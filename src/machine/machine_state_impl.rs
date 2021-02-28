@@ -153,31 +153,58 @@ impl MachineState {
         }
     }
 
-    fn bind_with_occurs_check(&mut self, r: Ref, addr: Addr) {
+    #[inline]
+    fn bind_with_occurs_check(&mut self, r: Ref, addr: Addr) -> bool {
         if let Ref::StackCell(..) = r {
             // local variable optimization -- r cannot occur in the
             // data structure bound to addr, so don't bother
             // traversing it.
             self.bind(r, addr);
-            return;
+            return false;
         }
 
-        let mut fail = false;
+        let mut occurs_triggered = false;
 
         for addr in self.acyclic_pre_order_iter(addr) {
             if let Some(inner_r) = addr.as_var() {
                 if r == inner_r {
-                    fail = true;
+                    occurs_triggered = true;
                     break;
                 }
             }
         }
 
-        self.fail = fail;
+        self.fail = occurs_triggered;
         self.bind(r, addr);
+
+        return occurs_triggered;
+    }
+
+    pub(super) fn unify_with_occurs_check_with_error(&mut self, a1: Addr, a2: Addr) {
+        let mut throw_error = false;
+        self.unify_with_occurs_check_loop(a1, a2, || throw_error = true);
+
+        if throw_error {
+            let err = self.representation_error(
+                RepFlag::Term,
+                clause_name!("unify_with_occurs_check"),
+                2,
+            );
+
+            self.throw_exception(err);
+        }
     }
 
     pub(super) fn unify_with_occurs_check(&mut self, a1: Addr, a2: Addr) {
+        self.unify_with_occurs_check_loop(a1, a2, || {})
+    }
+
+    pub(super) fn unify_with_occurs_check_loop(
+        &mut self,
+        a1: Addr,
+        a2: Addr,
+        mut occurs_trigger: impl FnMut()
+    ) {
         let mut pdl = vec![a1, a2];
         let mut tabu_list: IndexSet<(Addr, Addr)> = IndexSet::new();
 
@@ -199,13 +226,19 @@ impl MachineState {
 
                 match (d1, d2) {
                     (Addr::AttrVar(h), addr) | (addr, Addr::AttrVar(h)) => {
-                        self.bind_with_occurs_check(Ref::AttrVar(h), addr)
+                        if self.bind_with_occurs_check(Ref::AttrVar(h), addr) {
+                            occurs_trigger();
+                        }
                     }
                     (Addr::HeapCell(h), addr) | (addr, Addr::HeapCell(h)) => {
-                        self.bind_with_occurs_check(Ref::HeapCell(h), addr)
+                        if self.bind_with_occurs_check(Ref::HeapCell(h), addr) {
+                            occurs_trigger();
+                        }
                     }
                     (Addr::StackCell(fr, sc), addr) | (addr, Addr::StackCell(fr, sc)) => {
-                        self.bind_with_occurs_check(Ref::StackCell(fr, sc), addr)
+                        if self.bind_with_occurs_check(Ref::StackCell(fr, sc), addr) {
+                            occurs_trigger();
+                        }
                     }
                     (Addr::Lis(a1), Addr::Str(a2)) | (Addr::Str(a2), Addr::Lis(a1)) => {
                         if let &HeapCellValue::NamedStr(n2, ref f2, _) = &self.heap[a2] {

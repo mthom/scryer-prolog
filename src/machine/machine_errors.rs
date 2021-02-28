@@ -596,7 +596,8 @@ pub(crate) enum RepFlag {
     InCharacterCode,
     MaxArity,
     //    MaxInteger,
-    //    MinInteger
+    //    MinInteger,
+    Term,
 }
 
 impl RepFlag {
@@ -606,6 +607,7 @@ impl RepFlag {
             RepFlag::CharacterCode => "character_code",
             RepFlag::InCharacterCode => "in_character_code",
             RepFlag::MaxArity => "max_arity",
+            RepFlag::Term => "term",
             //            RepFlag::MaxInteger => "max_integer",
             //            RepFlag::MinInteger => "min_integer"
         }

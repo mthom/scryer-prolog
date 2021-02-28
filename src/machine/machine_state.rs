@@ -336,9 +336,13 @@ impl fmt::Debug for MachineState {
          .field("global_clock", &self.global_clock)
          .field("dynamic_mode", &self.dynamic_mode)
          .field("unify_fn",
-                if self.unify_fn as usize == MachineState::unify as usize
-                { &"MachineState::unify" }
-                else { &"MachineState::unify_with_occurs_check" })
+                if self.unify_fn as usize == MachineState::unify as usize {
+                    &"MachineState::unify"
+                } else if self.unify_fn as usize == MachineState::unify_with_occurs_check as usize {
+                    &"MachineState::unify_with_occurs_check"
+                } else {
+                    &"MachineState::unify_with_occurs_check_with_error"
+                })
          .finish()
     }
 }

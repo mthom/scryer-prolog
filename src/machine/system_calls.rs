@@ -5440,6 +5440,12 @@ impl MachineState {
                     );
 
                     (self.unify_fn)(self, self[temp_v!(1)], value);
+                } else if self.unify_fn as usize == MachineState::unify_with_occurs_check_with_error as usize {
+                    let value = self.heap.to_unifiable(
+                        HeapCellValue::Atom(clause_name!("error"), None),
+                    );
+
+                    (self.unify_fn)(self, self[temp_v!(1)], value);
                 } else {
                     let value = self.heap.to_unifiable(
                         HeapCellValue::Atom(clause_name!("false"), None),
@@ -5453,6 +5459,9 @@ impl MachineState {
             }
             &SystemClauseType::SetNSTOAsUnify => {
                 self.unify_fn = MachineState::unify;
+            }
+            &SystemClauseType::SetSTOWithErrorAsUnify => {
+                self.unify_fn = MachineState::unify_with_occurs_check_with_error;
             }
             &SystemClauseType::HomeDirectory => {
                 let path = match dirs_next::home_dir() {

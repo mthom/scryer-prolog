@@ -171,6 +171,8 @@ set_prolog_flag(occurs_check, true) :-
     !, '$set_sto_as_unify'.
 set_prolog_flag(occurs_check, false) :-
     !, '$set_nsto_as_unify'.
+set_prolog_flag(occurs_check, error) :-
+    !, '$set_sto_with_error_as_unify'.
 set_prolog_flag(double_quotes, Value) :-
     throw(error(domain_error(flag_value, double_quotes + Value),
 		        set_prolog_flag/2)). % 8.17.1.3 e
