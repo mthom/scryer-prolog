@@ -1749,6 +1749,8 @@ impl MachineState {
                         fail = true;
                         break;
                     }
+                } else {
+                    iter.stack().pop();
                 }
             }
 

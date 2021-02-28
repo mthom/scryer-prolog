@@ -392,21 +392,6 @@ pub(crate) fn requires_space(atom: &str, op: &str) -> bool {
     }
 }
 
-/*
-fn reverse_heap_locs<'a>(machine_st: &'a MachineState) -> ReverseHeapVarDict {
-    machine_st
-        .heap_locs
-        .iter()
-        .map(|(var, var_addr)| {
-            (
-                machine_st.store(machine_st.deref(var_addr.clone())),
-                var.clone(),
-            )
-        })
-        .collect()
-}
-*/
-
 fn non_quoted_graphic_token<Iter: Iterator<Item = char>>(mut iter: Iter, c: char) -> bool {
     if c == '/' {
         return match iter.next() {
@@ -494,37 +479,6 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             max_depth: 0,
         }
     }
-    /*
-        pub(crate) fn from_heap_locs(
-            machine_st: &'a MachineState,
-            op_dir: &'a OpDir,
-            output: Outputter,
-        ) -> Self {
-            let mut printer = Self::new(machine_st, op_dir, output);
-
-            printer.toplevel_spec = Some(DirectedOp::Right(
-                clause_name!("="),
-                SharedOpDesc::new(700, XFX),
-            ));
-
-            printer.heap_locs = reverse_heap_locs(machine_st);
-
-            printer
-        }
-    */
-    /*
-        pub(crate) fn drop_toplevel_spec(&mut self) {
-            self.toplevel_spec = None;
-        }
-    */
-    /*
-        #[inline]
-        pub(crate) fn see_all_locs(&mut self) {
-            for key in self.heap_locs.keys().cloned() {
-                self.printed_vars.insert(key);
-            }
-        }
-    */
 
     #[inline]
     fn ambiguity_check(&self, atom: &str) -> bool {
