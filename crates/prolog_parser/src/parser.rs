@@ -966,6 +966,11 @@ impl<'a, R: Read> Parser<'a, R> {
     }
 
     #[inline]
+    pub fn add_lines_read(&mut self, lines_read: usize) {
+        self.lexer.line_num += lines_read;
+    }
+
+    #[inline]
     pub fn num_lines_read(&self) -> usize {
         self.lexer.line_num
     }

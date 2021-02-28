@@ -185,7 +185,6 @@ impl MachineState {
         let mut parser = Parser::new(&mut stream, atom_tbl, self.flags);
 
         parser.devour_whitespace()?;
-        inner.add_lines_read(parser.num_lines_read());
 
         let result = parser.eof();
         let buf = stream.take_buf();
@@ -203,10 +202,13 @@ impl MachineState {
         let mut stream = parsing_stream(inner.clone())?;
 
         let (term, num_lines_read) = {
+            let prior_num_lines_read = inner.lines_read();
             let mut parser = Parser::new(&mut stream, atom_tbl, self.flags);
-            let term = parser.read_term(&CompositeOpDir::new(op_dir, None))?;
 
-            (term, parser.num_lines_read())
+            parser.add_lines_read(prior_num_lines_read);
+
+            let term = parser.read_term(&CompositeOpDir::new(op_dir, None))?;
+            (term, parser.num_lines_read() - prior_num_lines_read)
         };
 
         inner.add_lines_read(num_lines_read);

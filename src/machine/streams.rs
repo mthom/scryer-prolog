@@ -367,6 +367,11 @@ impl Stream {
     }
 
     #[inline]
+    pub(crate) fn lines_read(&mut self) -> usize {
+        self.stream_inst.0.borrow_mut().lines_read
+    }
+
+    #[inline]
     pub(crate) fn add_lines_read(&mut self, incr_num_lines_read: usize) {
         self.stream_inst.0.borrow_mut().lines_read += incr_num_lines_read;
     }
