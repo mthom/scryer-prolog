@@ -17,15 +17,26 @@
 :- use_module(library(pairs)).
 
 
-'$print_message_and_fail'(Error, Culprit) :-
-    %    writeq(error(Error, Culprit)),
-    %    nl,
+'$print_message_and_fail'(Error) :-
+    (  Error = error(existence_error(procedure, Expansion), Expansion) ->
+       (  (  Expansion = goal_expansion/2
+          ;  Expansion = term_expansion/2
+          )  ->
+          true
+       ;  write('caught: '),
+          writeq(Error),
+          nl
+       )
+    ;  write('caught: '),
+       writeq(Error),
+       nl
+    ),
     '$fail'.
 
 expand_term(Term, ExpandedTerm) :-
     (  catch('$call'(user:term_expansion(Term, ExpandedTerm0)),
              E,
-             '$call'(loader:'$print_message_and_fail'(E, user:term_expansion/2))) ->
+             '$call'(loader:'$print_message_and_fail'(E))) ->
        (  var(ExpandedTerm0) ->
           error:instantiation_error(term_expansion/2)
        ;  ExpandedTerm0 = [_|_] ->
@@ -51,7 +62,7 @@ term_expansion_list([Term|Terms], ExpandedTermsHead, ExpandedTermsTail) :-
 goal_expansion(Goal, Module, ExpandedGoal) :-
     (  catch('$call'(Module:goal_expansion(Goal, ExpandedGoal0)),
              E,
-             '$call'(loader:'$print_message_and_fail'(E, Module:goal_expansion/2))) ->
+             '$call'(loader:'$print_message_and_fail'(E))) ->
        (  var(ExpandedGoal0) ->
           error:instantiation_error(goal_expansion/2)
        ;  goal_expansion(ExpandedGoal0, Module, ExpandedGoal)
@@ -94,6 +105,7 @@ file_load(Stream, Path, Evacuable) :-
     catch(loader:load_loop(Stream, Evacuable),
           E,
           builtins:(loader:unload_evacuable(Evacuable),
+                    loader:'$print_message_and_fail'(E),
 		            builtins:throw(E))),
     run_initialization_goals,
     '$pop_load_context'.
@@ -104,6 +116,7 @@ load(Stream) :-
     catch(loader:load_loop(Stream, Evacuable),
           E,
           builtins:(loader:unload_evacuable(Evacuable),
+                    loader:'$print_message_and_fail'(E),
 		            builtins:throw(E))),
     run_initialization_goals,
     '$pop_load_context',
@@ -523,7 +536,7 @@ load_context(Module) :-
 
 predicate_property(Callable, Property) :-
     (  var(Callable) ->
-       instantiation_error(load/1)
+       instantiation_error(predicate_property/2)
     ;  functor(Callable, (:), 2),
        arg(1, Callable, Module),
        arg(2, Callable, Callable0),
