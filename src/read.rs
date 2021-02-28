@@ -186,10 +186,13 @@ impl MachineState {
 
         parser.devour_whitespace()?;
 
+        inner.add_lines_read(parser.num_lines_read());
+
         let result = parser.eof();
         let buf = stream.take_buf();
 
         inner.pause_stream(buf)?;
+
         result
     }
 
