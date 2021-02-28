@@ -17,7 +17,7 @@ use std::mem;
 use std::rc::Rc;
 
 #[derive(Debug, Clone, Copy)]
-pub enum IndexingCodePtr {
+pub(crate) enum IndexingCodePtr {
     External(usize), // the index points past the indexing instruction prelude.
     DynamicExternal(usize), // an External index of a dynamic predicate, potentially invalidated by retraction.
     Fail,
@@ -28,7 +28,7 @@ pub enum IndexingCodePtr {
 enum OptArgIndexKeyType {
     Structure,
     Constant,
-    List,
+    // List,
 }
 
 impl OptArgIndexKey {
@@ -37,7 +37,8 @@ impl OptArgIndexKey {
         match (self, key_type) {
             (OptArgIndexKey::Constant(..), OptArgIndexKeyType::Constant)
             | (OptArgIndexKey::Structure(..), OptArgIndexKeyType::Structure)
-            | (OptArgIndexKey::List(..), OptArgIndexKeyType::List) => true,
+            // | (OptArgIndexKey::List(..), OptArgIndexKeyType::List) 
+            => true,
             _ => false,
         }
     }
@@ -585,7 +586,7 @@ impl<'a> IndexingCodeMergingPtr<'a> {
     }
 }
 
-pub fn merge_clause_index(
+pub(crate) fn merge_clause_index(
     target_indexing_code: &mut Vec<IndexingLine>,
     skeleton: &mut [ClauseIndexInfo], // the clause to be merged is the last element in the skeleton.
     new_clause_loc: usize,            // the absolute location of the new clause in the code vector.
@@ -638,7 +639,7 @@ pub fn merge_clause_index(
     }
 }
 
-pub fn remove_constant_indices(
+pub(crate) fn remove_constant_indices(
     constant: &Constant,
     overlapping_constants: &[Constant],
     indexing_code: &mut Vec<IndexingLine>,
@@ -778,7 +779,7 @@ pub fn remove_constant_indices(
     }
 }
 
-pub fn remove_structure_index(
+pub(crate) fn remove_structure_index(
     name: &ClauseName,
     arity: usize,
     indexing_code: &mut Vec<IndexingLine>,
@@ -917,7 +918,7 @@ pub fn remove_structure_index(
     }
 }
 
-pub fn remove_list_index(indexing_code: &mut Vec<IndexingLine>, offset: usize) {
+pub(crate) fn remove_list_index(indexing_code: &mut Vec<IndexingLine>, offset: usize) {
     let mut index = 0;
 
     match &mut indexing_code[index] {
@@ -995,7 +996,7 @@ pub fn remove_list_index(indexing_code: &mut Vec<IndexingLine>, offset: usize) {
     }
 }
 
-pub fn remove_index(
+pub(crate) fn remove_index(
     opt_arg_index_key: &OptArgIndexKey,
     indexing_code: &mut Vec<IndexingLine>,
     clause_loc: usize,
@@ -1065,7 +1066,7 @@ fn uncap_choice_seq_with_try(prelude: &mut [IndexedChoiceInstruction]) {
     });
 }
 
-pub fn constant_key_alternatives(constant: &Constant, atom_tbl: TabledData<Atom>) -> Vec<Constant> {
+pub(crate) fn constant_key_alternatives(constant: &Constant, atom_tbl: TabledData<Atom>) -> Vec<Constant> {
     let mut constants = vec![];
 
     match constant {
@@ -1128,7 +1129,7 @@ pub(crate) struct DynamicCodeIndices {
     structures: IndexMap<(ClauseName, usize), SliceDeque<usize>>,
 }
 
-pub trait Indexer {
+pub(crate) trait Indexer {
     type ThirdLevelIndex;
 
     fn new() -> Self;
@@ -1383,14 +1384,14 @@ impl Indexer for DynamicCodeIndices {
 }
 
 #[derive(Debug)]
-pub struct CodeOffsets<I: Indexer> {
+pub(crate) struct CodeOffsets<I: Indexer> {
     atom_tbl: TabledData<Atom>,
     indices: I,
     optimal_index: usize,
 }
 
 impl<I: Indexer> CodeOffsets<I> {
-    pub fn new(
+    pub(crate) fn new(
         atom_tbl: TabledData<Atom>,
         indices: I,
         optimal_index: usize,
@@ -1440,7 +1441,7 @@ impl<I: Indexer> CodeOffsets<I> {
         code_len
     }
 
-    pub fn index_term(
+    pub(crate) fn index_term(
         &mut self,
         optimal_arg: &Term,
         index: usize,
@@ -1472,7 +1473,7 @@ impl<I: Indexer> CodeOffsets<I> {
         }
     }
 
-    pub fn no_indices(&mut self) -> bool {
+    pub(crate) fn no_indices(&mut self) -> bool {
         let no_constants = self.indices.constants().is_empty();
         let no_structures = self.indices.structures().is_empty();
         let no_lists = self.indices.lists().is_empty();
@@ -1480,7 +1481,7 @@ impl<I: Indexer> CodeOffsets<I> {
         no_constants && no_structures && no_lists
     }
 
-    pub fn compute_indices(mut self, skip_stub_try_me_else: bool) -> Vec<IndexingLine> {
+    pub(crate) fn compute_indices(mut self, skip_stub_try_me_else: bool) -> Vec<IndexingLine> {
         if self.no_indices() {
             return vec![];
         }
@@ -1488,7 +1489,7 @@ impl<I: Indexer> CodeOffsets<I> {
         let mut prelude = sdeq![];
 
         let mut emitted_switch_on_structure = false;
-        let mut emitted_switch_on_constant  = false;
+        let mut emitted_switch_on_constant = false;
 
         let mut lst_loc = I::switch_on_list(self.indices.lists(), &mut prelude);
 

@@ -9,7 +9,7 @@ use crate::targets::*;
 use std::cell::Cell;
 use std::rc::Rc;
 
-pub trait Allocator<'a> {
+pub(crate) trait Allocator<'a> {
     fn new() -> Self;
 
     fn mark_anon_var<Target>(&mut self, _: Level, _: GenContext, _: &mut Vec<Target>)

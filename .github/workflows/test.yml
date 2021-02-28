@@ -17,11 +17,16 @@ jobs:
           profile: minimal
           toolchain: ${{ matrix.rust-version }}
           override: true
-      - name: Build
+      - name: Build lib
         uses: actions-rs/cargo@v1
         with:
           command: rustc
-          args: --verbose -- -D warnings
+          args: --verbose --lib -- -D warnings
+      - name: Build bin
+        uses: actions-rs/cargo@v1
+        with:
+          command: rustc
+          args: --verbose --bin scryer-prolog -- -D warnings
       - name: Test
         uses: actions-rs/cargo@v1
         with:

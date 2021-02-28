@@ -78,7 +78,7 @@ impl<'a> TermStream for BootstrappingTermStream<'a> {
     }
 }
 
-pub struct LiveTermStream {
+pub(crate) struct LiveTermStream {
     pub(super) term_queue: VecDeque<Term>,
     pub(super) listing_src: ListingSource,
 }
@@ -93,7 +93,7 @@ impl LiveTermStream {
     }
 }
 
-pub struct LoadStatePayload {
+pub(crate) struct LoadStatePayload {
     pub(super) term_stream: LiveTermStream,
     pub(super) compilation_target: CompilationTarget,
     pub(super) retraction_info: RetractionInfo,

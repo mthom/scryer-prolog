@@ -71,7 +71,7 @@ use base64;
 use roxmltree;
 use select;
 
-pub fn get_key() -> KeyEvent {
+pub(crate) fn get_key() -> KeyEvent {
     let key;
     enable_raw_mode().expect("failed to enable raw mode");
     loop {

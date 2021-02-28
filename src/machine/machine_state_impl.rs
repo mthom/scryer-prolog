@@ -61,7 +61,7 @@ impl MachineState {
     }
 
     #[inline]
-    pub fn machine_flags(&self) -> MachineFlags {
+    pub(crate) fn machine_flags(&self) -> MachineFlags {
         self.flags
     }
 
@@ -590,8 +590,7 @@ impl MachineState {
         }
     }
 
-    pub(super)
-    fn trail(&mut self, r: TrailRef) {
+    pub(super) fn trail(&mut self, r: TrailRef) {
         match r {
             TrailRef::Ref(Ref::HeapCell(h)) => {
                 if h < self.hb {
@@ -3460,14 +3459,20 @@ impl MachineState {
             }
             &ChoiceInstruction::DefaultRetryMeElse(offset) => {
                 let mut call_policy = DefaultCallPolicy {};
-                try_or_fail!(self, call_policy.retry_me_else(self, offset, global_variables))
+                try_or_fail!(
+                    self,
+                    call_policy.retry_me_else(self, offset, global_variables)
+                )
             }
             &ChoiceInstruction::DefaultTrustMe(_) => {
                 let mut call_policy = DefaultCallPolicy {};
                 try_or_fail!(self, call_policy.trust_me(self, global_variables))
             }
             &ChoiceInstruction::RetryMeElse(offset) => {
-                try_or_fail!(self, call_policy.retry_me_else(self, offset, global_variables))
+                try_or_fail!(
+                    self,
+                    call_policy.retry_me_else(self, offset, global_variables)
+                )
             }
             &ChoiceInstruction::TrustMe(_) => {
                 try_or_fail!(self, call_policy.trust_me(self, global_variables))

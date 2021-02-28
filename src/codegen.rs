@@ -22,10 +22,10 @@ use std::collections::VecDeque;
 use std::rc::Rc;
 
 #[derive(Debug)]
-pub struct ConjunctInfo<'a> {
-    pub perm_vs: VariableFixtures<'a>,
-    pub num_of_chunks: usize,
-    pub has_deep_cut: bool,
+pub(crate) struct ConjunctInfo<'a> {
+    pub(crate) perm_vs: VariableFixtures<'a>,
+    pub(crate) num_of_chunks: usize,
+    pub(crate) has_deep_cut: bool,
 }
 
 impl<'a> ConjunctInfo<'a> {
@@ -90,7 +90,7 @@ impl<'a> ConjunctInfo<'a> {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub struct CodeGenSettings {
+pub(crate) struct CodeGenSettings {
     pub global_clock_tick: Option<usize>,
     pub is_extensible: bool,
     pub non_counted_bt: bool,
@@ -98,12 +98,12 @@ pub struct CodeGenSettings {
 
 impl CodeGenSettings {
     #[inline]
-    pub fn is_dynamic(&self) -> bool {
+    pub(crate) fn is_dynamic(&self) -> bool {
         self.global_clock_tick.is_some()
     }
 
     #[inline]
-    pub fn internal_try_me_else(&self, offset: usize) -> ChoiceInstruction {
+    pub(crate) fn internal_try_me_else(&self, offset: usize) -> ChoiceInstruction {
         if let Some(global_clock_time) = self.global_clock_tick {
             ChoiceInstruction::DynamicInternalElse(
                 global_clock_time,
@@ -115,7 +115,7 @@ impl CodeGenSettings {
         }
     }
 
-    pub fn try_me_else(&self, offset: usize) -> ChoiceInstruction {
+    pub(crate) fn try_me_else(&self, offset: usize) -> ChoiceInstruction {
         if let Some(global_clock_tick) = self.global_clock_tick {
             ChoiceInstruction::DynamicElse(
                 global_clock_tick,
@@ -127,7 +127,7 @@ impl CodeGenSettings {
         }
     }
 
-    pub fn internal_retry_me_else(&self, offset: usize) -> ChoiceInstruction {
+    pub(crate) fn internal_retry_me_else(&self, offset: usize) -> ChoiceInstruction {
         if let Some(global_clock_tick) = self.global_clock_tick {
             ChoiceInstruction::DynamicInternalElse(
                 global_clock_tick,
@@ -139,7 +139,7 @@ impl CodeGenSettings {
         }
     }
 
-    pub fn retry_me_else(&self, offset: usize) -> ChoiceInstruction {
+    pub(crate) fn retry_me_else(&self, offset: usize) -> ChoiceInstruction {
         if let Some(global_clock_tick) = self.global_clock_tick {
             ChoiceInstruction::DynamicElse(
                 global_clock_tick,
@@ -153,7 +153,7 @@ impl CodeGenSettings {
         }
     }
 
-    pub fn internal_trust_me(&self) -> ChoiceInstruction {
+    pub(crate) fn internal_trust_me(&self) -> ChoiceInstruction {
         if let Some(global_clock_tick) = self.global_clock_tick {
             ChoiceInstruction::DynamicInternalElse(
                 global_clock_tick,
@@ -167,7 +167,7 @@ impl CodeGenSettings {
         }
     }
 
-    pub fn trust_me(&self) -> ChoiceInstruction {
+    pub(crate) fn trust_me(&self) -> ChoiceInstruction {
         if let Some(global_clock_tick) = self.global_clock_tick {
             ChoiceInstruction::DynamicElse(
                 global_clock_tick,
@@ -183,18 +183,18 @@ impl CodeGenSettings {
 }
 
 #[derive(Debug)]
-pub struct CodeGenerator<TermMarker> {
+pub(crate) struct CodeGenerator<TermMarker> {
     atom_tbl: TabledData<Atom>,
     marker: TermMarker,
-    pub var_count: IndexMap<Rc<Var>, usize>,
+    pub(crate) var_count: IndexMap<Rc<Var>, usize>,
     settings: CodeGenSettings,
-    pub skeleton: PredicateSkeleton,
-    pub jmp_by_locs: Vec<usize>,
+    pub(crate) skeleton: PredicateSkeleton,
+    pub(crate) jmp_by_locs: Vec<usize>,
     global_jmp_by_locs_offset: usize,
 }
 
 impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
-    pub fn new(atom_tbl: TabledData<Atom>, settings: CodeGenSettings) -> Self {
+    pub(crate) fn new(atom_tbl: TabledData<Atom>, settings: CodeGenSettings) -> Self {
         CodeGenerator {
             atom_tbl,
             marker: Allocator::new(),
@@ -837,7 +837,10 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
         }
     }
 
-    pub fn compile_rule<'b: 'a>(&mut self, rule: &'b Rule) -> Result<Code, CompilationError> {
+    pub(crate) fn compile_rule<'b: 'a>(
+        &mut self,
+        rule: &'b Rule,
+    ) -> Result<Code, CompilationError> {
         let iter = ChunkedIterator::from_rule(rule);
         let conjunct_info = self.collect_var_data(iter);
 
@@ -894,7 +897,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
         UnsafeVarMarker::from_safe_vars(safe_vars)
     }
 
-    pub fn compile_fact<'b: 'a>(&mut self, term: &'b Term) -> Code {
+    pub(crate) fn compile_fact<'b: 'a>(&mut self, term: &'b Term) -> Code {
         self.update_var_count(post_order_iter(term));
 
         let mut vs = VariableFixtures::new();
@@ -1119,7 +1122,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
         Ok(Vec::from(code))
     }
 
-    pub fn compile_predicate<'b: 'a>(
+    pub(crate) fn compile_predicate<'b: 'a>(
         &mut self,
         clauses: &'b Vec<PredicateClause>,
     ) -> Result<Code, CompilationError> {

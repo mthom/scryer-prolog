@@ -14,7 +14,7 @@ use std::collections::BTreeSet;
 use std::rc::Rc;
 
 #[derive(Debug)]
-pub struct DebrayAllocator {
+pub(crate) struct DebrayAllocator {
     bindings: IndexMap<Rc<Var>, VarData>,
     arg_c: usize,
     temp_lb: usize,

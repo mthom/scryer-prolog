@@ -23,7 +23,7 @@ use std::rc::Rc;
 use native_tls::TlsStream;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum StreamType {
+pub(crate) enum StreamType {
     Binary,
     Text,
 }
@@ -55,14 +55,14 @@ impl StreamType {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum EOFAction {
+pub(crate) enum EOFAction {
     EOFCode,
     Error,
     Reset,
 }
 
 #[derive(Debug, PartialEq)]
-pub enum AtEndOfStream {
+pub(crate) enum AtEndOfStream {
     Not,
     At,
     Past,
@@ -198,7 +198,7 @@ impl fmt::Debug for StreamInstance {
 }
 
 #[derive(Debug)]
-struct InnerStream {
+pub(crate) struct InnerStream {
     options: StreamOptions,
     stream_inst: StreamInstance,
     past_end_of_stream: bool,
@@ -211,14 +211,12 @@ struct WrappedStreamInstance(Rc<RefCell<InnerStream>>);
 impl WrappedStreamInstance {
     #[inline]
     fn new(stream_inst: StreamInstance, past_end_of_stream: bool) -> Self {
-        WrappedStreamInstance(Rc::new(RefCell::new(
-            InnerStream {
-                options: StreamOptions::default(),
-                stream_inst,
-                past_end_of_stream,
-                lines_read: 0,
-            }
-        )))
+        WrappedStreamInstance(Rc::new(RefCell::new(InnerStream {
+            options: StreamOptions::default(),
+            stream_inst,
+            past_end_of_stream,
+            lines_read: 0,
+        })))
     }
 }
 
@@ -287,11 +285,11 @@ impl fmt::Display for StreamError {
 impl Error for StreamError {}
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct StreamOptions {
-    pub stream_type: StreamType,
-    pub reposition: bool,
-    pub alias: Option<ClauseName>,
-    pub eof_action: EOFAction,
+pub(crate) struct StreamOptions {
+    pub(crate) stream_type: StreamType,
+    pub(crate) reposition: bool,
+    pub(crate) alias: Option<ClauseName>,
+    pub(crate) eof_action: EOFAction,
 }
 
 impl Default for StreamOptions {
@@ -366,6 +364,23 @@ impl Stream {
         ptr as *const u8
     }
 
+    pub fn bytes(&self) -> Option<std::cell::Ref<Vec<u8>>> {
+        // if Ref had an and_then function this could be simplified
+        let val = std::cell::Ref::map(self.stream_inst.0.borrow(), |inner_stream| {
+            &inner_stream.stream_inst
+        });
+        match std::ops::Deref::deref(&val) {
+            StreamInstance::Bytes(_) => Some(std::cell::Ref::map(
+                std::cell::Ref::clone(&val),
+                |instance| match instance {
+                    StreamInstance::Bytes(cursor) => cursor.get_ref(),
+                    _ => unreachable!(),
+                },
+            )),
+            _ => None,
+        }
+    }
+
     #[inline]
     pub(crate) fn lines_read(&mut self) -> usize {
         self.stream_inst.0.borrow_mut().lines_read
@@ -378,30 +393,29 @@ impl Stream {
 
     #[inline]
     pub(crate) fn options(&self) -> std::cell::Ref<'_, StreamOptions> {
-        std::cell::Ref::map(
-            self.stream_inst.0.borrow(),
-            |inner_stream| &inner_stream.options,
-        )
+        std::cell::Ref::map(self.stream_inst.0.borrow(), |inner_stream| {
+            &inner_stream.options
+        })
     }
 
     #[inline]
     pub(crate) fn options_mut(&mut self) -> std::cell::RefMut<'_, StreamOptions> {
-        std::cell::RefMut::map(
-            self.stream_inst.0.borrow_mut(),
-            |inner_stream| &mut inner_stream.options,
-        )
+        std::cell::RefMut::map(self.stream_inst.0.borrow_mut(), |inner_stream| {
+            &mut inner_stream.options
+        })
     }
 
     #[inline]
-    pub(crate) fn position(&mut self) -> Option<(u64, usize)> { // returns lines_read, position.
+    pub(crate) fn position(&mut self) -> Option<(u64, usize)> {
+        // returns lines_read, position.
         let result = match self.stream_inst.0.borrow_mut().stream_inst {
             StreamInstance::InputFile(_, ref mut file) => file.seek(SeekFrom::Current(0)).ok(),
-            StreamInstance::TcpStream(..) |
-            StreamInstance::TlsStream(..) |
-            StreamInstance::ReadlineStream(..) |
-            StreamInstance::StaticStr(..) |
-            StreamInstance::PausedPrologStream(..) |
-            StreamInstance::Bytes(..) => Some(0),
+            StreamInstance::TcpStream(..)
+            | StreamInstance::TlsStream(..)
+            | StreamInstance::ReadlineStream(..)
+            | StreamInstance::StaticStr(..)
+            | StreamInstance::PausedPrologStream(..)
+            | StreamInstance::Bytes(..) => Some(0),
             _ => None,
         };
 
@@ -411,9 +425,11 @@ impl Stream {
     #[inline]
     pub(crate) fn set_position(&mut self, position: u64) {
         match self.stream_inst.0.borrow_mut().deref_mut() {
-            InnerStream { past_end_of_stream,
-                          stream_inst: StreamInstance::InputFile(_, ref mut file),
-                          .. } => {
+            InnerStream {
+                past_end_of_stream,
+                stream_inst: StreamInstance::InputFile(_, ref mut file),
+                ..
+            } => {
                 file.seek(SeekFrom::Start(position)).unwrap();
 
                 if let Ok(metadata) = file.metadata() {
@@ -446,31 +462,31 @@ impl Stream {
         }
 
         match self.stream_inst.0.borrow_mut().deref_mut() {
-            InnerStream { past_end_of_stream,
-                          stream_inst: StreamInstance::InputFile(_, ref mut file),
-                          .. } => {
-                match file.metadata() {
-                    Ok(metadata) => {
-                        if let Ok(position) = file.seek(SeekFrom::Current(0)) {
-                            return match position.cmp(&metadata.len()) {
-                                Ordering::Equal => AtEndOfStream::At,
-                                Ordering::Less => AtEndOfStream::Not,
-                                Ordering::Greater => {
-                                    *past_end_of_stream = true;
-                                    AtEndOfStream::Past
-                                }
-                            };
-                        } else {
-                            *past_end_of_stream = true;
-                            AtEndOfStream::Past
-                        }
-                    }
-                    _ => {
+            InnerStream {
+                past_end_of_stream,
+                stream_inst: StreamInstance::InputFile(_, ref mut file),
+                ..
+            } => match file.metadata() {
+                Ok(metadata) => {
+                    if let Ok(position) = file.seek(SeekFrom::Current(0)) {
+                        return match position.cmp(&metadata.len()) {
+                            Ordering::Equal => AtEndOfStream::At,
+                            Ordering::Less => AtEndOfStream::Not,
+                            Ordering::Greater => {
+                                *past_end_of_stream = true;
+                                AtEndOfStream::Past
+                            }
+                        };
+                    } else {
                         *past_end_of_stream = true;
                         AtEndOfStream::Past
                     }
                 }
-            }
+                _ => {
+                    *past_end_of_stream = true;
+                    AtEndOfStream::Past
+                }
+            },
             _ => AtEndOfStream::Not,
         }
     }
@@ -488,11 +504,11 @@ impl Stream {
     #[inline]
     pub(crate) fn mode(&self) -> &'static str {
         match self.stream_inst.0.borrow().stream_inst {
-            StreamInstance::Bytes(_) |
-            StreamInstance::PausedPrologStream(..) |
-            StreamInstance::ReadlineStream(_) |
-            StreamInstance::StaticStr(_) |
-            StreamInstance::InputFile(..) => "read",
+            StreamInstance::Bytes(_)
+            | StreamInstance::PausedPrologStream(..)
+            | StreamInstance::ReadlineStream(_)
+            | StreamInstance::StaticStr(_)
+            | StreamInstance::InputFile(..) => "read",
             StreamInstance::TcpStream(..) | StreamInstance::TlsStream(..) => "read_append",
             StreamInstance::OutputFile(_, _, true) => "append",
             StreamInstance::Stdout | StreamInstance::OutputFile(_, _, false) => "write",
@@ -508,7 +524,7 @@ impl Stream {
     }
 
     #[inline]
-    pub(crate) fn stdout() -> Self {
+    pub fn stdout() -> Self {
         Stream::from_inst(StreamInstance::Stdout)
     }
 
@@ -568,13 +584,13 @@ impl Stream {
     #[inline]
     pub(crate) fn is_input_stream(&self) -> bool {
         match self.stream_inst.0.borrow().stream_inst {
-            StreamInstance::TcpStream(..) |
-            StreamInstance::TlsStream(..) |
-            StreamInstance::Bytes(_) |
-            StreamInstance::PausedPrologStream(..) |
-            StreamInstance::ReadlineStream(_) |
-            StreamInstance::StaticStr(_) |
-            StreamInstance::InputFile(..) => true,
+            StreamInstance::TcpStream(..)
+            | StreamInstance::TlsStream(..)
+            | StreamInstance::Bytes(_)
+            | StreamInstance::PausedPrologStream(..)
+            | StreamInstance::ReadlineStream(_)
+            | StreamInstance::StaticStr(_)
+            | StreamInstance::InputFile(..) => true,
             _ => false,
         }
     }
@@ -582,11 +598,11 @@ impl Stream {
     #[inline]
     pub(crate) fn is_output_stream(&self) -> bool {
         match self.stream_inst.0.borrow().stream_inst {
-            StreamInstance::Stdout |
-            StreamInstance::TcpStream(..) |
-            StreamInstance::TlsStream(..) |
-            StreamInstance::Bytes(_) |
-            StreamInstance::OutputFile(..) => true,
+            StreamInstance::Stdout
+            | StreamInstance::TcpStream(..)
+            | StreamInstance::TlsStream(..)
+            | StreamInstance::Bytes(_)
+            | StreamInstance::OutputFile(..) => true,
             _ => false,
         }
     }
@@ -1084,11 +1100,11 @@ impl Write for Stream {
             StreamInstance::TlsStream(_, ref mut tls_stream) => tls_stream.write(buf),
             StreamInstance::Bytes(ref mut cursor) => cursor.write(buf),
             StreamInstance::Stdout => stdout().write(buf),
-            StreamInstance::PausedPrologStream(..) |
-            StreamInstance::StaticStr(_) |
-            StreamInstance::ReadlineStream(_) |
-            StreamInstance::InputFile(..) |
-            StreamInstance::Null => Err(std::io::Error::new(
+            StreamInstance::PausedPrologStream(..)
+            | StreamInstance::StaticStr(_)
+            | StreamInstance::ReadlineStream(_)
+            | StreamInstance::InputFile(..)
+            | StreamInstance::Null => Err(std::io::Error::new(
                 ErrorKind::PermissionDenied,
                 StreamError::WriteToInputStream,
             )),
@@ -1102,11 +1118,11 @@ impl Write for Stream {
             StreamInstance::TlsStream(_, ref mut tls_stream) => tls_stream.flush(),
             StreamInstance::Bytes(ref mut cursor) => cursor.flush(),
             StreamInstance::Stdout => stdout().flush(),
-            StreamInstance::PausedPrologStream(..) |
-            StreamInstance::StaticStr(_) |
-            StreamInstance::ReadlineStream(_) |
-            StreamInstance::InputFile(..) |
-            StreamInstance::Null => Err(std::io::Error::new(
+            StreamInstance::PausedPrologStream(..)
+            | StreamInstance::StaticStr(_)
+            | StreamInstance::ReadlineStream(_)
+            | StreamInstance::InputFile(..)
+            | StreamInstance::Null => Err(std::io::Error::new(
                 ErrorKind::PermissionDenied,
                 StreamError::FlushToInputStream,
             )),

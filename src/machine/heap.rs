@@ -429,7 +429,7 @@ impl<T: RawBlockTraits> HeapTemplate<T> {
     }
 
     #[inline]
-    pub fn index_addr<'a>(&'a self, addr: &Addr) -> RefOrOwned<'a, HeapCellValue> {
+    pub(crate) fn index_addr<'a>(&'a self, addr: &Addr) -> RefOrOwned<'a, HeapCellValue> {
         match addr {
             &Addr::Con(h) | &Addr::Str(h) | &Addr::Stream(h) | &Addr::TcpListener(h) => {
                 RefOrOwned::Borrowed(&self[h])

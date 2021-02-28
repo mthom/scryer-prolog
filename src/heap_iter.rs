@@ -8,13 +8,13 @@ use std::ops::Deref;
 use std::vec::Vec;
 
 #[derive(Debug)]
-pub struct HCPreOrderIterator<'a> {
-    pub machine_st: &'a MachineState,
-    pub state_stack: Vec<Addr>,
+pub(crate) struct HCPreOrderIterator<'a> {
+    pub(crate) machine_st: &'a MachineState,
+    pub(crate) state_stack: Vec<Addr>,
 }
 
 impl<'a> HCPreOrderIterator<'a> {
-    pub fn new(machine_st: &'a MachineState, a: Addr) -> Self {
+    pub(crate) fn new(machine_st: &'a MachineState, a: Addr) -> Self {
         HCPreOrderIterator {
             machine_st,
             state_stack: vec![a],
@@ -22,7 +22,7 @@ impl<'a> HCPreOrderIterator<'a> {
     }
 
     #[inline]
-    pub fn machine_st(&self) -> &MachineState {
+    pub(crate) fn machine_st(&self) -> &MachineState {
         &self.machine_st
     }
 
@@ -116,7 +116,7 @@ impl<'a> Iterator for HCPreOrderIterator<'a> {
     }
 }
 
-pub trait MutStackHCIterator<'b>
+pub(crate) trait MutStackHCIterator<'b>
 where
     Self: Iterator,
 {
@@ -126,7 +126,7 @@ where
 }
 
 #[derive(Debug)]
-pub struct HCPostOrderIterator<'a> {
+pub(crate) struct HCPostOrderIterator<'a> {
     base_iter: HCPreOrderIterator<'a>,
     parent_stack: Vec<(usize, Addr)>, // number of children, parent node.
 }
@@ -140,7 +140,7 @@ impl<'a> Deref for HCPostOrderIterator<'a> {
 }
 
 impl<'a> HCPostOrderIterator<'a> {
-    pub fn new(base_iter: HCPreOrderIterator<'a>) -> Self {
+    pub(crate) fn new(base_iter: HCPreOrderIterator<'a>) -> Self {
         HCPostOrderIterator {
             base_iter,
             parent_stack: vec![],
@@ -201,19 +201,19 @@ impl<'a> Iterator for HCPostOrderIterator<'a> {
 }
 
 impl MachineState {
-    pub fn pre_order_iter<'a>(&'a self, a: Addr) -> HCPreOrderIterator<'a> {
+    pub(crate) fn pre_order_iter<'a>(&'a self, a: Addr) -> HCPreOrderIterator<'a> {
         HCPreOrderIterator::new(self, a)
     }
 
-    pub fn post_order_iter<'a>(&'a self, a: Addr) -> HCPostOrderIterator<'a> {
+    pub(crate) fn post_order_iter<'a>(&'a self, a: Addr) -> HCPostOrderIterator<'a> {
         HCPostOrderIterator::new(HCPreOrderIterator::new(self, a))
     }
 
-    pub fn acyclic_pre_order_iter<'a>(&'a self, a: Addr) -> HCAcyclicIterator<'a> {
+    pub(crate) fn acyclic_pre_order_iter<'a>(&'a self, a: Addr) -> HCAcyclicIterator<'a> {
         HCAcyclicIterator::new(HCPreOrderIterator::new(self, a))
     }
 
-    pub fn zipped_acyclic_pre_order_iter<'a>(
+    pub(crate) fn zipped_acyclic_pre_order_iter<'a>(
         &'a self,
         a1: Addr,
         a2: Addr,
@@ -234,13 +234,13 @@ impl<'b, 'a: 'b> MutStackHCIterator<'b> for HCPreOrderIterator<'a> {
 }
 
 #[derive(Debug)]
-pub struct HCAcyclicIterator<'a> {
+pub(crate) struct HCAcyclicIterator<'a> {
     iter: HCPreOrderIterator<'a>,
     seen: IndexSet<Addr>,
 }
 
 impl<'a> HCAcyclicIterator<'a> {
-    pub fn new(iter: HCPreOrderIterator<'a>) -> Self {
+    pub(crate) fn new(iter: HCPreOrderIterator<'a>) -> Self {
         HCAcyclicIterator {
             iter,
             seen: IndexSet::new(),
@@ -282,11 +282,11 @@ impl<'a> Iterator for HCAcyclicIterator<'a> {
 }
 
 #[derive(Debug)]
-pub struct HCZippedAcyclicIterator<'a> {
+pub(crate) struct HCZippedAcyclicIterator<'a> {
     i1: HCPreOrderIterator<'a>,
     i2: HCPreOrderIterator<'a>,
     seen: IndexSet<(Addr, Addr)>,
-    pub first_to_expire: Ordering,
+    pub(crate) first_to_expire: Ordering,
 }
 
 impl<'b, 'a: 'b> MutStackHCIterator<'b> for HCZippedAcyclicIterator<'a> {
@@ -298,7 +298,7 @@ impl<'b, 'a: 'b> MutStackHCIterator<'b> for HCZippedAcyclicIterator<'a> {
 }
 
 impl<'a> HCZippedAcyclicIterator<'a> {
-    pub fn new(i1: HCPreOrderIterator<'a>, i2: HCPreOrderIterator<'a>) -> Self {
+    pub(crate) fn new(i1: HCPreOrderIterator<'a>, i2: HCPreOrderIterator<'a>) -> Self {
         HCZippedAcyclicIterator {
             i1,
             i2,

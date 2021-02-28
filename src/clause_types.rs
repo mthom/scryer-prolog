@@ -10,7 +10,7 @@ use ref_thread_local::{ref_thread_local, RefThreadLocal};
 use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
-pub enum CompareNumberQT {
+pub(crate) enum CompareNumberQT {
     GreaterThan,
     LessThan,
     GreaterThanOrEqual,
@@ -33,7 +33,7 @@ impl CompareNumberQT {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CompareTermQT {
+pub(crate) enum CompareTermQT {
     LessThan,
     LessThanOrEqual,
     GreaterThanOrEqual,
@@ -52,14 +52,14 @@ impl CompareTermQT {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ArithmeticTerm {
+pub(crate) enum ArithmeticTerm {
     Reg(RegType),
     Interm(usize),
     Number(Number),
 }
 
 impl ArithmeticTerm {
-    pub fn interm_or(&self, interm: usize) -> usize {
+    pub(crate) fn interm_or(&self, interm: usize) -> usize {
         if let &ArithmeticTerm::Interm(interm) = self {
             interm
         } else {
@@ -69,7 +69,7 @@ impl ArithmeticTerm {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub enum InlinedClauseType {
+pub(crate) enum InlinedClauseType {
     CompareNumber(CompareNumberQT, ArithmeticTerm, ArithmeticTerm),
     IsAtom(RegType),
     IsAtomic(RegType),
@@ -83,11 +83,11 @@ pub enum InlinedClauseType {
 }
 
 ref_thread_local! {
-    pub static managed RANDOM_STATE: RandState<'static> = RandState::new();
+    pub(crate)static managed RANDOM_STATE: RandState<'static> = RandState::new();
 }
 
 ref_thread_local! {
-    pub static managed CLAUSE_TYPE_FORMS: BTreeMap<(&'static str, usize), ClauseType> = {
+    pub(crate)static managed CLAUSE_TYPE_FORMS: BTreeMap<(&'static str, usize), ClauseType> = {
         let mut m = BTreeMap::new();
 
         let r1 = temp_v!(1);
@@ -133,7 +133,7 @@ ref_thread_local! {
 }
 
 impl InlinedClauseType {
-    pub fn name(&self) -> &'static str {
+    pub(crate) fn name(&self) -> &'static str {
         match self {
             &InlinedClauseType::CompareNumber(qt, ..) => qt.name(),
             &InlinedClauseType::IsAtom(..) => "atom",
@@ -150,7 +150,7 @@ impl InlinedClauseType {
 }
 
 #[derive(Debug, Copy, Clone, Eq, PartialEq)]
-pub enum SystemClauseType {
+pub(crate) enum SystemClauseType {
     AtomChars,
     AtomCodes,
     AtomLength,
@@ -311,7 +311,7 @@ pub enum SystemClauseType {
 }
 
 impl SystemClauseType {
-    pub fn name(&self) -> ClauseName {
+    pub(crate) fn name(&self) -> ClauseName {
         match self {
             &SystemClauseType::AtomChars => clause_name!("$atom_chars"),
             &SystemClauseType::AtomCodes => clause_name!("$atom_codes"),
@@ -596,7 +596,7 @@ impl SystemClauseType {
         }
     }
 
-    pub fn from(name: &str, arity: usize) -> Option<SystemClauseType> {
+    pub(crate) fn from(name: &str, arity: usize) -> Option<SystemClauseType> {
         match (name, arity) {
             ("$abolish_clause", 3) => Some(SystemClauseType::REPL(REPLCodePtr::AbolishClause)),
             ("$add_dynamic_predicate", 4) => {
@@ -605,9 +605,9 @@ impl SystemClauseType {
             ("$add_multifile_predicate", 4) => {
                 Some(SystemClauseType::REPL(REPLCodePtr::AddMultifilePredicate))
             }
-            ("$add_discontiguous_predicate", 4) => {
-                Some(SystemClauseType::REPL(REPLCodePtr::AddDiscontiguousPredicate))
-            }
+            ("$add_discontiguous_predicate", 4) => Some(SystemClauseType::REPL(
+                REPLCodePtr::AddDiscontiguousPredicate,
+            )),
             ("$add_goal_expansion_clause", 3) => {
                 Some(SystemClauseType::REPL(REPLCodePtr::AddGoalExpansionClause))
             }
@@ -766,18 +766,16 @@ impl SystemClauseType {
             ("$asserta", 5) => Some(SystemClauseType::REPL(REPLCodePtr::Asserta)),
             ("$assertz", 5) => Some(SystemClauseType::REPL(REPLCodePtr::Assertz)),
             ("$retract_clause", 4) => Some(SystemClauseType::REPL(REPLCodePtr::Retract)),
-            ("$is_consistent_with_term_queue", 4) => {
-                Some(SystemClauseType::REPL(REPLCodePtr::IsConsistentWithTermQueue))
-            }
-            ("$flush_term_queue", 1) => {
-                Some(SystemClauseType::REPL(REPLCodePtr::FlushTermQueue))
-            }
+            ("$is_consistent_with_term_queue", 4) => Some(SystemClauseType::REPL(
+                REPLCodePtr::IsConsistentWithTermQueue,
+            )),
+            ("$flush_term_queue", 1) => Some(SystemClauseType::REPL(REPLCodePtr::FlushTermQueue)),
             ("$remove_module_exports", 2) => {
                 Some(SystemClauseType::REPL(REPLCodePtr::RemoveModuleExports))
             }
-            ("$add_non_counted_backtracking", 3) => {
-                Some(SystemClauseType::REPL(REPLCodePtr::AddNonCountedBacktracking))
-            }
+            ("$add_non_counted_backtracking", 3) => Some(SystemClauseType::REPL(
+                REPLCodePtr::AddNonCountedBacktracking,
+            )),
             ("$variant", 2) => Some(SystemClauseType::Variant),
             ("$wam_instructions", 4) => Some(SystemClauseType::WAMInstructions),
             ("$write_term", 7) => Some(SystemClauseType::WriteTerm),
@@ -848,7 +846,7 @@ impl SystemClauseType {
 }
 
 #[derive(Debug, Clone, Eq, PartialEq)]
-pub enum BuiltInClauseType {
+pub(crate) enum BuiltInClauseType {
     AcyclicTerm,
     Arg,
     Compare,
@@ -866,7 +864,7 @@ pub enum BuiltInClauseType {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ClauseType {
+pub(crate) enum ClauseType {
     BuiltIn(BuiltInClauseType),
     CallN,
     Inlined(InlinedClauseType),
@@ -876,7 +874,7 @@ pub enum ClauseType {
 }
 
 impl BuiltInClauseType {
-    pub fn name(&self) -> ClauseName {
+    pub(crate) fn name(&self) -> ClauseName {
         match self {
             &BuiltInClauseType::AcyclicTerm => clause_name!("acyclic_term"),
             &BuiltInClauseType::Arg => clause_name!("arg"),
@@ -895,7 +893,7 @@ impl BuiltInClauseType {
         }
     }
 
-    pub fn arity(&self) -> usize {
+    pub(crate) fn arity(&self) -> usize {
         match self {
             &BuiltInClauseType::AcyclicTerm => 1,
             &BuiltInClauseType::Arg => 3,
@@ -916,7 +914,7 @@ impl BuiltInClauseType {
 }
 
 impl ClauseType {
-    pub fn spec(&self) -> Option<SharedOpDesc> {
+    pub(crate) fn spec(&self) -> Option<SharedOpDesc> {
         match self {
             &ClauseType::Op(_, ref spec, _) => Some(spec.clone()),
             &ClauseType::Inlined(InlinedClauseType::CompareNumber(..))
@@ -928,7 +926,7 @@ impl ClauseType {
         }
     }
 
-    pub fn name(&self) -> ClauseName {
+    pub(crate) fn name(&self) -> ClauseName {
         match self {
             &ClauseType::BuiltIn(ref built_in) => built_in.name(),
             &ClauseType::CallN => clause_name!("$call"),
@@ -939,7 +937,7 @@ impl ClauseType {
         }
     }
 
-    pub fn from(name: ClauseName, arity: usize, spec: Option<SharedOpDesc>) -> Self {
+    pub(crate) fn from(name: ClauseName, arity: usize, spec: Option<SharedOpDesc>) -> Self {
         CLAUSE_TYPE_FORMS
             .borrow()
             .get(&(name.as_str(), arity))

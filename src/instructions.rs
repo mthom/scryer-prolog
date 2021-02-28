@@ -47,7 +47,7 @@ impl ArithmeticTerm {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum NextOrFail {
+pub(crate) enum NextOrFail {
     Next(usize),
     Fail(usize),
 }
@@ -64,13 +64,13 @@ impl NextOrFail {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum Death {
+pub(crate) enum Death {
     Finite(usize),
     Infinity,
 }
 
 #[derive(Debug)]
-pub enum ChoiceInstruction {
+pub(crate) enum ChoiceInstruction {
     DynamicElse(usize, Death, NextOrFail),
     DynamicInternalElse(usize, Death, NextOrFail),
     DefaultRetryMeElse(usize),
@@ -81,7 +81,7 @@ pub enum ChoiceInstruction {
 }
 
 impl ChoiceInstruction {
-    pub fn to_functor(&self, h: usize) -> MachineStub {
+    pub(crate) fn to_functor(&self, h: usize) -> MachineStub {
         match self {
             &ChoiceInstruction::DynamicElse(birth, death, next_or_fail) => {
                 match (death, next_or_fail) {
@@ -171,7 +171,7 @@ impl ChoiceInstruction {
 }
 
 #[derive(Debug)]
-pub enum CutInstruction {
+pub(crate) enum CutInstruction {
     Cut(RegType),
     GetLevel(RegType),
     GetLevelAndUnify(RegType),
@@ -179,7 +179,7 @@ pub enum CutInstruction {
 }
 
 impl CutInstruction {
-    pub fn to_functor(&self, h: usize) -> MachineStub {
+    pub(crate) fn to_functor(&self, h: usize) -> MachineStub {
         match self {
             &CutInstruction::Cut(r) => {
                 let rt_stub = reg_type_into_functor(r);
@@ -201,14 +201,14 @@ impl CutInstruction {
 }
 
 #[derive(Clone, Copy, Debug)]
-pub enum IndexedChoiceInstruction {
+pub(crate) enum IndexedChoiceInstruction {
     Retry(usize),
     Trust(usize),
     Try(usize),
 }
 
 impl IndexedChoiceInstruction {
-    pub fn offset(&self) -> usize {
+    pub(crate) fn offset(&self) -> usize {
         match self {
             &IndexedChoiceInstruction::Retry(offset) => offset,
             &IndexedChoiceInstruction::Trust(offset) => offset,
@@ -216,7 +216,7 @@ impl IndexedChoiceInstruction {
         }
     }
 
-    pub fn to_functor(&self) -> MachineStub {
+    pub(crate) fn to_functor(&self) -> MachineStub {
         match self {
             &IndexedChoiceInstruction::Try(offset) => {
                 functor!("try", [integer(offset)])
@@ -233,7 +233,7 @@ impl IndexedChoiceInstruction {
 
 /// A `Line` is an instruction (cf. page 98 of wambook).
 #[derive(Debug)]
-pub enum IndexingLine {
+pub(crate) enum IndexingLine {
     Indexing(IndexingInstruction),
     IndexedChoice(SliceDeque<IndexedChoiceInstruction>),
     DynamicIndexedChoice(SliceDeque<usize>),
@@ -254,7 +254,7 @@ impl From<SliceDeque<IndexedChoiceInstruction>> for IndexingLine {
 }
 
 #[derive(Debug)]
-pub enum Line {
+pub(crate) enum Line {
     Arithmetic(ArithmeticInstruction),
     Choice(ChoiceInstruction),
     Control(ControlInstruction),
@@ -268,7 +268,7 @@ pub enum Line {
 
 impl Line {
     #[inline]
-    pub fn is_head_instr(&self) -> bool {
+    pub(crate) fn is_head_instr(&self) -> bool {
         match self {
             &Line::Fact(_) => true,
             &Line::Query(_) => true,
@@ -276,7 +276,7 @@ impl Line {
         }
     }
 
-    pub fn enqueue_functors(&self, mut h: usize, functors: &mut Vec<MachineStub>) {
+    pub(crate) fn enqueue_functors(&self, mut h: usize, functors: &mut Vec<MachineStub>) {
         match self {
             &Line::Arithmetic(ref arith_instr) => functors.push(arith_instr.to_functor(h)),
             &Line::Choice(ref choice_instr) => functors.push(choice_instr.to_functor(h)),
@@ -320,7 +320,7 @@ impl Line {
 }
 
 #[inline]
-pub fn to_indexing_line_mut(line: &mut Line) -> Option<&mut Vec<IndexingLine>> {
+pub(crate) fn to_indexing_line_mut(line: &mut Line) -> Option<&mut Vec<IndexingLine>> {
     match line {
         Line::IndexingCode(ref mut indexing_code) => Some(indexing_code),
         _ => None,
@@ -328,7 +328,7 @@ pub fn to_indexing_line_mut(line: &mut Line) -> Option<&mut Vec<IndexingLine>> {
 }
 
 #[inline]
-pub fn to_indexing_line(line: &Line) -> Option<&Vec<IndexingLine>> {
+pub(crate) fn to_indexing_line(line: &Line) -> Option<&Vec<IndexingLine>> {
     match line {
         Line::IndexingCode(ref indexing_code) => Some(indexing_code),
         _ => None,
@@ -336,7 +336,7 @@ pub fn to_indexing_line(line: &Line) -> Option<&Vec<IndexingLine>> {
 }
 
 #[derive(Debug, Clone)]
-pub enum ArithmeticInstruction {
+pub(crate) enum ArithmeticInstruction {
     Add(ArithmeticTerm, ArithmeticTerm, usize),
     Sub(ArithmeticTerm, ArithmeticTerm, usize),
     Mul(ArithmeticTerm, ArithmeticTerm, usize),
@@ -407,7 +407,7 @@ fn arith_instr_bin_functor(
 }
 
 impl ArithmeticInstruction {
-    pub fn to_functor(&self, h: usize) -> MachineStub {
+    pub(crate) fn to_functor(&self, h: usize) -> MachineStub {
         match self {
             &ArithmeticInstruction::Add(ref at_1, ref at_2, t) => {
                 arith_instr_bin_functor(h, "add", at_1, at_2, t)
@@ -505,7 +505,7 @@ impl ArithmeticInstruction {
 }
 
 #[derive(Debug)]
-pub enum ControlInstruction {
+pub(crate) enum ControlInstruction {
     Allocate(usize), // num_frames.
     // name, arity, perm_vars after threshold, last call, use default call policy.
     CallClause(ClauseType, usize, usize, bool, bool),
@@ -518,7 +518,7 @@ pub enum ControlInstruction {
 }
 
 impl ControlInstruction {
-    pub fn perm_vars(&self) -> Option<usize> {
+    pub(crate) fn perm_vars(&self) -> Option<usize> {
         match self {
             ControlInstruction::CallClause(_, _, num_cells, ..) => Some(*num_cells),
             ControlInstruction::JmpBy(_, _, num_cells, ..) => Some(*num_cells),
@@ -526,7 +526,7 @@ impl ControlInstruction {
         }
     }
 
-    pub fn to_functor(&self) -> MachineStub {
+    pub(crate) fn to_functor(&self) -> MachineStub {
         match self {
             &ControlInstruction::Allocate(num_frames) => {
                 functor!("allocate", [integer(num_frames)])
@@ -555,7 +555,7 @@ impl ControlInstruction {
 
 /// `IndexingInstruction` cf. page 110 of wambook.
 #[derive(Debug)]
-pub enum IndexingInstruction {
+pub(crate) enum IndexingInstruction {
     // The first index is the optimal argument being indexed.
     SwitchOnTerm(
         usize,
@@ -569,7 +569,7 @@ pub enum IndexingInstruction {
 }
 
 impl IndexingInstruction {
-    pub fn to_functor(&self, mut h: usize) -> MachineStub {
+    pub(crate) fn to_functor(&self, mut h: usize) -> MachineStub {
         match self {
             &IndexingInstruction::SwitchOnTerm(arg, vars, constants, lists, structures) => {
                 functor!(
@@ -657,7 +657,7 @@ impl IndexingInstruction {
 }
 
 #[derive(Debug, Clone)]
-pub enum FactInstruction {
+pub(crate) enum FactInstruction {
     GetConstant(Level, Constant, RegType),
     GetList(Level, RegType),
     GetPartialString(Level, String, RegType, bool),
@@ -672,7 +672,7 @@ pub enum FactInstruction {
 }
 
 impl FactInstruction {
-    pub fn to_functor(&self, h: usize) -> MachineStub {
+    pub(crate) fn to_functor(&self, h: usize) -> MachineStub {
         match self {
             &FactInstruction::GetConstant(lvl, ref c, r) => {
                 let lvl_stub = lvl.into_functor();
@@ -745,7 +745,7 @@ impl FactInstruction {
 }
 
 #[derive(Debug, Clone)]
-pub enum QueryInstruction {
+pub(crate) enum QueryInstruction {
     GetVariable(RegType, usize),
     PutConstant(Level, Constant, RegType),
     PutList(Level, RegType),
@@ -762,7 +762,7 @@ pub enum QueryInstruction {
 }
 
 impl QueryInstruction {
-    pub fn to_functor(&self, h: usize) -> MachineStub {
+    pub(crate) fn to_functor(&self, h: usize) -> MachineStub {
         match self {
             &QueryInstruction::PutUnsafeValue(norm, arg) => {
                 functor!("put_unsafe_value", [integer(norm), integer(arg)])
@@ -842,6 +842,6 @@ impl QueryInstruction {
     }
 }
 
-pub type CompiledFact = Vec<FactInstruction>;
+pub(crate) type CompiledFact = Vec<FactInstruction>;
 
-pub type Code = Vec<Line>;
+pub(crate) type Code = Vec<Line>;

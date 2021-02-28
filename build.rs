@@ -44,7 +44,7 @@ fn main() {
     libraries
         .write_all(
             b"ref_thread_local::ref_thread_local! {
-    pub static managed LIBRARIES: IndexMap<&'static str, &'static str> = {
+    pub(crate) static managed LIBRARIES: IndexMap<&'static str, &'static str> = {
         let mut m = IndexMap::new();\n",
         )
         .unwrap();

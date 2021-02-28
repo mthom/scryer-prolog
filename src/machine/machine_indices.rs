@@ -29,12 +29,12 @@ use std::ops::{Add, AddAssign, Deref, Sub, SubAssign};
 use std::rc::Rc;
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct OrderedOpDirKey(pub ClauseName, pub Fixity);
+pub(crate) struct OrderedOpDirKey(pub(crate) ClauseName, pub(crate) Fixity);
 
-pub type OssifiedOpDir = BTreeMap<OrderedOpDirKey, (usize, Specifier)>;
+pub(crate) type OssifiedOpDir = BTreeMap<OrderedOpDirKey, (usize, Specifier)>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum DBRef {
+pub(crate) enum DBRef {
     NamedPred(ClauseName, usize, Option<SharedOpDesc>),
     Op(
         usize,
@@ -47,7 +47,7 @@ pub enum DBRef {
 
 // 7.2
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub enum TermOrderCategory {
+pub(crate) enum TermOrderCategory {
     Variable,
     FloatingPoint,
     Integer,
@@ -56,7 +56,7 @@ pub enum TermOrderCategory {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum Addr {
+pub(crate) enum Addr {
     AttrVar(usize),
     Char(char),
     Con(usize),
@@ -76,14 +76,14 @@ pub enum Addr {
 }
 
 #[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, PartialOrd)]
-pub enum Ref {
+pub(crate) enum Ref {
     AttrVar(usize),
     HeapCell(usize),
     StackCell(usize, usize),
 }
 
 impl Ref {
-    pub fn as_addr(self) -> Addr {
+    pub(crate) fn as_addr(self) -> Addr {
         match self {
             Ref::AttrVar(h) => Addr::AttrVar(h),
             Ref::HeapCell(h) => Addr::HeapCell(h),
@@ -141,7 +141,7 @@ impl PartialOrd<Ref> for Addr {
 
 impl Addr {
     #[inline]
-    pub fn is_heap_bound(&self) -> bool {
+    pub(crate) fn is_heap_bound(&self) -> bool {
         match self {
             Addr::Char(_)
             | Addr::EmptyList
@@ -154,7 +154,7 @@ impl Addr {
     }
 
     #[inline]
-    pub fn is_ref(&self) -> bool {
+    pub(crate) fn is_ref(&self) -> bool {
         match self {
             Addr::HeapCell(_) | Addr::StackCell(_, _) | Addr::AttrVar(_) => true,
             _ => false,
@@ -162,7 +162,7 @@ impl Addr {
     }
 
     #[inline]
-    pub fn as_var(&self) -> Option<Ref> {
+    pub(crate) fn as_var(&self) -> Option<Ref> {
         match self {
             &Addr::AttrVar(h) => Some(Ref::AttrVar(h)),
             &Addr::HeapCell(h) => Some(Ref::HeapCell(h)),
@@ -202,7 +202,7 @@ impl Addr {
         }
     }
 
-    pub fn as_constant_index(&self, machine_st: &MachineState) -> Option<Constant> {
+    pub(crate) fn as_constant_index(&self, machine_st: &MachineState) -> Option<Constant> {
         match self {
             &Addr::Char(c) => Some(Constant::Char(c)),
             &Addr::Con(h) => match &machine_st.heap[h] {
@@ -222,7 +222,7 @@ impl Addr {
         }
     }
 
-    pub fn is_protected(&self, e: usize) -> bool {
+    pub(crate) fn is_protected(&self, e: usize) -> bool {
         match self {
             &Addr::StackCell(addr, _) if addr >= e => false,
             _ => true,
@@ -292,7 +292,7 @@ impl SubAssign<usize> for Addr {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum TrailRef {
+pub(crate) enum TrailRef {
     Ref(Ref),
     AttrVarHeapLink(usize),
     AttrVarListLink(usize, usize),
@@ -307,7 +307,7 @@ impl From<Ref> for TrailRef {
 }
 
 #[derive(Debug)]
-pub enum HeapCellValue {
+pub(crate) enum HeapCellValue {
     Addr(Addr),
     Atom(ClauseName, Option<SharedOpDesc>),
     DBRef(DBRef),
@@ -322,13 +322,13 @@ pub enum HeapCellValue {
 
 impl HeapCellValue {
     #[inline]
-    pub fn as_addr(&self, focus: usize) -> Addr {
+    pub(crate) fn as_addr(&self, focus: usize) -> Addr {
         match self {
             HeapCellValue::Addr(ref a) => *a,
-            HeapCellValue::Atom(..) |
-            HeapCellValue::DBRef(..) |
-            HeapCellValue::Integer(..) |
-            HeapCellValue::Rational(..) => Addr::Con(focus),
+            HeapCellValue::Atom(..)
+            | HeapCellValue::DBRef(..)
+            | HeapCellValue::Integer(..)
+            | HeapCellValue::Rational(..) => Addr::Con(focus),
             HeapCellValue::LoadStatePayload(_) => Addr::LoadStatePayload(focus),
             HeapCellValue::NamedStr(_, _, _) => Addr::Str(focus),
             HeapCellValue::PartialString(..) => Addr::PStrLocation(focus, 0),
@@ -338,7 +338,7 @@ impl HeapCellValue {
     }
 
     #[inline]
-    pub fn context_free_clone(&self) -> HeapCellValue {
+    pub(crate) fn context_free_clone(&self) -> HeapCellValue {
         match self {
             &HeapCellValue::Addr(addr) => HeapCellValue::Addr(addr),
             &HeapCellValue::Atom(ref name, ref op) => HeapCellValue::Atom(name.clone(), op.clone()),
@@ -370,7 +370,7 @@ impl From<Addr> for HeapCellValue {
 }
 
 #[derive(Debug, Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum IndexPtr {
+pub(crate) enum IndexPtr {
     DynamicUndefined, // a predicate, declared as dynamic, whose location in code is as yet undefined.
     DynamicIndex(usize),
     Index(usize),
@@ -378,7 +378,7 @@ pub enum IndexPtr {
 }
 
 #[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq)]
-pub struct CodeIndex(pub Rc<Cell<IndexPtr>>);
+pub(crate) struct CodeIndex(pub(crate) Rc<Cell<IndexPtr>>);
 
 impl Deref for CodeIndex {
     type Target = Cell<IndexPtr>;
@@ -396,14 +396,14 @@ impl CodeIndex {
     }
 
     #[inline]
-    pub fn is_undefined(&self) -> bool {
+    pub(crate) fn is_undefined(&self) -> bool {
         match self.0.get() {
             IndexPtr::Undefined => true, // | &IndexPtr::DynamicUndefined => true,
             _ => false,
         }
     }
 
-    pub fn local(&self) -> Option<usize> {
+    pub(crate) fn local(&self) -> Option<usize> {
         match self.0.get() {
             IndexPtr::Index(i) => Some(i),
             IndexPtr::DynamicIndex(i) => Some(i),
@@ -419,7 +419,7 @@ impl Default for CodeIndex {
 }
 
 #[derive(Debug, Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
-pub enum REPLCodePtr {
+pub(crate) enum REPLCodePtr {
     AddDiscontiguousPredicate,
     AddDynamicPredicate,
     AddMultifilePredicate,
@@ -456,7 +456,7 @@ pub enum REPLCodePtr {
 }
 
 #[derive(Debug, Clone, PartialEq)]
-pub enum CodePtr {
+pub(crate) enum CodePtr {
     BuiltInClause(BuiltInClauseType, LocalCodePtr), // local is the successor call.
     CallN(usize, LocalCodePtr, bool),               // arity, local, last call.
     Local(LocalCodePtr),
@@ -466,7 +466,7 @@ pub enum CodePtr {
 }
 
 impl CodePtr {
-    pub fn local(&self) -> LocalCodePtr {
+    pub(crate) fn local(&self) -> LocalCodePtr {
         match self {
             &CodePtr::BuiltInClause(_, ref local)
             | &CodePtr::CallN(_, ref local, _)
@@ -477,7 +477,7 @@ impl CodePtr {
     }
 
     #[inline]
-    pub fn is_halt(&self) -> bool {
+    pub(crate) fn is_halt(&self) -> bool {
         if let CodePtr::Local(LocalCodePtr::Halt) = self {
             true
         } else {
@@ -487,7 +487,7 @@ impl CodePtr {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
-pub enum LocalCodePtr {
+pub(crate) enum LocalCodePtr {
     DirEntry(usize), // offset
     Halt,
     IndexingBuf(usize, usize, usize), // DirEntry offset, first internal offset, second internal offset
@@ -659,22 +659,23 @@ impl SubAssign<usize> for CodePtr {
     }
 }
 
-pub type HeapVarDict = IndexMap<Rc<Var>, Addr>;
-pub type AllocVarDict = IndexMap<Rc<Var>, VarData>;
+pub(crate) type HeapVarDict = IndexMap<Rc<Var>, Addr>;
+pub(crate) type AllocVarDict = IndexMap<Rc<Var>, VarData>;
 
-pub type GlobalVarDir = IndexMap<ClauseName, (Ball, Option<Addr>)>;
+pub(crate) type GlobalVarDir = IndexMap<ClauseName, (Ball, Option<Addr>)>;
 
 pub(crate) type StreamAliasDir = IndexMap<ClauseName, Stream>;
 pub(crate) type StreamDir = BTreeSet<Stream>;
 
-pub type MetaPredicateDir = IndexMap<PredicateKey, Vec<MetaSpec>>;
+pub(crate) type MetaPredicateDir = IndexMap<PredicateKey, Vec<MetaSpec>>;
 
-pub type ExtensiblePredicates = IndexMap<PredicateKey, PredicateSkeleton>;
+pub(crate) type ExtensiblePredicates = IndexMap<PredicateKey, PredicateSkeleton>;
 
-pub type LocalExtensiblePredicates = IndexMap<(CompilationTarget, PredicateKey), PredicateSkeleton>;
+pub(crate) type LocalExtensiblePredicates =
+    IndexMap<(CompilationTarget, PredicateKey), PredicateSkeleton>;
 
 #[derive(Debug)]
-pub struct IndexStore {
+pub(crate) struct IndexStore {
     pub(super) code_dir: CodeDir,
     pub(super) extensible_predicates: ExtensiblePredicates,
     pub(super) local_extensible_predicates: LocalExtensiblePredicates,
@@ -694,7 +695,7 @@ impl Default for IndexStore {
 }
 
 impl IndexStore {
-    pub fn get_predicate_skeleton_mut(
+    pub(crate) fn get_predicate_skeleton_mut(
         &mut self,
         compilation_target: &CompilationTarget,
         key: &PredicateKey,
@@ -714,29 +715,25 @@ impl IndexStore {
         }
     }
 
-    pub fn get_local_predicate_skeleton_mut(
+    pub(crate) fn get_local_predicate_skeleton_mut(
         &mut self,
         src_compilation_target: &CompilationTarget,
         local_compilation_target: CompilationTarget,
         key: PredicateKey,
     ) -> Option<&mut PredicateSkeleton> {
         match (key.0.as_str(), key.1) {
-            ("term_expansion", 2) => {
-                self.local_extensible_predicates.get_mut(
-                    &(local_compilation_target, key),
-                )
-            }
+            ("term_expansion", 2) => self
+                .local_extensible_predicates
+                .get_mut(&(local_compilation_target, key)),
             _ => match src_compilation_target {
-                CompilationTarget::User => {
-                    self.local_extensible_predicates.get_mut(
-                        &(local_compilation_target, key),
-                    )
-                }
+                CompilationTarget::User => self
+                    .local_extensible_predicates
+                    .get_mut(&(local_compilation_target, key)),
                 CompilationTarget::Module(ref module_name) => {
                     if let Some(module) = self.modules.get_mut(module_name) {
-                        module.local_extensible_predicates.get_mut(
-                            &(local_compilation_target, key),
-                        )
+                        module
+                            .local_extensible_predicates
+                            .get_mut(&(local_compilation_target, key))
                     } else {
                         None
                     }
@@ -745,29 +742,25 @@ impl IndexStore {
         }
     }
 
-    pub fn get_local_predicate_skeleton(
+    pub(crate) fn get_local_predicate_skeleton(
         &self,
         src_compilation_target: &CompilationTarget,
         local_compilation_target: CompilationTarget,
         key: PredicateKey,
     ) -> Option<&PredicateSkeleton> {
         match (key.0.as_str(), key.1) {
-            ("term_expansion", 2) => {
-                self.local_extensible_predicates.get(
-                    &(local_compilation_target, key),
-                )
-            }
+            ("term_expansion", 2) => self
+                .local_extensible_predicates
+                .get(&(local_compilation_target, key)),
             _ => match src_compilation_target {
-                CompilationTarget::User => {
-                    self.local_extensible_predicates.get(
-                        &(local_compilation_target, key),
-                    )
-                }
+                CompilationTarget::User => self
+                    .local_extensible_predicates
+                    .get(&(local_compilation_target, key)),
                 CompilationTarget::Module(ref module_name) => {
                     if let Some(module) = self.modules.get(module_name) {
-                        module.local_extensible_predicates.get(
-                            &(local_compilation_target, key),
-                        )
+                        module
+                            .local_extensible_predicates
+                            .get(&(local_compilation_target, key))
                     } else {
                         None
                     }
@@ -776,7 +769,7 @@ impl IndexStore {
         }
     }
 
-    pub fn get_predicate_skeleton(
+    pub(crate) fn get_predicate_skeleton(
         &self,
         compilation_target: &CompilationTarget,
         key: &PredicateKey,
@@ -796,19 +789,15 @@ impl IndexStore {
         }
     }
 
-    pub fn remove_predicate_skeleton(
+    pub(crate) fn remove_predicate_skeleton(
         &mut self,
         compilation_target: &CompilationTarget,
         key: &PredicateKey,
     ) -> Option<PredicateSkeleton> {
         match (key.0.as_str(), key.1) {
-            ("term_expansion", 2) => {
-                self.extensible_predicates.remove(key)
-            }
+            ("term_expansion", 2) => self.extensible_predicates.remove(key),
             _ => match compilation_target {
-                CompilationTarget::User => {
-                    self.extensible_predicates.remove(key)
-                }
+                CompilationTarget::User => self.extensible_predicates.remove(key),
                 CompilationTarget::Module(ref module_name) => {
                     if let Some(module) = self.modules.get_mut(module_name) {
                         module.extensible_predicates.remove(key)
@@ -820,7 +809,7 @@ impl IndexStore {
         }
     }
 
-    pub fn get_predicate_code_index(
+    pub(crate) fn get_predicate_code_index(
         &self,
         name: ClauseName,
         arity: usize,
@@ -848,7 +837,7 @@ impl IndexStore {
         }
     }
 
-    pub fn get_meta_predicate_spec(
+    pub(crate) fn get_meta_predicate_spec(
         &self,
         name: ClauseName,
         arity: usize,
@@ -866,7 +855,7 @@ impl IndexStore {
         }
     }
 
-    pub fn is_dynamic_predicate(&self, module_name: ClauseName, key: PredicateKey) -> bool {
+    pub(crate) fn is_dynamic_predicate(&self, module_name: ClauseName, key: PredicateKey) -> bool {
         match module_name.as_str() {
             "user" => self
                 .extensible_predicates
@@ -911,9 +900,9 @@ impl IndexStore {
     }
 }
 
-pub type CodeDir = BTreeMap<PredicateKey, CodeIndex>;
+pub(crate) type CodeDir = BTreeMap<PredicateKey, CodeIndex>;
 
-pub enum RefOrOwned<'a, T: 'a> {
+pub(crate) enum RefOrOwned<'a, T: 'a> {
     Borrowed(&'a T),
     Owned(T),
 }
@@ -928,14 +917,14 @@ impl<'a, T: 'a + fmt::Debug> fmt::Debug for RefOrOwned<'a, T> {
 }
 
 impl<'a, T> RefOrOwned<'a, T> {
-    pub fn as_ref(&'a self) -> &'a T {
+    pub(crate) fn as_ref(&'a self) -> &'a T {
         match self {
             &RefOrOwned::Borrowed(r) => r,
             &RefOrOwned::Owned(ref r) => r,
         }
     }
 
-    pub fn to_owned(self) -> T
+    pub(crate) fn to_owned(self) -> T
     where
         T: Clone,
     {
