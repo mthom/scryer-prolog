@@ -108,6 +108,17 @@ repl :-
 repl :-
     repl.
 
+%% Enable op declarations with lists of operands, i.e.,
+%% :- op(900, fy, [$,@]).
+
+user:term_expansion((:- op(Pred, Spec, [Op | OtherOps])), OpResults) :-
+    expand_op_list([Op | OtherOps], Pred, Spec, OpResults).
+
+expand_op_list([], _, _, []).
+expand_op_list([Op | OtherOps], Pred, Spec, [(:- op(Pred, Spec, Op)) | OtherResults]) :-
+    expand_op_list(OtherOps, Pred, Spec, OtherResults).
+
+
 read_and_match :-
     '$read_query_term'(_, Term, _, _, VarList),
     instruction_match(Term, VarList).
