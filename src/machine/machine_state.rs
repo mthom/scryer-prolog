@@ -304,6 +304,7 @@ pub(crate) struct MachineState {
     pub(crate) global_clock: usize,
     pub(crate) dynamic_mode: FirstOrNext,
     pub(crate) unify_fn: fn(&mut MachineState, Addr, Addr),
+    pub(crate) bind_fn: fn(&mut MachineState, Ref, Addr),
 }
 
 impl fmt::Debug for MachineState {
@@ -342,6 +343,14 @@ impl fmt::Debug for MachineState {
                     &"MachineState::unify_with_occurs_check"
                 } else {
                     &"MachineState::unify_with_occurs_check_with_error"
+                })
+         .field("bind_fn",
+                if self.bind_fn as usize == MachineState::bind as usize {
+                    &"MachineState::bind"
+                } else if self.bind_fn as usize == MachineState::bind_with_occurs_check_wrapper as usize {
+                    &"MachineState::bind_with_occurs_check"
+                } else {
+                    &"MachineState::bind_with_occurs_check_with_error_wrapper"
                 })
          .finish()
     }

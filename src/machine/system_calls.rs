@@ -253,11 +253,11 @@ impl MachineState {
 
     fn finalize_skip_max_list(&mut self, n: usize, addr: Addr) {
         let target_n = self[temp_v!(1)];
-        (self.unify_fn)(self, Addr::Usize(n), target_n);
+        self.unify(Addr::Usize(n), target_n);
 
         if !self.fail {
             let xs = self[temp_v!(4)];
-            (self.unify_fn)(self, addr, xs);
+            self.unify(addr, xs);
         }
     }
 
@@ -313,7 +313,7 @@ impl MachineState {
                                 let xs0 = self[temp_v!(3)];
                                 let xs = self[temp_v!(4)];
 
-                                (self.unify_fn)(self, xs0, xs);
+                                self.unify(xs0, xs);
                             } else {
                                 self.skip_max_list_result(max_steps_n);
                             }
@@ -323,7 +323,7 @@ impl MachineState {
                                 let xs0 = self[temp_v!(3)];
                                 let xs = self[temp_v!(4)];
 
-                                (self.unify_fn)(self, xs0, xs);
+                                self.unify(xs0, xs);
                             } else {
                                 self.skip_max_list_result(max_steps_n);
                             }
@@ -5456,12 +5456,15 @@ impl MachineState {
             }
             &SystemClauseType::SetSTOAsUnify => {
                 self.unify_fn = MachineState::unify_with_occurs_check;
+                self.bind_fn = MachineState::bind_with_occurs_check_wrapper;
             }
             &SystemClauseType::SetNSTOAsUnify => {
                 self.unify_fn = MachineState::unify;
+                self.bind_fn = MachineState::bind;
             }
             &SystemClauseType::SetSTOWithErrorAsUnify => {
                 self.unify_fn = MachineState::unify_with_occurs_check_with_error;
+                self.bind_fn = MachineState::bind_with_occurs_check_with_error_wrapper;
             }
             &SystemClauseType::HomeDirectory => {
                 let path = match dirs_next::home_dir() {
