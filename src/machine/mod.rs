@@ -126,34 +126,6 @@ fn current_dir() -> PathBuf {
 include!(concat!(env!("OUT_DIR"), "/libraries.rs"));
 
 impl Machine {
-    /*
-    fn compile_scryerrc(&mut self) {
-        let mut path = match dirs_next::home_dir() {
-            Some(path) => path,
-            None => return,
-        };
-
-        path.push(".scryerrc");
-
-        if path.is_file() {
-            let file_src = match File::open(&path) {
-                Ok(file_handle) => Stream::from_file_as_input(
-                    clause_name!(".scryerrc"),
-                    file_handle,
-                ),
-                Err(_) => return,
-            };
-
-            let rc_src = ListingSource::from_file_and_path(
-                clause_name!(".scryerrc"),
-                path.to_path_buf(),
-            );
-
-            compile_user_module(self, file_src, rc_src);
-        }
-    }
-    */
-
     fn run_module_predicate(&mut self, module_name: ClauseName, key: PredicateKey) {
         if let Some(module) = self.indices.modules.get(&module_name) {
             if let Some(ref code_index) = module.code_dir.get(&key) {

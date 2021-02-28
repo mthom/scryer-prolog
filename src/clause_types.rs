@@ -307,6 +307,7 @@ pub enum SystemClauseType {
     IsSTOEnabled,
     SetSTOAsUnify,
     SetNSTOAsUnify,
+    HomeDirectory,
 }
 
 impl SystemClauseType {
@@ -591,6 +592,7 @@ impl SystemClauseType {
             &SystemClauseType::IsSTOEnabled => clause_name!("$is_sto_enabled"),
             &SystemClauseType::SetSTOAsUnify => clause_name!("$set_sto_as_unify"),
             &SystemClauseType::SetNSTOAsUnify => clause_name!("$set_nsto_as_unify"),
+            &SystemClauseType::HomeDirectory => clause_name!("$home_directory"),
         }
     }
 
@@ -839,6 +841,7 @@ impl SystemClauseType {
             ("$is_sto_enabled", 1) => Some(SystemClauseType::IsSTOEnabled),
             ("$set_sto_as_unify", 0) => Some(SystemClauseType::SetSTOAsUnify),
             ("$set_nsto_as_unify", 0) => Some(SystemClauseType::SetNSTOAsUnify),
+            ("$home_directory", 1) => Some(SystemClauseType::HomeDirectory),
             _ => None,
         }
     }

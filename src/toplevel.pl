@@ -9,6 +9,13 @@
 :- use_module(library('$project_atts')).
 :- use_module(library('$atts')).
 
+load_scryerrc :-
+    (  '$home_directory'(HomeDir) ->
+       atom_concat(HomeDir, '/.scryerrc', ScryerrcFile),
+       catch(use_module(ScryerrcFile), E, print_exception(E))
+    ;  true
+    ).
+
 :- dynamic(argv/1).
 
 '$repl'([_|Args0]) :-
@@ -19,12 +26,14 @@
     ;   asserta('$toplevel':argv([])),
         Args = Args0
     ),
+    load_scryerrc,
     delegate_task(Args, []),
     repl.
 '$repl'(_) :-
     (   \+ argv(_) -> asserta('$toplevel':argv([]))
     ;   true
     ),
+    load_scryerrc,
     repl.
 
 delegate_task([], []).

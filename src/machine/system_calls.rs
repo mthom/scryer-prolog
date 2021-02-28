@@ -5454,6 +5454,28 @@ impl MachineState {
             &SystemClauseType::SetNSTOAsUnify => {
                 self.unify_fn = MachineState::unify;
             }
+            &SystemClauseType::HomeDirectory => {
+                let path = match dirs_next::home_dir() {
+                    Some(path) => path,
+                    None => {
+                        self.fail = true;
+                        return Ok(());
+                    }
+                };
+
+                if path.is_dir() {
+                    if let Some(path) = path.to_str() {
+                        let path_atom = self.heap.to_unifiable(
+                            HeapCellValue::Atom(clause_name!(path.to_string(), self.atom_tbl), None),
+                        );
+
+                        (self.unify_fn)(self, self[temp_v!(1)], path_atom);
+                        return return_from_clause!(self.last_call, self);
+                    }
+                }
+
+                self.fail = true;
+            }
         };
 
         return_from_clause!(self.last_call, self)
