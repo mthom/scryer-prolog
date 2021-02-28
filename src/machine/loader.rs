@@ -1738,6 +1738,8 @@ impl Machine {
         let compile_assert = || {
             let mut loader = Loader::new(LiveTermStream::new(ListingSource::User), self);
 
+            loader.load_state.compilation_target = compilation_target.clone();
+
             let head = loader.read_term_from_heap(temp_v!(1))?;
             let body = loader.read_term_from_heap(temp_v!(2))?;
 
