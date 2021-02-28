@@ -304,6 +304,9 @@ pub enum SystemClauseType {
     UnsetEnv,
     CharsBase64,
     DevourWhitespace,
+    IsSTOEnabled,
+    SetSTOAsUnify,
+    SetNSTOAsUnify,
 }
 
 impl SystemClauseType {
@@ -585,6 +588,9 @@ impl SystemClauseType {
             &SystemClauseType::CharsBase64 => clause_name!("$chars_base64"),
             &SystemClauseType::LoadLibraryAsStream => clause_name!("$load_library_as_stream"),
             &SystemClauseType::DevourWhitespace => clause_name!("$devour_whitespace"),
+            &SystemClauseType::IsSTOEnabled => clause_name!("$is_sto_enabled"),
+            &SystemClauseType::SetSTOAsUnify => clause_name!("$set_sto_as_unify"),
+            &SystemClauseType::SetNSTOAsUnify => clause_name!("$set_nsto_as_unify"),
         }
     }
 
@@ -830,6 +836,9 @@ impl SystemClauseType {
             ("$devour_whitespace", 1) => {
                 Some(SystemClauseType::DevourWhitespace)
             }
+            ("$is_sto_enabled", 1) => Some(SystemClauseType::IsSTOEnabled),
+            ("$set_sto_as_unify", 0) => Some(SystemClauseType::SetSTOAsUnify),
+            ("$set_nsto_as_unify", 0) => Some(SystemClauseType::SetNSTOAsUnify),
             _ => None,
         }
     }

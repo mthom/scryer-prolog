@@ -1631,8 +1631,7 @@ impl Machine {
                     .push(HeapCellValue::Atom(path_atom, None)),
             );
 
-            self.machine_st
-                .unify(path_addr, self.machine_st[temp_v!(1)]);
+            self.machine_st.unify(path_addr, self.machine_st[temp_v!(1)]);
         } else {
             self.machine_st.fail = true;
         }
@@ -1652,9 +1651,7 @@ impl Machine {
                             .push(HeapCellValue::Atom(file_name_atom, None)),
                     );
 
-                    self.machine_st
-                        .unify(file_name_addr, self.machine_st[temp_v!(1)]);
-
+                    self.machine_st.unify(file_name_addr, self.machine_st[temp_v!(1)]);
                     return;
                 }
                 _ => {
@@ -1680,8 +1677,7 @@ impl Machine {
                         .push(HeapCellValue::Atom(directory_atom, None)),
                 );
 
-                self.machine_st
-                    .unify(directory_addr, self.machine_st[temp_v!(1)]);
+                self.machine_st.unify(directory_addr, self.machine_st[temp_v!(1)]);
                 return;
             }
         }
@@ -1697,8 +1693,7 @@ impl Machine {
                     .push(HeapCellValue::Atom(load_context.module.clone(), None)),
             );
 
-            self.machine_st
-                .unify(module_name_addr, self.machine_st[temp_v!(1)]);
+            self.machine_st.unify(module_name_addr, self.machine_st[temp_v!(1)]);
         } else {
             self.machine_st.fail = true;
         }
@@ -1712,8 +1707,7 @@ impl Machine {
                     .push(HeapCellValue::Stream(load_context.stream.clone())),
             );
 
-            self.machine_st
-                .unify(stream_addr, self.machine_st[temp_v!(1)]);
+            self.machine_st.unify(stream_addr, self.machine_st[temp_v!(1)]);
         } else {
             self.machine_st.fail = true;
         }
@@ -2064,8 +2058,8 @@ impl Machine {
                 self.machine_st
                     .heap
                     .push(HeapCellValue::Addr(Addr::HeapCell(list_loc)));
-                self.machine_st
-                    .unify(Addr::HeapCell(heap_loc), self.machine_st[temp_v!(4)]);
+
+                self.machine_st.unify(Addr::HeapCell(heap_loc), self.machine_st[temp_v!(4)]);
             }
             None => {
                 self.machine_st.fail = true;

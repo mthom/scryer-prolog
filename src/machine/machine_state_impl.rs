@@ -52,11 +52,11 @@ impl MachineState {
             lifted_heap: Heap::new(),
             interms: vec![Number::default(); 256],
             last_call: false,
-            heap_locs: HeapVarDict::new(),
             flags: MachineFlags::default(),
             cc: 0,
             global_clock: 0,
             dynamic_mode: FirstOrNext::First,
+            unify_fn: MachineState::unify,
         }
     }
 
@@ -770,7 +770,7 @@ impl MachineState {
                         self.heap.put_complete_string(&string[prefix_len..])
                     };
 
-                    self.unify(Addr::Lis(l), pstr_addr);
+                    (self.unify_fn)(self, Addr::Lis(l), pstr_addr);
                 }
                 _ => {
                     self.fail = true;
@@ -839,7 +839,7 @@ impl MachineState {
             }
             Addr::Lis(l) => {
                 let addr = self.heap.put_constant(c.clone());
-                self.unify(Addr::Lis(l), addr);
+                (self.unify_fn)(self, Addr::Lis(l), addr);
             }
             Addr::PStrLocation(h, n) => {
                 if let Constant::String(ref s2) = c {
@@ -857,7 +857,7 @@ impl MachineState {
                 if let Some(r) = addr.as_var() {
                     self.bind(r, c);
                 } else {
-                    self.unify(addr, c);
+                    (self.unify_fn)(self, addr, c);
                 }
             }
         };
@@ -1209,7 +1209,7 @@ impl MachineState {
                 let norm_addr = self[norm];
                 let reg_addr = self.registers[arg];
 
-                self.unify(norm_addr, reg_addr);
+                (self.unify_fn)(self, norm_addr, reg_addr);
             }
             &FactInstruction::UnifyConstant(ref c) => {
                 match self.mode {
@@ -1247,7 +1247,7 @@ impl MachineState {
                     MachineMode::Read => {
                         let reg_addr = self[reg];
 
-                        self.unify(reg_addr, self.s.read(&self.heap));
+                        (self.unify_fn)(self, reg_addr, self.s.read(&self.heap));
                         self.increment_s_ptr(1);
                     }
                     MachineMode::Write => {
@@ -1275,7 +1275,7 @@ impl MachineState {
                     MachineMode::Read => {
                         let reg_addr = self[reg];
 
-                        self.unify(reg_addr, self.s.read(&self.heap));
+                        (self.unify_fn)(self, reg_addr, self.s.read(&self.heap));
                         self.increment_s_ptr(1);
                     }
                     MachineMode::Write => {
@@ -1778,7 +1778,7 @@ impl MachineState {
                             let a3 = self[temp_v!(3)];
                             let h_a = Addr::HeapCell(o + n);
 
-                            self.unify(a3, h_a);
+                            (self.unify_fn)(self, a3, h_a);
                         }
                         _ => {
                             self.fail = true;
@@ -1789,7 +1789,7 @@ impl MachineState {
                             let a3 = self[temp_v!(3)];
                             let h_a = Addr::HeapCell(l + n - 1);
 
-                            self.unify(a3, h_a);
+                            (self.unify_fn)(self, a3, h_a);
                         } else {
                             self.fail = true;
                         }
@@ -1812,7 +1812,7 @@ impl MachineState {
                                     unreachable!()
                                 };
 
-                            self.unify(a3, h_a);
+                            (self.unify_fn)(self, a3, h_a);
                         } else {
                             self.fail = true;
                         }
@@ -2396,10 +2396,10 @@ impl MachineState {
         let a2 = self[temp_v!(2)];
         let a3 = self[temp_v!(3)];
 
-        self.unify(a2, name);
+        (self.unify_fn)(self, a2, name);
 
         if !self.fail {
-            self.unify(a3, Addr::Usize(arity));
+            (self.unify_fn)(self, a3, Addr::Usize(arity));
         }
     }
 
@@ -2520,7 +2520,7 @@ impl MachineState {
                     | Addr::Usize(_)
                         if arity == 0 =>
                     {
-                        self.unify(a1, name);
+                        (self.unify_fn)(self, a1, name);
                     }
                     Addr::Con(h) => {
                         if let HeapCellValue::Atom(name, spec) = self.heap.clone(h) {
@@ -2763,7 +2763,7 @@ impl MachineState {
 
         copy_term(CopyTerm::new(self), a1, attr_var_policy);
 
-        self.unify(Addr::HeapCell(old_h), a2);
+        (self.unify_fn)(self, Addr::HeapCell(old_h), a2);
     }
 
     // returns true on failure.
@@ -3505,7 +3505,7 @@ impl MachineState {
                 let b0 = self[perm_v!(1)];
                 let a = self[r];
 
-                self.unify(a, b0);
+                (self.unify_fn)(self, a, b0);
                 self.p += 1;
             }
             &CutInstruction::Cut(r) => {

@@ -253,11 +253,11 @@ impl MachineState {
 
     fn finalize_skip_max_list(&mut self, n: usize, addr: Addr) {
         let target_n = self[temp_v!(1)];
-        self.unify(Addr::Usize(n), target_n);
+        (self.unify_fn)(self, Addr::Usize(n), target_n);
 
         if !self.fail {
             let xs = self[temp_v!(4)];
-            self.unify(addr, xs);
+            (self.unify_fn)(self, addr, xs);
         }
     }
 
@@ -313,7 +313,7 @@ impl MachineState {
                                 let xs0 = self[temp_v!(3)];
                                 let xs = self[temp_v!(4)];
 
-                                self.unify(xs0, xs);
+                                (self.unify_fn)(self, xs0, xs);
                             } else {
                                 self.skip_max_list_result(max_steps_n);
                             }
@@ -323,7 +323,7 @@ impl MachineState {
                                 let xs0 = self[temp_v!(3)];
                                 let xs = self[temp_v!(4)];
 
-                                self.unify(xs0, xs);
+                                (self.unify_fn)(self, xs0, xs);
                             } else {
                                 self.skip_max_list_result(max_steps_n);
                             }
@@ -630,19 +630,19 @@ impl MachineState {
             }
             Ok(Term::Constant(_, Constant::Rational(n))) => {
                 let addr = self.heap.put_constant(Constant::Rational(n));
-                self.unify(nx, addr);
+                (self.unify_fn)(self, nx, addr);
             }
             Ok(Term::Constant(_, Constant::Float(n))) => {
                 let addr = self.heap.put_constant(Constant::Float(n));
-                self.unify(nx, addr);
+                (self.unify_fn)(self, nx, addr);
             }
             Ok(Term::Constant(_, Constant::Integer(n))) => {
                 let addr = self.heap.put_constant(Constant::Integer(n));
-                self.unify(nx, addr);
+                (self.unify_fn)(self, nx, addr);
             }
             Ok(Term::Constant(_, Constant::Fixnum(n))) => {
                 let addr = self.heap.put_constant(Constant::Fixnum(n));
-                self.unify(nx, addr);
+                (self.unify_fn)(self, nx, addr);
             }
             _ => {
                 let err = ParserError::ParseBigInt(0, 0);
@@ -668,7 +668,7 @@ impl MachineState {
         let attr_goals = Addr::HeapCell(self.heap.to_list(attr_goals.into_iter()));
         let target = self[temp_v!(1)];
 
-        self.unify(attr_goals, target);
+        (self.unify_fn)(self, attr_goals, target);
     }
 
     fn call_continuation_chunk(&mut self, chunk: Addr, return_p: LocalCodePtr) -> LocalCodePtr {
@@ -742,7 +742,7 @@ impl MachineState {
                         let target = self[temp_v!(n)];
                         let addr = self[temp_v!(1)];
 
-                        self.unify(addr, target);
+                        (self.unify_fn)(self, addr, target);
                         return return_from_clause!(self.last_call, self);
                     }
                 }
@@ -758,7 +758,7 @@ impl MachineState {
                                 None,
                             ));
 
-                            self.unify(self[temp_v!(1)], hostname);
+                            (self.unify_fn)(self, self[temp_v!(1)], hostname);
                             return return_from_clause!(self.last_call, self);
                         }
                         None => {}
@@ -777,7 +777,7 @@ impl MachineState {
                 match addr {
                     addr if addr.is_ref() => {
                         let stream = self.heap.to_unifiable(HeapCellValue::Stream(stream));
-                        self.unify(stream, addr);
+                        (self.unify_fn)(self, stream, addr);
                     }
                     Addr::Stream(other_stream) => {
                         if let HeapCellValue::Stream(ref other_stream) = &self.heap[other_stream] {
@@ -802,7 +802,7 @@ impl MachineState {
                 match addr {
                     addr if addr.is_ref() => {
                         let stream = self.heap.to_unifiable(HeapCellValue::Stream(stream));
-                        self.unify(stream, addr);
+                        (self.unify_fn)(self, stream, addr);
                     }
                     Addr::Stream(other_stream) => {
                         if let HeapCellValue::Stream(ref other_stream) = &self.heap[other_stream] {
@@ -849,7 +849,7 @@ impl MachineState {
                 }
 
                 let files_list = Addr::HeapCell(self.heap.to_list(files.into_iter()));
-                self.unify(self[temp_v!(2)], files_list);
+                (self.unify_fn)(self, self[temp_v!(2)], files_list);
             }
             &SystemClauseType::FileSize => {
                 let file = self.heap_pstr_iter(self[temp_v!(1)]).to_string();
@@ -857,7 +857,7 @@ impl MachineState {
 
                 let len = self.heap.to_unifiable(HeapCellValue::Integer(Rc::new(len)));
 
-                self.unify(self[temp_v!(2)], len);
+                (self.unify_fn)(self, self[temp_v!(2)], len);
             }
             &SystemClauseType::FileExists => {
                 let file = self.heap_pstr_iter(self[temp_v!(1)]).to_string();
@@ -880,7 +880,7 @@ impl MachineState {
                 let addr = self
                     .heap
                     .put_constant(Constant::Char(std::path::MAIN_SEPARATOR));
-                self.unify(self[temp_v!(1)], addr);
+                (self.unify_fn)(self, self[temp_v!(1)], addr);
             }
             &SystemClauseType::MakeDirectory => {
                 let directory = self.heap_pstr_iter(self[temp_v!(1)]).to_string();
@@ -919,7 +919,7 @@ impl MachineState {
                     };
 
                     let chars = self.heap.put_complete_string(current);
-                    self.unify(self[temp_v!(1)], chars);
+                    (self.unify_fn)(self, self[temp_v!(1)], chars);
 
                     let next = self.heap_pstr_iter(self[temp_v!(2)]).to_string();
 
@@ -952,7 +952,7 @@ impl MachineState {
                             }
                         };
                         let chars = self.heap.put_complete_string(cs);
-                        self.unify(self[temp_v!(2)], chars);
+                        (self.unify_fn)(self, self[temp_v!(2)], chars);
                     }
                     _ => {
                         self.fail = true;
@@ -986,7 +986,7 @@ impl MachineState {
                         }
                     } {
                         let chars = self.systemtime_to_timestamp(time);
-                        self.unify(self[temp_v!(3)], chars);
+                        (self.unify_fn)(self, self[temp_v!(3)], chars);
                     } else {
                         self.fail = true;
                         return Ok(());
@@ -1005,14 +1005,14 @@ impl MachineState {
                         let list_of_chars = Addr::HeapCell(self.heap.to_list(iter));
 
                         let a2 = self[temp_v!(2)];
-                        self.unify(a2, list_of_chars);
+                        (self.unify_fn)(self, a2, list_of_chars);
                     }
                     Addr::Con(h) if self.heap.atom_at(h) => {
                         if let HeapCellValue::Atom(name, _) = self.heap.clone(h) {
                             let s = self.heap.put_complete_string(name.as_str());
                             let a2 = self[temp_v!(2)];
 
-                            self.unify(s, a2);
+                            (self.unify_fn)(self, s, a2);
                         } else {
                             unreachable!()
                         }
@@ -1023,7 +1023,7 @@ impl MachineState {
 
                         let list_of_chars = Addr::HeapCell(self.heap.to_list(chars.into_iter()));
 
-                        self.unify(a2, list_of_chars);
+                        (self.unify_fn)(self, a2, list_of_chars);
                     }
                     addr if addr.is_ref() => {
                         let mut iter = self.heap_pstr_iter(self[temp_v!(2)]);
@@ -1032,13 +1032,13 @@ impl MachineState {
                         match iter.focus() {
                             Addr::EmptyList => {
                                 if &string == "[]" {
-                                    self.unify(addr, Addr::EmptyList);
+                                    (self.unify_fn)(self, addr, Addr::EmptyList);
                                 } else {
                                     let chars = clause_name!(string, self.atom_tbl);
                                     let atom =
                                         self.heap.to_unifiable(HeapCellValue::Atom(chars, None));
 
-                                    self.unify(addr, atom);
+                                    (self.unify_fn)(self, addr, atom);
                                 }
                             }
                             focus => {
@@ -1071,7 +1071,7 @@ impl MachineState {
                         let list_of_codes = Addr::HeapCell(self.heap.to_list(iter));
 
                         let a2 = self[temp_v!(2)];
-                        self.unify(a2, list_of_codes);
+                        (self.unify_fn)(self, a2, list_of_codes);
                     }
                     Addr::Con(h) if self.heap.atom_at(h) => {
                         if let HeapCellValue::Atom(name, _) = self.heap.clone(h) {
@@ -1081,7 +1081,7 @@ impl MachineState {
 
                             let list_of_codes = Addr::HeapCell(self.heap.to_list(iter));
 
-                            self.unify(a2, list_of_codes);
+                            (self.unify_fn)(self, a2, list_of_codes);
                         } else {
                             unreachable!()
                         }
@@ -1092,7 +1092,7 @@ impl MachineState {
                         let list_of_codes = Addr::HeapCell(self.heap.to_list(chars.into_iter()));
                         let a2 = self[temp_v!(2)];
 
-                        self.unify(a2, list_of_codes);
+                        (self.unify_fn)(self, a2, list_of_codes);
                     }
                     addr if addr.is_ref() => {
                         let stub = MachineError::functor_stub(clause_name!("atom_codes"), 2);
@@ -1180,7 +1180,7 @@ impl MachineState {
 
                 let a2 = self[temp_v!(2)];
 
-                self.unify(a2, len);
+                (self.unify_fn)(self, a2, len);
             }
             &SystemClauseType::CallContinuation => {
                 let stub = MachineError::functor_stub(clause_name!("call_continuation"), 1);
@@ -1244,13 +1244,13 @@ impl MachineState {
                 }
 
                 let pstr = self.heap.allocate_pstr(atom.as_str());
-                self.unify(self[temp_v!(2)], pstr);
+                (self.unify_fn)(self, self[temp_v!(2)], pstr);
 
                 if !self.fail {
                     let h = self.heap.h();
                     let pstr_tail = self.heap[h - 1].as_addr(h - 1);
 
-                    self.unify(self[temp_v!(3)], pstr_tail);
+                    (self.unify_fn)(self, self[temp_v!(3)], pstr_tail);
                 }
             }
             &SystemClauseType::IsPartialString => {
@@ -1288,14 +1288,14 @@ impl MachineState {
                             let tail = self.heap[h + 1].as_addr(h + 1);
                             let target = self[temp_v!(2)];
 
-                            self.unify(tail, target);
+                            (self.unify_fn)(self, tail, target);
                         } else {
                             self.fail = true;
                             return Ok(());
                         }
                     }
                     Addr::Lis(h) => {
-                        self.unify(Addr::HeapCell(h + 1), self[temp_v!(2)]);
+                        (self.unify_fn)(self, Addr::HeapCell(h + 1), self[temp_v!(2)]);
                     }
                     Addr::EmptyList => {
                         self.fail = true;
@@ -1328,7 +1328,7 @@ impl MachineState {
 
                 if stream.at_end_of_stream() {
                     stream.set_past_end_of_stream();
-                    self.unify(self[temp_v!(2)], Addr::Fixnum(-1));
+                    (self.unify_fn)(self, self[temp_v!(2)], Addr::Fixnum(-1));
                     return return_from_clause!(self.last_call, self);
                 }
 
@@ -1432,7 +1432,7 @@ impl MachineState {
 
                     stream.set_past_end_of_stream();
 
-                    self.unify(self[temp_v!(2)], end_of_file);
+                    (self.unify_fn)(self, self[temp_v!(2)], end_of_file);
                     return return_from_clause!(self.last_call, self);
                 }
 
@@ -1535,7 +1535,7 @@ impl MachineState {
 
                     stream.set_past_end_of_stream();
 
-                    self.unify(self[temp_v!(2)], end_of_file);
+                    (self.unify_fn)(self, self[temp_v!(2)], end_of_file);
                     return return_from_clause!(self.last_call, self);
                 }
 
@@ -1645,7 +1645,7 @@ impl MachineState {
                 let chars = string.trim().chars().map(|c| Addr::Char(c));
                 let char_list = Addr::HeapCell(self.heap.to_list(chars));
 
-                self.unify(char_list, chs);
+                (self.unify_fn)(self, char_list, chs);
             }
             &SystemClauseType::NumberToCodes => {
                 let n = self[temp_v!(1)];
@@ -1672,7 +1672,7 @@ impl MachineState {
 
                 let codes_list = Addr::HeapCell(self.heap.to_list(codes));
 
-                self.unify(codes_list, chs);
+                (self.unify_fn)(self, codes_list, chs);
             }
             &SystemClauseType::CodesToNumber => {
                 let stub = MachineError::functor_stub(clause_name!("number_codes"), 2);
@@ -1698,7 +1698,7 @@ impl MachineState {
                 let a1 = self[temp_v!(1)];
                 let lh_len = Addr::Usize(self.lifted_heap.h());
 
-                self.unify(a1, lh_len);
+                (self.unify_fn)(self, a1, lh_len);
             }
             &SystemClauseType::CharCode => {
                 let a1 = self[temp_v!(1)];
@@ -1717,11 +1717,11 @@ impl MachineState {
                         };
 
                         let a2 = self[temp_v!(2)];
-                        self.unify(Addr::Fixnum(c as isize), a2);
+                        (self.unify_fn)(self, Addr::Fixnum(c as isize), a2);
                     }
                     Addr::Char(c) => {
                         let a2 = self[temp_v!(2)];
-                        self.unify(Addr::Fixnum(c as isize), a2);
+                        (self.unify_fn)(self, Addr::Fixnum(c as isize), a2);
                     }
                     addr if addr.is_ref() => {
                         let a2 = self[temp_v!(2)];
@@ -1738,7 +1738,7 @@ impl MachineState {
                             }
                         };
 
-                        self.unify(Addr::Char(c), addr);
+                        (self.unify_fn)(self, Addr::Char(c), addr);
                     }
                     _ => {
                         unreachable!();
@@ -1869,14 +1869,14 @@ impl MachineState {
                     Some((ref ball, ref mut loc)) => {
                         match loc {
                             Some(ref value_addr) => {
-                                self.unify(addr, *value_addr);
+                                (self.unify_fn)(self, addr, *value_addr);
                             }
                             loc @ None if !ball.stub.is_empty() => {
                                 let h = self.heap.h();
                                 let stub = ball.copy_and_align(h);
 
                                 self.heap.extend(stub.into_iter());
-                                self.unify(addr, Addr::HeapCell(h));
+                                (self.unify_fn)(self, addr, Addr::HeapCell(h));
 
                                 if !self.fail {
                                     *loc = Some(Addr::HeapCell(h));
@@ -2204,7 +2204,7 @@ impl MachineState {
                         }
                         _ => {
                             stream.set_past_end_of_stream();
-                            self.unify(self[temp_v!(2)], Addr::Fixnum(-1));
+                            (self.unify_fn)(self, self[temp_v!(2)], Addr::Fixnum(-1));
                             return return_from_clause!(self.last_call, self);
                         }
                     }
@@ -2238,7 +2238,7 @@ impl MachineState {
 
                     stream.set_past_end_of_stream();
 
-                    self.unify(self[temp_v!(2)], end_of_file);
+                    (self.unify_fn)(self, self[temp_v!(2)], end_of_file);
                     return return_from_clause!(self.last_call, self);
                 }
 
@@ -2357,7 +2357,7 @@ impl MachineState {
                     }
                 };
                 let string = self.heap.put_complete_string(&string);
-                self.unify(self[temp_v!(3)], string);
+                (self.unify_fn)(self, self[temp_v!(3)], string);
             }
             &SystemClauseType::GetCode => {
                 let mut stream =
@@ -2387,7 +2387,7 @@ impl MachineState {
 
                     stream.set_past_end_of_stream();
 
-                    self.unify(self[temp_v!(2)], end_of_file);
+                    (self.unify_fn)(self, self[temp_v!(2)], end_of_file);
                     return return_from_clause!(self.last_call, self);
                 }
 
@@ -2580,7 +2580,7 @@ impl MachineState {
 
                 let a1 = self[temp_v!(1)];
 
-                self.unify(Addr::Char(c), a1);
+                (self.unify_fn)(self, Addr::Char(c), a1);
             }
             &SystemClauseType::HeadIsDynamic => {
                 let module_name = atom_from!(self, self.store(self.deref(self[temp_v!(1)])));
@@ -2933,10 +2933,10 @@ impl MachineState {
 
                             let atom = self.heap.to_unifiable(HeapCellValue::Atom(name, spec));
 
-                            self.unify(a2, atom);
+                            (self.unify_fn)(self, a2, atom);
 
                             if !self.fail {
-                                self.unify(a3, Addr::Usize(arity));
+                                (self.unify_fn)(self, a3, Addr::Usize(arity));
                             }
                         }
                         _ => {
@@ -2986,14 +2986,14 @@ impl MachineState {
                                 .heap
                                 .to_unifiable(HeapCellValue::Atom(name, Some(shared_op_desc)));
 
-                            self.unify(Addr::Usize(priority), prec);
+                            (self.unify_fn)(self, Addr::Usize(priority), prec);
 
                             if !self.fail {
-                                self.unify(a3, specifier);
+                                (self.unify_fn)(self, a3, specifier);
                             }
 
                             if !self.fail {
-                                self.unify(a4, op);
+                                (self.unify_fn)(self, a4, op);
                             }
                         }
                         _ => {
@@ -3018,11 +3018,11 @@ impl MachineState {
                 let a2 = ProcessTime::now().as_duration().as_secs_f64();
                 let addr = self.heap.put_constant(Constant::Float(OrderedFloat(a2)));
 
-                self.unify(a1, addr);
+                (self.unify_fn)(self, a1, addr);
             }
             &SystemClauseType::CurrentTime => {
                 let str = self.systemtime_to_timestamp(SystemTime::now());
-                self.unify(self[temp_v!(1)], str);
+                (self.unify_fn)(self, self[temp_v!(1)], str);
             }
             &SystemClauseType::OpDeclaration => {
                 let priority = self[temp_v!(1)];
@@ -3176,7 +3176,7 @@ impl MachineState {
                 let addr = self[temp_v!(1)];
                 let value = Addr::Usize(self.attr_var_init.attr_var_queue.len());
 
-                self.unify(addr, value);
+                (self.unify_fn)(self, addr, value);
             }
             &SystemClauseType::GetAttrVarQueueBeyond => {
                 let addr = self[temp_v!(1)];
@@ -3200,7 +3200,7 @@ impl MachineState {
                     let var_list_addr = Addr::HeapCell(self.heap.to_list(iter));
                     let list_addr = self[temp_v!(2)];
 
-                    self.unify(var_list_addr, list_addr);
+                    (self.unify_fn)(self, var_list_addr, list_addr);
                 }
             }
             &SystemClauseType::GetContinuationChunk => {
@@ -3245,7 +3245,7 @@ impl MachineState {
                 self.heap.push(HeapCellValue::Addr(p_functor));
                 self.heap.extend(addrs.into_iter().map(HeapCellValue::Addr));
 
-                self.unify(self[temp_v!(3)], chunk);
+                (self.unify_fn)(self, self[temp_v!(3)], chunk);
             }
             &SystemClauseType::GetLiftedHeapFromOffsetDiff => {
                 let lh_offset = self[temp_v!(1)];
@@ -3256,8 +3256,8 @@ impl MachineState {
                             let solutions = self[temp_v!(2)];
                             let diff = self[temp_v!(3)];
 
-                            self.unify(solutions, Addr::EmptyList);
-                            self.unify(diff, Addr::EmptyList);
+                            (self.unify_fn)(self, solutions, Addr::EmptyList);
+                            (self.unify_fn)(self, diff, Addr::EmptyList);
                         } else {
                             let h = self.heap.h();
                             let mut last_index = h;
@@ -3285,14 +3285,14 @@ impl MachineState {
 
                                 addr_opt.map(|addr| {
                                     let diff = self[temp_v!(3)];
-                                    self.unify(diff, addr);
+                                    (self.unify_fn)(self, diff, addr);
                                 });
                             }
 
                             self.lifted_heap.truncate(lh_offset);
 
                             let solutions = self[temp_v!(2)];
-                            self.unify(Addr::HeapCell(h), solutions);
+                            (self.unify_fn)(self, Addr::HeapCell(h), solutions);
                         }
                     }
                     _ => {
@@ -3307,7 +3307,7 @@ impl MachineState {
                     Addr::Usize(lh_offset) => {
                         if lh_offset >= self.lifted_heap.h() {
                             let solutions = self[temp_v!(2)];
-                            self.unify(solutions, Addr::EmptyList);
+                            (self.unify_fn)(self, solutions, Addr::EmptyList);
                         } else {
                             let h = self.heap.h();
 
@@ -3325,7 +3325,7 @@ impl MachineState {
                             self.lifted_heap.truncate(lh_offset);
 
                             let solutions = self[temp_v!(2)];
-                            self.unify(Addr::HeapCell(h), solutions);
+                            (self.unify_fn)(self, Addr::HeapCell(h), solutions);
                         }
                     }
                     _ => {
@@ -3342,21 +3342,21 @@ impl MachineState {
                             .heap
                             .to_unifiable(HeapCellValue::Atom(clause_name!("chars"), None));
 
-                        self.unify(a1, atom);
+                        (self.unify_fn)(self, a1, atom);
                     }
                     DoubleQuotes::Atom => {
                         let atom = self
                             .heap
                             .to_unifiable(HeapCellValue::Atom(clause_name!("atom"), None));
 
-                        self.unify(a1, atom);
+                        (self.unify_fn)(self, a1, atom);
                     }
                     DoubleQuotes::Codes => {
                         let atom = self
                             .heap
                             .to_unifiable(HeapCellValue::Atom(clause_name!("codes"), None));
 
-                        self.unify(a1, atom);
+                        (self.unify_fn)(self, a1, atom);
                     }
                 }
             }
@@ -3460,7 +3460,7 @@ impl MachineState {
                                     .to_unifiable(HeapCellValue::Integer(Rc::new(count)));
 
                                 let a3 = self[temp_v!(3)];
-                                self.unify(a3, count);
+                                (self.unify_fn)(self, a3, count);
                             }
                             None => {
                                 panic!(
@@ -3645,7 +3645,7 @@ impl MachineState {
 
                                 let a2 = self[temp_v!(2)];
 
-                                self.unify(a2, count);
+                                (self.unify_fn)(self, a2, count);
                             }
                             _ => {
                                 panic!("remove_inference_counter: expected Usize in A1.");
@@ -3795,13 +3795,13 @@ impl MachineState {
                                 .heap
                                 .to_unifiable(HeapCellValue::Atom(clause_name!("!"), None));
 
-                            self.unify(a1, a2);
+                            (self.unify_fn)(self, a1, a2);
                         } else {
                             let a2 = self
                                 .heap
                                 .to_unifiable(HeapCellValue::Atom(clause_name!("true"), None));
 
-                            self.unify(a1, a2);
+                            (self.unify_fn)(self, a1, a2);
                         }
                     }
                     _ => {
@@ -3860,13 +3860,13 @@ impl MachineState {
                 let a1 = self[temp_v!(1)];
                 let a2 = Addr::Usize(self.b);
 
-                self.unify(a1, a2);
+                (self.unify_fn)(self, a1, a2);
             }
             &SystemClauseType::GetCutPoint => {
                 let a1 = self[temp_v!(1)];
                 let a2 = Addr::CutPoint(self.b0);
 
-                self.unify(a1, a2);
+                (self.unify_fn)(self, a1, a2);
             }
             &SystemClauseType::InstallNewBlock => {
                 self.install_new_block(temp_v!(1));
@@ -3891,10 +3891,10 @@ impl MachineState {
 
                                 let p = cp.as_functor(&mut self.heap);
 
-                                self.unify(self[temp_v!(2)], e);
+                                (self.unify_fn)(self, self[temp_v!(2)], e);
 
                                 if !self.fail {
-                                    self.unify(self[temp_v!(3)], p);
+                                    (self.unify_fn)(self, self[temp_v!(3)], p);
                                 }
                             } else {
                                 unreachable!()
@@ -3918,10 +3918,10 @@ impl MachineState {
 
                         let e = Addr::Usize(e);
 
-                        self.unify(self[temp_v!(2)], e);
+                        (self.unify_fn)(self, self[temp_v!(2)], e);
 
                         if !self.fail {
-                            self.unify(self[temp_v!(3)], p);
+                            (self.unify_fn)(self, self[temp_v!(3)], p);
                         }
                     }
                     _ => {
@@ -4288,7 +4288,7 @@ impl MachineState {
                 self.bind(addr.as_var().unwrap(), tcp_listener);
 
                 if had_zero_port {
-                    self.unify(self[temp_v!(2)], Addr::Usize(port));
+                    (self.unify_fn)(self, self[temp_v!(2)], Addr::Usize(port));
                 }
             }
             &SystemClauseType::SocketServerAccept => {
@@ -4510,7 +4510,7 @@ impl MachineState {
                 };
 
                 let property = self.heap.to_unifiable(property);
-                self.unify(self[temp_v!(3)], property);
+                (self.unify_fn)(self, self[temp_v!(3)], property);
             }
             &SystemClauseType::StoreGlobalVar => {
                 let key = match self.store(self.deref(self[temp_v!(1)])) {
@@ -4580,7 +4580,7 @@ impl MachineState {
                 let seen_vars = self.attr_vars_of_term(self[temp_v!(1)]);
                 let outcome = Addr::HeapCell(self.heap.to_list(seen_vars.into_iter()));
 
-                self.unify(self[temp_v!(2)], outcome);
+                (self.unify_fn)(self, self[temp_v!(2)], outcome);
             }
             &SystemClauseType::TermVariables => {
                 let a1 = self[temp_v!(1)];
@@ -4595,7 +4595,7 @@ impl MachineState {
                 }
 
                 let outcome = Addr::HeapCell(self.heap.to_list(seen_vars.into_iter()));
-                self.unify(self[temp_v!(2)], outcome);
+                (self.unify_fn)(self, self[temp_v!(2)], outcome);
             }
             &SystemClauseType::TruncateLiftedHeapTo => {
                 match self.store(self.deref(self[temp_v!(1)])) {
@@ -4732,7 +4732,7 @@ impl MachineState {
                 let listing = Addr::HeapCell(self.heap.to_list(functor_list.into_iter()));
                 let listing_var = self[temp_v!(4)];
 
-                self.unify(listing, listing_var);
+                (self.unify_fn)(self, listing, listing_var);
             }
             &SystemClauseType::WriteTerm => {
                 let mut stream =
@@ -4819,7 +4819,7 @@ impl MachineState {
                 let buffer = git_version!(cargo_prefix = "cargo:", fallback = "unknown");
                 let chars = buffer.chars().map(|c| Addr::Char(c));
                 let result = Addr::HeapCell(self.heap.to_list(chars));
-                self.unify(version, result);
+                (self.unify_fn)(self, version, result);
             }
             &SystemClauseType::CryptoRandomByte => {
                 let arg = self[temp_v!(1)];
@@ -4840,7 +4840,7 @@ impl MachineState {
                     .heap
                     .to_unifiable(HeapCellValue::Integer(Rc::new(Integer::from(bytes[0]))));
 
-                self.unify(arg, byte);
+                (self.unify_fn)(self, arg, byte);
             }
             &SystemClauseType::CryptoDataHash => {
                 let encoding = self.atom_argument_to_string(2);
@@ -4963,7 +4963,7 @@ impl MachineState {
                     }
                 };
 
-                self.unify(self[temp_v!(3)], ints_list);
+                (self.unify_fn)(self, self[temp_v!(3)], ints_list);
             }
             &SystemClauseType::CryptoDataHKDF => {
                 let encoding = self.atom_argument_to_string(2);
@@ -5023,7 +5023,7 @@ impl MachineState {
                     )
                 };
 
-                self.unify(self[temp_v!(7)], ints_list);
+                (self.unify_fn)(self, self[temp_v!(7)], ints_list);
             }
             &SystemClauseType::CryptoPasswordHash => {
                 let stub1 = MachineError::functor_stub(clause_name!("crypto_password_hash"), 3);
@@ -5066,7 +5066,7 @@ impl MachineState {
                     )
                 };
 
-                self.unify(self[temp_v!(4)], ints_list);
+                (self.unify_fn)(self, self[temp_v!(4)], ints_list);
             }
             &SystemClauseType::CryptoDataEncrypt => {
                 let encoding = self.atom_argument_to_string(3);
@@ -5107,8 +5107,8 @@ impl MachineState {
                     self.heap.put_complete_string(&buffer)
                 };
 
-                self.unify(self[temp_v!(6)], tag_list);
-                self.unify(self[temp_v!(7)], complete_string);
+                (self.unify_fn)(self, self[temp_v!(6)], tag_list);
+                (self.unify_fn)(self, self[temp_v!(7)], complete_string);
             }
             &SystemClauseType::CryptoDataDecrypt => {
                 let data = self.string_encoding_bytes(1, "octet");
@@ -5152,7 +5152,7 @@ impl MachineState {
                     self.heap.put_complete_string(&buffer)
                 };
 
-                self.unify(self[temp_v!(6)], complete_string);
+                (self.unify_fn)(self, self[temp_v!(6)], complete_string);
             }
             &SystemClauseType::CryptoCurveScalarMult => {
                 let curve = self.atom_argument_to_string(1);
@@ -5196,8 +5196,8 @@ impl MachineState {
                     .heap
                     .put_complete_string(&ry.to_dec_str().unwrap().to_string());
 
-                self.unify(self[temp_v!(4)], sx);
-                self.unify(self[temp_v!(5)], sy);
+                (self.unify_fn)(self, self[temp_v!(4)], sx);
+                (self.unify_fn)(self, self[temp_v!(5)], sy);
             }
             &SystemClauseType::Ed25519NewKeyPair => {
                 let pkcs8_bytes = signature::Ed25519KeyPair::generate_pkcs8(rng()).unwrap();
@@ -5206,7 +5206,7 @@ impl MachineState {
                     self.heap.put_complete_string(&buffer)
                 };
 
-                self.unify(self[temp_v!(1)], complete_string);
+                (self.unify_fn)(self, self[temp_v!(1)], complete_string);
             }
             &SystemClauseType::Ed25519KeyPairPublicKey => {
                 let bytes = self.string_encoding_bytes(1, "octet");
@@ -5226,7 +5226,7 @@ impl MachineState {
                     self.heap.put_complete_string(&buffer)
                 };
 
-                self.unify(self[temp_v!(2)], complete_string);
+                (self.unify_fn)(self, self[temp_v!(2)], complete_string);
             }
             &SystemClauseType::Ed25519Sign => {
                 let key = self.string_encoding_bytes(1, "octet");
@@ -5251,7 +5251,7 @@ impl MachineState {
                     ),
                 );
 
-                self.unify(self[temp_v!(4)], sig_list);
+                (self.unify_fn)(self, self[temp_v!(4)], sig_list);
             }
             &SystemClauseType::Ed25519Verify => {
                 let key = self.string_encoding_bytes(1, "octet");
@@ -5282,21 +5282,21 @@ impl MachineState {
 
                 let string = String::from_iter(result[..].iter().map(|b| *b as char));
                 let cstr = self.heap.put_complete_string(&string);
-                self.unify(self[temp_v!(3)], cstr);
+                (self.unify_fn)(self, self[temp_v!(3)], cstr);
             }
             &SystemClauseType::LoadHTML => {
                 let string = self.heap_pstr_iter(self[temp_v!(1)]).to_string();
                 let doc = select::document::Document::from_read(string.as_bytes()).unwrap();
                 let result = self.html_node_to_term(indices, doc.nth(0).unwrap());
 
-                self.unify(self[temp_v!(2)], result);
+                (self.unify_fn)(self, self[temp_v!(2)], result);
             }
             &SystemClauseType::LoadXML => {
                 let string = self.heap_pstr_iter(self[temp_v!(1)]).to_string();
                 match roxmltree::Document::parse(&string) {
                     Ok(doc) => {
                         let result = self.xml_node_to_term(indices, doc.root_element());
-                        self.unify(self[temp_v!(2)], result);
+                        (self.unify_fn)(self, self[temp_v!(2)], result);
                     }
                     _ => {
                         self.fail = true;
@@ -5309,7 +5309,7 @@ impl MachineState {
                 match env::var(key) {
                     Ok(value) => {
                         let cstr = self.heap.put_complete_string(&value);
-                        self.unify(self[temp_v!(2)], cstr);
+                        (self.unify_fn)(self, self[temp_v!(2)], cstr);
                     }
                     _ => {
                         self.fail = true;
@@ -5352,7 +5352,7 @@ impl MachineState {
                         Ok(bs) => {
                             let string = String::from_iter(bs.iter().map(|b| *b as char));
                             let cstr = self.heap.put_complete_string(&string);
-                            self.unify(self[temp_v!(1)], cstr);
+                            (self.unify_fn)(self, self[temp_v!(1)], cstr);
                         }
                         _ => {
                             self.fail = true;
@@ -5379,7 +5379,7 @@ impl MachineState {
                     let b64 = base64::encode_config(bytes, config);
 
                     let cstr = self.heap.put_complete_string(&b64);
-                    self.unify(self[temp_v!(2)], cstr);
+                    (self.unify_fn)(self, self[temp_v!(2)], cstr);
                 }
             }
             &SystemClauseType::LoadLibraryAsStream => {
@@ -5432,6 +5432,27 @@ impl MachineState {
                         return Ok(());
                     }
                 }
+            }
+            &SystemClauseType::IsSTOEnabled => {
+                if self.unify_fn as usize == MachineState::unify_with_occurs_check as usize {
+                    let value = self.heap.to_unifiable(
+                        HeapCellValue::Atom(clause_name!("true"), None),
+                    );
+
+                    (self.unify_fn)(self, self[temp_v!(1)], value);
+                } else {
+                    let value = self.heap.to_unifiable(
+                        HeapCellValue::Atom(clause_name!("false"), None),
+                    );
+
+                    (self.unify_fn)(self, self[temp_v!(1)], value);
+                }
+            }
+            &SystemClauseType::SetSTOAsUnify => {
+                self.unify_fn = MachineState::unify_with_occurs_check;
+            }
+            &SystemClauseType::SetNSTOAsUnify => {
+                self.unify_fn = MachineState::unify;
             }
         };
 

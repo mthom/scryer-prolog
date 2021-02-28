@@ -275,7 +275,7 @@ pub enum FirstOrNext {
     Next,
 }
 
-#[derive(Debug)]
+// #[derive(Debug)]
 pub struct MachineState {
     pub(crate) atom_tbl: TabledData<Atom>,
     pub(super) s: HeapPtr,
@@ -299,11 +299,48 @@ pub struct MachineState {
     pub(super) lifted_heap: Heap,
     pub(super) interms: Vec<Number>, // intermediate numbers.
     pub(super) last_call: bool,
-    pub(crate) heap_locs: HeapVarDict,
     pub(crate) flags: MachineFlags,
     pub(crate) cc: usize,
     pub(crate) global_clock: usize,
     pub(crate) dynamic_mode: FirstOrNext,
+    pub(crate) unify_fn: fn(&mut MachineState, Addr, Addr),
+}
+
+impl fmt::Debug for MachineState {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_struct("MachineState")
+         .field("atom_tbl", &self.atom_tbl)
+         .field("s", &self.s)
+         .field("p", &self.p)
+         .field("b", &self.b)
+         .field("b0", &self.b0)
+         .field("e", &self.e)
+         .field("num_of_args", &self.num_of_args)
+         .field("cp", &self.cp)
+         .field("attr_var_init", &self.attr_var_init)
+         .field("fail", &self.fail)
+         .field("heap", &self.heap)
+         .field("mode", &self.mode)
+         .field("stack", &self.stack)
+         .field("registers", &self.registers)
+         .field("trail", &self.trail)
+         .field("tr", &self.tr)
+         .field("hb", &self.hb)
+         .field("block", &self.block)
+         .field("ball", &self.ball)
+         .field("lifted_heap", &self.lifted_heap)
+         .field("interms", &self.interms)
+         .field("last_call", &self.last_call)
+         .field("flags", &self.flags)
+         .field("cc", &self.cc)
+         .field("global_clock", &self.global_clock)
+         .field("dynamic_mode", &self.dynamic_mode)
+         .field("unify_fn",
+                if self.unify_fn as usize == MachineState::unify as usize
+                { &"MachineState::unify" }
+                else { &"MachineState::unify_with_occurs_check" })
+         .finish()
+    }
 }
 
 impl MachineState {
@@ -354,7 +391,7 @@ impl MachineState {
             match self.read(stream.clone(), self.atom_tbl.clone(), &indices.op_dir) {
                 Ok(term_write_result) => {
                     let term = self[temp_v!(2)];
-                    self.unify(Addr::HeapCell(term_write_result.heap_loc), term);
+                    (self.unify_fn)(self, Addr::HeapCell(term_write_result.heap_loc), term);
 
                     if self.fail {
                         return Ok(());
@@ -398,7 +435,7 @@ impl MachineState {
                     let singletons_offset =
                         Addr::HeapCell(self.heap.to_list(singleton_var_list.into_iter()));
 
-                    self.unify(singletons_offset, singleton_addr);
+                    (self.unify_fn)(self, singletons_offset, singleton_addr);
 
                     if self.fail {
                         return Ok(());
@@ -407,7 +444,7 @@ impl MachineState {
                     let vars_addr = self[temp_v!(4)];
                     let vars_offset = Addr::HeapCell(self.heap.to_list(var_list.into_iter()));
 
-                    self.unify(vars_offset, vars_addr);
+                    (self.unify_fn)(self, vars_offset, vars_addr);
 
                     if self.fail {
                         return Ok(());
@@ -417,7 +454,7 @@ impl MachineState {
                     let var_names_offset =
                         Addr::HeapCell(self.heap.to_list(list_of_var_eqs.into_iter()));
 
-                    return Ok(self.unify(var_names_offset, var_names_addr));
+                    return Ok((self.unify_fn)(self, var_names_offset, var_names_addr));
                 }
                 Err(err) => {
                     if let ParserError::UnexpectedEOF = err {
@@ -1027,7 +1064,7 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
                 let h = machine_st.heap.h();
 
                 machine_st.heap.push(atom);
-                machine_st.unify(a1, Addr::Con(h));
+                (machine_st.unify_fn)(machine_st, a1, Addr::Con(h));
 
                 return_from_clause!(machine_st.last_call, machine_st)
             }
@@ -1049,7 +1086,7 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
                 ) {
                     Ok(offset) => {
                         let addr = machine_st[temp_v!(1)];
-                        machine_st.unify(addr, Addr::HeapCell(offset.heap_loc));
+                        (machine_st.unify_fn)(machine_st, addr, Addr::HeapCell(offset.heap_loc));
                     }
                     Err(ParserError::UnexpectedEOF) => {
                         let addr = machine_st[temp_v!(1)];
@@ -1057,7 +1094,7 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
 
                         let atom = machine_st.heap.to_unifiable(HeapCellValue::Atom(eof, None));
 
-                        machine_st.unify(addr, atom);
+                        (machine_st.unify_fn)(machine_st, addr, atom);
                     }
                     Err(e) => {
                         let h = machine_st.heap.h();
@@ -1121,7 +1158,7 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
                 let heap_addr = Addr::HeapCell(machine_st.heap.to_list(list.into_iter()));
 
                 let r2 = machine_st[temp_v!(2)];
-                machine_st.unify(r2, heap_addr);
+                (machine_st.unify_fn)(machine_st, r2, heap_addr);
 
                 return_from_clause!(machine_st.last_call, machine_st)
             }
@@ -1147,7 +1184,7 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
                 let heap_addr = Addr::HeapCell(machine_st.heap.to_list(key_pairs));
 
                 let r2 = machine_st[temp_v!(2)];
-                machine_st.unify(r2, heap_addr);
+                (machine_st.unify_fn)(machine_st, r2, heap_addr);
 
                 return_from_clause!(machine_st.last_call, machine_st)
             }
@@ -1156,7 +1193,7 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
                 let n2 = machine_st.get_number(at)?;
 
                 let n2 = machine_st.heap.put_constant(n2.into());
-                machine_st.unify(a1, n2);
+                (machine_st.unify_fn)(machine_st, a1, n2);
 
                 return_from_clause!(machine_st.last_call, machine_st)
             }

@@ -133,6 +133,10 @@ current_prolog_flag(Flag, Value) :- Flag == double_quotes, !, '$get_double_quote
 current_prolog_flag(double_quotes, Value) :- '$get_double_quotes'(Value).
 current_prolog_flag(Flag, _) :- Flag == max_integer, !, '$fail'.
 current_prolog_flag(Flag, _) :- Flag == min_integer, !, '$fail'.
+current_prolog_flag(Flag, OccursCheckEnabled) :-
+    Flag == occurs_check,
+    !,
+    '$is_sto_enabled'(OccursCheckEnabled).
 current_prolog_flag(Flag, _) :-
     atom(Flag),
     throw(error(domain_error(prolog_flag, Flag), current_prolog_flag/2)). % 8.17.2.3 b
@@ -163,6 +167,10 @@ set_prolog_flag(double_quotes, atom) :-
     !, '$set_double_quotes'(atom). % 7.11.2.5, list of char codes (UTF8).
 set_prolog_flag(double_quotes, codes) :-
     !, '$set_double_quotes'(codes).
+set_prolog_flag(occurs_check, true) :-
+    !, '$set_sto_as_unify'.
+set_prolog_flag(occurs_check, false) :-
+    !, '$set_nsto_as_unify'.
 set_prolog_flag(double_quotes, Value) :-
     throw(error(domain_error(flag_value, double_quotes + Value),
 		        set_prolog_flag/2)). % 8.17.1.3 e
