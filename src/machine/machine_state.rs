@@ -270,6 +270,12 @@ impl Default for HeapPtr {
 }
 
 #[derive(Debug)]
+pub enum FirstOrNext {
+    First,
+    Next,
+}
+
+#[derive(Debug)]
 pub struct MachineState {
     pub(crate) atom_tbl: TabledData<Atom>,
     pub(super) s: HeapPtr,
@@ -295,7 +301,9 @@ pub struct MachineState {
     pub(super) last_call: bool,
     pub(crate) heap_locs: HeapVarDict,
     pub(crate) flags: MachineFlags,
-    pub(crate) at_end_of_expansion: bool,
+    pub(crate) cc: usize,
+    pub(crate) global_clock: usize,
+    pub(crate) dynamic_mode: FirstOrNext,
 }
 
 impl MachineState {
@@ -911,8 +919,12 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
             IndexPtr::Undefined => {
                 return Err(machine_st.throw_undefined_error(name, arity));
             }
+            IndexPtr::DynamicIndex(compiled_tl_index) => {
+                machine_st.dynamic_mode = FirstOrNext::First;
+                machine_st.call_at_index(arity, dir_entry!(compiled_tl_index));
+            }
             IndexPtr::Index(compiled_tl_index) => {
-                machine_st.call_at_index(arity, LocalCodePtr::DirEntry(compiled_tl_index));
+                machine_st.call_at_index(arity, dir_entry!(compiled_tl_index));
             }
         }
 
@@ -933,6 +945,10 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
             }
             IndexPtr::Undefined => {
                 return Err(machine_st.throw_undefined_error(name, arity));
+            }
+            IndexPtr::DynamicIndex(compiled_tl_index) => {
+                machine_st.dynamic_mode = FirstOrNext::First;
+                machine_st.execute_at_index(arity, dir_entry!(compiled_tl_index));
             }
             IndexPtr::Index(compiled_tl_index) => {
                 machine_st.execute_at_index(arity, dir_entry!(compiled_tl_index))

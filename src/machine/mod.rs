@@ -562,6 +562,7 @@ impl MachineState {
             &Line::Choice(ref choice_instr) => {
                 self.execute_choice_instr(
                     choice_instr,
+                    code_repo,
                     &mut policies.call_policy,
                     &mut indices.global_variables,
                 )
@@ -585,13 +586,19 @@ impl MachineState {
             &Line::IndexingCode(ref indexing_lines) => {
                 self.execute_indexing_instr(
                     indexing_lines,
-                    &mut policies.call_policy,
-                    &mut indices.global_variables,
+                    code_repo,
                 )
             }
             &Line::IndexedChoice(ref choice_instr) => {
                 self.execute_indexed_choice_instr(
                     choice_instr,
+                    &mut policies.call_policy,
+                    &mut indices.global_variables,
+                )
+            }
+            &Line::DynamicIndexedChoice(_) => {
+                self.execute_dynamic_indexed_choice_instr(
+                    code_repo,
                     &mut policies.call_policy,
                     &mut indices.global_variables,
                 )

@@ -21,24 +21,6 @@ use std::cell::Cell;
 use std::collections::VecDeque;
 use std::rc::Rc;
 
-#[inline]
-pub fn trust_me(non_counted_bt: bool) -> ChoiceInstruction {
-    if non_counted_bt {
-        ChoiceInstruction::DefaultTrustMe(0)
-    } else {
-        ChoiceInstruction::TrustMe(0)
-    }
-}
-
-#[inline]
-pub fn retry_me_else(offset: usize, non_counted_bt: bool) -> ChoiceInstruction {
-    if non_counted_bt {
-        ChoiceInstruction::DefaultRetryMeElse(offset)
-    } else {
-        ChoiceInstruction::RetryMeElse(offset)
-    }
-}
-
 #[derive(Debug)]
 pub struct ConjunctInfo<'a> {
     pub perm_vs: VariableFixtures<'a>,
@@ -109,16 +91,93 @@ impl<'a> ConjunctInfo<'a> {
 
 #[derive(Clone, Copy, Debug)]
 pub struct CodeGenSettings {
+    pub global_clock_tick: Option<usize>,
     pub is_extensible: bool,
     pub non_counted_bt: bool,
 }
 
 impl CodeGenSettings {
     #[inline]
-    pub fn new(is_extensible: bool, non_counted_bt: bool) -> Self {
-        CodeGenSettings {
-            is_extensible,
-            non_counted_bt,
+    pub fn is_dynamic(&self) -> bool {
+        self.global_clock_tick.is_some()
+    }
+
+    #[inline]
+    pub fn internal_try_me_else(&self, offset: usize) -> ChoiceInstruction {
+        if let Some(global_clock_time) = self.global_clock_tick {
+            ChoiceInstruction::DynamicInternalElse(
+                global_clock_time,
+                Death::Infinity,
+                if offset == 0 { NextOrFail::Next(0) } else { NextOrFail::Next(offset) },
+            )
+        } else {
+            ChoiceInstruction::TryMeElse(offset)
+        }
+    }
+
+    pub fn try_me_else(&self, offset: usize) -> ChoiceInstruction {
+        if let Some(global_clock_tick) = self.global_clock_tick {
+            ChoiceInstruction::DynamicElse(
+                global_clock_tick,
+                Death::Infinity,
+                if offset == 0 { NextOrFail::Next(0) } else { NextOrFail::Next(offset) },
+            )
+        } else {
+            ChoiceInstruction::TryMeElse(offset)
+        }
+    }
+
+    pub fn internal_retry_me_else(&self, offset: usize) -> ChoiceInstruction {
+        if let Some(global_clock_tick) = self.global_clock_tick {
+            ChoiceInstruction::DynamicInternalElse(
+                global_clock_tick,
+                Death::Infinity,
+                if offset == 0 { NextOrFail::Next(0) } else { NextOrFail::Next(offset) },
+            )
+        } else {
+            ChoiceInstruction::RetryMeElse(offset)
+        }
+    }
+
+    pub fn retry_me_else(&self, offset: usize) -> ChoiceInstruction {
+        if let Some(global_clock_tick) = self.global_clock_tick {
+            ChoiceInstruction::DynamicElse(
+                global_clock_tick,
+                Death::Infinity,
+                if offset == 0 { NextOrFail::Next(0) } else { NextOrFail::Next(offset) },
+            )
+        } else if self.non_counted_bt {
+            ChoiceInstruction::DefaultRetryMeElse(offset)
+        } else {
+            ChoiceInstruction::RetryMeElse(offset)
+        }
+    }
+
+    pub fn internal_trust_me(&self) -> ChoiceInstruction {
+        if let Some(global_clock_tick) = self.global_clock_tick {
+            ChoiceInstruction::DynamicInternalElse(
+                global_clock_tick,
+                Death::Infinity,
+                NextOrFail::Fail(0),
+            )
+        } else if self.non_counted_bt {
+            ChoiceInstruction::DefaultTrustMe(0)
+        } else {
+            ChoiceInstruction::TrustMe(0)
+        }
+    }
+
+    pub fn trust_me(&self) -> ChoiceInstruction {
+        if let Some(global_clock_tick) = self.global_clock_tick {
+            ChoiceInstruction::DynamicElse(
+                global_clock_tick,
+                Death::Infinity,
+                NextOrFail::Fail(0),
+            )
+        } else if self.non_counted_bt {
+            ChoiceInstruction::DefaultTrustMe(0)
+        } else {
+            ChoiceInstruction::TrustMe(0)
         }
     }
 }
@@ -128,8 +187,7 @@ pub struct CodeGenerator<TermMarker> {
     atom_tbl: TabledData<Atom>,
     marker: TermMarker,
     pub var_count: IndexMap<Rc<Var>, usize>,
-    non_counted_bt: bool,
-    is_extensible: bool,
+    settings: CodeGenSettings,
     pub skeleton: PredicateSkeleton,
     pub jmp_by_locs: Vec<usize>,
     global_jmp_by_locs_offset: usize,
@@ -141,8 +199,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
             atom_tbl,
             marker: Allocator::new(),
             var_count: IndexMap::new(),
-            non_counted_bt: settings.non_counted_bt,
-            is_extensible: settings.is_extensible,
+            settings,
             skeleton: PredicateSkeleton::new(),
             jmp_by_locs: vec![],
             global_jmp_by_locs_offset: 0,
@@ -889,27 +946,6 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
         self.add_conditional_call(code, term, num_perm_vars_left);
     }
 
-    /*
-        pub fn compile_query(&mut self, query: &'a Vec<QueryTerm>) -> Result<Code, CompilationError> {
-            let iter = ChunkedIterator::from_term_sequence(query);
-            let conjunct_info = self.collect_var_data(iter);
-
-            let mut code = Vec::new();
-            self.compile_seq_prelude(&conjunct_info, &mut code);
-
-            let iter = ChunkedIterator::from_term_sequence(query);
-            self.compile_seq(iter, &conjunct_info, &mut code, true)?;
-
-            conjunct_info.mark_unsafe_vars(UnsafeVarMarker::new(), &mut code);
-
-            if let Some(query_term) = query.last() {
-                Self::compile_cleanup(&mut code, &conjunct_info, query_term);
-            }
-
-            Ok(code)
-        }
-    */
-
     #[inline]
     fn increment_jmp_by_locs_by(&mut self, incr: usize) {
         let offset = self.global_jmp_by_locs_offset;
@@ -986,15 +1022,19 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
         subseqs
     }
 
-    fn compile_pred_subseq<'b: 'a>(
+    fn compile_pred_subseq<'b: 'a, I: Indexer>(
         &mut self,
         clauses: &'b [PredicateClause],
         optimal_index: usize,
     ) -> Result<Code, CompilationError> {
         let mut code = VecDeque::new();
-        let mut code_offsets = CodeOffsets::new(self.atom_tbl.clone(), optimal_index + 1);
-        let mut skip_stub_try_me_else = false;
+        let mut code_offsets = CodeOffsets::new(
+            self.atom_tbl.clone(),
+            I::new(),
+            optimal_index + 1,
+        );
 
+        let mut skip_stub_try_me_else = false;
         let jmp_by_locs_len = self.jmp_by_locs.len();
 
         for (i, clause) in clauses.iter().enumerate() {
@@ -1010,13 +1050,14 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
 
             if clauses.len() > 1 {
                 let choice = match i {
-                    0 => ChoiceInstruction::TryMeElse(clause_code.len() + 1),
-                    _ if i == clauses.len() - 1 => trust_me(self.non_counted_bt),
-                    _ => retry_me_else(clause_code.len() + 1, self.non_counted_bt),
+                    0 => self.settings.internal_try_me_else(clause_code.len() + 1),
+                    //ChoiceInstruction::TryMeElse(clause_code.len() + 1),
+                    _ if i == clauses.len() - 1 => self.settings.internal_trust_me(),
+                    _ => self.settings.internal_retry_me_else(clause_code.len() + 1),
                 };
 
                 code.push_back(Line::Choice(choice));
-            } else if self.is_extensible {
+            } else if self.settings.is_extensible {
                 /*
                    generate stub choice instructions for extensible
                    predicates. if predicates are added to either the
@@ -1028,8 +1069,9 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
                    over them.
                 */
 
-                code.push_front(Line::Choice(ChoiceInstruction::TryMeElse(0)));
-                skip_stub_try_me_else = true;
+                code.push_front(Line::Choice(self.settings.internal_try_me_else(0)));
+                //Line::Choice(ChoiceInstruction::TryMeElse(0)));
+                skip_stub_try_me_else = !self.settings.is_dynamic(); //true;
             }
 
             let arg = match clause.args() {
@@ -1045,7 +1087,7 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
                 code_offsets.index_term(arg, index, &mut clause_index_info);
             }
 
-            if !skip_stub_try_me_else {
+            if !(clauses.len() == 1 && self.settings.is_extensible) {
                 self.increment_jmp_by_locs_by(code.len());
             }
 
@@ -1065,7 +1107,11 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
             } else {
                 self.increment_jmp_by_locs_by(1);
             }
-        } else if skip_stub_try_me_else {
+        } else if clauses.len() == 1 && self.settings.is_extensible {
+            // the condition is the value of skip_stub_try_me_else, which is
+            // true if the predicate is not dynamic. This operation must apply
+            // to dynamic predicates also, though.
+
             // remove the TryMeElse(0).
             code.pop_front();
         }
@@ -1089,22 +1135,27 @@ impl<'a, TermMarker: Allocator<'a>> CodeGenerator<TermMarker> {
 
         for (l, r) in split_pred {
             let skel_lower_bound = self.skeleton.clauses.len();
-            let code_segment = self.compile_pred_subseq(&clauses[l..r], optimal_index)?;
+            let code_segment = if self.settings.is_dynamic() {
+                self.compile_pred_subseq::<DynamicCodeIndices>(&clauses[l..r], optimal_index)?
+            } else {
+                self.compile_pred_subseq::<StaticCodeIndices>(&clauses[l..r], optimal_index)?
+            };
+
             let clause_start_offset = code.len();
 
             if multi_seq {
                 let choice = match l {
-                    0 => ChoiceInstruction::TryMeElse(code_segment.len() + 1),
-                    _ if r == clauses.len() => trust_me(self.non_counted_bt),
-                    _ => retry_me_else(code_segment.len() + 1, self.non_counted_bt),
+                    0 => self.settings.try_me_else(code_segment.len() + 1),
+                    _ if r == clauses.len() => self.settings.trust_me(),
+                    _ => self.settings.retry_me_else(code_segment.len() + 1),
                 };
 
                 code.push(Line::Choice(choice));
-            } else if self.is_extensible {
-                code.push(Line::Choice(ChoiceInstruction::TryMeElse(0)));
+            } else if self.settings.is_extensible {
+                code.push(Line::Choice(self.settings.try_me_else(0)));
             }
 
-            if self.is_extensible {
+            if self.settings.is_extensible {
                 let segment_is_indexed = to_indexing_line(&code_segment[0]).is_some();
 
                 for clause_index_info in self.skeleton.clauses[skel_lower_bound..].iter_mut() {

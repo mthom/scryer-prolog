@@ -3496,14 +3496,16 @@ impl MachineState {
 
                 self.fail = match self.store(self.deref(self[temp_v!(2)])) {
                     Addr::Str(s) => match &self.heap[s] {
-                        &HeapCellValue::NamedStr(arity, ref name, ref spec) => indices
-                            .get_predicate_code_index(
+                        &HeapCellValue::NamedStr(arity, ref name, ref spec) => {
+                            CLAUSE_TYPE_FORMS.borrow().get(&(name.as_str(), arity)).is_some() ||
+                                indices.get_predicate_code_index(
                                 name.clone(),
                                 arity,
                                 module_name,
                                 spec.clone(),
                             )
-                            .is_some(),
+                            .is_some()
+                        }
                         _ => {
                             unreachable!()
                         }
@@ -3513,8 +3515,8 @@ impl MachineState {
                             let spec =
                                 fetch_atom_op_spec(name.clone(), spec.clone(), &indices.op_dir);
 
-                            indices
-                                .get_predicate_code_index(name.clone(), 0, module_name, spec)
+                            CLAUSE_TYPE_FORMS.borrow().get(&(name.as_str(), 0)).is_some() ||
+                            indices.get_predicate_code_index(name.clone(), 0, module_name, spec)
                                 .is_some()
                         } else {
                             unreachable!()

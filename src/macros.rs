@@ -126,6 +126,7 @@ macro_rules! functor_term {
     (indexing_code_ptr($h:expr, $e:expr), $arity:expr, $aux_lens:expr, $addendum:ident) => ({
         let stub =
             match $e {
+                IndexingCodePtr::DynamicExternal(o) => functor!("dynamic_external", [integer(o)]),
                 IndexingCodePtr::External(o) => functor!("external", [integer(o)]),
                 IndexingCodePtr::Internal(o) => functor!("internal", [integer(o)]),
                 IndexingCodePtr::Fail => vec![HeapCellValue::Atom(clause_name!("fail"), None)],

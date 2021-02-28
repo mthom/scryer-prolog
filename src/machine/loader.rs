@@ -68,7 +68,7 @@ pub(crate) enum RetractionRecord {
     RemovedIndex(usize, OptArgIndexKey, usize),
     ReplacedChoiceOffset(usize, usize),
     AppendedTrustMe(usize, usize, bool),
-    ReplacedSwitchOnTermVarIndex(usize, usize),
+    ReplacedSwitchOnTermVarIndex(usize, IndexingCodePtr),
     ModifiedTryMeElse(usize, usize),
     ModifiedRetryMeElse(usize, usize),
     ModifiedRevJmpBy(usize, usize),
@@ -94,6 +94,8 @@ pub(crate) enum RetractionRecord {
         SliceDeque<usize>,
     ),
     RemovedSkeleton(CompilationTarget, PredicateKey, PredicateSkeleton),
+    ReplacedDynamicElseOffset(usize, usize),
+    AppendedNextOrFail(usize, NextOrFail),
 }
 
 /*
@@ -624,6 +626,32 @@ impl<'a> Drop for LoadState<'a> {
                                 module.extensible_predicates.insert(key, skeleton);
                             }
                         }
+                    }
+                }
+                RetractionRecord::ReplacedDynamicElseOffset(instr_loc, next) => {
+                    match &mut self.wam.code_repo.code[instr_loc] {
+                        Line::Choice(ChoiceInstruction::DynamicElse(
+                            _, _, NextOrFail::Next(ref mut o),
+                        )) |
+                        Line::Choice(ChoiceInstruction::DynamicInternalElse(
+                            _, _, NextOrFail::Next(ref mut o),
+                        )) => {
+                            *o = next;
+                        }
+                        _ => {}
+                    }
+                }
+                RetractionRecord::AppendedNextOrFail(instr_loc, fail) => {
+                    match &mut self.wam.code_repo.code[instr_loc] {
+                        Line::Choice(ChoiceInstruction::DynamicElse(
+                            _, _, ref mut next_or_fail,
+                        )) |
+                        Line::Choice(ChoiceInstruction::DynamicInternalElse(
+                            _, _, ref mut next_or_fail,
+                        )) => {
+                            *next_or_fail = fail;
+                        }
+                        _ => {}
                     }
                 }
             }
@@ -1720,6 +1748,13 @@ impl Machine {
                 fetch_op_spec(clause_name!(":-"), 2, &loader.load_state.wam.indices.op_dir),
             );
 
+            // if a new predicate was just created, make it dynamic.
+            loader.add_dynamic_predicate(
+                compilation_target.clone(),
+                key.0.clone(),
+                key.1,
+            )?;
+
             loader.load_state.incremental_compile_clause(
                 key.clone(),
                 asserted_clause,
@@ -1728,13 +1763,8 @@ impl Machine {
                 append_or_prepend,
             )?;
 
-            // if a new predicate was just created, make it dynamic.
-            loader
-                .load_state
-                .wam
-                .indices
-                .get_predicate_skeleton_mut(&compilation_target, &key)
-                .map(|skeleton| skeleton.is_dynamic = true);
+            // the global clock is incremented after each assertion.
+            loader.load_state.wam.machine_st.global_clock += 1;
 
             loader.compile_clause_clauses(
                 key,
@@ -1883,7 +1913,10 @@ impl Machine {
             let mut loader = Loader::new(LiveTermStream::new(ListingSource::User), self);
             loader.load_state.compilation_target = compilation_target;
 
-            let clause_clause_loc = loader.load_state.retract_clause(key, target_pos);
+            let clause_clause_loc = loader.load_state.retract_dynamic_clause(key, target_pos);
+
+            // the global clock is incremented after each retraction.
+            loader.load_state.wam.machine_st.global_clock += 1;
 
             let target_pos = match loader.load_state.wam.indices.get_predicate_skeleton(
                 &clause_clause_compilation_target,

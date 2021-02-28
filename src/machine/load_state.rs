@@ -346,25 +346,27 @@ impl<'a> LoadState<'a> {
         key: PredicateKey,
         clause_locs: &SliceDeque<usize>,
     ) {
-        let clause_target_poses: Vec<_> = self
+        let (clause_target_poses, is_dynamic) = self
             .wam
             .indices
             .get_predicate_skeleton(&compilation_target, &key)
             .map(|skeleton| {
-                clause_locs
+                (clause_locs
                     .iter()
                     .map(|clause_clause_loc| {
                         skeleton.target_pos_of_clause_clause_loc(
                             *clause_clause_loc,
                         )
                     })
-                    .collect()
+                    .collect(),
+                 skeleton.is_dynamic)
             }).unwrap();
 
         self.retract_local_clauses_by_locs(
             compilation_target,
             key,
             clause_target_poses,
+            is_dynamic,
         );
     }
 
@@ -373,6 +375,7 @@ impl<'a> LoadState<'a> {
         compilation_target: CompilationTarget,
         key: PredicateKey,
         mut clause_target_poses: Vec<Option<usize>>,
+        is_dynamic: bool,
     ) {
         let old_compilation_target = mem::replace(
             &mut self.compilation_target,
@@ -381,6 +384,9 @@ impl<'a> LoadState<'a> {
 
         while let Some(target_pos_opt) = clause_target_poses.pop() {
             match target_pos_opt {
+                Some(target_pos) if is_dynamic => {
+                    self.retract_dynamic_clause(key.clone(), target_pos);
+                }
                 Some(target_pos) => {
                     self.retract_clause(key.clone(), target_pos);
                 }

@@ -372,6 +372,7 @@ impl From<Addr> for HeapCellValue {
 #[derive(Debug, Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum IndexPtr {
     DynamicUndefined, // a predicate, declared as dynamic, whose location in code is as yet undefined.
+    DynamicIndex(usize),
     Index(usize),
     Undefined,
 }
@@ -405,6 +406,7 @@ impl CodeIndex {
     pub fn local(&self) -> Option<usize> {
         match self.0.get() {
             IndexPtr::Index(i) => Some(i),
+            IndexPtr::DynamicIndex(i) => Some(i),
             _ => None,
         }
     }
@@ -554,38 +556,6 @@ impl LocalCodePtr {
         addr
     }
 }
-
-/*
-impl PartialOrd<CodePtr> for CodePtr {
-    fn partial_cmp(&self, other: &CodePtr) -> Option<Ordering> {
-        match (self, other) {
-            (&CodePtr::Local(ref l1), &CodePtr::Local(ref l2)) => {
-                l1.partial_cmp(l2)
-            }
-            _ => {
-                Some(Ordering::Greater)
-            }
-        }
-    }
-}
-
-impl PartialOrd<LocalCodePtr> for LocalCodePtr {
-    fn partial_cmp(&self, other: &LocalCodePtr) -> Option<Ordering> {
-        match (self, other) {
-            (&LocalCodePtr::DirEntry(p1), &LocalCodePtr::DirEntry(ref p2)) |
-            (&LocalCodePtr::TopLevel(_, p1), &LocalCodePtr::TopLevel(_, ref p2)) => {
-                p1.partial_cmp(p2)
-            }
-            (_, &LocalCodePtr::TopLevel(_, _)) => {
-                Some(Ordering::Less)
-            }
-            _ => {
-                Some(Ordering::Greater)
-            }
-        }
-    }
-}
-*/
 
 impl Default for CodePtr {
     #[inline]

@@ -46,8 +46,33 @@ impl ArithmeticTerm {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum NextOrFail {
+    Next(usize),
+    Fail(usize),
+}
+
+impl NextOrFail {
+    #[inline]
+    pub fn is_next(&self) -> bool {
+        if let NextOrFail::Next(_) = self {
+            true
+        } else {
+            false
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub enum Death {
+    Finite(usize),
+    Infinity,
+}
+
 #[derive(Debug)]
 pub enum ChoiceInstruction {
+    DynamicElse(usize, Death, NextOrFail),
+    DynamicInternalElse(usize, Death, NextOrFail),
     DefaultRetryMeElse(usize),
     DefaultTrustMe(usize),
     RetryMeElse(usize),
@@ -56,8 +81,76 @@ pub enum ChoiceInstruction {
 }
 
 impl ChoiceInstruction {
-    pub fn to_functor(&self) -> MachineStub {
+    pub fn to_functor(&self, h: usize) -> MachineStub {
         match self {
+            &ChoiceInstruction::DynamicElse(birth, death, next_or_fail) => {
+                match (death, next_or_fail) {
+                    (Death::Infinity, NextOrFail::Next(i)) => {
+                        functor!(
+                            "dynamic_else",
+                            [integer(birth), atom("inf"), integer(i)]
+                        )
+                    }
+                    (Death::Infinity, NextOrFail::Fail(i)) => {
+                        let next_functor = functor!("fail", [integer(i)]);
+
+                        functor!(
+                            "dynamic_else",
+                            [integer(birth), atom("inf"), aux(h, 0)],
+                            [next_functor]
+                        )
+                    }
+                    (Death::Finite(d), NextOrFail::Fail(i)) => {
+                        let next_functor = functor!("fail", [integer(i)]);
+
+                        functor!(
+                            "dynamic_else",
+                            [integer(birth), integer(d), aux(h, 0)],
+                            [next_functor]
+                        )
+                    }
+                    (Death::Finite(d), NextOrFail::Next(i)) => {
+                        functor!(
+                            "dynamic_else",
+                            [integer(birth), integer(d), integer(i)]
+                        )
+                    }
+                }
+            }
+            &ChoiceInstruction::DynamicInternalElse(birth, death, next_or_fail) => {
+                match (death, next_or_fail) {
+                    (Death::Infinity, NextOrFail::Next(i)) => {
+                        functor!(
+                            "dynamic_internal_else",
+                            [integer(birth), atom("inf"), integer(i)]
+                        )
+                    }
+                    (Death::Infinity, NextOrFail::Fail(i)) => {
+                        let next_functor = functor!("fail", [integer(i)]);
+
+                        functor!(
+                            "dynamic_internal_else",
+                            [integer(birth), atom("inf"), aux(h, 0)],
+                            [next_functor]
+                        )
+                    }
+                    (Death::Finite(d), NextOrFail::Fail(i)) => {
+                        let next_functor = functor!("fail", [integer(i)]);
+
+                        functor!(
+                            "dynamic_internal_else",
+                            [integer(birth), integer(d), aux(h, 0)],
+                            [next_functor]
+                        )
+                    }
+                    (Death::Finite(d), NextOrFail::Next(i)) => {
+                        functor!(
+                            "dynamic_internal_else",
+                            [integer(birth), integer(d), integer(i)]
+                        )
+                    }
+                }
+            }
             &ChoiceInstruction::TryMeElse(offset) => {
                 functor!("try_me_else", [integer(offset)])
             }
@@ -143,6 +236,7 @@ impl IndexedChoiceInstruction {
 pub enum IndexingLine {
     Indexing(IndexingInstruction),
     IndexedChoice(SliceDeque<IndexedChoiceInstruction>),
+    DynamicIndexedChoice(SliceDeque<usize>),
 }
 
 impl From<IndexingInstruction> for IndexingLine {
@@ -168,6 +262,7 @@ pub enum Line {
     Fact(FactInstruction),
     IndexingCode(Vec<IndexingLine>),
     IndexedChoice(IndexedChoiceInstruction),
+    DynamicIndexedChoice(usize),
     Query(QueryInstruction),
 }
 
@@ -184,7 +279,7 @@ impl Line {
     pub fn enqueue_functors(&self, mut h: usize, functors: &mut Vec<MachineStub>) {
         match self {
             &Line::Arithmetic(ref arith_instr) => functors.push(arith_instr.to_functor(h)),
-            &Line::Choice(ref choice_instr) => functors.push(choice_instr.to_functor()),
+            &Line::Choice(ref choice_instr) => functors.push(choice_instr.to_functor(h)),
             &Line::Control(ref control_instr) => functors.push(control_instr.to_functor()),
             &Line::Cut(ref cut_instr) => functors.push(cut_instr.to_functor(h)),
             &Line::Fact(ref fact_instr) => functors.push(fact_instr.to_functor(h)),
@@ -203,11 +298,21 @@ impl Line {
                                 functors.push(section);
                             }
                         }
+                        IndexingLine::DynamicIndexedChoice(indexed_choice_instrs) => {
+                            for indexed_choice_instr in indexed_choice_instrs {
+                                let section = functor!("dynamic", [integer(*indexed_choice_instr)]);
+                                h += section.len();
+                                functors.push(section);
+                            }
+                        }
                     }
                 }
             }
             &Line::IndexedChoice(ref indexed_choice_instr) => {
                 functors.push(indexed_choice_instr.to_functor())
+            }
+            &Line::DynamicIndexedChoice(ref indexed_choice_instr) => {
+                functors.push(functor!("dynamic", [integer(*indexed_choice_instr)]));
             }
             &Line::Query(ref query_instr) => functors.push(query_instr.to_functor(h)),
         }
@@ -454,7 +559,7 @@ pub enum IndexingInstruction {
     // The first index is the optimal argument being indexed.
     SwitchOnTerm(
         usize,
-        usize,
+        IndexingCodePtr,
         IndexingCodePtr,
         IndexingCodePtr,
         IndexingCodePtr,
@@ -471,7 +576,7 @@ impl IndexingInstruction {
                     "switch_on_term",
                     [
                         integer(arg),
-                        integer(vars),
+                        indexing_code_ptr(h, vars),
                         indexing_code_ptr(h, constants),
                         indexing_code_ptr(h, lists),
                         indexing_code_ptr(h, structures)

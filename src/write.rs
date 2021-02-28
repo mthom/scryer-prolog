@@ -96,7 +96,7 @@ impl fmt::Display for IndexPtr {
         match self {
             &IndexPtr::DynamicUndefined => write!(f, "undefined"),
             &IndexPtr::Undefined => write!(f, "undefined"),
-            &IndexPtr::Index(i) => write!(f, "{}", i),
+            &IndexPtr::DynamicIndex(i) | &IndexPtr::Index(i) => write!(f, "{}", i),
         }
     }
 }
@@ -339,6 +339,30 @@ impl fmt::Display for IndexedChoiceInstruction {
 impl fmt::Display for ChoiceInstruction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            &ChoiceInstruction::DynamicElse(offset, Death::Infinity, NextOrFail::Next(i)) => {
+                write!(f, "dynamic_else {}, {}, {}", offset, "inf", i)
+            }
+            &ChoiceInstruction::DynamicElse(offset, Death::Infinity, NextOrFail::Fail(i)) => {
+                write!(f, "dynamic_else {}, {}, fail({})", offset, "inf", i)
+            }
+            &ChoiceInstruction::DynamicElse(offset, Death::Finite(d), NextOrFail::Next(i)) => {
+                write!(f, "dynamic_else {}, {}, {}", offset, d, i)
+            }
+            &ChoiceInstruction::DynamicElse(offset, Death::Finite(d), NextOrFail::Fail(i)) => {
+                write!(f, "dynamic_else {}, {}, fail({})", offset, d, i)
+            }
+            &ChoiceInstruction::DynamicInternalElse(offset, Death::Infinity, NextOrFail::Next(i)) => {
+                write!(f, "dynamic_internal_else {}, {}, {}", offset, "inf", i)
+            }
+            &ChoiceInstruction::DynamicInternalElse(offset, Death::Infinity, NextOrFail::Fail(i)) => {
+                write!(f, "dynamic_internal_else {}, {}, fail({})", offset, "inf", i)
+            }
+            &ChoiceInstruction::DynamicInternalElse(offset, Death::Finite(d), NextOrFail::Next(i)) => {
+                write!(f, "dynamic_internal_else {}, {}, {}", offset, d, i)
+            }
+            &ChoiceInstruction::DynamicInternalElse(offset, Death::Finite(d), NextOrFail::Fail(i)) => {
+                write!(f, "dynamic_internal_else {}, {}, fail({})", offset, d, i)
+            }
             &ChoiceInstruction::TryMeElse(offset) =>
                 write!(f, "try_me_else {}", offset),
             &ChoiceInstruction::DefaultRetryMeElse(offset) => {
@@ -357,6 +381,9 @@ impl fmt::Display for ChoiceInstruction {
 impl fmt::Display for IndexingCodePtr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
+            &IndexingCodePtr::DynamicExternal(o) => {
+                write!(f, "IndexingCodePtr::DynamicExternal({})", o)
+            }
             &IndexingCodePtr::External(o) => {
                 write!(f, "IndexingCodePtr::External({})", o)
             }
@@ -482,6 +509,13 @@ impl fmt::Display for IndexingLine {
 
                 Ok(())
             }
+            &IndexingLine::DynamicIndexedChoice(ref indexed_choice_instrs) => {
+                for indexed_choice_instr in indexed_choice_instrs {
+                    write!(f, "dynamic({})", indexed_choice_instr)?;
+                }
+
+                Ok(())
+            }
         }
     }
 }
@@ -502,6 +536,7 @@ impl fmt::Display for Line {
                 Ok(())
             }
             &Line::IndexedChoice(ref indexed_choice_instr) => write!(f, "{}", indexed_choice_instr),
+            &Line::DynamicIndexedChoice(ref indexed_choice_instr) => write!(f, "{}", indexed_choice_instr),
             &Line::Query(ref query_instr) => write!(f, "{}", query_instr),
         }
     }

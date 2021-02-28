@@ -54,7 +54,9 @@ impl MachineState {
             last_call: false,
             heap_locs: HeapVarDict::new(),
             flags: MachineFlags::default(),
-            at_end_of_expansion: false,
+            cc: 0,
+            global_clock: 0,
+            dynamic_mode: FirstOrNext::First,
         }
     }
 
@@ -1302,9 +1304,35 @@ impl MachineState {
     pub(super) fn execute_indexing_instr(
         &mut self,
         indexing_lines: &Vec<IndexingLine>,
-        call_policy: &mut Box<dyn CallPolicy>,
-        global_variables: &mut GlobalVarDir,
+        code_repo: &CodeRepo,
     ) {
+        fn dynamic_external_of_clause_is_valid(
+            machine_st: &mut MachineState,
+            code: &Code,
+            p: usize,
+        ) -> bool {
+            match &code[p] {
+                Line::Choice(ChoiceInstruction::DynamicInternalElse(..)) => {
+                    machine_st.dynamic_mode = FirstOrNext::First;
+                    return true;
+                }
+                _ => {}
+            }
+
+            match &code[p-1] {
+                &Line::Choice(ChoiceInstruction::DynamicInternalElse(birth, death, _)) => {
+                    if birth < machine_st.cc && Death::Finite(machine_st.cc) <= death {
+                        return true;
+                    } else {
+                        return false;
+                    }
+                }
+                _ => {}
+            }
+
+            true
+        }
+
         let mut index = 0;
         let addr = match &indexing_lines[0] {
             &IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(arg, ..)) => {
@@ -1323,7 +1351,7 @@ impl MachineState {
                             IndexingCodePtr::Fail
                         }
                         Addr::HeapCell(_) | Addr::StackCell(..) | Addr::AttrVar(..) => {
-                            IndexingCodePtr::External(v)
+                            v
                         }
                         Addr::PStrLocation(..) => l,
                         Addr::Char(_)
@@ -1340,6 +1368,20 @@ impl MachineState {
                     match offset {
                         IndexingCodePtr::Fail => {
                             self.fail = true;
+                            break;
+                        }
+                        IndexingCodePtr::DynamicExternal(o) => {
+                            // either points directly to a
+                            // DynamicInternalElse, or just ahead of
+                            // one. Or neither!
+                            let p = self.p.local().abs_loc();
+
+                            if !dynamic_external_of_clause_is_valid(self, &code_repo.code, p + o) {
+                                self.fail = true;
+                            } else {
+                                self.p += o;
+                            }
+
                             break;
                         }
                         IndexingCodePtr::External(o) => {
@@ -1363,6 +1405,20 @@ impl MachineState {
                     match offset {
                         IndexingCodePtr::Fail => {
                             self.fail = true;
+                            break;
+                        }
+                        IndexingCodePtr::DynamicExternal(o) => {
+                            // either points directly to a
+                            // DynamicInternalElse, or just ahead of
+                            // one. Or neither!
+                            let p = self.p.local().abs_loc();
+
+                            if !dynamic_external_of_clause_is_valid(self, &code_repo.code, p + o) {
+                                self.fail = true;
+                            } else {
+                                self.p += o;
+                            }
+
                             break;
                         }
                         IndexingCodePtr::External(o) => {
@@ -1394,6 +1450,17 @@ impl MachineState {
                             self.fail = true;
                             break;
                         }
+                        IndexingCodePtr::DynamicExternal(o) => {
+                            let p = self.p.local().abs_loc();
+
+                            if !dynamic_external_of_clause_is_valid(self, &code_repo.code, p + o) {
+                                self.fail = true;
+                            } else {
+                                self.p += o;
+                            }
+
+                            break;
+                        }
                         IndexingCodePtr::External(o) => {
                             self.p += o;
                             break;
@@ -1403,18 +1470,23 @@ impl MachineState {
                         }
                     }
                 }
-                &IndexingLine::IndexedChoice(ref instrs) => {
+                &IndexingLine::IndexedChoice(_) => {
                     if let LocalCodePtr::DirEntry(p) = self.p.local() {
                         self.p = CodePtr::Local(LocalCodePtr::IndexingBuf(p, index, 0));
                     } else {
                         unreachable!()
                     }
 
-                    self.execute_indexed_choice_instr(
-                        instrs.first().unwrap(),
-                        call_policy,
-                        global_variables,
-                    );
+                    break;
+                }
+                &IndexingLine::DynamicIndexedChoice(_) => {
+                    self.dynamic_mode = FirstOrNext::First;
+
+                    if let LocalCodePtr::DirEntry(p) = self.p.local() {
+                        self.p = CodePtr::Local(LocalCodePtr::IndexingBuf(p, index, 0));
+                    } else {
+                        unreachable!()
+                    }
 
                     break;
                 }
@@ -3028,6 +3100,113 @@ impl MachineState {
         };
     }
 
+    pub(super) fn execute_dynamic_indexed_choice_instr(
+        &mut self,
+        code_repo: &CodeRepo,
+        call_policy: &mut Box<dyn CallPolicy>,
+        global_variables: &mut GlobalVarDir,
+    ) {
+        let p = self.p.local();
+
+        match code_repo.find_living_dynamic(p, self.cc) {
+            Some((offset, oi, ii, is_next_clause)) => {
+                self.p = CodePtr::Local(LocalCodePtr::IndexingBuf(
+                    p.abs_loc(), oi, ii,
+                ));
+
+                match self.dynamic_mode {
+                    FirstOrNext::First if !is_next_clause => {
+                        self.p = CodePtr::Local(LocalCodePtr::DirEntry(
+                            p.abs_loc() + offset,
+                        ));
+                    }
+                    FirstOrNext::First => {
+                        // there's a leading DynamicElse that sets self.cc.
+                        // self.cc = self.global_clock;
+
+                        match code_repo.find_living_dynamic(
+                            LocalCodePtr::IndexingBuf(p.abs_loc(), oi, ii + 1),
+                            self.cc,
+                        ) {
+                            Some(_) => {
+                                self.registers[self.num_of_args + 1] = Addr::Usize(self.cc);
+                                self.num_of_args += 1;
+
+                                self.execute_indexed_choice_instr(
+                                    &IndexedChoiceInstruction::Try(offset),
+                                    call_policy,
+                                    global_variables,
+                                );
+
+                                self.num_of_args -= 1;
+                            }
+                            None => {
+                                self.p = CodePtr::Local(LocalCodePtr::DirEntry(
+                                    p.abs_loc() + offset,
+                                ));
+                            }
+                        }
+                    }
+                    FirstOrNext::Next => {
+                        let n = self
+                            .stack
+                            .index_or_frame(self.b)
+                            .prelude
+                            .univ_prelude
+                            .num_cells;
+
+                        self.cc = match self.stack.index_or_frame(self.b)[n - 1] {
+                            Addr::Usize(cc) => cc,
+                            _ => unreachable!(),
+                        };
+
+                        if is_next_clause {
+                            match code_repo.find_living_dynamic(
+                                LocalCodePtr::IndexingBuf(p.abs_loc(), oi, ii + 1),
+                                self.cc,
+                            ) {
+                                Some(_) => {
+                                    try_or_fail!(
+                                        self,
+                                        call_policy.retry(
+                                            self,
+                                            offset,
+                                            global_variables,
+                                        )
+                                    )
+                                }
+                                None => {
+                                    try_or_fail!(
+                                        self,
+                                        call_policy.trust(
+                                            self,
+                                            offset,
+                                            global_variables,
+                                        )
+                                    )
+                                }
+                            }
+                        } else {
+                            try_or_fail!(
+                                self,
+                                call_policy.trust(
+                                    self,
+                                    offset,
+                                    global_variables,
+                                )
+                            )
+                        }
+                    }
+                }
+
+                self.dynamic_mode = FirstOrNext::Next;
+            }
+            None => {
+                self.fail = true;
+            }
+                }
+    }
+
     pub(super) fn execute_indexed_choice_instr(
         &mut self,
         instr: &IndexedChoiceInstruction,
@@ -3073,10 +3252,187 @@ impl MachineState {
     pub(super) fn execute_choice_instr(
         &mut self,
         instr: &ChoiceInstruction,
+        code_repo: &CodeRepo,
         call_policy: &mut Box<dyn CallPolicy>,
         global_variables: &mut GlobalVarDir,
     ) {
         match instr {
+            &ChoiceInstruction::DynamicElse(..) => {
+                if let FirstOrNext::First = self.dynamic_mode {
+                    self.cc = self.global_clock;
+                }
+
+                let p = self.p.local().abs_loc();
+
+                match code_repo.find_living_dynamic_else(p, self.cc) {
+                    Some((p, next_i)) => {
+                        self.p = CodePtr::Local(LocalCodePtr::DirEntry(p));
+
+                        match self.dynamic_mode {
+                            FirstOrNext::First if next_i == 0 => {
+                                self.p = CodePtr::Local(LocalCodePtr::DirEntry(p + 1));
+                            }
+                            FirstOrNext::First => {
+                                self.cc = self.global_clock;
+
+                                match code_repo.find_living_dynamic_else(p + next_i, self.cc) {
+                                    Some(_) => {
+                                        self.registers[self.num_of_args + 1] = Addr::Usize(self.cc);
+                                        self.num_of_args += 1;
+
+                                        self.execute_choice_instr(
+                                            &ChoiceInstruction::TryMeElse(next_i),
+                                            code_repo,
+                                            call_policy,
+                                            global_variables,
+                                        );
+
+                                        self.num_of_args -= 1;
+                                    }
+                                    None => {
+                                        self.p += 1;
+                                    }
+                                }
+                            }
+                            FirstOrNext::Next => {
+                                let n = self
+                                    .stack
+                                    .index_or_frame(self.b)
+                                    .prelude
+                                    .univ_prelude
+                                    .num_cells;
+
+                                self.cc = match self.stack.index_or_frame(self.b)[n - 1] {
+                                    Addr::Usize(cc) => cc,
+                                    _ => unreachable!(),
+                                };
+
+                                if next_i > 0 {
+                                    match code_repo.find_living_dynamic_else(p + next_i, self.cc) {
+                                        Some(_) => {
+                                            try_or_fail!(
+                                                self,
+                                                call_policy.retry_me_else(
+                                                    self,
+                                                    next_i,
+                                                    global_variables,
+                                                )
+                                            )
+                                        }
+                                        None => {
+                                            try_or_fail!(
+                                                self,
+                                                call_policy.trust_me(
+                                                    self,
+                                                    global_variables,
+                                                )
+                                            )
+                                        }
+                                    }
+                                } else {
+                                    try_or_fail!(
+                                        self,
+                                        call_policy.trust_me(
+                                            self,
+                                            global_variables,
+                                        )
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    None => {
+                        self.fail = true;
+                    }
+                }
+
+                self.dynamic_mode = FirstOrNext::Next;
+            }
+            &ChoiceInstruction::DynamicInternalElse(..) => {
+                let p = self.p.local().abs_loc();
+
+                match code_repo.find_living_dynamic_else(p, self.cc) {
+                    Some((p, next_i)) => {
+                        self.p = CodePtr::Local(LocalCodePtr::DirEntry(p));
+
+                        match self.dynamic_mode {
+                            FirstOrNext::First if next_i == 0 => {
+                                self.p = CodePtr::Local(LocalCodePtr::DirEntry(p + 1));
+                            }
+                            FirstOrNext::First => {
+                                match code_repo.find_living_dynamic_else(p + next_i, self.cc) {
+                                    Some(_) => {
+                                        self.registers[self.num_of_args + 1] = Addr::Usize(self.cc);
+                                        self.num_of_args += 1;
+
+                                        self.execute_choice_instr(
+                                            &ChoiceInstruction::TryMeElse(next_i),
+                                            code_repo,
+                                            call_policy,
+                                            global_variables,
+                                        );
+
+                                        self.num_of_args -= 1;
+                                    }
+                                    None => {
+                                        self.p += 1;
+                                    }
+                                }
+                            }
+                            FirstOrNext::Next => {
+                                let n = self
+                                    .stack
+                                    .index_or_frame(self.b)
+                                    .prelude
+                                    .univ_prelude
+                                    .num_cells;
+
+                                self.cc = match self.stack.index_or_frame(self.b)[n - 1] {
+                                    Addr::Usize(cc) => cc,
+                                    _ => unreachable!(),
+                                };
+
+                                if next_i > 0 {
+                                    match code_repo.find_living_dynamic_else(p + next_i, self.cc) {
+                                        Some(_) => {
+                                            try_or_fail!(
+                                                self,
+                                                call_policy.retry_me_else(
+                                                    self,
+                                                    next_i,
+                                                    global_variables,
+                                                )
+                                            )
+                                        }
+                                        None => {
+                                            try_or_fail!(
+                                                self,
+                                                call_policy.trust_me(
+                                                    self,
+                                                    global_variables,
+                                                )
+                                            )
+                                        }
+                                    }
+                                } else {
+                                    try_or_fail!(
+                                        self,
+                                        call_policy.trust_me(
+                                            self,
+                                            global_variables,
+                                        )
+                                    )
+                                }
+                            }
+                        }
+                    }
+                    None => {
+                        self.fail = true;
+                    }
+                }
+
+                self.dynamic_mode = FirstOrNext::Next;
+            }
             &ChoiceInstruction::TryMeElse(offset) => {
                 let n = self.num_of_args;
                 let b = self.stack.allocate_or_frame(n);
