@@ -603,7 +603,7 @@ expand_meta_predicate_subgoals([SG | SGs], [MS | MSs], M, [ESG | ESGs], HeadVars
        )  ->
        (  var(SG),
           pairs:same_key(SG, HeadVars, [_|_], _) ->
-          expand_subgoal(SG, MS, M, ESG, HeadVars)  %%TODO: Shortcut this.. set SG = ESG. Or wrap it in '$call', ie. ESG = '$call'(SG).
+          expand_subgoal(SG, MS, M, ESG, HeadVars)
        ;  expand_subgoal(SG, MS, M, ESG0, HeadVars),
           expand_module_name(ESG0, M, ESG)
        ),
@@ -654,7 +654,7 @@ expand_goal_cases((Module:Goals0), _, ExpandedGoals, HeadVars) :-
 
 expand_goal(UnexpandedGoals, Module, ExpandedGoals, HeadVars) :-
     (  var(UnexpandedGoals) ->
-       UnexpandedGoals = ExpandedGoals
+       call(Module:UnexpandedGoals) = ExpandedGoals
     ;  goal_expansion(UnexpandedGoals, Module, UnexpandedGoals1),
        (  Module \== user ->
           goal_expansion(UnexpandedGoals1, user, Goals)
