@@ -309,6 +309,53 @@ about strings.
 Partial strings were first proposed by Ulrich Neumerkel in issue
 [#95](https://github.com/mthom/scryer-prolog/issues/95).
 
+### Occurs check and cyclic terms
+
+The *occurs&nbsp;check* is an element of algorithms that perform
+syntactic unification, causing the unification to fail if a variable
+is unified with a term that contains that variable as a proper
+subterm. For efficiency, the *occurs&nbsp;check* is omitted by default
+in Scryer&nbsp;Prolog and many other Prolog systems.
+
+In Scryer Prolog, performing unifications which succeed only if the
+*occurs&nbsp;check* is omitted yield *cyclic&nbsp;terms*, also called
+*rational&nbsp;trees*. For example:
+
+```
+?- X = f(X), Y = g(X,Y).
+   X = f(X), Y = g(f(X),Y).
+```
+
+The creation of cyclic terms often indicates a programming mistake in
+the formulation of Prolog predicates, and to obtain logically sound
+results it is desirable to either perform all unifications with
+*occurs&nbsp;check* enabled, or let Prolog throw an error if enabling
+the *occurs&nbsp;check* is necessary to prevent a unification.
+
+Scryer Prolog supports this via the Prolog flag `occurs_check`. It can
+be set to one of the following values to obtain the desired behaviour:
+
+- `false`
+  Do not perform the *occurs&nbsp;check*. This is the default.
+- `true`
+  Perform all unifications with the *occurs&nbsp;check* enabled.
+- `error`
+  Yield an error if a unification is performed that the
+  *occurs&nbsp;check* would have prevented.
+
+Especially when starting with Prolog, we recommend to add the
+following directive to the `~/.scryerrc` configuration file so that
+programming mistakes in predicates that lead to the creation of cyclic
+terms are indicated by errors:
+
+```
+:- set_prolog_flag(occurs_check, error).
+```
+
+Scryer Prolog implements specialized reasoning to make unifications
+fast in many frequently occurring situations also if the
+*occurs&nbsp;check* is enabled.
+
 ### Tabling (SLG resolution)
 
 One of the foremost attractions of Prolog is that logical consequences
