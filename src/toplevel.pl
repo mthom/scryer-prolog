@@ -2,6 +2,7 @@
                         copy_term/3]).
 
 :- use_module(library(charsio)).
+:- use_module(library(files)).
 :- use_module(library(iso_ext)).
 :- use_module(library(lists)).
 :- use_module(library(si)).
@@ -11,8 +12,14 @@
 
 load_scryerrc :-
     (  '$home_directory'(HomeDir) ->
-       atom_concat(HomeDir, '/.scryerrc', ScryerrcFile),
-       catch(use_module(ScryerrcFile), E, print_exception(E))
+       append(HomeDir, "/.scryerrc", ScryerrcFile),
+       (  file_exists(ScryerrcFile) ->
+          % convert ScryerrcFile to atom. somehow, I dunno how.
+          append(ScryerrcFile, "'.", ScryerrcFile0),
+          read_term_from_chars(['\'' | ScryerrcFile0], ScryerrcFileAtom),
+          catch(use_module(ScryerrcFileAtom), E, print_exception(E))
+       ;  true
+       )
     ;  true
     ).
 

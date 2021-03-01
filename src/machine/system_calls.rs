@@ -5477,11 +5477,9 @@ impl MachineState {
 
                 if path.is_dir() {
                     if let Some(path) = path.to_str() {
-                        let path_atom = self.heap.to_unifiable(
-                            HeapCellValue::Atom(clause_name!(path.to_string(), self.atom_tbl), None),
-                        );
+                        let path_string = self.heap.put_complete_string(path);
 
-                        (self.unify_fn)(self, self[temp_v!(1)], path_atom);
+                        self.unify(self[temp_v!(1)], path_string);
                         return return_from_clause!(self.last_call, self);
                     }
                 }
