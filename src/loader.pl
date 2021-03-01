@@ -18,7 +18,9 @@
 
 
 '$print_message_and_fail'(Error) :-
-    (  Error = error(existence_error(procedure, Expansion), Expansion) ->
+    (  (  Error = error(existence_error(procedure, Expansion), Expansion)
+       ;  Error = error(evaluation_error((_:_)/_),Expansion)
+       )  ->
        (  (  Expansion = goal_expansion/2
           ;  Expansion = term_expansion/2
           )  ->

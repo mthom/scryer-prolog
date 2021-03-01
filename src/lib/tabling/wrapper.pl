@@ -95,10 +95,15 @@ rename((Head --> Body), (NewHead --> Body), Module) :- !,
 	functor(Head, Name, Arity),
 	PlainArity is Arity+1,
 	functor(PlainHead, Name, PlainArity),
-	table_wrapper:tabled(PlainHead, Module),
+	catch(table_wrapper:tabled(PlainHead, Module),
+          error(existence_error(procedure, tabled/2), _),
+          false),
 	rename_term(Head, NewHead).
 rename(Head, NewHead, Module) :-
-	table_wrapper:tabled(Head, Module), !,
+	catch(table_wrapper:tabled(Head, Module),
+          error(existence_error(procedure, tabled/2), _),
+          false),
+    !,
 	rename_term(Head, NewHead).
 
 rename_term(Compound0, Compound) :-
