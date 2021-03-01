@@ -255,6 +255,7 @@ call_or_cut(G, B, ErrorPI) :-
 
 :- non_counted_backtracking control_functor/1.
 
+control_functor(call(_:!)).
 control_functor(!).
 control_functor((_,_)).
 control_functor((_;_)).
@@ -280,6 +281,8 @@ call_or_cut(G, B) :-
 
 :- non_counted_backtracking call_or_cut_interp/2.
 
+call_or_cut_interp(call(_:!), B) :-
+    !. % '$set_cp_by_default'(B).
 call_or_cut_interp(!, B) :-
     '$set_cp_by_default'(B).
 call_or_cut_interp((G1, G2), B) :-
