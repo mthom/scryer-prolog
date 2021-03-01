@@ -51,6 +51,8 @@
 
 :- attribute trie_table_link/1.
 
+verify_attributes(_, _, []).
+
 % This file defines a call pattern trie.
 %
 % This data structure keeps the relation between a variant and the

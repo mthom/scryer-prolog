@@ -68,10 +68,18 @@ macro_rules! functor {
     });
     ($name:expr, [$($dt:ident($($value:expr),*)),+]) => ({
         {
-            let arity = count_tt!($($dt) +);
+            use crate::machine::heap::*;
 
-            vec![ HeapCellValue::NamedStr(arity, clause_name!($name), None),
-                  $(functor_term!( $dt($($value),*), arity, [], addendum ),)+ ]
+            let arity = count_tt!($($dt) +);
+            #[allow(unused_variables, unused_mut)]
+            let mut addendum = Heap::new();
+
+            let mut result =
+                vec![ HeapCellValue::NamedStr(arity, clause_name!($name), None),
+                      $(functor_term!( $dt($($value),*), arity, [], addendum ),)+ ];
+
+            result.extend(addendum.into_iter());
+            result
         }
     });
     ($name:expr, $fixity:expr) => (
@@ -112,13 +120,29 @@ macro_rules! functor_term {
     (number($e:expr), $arity:expr, $aux_lens:expr, $addendum:ident) => (
         $e.into()
     );
-    (integer($e:expr), $arity:expr, $aux_lens:expr, $addendum: ident) => (
+    (integer($e:expr), $arity:expr, $aux_lens:expr, $addendum:ident) => (
         HeapCellValue::Integer(Rc::new(Integer::from($e)))
     );
-    (clause_name($e:expr), $arity:expr, $aux_lens:expr, $addendum: ident) => (
+    (indexing_code_ptr($h:expr, $e:expr), $arity:expr, $aux_lens:expr, $addendum:ident) => ({
+        let stub =
+            match $e {
+                IndexingCodePtr::DynamicExternal(o) => functor!("dynamic_external", [integer(o)]),
+                IndexingCodePtr::External(o) => functor!("external", [integer(o)]),
+                IndexingCodePtr::Internal(o) => functor!("internal", [integer(o)]),
+                IndexingCodePtr::Fail => vec![HeapCellValue::Atom(clause_name!("fail"), None)],
+            };
+
+        let len: usize = $aux_lens.iter().sum();
+        let h = len + $arity + 1 + $addendum.h() + $h;
+
+        $addendum.extend(stub.into_iter());
+
+        HeapCellValue::Addr(Addr::HeapCell(h))
+    });
+    (clause_name($e:expr), $arity:expr, $aux_lens:expr, $addendum:ident) => (
         HeapCellValue::Atom($e, None)
     );
-    (atom($e:expr), $arity:expr, $aux_lens:expr, $addendum: ident) => (
+    (atom($e:expr), $arity:expr, $aux_lens:expr, $addendum:ident) => (
         HeapCellValue::Atom(clause_name!($e), None)
     );
     (value($e:expr), $arity:expr, $aux_lens:expr, $addendum: ident) => (
@@ -312,14 +336,6 @@ macro_rules! jmp_call {
     };
 }
 
-macro_rules! try_eval_session {
-    ($e:expr) => {
-        match $e {
-            Ok(result) => result,
-            Err(e) => return EvalSession::from(e),
-        }
-    };
-}
 macro_rules! return_from_clause {
     ($lco:expr, $machine_st:expr) => {{
         if let CodePtr::VerifyAttrInterrupt(_) = $machine_st.p {
@@ -342,36 +358,19 @@ macro_rules! dir_entry {
     };
 }
 
-macro_rules! set_code_index {
-    ($idx:expr, $ip:expr, $mod_name:expr) => {{
-        let mut idx = $idx.0.borrow_mut();
-
-        idx.0 = $ip;
-        idx.1 = $mod_name.clone();
-    }};
-}
-
 macro_rules! index_store {
-    ($atom_tbl:expr, $code_dir:expr, $op_dir:expr, $modules:expr) => {
+    ($code_dir:expr, $op_dir:expr, $modules:expr) => {
         IndexStore {
-            atom_tbl: $atom_tbl,
             code_dir: $code_dir,
-            module_dir: ModuleDir::new(),
-            dynamic_code_dir: DynamicCodeDir::new(),
+            extensible_predicates: ExtensiblePredicates::new(),
+            local_extensible_predicates: LocalExtensiblePredicates::new(),
             global_variables: GlobalVarDir::new(),
-            in_situ_code_dir: InSituCodeDir::new(),
-            in_situ_module_dir: ModuleStubDir::new(),
-            op_dir: $op_dir,
+            meta_predicates: MetaPredicateDir::new(),
             modules: $modules,
-            stream_aliases: StreamAliasDir::new(),
+            op_dir: $op_dir,
             streams: StreamDir::new(),
+            stream_aliases: StreamAliasDir::new(),
         }
-    };
-}
-
-macro_rules! default_index_store {
-    ($atom_tbl:expr) => {
-        index_store!($atom_tbl, CodeDir::new(), default_op_dir(), IndexMap::new())
     };
 }
 
@@ -387,6 +386,7 @@ macro_rules! get_level_and_unify {
     };
 }
 
+/*
 macro_rules! unwind_protect {
     ($e: expr, $protected: expr) => {
         match $e {
@@ -398,7 +398,8 @@ macro_rules! unwind_protect {
         }
     };
 }
-
+*/
+/*
 macro_rules! discard_result {
     ($f: expr) => {
         match $f {
@@ -406,7 +407,7 @@ macro_rules! discard_result {
         }
     };
 }
-
+*/
 macro_rules! ar_reg {
     ($r: expr) => {
         ArithmeticTerm::Reg($r)
@@ -414,7 +415,7 @@ macro_rules! ar_reg {
 }
 
 macro_rules! atom_from {
-    ($self:expr, $indices:expr, $e:expr) => {
+    ($self:expr, $e:expr) => {
         match $e {
             Addr::Con(h) if $self.heap.atom_at(h) => {
                 match &$self.heap[h] {
@@ -427,11 +428,23 @@ macro_rules! atom_from {
                 }
             }
             Addr::Char(c) => {
-                clause_name!(c.to_string(), $indices.atom_tbl.clone())
+                clause_name!(c.to_string(), $self.atom_tbl)
             }
             _ => {
                 unreachable!()
             }
         }
     }
+}
+
+macro_rules! try_or_fail {
+    ($s:expr, $e:expr) => {{
+        match $e {
+            Ok(val) => val,
+            Err(msg) => {
+                $s.throw_exception(msg);
+                return;
+            }
+        }
+    }};
 }

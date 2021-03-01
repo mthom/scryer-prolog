@@ -1,1454 +1,2262 @@
-use crate::prolog_parser::ast::*;
-use crate::prolog_parser::parser::get_desc;
-use crate::prolog_parser::tabled_rc::TabledData;
+use prolog_parser::clause_name;
 
 use crate::codegen::*;
 use crate::debray_allocator::*;
-use crate::forms::*;
-use crate::instructions::*;
-use crate::iterators::*;
-use crate::machine::code_walker::*;
-use crate::machine::machine_errors::*;
-use crate::machine::machine_indices::*;
-use crate::machine::term_expansion::ExpansionAdditionResult;
-use crate::machine::toplevel::*;
+use crate::indexing::{IndexingCodePtr, merge_clause_index, remove_index};
+use crate::machine::load_state::*;
+use crate::machine::loader::*;
+use crate::machine::preprocessor::*;
+use crate::machine::term_stream::*;
 use crate::machine::*;
 
-use crate::indexmap::{IndexMap, IndexSet};
-
-use crate::ref_thread_local::RefThreadLocal;
+use slice_deque::sdeq;
 
 use std::cell::Cell;
 use std::collections::VecDeque;
-use std::fs::File;
-use std::mem;
-use std::path::PathBuf;
+use std::ops::Range;
 
-#[allow(dead_code)]
-pub fn print_code(code: &Code) {
-    for clause in code {
-        match clause {
-            &Line::Arithmetic(ref arith) => println!("{}", arith),
-            &Line::Fact(ref fact_instr) => println!("{}", fact_instr),
-            &Line::Cut(ref cut) => println!("{}", cut),
-            &Line::Choice(ref choice) => println!("{}", choice),
-            &Line::Control(ref control) => println!("{}", control),
-            &Line::IndexedChoice(ref choice) => println!("{}", choice),
-            &Line::Indexing(ref indexing) => println!("{}", indexing),
-            &Line::Query(ref query_instr) => println!("{}", query_instr),
-        }
-    }
+struct StandaloneCompileResult {
+    clause_code: Code,
+    standalone_skeleton: PredicateSkeleton,
 }
 
-fn fix_filename(
-    atom_tbl: TabledData<Atom>,
-    mut path: PathBuf,
-) -> Result<PathBuf, SessionError>
-{
-    if !path.is_file() {
-        if path.extension().is_none() {
-            path.set_extension("pl");
-        }
-
-        if !path.is_file() {
-            let filename = clause_name!(path.to_string_lossy().to_string(), atom_tbl);
-            return Err(SessionError::InvalidFileName(filename));
-        }
-    }
-
-    Ok(path)
-}
-
-fn load_module(
-    wam: &mut Machine,
+pub(super) fn bootstrapping_compile(
     stream: Stream,
-    suppress_warnings: bool,
-    listing_src: &ListingSource,
-) -> Result<ClauseName, SessionError> {
-    // follow the operation of compile_user_module, but before
-    // compiling, check that a module is declared in the file. if not,
-    // throw an exception.
-    let mut indices = default_index_store!(wam.indices.atom_tbl.clone());
-    setup_indices(wam, clause_name!("builtins"), &mut indices)?;
-
-    let mut compiler = ListingCompiler::new(
-        &wam.code_repo,
-        suppress_warnings,
-        listing_src.clone(),
-    );
-
-    let mut stream = parsing_stream(stream)?;
-
-    let results = compiler.gather_items(
-        wam,
-        &mut stream,
-        &mut indices,
-    );
-
-    let module_name = if let Some(ref module) = &compiler.module {
-        module.module_decl.name.clone()
-    } else {
-        // this impromptu definition (namely, its exports) will be filled out later.
-        let module_decl = ModuleDecl { name: listing_src.name(), exports: vec![] };
-
-        let mut module  = Module::new(module_decl, wam.indices.atom_tbl.clone(), listing_src.clone());
-        let module_name = module.module_decl.name.clone();
-
-        module.is_impromptu_module = true;
-
-        compiler.module = Some(module);
-        module_name
-    };
-
-    results.and_then(|results| compile_work_impl(&mut compiler, wam, indices, results))
-           .or_else(|e| {
-               wam.indices.take_module(module_name.clone());
-               compiler.print_error(&e);
-               Err(e)
-           })?;
-
-    Ok(module_name)
-}
-
-pub(super)
-fn load_module_from_file(
     wam: &mut Machine,
-    path_buf: PathBuf,
-    suppress_warnings: bool,
-) -> Result<ClauseName, SessionError> {
-    let mut path_buf = fix_filename(wam.indices.atom_tbl.clone(), path_buf)?;
-    let filename = clause_name!(path_buf.to_string_lossy().to_string(), wam.indices.atom_tbl);
+    listing_src: ListingSource,
+) -> Result<(), SessionError> {
+    let stream = &mut parsing_stream(stream)?;
+    let term_stream = BootstrappingTermStream::from_prolog_stream(
+        stream,
+        wam.machine_st.atom_tbl.clone(),
+        wam.machine_st.flags,
+        listing_src,
+    );
 
-    let file_handle = Stream::from_file_as_input(filename.clone(), File::open(&path_buf).or_else(|_| {
-        Err(SessionError::InvalidFileName(filename.clone()))
-    })?);
+    let loader = Loader::new(term_stream, wam);
+    loader.load()?;
 
-    path_buf.pop();
-
-    let listing_src = ListingSource::from_file_and_path(filename, path_buf);
-    load_module(wam, file_handle, suppress_warnings, &listing_src)
+    Ok(())
 }
-
-pub type PredicateCompileQueue = (Predicate, VecDeque<TopLevel>);
 
 // throw errors if declaration or query found.
-fn compile_relation(
+pub(super) fn compile_relation(
     cg: &mut CodeGenerator<DebrayAllocator>,
-    tl: &TopLevel
-) -> Result<Code, ParserError> {
+    tl: &TopLevel,
+) -> Result<Code, CompilationError> {
     match tl {
-        &TopLevel::Declaration(_) | &TopLevel::Query(_) => Err(ParserError::ExpectedRel),
-        &TopLevel::Predicate(ref clauses) => cg.compile_predicate(&clauses.0),
+        &TopLevel::Query(_) => Err(CompilationError::ExpectedRel),
+        &TopLevel::Predicate(ref clauses) => cg.compile_predicate(&clauses),
         &TopLevel::Fact(ref fact, ..) => Ok(cg.compile_fact(fact)),
         &TopLevel::Rule(ref rule, ..) => cg.compile_rule(rule),
     }
 }
 
-fn issue_singleton_warnings(
-    src_name: ClauseName,
-    terms_and_locs: Vec<(Term, usize, usize)>,
-) {
-    for (term, line_num, _col_num) in terms_and_locs {
-        let mut singletons = vec![];
-        let mut var_count = IndexMap::new();
-
-        for subterm in breadth_first_iter(&term, true) {
-            if let TermRef::Var(_, _, var) = subterm {
-                let entry = var_count.entry(var).or_insert(0);
-                *entry += 1;
-            }
-        }
-
-        for (var, count) in var_count {
-            if count == 1 && !var.starts_with("_") && var.as_str() != "!" {
-                singletons.push(var);
-            }
-        }
-
-        if let Some(last_var) = singletons.pop() {
-            print!("Warning: {}:{}: Singleton variables: [",
-                   src_name, line_num);
-
-            for var in singletons {
-                print!("{}, ", var);
-            }
-
-            println!("{}]", last_var);
-        }
-    }
-}
-
-// set first jmp_by_call or jmp_by_index instruction to code.len() -
-// idx, where idx is the place it occurs. It only does this to the
-// *first* uninitialized jmp index it encounters, then returns.
-fn set_first_index(code: &mut Code) {
-    let code_len = code.len();
-
-    for (idx, line) in code.iter_mut().enumerate() {
-        match line {
-            &mut Line::Control(ControlInstruction::JmpBy(_, ref mut offset, ..))
-                if *offset == 0 =>
-            {
-                *offset = code_len - idx;
-                debug_assert!(*offset > 0);
-
-                break;
-            }
-            _ => {}
-        };
-    }
-}
-
-pub fn compile_appendix(
+pub(super) fn compile_appendix(
     code: &mut Code,
-    queue: &VecDeque<TopLevel>,
+    mut queue: VecDeque<TopLevel>,
+    jmp_by_locs: Vec<usize>,
     non_counted_bt: bool,
-) -> Result<(), ParserError> {
-    for tl in queue.iter() {
-        set_first_index(code);
-        let mut cg = CodeGenerator::<DebrayAllocator>::new(non_counted_bt);
-        let decl_code = compile_relation(&mut cg, tl)?;
+    atom_tbl: TabledData<Atom>,
+) -> Result<(), CompilationError> {
+    let mut jmp_by_locs = VecDeque::from(jmp_by_locs);
+
+    while let Some(jmp_by_offset) = jmp_by_locs.pop_front() {
+        let code_len = code.len();
+
+        match &mut code[jmp_by_offset] {
+            &mut Line::Control(ControlInstruction::JmpBy(_, ref mut offset, ..)) => {
+                *offset = code_len - jmp_by_offset;
+            }
+            _ => {
+                unreachable!()
+            }
+        }
+
+        // false because the inner predicate is a one-off, hence not extensible.
+        let settings = CodeGenSettings {
+            global_clock_tick: None,
+            is_extensible: false,
+            non_counted_bt,
+        };
+
+        let mut cg = CodeGenerator::<DebrayAllocator>::new(atom_tbl.clone(), settings);
+
+        let tl = queue.pop_front().unwrap();
+        let decl_code = compile_relation(&mut cg, &tl)?;
+
+        jmp_by_locs.extend(cg.jmp_by_locs.into_iter().map(|offset| offset + code.len()));
         code.extend(decl_code.into_iter());
     }
 
     Ok(())
 }
 
-fn append_trivial_goal(name: &ClauseName, pred: &mut Predicate)
-{
-    let var = Box::new(Term::Var(Cell::default(), Rc::new(String::from("X"))));
-    let body = QueryTerm::Clause(
-        Cell::default(),
-        ClauseType::from(clause_name!("$at_end_of_expansion"), 0, None),
-        vec![],
-        false
-    );
+fn lower_bound_of_target_clause(skeleton: &PredicateSkeleton, target_pos: usize) -> usize {
+    if target_pos == 0 {
+        return 0;
+    }
 
-    let rule = Rule {
-        head: (name.clone(), vec![var.clone(), var], body),
-        clauses: vec![]
-    };
+    let arg_num = skeleton.clauses[target_pos - 1].opt_arg_index_key.arg_num();
 
-    pred.0.push(PredicateClause::Rule(rule, 0, 0));
+    if arg_num == 0 {
+        return target_pos - 1;
+    }
+
+    for index in (0..target_pos - 1).rev() {
+        let current_arg_num = skeleton.clauses[index].opt_arg_index_key.arg_num();
+
+        if current_arg_num == 0 || current_arg_num != arg_num {
+            return index + 1;
+        }
+    }
+
+    0
 }
 
-impl CodeRepo {
-    pub fn compile_hook(
-        &mut self,
-        hook: CompileTimeHook,
-    ) -> Result<(), ParserError> {
-        let key = (hook.name(), hook.arity());
-
-        match self.term_dir.get_mut(&key) {
-            Some(ref mut preds) => {
-                append_trivial_goal(&key.0, &mut preds.0);
-
-                let mut cg = CodeGenerator::<DebrayAllocator>::new(false);
-                let mut code = cg.compile_predicate(&(preds.0).0)?;
-
-                compile_appendix(&mut code, &preds.1, false)?;
-
-                (preds.0).0.pop();
-
-                Ok(match hook {
-                    CompileTimeHook::UserTermExpansion | CompileTimeHook::TermExpansion => {
-                        self.term_expanders = code
-                    }
-                    CompileTimeHook::UserGoalExpansion | CompileTimeHook::GoalExpansion => {
-                        self.goal_expanders = code
-                    }
-                })
-            }
-            None => Ok(match hook {
-                CompileTimeHook::UserTermExpansion | CompileTimeHook::TermExpansion => {
-                    if self.term_expanders.is_empty() {
-                        let mut preds = Predicate::new();
-                        append_trivial_goal(&key.0, &mut preds);
-
-                        let mut cg = CodeGenerator::<DebrayAllocator>::new(false);
-                        self.term_expanders = cg.compile_predicate(&preds.0)?;
-                    }
-                }
-                CompileTimeHook::UserGoalExpansion | CompileTimeHook::GoalExpansion => {
-                    if self.goal_expanders.is_empty() {
-                        let mut preds = Predicate::new();
-                        append_trivial_goal(&key.0, &mut preds);
-
-                        let mut cg = CodeGenerator::<DebrayAllocator>::new(false);
-                        self.goal_expanders = cg.compile_predicate(&preds.0)?;
-                    }
-                }
-            })
+fn derelictize_try_me_else(
+    code: &mut Code,
+    index: usize,
+    retraction_info: &mut RetractionInfo,
+) -> Option<usize> {
+    match &mut code[index] {
+        Line::Choice(ChoiceInstruction::DynamicElse(_, _, NextOrFail::Next(0))) => None,
+        Line::Choice(ChoiceInstruction::DynamicElse(_, _, NextOrFail::Next(ref mut o))) => {
+            retraction_info.push_record(RetractionRecord::ReplacedDynamicElseOffset(index, *o));
+            Some(mem::replace(o, 0))
+        }
+        Line::Choice(ChoiceInstruction::DynamicInternalElse(_, _, NextOrFail::Next(0))) => None,
+        Line::Choice(ChoiceInstruction::DynamicInternalElse(_, _, NextOrFail::Next(ref mut o))) => {
+            retraction_info.push_record(RetractionRecord::ReplacedDynamicElseOffset(index, *o));
+            Some(mem::replace(o, 0))
+        }
+        Line::Choice(ChoiceInstruction::DynamicElse(_, _, NextOrFail::Fail(_))) |
+        Line::Choice(ChoiceInstruction::DynamicInternalElse(_, _, NextOrFail::Fail(_))) => None,
+        Line::Choice(ChoiceInstruction::TryMeElse(0)) => None,
+        Line::Choice(ChoiceInstruction::TryMeElse(ref mut o)) => {
+            retraction_info.push_record(RetractionRecord::ModifiedTryMeElse(index, *o));
+            Some(mem::replace(o, 0))
+        }
+        _ => {
+            unreachable!()
         }
     }
 }
 
-fn compile_query(
-    terms: Vec<QueryTerm>,
-    queue: VecDeque<TopLevel>,
-) -> Result<(Code, AllocVarDict), ParserError> {
-    // count backtracking inferences.
-    let mut cg = CodeGenerator::<DebrayAllocator>::new(false);
-    let mut code = cg.compile_query(&terms)?;
-
-    compile_appendix(&mut code, &queue, false)?;
-    Ok((code, cg.take_vars()))
-}
-
-fn add_hooks_to_mockup(
-    code_repo: &mut CodeRepo,
-    hook: CompileTimeHook,
-    expansions: (Predicate, VecDeque<TopLevel>),
+fn merge_indices(
+    code: &mut Code,
+    target_index_loc: usize,
+    index_range: Range<usize>,
+    skeleton: &mut [ClauseIndexInfo],
+    retraction_info: &mut RetractionInfo,
 ) {
-    let key = (hook.name(), hook.arity());
-    let preds = code_repo
-        .term_dir
-        .entry(key.clone())
-        .or_insert((Predicate::new(), VecDeque::from(vec![])));
+    for clause_index in index_range {
+        if let Some(index_loc) = skeleton[clause_index]
+            .opt_arg_index_key
+            .switch_on_term_loc()
+        {
+            let clause_loc =
+                find_inner_choice_instr(code, skeleton[clause_index].clause_start, index_loc);
 
-    (preds.0).0.extend((expansions.0).0.into_iter());
-    preds.1.extend(expansions.1.into_iter());
-}
+            let target_indexing_line = to_indexing_line_mut(&mut code[target_index_loc]).unwrap();
 
-fn setup_module_expansions(wam: &mut Machine, module: &Module) {
-    let term_expansions = module.term_expansions.clone();
-    let goal_expansions = module.goal_expansions.clone();
+            skeleton[clause_index]
+                .opt_arg_index_key
+                .set_switch_on_term_loc(target_index_loc);
 
-    add_hooks_to_mockup(
-        &mut wam.code_repo,
-        CompileTimeHook::TermExpansion,
-        term_expansions,
-    );
-
-    add_hooks_to_mockup(
-        &mut wam.code_repo,
-        CompileTimeHook::GoalExpansion,
-        goal_expansions,
-    );
-}
-
-pub(super)
-fn compile_into_module(
-    wam: &mut Machine,
-    module_name: ClauseName,
-    src: Stream,
-    name: ClauseName,
-) -> EvalSession {
-    let mut indices = default_index_store!(wam.atom_tbl_of(&name));
-    let module = wam.indices.take_module(module_name.clone()).unwrap();
-
-    indices.code_dir = module.code_dir.clone();
-    indices.op_dir   = module.op_dir.clone();
-    indices.atom_tbl = module.atom_tbl.clone();
-
-    let mut compiler = ListingCompiler::new(
-        &wam.code_repo,
-        true,
-        module.listing_src.clone(),
-    );
-
-    match compile_into_module_impl(wam, &mut compiler, module, src, indices) {
-        Ok(()) => {
-            EvalSession::EntrySuccess
-        }
-        Err(e) => {
-            compiler.drop_expansions(&mut wam.code_repo);
-            EvalSession::from(e)
-        }
-    }
-}
-
-fn compile_into_module_impl(
-    wam: &mut Machine,
-    compiler: &mut ListingCompiler,
-    module: Module,
-    src: Stream,
-    mut indices: IndexStore,
-) -> Result<(), SessionError> {
-    setup_module_expansions(wam, &module);
-
-    let module_name = module.module_decl.name.clone();
-    // compiler.module = Some(module); This trips the goal expansion up. Should be possible to 'merge' modules.
-    // A much better strategy!
-    wam.indices.insert_module(module);
-
-    wam.code_repo.compile_hook(CompileTimeHook::TermExpansion)?;
-    wam.code_repo.compile_hook(CompileTimeHook::GoalExpansion)?;
-
-    let mut results = compiler.gather_items(
-        wam,
-        &mut parsing_stream(src)?,
-        &mut indices,
-    )?;
-
-    compiler.adapt_in_situ_code(
-        results.worker_results,
-        wam,
-        &mut indices.code_dir,
-        &mut indices.module_dir,
-        &mut results.in_situ_code,
-        &results.in_situ_code_dir,
-        &results.in_situ_module_dir,
-    )?;
-
-    let mut clause_code_generator = ClauseCodeGenerator::new(
-        results.in_situ_code.len(),
-        module_name.clone()
-    );
-
-    clause_code_generator.generate_clause_code(&results.dynamic_clause_map, wam)?;
-
-    let top_level_term_dir = results.top_level_term_dirs.consolidate();
-    let module = wam.indices.take_module(module_name).unwrap();
-
-    add_module(
-        wam,
-        module,
-        indices,
-        top_level_term_dir,
-    );
-
-    wam.code_repo.code.extend(results.in_situ_code.into_iter());
-    clause_code_generator.add_clause_code(wam, results.dynamic_clause_map);
-
-    Ok(compiler.drop_expansions(&mut wam.code_repo))
-}
-
-#[derive(Debug)]
-pub struct GatherResult {
-    dynamic_clause_map: DynamicClauseMap,
-    pub(crate) worker_results: Vec<PredicateCompileQueue>,
-    toplevel_results: Vec<PredicateCompileQueue>,
-    toplevel_indices: IndexStore,
-    addition_results: ExpansionAdditionResult,
-    top_level_terms: Vec<(Term, usize, usize)>,
-    top_level_term_dirs: TermDirQuantum,
-    module_term_dirs: TermDirQuantum,
-    in_situ_code_dir: InSituCodeDir,
-    in_situ_code: Code,
-    in_situ_module_dir: ModuleStubDir,
-}
-
-#[derive(Debug)]
-pub struct ClauseCodeGenerator {
-    len_offset: usize,
-    code: Code,
-    module_name: ClauseName,
-    pi_to_loc: IndexMap<PredicateKey, usize>,
-}
-
-impl ClauseCodeGenerator {
-    #[inline]
-    fn new(len_offset: usize, module_name: ClauseName) -> Self {
-        ClauseCodeGenerator {
-            len_offset,
-            code: vec![],
-            module_name,
-            pi_to_loc: IndexMap::new(),
-        }
-    }
-
-    // compiles the latest version of clause/2.
-    fn generate_clause_code(
-        &mut self,
-        dynamic_clause_map: &DynamicClauseMap,
-        wam: &Machine,
-    ) -> Result<(), SessionError> {
-        for ((name, arity), heads_and_tails) in dynamic_clause_map {
-            if heads_and_tails.is_empty() {
-                continue;
-            }
-
-            let predicate = Predicate(
-                heads_and_tails
-                    .iter()
-                    .map(|(head, tail)| {
-                        let clause = Term::Clause(
-                            Cell::default(),
-                            clause_name!("clause"),
-                            vec![Box::new(head.clone()), Box::new(tail.clone())],
-                            None,
-                        );
-
-                        PredicateClause::Fact(clause, 0, 0)
-                    })
-                    .collect(),
+            merge_clause_index(
+                target_indexing_line,
+                &mut skeleton[0..clause_index + 1],
+                clause_loc,
+                AppendOrPrepend::Append,
             );
 
-            let p = self.code.len() + wam.code_repo.code.len() + self.len_offset;
-            let mut cg = CodeGenerator::<DebrayAllocator>::new(false);
-
-            let mut decl_code = compile_relation(
-                &mut cg,
-                &TopLevel::Predicate(predicate),
-            )?;
-
-            compile_appendix(&mut decl_code, &VecDeque::new(), false)?;
-
-            self.pi_to_loc.insert((name.clone(), *arity), p);
-            self.code.extend(decl_code.into_iter());
+            retraction_info.push_record(RetractionRecord::AddedIndex(
+                skeleton[clause_index].opt_arg_index_key.clone(),
+                clause_loc,
+            ));
+        } else {
+            break;
         }
-
-        Ok(())
     }
+}
 
-    fn add_clause_code(self, wam: &mut Machine, dynamic_code_dir: DynamicClauseMap)
-    {
-        wam.code_repo.code.extend(self.code.into_iter());
-
-        if self.module_name.as_str() == "user" {
-            for ((name, arity), _) in &dynamic_code_dir {
-                wam.indices.code_dir.entry((name.clone(), *arity))
-                   .or_insert(CodeIndex::dynamic_undefined(clause_name!("user")));
+fn find_outer_choice_instr(
+    code: &Code,
+    mut index: usize,
+) -> usize {
+    loop {
+        match &code[index] {
+            Line::Choice(ChoiceInstruction::DynamicElse(_, _, NextOrFail::Next(i))) |
+            Line::Choice(ChoiceInstruction::DynamicInternalElse(_, _, NextOrFail::Next(i)))
+                if *i > 0 =>
+            {
+                index += i;
+            }
+            _ => {
+                return index;
             }
         }
+    }
+}
 
-        for ((name, arity), _) in dynamic_code_dir {
-            wam.indices.dynamic_code_dir.insert((name.owning_module(), name, arity),
-                                                DynamicPredicateInfo::default());
-        }
-
-        for ((name, arity), p) in self.pi_to_loc {
-            let entry = wam
-                .indices
-                .dynamic_code_dir
-                .entry((name.owning_module(), name, arity))
-                .or_insert(DynamicPredicateInfo::default());
-
-            entry.clauses_subsection_p = p;
+fn find_inner_choice_instr(
+    code: &Code,
+    mut index: usize,
+    index_loc: usize,
+) -> usize {
+    loop {
+        match &code[index] {
+            Line::Choice(ChoiceInstruction::TryMeElse(o)) |
+            Line::Choice(ChoiceInstruction::RetryMeElse(o)) => {
+                if *o > 0 {
+                    return index;
+                } else {
+                    index = index_loc;
+                }
+            }
+            &Line::Choice(ChoiceInstruction::DynamicElse(_, _, next_or_fail)) |
+            &Line::Choice(ChoiceInstruction::DynamicInternalElse(_, _, next_or_fail)) => {
+                match next_or_fail {
+                    NextOrFail::Next(i) => {
+                        if i == 0 {
+                            index = index_loc;
+                        } else {
+                            return index;
+                        }
+                    }
+                    NextOrFail::Fail(_) => {
+                        return index;
+                    }
+                }
+            }
+            Line::Choice(ChoiceInstruction::TrustMe(_)) => {
+                return index;
+            }
+            Line::IndexingCode(indexing_code) => match &indexing_code[0] {
+                IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(_, v, ..)) => {
+                    match v {
+                        IndexingCodePtr::External(v) => {
+                            index += v;
+                        }
+                        IndexingCodePtr::DynamicExternal(v) => {
+                            match &code[index + v] {
+                                &Line::Choice(ChoiceInstruction::DynamicInternalElse(
+                                    _,
+                                    _,
+                                    NextOrFail::Next(0),
+                                )) => {
+                                    return index + v;
+                                }
+                                _ => {
+                                    index += v;
+                                }
+                            }
+                        }
+                        _ => unreachable!()
+                    }
+                }
+                _ => {
+                    unreachable!();
+                }
+            },
+            Line::Control(ControlInstruction::RevJmpBy(offset)) => {
+                index -= offset;
+            }
+            _ => {
+                /* Here we land at the line after a TryMeElse(0),
+                 * which happens iff a single clause belongs to the
+                 * indexed subsequence. So, end the search by pointing
+                 * to the original derelict TryMeElse.
+                 */
+                return index - 1;
+            }
         }
     }
 }
 
-fn insert_or_refresh_term_dir_quantum(
-    term_dir: &TermDir,
+fn remove_index_from_subsequence(
+    code: &mut Code,
+    opt_arg_index_key: &OptArgIndexKey,
+    clause_start: usize,
+    retraction_info: &mut RetractionInfo,
+) {
+    if let Some(index_loc) = opt_arg_index_key.switch_on_term_loc() {
+        let clause_start = find_inner_choice_instr(code, clause_start, index_loc);
+
+        let target_indexing_line = to_indexing_line_mut(&mut code[index_loc]).unwrap();
+
+        let offset = clause_start - index_loc + 1;
+
+        remove_index(opt_arg_index_key, target_indexing_line, offset);
+
+        // TODO: this isn't sufficiently precise. The removed offset could
+        // appear anywhere inside an Internal record.
+        retraction_info.push_record(RetractionRecord::RemovedIndex(
+            index_loc,
+            opt_arg_index_key.clone(),
+            offset,
+        ));
+    }
+}
+
+fn merge_indexed_subsequences(
+    code: &mut Code,
+    skeleton: &mut PredicateSkeleton,
+    lower_upper_bound: usize,
+    upper_lower_bound: usize,
+    retraction_info: &mut RetractionInfo,
+) -> Option<IndexPtr> {
+    // patch the inner-threaded choice instructions to link the
+    // two sequences, patch lower_bound's outer-threaded choice
+    // instruction to TrustMe (or RetryMeElse), and derelict-ize
+    // target_pos + 1's inner TryMeElse.
+
+    let inner_trust_me_loc = skeleton.clauses[upper_lower_bound - 2].clause_start;
+
+    let inner_try_me_else_loc = find_inner_choice_instr(
+        code,
+        skeleton.clauses[upper_lower_bound].clause_start,
+        skeleton.clauses[upper_lower_bound]
+            .opt_arg_index_key
+            .switch_on_term_loc()
+            .unwrap(),
+    );
+
+    match &mut code[inner_try_me_else_loc] {
+        Line::Choice(ChoiceInstruction::TryMeElse(ref mut o)) => {
+            retraction_info.push_record(RetractionRecord::ModifiedTryMeElse(
+                inner_try_me_else_loc,
+                *o,
+            ));
+
+            match *o {
+                0 => {
+                    code[inner_try_me_else_loc] = Line::Choice(ChoiceInstruction::TrustMe(0));
+                }
+                o => match &code[inner_try_me_else_loc + o] {
+                    Line::Control(ControlInstruction::RevJmpBy(0)) => {
+                        code[inner_try_me_else_loc] = Line::Choice(ChoiceInstruction::TrustMe(o));
+                    }
+                    _ => {
+                        code[inner_try_me_else_loc] =
+                            Line::Choice(ChoiceInstruction::RetryMeElse(o));
+                    }
+                },
+            }
+        }
+        _ => {}
+    }
+
+    thread_choice_instr_at_to(
+        code,
+        inner_trust_me_loc,
+        inner_try_me_else_loc,
+        retraction_info,
+    );
+
+    let mut end_of_upper_lower_bound = None;
+
+    for index in upper_lower_bound..skeleton.clauses.len() {
+        if !skeleton.clauses[index].opt_arg_index_key.is_some() {
+            end_of_upper_lower_bound = Some(index);
+            break;
+        }
+    }
+
+    let outer_threaded_choice_instr_loc = skeleton.clauses[lower_upper_bound].clause_start - 2;
+
+    match end_of_upper_lower_bound {
+        Some(outer_threaded_clause_index) => {
+            thread_choice_instr_at_to(
+                code,
+                outer_threaded_choice_instr_loc,
+                skeleton.clauses[outer_threaded_clause_index].clause_start,
+                retraction_info,
+            );
+        }
+        None => match &mut code[outer_threaded_choice_instr_loc] {
+            Line::Choice(ChoiceInstruction::TryMeElse(ref mut o)) => {
+                retraction_info
+                    .push_record(RetractionRecord::ModifiedTryMeElse(inner_trust_me_loc, *o));
+
+                *o = 0;
+
+                return Some(IndexPtr::Index(outer_threaded_choice_instr_loc + 1));
+            }
+            _ => {}
+        },
+    }
+
+    None
+}
+
+fn delete_from_skeleton(
+    compilation_target: CompilationTarget,
     key: PredicateKey,
-    term_dirs: &mut TermDirQuantum
-) {
-    match term_dir.get(&key) {
-        Some((ref preds, ref queue)) => {
-            let entry = TermDirQuantumEntry::from(preds, queue);
-            term_dirs.insert_or_refresh(key, entry);
-        }
-        None => {
-            let entry = TermDirQuantumEntry::from(&Predicate::new(), &VecDeque::new());
-            term_dirs.insert_or_refresh(key, entry);
+    skeleton: &mut PredicateSkeleton,
+    target_pos: usize,
+    retraction_info: &mut RetractionInfo,
+) -> usize {
+    let clause_index_info = skeleton.clauses.remove(target_pos);
+    let clause_clause_loc = skeleton.clause_clause_locs.remove(target_pos);
+
+    if target_pos < skeleton.clause_assert_margin {
+        skeleton.clause_assert_margin -= 1;
+    }
+
+    retraction_info.push_record(RetractionRecord::RemovedSkeletonClause(
+        compilation_target,
+        key,
+        target_pos,
+        clause_index_info,
+        clause_clause_loc,
+    ));
+
+    clause_clause_loc
+}
+
+fn blunt_leading_choice_instr(
+    code: &mut Code,
+    mut instr_loc: usize,
+    retraction_info: &mut RetractionInfo,
+) -> usize {
+    loop {
+        match &mut code[instr_loc] {
+            Line::Choice(ChoiceInstruction::RetryMeElse(o)) => {
+                retraction_info.push_record(RetractionRecord::ModifiedRetryMeElse(instr_loc, *o));
+
+                code[instr_loc] = Line::Choice(ChoiceInstruction::TryMeElse(*o));
+
+                return instr_loc;
+            }
+            Line::Choice(ChoiceInstruction::DynamicElse(_, _, NextOrFail::Next(_))) |
+            Line::Choice(ChoiceInstruction::DynamicInternalElse(_, _, NextOrFail::Next(_))) => {
+                return instr_loc;
+            }
+            &mut Line::Choice(ChoiceInstruction::DynamicElse(b, d, NextOrFail::Fail(o))) => {
+                retraction_info.push_record(
+                    RetractionRecord::AppendedNextOrFail(instr_loc, NextOrFail::Fail(o)),
+                );
+
+                code[instr_loc] = Line::Choice(
+                    ChoiceInstruction::DynamicElse(b, d, NextOrFail::Next(0)),
+                );
+
+                return instr_loc;
+            }
+            &mut Line::Choice(ChoiceInstruction::DynamicInternalElse(b, d, NextOrFail::Fail(o))) => {
+                retraction_info.push_record(
+                    RetractionRecord::AppendedNextOrFail(instr_loc, NextOrFail::Fail(o)),
+                );
+
+                code[instr_loc] = Line::Choice(
+                    ChoiceInstruction::DynamicInternalElse(b, d, NextOrFail::Next(0)),
+                );
+
+                return instr_loc;
+            }
+            Line::Choice(ChoiceInstruction::TrustMe(o)) => {
+                retraction_info
+                    .push_record(RetractionRecord::AppendedTrustMe(instr_loc, *o, false));
+
+                code[instr_loc] = Line::Choice(ChoiceInstruction::TryMeElse(0));
+                return instr_loc + 1;
+            }
+            Line::Choice(ChoiceInstruction::TryMeElse(0)) => {
+                return instr_loc + 1;
+            }
+            Line::Choice(ChoiceInstruction::TryMeElse(o)) => {
+                instr_loc += *o;
+            }
+            Line::Control(ControlInstruction::RevJmpBy(o)) => {
+                instr_loc -= *o;
+            }
+            _ => {
+                unreachable!()
+            }
         }
     }
 }
 
-#[derive(Debug)]
-pub struct ListingCompiler {
-    module: Option<Module>,
-    user_term_dir: TermDir,
-    orig_term_expansion_lens: (usize, usize),
-    orig_goal_expansion_lens: (usize, usize),
-    initialization_goals: (Vec<QueryTerm>, VecDeque<TopLevel>),
-    suppress_warnings: bool,
-    listing_src: ListingSource, // a file? a module?
-}
-
-fn add_toplevel(
-    wam: &mut Machine,
-    indices: IndexStore,
-    term_dir: TermDir,
+fn set_switch_var_offset_to_choice_instr(
+    code: &mut Code,
+    index_loc: usize,
+    offset: usize,
+    retraction_info: &mut RetractionInfo,
 ) {
-    wam.add_batched_code_dir(indices.code_dir);
-    wam.add_batched_ops(indices.op_dir);
-    wam.add_in_situ_module_dir(indices.module_dir);
+    let target_indexing_line = to_indexing_line_mut(&mut code[index_loc]).unwrap();
 
-    wam.code_repo.term_dir.extend(term_dir.into_iter());
+    let v = match &target_indexing_line[0] {
+        &IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(_, v, ..)) => {
+            match v {
+                IndexingCodePtr::External(v) | IndexingCodePtr::DynamicExternal(v) => v,
+                _ => unreachable!()
+            }
+        }
+        _ => {
+            unreachable!();
+        }
+    };
+
+    match &code[index_loc + v] {
+        Line::Choice(ChoiceInstruction::TryMeElse(_)) |
+        Line::Choice(ChoiceInstruction::DynamicElse(..)) |
+        Line::Choice(ChoiceInstruction::DynamicInternalElse(..)) => {}
+        _ => {
+            set_switch_var_offset(code, index_loc, offset, retraction_info);
+        }
+    }
 }
 
 #[inline]
-fn add_module(
-    wam: &mut Machine,
-    mut module: Module,
-    indices: IndexStore,
-    term_dir: TermDir,
+fn set_switch_var_offset(
+    code: &mut Code,
+    index_loc: usize,
+    offset: usize,
+    retraction_info: &mut RetractionInfo,
 ) {
-    module.code_dir.extend(indices.code_dir);
-    module.op_dir.extend(indices.op_dir);
-    module.term_dir.extend(term_dir);
+    let target_indexing_line = to_indexing_line_mut(&mut code[index_loc]).unwrap();
 
-    wam.add_in_situ_module_dir(indices.module_dir);
-    wam.add_module(module);
-}
-
-fn add_non_module_code(
-    wam: &mut Machine,
-    dynamic_clause_map: DynamicClauseMap,
-    code: Code,
-    indices: IndexStore,
-    term_dir: TermDir,
-) -> Result<(), SessionError> {
-    wam.check_toplevel_code(&indices)?;
-
-    let mut clause_code_generator = ClauseCodeGenerator::new(code.len(), clause_name!("user"));
-    clause_code_generator.generate_clause_code(&dynamic_clause_map, wam)?;
-
-    add_toplevel(wam, indices, term_dir);
-    wam.code_repo.code.extend(code);
-    clause_code_generator.add_clause_code(wam, dynamic_clause_map);
-
-    Ok(())
-}
-
-pub(super)
-fn load_library(
-    wam: &mut Machine,
-    name: ClauseName,
-    suppress_warnings: bool,
-) -> Result<ClauseName, SessionError> {
-    match LIBRARIES.borrow().get(name.as_str()) {
-        Some(code) => {
-            let listing_src = ListingSource::User;
-
-            load_module(
-                wam,
-                Stream::from(*code),
-                suppress_warnings,
-                &listing_src,
-            )
-        }
-        None => {
-            let err = ExistenceError::ModuleSource(ModuleSource::Library(
-                name.clone()
-            ));
-
-            Err(SessionError::ExistenceError(err))
-        }
-    }
-}
-
-impl ListingCompiler {
-    #[inline]
-    pub fn new(
-        code_repo: &CodeRepo,
-        suppress_warnings: bool,
-        listing_src: ListingSource,
-    ) -> Self {
-        ListingCompiler {
-            module: None,
-            user_term_dir: TermDir::new(),
-            orig_term_expansion_lens: code_repo
-                .term_dir_entry_len((clause_name!("term_expansion"), 2)),
-            orig_goal_expansion_lens: code_repo
-                .term_dir_entry_len((clause_name!("goal_expansion"), 2)),
-	        initialization_goals: (vec![], VecDeque::from(vec![])),
-            suppress_warnings,
-            listing_src
-        }
-    }
-
-    /* Replace calls to self with a localized index cell, not
-     * available to the global CodeIndex.  This is done to implement
-     * logical update semantics for dynamic database updates.
-     */
-    fn localize_self_calls(&mut self, key: PredicateKey, code: &mut Code, p: usize, target_p: usize)
-    {
-        let (name, arity) = key;
-
-        let self_idx = CodeIndex::default();
-        set_code_index!(self_idx, IndexPtr::Index(target_p), self.get_module_name());
-
-        walk_code_mut(code, p, |instr|
-            match instr {
-                Line::Control(ControlInstruction::CallClause(ref mut ct, ..)) => {
-                    match ct {
-                        ClauseType::Named(ref ct_name, ct_arity, ref mut idx)
-                            if ct_name == &name && arity == *ct_arity =>
-                        {
-                            *idx = self_idx.clone();
-                        }
-                        ClauseType::Op(ref op_name, ref shared_op_desc, ref mut idx)
-                            if op_name == &name && shared_op_desc.arity() == arity =>
-                        {
-                            *idx = self_idx.clone();
-                        }
-                        _ => {}
-                    }
+    let old_v = match &mut target_indexing_line[0] {
+        IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(_, ref mut v, ..)) => {
+            match *v {
+                IndexingCodePtr::DynamicExternal(_) => {
+                    mem::replace(v, IndexingCodePtr::DynamicExternal(offset))
                 }
-                _ => {}
-            },
+                IndexingCodePtr::External(_) => {
+                    mem::replace(v, IndexingCodePtr::External(offset))
+                }
+                _ => unreachable!()
+            }
+        }
+        _ => {
+            unreachable!()
+        }
+    };
+
+    retraction_info.push_record(RetractionRecord::ReplacedSwitchOnTermVarIndex(
+        index_loc, old_v,
+    ));
+}
+
+fn internalize_choice_instr_at(
+    code: &mut Code,
+    instr_loc: usize,
+    retraction_info: &mut RetractionInfo,
+) {
+    match &mut code[instr_loc] {
+        Line::Choice(ChoiceInstruction::DynamicElse(_, _, NextOrFail::Fail(_))) |
+        Line::Choice(ChoiceInstruction::DynamicInternalElse(_, _, NextOrFail::Fail(_))) => {
+        }
+        Line::Choice(ChoiceInstruction::DynamicElse(_, _, ref mut o @ NextOrFail::Next(0))) => {
+            retraction_info.push_record(RetractionRecord::ReplacedDynamicElseOffset(instr_loc, 0));
+            *o = NextOrFail::Fail(0);
+        }
+        &mut Line::Choice(ChoiceInstruction::DynamicElse(b, d, NextOrFail::Next(o))) => {
+            retraction_info.push_record(
+                RetractionRecord::AppendedNextOrFail(instr_loc, NextOrFail::Next(o)),
+            );
+
+            match &mut code[instr_loc + o] {
+                Line::Control(ControlInstruction::RevJmpBy(p)) if *p == 0 => {
+                    code[instr_loc] = Line::Choice(
+                        ChoiceInstruction::DynamicElse(b, d, NextOrFail::Fail(o)),
+                    );
+                }
+                _ => {
+                    code[instr_loc] = Line::Choice(
+                        ChoiceInstruction::DynamicElse(b, d, NextOrFail::Next(o)),
+                    );
+                }
+            }
+        }
+        Line::Choice(ChoiceInstruction::DynamicInternalElse(
+            _, _, ref mut o @ NextOrFail::Next(0),
+        )) => {
+            retraction_info.push_record(RetractionRecord::ReplacedDynamicElseOffset(instr_loc, 0));
+            *o = NextOrFail::Fail(0);
+        }
+        &mut Line::Choice(ChoiceInstruction::DynamicInternalElse(b, d, NextOrFail::Next(o))) => {
+            retraction_info.push_record(RetractionRecord::ReplacedDynamicElseOffset(instr_loc, o));
+
+            match &mut code[instr_loc + o] {
+                Line::Control(ControlInstruction::RevJmpBy(p)) if *p == 0 => {
+                    code[instr_loc] = Line::Choice(
+                        ChoiceInstruction::DynamicInternalElse(b, d, NextOrFail::Fail(o)),
+                    );
+                }
+                _ => {
+                    code[instr_loc] = Line::Choice(
+                        ChoiceInstruction::DynamicInternalElse(b, d, NextOrFail::Next(o)),
+                    );
+                }
+            }
+        }
+        Line::Choice(ChoiceInstruction::TryMeElse(0)) => {
+            retraction_info.push_record(RetractionRecord::ModifiedTryMeElse(instr_loc, 0));
+
+            code[instr_loc] = Line::Choice(ChoiceInstruction::TrustMe(0));
+        }
+        Line::Choice(ChoiceInstruction::TryMeElse(o)) => {
+            let o = *o;
+
+            retraction_info.push_record(RetractionRecord::ModifiedTryMeElse(instr_loc, o));
+
+            match &mut code[instr_loc + o] {
+                Line::Control(ControlInstruction::RevJmpBy(p)) if *p == 0 => {
+                    code[instr_loc] = Line::Choice(ChoiceInstruction::TrustMe(o));
+                }
+                _ => {
+                    code[instr_loc] = Line::Choice(ChoiceInstruction::RetryMeElse(o));
+                }
+            }
+        }
+        _ => {
+            unreachable!();
+        }
+    }
+}
+
+fn thread_choice_instr_at_to(
+    code: &mut Code,
+    mut instr_loc: usize,
+    target_loc: usize,
+    retraction_info: &mut RetractionInfo,
+) {
+    loop {
+        match &mut code[instr_loc] {
+            Line::Choice(ChoiceInstruction::TryMeElse(ref mut o)) |
+            Line::Choice(ChoiceInstruction::RetryMeElse(ref mut o))
+                if target_loc >= instr_loc =>
+            {
+                retraction_info.push_record(RetractionRecord::ReplacedChoiceOffset(instr_loc, *o));
+
+                *o = target_loc - instr_loc;
+                return;
+            }
+            Line::Choice(ChoiceInstruction::DynamicElse(_, _, NextOrFail::Next(ref mut o))) |
+            Line::Choice(ChoiceInstruction::DynamicInternalElse(_, _, NextOrFail::Next(ref mut o)))
+                if target_loc >= instr_loc =>
+            {
+                retraction_info.push_record(RetractionRecord::ReplacedDynamicElseOffset(instr_loc, *o));
+                *o = target_loc - instr_loc;
+                return;
+            }
+            Line::Choice(ChoiceInstruction::DynamicElse(_, _, NextOrFail::Next(ref mut o))) |
+            Line::Choice(ChoiceInstruction::DynamicInternalElse(_, _, NextOrFail::Next(ref mut o))) => {
+                instr_loc += *o;
+            }
+            Line::Choice(ChoiceInstruction::TryMeElse(ref mut o)) |
+            Line::Choice(ChoiceInstruction::RetryMeElse(ref mut o)) => {
+                instr_loc += *o;
+            }
+            Line::Control(ControlInstruction::RevJmpBy(ref mut o)) if instr_loc >= target_loc => {
+                retraction_info.push_record(RetractionRecord::ModifiedRevJmpBy(instr_loc, *o));
+
+                *o = instr_loc - target_loc;
+                return;
+            }
+            &mut Line::Choice(ChoiceInstruction::DynamicElse(birth, death, ref mut fail))
+                if target_loc >= instr_loc =>
+            {
+                retraction_info.push_record(
+                    RetractionRecord::AppendedNextOrFail(instr_loc, *fail),
+                );
+
+                code[instr_loc] =
+                    Line::Choice(ChoiceInstruction::DynamicElse(
+                        birth, death, NextOrFail::Next(target_loc - instr_loc),
+                    ));
+
+                return;
+            }
+            Line::Choice(ChoiceInstruction::DynamicElse(_, _, NextOrFail::Fail(o)))
+                if *o > 0 =>
+            {
+                instr_loc += *o;
+            }
+            &mut Line::Choice(ChoiceInstruction::DynamicInternalElse(birth, death, ref mut fail))
+                if target_loc >= instr_loc =>
+            {
+                retraction_info.push_record(
+                    RetractionRecord::AppendedNextOrFail(instr_loc, *fail),
+                );
+
+                code[instr_loc] =
+                    Line::Choice(ChoiceInstruction::DynamicInternalElse(
+                        birth, death, NextOrFail::Next(target_loc - instr_loc),
+                    ));
+
+                return;
+            }
+            Line::Choice(ChoiceInstruction::DynamicInternalElse(_, _, NextOrFail::Fail(o)))
+                if *o > 0 =>
+            {
+                instr_loc += *o;
+            }
+            Line::Choice(ChoiceInstruction::TrustMe(ref mut o)) if target_loc >= instr_loc => {
+                retraction_info.push_record(
+                    RetractionRecord::AppendedTrustMe(instr_loc, *o, false),
+                    //choice_instr.is_default()),
+                );
+
+                code[instr_loc] =
+                    Line::Choice(ChoiceInstruction::RetryMeElse(target_loc - instr_loc));
+
+                return;
+            }
+            Line::Choice(ChoiceInstruction::TrustMe(o)) if *o > 0 => {
+                instr_loc += *o;
+            }
+            _ => {
+                unreachable!()
+            }
+        }
+    }
+}
+
+fn remove_non_leading_clause(
+    code: &mut Code,
+    preceding_choice_instr_loc: usize,
+    non_indexed_choice_instr_loc: usize,
+    retraction_info: &mut RetractionInfo,
+) -> Option<IndexPtr> {
+    match &mut code[non_indexed_choice_instr_loc] {
+        Line::Choice(ChoiceInstruction::RetryMeElse(ref mut o)) => {
+            let o = *o;
+
+            thread_choice_instr_at_to(
+                code,
+                preceding_choice_instr_loc,
+                non_indexed_choice_instr_loc + o,
+                retraction_info,
+            );
+
+            None
+        }
+        Line::Choice(ChoiceInstruction::TrustMe(_)) => {
+            match &mut code[preceding_choice_instr_loc] {
+                Line::Choice(ChoiceInstruction::RetryMeElse(o)) => {
+                    retraction_info.push_record(RetractionRecord::ModifiedRetryMeElse(
+                        preceding_choice_instr_loc,
+                        *o,
+                    ));
+
+                    code[preceding_choice_instr_loc] = Line::Choice(ChoiceInstruction::TrustMe(0));
+
+                    None
+                }
+                Line::Choice(ChoiceInstruction::TryMeElse(ref mut o)) => {
+                    retraction_info.push_record(RetractionRecord::ModifiedTryMeElse(
+                        preceding_choice_instr_loc,
+                        *o,
+                    ));
+
+                    *o = 0;
+
+                    Some(IndexPtr::Index(preceding_choice_instr_loc + 1))
+                }
+                _ => {
+                    unreachable!();
+                }
+            }
+        }
+        _ => {
+            unreachable!();
+        }
+    }
+}
+
+fn finalize_retract(
+    key: PredicateKey,
+    compilation_target: CompilationTarget,
+    skeleton: &mut PredicateSkeleton,
+    code_index: CodeIndex,
+    target_pos: usize,
+    index_ptr_opt: Option<IndexPtr>,
+    retraction_info: &mut RetractionInfo,
+) -> usize {
+    let clause_clause_loc = delete_from_skeleton(
+        compilation_target.clone(),
+        key.clone(),
+        skeleton,
+        target_pos,
+        retraction_info,
+    );
+
+    if let Some(index_ptr) = index_ptr_opt {
+        set_code_index(
+            retraction_info,
+            &compilation_target,
+            key,
+            &code_index,
+            index_ptr,
         );
     }
 
-    fn use_module(
-        &mut self,
-        submodule: ClauseName,
-        code_repo: &mut CodeRepo,
-        flags: MachineFlags,
-        wam_indices: &mut IndexStore,
-        indices: &mut IndexStore,
-    ) -> Result<(), SessionError> {
-        let module_name = self.get_module_name();
+    clause_clause_loc
+}
 
-        if let Some(mut submodule) = wam_indices.take_module(submodule) {
-            unwind_protect!(
-                indices.use_module(code_repo, flags, &submodule),
-                wam_indices.insert_module(submodule)
-            );
+fn remove_leading_unindexed_clause(
+    code: &mut Code,
+    non_indexed_choice_instr_loc: usize,
+    retraction_info: &mut RetractionInfo,
+) -> Option<IndexPtr> {
+    match &mut code[non_indexed_choice_instr_loc] {
+        Line::Choice(ChoiceInstruction::TryMeElse(ref mut o)) => {
+            if *o > 0 {
+                retraction_info.push_record(RetractionRecord::ModifiedTryMeElse(
+                    non_indexed_choice_instr_loc,
+                    *o,
+                ));
 
-            if let Some(ref mut module) = &mut self.module {
-                module.remove_module(module_name, &submodule);
-                unwind_protect!(
-                    module.use_module(code_repo, flags, &submodule),
-                    wam_indices.insert_module(submodule)
+                let o = mem::replace(o, 0);
+
+                let index_ptr = blunt_leading_choice_instr(
+                    code,
+                    non_indexed_choice_instr_loc + o,
+                    retraction_info,
                 );
+
+                Some(IndexPtr::Index(index_ptr))
             } else {
-                submodule.inserted_expansions = true;
-                wam_indices.remove_module(clause_name!("user"), &submodule);
+                Some(IndexPtr::DynamicUndefined)
             }
-
-            Ok(wam_indices.insert_module(submodule))
-        } else {
-            let err = ExistenceError::ModuleSource(ModuleSource::File(
-                module_name,
-            ));
-
-            Err(SessionError::ExistenceError(err))
+        }
+        _ => {
+            unreachable!();
         }
     }
+}
 
-    fn use_qualified_module(
-        &mut self,
-        submodule: ClauseName,
-        code_repo: &mut CodeRepo,
-        flags: MachineFlags,
-        exports: &Vec<ModuleExport>,
-        wam_indices: &mut IndexStore,
-        indices: &mut IndexStore,
-    ) -> Result<(), SessionError> {
-        let module_name = self.get_module_name();
-
-        if let Some(mut submodule) = wam_indices.take_module(submodule) {
-            unwind_protect!(
-                indices.use_qualified_module(code_repo, flags, &submodule, exports),
-                wam_indices.insert_module(submodule)
-            );
-
-            if let &mut Some(ref mut module) = &mut self.module {
-                module.remove_module(module_name, &submodule);
-                unwind_protect!(
-                    module.use_qualified_module(code_repo, flags, &submodule, exports),
-                    wam_indices.insert_module(submodule)
-                );
-            } else {
-                submodule.inserted_expansions = true;
-                wam_indices.remove_module(clause_name!("user"), &submodule);
+fn find_dynamic_outer_choice_instr(
+    code: &Code,
+    index_loc: usize,
+) -> usize {
+    match &code[index_loc] {
+        Line::IndexingCode(indexing_code) => {
+            match &indexing_code[0] {
+                &IndexingLine::Indexing(
+                    IndexingInstruction::SwitchOnTerm(
+                        _,
+                        IndexingCodePtr::DynamicExternal(v),
+                        ..,
+                    )
+                ) => {
+                    index_loc + v - 2
+                }
+                _ => unreachable!()
             }
-
-            Ok(wam_indices.insert_module(submodule))
-        } else {
-            let err = ExistenceError::ModuleSource(ModuleSource::File(
-                module_name
-            ));
-
-            Err(SessionError::ExistenceError(err))
         }
+        _ => unreachable!()
     }
+}
 
-    #[inline]
-    fn get_module_name(&self) -> ClauseName {
-        self.module
-            .as_ref()
-            .map(|module| module.module_decl.name.clone())
-            .unwrap_or(ClauseName::BuiltIn("user"))
-    }
+fn prepend_compiled_clause(
+    code: &mut Code,
+    compilation_target: CompilationTarget,
+    key: PredicateKey,
+    mut clause_code: Code,
+    skeleton: &mut PredicateSkeleton,
+    retraction_info: &mut RetractionInfo,
+    global_clock_tick: usize,
+) -> IndexPtr {
+    let clause_loc = code.len();
+    let mut prepend_queue = sdeq![];
 
-    fn generate_init_goal_code(
-	    &mut self,
-    ) -> Result<Code, SessionError> {
-	    let query_terms = mem::replace(&mut self.initialization_goals.0, vec![]);
-	    let queue = mem::replace(&mut self.initialization_goals.1, VecDeque::new());
+    let target_arg_num = skeleton.clauses[0].opt_arg_index_key.arg_num();
+    let head_arg_num = skeleton.clauses[1].opt_arg_index_key.arg_num();
+    
+    let settings = CodeGenSettings {
+        global_clock_tick: if skeleton.is_dynamic {
+            Some(global_clock_tick)
+        } else {
+            None
+        },
+        is_extensible: true,
+        non_counted_bt: false,
+    };
 
-	    compile_query(query_terms, queue)
-	        .map(|(code, _)| code)
-	        .map_err(SessionError::from)
-    }
+    let clause_loc = if skeleton.clauses[0]
+        .opt_arg_index_key
+        .switch_on_term_loc()
+        .is_some()
+    {
+        match skeleton.clauses[1].opt_arg_index_key.switch_on_term_loc() {
+            Some(index_loc) if target_arg_num == head_arg_num => {
+                prepend_queue.extend(clause_code.drain(3..));
 
-    fn set_code_index(
-        &mut self,
-        wam: &Machine,
-        key: PredicateKey,
-        in_situ_code: &mut Code,
-        code_dir: &mut CodeDir,
-        in_situ_code_dir: &InSituCodeDir,
-        decl: PredicateCompileQueue,
-    ) -> Result<(), SessionError> {
-        let p = wam.code_repo.code.len();
+                skeleton.clauses[0].opt_arg_index_key += index_loc - 1;
+                skeleton.clauses[0].clause_start = clause_loc + 2;
 
-        let idx = code_dir
-            .entry(key.clone())
-            .or_insert(CodeIndex::default());
+                retraction_info.push_record(RetractionRecord::AddedIndex(
+                    skeleton.clauses[0].opt_arg_index_key.clone(),
+                    skeleton.clauses[0].clause_start,
+                ));
 
-        Ok(match in_situ_code_dir.get(&key) {
-            Some(in_situ_p) => {
-                set_code_index!(idx, IndexPtr::Index(p + *in_situ_p), self.get_module_name());
-                self.localize_self_calls(key, in_situ_code, *in_situ_p, p + *in_situ_p);
+                let outer_thread_choice_loc = if skeleton.is_dynamic {
+                    find_dynamic_outer_choice_instr(code, index_loc)
+                } else {
+                    skeleton.clauses[1].clause_start - 2
+                };
+
+                retraction_info.push_record(RetractionRecord::SkeletonClauseStartReplaced(
+                    compilation_target,
+                    key.clone(),
+                    1,
+                    skeleton.clauses[1].clause_start,
+                ));
+
+                skeleton.clauses[1].clause_start =
+                    find_inner_choice_instr(code, skeleton.clauses[1].clause_start, index_loc);
+
+                let inner_thread_rev_offset =
+                    3 + prepend_queue.len() + clause_loc - skeleton.clauses[1].clause_start;
+
+                prepend_queue.push_back(Line::Control(ControlInstruction::RevJmpBy(
+                    inner_thread_rev_offset,
+                )));
+
+                prepend_queue.push_front(Line::Choice(
+                    settings.internal_try_me_else(prepend_queue.len()),
+                ));
+
+                // prepend_queue is now:
+                //      | TryMeElse N_2
+                //      | (clause_code)
+                // +N_2 | RevJmpBy (RetryMeElse(M_1) or TryMeElse(0) at index_loc + 1)
+
+                prepend_queue.push_front(Line::Control(ControlInstruction::RevJmpBy(
+                    1 + clause_loc - index_loc,
+                )));
+
+                let outer_thread_choice_offset = // outer_thread_choice_loc WAS index_loc - 1..
+                    match derelictize_try_me_else(code, outer_thread_choice_loc, retraction_info) {
+                        Some(next_subseq_offset) => {
+                            // skeleton.clauses[1] has a non-stub TryMeElse.
+
+                            let outer_thread_rev_offset =
+                                prepend_queue.len() + 1 + clause_loc - outer_thread_choice_loc -
+                                next_subseq_offset;
+
+                            prepend_queue.push_back(
+                                Line::Control(ControlInstruction::RevJmpBy(outer_thread_rev_offset))
+                            );
+
+                            prepend_queue.len()
+                        }
+                        None => {
+                            // This case occurs when the clauses of
+                            // the host predicate, up to and including
+                            // the prepending of this clause, are
+                            // indexed.
+
+                            // The outer TryMeElse / RevJmpBy pushed
+                            // in this case are stub instructions
+                            // awaiting the addition of unindexed
+                            // clauses.
+
+                            prepend_queue.push_back(
+                                Line::Control(ControlInstruction::RevJmpBy(0)),
+                            );
+
+                            0
+                        }
+                    };
+
+                prepend_queue.push_front(Line::Choice(
+                    settings.try_me_else(outer_thread_choice_offset),
+                ));
+
+                // prepend_queue is now:
+                //     | TryMeElse N_3
+                //     | RevJmpBy (SwitchOnTerm at index_loc)
+                //     | TryMeElse N_2
+                //     | (clause_code)
+                // N_2 | RevJmpBy (RetryMeElse(M_1) or TryMeElse(0) at index_loc + 1)
+                // N_3 | RevJmpBy (TryMeElse(N_1) at index_loc - 1 or TrustMe if N_1 == 0)
+
+                let target_indexing_line = to_indexing_line_mut(&mut code[index_loc]).unwrap();
+
+                merge_clause_index(
+                    target_indexing_line,
+                    &mut skeleton.clauses,
+                    clause_loc + 2, // == skeleton.clauses[0].clause_start
+                    AppendOrPrepend::Prepend,
+                );
+
+                set_switch_var_offset(code, index_loc, clause_loc - index_loc + 2, retraction_info);
+
+                internalize_choice_instr_at(
+                    code,
+                    skeleton.clauses[1].clause_start,
+                    retraction_info,
+                );
+
+                code.extend(prepend_queue.into_iter());
+
+                if skeleton.is_dynamic {
+                    clause_loc
+                } else {
+                    clause_loc + (outer_thread_choice_offset == 0) as usize
+                }
+            }
+            _ => {
+                prepend_queue.extend(clause_code.drain(1..));
+
+                skeleton.clauses[0].opt_arg_index_key += clause_loc;
+                skeleton.clauses[0].clause_start = clause_loc + 2;
+
+                let old_clause_start =
+                    match skeleton.clauses[1].opt_arg_index_key.switch_on_term_loc() {
+                        Some(index_loc) if skeleton.is_dynamic => {
+                            find_dynamic_outer_choice_instr(code, index_loc)
+                        }
+                        Some(_) => {
+                            skeleton.clauses[1].clause_start - 2
+                        }
+                        None => {
+                            skeleton.clauses[1].clause_start
+                        }
+                    };
+
+                let inner_thread_rev_offset =
+                    2 + prepend_queue.len() + clause_loc - old_clause_start;
+
+                // this is a stub for chaining inner-threaded choice
+                // instructions.
+                prepend_queue.push_back(Line::Control(ControlInstruction::RevJmpBy(0)));
+
+                let prepend_queue_len = prepend_queue.len();
+
+                match &mut prepend_queue[1] {
+                    Line::Choice(ChoiceInstruction::TryMeElse(ref mut o)) if *o == 0 => {
+                        *o = prepend_queue_len - 2;
+                    }
+                    Line::Choice(ChoiceInstruction::DynamicInternalElse(
+                        _, _, ref mut o @ NextOrFail::Next(0),
+                    )) => {
+                        *o = NextOrFail::Fail(prepend_queue_len - 2);
+                    }
+                    _ => {
+                        unreachable!();
+                    }
+                }
+
+                prepend_queue.push_back(Line::Control(ControlInstruction::RevJmpBy(
+                    inner_thread_rev_offset,
+                )));
+
+                prepend_queue.push_front(Line::Choice(
+                    settings.try_me_else(prepend_queue.len()),
+                ));
+
+                // prepend_queue is now:
+                //      | TryMeElse(N_2)
+                //      | SwitchOnTerm 2, ...
+                //      | TryMeElse(0)
+                //      | (clause_code)
+                // +N_2 | RevJmpBy (RetryMeElse(M_1))
+
+                internalize_choice_instr_at(code, old_clause_start, retraction_info);
+
+                code.extend(prepend_queue.into_iter());
+
+                clause_loc // + (outer_thread_choice_offset == 0 as usize)
+            }
+        }
+    } else {
+        match skeleton.clauses[1].opt_arg_index_key.switch_on_term_loc() {
+            Some(index_loc) => {
+                prepend_queue.extend(clause_code.drain(1..));
+
+                let old_clause_start = if skeleton.is_dynamic {
+                    find_dynamic_outer_choice_instr(code, index_loc)
+                } else {
+                    skeleton.clauses[1].clause_start - 2
+                };
+
+                let inner_thread_rev_offset =
+                    1 + prepend_queue.len() + clause_loc - old_clause_start;
+
+                prepend_queue.push_back(Line::Control(ControlInstruction::RevJmpBy(
+                    inner_thread_rev_offset,
+                )));
+
+                prepend_queue.push_front(Line::Choice(
+                    settings.try_me_else(prepend_queue.len()),
+                ));
+
+                // prepend_queue is now:
+                //      | TryMeElse(N_2)
+                //      | (clause_code)
+                // +N_2 | RevJmpBy (RetryMeElse(M_1))
+
+                internalize_choice_instr_at(code, old_clause_start, retraction_info);
+
+                code.extend(prepend_queue.into_iter());
+
+                // skeleton.clauses[0].opt_arg_index_key += clause_loc;
+                skeleton.clauses[0].clause_start = clause_loc;
+
+                clause_loc // + (outer_thread_choice_offset == 0 as usize)
             }
             None => {
-                let (decl, queue) = decl;
+                prepend_queue.extend(clause_code.drain(1..));
 
-                let mut cg = CodeGenerator::<DebrayAllocator>::new(false);
-                let mut decl_code = cg.compile_predicate(&decl.0)?;
+                let old_clause_start = skeleton.clauses[1].clause_start;
 
-                compile_appendix(&mut decl_code, &queue, false)?;
+                let inner_thread_rev_offset =
+                    1 + prepend_queue.len() + clause_loc - old_clause_start;
 
-                let in_situ_p = in_situ_code.len();
+                prepend_queue.push_back(Line::Control(ControlInstruction::RevJmpBy(
+                    inner_thread_rev_offset,
+                )));
 
-                in_situ_code.extend(decl_code.into_iter());
+                prepend_queue.push_front(Line::Choice(
+                    settings.try_me_else(prepend_queue.len()),
+                ));
 
-                set_code_index!(idx, IndexPtr::Index(p + in_situ_p), self.get_module_name());
-                self.localize_self_calls(key, in_situ_code, in_situ_p, p + in_situ_p);
+                // prepend_queue is now:
+                //      | TryMeElse(N_2)
+                //      | (clause_code)
+                // +N_2 | RevJmpBy (RetryMeElse(M_1))
+
+                internalize_choice_instr_at(code, old_clause_start, retraction_info);
+
+                code.extend(prepend_queue.into_iter());
+
+                // skeleton.clauses[0].opt_arg_index_key += clause_loc;
+                skeleton.clauses[0].clause_start = clause_loc;
+
+                clause_loc
             }
+        }
+    };
+
+    if skeleton.is_dynamic {
+        IndexPtr::DynamicIndex(clause_loc)
+    } else {
+        IndexPtr::Index(clause_loc)
+    }
+}
+
+fn append_compiled_clause(
+    code: &mut Code,
+    mut clause_code: Code,
+    skeleton: &mut PredicateSkeleton,
+    retraction_info: &mut RetractionInfo,
+    global_clock_tick: usize,
+) -> Option<IndexPtr> {
+    let clause_loc = code.len();
+    let target_pos = skeleton.clauses.len() - 1;
+    let lower_bound = lower_bound_of_target_clause(skeleton, target_pos);
+
+    let settings = CodeGenSettings {
+        global_clock_tick: if skeleton.is_dynamic {
+            Some(global_clock_tick)
+        } else {
+            None
+        },
+        is_extensible: true,
+        non_counted_bt: false,
+    };
+
+    skeleton.clauses[target_pos].clause_start = clause_loc;
+
+    let mut code_ptr_opt = None;
+
+    let lower_bound_arg_num = skeleton.clauses[lower_bound].opt_arg_index_key.arg_num();
+    let target_arg_num = skeleton.clauses[target_pos].opt_arg_index_key.arg_num();
+
+    let threaded_choice_instr_loc = match skeleton.clauses[lower_bound]
+        .opt_arg_index_key
+        .switch_on_term_loc()
+    {
+        Some(index_loc) if lower_bound_arg_num == target_arg_num => {
+            code.push(Line::Choice(settings.internal_trust_me()));
+
+            code.extend(clause_code.drain(3..)); // skip the indexing code
+
+            // set skeleton[target_pos].opt_arg_index_key to
+            // index_loc. its original value is always 1.
+            skeleton.clauses[target_pos].opt_arg_index_key += index_loc - 1;
+
+            retraction_info.push_record(RetractionRecord::AddedIndex(
+                skeleton.clauses[target_pos].opt_arg_index_key.clone(),
+                skeleton.clauses[target_pos].clause_start,
+            ));
+
+            let target_indexing_line = to_indexing_line_mut(&mut code[index_loc]).unwrap();
+
+            merge_clause_index(
+                target_indexing_line,
+                &mut skeleton.clauses[lower_bound..],
+                clause_loc,
+                AppendOrPrepend::Append,
+            );
+
+            let target_pos_clause_start = find_inner_choice_instr(
+                code,
+                skeleton.clauses[target_pos - 1].clause_start,
+                index_loc,
+            );
+
+            let target_pos_clause_start = find_outer_choice_instr(
+                code,
+                target_pos_clause_start,
+            );
+
+            if lower_bound + 1 == target_pos {
+                set_switch_var_offset_to_choice_instr(
+                    code,
+                    index_loc,
+                    target_pos_clause_start - index_loc,
+                    retraction_info,
+                );
+            }
+
+            target_pos_clause_start // skeleton.clauses[target_pos - 1].clause_start
+        }
+        _ => {
+            code.push(Line::Choice(settings.trust_me()));
+
+            skeleton.clauses[target_pos].opt_arg_index_key += clause_loc;
+            code.extend(clause_code.drain(1..));
+
+            match skeleton.clauses[lower_bound]
+                .opt_arg_index_key
+                .switch_on_term_loc()
+            {
+                Some(_) => {
+                    if lower_bound == 0 {
+                        code_ptr_opt = Some(skeleton.clauses[lower_bound].clause_start - 2);
+                    }
+
+                    find_outer_choice_instr(code, skeleton.clauses[lower_bound].clause_start - 2)
+                }
+                None => {
+                    if lower_bound == 0 {
+                        code_ptr_opt = Some(skeleton.clauses[lower_bound].clause_start);
+                    }
+
+                    match skeleton.clauses[target_pos]
+                        .opt_arg_index_key
+                        .switch_on_term_loc()
+                    {
+                        Some(index_loc) => {
+                            // point to the inner-threaded TryMeElse(0) if target_pos is
+                            // indexed, and make switch_on_term point one line after it in
+                            // its variable offset.
+                            skeleton.clauses[target_pos].clause_start += 2;
+
+                            if !skeleton.is_dynamic {
+                                set_switch_var_offset(code, index_loc, 2, retraction_info);
+                            }
+                        }
+                        None => {}
+                    }
+
+                    find_outer_choice_instr(code, skeleton.clauses[lower_bound].clause_start)
+                }
+            }
+        }
+    };
+
+    thread_choice_instr_at_to(code, threaded_choice_instr_loc, clause_loc, retraction_info);
+
+    code_ptr_opt.map(|p| {
+        if skeleton.is_dynamic {
+            IndexPtr::DynamicIndex(p)
+        } else {
+            IndexPtr::Index(p)
+        }
+    })
+}
+
+#[inline]
+fn mergeable_indexed_subsequences(
+    lower_bound: usize,
+    target_pos: usize,
+    skeleton: &PredicateSkeleton,
+) -> bool {
+    let lower_bound_arg_num = skeleton.clauses[lower_bound].opt_arg_index_key.arg_num();
+
+    if target_pos + 1 < skeleton.clauses.len() {
+        let succ_arg_num = skeleton.clauses[target_pos + 1].opt_arg_index_key.arg_num();
+        let target_arg_num = skeleton.clauses[target_pos].opt_arg_index_key.arg_num();
+
+        return target_arg_num != succ_arg_num && lower_bound_arg_num == succ_arg_num;
+    }
+
+    false
+}
+
+impl<'a> LoadState<'a> {
+    fn compile_standalone_clause(
+        &mut self,
+        term: Term,
+        settings: CodeGenSettings,
+        atom_tbl: TabledData<Atom>,
+    ) -> Result<StandaloneCompileResult, SessionError> {
+        let mut preprocessor = Preprocessor::new(self.wam.machine_st.flags);
+        let mut cg = CodeGenerator::<DebrayAllocator>::new(atom_tbl.clone(), settings);
+
+        let clause = self.try_term_to_tl(term, &mut preprocessor)?;
+        let queue = preprocessor.parse_queue(self)?;
+
+        let mut clause_code = cg.compile_predicate(&vec![clause])?;
+
+        compile_appendix(
+            &mut clause_code,
+            queue,
+            cg.jmp_by_locs,
+            settings.non_counted_bt,
+            atom_tbl,
+        )?;
+
+        Ok(StandaloneCompileResult {
+            clause_code,
+            standalone_skeleton: cg.skeleton,
         })
     }
 
-    fn adapt_in_situ_code(
+    fn compile(
         &mut self,
-        decls: Vec<PredicateCompileQueue>,
-        wam: &Machine,
-        code_dir: &mut CodeDir,
-        module_dir: &mut ModuleDir,
-        in_situ_code: &mut Code,
-        in_situ_code_dir: &InSituCodeDir,
-        in_situ_module_dir: &ModuleStubDir,
+        key: PredicateKey,
+        predicates: &mut PredicateQueue,
+        settings: CodeGenSettings,
     ) -> Result<(), SessionError> {
-        for decl in decls {
-            let key = decl.0
-                .predicate_indicator()
-                .ok_or(SessionError::NamelessEntry)?;
+        let code_index = self.get_or_insert_code_index(
+            key.clone(),
+            predicates.compilation_target.clone(),
+        );
 
-            let (name, _arity) = key.clone();
-            let module_name = name.owning_module();
+        let code_len = self.wam.code_repo.code.len();
+        let mut code_ptr = code_len;
 
-            match in_situ_module_dir.get(&module_name) {
-                Some(ref module_stub) if name.has_table(&module_stub.atom_tbl) => {
-                    let module =
-                        module_dir.entry(module_name.clone())
-                                  .or_insert_with(|| {
-                                      let module_decl = ModuleDecl {
-                                          name: module_name.clone(),
-                                          exports: vec![]
-                                      };
+        let mut cg =
+            CodeGenerator::<DebrayAllocator>::new(self.wam.machine_st.atom_tbl.clone(), settings);
 
-                                      Module::new(
-                                          module_decl,
-                                          module_stub.atom_tbl.clone(),
-                                          self.listing_src.clone(),
-                                      )
-                                  });
+        let mut clauses = vec![];
+        let mut preprocessor = Preprocessor::new(self.wam.machine_st.flags);
 
-                    self.set_code_index(
-                        wam,
-                        key,
-                        in_situ_code,
-                        &mut module.code_dir,
-                        &module_stub.in_situ_code_dir,
-                        decl,
-                    )?;
+        for term in predicates.predicates.drain(0 ..) {
+            clauses.push(self.try_term_to_tl(term, &mut preprocessor)?);
+        }
+
+        let queue = preprocessor.parse_queue(self)?;
+        let mut code = cg.compile_predicate(&clauses)?;
+
+        compile_appendix(
+            &mut code,
+            queue,
+            cg.jmp_by_locs,
+            settings.non_counted_bt,
+            self.wam.machine_st.atom_tbl.clone(),
+        )?;
+
+        if settings.is_extensible {
+            let mut clause_clause_locs = sdeq![];
+
+            for clause_index_info in cg.skeleton.clauses.iter_mut() {
+                clause_index_info.clause_start += code_len;
+                clause_index_info.opt_arg_index_key += code_len;
+
+                clause_clause_locs.push_back(clause_index_info.clause_start);
+            }
+
+            match &mut code[0] {
+                Line::Choice(ChoiceInstruction::TryMeElse(0)) => {
+                    code_ptr += 1;
                 }
-                _ => {
-                    self.set_code_index(
-                        wam,
-                        key,
-                        in_situ_code,
-                        code_dir,
-                        in_situ_code_dir,
-                        decl,
-                    )?;
+                _ => {}
+            }
+
+            match self
+                .wam
+                .indices
+                .get_predicate_skeleton_mut(&predicates.compilation_target, &key)
+            {
+                Some(skeleton) => {
+                    self.retraction_info
+                        .push_record(RetractionRecord::SkeletonClauseTruncateBack(
+                            predicates.compilation_target.clone(),
+                            key.clone(),
+                            skeleton.clauses.len(),
+                        ));
+
+                    skeleton.clauses.extend(cg.skeleton.clauses.into_iter());
+                    skeleton.clause_clause_locs.extend_from_slice(
+                        &clause_clause_locs[0 ..]
+                    );
+                }
+                None => {
+                    cg.skeleton.clause_clause_locs.extend_from_slice(
+                        &clause_clause_locs[0 ..]
+                    );
+
+                    self.add_extensible_predicate(
+                        key.clone(),
+                        cg.skeleton,
+                        predicates.compilation_target.clone(),
+                    );
+                }
+            }
+
+            match self
+                .wam
+                .indices
+                .get_local_predicate_skeleton_mut(
+                    &self.compilation_target,
+                    predicates.compilation_target.clone(),
+                    key.clone(),
+                )
+            {
+                Some(skeleton) => {
+                    self.retraction_info
+                        .push_record(RetractionRecord::SkeletonLocalClauseTruncateBack(
+                            self.compilation_target.clone(),
+                            predicates.compilation_target.clone(),
+                            key.clone(),
+                            skeleton.clause_clause_locs.len(),
+                        ));
+
+                    skeleton.clause_clause_locs.extend_from_slice(
+                        &clause_clause_locs[0 ..]
+                    );
+                }
+                None => {
+                    let mut skeleton = PredicateSkeleton::new();
+                    skeleton.clause_clause_locs = clause_clause_locs;
+
+                    self.add_local_extensible_predicate(
+                        predicates.compilation_target.clone(),
+                        key.clone(),
+                        skeleton,
+                    );
                 }
             }
         }
 
+        set_code_index(
+            &mut self.retraction_info,
+            &predicates.compilation_target,
+            key,
+            &code_index,
+            if settings.is_dynamic() {
+                IndexPtr::DynamicIndex(code_ptr)
+            } else {
+                IndexPtr::Index(code_ptr)
+            },
+        );
+
+        self.wam.code_repo.code.extend(code.into_iter());
         Ok(())
     }
 
-    fn add_term_dir_terms(
+    fn record_incremental_compile(
         &mut self,
-        hook: CompileTimeHook,
-        code_repo: &mut CodeRepo,
         key: PredicateKey,
-        clause: PredicateClause,
-        queue: VecDeque<TopLevel>,
-    ) -> (usize, usize) {
-        let preds = code_repo
-            .term_dir
-            .entry(key.clone())
-            .or_insert((Predicate::new(), VecDeque::from(vec![])));
-
-        let (mut len, mut queue_len) = ((preds.0).0.len(), preds.1.len());
-
-        if self.module.is_some() && hook.has_module_scope() {
-            let module_preds = self
-                .user_term_dir
-                .entry(key.clone())
-                .or_insert((Predicate::new(), VecDeque::from(vec![])));
-
-            if let Some(ref mut module) = &mut self.module {
-                module.add_expansion_record(hook, clause.clone(), queue.clone());
-                module.add_local_expansion(hook, clause.clone(), queue.clone());
-            }
-
-            (module_preds.0).0.push(clause);
-            module_preds.1.extend(queue.into_iter());
-
-            (preds.0).0.extend((module_preds.0).0.iter().cloned());
-            preds.1.extend(module_preds.1.iter().cloned());
-        } else {
-            let module_preds = self
-                .user_term_dir
-                .entry(key.clone())
-                .or_insert((Predicate::new(), VecDeque::from(vec![])));
-
-            len += 1;
-            queue_len += queue.len();
-
-            (preds.0).0.push(clause);
-            preds.1.extend(queue.into_iter());
-
-            (preds.0).0.extend((module_preds.0).0.iter().cloned());
-            preds.1.extend(module_preds.1.iter().cloned());
-        }
-
-        (len, queue_len)
+        compilation_target: CompilationTarget,
+        append_or_prepend: AppendOrPrepend,
+    ) {
+        self.retraction_info
+            .push_record(match compilation_target {
+                CompilationTarget::User => match append_or_prepend {
+                    AppendOrPrepend::Append => {
+                        RetractionRecord::AppendedUserExtensiblePredicate(key)
+                    }
+                    AppendOrPrepend::Prepend => {
+                        RetractionRecord::PrependedUserExtensiblePredicate(key)
+                    }
+                },
+                CompilationTarget::Module(module_name) => match append_or_prepend {
+                    AppendOrPrepend::Append => RetractionRecord::AppendedModuleExtensiblePredicate(
+                        module_name,
+                        key,
+                    ),
+                    AppendOrPrepend::Prepend => {
+                        RetractionRecord::PrependedModuleExtensiblePredicate(
+                            module_name,
+                            key,
+                        )
+                    }
+                },
+            });
     }
 
-    fn submit_op(
+    pub(super) fn incremental_compile_clause(
         &mut self,
-        wam: &Machine,
-        indices: &mut IndexStore,
-        op_decl: &OpDecl,
+        key: PredicateKey,
+        clause: Term,
+        compilation_target: CompilationTarget,
+        non_counted_bt: bool,
+        append_or_prepend: AppendOrPrepend,
     ) -> Result<(), SessionError> {
-        let spec = get_desc(
-            op_decl.name(),
-            composite_op!(
-                self.module.is_some(),
-                &wam.indices.op_dir,
-                &mut indices.op_dir
-            ),
+        self.record_incremental_compile(
+            key.clone(),
+            compilation_target.clone(),
+            append_or_prepend,
         );
 
-        op_decl.submit(self.get_module_name(), spec, &mut indices.op_dir)
+        let settings = match self
+            .wam
+            .indices
+            .get_predicate_skeleton_mut(&compilation_target, &key)
+        {
+            Some(skeleton) if !skeleton.clauses.is_empty() => {
+                CodeGenSettings {
+                    global_clock_tick: if skeleton.is_dynamic {
+                        Some(self.wam.machine_st.global_clock)
+                    } else {
+                        None
+                    },
+                    is_extensible: true,
+                    non_counted_bt,
+                }
+            },
+            skeleton_opt => {
+                let settings = CodeGenSettings {
+                    global_clock_tick: if let Some(skeleton) = skeleton_opt {
+                        if skeleton.is_dynamic {
+                            Some(self.wam.machine_st.global_clock)
+                        } else {
+                            None
+                        }
+                    } else {
+                        None
+                    },
+                    is_extensible: true,
+                    non_counted_bt,
+                };
+
+                let mut predicate_queue = predicate_queue![clause];
+                predicate_queue.compilation_target = compilation_target;
+
+                return self.compile(key, &mut predicate_queue, settings);
+            }
+        };
+
+        let atom_tbl = self.wam.machine_st.atom_tbl.clone();
+
+        let StandaloneCompileResult {
+            clause_code,
+            mut standalone_skeleton,
+        } = self.compile_standalone_clause(clause, settings, atom_tbl)?;
+
+        let code_len = self.wam.code_repo.code.len();
+
+        let skeleton = match self
+            .wam
+            .indices
+            .get_predicate_skeleton_mut(&compilation_target, &key)
+        {
+            Some(skeleton) if !skeleton.clauses.is_empty() => skeleton,
+            _ => unreachable!()
+        };
+
+        match append_or_prepend {
+            AppendOrPrepend::Append => {
+                let clause_index_info = standalone_skeleton.clauses.pop_back().unwrap();
+                skeleton.clauses.push_back(clause_index_info);
+
+                skeleton.clause_clause_locs.push_back(code_len);
+
+                self.retraction_info
+                    .push_record(RetractionRecord::SkeletonClausePopBack(
+                        compilation_target.clone(),
+                        key.clone(),
+                    ));
+
+                let result = append_compiled_clause(
+                    &mut self.wam.code_repo.code,
+                    clause_code,
+                    skeleton,
+                    &mut self.retraction_info,
+                    self.wam.machine_st.global_clock,
+                );
+
+                match self
+                    .wam
+                    .indices
+                    .get_local_predicate_skeleton_mut(
+                        &self.compilation_target,
+                        compilation_target.clone(),
+                        key.clone(),
+                    )
+                {
+                    Some(skeleton) => {
+                        self.retraction_info.push_record(
+                            RetractionRecord::SkeletonLocalClauseClausePopBack(
+                                self.compilation_target.clone(),
+                                compilation_target.clone(),
+                                key.clone(),
+                            ),
+                        );
+
+                        skeleton.clause_clause_locs.push_back(code_len);
+                    }
+                    None => {
+                        let mut skeleton = PredicateSkeleton::new();
+                        skeleton.clause_clause_locs.push_back(code_len);
+
+                        self.add_local_extensible_predicate(
+                            compilation_target.clone(),
+                            key.clone(),
+                            skeleton,
+                        );
+                    }
+                }
+
+                let code_index = self.get_or_insert_code_index(
+                    key.clone(),
+                    compilation_target.clone(),
+                );
+
+                if let Some(new_code_ptr) = result {
+                    set_code_index(
+                        &mut self.retraction_info,
+                        &compilation_target,
+                        key,
+                        &code_index,
+                        new_code_ptr,
+                    );
+                }
+
+                Ok(())
+            }
+            AppendOrPrepend::Prepend => {
+                let clause_index_info = standalone_skeleton.clauses.pop_back().unwrap();
+                skeleton.clauses.push_front(clause_index_info);
+
+                skeleton.clause_clause_locs.push_front(code_len);
+                skeleton.clause_assert_margin += 1;
+
+                self.retraction_info
+                    .push_record(RetractionRecord::SkeletonClausePopFront(
+                        compilation_target.clone(),
+                        key.clone(),
+                    ));
+
+                let new_code_ptr = prepend_compiled_clause(
+                    &mut self.wam.code_repo.code,
+                    compilation_target.clone(),
+                    key.clone(),
+                    clause_code,
+                    skeleton,
+                    &mut self.retraction_info,
+                    self.wam.machine_st.global_clock,
+                );
+
+                match self
+                    .wam
+                    .indices
+                    .get_local_predicate_skeleton_mut(
+                        &self.compilation_target,
+                        compilation_target.clone(),
+                        key.clone(),
+                    )
+                {
+                    Some(skeleton) => {
+                        self.retraction_info.push_record(
+                            RetractionRecord::SkeletonLocalClauseClausePopFront(
+                                self.compilation_target.clone(),
+                                compilation_target.clone(),
+                                key.clone(),
+                            ),
+                        );
+
+                        skeleton.clause_clause_locs.push_front(code_len);
+                    }
+                    None => {
+                        let mut skeleton = PredicateSkeleton::new();
+                        skeleton.clause_clause_locs.push_front(code_len);
+
+                        self.add_local_extensible_predicate(
+                            compilation_target.clone(),
+                            key.clone(),
+                            skeleton,
+                        );
+                    }
+                }
+
+                let code_index = self.get_or_insert_code_index(
+                    key.clone(),
+                    compilation_target.clone(),
+                );
+
+                set_code_index(
+                    &mut self.retraction_info,
+                    &compilation_target,
+                    key,
+                    &code_index,
+                    new_code_ptr,
+                );
+
+                Ok(())
+            }
+        }
     }
 
-    fn process_decl(
-        &mut self,
-        decl: Declaration,
-        wam: &mut Machine,
-        indices: &mut IndexStore,
-        flags: MachineFlags,
-        non_counted_bt_preds: &mut IndexSet<PredicateKey>,
-    ) -> Result<(), SessionError> {
-        match decl {
-            Declaration::Dynamic(..) => {
-                Ok(())
+    pub(super) fn retract_dynamic_clause(&mut self, key: PredicateKey, target_pos: usize) -> usize {
+        let skeleton = match self
+            .wam
+            .indices
+            .get_predicate_skeleton_mut(&self.compilation_target, &key)
+        {
+            Some(skeleton) => skeleton,
+            None => {
+                unreachable!();
             }
-            Declaration::EndOfFile => {
-                Ok(())
+        };
+
+        let clause_loc = match skeleton.clauses[target_pos]
+            .opt_arg_index_key
+            .switch_on_term_loc()
+        {
+            Some(index_loc) => {
+                find_inner_choice_instr(
+                    &self.wam.code_repo.code,
+                    skeleton.clauses[target_pos].clause_start,
+                    index_loc,
+                )
             }
-            Declaration::Hook(hook, clause, queue) => {
-                let key = (hook.name(), hook.arity());
-                let (len, queue_len) =
-                    self.add_term_dir_terms(hook, &mut wam.code_repo, key.clone(), clause, queue);
+            None => {
+                skeleton.clauses[target_pos].clause_start
+            }
+        };
 
-                let result = wam
-                    .code_repo
-                    .compile_hook(hook)
-                    .map_err(SessionError::from);
+        match &mut self.wam.code_repo.code[clause_loc] {
+            Line::Choice(ChoiceInstruction::DynamicElse(_, ref mut d, _)) |
+            Line::Choice(ChoiceInstruction::DynamicInternalElse(_, ref mut d, _)) => {
+                *d = Death::Finite(self.wam.machine_st.global_clock);
+            }
+            _ => unreachable!()
+        }
 
-                wam.code_repo.truncate_terms(key, len, queue_len);
+        delete_from_skeleton(
+            self.compilation_target.clone(),
+            key,
+            skeleton,
+            target_pos,
+            &mut self.retraction_info,
+        )
+    }
+
+    pub(super) fn retract_clause(&mut self, key: PredicateKey, target_pos: usize) -> usize {
+        let code_index = self.get_or_insert_code_index(
+            key.clone(),
+            self.compilation_target.clone(),
+        );
+
+        let skeleton = match self
+            .wam
+            .indices
+            .get_predicate_skeleton_mut(&self.compilation_target, &key)
+        {
+            Some(skeleton) => skeleton,
+            None => {
+                unreachable!();
+            }
+        };
+
+        let code = &mut self.wam.code_repo.code;
+        let lower_bound = lower_bound_of_target_clause(skeleton, target_pos);
+        let lower_bound_is_unindexed = !skeleton.clauses[lower_bound].opt_arg_index_key.is_some();
+
+        if target_pos == 0 || (lower_bound + 1 == target_pos && lower_bound_is_unindexed) {
+            // the clause preceding target_pos, if there is one, is of key type
+            // OptArgIndexKey::None.
+            match skeleton.clauses[target_pos]
+                .opt_arg_index_key
+                .switch_on_term_loc()
+            {
+                Some(index_loc) => {
+                    let inner_clause_start = find_inner_choice_instr(
+                        code,
+                        skeleton.clauses[target_pos].clause_start,
+                        index_loc,
+                    );
+
+                    remove_index_from_subsequence(
+                        code,
+                        &skeleton.clauses[target_pos].opt_arg_index_key,
+                        inner_clause_start,
+                        &mut self.retraction_info,
+                    );
+
+                    match derelictize_try_me_else(
+                        code,
+                        inner_clause_start,
+                        &mut self.retraction_info,
+                    ) {
+                        Some(offset) => {
+                            let instr_loc = find_inner_choice_instr(
+                                code,
+                                inner_clause_start + offset,
+                                index_loc,
+                            );
+
+                            let clause_loc = blunt_leading_choice_instr(
+                                code,
+                                instr_loc,
+                                &mut self.retraction_info,
+                            );
+
+                            set_switch_var_offset(
+                                code,
+                                index_loc,
+                                clause_loc - index_loc,
+                                &mut self.retraction_info,
+                            );
+
+                            self.retraction_info.push_record(
+                                RetractionRecord::SkeletonClauseStartReplaced(
+                                    self.compilation_target.clone(),
+                                    key.clone(),
+                                    target_pos + 1,
+                                    skeleton.clauses[target_pos + 1].clause_start,
+                                ),
+                            );
+
+                            skeleton.clauses[target_pos + 1].clause_start =
+                                skeleton.clauses[target_pos].clause_start;
+
+                            return delete_from_skeleton(
+                                self.compilation_target.clone(),
+                                key,
+                                skeleton,
+                                target_pos,
+                                &mut self.retraction_info,
+                            );
+                        }
+                        None => {
+                            let index_ptr_opt = if target_pos > 0 {
+                                let preceding_choice_instr_loc =
+                                    skeleton.clauses[target_pos - 1].clause_start;
+
+                                remove_non_leading_clause(
+                                    code,
+                                    preceding_choice_instr_loc,
+                                    skeleton.clauses[target_pos].clause_start - 2,
+                                    &mut self.retraction_info,
+                                )
+                            } else {
+                                remove_leading_unindexed_clause(
+                                    code,
+                                    skeleton.clauses[target_pos].clause_start - 2,
+                                    &mut self.retraction_info,
+                                )
+                            };
+
+                            return finalize_retract(
+                                key,
+                                self.compilation_target.clone(),
+                                skeleton,
+                                code_index,
+                                target_pos,
+                                index_ptr_opt,
+                                &mut self.retraction_info,
+                            );
+                        }
+                    }
+                }
+                None => {}
+            }
+        }
+
+        let index_ptr_opt = match skeleton.clauses[lower_bound]
+            .opt_arg_index_key
+            .switch_on_term_loc()
+        {
+            Some(target_indexing_loc)
+                if mergeable_indexed_subsequences(lower_bound, target_pos, skeleton) =>
+            {
+                let lower_bound_clause_start = find_inner_choice_instr(
+                    code,
+                    skeleton.clauses[lower_bound].clause_start,
+                    target_indexing_loc,
+                );
+
+                let result;
+
+                match skeleton.clauses[target_pos + 1]
+                    .opt_arg_index_key
+                    .switch_on_term_loc()
+                {
+                    Some(later_indexing_loc) if later_indexing_loc < target_indexing_loc => {
+                        let target_indexing_line = mem::replace(
+                            &mut code[target_indexing_loc],
+                            Line::Control(ControlInstruction::RevJmpBy(
+                                target_indexing_loc - later_indexing_loc,
+                            )),
+                        );
+
+                        match target_indexing_line {
+                            Line::IndexingCode(indexing_code) => {
+                                self.retraction_info.push_record(
+                                    RetractionRecord::ReplacedIndexingLine(
+                                        target_indexing_loc,
+                                        indexing_code,
+                                    ),
+                                );
+                            }
+                            _ => {}
+                        }
+
+                        result = merge_indexed_subsequences(
+                            code,
+                            skeleton,
+                            lower_bound,
+                            target_pos + 1,
+                            &mut self.retraction_info,
+                        );
+
+                        merge_indices(
+                            code,
+                            later_indexing_loc,
+                            0..target_pos - lower_bound,
+                            &mut skeleton.clauses[lower_bound..],
+                            &mut self.retraction_info,
+                        );
+
+                        set_switch_var_offset(
+                            code,
+                            later_indexing_loc,
+                            lower_bound_clause_start - later_indexing_loc,
+                            &mut self.retraction_info,
+                        );
+                    }
+                    _ => {
+                        result = merge_indexed_subsequences(
+                            code,
+                            skeleton,
+                            lower_bound,
+                            target_pos + 1,
+                            &mut self.retraction_info,
+                        );
+
+                        merge_indices(
+                            code,
+                            target_indexing_loc,
+                            target_pos + 1 - lower_bound..skeleton.clauses.len() - lower_bound,
+                            &mut skeleton.clauses[lower_bound..],
+                            &mut self.retraction_info,
+                        );
+
+                        set_switch_var_offset_to_choice_instr(
+                            code,
+                            target_indexing_loc,
+                            lower_bound_clause_start - target_indexing_loc,
+                            &mut self.retraction_info,
+                        );
+                    }
+                };
 
                 result
             }
-            Declaration::Module(module_decl) => {
-                if self.module.is_none() {
-                    let module_name = module_decl.name.clone();
-                    let atom_tbl = TabledData::new(module_name.to_rc());
+            _ => {
+                if target_pos > 0 {
+                    remove_index_from_subsequence(
+                        code,
+                        &skeleton.clauses[target_pos].opt_arg_index_key,
+                        skeleton.clauses[target_pos].clause_start,
+                        &mut self.retraction_info,
+                    );
 
-                    for export in module_decl.exports.iter() {
-                        if let ModuleExport::OpDecl(ref op_decl) = export {
-                            self.submit_op(wam, indices, op_decl)?;
+                    match skeleton.clauses[target_pos]
+                        .opt_arg_index_key
+                        .switch_on_term_loc()
+                    {
+                        Some(index_loc) => {
+                            let preceding_choice_instr_loc = find_inner_choice_instr(
+                                code,
+                                skeleton.clauses[target_pos - 1].clause_start,
+                                index_loc,
+                            );
+
+                            remove_non_leading_clause(
+                                code,
+                                preceding_choice_instr_loc,
+                                skeleton.clauses[target_pos].clause_start,
+                                &mut self.retraction_info,
+                            );
+
+                            match &mut code[preceding_choice_instr_loc] {
+                                Line::Choice(ChoiceInstruction::TryMeElse(0)) => {
+                                    set_switch_var_offset(
+                                        code,
+                                        index_loc,
+                                        preceding_choice_instr_loc + 1 - index_loc,
+                                        &mut self.retraction_info,
+                                    );
+                                }
+                                _ => {}
+                            }
+
+                            None
+                        }
+                        None => {
+                            let preceding_choice_instr_loc =
+                                if skeleton.clauses[lower_bound].opt_arg_index_key.is_some() {
+                                    skeleton.clauses[lower_bound].clause_start - 2
+                                } else {
+                                    skeleton.clauses[lower_bound].clause_start
+                                };
+
+                            remove_non_leading_clause(
+                                code,
+                                preceding_choice_instr_loc,
+                                skeleton.clauses[target_pos].clause_start,
+                                &mut self.retraction_info,
+                            )
                         }
                     }
-
-                    let listing_src = self.listing_src.clone();
-
-                    Ok(self.module = Some(Module::new(module_decl, atom_tbl, listing_src)))
                 } else {
-                    Err(SessionError::from(ParserError::InvalidModuleDecl))
-                }
-            }
-	        Declaration::ModuleInitialization(query_terms, queue) => {
-		        self.initialization_goals.0.extend(query_terms.into_iter());
-		        self.initialization_goals.1.extend(queue.into_iter());
-
-		        Ok(())
-	        }
-            Declaration::MultiFile(..) => {
-                Ok(())
-            }
-            Declaration::NonCountedBacktracking(name, arity) => {
-                non_counted_bt_preds.insert((name, arity));
-                Ok(())
-            }
-            Declaration::Op(op_decl) => {
-                self.submit_op(wam, indices, &op_decl)
-            }
-            Declaration::SetPrologFlag(dbl_quotes) => {
-                wam.machine_st.flags.double_quotes = dbl_quotes;
-                Ok(())
-            }
-            Declaration::UseModule(ModuleSource::Library(name)) => {
-                let name = if !wam.indices.modules.contains_key(&name) {
-                    load_library(wam, name, true)?
-                } else {
-                    name
-                };
-
-                self.use_module(name, &mut wam.code_repo, flags, &mut wam.indices, indices)
-            }
-            Declaration::UseModule(ModuleSource::File(filename)) => {
-                let mut path_buf = self.listing_src.path();
-                path_buf.push(filename.as_str());
-
-                let name = load_module_from_file(wam, path_buf, true)?;
-                self.use_module(name, &mut wam.code_repo, flags, &mut wam.indices, indices)
-            }
-            Declaration::UseQualifiedModule(ModuleSource::Library(name), exports) => {
-                let name = if !wam.indices.modules.contains_key(&name) {
-                    load_library(wam, name, true)?
-                } else {
-                    name
-                };
-
-                self.use_qualified_module(
-                    name,
-                    &mut wam.code_repo,
-                    flags,
-                    &exports,
-                    &mut wam.indices,
-                    indices
-                )
-            }
-            Declaration::UseQualifiedModule(ModuleSource::File(filename), exports) => {
-                let mut path_buf = self.listing_src.path();
-                path_buf.push(filename.as_str());
-
-                let name = load_module_from_file(wam, path_buf, true)?;
-
-                self.use_qualified_module(
-                    name,
-                    &mut wam.code_repo,
-                    flags,
-                    &exports,
-                    &mut wam.indices,
-                    indices,
-                )
-            }
-        }
-    }
-
-    fn setup_multifile_decl(
-        &self,
-        indicator: MultiFileIndicator,
-        worker: &mut TopLevelBatchWorker,
-    ) -> Result<(), SessionError> {
-        match indicator {
-            MultiFileIndicator::LocalScoped(name, arity) => {
-                let term_dir  = &worker.term_stream.wam.code_repo.term_dir;
-                let key       = (name, arity);
-                let term_dirs = &mut worker.term_dirs;
-
-                insert_or_refresh_term_dir_quantum(term_dir, key, term_dirs);
-            }
-            MultiFileIndicator::ModuleScoped((module_name, key)) => {
-                match worker.term_stream.wam.indices.modules.get(&module_name) {
-                    Some(ref module) => {
-                        let term_dir  = &module.term_dir;
-                        let term_dirs = worker.intra_module_term_dirs
-                            .entry(module_name)
-                            .or_insert(TermDirQuantum::new());
-
-                        insert_or_refresh_term_dir_quantum(term_dir, key, term_dirs);
-                    }
-                    None => {
-                        let err = ExistenceError::ModuleSource(ModuleSource::File(
-                            module_name,
-                        ));
-
-                        return Err(SessionError::ExistenceError(err));
-                    }
+                    remove_leading_unindexed_clause(
+                        code,
+                        skeleton.clauses[target_pos].clause_start,
+                        &mut self.retraction_info,
+                    )
                 }
             }
         };
+
+        finalize_retract(
+            key,
+            self.compilation_target.clone(),
+            skeleton,
+            code_index,
+            target_pos,
+            index_ptr_opt,
+            &mut self.retraction_info,
+        )
+    }
+}
+
+impl<'a, TS: TermStream> Loader<'a, TS> {
+    pub(super) fn compile_clause_clauses<ClauseIter: Iterator<Item = (Term, Term)>>(
+        &mut self,
+        key: PredicateKey,
+        compilation_target: CompilationTarget,
+        clause_clauses: ClauseIter,
+        append_or_prepend: AppendOrPrepend,
+    ) -> Result<(), SessionError> {
+        let clause_predicates = clause_clauses.map(|(head, body)| {
+            Term::Clause(
+                Cell::default(),
+                clause_name!("$clause"),
+                vec![Box::new(head), Box::new(body)],
+                None,
+            )
+        });
+
+        let clause_clause_compilation_target = match compilation_target {
+            CompilationTarget::User => CompilationTarget::Module(clause_name!("builtins")),
+            _ => compilation_target.clone(),
+        };
+
+        let mut num_clause_predicates = 0;
+
+        for clause_term in clause_predicates {
+            self.load_state.incremental_compile_clause(
+                (clause_name!("$clause"), 2),
+                clause_term,
+                clause_clause_compilation_target.clone(),
+                false, // non_counted_bt is false.
+                append_or_prepend,
+            )?;
+
+            num_clause_predicates += 1;
+        }
+
+        let locs_vec: Vec<_> = match self
+            .load_state
+            .wam
+            .indices
+            .get_predicate_skeleton_mut(&compilation_target, &key)
+        {
+            Some(skeleton) if append_or_prepend.is_append() => {
+                let tail_num = skeleton.clause_clause_locs.len() - num_clause_predicates;
+                skeleton.clause_clause_locs[tail_num ..]
+                    .iter()
+                    .cloned()
+                    .collect()
+            }
+            Some(skeleton) => {
+                skeleton.clause_clause_locs[0 .. num_clause_predicates]
+                    .iter()
+                    .cloned()
+                    .collect()
+            }
+            None => {
+                unreachable!()
+            }
+        };
+
+        match self.load_state.wam.indices.get_predicate_skeleton_mut(
+            &clause_clause_compilation_target,
+            &(clause_name!("$clause"), 2),
+        ) {
+            Some(skeleton) if append_or_prepend.is_append() => {
+                for _ in 0 .. num_clause_predicates {
+                    skeleton.clause_clause_locs.pop_back();
+                }
+
+                for loc in locs_vec {
+                    skeleton.clause_clause_locs.push_back(loc);
+                }
+            }
+            Some(skeleton) => {
+                for _ in 0 .. num_clause_predicates {
+                    skeleton.clause_clause_locs.pop_front();
+                }
+
+                for loc in locs_vec.into_iter().rev() {
+                    skeleton.clause_clause_locs.push_front(loc);
+                }
+            }
+            None => {
+                unreachable!();
+            }
+        }
 
         Ok(())
     }
 
-    fn process_and_commit_decl(
-        &mut self,
-        decl: Declaration,
-        worker: &mut TopLevelBatchWorker,
-        indices: &mut IndexStore,
-        flags: MachineFlags,
-    ) -> Result<(), SessionError> {
-        let mut update_expansion_lengths = false;
+    pub(super) fn compile_and_submit(&mut self) -> Result<(), SessionError> {
+        let key = self
+            .predicates
+            .first()
+            .and_then(|cl| {
+                let arity = ClauseInfo::arity(cl);
+                ClauseInfo::name(cl).map(|name| (name, arity))
+            })
+            .ok_or(SessionError::NamelessEntry)?;
 
-        match &decl {
-            &Declaration::Dynamic(ref name, arity) => {
-                worker
-                    .dynamic_clause_map
-                    .entry((name.clone(), arity))
-                    .or_insert(vec![]);
+        let mut predicate_info = self
+            .load_state
+            .wam
+            .indices
+            .get_predicate_skeleton(&self.predicates.compilation_target, &key)
+            .map(|skeleton| skeleton.predicate_info())
+            .unwrap_or_default();
 
-		        indices.code_dir
-		            .entry((name.clone(), arity))
-		            .or_insert(CodeIndex::dynamic_undefined(self.get_module_name()));
-            }
-            &Declaration::Hook(hook, _, ref queue) if self.module.is_none() => worker
-                .term_stream
-                .incr_expansion_lens(hook.user_scope(), 1, queue.len()),
-            &Declaration::Hook(hook, _, ref queue) if !hook.has_module_scope() => {
-                worker.term_stream.incr_expansion_lens(hook, 1, queue.len())
-            }
-            &Declaration::MultiFile(ref indicator) => {
-                self.setup_multifile_decl(indicator.clone(), worker)?;
-            }
-            &Declaration::UseModule(_) | &Declaration::UseQualifiedModule(..) => {
-                update_expansion_lengths = true
-            }
-            _ => {}
-        };
+        let local_predicate_info = self
+            .load_state
+            .wam
+            .indices
+            .get_local_predicate_skeleton(
+                &self.load_state.compilation_target,
+                self.predicates.compilation_target.clone(),
+                key.clone(),
+            )
+            .map(|skeleton| skeleton.predicate_info())
+            .unwrap_or_default();
 
-        let result = self.process_decl(
-            decl,
-            &mut worker.term_stream.wam,
-            indices,
-            flags,
-            &mut worker.non_counted_bt_preds,
-        );
-
-        if update_expansion_lengths {
-            worker.term_stream.update_expansion_lens();
+        if local_predicate_info.must_retract_local_clauses() {
+            self.retract_local_clauses(&key, predicate_info.is_dynamic);
         }
 
-        result
-    }
-
-    pub(crate)
-    fn gather_items(
-        &mut self,
-        wam: &mut Machine,
-        src: &mut ParsingStream<Stream>,
-        indices: &mut IndexStore,
-    ) -> Result<GatherResult, SessionError> {
-        let flags = wam.machine_flags();
-        let atom_tbl = indices.atom_tbl.clone();
-        let mut worker = TopLevelBatchWorker::new(src, atom_tbl.clone(), flags, wam);
-
-        let mut toplevel_results = vec![];
-        let mut toplevel_indices = default_index_store!(atom_tbl.clone());
-
-        let mut top_level_term_dirs = TermDirQuantum::new();
-
-        while let Some(decl) = worker.consume(indices)? {
-            if decl.is_module_decl() {
-                toplevel_indices.copy_and_swap(indices);
-                mem::swap(&mut worker.results, &mut toplevel_results);
-                worker.in_module = true;
-
-                self.process_and_commit_decl(decl, &mut worker, indices, flags)?;
-
-                if let Some(ref module) = &self.module {
-                    worker.term_stream.set_atom_tbl(module.atom_tbl.clone());
-
-                    top_level_term_dirs = mem::replace(
-                        &mut worker.term_dirs,
-                        TermDirQuantum::new(),
-                    );
-                }
-            } else if decl.is_end_of_file() {
-                break;
+        let do_incremental_compile =
+            if self.load_state.compilation_target == self.predicates.compilation_target {
+                predicate_info.compile_incrementally()
             } else {
-                self.process_and_commit_decl(decl, &mut worker, indices, flags)?;
+                local_predicate_info.is_multifile && predicate_info.compile_incrementally()
+            };
+
+        let predicates_len = self.predicates.len();
+        let non_counted_bt = self.non_counted_bt_preds.contains(&key);
+
+        if do_incremental_compile {
+            for term in self.predicates.predicates.drain(0 ..) {
+                self.load_state.incremental_compile_clause(
+                    key.clone(),
+                    term,
+                    self.predicates.compilation_target.clone(),
+                    non_counted_bt,
+                    AppendOrPrepend::Append,
+                )?;
             }
-        }
-
-        let addition_results = worker.term_stream.rollback_expansion_code()?;
-
-        let module_term_dirs = if self.module.is_some() {
-            worker.term_dirs
         } else {
-            top_level_term_dirs = worker.term_dirs;
-            TermDirQuantum::new()
-        };
+            if self.load_state.compilation_target != self.predicates.compilation_target {
+                if !local_predicate_info.is_extensible {
+                    if predicate_info.is_multifile {
+                        println!("Warning: overwriting multifile predicate {}:{}/{} because \
+                                  it was not locally declared multifile.",
+                                 self.predicates.compilation_target, key.0, key.1);
+                    }
 
-        Ok(GatherResult {
-            worker_results: worker.results,
-            dynamic_clause_map: worker.dynamic_clause_map,
-            toplevel_results,
-            toplevel_indices,
-            addition_results,
-            top_level_terms: worker.term_stream.top_level_terms(),
-            top_level_term_dirs,
-            module_term_dirs,
-            in_situ_code_dir: worker.term_stream.wam.indices.take_in_situ_code_dir(),
-            in_situ_code: worker.term_stream.wam.code_repo.take_in_situ_code(),
-            in_situ_module_dir: worker.term_stream.wam.indices.take_in_situ_module_dir(),
-        })
-    }
+                    if let Some(skeleton) = self.load_state
+                        .wam
+                        .indices
+                        .remove_predicate_skeleton(
+                            &self.predicates.compilation_target,
+                            &key,
+                        )
+                    {
+                        if predicate_info.is_dynamic {
+                            let clause_clause_compilation_target =
+                                match &self.predicates.compilation_target {
+                                    CompilationTarget::User => {
+                                        CompilationTarget::Module(clause_name!("builtins"))
+                                    }
+                                    module => {
+                                        module.clone()
+                                    }
+                                };
 
-    fn drop_expansions(&self, code_repo: &mut CodeRepo) {
-        let (te_len, te_queue_len) = self.orig_term_expansion_lens;
-        let (ge_len, ge_queue_len) = self.orig_goal_expansion_lens;
+                            self.load_state.retract_local_clauses_by_locs(
+                                clause_clause_compilation_target,
+                                (clause_name!("$clause"), 2),
+                                (0 .. skeleton.clauses.len()).map(Some).collect(),
+                                false, // the builtin M:'$clause'/2 is never dynamic.
+                            );
 
-        code_repo.truncate_terms((clause_name!("term_expansion"), 2), te_len, te_queue_len);
-        code_repo.truncate_terms((clause_name!("goal_expansion"), 2), ge_len, ge_queue_len);
+                            predicate_info.is_dynamic = false;
+                        }
 
-        discard_result!(code_repo.compile_hook(CompileTimeHook::UserGoalExpansion));
-        discard_result!(code_repo.compile_hook(CompileTimeHook::UserTermExpansion));
-    }
-
-    fn print_error(&self, e: &SessionError) {
-        if let &SessionError::ParserError(ref e) = e {
-            if let Some((line_num, _col_num)) = e.line_and_col_num() {
-                println!("{}:{}: {}", self.listing_src.name(), line_num, e.as_str());
+                        self.load_state.retraction_info.push_record(
+                            RetractionRecord::RemovedSkeleton(
+                                self.predicates.compilation_target.clone(),
+                                key.clone(),
+                                skeleton,
+                            ),
+                        );
+                    }
+                }
             }
+
+            let settings = CodeGenSettings {
+                global_clock_tick: if predicate_info.is_dynamic {
+                    Some(self.load_state.wam.machine_st.global_clock)
+                } else {
+                    None
+                },
+                is_extensible: predicate_info.is_extensible,
+                non_counted_bt,
+            };
+
+            self.load_state.compile(key.clone(), &mut self.predicates, settings)?;
         }
-    }
-}
 
-fn compile_work_impl(
-    compiler: &mut ListingCompiler,
-    wam: &mut Machine,
-    mut indices: IndexStore,
-    mut results: GatherResult,
-) -> Result<(), SessionError> {
-    if let Some(ref mut module) = &mut compiler.module {
-        // compile the module-level goal and term expansions and store
-        // their locations to the module's code_dir.
-        let mut decls = module.take_local_expansions();
+        if predicate_info.is_dynamic {
+            self.load_state.wam.machine_st.global_clock += 1;
 
-        if !decls.is_empty() {
-            append_trivial_goal(&clause_name!("term_expansion"), &mut decls[0].0);
-            append_trivial_goal(&clause_name!("goal_expansion"), &mut decls[1].0);
-
-            results.worker_results.extend(decls.into_iter());
-        }
-    }
-
-    let top_level_term_dir = results.top_level_term_dirs.consolidate();
-    let module_term_dir = results.module_term_dirs.consolidate();
-
-    let mut code = results.in_situ_code;
-
-    let in_situ_code_dir = results.in_situ_code_dir;
-    let in_situ_module_dir = results.in_situ_module_dir;
-
-    compiler.adapt_in_situ_code(
-        results.worker_results,
-        wam,
-        &mut indices.code_dir,
-        &mut indices.module_dir,
-        &mut code,
-        &in_situ_code_dir,
-        &in_situ_module_dir,
-    )?;
-
-    compiler.adapt_in_situ_code(
-        results.toplevel_results,
-        wam,
-        &mut results.toplevel_indices.code_dir,
-        &mut indices.module_dir,
-        &mut code,
-        &in_situ_code_dir,
-        &in_situ_module_dir,
-    )?;
-
-    if let Some(ref mut module) = &mut compiler.module {
-        if !module.is_impromptu_module {
-            module.user_term_expansions = results.addition_results.take_term_expansions();
-            module.user_goal_expansions = results.addition_results.take_goal_expansions();
-        }
-    }
-
-    wam.code_repo.compile_hook(CompileTimeHook::UserTermExpansion)?;
-    wam.code_repo.compile_hook(CompileTimeHook::UserGoalExpansion)?;
-
-    if let Some(mut module) = compiler.module.take() {
-        if module.is_impromptu_module {
-            module.module_decl.exports = indices.code_dir.keys().cloned()
-                .filter(|(name, _)| name.owning_module().as_str() != "builtins")
-                .map(ModuleExport::PredicateKey)
+            let clauses_vec: Vec<_> = self.clause_clauses
+                .drain(0 .. predicates_len)
                 .collect();
 
-            module.module_decl.exports.extend(
-                indices.op_dir.iter()
-                    .map(|((name, _), OpDirValue (shared_op_desc, _))|
-                        ModuleExport::OpDecl(OpDecl(
-                            shared_op_desc.prec(),
-                            shared_op_desc.assoc(),
-                            name.clone(),
-                        ))
-                    )
-            );
+            self.compile_clause_clauses(
+                key,
+                self.predicates.compilation_target.clone(),
+                clauses_vec.into_iter(),
+                AppendOrPrepend::Append,
+            )?;
         }
 
-        let mut clause_code_generator =
-            ClauseCodeGenerator::new(code.len(), module.module_decl.name.clone());
-
-        wam.check_toplevel_code(&results.toplevel_indices)?;
-        clause_code_generator.generate_clause_code(&results.dynamic_clause_map, wam)?;
-
-        if let Some(ref module) = wam.indices.modules.swap_remove(&module.module_decl.name) {
-            wam.indices.remove_module(clause_name!("user"), module);
-        }
-
-        if module.is_impromptu_module {
-            add_module(wam, module, indices, module_term_dir);
-
-            let module = wam.indices.take_module(compiler.listing_src.name()).unwrap();
-
-            wam.indices.use_module(&mut wam.code_repo, wam.machine_st.flags, &module)?;
-            wam.indices.insert_module(module);
-        } else {
-            add_module(wam, module, indices, module_term_dir);
-        }
-
-        add_toplevel(wam, results.toplevel_indices, top_level_term_dir);
-        wam.code_repo.code.extend(code.into_iter());
-
-        clause_code_generator.add_clause_code(wam, results.dynamic_clause_map);
-    } else {
-        add_non_module_code(
-            wam,
-            results.dynamic_clause_map,
-            code,
-            indices,
-            top_level_term_dir,
-        )?;
+        Ok(())
     }
-
-    let init_goal_code = compiler.generate_init_goal_code()?;
-
-    if init_goal_code.len() > 0 {
-	    if !wam.run_init_code(init_goal_code) {
-            println!("Warning: initialization goal for {} failed",
-                     compiler.listing_src.name());
-        }
-    }
-
-    if !compiler.suppress_warnings {
-        issue_singleton_warnings(
-            compiler.listing_src.name(),
-            results.top_level_terms,
-        );
-    }
-
-    Ok(())
-}
-
-fn compile_work(
-    compiler: &mut ListingCompiler,
-    wam: &mut Machine,
-    src: Stream,
-    mut indices: IndexStore,
-) -> EvalSession {
-    let mut stream = try_eval_session!(parsing_stream(src));
-    let src = &mut stream;
-    let results = try_eval_session!(compiler.gather_items(wam, src, &mut indices));
-
-    try_eval_session!(compile_work_impl(compiler, wam, indices, results));
-
-    EvalSession::EntrySuccess
-}
-
-/* This is a truncated version of compile_user_module, used for
-compiling code composing special forms, ie. the code that calls
-M:verify_attributes on attributed variables. */
-pub fn compile_special_form(
-    wam: &mut Machine,
-    src: Stream,
-    listing_src: ListingSource,
-) -> Result<usize, SessionError> {
-    let mut indices = default_index_store!(wam.indices.atom_tbl.clone());
-    setup_indices(wam, clause_name!("builtins"), &mut indices)?;
-
-    let mut src = parsing_stream(src)?;
-    let mut compiler = ListingCompiler::new(&wam.code_repo, true, listing_src);
-    let mut results = compiler.gather_items(wam, &mut src, &mut indices)?;
-
-    compiler.adapt_in_situ_code(
-        results.worker_results,
-        wam,
-        &mut indices.code_dir,
-        &mut indices.module_dir,
-        &mut results.in_situ_code,
-        &results.in_situ_code_dir,
-        &results.in_situ_module_dir,
-    )?;
-
-    let p = wam.code_repo.code.len();
-    let top_level_term_dir = results.top_level_term_dirs.consolidate();
-
-    add_toplevel(wam, indices, top_level_term_dir);
-
-    wam.code_repo.code.extend(results.in_situ_code.into_iter());
-
-    Ok(p)
-}
-
-#[inline]
-pub fn compile_listing(
-    wam: &mut Machine,
-    src: Stream,
-    indices: IndexStore,
-    suppress_warnings: bool,
-    listing_src: ListingSource,
-) -> EvalSession {
-    let mut compiler = ListingCompiler::new(&wam.code_repo, suppress_warnings, listing_src);
-
-    match compile_work(&mut compiler, wam, src, indices) {
-        EvalSession::Error(e) => {
-            compiler.drop_expansions(&mut wam.code_repo);
-            compiler.print_error(&e);
-
-            EvalSession::Error(e)
-        }
-        result => result,
-    }
-}
-
-pub(super) fn setup_indices(
-    wam: &mut Machine,
-    module: ClauseName,
-    indices: &mut IndexStore,
-) -> Result<(), SessionError> {
-    if let Some(module) = wam.indices.take_module(module.clone()) {
-        let flags = wam.machine_flags();
-        let result = indices.use_module(&mut wam.code_repo, flags, &module);
-
-        wam.indices.insert_module(module);
-        result
-    } else {
-        let err = ExistenceError::ModuleSource(ModuleSource::Library(
-            module
-        ));
-
-        Err(SessionError::ExistenceError(err))
-    }
-}
-
-pub fn compile_user_module(
-    wam: &mut Machine,
-    src: Stream,
-    suppress_warnings: bool,
-    listing_src: ListingSource,
-) -> EvalSession {
-    let mut indices = default_index_store!(wam.indices.atom_tbl.clone());
-    try_eval_session!(setup_indices(wam, clause_name!("builtins"), &mut indices));
-    compile_listing(wam, src, indices, suppress_warnings, listing_src)
 }

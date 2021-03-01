@@ -59,11 +59,10 @@ Extend Scryer Prolog to include the following, among other features:
 - [x] clp(B) and clp(ℤ) as builtin libraries.
 - [x] Streams and predicates for stream control.
   - [x] A simple sockets library representing TCP connections as streams.  
-- [ ] Incremental compilation and loading process, newly written,
-      primarily in Prolog. (_in progress_, see
-      [#775](https://github.com/mthom/scryer-prolog/issues/775))
-- [ ] A compacting garbage collector satisfying the five
-      properties of "Precise Garbage Collection in Prolog."
+- [x] Incremental compilation and loading process, newly written,
+      primarily in Prolog.
+- [ ] A compacting garbage collector satisfying the five properties of
+      "Precise Garbage Collection in Prolog." (_in progress_)
 - [ ] Mode declarations.
 
 ## Phase 3
@@ -418,6 +417,8 @@ The modules that ship with Scryer&nbsp;Prolog are also called
   file, reading lazily only as much as is needed. Due to the compact
   internal string representation, also extremely large files can be
   efficiently processed with Scryer&nbsp;Prolog in this way.
+* [`lambda`](src/lib/lambda.pl)
+  Lambda expressions to simplify higher order programming.
 * [`charsio`](src/lib/charsio.pl) Various predicates that are useful
   for parsing and reasoning about characters, notably `char_type/2` to
   classify characters according to their type, and conversion
@@ -490,6 +491,7 @@ The modules that ship with Scryer&nbsp;Prolog are also called
   public key signatures and signature verification with&nbsp;Ed25519,
   ECDH key&nbsp;exchange over Curve25519 (X25519), authenticated symmetric
   encryption with ChaCha20-Poly1305, and reasoning about elliptic curves.
+* [`uuid`](src/lib/uuid.pl) UUIDv4 generation and hex representation
 
 To use predicates provided by the `lists` library, write:
 

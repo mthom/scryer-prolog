@@ -3,47 +3,53 @@
 
 %% ?- use_module(library(iso_ext)).
 
-:- module(iso_ext, [bb_b_put/2, bb_get/2, bb_put/2, call_cleanup/2,
-                    call_with_inference_limit/3, forall/2,
-                    partial_string/1, partial_string/3,
-                    partial_string_tail/2, setup_call_cleanup/3,
-                    call_nth/2, variant/2]).
+:- module(iso_ext, [bb_b_put/2,
+                    bb_get/2,
+                    bb_put/2,
+                    call_cleanup/2,
+                    call_with_inference_limit/3,
+                    forall/2,
+                    partial_string/1,
+                    partial_string/3,
+                    partial_string_tail/2,
+                    setup_call_cleanup/3,
+                    call_nth/2,
+                    variant/2,
+                    copy_term_nat/2]).
 
-:- use_module(library(error), [can_be/2,domain_error/3]).
+:- use_module(library(error), [can_be/2, domain_error/3, type_error/3]).
+
+
+:- meta_predicate call_cleanup(0, 0).
+
+:- meta_predicate setup_call_cleanup(0, 0, 0).
+
 
 forall(Generate, Test) :-
     \+ (Generate, \+ Test).
 
 %% (non-)backtrackable global variables.
 
-bb_put(Key, Value) :- atom(Key), !, '$store_global_var'(Key, Value).
-bb_put(Key, _) :- throw(error(type_error(atom, Key), bb_put/2)).
+bb_put(Key, Value) :-
+    (  atom(Key) ->
+       '$store_global_var'(Key, Value)
+    ;  type_error(atom, Key, bb_put/2)
+    ).
 
 %% backtrackable global variables.
 
-bb_b_put(Key, NewValue) :-
-    (  '$bb_get_with_offset'(Key, OldValue, OldOffset) ->
-       call_cleanup((store_global_var_with_offset(Key, NewValue) ; false),
-                    reset_global_var_at_offset(Key, OldValue, OldOffset))
-    ;  call_cleanup((store_global_var_with_offset(Key, NewValue) ; false),
-                    reset_global_var_at_key(Key))
+bb_b_put(Key, Value) :-
+    (  atom(Key) ->
+       '$store_backtrackable_global_var'(Key, Value)
+    ;  type_error(atom, Key, bb_b_put/2)
     ).
 
-store_global_var_with_offset(Key, Value) :- '$store_global_var_with_offset'(Key, Value).
+bb_get(Key, Value) :-
+    (  atom(Key) ->
+       '$fetch_global_var'(Key, Value)
+    ;  type_error(atom, Key, bb_get/2)
+    ).
 
-store_global_var(Key, Value) :- '$store_global_var'(Key, Value).
-
-reset_global_var_at_key(Key) :- '$reset_global_var_at_key'(Key).
-
-reset_global_var_at_offset(Key, Value, Offset) :- '$reset_global_var_at_offset'(Key, Value, Offset).
-
-'$bb_get_with_offset'(Key, OldValue, Offset) :-
-    atom(Key), !, '$fetch_global_var_with_offset'(Key, OldValue, Offset).
-'$bb_get_with_offset'(Key, _, _) :-
-    throw(error(type_error(atom, Key), bb_b_put/2)).
-
-bb_get(Key, Value) :- atom(Key), !, '$fetch_global_var'(Key, Value).
-bb_get(Key, _) :- throw(error(type_error(atom, Key), bb_get/2)).
 
 call_cleanup(G, C) :- setup_call_cleanup(true, G, C).
 
@@ -103,10 +109,10 @@ run_cleaners_without_handling(Cp) :-
 % call_with_inference_limit
 
 :- non_counted_backtracking end_block/4.
-end_block(_, Bb, NBb, L) :-
+end_block(_, Bb, NBb, _L) :-
     '$clean_up_block'(NBb),
     '$reset_block'(Bb).
-end_block(B, Bb, NBb, L) :-
+end_block(B, _Bb, NBb, L) :-
     '$install_inference_counter'(B, L, _),
     '$reset_block'(NBb),
     '$fail'.
@@ -116,6 +122,8 @@ handle_ile(B, inference_limit_exceeded(B), inference_limit_exceeded) :- !.
 handle_ile(B, E, _) :-
     '$remove_call_policy_check'(B),
     '$call_with_default_policy'(throw(E)).
+
+:- meta_predicate call_with_inference_limit(0, ?, ?).
 
 call_with_inference_limit(G, L, R) :-
     '$get_current_block'(Bb),
@@ -195,3 +203,7 @@ call_nth_nesting(ID) :-
     ),
     asserta(i_call_nth_nesting(ID, 0)),
     asserta(i_call_nth_counter(ID)).
+
+
+copy_term_nat(Source, Dest) :-
+    '$copy_term_without_attr_vars'(Source, Dest).

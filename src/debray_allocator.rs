@@ -1,6 +1,7 @@
-use crate::indexmap::IndexMap;
+use indexmap::IndexMap;
 
-use crate::prolog_parser::ast::*;
+use prolog_parser::ast::*;
+use prolog_parser::temp_v;
 
 use crate::allocator::*;
 use crate::fixtures::*;
@@ -13,7 +14,7 @@ use std::collections::BTreeSet;
 use std::rc::Rc;
 
 #[derive(Debug)]
-pub struct DebrayAllocator {
+pub(crate) struct DebrayAllocator {
     bindings: IndexMap<Rc<Var>, VarData>,
     arg_c: usize,
     temp_lb: usize,
@@ -293,9 +294,7 @@ impl<'a> Allocator<'a> for DebrayAllocator {
 
                 (pr, true)
             }
-            r => {
-                (r, false)
-            }
+            r => (r, false),
         };
 
         self.mark_reserved_var(var, lvl, cell, term_loc, target, r, is_new_var);

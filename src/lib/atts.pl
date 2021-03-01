@@ -1,4 +1,5 @@
-:- module(atts, [op(1199, fx, attribute), call_residue_vars/2,
+:- module(atts, [op(1199, fx, attribute),
+                 call_residue_vars/2,
                  term_attributed_variables/2,
 		         '$absent_attr'/2, '$copy_attr_list'/2, '$get_attr'/2,
 		         '$put_attr'/2, '$absent_from_list'/2,
@@ -19,9 +20,7 @@
     ).
 
 '$default_attr_list'([PG | PGs], Module, AttrVar) -->
-    (  { '$module_of'(Module, PG) } -> [Module:put_atts(AttrVar, PG)]
-    ;  { true }
-    ),
+    [Module:put_atts(AttrVar, PG)],
     '$default_attr_list'(PGs, Module, AttrVar).
 '$default_attr_list'([], _, _) --> [].
 
@@ -66,7 +65,8 @@
 
 '$del_attr_step'(Ls1, V, Attr) :-
     (  nonvar(Ls1) -> Ls1 = [_ | Ls2], '$del_attr_buried'(Ls1, Ls2, V, Attr)
-    ;  true ).
+    ;  true
+    ).
 
 %% assumptions: Ls0 is a list, Ls1 is its tail;
 %%              the head of Ls0 can be ignored.
@@ -75,8 +75,8 @@
     ;  Ls1 = [Att | Ls2] ->
        (  Att \= Attr -> '$del_attr_buried'(Ls1, Ls2, V, Attr)
        ;  '$enqueue_attr_var'(V),
-	  '$del_attr_non_head'(Ls0), %% set tail of Ls0 = tail of Ls1. can be undone by backtracking.
-	  '$del_attr_step'(Ls1, V, Attr)
+	      '$del_attr_non_head'(Ls0), %% set tail of Ls0 = tail of Ls1. can be undone by backtracking.
+	      '$del_attr_step'(Ls1, V, Attr)
        )
     ).
 
@@ -88,66 +88,66 @@ user:term_expansion(Term0, Terms) :-
     nonvar(Term0),
     Term0 = (:- attribute Atts),
     nonvar(Atts),
-    phrase(expand_terms(Atts), Terms).
+    loader:prolog_load_context(module, Module),
+    phrase(expand_terms(Atts, Module), Terms).
 
-expand_terms(Atts) -->
+expand_terms(Atts, Module) -->
     put_attrs_var_check,
-    put_attrs(Atts),
+    put_attrs(Atts, Module),
     get_attrs_var_check,
-    get_attrs(Atts).
+    get_attrs(Atts, Module).
 
 put_attrs_var_check -->
-    { numbervars([Var, Attr], 0, _) },
     [(put_atts(Var, Attr) :- nonvar(Var), throw(error(type_error(variable, Var), put_atts/2))),
      (put_atts(Var, Attr) :- var(Attr), throw(error(instantiation_error, put_atts/2)))].
 
 get_attrs_var_check -->
-    { numbervars([Var, Ls, Attr], 0, _) },
     [(get_atts(Var, Attr) :- nonvar(Var), throw(error(type_error(variable, Var), get_atts/2))),
      (get_atts(Var, Attr) :- var(Attr), !, '$get_attr_list'(Var, Ls), nonvar(Ls),
 			     '$copy_attr_list'(Ls, Attr))].
 
-put_attrs(Name/Arity) -->
-    put_attr(Name, Arity),
-    { numbervars([Var, Attr], 0, _) },
-    [(put_atts(Var, Attr) :- lists:maplist(put_atts(Var), Attr), !)].
-put_attrs((Name/Arity, Atts)) -->
+put_attrs(Name/Arity, Module) -->
+    put_attr(Name, Arity, Module),
+    [(put_atts(Var, Attr) :- lists:maplist(Module:put_atts(Var), Attr), !)].
+put_attrs((Name/Arity, Atts), Module) -->
     { nonvar(Atts) },
-    put_attr(Name, Arity),
-    put_attrs(Atts).
+    put_attr(Name, Arity, Module),
+    put_attrs(Atts, Module).
 
-get_attrs(Name/Arity) -->
-    get_attr(Name, Arity).
-get_attrs((Name/Arity, Atts)) -->
+get_attrs(Name/Arity, Module) -->
+    get_attr(Name, Arity, Module).
+get_attrs((Name/Arity, Atts), Module) -->
     { nonvar(Atts) },
-    get_attr(Name, Arity),
-    get_attrs(Atts).
+    get_attr(Name, Arity, Module),
+    get_attrs(Atts, Module).
 
-put_attr(Name, Arity) -->
-    { functor(Attr, Name, Arity),
-      numbervars(Attr, 0, Arity),
-      V = '$VAR'(Arity) },
-    [(put_atts(V, +Attr) :- !, functor(Attr, Head, Arity),
-			    functor(AttrForm, Head, Arity),
-			    '$get_attr_list'(V, Ls),
-			    '$del_attr'(Ls, V, AttrForm),
-			    '$put_attr'(V, Attr)),
-     (put_atts(V,  Attr) :- !, functor(Attr, Head, Arity),
-			    functor(AttrForm, Head, Arity),
-			    '$get_attr_list'(V, Ls),
-			    '$del_attr'(Ls, V, AttrForm),
-			    '$put_attr'(V, Attr)),
-     (put_atts(V, -Attr) :- !, functor(Attr, _, _),
-			    '$get_attr_list'(V, Ls),
-			    '$del_attr'(Ls, V, Attr))].
+put_attr(Name, Arity, Module) -->
+    { functor(Attr, Name, Arity) },
+    [(put_atts(V, +Attr) :-
+          !,
+          functor(Attr, Head, Arity),
+		  functor(AttrForm, Head, Arity),
+		  '$get_attr_list'(V, Ls),
+		  '$del_attr'(Ls, V, Module:AttrForm),
+		  '$put_attr'(V, Module:Attr)),
+     (put_atts(V,  Attr) :-
+          !,
+          functor(Attr, Head, Arity),
+		  functor(AttrForm, Head, Arity),
+		  '$get_attr_list'(V, Ls),
+		  '$del_attr'(Ls, V, Module:AttrForm),
+		  '$put_attr'(V, Module:Attr)),
+     (put_atts(V, -Attr) :-
+          !,
+          functor(Attr, _, _),
+		  '$get_attr_list'(V, Ls),
+		  '$del_attr'(Ls, V, Module:Attr))].
 
-get_attr(Name, Arity) -->
-    { functor(Attr, Name, Arity),
-      numbervars(Attr, 0, Arity),
-      V = '$VAR'(Arity) },
-    [(get_atts(V, +Attr) :- !, functor(Attr, _, _), '$get_attr'(V, Attr)),
-     (get_atts(V,  Attr) :- !, functor(Attr, _, _), '$get_attr'(V, Attr)),
-     (get_atts(V, -Attr) :- !, functor(Attr, _, _), '$absent_attr'(V, Attr))].
+get_attr(Name, Arity, Module) -->
+    { functor(Attr, Name, Arity) },
+    [(get_atts(V, +Attr) :- !, functor(Attr, _, _), '$get_attr'(V, Module:Attr)),
+     (get_atts(V,  Attr) :- !, functor(Attr, _, _), '$get_attr'(V, Module:Attr)),
+     (get_atts(V, -Attr) :- !, functor(Attr, _, _), '$absent_attr'(V, Module:Attr))].
 
 user:goal_expansion(Term, M:put_atts(Var, Attr)) :-
     nonvar(Term),
@@ -155,6 +155,8 @@ user:goal_expansion(Term, M:put_atts(Var, Attr)) :-
 user:goal_expansion(Term, M:get_atts(Var, Attr)) :-
     nonvar(Term),
     Term = get_atts(Var, M, Attr).
+
+:- meta_predicate call_residue_vars(0, ?).
 
 call_residue_vars(Goal, Vars) :-
     '$get_attr_var_queue_delim'(B),

@@ -1,9 +1,12 @@
-use crate::prolog_parser::ast::*;
+use prolog_parser::ast::*;
+use prolog_parser::{clause_name, temp_v};
 
-use crate::forms::{ModuleSource, Number, PredicateKey};
+use crate::forms::{ModuleSource, Number}; //, PredicateKey};
 use crate::machine::heap::*;
+use crate::machine::loader::CompilationTarget;
 use crate::machine::machine_indices::*;
 use crate::machine::machine_state::*;
+use crate::machine::PredicateKey;
 use crate::rug::Integer;
 
 use std::rc::Rc;
@@ -23,74 +26,59 @@ pub(crate) struct MachineError {
     from: ErrorProvenance,
 }
 
-pub(crate)
-trait TypeError {
+pub(crate) trait TypeError {
     fn type_error(self, h: usize, valid_type: ValidType) -> MachineError;
 }
 
 impl TypeError for Addr {
     fn type_error(self, _: usize, valid_type: ValidType) -> MachineError {
-        let stub = functor!(
-            "type_error",
-            [atom(valid_type.as_str()), addr(self)]
-        );
+        let stub = functor!("type_error", [atom(valid_type.as_str()), addr(self)]);
 
         MachineError {
             stub,
             location: None,
-            from: ErrorProvenance::Received
+            from: ErrorProvenance::Received,
         }
     }
 }
 
 impl TypeError for HeapCellValue {
     fn type_error(self, _: usize, valid_type: ValidType) -> MachineError {
-        let stub = functor!(
-            "type_error",
-            [atom(valid_type.as_str()), value(self)]
-        );
+        let stub = functor!("type_error", [atom(valid_type.as_str()), value(self)]);
 
         MachineError {
             stub,
             location: None,
-            from: ErrorProvenance::Received
+            from: ErrorProvenance::Received,
         }
     }
 }
 
 impl TypeError for MachineStub {
     fn type_error(self, h: usize, valid_type: ValidType) -> MachineError {
-        let stub = functor!(
-            "type_error",
-            [atom(valid_type.as_str()), aux(h, 0)],
-            [self]
-        );
+        let stub = functor!("type_error", [atom(valid_type.as_str()), aux(h, 0)], [self]);
 
         MachineError {
             stub,
             location: None,
-            from: ErrorProvenance::Constructed
+            from: ErrorProvenance::Constructed,
         }
     }
 }
 
 impl TypeError for Number {
     fn type_error(self, _h: usize, valid_type: ValidType) -> MachineError {
-        let stub = functor!(
-            "type_error",
-            [atom(valid_type.as_str()), number(self)]
-        );
+        let stub = functor!("type_error", [atom(valid_type.as_str()), number(self)]);
 
         MachineError {
             stub,
             location: None,
-            from: ErrorProvenance::Received
+            from: ErrorProvenance::Received,
         }
     }
 }
 
-pub(crate)
-trait PermissionError {
+pub(crate) trait PermissionError {
     fn permission_error(self, h: usize, index_str: &'static str, perm: Permission) -> MachineError;
 }
 
@@ -104,7 +92,7 @@ impl PermissionError for Addr {
         MachineError {
             stub,
             location: None,
-            from: ErrorProvenance::Received
+            from: ErrorProvenance::Received,
         }
     }
 }
@@ -120,22 +108,18 @@ impl PermissionError for MachineStub {
         MachineError {
             stub,
             location: None,
-            from: ErrorProvenance::Constructed
+            from: ErrorProvenance::Constructed,
         }
     }
 }
 
-pub(super)
-trait DomainError {
+pub(super) trait DomainError {
     fn domain_error(self, error: DomainErrorType) -> MachineError;
 }
 
 impl DomainError for Addr {
     fn domain_error(self, error: DomainErrorType) -> MachineError {
-        let stub = functor!(
-            "domain_error",
-            [atom(error.as_str()), addr(self)]
-        );
+        let stub = functor!("domain_error", [atom(error.as_str()), addr(self)]);
 
         MachineError {
             stub,
@@ -147,10 +131,7 @@ impl DomainError for Addr {
 
 impl DomainError for Number {
     fn domain_error(self, error: DomainErrorType) -> MachineError {
-        let stub = functor!(
-            "domain_error",
-            [atom(error.as_str()), number(self)]
-        );
+        let stub = functor!("domain_error", [atom(error.as_str()), number(self)]);
 
         MachineError {
             stub,
@@ -161,8 +142,7 @@ impl DomainError for Number {
 }
 
 impl MachineError {
-    pub(super)
-    fn functor_stub(name: ClauseName, arity: usize) -> MachineStub {
+    pub(super) fn functor_stub(name: ClauseName, arity: usize) -> MachineStub {
         functor!(
             "/",
             SharedOpDesc::new(400, YFX),
@@ -171,8 +151,7 @@ impl MachineError {
     }
 
     #[inline]
-    pub(super)
-    fn interrupt_error() -> Self {
+    pub(super) fn interrupt_error() -> Self {
         let stub = functor!("$interrupt_thrown");
 
         MachineError {
@@ -182,8 +161,7 @@ impl MachineError {
         }
     }
 
-    pub(super)
-    fn evaluation_error(eval_error: EvalError) -> Self {
+    pub(super) fn evaluation_error(eval_error: EvalError) -> Self {
         let stub = functor!("evaluation_error", [atom(eval_error.as_str())]);
 
         MachineError {
@@ -193,13 +171,11 @@ impl MachineError {
         }
     }
 
-    pub(super)
-    fn type_error<T: TypeError>(h: usize, valid_type: ValidType, culprit: T) -> Self {
+    pub(super) fn type_error<T: TypeError>(h: usize, valid_type: ValidType, culprit: T) -> Self {
         culprit.type_error(h, valid_type)
     }
 
-    pub(super)
-    fn module_resolution_error(
+    pub(super) fn module_resolution_error(
         h: usize,
         mod_name: ClauseName,
         name: ClauseName,
@@ -218,11 +194,7 @@ impl MachineError {
             [res_stub]
         );
 
-        let stub = functor!(
-            "evaluation_error",
-            [aux(h, 0)],
-            [ind_stub]
-        );
+        let stub = functor!("evaluation_error", [aux(h, 0)], [ind_stub]);
 
         MachineError {
             stub,
@@ -231,14 +203,10 @@ impl MachineError {
         }
     }
 
-    pub(super)
-    fn existence_error(h: usize, err: ExistenceError) -> Self {
+    pub(super) fn existence_error(h: usize, err: ExistenceError) -> Self {
         match err {
             ExistenceError::Module(name) => {
-                let stub = functor!(
-                    "existence_error",
-                    [atom("source_sink"), clause_name(name)]
-                );
+                let stub = functor!("existence_error", [atom("source_sink"), clause_name(name)]);
 
                 MachineError {
                     stub,
@@ -253,11 +221,7 @@ impl MachineError {
                     [clause_name(name), integer(arity)]
                 );
 
-                let stub = functor!(
-                    "existence_error",
-                    [atom("procedure"), aux(h, 0)],
-                    [culprit]
-                );
+                let stub = functor!("existence_error", [atom("procedure"), aux(h, 0)], [culprit]);
 
                 MachineError {
                     stub,
@@ -281,10 +245,7 @@ impl MachineError {
                 }
             }
             ExistenceError::SourceSink(culprit) => {
-                let stub = functor!(
-                    "existence_error",
-                    [atom("source_sink"), addr(culprit)]
-                );
+                let stub = functor!("existence_error", [atom("source_sink"), addr(culprit)]);
 
                 MachineError {
                     stub,
@@ -293,10 +254,7 @@ impl MachineError {
                 }
             }
             ExistenceError::Stream(culprit) => {
-                let stub = functor!(
-                    "existence_error",
-                    [atom("stream"), addr(culprit)]
-                );
+                let stub = functor!("existence_error", [atom("stream"), addr(culprit)]);
 
                 MachineError {
                     stub,
@@ -307,25 +265,18 @@ impl MachineError {
         }
     }
 
-    pub(super)
-    fn permission_error<T: PermissionError>(
+    pub(super) fn permission_error<T: PermissionError>(
         h: usize,
         err: Permission,
         index_str: &'static str,
         culprit: T,
     ) -> Self {
-        culprit.permission_error(
-            h,
-            index_str,
-            err,
-        )
+        culprit.permission_error(h, index_str, err)
     }
 
     fn arithmetic_error(h: usize, err: ArithmeticError) -> Self {
         match err {
-            ArithmeticError::UninstantiatedVar => {
-                Self::instantiation_error()
-            }
+            ArithmeticError::UninstantiatedVar => Self::instantiation_error(),
             ArithmeticError::NonEvaluableFunctor(name, arity) => {
                 let culprit = functor!(
                     "/",
@@ -339,13 +290,11 @@ impl MachineError {
     }
 
     #[inline]
-    pub(super)
-    fn domain_error<T: DomainError>(error: DomainErrorType, culprit: T) -> Self {
+    pub(super) fn domain_error<T: DomainError>(error: DomainErrorType, culprit: T) -> Self {
         culprit.domain_error(error)
     }
 
-    pub(super)
-    fn instantiation_error() -> Self {
+    pub(super) fn instantiation_error() -> Self {
         let stub = functor!("instantiation_error");
 
         MachineError {
@@ -355,24 +304,10 @@ impl MachineError {
         }
     }
 
-    pub(super)
-    fn uninstantiation_error(culprit: Addr) -> Self {
-        let stub = functor!(
-            "uninstantiation_error",
-            [addr(culprit)]
-        );
-
-        MachineError {
-            stub,
-            location: None,
-            from: ErrorProvenance::Received,
-        }
-    }
-
-    pub(super)
-    fn session_error(h: usize, err: SessionError) -> Self {
+    pub(super) fn session_error(h: usize, err: SessionError) -> Self {
         match err {
-            SessionError::CannotOverwriteBuiltIn(pred_str) |
+            // SessionError::CannotOverwriteBuiltIn(pred_str) |
+            /*
             SessionError::CannotOverwriteImport(pred_str) => {
                 Self::permission_error(
                     h,
@@ -381,64 +316,69 @@ impl MachineError {
                     functor!(clause_name(pred_str)),
                 )
             }
-            SessionError::ExistenceError(err) => {
-                Self::existence_error(h, err)
-            }
-            SessionError::InvalidFileName(filename) => {
-                Self::existence_error(h, ExistenceError::Module(filename))
-            }
-            SessionError::ModuleDoesNotContainExport(..) => {
-                Self::permission_error(
-                    h,
-                    Permission::Access,
-                    "private_procedure",
-                    functor!("module_does_not_contain_claimed_export"),
-                )
-            }
-            SessionError::NamelessEntry => {
-                Self::permission_error(
-                    h,
-                    Permission::Create,
-                    "static_procedure",
-                    functor!("nameless_procedure")
-                )
-            }
+            */
+            SessionError::ExistenceError(err) => Self::existence_error(h, err),
+            // SessionError::InvalidFileName(filename) => {
+            //     Self::existence_error(h, ExistenceError::Module(filename))
+            // }
+            SessionError::ModuleDoesNotContainExport(..) => Self::permission_error(
+                h,
+                Permission::Access,
+                "private_procedure",
+                functor!("module_does_not_contain_claimed_export"),
+            ),
+            SessionError::ModuleCannotImportSelf(module_name) => Self::permission_error(
+                h,
+                Permission::Modify,
+                "module",
+                functor!("module_cannot_import_self", [clause_name(module_name)]),
+            ),
+            SessionError::NamelessEntry => Self::permission_error(
+                h,
+                Permission::Create,
+                "static_procedure",
+                functor!("nameless_procedure"),
+            ),
             SessionError::OpIsInfixAndPostFix(op) => {
+                Self::permission_error(h, Permission::Create, "operator", functor!(clause_name(op)))
+            }
+            SessionError::CompilationError(err) => Self::syntax_error(h, err),
+            SessionError::PredicateNotMultifileOrDiscontiguous(compilation_target, key) => {
+                let functor_stub = Self::functor_stub(key.0, key.1);
+                let stub = functor!(
+                    ":",
+                    SharedOpDesc::new(600, XFY),
+                    [clause_name(compilation_target.module_name()), aux(h + 4, 0)],
+                    [functor_stub]
+                );
+
                 Self::permission_error(
                     h,
-                    Permission::Create,
-                    "operator",
-                    functor!(clause_name(op)),
+                    Permission::Modify,
+                    "not_declared_multifile_or_discontiguous",
+                    stub,
                 )
             }
-            SessionError::ParserError(err) => {
-                Self::syntax_error(h, err)
-            }
-            SessionError::QueryCannotBeDefinedAsFact => {
-                Self::permission_error(
-                    h,
-                    Permission::Create,
-                    "static_procedure",
-                    functor!("query_cannot_be_defined_as_fact")
-                )
-            }
+            SessionError::QueryCannotBeDefinedAsFact => Self::permission_error(
+                h,
+                Permission::Create,
+                "static_procedure",
+                functor!("query_cannot_be_defined_as_fact"),
+            ),
         }
     }
 
-    pub(super)
-    fn syntax_error(h: usize, err: ParserError) -> Self {
-        if let ParserError::Arithmetic(err) = err {
+    pub(super) fn syntax_error<E: Into<CompilationError>>(h: usize, err: E) -> Self {
+        let err = err.into();
+
+        if let CompilationError::Arithmetic(err) = err {
             return Self::arithmetic_error(h, err);
         }
 
         let location = err.line_and_col_num();
-        let stub = functor!(err.as_str());
+        let stub = err.as_functor(h);
 
-        let stub = functor!(
-            "syntax_error",
-            [aux(h, 0)],
-            [stub]
-        );
+        let stub = functor!("syntax_error", [aux(h, 0)], [stub]);
 
         MachineError {
             stub,
@@ -447,8 +387,7 @@ impl MachineError {
         }
     }
 
-    pub(super)
-    fn representation_error(flag: RepFlag) -> Self {
+    pub(super) fn representation_error(flag: RepFlag) -> Self {
         let stub = functor!("representation_error", [atom(flag.as_str())]);
 
         MachineError {
@@ -475,8 +414,85 @@ impl MachineError {
     }
 }
 
+#[derive(Debug)]
+pub(crate) enum CompilationError {
+    Arithmetic(ArithmeticError),
+    ParserError(ParserError),
+    // BadPendingByte,
+    CannotParseCyclicTerm,
+    // ExpandedTermsListNotAList,
+    ExpectedRel,
+    // ExpectedTopLevelTerm,
+    InadmissibleFact,
+    InadmissibleQueryTerm,
+    InconsistentEntry,
+    // InvalidDoubleQuotesDecl,
+    // InvalidHook,
+    InvalidMetaPredicateDecl,
+    InvalidModuleDecl,
+    InvalidModuleExport,
+    InvalidRuleHead,
+    InvalidUseModuleDecl,
+    InvalidModuleResolution(ClauseName),
+    UnreadableTerm,
+}
+
+impl From<ArithmeticError> for CompilationError {
+    #[inline]
+    fn from(err: ArithmeticError) -> CompilationError {
+        CompilationError::Arithmetic(err)
+    }
+}
+
+impl From<ParserError> for CompilationError {
+    #[inline]
+    fn from(err: ParserError) -> CompilationError {
+        CompilationError::ParserError(err)
+    }
+}
+
+impl CompilationError {
+    pub(crate) fn line_and_col_num(&self) -> Option<(usize, usize)> {
+        match self {
+            &CompilationError::ParserError(ref err) => err.line_and_col_num(),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn as_functor(&self, _h: usize) -> MachineStub {
+        match self {
+            &CompilationError::Arithmetic(..) => functor!("arithmetic_error"),
+            // &CompilationError::BadPendingByte =>
+            //     functor!("bad_pending_byte"),
+            &CompilationError::CannotParseCyclicTerm => functor!("cannot_parse_cyclic_term"),
+            // &CompilationError::ExpandedTermsListNotAList =>
+            //     functor!("expanded_terms_list_is_not_a_list"),
+            &CompilationError::ExpectedRel => functor!("expected_relation"),
+            // &CompilationError::ExpectedTopLevelTerm =>
+            //     functor!("expected_atom_or_cons_or_clause"),
+            &CompilationError::InadmissibleFact => functor!("inadmissible_fact"),
+            &CompilationError::InadmissibleQueryTerm => functor!("inadmissible_query_term"),
+            &CompilationError::InconsistentEntry => functor!("inconsistent_entry"),
+            // &CompilationError::InvalidDoubleQuotesDecl =>
+            //     functor!("invalid_double_quotes_declaration"),
+            // &CompilationError::InvalidHook =>
+            //     functor!("invalid_hook"),
+            &CompilationError::InvalidMetaPredicateDecl => functor!("invalid_meta_predicate_decl"),
+            &CompilationError::InvalidModuleDecl => functor!("invalid_module_declaration"),
+            &CompilationError::InvalidModuleExport => functor!("invalid_module_export"),
+            &CompilationError::InvalidModuleResolution(ref module_name) => {
+                functor!("no_such_module", [clause_name(module_name.clone())])
+            }
+            &CompilationError::InvalidRuleHead => functor!("invalid_head_of_rule"),
+            &CompilationError::InvalidUseModuleDecl => functor!("invalid_use_module_declaration"),
+            &CompilationError::ParserError(ref err) => functor!(err.as_str()),
+            &CompilationError::UnreadableTerm => functor!("unreadable_term"),
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
-pub enum Permission {
+pub(crate) enum Permission {
     Access,
     Create,
     InputStream,
@@ -488,7 +504,7 @@ pub enum Permission {
 
 impl Permission {
     #[inline]
-    pub fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             Permission::Access => "access",
             Permission::Create => "create",
@@ -503,7 +519,7 @@ impl Permission {
 
 // from 7.12.2 b) of 13211-1:1995
 #[derive(Debug, Clone, Copy)]
-pub enum ValidType {
+pub(crate) enum ValidType {
     Atom,
     Atomic,
     //    Boolean,
@@ -525,7 +541,7 @@ pub enum ValidType {
 }
 
 impl ValidType {
-    pub fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             ValidType::Atom => "atom",
             ValidType::Atomic => "atomic",
@@ -550,7 +566,7 @@ impl ValidType {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub enum DomainErrorType {
+pub(crate) enum DomainErrorType {
     IOMode,
     NotLessThanZero,
     Order,
@@ -560,7 +576,7 @@ pub enum DomainErrorType {
 }
 
 impl DomainErrorType {
-    pub fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             DomainErrorType::IOMode => "io_mode",
             DomainErrorType::NotLessThanZero => "not_less_than_zero",
@@ -574,22 +590,24 @@ impl DomainErrorType {
 
 // from 7.12.2 f) of 13211-1:1995
 #[derive(Debug, Clone, Copy)]
-pub enum RepFlag {
+pub(crate) enum RepFlag {
     Character,
     CharacterCode,
     InCharacterCode,
     MaxArity,
     //    MaxInteger,
-    //    MinInteger
+    //    MinInteger,
+    Term,
 }
 
 impl RepFlag {
-    pub fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             RepFlag::Character => "character",
             RepFlag::CharacterCode => "character_code",
             RepFlag::InCharacterCode => "in_character_code",
             RepFlag::MaxArity => "max_arity",
+            RepFlag::Term => "term",
             //            RepFlag::MaxInteger => "max_integer",
             //            RepFlag::MinInteger => "min_integer"
         }
@@ -598,7 +616,7 @@ impl RepFlag {
 
 // from 7.12.2 g) of 13211-1:1995
 #[derive(Debug, Clone, Copy)]
-pub enum EvalError {
+pub(crate) enum EvalError {
     FloatOverflow,
     Undefined,
     //    Underflow,
@@ -606,7 +624,7 @@ pub enum EvalError {
 }
 
 impl EvalError {
-    pub fn as_str(self) -> &'static str {
+    pub(crate) fn as_str(self) -> &'static str {
         match self {
             EvalError::FloatOverflow => "float_overflow",
             EvalError::Undefined => "undefined",
@@ -621,16 +639,15 @@ impl EvalError {
 pub(super) enum CycleSearchResult {
     EmptyList,
     NotList,
-    PartialList(usize, Ref),           // the list length (up to max), and an offset into the heap.
-    ProperList(usize),                 // the list length.
+    PartialList(usize, Ref), // the list length (up to max), and an offset into the heap.
+    ProperList(usize),       // the list length.
     PStrLocation(usize, usize, usize), // the list length (up to max), the heap offset, byte offset into the string.
     UntouchedList(usize),              // the address of an uniterated Addr::Lis(address).
 }
 
 impl MachineState {
     // see 8.4.3 of Draft Technical Corrigendum 2.
-    pub(super)
-    fn check_sort_errors(&self) -> CallResult {
+    pub(super) fn check_sort_errors(&self) -> CallResult {
         let stub = MachineError::functor_stub(clause_name!("sort"), 2);
         let list = self.store(self.deref(self[temp_v!(1)].clone()));
         let sorted = self.store(self.deref(self[temp_v!(2)].clone()));
@@ -640,7 +657,9 @@ impl MachineState {
                 return Err(self.error_form(MachineError::instantiation_error(), stub))
             }
             CycleSearchResult::NotList => {
-                return Err(self.error_form(MachineError::type_error(0, ValidType::List, list), stub))
+                return Err(
+                    self.error_form(MachineError::type_error(0, ValidType::List, list), stub)
+                )
             }
             _ => {}
         };
@@ -672,7 +691,8 @@ impl MachineState {
                                 new_l = l;
                             }
                             HeapCellValue::NamedStr(2, ref name, Some(_))
-                                if name.as_str() == "-" => {
+                                if name.as_str() == "-" =>
+                            {
                                 break;
                             }
                             HeapCellValue::Addr(Addr::HeapCell(_)) => {
@@ -699,11 +719,10 @@ impl MachineState {
     }
 
     // see 8.4.4 of Draft Technical Corrigendum 2.
-    pub(super)
-    fn check_keysort_errors(&self) -> CallResult {
+    pub(super) fn check_keysort_errors(&self) -> CallResult {
         let stub = MachineError::functor_stub(clause_name!("keysort"), 2);
 
-        let pairs  = self.store(self.deref(self[temp_v!(1)].clone()));
+        let pairs = self.store(self.deref(self[temp_v!(1)].clone()));
         let sorted = self.store(self.deref(self[temp_v!(2)].clone()));
 
         match self.detect_cycles(pairs.clone()) {
@@ -720,8 +739,7 @@ impl MachineState {
     }
 
     #[inline]
-    pub(crate)
-    fn type_error<T: TypeError>(
+    pub(crate) fn type_error<T: TypeError>(
         &self,
         valid_type: ValidType,
         culprit: T,
@@ -729,33 +747,25 @@ impl MachineState {
         arity: usize,
     ) -> MachineStub {
         let stub = MachineError::functor_stub(caller, arity);
-        let err = MachineError::type_error(
-            self.heap.h(),
-            valid_type,
-            culprit,
-        );
+        let err = MachineError::type_error(self.heap.h(), valid_type, culprit);
 
         return self.error_form(err, stub);
     }
 
     #[inline]
-    pub(crate)
-    fn representation_error(
+    pub(crate) fn representation_error(
         &self,
         rep_flag: RepFlag,
         caller: ClauseName,
         arity: usize,
     ) -> MachineStub {
         let stub = MachineError::functor_stub(caller, arity);
-        let err = MachineError::representation_error(
-            rep_flag,
-        );
+        let err = MachineError::representation_error(rep_flag);
 
         return self.error_form(err, stub);
     }
 
-    pub(super)
-    fn error_form(&self, err: MachineError, src: MachineStub) -> MachineStub {
+    pub(super) fn error_form(&self, err: MachineError, src: MachineStub) -> MachineStub {
         let location = err.location;
         let err_len = err.len();
 
@@ -780,8 +790,7 @@ impl MachineState {
         stub
     }
 
-    pub(super)
-    fn throw_exception(&mut self, err: MachineStub) {
+    pub(super) fn throw_exception(&mut self, err: MachineStub) {
         let h = self.heap.h();
 
         self.ball.boundary = 0;
@@ -797,7 +806,7 @@ impl MachineState {
 }
 
 #[derive(Debug)]
-pub enum ExistenceError {
+pub(crate) enum ExistenceError {
     Module(ClauseName),
     ModuleSource(ModuleSource),
     Procedure(ClauseName, usize),
@@ -806,38 +815,57 @@ pub enum ExistenceError {
 }
 
 #[derive(Debug)]
-pub enum SessionError {
-    CannotOverwriteBuiltIn(ClauseName),
-    CannotOverwriteImport(ClauseName),
+pub(crate) enum SessionError {
+    CompilationError(CompilationError),
+    // CannotOverwriteBuiltIn(ClauseName),
+    // CannotOverwriteImport(ClauseName),
     ExistenceError(ExistenceError),
-    InvalidFileName(ClauseName),
+    // InvalidFileName(ClauseName),
     ModuleDoesNotContainExport(ClauseName, PredicateKey),
+    ModuleCannotImportSelf(ClauseName),
     NamelessEntry,
     OpIsInfixAndPostFix(ClauseName),
+    PredicateNotMultifileOrDiscontiguous(CompilationTarget, PredicateKey),
     QueryCannotBeDefinedAsFact,
-    ParserError(ParserError),
 }
 
 #[derive(Debug)]
-pub enum EvalSession {
-    EntrySuccess,
+pub(crate) enum EvalSession {
+    // EntrySuccess,
     Error(SessionError),
 }
 
 impl From<SessionError> for EvalSession {
+    #[inline]
     fn from(err: SessionError) -> Self {
         EvalSession::Error(err)
     }
 }
 
+impl From<std::io::Error> for SessionError {
+    #[inline]
+    fn from(err: std::io::Error) -> SessionError {
+        SessionError::from(ParserError::from(err))
+    }
+}
+
 impl From<ParserError> for SessionError {
+    #[inline]
     fn from(err: ParserError) -> Self {
-        SessionError::ParserError(err)
+        SessionError::CompilationError(CompilationError::from(err))
+    }
+}
+
+impl From<CompilationError> for SessionError {
+    #[inline]
+    fn from(err: CompilationError) -> Self {
+        SessionError::CompilationError(err)
     }
 }
 
 impl From<ParserError> for EvalSession {
+    #[inline]
     fn from(err: ParserError) -> Self {
-        EvalSession::from(SessionError::ParserError(err))
+        EvalSession::from(SessionError::from(err))
     }
 }

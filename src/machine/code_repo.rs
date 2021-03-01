@@ -1,161 +1,54 @@
 use crate::clause_types::*;
-use crate::codegen::*;
-use crate::debray_allocator::*;
-use crate::forms::*;
 use crate::instructions::*;
-use crate::machine::compile::*;
-use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
 
-use crate::indexmap::IndexSet;
-
-use std::collections::VecDeque;
-use std::mem;
-
 #[derive(Debug)]
-pub struct CodeRepo {
-    pub(super) cached_query: Code,
-    pub(super) goal_expanders: Code,
-    pub(super) term_expanders: Code,
+pub(crate) struct CodeRepo {
     pub(super) code: Code,
-    pub(super) in_situ_code: Code,
-    pub(super) term_dir: TermDir,
 }
 
 impl CodeRepo {
     #[inline]
     pub(super) fn new() -> Self {
-        CodeRepo {
-            cached_query: vec![],
-            goal_expanders: Code::new(),
-            term_expanders: Code::new(),
-            code: Code::new(),
-            in_situ_code: Code::new(),
-            term_dir: TermDir::new(),
+        CodeRepo { code: Code::new() }
+    }
+
+    #[inline]
+    pub(super) fn lookup_local_instr<'a>(&'a self, p: LocalCodePtr) -> RefOrOwned<'a, Line> {
+        match p {
+            LocalCodePtr::Halt => {
+                // exit with the interrupt exit code.
+                std::process::exit(1);
+            }
+            LocalCodePtr::DirEntry(p) => RefOrOwned::Borrowed(&self.code[p as usize]),
+            LocalCodePtr::IndexingBuf(p, o, i) => match &self.code[p] {
+                &Line::IndexingCode(ref indexing_lines) => match &indexing_lines[o] {
+                    &IndexingLine::IndexedChoice(ref indexed_choice_instrs) => {
+                        RefOrOwned::Owned(Line::IndexedChoice(indexed_choice_instrs[i]))
+                    }
+                    &IndexingLine::DynamicIndexedChoice(ref indexed_choice_instrs) => {
+                        RefOrOwned::Owned(Line::DynamicIndexedChoice(indexed_choice_instrs[i]))
+                    }
+                    _ => {
+                        unreachable!()
+                    }
+                },
+                _ => {
+                    unreachable!()
+                }
+            },
         }
     }
 
-    #[inline]
-    pub fn term_dir_entry_len(&self, key: PredicateKey) -> (usize, usize) {
-        self.term_dir
-            .get(&key)
-            .map(|entry| ((entry.0).0.len(), entry.1.len()))
-            .unwrap_or((0, 0))
-    }
-
-    #[inline]
-    pub fn truncate_terms(
-        &mut self,
-        key: PredicateKey,
-        len: usize,
-        queue_len: usize,
-    ) -> (Predicate, VecDeque<TopLevel>) {
-        self.term_dir
-            .get_mut(&key)
-            .map(|entry| {
-                let terms =
-                    if len < (entry.0).0.len() {
-                        (entry.0).0.drain(len ..).collect()
-                    } else {
-                        vec![]
-                    };
-
-                let queue =
-                    if queue_len < entry.1.len() {
-                        entry.1.drain(queue_len ..).collect()
-                    } else {
-                        VecDeque::new()
-                    };
-
-                (Predicate(terms), queue)
-            })
-            .unwrap_or((Predicate::new(), VecDeque::new()))
-    }
-
-    pub(crate)
-    fn add_in_situ_result(
-        &mut self,
-        result: &CompiledResult,
-        in_situ_code_dir: &mut InSituCodeDir,
-        in_situ_module_dir: &mut ModuleStubDir,
-        non_counted_bt_preds: &IndexSet<PredicateKey>,
-    ) -> Result<(), SessionError> {
-        let (ref decl, ref queue) = result;
-        let (name, arity) = decl
-            .0
-            .first()
-            .and_then(|cl| {
-                let arity = cl.arity();
-                cl.name().map(|name| (name, arity))
-            })
-            .ok_or(SessionError::NamelessEntry)?;
-
-        let non_counted_bt = non_counted_bt_preds.contains(&(name.clone(), arity));
-        let module_name = name.owning_module();
-
-        let p = self.in_situ_code.len();
-
-        match in_situ_module_dir.get_mut(&module_name) {
-            Some(ref mut module_stub) if name.has_table(&module_stub.atom_tbl) => {
-                module_stub.in_situ_code_dir.insert((name, arity), p);
-            }
-            _ => {
-                in_situ_code_dir.insert((name, arity), p);
-            }
-        }
-
-        let mut cg = CodeGenerator::<DebrayAllocator>::new(non_counted_bt);
-        let mut decl_code = cg.compile_predicate(&decl.0)?;
-
-        compile_appendix(&mut decl_code, queue, non_counted_bt)?;
-
-        Ok(self.in_situ_code.extend(decl_code.into_iter()))
-    }
-
-    #[inline]
-    pub(super)
-    fn size_of_cached_query(&self) -> usize {
-        self.cached_query.len()
-    }
-
-    #[inline]
-    pub(super)
-    fn take_in_situ_code(&mut self) -> Code {
-        mem::replace(&mut self.in_situ_code, Code::new())
-    }
-
-    pub(super)
-    fn lookup_instr<'a>(
+    pub(super) fn lookup_instr<'a>(
         &'a self,
         last_call: bool,
         p: &CodePtr,
     ) -> Option<RefOrOwned<'a, Line>> {
         match p {
-            &CodePtr::Local(LocalCodePtr::UserGoalExpansion(p)) => {
-                if p < self.goal_expanders.len() {
-                    Some(RefOrOwned::Borrowed(&self.goal_expanders[p]))
-                } else {
-                    None
-                }
+            &CodePtr::Local(local) => {
+                return Some(self.lookup_local_instr(local));
             }
-            &CodePtr::Local(LocalCodePtr::UserTermExpansion(p)) => {
-                if p < self.term_expanders.len() {
-                    Some(RefOrOwned::Borrowed(&self.term_expanders[p]))
-                } else {
-                    None
-                }
-            }
-            &CodePtr::Local(LocalCodePtr::TopLevel(_, p)) => {
-                if p < self.cached_query.len() {
-                    Some(RefOrOwned::Borrowed(&self.cached_query[p]))
-                } else {
-                    None
-                }
-            }
-            &CodePtr::Local(LocalCodePtr::InSituDirEntry(p)) => {
-                Some(RefOrOwned::Borrowed(&self.in_situ_code[p]))
-            }
-            &CodePtr::Local(LocalCodePtr::DirEntry(p)) => Some(RefOrOwned::Borrowed(&self.code[p])),
             &CodePtr::REPL(..) => None,
             &CodePtr::BuiltInClause(ref built_in, _) => {
                 let call_clause = call_clause!(
@@ -164,14 +57,121 @@ impl CodeRepo {
                     0,
                     last_call
                 );
+
                 Some(RefOrOwned::Owned(call_clause))
             }
             &CodePtr::CallN(arity, _, last_call) => {
                 let call_clause = call_clause!(ClauseType::CallN, arity, 0, last_call);
+
                 Some(RefOrOwned::Owned(call_clause))
             }
             &CodePtr::VerifyAttrInterrupt(p) => Some(RefOrOwned::Borrowed(&self.code[p])),
-            &CodePtr::DynamicTransaction(..) => None,
+        }
+    }
+
+    pub(super) fn find_living_dynamic_else(
+        &self,
+        mut p: usize,
+        cc: usize,
+    ) -> Option<(usize, usize)> {
+        loop {
+            match &self.code[p] {
+                &Line::Choice(ChoiceInstruction::DynamicElse(
+                    birth,
+                    death,
+                    NextOrFail::Next(i),
+                )) => {
+                    if birth < cc && Death::Finite(cc) <= death {
+                        return Some((p, i));
+                    } else if i > 0 {
+                        p += i;
+                    } else {
+                        return None;
+                    }
+                }
+                &Line::Choice(ChoiceInstruction::DynamicElse(
+                    birth,
+                    death,
+                    NextOrFail::Fail(_),
+                )) => {
+                    if birth < cc && Death::Finite(cc) <= death {
+                        return Some((p, 0));
+                    } else {
+                        return None;
+                    }
+                }
+                &Line::Choice(ChoiceInstruction::DynamicInternalElse(
+                    birth,
+                    death,
+                    NextOrFail::Next(i),
+                )) => {
+                    if birth < cc && Death::Finite(cc) <= death {
+                        return Some((p, i));
+                    } else if i > 0 {
+                        p += i;
+                    } else {
+                        return None;
+                    }
+                }
+                &Line::Choice(ChoiceInstruction::DynamicInternalElse(
+                    birth,
+                    death,
+                    NextOrFail::Fail(_),
+                )) => {
+                    if birth < cc && Death::Finite(cc) <= death {
+                        return Some((p, 0));
+                    } else {
+                        return None;
+                    }
+                }
+                &Line::Control(ControlInstruction::RevJmpBy(i)) => {
+                    p -= i;
+                }
+                _ => {
+                    unreachable!();
+                }
+            }
+        }
+    }
+
+    pub(super) fn find_living_dynamic(
+        &self,
+        p: LocalCodePtr,
+        cc: usize,
+    ) -> Option<(usize, usize, usize, bool)> {
+        let (p, oi, mut ii) = match p {
+            LocalCodePtr::IndexingBuf(p, oi, ii) => (p, oi, ii),
+            _ => unreachable!(),
+        };
+
+        let indexed_choice_instrs = match &self.code[p] {
+            Line::IndexingCode(ref indexing_code) => match &indexing_code[oi] {
+                IndexingLine::DynamicIndexedChoice(ref indexed_choice_instrs) => {
+                    indexed_choice_instrs
+                }
+                _ => unreachable!(),
+            },
+            _ => unreachable!(),
+        };
+
+        loop {
+            match &indexed_choice_instrs.get(ii) {
+                Some(&offset) => match &self.code[p + offset - 1] {
+                    &Line::Choice(ChoiceInstruction::DynamicInternalElse(
+                        birth,
+                        death,
+                        next_or_fail,
+                    )) => {
+                        if birth < cc && Death::Finite(cc) <= death {
+                            return Some((offset, oi, ii, next_or_fail.is_next()));
+                        } else {
+                            ii += 1;
+                        }
+                    }
+                    _ => unreachable!(),
+                },
+                None => return None,
+            }
         }
     }
 }

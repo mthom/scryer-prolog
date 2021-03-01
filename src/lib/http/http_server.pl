@@ -10,7 +10,7 @@
    Usage
    ==========
    The main predicate of the library is http_listen/2, which needs a port number
-    (usually 80) and a list of handlers. A handler is a compund term with the functor
+    (usually 80) and a list of handlers. A handler is a compound term with the functor
    as one HTTP method (in lowercase) and followed by a Route Match and a predicate
    which will handle the call.
 
@@ -58,6 +58,8 @@
     url_decode//1
 ]).
 
+:- meta_predicate http_listen(?, 2).
+
 :- use_module(library(sockets)).
 :- use_module(library(dcgs)).
 :- use_module(library(format)).
@@ -68,8 +70,17 @@
 :- use_module(library(time)).
 :- use_module(library(crypto)).
 
+% Module prefix workaround with meta_predicate
+http_listen(Port, Module:Handlers0) :-
+    maplist(module_qualification(Module), Handlers0, Handlers),
+    http_listen_(Port, Handlers).
+
+module_qualification(M, H0, H) :-
+    H0 =.. [Method, Path, Goal],
+    H =.. [Method, Path, M:Goal].
+
 % Server initialization
-http_listen(Port, Handlers) :-
+http_listen_(Port, Handlers) :-
     must_be(integer, Port),
     must_be(list, Handlers),
     once(socket_server_open(Port, Socket)),
@@ -99,7 +110,7 @@ accept_loop(Socket, Handlers) :-
                                 HttpResponse = http_response(_, _, _),
                                 (call(Handler, HttpRequest, HttpResponse) ->
                                     send_response(Stream, HttpResponse)
-                                ;   format(Stream, "HTTP/1.0 500 Internal Server Error\r\n\r\n")
+                                ;   format(Stream, "HTTP/1.0 500 Internal Server Error\r\n\r\n", [])
                                 )
                             )
                         ;   format(Stream, "HTTP/1.0 404 Not Found\r\n\r\n", [])

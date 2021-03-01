@@ -23,9 +23,7 @@ impl RawBlockTraits for StackTraits {
 
     #[inline]
     fn base_offset(base: *const u8) -> *const u8 {
-        unsafe {
-            base.offset(Self::align() as isize)
-        }
+        unsafe { base.offset(Self::align() as isize) }
     }
 }
 
@@ -37,7 +35,7 @@ const fn prelude_size<Prelude>() -> usize {
 }
 
 #[derive(Debug)]
-pub struct Stack {
+pub(crate) struct Stack {
     buf: RawBlock<StackTraits>,
     _marker: PhantomData<Addr>,
 }
@@ -50,25 +48,25 @@ impl Drop for Stack {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub struct FramePrelude {
-    pub num_cells: usize,
+pub(crate) struct FramePrelude {
+    pub(crate) num_cells: usize,
 }
 
 #[derive(Debug)]
-pub struct AndFramePrelude {
-    pub univ_prelude: FramePrelude,
-    pub e: usize,
-    pub cp: LocalCodePtr,
-    pub interrupt_cp: LocalCodePtr,
+pub(crate) struct AndFramePrelude {
+    pub(crate) univ_prelude: FramePrelude,
+    pub(crate) e: usize,
+    pub(crate) cp: LocalCodePtr,
+    pub(crate) interrupt_cp: LocalCodePtr,
 }
 
 #[derive(Debug)]
-pub struct AndFrame {
-    pub prelude: AndFramePrelude,
+pub(crate) struct AndFrame {
+    pub(crate) prelude: AndFramePrelude,
 }
 
 impl AndFrame {
-    pub fn size_of(num_cells: usize) -> usize {
+    pub(crate) fn size_of(num_cells: usize) -> usize {
         prelude_size::<AndFramePrelude>() + num_cells * mem::size_of::<Addr>()
     }
 }
@@ -104,23 +102,23 @@ impl IndexMut<usize> for AndFrame {
 }
 
 #[derive(Debug)]
-pub struct OrFramePrelude {
-    pub univ_prelude: FramePrelude,
-    pub e: usize,
-    pub cp: LocalCodePtr,
-    pub b: usize,
-    pub bp: LocalCodePtr,
-    pub tr: usize,
-    pub pstr_tr: usize,
-    pub h: usize,
-    pub b0: usize,
-    pub attr_var_init_queue_b: usize,
-    pub attr_var_init_bindings_b: usize,
+pub(crate) struct OrFramePrelude {
+    pub(crate) univ_prelude: FramePrelude,
+    pub(crate) e: usize,
+    pub(crate) cp: LocalCodePtr,
+    pub(crate) b: usize,
+    pub(crate) bp: LocalCodePtr,
+    pub(crate) tr: usize,
+    pub(crate) pstr_tr: usize,
+    pub(crate) h: usize,
+    pub(crate) b0: usize,
+    pub(crate) attr_var_init_queue_b: usize,
+    pub(crate) attr_var_init_bindings_b: usize,
 }
 
 #[derive(Debug)]
-pub struct OrFrame {
-    pub prelude: OrFramePrelude,
+pub(crate) struct OrFrame {
+    pub(crate) prelude: OrFramePrelude,
 }
 
 impl Index<usize> for OrFrame {
@@ -156,24 +154,27 @@ impl IndexMut<usize> for OrFrame {
 }
 
 impl OrFrame {
-    pub fn size_of(num_cells: usize) -> usize {
+    pub(crate) fn size_of(num_cells: usize) -> usize {
         prelude_size::<OrFramePrelude>() + num_cells * mem::size_of::<Addr>()
     }
 }
 
 impl Stack {
-    pub fn new() -> Self {
-        Stack { buf: RawBlock::new(), _marker: PhantomData }
+    pub(crate) fn new() -> Self {
+        Stack {
+            buf: RawBlock::new(),
+            _marker: PhantomData,
+        }
     }
 
-    pub fn allocate_and_frame(&mut self, num_cells: usize) -> usize {
+    pub(crate) fn allocate_and_frame(&mut self, num_cells: usize) -> usize {
         let frame_size = AndFrame::size_of(num_cells);
 
         unsafe {
             let new_top = self.buf.new_block(frame_size);
             let e = self.buf.top as usize - self.buf.base as usize;
 
-            for idx in 0 .. num_cells {
+            for idx in 0..num_cells {
                 let offset = prelude_size::<AndFramePrelude>() + idx * mem::size_of::<Addr>();
                 ptr::write(
                     (self.buf.top as usize + offset) as *mut Addr,
@@ -190,14 +191,14 @@ impl Stack {
         }
     }
 
-    pub fn allocate_or_frame(&mut self, num_cells: usize) -> usize {
+    pub(crate) fn allocate_or_frame(&mut self, num_cells: usize) -> usize {
         let frame_size = OrFrame::size_of(num_cells);
 
         unsafe {
             let new_top = self.buf.new_block(frame_size);
             let b = self.buf.top as usize - self.buf.base as usize;
 
-            for idx in 0 .. num_cells {
+            for idx in 0..num_cells {
                 let offset = prelude_size::<OrFramePrelude>() + idx * mem::size_of::<Addr>();
                 ptr::write(
                     (self.buf.top as usize + offset) as *mut Addr,
@@ -215,7 +216,7 @@ impl Stack {
     }
 
     #[inline]
-    pub fn index_and_frame(&self, e: usize) -> &AndFrame {
+    pub(crate) fn index_and_frame(&self, e: usize) -> &AndFrame {
         unsafe {
             let ptr = self.buf.base as usize + e;
             &*(ptr as *const AndFrame)
@@ -223,7 +224,7 @@ impl Stack {
     }
 
     #[inline]
-    pub fn index_and_frame_mut(&mut self, e: usize) -> &mut AndFrame {
+    pub(crate) fn index_and_frame_mut(&mut self, e: usize) -> &mut AndFrame {
         unsafe {
             let ptr = self.buf.base as usize + e;
             &mut *(ptr as *mut AndFrame)
@@ -231,7 +232,7 @@ impl Stack {
     }
 
     #[inline]
-    pub fn index_or_frame(&self, b: usize) -> &OrFrame {
+    pub(crate) fn index_or_frame(&self, b: usize) -> &OrFrame {
         unsafe {
             let ptr = self.buf.base as usize + b;
             &*(ptr as *const OrFrame)
@@ -239,19 +240,15 @@ impl Stack {
     }
 
     #[inline]
-    pub fn index_or_frame_mut(&mut self, b: usize) -> &mut OrFrame {
+    pub(crate) fn index_or_frame_mut(&mut self, b: usize) -> &mut OrFrame {
         unsafe {
             let ptr = self.buf.base as usize + b;
             &mut *(ptr as *mut OrFrame)
         }
     }
 
-    pub fn take(&mut self) -> Self {
-        Stack { buf: self.buf.take(), _marker: PhantomData }
-    }
-
     #[inline]
-    pub fn truncate(&mut self, b: usize) {
+    pub(crate) fn truncate(&mut self, b: usize) {
         if b == 0 {
             self.inner_truncate(mem::align_of::<Addr>());
         } else {
@@ -268,7 +265,7 @@ impl Stack {
         }
     }
 
-    pub fn drop_in_place(&mut self) {
+    pub(crate) fn drop_in_place(&mut self) {
         self.truncate(mem::align_of::<Addr>());
 
         debug_assert!(if self.buf.top.is_null() {

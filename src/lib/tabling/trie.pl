@@ -47,6 +47,8 @@
 
 :- attribute maybe_just/1, children/1.
 
+verify_attributes(_, _, []).
+
 % Implementation of a prefix tree, a.k.a. trie %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 

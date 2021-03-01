@@ -1,6 +1,6 @@
-use crate::prolog_parser::ast::*;
-use crate::prolog_parser::parser::*;
-use crate::prolog_parser::tabled_rc::TabledData;
+use prolog_parser::ast::*;
+use prolog_parser::parser::*;
+use prolog_parser::tabled_rc::TabledData;
 
 use crate::forms::*;
 use crate::iterators::*;
@@ -12,19 +12,19 @@ use std::collections::VecDeque;
 
 type SubtermDeque = VecDeque<(usize, usize)>;
 
-pub type PrologStream = ParsingStream<Stream>;
+pub(crate) type PrologStream = ParsingStream<Stream>;
 
 pub mod readline {
     use crate::machine::streams::Stream;
-    use crate::rustyline::error::ReadlineError;
-    use crate::rustyline::{Cmd, Editor, KeyEvent};
+    use rustyline::error::ReadlineError;
+    use rustyline::{Cmd, Config, Editor, KeyEvent};
     use std::io::{Cursor, Error, ErrorKind, Read};
 
     static mut PROMPT: bool = false;
 
     const HISTORY_FILE: &'static str = ".scryer_history";
 
-    pub fn set_prompt(value: bool) {
+    pub(crate) fn set_prompt(value: bool) {
         unsafe {
             PROMPT = value;
         }
@@ -33,7 +33,11 @@ pub mod readline {
     #[inline]
     fn get_prompt() -> &'static str {
         unsafe {
-            if PROMPT { "?- " } else { "" }
+            if PROMPT {
+                "?- "
+            } else {
+                ""
+            }
         }
     }
 
@@ -45,8 +49,10 @@ pub mod readline {
 
     impl ReadlineStream {
         #[inline]
-        pub fn new(pending_input: String) -> Self {
-            let mut rl = Editor::<()>::new();
+        pub(crate) fn new(pending_input: String) -> Self {
+            let config = Config::builder().check_cursor_position(true).build();
+
+            let mut rl = Editor::<()>::with_config(config); //Editor::<()>::new();
             if let Some(mut path) = dirs_next::home_dir() {
                 path.push(HISTORY_FILE);
                 if path.exists() {
@@ -57,11 +63,14 @@ pub mod readline {
             }
 
             rl.bind_sequence(KeyEvent::from('\t'), Cmd::Insert(1, "\t".to_string()));
-            ReadlineStream { rl, pending_input: Cursor::new(pending_input) }
+            ReadlineStream {
+                rl,
+                pending_input: Cursor::new(pending_input),
+            }
         }
 
         #[inline]
-        pub fn input_stream(pending_input: String) -> Stream {
+        pub(crate) fn input_stream(pending_input: String) -> Stream {
             Stream::from(Self::new(pending_input))
         }
 
@@ -85,12 +94,8 @@ pub mod readline {
 
                     self.pending_input.read(buf)
                 }
-                Err(ReadlineError::Eof) => {
-                    Ok(0)
-                }
-                Err(e) => {
-                    Err(Error::new(ErrorKind::InvalidInput, e))
-                }
+                Err(ReadlineError::Eof) => Ok(0),
+                Err(e) => Err(Error::new(ErrorKind::InvalidInput, e)),
             }
         }
 
@@ -109,7 +114,7 @@ pub mod readline {
             }
         }
 
-        pub fn peek_byte(&mut self) -> std::io::Result<u8> {
+        pub(crate) fn peek_byte(&mut self) -> std::io::Result<u8> {
             set_prompt(false);
 
             loop {
@@ -117,26 +122,20 @@ pub mod readline {
                     Some(b) => {
                         return Ok(b);
                     }
-                    None => {
-                        match self.call_readline(&mut []) {
-                            Err(e) => {
-                                return Err(e);
-                            }
-                            Ok(0) => {
-                                return Err(Error::new(
-                                    ErrorKind::UnexpectedEof,
-                                    "end of file",
-                                ));
-                            }
-                            _ => {
-                            }
+                    None => match self.call_readline(&mut []) {
+                        Err(e) => {
+                            return Err(e);
                         }
-                    }
+                        Ok(0) => {
+                            return Err(Error::new(ErrorKind::UnexpectedEof, "end of file"));
+                        }
+                        _ => {}
+                    },
                 }
             }
         }
 
-        pub fn peek_char(&mut self) -> std::io::Result<char> {
+        pub(crate) fn peek_char(&mut self) -> std::io::Result<char> {
             set_prompt(false);
 
             loop {
@@ -144,21 +143,15 @@ pub mod readline {
                     Some(c) => {
                         return Ok(c);
                     }
-                    None => {
-                        match self.call_readline(&mut []) {
-                            Err(e) => {
-                                return Err(e);
-                            }
-                            Ok(0) => {
-                                return Err(Error::new(
-                                    ErrorKind::UnexpectedEof,
-                                    "end of file",
-                                ));
-                            }
-                            _ => {
-                            }
+                    None => match self.call_readline(&mut []) {
+                        Err(e) => {
+                            return Err(e);
                         }
-                    }
+                        Ok(0) => {
+                            return Err(Error::new(ErrorKind::UnexpectedEof, "end of file"));
+                        }
+                        _ => {}
+                    },
                 }
             }
         }
@@ -167,12 +160,8 @@ pub mod readline {
     impl Read for ReadlineStream {
         fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
             match self.pending_input.read(buf) {
-                Ok(0) => {
-                    self.call_readline(buf)
-                }
-                result => {
-                    result
-                }
+                Ok(0) => self.call_readline(buf),
+                result => result,
             }
         }
     }
@@ -185,7 +174,27 @@ pub mod readline {
 }
 
 impl MachineState {
-    pub fn read(
+    pub(crate) fn devour_whitespace(
+        &mut self,
+        mut inner: Stream,
+        atom_tbl: TabledData<Atom>,
+    ) -> Result<bool, ParserError> {
+        let mut stream = parsing_stream(inner.clone())?;
+        let mut parser = Parser::new(&mut stream, atom_tbl, self.flags);
+
+        parser.devour_whitespace()?;
+
+        inner.add_lines_read(parser.num_lines_read());
+
+        let result = parser.eof();
+        let buf = stream.take_buf();
+
+        inner.pause_stream(buf)?;
+
+        result
+    }
+
+    pub(crate) fn read(
         &mut self,
         mut inner: Stream,
         atom_tbl: TabledData<Atom>,
@@ -193,10 +202,17 @@ impl MachineState {
     ) -> Result<TermWriteResult, ParserError> {
         let mut stream = parsing_stream(inner.clone())?;
 
-        let term = {
+        let (term, num_lines_read) = {
+            let prior_num_lines_read = inner.lines_read();
             let mut parser = Parser::new(&mut stream, atom_tbl, self.flags);
-            parser.read_term(composite_op!(op_dir))?
+
+            parser.add_lines_read(prior_num_lines_read);
+
+            let term = parser.read_term(&CompositeOpDir::new(op_dir, None))?;
+            (term, parser.num_lines_read() - prior_num_lines_read)
         };
+
+        inner.add_lines_read(num_lines_read);
 
         // 'pausing' the stream saves the pending top buffer
         // created by the parsing stream, which was created in this
@@ -210,8 +226,7 @@ impl MachineState {
 }
 
 #[inline]
-pub(crate)
-fn write_term_to_heap(term: &Term, machine_st: &mut MachineState) -> TermWriteResult {
+pub(crate) fn write_term_to_heap(term: &Term, machine_st: &mut MachineState) -> TermWriteResult {
     let term_writer = TermWriter::new(machine_st);
     term_writer.write_term_to_heap(term)
 }
@@ -224,7 +239,7 @@ struct TermWriter<'a> {
 }
 
 #[derive(Debug)]
-pub struct TermWriteResult {
+pub(crate) struct TermWriteResult {
     pub(crate) heap_loc: usize,
     pub(crate) var_dict: HeapVarDict,
 }
@@ -242,8 +257,7 @@ impl<'a> TermWriter<'a> {
     #[inline]
     fn modify_head_of_queue(&mut self, term: &TermRef<'a>, h: usize) {
         if let Some((arity, site_h)) = self.queue.pop_front() {
-            self.machine_st.heap[site_h] =
-                HeapCellValue::Addr(self.term_as_addr(term, h));
+            self.machine_st.heap[site_h] = HeapCellValue::Addr(self.term_as_addr(term, h));
 
             if arity > 1 {
                 self.queue.push_front((arity - 1, site_h + 1));
@@ -254,26 +268,18 @@ impl<'a> TermWriter<'a> {
     #[inline]
     fn push_stub_addr(&mut self) {
         let h = self.machine_st.heap.h();
-        self.machine_st.heap.push(HeapCellValue::Addr(Addr::HeapCell(h)));
+        self.machine_st
+            .heap
+            .push(HeapCellValue::Addr(Addr::HeapCell(h)));
     }
 
     fn term_as_addr(&mut self, term: &TermRef<'a>, h: usize) -> Addr {
         match term {
-            &TermRef::AnonVar(_) | &TermRef::Var(..) => {
-                Addr::HeapCell(h)
-            }
-            &TermRef::Cons(..) => {
-                Addr::HeapCell(h)
-            }
-            &TermRef::Constant(_, _, c) => {
-                self.machine_st.heap.put_constant(c.clone())
-            }
-            &TermRef::Clause(..) => {
-                Addr::Str(h)
-            }
-            &TermRef::PartialString(..) => {
-                Addr::PStrLocation(h, 0)
-            }
+            &TermRef::AnonVar(_) | &TermRef::Var(..) => Addr::HeapCell(h),
+            &TermRef::Cons(..) => Addr::HeapCell(h),
+            &TermRef::Constant(_, _, c) => self.machine_st.heap.put_constant(c.clone()),
+            &TermRef::Clause(..) => Addr::Str(h),
+            &TermRef::PartialString(..) => Addr::PStrLocation(h, 0),
         }
     }
 
@@ -286,7 +292,9 @@ impl<'a> TermWriter<'a> {
             match &term {
                 &TermRef::Cons(lvl, ..) => {
                     self.queue.push_back((2, h + 1));
-                    self.machine_st.heap.push(HeapCellValue::Addr(Addr::Lis(h + 1)));
+                    self.machine_st
+                        .heap
+                        .push(HeapCellValue::Addr(Addr::Lis(h + 1)));
 
                     self.push_stub_addr();
                     self.push_stub_addr();
@@ -355,13 +363,15 @@ impl<'a> TermWriter<'a> {
 
                     continue;
                 }
-                _ => {
-                }
+                _ => {}
             };
 
             self.modify_head_of_queue(&term, h);
         }
 
-        TermWriteResult { heap_loc, var_dict: self.var_dict }
+        TermWriteResult {
+            heap_loc,
+            var_dict: self.var_dict,
+        }
     }
 }

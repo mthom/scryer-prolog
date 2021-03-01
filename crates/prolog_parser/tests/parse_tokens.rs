@@ -1,5 +1,3 @@
-extern crate prolog_parser;
-
 use prolog_parser::ast::*;
 use prolog_parser::lexer::{Lexer, Token};
 use prolog_parser::tabled_rc::TabledData;

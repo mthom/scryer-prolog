@@ -3,6 +3,8 @@
 :- use_module(library(atts)).
 :- use_module(library(dcgs)).
 
+:- meta_predicate freeze(?, 0).
+
 :- attribute frozen/1.
 
 verify_attributes(Var, Other, Goals) :-

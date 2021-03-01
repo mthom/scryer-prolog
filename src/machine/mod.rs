@@ -1,30 +1,35 @@
-use crate::prolog_parser::ast::*;
-use crate::prolog_parser::tabled_rc::*;
+use prolog_parser::ast::*;
+use prolog_parser::tabled_rc::*;
+use prolog_parser::{clause_name, temp_v};
+
+use lazy_static::lazy_static;
 
 use crate::clause_types::*;
 use crate::forms::*;
-use crate::heap_print::*;
 use crate::instructions::*;
 use crate::machine::heap::*;
+use crate::machine::loader::*;
+use crate::machine::term_stream::{LiveTermStream, LoadStatePayload, TermStream};
 use crate::read::*;
 
 mod attributed_variables;
 pub(super) mod code_repo;
-pub mod code_walker;
-pub mod compile;
+pub(crate) mod code_walker;
+#[macro_use]
+pub(crate) mod loader;
+mod compile;
 mod copier;
-mod dynamic_database;
-pub mod heap;
-pub mod machine_errors;
-pub mod machine_indices;
+pub(crate) mod heap;
+mod load_state;
+pub(crate) mod machine_errors;
+pub(crate) mod machine_indices;
 pub(super) mod machine_state;
-pub mod modules;
-pub mod partial_string;
+pub(crate) mod partial_string;
+mod preprocessor;
 mod raw_block;
 mod stack;
 pub(crate) mod streams;
-pub(super) mod term_expansion;
-pub mod toplevel;
+mod term_stream;
 
 #[macro_use]
 mod arithmetic_ops;
@@ -32,29 +37,24 @@ mod arithmetic_ops;
 mod machine_state_impl;
 mod system_calls;
 
-use crate::machine::attributed_variables::*;
 use crate::machine::code_repo::*;
 use crate::machine::compile::*;
 use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
 use crate::machine::machine_state::*;
-use crate::machine::modules::*;
-use crate::machine::streams::*;
-use crate::machine::toplevel::*;
+pub use crate::machine::streams::Stream;
 
-use crate::indexmap::IndexMap;
+use indexmap::IndexMap;
 
-use std::collections::VecDeque;
-use std::convert::TryFrom;
+//use std::convert::TryFrom;
+use prolog_parser::ast::ClauseName;
 use std::fs::File;
 use std::mem;
-use std::ops::Index;
 use std::path::PathBuf;
-use std::rc::Rc;
 use std::sync::atomic::AtomicBool;
 
 #[derive(Debug)]
-pub struct MachinePolicies {
+pub(crate) struct MachinePolicies {
     call_policy: Box<dyn CallPolicy>,
     cut_policy: Box<dyn CutPolicy>,
 }
@@ -81,249 +81,131 @@ impl Default for MachinePolicies {
 }
 
 #[derive(Debug)]
+pub(super) struct LoadContext {
+    pub(super) path: PathBuf,
+    pub(super) stream: Stream,
+    pub(super) module: ClauseName,
+}
+
+impl LoadContext {
+    #[inline]
+    fn new(path: &str, stream: Stream) -> Self {
+        let mut path_buf = PathBuf::from(path);
+
+        if path_buf.is_relative() {
+            let mut current_dir = current_dir();
+            current_dir.push(path_buf);
+            path_buf = current_dir;
+        }
+
+        LoadContext {
+            path: path_buf,
+            stream,
+            module: clause_name!("user"),
+        }
+    }
+}
+
+#[derive(Debug)]
 pub struct Machine {
     pub(super) machine_st: MachineState,
     pub(super) inner_heap: Heap,
     pub(super) policies: MachinePolicies,
     pub(super) indices: IndexStore,
     pub(super) code_repo: CodeRepo,
-    pub(super) toplevel_idx: usize,
-    pub(super) current_input_stream: Stream,
-    pub(super) current_output_stream: Stream,
+    pub(super) user_input: Stream,
+    pub(super) user_output: Stream,
+    pub(super) load_contexts: Vec<LoadContext>,
 }
 
-impl Index<LocalCodePtr> for CodeRepo {
-    type Output = Line;
-
-    fn index(&self, ptr: LocalCodePtr) -> &Self::Output {
-        match ptr {
-            LocalCodePtr::InSituDirEntry(p) => &self.in_situ_code[p],
-            LocalCodePtr::TopLevel(_, p) => &self.cached_query[p],
-            LocalCodePtr::DirEntry(p) => &self.code[p],
-            LocalCodePtr::UserGoalExpansion(p) => &self.goal_expanders[p],
-            LocalCodePtr::UserTermExpansion(p) => &self.term_expanders[p],
-        }
-    }
-}
-
-impl Index<LocalCodePtr> for Machine {
-    type Output = Line;
-
-    fn index(&self, ptr: LocalCodePtr) -> &Self::Output {
-        &self.code_repo[ptr]
-    }
-}
-
-impl SubModuleUser for IndexStore {
-    fn atom_tbl(&self) -> TabledData<Atom> {
-        self.atom_tbl.clone()
-    }
-
-    fn op_dir(&mut self) -> &mut OpDir {
-        &mut self.op_dir
-    }
-
-    fn get_code_index(&self, key: PredicateKey, module_name: ClauseName) -> Option<CodeIndex> {
-        match module_name.as_str() {
-            "user" => {
-                self.code_dir.get(&key).cloned()
-            }
-            _ => {
-                match self.in_situ_module_dir.get(&module_name) {
-                    Some(ref module_stub) => {
-                        match module_stub.in_situ_code_dir.get(&key) {
-                            Some(p) => {
-                                return Some(CodeIndex::new(
-                                    IndexPtr::InSituDirEntry(*p),
-                                    module_name.clone()
-                                ));
-                            }
-                            None => {
-                            }
-                        }
-                    }
-                    None => {
-                    }
-                };
-
-                self.modules
-                    .get(&module_name)
-                    .and_then(|ref module| {
-                        module.code_dir.get(&key).cloned()
-                    })
-            }
-        }
-    }
-
-    fn remove_code_index(&mut self, key: PredicateKey) {
-        self.code_dir.remove(&key);
-    }
-
-    fn insert_dir_entry(&mut self, name: ClauseName, arity: usize, idx: CodeIndex) {
-        if let Some(ref code_idx) = self.code_dir.get(&(name.clone(), arity)) {
-            if !code_idx.is_undefined() {
-                match (name.as_str(), arity) {
-                    ("term_expansion", 2) => {
-                    }
-                    ("goal_expansion", 2) => {
-                    }
-                    _ => {
-                        println!("Warning: overwriting {}/{}", &name, arity);
-                    }
-                }
-            }
-
-            let (p, module_name) = idx.0.borrow().clone();
-            set_code_index!(code_idx, p, module_name);
-            return;
-        }
-
-        self.code_dir.insert((name.clone(), arity), idx.clone());
-    }
-
-    fn use_qualified_module(
-        &mut self,
-        code_repo: &mut CodeRepo,
-        _: MachineFlags,
-        submodule: &Module,
-        exports: &Vec<ModuleExport>,
-    ) -> Result<(), SessionError> {
-        use_qualified_module(self, submodule, exports)?;
-        submodule
-            .dump_expansions(code_repo)
-            .map_err(SessionError::from)
-    }
-
-    fn use_module(
-        &mut self,
-        code_repo: &mut CodeRepo,
-        _: MachineFlags,
-        submodule: &Module,
-    ) -> Result<(), SessionError> {
-        use_module(self, submodule)?;
-
-        if !submodule.inserted_expansions {
-            submodule
-                .dump_expansions(code_repo)
-                .map_err(SessionError::from)
-        } else {
-            Ok(())
-        }
-    }
+#[inline]
+fn current_dir() -> PathBuf {
+    std::env::current_dir().unwrap_or(PathBuf::from("./"))
 }
 
 include!(concat!(env!("OUT_DIR"), "/libraries.rs"));
 
-static TOPLEVEL: &str = include_str!("../toplevel.pl");
-
 impl Machine {
-    fn compile_special_forms(&mut self)
-    {
-        let verify_attrs_src = ListingSource::User;
+    fn run_module_predicate(&mut self, module_name: ClauseName, key: PredicateKey) {
+        if let Some(module) = self.indices.modules.get(&module_name) {
+            if let Some(ref code_index) = module.code_dir.get(&key) {
+                let p = code_index.local().unwrap();
 
-        match compile_special_form(
-            self,
-            Stream::from(VERIFY_ATTRS),
-            verify_attrs_src,
-        )
-        {
-            Ok(p) => {
-                self.machine_st.attr_var_init.verify_attrs_loc = p;
+                self.machine_st.cp = LocalCodePtr::Halt;
+                self.machine_st.p = CodePtr::Local(LocalCodePtr::DirEntry(p));
+
+                return self.run_query();
             }
-            Err(_) =>
-                panic!("Machine::compile_special_forms() failed at VERIFY_ATTRS"),
         }
 
-        let project_attrs_src = ListingSource::User;
-
-        match compile_special_form(
-            self,
-            Stream::from(PROJECT_ATTRS),
-            project_attrs_src,
-        )
-        {
-            Ok(p) => {
-                self.machine_st.attr_var_init.project_attrs_loc = p;
-            }
-            Err(e) =>
-                panic!("Machine::compile_special_forms() failed at PROJECT_ATTRS: {}", e),
-        }
+        unreachable!();
     }
 
-    fn compile_top_level(&mut self) -> Result<(), SessionError>
-    {
-        self.toplevel_idx = self.code_repo.code.len();
+    pub fn load_file(&mut self, path: String, stream: Stream) {
+        self.machine_st[temp_v!(1)] =
+            Addr::Stream(self.machine_st.heap.push(HeapCellValue::Stream(stream)));
 
-        let top_lvl_src = ListingSource::User;
+        self.machine_st[temp_v!(2)] = Addr::Con(self.machine_st.heap.push(HeapCellValue::Atom(
+            clause_name!(path, self.machine_st.atom_tbl),
+            None,
+        )));
 
-        compile_user_module(
-            self,
-            Stream::from(TOPLEVEL),
-            true,
-            top_lvl_src,
-        );
-
-        if let Some(module) = self.indices.take_module(clause_name!("$toplevel")) {
-            self.indices.use_module(
-                &mut self.code_repo,
-                self.machine_st.flags,
-                &module,
-            )?;
-
-            Ok(self.indices.insert_module(module))
-        } else {
-            let err = ExistenceError::ModuleSource(ModuleSource::File(
-                clause_name!("$toplevel"),
-            ));
-
-            Err(SessionError::ExistenceError(err))
-        }
+        self.run_module_predicate(clause_name!("loader"), (clause_name!("file_load"), 2));
     }
 
-    fn compile_scryerrc(&mut self) {
-        let mut path = match dirs_next::home_dir() {
-            Some(path) => path,
-            None => return,
-        };
+    fn load_top_level(&mut self) {
+        let mut path_buf = current_dir();
+        path_buf.push("toplevel.pl");
 
-        path.push(".scryerrc");
+        let path = path_buf.to_str().unwrap().to_string();
 
-        if path.is_file() {
-            let file_src = match File::open(&path) {
-                Ok(file_handle) => Stream::from_file_as_input(
-                    clause_name!(".scryerrc"),
-                    file_handle,
-                ),
-                Err(_) => return,
-            };
+        self.load_file(path, Stream::from(include_str!("../toplevel.pl")));
 
-            let rc_src = ListingSource::from_file_and_path(
-                clause_name!(".scryerrc"),
-                path.to_path_buf(),
+        if let Some(toplevel) = self.indices.modules.get(&clause_name!("$toplevel")) {
+            load_module(
+                &mut self.indices.code_dir,
+                &mut self.indices.op_dir,
+                &mut self.indices.meta_predicates,
+                &CompilationTarget::User,
+                toplevel,
             );
-
-            compile_user_module(self, file_src, true, rc_src);
+        } else {
+            unreachable!()
         }
     }
 
-    #[cfg(test)]
-    pub fn reset(&mut self) {
-        self.current_input_stream = readline::input_stream();
-        self.policies.cut_policy = Box::new(DefaultCutPolicy {});
-        self.machine_st.reset();
-    }
+    fn load_special_forms(&mut self) {
+        let mut path_buf = current_dir();
+        path_buf.push("machine/attributed_variables.pl");
 
-    pub fn run_init_code(&mut self, code: Code) -> bool {
-	    let old_machine_st = self.sink_to_snapshot();
-	    self.machine_st.reset();
+        bootstrapping_compile(
+            Stream::from(include_str!("attributed_variables.pl")),
+            self,
+            ListingSource::from_file_and_path(clause_name!("attributed_variables"), path_buf),
+        )
+        .unwrap();
 
-	    self.code_repo.cached_query = code;
-	    self.run_query();
+        let mut path_buf = current_dir();
+        path_buf.push("machine/project_attributes.pl");
 
-        let result = self.machine_st.fail;
-	    self.absorb_snapshot(old_machine_st);
+        bootstrapping_compile(
+            Stream::from(include_str!("project_attributes.pl")),
+            self,
+            ListingSource::from_file_and_path(clause_name!("project_attributes"), path_buf),
+        )
+        .unwrap();
 
-        !result
+        if let Some(module) = self.indices.modules.get(&clause_name!("$atts")) {
+            if let Some(code_index) = module.code_dir.get(&(clause_name!("driver"), 2)) {
+                self.machine_st.attr_var_init.verify_attrs_loc = code_index.local().unwrap();
+            }
+        }
+
+        if let Some(module) = self.indices.modules.get(&clause_name!("$project_atts")) {
+            if let Some(code_index) = module.code_dir.get(&(clause_name!("driver"), 2)) {
+                self.machine_st.attr_var_init.project_attrs_loc = code_index.local().unwrap();
+            }
+        }
     }
 
     pub fn run_top_level(&mut self) {
@@ -336,17 +218,70 @@ impl Machine {
         }
 
         let list_addr = Addr::HeapCell(self.machine_st.heap.to_list(arg_pstrs.into_iter()));
+
         self.machine_st[temp_v!(1)] = list_addr;
 
-        loop {
-            self.machine_st.p = CodePtr::Local(LocalCodePtr::DirEntry(self.toplevel_idx));
-            self.run_query();
+        self.run_module_predicate(clause_name!("$toplevel"), (clause_name!("$repl"), 1));
+    }
+
+    pub(crate) fn configure_modules(&mut self) {
+        fn update_call_n_indices(loader: &Module, target_code_dir: &mut CodeDir) {
+            for arity in 1..66 {
+                let key = (clause_name!("call"), arity);
+
+                match loader.code_dir.get(&key) {
+                    Some(src_code_index) => {
+                        let target_code_index = target_code_dir
+                            .entry(key.clone())
+                            .or_insert_with(|| CodeIndex::new(IndexPtr::Undefined));
+
+                        target_code_index.set(src_code_index.get());
+                    }
+                    None => {
+                        unreachable!();
+                    }
+                }
+            }
+        }
+
+        if let Some(loader) = self.indices.modules.swap_remove(&clause_name!("loader")) {
+            if let Some(builtins) = self.indices.modules.get_mut(&clause_name!("builtins")) {
+                // Import loader's exports into the builtins module so they will be
+                // implicitly included in every further module.
+                load_module(
+                    &mut builtins.code_dir,
+                    &mut builtins.op_dir,
+                    &mut builtins.meta_predicates,
+                    &CompilationTarget::Module(clause_name!("builtins")),
+                    &loader,
+                );
+
+                for export in &loader.module_decl.exports {
+                    builtins.module_decl.exports.push(export.clone());
+                }
+
+                for arity in 10..66 {
+                    builtins
+                        .module_decl
+                        .exports
+                        .push(ModuleExport::PredicateKey((clause_name!("call"), arity)));
+                }
+            }
+
+            for (_, target_module) in self.indices.modules.iter_mut() {
+                update_call_n_indices(&loader, &mut target_module.code_dir);
+            }
+
+            update_call_n_indices(&loader, &mut self.indices.code_dir);
+
+            self.indices.modules.insert(clause_name!("loader"), loader);
+        } else {
+            unreachable!()
         }
     }
 
-    pub fn new(current_input_stream: Stream, current_output_stream: Stream) -> Self
-    {
-        use crate::ref_thread_local::RefThreadLocal;
+    pub fn new(user_input: Stream, user_output: Stream) -> Self {
+        use ref_thread_local::RefThreadLocal;
 
         let mut wam = Machine {
             machine_st: MachineState::new(),
@@ -354,191 +289,91 @@ impl Machine {
             policies: MachinePolicies::new(),
             indices: IndexStore::new(),
             code_repo: CodeRepo::new(),
-            toplevel_idx: 0,
-            current_input_stream,
-            current_output_stream,
+            user_input,
+            user_output,
+            load_contexts: vec![],
         };
 
-        let atom_tbl = wam.indices.atom_tbl.clone();
+        let mut lib_path = current_dir();
 
-        wam.indices.add_term_and_goal_expansion_indices();
+        lib_path.pop();
+        lib_path.push("lib");
 
-        compile_listing(
+        bootstrapping_compile(
+            Stream::from(LIBRARIES.borrow()["ops_and_meta_predicates"]),
             &mut wam,
+            ListingSource::from_file_and_path(
+                clause_name!("ops_and_meta_predicates.pl"),
+                lib_path.clone(),
+            ),
+        )
+        .unwrap();
+
+        bootstrapping_compile(
             Stream::from(LIBRARIES.borrow()["builtins"]),
-            default_index_store!(atom_tbl.clone()),
-            true,
-            ListingSource::User,
-        );
-
-        wam.compile_special_forms();
-
-        compile_user_module(
             &mut wam,
-            Stream::from(LIBRARIES.borrow()["error"]),
-            true,
-            ListingSource::User,
-        );
+            ListingSource::from_file_and_path(clause_name!("builtins.pl"), lib_path.clone()),
+        )
+        .unwrap();
 
-        compile_user_module(
-            &mut wam,
-            Stream::from(LIBRARIES.borrow()["pairs"]),
-            true,
-            ListingSource::User,
-        );
-
-        compile_user_module(
-            &mut wam,
-            Stream::from(LIBRARIES.borrow()["lists"]),
-            true,
-            ListingSource::User,
-        );
-
-        compile_user_module(
-            &mut wam,
-            Stream::from(LIBRARIES.borrow()["iso_ext"]),
-            true,
-            ListingSource::User,
-        );
-
-        compile_user_module(
-            &mut wam,
-            Stream::from(LIBRARIES.borrow()["si"]),
-            true,
-            ListingSource::User,
-        );
-
-        compile_user_module(
-            &mut wam,
-            Stream::from(LIBRARIES.borrow()["charsio"]),
-            true,
-            ListingSource::User,
-        );
-
-        if wam.compile_top_level().is_err() {
-            panic!("Loading '$toplevel' module failed");
+        if let Some(builtins) = wam.indices.modules.get(&clause_name!("builtins")) {
+            load_module(
+                &mut wam.indices.code_dir,
+                &mut wam.indices.op_dir,
+                &mut wam.indices.meta_predicates,
+                &CompilationTarget::User,
+                builtins,
+            );
+        } else {
+            unreachable!()
         }
 
-        wam.compile_scryerrc();
+        lib_path.pop(); // remove the "lib" at the end
+
+        bootstrapping_compile(
+            Stream::from(include_str!("../loader.pl")),
+            &mut wam,
+            ListingSource::from_file_and_path(clause_name!("loader.pl"), lib_path.clone()),
+        )
+        .unwrap();
+
+        wam.configure_modules();
+
+        if let Some(loader) = wam.indices.modules.get(&clause_name!("loader")) {
+            load_module(
+                &mut wam.indices.code_dir,
+                &mut wam.indices.op_dir,
+                &mut wam.indices.meta_predicates,
+                &CompilationTarget::User,
+                loader,
+            );
+        } else {
+            unreachable!()
+        }
+
+        wam.load_special_forms();
+        wam.load_top_level();
         wam.configure_streams();
 
         wam
     }
 
-    pub fn configure_streams(&mut self) {
-        self.current_input_stream.options.alias = Some(clause_name!("user_input"));
+    pub(crate) fn configure_streams(&mut self) {
+        self.user_input.options_mut().alias = Some(clause_name!("user_input"));
 
-        self.indices.stream_aliases.insert(
-            clause_name!("user_input"),
-            self.current_input_stream.clone(),
-        );
-
-        self.indices.streams.insert(
-            self.current_input_stream.clone()
-        );
-
-        self.current_output_stream.options.alias = Some(clause_name!("user_output"));
-
-        self.indices.stream_aliases.insert(
-            clause_name!("user_output"),
-            self.current_output_stream.clone(),
-        );
-
-        self.indices.streams.insert(
-            self.current_output_stream.clone()
-        );
-    }
-
-    #[inline]
-    pub fn machine_flags(&self) -> MachineFlags {
-        self.machine_st.flags
-    }
-
-    pub fn check_toplevel_code(&self, indices: &IndexStore) -> Result<(), SessionError> {
-        for (key, idx) in &indices.code_dir {
-            match ClauseType::from(key.0.clone(), key.1, None) {
-                ClauseType::Named(..) | ClauseType::Op(..) => {}
-                _ => {
-                    // ensure we don't try to overwrite the name/arity of a builtin.
-                    let err_str = format!("{}/{}", key.0, key.1);
-                    let err_str = clause_name!(err_str, self.indices.atom_tbl());
-
-                    return Err(SessionError::CannotOverwriteBuiltIn(err_str));
-                }
-            };
-
-            if let Some(ref existing_idx) = self.indices.code_dir.get(&key) {
-                // ensure we don't try to overwrite an existing predicate from a different module.
-                if !existing_idx.is_undefined() && !idx.is_undefined() {
-                    // allow the overwriting of user-level predicates by all other predicates.
-                    if existing_idx.module_name().as_str() == "user" {
-                        continue;
-                    }
-
-                    if existing_idx.module_name() != idx.module_name() {
-                        let err_str = format!(
-                            "{}/{} from module {}",
-                            key.0,
-                            key.1,
-                            existing_idx.module_name().as_str()
-                        );
-                        let err_str = clause_name!(err_str, self.indices.atom_tbl());
-
-                        return Err(SessionError::CannotOverwriteImport(err_str));
-                    }
-                }
-            }
-        }
-
-        Ok(())
-    }
-
-    pub(crate) fn add_batched_code_dir(&mut self, code_dir: CodeDir) {
-        // error detection has finished, so update the master index of keys.
-        for (key, idx) in code_dir {
-            if let Some(ref master_idx) = self.indices.code_dir.get(&key) {
-                // ensure we don't double borrow if master_idx == idx.
-                // we don't need to modify anything in that case.
-                if !Rc::ptr_eq(&master_idx.0, &idx.0) {
-                    set_code_index!(master_idx, idx.0.borrow().0, idx.module_name());
-                }
-
-                continue;
-            }
-
-            self.indices.code_dir.insert(key, idx);
-        }
-    }
-
-    #[inline]
-    pub(crate) fn add_batched_ops(&mut self, op_dir: OpDir) {
-        self.indices.op_dir.extend(op_dir.into_iter());
-    }
-
-    pub(crate) fn add_in_situ_module_dir(&mut self, module_dir: ModuleDir) {
-        for (module_name, module_skeleton) in module_dir {
-            match self.indices.modules.get_mut(&module_name) {
-                Some(ref mut module) => {
-                    for (key, idx) in module_skeleton.code_dir {
-                        if let Some(existing_idx) = module.code_dir.get(&key) {
-                            set_code_index!(existing_idx, idx.0.borrow().0, module_name.clone());
-                        } else {
-                            module.code_dir.insert(key, idx);
-                        }
-                    }
-                }
-                None => {
-                    self.add_module(module_skeleton);
-                }
-            }
-        }
-    }
-
-    #[inline]
-    pub fn add_module(&mut self, module: Module) {
         self.indices
-            .modules
-            .insert(module.module_decl.name.clone(), module);
+            .stream_aliases
+            .insert(clause_name!("user_input"), self.user_input.clone());
+
+        self.indices.streams.insert(self.user_input.clone());
+
+        self.user_output.options_mut().alias = Some(clause_name!("user_output"));
+
+        self.indices
+            .stream_aliases
+            .insert(clause_name!("user_output"), self.user_output.clone());
+
+        self.indices.streams.insert(self.user_output.clone());
     }
 
     fn throw_session_error(&mut self, err: SessionError, key: PredicateKey) {
@@ -552,307 +387,133 @@ impl Machine {
         return;
     }
 
-    fn extract_module_export_list(&mut self) -> Result<Vec<ModuleExport>, ParserError>
-    {
-	    let mut export_list = self.machine_st[temp_v!(2)].clone();
-	    let mut exports = vec![];
-
-	    while let Addr::Lis(l) = self.machine_st.store(self.machine_st.deref(export_list)) {
-	        match &self.machine_st.heap[l] {
-		        &HeapCellValue::Addr(Addr::Str(s)) => {
-                    match &self.machine_st.heap[s] {
-                        HeapCellValue::NamedStr(arity, ref name, _)
-                            if *arity == 2 && name.as_str() == "/" => {
-		                        let name = match &self.machine_st.heap[s+1] {
-			                        &HeapCellValue::Atom(ref name, _) =>
-			                            name.clone(),
-			                        _ =>
-			                            unreachable!()
-		                        };
-
-		                        let arity = match &self.machine_st.heap[s+2] {
-			                        &HeapCellValue::Integer(ref arity) =>
-			                            arity.to_usize().unwrap(),
-                                    &HeapCellValue::Addr(Addr::Fixnum(n)) =>
-                                        usize::try_from(n).unwrap(),
-			                        _ =>
-			                            unreachable!()
-		                        };
-
-		                        exports.push(ModuleExport::PredicateKey((name, arity)));
-                            }
-                        HeapCellValue::NamedStr(arity, ref name, _)
-                            if *arity == 3 && name.as_str() == "op" => {
-                                let name = match &self.machine_st.heap[s+3] {
-			                        &HeapCellValue::Atom(ref name, _) =>
-			                            name.clone(),
-			                        _ =>
-			                            unreachable!()
-		                        };
-
-                                let spec = match &self.machine_st.heap[s+2] {
-			                        &HeapCellValue::Atom(ref name, _) =>
-			                            name.clone(),
-			                        _ =>
-			                            unreachable!()
-		                        };
-
-		                        let prec = match &self.machine_st.heap[s+1] {
-			                        &HeapCellValue::Integer(ref arity) =>
-			                            arity.to_usize().unwrap(),
-                                    &HeapCellValue::Addr(Addr::Fixnum(n)) =>
-                                        usize::try_from(n).unwrap(),
-			                        _ =>
-			                            unreachable!()
-		                        };
-
-                                exports.push(ModuleExport::OpDecl(to_op_decl(
-                                    prec,
-                                    spec.as_str(),
-                                    name,
-                                )?));
-                            }
-                        _ => unreachable!()
-                    }
-		        }
-		        _ => unreachable!()
-	        }
-
-	        export_list = self.machine_st.heap[l+1].as_addr(l+1);
-	    }
-
-	    Ok(exports)
-    }
-
-    fn use_module<ToSource>(&mut self, to_src: ToSource)
-	where ToSource: Fn(ClauseName) -> ModuleSource
-    {
-	    // the term expander will overwrite the cached query, so save it here.
-	    let cached_query = mem::replace(&mut self.code_repo.cached_query, vec![]);
-
-	    let module_spec = self.machine_st[temp_v!(1)].clone();
-	    let name = {
-            let addr = self.machine_st.store(self.machine_st.deref(module_spec));
-
-            match self.machine_st.heap.index_addr(&addr).as_ref() {
-                HeapCellValue::Atom(name, _) =>
-                    name.clone(),
-                HeapCellValue::Addr(Addr::Char(c)) =>
-                    clause_name!(c.to_string(), self.indices.atom_tbl),
-                HeapCellValue::Addr(addr @ Addr::PStrLocation(..)) => {
-                    let mut heap_pstr_iter =
-                        self.machine_st.heap_pstr_iter(*addr);
-                    clause_name!(
-                        heap_pstr_iter.to_string(),
-                        self.indices.atom_tbl
-                    )
-                }
-                _ => unreachable!(),
-            }
-	    };
-
-	    let load_result = match to_src(name) {
-	        ModuleSource::Library(name) =>
-                if let Some(module) = self.indices.take_module(name.clone()) {
-                    self.indices.remove_module(clause_name!("user"), &module);
-                    self.indices.modules.insert(name.clone(), module);
-
-		            Ok(name)
-		        } else {
-		            load_library(self, name, false)
-		        },
-	        ModuleSource::File(name) =>
-                load_module_from_file(self, PathBuf::from(name.as_str()), false)
-	    };
-
-	    let result = load_result.and_then(|name| {
-            let module = self.indices.take_module(name.clone()).unwrap();
-
-            if !module.is_impromptu_module {
-                self.indices.use_module(&mut self.code_repo, self.machine_st.flags, &module)?;
-            }
-
-            Ok(self.indices.insert_module(module))
-        });
-
-	    self.code_repo.cached_query = cached_query;
-
-	    if let Err(e) = result {
-	        self.throw_session_error(e, (clause_name!("use_module"), 1));
-	    }
-    }
-
-    fn use_qualified_module<ToSource>(&mut self, to_src: ToSource)
-	where ToSource: Fn(ClauseName) -> ModuleSource
-    {
-	    // the term expander will overwrite the cached query, so save it here.
-	    let cached_query = mem::replace(&mut self.code_repo.cached_query, vec![]);
-
-	    let module_spec = self.machine_st[temp_v!(1)].clone();
-	    let name = {
-            let addr = self.machine_st.store(self.machine_st.deref(module_spec));
-
-            match self.machine_st.heap.index_addr(&addr).as_ref() {
-                HeapCellValue::Atom(name, _) =>
-                    name.clone(),
-                HeapCellValue::Addr(Addr::Char(c)) =>
-                    clause_name!(c.to_string(), self.indices.atom_tbl),
-	            _ =>
-                    unreachable!(),
-            }
-	    };
-
-	    let exports = match self.extract_module_export_list() {
-            Ok(exports) => exports,
-            Err(e) => {
-                self.throw_session_error(SessionError::from(e), (clause_name!("use_module"), 2));
-                return;
-            }
-        };
-
-	    let load_result = match to_src(name) {
-	        ModuleSource::Library(name) =>
-                if let Some(module) = self.indices.take_module(name.clone()) {
-                    self.indices.remove_module(clause_name!("user"), &module);
-                    self.indices.modules.insert(name.clone(), module);
-
-		            Ok(name)
-		        } else {
-		            load_library(self, name, false)
-		        },
-	        ModuleSource::File(name) =>
-                load_module_from_file(self, PathBuf::from(name.as_str()), false)
-	    };
-
-	    let result = load_result.and_then(|name| {
-	        let module = self.indices.take_module(name.clone()).unwrap();
-
-            if !module.is_impromptu_module {
-	            self.indices.use_qualified_module(&mut self.code_repo,
-					                              self.machine_st.flags,
-					                              &module,
-					                              &exports)?;
-            }
-
-	        Ok(self.indices.insert_module(module))
-        });
-
-	    self.code_repo.cached_query = cached_query;
-
-	    if let Err(e) = result {
-	        self.throw_session_error(e, (clause_name!("use_module"), 2));
-	    }
-    }
-
     fn handle_toplevel_command(&mut self, code_ptr: REPLCodePtr, p: LocalCodePtr) {
         match code_ptr {
-            REPLCodePtr::CompileBatch => {
-                let user_src = ListingSource::User;
-
-                let src = readline::input_stream();
-                readline::set_prompt(false);
-
-                if let EvalSession::Error(e) = compile_user_module(self, src, false, user_src) {
-                    self.throw_session_error(e, (clause_name!("repl"), 0));
-                }
+            REPLCodePtr::AddDiscontiguousPredicate => {
+                self.add_discontiguous_predicate();
             }
-	        REPLCodePtr::UseModule =>
-		        self.use_module(ModuleSource::Library),
-	        REPLCodePtr::UseModuleFromFile =>
-		        self.use_module(ModuleSource::File),
-	        REPLCodePtr::UseQualifiedModule =>
-		        self.use_qualified_module(ModuleSource::Library),
-	        REPLCodePtr::UseQualifiedModuleFromFile =>
-		        self.use_qualified_module(ModuleSource::File)
+            REPLCodePtr::AddDynamicPredicate => {
+                self.add_dynamic_predicate();
+            }
+            REPLCodePtr::AddMultifilePredicate => {
+                self.add_multifile_predicate();
+            }
+            REPLCodePtr::AddGoalExpansionClause => {
+                self.add_goal_expansion_clause();
+            }
+            REPLCodePtr::AddTermExpansionClause => {
+                self.add_term_expansion_clause();
+            }
+            REPLCodePtr::ClauseToEvacuable => {
+                self.clause_to_evacuable();
+            }
+            REPLCodePtr::ScopedClauseToEvacuable => {
+                self.scoped_clause_to_evacuable();
+            }
+            REPLCodePtr::ConcludeLoad => {
+                self.conclude_load();
+            }
+            REPLCodePtr::PopLoadContext => {
+                self.pop_load_context();
+            }
+            REPLCodePtr::PushLoadContext => {
+                self.push_load_context();
+            }
+            REPLCodePtr::PopLoadStatePayload => {
+                self.pop_load_state_payload();
+            }
+            REPLCodePtr::UseModule => {
+                self.use_module();
+            }
+            REPLCodePtr::LoadCompiledLibrary => {
+                self.load_compiled_library();
+            }
+            REPLCodePtr::DeclareModule => {
+                self.declare_module();
+            }
+            REPLCodePtr::PushLoadStatePayload => {
+                self.push_load_state_payload();
+            }
+            REPLCodePtr::LoadContextSource => {
+                self.load_context_source();
+            }
+            REPLCodePtr::LoadContextFile => {
+                self.load_context_file();
+            }
+            REPLCodePtr::LoadContextDirectory => {
+                self.load_context_directory();
+            }
+            REPLCodePtr::LoadContextModule => {
+                self.load_context_module();
+            }
+            REPLCodePtr::LoadContextStream => {
+                self.load_context_stream();
+            }
+            REPLCodePtr::MetaPredicateProperty => {
+                self.meta_predicate_property();
+            }
+            REPLCodePtr::BuiltInProperty => {
+                self.builtin_property();
+            }
+            REPLCodePtr::MultifileProperty => {
+                self.multifile_property();
+            }
+            REPLCodePtr::DiscontiguousProperty => {
+                self.discontiguous_property();
+            }
+            REPLCodePtr::DynamicProperty => {
+                self.dynamic_property();
+            }
+            REPLCodePtr::Assertz => {
+                self.compile_assert(AppendOrPrepend::Append);
+            }
+            REPLCodePtr::Asserta => {
+                self.compile_assert(AppendOrPrepend::Prepend);
+            }
+            REPLCodePtr::Retract => {
+                self.retract_clause();
+            }
+            REPLCodePtr::AbolishClause => {
+                self.abolish_clause();
+            }
+            REPLCodePtr::IsConsistentWithTermQueue => {
+                self.is_consistent_with_term_queue();
+            }
+            REPLCodePtr::FlushTermQueue => {
+                self.flush_term_queue();
+            }
+            REPLCodePtr::RemoveModuleExports => {
+                self.remove_module_exports();
+            }
+            REPLCodePtr::AddNonCountedBacktracking => {
+                self.add_non_counted_backtracking();
+            }
         }
 
         self.machine_st.p = CodePtr::Local(p);
     }
 
-    fn sink_to_snapshot(&mut self) -> MachineState {
-        let mut snapshot = MachineState::with_small_heap();
-
-        snapshot.hb = self.machine_st.hb;
-        snapshot.e = self.machine_st.e;
-        snapshot.b = self.machine_st.b;
-        snapshot.b0 = self.machine_st.b0;
-        snapshot.s = self.machine_st.s.clone();
-        snapshot.tr = self.machine_st.tr;
-        snapshot.num_of_args = self.machine_st.num_of_args;
-
-        snapshot.fail = self.machine_st.fail;
-        snapshot.trail = mem::replace(&mut self.machine_st.trail, vec![]);
-        snapshot.heap = self.machine_st.heap.take();
-        snapshot.mode = self.machine_st.mode;
-        snapshot.stack = self.machine_st.stack.take();
-        snapshot.registers = mem::replace(&mut self.machine_st.registers, vec![]);
-        snapshot.block = self.machine_st.block;
-
-        snapshot.ball = self.machine_st.ball.take();
-        snapshot.lifted_heap = self.machine_st.lifted_heap.take();
-
-        snapshot
-    }
-
-    fn absorb_snapshot(&mut self, mut snapshot: MachineState) {
-        self.machine_st.hb = snapshot.hb;
-        self.machine_st.e = snapshot.e;
-        self.machine_st.b = snapshot.b;
-        self.machine_st.b0 = snapshot.b0;
-        self.machine_st.s = snapshot.s;
-        self.machine_st.tr = snapshot.tr;
-        self.machine_st.num_of_args = snapshot.num_of_args;
-
-        self.machine_st.fail = snapshot.fail;
-        self.machine_st.trail = mem::replace(&mut snapshot.trail, vec![]);
-
-        self.inner_heap = self.machine_st.heap.take();
-        self.inner_heap.truncate(0);
-
-        self.machine_st.heap = snapshot.heap.take();
-        self.machine_st.mode = snapshot.mode;
-        self.machine_st.stack = snapshot.stack;
-        self.machine_st.registers = mem::replace(&mut snapshot.registers, vec![]);
-        self.machine_st.block = snapshot.block;
-
-        self.machine_st.ball = snapshot.ball.take();
-        self.machine_st.lifted_heap = snapshot.lifted_heap.take();
-    }
-
-    pub(super) fn run_query(&mut self) {
-	    self.machine_st.cp = LocalCodePtr::TopLevel(0, self.code_repo.size_of_cached_query());
-        let end_ptr = CodePtr::Local(self.machine_st.cp);
-
-        while self.machine_st.p < end_ptr {
+    pub(crate) fn run_query(&mut self) {
+        while !self.machine_st.p.is_halt() {
             self.machine_st.query_stepper(
                 &mut self.indices,
                 &mut self.policies,
                 &mut self.code_repo,
-                &mut self.current_input_stream,
-                &mut self.current_output_stream,
+                &mut self.user_input,
+                &mut self.user_output,
             );
 
             match self.machine_st.p {
-                CodePtr::Local(LocalCodePtr::TopLevel(_, p)) if p > 0 => {
-                }
                 CodePtr::REPL(code_ptr, p) => {
-                    self.handle_toplevel_command(code_ptr, p)
-                }
-                CodePtr::DynamicTransaction(trans_type, p) => {
-                    // self.code_repo.cached_query is about to be overwritten by the term expander,
-                    // so hold onto it locally and restore it after the compiler has finished.
-                    self.machine_st.fail = false;
-                    let cached_query = mem::replace(&mut self.code_repo.cached_query, vec![]);
+                    self.handle_toplevel_command(code_ptr, p);
 
-                    self.dynamic_transaction(trans_type, p);
-                    self.code_repo.cached_query = cached_query;
-
-                    if let CodePtr::Local(LocalCodePtr::TopLevel(_, 0)) = self.machine_st.p {
-                        break;
+                    if self.machine_st.fail {
+                        self.machine_st.backtrack();
                     }
                 }
-                _ =>
-                    break
+                _ => {
+                    break;
+                }
             };
         }
     }
@@ -865,39 +526,54 @@ impl MachineState {
         indices: &mut IndexStore,
         policies: &mut MachinePolicies,
         code_repo: &CodeRepo,
-        current_input_stream: &mut Stream,
-        current_output_stream: &mut Stream,
+        user_input: &mut Stream,
+        user_output: &mut Stream,
     ) {
         match instr {
-            &Line::Arithmetic(ref arith_instr) => {
-                self.execute_arith_instr(arith_instr)
-            }
+            &Line::Arithmetic(ref arith_instr) => self.execute_arith_instr(arith_instr),
             &Line::Choice(ref choice_instr) => {
-                self.execute_choice_instr(choice_instr, &mut policies.call_policy)
+                self.execute_choice_instr(
+                    choice_instr,
+                    code_repo,
+                    &mut policies.call_policy,
+                    &mut indices.global_variables,
+                )
             }
             &Line::Cut(ref cut_instr) => {
                 self.execute_cut_instr(cut_instr, &mut policies.cut_policy)
             }
-            &Line::Control(ref control_instr) => {
-                self.execute_ctrl_instr(
-                    indices,
-                    code_repo,
-                    &mut policies.call_policy,
-                    &mut policies.cut_policy,
-                    current_input_stream,
-                    current_output_stream,
-                    control_instr,
-                )
-            }
+            &Line::Control(ref control_instr) => self.execute_ctrl_instr(
+                indices,
+                code_repo,
+                &mut policies.call_policy,
+                &mut policies.cut_policy,
+                user_input,
+                user_output,
+                control_instr,
+            ),
             &Line::Fact(ref fact_instr) => {
                 self.execute_fact_instr(&fact_instr);
                 self.p += 1;
             }
-            &Line::Indexing(ref indexing_instr) => {
-                self.execute_indexing_instr(&indexing_instr)
+            &Line::IndexingCode(ref indexing_lines) => {
+                self.execute_indexing_instr(
+                    indexing_lines,
+                    code_repo,
+                )
             }
             &Line::IndexedChoice(ref choice_instr) => {
-                self.execute_indexed_choice_instr(choice_instr, &mut policies.call_policy)
+                self.execute_indexed_choice_instr(
+                    choice_instr,
+                    &mut policies.call_policy,
+                    &mut indices.global_variables,
+                )
+            }
+            &Line::DynamicIndexedChoice(_) => {
+                self.execute_dynamic_indexed_choice_instr(
+                    code_repo,
+                    &mut policies.call_policy,
+                    &mut indices.global_variables,
+                )
             }
             &Line::Query(ref query_instr) => {
                 self.execute_query_instr(&query_instr);
@@ -911,8 +587,8 @@ impl MachineState {
         indices: &mut IndexStore,
         policies: &mut MachinePolicies,
         code_repo: &CodeRepo,
-        current_input_stream: &mut Stream,
-        current_output_stream: &mut Stream,
+        user_input: &mut Stream,
+        user_output: &mut Stream,
     ) {
         let instr = match code_repo.lookup_instr(self.last_call, &self.p) {
             Some(instr) => instr,
@@ -924,45 +600,26 @@ impl MachineState {
             indices,
             policies,
             code_repo,
-            current_input_stream,
-            current_output_stream,
+            user_input,
+            user_output,
         );
     }
 
     fn backtrack(&mut self) {
-        if self.b > 0 {
-            let b = self.b;
+        let b = self.b;
 
-            self.b0 = self.stack.index_or_frame(b).prelude.b0;
-            self.p = CodePtr::Local(self.stack.index_or_frame(b).prelude.bp);
+        self.b0 = self.stack.index_or_frame(b).prelude.b0;
+        self.p = CodePtr::Local(self.stack.index_or_frame(b).prelude.bp);
 
-            if let CodePtr::Local(LocalCodePtr::TopLevel(_, p)) = self.p {
-                self.fail = p == 0;
-            } else {
-                self.fail = false;
-            }
-        } else {
-            self.p = CodePtr::Local(LocalCodePtr::TopLevel(0, 0));
-        }
+        self.fail = false;
     }
 
     fn check_machine_index(&mut self, code_repo: &CodeRepo) -> bool {
         match self.p {
-            CodePtr::Local(LocalCodePtr::DirEntry(p)) if p < code_repo.code.len() => {}
-            CodePtr::Local(LocalCodePtr::UserTermExpansion(p))
-                if p < code_repo.term_expanders.len() => {}
-            CodePtr::Local(LocalCodePtr::UserTermExpansion(_)) => self.fail = true,
-            CodePtr::Local(LocalCodePtr::UserGoalExpansion(p))
-                if p < code_repo.goal_expanders.len() => {}
-            CodePtr::Local(LocalCodePtr::UserGoalExpansion(_)) => self.fail = true,
-            CodePtr::Local(LocalCodePtr::InSituDirEntry(p)) if p < code_repo.in_situ_code.len() => {
-            }
-            CodePtr::Local(_) | CodePtr::REPL(..) => return false,
-            CodePtr::DynamicTransaction(..) => {
-                // prevent use of dynamic transactions from
-                // succeeding in expansions. self.fail will be toggled
-                // back to false later.
-                self.fail = true;
+            CodePtr::Local(LocalCodePtr::DirEntry(p))
+            | CodePtr::Local(LocalCodePtr::IndexingBuf(p, ..))
+                if p < code_repo.code.len() => {}
+            CodePtr::Local(LocalCodePtr::Halt) | CodePtr::REPL(..) => {
                 return false;
             }
             _ => {}
@@ -977,8 +634,8 @@ impl MachineState {
         indices: &mut IndexStore,
         policies: &mut MachinePolicies,
         code_repo: &mut CodeRepo,
-        current_input_stream: &mut Stream,
-        current_output_stream: &mut Stream,
+        user_input: &mut Stream,
+        user_output: &mut Stream,
     ) -> bool {
         loop {
             let instr = match code_repo.lookup_instr(self.last_call, &self.p) {
@@ -999,8 +656,8 @@ impl MachineState {
                 indices,
                 policies,
                 code_repo,
-                current_input_stream,
-                current_output_stream,
+                user_input,
+                user_output,
             );
 
             if self.fail {
@@ -1025,17 +682,11 @@ impl MachineState {
         indices: &mut IndexStore,
         policies: &mut MachinePolicies,
         code_repo: &mut CodeRepo,
-        current_input_stream: &mut Stream,
-        current_output_stream: &mut Stream,
+        user_input: &mut Stream,
+        user_output: &mut Stream,
     ) {
         loop {
-            self.execute_instr(
-                indices,
-                policies,
-                code_repo,
-                current_input_stream,
-                current_output_stream,
-            );
+            self.execute_instr(indices, policies, code_repo, user_input, user_output);
 
             if self.fail {
                 self.backtrack();
@@ -1055,8 +706,8 @@ impl MachineState {
                         indices,
                         policies,
                         code_repo,
-                        current_input_stream,
-                        current_output_stream,
+                        user_input,
+                        user_output,
                     ) {
                         if self.fail {
                             break;

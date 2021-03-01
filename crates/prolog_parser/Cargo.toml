@@ -2,15 +2,17 @@
 name = "prolog_parser"
 version = "0.8.68"
 authors = ["Mark Thom <markjordanthom@gmail.com>"]
+edition = "2018"
 repository = "https://github.com/mthom/scryer-prolog"
-description = " An operator precedence parser for scryer-prolog, an up and coming ISO Prolog implementation."
+description = " An operator precedence parser for the Rebis development version of Scryer Prolog, an up and coming ISO Prolog implementation."
 license = "BSD-3-Clause"
 
 [dependencies]
+indexmap = "1.0.2"
 lexical = "2.1.0"
 ordered-float = "0.5.0"
 rug = { optional = true, version = "1.4.0" }
-num-rug-adapter = { optional = true, version = "0.1.3" }
+num-rug-adapter = { optional = true, path = "../num-rug-adapter" }
 unicode_reader = "1.0.0"
 
 [lib]

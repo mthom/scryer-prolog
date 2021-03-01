@@ -3068,12 +3068,10 @@ is_false(var(X)) :- nonvar(X).
 
 :- dynamic(goal_expansion/1).
 
-% goal expansion is disabled for now, until #445 is resolved
-%
-% user:goal_expansion(Goal0, Goal) :-
-%         \+ goal_expansion(false),
-%         clpz_expandable(Goal0),
-%         clpz_expansion(Goal0, Goal).
+user:goal_expansion(Goal0, Goal) :-
+        \+ goal_expansion(false),
+        clpz_expandable(Goal0),
+        clpz_expansion(Goal0, Goal).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -5884,10 +5882,12 @@ difference_arcs([V|Vs], FL0) -->
 
 writeln(T) :- write(T), nl.
 
+:- meta_predicate must_succeed(0).
+
 must_succeed(G) :-
-    (G -> true
-     ;write(failed-G), halt
-    ).
+        (   G -> true
+        ;   throw(failed-G)
+        ).
 
 enumerate([], _) --> [].
 enumerate([N|Ns], V) -->
@@ -6046,6 +6046,8 @@ del_all_attrs(Var) :-
 remove_attr(Var, Attr) :-
         functor(Term, Attr, 1),
         put_atts(Var, -Term).
+
+:- meta_predicate with_local_attributes(?, 0, ?).
 
 with_local_attributes(Vars, Goal, Result) :-
         catch((Goal,
@@ -7578,20 +7580,6 @@ attribute_goals(X) -->
         attributes_goals(Ps),
         { del_attr(X, clpz) }.
 
-clpz_aux:attribute_goals(_) --> [].
-
-clpz_gcc_vs:attribute_goals(_) --> [].
-
-clpz_gcc_num:attribute_goals(_) --> [].
-
-clpz_gcc_occurred:attribute_goals(_) --> [].
-
-clpz_relation:attribute_goals(_) --> [].
-
-attribute_goal(Var, Goal) :-
-        phrase(attribute_goals(Var), Goals),
-        list_goal(Goals, Goal).
-
 attributes_goals([]) --> [].
 attributes_goals([propagator(P, State)|As]) -->
         (   { ground(State) } -> []
@@ -7654,7 +7642,9 @@ attribute_goal_(pelement(N,Is,V)) --> [element(N, Is, V)].
 attribute_goal_(pgcc(Vs, Pairs, _))   --> [global_cardinality(Vs, Pairs)].
 attribute_goal_(pgcc_single(_,_))     --> [].
 attribute_goal_(pgcc_check_single(_)) --> [].
-attribute_goal_(pgcc_check(_))        --> [].
+attribute_goal_(pgcc_check(Pairs))    -->
+        { pairs_values(Pairs, Nums),
+          maplist(gcc_done, Nums) }.
 attribute_goal_(pcircuit(Vs))       --> [circuit(Vs)].
 attribute_goal_(pserialized(_,_,_,_,O)) --> original_goal(O).
 attribute_goal_(rel_tuple(R, Tuple)) -->
@@ -7763,11 +7753,10 @@ zo_t(1, true).
    Generated predicates
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
-generated_clauses(Cs) :-
-        make_parse_clpz(Cs1),
-        make_parse_reified(Cs2),
-        make_matches(Cs3),
-        append([Cs1,Cs2,Cs3], Cs).
+term_expansion(make_parse_clpz, Clauses)    :- make_parse_clpz(Clauses).
+term_expansion(make_parse_reified, Clauses) :- make_parse_reified(Clauses).
+term_expansion(make_matches, Clauses)       :- make_matches(Clauses).
 
-:- initialization((generated_clauses(Cs),
-                   maplist(assertz, Cs))).
+make_parse_clpz.
+make_parse_reified.
+make_matches.

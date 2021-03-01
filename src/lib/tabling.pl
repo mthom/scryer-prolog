@@ -11,9 +11,9 @@
 :- use_module(library(tabling/double_linked_list)).
 :- use_module(library(tabling/table_data_structure)).
 :- use_module(library(tabling/batched_worklist)).
-:- use_module(library(tabling/wrapper)).
 :- use_module(library(tabling/global_worklist)).
 :- use_module(library(tabling/table_link_manager)).
+:- use_module(library(tabling/wrapper)).
 
 :- use_module(library(cont)).
 :- use_module(library(lists)).
@@ -65,6 +65,9 @@ table_and_status_for_variant(V,T,S) :-
   % Order of the two calls really important: first create, then get status
   table_for_variant(V,T),
   tbd_table_status(T,S).
+
+
+:- meta_predicate start_tabling(?, 0).
 
 start_tabling(Wrapper,Worker) :-
   put_new_trie_table_link,

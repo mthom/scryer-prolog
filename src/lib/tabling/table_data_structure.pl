@@ -61,6 +61,8 @@
 
 :- attribute table_status/1, newly_created_table_identifiers/1.
 
+verify_attributes(_, _, []).
+
 % This file defines the table datastructure.
 %
 % The table datastructure contains the following sub-structures:

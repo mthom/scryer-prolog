@@ -53,7 +53,7 @@ extend_var_list(Vars, VarList, NewVarList, VarType) :-
     extend_var_list_(Vars, 0, VarList, NewVarList0, VarType),
     append(VarList, NewVarList0, NewVarList).
 
-extend_var_list_([], _, VarList, [], _).
+extend_var_list_([], _, _, [], _).
 extend_var_list_([V|Vs], N, VarList, NewVarList, VarType) :-
     (  var_list_contains_variable(VarList, V) ->
        extend_var_list_(Vs, N, VarList, NewVarList, VarType)

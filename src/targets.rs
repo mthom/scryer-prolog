@@ -1,11 +1,11 @@
-use crate::prolog_parser::ast::*;
+use prolog_parser::ast::*;
 
 use crate::clause_types::*;
 use crate::forms::*;
 use crate::instructions::*;
 use crate::iterators::*;
 
-pub trait CompilationTarget<'a> {
+pub(crate) trait CompilationTarget<'a> {
     type Iterator: Iterator<Item = TermRef<'a>>;
 
     fn iter(_: &'a Term) -> Self::Iterator;

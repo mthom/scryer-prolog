@@ -1,20 +1,20 @@
 use crate::machine::machine_indices::*;
 use crate::machine::machine_state::*;
 
-use crate::indexmap::IndexSet;
+use indexmap::IndexSet;
 
 use std::cmp::Ordering;
 use std::ops::Deref;
 use std::vec::Vec;
 
 #[derive(Debug)]
-pub struct HCPreOrderIterator<'a> {
-    pub machine_st: &'a MachineState,
-    pub state_stack: Vec<Addr>,
+pub(crate) struct HCPreOrderIterator<'a> {
+    pub(crate) machine_st: &'a MachineState,
+    pub(crate) state_stack: Vec<Addr>,
 }
 
 impl<'a> HCPreOrderIterator<'a> {
-    pub fn new(machine_st: &'a MachineState, a: Addr) -> Self {
+    pub(crate) fn new(machine_st: &'a MachineState, a: Addr) -> Self {
         HCPreOrderIterator {
             machine_st,
             state_stack: vec![a],
@@ -22,35 +22,28 @@ impl<'a> HCPreOrderIterator<'a> {
     }
 
     #[inline]
-    pub fn machine_st(&self) -> &MachineState {
+    pub(crate) fn machine_st(&self) -> &MachineState {
         &self.machine_st
     }
 
     fn follow_heap(&mut self, h: usize) -> Addr {
         match &self.machine_st.heap[h] {
             &HeapCellValue::NamedStr(arity, _, _) => {
-                for idx in (1 .. arity + 1).rev() {
+                for idx in (1..arity + 1).rev() {
                     self.state_stack.push(Addr::HeapCell(h + idx));
                 }
 
                 Addr::Str(h)
             }
-            &HeapCellValue::Addr(a) => {
-                self.follow(a)
-            }
-            HeapCellValue::PartialString(..) => {
-                self.follow(Addr::PStrLocation(h, 0))
-            }
-            HeapCellValue::Atom(..) | HeapCellValue::DBRef(_)
-          | HeapCellValue::Integer(_) | HeapCellValue::Rational(_) => {
-                Addr::Con(h)
-            }
-            HeapCellValue::Stream(_) => {
-                Addr::Stream(h)
-            }
-            &HeapCellValue::TcpListener(_) => {
-                Addr::TcpListener(h)
-            }
+            &HeapCellValue::Addr(a) => self.follow(a),
+            HeapCellValue::PartialString(..) => self.follow(Addr::PStrLocation(h, 0)),
+            HeapCellValue::Atom(..)
+            | HeapCellValue::DBRef(_)
+            | HeapCellValue::Integer(_)
+            | HeapCellValue::Rational(_) => Addr::Con(h),
+            HeapCellValue::LoadStatePayload(_) => Addr::LoadStatePayload(h),
+            HeapCellValue::Stream(_) => Addr::Stream(h),
+            HeapCellValue::TcpListener(_) => Addr::TcpListener(h),
         }
     }
 
@@ -68,10 +61,12 @@ impl<'a> HCPreOrderIterator<'a> {
                 da
             }
             Addr::PStrLocation(h, n) => {
-                if let &HeapCellValue::PartialString(ref pstr, has_tail) = &self.machine_st.heap[h] {
-                    if let Some(c) = pstr.range_from(n ..).next() {
+                if let &HeapCellValue::PartialString(ref pstr, has_tail) = &self.machine_st.heap[h]
+                {
+                    if let Some(c) = pstr.range_from(n..).next() {
                         if !pstr.at_end(n + c.len_utf8()) {
-                            self.state_stack.push(Addr::PStrLocation(h, n + c.len_utf8()));
+                            self.state_stack
+                                .push(Addr::PStrLocation(h, n + c.len_utf8()));
                         } else if has_tail {
                             self.state_stack.push(Addr::HeapCell(h + 1));
                         } else {
@@ -92,8 +87,9 @@ impl<'a> HCPreOrderIterator<'a> {
                 self.follow_heap(s) // record terms of structure.
             }
             Addr::Con(h) => {
-                if let &HeapCellValue::PartialString(ref pstr, has_tail) = &self.machine_st.heap[h] {
-                    if let Some(c) = pstr.range_from(0 ..).next() {
+                if let &HeapCellValue::PartialString(ref pstr, has_tail) = &self.machine_st.heap[h]
+                {
+                    if let Some(c) = pstr.range_from(0..).next() {
                         self.state_stack.push(Addr::PStrLocation(h, c.len_utf8()));
                         self.state_stack.push(Addr::Char(c));
 
@@ -107,9 +103,7 @@ impl<'a> HCPreOrderIterator<'a> {
                     Addr::Con(h)
                 }
             }
-            da => {
-                da
-            }
+            da => da,
         }
     }
 }
@@ -122,7 +116,9 @@ impl<'a> Iterator for HCPreOrderIterator<'a> {
     }
 }
 
-pub trait MutStackHCIterator<'b> where Self: Iterator
+pub(crate) trait MutStackHCIterator<'b>
+where
+    Self: Iterator,
 {
     type MutStack;
 
@@ -130,7 +126,7 @@ pub trait MutStackHCIterator<'b> where Self: Iterator
 }
 
 #[derive(Debug)]
-pub struct HCPostOrderIterator<'a> {
+pub(crate) struct HCPostOrderIterator<'a> {
     base_iter: HCPreOrderIterator<'a>,
     parent_stack: Vec<(usize, Addr)>, // number of children, parent node.
 }
@@ -144,7 +140,7 @@ impl<'a> Deref for HCPostOrderIterator<'a> {
 }
 
 impl<'a> HCPostOrderIterator<'a> {
-    pub fn new(base_iter: HCPreOrderIterator<'a>) -> Self {
+    pub(crate) fn new(base_iter: HCPreOrderIterator<'a>) -> Self {
         HCPostOrderIterator {
             base_iter,
             parent_stack: vec![],
@@ -175,13 +171,18 @@ impl<'a> Iterator for HCPostOrderIterator<'a> {
                     }
                     &HeapCellValue::Addr(Addr::PStrLocation(h, n)) => {
                         match &self.machine_st.heap[h] {
-                            &HeapCellValue::PartialString(ref pstr, _) => {
+                            &HeapCellValue::PartialString(..) => {
+                                // ref pstr, _) => {
+                                /*
                                 let c = pstr.range_from(n ..).next().unwrap();
                                 let next_n = n + c.len_utf8();
 
                                 if !pstr.at_end(next_n) {
-                                    self.parent_stack.push((2, Addr::PStrLocation(h, next_n)));
-                                }
+                                */
+                                // self.parent_stack.push((2, Addr::PStrLocation(h, next_n)));
+                                // }
+
+                                self.parent_stack.push((2, Addr::PStrLocation(h, n)));
                             }
                             _ => {
                                 unreachable!()
@@ -200,19 +201,19 @@ impl<'a> Iterator for HCPostOrderIterator<'a> {
 }
 
 impl MachineState {
-    pub fn pre_order_iter<'a>(&'a self, a: Addr) -> HCPreOrderIterator<'a> {
+    pub(crate) fn pre_order_iter<'a>(&'a self, a: Addr) -> HCPreOrderIterator<'a> {
         HCPreOrderIterator::new(self, a)
     }
 
-    pub fn post_order_iter<'a>(&'a self, a: Addr) -> HCPostOrderIterator<'a> {
+    pub(crate) fn post_order_iter<'a>(&'a self, a: Addr) -> HCPostOrderIterator<'a> {
         HCPostOrderIterator::new(HCPreOrderIterator::new(self, a))
     }
 
-    pub fn acyclic_pre_order_iter<'a>(&'a self, a: Addr,) -> HCAcyclicIterator<'a> {
+    pub(crate) fn acyclic_pre_order_iter<'a>(&'a self, a: Addr) -> HCAcyclicIterator<'a> {
         HCAcyclicIterator::new(HCPreOrderIterator::new(self, a))
     }
 
-    pub fn zipped_acyclic_pre_order_iter<'a>(
+    pub(crate) fn zipped_acyclic_pre_order_iter<'a>(
         &'a self,
         a1: Addr,
         a2: Addr,
@@ -233,13 +234,13 @@ impl<'b, 'a: 'b> MutStackHCIterator<'b> for HCPreOrderIterator<'a> {
 }
 
 #[derive(Debug)]
-pub struct HCAcyclicIterator<'a> {
+pub(crate) struct HCAcyclicIterator<'a> {
     iter: HCPreOrderIterator<'a>,
     seen: IndexSet<Addr>,
 }
 
 impl<'a> HCAcyclicIterator<'a> {
-    pub fn new(iter: HCPreOrderIterator<'a>) -> Self {
+    pub(crate) fn new(iter: HCPreOrderIterator<'a>) -> Self {
         HCAcyclicIterator {
             iter,
             seen: IndexSet::new(),
@@ -263,8 +264,7 @@ impl<'b, 'a: 'b> MutStackHCIterator<'b> for HCAcyclicIterator<'a> {
     }
 }
 
-impl<'a> Iterator for HCAcyclicIterator<'a>
-{
+impl<'a> Iterator for HCAcyclicIterator<'a> {
     type Item = Addr;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -282,11 +282,11 @@ impl<'a> Iterator for HCAcyclicIterator<'a>
 }
 
 #[derive(Debug)]
-pub struct HCZippedAcyclicIterator<'a> {
+pub(crate) struct HCZippedAcyclicIterator<'a> {
     i1: HCPreOrderIterator<'a>,
     i2: HCPreOrderIterator<'a>,
     seen: IndexSet<(Addr, Addr)>,
-    pub first_to_expire: Ordering,
+    pub(crate) first_to_expire: Ordering,
 }
 
 impl<'b, 'a: 'b> MutStackHCIterator<'b> for HCZippedAcyclicIterator<'a> {
@@ -298,7 +298,7 @@ impl<'b, 'a: 'b> MutStackHCIterator<'b> for HCZippedAcyclicIterator<'a> {
 }
 
 impl<'a> HCZippedAcyclicIterator<'a> {
-    pub fn new(i1: HCPreOrderIterator<'a>, i2: HCPreOrderIterator<'a>) -> Self {
+    pub(crate) fn new(i1: HCPreOrderIterator<'a>, i2: HCPreOrderIterator<'a>) -> Self {
         HCZippedAcyclicIterator {
             i1,
             i2,
@@ -308,8 +308,7 @@ impl<'a> HCZippedAcyclicIterator<'a> {
     }
 }
 
-impl<'a> Iterator for HCZippedAcyclicIterator<'a>
-{
+impl<'a> Iterator for HCZippedAcyclicIterator<'a> {
     type Item = (Addr, Addr);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -334,9 +333,7 @@ impl<'a> Iterator for HCZippedAcyclicIterator<'a>
                 self.first_to_expire = Ordering::Less;
                 None
             }
-            _ => {
-                None
-            }
+            _ => None,
         }
     }
 }
