@@ -60,7 +60,8 @@ term_expansion_list([Term|Terms], ExpandedTermsHead, ExpandedTermsTail) :-
 
 
 goal_expansion(Goal, Module, ExpandedGoal) :-
-    (  catch('$call'(Module:goal_expansion(Goal, ExpandedGoal0)),
+    (  atom(Module),
+       catch('$call'(Module:goal_expansion(Goal, ExpandedGoal0)),
              E,
              '$call'(loader:'$print_message_and_fail'(E))) ->
        (  var(ExpandedGoal0) ->
