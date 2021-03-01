@@ -14,9 +14,7 @@ load_scryerrc :-
     (  '$home_directory'(HomeDir) ->
        append(HomeDir, "/.scryerrc", ScryerrcFile),
        (  file_exists(ScryerrcFile) ->
-          % convert ScryerrcFile to atom. somehow, I dunno how.
-          append(ScryerrcFile, "'.", ScryerrcFile0),
-          read_term_from_chars(['\'' | ScryerrcFile0], ScryerrcFileAtom),
+          atom_chars(ScryerrcFileAtom, ScryerrcFile),
           catch(use_module(ScryerrcFileAtom), E, print_exception(E))
        ;  true
        )
