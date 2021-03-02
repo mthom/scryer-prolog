@@ -21,12 +21,12 @@ jobs:
         uses: actions-rs/cargo@v1
         with:
           command: rustc
-          args: --verbose --lib -- -D warnings
+          args: --verbose -p scryer-prolog --lib -- -D warnings
       - name: Build bin
         uses: actions-rs/cargo@v1
         with:
           command: rustc
-          args: --verbose --bin scryer-prolog -- -D warnings
+          args: --verbose -p scryer-prolog --bin scryer-prolog -- -D warnings
       - name: Test
         uses: actions-rs/cargo@v1
         with:
