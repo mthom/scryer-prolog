@@ -1,0 +1,51 @@
+[package]
+name = "scryer-prolog"
+version = "0.8.128"
+authors = ["Mark Thom <markjordanthom@gmail.com>"]
+edition = "2018"
+description = "A modern Prolog implementation written mostly in Rust."
+readme = "README.md"
+repository = "https://github.com/mthom/scryer-prolog"
+license = "BSD-3-Clause"
+keywords = ["prolog", "prolog-interpreter", "prolog-system"]
+categories = ["command-line-utilities"]
+build = "build.rs"
+
+[build-dependencies]
+indexmap = "1.0.2"
+
+[features]
+default = ["rug", "prolog_parser/rug"]
+num = ["num-rug-adapter", "prolog_parser/num"]
+
+[dependencies]
+cpu-time = "1.0.0"
+crossterm = "0.16.0"
+dirs-next = "2.0.0"
+divrem = "0.1.0"
+downcast = "0.10.0"
+git-version = "0.3.4"
+hostname = "0.3.1"
+indexmap = "1.0.2"
+lazy_static = "1.4.0"
+libc = "0.2.62"
+nix = "0.15.0"
+num-rug-adapter = { optional = true, path = "../num-rug-adapter" }
+ordered-float = "0.5.0"
+prolog_parser = { path = "../prolog_parser", default-features = false }
+ref_thread_local = "0.0.0"
+rug = { version = "1.4.0", optional = true }
+rustyline = "7.0.0"
+unicode_reader = "1.0.0"
+ring = "0.16.13"
+ripemd160 = "0.8.0"
+sha3 = "0.8.2"
+blake2 = "0.8.1"
+openssl = { version = "0.10.29", features = ["vendored"] }
+native-tls = "0.2.4"
+chrono = "0.4.11"
+select = "0.4.3"
+roxmltree = "0.11.0"
+base64 = "0.12.3"
+sodiumoxide = "0.2.6"
+slice-deque = "0.3.0"
