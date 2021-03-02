@@ -6985,10 +6985,6 @@ cumulative(Tasks, Options) :-
             resource_limit(Start, End, Tasks, Bss, L)
         ).
 
-min_(E, M0, M) :- M is min(E,M0).
-
-max_(E, M0, M) :- M is max(E,M0).
-
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    Trivial lower and upper bounds, assuming no gaps and not necessarily
    retaining the rectangular shape of each task.
