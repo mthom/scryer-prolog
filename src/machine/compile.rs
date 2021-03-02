@@ -1293,6 +1293,26 @@ fn mergeable_indexed_subsequences(
     false
 }
 
+fn print_overwrite_warning(
+    compilation_target: &CompilationTarget,
+    code_ptr: IndexPtr,
+    key: &PredicateKey,
+) {
+    if let CompilationTarget::Module(ref module_name) = compilation_target {
+        match module_name.as_str() {
+            "builtins" | "loader" => return,
+            _ => {}
+        }
+    }
+
+    match code_ptr {
+        IndexPtr::DynamicUndefined | IndexPtr::Undefined => return,
+        _ => {}
+    }
+
+    println!("Warning: overwriting {}/{}", key.0, key.1);
+}
+
 impl<'a> LoadState<'a> {
     fn compile_standalone_clause(
         &mut self,
@@ -1403,7 +1423,7 @@ impl<'a> LoadState<'a> {
                         predicates.compilation_target.clone(),
                     );
                 }
-            }
+            };
 
             match self
                 .wam
@@ -1439,6 +1459,8 @@ impl<'a> LoadState<'a> {
                 }
             }
         }
+
+        print_overwrite_warning(&predicates.compilation_target, code_index.get(), &key);
 
         set_code_index(
             &mut self.retraction_info,

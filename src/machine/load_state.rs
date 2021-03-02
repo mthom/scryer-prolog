@@ -35,7 +35,6 @@ pub(super) fn set_code_index(
                 code_index.set(code_ptr);
                 RetractionRecord::AddedUserPredicate(key)
             } else {
-                // TODO: emit warning about overwriting previous record
                 let replaced = code_index.replace(code_ptr);
                 RetractionRecord::ReplacedUserPredicate(key, replaced)
             }
@@ -45,7 +44,6 @@ pub(super) fn set_code_index(
                 code_index.set(code_ptr);
                 RetractionRecord::AddedModulePredicate(module_name.clone(), key)
             } else {
-                // TODO: emit warning about overwriting previous record
                 let replaced = code_index.replace(code_ptr);
                 RetractionRecord::ReplacedModulePredicate(module_name.clone(), key, replaced)
             }
