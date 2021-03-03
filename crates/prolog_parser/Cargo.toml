@@ -20,4 +20,7 @@ path = "src/lib.rs"
 
 [features]
 num = ["num-rug-adapter"]
-default = ["rug"]
+# no default features to make num tests work
+# workaround for --no-default-features and --features not working intuitively for workspaces with a root package
+# see rust-lang/cargo#7160
+# default = ["rug"]
