@@ -823,584 +823,511 @@ call_clause(G, Args, _, G0) :-
 call(A,B) :-
     (  var(A) ->
        instantiation_error(call/2)
-    ;  (  call_clause(A,[B],2,C) ->
-          '$call'(C)
-       ;  type_error(callable,A,call/2)
-       )
+    ;  call_clause(A,[B],2,C) ->
+       '$call'(C)
+    ;  type_error(callable,A,call/2)
     ).
 
 call(A,B,C) :-
     (  var(A) ->
        instantiation_error(call/3)
-    ;  (  call_clause(A,[B,C],3,D) ->
-          '$call'(D)
-       ;  type_error(callable,A,call/3)
-       )
+    ;  call_clause(A,[B,C],3,D) ->
+       '$call'(D)
+    ;  type_error(callable,A,call/3)
     ).
 
 call(A,B,C,D) :-
     (  var(A) ->
        instantiation_error(call/4)
-    ;  (  call_clause(A,[B,C,D],4,E) ->
-          '$call'(E)
-       ;  type_error(callable,A,call/4)
-       )
+    ;  call_clause(A,[B,C,D],4,E) ->
+       '$call'(E)
+    ;  type_error(callable,A,call/4)
     ).
 
 call(A,B,C,D,E) :-
     (  var(A) ->
        instantiation_error(call/5)
-    ;  (  call_clause(A,[B,C,D,E],5,F) ->
-          '$call'(F)
-       ;  type_error(callable,A,call/5)
-       )
+    ;  call_clause(A,[B,C,D,E],5,F) ->
+       '$call'(F)
+    ;  type_error(callable,A,call/5)
     ).
 
 call(A,B,C,D,E,F) :-
     (  var(A) ->
        instantiation_error(call/6)
-    ;  (  call_clause(A,[B,C,D,E,F],6,G) ->
-          '$call'(G)
-       ;  type_error(callable,A,call/6)
-       )
+    ;  call_clause(A,[B,C,D,E,F],6,G) ->
+       '$call'(G)
+    ;  type_error(callable,A,call/6)
     ).
 
 call(A,B,C,D,E,F,G) :-
     (  var(A) ->
        instantiation_error(call/7)
-    ;  (  call_clause(A,[B,C,D,E,F,G],7,H) ->
-          '$call'(H)
-       ;  type_error(callable,A,call/7)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G],7,H) ->
+       '$call'(H)
+    ;  type_error(callable,A,call/7)
     ).
 
 call(A,B,C,D,E,F,G,H) :-
     (  var(A) ->
        instantiation_error(call/8)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H],8,I) ->
-          '$call'(I)
-       ;  type_error(callable,A,call/8)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H],8,I) ->
+       '$call'(I)
+    ;  type_error(callable,A,call/8)
     ).
 
 call(A,B,C,D,E,F,G,H,I) :-
     (  var(A) ->
        instantiation_error(call/9)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I],9,J) ->
-          '$call'(J)
-       ;  type_error(callable,A,call/9)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I],9,J) ->
+       '$call'(J)
+    ;  type_error(callable,A,call/9)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J) :-
     (  var(A) ->
        instantiation_error(call/10)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J],10,K) ->
-          '$call'(K)
-       ;  type_error(callable,A,call/10)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J],10,K) ->
+       '$call'(K)
+    ;  type_error(callable,A,call/10)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K) :-
     (  var(A) ->
        instantiation_error(call/11)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K],11,L) ->
-          '$call'(L)
-       ;  type_error(callable,A,call/11)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K],11,L) ->
+       '$call'(L)
+    ;  type_error(callable,A,call/11)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L) :-
     (  var(A) ->
        instantiation_error(call/12)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L],12,M) ->
-          '$call'(M)
-       ;  type_error(callable,A,call/12)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L],12,M) ->
+       '$call'(M)
+    ;  type_error(callable,A,call/12)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M) :-
     (  var(A) ->
        instantiation_error(call/13)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M],13,N) ->
-          '$call'(N)
-       ;  type_error(callable,A,call/13)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M],13,N) ->
+       '$call'(N)
+    ;  type_error(callable,A,call/13)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N) :-
     (  var(A) ->
        instantiation_error(call/14)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N],14,O) ->
-          '$call'(O)
-       ;  type_error(callable,A,call/14)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N],14,O) ->
+       '$call'(O)
+    ;  type_error(callable,A,call/14)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O) :-
     (  var(A) ->
        instantiation_error(call/15)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O],15,P) ->
-          '$call'(P)
-       ;  type_error(callable,A,call/15)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O],15,P) ->
+       '$call'(P)
+    ;  type_error(callable,A,call/15)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P) :-
     (  var(A) ->
        instantiation_error(call/16)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P],16,Q) ->
-          '$call'(Q)
-       ;  type_error(callable,A,call/16)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P],16,Q) ->
+       '$call'(Q)
+    ;  type_error(callable,A,call/16)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q) :-
     (  var(A) ->
        instantiation_error(call/17)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q],17,R) ->
-          '$call'(R)
-       ;  type_error(callable,A,call/17)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q],17,R) ->
+       '$call'(R)
+    ;  type_error(callable,A,call/17)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R) :-
     (  var(A) ->
        instantiation_error(call/18)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R],18,S) ->
-          '$call'(S)
-       ;  type_error(callable,A,call/18)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R],18,S) ->
+       '$call'(S)
+    ;  type_error(callable,A,call/18)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S) :-
     (  var(A) ->
        instantiation_error(call/19)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S],19,T) ->
-          '$call'(T)
-       ;  type_error(callable,A,call/19)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S],19,T) ->
+       '$call'(T)
+    ;  type_error(callable,A,call/19)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T) :-
     (  var(A) ->
        instantiation_error(call/20)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T],20,U) ->
-          '$call'(U)
-       ;  type_error(callable,A,call/20)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T],20,U) ->
+       '$call'(U)
+    ;  type_error(callable,A,call/20)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U) :-
     (  var(A) ->
        instantiation_error(call/21)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U],21,V) ->
-          '$call'(V)
-       ;  type_error(callable,A,call/21)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U],21,V) ->
+       '$call'(V)
+    ;  type_error(callable,A,call/21)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V) :-
     (  var(A) ->
        instantiation_error(call/22)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V],22,W) ->
-          '$call'(W)
-       ;  type_error(callable,A,call/22)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V],22,W) ->
+       '$call'(W)
+    ;  type_error(callable,A,call/22)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W) :-
     (  var(A) ->
        instantiation_error(call/23)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W],23,X) ->
-          '$call'(X)
-       ;  type_error(callable,A,call/23)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W],23,X) ->
+       '$call'(X)
+    ;  type_error(callable,A,call/23)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X) :-
     (  var(A) ->
        instantiation_error(call/24)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X],24,Y) ->
-          '$call'(Y)
-       ;  type_error(callable,A,call/24)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X],24,Y) ->
+       '$call'(Y)
+    ;  type_error(callable,A,call/24)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y) :-
     (  var(A) ->
        instantiation_error(call/25)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y],25,Z) ->
-          '$call'(Z)
-       ;  type_error(callable,A,call/25)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y],25,Z) ->
+       '$call'(Z)
+    ;  type_error(callable,A,call/25)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z) :-
     (  var(A) ->
        instantiation_error(call/26)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z],26,A1) ->
-          '$call'(A1)
-       ;  type_error(callable,A,call/26)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z],26,A1) ->
+       '$call'(A1)
+    ;  type_error(callable,A,call/26)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1) :-
     (  var(A) ->
        instantiation_error(call/27)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1],27,B1) ->
-          '$call'(B1)
-       ;  type_error(callable,A,call/27)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1],27,B1) ->
+       '$call'(B1)
+    ;  type_error(callable,A,call/27)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1) :-
     (  var(A) ->
        instantiation_error(call/28)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1],28,C1) ->
-          '$call'(C1)
-       ;  type_error(callable,A,call/28)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1],28,C1) ->
+       '$call'(C1)
+    ;  type_error(callable,A,call/28)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1) :-
     (  var(A) ->
        instantiation_error(call/29)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1],29,D1) ->
-          '$call'(D1)
-       ;  type_error(callable,A,call/29)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1],29,D1) ->
+       '$call'(D1)
+    ;  type_error(callable,A,call/29)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1) :-
     (  var(A) ->
        instantiation_error(call/30)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1],30,E1) ->
-          '$call'(E1)
-       ;  type_error(callable,A,call/30)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1],30,E1) ->
+       '$call'(E1)
+    ;  type_error(callable,A,call/30)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1) :-
     (  var(A) ->
        instantiation_error(call/31)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1],31,F1) ->
-          '$call'(F1)
-       ;  type_error(callable,A,call/31)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1],31,F1) ->
+       '$call'(F1)
+    ;  type_error(callable,A,call/31)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1) :-
     (  var(A) ->
        instantiation_error(call/32)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1],32,G1) ->
-          '$call'(G1)
-       ;  type_error(callable,A,call/32)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1],32,G1) ->
+       '$call'(G1)
+    ;  type_error(callable,A,call/32)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1) :-
     (  var(A) ->
        instantiation_error(call/33)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1],33,H1) ->
-          '$call'(H1)
-       ;  type_error(callable,A,call/33)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1],33,H1) ->
+       '$call'(H1)
+    ;  type_error(callable,A,call/33)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1) :-
     (  var(A) ->
        instantiation_error(call/34)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1],34,I1) ->
-          '$call'(I1)
-       ;  type_error(callable,A,call/34)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1],34,I1) ->
+       '$call'(I1)
+    ;  type_error(callable,A,call/34)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1) :-
     (  var(A) ->
        instantiation_error(call/35)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1],35,J1) ->
-          '$call'(J1)
-       ;  type_error(callable,A,call/35)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1],35,J1) ->
+       '$call'(J1)
+    ;  type_error(callable,A,call/35)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1) :-
     (  var(A) ->
        instantiation_error(call/36)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1],36,K1) ->
-          '$call'(K1)
-       ;  type_error(callable,A,call/36)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1],36,K1) ->
+       '$call'(K1)
+    ;  type_error(callable,A,call/36)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1) :-
     (  var(A) ->
        instantiation_error(call/37)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1],37,L1) ->
-          '$call'(L1)
-       ;  type_error(callable,A,call/37)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1],37,L1) ->
+       '$call'(L1)
+    ;  type_error(callable,A,call/37)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1) :-
     (  var(A) ->
        instantiation_error(call/38)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1],38,M1) ->
-          '$call'(M1)
-       ;  type_error(callable,A,call/38)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1],38,M1) ->
+       '$call'(M1)
+    ;  type_error(callable,A,call/38)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1) :-
     (  var(A) ->
        instantiation_error(call/39)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1],39,N1) ->
-          '$call'(N1)
-       ;  type_error(callable,A,call/39)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1],39,N1) ->
+       '$call'(N1)
+    ;  type_error(callable,A,call/39)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1) :-
     (  var(A) ->
        instantiation_error(call/40)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1],40,O1) ->
-          '$call'(O1)
-       ;  type_error(callable,A,call/40)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1],40,O1) ->
+       '$call'(O1)
+    ;  type_error(callable,A,call/40)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1) :-
     (  var(A) ->
        instantiation_error(call/41)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1],41,P1) ->
-          '$call'(P1)
-       ;  type_error(callable,A,call/41)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1],41,P1) ->
+       '$call'(P1)
+    ;  type_error(callable,A,call/41)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1) :-
     (  var(A) ->
        instantiation_error(call/42)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1],42,Q1) ->
-          '$call'(Q1)
-       ;  type_error(callable,A,call/42)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1],42,Q1) ->
+       '$call'(Q1)
+    ;  type_error(callable,A,call/42)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1) :-
     (  var(A) ->
        instantiation_error(call/43)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1],43,R1) ->
-          '$call'(R1)
-       ;  type_error(callable,A,call/43)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1],43,R1) ->
+       '$call'(R1)
+    ;  type_error(callable,A,call/43)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1) :-
     (  var(A) ->
        instantiation_error(call/44)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1],44,S1) ->
-          '$call'(S1)
-       ;  type_error(callable,A,call/44)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1],44,S1) ->
+       '$call'(S1)
+    ;  type_error(callable,A,call/44)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1) :-
     (  var(A) ->
        instantiation_error(call/45)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1],45,T1) ->
-          '$call'(T1)
-       ;  type_error(callable,A,call/45)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1],45,T1) ->
+       '$call'(T1)
+    ;  type_error(callable,A,call/45)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1) :-
     (  var(A) ->
        instantiation_error(call/46)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1],46,U1) ->
-          '$call'(U1)
-       ;  type_error(callable,A,call/46)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1],46,U1) ->
+       '$call'(U1)
+    ;  type_error(callable,A,call/46)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1) :-
     (  var(A) ->
        instantiation_error(call/47)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1],47,V1) ->
-          '$call'(V1)
-       ;  type_error(callable,A,call/47)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1],47,V1) ->
+       '$call'(V1)
+    ;  type_error(callable,A,call/47)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1) :-
     (  var(A) ->
        instantiation_error(call/48)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1],48,W1) ->
-          '$call'(W1)
-       ;  type_error(callable,A,call/48)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1],48,W1) ->
+       '$call'(W1)
+    ;  type_error(callable,A,call/48)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1) :-
     (  var(A) ->
        instantiation_error(call/49)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1],49,X1) ->
-          '$call'(X1)
-       ;  type_error(callable,A,call/49)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1],49,X1) ->
+       '$call'(X1)
+    ;  type_error(callable,A,call/49)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1) :-
     (  var(A) ->
        instantiation_error(call/50)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1],50,Y1) ->
-          '$call'(Y1)
-       ;  type_error(callable,A,call/50)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1],50,Y1) ->
+       '$call'(Y1)
+    ;  type_error(callable,A,call/50)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1) :-
     (  var(A) ->
        instantiation_error(call/51)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1],51,Z1) ->
-          '$call'(Z1)
-       ;  type_error(callable,A,call/51)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1],51,Z1) ->
+       '$call'(Z1)
+    ;  type_error(callable,A,call/51)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1) :-
     (  var(A) ->
        instantiation_error(call/52)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1],52,A2) ->
-          '$call'(A2)
-       ;  type_error(callable,A,call/52)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1],52,A2) ->
+       '$call'(A2)
+    ;  type_error(callable,A,call/52)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2) :-
     (  var(A) ->
        instantiation_error(call/53)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2],53,B2) ->
-          '$call'(B2)
-       ;  type_error(callable,A,call/53)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2],53,B2) ->
+       '$call'(B2)
+    ;  type_error(callable,A,call/53)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2) :-
     (  var(A) ->
        instantiation_error(call/54)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2],54,C2) ->
-          '$call'(C2)
-       ;  type_error(callable,A,call/54)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2],54,C2) ->
+       '$call'(C2)
+    ;  type_error(callable,A,call/54)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2) :-
     (  var(A) ->
        instantiation_error(call/55)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2],55,D2) ->
-          '$call'(D2)
-       ;  type_error(callable,A,call/55)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2],55,D2) ->
+       '$call'(D2)
+    ;  type_error(callable,A,call/55)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2) :-
     (  var(A) ->
        instantiation_error(call/56)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2],56,E2) ->
-          '$call'(E2)
-       ;  type_error(callable,A,call/56)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2],56,E2) ->
+       '$call'(E2)
+    ;  type_error(callable,A,call/56)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2) :-
     (  var(A) ->
        instantiation_error(call/57)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2],57,F2) ->
-          '$call'(F2)
-       ;  type_error(callable,A,call/57)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2],57,F2) ->
+       '$call'(F2)
+    ;  type_error(callable,A,call/57)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2) :-
     (  var(A) ->
        instantiation_error(call/58)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2],58,G2) ->
-          '$call'(G2)
-       ;  type_error(callable,A,call/58)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2],58,G2) ->
+       '$call'(G2)
+    ;  type_error(callable,A,call/58)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2) :-
     (  var(A) ->
        instantiation_error(call/59)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2],59,H2) ->
-          '$call'(H2)
-       ;  type_error(callable,A,call/59)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2],59,H2) ->
+       '$call'(H2)
+    ;  type_error(callable,A,call/59)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2) :-
     (  var(A) ->
        instantiation_error(call/60)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2],60,I2) ->
-          '$call'(I2)
-       ;  type_error(callable,A,call/60)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2],60,I2) ->
+       '$call'(I2)
+    ;  type_error(callable,A,call/60)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2) :-
     (  var(A) ->
        instantiation_error(call/61)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2],61,J2) ->
-          '$call'(J2)
-       ;  type_error(callable,A,call/61)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2],61,J2) ->
+       '$call'(J2)
+    ;  type_error(callable,A,call/61)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2,J2) :-
     (  var(A) ->
        instantiation_error(call/62)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2,J2],62,K2) ->
-          '$call'(K2)
-       ;  type_error(callable,A,call/62)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2,J2],62,K2) ->
+       '$call'(K2)
+    ;  type_error(callable,A,call/62)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2,J2,K2) :-
     (  var(A) ->
        instantiation_error(call/63)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2,J2,K2],63,L2) ->
-          '$call'(L2)
-       ;  type_error(callable,A,call/63)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2,J2,K2],63,L2) ->
+       '$call'(L2)
+    ;  type_error(callable,A,call/63)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2,J2,K2,L2) :-
     (  var(A) ->
        instantiation_error(call/64)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2,J2,K2,L2],64,M2) ->
-          '$call'(M2)
-       ;  type_error(callable,A,call/64)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2,J2,K2,L2],64,M2) ->
+       '$call'(M2)
+    ;  type_error(callable,A,call/64)
     ).
 
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2,J2,K2,L2,M2) :-
     (  var(A) ->
        instantiation_error(call/65)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2,J2,K2,L2,M2],65,N2) ->
-          '$call'(N2)
-       ;  type_error(callable,A,call/65)
-       )
-    ).
-
-call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2,J2,K2,L2,M2) :-
-    (  var(A) ->
-       instantiation_error(call/65)
-    ;  (  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2,J2,K2,L2,M2],65,N2) ->
-          '$call'(N2)
-       ;  type_error(callable,A,call/65)
-       )
+    ;  call_clause(A,[B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2,J2,K2,L2,M2],65,N2) ->
+       '$call'(N2)
+    ;  type_error(callable,A,call/65)
     ).
