@@ -105,23 +105,23 @@ file_load(_, _).
 
 file_load(Stream, Path, Evacuable) :-
     create_file_load_context(Stream, Path, Evacuable),
-    catch(loader:load_loop(Stream, Evacuable),
+    catch((loader:load_loop(Stream, Evacuable),
+           loader:run_initialization_goals),
           E,
           builtins:(loader:unload_evacuable(Evacuable),
                     loader:'$print_message_and_fail'(E),
 		            builtins:throw(E))),
-    run_initialization_goals,
     '$pop_load_context'.
 
 
 load(Stream) :-
     create_load_context(Stream, Evacuable),
-    catch(loader:load_loop(Stream, Evacuable),
+    catch((loader:load_loop(Stream, Evacuable),
+           loader:run_initialization_goals),
           E,
           builtins:(loader:unload_evacuable(Evacuable),
                     loader:'$print_message_and_fail'(E),
 		            builtins:throw(E))),
-    run_initialization_goals,
     '$pop_load_context',
     false.        %% Clear the heap.
 load(_).
