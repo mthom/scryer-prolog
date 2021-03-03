@@ -3111,7 +3111,7 @@ impl MachineState {
                         self.stream_from_file_spec(atom, indices, &options)?
                     }
                     Addr::PStrLocation(h, n) => match &self.heap[h] {
-                        &HeapCellValue::PartialString(_, true) => {
+                        &HeapCellValue::PartialString(_, _has_tail @ false) => {
                             let mut heap_pstr_iter = self.heap_pstr_iter(Addr::PStrLocation(h, n));
 
                             let file_spec = clause_name!(heap_pstr_iter.to_string(), self.atom_tbl);
