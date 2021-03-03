@@ -494,8 +494,8 @@ body_(Var, C, I, VNs) --> { var(Var) }, !,
 body_((A,B), C, I, VNs) --> !,
         body_(A, C, I, VNs), ",\n",
         body_(B, 0, I, VNs).
-body_((A ; Else), C, I, VNs) --> % ( If -> Then ; Else )
-        { nonvar(A), A = (If -> Then) },
+body_(Body, C, I, VNs) -->
+        { body_if_then_else(Body, If, Then, Else) },
         !,
         indent_to(C, I),
         "(  ",
@@ -513,16 +513,28 @@ body_(Goal, C, I, VNs) -->
         indent_to(C, I), literal(Goal, VNs).
 
 
+% True iff Body has the shape ( If -> Then ; Else ).
+body_if_then_else(Body, If, Then, Else) :-
+        nonvar(Body),
+        Body = (A ; Else),
+        nonvar(A),
+        A = (If -> Then).
+
 else_branch(Else, C, I, VNs) -->
         indent_to(0, I),
         ";  ",
-        body_(Else, C, C, VNs), "\n",
-        indent_to(0, I),
-        ")".
+        (   { body_if_then_else(Else, If, Then, NextElse) } ->
+            { C1 is I + 3 },
+            body_(If, C1, C1, VNs), " ->\n",
+            body_(Then, 0, C1, VNs), "\n",
+            else_branch(NextElse, C1, I, VNs)
+        ;   body_(Else, C, C, VNs), "\n",
+            indent_to(0, I),
+            ")"
+        ).
 
 indent_to(CurrentColumn, Indent) -->
-        { Delta is Indent - CurrentColumn },
-        format_("~t~*|", [Delta]).
+        format_("~t~*|", [Indent-CurrentColumn]).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ?- portray_clause(a).
