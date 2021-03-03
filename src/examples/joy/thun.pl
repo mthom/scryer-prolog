@@ -1,4 +1,4 @@
-﻿/* 
+﻿/*
 
 ████████╗██╗  ██╗██╗   ██╗███╗   ██╗
 ╚══██╔══╝██║  ██║██║   ██║████╗  ██║
@@ -13,7 +13,7 @@
 
     Thun is free software: you can redistribute it and/or modify
     it under the terms of the GNU General Public License as published by
-    the Free Software Foundation, either version 3 of the License, or
+    the Free Software Foundation, either version 3 of the License, or 
     (at your option) any later version.
 
     Thun is distributed in the hope that it will be useful,
@@ -49,6 +49,7 @@ Table of Contents
 :- use_module(library(charsio), [char_type/2]).
 :- use_module(library(clpz)).
 :- use_module(library(dcgs)).
+:- use_module(library(files)).
 :- use_module(library(format), [format/2, portray_clause/1]).
 :- use_module(library(lists), [append/3, list_to_set/2, maplist/2, member/2, select/3]).
 :- use_module(library(pio), [phrase_from_file/2]).
@@ -73,14 +74,14 @@ joy(InputString, StackIn, StackOut) :-
 
 /*
 
-██████╗  █████╗ ██████╗ ███████╗███████╗██████╗        ██╗     
-██╔══██╗██╔══██╗██╔══██╗██╔════╝██╔════╝██╔══██╗       ██║     
-██████╔╝███████║██████╔╝███████╗█████╗  ██████╔╝    ████████╗  
-██╔═══╝ ██╔══██║██╔══██╗╚════██║██╔══╝  ██╔══██╗    ██╔═██╔═╝  
-██║     ██║  ██║██║  ██║███████║███████╗██║  ██║    ██████║    
-╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝╚══════╝╚═╝  ╚═╝    ╚═════╝    
-                                                               
- ██████╗ ██████╗  █████╗ ███╗   ███╗███╗   ███╗ █████╗ ██████╗ 
+██████╗  █████╗ ██████╗ ███████╗███████╗██████╗        ██╗
+██╔══██╗██╔══██╗██╔══██╗██╔════╝██╔════╝██╔══██╗       ██║
+██████╔╝███████║██████╔╝███████╗█████╗  ██████╔╝    ████████╗
+██╔═══╝ ██╔══██║██╔══██╗╚════██║██╔══╝  ██╔══██╗    ██╔═██╔═╝
+██║     ██║  ██║██║  ██║███████║███████╗██║  ██║    ██████║
+╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝╚══════╝╚══════╝╚═╝  ╚═╝    ╚═════╝
+
+ ██████╗ ██████╗  █████╗ ███╗   ███╗███╗   ███╗ █████╗ ██████╗
 ██╔════╝ ██╔══██╗██╔══██╗████╗ ████║████╗ ████║██╔══██╗██╔══██╗
 ██║  ███╗██████╔╝███████║██╔████╔██║██╔████╔██║███████║██████╔╝
 ██║   ██║██╔══██╗██╔══██║██║╚██╔╝██║██║╚██╔╝██║██╔══██║██╔══██╗
@@ -96,7 +97,7 @@ quoted Joy expressions, or symbols (names of functions.)
     term ::= integer | bool | '[' joy ']' | symbol
 
     integer ::= [ '-' | '+' ] ('0'...'9')+
-    bool ::= 'true' | 'false' 
+    bool ::= 'true' | 'false'
     symbol ::= char+
 
     char ::= <Any non-space other than '[' and ']'.>
@@ -449,7 +450,11 @@ prepare_mapping(    Pl, S, [T|In],                                  Acc,  Out) :
 joy_def --> joy_parse([symbol(Name)|Body]), { assert_def(Name, Body) }.
 
 assert_defs(DefsFile) :-
-    phrase_from_file(lines(Lines), DefsFile),
+    prolog_load_context(directory, Dir),
+    atom_chars(Dir, DirChars),
+    path_segments(DefsPath, [DirChars, DefsFile]),
+    atom_chars(DefsPathAtom, DefsPath),
+    phrase_from_file(lines(Lines), DefsPathAtom),
     maplist(phrase(joy_def), Lines).
 
 assert_def(Symbol, Body) :-
@@ -471,7 +476,7 @@ line([C|Cs]) --> [C], line(Cs).
 
 eos([], []).
 
-:- initialization(assert_defs('defs.txt')).
+:- initialization(assert_defs("defs.txt")).
 
 
 % A meta function that finds the names of all available functions.
@@ -486,17 +491,17 @@ words(Words) :-
 
 /*
 
- ██████╗ ██████╗ ███╗   ███╗██████╗ ██╗██╗     ███████╗██████╗ 
+ ██████╗ ██████╗ ███╗   ███╗██████╗ ██╗██╗     ███████╗██████╗
 ██╔════╝██╔═══██╗████╗ ████║██╔══██╗██║██║     ██╔════╝██╔══██╗
 ██║     ██║   ██║██╔████╔██║██████╔╝██║██║     █████╗  ██████╔╝
 ██║     ██║   ██║██║╚██╔╝██║██╔═══╝ ██║██║     ██╔══╝  ██╔══██╗
 ╚██████╗╚██████╔╝██║ ╚═╝ ██║██║     ██║███████╗███████╗██║  ██║
  ╚═════╝ ╚═════╝ ╚═╝     ╚═╝╚═╝     ╚═╝╚══════╝╚══════╝╚═╝  ╚═╝
-  _         ___         _           
- | |_ ___  | _ \_ _ ___| |___  __ _ 
+  _         ___         _
+ | |_ ___  | _ \_ _ ___| |___  __ _
  |  _/ _ \ |  _/ '_/ _ \ | _ \/ _` |
   \__\___/ |_| |_| \___/_|___/\__, |
-                              |___/ 
+                              |___/
 
 This is an experimental compiler from Joy expressions to Prolog code.
 As you will see it's also doing type inference and type checking.
@@ -505,15 +510,15 @@ For many Joy expressions the existing code is enough to "compile" them to
 Prolog code.  E.g. the definition of 'third' is 'rest rest first' and
 that's enough for the code to generate the "type" of the expression:
 
-    ?- joy(`third`, Si, So).
-    Si = [list([_32906, _32942, _32958|_32960])|_32898],
-    So = [_32958|_32898] .
+    ?- joy("third", Si, So).
+    Si = [list([_A,_B,_C|_D])|_E],
+    So = [_C|_E] .
 
 Because 'third' is just manipulating lists (the stack is a list too) the
 type signature is the whole of the (Prolog) implementation of the
 function:
 
-    ?- sjc(third, `third`).
+    ?- sjc(third, "third").
     func(third, [list([_, _, A|_])|B], [A|B]).
 
 So that's nice.
@@ -535,10 +540,9 @@ formal theory there is beyond me.  In any event, it captures the integer
 constraints established by the expressions as well as the "types" of
 inputs and outputs.
 
-    ?- sjc(fn, `* + * -`).
+    ?- sjc(fn, "* + * -").
     func(fn, [int(H), int(I), int(F), int(D), int(C)|A], [int(B)|A]) :-
         maplist(call,
-                
                 [ clpfd:(B+E#=C),
                 clpfd:(G*D#=E),
                 clpfd:(J+F#=G),
@@ -548,28 +552,28 @@ inputs and outputs.
 For functions involving 'branch', compilation results in one rule for each
 (reachable) path of the branch:
 
-    ?- sjc(fn, `[+] [-] branch`).
+    ?- sjc(fn, "[+] [-] branch").
 
-    func(fn, [bool(true), int(C), int(D)|A], [int(B)|A]) :-
-        maplist(call, [clpfd:(B+C#=D)]).
+     func(fn,[bool(true),int(A),int(B)|C],[int(D)|C]) :-
+        maplist(call,[clpz:(D+A#=B)]).
 
-    func(fn, [bool(false), int(B), int(C)|A], [int(D)|A]) :-
-        maplist(call, [clpfd:(B+C#=D)]).
+     func(fn,[bool(false),int(A),int(B)|C],[int(D)|C]) :-
+        maplist(call,[clpz:(A+B#=D)]).
 
 (Note that in the subtraction case (bool(true)) the CLP(FD) constraints
 are coded as addition but the meaning is the same (subtaction) because of
 how the logic variables are named:  B + C #= D  <==>  B #= D - C.)
 
-?- sjc(fn, `[[+] [-] branch] [pop *] branch`).
+?- sjc(fn, "[[+] [-] branch] [pop *] branch").
 
-    func(fn, [bool(true), _, int(B), int(C)|A], [int(D)|A]) :-
-        maplist(call, [clpfd:(B*C#=D)]).
+    func(fn,[bool(true),A,int(B),int(C)|D],[int(E)|D]) :-
+       maplist(call,[clpz:(B*C#=E)]).
 
-    func(fn, [bool(false), bool(true), int(C), int(D)|A], [int(B)|A]) :-
-        maplist(call, [clpfd:(B+C#=D)]).
+    func(fn,[bool(false),bool(true),int(A),int(B)|C],[int(D)|C]) :-
+       maplist(call,[clpz:(D+A#=B)]).
 
-    func(fn, [bool(false), bool(false), int(B), int(C)|A], [int(D)|A]) :-
-        maplist(call, [clpfd:(B+C#=D)]).
+    func(fn,[bool(false),bool(false),int(A),int(B)|C],[int(D)|C]) :-
+       maplist(call,[clpz:(A+B#=D)]).
 
 Three paths, three rules.  Neat, eh?
 
@@ -598,7 +602,7 @@ sjc(Name, InputString) :- phrase(joy_parse(E), InputString), show_joy_compile(Na
 
 Experiments with compilation.
 
-?- sjc(fn, `[+ dup bool] loop`).
+?- sjc(fn, "[+ dup bool] loop").
 
 func(fn, [bool(false)|A], A).
 
@@ -625,7 +629,7 @@ func(fn, [bool(true), int(F), int(G), int(D), int(B)|A], [int(0)|A]) :-
 
 
 
-?- sjc(fn, `[] loop`).
+?- sjc(fn, "[] loop").
 
 func(fn, [bool(false)|A], A).
 
@@ -637,29 +641,29 @@ func(fn, [bool(true), bool(true), bool(true), bool(false)|A], A).
 
 So...
 
-    `[] loop` ::= true* false
+    "[] loop" ::= true* false
 
 sorta...
 
 
 The quine '[[dup cons] dup cons]' works fine:
 
-?- sjc(fn, `dup cons`).
+?- sjc(fn, "dup cons").
 func(fn, [list(A)|B], [list([list(A)|A])|B]).
 
-?- sjc(fn, `[dup cons] dup cons`).
+?- sjc(fn, "[dup cons] dup cons").
 func(fn, A, [list([list([symbol(dup), symbol(cons)]), symbol(dup), symbol(cons)])|A]).
 
-?- sjc(fn, `[dup cons] dup cons i`).
+?- sjc(fn, "[dup cons] dup cons i").
 func(fn, A, [list([list([symbol(dup), symbol(cons)]), symbol(dup), symbol(cons)])|A]).
 
-?- sjc(fn, `[dup cons] dup cons i i i i`).
+?- sjc(fn, "[dup cons] dup cons i i i i").
 func(fn, A, [list([list([symbol(dup), symbol(cons)]), symbol(dup), symbol(cons)])|A]).
 
 
 In the right context the system will "hallucinate" programs:
 
-?- sjc(fn, `x`).
+?- sjc(fn, "x").
 func(fn, [list([])|A], [list([])|A]).
 
 func(fn, [list([int(A)])|B], [int(A), list([int(A)])|B]).
@@ -681,11 +685,11 @@ With iterative deepening this might be very interesting...
 
 Infinite loops are infinite:
 
-?- sjc(fn, `[x] x`).
+?- sjc(fn, "[x] x").
 ERROR: Out of global-stack.
 
 
-?- sjc(fn, `sum`).
+?- sjc(fn, "sum").
 func(fn, [list([])|A], [int(0)|A]).
 
 func(fn, [list([int(A)])|B], [int(A)|B]) :-
@@ -696,14 +700,12 @@ func(fn, [list([int(C), int(B)])|A], [int(D)|A]) :-
 
 func(fn, [list([int(E), int(D), int(B)])|A], [int(C)|A]) :-
     maplist(call,
-            
             [ clpfd:(B+F#=C),
               clpfd:(D+E#=F)
             ]).
 
 func(fn, [list([int(G), int(F), int(D), int(B)])|A], [int(C)|A]) :-
     maplist(call,
-            
             [ clpfd:(B+E#=C),
               clpfd:(D+H#=E),
               clpfd:(F+G#=H)
@@ -715,14 +717,14 @@ TODO: genrec, fix points.
 
 
 
- ██████╗ ██████╗ ███╗   ███╗██████╗ ██╗██╗     ███████╗██████╗ 
+ ██████╗ ██████╗ ███╗   ███╗██████╗ ██╗██╗     ███████╗██████╗
 ██╔════╝██╔═══██╗████╗ ████║██╔══██╗██║██║     ██╔════╝██╔══██╗
 ██║     ██║   ██║██╔████╔██║██████╔╝██║██║     █████╗  ██████╔╝
 ██║     ██║   ██║██║╚██╔╝██║██╔═══╝ ██║██║     ██╔══╝  ██╔══██╗
 ╚██████╗╚██████╔╝██║ ╚═╝ ██║██║     ██║███████╗███████╗██║  ██║
  ╚═════╝ ╚═════╝ ╚═╝     ╚═╝╚═╝     ╚═╝╚══════╝╚══════╝╚═╝  ╚═╝
-  _         __  __         _    _             ___         _     
- | |_ ___  |  \/  |__ _ __| |_ (_)_ _  ___   / __|___  __| |___ 
+  _         __  __         _    _             ___         _
+ | |_ ___  |  \/  |__ _ __| |_ (_)_ _  ___   / __|___  __| |___
  |  _/ _ \ | |\/| / _` / _| ' \| | ' \/ -_) | (__/ _ \/ _` / -_)
   \__\___/ |_|  |_\__,_\__|_||_|_|_||_\___|  \___\___/\__,_\___|
 
@@ -736,7 +738,7 @@ generation.
 3) Translate to:
 
     3a) LLVM IR.
-    
+
     3b) Some subset of C.
 
     3c) Python for Cython.
@@ -763,8 +765,8 @@ small and clean.
     4c) Self-hosting requires Prolog-in-Joy.
 
 
- ___ ___ ___  ___   __  __         _    _             ___        _     
-| _ |_ _/ __|/ __| |  \/  |__ _ __| |_ (_)_ _  ___   / __|___ __| |___ 
+ ___ ___ ___  ___   __  __         _    _             ___        _
+| _ |_ _/ __|/ __| |  \/  |__ _ __| |_ (_)_ _  ___   / __|___ __| |___
 |   /| |\__ | (__  | |\/| / _` / _| ' \| | ' \/ -_) | (__/ _ / _` / -_)
 |_|_|___|___/\___| |_|  |_\__,_\__|_||_|_|_||_\___|  \___\___\__,_\___|
 
@@ -922,9 +924,9 @@ show_compiler(InputString, StackIn, StackOut) :-
     portray_clause(VP).
 
 
-/* 
+/*
 
-?- compiler(`1 2 +`, MachineCode, StackIn, StackOut).
+?- compiler("1 2 +", MachineCode, StackIn, StackOut).
 MachineCode = [mov_imm(_18272, int(1)), mov_imm(_18298, int(2))],
 StackOut = [_18298, _18272|StackIn].
 
@@ -932,70 +934,70 @@ StackOut = [_18298, _18272|StackIn].
 - - - -
 
 
-?- compiler(`1 2 +`, MachineCode, StackIn, StackOut).
+?- compiler("1 2 +", MachineCode, StackIn, StackOut).
 MachineCode = [mov_imm(r1, int(1)), mov_imm(r2, int(2)), add(r1, r2, r1)],
 StackOut = [r1|StackIn].
 
-?- compiler(`1 2 +`, MachineCode, StackIn, StackOut).
+?- compiler("1 2 +", MachineCode, StackIn, StackOut).
 MachineCode = [mov_imm(r1, int(1)), mov_imm(r2, int(2)), add(r1, r2, r1)],
 StackOut = [r1|StackIn].
 
-?- compiler(`1 2 + 3 +`, MachineCode, StackIn, StackOut).
+?- compiler("1 2 + 3 +", MachineCode, StackIn, StackOut).
 MachineCode = [mov_imm(r1, int(1)), mov_imm(r2, int(2)), add(r1, r2, r1), mov_imm(r3, int(3)), add(r1, r3, r1)],
 StackOut = [r1|StackIn].
 
-?- compiler(`1 2 + +`, MachineCode, StackIn, StackOut).
+?- compiler("1 2 + +", MachineCode, StackIn, StackOut).
 MachineCode = [mov_imm(r1, int(1)), mov_imm(r2, int(2)), add(r1, r2, r1), add(_37848, r1, _37848)],
 StackIn = StackOut, StackOut = [_37848|_37850].
 
-?- compiler(`+ +`, MachineCode, StackIn, StackOut).
+?- compiler("+ +", MachineCode, StackIn, StackOut).
 MachineCode = [add(_37270, _37264, _37270), add(_37688, _37270, _37688)],
 StackIn = [_37264, _37270, _37688|_37690],
 StackOut = [_37688|_37690].
 
-?- compiler(`+ +`, MachineCode, [r1, r2, r3], StackOut).
+?- compiler("+ +", MachineCode, [r1, r2, r3], StackOut).
 MachineCode = [add(r2, r1, r2), add(r3, r2, r3)],
 StackOut = [r3].
 
-?- compiler(`+ +`, MachineCode, [r1, r2, r3, r4, r5, r6, r7], StackOut).
+?- compiler("+ +", MachineCode, [r1, r2, r3, r4, r5, r6, r7], StackOut).
 MachineCode = [add(r2, r1, r2), add(r3, r2, r3)],
 StackOut = [r3, r4, r5, r6, r7].
 
 - - - - -
 
 
-?- compiler(`1 2 3 + +`, MachineCode, StackIn, StackOut).
+?- compiler("1 2 3 + +", MachineCode, StackIn, StackOut).
 MachineCode = [mov_imm(r0, int(1)), mov_imm(r1, int(2)), mov_imm(r2, int(3)), add(r1, r2, r1), add(r0, r1, r0)],
 StackOut = [r0|StackIn].
 
 
 register free seems to work...
 
-?- compiler(`1 2 + 3 +`, MachineCode, StackIn, StackOut).
+?- compiler("1 2 + 3 +", MachineCode, StackIn, StackOut).
 MachineCode = [mov_imm(r0, int(1)), mov_imm(r1, int(2)), add(r0, r1, r0), mov_imm(r1, int(3)), add(r0, r1, r0)],
 StackOut = [r0|StackIn] ;
 false.
 
 - - - -
 
-?- compiler(`1 2 dup + 3 +`, MachineCode, StackIn, StackOut).
+?- compiler("1 2 dup + 3 +", MachineCode, StackIn, StackOut).
 MachineCode = [mov_imm(r0, int(1)), mov_imm(r1, int(2)), add(r1, r1, r1), mov_imm(r2, int(3)), add(r1, r2, r1)],
 StackOut = [r1, r0|StackIn] .
 
-?- compiler(`dup +`, MachineCode, StackIn, StackOut).
+?- compiler("dup +", MachineCode, StackIn, StackOut).
 MachineCode = [add(_37000, _37000, _37000)],
 StackIn = StackOut, StackOut = [_37000|_37002].
 
-?- compiler(`dup +`, MachineCode, [r0], StackOut).
+?- compiler("dup +", MachineCode, [r0], StackOut).
 MachineCode = [add(r0, r0, r0)],
 StackOut = [r0].
 
-?- compiler(`dup +`, MachineCode, [r0], [r0]).
+?- compiler("dup +", MachineCode, [r0], [r0]).
 MachineCode = [add(r0, r0, r0)].
 
 - - - -
 
-?- compiler(`1 2 3 4 5 + + + 6 7 + 8 + +`, MachineCode, StackIn, StackOut), maplist(portray_clause, MachineCode).
+?- compiler("1 2 3 4 5 + + + 6 7 + 8 + +", MachineCode, StackIn, StackOut), maplist(portray_clause, MachineCode).
 mov_imm(r0, int(1)).
 mov_imm(r1, int(2)).
 mov_imm(r2, int(3)).
@@ -1020,7 +1022,7 @@ Test that returning registers before asking for new ones
 does reuse registers that are unused and preserve registers
 that are still in use.
 
-?- show_compiler(`1 dup 2 + swap 3 +`, StackIn, StackOut).
+?- show_compiler("1 dup 2 + swap 3 +", StackIn, StackOut).
 mov_imm(r0, int(1)).
 mov_imm(r1, int(2)).
 add(r1, r1, r0).
@@ -1032,12 +1034,12 @@ StackOut = [r0, r1|StackIn] .
 
 
 
-███╗   ███╗███████╗████████╗ █████╗       ██████╗ ██████╗  ██████╗  ██████╗ ██████╗  █████╗ ███╗   ███╗███╗   ███╗██╗███╗   ██╗ ██████╗ 
-████╗ ████║██╔════╝╚══██╔══╝██╔══██╗      ██╔══██╗██╔══██╗██╔═══██╗██╔════╝ ██╔══██╗██╔══██╗████╗ ████║████╗ ████║██║████╗  ██║██╔════╝ 
+███╗   ███╗███████╗████████╗ █████╗       ██████╗ ██████╗  ██████╗  ██████╗ ██████╗  █████╗ ███╗   ███╗███╗   ███╗██╗███╗   ██╗ ██████╗
+████╗ ████║██╔════╝╚══██╔══╝██╔══██╗      ██╔══██╗██╔══██╗██╔═══██╗██╔════╝ ██╔══██╗██╔══██╗████╗ ████║████╗ ████║██║████╗  ██║██╔════╝
 ██╔████╔██║█████╗     ██║   ███████║█████╗██████╔╝██████╔╝██║   ██║██║  ███╗██████╔╝███████║██╔████╔██║██╔████╔██║██║██╔██╗ ██║██║  ███╗
 ██║╚██╔╝██║██╔══╝     ██║   ██╔══██║╚════╝██╔═══╝ ██╔══██╗██║   ██║██║   ██║██╔══██╗██╔══██║██║╚██╔╝██║██║╚██╔╝██║██║██║╚██╗██║██║   ██║
 ██║ ╚═╝ ██║███████╗   ██║   ██║  ██║      ██║     ██║  ██║╚██████╔╝╚██████╔╝██║  ██║██║  ██║██║ ╚═╝ ██║██║ ╚═╝ ██║██║██║ ╚████║╚██████╔╝
-╚═╝     ╚═╝╚══════╝   ╚═╝   ╚═╝  ╚═╝      ╚═╝     ╚═╝  ╚═╝ ╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝     ╚═╝╚═╝     ╚═╝╚═╝╚═╝  ╚═══╝ ╚═════╝ 
+╚═╝     ╚═╝╚══════╝   ╚═╝   ╚═╝  ╚═╝      ╚═╝     ╚═╝  ╚═╝ ╚═════╝  ╚═════╝ ╚═╝  ╚═╝╚═╝  ╚═╝╚═╝     ╚═╝╚═╝     ╚═╝╚═╝╚═╝  ╚═══╝ ╚═════╝
 
 
 
@@ -1047,10 +1049,10 @@ StackOut = [r0, r1|StackIn] .
 
 ███████╗██╗  ██╗██████╗  █████╗ ███╗   ██╗██████╗         ██╗     ██████╗ ██████╗ ███╗   ██╗████████╗██████╗  █████╗  ██████╗████████╗
 ██╔════╝╚██╗██╔╝██╔══██╗██╔══██╗████╗  ██║██╔══██╗       ██╔╝    ██╔════╝██╔═══██╗████╗  ██║╚══██╔══╝██╔══██╗██╔══██╗██╔════╝╚══██╔══╝
-█████╗   ╚███╔╝ ██████╔╝███████║██╔██╗ ██║██║  ██║      ██╔╝     ██║     ██║   ██║██╔██╗ ██║   ██║   ██████╔╝███████║██║        ██║   
-██╔══╝   ██╔██╗ ██╔═══╝ ██╔══██║██║╚██╗██║██║  ██║     ██╔╝      ██║     ██║   ██║██║╚██╗██║   ██║   ██╔══██╗██╔══██║██║        ██║   
-███████╗██╔╝ ██╗██║     ██║  ██║██║ ╚████║██████╔╝    ██╔╝       ╚██████╗╚██████╔╝██║ ╚████║   ██║   ██║  ██║██║  ██║╚██████╗   ██║   
-╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝  ╚═╝╚═╝  ╚═══╝╚═════╝     ╚═╝         ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝   ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝   ╚═╝   
+█████╗   ╚███╔╝ ██████╔╝███████║██╔██╗ ██║██║  ██║      ██╔╝     ██║     ██║   ██║██╔██╗ ██║   ██║   ██████╔╝███████║██║        ██║
+██╔══╝   ██╔██╗ ██╔═══╝ ██╔══██║██║╚██╗██║██║  ██║     ██╔╝      ██║     ██║   ██║██║╚██╗██║   ██║   ██╔══██╗██╔══██║██║        ██║
+███████╗██╔╝ ██╗██║     ██║  ██║██║ ╚████║██████╔╝    ██╔╝       ╚██████╗╚██████╔╝██║ ╚████║   ██║   ██║  ██║██║  ██║╚██████╗   ██║
+╚══════╝╚═╝  ╚═╝╚═╝     ╚═╝  ╚═╝╚═╝  ╚═══╝╚═════╝     ╚═╝         ╚═════╝ ╚═════╝ ╚═╝  ╚═══╝   ╚═╝   ╚═╝  ╚═╝╚═╝  ╚═╝ ╚═════╝   ╚═╝
 
 */
 
@@ -1089,9 +1091,9 @@ shrink --> to_fixed_point(rebo(contracto, shrink)).
 % Out = [rest, second] ;
 % Out = [rest, rest, first].
 
-/* 
+/*
 
-███████╗ ██████╗ ██████╗ ███╗   ███╗ █████╗ ████████╗████████╗███████╗██████╗ 
+███████╗ ██████╗ ██████╗ ███╗   ███╗ █████╗ ████████╗████████╗███████╗██████╗
 ██╔════╝██╔═══██╗██╔══██╗████╗ ████║██╔══██╗╚══██╔══╝╚══██╔══╝██╔════╝██╔══██╗
 █████╗  ██║   ██║██████╔╝██╔████╔██║███████║   ██║      ██║   █████╗  ██████╔╝
 ██╔══╝  ██║   ██║██╔══██╗██║╚██╔╝██║██╔══██║   ██║      ██║   ██╔══╝  ██╔══██╗
@@ -1099,16 +1101,15 @@ shrink --> to_fixed_point(rebo(contracto, shrink)).
 ╚═╝      ╚═════╝ ╚═╝  ╚═╝╚═╝     ╚═╝╚═╝  ╚═╝   ╚═╝      ╚═╝   ╚══════╝╚═╝  ╚═╝
 
 
-?- phrase(joy_parse(E), `22 18 true [false] [1[2[3]]]`), !, format_joy_terms(E, A, []), string_codes(S, A).
-E = [int(22), int(18), bool(true), list([bool(false)]), list([int(1), list([...|...])])],
-A = [50, 50, 32, 49, 56, 32, 116, 114, 117|...],
-S = "22 18 true [false] [1 [2 [3]]]".
+?- phrase(joy_parse(E), "22 18 true [false] [1[2[3]]]"), format_joy_terms(E, S, []).
+E = [int(22),int(18),bool(true),list([bool(false)]),list([int(1),list([int(2),list(...)])])],
+S = "22 18 true [false]  ..."
 
 */
 
-format_joy_expression(   int(I)) --> { number_codes(I, Codes) }, Codes.
-format_joy_expression(  bool(B)) --> {   atom_codes(B, Codes) }, Codes.
-format_joy_expression(symbol(S)) --> {   atom_codes(S, Codes) }, Codes.
+format_joy_expression(   int(I)) --> { number_chars(I, Chars) }, Chars.
+format_joy_expression(  bool(B)) --> {   atom_chars(B, Chars) }, Chars.
+format_joy_expression(symbol(S)) --> {   atom_chars(S, Chars) }, Chars.
 format_joy_expression(  list(J)) --> "[", format_joy_terms(J), "]".
 
 format_joy_terms(    []) --> [].
@@ -1116,20 +1117,20 @@ format_joy_terms(   [T]) --> format_joy_expression(T), !.
 format_joy_terms([T|Ts]) --> format_joy_expression(T), " ", format_joy_terms(Ts).
 
 joy_terms_to_string(Expr, String) :-
-    format_joy_terms(Expr, Codes, []),
-    string_codes(String, Codes).
+    format_joy_terms(Expr, String, []).
+    % string_codes(String, Codes).
 
 
-/* 
+/*
 
-██████╗  █████╗ ██████╗ ████████╗██╗ █████╗ ██╗          
-██╔══██╗██╔══██╗██╔══██╗╚══██╔══╝██║██╔══██╗██║          
-██████╔╝███████║██████╔╝   ██║   ██║███████║██║          
-██╔═══╝ ██╔══██║██╔══██╗   ██║   ██║██╔══██║██║          
-██║     ██║  ██║██║  ██║   ██║   ██║██║  ██║███████╗     
-╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝   ╚═╝╚═╝  ╚═╝╚══════╝     
-                                                         
-██████╗ ███████╗██████╗ ██╗   ██╗ ██████╗███████╗██████╗ 
+██████╗  █████╗ ██████╗ ████████╗██╗ █████╗ ██╗
+██╔══██╗██╔══██╗██╔══██╗╚══██╔══╝██║██╔══██╗██║
+██████╔╝███████║██████╔╝   ██║   ██║███████║██║
+██╔═══╝ ██╔══██║██╔══██╗   ██║   ██║██╔══██║██║
+██║     ██║  ██║██║  ██║   ██║   ██║██║  ██║███████╗
+╚═╝     ╚═╝  ╚═╝╚═╝  ╚═╝   ╚═╝   ╚═╝╚═╝  ╚═╝╚══════╝
+
+██████╗ ███████╗██████╗ ██╗   ██╗ ██████╗███████╗██████╗
 ██╔══██╗██╔════╝██╔══██╗██║   ██║██╔════╝██╔════╝██╔══██╗
 ██████╔╝█████╗  ██║  ██║██║   ██║██║     █████╗  ██████╔╝
 ██╔══██╗██╔══╝  ██║  ██║██║   ██║██║     ██╔══╝  ██╔══██╗
