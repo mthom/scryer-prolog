@@ -711,21 +711,21 @@ thread_goals(Goals0, Goals1, Hole, Functor) :-
 % :- use_module(library(lists)).
 % :- use_module(library(format)).
 %
-% call_form_generator(N) :-
+% n_call_clause(N, Clause) :-
 %     length(Args, N),
-%     CallHead =.. [call, G | Args],
+%     Head =.. [call, G | Args],
 %     N1 is N + 1,
-%     Form = (CallHead :- (  var(G) ->
-%                            instantiation_error(call/N1)
-%                         ;  call_clause(G, Args, N1, G0) ->
-%                            '$call'(G0)
-%                         ;  type_error(callable, G, call/N1)
-%                         )),
-%     portray_clause(Form).
+%     Clause = (Head :- (  var(G) ->
+%                           instantiation_error(call/N1)
+%                       ;   call_clause(G, Args, N1, G0) ->
+%                           '$call'(G0)
+%                       ;   type_error(callable, G, call/N1)
+%                       )).
 %
 % generate_call_forms :-
 %     between(1, 64, N),
-%     call_form_generator(N),
+%     n_call_clause(N, Clause),
+%     portray_clause(Clause),
 %     nl,
 %     false.
 %
