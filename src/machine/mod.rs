@@ -200,12 +200,6 @@ impl Machine {
                 self.machine_st.attr_var_init.verify_attrs_loc = code_index.local().unwrap();
             }
         }
-
-        if let Some(module) = self.indices.modules.get(&clause_name!("$project_atts")) {
-            if let Some(code_index) = module.code_dir.get(&(clause_name!("driver"), 2)) {
-                self.machine_st.attr_var_init.project_attrs_loc = code_index.local().unwrap();
-            }
-        }
     }
 
     pub fn run_top_level(&mut self) {

@@ -1,11 +1,9 @@
 :- module('$project_atts', [copy_term/3]).
 
-driver(QueryVars, AttrVars) :-
+project_attributes(QueryVars, AttrVars) :-
     gather_attr_modules(AttrVars, Modules0),
     sort(Modules0, Modules),
-    call_project_attributes(Modules, QueryVars, AttrVars),
-    call_attribute_goals(Modules, '$project_atts':call_query_var_goals, QueryVars),
-    call_attribute_goals(Modules, '$project_atts':call_attr_var_goals, AttrVars).
+    call_project_attributes(Modules, QueryVars, AttrVars).
 
 enqueue_goals(Goals0) :-
     nonvar(Goals0),

@@ -38,7 +38,7 @@ impl MachineState {
             e: 0,
             num_of_args: 0,
             cp: LocalCodePtr::default(),
-            attr_var_init: AttrVarInitializer::new(0, 0),
+            attr_var_init: AttrVarInitializer::new(0),
             fail: false,
             heap: Heap::new(),
             mode: MachineMode::Write,

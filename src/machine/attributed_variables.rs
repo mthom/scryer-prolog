@@ -17,11 +17,10 @@ pub(super) struct AttrVarInitializer {
     pub(super) cp: LocalCodePtr,
     pub(super) instigating_p: LocalCodePtr,
     pub(super) verify_attrs_loc: usize,
-    pub(super) project_attrs_loc: usize,
 }
 
 impl AttrVarInitializer {
-    pub(super) fn new(verify_attrs_loc: usize, project_attrs_loc: usize) -> Self {
+    pub(super) fn new(verify_attrs_loc: usize) -> Self {
         AttrVarInitializer {
             attribute_goals: vec![],
             attr_var_queue: vec![],
@@ -29,7 +28,6 @@ impl AttrVarInitializer {
             instigating_p: LocalCodePtr::default(),
             cp: LocalCodePtr::default(),
             verify_attrs_loc,
-            project_attrs_loc,
         }
     }
 

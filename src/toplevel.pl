@@ -266,6 +266,7 @@ trailing_period_is_ambiguous(Value) :-
 write_eqs_and_read_input(B, VarList) :-
     term_variables(VarList, Vars0),
     '$term_attributed_variables'(VarList, AttrVars),
+    '$project_atts':project_attributes(Vars0, AttrVars),
     copy_term(AttrVars, AttrVars, AttrGoals),
     term_variables(AttrGoals, AttrGoalVars),
     append([Vars0, AttrGoalVars, AttrVars], Vars),
