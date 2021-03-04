@@ -502,13 +502,13 @@ body_(Body, C, I, VNs) -->
         { C1 is I + 3 },
         body_(If, C1, C1, VNs), " ->\n",
         body_(Then, 0, C1, VNs), "\n",
-        else_branch(Else, C1, I, VNs).
+        else_branch(Else, I, VNs).
 body_((A;B), C, I, VNs) --> !,
         indent_to(C, I),
         "(  ",
         { C1 is I + 3 },
         body_(A, C1, C1, VNs), "\n",
-        else_branch(B, C1, I, VNs).
+        else_branch(B, I, VNs).
 body_(Goal, C, I, VNs) -->
         indent_to(C, I), literal(Goal, VNs).
 
@@ -520,14 +520,17 @@ body_if_then_else(Body, If, Then, Else) :-
         nonvar(A),
         A = (If -> Then).
 
-else_branch(Else, C, I, VNs) -->
+else_branch(Else, I, VNs) -->
         indent_to(0, I),
         ";  ",
+        { C is I + 3 },
         (   { body_if_then_else(Else, If, Then, NextElse) } ->
-            { C1 is I + 3 },
-            body_(If, C1, C1, VNs), " ->\n",
-            body_(Then, 0, C1, VNs), "\n",
-            else_branch(NextElse, C1, I, VNs)
+            body_(If, C, C, VNs), " ->\n",
+            body_(Then, 0, C, VNs), "\n",
+            else_branch(NextElse, I, VNs)
+        ;   { nonvar(Else), Else = ( A ; B ) } ->
+            body_(A, C, C, VNs), "\n",
+            else_branch(B, I, VNs)
         ;   body_(Else, C, C, VNs), "\n",
             indent_to(0, I),
             ")"
