@@ -528,6 +528,9 @@ else_branch(Else, I, VNs) -->
             body_(If, C, C, VNs), " ->\n",
             body_(Then, 0, C, VNs), "\n",
             else_branch(NextElse, I, VNs)
+        ;   { nonvar(Else), Else = ( A ; B ) } ->
+            body_(A, C, C, VNs), "\n",
+            else_branch(B, I, VNs)
         ;   body_(Else, C, C, VNs), "\n",
             indent_to(0, I),
             ")"
