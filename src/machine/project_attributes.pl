@@ -15,7 +15,9 @@ enqueue_goals(Goals0) :-
 enqueue_goals(_).
 
 '$print_project_attributes_exception'(Module, E) :-
-    (  E = error(evaluation_error((Module:project_attributes)/2), project_attributes/2) ->
+    (  (  E = error(existence_error(procedure, project_attributes/2), _)
+       ;  E = error(evaluation_error((Module:project_attributes)/2), _)
+       )  ->
        true
     ;  write_term('caught: ', [quoted(false)]),
        writeq(E),
@@ -26,7 +28,7 @@ call_project_attributes([], _, _).
 call_project_attributes([Module|Modules], QueryVars, AttrVars) :-
     (   catch(Module:project_attributes(QueryVars, AttrVars),
 	      E,
-	      '$print_project_attributes_exception'(Module, E)
+	      '$project_atts':'$print_project_attributes_exception'(Module, E)
 	     )
     ->  true
     ;   true
