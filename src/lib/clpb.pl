@@ -1517,8 +1517,8 @@ pairs_([], _) --> [].
 pairs_([B|Bs], A) --> [A-B], pairs_(Bs, A).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   Set the Prolog flag clpb_residuals to bdd to obtain the BDD nodes
-   as residuals. Note that they cannot be used as regular goals.
+   Assert clpb:clpb_residuals(bdd) to obtain the BDD nodes as
+   residuals. Note that they cannot be used as regular goals.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 nodes([]) --> [].
