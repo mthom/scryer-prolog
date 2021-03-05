@@ -1276,12 +1276,17 @@ weighted_maximum(Ws, Vars, Max) :-
         maplist(var_with_index, Vars, IVs),
         pairs_keys_values(Pairs0, IVs, Ws),
         keysort(Pairs0, Pairs1),
-        pairs_keys_values(Pairs1, IVs1, WeightsIndexOrder),
+        % sum linear combinations of repeated variables
+        group_pairs_by_key(Pairs1, Groups),
+        maplist(group_sumweights_pair, Groups, Pairs2),
+        pairs_keys_values(Pairs2, IVs1, WeightsIndexOrder),
         pairs_values(IVs1, VarsIndexOrder),
         % Pairs is a list of Var-Weight terms, in index order of Vars
         pairs_keys_values(Pairs, VarsIndexOrder, WeightsIndexOrder),
         bdd_maximum(BDD, Pairs, Max),
         max_labeling(BDD, Pairs).
+
+group_sumweights_pair((I-V)-Ws, (I-V)-W) :- sum_list(Ws, W).
 
 max_labeling(1, Pairs) :- max_upto(Pairs, _, _).
 max_labeling(node(_,Var,Low,High,Aux), Pairs0) :-
