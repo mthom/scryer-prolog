@@ -153,7 +153,7 @@ element_gluevar(glue(_,V), N, N) --> [V].
    available space is distributed.
 
    newline is used if ~n occurs in a format string.
-   It is is used because a newline character does not
+   It is used because a newline character does not
    consume whitespace in the sense of format strings.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
