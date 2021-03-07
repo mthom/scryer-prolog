@@ -2578,7 +2578,7 @@ parse_clpz(E, R,
              m(A>>B)           => [p(pfunction(>>, A, B, R))],
              m(A/\B)           => [p(pfunction(/\, A, B, R))],
              m(A\/B)           => [p(pfunction(\/, A, B, R))],
-             m(A xor B)        => [p(pxor(A, B, R))],
+             m(xor(A, B))      => [p(pxor(A, B, R))],
              g(true)           => [g(domain_error(clpz_expression, E))]
             ]).
 
@@ -3503,7 +3503,7 @@ parse_reified(E, R, D,
                m(A>>B)       => [function(D,>>,A,B,R)],
                m(A/\B)       => [function(D,/\,A,B,R)],
                m(A\/B)       => [function(D,\/,A,B,R)],
-               m(A xor B)    => [skeleton(A,B,D,R,pxor)],
+               m(xor(A, B))  => [skeleton(A,B,D,R,pxor)],
                g(true)       => [g(domain_error(clpz_expression, E))]]
              ).
 
@@ -5453,13 +5453,13 @@ run_propagator(pexp(X,Y,Z), MState) -->
 run_propagator(pxor(X,Y,Z), MState) -->
         (   nonvar(X), nonvar(Y) ->
             kill(MState),
-            Z is X xor Y
+            Z is xor(X, Y)
         ;   nonvar(Y), nonvar(Z) ->
             kill(MState),
-            X is Y xor Z
+            X is xor(Y, Z)
         ;   nonvar(Z), nonvar(X) ->
             kill(MState),
-            Y is Z xor X
+            Y is xor(Z, X)
         ;   X == Y ->
             kill(MState),
             queue_goal(Z = 0)
@@ -7653,7 +7653,7 @@ attribute_goal_(pmod(X,M,K))           --> [?(X) mod ?(M) #= ?(K)].
 attribute_goal_(prem(X,Y,Z))           --> [?(X) rem ?(Y) #= ?(Z)].
 attribute_goal_(pmax(X,Y,Z))           --> [?(Z) #= max(?(X),?(Y))].
 attribute_goal_(pmin(X,Y,Z))           --> [?(Z) #= min(?(X),?(Y))].
-attribute_goal_(pxor(X,Y,Z))           --> [?(Z) #= ?(X) xor ?(Y)].
+attribute_goal_(pxor(X,Y,Z))           --> [?(Z) #= xor(?(X), ?(Y))].
 attribute_goal_(scalar_product_neq(Cs,Vs,C)) -->
         [Left #\= Right],
         { scalar_product_left_right([-1|Cs], [C|Vs], Left, Right) }.
