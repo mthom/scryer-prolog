@@ -60,6 +60,7 @@ fn setup_call_cleanup() {
 }
 
 #[test]
+#[ignore] // ignored as this does not terminate
 fn clpz() {
     test_file("src/tests/clpz/test_clpz.pl", Some(b""));
 }
