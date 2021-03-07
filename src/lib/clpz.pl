@@ -2578,7 +2578,7 @@ parse_clpz(E, R,
              m(A>>B)           => [p(pfunction(>>, A, B, R))],
              m(A/\B)           => [p(pfunction(/\, A, B, R))],
              m(A\/B)           => [p(pfunction(\/, A, B, R))],
-             m(xor(A,B))       => [p(pfunction(xor, A, B, R))],
+             m(A xor B)        => [p(pxor(A, B, R))],
              g(true)           => [g(domain_error(clpz_expression, E))]
             ]).
 
@@ -3503,7 +3503,7 @@ parse_reified(E, R, D,
                m(A>>B)       => [function(D,>>,A,B,R)],
                m(A/\B)       => [function(D,/\,A,B,R)],
                m(A\/B)       => [function(D,\/,A,B,R)],
-               m(xor(A, B))  => [function(D,xor,A,B,R)],
+               m(A xor B)    => [skeleton(A,B,D,R,pxor)],
                g(true)       => [g(domain_error(clpz_expression, E))]]
              ).
 
@@ -5445,6 +5445,39 @@ run_propagator(pexp(X,Y,Z), MState) -->
             { n(NZL) cis XL^YL,
               domain_remove_smaller_than(ZD, NZL, ZD1) },
             fd_put(Z, ZD1, ZPs)
+        ;   true
+        ).
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% % Z = X xor Y
+
+run_propagator(pxor(X,Y,Z), MState) -->
+        (   nonvar(X), nonvar(Y) ->
+            kill(MState),
+            Z is X xor Y
+        ;   nonvar(Y), nonvar(Z) ->
+            kill(MState),
+            X is Y xor Z
+        ;   nonvar(Z), nonvar(X) ->
+            kill(MState),
+            Y is Z xor X
+        ;   X == Y ->
+            kill(MState),
+            queue_goal(Z = 0)
+        ;   Y == Z ->
+            kill(MState),
+            queue_goal(X = 0)
+        ;   Z == X ->
+            kill(MState),
+            queue_goal(Y = 0)
+        ;   X == 0 ->
+            kill(MState),
+            queue_goal(Y = Z)
+        ;   Y == 0 ->
+            kill(MState),
+            queue_goal(Z = X)
+        ;   Z == 0 ->
+            kill(MState),
+            queue_goal(X = Y)
         ;   true
         ).
 
@@ -7620,6 +7653,7 @@ attribute_goal_(pmod(X,M,K))           --> [?(X) mod ?(M) #= ?(K)].
 attribute_goal_(prem(X,Y,Z))           --> [?(X) rem ?(Y) #= ?(Z)].
 attribute_goal_(pmax(X,Y,Z))           --> [?(Z) #= max(?(X),?(Y))].
 attribute_goal_(pmin(X,Y,Z))           --> [?(Z) #= min(?(X),?(Y))].
+attribute_goal_(pxor(X,Y,Z))           --> [?(Z) #= ?(X) xor ?(Y)].
 attribute_goal_(scalar_product_neq(Cs,Vs,C)) -->
         [Left #\= Right],
         { scalar_product_left_right([-1|Cs], [C|Vs], Left, Right) }.
