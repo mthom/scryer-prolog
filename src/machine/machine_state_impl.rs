@@ -1750,28 +1750,57 @@ impl MachineState {
         let mut seen = IndexSet::new();
         let mut fail = false;
         let mut iter = self.pre_order_iter(addr);
+        let mut parent_stack = vec![];
 
-        let is_composite = |addr: &Addr| match *addr {
+        let is_composite = |addr: Addr| match addr {
             Addr::Str(_) | Addr::Lis(_) | Addr::PStrLocation(..) => true,
             _ => false,
         };
 
-        loop {
-            if let Some(addr) = iter.stack().last() {
+        'outer: loop {
+            if let Some(addr) = iter.stack().last().cloned() {
+                let addr = self.store(self.deref(addr));
+
                 if is_composite(addr) {
-                    if !seen.contains(addr) {
-                        seen.insert(*addr);
+                    if !seen.contains(&addr) {
+                        seen.insert(addr);
                     } else {
-                        fail = true;
-                        break;
+                        // when we again encounter a seen composite
+                        // term, check that it precedes itself as a
+                        // parent in the post-order traversal. in the
+                        // future, when value cells have mark bits,
+                        // use them to designate parenthood instead of
+                        // this linear search.
+
+                        for (_, prec_addr) in parent_stack.iter().rev().cloned() {
+                            if prec_addr == addr {
+                                fail = true;
+                                break 'outer;
+                            }
+                        }
                     }
-                } else {
-                    iter.stack().pop();
+
+                    let arity = match addr {
+                        Addr::Str(h) => match &self.heap[h] {
+                            &HeapCellValue::NamedStr(arity, ..) => arity,
+                            _ => unreachable!(),
+                        },
+                        _ => 2,
+                    };
+
+                    parent_stack.push((arity, addr));
                 }
             }
 
             if iter.next().is_none() {
                 break;
+            } else {
+                while let Some((rem_children, addr)) = parent_stack.pop() {
+                    if rem_children > 0 {
+                        parent_stack.push((rem_children - 1, addr));
+                        break;
+                    }
+                }
             }
         }
 
