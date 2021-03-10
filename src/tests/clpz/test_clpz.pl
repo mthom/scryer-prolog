@@ -100,7 +100,7 @@ run :-
             Dss
         ),
         E,
-        (   write('caugth: '), write(E), nl,
+        (   write('caught: '), write(E), nl,
             portray_clause([N, Settings, Vs, Gs4, Dss]), nl,
             false
         )
