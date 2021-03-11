@@ -1,0 +1,1 @@
+:- initialization(throw(e)).

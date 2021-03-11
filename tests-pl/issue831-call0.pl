@@ -1,0 +1,1 @@
+:- initialization(call).
