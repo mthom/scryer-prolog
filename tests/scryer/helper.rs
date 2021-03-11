@@ -60,7 +60,7 @@ pub fn run_top_level_test_no_args<
     run_top_level_test_with_args::<&[&str], _, _, _, _>(&[], stdin, expected_stdout)
 }
 
-/// Test whether scryr-prolog
+/// Test whether scryer-prolog
 /// produces the expected output when called with the supplied
 /// arguments and fed the supplied input
 pub fn run_top_level_test_with_args<

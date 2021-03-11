@@ -1,6 +1,6 @@
 :- use_module(library(debug)).
 :- use_module(library(format)).
 
-missing_dot :- write('Not "." at the end of the line'), nl
+missing_dot :- write('No "." at the end of the line'), nl
 
-:- initialize(missing_dot).
+:- initialization(missing_dot).
