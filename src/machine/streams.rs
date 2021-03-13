@@ -365,7 +365,17 @@ impl Stream {
     }
 
     pub fn bytes(&self) -> Option<std::cell::Ref<Vec<u8>>> {
-        // if Ref had an and_then function this could be simplified
+        /*
+        // Replacement of workaround for when we have stable https://github.com/rust-lang/rust/issues/81061
+        std::cell::Ref::filter_map(
+            self.stream_inst.0.borrow(),
+            |inner_stream| match inner_stream.stream_inst {
+                StreamInstance::Bytes(cursor) => Some(cursor.get_ref()),
+                _ => None,
+            },
+        )
+        .ok()
+        */
         let val = std::cell::Ref::map(self.stream_inst.0.borrow(), |inner_stream| {
             &inner_stream.stream_inst
         });
