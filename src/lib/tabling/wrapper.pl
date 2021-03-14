@@ -56,8 +56,8 @@
 %% table(PIList) :-
 %% 	throw(error(context_error(nodirective, table(PIList)), _)).
 
-instantiation_error(Var) :-
-        throw(error(instantiation_error(Var), _)).
+%% instantiation_error(Var) :-
+%%         throw(error(instantiation_error(Var), _)).
 
 wrappers(Var) -->
 	{ var(Var), !,
