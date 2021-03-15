@@ -1297,6 +1297,7 @@ fn print_overwrite_warning(
     compilation_target: &CompilationTarget,
     code_ptr: IndexPtr,
     key: &PredicateKey,
+    is_dynamic: bool,
 ) {
     if let CompilationTarget::Module(ref module_name) = compilation_target {
         match module_name.as_str() {
@@ -1307,6 +1308,7 @@ fn print_overwrite_warning(
 
     match code_ptr {
         IndexPtr::DynamicUndefined | IndexPtr::Undefined => return,
+        _ if is_dynamic => return,
         _ => {}
     }
 
@@ -1460,7 +1462,12 @@ impl<'a> LoadState<'a> {
             }
         }
 
-        print_overwrite_warning(&predicates.compilation_target, code_index.get(), &key);
+        print_overwrite_warning(
+            &predicates.compilation_target,
+            code_index.get(),
+            &key,
+            settings.is_dynamic(),
+        );
 
         set_code_index(
             &mut self.retraction_info,
