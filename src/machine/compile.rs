@@ -9,7 +9,7 @@ use crate::machine::preprocessor::*;
 use crate::machine::term_stream::*;
 use crate::machine::*;
 
-use slice_deque::sdeq;
+use slice_deque::{sdeq, SliceDeque};
 
 use std::cell::Cell;
 use std::collections::VecDeque;
@@ -867,7 +867,7 @@ fn prepend_compiled_clause(
 
     let target_arg_num = skeleton.clauses[0].opt_arg_index_key.arg_num();
     let head_arg_num = skeleton.clauses[1].opt_arg_index_key.arg_num();
-    
+
     let settings = CodeGenSettings {
         global_clock_tick: if skeleton.is_dynamic {
             Some(global_clock_tick)
@@ -1316,6 +1316,18 @@ fn print_overwrite_warning(
 }
 
 impl<'a> LoadState<'a> {
+    pub(super) fn listing_src_file_name(&self) -> Option<ClauseName> {
+        if let Some(load_context) = self.wam.load_contexts.last() {
+            if let Some(path_str) = load_context.path.to_str() {
+                if !path_str.is_empty() {
+                    return Some(clause_name!(path_str.to_string(), self.wam.machine_st.atom_tbl));
+                }
+            }
+        }
+
+        None
+    }
+
     fn compile_standalone_clause(
         &mut self,
         term: Term,
@@ -1349,7 +1361,7 @@ impl<'a> LoadState<'a> {
         key: PredicateKey,
         predicates: &mut PredicateQueue,
         settings: CodeGenSettings,
-    ) -> Result<(), SessionError> {
+    ) -> Result<CodeIndex, SessionError> {
         let code_index = self.get_or_insert_code_index(
             key.clone(),
             predicates.compilation_target.clone(),
@@ -1427,39 +1439,28 @@ impl<'a> LoadState<'a> {
                 }
             };
 
-            match self
-                .wam
-                .indices
-                .get_local_predicate_skeleton_mut(
-                    &self.compilation_target,
-                    predicates.compilation_target.clone(),
-                    key.clone(),
-                )
-            {
-                Some(skeleton) => {
-                    self.retraction_info
-                        .push_record(RetractionRecord::SkeletonLocalClauseTruncateBack(
-                            self.compilation_target.clone(),
-                            predicates.compilation_target.clone(),
-                            key.clone(),
-                            skeleton.clause_clause_locs.len(),
-                        ));
-
-                    skeleton.clause_clause_locs.extend_from_slice(
-                        &clause_clause_locs[0 ..]
+            if let Some(filename) = self.listing_src_file_name() {
+                if let CompilationTarget::User = &predicates.compilation_target {
+                    let compilation_target = mem::replace(
+                        &mut self.compilation_target,
+                        CompilationTarget::Module(filename),
                     );
-                }
-                None => {
-                    let mut skeleton = PredicateSkeleton::new();
-                    skeleton.clause_clause_locs = clause_clause_locs;
 
-                    self.add_local_extensible_predicate(
-                        predicates.compilation_target.clone(),
-                        key.clone(),
-                        skeleton,
+                    self.extend_local_predicate_skeleton(
+                        &CompilationTarget::User,
+                        &key,
+                        clause_clause_locs.clone(),
                     );
+
+                    self.compilation_target = compilation_target;
                 }
             }
+
+            self.extend_local_predicate_skeleton(
+                &predicates.compilation_target,
+                &key,
+                clause_clause_locs,
+            );
         }
 
         print_overwrite_warning(
@@ -1469,20 +1470,22 @@ impl<'a> LoadState<'a> {
             settings.is_dynamic(),
         );
 
+        let index_ptr = if settings.is_dynamic() {
+            IndexPtr::DynamicIndex(code_ptr)
+        } else {
+            IndexPtr::Index(code_ptr)
+        };
+
         set_code_index(
             &mut self.retraction_info,
             &predicates.compilation_target,
             key,
             &code_index,
-            if settings.is_dynamic() {
-                IndexPtr::DynamicIndex(code_ptr)
-            } else {
-                IndexPtr::Index(code_ptr)
-            },
+            index_ptr,
         );
 
         self.wam.code_repo.code.extend(code.into_iter());
-        Ok(())
+        Ok(code_index)
     }
 
     fn record_incremental_compile(
@@ -1516,6 +1519,125 @@ impl<'a> LoadState<'a> {
             });
     }
 
+    fn extend_local_predicate_skeleton(
+        &mut self,
+        compilation_target: &CompilationTarget,
+        key: &PredicateKey,
+        clause_clause_locs: SliceDeque<usize>,
+    ) {
+        match self
+            .wam
+            .indices
+            .get_local_predicate_skeleton_mut(
+                &self.compilation_target,
+                compilation_target.clone(),
+                key.clone(),
+            )
+        {
+            Some(skeleton) => {
+                self.retraction_info
+                    .push_record(RetractionRecord::SkeletonLocalClauseTruncateBack(
+                        self.compilation_target.clone(),
+                        compilation_target.clone(),
+                        key.clone(),
+                        skeleton.clause_clause_locs.len(),
+                    ));
+
+                skeleton.clause_clause_locs.extend_from_slice(
+                    &clause_clause_locs[0 ..]
+                );
+            }
+            None => {
+                let mut skeleton = PredicateSkeleton::new();
+                skeleton.clause_clause_locs = clause_clause_locs;
+
+                self.add_local_extensible_predicate(
+                    compilation_target.clone(),
+                    key.clone(),
+                    skeleton,
+                );
+            }
+        }
+    }
+
+    fn push_front_to_local_predicate_skeleton(
+        &mut self,
+        compilation_target: &CompilationTarget,
+        key: &PredicateKey,
+        code_len: usize,
+    ) {
+        match self
+            .wam
+            .indices
+            .get_local_predicate_skeleton_mut(
+                &self.compilation_target,
+                compilation_target.clone(),
+                key.clone(),
+            )
+        {
+            Some(skeleton) => {
+                self.retraction_info.push_record(
+                    RetractionRecord::SkeletonLocalClauseClausePopFront(
+                        self.compilation_target.clone(),
+                        compilation_target.clone(),
+                        key.clone(),
+                    ),
+                );
+
+                skeleton.clause_clause_locs.push_front(code_len);
+            }
+            None => {
+                let mut skeleton = PredicateSkeleton::new();
+                skeleton.clause_clause_locs.push_front(code_len);
+
+                self.add_local_extensible_predicate(
+                    compilation_target.clone(),
+                    key.clone(),
+                    skeleton,
+                );
+            }
+        }
+    }
+
+    fn push_back_to_local_predicate_skeleton(
+        &mut self,
+        compilation_target: &CompilationTarget,
+        key: &PredicateKey,
+        code_len: usize,
+    ) {
+        match self
+            .wam
+            .indices
+            .get_local_predicate_skeleton_mut(
+                &self.compilation_target,
+                compilation_target.clone(),
+                key.clone(),
+            )
+        {
+            Some(skeleton) => {
+                self.retraction_info.push_record(
+                    RetractionRecord::SkeletonLocalClauseClausePopBack(
+                        self.compilation_target.clone(),
+                        compilation_target.clone(),
+                        key.clone(),
+                    ),
+                );
+
+                skeleton.clause_clause_locs.push_back(code_len);
+            }
+            None => {
+                let mut skeleton = PredicateSkeleton::new();
+                skeleton.clause_clause_locs.push_back(code_len);
+
+                self.add_local_extensible_predicate(
+                    compilation_target.clone(),
+                    key.clone(),
+                    skeleton,
+                );
+            }
+        }
+    }
+
     pub(super) fn incremental_compile_clause(
         &mut self,
         key: PredicateKey,
@@ -1523,7 +1645,7 @@ impl<'a> LoadState<'a> {
         compilation_target: CompilationTarget,
         non_counted_bt: bool,
         append_or_prepend: AppendOrPrepend,
-    ) -> Result<(), SessionError> {
+    ) -> Result<CodeIndex, SessionError> {
         self.record_incremental_compile(
             key.clone(),
             compilation_target.clone(),
@@ -1607,35 +1729,26 @@ impl<'a> LoadState<'a> {
                     self.wam.machine_st.global_clock,
                 );
 
-                match self
-                    .wam
-                    .indices
-                    .get_local_predicate_skeleton_mut(
-                        &self.compilation_target,
-                        compilation_target.clone(),
-                        key.clone(),
-                    )
-                {
-                    Some(skeleton) => {
-                        self.retraction_info.push_record(
-                            RetractionRecord::SkeletonLocalClauseClausePopBack(
-                                self.compilation_target.clone(),
-                                compilation_target.clone(),
-                                key.clone(),
-                            ),
+                self.push_back_to_local_predicate_skeleton(
+                    &compilation_target,
+                    &key,
+                    code_len,
+                );
+
+                if let Some(filename) = self.listing_src_file_name() {
+                    if let CompilationTarget::User = &compilation_target {
+                        let compilation_target = mem::replace(
+                            &mut self.compilation_target,
+                            CompilationTarget::Module(filename),
                         );
 
-                        skeleton.clause_clause_locs.push_back(code_len);
-                    }
-                    None => {
-                        let mut skeleton = PredicateSkeleton::new();
-                        skeleton.clause_clause_locs.push_back(code_len);
-
-                        self.add_local_extensible_predicate(
-                            compilation_target.clone(),
-                            key.clone(),
-                            skeleton,
+                        self.push_back_to_local_predicate_skeleton(
+                            &CompilationTarget::User,
+                            &key,
+                            code_len,
                         );
+
+                        self.compilation_target = compilation_target;
                     }
                 }
 
@@ -1654,7 +1767,7 @@ impl<'a> LoadState<'a> {
                     );
                 }
 
-                Ok(())
+                Ok(code_index)
             }
             AppendOrPrepend::Prepend => {
                 let clause_index_info = standalone_skeleton.clauses.pop_back().unwrap();
@@ -1679,37 +1792,28 @@ impl<'a> LoadState<'a> {
                     self.wam.machine_st.global_clock,
                 );
 
-                match self
-                    .wam
-                    .indices
-                    .get_local_predicate_skeleton_mut(
-                        &self.compilation_target,
-                        compilation_target.clone(),
-                        key.clone(),
-                    )
-                {
-                    Some(skeleton) => {
-                        self.retraction_info.push_record(
-                            RetractionRecord::SkeletonLocalClauseClausePopFront(
-                                self.compilation_target.clone(),
-                                compilation_target.clone(),
-                                key.clone(),
-                            ),
+                if let Some(filename) = self.listing_src_file_name() {
+                    if let CompilationTarget::User = &compilation_target {
+                        let compilation_target = mem::replace(
+                            &mut self.compilation_target,
+                            CompilationTarget::Module(filename),
                         );
 
-                        skeleton.clause_clause_locs.push_front(code_len);
-                    }
-                    None => {
-                        let mut skeleton = PredicateSkeleton::new();
-                        skeleton.clause_clause_locs.push_front(code_len);
-
-                        self.add_local_extensible_predicate(
-                            compilation_target.clone(),
-                            key.clone(),
-                            skeleton,
+                        self.push_front_to_local_predicate_skeleton(
+                            &CompilationTarget::User,
+                            &key,
+                            code_len,
                         );
+
+                        self.compilation_target = compilation_target;
                     }
                 }
+
+                self.push_front_to_local_predicate_skeleton(
+                    &compilation_target,
+                    &key,
+                    code_len,
+                );
 
                 let code_index = self.get_or_insert_code_index(
                     key.clone(),
@@ -1724,7 +1828,7 @@ impl<'a> LoadState<'a> {
                     new_code_ptr,
                 );
 
-                Ok(())
+                Ok(code_index)
             }
         }
     }
@@ -2268,7 +2372,30 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
                 non_counted_bt,
             };
 
-            self.load_state.compile(key.clone(), &mut self.predicates, settings)?;
+            let code_index
+                = self.load_state.compile(key.clone(), &mut self.predicates, settings)?;
+
+            if let Some(filename) = self.load_state.listing_src_file_name() {
+                if let CompilationTarget::User = &self.predicates.compilation_target {
+                    match self.load_state.wam.indices.modules.get_mut(&filename) {
+                        Some(ref mut module) => {
+                            let index_ptr = code_index.get();
+                            let code_index = module.code_dir.entry(key.clone())
+                                .or_insert(code_index);
+
+                            set_code_index(
+                                &mut self.load_state.retraction_info,
+                                &CompilationTarget::Module(filename),
+                                key.clone(),
+                                &code_index,
+                                index_ptr,
+                            );
+                        }
+                        None => {
+                        }
+                    }
+                }
+            }
         }
 
         if predicate_info.is_dynamic {

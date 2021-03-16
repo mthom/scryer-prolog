@@ -425,6 +425,7 @@ pub(crate) enum REPLCodePtr {
     AddMultifilePredicate,
     AddGoalExpansionClause,
     AddTermExpansionClause,
+    AddInSituFilenameModule,
     ClauseToEvacuable,
     ScopedClauseToEvacuable,
     ConcludeLoad,

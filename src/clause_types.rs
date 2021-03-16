@@ -372,6 +372,9 @@ impl SystemClauseType {
             &SystemClauseType::REPL(REPLCodePtr::PushLoadStatePayload) => {
                 clause_name!("$push_load_state_payload")
             }
+            &SystemClauseType::REPL(REPLCodePtr::AddInSituFilenameModule) => {
+                clause_name!("$add_in_situ_filename_module")
+            }
             &SystemClauseType::REPL(REPLCodePtr::Asserta) => clause_name!("$asserta"),
             &SystemClauseType::REPL(REPLCodePtr::Assertz) => clause_name!("$assertz"),
             &SystemClauseType::REPL(REPLCodePtr::Retract) => clause_name!("$retract_clause"),
@@ -764,6 +767,9 @@ impl SystemClauseType {
             }
             ("$push_load_state_payload", 1) => {
                 Some(SystemClauseType::REPL(REPLCodePtr::PushLoadStatePayload))
+            }
+            ("$add_in_situ_filename_module", 1) => {
+                Some(SystemClauseType::REPL(REPLCodePtr::AddInSituFilenameModule))
             }
             ("$asserta", 5) => Some(SystemClauseType::REPL(REPLCodePtr::Asserta)),
             ("$assertz", 5) => Some(SystemClauseType::REPL(REPLCodePtr::Assertz)),

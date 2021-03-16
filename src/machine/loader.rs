@@ -726,7 +726,7 @@ pub(crate) struct Loader<'a, TermStream> {
     pub(super) load_state: LoadState<'a>,
     pub(super) predicates: PredicateQueue,
     pub(super) clause_clauses: Vec<(Term, Term)>,
-    term_stream: TermStream,
+    pub(super) term_stream: TermStream,
     pub(super) non_counted_bt_preds: IndexSet<PredicateKey>,
 }
 
@@ -767,9 +767,10 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
             }
 
             let term = match term {
-                Term::Clause(_, name, terms, _) if name.as_str() == ":-" && terms.len() == 1 => {
-                    return Ok(Some(setup_declaration(&self.load_state, terms)?));
-                }
+                Term::Clause(_, name, terms, _)
+                    if name.as_str() == ":-" && terms.len() == 1 => {
+                        return Ok(Some(setup_declaration(&self.load_state, terms)?));
+                    }
                 term => term,
             };
 
@@ -1460,6 +1461,36 @@ impl Machine {
         };
 
         let result = add_clause();
+        self.restore_load_state_payload(result, evacuable_h);
+    }
+
+    pub(crate) fn add_in_situ_filename_module(&mut self) {
+        let (mut loader, evacuable_h) = self.loader_from_heap_evacuable(temp_v!(1));
+
+        let add_in_situ_filename_module = || {
+            if let Some(filename) = loader.load_state.listing_src_file_name() {
+                let module_decl = ModuleDecl {
+                    name: filename,
+                    exports: vec![],
+                };
+
+                if !loader.load_state.wam.indices.modules.contains_key(&module_decl.name) {
+                    let module_name = module_decl.name.clone();
+                    let module = Module::new(module_decl, ListingSource::DynamicallyGenerated);
+
+                    loader.load_state.wam.indices.modules.insert(module_name, module);
+                } else {
+                    loader.load_state.reset_in_situ_module(
+                        module_decl.clone(),
+                        &ListingSource::DynamicallyGenerated,
+                    );
+                }
+            }
+
+            LiveTermStream::evacuate(loader)
+        };
+
+        let result = add_in_situ_filename_module();
         self.restore_load_state_payload(result, evacuable_h);
     }
 

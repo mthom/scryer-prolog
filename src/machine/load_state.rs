@@ -903,7 +903,7 @@ impl<'a> LoadState<'a> {
         }
     }
 
-    pub(crate) fn add_module(&mut self, module_decl: ModuleDecl, listing_src: ListingSource) {
+    pub(crate) fn reset_in_situ_module(&mut self, module_decl: ModuleDecl, listing_src: &ListingSource) {
         let module_name = module_decl.name.clone();
 
         self.remove_module_exports(module_name.clone());
@@ -947,6 +947,21 @@ impl<'a> LoadState<'a> {
                             &skeleton.clause_clause_locs,
                         );
                     }
+
+                    if &self.compilation_target == compilation_target {
+                        let skeleton_opt = self.wam.indices.remove_predicate_skeleton(
+                            compilation_target,
+                            &key,
+                        );
+
+                        if let Some(skeleton) = skeleton_opt {
+                            self.retraction_info.push_record(RetractionRecord::RemovedSkeleton(
+                                compilation_target.clone(),
+                                key.clone(),
+                                skeleton,
+                            ));
+                        }
+                    }
                 }
 
                 self.retraction_info.push_record(RetractionRecord::ReplacedModule(
@@ -957,6 +972,11 @@ impl<'a> LoadState<'a> {
             }
             None => {}
         }
+    }
+
+    pub(crate) fn add_module(&mut self, module_decl: ModuleDecl, listing_src: ListingSource) {
+        self.reset_in_situ_module(module_decl.clone(), &listing_src);
+        let module_name = module_decl.name.clone();
 
         let mut module = match self.wam.indices.modules.remove(&module_name) {
             Some(mut module) => {

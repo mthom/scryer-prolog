@@ -398,6 +398,9 @@ impl Machine {
             REPLCodePtr::AddTermExpansionClause => {
                 self.add_term_expansion_clause();
             }
+            REPLCodePtr::AddInSituFilenameModule => {
+                self.add_in_situ_filename_module();
+            }
             REPLCodePtr::ClauseToEvacuable => {
                 self.clause_to_evacuable();
             }

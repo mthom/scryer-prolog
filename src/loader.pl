@@ -105,6 +105,10 @@ file_load(_, _).
 
 file_load(Stream, Path, Evacuable) :-
     create_file_load_context(Stream, Path, Evacuable),
+    % '$add_in_situ_filename_module' removes user level predicates,
+    % local predicate clauses, etc. from a previous load of the file
+    % at Path.
+    '$add_in_situ_filename_module'(Evacuable),
     catch((loader:load_loop(Stream, Evacuable),
            loader:run_initialization_goals),
           E,
