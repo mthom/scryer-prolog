@@ -1474,16 +1474,29 @@ impl Machine {
                     exports: vec![],
                 };
 
-                if !loader.load_state.wam.indices.modules.contains_key(&module_decl.name) {
-                    let module_name = module_decl.name.clone();
-                    let module = Module::new(module_decl, ListingSource::DynamicallyGenerated);
+                let module_name = module_decl.name.clone();
 
+                if !loader.load_state.wam.indices.modules.contains_key(&module_decl.name) {
+                    let module = Module::new_in_situ(module_decl);
                     loader.load_state.wam.indices.modules.insert(module_name, module);
                 } else {
                     loader.load_state.reset_in_situ_module(
                         module_decl.clone(),
                         &ListingSource::DynamicallyGenerated,
                     );
+
+                    match loader.load_state.wam.indices.modules.get_mut(&module_name) {
+                        Some(module) => {
+                            for (key, value) in module.op_dir.drain(0 ..) {
+                                let (prec, spec) = value.shared_op_desc().get();
+                                let mut op_decl = OpDecl::new(prec, spec, key.0);
+
+                                op_decl.remove(&mut loader.load_state.wam.indices.op_dir);
+                            }
+                        }
+                        None => {
+                        }
+                    }
                 }
             }
 

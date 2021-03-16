@@ -718,6 +718,16 @@ impl<'a> LoadState<'a> {
     pub(super) fn add_op_decl(&mut self, op_decl: &OpDecl) {
         match &self.compilation_target {
             CompilationTarget::User => {
+                if let Some(filename) = self.listing_src_file_name() {
+                    match self.wam.indices.modules.get_mut(&filename) {
+                        Some(ref mut module) => {
+                            op_decl.insert_into_op_dir(&mut module.op_dir);
+                        }
+                        None => {
+                        }
+                    }
+                }
+
                 add_op_decl(
                     &mut self.retraction_info,
                     &self.compilation_target,
@@ -949,6 +959,15 @@ impl<'a> LoadState<'a> {
                     }
 
                     if &self.compilation_target == compilation_target {
+                        if let CompilationTarget::User = &self.compilation_target {
+                            match (key.0.as_str(), key.1) {
+                                ("term_expansion", 2) | ("goal_expansion", 2) => {
+                                    continue;
+                                }
+                                _ => {}
+                            }
+                        }
+
                         let skeleton_opt = self.wam.indices.remove_predicate_skeleton(
                             compilation_target,
                             &key,

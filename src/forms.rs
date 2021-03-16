@@ -453,6 +453,19 @@ impl Module {
             listing_src,
         }
     }
+
+    pub(crate) fn new_in_situ(module_decl: ModuleDecl) -> Self {
+        Module {
+            module_decl,
+            code_dir: CodeDir::new(),
+            op_dir: OpDir::new(),
+            meta_predicates: MetaPredicateDir::new(),
+            is_impromptu_module: false,
+            extensible_predicates: ExtensiblePredicates::new(),
+            local_extensible_predicates: LocalExtensiblePredicates::new(),
+            listing_src: ListingSource::DynamicallyGenerated,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

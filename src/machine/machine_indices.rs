@@ -702,7 +702,7 @@ impl IndexStore {
         key: &PredicateKey,
     ) -> Option<&mut PredicateSkeleton> {
         match (key.0.as_str(), key.1) {
-            ("term_expansion", 2) => self.extensible_predicates.get_mut(key),
+//            ("term_expansion", 2) => self.extensible_predicates.get_mut(key),
             _ => match compilation_target {
                 CompilationTarget::User => self.extensible_predicates.get_mut(key),
                 CompilationTarget::Module(ref module_name) => {
@@ -722,24 +722,19 @@ impl IndexStore {
         local_compilation_target: CompilationTarget,
         key: PredicateKey,
     ) -> Option<&mut PredicateSkeleton> {
-        match (key.0.as_str(), key.1) {
-            ("term_expansion", 2) => self
+        match src_compilation_target {
+            CompilationTarget::User => self
                 .local_extensible_predicates
                 .get_mut(&(local_compilation_target, key)),
-            _ => match src_compilation_target {
-                CompilationTarget::User => self
-                    .local_extensible_predicates
-                    .get_mut(&(local_compilation_target, key)),
-                CompilationTarget::Module(ref module_name) => {
-                    if let Some(module) = self.modules.get_mut(module_name) {
-                        module
-                            .local_extensible_predicates
-                            .get_mut(&(local_compilation_target, key))
-                    } else {
-                        None
-                    }
+            CompilationTarget::Module(ref module_name) => {
+                if let Some(module) = self.modules.get_mut(module_name) {
+                    module
+                        .local_extensible_predicates
+                        .get_mut(&(local_compilation_target, key))
+                } else {
+                    None
                 }
-            },
+            }
         }
     }
 
@@ -749,24 +744,19 @@ impl IndexStore {
         local_compilation_target: CompilationTarget,
         key: PredicateKey,
     ) -> Option<&PredicateSkeleton> {
-        match (key.0.as_str(), key.1) {
-            ("term_expansion", 2) => self
+        match src_compilation_target {
+            CompilationTarget::User => self
                 .local_extensible_predicates
                 .get(&(local_compilation_target, key)),
-            _ => match src_compilation_target {
-                CompilationTarget::User => self
-                    .local_extensible_predicates
-                    .get(&(local_compilation_target, key)),
-                CompilationTarget::Module(ref module_name) => {
-                    if let Some(module) = self.modules.get(module_name) {
-                        module
-                            .local_extensible_predicates
-                            .get(&(local_compilation_target, key))
-                    } else {
-                        None
-                    }
+            CompilationTarget::Module(ref module_name) => {
+                if let Some(module) = self.modules.get(module_name) {
+                    module
+                        .local_extensible_predicates
+                        .get(&(local_compilation_target, key))
+                } else {
+                    None
                 }
-            },
+            }
         }
     }
 
@@ -775,18 +765,15 @@ impl IndexStore {
         compilation_target: &CompilationTarget,
         key: &PredicateKey,
     ) -> Option<&PredicateSkeleton> {
-        match (key.0.as_str(), key.1) {
-            ("term_expansion", 2) => self.extensible_predicates.get(key),
-            _ => match compilation_target {
-                CompilationTarget::User => self.extensible_predicates.get(key),
-                CompilationTarget::Module(ref module_name) => {
-                    if let Some(module) = self.modules.get(module_name) {
-                        module.extensible_predicates.get(key)
-                    } else {
-                        None
-                    }
+        match compilation_target {
+            CompilationTarget::User => self.extensible_predicates.get(key),
+            CompilationTarget::Module(ref module_name) => {
+                if let Some(module) = self.modules.get(module_name) {
+                    module.extensible_predicates.get(key)
+                } else {
+                    None
                 }
-            },
+            }
         }
     }
 
@@ -795,18 +782,15 @@ impl IndexStore {
         compilation_target: &CompilationTarget,
         key: &PredicateKey,
     ) -> Option<PredicateSkeleton> {
-        match (key.0.as_str(), key.1) {
-            ("term_expansion", 2) => self.extensible_predicates.remove(key),
-            _ => match compilation_target {
-                CompilationTarget::User => self.extensible_predicates.remove(key),
-                CompilationTarget::Module(ref module_name) => {
-                    if let Some(module) = self.modules.get_mut(module_name) {
-                        module.extensible_predicates.remove(key)
-                    } else {
-                        None
-                    }
+        match compilation_target {
+            CompilationTarget::User => self.extensible_predicates.remove(key),
+            CompilationTarget::Module(ref module_name) => {
+                if let Some(module) = self.modules.get_mut(module_name) {
+                    module.extensible_predicates.remove(key)
+                } else {
+                    None
                 }
-            },
+            }
         }
     }
 
