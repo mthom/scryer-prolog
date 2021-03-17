@@ -1,10 +1,10 @@
 use prolog_parser::ast::*;
 use prolog_parser::parser::*;
 use prolog_parser::{
-    alpha_char, binary_digit_char, clause_name, decimal_digit_char, exponent_char, graphic_char,
-    graphic_token_char, hexadecimal_digit_char, layout_char, meta_char, new_line_char,
-    octal_digit_char, prolog_char, sign_char, solo_char, symbolic_control_char,
-    symbolic_hexadecimal_char, temp_v,
+    alpha_char, alpha_numeric_char, binary_digit_char, clause_name, decimal_digit_char,
+    exponent_char, graphic_char, graphic_token_char, hexadecimal_digit_char, layout_char,
+    meta_char, new_line_char, octal_digit_char, prolog_char, sign_char, solo_char,
+    symbolic_control_char, symbolic_hexadecimal_char, temp_v,
 };
 
 use lazy_static::lazy_static;
@@ -1810,7 +1810,7 @@ impl MachineState {
                 macro_check!(alpha_char, "alpha");
                 macro_check!(decimal_digit_char, "decimal_digit");
                 // macro_check!(decimal_point_char, "decimal_point");
-                // macro_check!(alpha_numeric_char, "alnum");
+                macro_check!(alpha_numeric_char, "alnum");
                 // macro_check!(cut_char, "cut");
                 // macro_check!(semicolon_char, "semicolon");
                 // macro_check!(backslash_char, "backslash");
@@ -1824,7 +1824,7 @@ impl MachineState {
                 method_check!(is_lowercase, "lower");
                 method_check!(is_uppercase, "upper");
                 method_check!(is_whitespace, "whitespace");
-                method_check!(is_alphanumeric, "alnum");
+                method_check!(is_alphanumeric, "alphanumeric");
                 method_check!(is_control, "control");
                 method_check!(is_numeric, "numeric");
                 method_check!(is_ascii, "ascii");

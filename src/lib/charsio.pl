@@ -81,6 +81,7 @@ char_type(Char, Type) :-
 ctype(alnum).
 ctype(alpha).
 ctype(alphabetic).
+ctype(alphanumeric).
 ctype(ascii).
 ctype(ascii_graphic).
 ctype(ascii_punctuation).
@@ -89,6 +90,7 @@ ctype(control).
 ctype(decimal_digit).
 ctype(exponent).
 ctype(graphic).
+ctype(graphic_token).
 ctype(hexadecimal_digit).
 ctype(layout).
 ctype(lower).
