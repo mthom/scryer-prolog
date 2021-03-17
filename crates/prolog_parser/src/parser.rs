@@ -199,13 +199,21 @@ fn read_tokens<R: Read>(lexer: &mut Lexer<R>) -> Result<Vec<Token>, ParserError>
     let mut tokens = vec![];
 
     loop {
-        let token = lexer.next_token()?;
-        let at_end = token.is_end();
+        match lexer.next_token() {
+            Ok(token) => {
+                let at_end = token.is_end();
+                tokens.push(token);
 
-        tokens.push(token);
-
-        if at_end {
-            break;
+                if at_end {
+                    break;
+                }
+            }
+            Err(ParserError::UnexpectedEOF) if !tokens.is_empty() => {
+                return Err(ParserError::IncompleteReduction(lexer.line_num, lexer.col_num));
+            }
+            Err(e) => {
+                return Err(e);
+            }
         }
     }
 
