@@ -1336,6 +1336,39 @@ must_be_number(N, PI) :-
     ;  throw(error(instantiation_error, PI))
     ).
 
+can_be_chars_or_vars(Cs, _) :- var(Cs), !.
+can_be_chars_or_vars(Cs, PI) :- chars_or_vars(Cs, PI).
+
+chars_or_vars([], _).
+chars_or_vars([C|Cs], PI) :-
+    (  nonvar(C) ->
+       (  catch(builtins:atom_length(C, 1), _, false) ->
+	      (  nonvar(Cs) ->
+             chars_or_vars(Cs, PI)
+	      ;  false
+	      )
+       ;  throw(error(type_error(character, C), PI))
+       )
+    ;  chars_or_vars(Cs, PI)
+    ).
+
+can_be_codes_or_vars(Cs, _) :- var(Cs), !.
+can_be_codes_or_vars(Cs, PI) :- codes_or_vars(Cs, PI).
+
+codes_or_vars([], _).
+codes_or_vars([C|Cs], PI) :-
+    (  nonvar(C) ->
+       (  catch(builtins:char_code(_, C), _, false) ->
+	      (  nonvar(Cs) -> codes_or_vars(Cs, PI)
+	      ;  false
+	      )
+       ;  integer(C) ->
+          throw(error(representation_error(character_code), PI))
+       ;  throw(error(type_error(integer, C), PI))
+       )
+    ;  codes_or_vars(Cs, PI)
+    ).
+
 number_chars(N, Chs) :-
    (  ground(Chs)
    -> can_be_number(N, number_chars/2),
