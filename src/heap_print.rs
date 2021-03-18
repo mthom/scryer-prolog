@@ -963,8 +963,8 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         match n {
             Number::Float(fl) => {
                 if &fl == &OrderedFloat(0f64) {
-                    push_space_if_amb!(self, "0", {
-                        self.append_str("0");
+                    push_space_if_amb!(self, "0.0", {
+                        self.append_str("0.0");
                     });
                 } else {
                     let OrderedFloat(fl) = fl;
