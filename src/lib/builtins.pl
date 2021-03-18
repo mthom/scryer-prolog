@@ -694,16 +694,18 @@ findall(Template, Goal, Solutions) :-
     '$get_lh_from_offset_diff'(LhOffset, Solutions0, Solutions1).
 
 
-% :- meta_predicate findall(?, 0, ?, ?).
+:- meta_predicate findall(?, 0, ?, ?).
 
 findall(Template, Goal, Solutions0, Solutions1) :-
     error:can_be(list, Solutions0),
     error:can_be(list, Solutions1),
     '$lh_length'(LhLength),
-    '$call_with_default_policy'(catch(builtins:'$iterate_find_all_diff'(Template, Goal, Solutions0,
-							                                            Solutions1, LhLength),
-				                      Error,
-				                      ( builtins:truncate_lh_to(LhLength), builtins:throw(Error) ))).
+    '$call_with_default_policy'(
+        catch(builtins:'$iterate_find_all_diff'(Template, Goal, Solutions0,
+							                    Solutions1, LhLength),
+			  Error,
+			  ( builtins:truncate_lh_to(LhLength), builtins:throw(Error) ))
+    ).
 
 set_difference([X|Xs], [Y|Ys], Zs) :-
     X == Y, !, set_difference(Xs, [Y|Ys], Zs).
