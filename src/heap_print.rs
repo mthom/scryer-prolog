@@ -831,21 +831,16 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             }
 
             match self.heap_locs.get(&addr).cloned() {
-                Some(var) => {
-                    if !self.printed_vars.contains(&addr) {
-                        self.printed_vars.insert(addr);
-                        return iter.next();
-                    } else {
-                        iter.stack().pop();
+                Some(var) if addr.is_ref() => {
+                    iter.stack().pop();
 
-                        push_space_if_amb!(self, &var, {
-                            self.append_str(&var);
-                        });
+                    push_space_if_amb!(self, &var, {
+                        self.append_str(&var);
+                    });
 
-                        return None;
-                    }
+                    return None;
                 }
-                None => {
+                var_opt => {
                     let offset = match functor_location(&addr) {
                         Some(offset) => offset,
                         None => {
@@ -858,17 +853,32 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                             if reps > 0 {
                                 self.cyclic_terms.insert(addr, reps - 1);
                             } else {
-                                push_space_if_amb!(self, "...", {
-                                    self.append_str("...");
-                                });
+                                match var_opt {
+                                    Some(var) => {
+                                        push_space_if_amb!(self, &var, {
+                                            self.append_str(&var);
+                                        });
 
-                                iter.stack().pop();
-                                self.cyclic_terms.insert(addr, 2);
+                                        iter.stack().pop();
+                                    }
+                                    None => {
+                                        push_space_if_amb!(self, "...", {
+                                            self.append_str("...");
+                                        });
+
+                                        iter.stack().pop();
+                                        self.cyclic_terms.insert(addr, 2);
+                                    }
+                                }
 
                                 return None;
                             }
                         } else if self.machine_st.is_cyclic_term(addr.clone()) {
-                            self.cyclic_terms.insert(addr, 2);
+                            if var_opt.is_some() {
+                                self.cyclic_terms.insert(addr, 0);
+                            } else {
+                                self.cyclic_terms.insert(addr, 2);
+                            }
                         } else {
                             self.record_children_as_non_cyclic(&addr);
                             self.non_cyclic_terms.insert(offset);
