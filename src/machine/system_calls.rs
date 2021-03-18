@@ -467,7 +467,7 @@ impl MachineState {
         } else {
             self.p.local() + 1
         };
-        
+
         Ok(self.p = CodePtr::REPL(repl_code_ptr, p))
     }
 
@@ -3267,8 +3267,7 @@ impl MachineState {
                             let solutions = self[temp_v!(2)];
                             let diff = self[temp_v!(3)];
 
-                            (self.unify_fn)(self, solutions, Addr::EmptyList);
-                            (self.unify_fn)(self, diff, Addr::EmptyList);
+                            (self.unify_fn)(self, solutions, diff);
                         } else {
                             let h = self.heap.h();
                             let mut last_index = h;

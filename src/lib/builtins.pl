@@ -682,9 +682,8 @@ findall(Template, Goal, Solutions) :-
     ).
 
 
-% :- meta_predicate '$iterate_find_all_diff'(?, 0, ?, ?, ?).
-
 :- non_counted_backtracking '$iterate_find_all_diff'/5.
+
 '$iterate_find_all_diff'(Template, Goal, _, _, LhOffset) :-
     call(Goal),
     '$copy_to_lh'(LhOffset, Template),
