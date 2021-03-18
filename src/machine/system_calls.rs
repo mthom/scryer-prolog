@@ -2775,6 +2775,17 @@ impl MachineState {
                             unreachable!()
                         }
                     }
+                    Addr::Char(c) => {
+                        return self.module_lookup(
+                            indices,
+                            call_policy,
+                            (clause_name!(c.to_string(), self.atom_tbl), narity),
+                            module_name,
+                            true,
+                            current_input_stream,
+                            current_output_stream,
+                        );
+                    }
                     addr => {
                         let stub = MachineError::functor_stub(clause_name!("(:)"), 2);
 

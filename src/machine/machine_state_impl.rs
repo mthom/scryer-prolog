@@ -1711,6 +1711,7 @@ impl MachineState {
                     return None;
                 }
             }
+            Addr::Char(c) => (clause_name!(c.to_string(), self.atom_tbl), 0),
             Addr::Con(h) => match &self.heap[h] {
                 HeapCellValue::Atom(ref name, _) => (name.clone(), 0),
                 _ => {
@@ -1726,7 +1727,7 @@ impl MachineState {
                 self.throw_exception(instantiation_error);
                 return None;
             }
-            _ => {
+            addr => {
                 let stub = MachineError::functor_stub(clause_name!("call"), arity + 1);
                 let type_error = self.error_form(
                     MachineError::type_error(self.heap.h(), ValidType::Callable, addr),
