@@ -1318,6 +1318,10 @@ fn print_overwrite_warning(
 impl<'a> LoadState<'a> {
     pub(super) fn listing_src_file_name(&self) -> Option<ClauseName> {
         if let Some(load_context) = self.wam.load_contexts.last() {
+            if !load_context.path.is_file() {
+                return None;
+            }
+
             if let Some(path_str) = load_context.path.to_str() {
                 if !path_str.is_empty() {
                     return Some(clause_name!(path_str.to_string(), self.wam.machine_st.atom_tbl));
