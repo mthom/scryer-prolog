@@ -255,6 +255,7 @@ call_or_cut(G, B, ErrorPI) :-
 
 :- non_counted_backtracking control_functor/1.
 
+control_functor(_:G) :- control_functor(G).
 control_functor(call(_:!)).
 control_functor(!).
 control_functor((_,_)).
@@ -264,13 +265,6 @@ control_functor((_->_)).
 
 :- non_counted_backtracking call_or_cut/2.
 
-call_or_cut(M:G, B) :-
-    !,
-    (  nonvar(G),
-       '$call_with_default_policy'(control_functor(G)) ->
-       '$call_with_default_policy'(call_or_cut_interp(G, B))
-    ;  call(M:G)
-    ).
 call_or_cut(G, B) :-
     (  nonvar(G),
        '$call_with_default_policy'(control_functor(G)) ->
@@ -281,10 +275,12 @@ call_or_cut(G, B) :-
 
 :- non_counted_backtracking call_or_cut_interp/2.
 
-call_or_cut_interp(call(_:!), B) :-
-    !. % '$set_cp_by_default'(B).
+call_or_cut_interp(_ : G, B) :-
+    call_or_cut_interp(G, B).
+call_or_cut_interp(call(_ : !), B) :-
+    !. % '$set_cp'(B).
 call_or_cut_interp(!, B) :-
-    '$set_cp_by_default'(B).
+    '$set_cp'(B).
 call_or_cut_interp((G1, G2), B) :-
     '$call_with_default_policy'(','(G1, G2, B)).
 call_or_cut_interp((G1 ; G2), B) :-
@@ -295,96 +291,57 @@ call_or_cut_interp((G1 -> G2), B) :-
 
 :- non_counted_backtracking (',')/3.
 
-','(M:G1, G2, B) :-
-    !,
+','(G1, G2, B) :-
     (  nonvar(G1),
        '$call_with_default_policy'(control_functor(G1)) ->
-       '$call_with_default_policy'(',-interp'(G1, G2, B))
-    ;  call(M:G1),
+       '$call_with_default_policy'(call_or_cut_interp(G1, B)),
+       '$call_with_default_policy'(call_or_cut(G2, B, (',')/2))
+    ;  call(G1),
        '$call_with_default_policy'(call_or_cut(G2, B, (',')/2))
     ).
-','(G1, G2, B) :-
-    '$call_with_default_policy'(call_or_cut(G1, B, (',')/2)),
-    '$call_with_default_policy'(call_or_cut(G2, B, (',')/2)).
-
-
-:- non_counted_backtracking (',-interp')/3.
-
-',-interp'((G1, G2), G3, B) :-
-    '$call_with_default_policy'(','(G1, G2, B)),
-    '$call_with_default_policy'(call_or_cut(G3, B, (',')/2)).
-',-interp'((G1; G2), G3, B) :-
-    '$call_with_default_policy'(';'(G1, G2, B)),
-    '$call_with_default_policy'(call_or_cut(G3, B, (',')/2)).
-',-interp'((G1 -> G2), G3, B) :-
-    '$call_with_default_policy'(->(G1, G2, B)),
-    '$call_with_default_policy'(call_or_cut(G3, B, (',')/2)).
-
 
 :- non_counted_backtracking (;)/3.
 
-';'(M:G1, G2, B) :-
-    !,
+';'(G1, G2, B) :-
     (  nonvar(G1),
        '$call_with_default_policy'(control_functor(G1)) ->
        '$call_with_default_policy'(';-interp'(G1, G2, B))
-    ;  call(M:G1)
-    ;  '$call_with_default_policy'(call_or_cut(G2, B, (;)/2))
-    ).
-';'(G1, G2, B) :-
-    (  '$call_with_default_policy'(call_or_cut(G1, B, (;)/2))
+    ;  call(G1)
     ;  '$call_with_default_policy'(call_or_cut(G2, B, (;)/2))
     ).
 
 
 :- non_counted_backtracking ';-interp'/3.
 
-';-interp'((G1, G2), G3, B) :-
-    (  '$call_with_default_policy'(','(G1, G2, B))
-    ;  '$call_with_default_policy'(call_or_cut(G3, B, (;)/2))
-    ).
-';-interp'((G1; G2), G3, B) :-
-    (  '$call_with_default_policy'(';'(G1, G2, B))
-    ;  '$call_with_default_policy'(call_or_cut(G3, B, (;)/2))
-    ).
 ';-interp'((G1 -> G2), G3, B) :-
+    !,
     (  '$call_with_default_policy'(call_or_cut(G1, B, (->)/2)) ->
        '$call_with_default_policy'(call_or_cut(G2, B, (->)/2))
     ;  '$call_with_default_policy'(call_or_cut(G3, B, (;)/2))
+    ).
+';-interp'(_:(G1 -> G2), G3, B) :-
+    !,
+    (  '$call_with_default_policy'(call_or_cut(G1, B, (->)/2)) ->
+       '$call_with_default_policy'(call_or_cut(G2, B, (->)/2))
+    ;  '$call_with_default_policy'(call_or_cut(G3, B, (;)/2))
+    ).
+';-interp'(G1, G2, B) :-
+    (  '$call_with_default_policy'(call_or_cut_interp(G1, B))
+    ;  '$call_with_default_policy'(call_or_cut(G2, B, (;)/2))
     ).
 
 
 :- non_counted_backtracking (->)/3.
 
-->(M:G1, G2, B) :-
-    !,
+->(G1, G2, B) :-
     (  nonvar(G1),
        '$call_with_default_policy'(control_functor(G1)) ->
-       '$call_with_default_policy'('->-interp'(G1, G2, B))
-    ;  call(M:G1) ->
+       (  '$call_with_default_policy'(call_or_cut_interp(G1, B)) ->
+          '$call_with_default_policy'(call_or_cut(G2, B, (->)/2))
+       )
+    ;  call(G1) ->
        '$call_with_default_policy'(call_or_cut(G2, B, (->)/2))
     ).
-->(G1, G2, B) :-
-    (  '$call_with_default_policy'(call_or_cut(G1, B, (->)/2)) ->
-       '$call_with_default_policy'(call_or_cut(G2, B, (->)/2))
-    ).
-
-
-:- non_counted_backtracking '->-interp'/3.
-
-'->-interp'((G1, G2), G3, B) :-
-    (  '$call_with_default_policy'(','(G1, G2, B)) ->
-       '$call_with_default_policy'(call_or_cut(G3, B, (->)/2))
-    ).
-'->-interp'((G1 ; G2), G3, B) :-
-    (  '$call_with_default_policy'(';'(G1, G2, B)) ->
-       '$call_with_default_policy'(call_or_cut(G3, B, (->)/2))
-    ).
-'->-interp'((G1 -> G2), G3, B) :-
-    (  '$call_with_default_policy'(->(G1, G2, B)) ->
-       '$call_with_default_policy'(call_or_cut(G3, B, (->)/2))
-    ).
-
 
 % univ.
 
@@ -736,11 +693,13 @@ iterate_variants([_|GroupSolutions], Ws, Solution) :-
 
 
 rightmost_power(Term, FinalTerm, Xs) :-
-    (  (  Term = X ^ Y
-       ;  Term = _ : X ^ Y
-       )
+    (  Term = X ^ Y
     -> (  var(Y) -> FinalTerm = Y, Xs = [X]
        ;  Xs = [X | Xss], rightmost_power(Y, FinalTerm, Xss)
+       )
+    ;  Term = M : X ^ Y
+    -> (  var(Y) -> FinalTerm = M:Y, Xs = [X]
+       ;  Xs = [X | Xss], rightmost_power(M:Y, FinalTerm, Xss)
        )
     ;  Xs = [], FinalTerm = Term
     ).
