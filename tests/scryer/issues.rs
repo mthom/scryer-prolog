@@ -71,7 +71,7 @@ fn handle_residual_goal() {
 #[test]
 fn occurs_check_flag() {
     run_top_level_test_with_args(
-        &["tests-pl/issue841-occure-check.pl"],
+        &["tests-pl/issue841-occurs-check.pl"],
         "\
             f(X, X).\n\
             ",
