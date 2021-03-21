@@ -31,7 +31,6 @@ use indexmap::IndexSet;
 
 use ref_thread_local::RefThreadLocal;
 
-use std::cmp;
 use std::collections::BTreeSet;
 use std::convert::TryFrom;
 use std::env;
@@ -655,20 +654,6 @@ impl MachineState {
         }
 
         Ok(())
-    }
-
-    fn fetch_attribute_goals(&mut self, mut attr_goals: Vec<Addr>) {
-        attr_goals.sort_unstable_by(|a1, a2| {
-            self.compare_term_test(a1, a2)
-                .unwrap_or(cmp::Ordering::Less)
-        });
-
-        self.term_dedup(&mut attr_goals);
-
-        let attr_goals = Addr::HeapCell(self.heap.to_list(attr_goals.into_iter()));
-        let target = self[temp_v!(1)];
-
-        (self.unify_fn)(self, attr_goals, target);
     }
 
     fn call_continuation_chunk(&mut self, chunk: Addr, return_p: LocalCodePtr) -> LocalCodePtr {
@@ -2797,10 +2782,6 @@ impl MachineState {
                     }
                 }
             }
-            &SystemClauseType::EnqueueAttributeGoal => {
-                let addr = self[temp_v!(1)];
-                self.attr_var_init.attribute_goals.push(addr);
-            }
             &SystemClauseType::EnqueueAttributedVar => {
                 let addr = self[temp_v!(1)];
 
@@ -2811,16 +2792,6 @@ impl MachineState {
                     _ => {}
                 }
             }
-            /*
-            &SystemClauseType::ExpandGoal => {
-                self.p = CodePtr::Local(LocalCodePtr::UserGoalExpansion(0));
-                return Ok(());
-            }
-            &SystemClauseType::ExpandTerm => {
-                self.p = CodePtr::Local(LocalCodePtr::UserTermExpansion(0));
-                return Ok(());
-            }
-            */
             &SystemClauseType::GetNextDBRef => {
                 let a1 = self[temp_v!(1)];
 
@@ -3152,13 +3123,6 @@ impl MachineState {
             }
             &SystemClauseType::TruncateIfNoLiftedHeapGrowth => {
                 self.truncate_if_no_lifted_heap_diff(|_| Addr::EmptyList)
-            }
-            &SystemClauseType::ClearAttributeGoals => {
-                self.attr_var_init.attribute_goals.clear();
-            }
-            &SystemClauseType::CloneAttributeGoals => {
-                let attr_goals = self.attr_var_init.attribute_goals.clone();
-                self.fetch_attribute_goals(attr_goals);
             }
             &SystemClauseType::GetAttributedVariableList => {
                 let attr_var = self.store(self.deref(self[temp_v!(1)]));

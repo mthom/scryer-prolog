@@ -5,15 +5,6 @@ project_attributes(QueryVars, AttrVars) :-
     sort(Modules0, Modules),
     call_project_attributes(Modules, QueryVars, AttrVars).
 
-enqueue_goals(Goals0) :-
-    nonvar(Goals0),
-    Goals0 = [Goal | Goals],
-    nonvar(Goal),
-    !,
-    '$enqueue_attribute_goal'(Goal),
-    enqueue_goals(Goals).
-enqueue_goals(_).
-
 '$print_project_attributes_exception'(Module, E) :-
     (  (  E = error(existence_error(procedure, project_attributes/2), _)
        ;  E = error(evaluation_error((Module:project_attributes)/2), _)
@@ -38,7 +29,6 @@ call_project_attributes([Module|Modules], QueryVars, AttrVars) :-
 call_attribute_goals([], _, _).
 call_attribute_goals([Module|Modules], GoalCaller, AttrVars) :-
     call(GoalCaller, AttrVars, Module, Goals),
-    enqueue_goals(Goals),
     call_attribute_goals(Modules, GoalCaller, AttrVars).
 
 '$print_attribute_goals_exception'(Module, E) :-
@@ -85,7 +75,6 @@ module_prefixed_goals([G|Gs], Module, [MG|MGs], TailGs) :-
 call_attribute_goals_with_module_prefix([], _, _, []).
 call_attribute_goals_with_module_prefix([Module | Modules], GoalCaller, AttrVars, Goals) :-
     call(GoalCaller, AttrVars, Module, Goals0),
-    enqueue_goals(Goals0),
     module_prefixed_goals(Goals0, Module, Goals, Gs),
     call_attribute_goals_with_module_prefix(Modules, GoalCaller, AttrVars, Gs).
 

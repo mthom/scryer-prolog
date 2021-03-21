@@ -169,7 +169,6 @@ submit_query_and_print_results_(Term, VarList) :-
 submit_query_and_print_results_(_, _) :-
     %  clear attribute goal lists, which may be populated by
     %  copy_term/3 prior to failure.
-    '$clear_attribute_goals',
     write('false.'),
     nl.
 
