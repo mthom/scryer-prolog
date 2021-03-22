@@ -1492,37 +1492,6 @@ impl<'a> LoadState<'a> {
         Ok(code_index)
     }
 
-    fn record_incremental_compile(
-        &mut self,
-        key: PredicateKey,
-        compilation_target: CompilationTarget,
-        append_or_prepend: AppendOrPrepend,
-    ) {
-        self.retraction_info
-            .push_record(match compilation_target {
-                CompilationTarget::User => match append_or_prepend {
-                    AppendOrPrepend::Append => {
-                        RetractionRecord::AppendedUserExtensiblePredicate(key)
-                    }
-                    AppendOrPrepend::Prepend => {
-                        RetractionRecord::PrependedUserExtensiblePredicate(key)
-                    }
-                },
-                CompilationTarget::Module(module_name) => match append_or_prepend {
-                    AppendOrPrepend::Append => RetractionRecord::AppendedModuleExtensiblePredicate(
-                        module_name,
-                        key,
-                    ),
-                    AppendOrPrepend::Prepend => {
-                        RetractionRecord::PrependedModuleExtensiblePredicate(
-                            module_name,
-                            key,
-                        )
-                    }
-                },
-            });
-    }
-
     fn extend_local_predicate_skeleton(
         &mut self,
         compilation_target: &CompilationTarget,
@@ -1650,12 +1619,6 @@ impl<'a> LoadState<'a> {
         non_counted_bt: bool,
         append_or_prepend: AppendOrPrepend,
     ) -> Result<CodeIndex, SessionError> {
-        self.record_incremental_compile(
-            key.clone(),
-            compilation_target.clone(),
-            append_or_prepend,
-        );
-
         let settings = match self
             .wam
             .indices

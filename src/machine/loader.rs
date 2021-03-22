@@ -48,8 +48,6 @@ pub(crate) enum RetractionRecord {
     ReplacedMetaPredicate(ClauseName, ClauseName, Vec<MetaSpec>),
     AddedModule(ClauseName),
     ReplacedModule(ModuleDecl, ListingSource, LocalExtensiblePredicates),
-    AppendedModuleExtensiblePredicate(ClauseName, PredicateKey),
-    PrependedModuleExtensiblePredicate(ClauseName, PredicateKey),
     AddedModuleOp(ClauseName, OpDecl),
     ReplacedModuleOp(ClauseName, OpDecl, usize, Specifier),
     AddedModulePredicate(ClauseName, PredicateKey),
@@ -60,8 +58,6 @@ pub(crate) enum RetractionRecord {
     AddedUserOp(OpDecl),
     ReplacedUserOp(OpDecl, usize, Specifier),
     AddedExtensiblePredicate(CompilationTarget, PredicateKey),
-    AppendedUserExtensiblePredicate(PredicateKey),
-    PrependedUserExtensiblePredicate(PredicateKey),
     AddedUserPredicate(PredicateKey),
     ReplacedUserPredicate(PredicateKey, IndexPtr),
     AddedIndex(OptArgIndexKey, usize), //, Vec<usize>),
@@ -263,22 +259,6 @@ impl<'a> Drop for LoadState<'a> {
                         }
                     }
                 }
-                RetractionRecord::AppendedModuleExtensiblePredicate(module_name, key) => {
-                    self.wam
-                        .indices
-                        .get_predicate_skeleton_mut(&CompilationTarget::Module(module_name), &key)
-                        .map(|skeleton| {
-                            skeleton.clauses.pop_back();
-                        });
-                }
-                RetractionRecord::PrependedModuleExtensiblePredicate(module_name, key) => {
-                    self.wam
-                        .indices
-                        .get_predicate_skeleton_mut(&CompilationTarget::Module(module_name), &key)
-                        .map(|skeleton| {
-                            skeleton.clauses.pop_front();
-                        });
-                }
                 RetractionRecord::AddedModuleOp(module_name, mut op_decl) => {
                     match self.wam.indices.modules.get_mut(&module_name) {
                         Some(ref mut module) => {
@@ -320,22 +300,6 @@ impl<'a> Drop for LoadState<'a> {
                     self.wam
                         .indices
                         .remove_predicate_skeleton(&compilation_target, &key);
-                }
-                RetractionRecord::AppendedUserExtensiblePredicate(key) => {
-                    self.wam
-                        .indices
-                        .get_predicate_skeleton_mut(&CompilationTarget::User, &key)
-                        .map(|skeleton| {
-                            skeleton.clauses.pop_back();
-                        });
-                }
-                RetractionRecord::PrependedUserExtensiblePredicate(key) => {
-                    self.wam
-                        .indices
-                        .get_predicate_skeleton_mut(&CompilationTarget::User, &key)
-                        .map(|skeleton| {
-                            skeleton.clauses.pop_front();
-                        });
                 }
                 RetractionRecord::AddedUserOp(mut op_decl) => {
                     op_decl.remove(&mut self.wam.indices.op_dir);
