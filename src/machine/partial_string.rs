@@ -278,7 +278,7 @@ impl<'a> Iterator for HeapPStrIter<'a> {
                     Addr::Con(h) if self.machine_st.heap.atom_at(h) => {
                         if let HeapCellValue::Atom(ref atom, _) = &self.machine_st.heap[h] {
                             if atom.is_char() {
-                                Some(atom.as_str().chars().next().unwrap())
+                                atom.as_str().chars().next()
                             } else {
                                 None
                             }
@@ -400,11 +400,42 @@ pub(super) fn compare_pstr_prefixes<'a>(
             }
         }
 
-        return match (i1.focus(), i2.focus()) {
-            (Addr::EmptyList, Addr::EmptyList) => Some(Ordering::Equal),
-            (Addr::EmptyList, _) => Some(Ordering::Less),
-            (_, Addr::EmptyList) => Some(Ordering::Greater),
-            _ => None,
+        let ordering = if r1.is_none() {
+            mem::swap(&mut r1, &mut r2);
+            Ordering::Less
+        } else {
+            Ordering::Greater
+        };
+
+        let machine_st = i1.machine_st;
+
+        let check_focuses = || {
+            match (i1.focus(), i2.focus()) {
+                (Addr::EmptyList, Addr::EmptyList) => Some(Ordering::Equal),
+                (Addr::EmptyList, _) => Some(Ordering::Less),
+                (_, Addr::EmptyList) => Some(Ordering::Greater),
+                _ => None,
+            }
+        };
+
+        return match r1 {
+            Some(PStrIteratee::PStrSegment(h, n)) => {
+                if let &HeapCellValue::PartialString(ref pstr, _) = &machine_st.heap[h] {
+                    if pstr.as_str_from(n).chars().next().is_some() {
+                        Some(ordering)
+                    } else {
+                        check_focuses()
+                    }
+                } else {
+                    unreachable!()
+                }
+            }
+            Some(PStrIteratee::Char(_)) => {
+                Some(ordering)
+            }
+            None => {
+                check_focuses()
+            }
         };
     }
 }

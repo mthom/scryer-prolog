@@ -1,4 +1,4 @@
-:- module(bimetatran_tests, [test_bimetatrans/0]).
+:- module(bimetatrans_tests, [test_bimetatrans/0]).
 
 :- use_module(bimetatrans).
 
@@ -21,28 +21,6 @@
  * order of ascending N.
  */
 
-term_expansion(Term0, Term) :-
-    nonvar(Term0),
-    Term0 = test(N, Assert, Query, XML),
-    integer(N),
-    list_si(Assert),
-    list_si(Query),
-    partial_string(XML),
-    number_chars(N, NChars),
-    atom_chars(NAtom, NChars),
-    atom_concat(prolog2ruleml_, NAtom, Prolog2RuleML),
-    atom_concat(ruleml2prolog_, NAtom, RuleML2Prolog),
-    atom_concat(test_, NAtom, TestN),
-    strip_indentation(XML, XML1),
-    Term = [(Prolog2RuleML :- parse_ruleml(Assert, Query, XML0),
-                              XML0 = XML1),
-            (RuleML2Prolog :- parse_ruleml(Assert0, Query0, XML),
-                              Assert0 = Assert,
-                              Query0 = Query),
-            (TestN :- write(test(N)), nl, Prolog2RuleML, RuleML2Prolog, !),
-            (TestN :- throw(error(test_failure, TestN)))].
-
-
 until_non_space_or_end([C|Cs], Cs1) :-
     (  C == (' ') ->
        until_non_space_or_end(Cs, Cs1)
@@ -64,6 +42,28 @@ strip_indentation_([C|Cs], Cs0) :-
        strip_indentation_(Cs, Cs1)
     ).
 strip_indentation_([], []).
+
+
+user:term_expansion(Term0, Term) :-
+    nonvar(Term0),
+    Term0 = test(N, Assert, Query, XML),
+    integer(N),
+    list_si(Assert),
+    list_si(Query),
+    partial_string(XML),
+    number_chars(N, NChars),
+    atom_chars(NAtom, NChars),
+    atom_concat(prolog2ruleml_, NAtom, Prolog2RuleML),
+    atom_concat(ruleml2prolog_, NAtom, RuleML2Prolog),
+    atom_concat(test_, NAtom, TestN),
+    strip_indentation(XML, XML1),
+    Term = [(Prolog2RuleML :- parse_ruleml(Assert, Query, XML0),
+                              XML0 = XML1),
+            (RuleML2Prolog :- parse_ruleml(Assert0, Query0, XML),
+                              Assert0 = Assert,
+                              Query0 = Query),
+            (TestN :- write(test(N)), nl, Prolog2RuleML, RuleML2Prolog, !),
+            (TestN :- throw(error(test_failure, TestN)))].
 
 
 test(1,
