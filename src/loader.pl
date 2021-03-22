@@ -91,6 +91,7 @@ run_initialization_goals :-
     prolog_load_context(module, Module),
     (  predicate_property(Module:'$initialization_goals'(_), dynamic) ->
        findall(Goal, '$call'(builtins:retract(Module:'$initialization_goals'(Goal))), Goals),
+       abolish(Module:'$initialization_goals'/1),
        (  maplist(Module:call, Goals) ->
           true
        ;  true %% initialization goals can fail without thwarting the load.
@@ -275,7 +276,7 @@ compile_dispatch_or_clause(Term, Evacuable) :-
     (  var(Term) ->
        instantiation_error(load/1)
     ;  compile_dispatch(Term, Evacuable) ->
-       true
+       '$flush_term_queue'(Evacuable)
     ;  compile_clause(Term, Evacuable)
     ).
 
@@ -364,6 +365,7 @@ compile_declaration(discontiguous(Module:Name/Arity), Evacuable) :-
     '$add_discontiguous_predicate'(Module, Name, Arity, Evacuable).
 compile_declaration(initialization(Goal), Evacuable) :-
     prolog_load_context(module, Module),
+    '$add_dynamic_predicate'(Module, '$initialization_goals', 1, Evacuable),
     assertz(Module:'$initialization_goals'(Goal)).
 compile_declaration(set_prolog_flag(Flag, Value), _) :-
     set_prolog_flag(Flag, Value).

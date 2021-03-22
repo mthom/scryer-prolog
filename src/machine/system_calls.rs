@@ -3471,14 +3471,23 @@ impl MachineState {
                 self.fail = match self.store(self.deref(self[temp_v!(2)])) {
                     Addr::Str(s) => match &self.heap[s] {
                         &HeapCellValue::NamedStr(arity, ref name, ref spec) => {
-                            CLAUSE_TYPE_FORMS.borrow().get(&(name.as_str(), arity)).is_some() ||
-                                indices.get_predicate_code_index(
-                                name.clone(),
-                                arity,
-                                module_name,
-                                spec.clone(),
-                            )
-                            .is_some()
+                            if CLAUSE_TYPE_FORMS.borrow().get(&(name.as_str(), arity)).is_some() {
+                                true
+                            } else {
+                                let index = indices.get_predicate_code_index(
+                                    name.clone(),
+                                    arity,
+                                    module_name,
+                                    spec.clone(),
+                                )
+                                .map(|index| index.get())
+                                .unwrap_or(IndexPtr::DynamicUndefined);
+
+                                match index {
+                                    IndexPtr::DynamicUndefined => false,
+                                    _ => true,
+                                }
+                            }
                         }
                         _ => {
                             unreachable!()
@@ -3489,9 +3498,23 @@ impl MachineState {
                             let spec =
                                 fetch_atom_op_spec(name.clone(), spec.clone(), &indices.op_dir);
 
-                            CLAUSE_TYPE_FORMS.borrow().get(&(name.as_str(), 0)).is_some() ||
-                            indices.get_predicate_code_index(name.clone(), 0, module_name, spec)
-                                .is_some()
+                            if CLAUSE_TYPE_FORMS.borrow().get(&(name.as_str(), 0)).is_some() {
+                                true
+                            } else {
+                                let index = indices.get_predicate_code_index(
+                                    name.clone(),
+                                    0,
+                                    module_name,
+                                    spec.clone(),
+                                )
+                                .map(|index| index.get())
+                                .unwrap_or(IndexPtr::DynamicUndefined);
+
+                                match index {
+                                    IndexPtr::DynamicUndefined => false,
+                                    _ => true,
+                                }
+                            }
                         } else {
                             unreachable!()
                         }

@@ -839,9 +839,9 @@ asserta_clause(Head, Body) :-
 	     arg(2, Head, F),
 	     module_asserta_clause(F, Body, Module)
        ; '$head_is_dynamic'(user, Head) ->
-         call_asserta(Head, Body, Name, Arity, user)
+          call_asserta(Head, Body, Name, Arity, user)
        ; '$no_such_predicate'(user, Head) ->
-         call_asserta(Head, Body, Name, Arity, user)
+          call_asserta(Head, Body, Name, Arity, user)
        ;  throw(error(permission_error(modify, static_procedure, Name/Arity), asserta/1))
        )
     ;  throw(error(type_error(callable, Head), asserta/1))
