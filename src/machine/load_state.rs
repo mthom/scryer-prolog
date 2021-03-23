@@ -344,7 +344,7 @@ impl<'a> LoadState<'a> {
         key: PredicateKey,
         clause_locs: &SliceDeque<usize>,
     ) {
-        let (clause_target_poses, is_dynamic) = self
+        let result_opt = self
             .wam
             .indices
             .get_predicate_skeleton(&compilation_target, &key)
@@ -358,14 +358,16 @@ impl<'a> LoadState<'a> {
                     })
                     .collect(),
                  skeleton.is_dynamic)
-            }).unwrap();
+            });
 
-        self.retract_local_clauses_by_locs(
-            compilation_target,
-            key,
-            clause_target_poses,
-            is_dynamic,
-        );
+        if let Some((clause_target_poses, is_dynamic)) = result_opt {
+            self.retract_local_clauses_by_locs(
+                compilation_target,
+                key,
+                clause_target_poses,
+                is_dynamic,
+            );
+        }
     }
 
     pub(super) fn retract_local_clauses_by_locs(

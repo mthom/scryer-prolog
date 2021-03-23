@@ -29,7 +29,6 @@ fn do_not_duplicate_path_components() {
         "\
         caught: e\n\
         false.\n\
-        Warning: overwriting $initialization_goals/1\n\
         caught: e\n\
         false.\n\
         ",
