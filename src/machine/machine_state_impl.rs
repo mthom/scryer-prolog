@@ -1327,8 +1327,21 @@ impl MachineState {
                         self.increment_s_ptr(1);
                     }
                     MachineMode::Write => {
-                        let heap_val = self.store(self[reg]);
-                        self.heap.push(HeapCellValue::Addr(heap_val));
+                        let h = self.heap.h();
+                        self.heap.push(HeapCellValue::Addr(Addr::HeapCell(h)));
+
+                        let addr = self.store(self[reg]);
+                        (self.bind_fn)(self, Ref::HeapCell(h), addr);
+
+                        // the former code of this match arm was:
+
+                        // let addr = self.store(self[reg]);
+                        // self.heap.push(HeapCellValue::Addr(addr));
+
+                        // the old code didn't perform the occurs
+                        // check when enabled and so it was changed to
+                        // the above, which is only slightly less
+                        // efficient when the occurs_check is disabled.
                     }
                 };
             }

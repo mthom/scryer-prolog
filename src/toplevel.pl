@@ -163,7 +163,7 @@ instruction_match(Term, VarList) :-
 
 submit_query_and_print_results_(Term, VarList) :-
     '$get_b_value'(B),
-    call(Term),
+    '$call'(Term),
     write_eqs_and_read_input(B, VarList),
     !.
 submit_query_and_print_results_(_, _) :-
@@ -174,7 +174,7 @@ submit_query_and_print_results_(_, _) :-
 
 
 submit_query_and_print_results(Term0, VarList) :-
-    expand_goal(call(Term0), user, Term),
+    expand_goal(call(Term0), user, call(Term)),
     !,
     setup_call_cleanup(bb_put('$first_answer', true),
                        submit_query_and_print_results_(Term, VarList),

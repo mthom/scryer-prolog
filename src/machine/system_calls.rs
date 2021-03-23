@@ -3541,62 +3541,6 @@ impl MachineState {
                     }
                 }
             }
-            /*
-            &SystemClauseType::ResetGlobalVarAtKey => {
-                let key = self[temp_v!(1)];
-
-                match self.store(self.deref(key)) {
-                    Addr::Con(h) if self.heap.atom_at(h) => {
-                        if let HeapCellValue::Atom(ref key, _) = &self.heap[h] {
-                            indices.global_variables.swap_remove(key);
-                        } else {
-                            unreachable!()
-                        }
-                    }
-                    _ => {
-                        unreachable!()
-                    }
-                }
-            }
-            &SystemClauseType::ResetGlobalVarAtOffset => {
-                let key = self[temp_v!(1)];
-
-                let key = match self.store(self.deref(key)) {
-                    Addr::Con(h) if self.heap.atom_at(h) => {
-                        if let HeapCellValue::Atom(ref key, _) = &self.heap[h] {
-                            key.clone()
-                        } else {
-                            unreachable!()
-                        }
-                    }
-                    _ => {
-                        unreachable!()
-                    }
-                };
-
-                let value = self[temp_v!(2)];
-                let mut ball = Ball::new();
-
-                ball.boundary = self.heap.h();
-
-                copy_term(
-                    CopyBallTerm::new(&mut self.stack, &mut self.heap, &mut ball.stub),
-                    value,
-                    AttrVarPolicy::DeepCopy,
-                );
-
-                let offset = self[temp_v!(3)];
-
-                match self.store(self.deref(offset)) {
-                    Addr::Usize(offset) => {
-                        indices.global_variables.insert(key, (ball, Some(offset)));
-                    }
-                    _ => {
-                        indices.global_variables.insert(key, (ball, None));
-                    }
-                }
-            }
-            */
             &SystemClauseType::ResetAttrVarState => {
                 self.attr_var_init.reset();
             }
@@ -3658,22 +3602,6 @@ impl MachineState {
             &SystemClauseType::REPL(repl_code_ptr) => {
                 return self.repl_redirect(repl_code_ptr);
             }
-            /*
-            &SystemClauseType::ModuleRetractClause => {
-                let p = self.cp;
-                let trans_type = DynamicTransactionType::ModuleRetract;
-
-                self.p = CodePtr::DynamicTransaction(trans_type, p);
-                return Ok(());
-            }
-            &SystemClauseType::RetractClause => {
-                let p = self.cp;
-                let trans_type = DynamicTransactionType::Retract;
-
-                self.p = CodePtr::DynamicTransaction(trans_type, p);
-                return Ok(());
-            }
-            */
             &SystemClauseType::ReturnFromVerifyAttr => {
                 let e = self.e;
                 let frame_len = self.stack.index_and_frame(e).prelude.univ_prelude.num_cells;
@@ -5482,6 +5410,9 @@ impl MachineState {
                 }
 
                 self.fail = true;
+            }
+            &SystemClauseType::DebugHook => {
+                self.fail = false;
             }
         };
 

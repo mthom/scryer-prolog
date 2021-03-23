@@ -306,6 +306,7 @@ pub(crate) enum SystemClauseType {
     SetNSTOAsUnify,
     SetSTOWithErrorAsUnify,
     HomeDirectory,
+    DebugHook,
 }
 
 impl SystemClauseType {
@@ -592,6 +593,7 @@ impl SystemClauseType {
             &SystemClauseType::SetNSTOAsUnify => clause_name!("$set_nsto_as_unify"),
             &SystemClauseType::HomeDirectory => clause_name!("$home_directory"),
             &SystemClauseType::SetSTOWithErrorAsUnify => clause_name!("$set_sto_with_error_as_unify"),
+            &SystemClauseType::DebugHook => clause_name!("$debug_hook"),
         }
     }
 
@@ -840,6 +842,7 @@ impl SystemClauseType {
             ("$set_nsto_as_unify", 0) => Some(SystemClauseType::SetNSTOAsUnify),
             ("$set_sto_with_error_as_unify", 0) => Some(SystemClauseType::SetSTOWithErrorAsUnify),
             ("$home_directory", 1) => Some(SystemClauseType::HomeDirectory),
+            ("$debug_hook", 0) => Some(SystemClauseType::DebugHook),
             _ => None,
         }
     }
