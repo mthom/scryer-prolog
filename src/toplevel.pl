@@ -1,13 +1,24 @@
-:- module('$toplevel', [argv/1,
-                        copy_term/3]).
+:- module('$toplevel', [argv/1, copy_term/3]).
 
 :- use_module(library(atts), [call_residue_vars/2]).
-:- use_module(library(charsio)).
-:- use_module(library(files)).
+:- use_module(library(charsio), [
+    char_type/2,
+    get_single_char/1,
+    read_term_from_chars/2,
+    write_term_to_chars/3
+]).
+:- use_module(library(dcgs)).
+:- use_module(library(files), [file_exists/1]).
 :- use_module(library(format), [format/2]).
-:- use_module(library(iso_ext)).
-:- use_module(library(lists)).
-:- use_module(library(si)).
+:- use_module(library(iso_ext), [setup_call_cleanup/3]).
+:- use_module(library(lists), [
+    append/2,
+    append/3,
+    maplist/2,
+    maplist/3,
+    member/2,
+    reverse/2
+]).
 
 :- use_module(library('$project_atts')).
 :- use_module(library('$atts')).
@@ -25,37 +36,88 @@ load_scryerrc :-
 
 :- dynamic(argv/1).
 
-'$repl'([_|Args0]) :-
-    \+ argv(_),
-    (   append(Args1, ["--"|Args2], Args0) ->
-        asserta('$toplevel':argv(Args2)),
-        Args = Args1
-    ;   asserta('$toplevel':argv([])),
-        Args = Args0
+'$repl'(Args0) :-
+    (   nonvar(Args0), Args0 = [_|Args1] ->
+        (   append(Args2, ["--"|Args3], Args1) ->
+            true
+        ;   Args2 = Args1,
+            Args3 = []
+        )
+    ;   Args2 = [],
+        Args3 = []
+    ),
+    (   \+ argv(_) ->
+        asserta('$toplevel':argv(Args3))
+    ;   % Unexpected what to do?
+        argv(Args), write('Found unexpected arguments: '), write(Args), nl
     ),
     load_scryerrc,
-    delegate_task(Args, []),
-    repl.
+    % Loads modules first.
+    gather_goals_and_load_modules(Args2, Goals, Toplevels0),
+    append(Toplevels0, ['$toplevel':repl], Toplevels),
+    maplist(execute_goal, Goals),
+    [Toplevel|_] = Toplevels,
+    % The top-level isn't supposed to fail or end.
+    call(Toplevel).
 '$repl'(_) :-
-    (   \+ argv(_) -> asserta('$toplevel':argv([]))
-    ;   true
-    ),
-    load_scryerrc,
-    repl.
+    repeat.
 
-delegate_task([], []).
-delegate_task([], Goals0) :-
+gather_goals_and_load_modules(Args, Goals, Toplevels) :-
+    gather_goals_and_load_modules(Args, [], Goals0, [], Toplevels0),
     reverse(Goals0, Goals),
-    run_goals(Goals),
-    repl.
-delegate_task([Arg0|Args], Goals0) :-
-    (   member(Arg0, ["-h", "--help"]) -> print_help
-    ;   member(Arg0, ["-v", "--version"]) -> print_version
-    ;   member(Arg0, ["-g", "--goal"]) -> gather_goal(g, Args, Goals0)
-    ;   atom_chars(Mod, Arg0),
+    reverse(Toplevels0, Toplevels).
+
+gather_goals_and_load_modules([], Goals, Goals, Toplevels, Toplevels).
+gather_goals_and_load_modules([Arg0|Args0], Goals0, Goals, Toplevels0, Toplevels) :-
+    (   member(Arg0, ["-h", "--help"]) ->
+        print_help,
+        halt
+    ;   member(Arg0, ["-v", "--version"]) ->
+        print_version,
+        halt
+    ;   member(Arg0, ["-g", "--goal"]) ->
+        Toplevels1 = Toplevels0,
+        (   [Arg1|Args1] = Args0 ->
+            % Only the first term needs to be valid.
+            append(Arg1, "\n.", Arg2),
+            catch(read_term_from_chars(Arg2, Goal), Exception, true),
+            (   nonvar(Exception) ->
+                format("~q causes: ~q\n", [Arg1, Exception])
+            ;   Goals1 = [Goal|Goals0]
+            )
+        ;   print_help % Argument is missing.
+        )
+    ;   member(Arg0, ["-t", "--top-level"]) ->
+        Goals1 = Goals0,
+        (   [Arg1|Args1] = Args0 ->
+            % Only the first term needs to be valid.
+            append(Arg1, "\n.", Arg2),
+            catch(read_term_from_chars(Arg2, Goal), Exception, true),
+            (   nonvar(Exception) ->
+                format("~q causes: ~q\n", [Arg1, Exception])
+            ;   Toplevels1 = [Goal|Toplevels0]
+            )
+        ;   print_help % Argument is missing.
+        )
+    ;   % Load file as a module.
+        Args1 = Args0,
+        Toplevels1 = Toplevels0,
+        Goals1 = Goals0,
+        atom_chars(Mod, Arg0),
+        % Goals1 = [use_module(Mod)|Goals0]
         catch(use_module(Mod), E, print_exception(E))
     ),
-    delegate_task(Args, Goals0).
+    gather_goals_and_load_modules(Args1, Goals1, Goals, Toplevels1, Toplevels).
+
+execute_goal(G) :-
+    (   catch(call(user:G), Exception, true) ->
+        (   nonvar(Exception) ->
+            % write(G), write(' causes: '), write(Exception), nl % Fail-safe.
+            format("\"~q\" causes: ~q\n", [G, Exception])
+        ;   true
+        )
+    ;   true
+    ).
 
 print_help :-
     write('Usage: scryer-prolog [OPTIONS] [FILES] [-- ARGUMENTS]'),
@@ -67,55 +129,15 @@ print_help :-
     write('Print version information and exit'), nl,
     write('   -g, --goal GOAL      '),
     write('Run the query GOAL'), nl,
+    write('   -t, --top-level GOAL '),
+    write('Launch the top-level GOAL'), nl,
     % write('                        '),
     halt.
 
 print_version :-
     '$scryer_prolog_version'(Version),
-    write(Version), nl,
-    halt.
-
-gather_goal(Type, Args0, Goals) :-
-    length(Args0, N),
-    (   N < 1 -> print_help, halt
-    ;   true
-    ),
-    [Gs1|Args] = Args0,
-    Gs =.. [Type, Gs1],
-    delegate_task(Args, [Gs|Goals]).
-
-arg_type(g).
-arg_type(t).
-arg_type(g(_)).
-arg_type(t(_)).
-
-ends_with_dot(Ls0) :-
-    reverse(Ls0, Ls),
-    layout_and_dot(Ls).
-
-layout_and_dot(['.'|_]).
-layout_and_dot([C|Cs]) :-
-    char_type(C, layout),
-    layout_and_dot(Cs).
-
-run_goals([]).
-run_goals([g(Gs0)|Goals]) :-
-    (   ends_with_dot(Gs0) -> Gs1 = Gs0
-    ;   append(Gs0, ".", Gs1)
-    ),
-    read_term_from_chars(Gs1, Goal),
-    (   catch(
-            user:Goal,
-            Exception,
-            (write(Goal), write(' causes: '), write(Exception), nl) % halt?
-        )
-    ;   write('Warning: initialization failed for '),
-        write(Gs0), nl
-    ),
-    run_goals(Goals).
-run_goals([Goal|_]) :-
-    write('caught: '),
-    write(error(domain_error(arg_type, Goal), run_goals/1)), nl,
+    % write(Version), nl, % Fail-safe.
+    format("~s\n", [Version]),
     halt.
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
