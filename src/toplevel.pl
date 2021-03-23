@@ -213,7 +213,7 @@ execute_query(Goal, Eqs0, AllInitVs) :-
             )
         ),
         (   (   NoError \== false, Succeed \== true ->
-                format("    false.\n", [])
+                format("   false.\n", [])
             ;   Last = true
             )
         )
@@ -233,7 +233,7 @@ execute_query(Goal, Eqs0, AllInitVs) :-
 
 print_and_read_input_if_not_last(Last, MaxDepth, Terms, AllEqs) :-
     print_goal(Terms, AllEqs, MaxDepth, Cs),
-    format("    ~s", [Cs]),
+    format("   ~s", [Cs]),
     (   Last == true ->
         (   list_last(Cs, C), char_type(C, graphic_token) ->
             write(' .'), nl
@@ -248,18 +248,18 @@ read_input_and_print_(MaxDepth, Terms, AllEqs) :-
     (   member(C, [;, ' ', n]) ->
         write(;), nl
     ;   member(C, ['\n', .]) ->
-        write(';   ...'), nl,
+        write(';  ...'), nl,
         false
     ;   C = h ->
         help_message,
         read_input_and_print_(MaxDepth, Terms, AllEqs)
     ;   C = p ->
         print_goal(Terms, AllEqs, MaxDepth, Cs),
-        format("    ~s", [Cs]),
+        format("   ~s", [Cs]),
         read_input_and_print_(MaxDepth, Terms, AllEqs)
     ;   C = w ->
         print_goal(Terms, AllEqs, 0, Cs),
-        format("    ~s", [Cs]),
+        format("   ~s", [Cs]),
         read_input_and_print_(MaxDepth, Terms, AllEqs)
     ;   read_input_and_print_(MaxDepth, Terms, AllEqs)
     ).

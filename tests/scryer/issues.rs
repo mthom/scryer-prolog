@@ -9,10 +9,10 @@ fn display_constraints() {
         use_module(library(dif)).\n\
         X = 1.\n\
         dif(X,1).\n",
-        "    \
-        X=1.\n    \
-        true.\n    \
-        X=1.\n    \
+        "   \
+        X=1.\n   \
+        true.\n   \
+        X=1.\n   \
         dif:dif(X,1).\n\
         ",
     );
@@ -49,16 +49,16 @@ fn handle_residual_goal() {
         -X\\=X.\n\
         dif(-X,X).\n\
         ",
-        "    \
-        true.\n    \
-        true.\n    \
-        false.\n    \
-        X= -X.\n    \
-        dif:dif(-X,X).\n    \
-        false.\n    \
-        Vars=[X], dif:dif(-X,X).\n    \
-        true.\n    \
-        true.\n    \
+        "   \
+        true.\n   \
+        true.\n   \
+        false.\n   \
+        X= -X.\n   \
+        dif:dif(-X,X).\n   \
+        false.\n   \
+        Vars=[X], dif:dif(-X,X).\n   \
+        true.\n   \
+        true.\n   \
         true.\n\
         ",
     )
@@ -72,7 +72,7 @@ fn occurs_check_flag() {
         "\
             f(X, X).\n\
             ",
-        "    false.\n",
+        "   false.\n",
     )
 }
 
@@ -86,11 +86,11 @@ fn occurs_check_flag2() {
             f(X,X).\n\
             X-X = X-g(X).
             ",
-        "    \
-            true.\n    \
-            false.\n    \
-            true.\n    \
-            false.\n    \
+        "   \
+            true.\n   \
+            false.\n   \
+            true.\n   \
+            false.\n   \
             false.\n\
             ",
     )
@@ -125,7 +125,7 @@ fn compound_goal() {
 // issue #815
 #[test]
 fn no_stutter() {
-    run_top_level_test_no_args("write(a), write(b), false.\n", "ab    false.\n")
+    run_top_level_test_no_args("write(a), write(b), false.\n", "ab   false.\n")
 }
 
 // issue #812
@@ -135,7 +135,7 @@ fn singleton_warning() {
     run_top_level_test_no_args(
         "['tests-pl/issue812-singleton-warning.pl'].",
         "\
-        Warning: singleton variables X at line 4 of issue812-singleton-warning.pl\n    \
+        Warning: singleton variables X at line 4 of issue812-singleton-warning.pl\n   \
         true.\n\
         ",
     );
@@ -146,7 +146,7 @@ fn singleton_warning() {
 fn ignored_constraint() {
     run_top_level_test_no_args(
         "use_module(library(freeze)), freeze(X,false), X \\=a.",
-        "    freeze:freeze(X,user:false).\n",
+        "   freeze:freeze(X,user:false).\n",
     );
 }
 
