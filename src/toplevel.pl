@@ -1,8 +1,10 @@
 :- module('$toplevel', [argv/1,
                         copy_term/3]).
 
+:- use_module(library(atts), [call_residue_vars/2]).
 :- use_module(library(charsio)).
 :- use_module(library(files)).
+:- use_module(library(format), [format/2]).
 :- use_module(library(iso_ext)).
 :- use_module(library(lists)).
 :- use_module(library(si)).
@@ -116,11 +118,9 @@ run_goals([Goal|_]) :-
     write(error(domain_error(arg_type, Goal), run_goals/1)), nl,
     halt.
 
-repl :-
-    catch(read_and_match, E, print_exception(E)),
-    false. %% this is for GC, until we get actual GC.
-repl :-
-    repl.
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  REPL.
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 %% Enable op declarations with lists of operands, i.e.,
 %% :- op(900, fy, [$,@]).
@@ -133,188 +133,111 @@ expand_op_list([Op | OtherOps], Pred, Spec, [(:- op(Pred, Spec, Op)) | OtherResu
     expand_op_list(OtherOps, Pred, Spec, OtherResults).
 
 
-read_and_match :-
-    '$read_query_term'(_, Term, _, _, VarList),
-    instruction_match(Term, VarList).
+repl :-
+    catch(read_execute, E, print_exception(E)),
+    false. %% This is for GC, until we get actual GC.
+repl :-
+    repl.
 
-
-instruction_match(Term, VarList) :-
-    (  var(Term) ->
-       throw(error(instantiation_error, repl/0))
-    ;  Term = [Item] ->
-       !,
-       (  atom(Item) ->
-	      (  Item == user ->
-	         catch(load(user_input), E, print_exception_with_check(E))
-	      ;
-             submit_query_and_print_results(consult(Item), [])
-	      )
-       ;
-	   catch(type_error(atom, Item, repl/0),
-		     E,
-		     print_exception_with_check(E))
-       )
-    ;  Term = end_of_file ->
-       halt
-    ;
-       submit_query_and_print_results(Term, VarList)
-    ).
-
-
-submit_query_and_print_results_(Term, VarList) :-
-    '$get_b_value'(B),
-    '$call'(Term),
-    write_eqs_and_read_input(B, VarList),
-    !.
-submit_query_and_print_results_(_, _) :-
-    %  clear attribute goal lists, which may be populated by
-    %  copy_term/3 prior to failure.
-    write('false.'),
-    nl.
-
-
-submit_query_and_print_results(Term0, VarList) :-
-    expand_goal(call(Term0), user, call(Term)),
-    !,
-    setup_call_cleanup(bb_put('$first_answer', true),
-                       submit_query_and_print_results_(Term, VarList),
-                       bb_put('$first_answer', false)).
-
-
-needs_bracketing(Value, Op) :-
-    catch((functor(Value, F, _),
-	       current_op(EqPrec, EqSpec, Op),
-	       current_op(FPrec, _, F)),
-	      _,
-	      false),
-    (  EqPrec < FPrec ->
-       true
-    ;  FPrec > 0, F == Value, graphic_token_char(F) ->
-       true
-    ;  F \== '.', '$quoted_token'(F) ->
-       true
-    ;  EqPrec == FPrec,
-       memberchk(EqSpec, [fx,xfx,yfx])
-    ).
-
-write_goal(G, VarList, MaxDepth) :-
-    (  G = (Var = Value) ->
-       (  var(Value) ->
-	      select((Var = _), VarList, NewVarList)
-       ;  VarList = NewVarList
-       ),
-       write(Var),
-       write(' = '),
-       (  needs_bracketing(Value, (=)) ->
-	      write('('),
-	      write_term(Value, [quoted(true), variable_names(NewVarList), max_depth(MaxDepth)]),
-	      write(')')
-       ;  write_term(Value, [quoted(true), variable_names(NewVarList), max_depth(MaxDepth)])
-       )
-    ;  G == [] ->
-       write('true')
-    ;  write_term(G, [quoted(true), variable_names(VarList), max_depth(MaxDepth)])
-    ).
-
-write_last_goal(G, VarList, MaxDepth) :-
-    (  G = (Var = Value) ->
-       (  var(Value) ->
-	      select((Var = _), VarList, NewVarList)
-       ;  VarList = NewVarList
-       ),
-       write(Var),
-       write(' = '),
-       (  needs_bracketing(Value, (=)) ->
-	      write('('),
-	      write_term(Value, [quoted(true), variable_names(NewVarList), max_depth(MaxDepth)]),
-	      write(')')
-       ;  write_term(Value, [quoted(true), variable_names(NewVarList), max_depth(MaxDepth)]),
-	      (  trailing_period_is_ambiguous(Value) ->
-	         write(' ')
-	      ;  true
-	      )
-       )
-    ;  G == [] ->
-       write('true')
-    ;  write_term(G, [quoted(true), variable_names(VarList), max_depth(MaxDepth)])
-    ).
-
-write_eq((G1, G2), VarList, MaxDepth) :-
-    !,
-    write_goal(G1, VarList, MaxDepth),
-    write(', '),
-    write_eq(G2, VarList, MaxDepth).
-write_eq(G, VarList, MaxDepth) :-
-    write_last_goal(G, VarList, MaxDepth).
-
-graphic_token_char(C) :-
-    memberchk(C, ['#', '$', '&', '*', '+', '-', '.', ('/'), ':',
-                  '<', '=', '>', '?', '@', '^', '~', ('\\')]).
-
-list_last_item([C], C) :- !.
-list_last_item([_|Cs], D) :-
-    list_last_item(Cs, D).
-
-trailing_period_is_ambiguous(Value) :-
-    atom(Value),
-    atom_chars(Value, ValueChars),
-    list_last_item(ValueChars, Char),
-    ValueChars \== ['.'],
-    graphic_token_char(Char).
-
-write_eqs_and_read_input(B, VarList) :-
-    term_variables(VarList, Vars0),
-    '$term_attributed_variables'(VarList, AttrVars),
-    '$project_atts':project_attributes(Vars0, AttrVars),
-    copy_term(AttrVars, AttrVars, AttrGoals),
-    term_variables(AttrGoals, AttrGoalVars),
-    append([Vars0, AttrGoalVars, AttrVars], Vars),
-    charsio:extend_var_list(Vars, VarList, NewVarList, fabricated),
-    '$get_b_value'(B0),
-    gather_query_vars(VarList, OrigVars),
-    gather_equations(NewVarList, OrigVars, Equations),
-    append(Equations, AttrGoals, Goals),
-    term_variables(Equations, EquationVars),
-    append([AttrGoalVars, EquationVars], Vars1),
-    charsio:extend_var_list(Vars1, VarList, NewVarList0, fabricated),
-    (   bb_get('$first_answer', true) ->
-        write('   '),
-        bb_put('$first_answer', false)
+print_exception(E) :-
+    (   E == error('$interrupt_throw', repl/0) ->
+        nl  % Print the exception on a new line to evade "^C".
     ;   true
     ),
-    (  B0 == B ->
-       (  Goals == [] ->
-	      write('true.'), nl
-       ;  loader:thread_goals(Goals, ThreadedGoals, (',')),
-	      write_eq(ThreadedGoals, NewVarList0, 20),
-	      write('.'),
-	      nl
-       )
-    ;  loader:thread_goals(Goals, ThreadedGoals, (',')),
-       write_eq(ThreadedGoals, NewVarList0, 20),
-       read_input(ThreadedGoals, NewVarList0)
+    write_term('caught: ', [quoted(false), max_depth(20)]),
+    writeq(E), nl. % Fail-safe.
+
+print_exception_with_check(E) :-
+    (   E = error(_, _:_) ->
+        % If the error source contains a line number, a GNU-style error
+        % message is expected to be printed instead.
+        true
+    ;   print_exception(E)
     ).
 
-read_input(ThreadedGoals, NewVarList) :-
+read_execute :-
+    '$read_query_term'(_, Term, _, AllInitVs, Eqs0),
+    (   var(Term) ->
+        throw(error(instantiation_error, repl/0))
+    ;   Term = end_of_file ->
+        halt
+    ;   Term = [File] -> !,
+        (   atom(File) ->
+            (   File == user ->
+                catch(load(user_input), E, print_exception_with_check(E))
+            ;   consult(File)
+            )
+        ;   catch(
+                throw(error(type_error(atom, File), repl/0)),
+                E,
+                print_exception_with_check(E)
+            )
+        )
+    ;   execute_query(Term, Eqs0, AllInitVs)
+    ).
+
+% :- meta_predicate execute_query(0, ?, ?).
+execute_query(Goal, Eqs0, AllInitVs) :-
+    term_variables(Eqs0, InterestVs), % Must show it.
+    list_filter(not(in(InterestVs)), AllInitVs, AnonVs),
+    setup_call_cleanup(
+        true,
+        (   catch(call_residue_vars(user:Goal, ResVs), E, true),
+            (   var(E) ->
+                Succeed = true
+            ;   NoError = false
+            )
+        ),
+        (   (   NoError \== false, Succeed \== true ->
+                format("    false.\n", [])
+            ;   Last = true
+            )
+        )
+    ),
+    (   nonvar(E) ->
+        throw(E)
+    ;   true
+    ),
+    term_variables(Goal, NewVs),
+    terms_equations(Eqs0, AllInitVs, InterestVs, AnonVs, ResVs, NewVs, Terms, AllEqs),
+    (   print_and_read_input_if_not_last(Last, 20, Terms, AllEqs) ->
+        true
+    % ;   !       % Bug, this doesn't cut.
+    % ;   !, true % Bug, this also doesn't cut.
+    ;   true, ! % End query.
+    ).
+
+print_and_read_input_if_not_last(Last, MaxDepth, Terms, AllEqs) :-
+    print_goal(Terms, AllEqs, MaxDepth, Cs),
+    format("    ~s", [Cs]),
+    (   Last == true ->
+        (   list_last(Cs, C), char_type(C, graphic_token) ->
+            write(' .'), nl
+        ;   write('.'), nl
+        )
+    ;   read_input_and_print_(MaxDepth, Terms, AllEqs)
+    ).
+
+read_input_and_print_(MaxDepth, Terms, AllEqs) :-
     get_single_char(C),
-    (  C = w ->
-       nl,
-       write('   '),
-       write_eq(ThreadedGoals, NewVarList, 0),
-       read_input(ThreadedGoals, NewVarList)
-    ;  C = p ->
-       nl,
-       write('   '),
-       write_eq(ThreadedGoals, NewVarList, 20),
-       read_input(ThreadedGoals, NewVarList)
-    ;  member(C, [';', ' ', n]) ->
-       nl, write(';  '), false
-    ;  C = h ->
-       help_message,
-       read_input(ThreadedGoals, NewVarList)
-    ;  member(C, ['\n', .]) ->
-       nl, write(';  ...'), nl
-    ;  read_input(ThreadedGoals, NewVarList)
+    nl,
+    (   member(C, [;, ' ', n]) ->
+        write(;), nl
+    ;   member(C, ['\n', .]) ->
+        write(';   ...'), nl,
+        false
+    ;   C = h ->
+        help_message,
+        read_input_and_print_(MaxDepth, Terms, AllEqs)
+    ;   C = p ->
+        print_goal(Terms, AllEqs, MaxDepth, Cs),
+        format("    ~s", [Cs]),
+        read_input_and_print_(MaxDepth, Terms, AllEqs)
+    ;   C = w ->
+        print_goal(Terms, AllEqs, 0, Cs),
+        format("    ~s", [Cs]),
+        read_input_and_print_(MaxDepth, Terms, AllEqs)
+    ;   read_input_and_print_(MaxDepth, Terms, AllEqs)
     ).
 
 help_message :-
@@ -325,62 +248,148 @@ help_message :-
     write('"w": write terms without depth limit\n'),
     write('"p": print terms with depth limit\n\n').
 
-gather_query_vars([_ = Var | Vars], QueryVars) :-
-    (  var(Var) ->
-       QueryVars = [Var | QueryVars0],
-       gather_query_vars(Vars, QueryVars0)
-    ;
-       gather_query_vars(Vars, QueryVars)
+terms_equations(Eqs0, AllInitVs, InterestVs0, AnonVs0, ResVs0, NewVs0, Terms, AllEqs) :-
+    % Include new variables of interest, possibly some anonymous variables.
+    term_variables(InterestVs0, InterestVs),
+
+    % Include new anonymous variables. New variables of anonymous origin are
+    % new anonymous variables.
+    term_variables(AnonVs0, AnonVs1),
+
+    % Anonymous variables that are "inside" a variable of interest isn't
+    % anonymous.
+    list_filter(not(in(InterestVs)), AnonVs1, AnonVs),
+
+    % Get the attributed variables only.
+    '$term_attributed_variables'(ResVs0, ResVs1), % Not enough.
+    list_filter(not(in(AnonVs)), ResVs1, ResVs2),
+
+    term_variables([AllInitVs, ResVs1], AllVs),
+
+    list_filter(not(in(AnonVs)), AllVs, AttrVs0),
+
+    term_variables(AllInitVs, AllVs0),
+
+    % '$term_attributed_variables'(AttrVs0, AttrVs1),
+    '$project_atts':project_attributes(AllVs0, AttrVs0),
+    copy_term(AttrVs0, AttrVs0, AttrGs),
+
+    % Truly useful attributed variables.
+    term_variables(AttrGs, AttrVs1),
+    % '$term_attributed_variables'(AttrGs, AttrVs1), % Bad.
+    list_filter(both(ResVs2, AttrVs1), ResVs2, ResVs3),
+
+    % New hidden variables in attributed variables have to be revealed.
+    term_variables(AttrGs, HiddenVs0),
+    list_filter(not(in(AllVs)), HiddenVs0, Hs),
+
+    % Reorder: normal variables then attributed variables.
+    list_filter(not(in(AnonVs)), NewVs0, NewVs1),
+    list_filter(not(in(NewVs1)), ResVs3, ResVs4),
+
+    append([NewVs1, ResVs4, Hs], NewVs),
+    charsio:extend_var_list(NewVs, Eqs0, AllEqs, fabricated),
+
+    append(AllEqs, AttrGs, Terms0),
+    reverse(Terms0, RevTerms0),
+    seen(RevTerms0, [], Terms1),
+
+    (   Terms1 = [] ->
+        Terms = [true]
+    ;   Terms = Terms1
     ).
-gather_query_vars([], []).
 
-is_a_different_variable([_ = Binding | Pairs], Value) :-
-    (  Value == Binding, !
-    ;  is_a_different_variable(Pairs, Value)
-    ).
+print_goal(Terms, AllEqs, MaxDepth, Cs) :-
+    maplist(print_goal_(AllEqs, MaxDepth, ", "), Terms, Css),
+    append(Css, Cs0),
+    append(Cs, ", ", Cs0).
 
-eq_member(X, [Y|_])  :- X == Y, !.
-eq_member(X, [_|Ys]) :- eq_member(X, Ys).
+print_goal_(AllEqs, MaxDepth, Append, Term, Cs) :-
+    Settings = [variable_names(AllEqs), max_depth(MaxDepth)],
+    write_term_to_chars(Term, Settings, Cs0), % Not good enough for REPL.
+    append(Cs0, Append, Cs).
 
-select_all([], _, _, [], []).
-select_all([OtherVar = OtherValue | Pairs], Var, Value, Vars, NewPairs) :-
-    (  OtherValue == Value ->
-       Vars = [OtherVar = OtherValue | Vars0],
-       select_all(Pairs, Var, Value, Vars0, NewPairs)
-    ;
-       NewPairs = [OtherVar = OtherValue | NewPairs0],
-       select_all(Pairs, Var, Value, Vars, NewPairs0)
-    ).
-
-gather_equations([], _, []).
-gather_equations([Var = Value | Pairs], OrigVarList, Goals) :-
-    (  var(Value) ->
-       (  eq_member(Value, OrigVarList),
-          select_all(Pairs, Var, Value, [_ | VarEqs], NewPairs) ->
-          append([Var = Value | VarEqs], Goals0, Goals),
-          gather_equations(NewPairs, OrigVarList, Goals0)
-       ;
-          gather_equations(Pairs, OrigVarList, Goals)
-       )
-    ;
-       Goals = [Var = Value | Goals0],
-       gather_equations(Pairs, OrigVarList, Goals0)
-    ).
-
-print_exception(E) :-
-    (  E == error('$interrupt_thrown', repl) -> nl % print the
-    % exception on a
-    % newline to evade
-    % "^C".
-    ;  true
+:- meta_predicate list_filter(1, ?, ?).
+list_filter(_, [], []).
+list_filter(G, [L|Ls0], Ls1) :-
+    (   call('$toplevel':G, L) ->
+        Ls1 = [L|Ls2]
+    ;   Ls1 = Ls2
     ),
-    write_term('caught: ', [quoted(false), max_depth(20)]),
-    writeq(E),
-    nl.
+    list_filter(G, Ls0, Ls2).
 
-print_exception_with_check(E) :-
-    (  E = error(_, _:_) -> true % if the error source contains a line
-    % number, a GNU-style error message
-    % is expected to be printed instead.
-    ;  print_exception(E)
+% Warning: This isn't pure.
+:- meta_predicate not(1, ?).
+not(G, L) :-
+    \+ call('$toplevel':G, L).
+
+diff(Ls0, Ls1, L) :-
+    eq_member(L, Ls0),
+    \+ eq_member(L, Ls1).
+
+in(Ls0, L) :-
+    eq_member(L, Ls0).
+
+both(Ls0, Ls1, L) :-
+    eq_member(L, Ls0),
+    eq_member(L, Ls1).
+
+either(Ls0, Ls1, L) :-
+    (   eq_member(L, Ls0)
+    ;   eq_member(L, Ls1)
+    ).
+
+/*
+ * This predicate removes the first equations like `'A'=A` and permutes the
+ * second equation if it's the second occurrence of the variable `A`.
+ */
+% FIXME: Find a better name.
+seen([], Eqs, Eqs).
+seen([Eq0|Eqs0], Eqs1, Eqs) :-
+    (   Eq0 = (N = V), var(V), occurrences(is_eq(V), Eqs0, N0) ->
+        (   N0 =:= 0 ->
+            % Remove singleton.
+            Eqs2 = Eqs1
+        ;   N0 =:= 1,
+            maplist(term_variables, Eqs0, Vss),
+            append(Vss, Vs),
+            occurrences(==(V), Vs, N1),
+            N1 =:= 1 ->
+            % The singleton is the only one that remains.
+            % So this equation is permuted.
+            Eqs2 = [V = N|Eqs1]
+        ;   Eqs2 = [N = V|Eqs1]
+        )
+    ;   Eqs2 = [Eq0|Eqs1]
+    ),
+    seen(Eqs0, Eqs2, Eqs).
+
+is_eq(V0, _ = V) :-
+    V0 == V.
+
+:- meta_predicate occurrences(1, ?, ?).
+occurrences(G, Ls, N) :-
+    occurrences_(G, Ls, 0, N).
+
+:- meta_predicate occurrences_(1, ?, ?, ?).
+occurrences_(_, [], N, N).
+occurrences_(G, [Eq|Eqs], N0, N) :-
+    (   call('$toplevel':G, Eq) ->
+        N1 is N0 + 1
+    ;   N1 = N0
+    ),
+    occurrences_(G, Eqs, N1, N).
+
+list_last([L0|Ls], L) :-
+    list_last(Ls, L0, L).
+
+list_last([], L, L).
+list_last([L0|Ls], _, L) :-
+    list_last(Ls, L0, L).
+
+eq_member(X, [Y|Ls]) :-
+    (   Ls == [] ->
+        X == Y
+    ;   X == Y
+    ;   eq_member(X, Ls)
     ).
