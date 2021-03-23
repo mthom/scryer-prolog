@@ -330,38 +330,38 @@ compile_declaration(module(Module, Exports), Evacuable) :-
        '$declare_module'(Module, Exports, Evacuable)
     ;  type_error(atom, Module, load/1)
     ).
-compile_declaration(dynamic(Name/Arity), Evacuable) :-
-    !,
-    must_be(atom, Name),
-    must_be(integer, Arity),
-    prolog_load_context(module, Module),
-    '$add_dynamic_predicate'(Module, Name, Arity, Evacuable).
 compile_declaration(dynamic(Module:Name/Arity), Evacuable) :-
+    !,
     must_be(atom, Module),
     must_be(atom, Name),
     must_be(integer, Arity),
     '$add_dynamic_predicate'(Module, Name, Arity, Evacuable).
-compile_declaration(multifile(Name/Arity), Evacuable) :-
-    !,
+compile_declaration(dynamic(Name/Arity), Evacuable) :-
     must_be(atom, Name),
     must_be(integer, Arity),
     prolog_load_context(module, Module),
-    '$add_multifile_predicate'(Module, Name, Arity, Evacuable).
+    '$add_dynamic_predicate'(Module, Name, Arity, Evacuable).
 compile_declaration(multifile(Module:Name/Arity), Evacuable) :-
+    !,
     must_be(atom, Module),
     must_be(atom, Name),
     must_be(integer, Arity),
     '$add_multifile_predicate'(Module, Name, Arity, Evacuable).
-compile_declaration(discontiguous(Name/Arity), Evacuable) :-
-    !,
+compile_declaration(multifile(Name/Arity), Evacuable) :-
     must_be(atom, Name),
     must_be(integer, Arity),
     prolog_load_context(module, Module),
-    '$add_discontiguous_predicate'(Module, Name, Arity, Evacuable).
+    '$add_multifile_predicate'(Module, Name, Arity, Evacuable).
 compile_declaration(discontiguous(Module:Name/Arity), Evacuable) :-
+    !,
     must_be(atom, Module),
     must_be(atom, Name),
     must_be(integer, Arity),
+    '$add_discontiguous_predicate'(Module, Name, Arity, Evacuable).
+compile_declaration(discontiguous(Name/Arity), Evacuable) :-
+    must_be(atom, Name),
+    must_be(integer, Arity),
+    prolog_load_context(module, Module),
     '$add_discontiguous_predicate'(Module, Name, Arity, Evacuable).
 compile_declaration(initialization(Goal), Evacuable) :-
     prolog_load_context(module, Module),
