@@ -17,13 +17,17 @@
                     variant/2,
                     copy_term_nat/2]).
 
-:- use_module(library(error), [can_be/2, domain_error/3, type_error/3]).
+:- use_module(library(error), [can_be/2,
+                               domain_error/3,
+                               instantiation_error/1,
+                               type_error/3]).
 
 
 :- meta_predicate call_cleanup(0, 0).
 
 :- meta_predicate setup_call_cleanup(0, 0, 0).
 
+:- meta_predicate forall(0, 0).
 
 forall(Generate, Test) :-
     \+ (Generate, \+ Test).
@@ -61,20 +65,24 @@ setup_call_cleanup(S, G, C) :-
     call(S),
     '$set_cp_by_default'(B),
     '$get_current_block'(Bb),
-    (  '$call_with_default_policy'(var(C)) ->
-       throw(error(instantiation_error, setup_call_cleanup/3))
+    (  C = _:CC,
+       '$call_with_default_policy'(var(CC)) ->
+       instantiation_error(setup_call_cleanup/3)
     ;  '$call_with_default_policy'(scc_helper(C, G, Bb))
     ).
 
 :- non_counted_backtracking scc_helper/3.
 scc_helper(C, G, Bb) :-
-    '$get_cp'(Cp), '$install_scc_cleaner'(C, NBb), call(G),
+    '$get_cp'(Cp),
+    '$install_scc_cleaner'(C, NBb),
+    call(G),
     ( '$check_cp'(Cp) ->
       '$reset_block'(Bb),
       '$call_with_default_policy'(run_cleaners_without_handling(Cp))
     ; '$call_with_default_policy'(true)
     ; '$reset_block'(NBb),
-      '$fail').
+      '$fail'
+    ).
 scc_helper(_, _, Bb) :-
     '$reset_block'(Bb),
     '$get_ball'(Ball),

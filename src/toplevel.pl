@@ -149,10 +149,9 @@ instruction_match(Term, VarList) :-
 	      ;
              submit_query_and_print_results(consult(Item), [])
 	      )
-       ;
-	   catch(type_error(atom, Item, repl/0),
-		     E,
-		     print_exception_with_check(E))
+       ;  catch(type_error(atom, Item, repl/0),
+		        E,
+		        print_exception_with_check(E))
        )
     ;  Term = end_of_file ->
        halt
@@ -167,15 +166,12 @@ submit_query_and_print_results_(Term, VarList) :-
     write_eqs_and_read_input(B, VarList),
     !.
 submit_query_and_print_results_(_, _) :-
-    %  clear attribute goal lists, which may be populated by
-    %  copy_term/3 prior to failure.
     write('false.'),
     nl.
 
 
 submit_query_and_print_results(Term0, VarList) :-
     expand_goal(call(Term0), user, call(Term)),
-    !,
     setup_call_cleanup(bb_put('$first_answer', true),
                        submit_query_and_print_results_(Term, VarList),
                        bb_put('$first_answer', false)).

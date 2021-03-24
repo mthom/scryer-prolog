@@ -255,8 +255,8 @@ call_or_cut(G, B, ErrorPI) :-
 
 :- non_counted_backtracking control_functor/1.
 
-control_functor(_:G) :- control_functor(G).
-control_functor(call(_:!)).
+control_functor(_:G) :- nonvar(G), control_functor(G).
+control_functor(call(_:C)) :- C == !.
 control_functor(!).
 control_functor((_,_)).
 control_functor((_;_)).
@@ -577,9 +577,6 @@ catch(G,C,R) :-
     '$get_current_block'(Bb),
     '$call_with_default_policy'(catch(G,C,R,Bb)).
 
-
-:- meta_predicate catch(0, ?, 0, +).
-
 :- non_counted_backtracking catch/4.
 catch(G,C,R,Bb) :-
     '$install_new_block'(NBb),
@@ -599,8 +596,6 @@ end_block(Bb, NBb) :-
     '$reset_block'(NBb),
     '$fail'.
 
-:- meta_predicate handle_ball(?, ?, 0).
-
 :- non_counted_backtracking handle_ball/3.
 handle_ball(C, C, R) :-
     !,
@@ -611,8 +606,6 @@ handle_ball(_, _, _) :-
 
 throw(Ball) :- '$set_ball'(Ball), '$unwind_stack'.
 
-
-% :- meta_predicate '$iterate_find_all'(?, 0, ?, ?).
 
 :- non_counted_backtracking '$iterate_find_all'/4.
 '$iterate_find_all'(Template, Goal, _, LhOffset) :-
