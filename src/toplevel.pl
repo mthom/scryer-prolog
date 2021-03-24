@@ -244,20 +244,22 @@ print_and_read_input_if_not_last(Last, MaxDepth, Terms, AllEqs) :-
 
 read_input_and_print_(MaxDepth, Terms, AllEqs) :-
     get_single_char(C),
-    nl,
     (   member(C, [;, ' ', n]) ->
-        write(;), nl
+        write(' ;'), nl
     ;   member(C, ['\n', .]) ->
-        write(';  ...'), nl,
+        write(' ;\n   ...'), nl,
         false
     ;   C = h ->
+        nl,
         help_message,
         read_input_and_print_(MaxDepth, Terms, AllEqs)
     ;   C = p ->
+        nl,
         print_goal(Terms, AllEqs, MaxDepth, Cs),
         format("   ~s", [Cs]),
         read_input_and_print_(MaxDepth, Terms, AllEqs)
     ;   C = w ->
+        nl,
         print_goal(Terms, AllEqs, 0, Cs),
         format("   ~s", [Cs]),
         read_input_and_print_(MaxDepth, Terms, AllEqs)
