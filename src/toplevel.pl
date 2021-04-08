@@ -213,7 +213,11 @@ execute_query(Goal, Eqs0, AllInitVs) :-
             )
         ),
         (   (   NoError \== false, Succeed \== true ->
-                format("   false.\n", [])
+                (   bb_get('$first_answer', true) ->
+                    write('   ')
+                ;   true
+                ),
+                format("false.\n", [])
             ;   Last = true
             )
         )
