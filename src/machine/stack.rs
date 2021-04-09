@@ -176,6 +176,7 @@ impl Stack {
 
             for idx in 0..num_cells {
                 let offset = prelude_size::<AndFramePrelude>() + idx * mem::size_of::<Addr>();
+
                 ptr::write(
                     (self.buf.top as usize + offset) as *mut Addr,
                     Addr::StackCell(e, idx + 1),

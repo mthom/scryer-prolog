@@ -252,13 +252,10 @@ print_and_read_input_if_not_last(Last, MaxDepth, Terms, AllEqs) :-
 read_input_and_print_(MaxDepth, Terms, AllEqs) :-
     get_single_char(C),
     (   member(C, [;, ' ', n]) ->
-        % write(' ;'), nl
         nl, write(';  ')
     ;   member(C, ['\n', .]) ->
         nl, write(';  ...'), nl,
         false
-        % write(' ;\n   ...'), nl,
-        % false
     ;   C = h ->
         nl,
         help_message,
