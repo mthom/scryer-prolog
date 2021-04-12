@@ -6,8 +6,9 @@
                      atom_chars/2, atom_codes/2, atom_concat/3,
                      atom_length/2, bagof/3, call/1, call/2, call/3,
                      call/4, call/5, call/6, call/7, call/8, call/9,
-                     catch/3, char_code/2, clause/2, close/1, close/2,
-                     current_input/1, current_output/1, current_op/3,
+                     callable/1, catch/3, char_code/2, clause/2,
+                     close/1, close/2, current_input/1,
+                     current_output/1, current_op/3,
                      current_predicate/1, current_prolog_flag/2,
                      fail/0, false/0, findall/3, findall/4,
                      flush_output/0, flush_output/1, get_byte/1,
@@ -18,14 +19,14 @@
                      peek_char/1, peek_char/2, peek_code/1,
                      peek_code/2, put_byte/1, put_byte/2, put_code/1,
                      put_code/2, put_char/1, put_char/2, read_term/2,
-                     read_term/3, repeat/0, retract/1,
+                     read_term/3, repeat/0, retract/1, retractall/1,
                      set_prolog_flag/2, set_input/1,
                      set_stream_position/2, set_output/1, setof/3,
                      stream_property/2, sub_atom/5, subsumes_term/2,
                      term_variables/2, throw/1, true/0,
-                     unify_with_occurs_check/2, write/1,
-                     write_canonical/1, write_term/2, write_term/3,
-                     writeq/1]).
+                     unify_with_occurs_check/2, write/1, write/2,
+                     write_canonical/1, write_canonical/2,
+                     write_term/2, write_term/3, writeq/1, writeq/2]).
 
 
 % the maximum arity flag. needs to be replaced with
@@ -506,15 +507,22 @@ write(Term) :-
     current_output(Stream),
     '$write_term'(Stream, Term, false, true, false, [], 0).
 
+write(Stream, Term) :-
+    '$write_term'(Stream, Term, false, true, false, [], 0).
+
 write_canonical(Term) :-
     current_output(Stream),
+    '$write_term'(Stream, Term, true, false, true, [], 0).
+
+write_canonical(Stream, Term) :-
     '$write_term'(Stream, Term, true, false, true, [], 0).
 
 writeq(Term) :-
     current_output(Stream),
     '$write_term'(Stream, Term, false, true, true, [], 0).
 
-
+writeq(Stream, Term) :-
+    '$write_term'(Stream, Term, false, true, true, [], 0).
 
 select_rightmost_options([Option-Value | OptionPairs], OptionValues) :-
     (  pairs:same_key(Option, OptionPairs, OtherValues, _),
@@ -765,10 +773,8 @@ setof(Template, Goal, Solution) :-
 '$module_clause'(H, B, Module) :-
     (  var(H) ->
        throw(error(instantiation_error, clause/2))
-    ;  functor(H, Name, Arity) ->
-       (  Name == '.' ->
-          throw(error(type_error(callable, H), clause/2))
-	   ;  '$head_is_dynamic'(Module, H) ->
+    ;  callable(H), functor(H, Name, Arity) ->
+       (  '$head_is_dynamic'(Module, H) ->
 		  '$clause_body_is_valid'(B),
 		  Module:'$clause'(H, B)
        ;  '$no_such_predicate'(Module, H) ->
@@ -783,10 +789,8 @@ setof(Template, Goal, Solution) :-
 clause(H, B) :-
     (  var(H) ->
        throw(error(instantiation_error, clause/2))
-    ;  functor(H, Name, Arity) ->
-       (  Name == '.' ->
-          throw(error(type_error(callable, H), clause/2))
-	   ;  Name == (:),
+    ;  callable(H), functor(H, Name, Arity) ->
+       (  Name == (:),
           Arity =:= 2 ->
 		  arg(1, H, Module),
 		  arg(2, H, F),
@@ -811,9 +815,7 @@ call_asserta(Head, Body, Name, Arity, Module) :-
 module_asserta_clause(Head, Body, Module) :-
     (  var(Head) ->
        throw(error(instantiation_error, asserta/1))
-    ;  functor(Head, Name, Arity),
-       atom(Name),
-       Name \== '.' ->
+    ;  callable(Head), functor(Head, Name, Arity) ->
        (  '$head_is_dynamic'(Module, Head) ->
           call_asserta(Head, Body, Name, Arity, Module)
        ;  throw(error(permission_error(modify, static_procedure, Name/Arity), asserta/1))
@@ -823,9 +825,7 @@ module_asserta_clause(Head, Body, Module) :-
 
 asserta_clause(Head, Body) :-
     (  var(Head) -> throw(error(instantiation_error, asserta/1))
-    ;  functor(Head, Name, Arity),
-       atom(Name),
-       Name \== '.' ->
+    ;  callable(Head), functor(Head, Name, Arity) ->
        ( Name == (:),
          Arity =:= 2 ->
 	     arg(1, Head, Module),
@@ -852,9 +852,7 @@ asserta(Clause) :-
 module_assertz_clause(Head, Body, Module) :-
     (  var(Head) ->
        throw(error(instantiation_error, assertz/1))
-    ;  functor(Head, Name, Arity),
-       atom(Name),
-       Name \== '.' ->
+    ;  callable(Head), functor(Head, Name, Arity) ->
        (  '$head_is_dynamic'(Module, Head) ->
           call_assertz(Head, Body, Name, Arity, Module)
        ;  '$no_such_predicate'(Module, Head) ->
@@ -874,9 +872,7 @@ call_assertz(Head, Body, Name, Arity, Module) :-
 assertz_clause(Head, Body) :-
     (  var(Head) ->
        throw(error(instantiation_error, assertz/1))
-    ;  functor(Head, Name, Arity),
-       atom(Name),
-       Name \== '.' ->
+    ;  callable(Head), functor(Head, Name, Arity) ->
        (  Name == (:),
           Arity =:= 2 ->
 	      arg(1, Head, Module),
@@ -923,9 +919,7 @@ call_module_retract(Head, Body, Name, Arity, Module) :-
 retract_module_clause(Head, Body, Module) :-
     (  var(Head) ->
        throw(error(instantiation_error, retract/1))
-    ;  functor(Head, Name, Arity),
-       atom(Name),
-       Name \== '.' ->
+    ;  callable(Head), functor(Head, Name, Arity) ->
        (  '$head_is_dynamic'(Module, Head) ->
           (  Module == user ->
              call_retract(Head, Body, Name, Arity)
@@ -964,9 +958,7 @@ call_retract(Head, Body, Name, Arity) :-
 retract_clause(Head, Body) :-
     (  var(Head) ->
        throw(error(instantiation_error, retract/1))
-    ;  functor(Head, Name, Arity),
-       atom(Name),
-       Name \== '.' ->
+    ;  callable(Head), functor(Head, Name, Arity) ->
        (  Name == (:),
           Arity =:= 2 ->
 	      arg(1, Head, Module),
@@ -1004,7 +996,7 @@ module_abolish(Pred, Module) :-
              throw(error(domain_error(not_less_than_zero, Arity), abolish/1))
 	      ;  max_arity(N), Arity > N ->
              throw(error(representation_error(max_arity), abolish/1))
-	      ;  functor(Head, Name, Arity) ->
+	      ;  callable(Head), functor(Head, Name, Arity) ->
 	         (  '$head_is_dynamic'(Module, Head) ->
 	            '$abolish_clause'(Module, Name, Arity)
 	         ;  throw(error(permission_error(modify, static_procedure, Pred), abolish/1))
@@ -1032,7 +1024,7 @@ abolish(Pred) :-
              throw(error(domain_error(not_less_than_zero, Arity), abolish/1))
 	      ;  max_arity(N), Arity > N ->
              throw(error(representation_error(max_arity), abolish/1))
-	      ;  functor(Head, Name, Arity) ->
+	      ;  callable(Head), functor(Head, Name, Arity) ->
 	         (  '$head_is_dynamic'(user, Head) ->
                 '$abolish_clause'(user, Name, Arity)
 	         ;  '$no_such_predicate'(user, Head) ->
@@ -1587,3 +1579,14 @@ set_stream_position(S_or_a, Position) :-
        '$set_stream_position'(S_or_a, P)
     ;  throw(error(domain_error(stream_position, Position)))
     ).
+
+callable(X) :-
+    (  nonvar(X), functor(X, F, _), atom(F) ->
+       true
+    ;  false
+    ).
+
+retractall(Head) :-
+   retract((Head :- _)),
+   false.
+retractall(_).
