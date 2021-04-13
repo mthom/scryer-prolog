@@ -1,30 +1,24 @@
-# Based on https://hub.docker.com/_/rust?tab=description and https://blog.sedrik.se/posts/my-docker-setup-for-rust/
-
-# The first container is for build purposes only.
-FROM rust as builder
-
-WORKDIR /usr/src/scryer-prolog
-
-# Using a dummy build.rs and src/main.rs with your Cargo.toml lets Docker cache your Rust dependencies and not rebuild
-# them every time.
-COPY Cargo.toml .
-COPY Cargo.lock .
-RUN mkdir -p src
-RUN echo "fn main() {}" > src/main.rs
-RUN echo "fn main() {}" > build.rs
-RUN cargo build --release
-
-# We need to touch our real main.rs and build.rs files or else
-# docker will use the cached ones.
+# See https://github.com/LukeMathWalker/cargo-chef
+FROM lukemathwalker/cargo-chef as planner
+WORKDIR /scryer-prolog
 COPY . .
-RUN touch src/main.rs
-RUN touch build.rs
+RUN cargo chef prepare --recipe-path recipe.json
 
-RUN cargo build --release
+FROM lukemathwalker/cargo-chef as cacher
+WORKDIR /scryer-prolog
+COPY --from=planner /scryer-prolog/recipe.json recipe.json
+RUN cargo chef cook --release --recipe-path recipe.json
 
-RUN ls ./target/release
+FROM rust as builder
+WORKDIR /scryer-prolog
+COPY . .
+# Copy over the cached dependencies
+COPY --from=cacher /scryer-prolog/target target
+COPY --from=cacher $CARGO_HOME $CARGO_HOME
+RUN cargo build --release --bin scryer-prolog
 
-# Finally, copy the scryer-prolog executable to a slimmer container.
-FROM debian:buster-slim
-COPY --from=builder /usr/src/scryer-prolog/target/release/scryer-prolog /usr/local/bin/scryer-prolog
-CMD ["scryer-prolog"]
+FROM debian:stable-slim
+WORKDIR scryer-prolog
+COPY --from=builder /scryer-prolog/target/release/scryer-prolog /usr/local/bin
+ENV RUST_BACKTRACE=1
+ENTRYPOINT ["/usr/local/bin/scryer-prolog"]
