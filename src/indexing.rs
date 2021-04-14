@@ -37,7 +37,7 @@ impl OptArgIndexKey {
         match (self, key_type) {
             (OptArgIndexKey::Constant(..), OptArgIndexKeyType::Constant)
             | (OptArgIndexKey::Structure(..), OptArgIndexKeyType::Structure)
-            // | (OptArgIndexKey::List(..), OptArgIndexKeyType::List) 
+            // | (OptArgIndexKey::List(..), OptArgIndexKeyType::List)
             => true,
             _ => false,
         }
@@ -116,7 +116,12 @@ impl<'a> IndexingCodeMergingPtr<'a> {
                 constants.insert(constant.clone(), constant_ptr);
             }
             _ => {
-                unreachable!()
+                if let IndexingCodePtr::DynamicExternal(_) = constant_ptr {
+                    // this must be a defunct clause, because it's been deleted
+                    // from the skeleton.
+                } else {
+                    unreachable!()
+                }
             }
         }
 
@@ -378,7 +383,12 @@ impl<'a> IndexingCodeMergingPtr<'a> {
                 structures.insert((name.clone(), *arity), structure_ptr);
             }
             _ => {
-                unreachable!()
+                if let IndexingCodePtr::DynamicExternal(_) = structure_ptr {
+                    // this must be a defunct clause, because it's been deleted
+                    // from the skeleton.
+                } else {
+                    unreachable!()
+                }
             }
         }
 

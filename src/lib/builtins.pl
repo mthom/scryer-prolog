@@ -818,6 +818,8 @@ module_asserta_clause(Head, Body, Module) :-
     ;  callable(Head), functor(Head, Name, Arity) ->
        (  '$head_is_dynamic'(Module, Head) ->
           call_asserta(Head, Body, Name, Arity, Module)
+       ;  '$no_such_predicate'(Module, Head) ->
+          call_asserta(Head, Body, Name, Arity, Module)
        ;  throw(error(permission_error(modify, static_procedure, Name/Arity), asserta/1))
        )
     ;  throw(error(type_error(callable, Head), asserta/1))
@@ -839,6 +841,8 @@ asserta_clause(Head, Body) :-
        )
     ;  throw(error(type_error(callable, Head), asserta/1))
     ).
+
+:- meta_predicate asserta(0).
 
 asserta(Clause) :-
     (  Clause \= (_ :- _) ->
@@ -887,6 +891,8 @@ assertz_clause(Head, Body) :-
        )
     ;  throw(error(type_error(callable, Head), assertz/1))
     ).
+
+:- meta_predicate assertz(0).
 
 assertz(Clause) :-
     (  Clause \= (_ :- _) ->
@@ -973,6 +979,8 @@ retract_clause(Head, Body) :-
     ;  throw(error(type_error(callable, Head), retract/1))
     ).
 
+:- meta_predicate retract(0).
+
 retract(Clause) :-
     (  Clause \= (_ :- _) ->
        Head = Clause,
@@ -981,6 +989,14 @@ retract(Clause) :-
     ;  Clause = (Head :- Body) ->
        retract_clause(Head, Body)
     ).
+
+
+:- meta_predicate retractall(0).
+
+retractall(Head) :-
+   retract((Head :- _)),
+   false.
+retractall(_).
 
 
 module_abolish(Pred, Module) :-
@@ -996,7 +1012,7 @@ module_abolish(Pred, Module) :-
              throw(error(domain_error(not_less_than_zero, Arity), abolish/1))
 	      ;  max_arity(N), Arity > N ->
              throw(error(representation_error(max_arity), abolish/1))
-	      ;  callable(Head), functor(Head, Name, Arity) ->
+	      ;  functor(Head, Name, Arity) ->
 	         (  '$head_is_dynamic'(Module, Head) ->
 	            '$abolish_clause'(Module, Name, Arity)
 	         ;  throw(error(permission_error(modify, static_procedure, Pred), abolish/1))
@@ -1006,6 +1022,9 @@ module_abolish(Pred, Module) :-
        )
     ;  throw(error(type_error(predicate_indicator, Module:Pred), abolish/1))
     ).
+
+
+:- meta_predicate abolish(0).
 
 abolish(Pred) :-
     (  var(Pred) ->
@@ -1024,7 +1043,7 @@ abolish(Pred) :-
              throw(error(domain_error(not_less_than_zero, Arity), abolish/1))
 	      ;  max_arity(N), Arity > N ->
              throw(error(representation_error(max_arity), abolish/1))
-	      ;  callable(Head), functor(Head, Name, Arity) ->
+	      ;  functor(Head, Name, Arity) ->
 	         (  '$head_is_dynamic'(user, Head) ->
                 '$abolish_clause'(user, Name, Arity)
 	         ;  '$no_such_predicate'(user, Head) ->
@@ -1585,8 +1604,3 @@ callable(X) :-
        true
     ;  false
     ).
-
-retractall(Head) :-
-   retract((Head :- _)),
-   false.
-retractall(_).

@@ -365,7 +365,6 @@ compile_declaration(discontiguous(Name/Arity), Evacuable) :-
     '$add_discontiguous_predicate'(Module, Name, Arity, Evacuable).
 compile_declaration(initialization(Goal), Evacuable) :-
     prolog_load_context(module, Module),
-    '$add_dynamic_predicate'(Module, '$initialization_goals', 1, Evacuable),
     assertz(Module:'$initialization_goals'(Goal)).
 compile_declaration(set_prolog_flag(Flag, Value), _) :-
     set_prolog_flag(Flag, Value).
