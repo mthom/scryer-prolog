@@ -1902,12 +1902,6 @@ label([], _, Selection, Order, Choice, Optim0, Consistency, Vars) :-
                          retractall(extremum(_)))
         ).
 
-retractall(What) :-
-        (   \+ \+ retract(What) ->
-            retractall(What)
-        ;   true
-        ).
-
 % Introduce new variables for each min/max expression to avoid
 % reparsing expressions during optimisation.
 
