@@ -627,3 +627,11 @@ It stays close to the actual Prolog code under consideration, it does
 not need additional tools and formalisms for its application, and
 further, it encourages declarative reasoning that can in principle
 also be performed automatically.
+
+## Support and discussions
+
+If Scryer Prolog crashes or yields unexpected errors, consider filing
+an&nbsp;[issue](https://github.com/mthom/scryer-prolog/issues).
+
+To get in touch with the Scryer Prolog community, participate in
+[discussions](https://github.com/mthom/scryer-prolog/discussions)!
