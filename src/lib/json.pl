@@ -38,9 +38,11 @@
                  json_string//1,
                  json_number//1,
                  json_value//1,
-                 json_array//1
+                 json_array//1,
+                 json_object//1
                 ]).
 
+:- use_module(library(assoc)).
 :- use_module(library(charsio)).
 :- use_module(library(clpz)).
 :- use_module(library(dcgs)).
@@ -178,12 +180,12 @@ json_number(Number) -->
             ; number_chars(Number, NumberChars)
     }.
 
-inner_value(String) --> json_string(String).
-inner_value(Number) --> json_number(Number).
-%inner_value(Object) --> json_object(Object).
-inner_value(Array) --> json_array(Array).
-inner_value(true) --> "true".
-inner_value(false) --> "false".
+inner_value(string(Chars)) --> json_string(Chars).
+inner_value(number(Number)) --> json_number(Number).
+inner_value(object(Object)) --> json_object(Object).
+inner_value(array(Array)) --> json_array(Array).
+inner_value(boolean(true)) --> "true".
+inner_value(boolean(false)) --> "false".
 inner_value(null) --> "null".
 json_value(Value) --> json_whitespace, inner_value(Value), json_whitespace.
 
@@ -194,3 +196,25 @@ inner_array([Value1, Value2 | Tail]) -->
     ",",
     inner_array([Value2 | Tail]).
 json_array(List) --> "[", inner_array(List), "]".
+
+json_member(Key, Value) --> json_whitespace, json_string(Key), json_whitespace, ":", json_value(Value).
+
+json_members([Key-Value]) --> json_member(Key, Value).
+json_members([Key-Value | Tail]) --> json_member(Key, Value), ",", json_members(Tail).
+
+json_object(EmptyAssoc) --> {empty_assoc(EmptyAssoc)}, "{", json_whitespace, "}".
+json_object(Assoc) -->
+    {
+        nonvar(Assoc) ->
+        \+ empty_assoc(Assoc),
+        assoc_to_list(Assoc, [Pair|Pairs])
+        ; true
+    },
+    "{",
+    json_members([Pair|Pairs]),
+    "}",
+    {
+        var(Assoc) ->
+        list_to_assoc([Pair|Pairs], Assoc)
+        ; true
+    }.
