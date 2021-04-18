@@ -35,7 +35,10 @@
 
 :- module(json, [
                  json_whitespace//0,
-                 json_string//1
+                 json_string//1,
+                 json_number//1,
+                 json_value//1,
+                 json_array//1
                 ]).
 
 :- use_module(library(charsio)).
@@ -44,6 +47,7 @@
 :- use_module(library(dif)).
 :- use_module(library(error)).
 :- use_module(library(lists)).
+:- use_module(library(reif)).
 
 char_uniontypes(Char, Types) :-
     must_be(list, Types),
@@ -130,4 +134,63 @@ inner_string([NonPrintChar | Tail]) -->
     },
     inner_string(Tail).
 
-json_string(Inner) --> "\"", inner_string(Inner), "\"".
+json_string(Inner) -->
+    "\"",
+    inner_string(Inner),
+    "\"".
+
+posdigit(Digit) --> [Digit], {member(Digit, "123456789")}.
+digit('0') --> "0".
+digit(Digit) --> posdigit(Digit).
+number_str(['-'|Rest], sign) --> "-", number_str(Rest, wholestart).
+number_str(Rest, sign) --> number_str(Rest, wholestart).
+number_str([PosDigit|Rest], wholestart) --> posdigit(PosDigit), number_str(Rest, wholerest).
+number_str(['0'|Rest], wholestart) --> "0", number_str(Rest, fractionstart).
+number_str([Digit|Rest], wholerest) --> digit(Digit), number_str(Rest, wholerest).
+number_str(Rest, wholerest) --> number_str(Rest, fractionstart).
+number_str(Rest, wholerest) --> number_str(Rest, exponentstart).
+number_str(['.'|Rest], fractionstart) --> ".", number_str(Rest, fraction).
+number_str([Digit|Rest], fraction) --> digit(Digit), number_str(Rest, fraction).
+number_str([Digit|Rest], fraction) --> digit(Digit), number_str(Rest, exponentstart).
+number_str(['e'|Rest], exponentstart) --> "e", number_str(Rest, exponentsign).
+number_str(['e'|Rest], exponentstart) --> "E", number_str(Rest, exponentsign).
+number_str("", exponentstart) --> "".
+number_str(['-'|Rest], exponentsign) --> "-", number_str(Rest, exponent).
+number_str(Rest, exponentsign) --> "+", number_str(Rest, exponent).
+number_str(Rest, exponentsign) --> number_str(Rest, exponent).
+number_str([Digit|Rest], exponent) --> digit(Digit), number_str(Rest, exponent).
+number_str([Digit], exponent) --> digit(Digit).
+
+json_number(Number) -->
+    {
+        ground(Number) ->
+        (
+            number(Number) ->
+            number_chars(Number, NumberChars)
+            ; false
+        )
+        ; true
+    },
+    number_str(NumberChars, sign),
+    {
+        ground(Number) ->
+            true
+            ; number_chars(Number, NumberChars)
+    }.
+
+inner_value(String) --> json_string(String).
+inner_value(Number) --> json_number(Number).
+%inner_value(Object) --> json_object(Object).
+inner_value(Array) --> json_array(Array).
+inner_value(true) --> "true".
+inner_value(false) --> "false".
+inner_value(null) --> "null".
+json_value(Value) --> json_whitespace, inner_value(Value), json_whitespace.
+
+inner_array([]) --> "".
+inner_array([Value]) --> json_value(Value).
+inner_array([Value1, Value2 | Tail]) -->
+    json_value(Value1),
+    ",",
+    inner_array([Value2 | Tail]).
+json_array(List) --> "[", inner_array(List), "]".
