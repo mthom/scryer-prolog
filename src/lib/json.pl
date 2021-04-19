@@ -63,8 +63,16 @@ json_value(boolean(true))   --> "true".
 json_value(boolean(false))  --> "false".
 json_value(null)            --> "null".
 
-/*  Read Bob Kowalski's "Algorithm = Logic + Control":
+/*  Note on variable instantiation checks (`var/1` and `nonvar/1`) used below and in Prolog in general.
+    Instantiation checks should never ever be used to change the logic of your program! Instead, they are one of
+    many tools to adjust the 'control' or 'search strategy' used by Prolog to execute the logic of your program.
+    Control tweaks are used for the following:
+    - Prevent instantiation errors.
+    - Prevent nontermination.
+    - Improve the time complexity of execution (e.g. from superexponential to linear).
+    For a general overview of the idea, read Bob Kowalski's "Algorithm = Logic + Control":
     https://www.doc.ic.ac.uk/~rak/papers/algorithm%20=%20logic%20+%20control.pdf
+    For an introduction to search strategies in Prolog, read: https://www.metalevel.at/prolog/sorting#searching
     This DCG definition does two things:
     1.  Logic: Relate an association list to a JSON object serialized in a string.
     2.  Control: Define the exact strategy by which we obtain an association list from a JSON string and vice versa.
@@ -87,16 +95,42 @@ json_object(Assoc)      -->
           ;   true
           ) }.
 
-json_members([Key-Value])         --> json_member(Key, Value).
-json_members([Key-Value | Pairs]) --> json_member(Key, Value), ",", json_members(Pairs).
+
+/*  Why have both `json_members//1` and `json_members_//2`? Wouldn't it be less confusing to have just
+    `json_members//1`?
+    In fact in the first version of the code there was just this simple definition of `json_members//1`:
+    ```
+    json_members([Key-Value])         --> json_member(Key, Value).
+    json_members([Key-Value | Pairs]) --> json_member(Key, Value), ",", json_members(Pairs).
+    ```
+    The problem with this definition was that there's no way for Prolog to distinguish between the two DCG heads,
+    because [Key-Value] unifies with [Key-Value|[]], which unifies with [Key-Value|Pairs].
+    Therefore, such a representation is defaulty, and is actually misleading because when you look at it you think
+    that a list with only one pair would apply to only the first definition, but it actually applies to both!
+    For more info on clean vs defaulty representations, read: https://www.metalevel.at/prolog/data#clean
+    The below definition, while longer, cleanly distinguishes member lists with just one value from member lists
+    with two or more values.
+    */
+json_members([Pair|Pairs]) --> json_members_(Pairs, Pair).
+
+json_members_([], Key-Value)               --> json_member(Key, Value).
+json_members_([NextPair|Pairs], Key-Value) -->
+        json_member(Key, Value),
+        ",",
+        json_members_(Pairs, NextPair).
 
 json_member(Key, Value) --> json_ws, json_string(Key), json_ws, ":", json_element(Value).
 
 json_array([])             --> "[", json_ws, "]".
 json_array([Value|Values]) --> "[", json_elements([Value|Values]), "]".
 
-json_elements([Value])        --> json_element(Value).
-json_elements([Value|Values]) --> json_element(Value), ",", json_elements(Values).
+json_elements([Value|Values]) --> json_elements_(Values, Value).
+
+json_elements_([], Value)                 --> json_element(Value).
+json_elements_([NextValue|Values], Value) -->
+        json_element(Value),
+        ",",
+        json_elements_(Values, NextValue).
 
 json_element(Value) --> json_ws, json_value(Value), json_ws.
 
