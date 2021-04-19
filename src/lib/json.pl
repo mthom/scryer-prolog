@@ -34,15 +34,11 @@
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 :- module(json, [
-                 json_whitespace//0,
-                 json_string//1,
-                 json_number//1,
-                 json_value//1,
-                 json_array//1,
-                 json_object//1
+                 json_chars//1
                 ]).
 
 :- use_module(library(assoc)).
+:- use_module(library(between)).
 :- use_module(library(charsio)).
 :- use_module(library(clpz)).
 :- use_module(library(dcgs)).
@@ -51,158 +47,32 @@
 :- use_module(library(lists)).
 :- use_module(library(reif)).
 
-char_uniontypes(Char, Types) :-
-    must_be(list, Types),
-    bagof(Type, (char_type(Char, Type), member(Type, Types)), [_|_]).
+/*  The DCGs are written to match the McKeeman Form presented on the right side of https://www.json.org/json-en.html 
+    almost perfectly. Note that the McKeeman form conflicts some with the pictures on the left side. */
+json_chars(Internal) --> json_element(Internal).
 
-json_whitespace --> "".
-json_whitespace --> " ", json_whitespace.
-json_whitespace --> "\n", json_whitespace.
-json_whitespace --> "\r", json_whitespace.
-json_whitespace --> "\t", json_whitespace.
+/*  Because it's impossible to distinguish between an empty array [] and an empty string "", we distinguish between
+    different types of values based on their principal functor. The principal functors match the types defined in
+    the JSON Schema spec here: https://json-schema.org/draft/2020-12/json-schema-validation.html#rfc.section.6.1.1
+    Down the line we'll incorporate more JSON Schema support, but this is it for now. */
+json_value(object(Assoc)) --> json_object(Assoc).
+json_value(array(List)) --> json_array(List).
+json_value(string(Chars)) --> json_string(Chars).
+json_value(number(Number)) --> json_number(Number).
+json_value(boolean(true)) --> "true".
+json_value(boolean(false)) --> "false".
+json_value(null) --> "null".
 
-escape_map([
-    '"' - '"',
-    ('\\') - ('\\'),
-    ('/') - ('/'),
-    '\b' - 'b',
-    '\f' - 'f',
-    '\n' - 'n',
-    '\r' - 'r',
-    '\t' - 't'
-]).
-
-hex(0) --> "0".
-hex(1) --> "1".
-hex(2) --> "2".
-hex(3) --> "3".
-hex(4) --> "4".
-hex(5) --> "5".
-hex(6) --> "6".
-hex(7) --> "7".
-hex(8) --> "8".
-hex(9) --> "9".
-hex(10) --> "a".
-hex(11) --> "b".
-hex(12) --> "c".
-hex(13) --> "d".
-hex(14) --> "e".
-hex(15) --> "f".
-
-inner_string("") --> "".
-inner_string([PrintChar | Tail]) -->
-    [PrintChar],
-    {
-        escape_map(EscapeMap),
-        \+ member(PrintChar-_, EscapeMap),
-        (
-            PrintChar = ' '
-            ; char_uniontypes(PrintChar, [alphanumeric, ascii_graphic])
-        )
-    },
-    inner_string(Tail).
-inner_string([EscapeChar | Tail]) -->
-    "\\",
-    [PrintChar],
-    {
-        escape_map(EscapeMap),
-        member(EscapeChar-PrintChar, EscapeMap)
-    },
-    inner_string(Tail).
-inner_string([NonPrintChar | Tail]) -->
-    "\\u",
-    {
-        [H1, H2, H3, H4] ins 0..15,
-        NonPrintCharCode in 0..65535,
-        NonPrintCharCode #= H1 * 16^3 + H2 * 16^2 + H3 * 16 + H4,
-        (
-            ground(NonPrintChar) ->
-            escape_map(EscapeMap),
-            \+ member(NonPrintChar-_, EscapeMap),
-            dif(NonPrintChar, ' '),
-            \+ char_uniontypes(NonPrintChar, [alphanumeric, ascii_graphic]),
-            char_code(NonPrintChar, NonPrintCharCode)
-            ; true
-        )
-    },
-    hex(H1),
-    hex(H2),
-    hex(H3),
-    hex(H4),
-    {
-        \+ ground(NonPrintChar) ->
-        char_code(NonPrintChar, NonPrintCharCode)
-        ; true
-    },
-    inner_string(Tail).
-
-json_string(Inner) -->
-    "\"",
-    inner_string(Inner),
-    "\"".
-
-posdigit(Digit) --> [Digit], {member(Digit, "123456789")}.
-digit('0') --> "0".
-digit(Digit) --> posdigit(Digit).
-number_str(['-'|Rest], sign) --> "-", number_str(Rest, wholestart).
-number_str(Rest, sign) --> number_str(Rest, wholestart).
-number_str([PosDigit|Rest], wholestart) --> posdigit(PosDigit), number_str(Rest, wholerest).
-number_str(['0'|Rest], wholestart) --> "0", number_str(Rest, fractionstart).
-number_str([Digit|Rest], wholerest) --> digit(Digit), number_str(Rest, wholerest).
-number_str(Rest, wholerest) --> number_str(Rest, fractionstart).
-number_str(Rest, wholerest) --> number_str(Rest, exponentstart).
-number_str(['.'|Rest], fractionstart) --> ".", number_str(Rest, fraction).
-number_str([Digit|Rest], fraction) --> digit(Digit), number_str(Rest, fraction).
-number_str([Digit|Rest], fraction) --> digit(Digit), number_str(Rest, exponentstart).
-number_str(['e'|Rest], exponentstart) --> "e", number_str(Rest, exponentsign).
-number_str(['e'|Rest], exponentstart) --> "E", number_str(Rest, exponentsign).
-number_str("", exponentstart) --> "".
-number_str(['-'|Rest], exponentsign) --> "-", number_str(Rest, exponent).
-number_str(Rest, exponentsign) --> "+", number_str(Rest, exponent).
-number_str(Rest, exponentsign) --> number_str(Rest, exponent).
-number_str([Digit|Rest], exponent) --> digit(Digit), number_str(Rest, exponent).
-number_str([Digit], exponent) --> digit(Digit).
-
-json_number(Number) -->
-    {
-        ground(Number) ->
-        (
-            number(Number) ->
-            number_chars(Number, NumberChars)
-            ; false
-        )
-        ; true
-    },
-    number_str(NumberChars, sign),
-    {
-        ground(Number) ->
-            true
-            ; number_chars(Number, NumberChars)
-    }.
-
-inner_value(string(Chars)) --> json_string(Chars).
-inner_value(number(Number)) --> json_number(Number).
-inner_value(object(Object)) --> json_object(Object).
-inner_value(array(Array)) --> json_array(Array).
-inner_value(boolean(true)) --> "true".
-inner_value(boolean(false)) --> "false".
-inner_value(null) --> "null".
-json_value(Value) --> json_whitespace, inner_value(Value), json_whitespace.
-
-inner_array([]) --> "".
-inner_array([Value]) --> json_value(Value).
-inner_array([Value1, Value2 | Tail]) -->
-    json_value(Value1),
-    ",",
-    inner_array([Value2 | Tail]).
-json_array(List) --> "[", inner_array(List), "]".
-
-json_member(Key, Value) --> json_whitespace, json_string(Key), json_whitespace, ":", json_value(Value).
-
-json_members([Key-Value]) --> json_member(Key, Value).
-json_members([Key-Value | Tail]) --> json_member(Key, Value), ",", json_members(Tail).
-
-json_object(EmptyAssoc) --> {empty_assoc(EmptyAssoc)}, "{", json_whitespace, "}".
+/*  Read Bob Kowalski's "Algorithm = Logic + Control":
+    https://www.doc.ic.ac.uk/~rak/papers/algorithm%20=%20logic%20+%20control.pdf
+    This DCG definition does two things:
+    1.  Logic: Relate an association list to a JSON object serialized in a string.
+    2.  Control: Define the exact strategy by which we obtain an association list from a JSON string and vice versa.
+        This is done via instantiation checks `var/1` and `nonvar/1`.
+    Unfortunately, the logic and control in this DCG aren't separated cleanly like Bob Kowalski proposed.
+    Maybe at some point in the future we'll have a library that takes a pure logic character parsing/generating DCG
+    and 'injects' control strategy into it. We aren't there yet... */
+json_object(EmptyAssoc) --> {empty_assoc(EmptyAssoc)}, "{", json_ws, "}".
 json_object(Assoc) -->
     {
         nonvar(Assoc) ->
@@ -218,3 +88,180 @@ json_object(Assoc) -->
         list_to_assoc([Pair|Pairs], Assoc)
         ; true
     }.
+
+json_members([Key-Value]) --> json_member(Key, Value).
+json_members([Key-Value | Pairs]) --> json_member(Key, Value), ",", json_members(Pairs).
+
+json_member(Key, Value) --> json_ws, json_string(Key), json_ws, ":", json_element(Value).
+
+json_array([]) --> "[", json_ws, "]".
+json_array([Value|Values]) --> "[", json_elements([Value|Values]), "]".
+
+json_elements([Value]) --> json_element(Value).
+json_elements([Value|Values]) --> json_element(Value), ",", json_elements(Values).
+
+json_element(Value) --> json_ws, json_value(Value), json_ws.
+
+json_string(Chars) --> "\"", json_characters(Chars), "\"".
+
+json_characters("") --> "".
+json_characters([Char|Chars]) --> json_character(Char), json_characters(Chars).
+
+/*  A directly printable character is defined by the JSON spec as a character between 0020 and 10FFFF except the
+    escaped characters.
+    Note that `char_code/2` throws an instantiation error if both its arguments are undefined, so we delay
+    calling it until we've seen both the generating and the parsing sides of the DCG.
+    If we moved the block containing `char_code/2` up before `[PrintChar]`, we would still be able to generate JSON,
+    but attempting to parse JSON would cause an instantiation error. */
+escape_map([
+    '"' - '"',
+    ('\\') - ('\\'),
+    ('/') - ('/'),
+    '\b' - 'b',
+    '\f' - 'f',
+    '\n' - 'n',
+    '\r' - 'r',
+    '\t' - 't'
+]).
+
+json_character(PrintChar) -->
+    [PrintChar],
+    {
+        escape_map(EscapeMap),
+        \+ member(PrintChar-_, EscapeMap),
+        char_code(PrintChar, PrintCharCode),
+        PrintCharCode in 32..1114111 /* 20.10FFFF */
+    }.
+json_character(EscapeChar) --> "\\", json_escape(EscapeChar).
+
+json_escape(EscapeChar) -->
+    [PrintChar],
+    {
+        escape_map(EscapeMap),
+        member(EscapeChar-PrintChar, EscapeMap)
+    }.
+json_escape(EscapeChar) -->
+    "u",
+    {   /*  Logic: Define the domain of the escape character as well as the relationship between the escape character
+            and the four hexes */
+        [H1, H2, H3, H4] ins 0..15,
+        EscapeCharCode in 0..65535,
+        EscapeCharCode #= H1 * 16^3 + H2 * 16^2 + H3 * 16 + H4
+    },
+    {   /*  Control: Get the code of the escape character if we can. Otherwise we'll end up backtracking over 65,536
+            possible hex values. 
+            Logic: Only the first 32 Unicode characters not escaped in the escape map are eligible for \u-escaping
+            when generating. However, we want to be able to parse any of the 65,536 \u-escaped values when parsing. */
+        nonvar(EscapeChar) ->
+        char_code(EscapeChar, EscapeCharCode),
+        EscapeCharCode in 0..31,
+        escape_map(EscapeMap),
+        \+ member(EscapeChar-_, EscapeMap)
+        ; true
+    },
+    json_hex(H1),
+    json_hex(H2),
+    json_hex(H3),
+    json_hex(H4),
+    {   /*  Control + Logic: Get the escape character atom from the character code computed from the hexes. */
+        var(EscapeChar) ->
+        char_code(EscapeChar, EscapeCharCode)
+        ; true
+    }.
+
+json_hex(Digit) --> json_digit(Digit).
+json_hex(10) --> "a".
+json_hex(11) --> "b".
+json_hex(12) --> "c".
+json_hex(13) --> "d".
+json_hex(14) --> "e".
+json_hex(15) --> "f".
+json_hex(10) --> "A".
+json_hex(11) --> "B".
+json_hex(12) --> "C".
+json_hex(13) --> "D".
+json_hex(14) --> "E".
+json_hex(15) --> "F".
+
+/*  Here we are going to write completely different DCGs for parsing and generating, and rely on built-in
+    predicates. However, the underlying logic remains the same. */
+json_number(Number) -->
+    {
+        nonvar(Number) ->
+        number_chars(Number, NumberChars)
+        ; false
+    },
+    NumberChars.
+json_number(Number) -->
+    {
+        var(Number)
+    },
+    json_sign_noplus(Sign),
+    json_integer(Integer),
+    json_fraction(Fraction),
+    json_exponent(Exponent),
+    {
+        Number is Sign * (Integer + Fraction) * 10.0 ^ Exponent
+    }.
+
+json_integer(Digit) --> json_digit(Digit).
+json_integer(TotalValue) -->
+    json_onenine(FirstDigit),
+    json_digits(RemainingValue, Power),
+    {
+        TotalValue #= FirstDigit * 10 ^ (Power + 1) + RemainingValue
+    }.
+
+json_digits(Digit, 0) --> json_digit(Digit).
+json_digits(Value, Power) -->
+    json_digit(FirstDigit),
+    json_digits(RemainingValue, NextPower),
+    {
+        Power #= NextPower + 1,
+        Value #= FirstDigit * 10^Power + RemainingValue
+    }.
+
+json_digit(0) --> "0".
+json_digit(Digit) --> json_onenine(Digit).
+
+json_onenine(1) --> "1".
+json_onenine(2) --> "2".
+json_onenine(3) --> "3".
+json_onenine(4) --> "4".
+json_onenine(5) --> "5".
+json_onenine(6) --> "6".
+json_onenine(7) --> "7".
+json_onenine(8) --> "8".
+json_onenine(9) --> "9".
+
+json_fraction(0) --> "".
+json_fraction(Fraction) -->
+    ".",
+    json_digits(Value, Power),
+    {
+        Fraction is Value / 10 ^ (Power + 1)
+    }.
+
+json_exponent(0) --> "".
+json_exponent(Exponent) -->
+    json_exponent_signifier,
+    json_sign(Sign),
+    json_digits(Value, _),
+    {
+        Exponent #= Sign * Value
+    }.
+
+json_exponent_signifier --> "E".
+json_exponent_signifier --> "e".
+
+json_sign_noplus(1) --> "".
+json_sign_noplus(-1) --> "-".
+
+json_sign(Sign) --> json_sign_noplus(Sign).
+json_sign(1) --> "+".
+
+json_ws --> "".
+json_ws --> " ", json_ws.
+json_ws --> "\n", json_ws.
+json_ws --> "\r", json_ws.
+json_ws --> "\t", json_ws.
