@@ -148,7 +148,7 @@ json_characters([Char|Chars]) --> json_character(Char), json_characters(Chars).
 escape_map([
         '"' - '"',
         ('\\') - ('\\'),
-        ('/') - ('/'),
+        ('/') - ('/'), /* Forward slash parsed with or without a preceding backslash, but always generated with. */
         '\b' - 'b',
         '\f' - 'f',
         '\n' - 'n',
@@ -156,9 +156,13 @@ escape_map([
         '\t' - 't' ]).
 
 json_character(PrintChar)  -->
+        { (   nonvar(PrintChar) ->
+              dif(PrintChar, '/') /* Don't generate forward slash without preceding backslash */
+          ;   true
+          ) },
         [PrintChar],
-        { escape_map(EscapeMap),
-          \+ member(PrintChar-_, EscapeMap),
+        { dif(PrintChar, '"'),
+          dif(PrintChar, '\\'),
           char_code(PrintChar, PrintCharCode),
           PrintCharCode in 32..1114111 /* 20.10FFFF */ }.
 json_character(EscapeChar) --> "\\", json_escape(EscapeChar).
