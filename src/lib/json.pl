@@ -40,7 +40,6 @@
 :- use_module(library(assoc)).
 :- use_module(library(between)).
 :- use_module(library(charsio)).
-:- use_module(library(clpz)).
 :- use_module(library(dcgs)).
 :- use_module(library(dif)).
 :- use_module(library(error)).
@@ -164,7 +163,7 @@ json_character(PrintChar)  -->
         { dif(PrintChar, '"'),
           dif(PrintChar, '\\'),
           char_code(PrintChar, PrintCharCode),
-          PrintCharCode in 32..1114111 /* 20.10FFFF */ }.
+          PrintCharCode >= 32 /* 20.10FFFF */ }.
 json_character(EscapeChar) --> "\\", json_escape(EscapeChar).
 
 json_escape(EscapeChar) -->
@@ -173,29 +172,28 @@ json_escape(EscapeChar) -->
           member(EscapeChar-PrintChar, EscapeMap) }.
 json_escape(EscapeChar) -->
         "u",
-        /*  Logic: Define the domain of the escape character as well as the relationship between the escape character
-            and the four hexes */
-        { [H1, H2, H3, H4] ins 0..15,
-          EscapeCharCode in 0..65535,
-          EscapeCharCode #= H1 * 16^3 + H2 * 16^2 + H3 * 16 + H4,
-          /*  Control: Get the code of the escape character if we can. Otherwise we'll end up backtracking over 65,536
+        { /*  Control: Get the code of the escape character if we can. Otherwise we'll end up backtracking over 65,536
               possible hex values. 
               Logic: Only the first 32 Unicode characters not escaped in the escape map are eligible for \u-escaping
               when generating. However, we want to be able to parse any of the 65,536 \u-escaped values when parsing. */
           (   nonvar(EscapeChar) ->
               char_code(EscapeChar, EscapeCharCode),
-              EscapeCharCode in 0..31,
+              EscapeCharCode < 32,
               escape_map(EscapeMap),
-              \+ member(EscapeChar-_, EscapeMap)
+              \+ member(EscapeChar-_, EscapeMap),
+              H1 = 0,
+              H2 = 0,
+              H3 is EscapeCharCode // 16,
+              H4 is EscapeCharCode mod 16
           ;   true
-          )
-        },
+          ) },
         json_hex(H1),
         json_hex(H2),
         json_hex(H3),
         json_hex(H4),
         /*  Control + Logic: Get the escape character atom from the character code computed from the hexes. */
         { (   var(EscapeChar) ->
+              EscapeCharCode is H1 * 16^3 + H2 * 16^2 + H3 * 16 + H4,
               char_code(EscapeChar, EscapeCharCode)
           ;   true
           ) }.
@@ -234,14 +232,14 @@ json_integer(Digit)      --> json_digit(Digit).
 json_integer(TotalValue) -->
     json_onenine(FirstDigit),
     json_digits(RemainingValue, Power),
-    { TotalValue #= FirstDigit * 10 ^ (Power + 1) + RemainingValue }.
+    { TotalValue is FirstDigit * 10 ^ (Power + 1) + RemainingValue }.
 
 json_digits(Digit, 0)     --> json_digit(Digit).
 json_digits(Value, Power) -->
     json_digit(FirstDigit),
     json_digits(RemainingValue, NextPower),
-    { Power #= NextPower + 1,
-      Value #= FirstDigit * 10^Power + RemainingValue }.
+    { Power is NextPower + 1,
+      Value is FirstDigit * 10^Power + RemainingValue }.
 
 json_digit(0)     --> "0".
 json_digit(Digit) --> json_onenine(Digit).
@@ -267,7 +265,7 @@ json_exponent(Exponent) -->
     json_exponent_signifier,
     json_sign(Sign),
     json_digits(Value, _),
-    { Exponent #= Sign * Value }.
+    { Exponent is Sign * Value }.
 
 json_exponent_signifier --> "E".
 json_exponent_signifier --> "e".
