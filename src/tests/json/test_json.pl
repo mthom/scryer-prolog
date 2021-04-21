@@ -1,4 +1,4 @@
-:- module(test_json, [test_json_read/0, test_json_minify/0]).
+:- module(test_json, [test_json/0]).
 
 :- use_module(library(charsio)).
 :- use_module(library(dcgs)).
@@ -36,3 +36,20 @@ test_json_minify :-
     name_parse("pass_everything.json", Json),
     time(once(phrase(json_chars(Json), MinChars))),
     RefChars = MinChars.
+
+test_json_int_float :-
+    once(phrase(json_chars(number(ZeroInt)), "0")),
+    integer(ZeroInt),
+    once(phrase(json_chars(number(ZeroFloat)), "0.0")),
+    \+ integer(ZeroFloat),
+    once(phrase(json_chars(number(BigInt)), "32E5")),
+    integer(BigInt),
+    once(phrase(json_chars(number(BigFloat)), "32.2E5")),
+    \+ integer(BigFloat),
+    once(phrase(json_chars(number(SmallFloat)), "32E-5")),
+    \+ integer(SmallFloat).
+
+test_json :-
+    test_json_read,
+    test_json_minify,
+    test_json_int_float.

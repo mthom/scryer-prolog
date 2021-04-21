@@ -226,7 +226,11 @@ json_number(Number) -->
     json_integer(Integer),
     json_fraction(Fraction),
     json_exponent(Exponent),
-    { Number is Sign * (Integer + Fraction) * 10.0 ^ Exponent }.
+    { (   Exponent >= 0 ->
+          Base = 10
+      ;   Base = 10.0
+      ),
+      Number is Sign * (Integer + Fraction) * Base ^ Exponent }.
 
 json_integer(Digit)      --> json_digit(Digit).
 json_integer(TotalValue) -->
