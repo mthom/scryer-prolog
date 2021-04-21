@@ -1,5 +1,7 @@
-:- module(test_json, [test_json_read/0]).
+:- module(test_json, [test_json_read/0, test_json_minify/0]).
 
+:- use_module(library(charsio)).
+:- use_module(library(dcgs)).
 :- use_module(library(json)).
 :- use_module(library(lists)).
 :- use_module(library(os)).
@@ -25,3 +27,12 @@ test_json_read :-
     name_parse("pass_smallfloat.json", _),
     name_parse("pass_bigfloat.json", _),
     time(name_parse("pass_everything.json", _)).
+
+test_json_minify :-
+    test_path("pass_everything.min.json", MinPath),
+    open(MinPath, read, RefMin),
+    read_line_to_chars(RefMin, RefChars, []),
+    close(RefMin),
+    name_parse("pass_everything.json", Json),
+    time(once(phrase(json_chars(Json), MinChars))),
+    RefChars = MinChars.
