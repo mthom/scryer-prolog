@@ -47,89 +47,58 @@
 :- use_module(library(reif)).
 
 /*  The DCGs are written to match the McKeeman form presented on the right side of https://www.json.org/json-en.html 
-    almost perfectly. Note that the McKeeman form conflicts some with the pictures on the left side. */
+    as closely as possible. Note that the names in the McKeeman form conflict with the pictures on the site. */
 json_chars(Internal) --> json_element(Internal).
 
 /*  Because it's impossible to distinguish between an empty array [] and an empty string "", we distinguish between
     different types of values based on their principal functor. The principal functors match the types defined in
     the JSON Schema spec here: https://json-schema.org/draft/2020-12/json-schema-validation.html#rfc.section.6.1.1
-    Down the line we'll incorporate more JSON Schema support, but this is it for now. */
+    EXCEPT we don't yet support the integer type. There are plans for more JSON Schema support in the near future. */
 json_value(object(Assoc))   --> json_object(Assoc).
 json_value(array(List))     --> json_array(List).
 json_value(string(Chars))   --> json_string(Chars).
 json_value(number(Number))  --> json_number(Number).
-json_value(boolean(true))   --> "true".
-json_value(boolean(false))  --> "false".
+json_value(boolean(Bool))   --> json_boolean(Bool).
 json_value(null)            --> "null".
 
-/*  Note on variable instantiation checks (`var/1` and `nonvar/1`) used below and in Prolog in general.
-    Instantiation checks should never ever be used to change the logic of your program! Instead, they are one of
-    many tools to adjust the 'control' or 'search strategy' used by Prolog to execute the logic of your program.
-    Control tweaks are used for the following:
-    - Prevent instantiation errors.
-    - Prevent nontermination.
-    - Improve the time complexity of execution (e.g. from superexponential to linear).
-    For a general overview of the idea, read Bob Kowalski's "Algorithm = Logic + Control":
-    https://www.doc.ic.ac.uk/~rak/papers/algorithm%20=%20logic%20+%20control.pdf
-    For an introduction to search strategies in Prolog, read: https://www.metalevel.at/prolog/sorting#searching
-    This DCG definition does two things:
-    1.  Logic: Relate an association list to a JSON object serialized in a string.
-    2.  Control: Define the exact strategy by which we obtain an association list from a JSON string and vice versa.
-        This is done via instantiation checks `var/1` and `nonvar/1`.
-    Unfortunately, the logic and control in this DCG aren't separated cleanly like Bob Kowalski proposed.
-    Maybe at some point in the future we'll have a library that takes a pure logic character parsing/generating DCG
-    and 'injects' control strategy into it. We aren't there yet... */
-json_object(EmptyAssoc) --> {empty_assoc(EmptyAssoc)}, "{", json_ws, "}".
-json_object(Assoc)      -->
-        { (   nonvar(Assoc) ->
-              \+ empty_assoc(Assoc),
-              assoc_to_list(Assoc, [Pair|Pairs])
-          ;   true
-          ) },
+/*  We pull json_boolean out into its own predicate in order to take advantage of first argument indexing and not leave
+    choice points. For more details, watch this video on decomposing arguments: https://youtu.be/FZLofckPu4A?t=1648 */
+json_boolean(true) --> "true".
+json_boolean(false) --> "false".
+
+json_object([])           --> "{", json_ws, "}".
+json_object([Pair|Pairs]) -->
         "{",
-        json_members([Pair|Pairs]),
-        "}",
-        { (   var(Assoc) ->
-              list_to_assoc([Pair|Pairs], Assoc)
-          ;   true
-          ) }.
+        json_members(Pairs, Pair),
+        "}".
 
-
-/*  Why have both `json_members//1` and `json_members_//2`? Wouldn't it be less confusing to have just
-    `json_members//1`?
-    In fact in the first version of the code there was just this simple definition of `json_members//1`:
+/*  `json_members//2` below is implemented with a lagged argument to take advantage of first argument indexing.
+    This is a pure performance-driven decision that doesn't affect the logic. The predicate could equivalently be
+    implementes as `json_members//1` below:
     ```
-    json_members([Key-Value])         --> json_member(Key, Value).
-    json_members([Key-Value | Pairs]) --> json_member(Key, Value), ",", json_members(Pairs).
+    json_members([Key-Value])                --> json_member(Key, Value).
+    json_members([Key-Value, Pair2 | Pairs]) --> json_member(Key, Value), ",", json_members([Pair2 | Pairs]).
     ```
-    The problem with this definition was that there's no way for Prolog to distinguish between the two DCG heads,
-    because [Key-Value] unifies with [Key-Value|[]], which unifies with [Key-Value|Pairs].
-    Therefore, such a representation is defaulty, and is actually misleading because when you look at it you think
-    that a list with only one pair would apply to only the first definition, but it actually applies to both!
-    For more info on clean vs defaulty representations, read: https://www.metalevel.at/prolog/data#clean
-    The below definition, while longer, cleanly distinguishes member lists with just one value from member lists
-    with two or more values.
+    That's a logically equivalent and equally clean representation to the lagged argument. However, it leaves
+    choice points, while using the lagged argument doesn't. For more info, watch: https://youtu.be/FZLofckPu4A?t=1737
     */
-json_members([Pair|Pairs]) --> json_members_(Pairs, Pair).
-
-json_members_([], Key-Value)               --> json_member(Key, Value).
-json_members_([NextPair|Pairs], Key-Value) -->
+json_members([], Key-Value)               --> json_member(Key, Value).
+json_members([NextPair|Pairs], Key-Value) -->
         json_member(Key, Value),
         ",",
-        json_members_(Pairs, NextPair).
+        json_members(Pairs, NextPair).
 
 json_member(Key, Value) --> json_ws, json_string(Key), json_ws, ":", json_element(Value).
 
 json_array([])             --> "[", json_ws, "]".
-json_array([Value|Values]) --> "[", json_elements([Value|Values]), "]".
+json_array([Value|Values]) --> "[", json_elements(Values, Value), "]".
 
-json_elements([Value|Values]) --> json_elements_(Values, Value).
-
-json_elements_([], Value)                 --> json_element(Value).
-json_elements_([NextValue|Values], Value) -->
+/* Also using a lagged argument with `json_elements//2` to take advantage of first-argument indexing */
+json_elements([], Value)                 --> json_element(Value).
+json_elements([NextValue|Values], Value) -->
         json_element(Value),
         ",",
-        json_elements_(Values, NextValue).
+        json_elements(Values, NextValue).
 
 json_element(Value) --> json_ws, json_value(Value), json_ws.
 
@@ -138,49 +107,55 @@ json_string(Chars) --> "\"", json_characters(Chars), "\"".
 json_characters("")           --> "".
 json_characters([Char|Chars]) --> json_character(Char), json_characters(Chars).
 
-/*  A directly printable character is defined by the JSON spec as a character between 0020 and 10FFFF except the
-    escaped characters.
-    Note that `char_code/2` throws an instantiation error if both its arguments are undefined, so we delay
-    calling it until we've seen both the generating and the parsing sides of the DCG.
-    If we moved the block containing `char_code/2` up before `[PrintChar]`, we would still be able to generate JSON,
-    but attempting to parse JSON would cause an instantiation error. */
-escape_map([
-        '"' - '"',
-        ('\\') - ('\\'),
-        ('/') - ('/'), /* Forward slash parsed with or without a preceding backslash, but always generated with. */
-        '\b' - 'b',
-        '\f' - 'f',
-        '\n' - 'n',
-        '\r' - 'r',
-        '\t' - 't' ]).
+letter_escape('"', '"').
+letter_escape('\\', '\\').
+letter_escape('/', '/').
+letter_escape('\b', 'b').
+letter_escape('\f', 'f').
+letter_escape('\n', 'n').
+letter_escape('\r', 'r').
+letter_escape('\t', 't').
 
-json_character(PrintChar)  -->
-        { (   nonvar(PrintChar) ->
-              dif(PrintChar, '/') /* Don't generate forward slash without preceding backslash */
+/*  Note on variable instantiation checks (`var/1` and `nonvar/1`) used below and in Prolog in general.
+    Instantiation checks should ideally never be used to change the logic of your program. Instead, they are one of
+    many tools to adjust the 'control' or 'search strategy' used by Prolog to execute the logic of your program.
+    For a general overview of the idea, read Bob Kowalski's "Algorithm = Logic + Control":
+    https://www.doc.ic.ac.uk/~rak/papers/algorithm%20=%20logic%20+%20control.pdf
+    For an introduction to search strategies in Prolog, read: https://www.metalevel.at/prolog/sorting#searching
+    However, when dealing with a real-world data format standard, real differences arise in how a string should be
+    parsed vs generated. Usually, parsing should allow multiple ways of doing things, while generating should only
+    happen in one best way.
+    JSON characters are parsed/generated in one of three ways:
+    1.  Directly. All characters in the range 20.10FFFF, except '"' and '\\' must be generated and parsed directly,
+        escape for the forward slash '/', which must not be generated directly, but can be parsed directly.
+    2.  Backslash followed by a single special character defined in the escape map - both parsing and generating.
+    3.  Backslash followed by 'u' and 4 hex values defining the character code of the internal character.
+        When generating, only allow range 0.20 excepting characters in the escape map.
+        When parsing, allow any value.
+    In order to take advantage of first argument indexing, we must reify this distinction in a single predicate. */
+json_character(InternalChar) -->
+        { (   nonvar(InternalChar) ->
+              (   letter_escape(InternalChar, _) ->
+                  Type = letter_escape
+              ;   char_code(InternalChar, InternalCharCode),
+                  (   InternalCharCode >= 32 ->
+                      Type = direct
+                  ;   Type = hex_escape
+                  )
+              )
           ;   true
           ) },
-        [PrintChar],
-        { dif(PrintChar, '"'),
-          dif(PrintChar, '\\'),
-          char_code(PrintChar, PrintCharCode),
-          PrintCharCode >= 32 /* 20.10FFFF */ }.
-json_character(EscapeChar) --> "\\", json_escape(EscapeChar).
+          json_character(Type, InternalChar).
 
-json_escape(EscapeChar) -->
-        [PrintChar],
-        { escape_map(EscapeMap),
-          member(EscapeChar-PrintChar, EscapeMap) }.
-json_escape(EscapeChar) -->
-        "u",
-        { /*  Control: Get the code of the escape character if we can. Otherwise we'll end up backtracking over 65,536
-              possible hex values. 
-              Logic: Only the first 32 Unicode characters not escaped in the escape map are eligible for \u-escaping
-              when generating. However, we want to be able to parse any of the 65,536 \u-escaped values when parsing. */
-          (   nonvar(EscapeChar) ->
+json_character(direct, PrintChar)  --> [PrintChar].
+json_character(letter_escape, EscapeChar) -->
+        { letter_escape(EscapeChar, PrintChar) },
+        "\\",
+        [PrintChar].
+json_character(hex_escape, EscapeChar) -->
+        "\\u",
+        { (   nonvar(EscapeChar) ->
               char_code(EscapeChar, EscapeCharCode),
-              EscapeCharCode < 32,
-              escape_map(EscapeMap),
-              \+ member(EscapeChar-_, EscapeMap),
               H1 = 0,
               H2 = 0,
               H3 is EscapeCharCode // 16,
@@ -191,62 +166,69 @@ json_escape(EscapeChar) -->
         json_hex(H2),
         json_hex(H3),
         json_hex(H4),
-        /*  Control + Logic: Get the escape character atom from the character code computed from the hexes. */
         { (   var(EscapeChar) ->
               EscapeCharCode is H1 * 16^3 + H2 * 16^2 + H3 * 16 + H4,
               char_code(EscapeChar, EscapeCharCode)
           ;   true
           ) }.
 
-json_hex(Digit) --> json_digit(Digit).
-json_hex(10)    --> "a".
-json_hex(11)    --> "b".
-json_hex(12)    --> "c".
-json_hex(13)    --> "d".
-json_hex(14)    --> "e".
-json_hex(15)    --> "f".
-json_hex(10)    --> "A".
-json_hex(11)    --> "B".
-json_hex(12)    --> "C".
-json_hex(13)    --> "D".
-json_hex(14)    --> "E".
-json_hex(15)    --> "F".
+json_hex(Value) -->
+    { (   nonvar(Value) ->
+          (   between(0, 9, Value) ->
+              Code is Value + 48
+          ;   (   between(10, 15, Value) ->
+                  Code is Value + 87
+              ;   false
+              )
+          ),
+          char_code(Char, Code)
+      ;   true
+      )
+    },
+    [Char],
+    { (   var(Value) ->
+          char_code(Char, Code),
+          (   between(48, 57, Code) ->
+              Value is Code - 48
+          ;   (   between(65, 70, Code) ->
+                  Value is Code - 55
+              ;   (   between(97, 102, Code) ->
+                      Value is Code - 87
+                  ;   false
+                  )
+              )
+          )
+      ;   true
+      ) }.
 
-/*  Here we are going to write completely different DCGs for parsing and generating, and rely on built-in
-    predicates. However, the underlying logic remains the same. */
+/*  Here we are going to simply rely on `number_chars/2` when generating. */
 json_number(Number) -->
-    { (   nonvar(Number) ->
-          number_chars(Number, NumberChars)
-      ;   false
-      ) },
-    NumberChars.
-json_number(Number) -->
-    { var(Number) },
-    json_sign_noplus(Sign),
-    json_integer(Integer),
-    json_fraction(Fraction),
-    json_exponent(Exponent),
-    { (   Exponent >= 0 ->
-          Base = 10
-      ;   Base = 10.0
-      ),
-      Number is Sign * (Integer + Fraction) * Base ^ Exponent }.
+        (   { nonvar(Number) } ->
+            { number_chars(Number, NumberChars) },
+            NumberChars
+        ;   json_sign_noplus(Sign),
+            json_integer(Integer),
+            json_fraction(Fraction),
+            json_exponent(Exponent),
+            { (   Exponent >= 0 ->
+                  Base = 10
+              ;   Base = 10.0
+              ),
+              Number is Sign * (Integer + Fraction) * Base ^ Exponent }
+        ).
 
 json_integer(Digit)      --> json_digit(Digit).
 json_integer(TotalValue) -->
-    json_onenine(FirstDigit),
-    json_digits(RemainingValue, Power),
-    { TotalValue is FirstDigit * 10 ^ (Power + 1) + RemainingValue }.
+        json_onenine(FirstDigit),
+        json_digits(RemainingValue, Power),
+        { TotalValue is FirstDigit * 10 ^ (Power + 1) + RemainingValue }.
 
 json_digits(Digit, 0)     --> json_digit(Digit).
 json_digits(Value, Power) -->
-    json_digit(FirstDigit),
-    json_digits(RemainingValue, NextPower),
-    { Power is NextPower + 1,
-      Value is FirstDigit * 10^Power + RemainingValue }.
-
-json_digit(0)     --> "0".
-json_digit(Digit) --> json_onenine(Digit).
+        json_digit(FirstDigit),
+        json_digits(RemainingValue, NextPower),
+        { Power is NextPower + 1,
+          Value is FirstDigit * 10^Power + RemainingValue }.
 
 json_onenine(1) --> "1".
 json_onenine(2) --> "2".
@@ -257,6 +239,17 @@ json_onenine(6) --> "6".
 json_onenine(7) --> "7".
 json_onenine(8) --> "8".
 json_onenine(9) --> "9".
+
+json_digit(0) --> "0".
+json_digit(1) --> "1".
+json_digit(2) --> "2".
+json_digit(3) --> "3".
+json_digit(4) --> "4".
+json_digit(5) --> "5".
+json_digit(6) --> "6".
+json_digit(7) --> "7".
+json_digit(8) --> "8".
+json_digit(9) --> "9".
 
 json_fraction(0)        --> "".
 json_fraction(Fraction) -->
@@ -280,8 +273,6 @@ json_sign_noplus(-1) --> "-".
 json_sign(Sign) --> json_sign_noplus(Sign).
 json_sign(1)    --> "+".
 
+/* Make sure json_ws doesn't attempt to generate whitespace and succeeds without choicepoints when generating */
+json_ws --> [C], {nonvar(C), member(C, " \n\r\t")}, json_ws.
 json_ws --> "".
-json_ws --> " ", json_ws.
-json_ws --> "\n", json_ws.
-json_ws --> "\r", json_ws.
-json_ws --> "\t", json_ws.

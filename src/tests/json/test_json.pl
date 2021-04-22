@@ -34,7 +34,7 @@ test_json_minify :-
     read_line_to_chars(RefMin, RefChars, []),
     close(RefMin),
     name_parse("pass_everything.json", Json),
-    time(once(phrase(json_chars(Json), MinChars))),
+    time(phrase(json_chars(Json), MinChars)),
     RefChars = MinChars.
 
 test_json_int_float :-
