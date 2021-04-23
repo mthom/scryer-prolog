@@ -37,14 +37,9 @@
                  json_chars//1
                 ]).
 
-:- use_module(library(assoc)).
-:- use_module(library(between)).
-:- use_module(library(charsio)).
 :- use_module(library(dcgs)).
 :- use_module(library(dif)).
-:- use_module(library(error)).
 :- use_module(library(lists)).
-:- use_module(library(reif)).
 
 /*  The DCGs are written to match the McKeeman form presented on the right side of https://www.json.org/json-en.html 
     as closely as possible. Note that the names in the McKeeman form conflict with the pictures on the site. */
@@ -76,7 +71,6 @@ json_object([Pair|Pairs]) -->
     This is a pure performance-driven decision that doesn't affect the logic. The predicate could equivalently be
     implementes as `json_members//1` below:
     ```
-    json_members([Key-Value])                --> json_member(Key, Value).
     json_members([Key-Value, Pair2 | Pairs]) --> json_member(Key, Value), ",", json_members([Pair2 | Pairs]).
     ```
     That's a logically equivalent and equally clean representation to the lagged argument. However, it leaves
@@ -107,106 +101,98 @@ json_string(Chars) --> "\"", json_characters(Chars), "\"".
 json_characters("")           --> "".
 json_characters([Char|Chars]) --> json_character(Char), json_characters(Chars).
 
-letter_escape('"', '"').
-letter_escape('\\', '\\').
-letter_escape('/', '/').
-letter_escape('\b', 'b').
-letter_escape('\f', 'f').
-letter_escape('\n', 'n').
-letter_escape('\r', 'r').
-letter_escape('\t', 't').
-
 /*  Note on variable instantiation checks (`var/1` and `nonvar/1`) used below and in Prolog in general.
-    Instantiation checks should ideally never be used to change the logic of your program. Instead, they are one of
+    Instantiation checks should never be used to change the logic of your program. Instead, they are one of
     many tools to adjust the 'control' or 'search strategy' used by Prolog to execute the logic of your program.
     For a general overview of the idea, read Bob Kowalski's "Algorithm = Logic + Control":
     https://www.doc.ic.ac.uk/~rak/papers/algorithm%20=%20logic%20+%20control.pdf
     For an introduction to search strategies in Prolog, read: https://www.metalevel.at/prolog/sorting#searching
-    However, when dealing with a real-world data format standard, real differences arise in how a string should be
-    parsed vs generated. Usually, parsing should allow multiple ways of doing things, while generating should only
-    happen in one best way.
-    JSON characters are parsed/generated in one of three ways:
-    1.  Directly. All characters in the range 20.10FFFF, except '"' and '\\' must be generated and parsed directly,
-        escape for the forward slash '/', which must not be generated directly, but can be parsed directly.
-    2.  Backslash followed by a single special character defined in the escape map - both parsing and generating.
-    3.  Backslash followed by 'u' and 4 hex values defining the character code of the internal character.
-        When generating, only allow range 0.20 excepting characters in the escape map.
-        When parsing, allow any value.
-    In order to take advantage of first argument indexing, we must reify this distinction in a single predicate. */
-json_character(InternalChar) -->
-        { (   nonvar(InternalChar) ->
-              (   letter_escape(InternalChar, _) ->
-                  Type = letter_escape
-              ;   char_code(InternalChar, InternalCharCode),
-                  (   InternalCharCode >= 32 ->
-                      Type = direct
-                  ;   Type = hex_escape
-                  )
-              )
-          ;   true
-          ) },
-          json_character(Type, InternalChar).
+    It's tempting to use instantiation checks to be more strict while generating and more relaxed while parsing.
+    In fact, the early version of this library aimed to return exactly one result when generating. However, doing that
+    is **wrong** and leads to difficult-to-catch bugs. Instead, adjust the search strategy to return the most ideal
+    and strictest answer FIRST and then return less ideal answers on backtracking.
+    As an example, consider a string containing just the forward slash. The JSON standard recommends the forward slash
+    be escaped with a backslash, but allows it to not be escaped. Attempting to force stricter behavior with
+    instantiation checks can lead to this confusing mess:
+    ```
+    phrase(json:json_characters("/"), External).
+       External = "\\/".
+    ?- phrase(json:json_characters(Internal), "/").
+       Internal = "/"
+    ;  false.
+    ?- phrase(json:json_characters("/"), "/").
+    false.
+    ```
+    To avoid such bugs, never use instantiation checks to reduce the number of right answers, but rather to adjust
+    the *path* used to traverse those answers. */
 
-json_character(direct, PrintChar)  --> [PrintChar].
-json_character(letter_escape, EscapeChar) -->
-        { letter_escape(EscapeChar, PrintChar) },
+escape_char('"', '"').
+escape_char('\\', '\\').
+escape_char('/', '/').
+escape_char('\b', 'b').
+escape_char('\f', 'f').
+escape_char('\n', 'n').
+escape_char('\r', 'r').
+escape_char('\t', 't').
+
+json_character(EscapeChar) -->
+        { escape_char(EscapeChar, PrintChar) },
         "\\",
         [PrintChar].
-json_character(hex_escape, EscapeChar) -->
+json_character(PrintChar)  -->
+    [PrintChar],
+    { dif(PrintChar, '\\'),
+      dif(PrintChar, '"'),
+      char_code(PrintChar, PrintCharCode),
+      PrintCharCode >= 32 }.
+json_character(EscapeChar) -->
         "\\u",
-        { (   nonvar(EscapeChar) ->
-              char_code(EscapeChar, EscapeCharCode),
-              H1 = 0,
-              H2 = 0,
-              H3 is EscapeCharCode // 16,
-              H4 is EscapeCharCode mod 16
-          ;   true
-          ) },
         json_hex(H1),
         json_hex(H2),
         json_hex(H3),
         json_hex(H4),
-        { (   var(EscapeChar) ->
+        { (   nonvar(H1) ->
               EscapeCharCode is H1 * 16^3 + H2 * 16^2 + H3 * 16 + H4,
               char_code(EscapeChar, EscapeCharCode)
-          ;   true
+          ;   char_code(EscapeChar, EscapeCharCode),
+              H1 is (EscapeCharCode // 16^3) mod 16,
+              H2 is (EscapeCharCode // 16^2) mod 16,
+              H3 is (EscapeCharCode // 16^1) mod 16,
+              H4 is (EscapeCharCode // 16^0) mod 16
           ) }.
 
-json_hex(Value) -->
-    { (   nonvar(Value) ->
-          (   between(0, 9, Value) ->
-              Code is Value + 48
-          ;   (   between(10, 15, Value) ->
-                  Code is Value + 87
-              ;   false
-              )
-          ),
-          char_code(Char, Code)
-      ;   true
-      )
-    },
-    [Char],
-    { (   var(Value) ->
-          char_code(Char, Code),
-          (   between(48, 57, Code) ->
-              Value is Code - 48
-          ;   (   between(65, 70, Code) ->
-                  Value is Code - 55
-              ;   (   between(97, 102, Code) ->
-                      Value is Code - 87
-                  ;   false
-                  )
-              )
-          )
-      ;   true
-      ) }.
+json_hex(Digit) --> json_digit(Digit).
+json_hex(10)    --> "a".
+json_hex(11)    --> "b".
+json_hex(12)    --> "c".
+json_hex(13)    --> "d".
+json_hex(14)    --> "e".
+json_hex(15)    --> "f".
+json_hex(10)    --> "A".
+json_hex(11)    --> "B".
+json_hex(12)    --> "C".
+json_hex(13)    --> "D".
+json_hex(14)    --> "E".
+json_hex(15)    --> "F".
 
-/*  Here we are going to simply rely on `number_chars/2` when generating. */
+/*  I can't think of any alternatives to using `number_chars/2` when generating, though this leads
+    to under-reporting of correct solutions. At least matching solutions unify when both are instantiated...
+    ```
+    ?- phrase(json:json_number(N), "123E2").
+       N = 12300
+    ;  false.
+    ?- phrase(json:json_number(12300), Cs).
+       Cs = "12300".
+    ?- phrase(json:json_number(12300), "123E2").
+       true
+    ;  false.
+    ```
+*/
+parsing, [C] --> [C], { nonvar(C) }.
+
 json_number(Number) -->
-        (   { nonvar(Number) } ->
-            { number_chars(Number, NumberChars) },
-            NumberChars
-        ;   json_sign_noplus(Sign),
+        (   parsing ->
+            json_sign_noplus(Sign),
             json_integer(Integer),
             json_fraction(Fraction),
             json_exponent(Exponent),
@@ -215,6 +201,8 @@ json_number(Number) -->
               ;   Base = 10.0
               ),
               Number is Sign * (Integer + Fraction) * Base ^ Exponent }
+        ;   { number_chars(Number, NumberChars) },
+            NumberChars
         ).
 
 json_integer(Digit)      --> json_digit(Digit).
@@ -230,6 +218,9 @@ json_digits(Value, Power) -->
         { Power is NextPower + 1,
           Value is FirstDigit * 10^Power + RemainingValue }.
 
+json_digit(0)     --> "0".
+json_digit(Digit) --> json_onenine(Digit).
+
 json_onenine(1) --> "1".
 json_onenine(2) --> "2".
 json_onenine(3) --> "3".
@@ -240,29 +231,18 @@ json_onenine(7) --> "7".
 json_onenine(8) --> "8".
 json_onenine(9) --> "9".
 
-json_digit(0) --> "0".
-json_digit(1) --> "1".
-json_digit(2) --> "2".
-json_digit(3) --> "3".
-json_digit(4) --> "4".
-json_digit(5) --> "5".
-json_digit(6) --> "6".
-json_digit(7) --> "7".
-json_digit(8) --> "8".
-json_digit(9) --> "9".
-
 json_fraction(0)        --> "".
 json_fraction(Fraction) -->
-    ".",
-    json_digits(Value, Power),
-    { Fraction is Value / 10 ^ (Power + 1) }.
+        ".",
+        json_digits(Value, Power),
+        { Fraction is Value / 10.0 ^ (Power + 1) }.
 
 json_exponent(0)        --> "".
 json_exponent(Exponent) -->
-    json_exponent_signifier,
-    json_sign(Sign),
-    json_digits(Value, _),
-    { Exponent is Sign * Value }.
+        json_exponent_signifier,
+        json_sign(Sign),
+        json_digits(Value, _),
+        { Exponent is Sign * Value }.
 
 json_exponent_signifier --> "E".
 json_exponent_signifier --> "e".
@@ -273,6 +253,18 @@ json_sign_noplus(-1) --> "-".
 json_sign(Sign) --> json_sign_noplus(Sign).
 json_sign(1)    --> "+".
 
-/* Make sure json_ws doesn't attempt to generate whitespace and succeeds without choicepoints when generating */
-json_ws --> [C], {nonvar(C), member(C, " \n\r\t")}, json_ws.
-json_ws --> "".
+/* Make `json_ws/0` greedy when parsing, lazy when generating */
+json_ws_empty --> "".
+json_ws_nonempty --> " ".
+json_ws_nonempty --> "\n".
+json_ws_nonempty --> "\r".
+json_ws_nonempty --> "\t".
+json_ws_greedy --> json_ws_nonempty, json_ws_greedy.
+json_ws_greedy --> json_ws_empty.
+json_ws_lazy --> json_ws_empty.
+json_ws_lazy --> json_ws_nonempty, json_ws_lazy.
+json_ws -->
+        (   parsing ->
+            json_ws_greedy
+        ;   json_ws_lazy
+        ).
