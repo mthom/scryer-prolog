@@ -7,6 +7,7 @@
 :- use_module(library(lists)).
 :- use_module(library(os)).
 :- use_module(library(pio)).
+:- use_module(library(iso_ext)).
 :- use_module(library(time)).
 
 test_path(TestName, TestPath) :-
@@ -33,15 +34,15 @@ minify_sample_json :-
     name_parse("pass_everything.json", Json),
     time(once(phrase(json_chars(Json), MinChars))),
     test_path("pass_everything.min.json", MinPath),
-    open(MinPath, write, Stream),
-    format(Stream, "~s", [MinChars]),
-    close(Stream).
+    setup_call_cleanup(
+        open(MinPath, write, Stream),
+        format(Stream, "~s", [MinChars]),
+        close(Stream)
+    ).
 
 test_json_minify :-
     test_path("pass_everything.min.json", MinPath),
-    open(MinPath, read, Stream),
-    read_line_to_chars(Stream, RefChars, []),
-    close(Stream),
+    once(phrase_from_file(raw_chars(RefChars), MinPath)),
     name_parse("pass_everything.json", Json),
     time(once(phrase(json_chars(Json), MinChars))),
     RefChars = MinChars.
