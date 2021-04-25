@@ -1,6 +1,5 @@
 :- module(pio, [phrase_from_file/2,
-                phrase_from_file/3,
-                raw_chars//1]).
+                phrase_from_file/3]).
 
 :- use_module(library(dcgs)).
 :- use_module(library(error)).
@@ -44,15 +43,3 @@ reader_step(Stream, Pos, Xs0) :-
             partial_string(Cs, Xs0, Xs),
             stream_to_lazy_list(Stream, Xs)
         ).
-
-/*  Relate a character list to itself greedily - for reading raw file contents using `phrase_from_file/2`
-    A quick benchmark:
-    Greedy (recurse first):
-    ?- time(phrase_from_file(raw_chars(_), '/mnt/544KB.json')).
-       % CPU time: 22.471 seconds   
-    Generous (empty list first):
-    ?- time(phrase_from_file(raw_chars(_), '/mnt/544KB.json')).
-       % CPU time: 44.119 seconds
-*/
-raw_chars([C|Cs]) --> [C], raw_chars(Cs).
-raw_chars([]) --> [].

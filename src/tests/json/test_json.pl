@@ -42,7 +42,7 @@ minify_sample_json :-
 
 test_json_minify :-
     test_path("pass_everything.min.json", MinPath),
-    once(phrase_from_file(raw_chars(RefChars), MinPath)),
+    once(phrase_from_file(seq(RefChars), MinPath)),
     name_parse("pass_everything.json", Json),
     time(once(phrase(json_chars(Json), MinChars))),
     RefChars = MinChars.
