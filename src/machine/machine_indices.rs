@@ -673,7 +673,7 @@ pub(crate) type MetaPredicateDir = IndexMap<PredicateKey, Vec<MetaSpec>>;
 pub(crate) type ExtensiblePredicates = IndexMap<PredicateKey, PredicateSkeleton>;
 
 pub(crate) type LocalExtensiblePredicates =
-    IndexMap<(CompilationTarget, PredicateKey), PredicateSkeleton>;
+    IndexMap<(CompilationTarget, PredicateKey), LocalPredicateSkeleton>;
 
 #[derive(Debug)]
 pub(crate) struct IndexStore {
@@ -702,7 +702,7 @@ impl IndexStore {
         key: &PredicateKey,
     ) -> Option<&mut PredicateSkeleton> {
         match (key.0.as_str(), key.1) {
-//            ("term_expansion", 2) => self.extensible_predicates.get_mut(key),
+            //            ("term_expansion", 2) => self.extensible_predicates.get_mut(key),
             _ => match compilation_target {
                 CompilationTarget::User => self.extensible_predicates.get_mut(key),
                 CompilationTarget::Module(ref module_name) => {
@@ -716,12 +716,34 @@ impl IndexStore {
         }
     }
 
+    pub(crate) fn get_predicate_skeleton(
+        &self,
+        compilation_target: &CompilationTarget,
+        key: &PredicateKey,
+    ) -> Option<&PredicateSkeleton> {
+        match compilation_target {
+            CompilationTarget::User => self.extensible_predicates.get(key),
+            CompilationTarget::Module(ref module_name) => {
+                if let Some(module) = self.modules.get(module_name) {
+                    module.extensible_predicates.get(key)
+                } else {
+                    None
+                }
+            }
+        }
+    }
+
     pub(crate) fn get_local_predicate_skeleton_mut(
         &mut self,
-        src_compilation_target: &CompilationTarget,
+        mut src_compilation_target: CompilationTarget,
         local_compilation_target: CompilationTarget,
+        listing_src_file_name: Option<ClauseName>,
         key: PredicateKey,
-    ) -> Option<&mut PredicateSkeleton> {
+    ) -> Option<&mut LocalPredicateSkeleton> {
+        if let Some(filename) = listing_src_file_name {
+            src_compilation_target = CompilationTarget::Module(filename);
+        }
+
         match src_compilation_target {
             CompilationTarget::User => self
                 .local_extensible_predicates
@@ -740,10 +762,15 @@ impl IndexStore {
 
     pub(crate) fn get_local_predicate_skeleton(
         &self,
-        src_compilation_target: &CompilationTarget,
+        mut src_compilation_target: CompilationTarget,
         local_compilation_target: CompilationTarget,
+        listing_src_file_name: Option<ClauseName>,
         key: PredicateKey,
-    ) -> Option<&PredicateSkeleton> {
+    ) -> Option<&LocalPredicateSkeleton> {
+        if let Some(filename) = listing_src_file_name {
+            src_compilation_target = CompilationTarget::Module(filename);
+        }
+
         match src_compilation_target {
             CompilationTarget::User => self
                 .local_extensible_predicates
@@ -753,23 +780,6 @@ impl IndexStore {
                     module
                         .local_extensible_predicates
                         .get(&(local_compilation_target, key))
-                } else {
-                    None
-                }
-            }
-        }
-    }
-
-    pub(crate) fn get_predicate_skeleton(
-        &self,
-        compilation_target: &CompilationTarget,
-        key: &PredicateKey,
-    ) -> Option<&PredicateSkeleton> {
-        match compilation_target {
-            CompilationTarget::User => self.extensible_predicates.get(key),
-            CompilationTarget::Module(ref module_name) => {
-                if let Some(module) = self.modules.get(module_name) {
-                    module.extensible_predicates.get(key)
                 } else {
                     None
                 }
@@ -845,13 +855,13 @@ impl IndexStore {
             "user" => self
                 .extensible_predicates
                 .get(&key)
-                .map(|skeleton| skeleton.is_dynamic)
+                .map(|skeleton| skeleton.core.is_dynamic)
                 .unwrap_or(false),
             _ => match self.modules.get(&module_name) {
                 Some(ref module) => module
                     .extensible_predicates
                     .get(&key)
-                    .map(|skeleton| skeleton.is_dynamic)
+                    .map(|skeleton| skeleton.core.is_dynamic)
                     .unwrap_or(false),
                 None => false,
             },

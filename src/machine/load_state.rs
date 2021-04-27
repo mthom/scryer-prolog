@@ -1,7 +1,7 @@
 use crate::machine::machine_indices::*;
 use crate::machine::preprocessor::*;
-use crate::machine::*;
 use crate::machine::term_stream::*;
+use crate::machine::*;
 
 use prolog_parser::clause_name;
 
@@ -349,15 +349,15 @@ impl<'a> LoadState<'a> {
             .indices
             .get_predicate_skeleton(&compilation_target, &key)
             .map(|skeleton| {
-                (clause_locs
-                    .iter()
-                    .map(|clause_clause_loc| {
-                        skeleton.target_pos_of_clause_clause_loc(
-                            *clause_clause_loc,
-                        )
-                    })
-                    .collect(),
-                 skeleton.is_dynamic)
+                (
+                    clause_locs
+                        .iter()
+                        .map(|clause_clause_loc| {
+                            skeleton.target_pos_of_clause_clause_loc(*clause_clause_loc)
+                        })
+                        .collect(),
+                    skeleton.core.is_dynamic,
+                )
             });
 
         if let Some((clause_target_poses, is_dynamic)) = result_opt {
@@ -377,10 +377,7 @@ impl<'a> LoadState<'a> {
         mut clause_target_poses: Vec<Option<usize>>,
         is_dynamic: bool,
     ) {
-        let old_compilation_target = mem::replace(
-            &mut self.compilation_target,
-            compilation_target,
-        );
+        let old_compilation_target = mem::replace(&mut self.compilation_target, compilation_target);
 
         while let Some(target_pos_opt) = clause_target_poses.pop() {
             match target_pos_opt {
@@ -408,15 +405,12 @@ impl<'a> LoadState<'a> {
     ) {
         let key = (clause_name!("$clause"), 2);
 
-        match self
-            .wam
-            .indices
-            .get_local_predicate_skeleton_mut(
-                &self.compilation_target,
-                clause_clause_compilation_target.clone(),
-                key.clone(),
-            )
-        {
+        match self.wam.indices.get_local_predicate_skeleton_mut(
+            self.compilation_target.clone(),
+            clause_clause_compilation_target.clone(),
+            self.listing_src_file_name(),
+            key.clone(),
+        ) {
             Some(skeleton) => {
                 self.retraction_info.push_record(
                     RetractionRecord::RemovedLocalSkeletonClauseLocations(
@@ -436,11 +430,7 @@ impl<'a> LoadState<'a> {
             }
         };
 
-        self.retract_local_clauses(
-            clause_clause_compilation_target,
-            key,
-            &clause_locs,
-        );
+        self.retract_local_clauses(clause_clause_compilation_target, key, &clause_locs);
     }
 
     pub(super) fn try_term_to_tl(
@@ -448,11 +438,7 @@ impl<'a> LoadState<'a> {
         term: Term,
         preprocessor: &mut Preprocessor,
     ) -> Result<PredicateClause, SessionError> {
-        let tl = preprocessor.try_term_to_tl(
-            self,
-            term,
-            CutContext::BlocksCuts,
-        )?;
+        let tl = preprocessor.try_term_to_tl(self, term, CutContext::BlocksCuts)?;
 
         Ok(match tl {
             TopLevel::Fact(fact) => PredicateClause::Fact(fact),
@@ -485,11 +471,12 @@ impl<'a> LoadState<'a> {
             if code_index.get() != IndexPtr::Undefined {
                 let old_index_ptr = code_index.replace(IndexPtr::Undefined);
 
-                self.retraction_info.push_record(
-                    RetractionRecord::ReplacedModulePredicate(
-                        module_name.clone(), key.clone(), old_index_ptr,
-                    ),
-                );
+                self.retraction_info
+                    .push_record(RetractionRecord::ReplacedModulePredicate(
+                        module_name.clone(),
+                        key.clone(),
+                        old_index_ptr,
+                    ));
             }
         }
 
@@ -515,25 +502,24 @@ impl<'a> LoadState<'a> {
                     ModuleExport::PredicateKey(ref key) => {
                         match (removed_module.code_dir.get(key), code_dir.get(key)) {
                             (Some(module_code_index), Some(target_code_index))
-                                if module_code_index.get() == target_code_index.get() => {
-                                    let old_index_ptr = target_code_index.replace(IndexPtr::Undefined);
+                                if module_code_index.get() == target_code_index.get() =>
+                            {
+                                let old_index_ptr = target_code_index.replace(IndexPtr::Undefined);
 
-                                    retraction_info.push_record(
-                                        predicate_retractor(key.clone(), old_index_ptr),
-                                    );
-                                }
+                                retraction_info
+                                    .push_record(predicate_retractor(key.clone(), old_index_ptr));
+                            }
                             _ => {}
                         }
                     }
                     ModuleExport::OpDecl(op_decl) => {
-                        let op_dir_value_opt = op_dir.remove(&(op_decl.name.clone(), op_decl.fixity()));
+                        let op_dir_value_opt =
+                            op_dir.remove(&(op_decl.name.clone(), op_decl.fixity()));
 
                         if let Some(op_dir_value) = op_dir_value_opt {
                             let (prec, spec) = op_dir_value.shared_op_desc().get();
 
-                            retraction_info.push_record(
-                                op_retractor(op_decl.clone(), prec, spec),
-                            );
+                            retraction_info.push_record(op_retractor(op_decl.clone(), prec, spec));
                         }
                     }
                 }
@@ -552,33 +538,30 @@ impl<'a> LoadState<'a> {
                 );
             }
             CompilationTarget::Module(ref target_module_name)
-                if target_module_name.as_str() != module_name.as_str() => {
-                    let predicate_retractor = |key, index_ptr| {
-                        RetractionRecord::ReplacedModulePredicate(
-                            module_name.clone(), key, index_ptr,
-                        )
-                    };
+                if target_module_name.as_str() != module_name.as_str() =>
+            {
+                let predicate_retractor = |key, index_ptr| {
+                    RetractionRecord::ReplacedModulePredicate(module_name.clone(), key, index_ptr)
+                };
 
-                    let op_retractor = |op_decl, prec, spec| {
-                        RetractionRecord::ReplacedModuleOp(
-                            module_name.clone(), op_decl, prec, spec,
-                        )
-                    };
+                let op_retractor = |op_decl, prec, spec| {
+                    RetractionRecord::ReplacedModuleOp(module_name.clone(), op_decl, prec, spec)
+                };
 
-                    if let Some(module) = self.wam.indices.modules.get_mut(target_module_name) {
-                        remove_module_exports(
-                            &removed_module,
-                            &mut module.code_dir,
-                            &mut module.op_dir,
-                            &mut self.retraction_info,
-                            predicate_retractor,
-                            op_retractor,
-                        );
-                    } else {
-                        unreachable!()
-                    }
+                if let Some(module) = self.wam.indices.modules.get_mut(target_module_name) {
+                    remove_module_exports(
+                        &removed_module,
+                        &mut module.code_dir,
+                        &mut module.op_dir,
+                        &mut self.retraction_info,
+                        predicate_retractor,
+                        op_retractor,
+                    );
+                } else {
+                    unreachable!()
                 }
-            CompilationTarget::Module(_) => {},
+            }
+            CompilationTarget::Module(_) => {}
         };
 
         self.wam.indices.modules.insert(module_name, removed_module);
@@ -599,13 +582,11 @@ impl<'a> LoadState<'a> {
                 self.add_dynamically_generated_module(&module_name);
 
                 match self.wam.indices.modules.get_mut(&module_name) {
-                    Some(ref mut module) => {
-                        module
-                            .code_dir
-                            .entry(key)
-                            .or_insert_with(|| CodeIndex::new(IndexPtr::Undefined))
-                            .clone()
-                    }
+                    Some(ref mut module) => module
+                        .code_dir
+                        .entry(key)
+                        .or_insert_with(|| CodeIndex::new(IndexPtr::Undefined))
+                        .clone(),
                     None => {
                         unreachable!()
                     }
@@ -665,18 +646,14 @@ impl<'a> LoadState<'a> {
                     .extensible_predicates
                     .insert(key.clone(), skeleton);
 
-                let record = RetractionRecord::AddedExtensiblePredicate(
-                    CompilationTarget::User,
-                    key,
-                );
+                let record =
+                    RetractionRecord::AddedExtensiblePredicate(CompilationTarget::User, key);
 
                 self.retraction_info.push_record(record);
             }
             CompilationTarget::Module(module_name) => {
                 if let Some(module) = self.wam.indices.modules.get_mut(&module_name) {
-                    module
-                        .extensible_predicates
-                        .insert(key.clone(), skeleton);
+                    module.extensible_predicates.insert(key.clone(), skeleton);
 
                     let record = RetractionRecord::AddedExtensiblePredicate(
                         CompilationTarget::Module(module_name),
@@ -696,9 +673,14 @@ impl<'a> LoadState<'a> {
         &mut self,
         local_compilation_target: CompilationTarget,
         key: PredicateKey,
-        skeleton: PredicateSkeleton,
+        skeleton: LocalPredicateSkeleton,
     ) {
-        match self.compilation_target.clone() {
+        let src_compilation_target = match self.listing_src_file_name() {
+            Some(filename) => CompilationTarget::Module(filename),
+            None => self.compilation_target.clone(),
+        };
+
+        match src_compilation_target {
             CompilationTarget::User => {
                 self.wam
                     .indices
@@ -725,8 +707,7 @@ impl<'a> LoadState<'a> {
                         Some(ref mut module) => {
                             op_decl.insert_into_op_dir(&mut module.op_dir);
                         }
-                        None => {
-                        }
+                        None => {}
                     }
                 }
 
@@ -911,11 +892,16 @@ impl<'a> LoadState<'a> {
                 code_dir,
                 op_dir,
                 meta_predicates,
-            ).unwrap();
+            )
+            .unwrap();
         }
     }
 
-    pub(crate) fn reset_in_situ_module(&mut self, module_decl: ModuleDecl, listing_src: &ListingSource) {
+    pub(crate) fn reset_in_situ_module(
+        &mut self,
+        module_decl: ModuleDecl,
+        listing_src: &ListingSource,
+    ) {
         let module_name = module_decl.name.clone();
 
         self.remove_module_exports(module_name.clone());
@@ -940,8 +926,8 @@ impl<'a> LoadState<'a> {
                     let is_dynamic = self
                         .wam
                         .indices
-                        .get_predicate_skeleton(&compilation_target, &key)
-                        .map(|skeleton| skeleton.is_dynamic)
+                        .get_predicate_skeleton(compilation_target, key)
+                        .map(|skeleton| skeleton.core.is_dynamic)
                         .unwrap_or(false);
 
                     if is_dynamic {
@@ -949,9 +935,7 @@ impl<'a> LoadState<'a> {
                             CompilationTarget::User => {
                                 CompilationTarget::Module(clause_name!("builtins"))
                             }
-                            module => {
-                                module.clone()
-                            }
+                            module => module.clone(),
                         };
 
                         self.retract_local_clause_clauses(
@@ -959,37 +943,14 @@ impl<'a> LoadState<'a> {
                             &skeleton.clause_clause_locs,
                         );
                     }
-
-                    if &self.compilation_target == compilation_target {
-                        if let CompilationTarget::User = &self.compilation_target {
-                            match (key.0.as_str(), key.1) {
-                                ("term_expansion", 2) | ("goal_expansion", 2) => {
-                                    continue;
-                                }
-                                _ => {}
-                            }
-                        }
-
-                        let skeleton_opt = self.wam.indices.remove_predicate_skeleton(
-                            compilation_target,
-                            &key,
-                        );
-
-                        if let Some(skeleton) = skeleton_opt {
-                            self.retraction_info.push_record(RetractionRecord::RemovedSkeleton(
-                                compilation_target.clone(),
-                                key.clone(),
-                                skeleton,
-                            ));
-                        }
-                    }
                 }
 
-                self.retraction_info.push_record(RetractionRecord::ReplacedModule(
-                    old_module_decl,
-                    listing_src.clone(),
-                    local_extensible_predicates,
-                ));
+                self.retraction_info
+                    .push_record(RetractionRecord::ReplacedModule(
+                        old_module_decl,
+                        listing_src.clone(),
+                        local_extensible_predicates,
+                    ));
             }
             None => {}
         }

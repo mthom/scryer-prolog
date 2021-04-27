@@ -198,14 +198,14 @@ impl<'a> Drop for LoadState<'a> {
                                 .extensible_predicates
                                 .get_mut(&key)
                                 .map(|skeleton| {
-                                    skeleton.is_discontiguous = false;
+                                    skeleton.core.is_discontiguous = false;
                                 });
                         }
                         CompilationTarget::Module(module_name) => {
                             match self.wam.indices.modules.get_mut(&module_name) {
                                 Some(ref mut module) => {
                                     module.extensible_predicates.get_mut(&key).map(|skeleton| {
-                                        skeleton.is_discontiguous = false;
+                                        skeleton.core.is_discontiguous = false;
                                     });
                                 }
                                 None => {}
@@ -221,14 +221,14 @@ impl<'a> Drop for LoadState<'a> {
                                 .extensible_predicates
                                 .get_mut(&key)
                                 .map(|skeleton| {
-                                    skeleton.is_dynamic = false;
+                                    skeleton.core.is_dynamic = false;
                                 });
                         }
                         CompilationTarget::Module(module_name) => {
                             match self.wam.indices.modules.get_mut(&module_name) {
                                 Some(ref mut module) => {
                                     module.extensible_predicates.get_mut(&key).map(|skeleton| {
-                                        skeleton.is_dynamic = false;
+                                        skeleton.core.is_dynamic = false;
                                     });
                                 }
                                 None => {}
@@ -244,14 +244,14 @@ impl<'a> Drop for LoadState<'a> {
                                 .extensible_predicates
                                 .get_mut(&key)
                                 .map(|skeleton| {
-                                    skeleton.is_multifile = false;
+                                    skeleton.core.is_multifile = false;
                                 });
                         }
                         CompilationTarget::Module(module_name) => {
                             match self.wam.indices.modules.get_mut(&module_name) {
                                 Some(ref mut module) => {
                                     module.extensible_predicates.get_mut(&key).map(|skeleton| {
-                                        skeleton.is_multifile = false;
+                                        skeleton.core.is_multifile = false;
                                     });
                                 }
                                 None => {}
@@ -429,7 +429,7 @@ impl<'a> Drop for LoadState<'a> {
                     {
                         Some(skeleton) => {
                             skeleton.clauses.pop_back();
-                            skeleton.clause_clause_locs.pop_back();
+                            skeleton.core.clause_clause_locs.pop_back();
                         }
                         None => {}
                     }
@@ -442,8 +442,8 @@ impl<'a> Drop for LoadState<'a> {
                     {
                         Some(skeleton) => {
                             skeleton.clauses.pop_front();
-                            skeleton.clause_clause_locs.pop_front();
-                            skeleton.clause_assert_margin -= 1;
+                            skeleton.core.clause_clause_locs.pop_front();
+                            skeleton.core.clause_assert_margin -= 1;
                         }
                         None => {}
                     }
@@ -454,8 +454,9 @@ impl<'a> Drop for LoadState<'a> {
                     key,
                 ) => {
                     match self.wam.indices.get_local_predicate_skeleton_mut(
-                        &src_compilation_target,
+                        src_compilation_target,
                         local_compilation_target,
+                        self.listing_src_file_name(),
                         key,
                     ) {
                         Some(skeleton) => {
@@ -470,8 +471,9 @@ impl<'a> Drop for LoadState<'a> {
                     key,
                 ) => {
                     match self.wam.indices.get_local_predicate_skeleton_mut(
-                        &src_compilation_target,
+                        src_compilation_target,
                         local_compilation_target,
+                        self.listing_src_file_name(),
                         key,
                     ) {
                         Some(skeleton) => {
@@ -487,8 +489,9 @@ impl<'a> Drop for LoadState<'a> {
                     len,
                 ) => {
                     match self.wam.indices.get_local_predicate_skeleton_mut(
-                        &src_compilation_target,
+                        src_compilation_target,
                         local_compilation_target,
+                        self.listing_src_file_name(),
                         key,
                     ) {
                         Some(skeleton) => {
@@ -505,7 +508,7 @@ impl<'a> Drop for LoadState<'a> {
                     {
                         Some(skeleton) => {
                             skeleton.clauses.truncate_back(len);
-                            skeleton.clause_clause_locs.truncate_back(len);
+                            skeleton.core.clause_clause_locs.truncate_back(len);
                         }
                         None => {}
                     }
@@ -541,6 +544,7 @@ impl<'a> Drop for LoadState<'a> {
                     {
                         Some(skeleton) => {
                             skeleton
+                                .core
                                 .clause_clause_locs
                                 .insert(target_pos, clause_clause_loc);
                             skeleton.clauses.insert(target_pos, clause_index_info);
@@ -558,8 +562,9 @@ impl<'a> Drop for LoadState<'a> {
                     clause_locs,
                 ) => {
                     match self.wam.indices.get_local_predicate_skeleton_mut(
-                        &compilation_target,
+                        compilation_target,
                         local_compilation_target,
+                        self.listing_src_file_name(),
                         key,
                     ) {
                         Some(skeleton) => skeleton.clause_clause_locs = clause_locs,
@@ -581,10 +586,14 @@ impl<'a> Drop for LoadState<'a> {
                 RetractionRecord::ReplacedDynamicElseOffset(instr_loc, next) => {
                     match &mut self.wam.code_repo.code[instr_loc] {
                         Line::Choice(ChoiceInstruction::DynamicElse(
-                            _, _, NextOrFail::Next(ref mut o),
-                        )) |
-                        Line::Choice(ChoiceInstruction::DynamicInternalElse(
-                            _, _, NextOrFail::Next(ref mut o),
+                            _,
+                            _,
+                            NextOrFail::Next(ref mut o),
+                        ))
+                        | Line::Choice(ChoiceInstruction::DynamicInternalElse(
+                            _,
+                            _,
+                            NextOrFail::Next(ref mut o),
                         )) => {
                             *o = next;
                         }
@@ -594,10 +603,14 @@ impl<'a> Drop for LoadState<'a> {
                 RetractionRecord::AppendedNextOrFail(instr_loc, fail) => {
                     match &mut self.wam.code_repo.code[instr_loc] {
                         Line::Choice(ChoiceInstruction::DynamicElse(
-                            _, _, ref mut next_or_fail,
-                        )) |
-                        Line::Choice(ChoiceInstruction::DynamicInternalElse(
-                            _, _, ref mut next_or_fail,
+                            _,
+                            _,
+                            ref mut next_or_fail,
+                        ))
+                        | Line::Choice(ChoiceInstruction::DynamicInternalElse(
+                            _,
+                            _,
+                            ref mut next_or_fail,
                         )) => {
                             *next_or_fail = fail;
                         }
@@ -731,10 +744,9 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
             }
 
             let term = match term {
-                Term::Clause(_, name, terms, _)
-                    if name.as_str() == ":-" && terms.len() == 1 => {
-                        return Ok(Some(setup_declaration(&self.load_state, terms)?));
-                    }
+                Term::Clause(_, name, terms, _) if name.as_str() == ":-" && terms.len() == 1 => {
+                    return Ok(Some(setup_declaration(&self.load_state, terms)?));
+                }
                 term => term,
             };
 
@@ -905,7 +917,7 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
         compilation_target: CompilationTarget,
         name: ClauseName,
         arity: usize,
-        flag_accessor: impl Fn(&mut PredicateSkeleton) -> &mut bool,
+        flag_accessor: impl Fn(&mut LocalPredicateSkeleton) -> &mut bool,
         retraction_fn: impl Fn(CompilationTarget, PredicateKey) -> RetractionRecord,
     ) -> Result<(), SessionError> {
         let key = (name, arity);
@@ -920,9 +932,9 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
                     .extensible_predicates
                     .get_mut(&key)
                 {
-                    Some(ref mut skeleton) => {
-                        if !*flag_accessor(skeleton) {
-                            *flag_accessor(skeleton) = true;
+                    Some(skeleton) => {
+                        if !*flag_accessor(&mut skeleton.core) {
+                            *flag_accessor(&mut skeleton.core) = true;
 
                             self.load_state.retraction_info.push_record(retraction_fn(
                                 compilation_target.clone(),
@@ -933,7 +945,7 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
                     None => {
                         if self.load_state.compilation_target == compilation_target {
                             let mut skeleton = PredicateSkeleton::new();
-                            *flag_accessor(&mut skeleton) = true;
+                            *flag_accessor(&mut skeleton.core) = true;
 
                             self.load_state.add_extensible_predicate(
                                 key.clone(),
@@ -950,8 +962,8 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
                 match self.load_state.wam.indices.modules.get_mut(module_name) {
                     Some(ref mut module) => match module.extensible_predicates.get_mut(&key) {
                         Some(ref mut skeleton) => {
-                            if !*flag_accessor(skeleton) {
-                                *flag_accessor(skeleton) = true;
+                            if !*flag_accessor(&mut skeleton.core) {
+                                *flag_accessor(&mut skeleton.core) = true;
 
                                 self.load_state.retraction_info.push_record(retraction_fn(
                                     compilation_target.clone(),
@@ -962,7 +974,7 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
                         None => {
                             if self.load_state.compilation_target == compilation_target {
                                 let mut skeleton = PredicateSkeleton::new();
-                                *flag_accessor(&mut skeleton) = true;
+                                *flag_accessor(&mut skeleton.core) = true;
 
                                 self.load_state.add_extensible_predicate(
                                     key.clone(),
@@ -979,7 +991,7 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
                             .add_dynamically_generated_module(module_name);
 
                         let mut skeleton = PredicateSkeleton::new();
-                        *flag_accessor(&mut skeleton) = true;
+                        *flag_accessor(&mut skeleton.core) = true;
 
                         self.load_state.add_extensible_predicate(
                             key.clone(),
@@ -998,16 +1010,19 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
                         .load_state
                         .wam
                         .indices
-                        .local_extensible_predicates
-                        .get_mut(&(compilation_target.clone(), key.clone()))
-                    {
-                        Some(ref mut skeleton) => {
+                        .get_local_predicate_skeleton_mut(
+                            self.load_state.compilation_target.clone(),
+                            compilation_target.clone(),
+                            self.load_state.listing_src_file_name(),
+                            key.clone(),
+                        ) {
+                        Some(skeleton) => {
                             if !*flag_accessor(skeleton) {
                                 *flag_accessor(skeleton) = true;
                             }
                         }
                         None => {
-                            let mut skeleton = PredicateSkeleton::new();
+                            let mut skeleton = LocalPredicateSkeleton::new();
                             *flag_accessor(&mut skeleton) = true;
 
                             self.load_state.add_local_extensible_predicate(
@@ -1020,17 +1035,17 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
                 }
                 CompilationTarget::Module(ref module_name) => {
                     match self.load_state.wam.indices.modules.get_mut(module_name) {
-                        Some(ref mut module) => match module
+                        Some(module) => match module
                             .local_extensible_predicates
                             .get_mut(&(compilation_target.clone(), key.clone()))
                         {
-                            Some(ref mut skeleton) => {
+                            Some(skeleton) => {
                                 if !*flag_accessor(skeleton) {
                                     *flag_accessor(skeleton) = true;
                                 }
                             }
                             None => {
-                                let mut skeleton = PredicateSkeleton::new();
+                                let mut skeleton = LocalPredicateSkeleton::new();
                                 *flag_accessor(&mut skeleton) = true;
 
                                 self.load_state.add_local_extensible_predicate(
@@ -1044,7 +1059,7 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
                             self.load_state
                                 .add_dynamically_generated_module(module_name);
 
-                            let mut skeleton = PredicateSkeleton::new();
+                            let mut skeleton = LocalPredicateSkeleton::new();
                             *flag_accessor(&mut skeleton) = true;
 
                             self.load_state.add_local_extensible_predicate(
@@ -1139,7 +1154,7 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
                     &self.predicates.compilation_target,
                     &(predicate_name, arity),
                 )
-                .map(|skeleton| skeleton.is_dynamic)
+                .map(|skeleton| skeleton.core.is_dynamic)
                 .unwrap_or(false);
 
             if is_dynamic {
@@ -1156,8 +1171,9 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
             .wam
             .indices
             .get_local_predicate_skeleton_mut(
-                &self.load_state.compilation_target,
+                self.load_state.compilation_target.clone(),
                 self.predicates.compilation_target.clone(),
+                self.load_state.listing_src_file_name(),
                 key.clone(),
             ) {
             Some(skeleton) if !skeleton.clause_clause_locs.is_empty() => {
@@ -1440,9 +1456,20 @@ impl Machine {
 
                 let module_name = module_decl.name.clone();
 
-                if !loader.load_state.wam.indices.modules.contains_key(&module_decl.name) {
+                if !loader
+                    .load_state
+                    .wam
+                    .indices
+                    .modules
+                    .contains_key(&module_decl.name)
+                {
                     let module = Module::new_in_situ(module_decl);
-                    loader.load_state.wam.indices.modules.insert(module_name, module);
+                    loader
+                        .load_state
+                        .wam
+                        .indices
+                        .modules
+                        .insert(module_name, module);
                 } else {
                     loader.load_state.reset_in_situ_module(
                         module_decl.clone(),
@@ -1451,15 +1478,14 @@ impl Machine {
 
                     match loader.load_state.wam.indices.modules.get_mut(&module_name) {
                         Some(module) => {
-                            for (key, value) in module.op_dir.drain(0 ..) {
+                            for (key, value) in module.op_dir.drain(0..) {
                                 let (prec, spec) = value.shared_op_desc().get();
                                 let mut op_decl = OpDecl::new(prec, spec, key.0);
 
                                 op_decl.remove(&mut loader.load_state.wam.indices.op_dir);
                             }
                         }
-                        None => {
-                        }
+                        None => {}
                     }
                 }
             }
@@ -1638,7 +1664,8 @@ impl Machine {
                     .push(HeapCellValue::Atom(path_atom, None)),
             );
 
-            self.machine_st.unify(path_addr, self.machine_st[temp_v!(1)]);
+            self.machine_st
+                .unify(path_addr, self.machine_st[temp_v!(1)]);
         } else {
             self.machine_st.fail = true;
         }
@@ -1658,7 +1685,8 @@ impl Machine {
                             .push(HeapCellValue::Atom(file_name_atom, None)),
                     );
 
-                    self.machine_st.unify(file_name_addr, self.machine_st[temp_v!(1)]);
+                    self.machine_st
+                        .unify(file_name_addr, self.machine_st[temp_v!(1)]);
                     return;
                 }
                 _ => {
@@ -1684,7 +1712,8 @@ impl Machine {
                         .push(HeapCellValue::Atom(directory_atom, None)),
                 );
 
-                self.machine_st.unify(directory_addr, self.machine_st[temp_v!(1)]);
+                self.machine_st
+                    .unify(directory_addr, self.machine_st[temp_v!(1)]);
                 return;
             }
         }
@@ -1700,7 +1729,8 @@ impl Machine {
                     .push(HeapCellValue::Atom(load_context.module.clone(), None)),
             );
 
-            self.machine_st.unify(module_name_addr, self.machine_st[temp_v!(1)]);
+            self.machine_st
+                .unify(module_name_addr, self.machine_st[temp_v!(1)]);
         } else {
             self.machine_st.fail = true;
         }
@@ -1714,7 +1744,8 @@ impl Machine {
                     .push(HeapCellValue::Stream(load_context.stream.clone())),
             );
 
-            self.machine_st.unify(stream_addr, self.machine_st[temp_v!(1)]);
+            self.machine_st
+                .unify(stream_addr, self.machine_st[temp_v!(1)]);
         } else {
             self.machine_st.fail = true;
         }
@@ -1752,11 +1783,7 @@ impl Machine {
             );
 
             // if a new predicate was just created, make it dynamic.
-            loader.add_dynamic_predicate(
-                compilation_target.clone(),
-                key.0.clone(),
-                key.1,
-            )?;
+            loader.add_dynamic_predicate(compilation_target.clone(), key.0.clone(), key.1)?;
 
             loader.load_state.incremental_compile_clause(
                 key.clone(),
@@ -1833,6 +1860,7 @@ impl Machine {
                         )
                         .map(|clause_clause_skeleton| {
                             skeleton
+                                .core
                                 .clause_clause_locs
                                 .iter()
                                 .map(|clause_clause_loc| {
@@ -2060,7 +2088,8 @@ impl Machine {
                     .heap
                     .push(HeapCellValue::Addr(Addr::HeapCell(list_loc)));
 
-                self.machine_st.unify(Addr::HeapCell(heap_loc), self.machine_st[temp_v!(4)]);
+                self.machine_st
+                    .unify(Addr::HeapCell(heap_loc), self.machine_st[temp_v!(4)]);
             }
             None => {
                 self.machine_st.fail = true;
@@ -2089,7 +2118,7 @@ impl Machine {
             .get_predicate_skeleton(&compilation_target, &key)
         {
             Some(skeleton) => {
-                self.machine_st.fail = !skeleton.is_dynamic;
+                self.machine_st.fail = !skeleton.core.is_dynamic;
             }
             None => {
                 self.machine_st.fail = true;
@@ -2118,7 +2147,7 @@ impl Machine {
             .get_predicate_skeleton(&compilation_target, &key)
         {
             Some(skeleton) => {
-                self.machine_st.fail = !skeleton.is_multifile;
+                self.machine_st.fail = !skeleton.core.is_multifile;
             }
             None => {
                 self.machine_st.fail = true;
@@ -2147,7 +2176,7 @@ impl Machine {
             .get_predicate_skeleton(&compilation_target, &key)
         {
             Some(skeleton) => {
-                self.machine_st.fail = !skeleton.is_discontiguous;
+                self.machine_st.fail = !skeleton.core.is_discontiguous;
             }
             None => {
                 self.machine_st.fail = true;

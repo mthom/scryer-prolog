@@ -847,7 +847,7 @@ asserta_clause(Head, Body) :-
 asserta(Clause) :-
     (  Clause \= (_ :- _) ->
        Head = Clause,
-       Body = true,
+       Body = user:true,
        asserta_clause(Head, Body)
     ;  Clause = (Head :- Body) ->
        asserta_clause(Head, Body)
@@ -897,7 +897,7 @@ assertz_clause(Head, Body) :-
 assertz(Clause) :-
     (  Clause \= (_ :- _) ->
        Head = Clause,
-       Body = true,
+       Body = user:true,
        assertz_clause(Head, Body)
     ;  Clause = (Head :- Body) ->
        assertz_clause(Head, Body)

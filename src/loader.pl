@@ -509,7 +509,8 @@ use_module(Module, Exports, Evacuable) :-
     ;  (  path_atom(Module, ModulePath) ->
           load_context_path(ModulePath, Path),
           open_file(Path, Stream),
-          file_load(Stream, Path, Subevacuable),
+          stream_property(Stream, file_name(PathFileName)),
+          file_load(Stream, PathFileName, Subevacuable),
           '$use_module'(Evacuable, Subevacuable, Exports)
        ;  type_error(atom, Library, load/1)
        )

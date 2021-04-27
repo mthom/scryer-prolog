@@ -696,24 +696,22 @@ impl PredicateInfo {
     }
 }
 
-#[derive(Debug)]
-pub(crate) struct PredicateSkeleton {
+#[derive(Clone, Debug)]
+pub(crate) struct LocalPredicateSkeleton {
     pub(crate) is_discontiguous: bool,
     pub(crate) is_dynamic: bool,
     pub(crate) is_multifile: bool,
-    pub(crate) clauses: SliceDeque<ClauseIndexInfo>,
     pub(crate) clause_clause_locs: SliceDeque<usize>,
     pub(crate) clause_assert_margin: usize,
 }
 
-impl PredicateSkeleton {
+impl LocalPredicateSkeleton {
     #[inline]
     pub(crate) fn new() -> Self {
-        PredicateSkeleton {
+        Self {
             is_discontiguous: false,
             is_dynamic: false,
             is_multifile: false,
-            clauses: sdeq![],
             clause_clause_locs: sdeq![],
             clause_assert_margin: 0,
         }
@@ -732,23 +730,56 @@ impl PredicateSkeleton {
 
     #[inline]
     pub(crate) fn reset(&mut self) {
-        self.clauses.clear();
         self.clause_clause_locs.clear();
         self.clause_assert_margin = 0;
+    }
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct PredicateSkeleton {
+    pub(crate) core: LocalPredicateSkeleton,
+    pub(crate) clauses: SliceDeque<ClauseIndexInfo>,
+}
+
+impl PredicateSkeleton {
+    #[inline]
+    pub(crate) fn new() -> Self {
+        PredicateSkeleton {
+            core: LocalPredicateSkeleton::new(),
+            clauses: sdeq![],
+        }
+    }
+
+    #[inline]
+    pub(crate) fn predicate_info(&self) -> PredicateInfo {
+        PredicateInfo {
+            is_extensible: true,
+            is_discontiguous: self.core.is_discontiguous,
+            is_dynamic: self.core.is_dynamic,
+            is_multifile: self.core.is_multifile,
+            has_clauses: !self.clauses.is_empty(),
+        }
+    }
+
+    #[inline]
+    pub(crate) fn reset(&mut self) {
+        self.core.clause_clause_locs.clear();
+        self.core.clause_assert_margin = 0;
+        self.clauses.clear();
     }
 
     pub(crate) fn target_pos_of_clause_clause_loc(
         &self,
         clause_clause_loc: usize,
     ) -> Option<usize> {
-        let search_result = self.clause_clause_locs[0..self.clause_assert_margin]
+        let search_result = self.core.clause_clause_locs[0..self.core.clause_assert_margin]
             .binary_search_by(|loc| clause_clause_loc.cmp(&loc));
 
         match search_result {
             Ok(loc) => Some(loc),
-            Err(_) => self.clause_clause_locs[self.clause_assert_margin..]
+            Err(_) => self.core.clause_clause_locs[self.core.clause_assert_margin..]
                 .binary_search_by(|loc| loc.cmp(&clause_clause_loc))
-                .map(|loc| loc + self.clause_assert_margin)
+                .map(|loc| loc + self.core.clause_assert_margin)
                 .ok(),
         }
     }
