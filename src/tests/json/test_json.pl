@@ -36,7 +36,7 @@ minify_sample_json :-
     test_path("pass_everything.min.json", MinPath),
     setup_call_cleanup(
         open(MinPath, write, Stream),
-        format(Stream, "~s", [MinChars]),
+        format(Stream, "~s~n", [MinChars]),
         close(Stream)
     ).
 
@@ -45,7 +45,8 @@ test_json_minify :-
     once(phrase_from_file(seq(RefChars), MinPath)),
     name_parse("pass_everything.json", Json),
     time(once(phrase(json_chars(Json), MinChars))),
-    RefChars = MinChars.
+    append(MinChars, "\n", MinFileChars),
+    RefChars = MinFileChars.
 
 test_json_int_float :-
     once(phrase(json_chars(number(ZeroInt)), "0")),

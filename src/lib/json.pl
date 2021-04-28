@@ -37,6 +37,7 @@
                  json_chars//1
                 ]).
 
+:- use_module(library(charsio)).
 :- use_module(library(dcgs)).
 :- use_module(library(dif)).
 :- use_module(library(lists)).
@@ -161,19 +162,13 @@ json_character(EscapeChar) -->
               H4 is (EscapeCharCode // 16^0) mod 16
           ) }.
 
-json_hex(Digit) --> json_digit(Digit).
+json_hex(Hex) --> abnf_hexdig(Hex).
 json_hex(10)    --> "a".
 json_hex(11)    --> "b".
 json_hex(12)    --> "c".
 json_hex(13)    --> "d".
 json_hex(14)    --> "e".
 json_hex(15)    --> "f".
-json_hex(10)    --> "A".
-json_hex(11)    --> "B".
-json_hex(12)    --> "C".
-json_hex(13)    --> "D".
-json_hex(14)    --> "E".
-json_hex(15)    --> "F".
 
 /*  I can't think of any alternatives to using `number_chars/2` when generating, though this leads
     to under-reporting of correct solutions. At least matching solutions unify when both are instantiated...
@@ -205,31 +200,20 @@ json_number(Number) -->
             NumberChars
         ).
 
-json_integer(Digit)      --> json_digit(Digit).
+json_integer(Digit)      --> abnf_digit(Digit).
 json_integer(TotalValue) -->
         json_onenine(FirstDigit),
         json_digits(RemainingValue, Power),
         { TotalValue is FirstDigit * 10 ^ (Power + 1) + RemainingValue }.
 
-json_digits(Digit, 0)     --> json_digit(Digit).
+json_digits(Digit, 0)     --> abnf_digit(Digit).
 json_digits(Value, Power) -->
-        json_digit(FirstDigit),
+        abnf_digit(FirstDigit),
         json_digits(RemainingValue, NextPower),
         { Power is NextPower + 1,
           Value is FirstDigit * 10^Power + RemainingValue }.
 
-json_digit(0)     --> "0".
-json_digit(Digit) --> json_onenine(Digit).
-
-json_onenine(1) --> "1".
-json_onenine(2) --> "2".
-json_onenine(3) --> "3".
-json_onenine(4) --> "4".
-json_onenine(5) --> "5".
-json_onenine(6) --> "6".
-json_onenine(7) --> "7".
-json_onenine(8) --> "8".
-json_onenine(9) --> "9".
+json_onenine(Digit) --> abnf_digit(Digit), { dif(Digit, 0) }.
 
 json_fraction(0)        --> "".
 json_fraction(Fraction) -->

@@ -3,7 +3,7 @@ use prolog_parser::parser::*;
 use prolog_parser::{
     alpha_char, alpha_numeric_char, binary_digit_char, clause_name, decimal_digit_char,
     exponent_char, graphic_char, graphic_token_char, hexadecimal_digit_char, layout_char,
-    meta_char, new_line_char, octal_digit_char, prolog_char, sign_char, solo_char,
+    meta_char, new_line_char, octal_digit_char, octet_char, prolog_char, sign_char, solo_char,
     symbolic_control_char, symbolic_hexadecimal_char, temp_v,
 };
 
@@ -1803,6 +1803,7 @@ impl MachineState {
                 // macro_check!(new_line_char, "new_line");
                 method_check!(is_numeric, "numeric");
                 macro_check!(octal_digit_char, "octal_digit");
+                macro_check!(octet_char, "octet");
                 macro_check!(prolog_char, "prolog");
                 // macro_check!(semicolon_char, "semicolon");
                 macro_check!(sign_char, "sign");
