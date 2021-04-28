@@ -50,8 +50,8 @@ json_chars(Internal) --> json_element(Internal).
     different types of values based on their principal functor. The principal functors match the types defined in
     the JSON Schema spec here: https://json-schema.org/draft/2020-12/json-schema-validation.html#rfc.section.6.1.1
     EXCEPT we don't yet support the integer type. There are plans for more JSON Schema support in the near future. */
-json_value(object(Assoc))   --> json_object(Assoc).
-json_value(array(List))     --> json_array(List).
+json_value(pairs(Pairs))    --> json_object(Pairs).
+json_value(list(List))      --> json_array(List).
 json_value(string(Chars))   --> json_string(Chars).
 json_value(number(Number))  --> json_number(Number).
 json_value(boolean(Bool))   --> json_boolean(Bool).
@@ -83,7 +83,7 @@ json_members([NextPair|Pairs], Key-Value) -->
         ",",
         json_members(Pairs, NextPair).
 
-json_member(Key, Value) --> json_ws, json_string(Key), json_ws, ":", json_element(Value).
+json_member(string(Key), Value) --> json_ws, json_string(Key), json_ws, ":", json_element(Value).
 
 json_array([])             --> "[", json_ws, "]".
 json_array([Value|Values]) --> "[", json_elements(Values, Value), "]".
