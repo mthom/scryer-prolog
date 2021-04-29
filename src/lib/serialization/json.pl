@@ -1,6 +1,9 @@
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    Written Apr 2021 by Aram Panasenco (panasenco@ucla.edu)
    Part of Scryer Prolog.
+
+   `json_chars//1` can be used with [`phrase_from_file/2`](src/lib/pio.pl)
+   or [`phrase/2`](src/lib/dcgs.pl) to parse and generate [JSON](https://www.json.org/json-en.html).
    
    BSD 3-Clause License
    
@@ -37,10 +40,10 @@
                  json_chars//1
                 ]).
 
-:- use_module(library(charsio)).
 :- use_module(library(dcgs)).
 :- use_module(library(dif)).
 :- use_module(library(lists)).
+:- use_module(library(serialization/abnf)).
 
 /*  The DCGs are written to match the McKeeman form presented on the right side of https://www.json.org/json-en.html 
     as closely as possible. Note that the names in the McKeeman form conflict with the pictures on the site. */

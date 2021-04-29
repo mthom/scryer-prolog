@@ -3,11 +3,11 @@
 :- use_module(library(charsio)).
 :- use_module(library(dcgs)).
 :- use_module(library(format)).
-:- use_module(library(json)).
+:- use_module(library(iso_ext)).
 :- use_module(library(lists)).
 :- use_module(library(os)).
 :- use_module(library(pio)).
-:- use_module(library(iso_ext)).
+:- use_module(library(serialization/json)).
 :- use_module(library(time)).
 
 test_path(TestName, TestPath) :-
