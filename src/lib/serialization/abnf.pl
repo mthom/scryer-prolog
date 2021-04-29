@@ -116,37 +116,37 @@ abnf_alpha('X') --> "X".
 abnf_alpha('Y') --> "Y".
 abnf_alpha('Z') --> "Z".
 
-abnf_bit(0) --> "0".
-abnf_bit(1) --> "1".
+abnf_bit('0') --> "0".
+abnf_bit('1') --> "1".
 
-abnf_char(C) --> [C], { dif(C, '\x0000\'), char_type(C, ascii) }. %'
+abnf_char(Char) --> [Char], { dif(Char, '\x0000\'), char_type(Char, ascii) }. %'
 
 abnf_cr --> "\r".
 
 abnf_crlf --> "\r\n".
 
-abnf_ctl(C) --> [C], { char_type(C, ascii), char_type(C, control) }.
+abnf_ctl(Char) --> [Char], { char_type(Char, ascii), char_type(Char, control) }.
 
-abnf_digit(0) --> "0".
-abnf_digit(1) --> "1".
-abnf_digit(2) --> "2".
-abnf_digit(3) --> "3".
-abnf_digit(4) --> "4".
-abnf_digit(5) --> "5".
-abnf_digit(6) --> "6".
-abnf_digit(7) --> "7".
-abnf_digit(8) --> "8".
-abnf_digit(9) --> "9".
+abnf_digit('0') --> "0".
+abnf_digit('1') --> "1".
+abnf_digit('2') --> "2".
+abnf_digit('3') --> "3".
+abnf_digit('4') --> "4".
+abnf_digit('5') --> "5".
+abnf_digit('6') --> "6".
+abnf_digit('7') --> "7".
+abnf_digit('8') --> "8".
+abnf_digit('9') --> "9".
 
 abnf_dquote --> "\"".
 
-abnf_hexdig(Digit) --> abnf_digit(Digit).
-abnf_hexdig(10) --> "A".
-abnf_hexdig(11) --> "B".
-abnf_hexdig(12) --> "C".
-abnf_hexdig(13) --> "D".
-abnf_hexdig(14) --> "E".
-abnf_hexdig(15) --> "F".
+abnf_hexdig(Char) --> abnf_digit(Char).
+abnf_hexdig('A') --> "A".
+abnf_hexdig('B') --> "B".
+abnf_hexdig('C') --> "C".
+abnf_hexdig('D') --> "D".
+abnf_hexdig('E') --> "E".
+abnf_hexdig('F') --> "F".
 
 abnf_htab --> "\t".
 
@@ -156,11 +156,11 @@ abnf_lwsp --> "".
 abnf_lwsp --> abnf_wsp, abnf_lwsp.
 abnf_lwsp --> abnf_clrf, abnf_wsp, abnf_lwsp.
 
-abnf_octet(C) --> [C], char_type(C, octet).
+abnf_octet(Char) --> [Char], char_type(Char, octet).
 
 abnf_sp --> " ".
 
-abnf_vchar(C) --> [C], char_type(C, ascii_graphic).
+abnf_vchar(Char) --> [Char], char_type(Char, ascii_graphic).
 
 abnf_wsp --> abnf_sp.
 abnf_wsp --> abnf_htab.
