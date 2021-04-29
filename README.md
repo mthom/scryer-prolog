@@ -518,6 +518,17 @@ The modules that ship with Scryer&nbsp;Prolog are also called
 * [`csv`](src/lib/csv.pl)
   `parse_csv//1` and `parse_csv//2` can be used with [`phrase_from_file/2`](src/lib/pio.pl)
   or [`phrase/2`](src/lib/dcgs.pl) to parse csv
+* [`serialization/abnf`](src/lib/serialization/abnf.pl)
+  DCGs describing the
+  [ABNF grammar core (RFC 5234)](https://tools.ietf.org/html/rfc5234#appendix-B.1),
+  which is used to describe many [IETF](https://www.ietf.org/standards/rfcs/)
+  syntaxes, such as [HTTP v1.1](https://www.rfc-editor.org/rfc/rfc7230.html#page-82),
+  [SMTP](https://www.rfc-editor.org/rfc/rfc5321.html),
+  [iCalendar](https://www.rfc-editor.org/rfc/rfc5545.html), and more.
+* [`serialization/json`](src/lib/serialization/json.pl)
+  `json_chars//1` can be used with [`phrase_from_file/2`](src/lib/pio.pl)
+  or [`phrase/2`](src/lib/dcgs.pl) to parse and generate
+  [JSON](https://www.json.org/json-en.html).
 * [`xpath`](src/lib/xpath.pl)
   The predicate `xpath/3` is used for convenient reasoning about HTML
   and XML&nbsp;documents, inspired by the XPath language. This library
@@ -539,8 +550,6 @@ The modules that ship with Scryer&nbsp;Prolog are also called
   ECDH key&nbsp;exchange over Curve25519 (X25519), authenticated symmetric
   encryption with ChaCha20-Poly1305, and reasoning about elliptic curves.
 * [`uuid`](src/lib/uuid.pl) UUIDv4 generation and hex representation
-* [`json`](src/lib/json.pl) [JSON](https://www.json.org/json-en.html)
-  parsing and generation (beta version, subject to interface changes).
 
 To use predicates provided by the `lists` library, write:
 

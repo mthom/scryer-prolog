@@ -3,7 +3,7 @@ use prolog_parser::parser::*;
 use prolog_parser::{
     alpha_char, alpha_numeric_char, binary_digit_char, clause_name, decimal_digit_char,
     exponent_char, graphic_char, graphic_token_char, hexadecimal_digit_char, layout_char,
-    meta_char, new_line_char, octal_digit_char, prolog_char, sign_char, solo_char,
+    meta_char, new_line_char, octal_digit_char, octet_char, prolog_char, sign_char, solo_char,
     symbolic_control_char, symbolic_hexadecimal_char, temp_v,
 };
 
@@ -1775,46 +1775,47 @@ impl MachineState {
                         }
                     };
                 }
-                macro_check!(symbolic_control_char, "symbolic_control");
-                // macro_check!(space_char, "space");
-                macro_check!(layout_char, "layout");
-                macro_check!(symbolic_hexadecimal_char, "symbolic_hexadecimal");
-                macro_check!(octal_digit_char, "octal_digit");
-                macro_check!(binary_digit_char, "binary_digit");
-                macro_check!(hexadecimal_digit_char, "hexadecimal_digit");
-                macro_check!(exponent_char, "exponent");
-                macro_check!(sign_char, "sign");
-                // macro_check!(new_line_char, "new_line");
-                // macro_check!(comment_1_char, "comment_1");
-                // macro_check!(comment_2_char, "comment_2");
-                // macro_check!(capital_letter_char, "upper");
-                // macro_check!(small_letter_char, "lower");
-                // macro_check!(variable_indicator_char, "variable_indicator");
-                macro_check!(graphic_char, "graphic");
-                macro_check!(graphic_token_char, "graphic_token");
                 macro_check!(alpha_char, "alpha");
-                macro_check!(decimal_digit_char, "decimal_digit");
-                // macro_check!(decimal_point_char, "decimal_point");
-                macro_check!(alpha_numeric_char, "alnum");
-                // macro_check!(cut_char, "cut");
-                // macro_check!(semicolon_char, "semicolon");
-                // macro_check!(backslash_char, "backslash");
-                // macro_check!(single_quote_char, "single_quote");
-                // macro_check!(double_quote_char, "double_quote");
-                // macro_check!(back_quote_char, "back_quote");
-                macro_check!(meta_char, "meta");
-                macro_check!(solo_char, "solo");
-                macro_check!(prolog_char, "prolog");
                 method_check!(is_alphabetic, "alphabetic");
-                method_check!(is_lowercase, "lower");
-                method_check!(is_uppercase, "upper");
-                method_check!(is_whitespace, "whitespace");
                 method_check!(is_alphanumeric, "alphanumeric");
-                method_check!(is_control, "control");
-                method_check!(is_numeric, "numeric");
+                macro_check!(alpha_numeric_char, "alnum");
                 method_check!(is_ascii, "ascii");
                 method_check!(is_ascii_punctuation, "ascii_ponctuaction");
                 method_check!(is_ascii_graphic, "ascii_graphic");
+                // macro_check!(backslash_char, "backslash");
+                // macro_check!(back_quote_char, "back_quote");
+                macro_check!(binary_digit_char, "binary_digit");
+                // macro_check!(capital_letter_char, "upper");
+                // macro_check!(comment_1_char, "comment_1");
+                // macro_check!(comment_2_char, "comment_2");
+                method_check!(is_control, "control");
+                // macro_check!(cut_char, "cut");
+                macro_check!(decimal_digit_char, "decimal_digit");
+                // macro_check!(decimal_point_char, "decimal_point");
+                // macro_check!(double_quote_char, "double_quote");
+                macro_check!(exponent_char, "exponent");
+                macro_check!(graphic_char, "graphic");
+                macro_check!(graphic_token_char, "graphic_token");
+                macro_check!(hexadecimal_digit_char, "hexadecimal_digit");
+                macro_check!(layout_char, "layout");
+                method_check!(is_lowercase, "lower");
+                macro_check!(meta_char, "meta");
+                // macro_check!(new_line_char, "new_line");
+                method_check!(is_numeric, "numeric");
+                macro_check!(octal_digit_char, "octal_digit");
+                macro_check!(octet_char, "octet");
+                macro_check!(prolog_char, "prolog");
+                // macro_check!(semicolon_char, "semicolon");
+                macro_check!(sign_char, "sign");
+                // macro_check!(single_quote_char, "single_quote");
+                // macro_check!(small_letter_char, "lower");
+                macro_check!(solo_char, "solo");
+                // macro_check!(space_char, "space");
+                macro_check!(symbolic_hexadecimal_char, "symbolic_hexadecimal");
+                macro_check!(symbolic_control_char, "symbolic_control");
+                method_check!(is_uppercase, "upper");
+                // macro_check!(variable_indicator_char, "variable_indicator");
+                method_check!(is_whitespace, "whitespace");
             }
             &SystemClauseType::CheckCutPoint => {
                 let addr = self.store(self.deref(self[temp_v!(1)]));

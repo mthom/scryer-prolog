@@ -97,6 +97,7 @@ ctype(lower).
 ctype(meta).
 ctype(numeric).
 ctype(octal_digit).
+ctype(octet).
 ctype(prolog).
 ctype(sign).
 ctype(solo).
