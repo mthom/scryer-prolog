@@ -14,13 +14,15 @@ fn capture_offset(line: &Line, index: usize, stack: &mut Vec<usize>) -> bool {
             stack.push(index + offset);
         }
         &Line::Choice(ChoiceInstruction::DynamicElse(_, _, NextOrFail::Next(offset)))
-            if offset > 0 => {
-                stack.push(index + offset);
-            }
+            if offset > 0 =>
+        {
+            stack.push(index + offset);
+        }
         &Line::Choice(ChoiceInstruction::DynamicInternalElse(_, _, NextOrFail::Next(offset)))
-            if offset > 0 => {
-                stack.push(index + offset);
-            }
+            if offset > 0 =>
+        {
+            stack.push(index + offset);
+        }
         &Line::Control(ControlInstruction::JmpBy(_, offset, _, false)) => {
             stack.push(index + offset);
         }

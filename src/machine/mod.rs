@@ -115,6 +115,7 @@ pub struct Machine {
     pub(super) code_repo: CodeRepo,
     pub(super) user_input: Stream,
     pub(super) user_output: Stream,
+    pub(super) user_error: Stream,
     pub(super) load_contexts: Vec<LoadContext>,
 }
 
@@ -274,7 +275,7 @@ impl Machine {
         }
     }
 
-    pub fn new(user_input: Stream, user_output: Stream) -> Self {
+    pub fn new(user_input: Stream, user_output: Stream, user_error: Stream) -> Self {
         use ref_thread_local::RefThreadLocal;
 
         let mut wam = Machine {
@@ -285,6 +286,7 @@ impl Machine {
             code_repo: CodeRepo::new(),
             user_input,
             user_output,
+            user_error,
             load_contexts: vec![],
         };
 
@@ -366,6 +368,12 @@ impl Machine {
         self.indices
             .stream_aliases
             .insert(clause_name!("user_output"), self.user_output.clone());
+
+        self.user_error.options_mut().alias = Some(clause_name!("user_error"));
+
+        self.indices
+            .stream_aliases
+            .insert(clause_name!("user_error"), self.user_error.clone());
 
         self.indices.streams.insert(self.user_output.clone());
     }
@@ -528,14 +536,12 @@ impl MachineState {
     ) {
         match instr {
             &Line::Arithmetic(ref arith_instr) => self.execute_arith_instr(arith_instr),
-            &Line::Choice(ref choice_instr) => {
-                self.execute_choice_instr(
-                    choice_instr,
-                    code_repo,
-                    &mut policies.call_policy,
-                    &mut indices.global_variables,
-                )
-            }
+            &Line::Choice(ref choice_instr) => self.execute_choice_instr(
+                choice_instr,
+                code_repo,
+                &mut policies.call_policy,
+                &mut indices.global_variables,
+            ),
             &Line::Cut(ref cut_instr) => {
                 self.execute_cut_instr(cut_instr, &mut policies.cut_policy)
             }
@@ -553,25 +559,18 @@ impl MachineState {
                 self.p += 1;
             }
             &Line::IndexingCode(ref indexing_lines) => {
-                self.execute_indexing_instr(
-                    indexing_lines,
-                    code_repo,
-                )
+                self.execute_indexing_instr(indexing_lines, code_repo)
             }
-            &Line::IndexedChoice(ref choice_instr) => {
-                self.execute_indexed_choice_instr(
-                    choice_instr,
-                    &mut policies.call_policy,
-                    &mut indices.global_variables,
-                )
-            }
-            &Line::DynamicIndexedChoice(_) => {
-                self.execute_dynamic_indexed_choice_instr(
-                    code_repo,
-                    &mut policies.call_policy,
-                    &mut indices.global_variables,
-                )
-            }
+            &Line::IndexedChoice(ref choice_instr) => self.execute_indexed_choice_instr(
+                choice_instr,
+                &mut policies.call_policy,
+                &mut indices.global_variables,
+            ),
+            &Line::DynamicIndexedChoice(_) => self.execute_dynamic_indexed_choice_instr(
+                code_repo,
+                &mut policies.call_policy,
+                &mut indices.global_variables,
+            ),
             &Line::Query(ref query_instr) => {
                 self.execute_query_instr(&query_instr);
                 self.p += 1;

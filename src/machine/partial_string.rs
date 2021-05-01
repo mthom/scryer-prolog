@@ -409,13 +409,11 @@ pub(super) fn compare_pstr_prefixes<'a>(
 
         let machine_st = i1.machine_st;
 
-        let check_focuses = || {
-            match (i1.focus(), i2.focus()) {
-                (Addr::EmptyList, Addr::EmptyList) => Some(Ordering::Equal),
-                (Addr::EmptyList, _) => Some(Ordering::Less),
-                (_, Addr::EmptyList) => Some(Ordering::Greater),
-                _ => None,
-            }
+        let check_focuses = || match (i1.focus(), i2.focus()) {
+            (Addr::EmptyList, Addr::EmptyList) => Some(Ordering::Equal),
+            (Addr::EmptyList, _) => Some(Ordering::Less),
+            (_, Addr::EmptyList) => Some(Ordering::Greater),
+            _ => None,
         };
 
         return match r1 {
@@ -430,12 +428,8 @@ pub(super) fn compare_pstr_prefixes<'a>(
                     unreachable!()
                 }
             }
-            Some(PStrIteratee::Char(_)) => {
-                Some(ordering)
-            }
-            None => {
-                check_focuses()
-            }
+            Some(PStrIteratee::Char(_)) => Some(ordering),
+            None => check_focuses(),
         };
     }
 }

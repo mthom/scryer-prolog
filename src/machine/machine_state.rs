@@ -310,49 +310,55 @@ pub(crate) struct MachineState {
 impl fmt::Debug for MachineState {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         f.debug_struct("MachineState")
-         .field("atom_tbl", &self.atom_tbl)
-         .field("s", &self.s)
-         .field("p", &self.p)
-         .field("b", &self.b)
-         .field("b0", &self.b0)
-         .field("e", &self.e)
-         .field("num_of_args", &self.num_of_args)
-         .field("cp", &self.cp)
-         .field("attr_var_init", &self.attr_var_init)
-         .field("fail", &self.fail)
-         .field("heap", &self.heap)
-         .field("mode", &self.mode)
-         .field("stack", &self.stack)
-         .field("registers", &self.registers)
-         .field("trail", &self.trail)
-         .field("tr", &self.tr)
-         .field("hb", &self.hb)
-         .field("block", &self.block)
-         .field("ball", &self.ball)
-         .field("lifted_heap", &self.lifted_heap)
-         .field("interms", &self.interms)
-         .field("last_call", &self.last_call)
-         .field("flags", &self.flags)
-         .field("cc", &self.cc)
-         .field("global_clock", &self.global_clock)
-         .field("dynamic_mode", &self.dynamic_mode)
-         .field("unify_fn",
+            .field("atom_tbl", &self.atom_tbl)
+            .field("s", &self.s)
+            .field("p", &self.p)
+            .field("b", &self.b)
+            .field("b0", &self.b0)
+            .field("e", &self.e)
+            .field("num_of_args", &self.num_of_args)
+            .field("cp", &self.cp)
+            .field("attr_var_init", &self.attr_var_init)
+            .field("fail", &self.fail)
+            .field("heap", &self.heap)
+            .field("mode", &self.mode)
+            .field("stack", &self.stack)
+            .field("registers", &self.registers)
+            .field("trail", &self.trail)
+            .field("tr", &self.tr)
+            .field("hb", &self.hb)
+            .field("block", &self.block)
+            .field("ball", &self.ball)
+            .field("lifted_heap", &self.lifted_heap)
+            .field("interms", &self.interms)
+            .field("last_call", &self.last_call)
+            .field("flags", &self.flags)
+            .field("cc", &self.cc)
+            .field("global_clock", &self.global_clock)
+            .field("dynamic_mode", &self.dynamic_mode)
+            .field(
+                "unify_fn",
                 if self.unify_fn as usize == MachineState::unify as usize {
                     &"MachineState::unify"
                 } else if self.unify_fn as usize == MachineState::unify_with_occurs_check as usize {
                     &"MachineState::unify_with_occurs_check"
                 } else {
                     &"MachineState::unify_with_occurs_check_with_error"
-                })
-         .field("bind_fn",
+                },
+            )
+            .field(
+                "bind_fn",
                 if self.bind_fn as usize == MachineState::bind as usize {
                     &"MachineState::bind"
-                } else if self.bind_fn as usize == MachineState::bind_with_occurs_check_wrapper as usize {
+                } else if self.bind_fn as usize
+                    == MachineState::bind_with_occurs_check_wrapper as usize
+                {
                     &"MachineState::bind_with_occurs_check"
                 } else {
                     &"MachineState::bind_with_occurs_check_with_error_wrapper"
-                })
-         .finish()
+                },
+            )
+            .finish()
     }
 }
 

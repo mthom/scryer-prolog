@@ -1852,26 +1852,24 @@ impl MachineState {
                 let addr = self[temp_v!(2)];
 
                 match indices.global_variables.get_mut(&key) {
-                    Some((ref ball, ref mut loc)) => {
-                        match loc {
-                            Some(ref value_addr) => {
-                                (self.unify_fn)(self, addr, *value_addr);
-                            }
-                            loc @ None if !ball.stub.is_empty() => {
-                                let h = self.heap.h();
-                                let stub = ball.copy_and_align(h);
-
-                                self.heap.extend(stub.into_iter());
-                                (self.unify_fn)(self, addr, Addr::HeapCell(h));
-
-                                if !self.fail {
-                                    *loc = Some(Addr::HeapCell(h));
-                                    self.trail(TrailRef::BlackboardEntry(key_h));
-                                }
-                            }
-                            _ => self.fail = true,
+                    Some((ref ball, ref mut loc)) => match loc {
+                        Some(ref value_addr) => {
+                            (self.unify_fn)(self, addr, *value_addr);
                         }
-                    }
+                        loc @ None if !ball.stub.is_empty() => {
+                            let h = self.heap.h();
+                            let stub = ball.copy_and_align(h);
+
+                            self.heap.extend(stub.into_iter());
+                            (self.unify_fn)(self, addr, Addr::HeapCell(h));
+
+                            if !self.fail {
+                                *loc = Some(Addr::HeapCell(h));
+                                self.trail(TrailRef::BlackboardEntry(key_h));
+                            }
+                        }
+                        _ => self.fail = true,
+                    },
                     None => self.fail = true,
                 };
             }
@@ -2617,7 +2615,7 @@ impl MachineState {
                     indices.streams.insert(current_output_stream.clone());
                 }
 
-                if !stream.is_stdin() && !stream.is_stdout() {
+                if !stream.is_stdin() && !stream.is_stdout() && !stream.is_stderr() {
                     stream.close();
 
                     if let Some(ref alias) = stream.options().alias {
@@ -3472,17 +3470,22 @@ impl MachineState {
                 self.fail = match self.store(self.deref(self[temp_v!(2)])) {
                     Addr::Str(s) => match &self.heap[s] {
                         &HeapCellValue::NamedStr(arity, ref name, ref spec) => {
-                            if CLAUSE_TYPE_FORMS.borrow().get(&(name.as_str(), arity)).is_some() {
+                            if CLAUSE_TYPE_FORMS
+                                .borrow()
+                                .get(&(name.as_str(), arity))
+                                .is_some()
+                            {
                                 true
                             } else {
-                                let index = indices.get_predicate_code_index(
-                                    name.clone(),
-                                    arity,
-                                    module_name,
-                                    spec.clone(),
-                                )
-                                .map(|index| index.get())
-                                .unwrap_or(IndexPtr::DynamicUndefined);
+                                let index = indices
+                                    .get_predicate_code_index(
+                                        name.clone(),
+                                        arity,
+                                        module_name,
+                                        spec.clone(),
+                                    )
+                                    .map(|index| index.get())
+                                    .unwrap_or(IndexPtr::DynamicUndefined);
 
                                 match index {
                                     IndexPtr::DynamicUndefined => false,
@@ -3499,17 +3502,22 @@ impl MachineState {
                             let spec =
                                 fetch_atom_op_spec(name.clone(), spec.clone(), &indices.op_dir);
 
-                            if CLAUSE_TYPE_FORMS.borrow().get(&(name.as_str(), 0)).is_some() {
+                            if CLAUSE_TYPE_FORMS
+                                .borrow()
+                                .get(&(name.as_str(), 0))
+                                .is_some()
+                            {
                                 true
                             } else {
-                                let index = indices.get_predicate_code_index(
-                                    name.clone(),
-                                    0,
-                                    module_name,
-                                    spec.clone(),
-                                )
-                                .map(|index| index.get())
-                                .unwrap_or(IndexPtr::DynamicUndefined);
+                                let index = indices
+                                    .get_predicate_code_index(
+                                        name.clone(),
+                                        0,
+                                        module_name,
+                                        spec.clone(),
+                                    )
+                                    .map(|index| index.get())
+                                    .unwrap_or(IndexPtr::DynamicUndefined);
 
                                 match index {
                                     IndexPtr::DynamicUndefined => false,
@@ -4482,22 +4490,22 @@ impl MachineState {
                 let new_value = self.store(self.deref(self[temp_v!(2)]));
 
                 match indices.global_variables.get_mut(&key) {
-                    Some((_, ref mut loc)) => {
-                        match loc {
-                            Some(ref mut value) => {
-                                let old_value_loc = self.heap.push(HeapCellValue::Addr(*value));
-                                self.trail(TrailRef::BlackboardOffset(key_h, old_value_loc));
-                                *value = new_value;
-                            }
-                            loc @ None => {
-                                self.trail(TrailRef::BlackboardEntry(key_h));
-                                *loc = Some(new_value);
-                            }
+                    Some((_, ref mut loc)) => match loc {
+                        Some(ref mut value) => {
+                            let old_value_loc = self.heap.push(HeapCellValue::Addr(*value));
+                            self.trail(TrailRef::BlackboardOffset(key_h, old_value_loc));
+                            *value = new_value;
                         }
-                    }
+                        loc @ None => {
+                            self.trail(TrailRef::BlackboardEntry(key_h));
+                            *loc = Some(new_value);
+                        }
+                    },
                     None => {
                         self.trail(TrailRef::BlackboardEntry(key_h));
-                        indices.global_variables.insert(key, (Ball::new(), Some(new_value)));
+                        indices
+                            .global_variables
+                            .insert(key, (Ball::new(), Some(new_value)));
                     }
                 }
             }
@@ -5361,21 +5369,23 @@ impl MachineState {
             }
             &SystemClauseType::IsSTOEnabled => {
                 if self.unify_fn as usize == MachineState::unify_with_occurs_check as usize {
-                    let value = self.heap.to_unifiable(
-                        HeapCellValue::Atom(clause_name!("true"), None),
-                    );
+                    let value = self
+                        .heap
+                        .to_unifiable(HeapCellValue::Atom(clause_name!("true"), None));
 
                     (self.unify_fn)(self, self[temp_v!(1)], value);
-                } else if self.unify_fn as usize == MachineState::unify_with_occurs_check_with_error as usize {
-                    let value = self.heap.to_unifiable(
-                        HeapCellValue::Atom(clause_name!("error"), None),
-                    );
+                } else if self.unify_fn as usize
+                    == MachineState::unify_with_occurs_check_with_error as usize
+                {
+                    let value = self
+                        .heap
+                        .to_unifiable(HeapCellValue::Atom(clause_name!("error"), None));
 
                     (self.unify_fn)(self, self[temp_v!(1)], value);
                 } else {
-                    let value = self.heap.to_unifiable(
-                        HeapCellValue::Atom(clause_name!("false"), None),
-                    );
+                    let value = self
+                        .heap
+                        .to_unifiable(HeapCellValue::Atom(clause_name!("false"), None));
 
                     (self.unify_fn)(self, self[temp_v!(1)], value);
                 }

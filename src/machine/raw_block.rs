@@ -23,12 +23,13 @@ pub(crate) struct RawBlock<T: RawBlockTraits> {
 }
 
 impl<T: RawBlockTraits> RawBlock<T> {
-    pub(crate)
-    fn new() -> Self {
-        let mut block = RawBlock { size: 0,
-                                   base: ptr::null(),
-                                   top: ptr::null(),
-                                   _marker: PhantomData };
+    pub(crate) fn new() -> Self {
+        let mut block = RawBlock {
+            size: 0,
+            base: ptr::null(),
+            top: ptr::null(),
+            _marker: PhantomData,
+        };
 
         unsafe {
             block.grow();
@@ -46,45 +47,47 @@ impl<T: RawBlockTraits> RawBlock<T> {
         self.top = T::base_offset(self.base);
     }
 
-    pub(super)
-    unsafe fn grow(&mut self) {
+    pub(super) unsafe fn grow(&mut self) {
         if self.size == 0 {
             self.init_at_size(T::init_size());
         } else {
             let layout = alloc::Layout::from_size_align_unchecked(T::init_size(), T::align());
             let top_dist = self.top as usize - self.base as usize;
 
-            self.base = alloc::realloc(self.base as *mut _, layout, self.size*2) as *const _;
+            self.base = alloc::realloc(self.base as *mut _, layout, self.size * 2) as *const _;
             self.top = (self.base as usize + top_dist) as *const _;
             self.size *= 2;
         }
     }
 
     fn empty_block() -> Self {
-        RawBlock { size: 0,
-                 base: ptr::null(),
-                 top: ptr::null(),
-                 _marker: PhantomData }
+        RawBlock {
+            size: 0,
+            base: ptr::null(),
+            top: ptr::null(),
+            _marker: PhantomData,
+        }
     }
 
     #[inline]
-    pub(crate)
-    fn take(&mut self) -> Self {
+    pub(crate) fn take(&mut self) -> Self {
         mem::replace(self, Self::empty_block())
     }
 
     #[inline]
     fn free_space(&self) -> usize {
-        debug_assert!(self.top >= self.base,
-                      "self.top = {:?} < {:?} = self.base",
-                      self.top, self.base);
+        debug_assert!(
+            self.top >= self.base,
+            "self.top = {:?} < {:?} = self.base",
+            self.top,
+            self.base
+        );
 
         self.size - (self.top as usize - self.base as usize)
     }
 
     #[inline]
-    pub(crate)
-    unsafe fn new_block(&mut self, size: usize) -> *const u8 {
+    pub(crate) unsafe fn new_block(&mut self, size: usize) -> *const u8 {
         loop {
             if self.free_space() >= size {
                 return (self.top as usize + size) as *const _;
@@ -94,14 +97,13 @@ impl<T: RawBlockTraits> RawBlock<T> {
         }
     }
 
-    pub(crate)
-    fn deallocate(&mut self) {
+    pub(crate) fn deallocate(&mut self) {
         unsafe {
             let layout = alloc::Layout::from_size_align_unchecked(self.size, T::align());
 
             alloc::dealloc(self.base as *mut u8, layout);
 
-            self.top  = ptr::null();
+            self.top = ptr::null();
             self.base = ptr::null();
             self.size = 0;
         }

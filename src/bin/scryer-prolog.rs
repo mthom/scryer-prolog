@@ -6,7 +6,11 @@ fn main() {
     let handler = signal::SigHandler::Handler(handle_sigint);
     unsafe { signal::signal(signal::Signal::SIGINT, handler) }.unwrap();
 
-    let mut wam = machine::Machine::new(readline::input_stream(), machine::Stream::stdout());
+    let mut wam = machine::Machine::new(
+        readline::input_stream(),
+        machine::Stream::stdout(),
+        machine::Stream::stderr(),
+    );
     wam.run_top_level();
 }
 
