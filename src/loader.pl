@@ -463,7 +463,9 @@ use_module(Module, Exports) :-
 %% directory. Otherwise, use the relative path of Path.
 
 load_context_path(Module, Path) :-
-    (  prolog_load_context(directory, CurrentDir) ->
+    (  sub_atom(Module, 0, 1, _, '/') ->
+       Path = Module
+    ;  prolog_load_context(directory, CurrentDir) ->
        % Rust's Path module never ends a directory path with '/', so
        % add one here.
        atom_concat(CurrentDir, '/', CurrentDirSlashed),
