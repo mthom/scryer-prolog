@@ -847,7 +847,7 @@ asserta_clause(Head, Body) :-
 asserta(Clause) :-
     (  Clause \= (_ :- _) ->
        Head = Clause,
-       Body = user:true,
+       Body = true,
        asserta_clause(Head, Body)
     ;  Clause = (Head :- Body) ->
        asserta_clause(Head, Body)
@@ -897,7 +897,7 @@ assertz_clause(Head, Body) :-
 assertz(Clause) :-
     (  Clause \= (_ :- _) ->
        Head = Clause,
-       Body = user:true,
+       Body = true,
        assertz_clause(Head, Body)
     ;  Clause = (Head :- Body) ->
        assertz_clause(Head, Body)
@@ -926,7 +926,9 @@ retract_module_clause(Head, Body, Module) :-
     (  var(Head) ->
        throw(error(instantiation_error, retract/1))
     ;  callable(Head), functor(Head, Name, Arity) ->
-       (  '$head_is_dynamic'(Module, Head) ->
+       (  '$no_such_predicate'(Module, Head) ->
+          '$fail'
+       ;  '$head_is_dynamic'(Module, Head) ->
           (  Module == user ->
              call_retract(Head, Body, Name, Arity)
           ;  call_module_retract(Head, Body, Name, Arity, Module)
@@ -970,10 +972,10 @@ retract_clause(Head, Body) :-
 	      arg(1, Head, Module),
 	      arg(2, Head, F),
 	      retract_module_clause(F, Body, Module)
-       ;  '$head_is_dynamic'(user, Head) ->
-          call_retract(Head, Body, Name, Arity)
        ;  '$no_such_predicate'(user, Head) ->
           '$fail'
+       ;  '$head_is_dynamic'(user, Head) ->
+          call_retract(Head, Body, Name, Arity)
        ;  throw(error(permission_error(modify, static_procedure, Name/Arity), retract/1))
        )
     ;  throw(error(type_error(callable, Head), retract/1))
