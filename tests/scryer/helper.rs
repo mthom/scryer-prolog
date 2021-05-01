@@ -33,8 +33,9 @@ pub(crate) fn load_module_test<T: Expectable>(file: &str, expected: T) {
 
     let input = machine::Stream::from("");
     let output = machine::Stream::from(String::new());
+    let error = machine::Stream::from(String::new());
 
-    let mut wam = machine::Machine::new(input, output.clone());
+    let mut wam = machine::Machine::new(input, output.clone(), error);
 
     wam.load_file(
         file.into(),

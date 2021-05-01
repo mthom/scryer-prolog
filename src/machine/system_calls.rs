@@ -1292,8 +1292,12 @@ impl MachineState {
                 }
             }
             &SystemClauseType::PeekByte => {
-                let mut stream =
-                    self.get_stream_or_alias(self[temp_v!(1)], indices, "peek_byte", 2)?;
+                let mut stream = self.get_stream_or_alias(
+                    self[temp_v!(1)],
+                    &indices.stream_aliases,
+                    "peek_byte",
+                    2,
+                )?;
 
                 self.check_stream_properties(
                     &mut stream,
@@ -1390,8 +1394,12 @@ impl MachineState {
                 }
             }
             &SystemClauseType::PeekChar => {
-                let mut stream =
-                    self.get_stream_or_alias(self[temp_v!(1)], indices, "peek_char", 2)?;
+                let mut stream = self.get_stream_or_alias(
+                    self[temp_v!(1)],
+                    &indices.stream_aliases,
+                    "peek_char",
+                    2,
+                )?;
 
                 self.check_stream_properties(
                     &mut stream,
@@ -1493,8 +1501,12 @@ impl MachineState {
                 }
             }
             &SystemClauseType::PeekCode => {
-                let mut stream =
-                    self.get_stream_or_alias(self[temp_v!(1)], indices, "peek_code", 2)?;
+                let mut stream = self.get_stream_or_alias(
+                    self[temp_v!(1)],
+                    &indices.stream_aliases,
+                    "peek_code",
+                    2,
+                )?;
 
                 self.check_stream_properties(
                     &mut stream,
@@ -1874,8 +1886,12 @@ impl MachineState {
                 };
             }
             &SystemClauseType::PutCode => {
-                let mut stream =
-                    self.get_stream_or_alias(self[temp_v!(1)], indices, "put_code", 2)?;
+                let mut stream = self.get_stream_or_alias(
+                    self[temp_v!(1)],
+                    &indices.stream_aliases,
+                    "put_code",
+                    2,
+                )?;
 
                 self.check_stream_properties(
                     &mut stream,
@@ -1928,8 +1944,12 @@ impl MachineState {
                 }
             }
             &SystemClauseType::PutChar => {
-                let mut stream =
-                    self.get_stream_or_alias(self[temp_v!(1)], indices, "put_char", 2)?;
+                let mut stream = self.get_stream_or_alias(
+                    self[temp_v!(1)],
+                    &indices.stream_aliases,
+                    "put_char",
+                    2,
+                )?;
 
                 self.check_stream_properties(
                     &mut stream,
@@ -1975,8 +1995,12 @@ impl MachineState {
                 }
             }
             &SystemClauseType::PutChars => {
-                let mut stream =
-                    self.get_stream_or_alias(self[temp_v!(1)], indices, "$put_chars", 2)?;
+                let mut stream = self.get_stream_or_alias(
+                    self[temp_v!(1)],
+                    &indices.stream_aliases,
+                    "$put_chars",
+                    2,
+                )?;
 
                 let mut bytes = Vec::new();
                 let string = self.heap_pstr_iter(self[temp_v!(2)]).to_string();
@@ -2023,8 +2047,12 @@ impl MachineState {
                 }
             }
             &SystemClauseType::PutByte => {
-                let mut stream =
-                    self.get_stream_or_alias(self[temp_v!(1)], indices, "put_byte", 2)?;
+                let mut stream = self.get_stream_or_alias(
+                    self[temp_v!(1)],
+                    &indices.stream_aliases,
+                    "put_byte",
+                    2,
+                )?;
 
                 self.check_stream_properties(
                     &mut stream,
@@ -2112,8 +2140,12 @@ impl MachineState {
                 }
             }
             &SystemClauseType::GetByte => {
-                let mut stream =
-                    self.get_stream_or_alias(self[temp_v!(1)], indices, "get_byte", 2)?;
+                let mut stream = self.get_stream_or_alias(
+                    self[temp_v!(1)],
+                    &indices.stream_aliases,
+                    "get_byte",
+                    2,
+                )?;
 
                 self.check_stream_properties(
                     &mut stream,
@@ -2195,8 +2227,12 @@ impl MachineState {
                 }
             }
             &SystemClauseType::GetChar => {
-                let mut stream =
-                    self.get_stream_or_alias(self[temp_v!(1)], indices, "get_char", 2)?;
+                let mut stream = self.get_stream_or_alias(
+                    self[temp_v!(1)],
+                    &indices.stream_aliases,
+                    "get_char",
+                    2,
+                )?;
 
                 self.check_stream_properties(
                     &mut stream,
@@ -2298,8 +2334,12 @@ impl MachineState {
                 }
             }
             &SystemClauseType::GetNChars => {
-                let stream =
-                    self.get_stream_or_alias(self[temp_v!(1)], indices, "get_n_chars", 3)?;
+                let stream = self.get_stream_or_alias(
+                    self[temp_v!(1)],
+                    &indices.stream_aliases,
+                    "get_n_chars",
+                    3,
+                )?;
 
                 let num = match Number::try_from((self[temp_v!(2)], &self.heap)) {
                     Ok(Number::Fixnum(n)) => usize::try_from(n).unwrap(),
@@ -2344,8 +2384,12 @@ impl MachineState {
                 (self.unify_fn)(self, self[temp_v!(3)], string);
             }
             &SystemClauseType::GetCode => {
-                let mut stream =
-                    self.get_stream_or_alias(self[temp_v!(1)], indices, "get_code", 2)?;
+                let mut stream = self.get_stream_or_alias(
+                    self[temp_v!(1)],
+                    &indices.stream_aliases,
+                    "get_code",
+                    2,
+                )?;
 
                 self.check_stream_properties(
                     &mut stream,
@@ -2522,8 +2566,12 @@ impl MachineState {
                 }
             }
             &SystemClauseType::FlushOutput => {
-                let mut stream =
-                    self.get_stream_or_alias(self[temp_v!(1)], indices, "flush_output", 1)?;
+                let mut stream = self.get_stream_or_alias(
+                    self[temp_v!(1)],
+                    &indices.stream_aliases,
+                    "flush_output",
+                    1,
+                )?;
 
                 if !stream.is_output_stream() {
                     let stub = MachineError::functor_stub(clause_name!("flush_output"), 1);
@@ -2589,7 +2637,12 @@ impl MachineState {
                 };
             }
             &SystemClauseType::Close => {
-                let mut stream = self.get_stream_or_alias(self[temp_v!(1)], indices, "close", 2)?;
+                let mut stream = self.get_stream_or_alias(
+                    self[temp_v!(1)],
+                    &indices.stream_aliases,
+                    "close",
+                    2,
+                )?;
 
                 if !stream.is_input_stream() {
                     stream.flush().unwrap(); // 8.11.6.1b)
@@ -2737,8 +2790,7 @@ impl MachineState {
                                 (name, arity + narity),
                                 module_name,
                                 true,
-                                current_input_stream,
-                                current_output_stream,
+                                &indices.stream_aliases,
                             );
                         } else {
                             unreachable!()
@@ -2752,8 +2804,7 @@ impl MachineState {
                                 (name.clone(), narity),
                                 module_name,
                                 true,
-                                current_input_stream,
-                                current_output_stream,
+                                &indices.stream_aliases,
                             );
                         } else {
                             unreachable!()
@@ -2766,8 +2817,7 @@ impl MachineState {
                             (clause_name!(c.to_string(), self.atom_tbl), narity),
                             module_name,
                             true,
-                            current_input_stream,
-                            current_output_stream,
+                            &indices.stream_aliases,
                         );
                     }
                     addr => {
@@ -3652,7 +3702,8 @@ impl MachineState {
             &SystemClauseType::SetCutPointByDefault(r) => deref_cut(self, r),
             &SystemClauseType::SetInput => {
                 let addr = self.store(self.deref(self[temp_v!(1)]));
-                let stream = self.get_stream_or_alias(addr, indices, "set_input", 1)?;
+                let stream =
+                    self.get_stream_or_alias(addr, &indices.stream_aliases, "set_input", 1)?;
 
                 if !stream.is_input_stream() {
                     let stub = MachineError::functor_stub(clause_name!("set_input"), 1);
@@ -3675,7 +3726,8 @@ impl MachineState {
             }
             &SystemClauseType::SetOutput => {
                 let addr = self.store(self.deref(self[temp_v!(1)]));
-                let stream = self.get_stream_or_alias(addr, indices, "set_output", 1)?;
+                let stream =
+                    self.get_stream_or_alias(addr, &indices.stream_aliases, "set_output", 1)?;
 
                 if !stream.is_output_stream() {
                     let stub = MachineError::functor_stub(clause_name!("set_input"), 1);
@@ -3925,7 +3977,12 @@ impl MachineState {
             &SystemClauseType::ReadTerm => {
                 readline::set_prompt(false);
 
-                let stream = self.get_stream_or_alias(self[temp_v!(1)], indices, "read_term", 3)?;
+                let stream = self.get_stream_or_alias(
+                    self[temp_v!(1)],
+                    &indices.stream_aliases,
+                    "read_term",
+                    3,
+                )?;
 
                 self.read_term(stream, indices)?;
             }
@@ -4324,8 +4381,12 @@ impl MachineState {
                 }
             }
             &SystemClauseType::SetStreamPosition => {
-                let mut stream =
-                    self.get_stream_or_alias(self[temp_v!(1)], indices, "set_stream_position", 2)?;
+                let mut stream = self.get_stream_or_alias(
+                    self[temp_v!(1)],
+                    &indices.stream_aliases,
+                    "set_stream_position",
+                    2,
+                )?;
 
                 if !stream.options().reposition {
                     let stub = MachineError::functor_stub(clause_name!("set_stream_position"), 2);
@@ -4360,8 +4421,12 @@ impl MachineState {
                 stream.set_position(position);
             }
             &SystemClauseType::StreamProperty => {
-                let mut stream =
-                    self.get_stream_or_alias(self[temp_v!(1)], indices, "stream_property", 2)?;
+                let mut stream = self.get_stream_or_alias(
+                    self[temp_v!(1)],
+                    &indices.stream_aliases,
+                    "stream_property",
+                    2,
+                )?;
 
                 let property = match self.store(self.deref(self[temp_v!(2)])) {
                     Addr::Con(h) if self.heap.atom_at(h) => match &self.heap[h] {
@@ -4669,8 +4734,12 @@ impl MachineState {
                 (self.unify_fn)(self, listing, listing_var);
             }
             &SystemClauseType::WriteTerm => {
-                let mut stream =
-                    self.get_stream_or_alias(self[temp_v!(1)], indices, "write_term", 3)?;
+                let mut stream = self.get_stream_or_alias(
+                    self[temp_v!(1)],
+                    &indices.stream_aliases,
+                    "write_term",
+                    3,
+                )?;
 
                 self.check_stream_properties(
                     &mut stream,
@@ -5356,8 +5425,12 @@ impl MachineState {
                 }
             }
             &SystemClauseType::DevourWhitespace => {
-                let stream =
-                    self.get_stream_or_alias(self[temp_v!(1)], indices, "$devour_whitespace", 1)?;
+                let stream = self.get_stream_or_alias(
+                    self[temp_v!(1)],
+                    &indices.stream_aliases,
+                    "$devour_whitespace",
+                    1,
+                )?;
 
                 match self.devour_whitespace(stream, self.atom_tbl.clone()) {
                     Ok(false) => {} // not at EOF.

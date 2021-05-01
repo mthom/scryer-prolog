@@ -13,14 +13,14 @@
                      fail/0, false/0, findall/3, findall/4,
                      flush_output/0, flush_output/1, get_byte/1,
                      get_byte/2, get_char/1, get_char/2, get_code/1,
-                     get_code/2, halt/0, halt/1, max_arity/1,
-                     number_chars/2, number_codes/2, once/1, op/3,
-                     open/3, open/4, peek_byte/1, peek_byte/2,
+                     get_code/2, halt/0, halt/1, max_arity/1, nl/0,
+                     nl/1, number_chars/2, number_codes/2, once/1,
+                     op/3, open/3, open/4, peek_byte/1, peek_byte/2,
                      peek_char/1, peek_char/2, peek_code/1,
                      peek_code/2, put_byte/1, put_byte/2, put_code/1,
-                     put_code/2, put_char/1, put_char/2, read_term/2,
-                     read_term/3, repeat/0, retract/1, retractall/1,
-                     set_prolog_flag/2, set_input/1,
+                     put_code/2, put_char/1, put_char/2, read/1,
+                     read_term/2, read_term/3, repeat/0, retract/1,
+                     retractall/1, set_prolog_flag/2, set_input/1,
                      set_stream_position/2, set_output/1, setof/3,
                      stream_property/2, sub_atom/5, subsumes_term/2,
                      term_variables/2, throw/1, true/0,
@@ -556,6 +556,9 @@ read_term(Term, Options) :-
     current_input(Stream),
     read_term(Stream, Term, Options).
 
+read(Term) :-
+    current_input(Stream),
+    read(Stream, Term).
 
 % term_variables.
 
@@ -1606,3 +1609,10 @@ callable(X) :-
        true
     ;  false
     ).
+
+nl :-
+    current_output(Stream),
+    nl(Stream).
+
+nl(Stream) :-
+    put_char(Stream, '\n').

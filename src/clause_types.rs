@@ -123,9 +123,8 @@ ref_thread_local! {
         m.insert(("ground", 1), ClauseType::BuiltIn(BuiltInClauseType::Ground));
         m.insert(("is", 2), ClauseType::BuiltIn(BuiltInClauseType::Is(r1, ar_reg!(r2))));
         m.insert(("keysort", 2), ClauseType::BuiltIn(BuiltInClauseType::KeySort));
-        m.insert(("nl", 0), ClauseType::BuiltIn(BuiltInClauseType::Nl));
         m.insert(("\\==", 2), ClauseType::BuiltIn(BuiltInClauseType::NotEq));
-        m.insert(("read", 1), ClauseType::BuiltIn(BuiltInClauseType::Read));
+        m.insert(("read", 2), ClauseType::BuiltIn(BuiltInClauseType::Read));
         m.insert(("sort", 2), ClauseType::BuiltIn(BuiltInClauseType::Sort));
 
         m
@@ -592,7 +591,9 @@ impl SystemClauseType {
             &SystemClauseType::SetSTOAsUnify => clause_name!("$set_sto_as_unify"),
             &SystemClauseType::SetNSTOAsUnify => clause_name!("$set_nsto_as_unify"),
             &SystemClauseType::HomeDirectory => clause_name!("$home_directory"),
-            &SystemClauseType::SetSTOWithErrorAsUnify => clause_name!("$set_sto_with_error_as_unify"),
+            &SystemClauseType::SetSTOWithErrorAsUnify => {
+                clause_name!("$set_sto_with_error_as_unify")
+            }
             &SystemClauseType::DebugHook => clause_name!("$debug_hook"),
         }
     }
@@ -834,9 +835,7 @@ impl SystemClauseType {
             ("$cpp_discontiguous_property", 3) => {
                 Some(SystemClauseType::REPL(REPLCodePtr::DiscontiguousProperty))
             }
-            ("$devour_whitespace", 1) => {
-                Some(SystemClauseType::DevourWhitespace)
-            }
+            ("$devour_whitespace", 1) => Some(SystemClauseType::DevourWhitespace),
             ("$is_sto_enabled", 1) => Some(SystemClauseType::IsSTOEnabled),
             ("$set_sto_as_unify", 0) => Some(SystemClauseType::SetSTOAsUnify),
             ("$set_nsto_as_unify", 0) => Some(SystemClauseType::SetNSTOAsUnify),
@@ -860,7 +859,6 @@ pub(crate) enum BuiltInClauseType {
     Ground,
     Is(RegType, ArithmeticTerm),
     KeySort,
-    Nl,
     NotEq,
     Read,
     Sort,
@@ -889,7 +887,6 @@ impl BuiltInClauseType {
             &BuiltInClauseType::Ground => clause_name!("ground"),
             &BuiltInClauseType::Is(..) => clause_name!("is"),
             &BuiltInClauseType::KeySort => clause_name!("keysort"),
-            &BuiltInClauseType::Nl => clause_name!("nl"),
             &BuiltInClauseType::NotEq => clause_name!("\\=="),
             &BuiltInClauseType::Read => clause_name!("read"),
             &BuiltInClauseType::Sort => clause_name!("sort"),
@@ -909,8 +906,7 @@ impl BuiltInClauseType {
             &BuiltInClauseType::Is(..) => 2,
             &BuiltInClauseType::KeySort => 2,
             &BuiltInClauseType::NotEq => 2,
-            &BuiltInClauseType::Nl => 0,
-            &BuiltInClauseType::Read => 1,
+            &BuiltInClauseType::Read => 2,
             &BuiltInClauseType::Sort => 2,
         }
     }

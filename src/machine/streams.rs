@@ -916,14 +916,14 @@ impl MachineState {
     pub(crate) fn get_stream_or_alias(
         &mut self,
         addr: Addr,
-        indices: &IndexStore,
+        stream_aliases: &StreamAliasDir,
         caller: &'static str,
         arity: usize,
     ) -> Result<Stream, MachineStub> {
         Ok(match self.store(self.deref(addr)) {
             Addr::Con(h) if self.heap.atom_at(h) => {
                 if let HeapCellValue::Atom(ref atom, ref spec) = self.heap.clone(h) {
-                    match indices.stream_aliases.get(atom) {
+                    match stream_aliases.get(atom) {
                         Some(stream) if !stream.is_null_stream() => stream.clone(),
                         _ => {
                             let stub = MachineError::functor_stub(clause_name!(caller), arity);

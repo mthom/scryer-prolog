@@ -24,7 +24,6 @@ use indexmap::IndexMap;
 use std::cmp::Ordering;
 use std::convert::TryFrom;
 use std::fmt;
-use std::io::Write;
 use std::mem;
 use std::ops::{Index, IndexMut};
 use std::rc::Rc;
@@ -685,8 +684,7 @@ impl MachineState {
         key: PredicateKey,
         module_name: ClauseName,
         _last_call: bool,
-        current_input_stream: &mut Stream,
-        current_output_stream: &mut Stream,
+        stream_aliases: &StreamAliasDir,
     ) -> CallResult {
         if module_name.as_str() == "user" {
             return call_policy.call_clause_type(
@@ -694,8 +692,7 @@ impl MachineState {
                 key,
                 &indices.code_dir,
                 &indices.op_dir,
-                current_input_stream,
-                current_output_stream,
+                stream_aliases,
             );
         } else if let Some(module) = indices.modules.get(&module_name) {
             return call_policy.call_clause_type(
@@ -703,8 +700,7 @@ impl MachineState {
                 key,
                 &module.code_dir,
                 &module.op_dir,
-                current_input_stream,
-                current_output_stream,
+                stream_aliases,
             );
         }
 
@@ -1020,8 +1016,7 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
         ct: &BuiltInClauseType,
         _code_dir: &CodeDir,
         op_dir: &OpDir,
-        current_input_stream: &mut Stream,
-        current_output_stream: &mut Stream,
+        stream_aliases: &StreamAliasDir,
     ) -> CallResult {
         match ct {
             &BuiltInClauseType::AcyclicTerm => {
@@ -1091,24 +1086,21 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
                 machine_st.compare_term(qt);
                 return_from_clause!(machine_st.last_call, machine_st)
             }
-            &BuiltInClauseType::Nl => {
-                write!(current_output_stream, "\n").unwrap();
-                current_output_stream.flush().unwrap();
-
-                return_from_clause!(machine_st.last_call, machine_st)
-            }
             &BuiltInClauseType::Read => {
-                match machine_st.read(
-                    current_input_stream.clone(),
-                    machine_st.atom_tbl.clone(),
-                    op_dir,
-                ) {
+                let stream = machine_st.get_stream_or_alias(
+                    machine_st[temp_v!(1)],
+                    stream_aliases,
+                    "read",
+                    2,
+                )?;
+
+                match machine_st.read(stream, machine_st.atom_tbl.clone(), op_dir) {
                     Ok(offset) => {
-                        let addr = machine_st[temp_v!(1)];
+                        let addr = machine_st[temp_v!(2)];
                         (machine_st.unify_fn)(machine_st, addr, Addr::HeapCell(offset.heap_loc));
                     }
                     Err(ParserError::UnexpectedEOF) => {
-                        let addr = machine_st[temp_v!(1)];
+                        let addr = machine_st[temp_v!(2)];
                         let eof = clause_name!("end_of_file".to_string(), machine_st.atom_tbl);
 
                         let atom = machine_st.heap.to_unifiable(HeapCellValue::Atom(eof, None));
@@ -1117,7 +1109,7 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
                     }
                     Err(e) => {
                         let h = machine_st.heap.h();
-                        let stub = MachineError::functor_stub(clause_name!("read"), 1);
+                        let stub = MachineError::functor_stub(clause_name!("read"), 2);
 
                         let err = MachineError::syntax_error(h, e);
                         let err = machine_st.error_form(err, stub);
@@ -1225,22 +1217,14 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
         key: PredicateKey,
         code_dir: &CodeDir,
         op_dir: &OpDir,
-        current_input_stream: &mut Stream,
-        current_output_stream: &mut Stream,
+        stream_aliases: &StreamAliasDir,
     ) -> CallResult {
         let (name, arity) = key;
 
         match ClauseType::from(name.clone(), arity, None) {
             ClauseType::BuiltIn(built_in) => {
                 machine_st.setup_built_in_call(built_in.clone());
-                self.call_builtin(
-                    machine_st,
-                    &built_in,
-                    code_dir,
-                    op_dir,
-                    current_input_stream,
-                    current_output_stream,
-                )?;
+                self.call_builtin(machine_st, &built_in, code_dir, op_dir, stream_aliases)?;
             }
             ClauseType::CallN => {
                 machine_st.handle_internal_call_n(arity);
@@ -1285,18 +1269,10 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
         arity: usize,
         code_dir: &CodeDir,
         op_dir: &OpDir,
-        current_input_stream: &mut Stream,
-        current_output_stream: &mut Stream,
+        stream_aliases: &StreamAliasDir,
     ) -> CallResult {
         if let Some(key) = machine_st.setup_call_n(arity) {
-            self.call_clause_type(
-                machine_st,
-                key,
-                code_dir,
-                op_dir,
-                current_input_stream,
-                current_output_stream,
-            )?;
+            self.call_clause_type(machine_st, key, code_dir, op_dir, stream_aliases)?;
         }
 
         Ok(())
@@ -1364,17 +1340,10 @@ impl CallPolicy for CWILCallPolicy {
         ct: &BuiltInClauseType,
         code_dir: &CodeDir,
         op_dir: &OpDir,
-        current_input_stream: &mut Stream,
-        current_output_stream: &mut Stream,
+        stream_aliases: &StreamAliasDir,
     ) -> CallResult {
-        self.prev_policy.call_builtin(
-            machine_st,
-            ct,
-            code_dir,
-            op_dir,
-            current_input_stream,
-            current_output_stream,
-        )?;
+        self.prev_policy
+            .call_builtin(machine_st, ct, code_dir, op_dir, stream_aliases)?;
 
         self.increment(machine_st)
     }
@@ -1385,17 +1354,10 @@ impl CallPolicy for CWILCallPolicy {
         arity: usize,
         code_dir: &CodeDir,
         op_dir: &OpDir,
-        current_input_stream: &mut Stream,
-        current_output_stream: &mut Stream,
+        stream_aliases: &StreamAliasDir,
     ) -> CallResult {
-        self.prev_policy.call_n(
-            machine_st,
-            arity,
-            code_dir,
-            op_dir,
-            current_input_stream,
-            current_output_stream,
-        )?;
+        self.prev_policy
+            .call_n(machine_st, arity, code_dir, op_dir, stream_aliases)?;
 
         self.increment(machine_st)
     }

@@ -1586,7 +1586,7 @@ impl Machine {
             self.machine_st,
             self.machine_st.get_stream_or_alias(
                 self.machine_st[temp_v!(1)],
-                &self.indices,
+                &self.indices.stream_aliases,
                 "$push_load_context",
                 2,
             )

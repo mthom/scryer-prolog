@@ -3101,8 +3101,7 @@ impl MachineState {
                     ct,
                     &indices.code_dir,
                     &indices.op_dir,
-                    current_input_stream,
-                    current_output_stream,
+                    &indices.stream_aliases,
                 )
             ),
             &ClauseType::CallN => try_or_fail!(
@@ -3112,8 +3111,7 @@ impl MachineState {
                     arity,
                     &indices.code_dir,
                     &indices.op_dir,
-                    current_input_stream,
-                    current_output_stream,
+                    &indices.stream_aliases,
                 )
             ),
             &ClauseType::Inlined(ref ct) => {
