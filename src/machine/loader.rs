@@ -1072,12 +1072,35 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
                 }
             }
 
+            self.fail_on_undefined(&compilation_target, key);
+
             Ok(())
         } else {
             Err(SessionError::PredicateNotMultifileOrDiscontiguous(
                 compilation_target,
                 key,
             ))
+        }
+    }
+
+    fn fail_on_undefined(&mut self, compilation_target: &CompilationTarget, key: PredicateKey) {
+        /*
+         * DynamicUndefined isn't only applied to dynamic predicates
+         * but to multifile and discontiguous predicates as well.
+         */
+
+        let code_index = self
+            .load_state
+            .get_or_insert_code_index(key.clone(), compilation_target.clone());
+
+        if let IndexPtr::Undefined = code_index.get() {
+            set_code_index(
+                &mut self.load_state.retraction_info,
+                compilation_target,
+                key,
+                &code_index,
+                IndexPtr::DynamicUndefined,
+            );
         }
     }
 
@@ -1108,23 +1131,7 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
             arity,
             |skeleton| &mut skeleton.is_dynamic,
             RetractionRecord::AddedDynamicPredicate,
-        )?;
-
-        let code_index = self
-            .load_state
-            .get_or_insert_code_index((name.clone(), arity), compilation_target.clone());
-
-        if let IndexPtr::Undefined = code_index.get() {
-            set_code_index(
-                &mut self.load_state.retraction_info,
-                &compilation_target,
-                (name, arity),
-                &code_index,
-                IndexPtr::DynamicUndefined,
-            );
-        }
-
-        Ok(())
+        )
     }
 
     fn add_multifile_predicate(
