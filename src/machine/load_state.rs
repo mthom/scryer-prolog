@@ -870,7 +870,14 @@ impl<'a> LoadState<'a> {
         };
 
         let listing_src = ListingSource::DynamicallyGenerated;
-        let module = Module::new(module_decl, listing_src);
+        let mut module = Module::new(module_decl, listing_src);
+
+        self.import_builtins_in_module(
+            module_name.clone(),
+            &mut module.code_dir,
+            &mut module.op_dir,
+            &mut module.meta_predicates,
+        );
 
         self.retraction_info
             .push_record(RetractionRecord::AddedModule(module_name.clone()));
@@ -880,14 +887,21 @@ impl<'a> LoadState<'a> {
 
     fn import_builtins_in_module(
         &mut self,
+        module_name: ClauseName,
         code_dir: &mut CodeDir,
         op_dir: &mut OpDir,
         meta_predicates: &mut MetaPredicateDir,
     ) {
         if let Some(builtins) = self.wam.indices.modules.get(&clause_name!("builtins")) {
+            let module_compilation_target = CompilationTarget::Module(module_name);
+
+            if CompilationTarget::Module(clause_name!("builtins")) == self.compilation_target {
+                return;
+            }
+
             import_module_exports(
                 &mut self.retraction_info,
-                &self.compilation_target,
+                &module_compilation_target,
                 builtins,
                 code_dir,
                 op_dir,
@@ -974,6 +988,7 @@ impl<'a> LoadState<'a> {
         };
 
         self.import_builtins_in_module(
+            module_name.clone(),
             &mut module.code_dir,
             &mut module.op_dir,
             &mut module.meta_predicates,
