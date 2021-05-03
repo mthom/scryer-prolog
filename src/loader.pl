@@ -90,7 +90,7 @@ unload_evacuable(Evacuable) :-
 run_initialization_goals :-
     prolog_load_context(module, Module),
     (  predicate_property(Module:'$initialization_goals'(_), dynamic) ->
-       findall(Goal, '$call'(builtins:retract(Module:'$initialization_goals'(Goal))), Goals),
+       findall(Module:Goal, '$call'(builtins:retract(Module:'$initialization_goals'(Goal))), Goals),
        abolish(Module:'$initialization_goals'/1),
        (  maplist(Module:call, Goals) ->
           true

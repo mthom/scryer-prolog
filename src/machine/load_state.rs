@@ -461,13 +461,21 @@ impl<'a> LoadState<'a> {
         }
     }
 
-    pub(super) fn remove_replaced_module(&mut self, module_name: ClauseName) {
+    pub(super) fn remove_replaced_in_situ_module(&mut self, module_name: ClauseName) {
         let removed_module = match self.wam.indices.modules.remove(&module_name) {
             Some(module) => module,
             None => return,
         };
 
         for (key, code_index) in &removed_module.code_dir {
+            match removed_module
+                .local_extensible_predicates
+                .get(&(CompilationTarget::User, key.clone()))
+            {
+                Some(skeleton) if skeleton.is_multifile => continue,
+                _ => {}
+            }
+
             if code_index.get() != IndexPtr::Undefined {
                 let old_index_ptr = code_index.replace(IndexPtr::Undefined);
 
@@ -919,7 +927,7 @@ impl<'a> LoadState<'a> {
         let module_name = module_decl.name.clone();
 
         self.remove_module_exports(module_name.clone());
-        self.remove_replaced_module(module_name.clone());
+        self.remove_replaced_in_situ_module(module_name.clone());
 
         match self.wam.indices.modules.get_mut(&module_name) {
             Some(module) => {

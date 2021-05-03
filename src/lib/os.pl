@@ -1,4 +1,4 @@
-/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+ /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    Predicates for reasoning about the operating system (OS) environment.
    Written July 2020 by Markus Triska (triska@metalevel.at).
 

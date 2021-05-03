@@ -103,11 +103,27 @@ fn lower_bound_of_target_clause(skeleton: &PredicateSkeleton, target_pos: usize)
         return target_pos - 1;
     }
 
-    for index in (0..target_pos - 1).rev() {
+    let mut index_loc_opt = None;
+
+    for index in (0..target_pos).rev() {
         let current_arg_num = skeleton.clauses[index].opt_arg_index_key.arg_num();
 
         if current_arg_num == 0 || current_arg_num != arg_num {
             return index + 1;
+        }
+
+        if let Some(index_loc) = index_loc_opt {
+            let current_index_loc = skeleton.clauses[index]
+                .opt_arg_index_key
+                .switch_on_term_loc();
+
+            if Some(index_loc) != current_index_loc {
+                return index + 1;
+            }
+        } else {
+            index_loc_opt = skeleton.clauses[index]
+                .opt_arg_index_key
+                .switch_on_term_loc();
         }
     }
 
@@ -1195,7 +1211,7 @@ fn append_compiled_clause(
                     retraction_info,
                 );
 
-                if lower_bound == 0 {
+                if lower_bound == 0 && !skeleton.core.is_dynamic {
                     code_ptr_opt = Some(target_pos_clause_start);
                 }
             }

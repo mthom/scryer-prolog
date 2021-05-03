@@ -834,8 +834,13 @@ asserta_clause(Head, Body) :-
        ( Name == (:),
          Arity =:= 2 ->
 	     arg(1, Head, Module),
-	     arg(2, Head, F),
-	     module_asserta_clause(F, Body, Module)
+	     arg(2, Head, HeadAndBody),
+         (  HeadAndBody = (F :- Body1) ->
+            true
+         ;  F = HeadAndBody,
+            Body1 = true
+         ),
+	     module_asserta_clause(F, Body1, Module)
        ; '$head_is_dynamic'(user, Head) ->
           call_asserta(Head, Body, Name, Arity, user)
        ; '$no_such_predicate'(user, Head) ->
@@ -883,8 +888,13 @@ assertz_clause(Head, Body) :-
        (  Name == (:),
           Arity =:= 2 ->
 	      arg(1, Head, Module),
-	      arg(2, Head, F),
-	      module_assertz_clause(F, Body, Module)
+	      arg(2, Head, HeadAndBody),
+          (  HeadAndBody = (F :- Body1) ->
+             true
+          ;  F = HeadAndBody,
+             Body1 = true
+          ),
+	      module_assertz_clause(F, Body1, Module)
        ;  '$head_is_dynamic'(user, Head) ->
 	      call_assertz(Head, Body, Name, Arity, user)
        ;  '$no_such_predicate'(user, Head) ->
@@ -973,8 +983,13 @@ retract_clause(Head, Body) :-
        (  Name == (:),
           Arity =:= 2 ->
 	      arg(1, Head, Module),
-	      arg(2, Head, F),
-	      retract_module_clause(F, Body, Module)
+	      arg(2, Head, HeadAndBody),
+          (  HeadAndBody = (F :- Body1) ->
+             true
+          ;  F = HeadAndBody,
+             Body1 = true
+          ),
+	      retract_module_clause(F, Body1, Module)
        ;  '$no_such_predicate'(user, Head) ->
           '$fail'
        ;  '$head_is_dynamic'(user, Head) ->
