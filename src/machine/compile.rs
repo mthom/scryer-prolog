@@ -224,8 +224,20 @@ fn find_inner_choice_instr(code: &Code, mut index: usize, index_loc: usize) -> u
                     index = index_loc;
                 }
             }
-            &Line::Choice(ChoiceInstruction::DynamicElse(_, _, next_or_fail))
-            | &Line::Choice(ChoiceInstruction::DynamicInternalElse(_, _, next_or_fail)) => {
+            &Line::Choice(ChoiceInstruction::DynamicElse(_, _, next_or_fail)) => match next_or_fail
+            {
+                NextOrFail::Next(i) => {
+                    if i == 0 {
+                        index = index_loc;
+                    } else {
+                        return index;
+                    }
+                }
+                NextOrFail::Fail(_) => {
+                    index = index_loc;
+                }
+            },
+            &Line::Choice(ChoiceInstruction::DynamicInternalElse(_, _, next_or_fail)) => {
                 match next_or_fail {
                     NextOrFail::Next(i) => {
                         if i == 0 {
@@ -656,16 +668,12 @@ fn thread_choice_instr_at_to(
                 *o = target_loc - instr_loc;
                 return;
             }
-            Line::Choice(ChoiceInstruction::DynamicElse(_, _, NextOrFail::Next(ref mut o)))
-            | Line::Choice(ChoiceInstruction::DynamicInternalElse(
-                _,
-                _,
-                NextOrFail::Next(ref mut o),
-            )) => {
+            Line::Choice(ChoiceInstruction::DynamicElse(_, _, NextOrFail::Next(o)))
+            | Line::Choice(ChoiceInstruction::DynamicInternalElse(_, _, NextOrFail::Next(o))) => {
                 instr_loc += *o;
             }
-            Line::Choice(ChoiceInstruction::TryMeElse(ref mut o))
-            | Line::Choice(ChoiceInstruction::RetryMeElse(ref mut o)) => {
+            Line::Choice(ChoiceInstruction::TryMeElse(o))
+            | Line::Choice(ChoiceInstruction::RetryMeElse(o)) => {
                 instr_loc += *o;
             }
             Line::Control(ControlInstruction::RevJmpBy(ref mut o)) if instr_loc >= target_loc => {
@@ -725,6 +733,12 @@ fn thread_choice_instr_at_to(
                 instr_loc += *o;
             }
             _ => {
+                println!("failing code: \n");
+
+                for index in instr_loc - 40..instr_loc + 40 {
+                    println!("{:07} | {}", index, code[index]);
+                }
+
                 unreachable!()
             }
         }
@@ -1224,6 +1238,23 @@ fn append_compiled_clause(
             skeleton.clauses[target_pos].opt_arg_index_key += clause_loc;
             code.extend(clause_code.drain(1..));
 
+            match skeleton.clauses[target_pos]
+                .opt_arg_index_key
+                .switch_on_term_loc()
+            {
+                Some(index_loc) => {
+                    // point to the inner-threaded TryMeElse(0) if target_pos is
+                    // indexed, and make switch_on_term point one line after it in
+                    // its variable offset.
+                    skeleton.clauses[target_pos].clause_start += 2;
+
+                    if !skeleton.core.is_dynamic {
+                        set_switch_var_offset(code, index_loc, 2, retraction_info);
+                    }
+                }
+                None => {}
+            }
+
             match skeleton.clauses[lower_bound]
                 .opt_arg_index_key
                 .switch_on_term_loc()
@@ -1238,23 +1269,6 @@ fn append_compiled_clause(
                 None => {
                     if lower_bound == 0 {
                         code_ptr_opt = Some(skeleton.clauses[lower_bound].clause_start);
-                    }
-
-                    match skeleton.clauses[target_pos]
-                        .opt_arg_index_key
-                        .switch_on_term_loc()
-                    {
-                        Some(index_loc) => {
-                            // point to the inner-threaded TryMeElse(0) if target_pos is
-                            // indexed, and make switch_on_term point one line after it in
-                            // its variable offset.
-                            skeleton.clauses[target_pos].clause_start += 2;
-
-                            if !skeleton.core.is_dynamic {
-                                set_switch_var_offset(code, index_loc, 2, retraction_info);
-                            }
-                        }
-                        None => {}
                     }
 
                     find_outer_choice_instr(code, skeleton.clauses[lower_bound].clause_start)
