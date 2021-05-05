@@ -682,6 +682,9 @@ fn thread_choice_instr_at_to(
                 *o = instr_loc - target_loc;
                 return;
             }
+            &mut Line::Control(ControlInstruction::RevJmpBy(o)) => {
+                instr_loc -= o;
+            }
             &mut Line::Choice(ChoiceInstruction::DynamicElse(birth, death, ref mut fail))
                 if target_loc >= instr_loc =>
             {
@@ -733,12 +736,6 @@ fn thread_choice_instr_at_to(
                 instr_loc += *o;
             }
             _ => {
-                println!("failing code: \n");
-
-                for index in instr_loc - 40..instr_loc + 40 {
-                    println!("{:07} | {}", index, code[index]);
-                }
-
                 unreachable!()
             }
         }
