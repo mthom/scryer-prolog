@@ -3268,13 +3268,13 @@ impl MachineState {
                         }
                     }
                 }
-
-                self.dynamic_mode = FirstOrNext::Next;
             }
             None => {
                 self.fail = true;
             }
         }
+
+        self.dynamic_mode = FirstOrNext::Next;
     }
 
     pub(super) fn execute_indexed_choice_instr(
