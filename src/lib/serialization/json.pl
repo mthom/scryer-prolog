@@ -40,6 +40,7 @@
                  json_chars//1
                 ]).
 
+:- use_module(library(assoc)).
 :- use_module(library(dcgs)).
 :- use_module(library(dif)).
 :- use_module(library(lists)).
@@ -52,11 +53,12 @@ json_chars(Internal) --> json_element(Internal).
     different types of values based on their principal functor. The principal functors match the types defined in
     the JSON Schema spec here: https://json-schema.org/draft/2020-12/json-schema-validation.html#rfc.section.6.1.1
     EXCEPT we don't yet support the integer type. There are plans for more JSON Schema support in the near future. */
-json_value(pairs(Pairs))    --> json_object(Pairs).
+json_value(Assoc)           --> json_object(Assoc).
 json_value(list(List))      --> json_array(List).
 json_value(string(Chars))   --> json_string(Chars).
 json_value(number(Number))  --> json_number(Number).
-json_value(boolean(Bool))   --> json_boolean(Bool).
+json_value(true)            --> "true".
+json_value(false)           --> "false".
 json_value(null)            --> "null".
 
 /*  We pull json_boolean out into its own predicate in order to take advantage of first argument indexing and not leave
@@ -64,11 +66,20 @@ json_value(null)            --> "null".
 json_boolean(true) --> "true".
 json_boolean(false) --> "false".
 
-json_object([])           --> "{", json_ws, "}".
-json_object([Pair|Pairs]) -->
+json_object(t)            --> "{", json_ws, "}".
+json_object(t(K,V,B,L,R)) -->
         "{",
-        json_members(Pairs, Pair),
-        "}".
+        { (   is_assoc(t(K,V,B,L,R)) ->
+              assoc_to_list(t(K,V,B,L,R), OrderedPairs),
+              permutation(OrderedPairs, [Key-Value|Pairs])
+          ;   true
+          ) },
+        json_members(Pairs, Key-Value),
+        "}",
+        { (   \+ is_assoc(t(K,V,B,L,R)) ->
+              list_to_assoc([Key-Value|Pairs], t(K,V,B,L,R))
+          ;   true
+          ) }.
 
 /*  `json_members//2` below is implemented with a lagged argument to take advantage of first argument indexing.
     This is a pure performance-driven decision that doesn't affect the logic. The predicate could equivalently be
@@ -85,7 +96,7 @@ json_members([NextPair|Pairs], Key-Value) -->
         ",",
         json_members(Pairs, NextPair).
 
-json_member(string(Key), Value) --> json_ws, json_string(Key), json_ws, ":", json_element(Value).
+json_member(Key, Value) --> json_ws, json_string(Key), json_ws, ":", json_element(Value).
 
 json_array([])             --> "[", json_ws, "]".
 json_array([Value|Values]) --> "[", json_elements(Values, Value), "]".

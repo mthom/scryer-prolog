@@ -1,5 +1,6 @@
 :- module(test_json, [test_json/0]).
 
+:- use_module(library(assoc)).
 :- use_module(library(charsio)).
 :- use_module(library(dcgs)).
 :- use_module(library(format)).
@@ -28,6 +29,9 @@ test_json_read :-
     name_parse("pass_hex.json", string("ģ\x4567\\x89ab\\xcdef\\xabcd\\xef4a\")),
     name_parse("pass_smallfloat.json", number(0.000000000000123456789)),
     name_parse("pass_bigfloat.json", number(12345678900000000000000000000000000.0)),
+    name_parse("pass_array.json", list([number(1),number(2),number(3),number(4),number(5),number(6),number(7)])),
+    list_to_assoc(["object"-t, "key"-null], Object),
+    name_parse("pass_object.json", Object),
     time(name_parse("pass_everything.json", _)).
 
 minify_sample_json :-
@@ -60,7 +64,13 @@ test_json_int_float :-
     once(phrase(json_chars(number(SmallFloat)), "32E-5")),
     \+ integer(SmallFloat).
 
+test_json_unordered :-
+    list_to_assoc(["x"-null,"y"-null], Object),
+    once(phrase(json_chars(Object), "{\"x\":null,\"y\":null}")),
+    once(phrase(json_chars(Object), "{\"y\":null,\"x\":null}")).
+
 test_json :-
-    test_json_read,
+    test_json_int_float,
     test_json_minify,
-    test_json_int_float.
+    test_json_read,
+    test_json_unordered.
