@@ -27,9 +27,9 @@ test_json_read :-
     name_parse("pass_mandatory_escapes.json", string(" \" \\ \b\f\n\r\t ")),
     name_parse("pass_forward_slash.json", string("/ & /")),
     name_parse("pass_hex.json", string("ģ\x4567\\x89ab\\xcdef\\xabcd\\xef4a\")),
-    name_parse("pass_smallfloat.json", number(0.000000000000123456789)),
-    name_parse("pass_bigfloat.json", number(12345678900000000000000000000000000.0)),
-    name_parse("pass_array.json", list([number(1),number(2),number(3),number(4),number(5),number(6),number(7)])),
+    name_parse("pass_smallfloat.json", 0.000000000000123456789),
+    name_parse("pass_bigfloat.json", 12345678900000000000000000000000000.0),
+    name_parse("pass_array.json", list([1,2,3,4,5,6,7])),
     list_to_assoc(["object"-t, "key"-null], Object),
     name_parse("pass_object.json", Object),
     time(name_parse("pass_everything.json", _)).
@@ -53,15 +53,15 @@ test_json_minify :-
     RefChars = MinFileChars.
 
 test_json_int_float :-
-    once(phrase(json_chars(number(ZeroInt)), "0")),
+    once(phrase(json_chars(ZeroInt), "0")),
     integer(ZeroInt),
-    once(phrase(json_chars(number(ZeroFloat)), "0.0")),
+    once(phrase(json_chars(ZeroFloat), "0.0")),
     \+ integer(ZeroFloat),
-    once(phrase(json_chars(number(BigInt)), "32E5")),
+    once(phrase(json_chars(BigInt), "32E5")),
     integer(BigInt),
-    once(phrase(json_chars(number(BigFloat)), "32.2E5")),
+    once(phrase(json_chars(BigFloat), "32.2E5")),
     \+ integer(BigFloat),
-    once(phrase(json_chars(number(SmallFloat)), "32E-5")),
+    once(phrase(json_chars(SmallFloat), "32E-5")),
     \+ integer(SmallFloat).
 
 test_json_unordered :-

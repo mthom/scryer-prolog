@@ -56,15 +56,10 @@ json_chars(Internal) --> json_element(Internal).
 json_value(Assoc)           --> json_object(Assoc).
 json_value(list(List))      --> json_array(List).
 json_value(string(Chars))   --> json_string(Chars).
-json_value(number(Number))  --> json_number(Number).
+json_value(Number)          --> json_number(Number).
 json_value(true)            --> "true".
 json_value(false)           --> "false".
 json_value(null)            --> "null".
-
-/*  We pull json_boolean out into its own predicate in order to take advantage of first argument indexing and not leave
-    choice points. For more details, watch this video on decomposing arguments: https://youtu.be/FZLofckPu4A?t=1648 */
-json_boolean(true) --> "true".
-json_boolean(false) --> "false".
 
 json_object(t)            --> "{", json_ws, "}".
 json_object(t(K,V,B,L,R)) -->
@@ -215,7 +210,8 @@ json_number(Number) -->
               ;   Base = 10.0
               ),
               Number is Sign * (Integer + Fraction) * Base ^ Exponent }
-        ;   { number_chars(Number, NumberChars) },
+        ;   { number(Number),
+              number_chars(Number, NumberChars) }, 
             NumberChars
         ).
 
