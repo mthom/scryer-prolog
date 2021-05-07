@@ -45,14 +45,14 @@
 :- use_module(library(dif)).
 :- use_module(library(lists)).
 
-/*  The DCGs are written to match the McKeeman form presented on the right side of https://www.json.org/json-en.html 
-    as closely as possible. Note that the names in the McKeeman form conflict with the pictures on the site. */
+/*  The DCGs are written to match the McKeeman form presented on the right side of
+    https://www.json.org/json-en.html as closely as possible. Note that the names in
+    the McKeeman form conflict with the pictures on the site. */
 json_chars(Internal) --> json_element(Internal).
 
-/*  Because it's impossible to distinguish between an empty array [] and an empty string "", we distinguish between
-    different types of values based on their principal functor. The principal functors match the types defined in
-    the JSON Schema spec here: https://json-schema.org/draft/2020-12/json-schema-validation.html#rfc.section.6.1.1
-    EXCEPT we don't yet support the integer type. There are plans for more JSON Schema support in the near future. */
+/*  Because it's impossible to distinguish between an empty list [] and an empty
+    string "" in Prolog, we force lists and strings in Prolog to be wrapped in terms
+    list() and string() respectively. */
 json_value(Assoc)           --> json_object(Assoc).
 json_value(list(List))      --> json_array(List).
 json_value(string(Chars))   --> json_string(Chars).
@@ -61,6 +61,17 @@ json_value(true)            --> "true".
 json_value(false)           --> "false".
 json_value(null)            --> "null".
 
+/*  `json_object//1` relates association lists to JSON objects. Association lists
+    allow us to reason about the equality of JSON objects regardless of key order.
+    Use of `is_assoc/1` is not intended to change the logic, but instead to adjust
+    the 'control' or 'search strategy' used to execute the logic. Logically speaking,
+    permuting a list before converting it to an association list is nonsensical,
+    because association lists are ordered no matter what. For a general
+    overview of the idea of separating 'logic' and 'control', read:
+    https://www.doc.ic.ac.uk/~rak/papers/algorithm%20=%20logic%20+%20control.pdf
+    For an introduction to search strategies in Prolog, read:
+    https://www.metalevel.at/prolog/sorting#searching
+*/
 json_object(t)            --> "{", json_ws, "}".
 json_object(t(K,V,B,L,R)) -->
         "{",
@@ -76,14 +87,16 @@ json_object(t(K,V,B,L,R)) -->
           ;   true
           ) }.
 
-/*  `json_members//2` below is implemented with a lagged argument to take advantage of first argument indexing.
-    This is a pure performance-driven decision that doesn't affect the logic. The predicate could equivalently be
-    implementes as `json_members//1` below:
+/*  `json_members//2` below is implemented with a lagged argument to take advantage of
+    first argument indexing. This is a pure performance-driven decision that doesn't
+    affect the logic. The predicate could equivalently be implementes as
+    `json_members//1` below:
     ```
     json_members([Key-Value, Pair2 | Pairs]) --> json_member(Key, Value), ",", json_members([Pair2 | Pairs]).
     ```
-    That's a logically equivalent and equally clean representation to the lagged argument. However, it leaves
-    choice points, while using the lagged argument doesn't. For more info, watch: https://youtu.be/FZLofckPu4A?t=1737
+    That's a logically equivalent and equally clean representation to the lagged
+    argument. However, it leaves choice points, while using the lagged argument
+    doesn't. For more info, watch: https://youtu.be/FZLofckPu4A?t=1737
     */
 json_members([], Key-Value)               --> json_member(Key, Value).
 json_members([NextPair|Pairs], Key-Value) -->
@@ -96,7 +109,7 @@ json_member(Key, Value) --> json_ws, json_string(Key), json_ws, ":", json_elemen
 json_array([])             --> "[", json_ws, "]".
 json_array([Value|Values]) --> "[", json_elements(Values, Value), "]".
 
-/* Also using a lagged argument with `json_elements//2` to take advantage of first-argument indexing */
+/* Also using a lagged argument here with `json_elements//2` */
 json_elements([], Value)                 --> json_element(Value).
 json_elements([NextValue|Values], Value) -->
         json_element(Value),
@@ -110,19 +123,18 @@ json_string(Chars) --> "\"", json_characters(Chars), "\"".
 json_characters("")           --> "".
 json_characters([Char|Chars]) --> json_character(Char), json_characters(Chars).
 
-/*  Note on variable instantiation checks (`var/1` and `nonvar/1`) used below and in Prolog in general.
-    Instantiation checks should never be used to change the logic of your program. Instead, they are one of
-    many tools to adjust the 'control' or 'search strategy' used by Prolog to execute the logic of your program.
-    For a general overview of the idea, read Bob Kowalski's "Algorithm = Logic + Control":
-    https://www.doc.ic.ac.uk/~rak/papers/algorithm%20=%20logic%20+%20control.pdf
-    For an introduction to search strategies in Prolog, read: https://www.metalevel.at/prolog/sorting#searching
-    It's tempting to use instantiation checks to be more strict while generating and more relaxed while parsing.
-    In fact, the early version of this library aimed to return exactly one result when generating. However, doing that
-    is **wrong** and leads to difficult-to-catch bugs. Instead, adjust the search strategy to return the most ideal
-    and strictest answer FIRST and then return less ideal answers on backtracking.
-    As an example, consider a string containing just the forward slash. The JSON standard recommends the forward slash
-    be escaped with a backslash, but allows it to not be escaped. Attempting to force stricter behavior with
-    instantiation checks can lead to this confusing mess:
+/*  Variable instantiation checks (`var/1` and `nonvar/1`) used below are also intended
+    to change the search strategy and not the logic, just like `is_assoc/1` in
+    `json_object//1` above.
+    It's tempting to use instantiation checks to be more strict while generating and
+    more relaxed while parsing. In fact, the early version of this library aimed to
+    return exactly one result when generating. However, doing that is **wrong** and
+    leads to difficult-to-catch bugs. Instead, the search strategy should be adjusted
+    to return the most ideal and strictest answer FIRST and then return less ideal
+    answers on backtracking. As an example, consider a string containing just the
+    forward slash. The JSON standard recommends the forward slash be escaped with a
+    backslash, but allows it to not be escaped. Attempting to force stricter behavior
+    with instantiation checks can lead to this confusing mess:
     ```
     phrase(json:json_characters("/"), External).
        External = "\\/".
@@ -132,8 +144,8 @@ json_characters([Char|Chars]) --> json_character(Char), json_characters(Chars).
     ?- phrase(json:json_characters("/"), "/").
     false.
     ```
-    To avoid such bugs, never use instantiation checks to reduce the number of right answers, but rather to adjust
-    the *path* used to traverse those answers. */
+    To avoid such bugs, instantiation checks are never used to reduce the number of
+    right answers, but rather to adjust the *path* used to traverse those answers. */
 
 escape_char('"', '"').
 escape_char('\\', '\\').
@@ -184,8 +196,9 @@ json_hex(13)    --> "D".
 json_hex(14)    --> "E".
 json_hex(15)    --> "F".
 
-/*  I can't think of any alternatives to using `number_chars/2` when generating, though this leads
-    to under-reporting of correct solutions. At least matching solutions unify when both are instantiated...
+/*  I can't think of any alternatives to using `number_chars/2` when generating,
+    though this leads to under-reporting of correct solutions. At least matching
+    solutions unify when both are instantiated...
     ```
     ?- phrase(json:json_number(N), "123E2").
        N = 12300
@@ -263,7 +276,7 @@ json_sign_noplus(-1) --> "-".
 json_sign(Sign) --> json_sign_noplus(Sign).
 json_sign(1)    --> "+".
 
-/* Make `json_ws/0` greedy when parsing, lazy when generating */
+/* `json_ws/0` is greedy when parsing, lazy when generating */
 json_ws_empty --> "".
 json_ws_nonempty --> " ".
 json_ws_nonempty --> "\n".
