@@ -2,7 +2,37 @@
 		          memberchk/2, reverse/2, length/2, maplist/2,
 		          maplist/3, maplist/4, maplist/5, maplist/6,
 		          maplist/7, maplist/8, maplist/9, same_length/2, nth0/3,
-		          sum_list/2, transpose/2, list_to_set/2, list_max/2, list_min/2]).
+		          sum_list/2, transpose/2, list_to_set/2, list_max/2,
+                          list_min/2, permutation/2]).
+
+/*  Author:        Mark Thom, Jan Wielemaker, and Richard O'Keefe
+    Copyright (c)  2018-2021, Mark Thom
+    Copyright (c)  2002-2020, University of Amsterdam
+                              VU University Amsterdam
+                              SWI-Prolog Solutions b.v.
+    All rights reserved.
+    Redistribution and use in source and binary forms, with or without
+    modification, are permitted provided that the following conditions
+    are met:
+    1. Redistributions of source code must retain the above copyright
+       notice, this list of conditions and the following disclaimer.
+    2. Redistributions in binary form must reproduce the above copyright
+       notice, this list of conditions and the following disclaimer in
+       the documentation and/or other materials provided with the
+       distribution.
+    THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS
+    "AS IS" AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT
+    LIMITED TO, THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS
+    FOR A PARTICULAR PURPOSE ARE DISCLAIMED. IN NO EVENT SHALL THE
+    COPYRIGHT OWNER OR CONTRIBUTORS BE LIABLE FOR ANY DIRECT, INDIRECT,
+    INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING,
+    BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+    LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
+    CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+    LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN
+    ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
+    POSSIBILITY OF SUCH DAMAGE.
+*/
 
 
 :- use_module(library(error)).
@@ -231,3 +261,47 @@ list_min([N|Ns], Min) :-
 
 list_min_(N, Min0, Min) :-
     Min is min(N, Min0).
+
+%!  permutation(?Xs, ?Ys) is nondet.
+%
+%   True when Xs is a permutation of Ys. This can solve for Ys given
+%   Xs or Xs given Ys, or  even   enumerate  Xs and Ys together. The
+%   predicate  permutation/2  is  primarily   intended  to  generate
+%   permutations. Note that a list of  length N has N! permutations,
+%   and  unbounded  permutation  generation   becomes  prohibitively
+%   expensive, even for rather short lists (10! = 3,628,800).
+%
+%   The example below illustrates that Xs   and Ys being proper lists
+%   is not a sufficient condition to use the above replacement.
+%
+%     ==
+%     ?- permutation([1,2], [X,Y]).
+%     X = 1, Y = 2 ;
+%     X = 2, Y = 1 ;
+%     false.
+%     ==
+%
+%   @error  type_error(list, Arg) if either argument is not a proper
+%           or partial list.
+
+permutation(Xs, Ys) :-
+    '$skip_max_list'(Xlen, -1, Xs, XTail),
+    '$skip_max_list'(Ylen, -1, Ys, YTail),
+    (   XTail == [], YTail == []            % both proper lists
+    ->  Xlen == Ylen
+    ;   var(XTail), YTail == []             % partial, proper
+    ->  length(Xs, Ylen)
+    ;   XTail == [], var(YTail)             % proper, partial
+    ->  length(Ys, Xlen)
+    ;   var(XTail), var(YTail)              % partial, partial
+    ->  length(Xs, Len),
+        length(Ys, Len)
+    ;   must_be(list, Xs),                  % either is not a list
+        must_be(list, Ys)
+    ),
+    perm(Xs, Ys).
+
+perm([], []).
+perm(List, [First|Perm]) :-
+    select(First, List, Rest),
+    perm(Rest, Perm).
