@@ -227,6 +227,9 @@ impl MachineState {
                 &HeapCellValue::Atom(ref name, _) if name.as_str() == "e" => {
                     interms.push(Number::Float(OrderedFloat(f64::consts::E)))
                 }
+                &HeapCellValue::Atom(ref name, _) if name.as_str() == "epsilon" => {
+                    interms.push(Number::Float(OrderedFloat(f64::EPSILON)))
+                }
                 &HeapCellValue::NamedStr(arity, ref name, _) => {
                     let evaluable_stub = MachineError::functor_stub(name.clone(), arity);
 

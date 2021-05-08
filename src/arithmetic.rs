@@ -290,6 +290,12 @@ impl<'a> ArithmeticEvaluator<'a> {
                         f64::consts::PI,
                     ))))
             }
+            &Constant::Atom(ref name, _) if name.as_str() == "epsilon" => {
+                self.interm
+                    .push(ArithmeticTerm::Number(Number::Float(OrderedFloat(
+                        f64::EPSILON,
+                    ))))
+            }
             _ => return Err(ArithmeticError::NonEvaluableFunctor(c.clone(), 0)),
         }
 
