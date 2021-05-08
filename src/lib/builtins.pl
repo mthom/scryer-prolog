@@ -161,7 +161,7 @@ set_prolog_flag(min_integer, Value) :-
 set_prolog_flag(integer_rounding_function, down) :- !. % 7.11.1.4
 set_prolog_flag(integer_rounding_function, Value) :-
     throw(error(domain_error(flag_value, integer_rounding_function + Value),
-		        set_prolog_flag/2)). % 8.17.1.3 e
+                set_prolog_flag/2)). % 8.17.1.3 e
 set_prolog_flag(double_quotes, chars) :-
     !, '$set_double_quotes'(chars). % 7.11.2.5, list of one-char atoms.
 set_prolog_flag(double_quotes, atom) :-
@@ -176,7 +176,7 @@ set_prolog_flag(occurs_check, error) :-
     !, '$set_sto_with_error_as_unify'.
 set_prolog_flag(double_quotes, Value) :-
     throw(error(domain_error(flag_value, double_quotes + Value),
-		        set_prolog_flag/2)). % 8.17.1.3 e
+                set_prolog_flag/2)). % 8.17.1.3 e
 set_prolog_flag(Flag, _) :-
     atom(Flag),
     throw(error(domain_error(prolog_flag, Flag), set_prolog_flag/2)). % 8.17.1.3 d
@@ -359,18 +359,18 @@ univ_errors(Term, List, N) :-
     ;  List = [H|T] ->
        (  var(H),
           var(Term), % R == [] => List is a proper list.
-       	  throw(error(instantiation_error, (=..)/2))                 % 8.5.3.3 c)
+          throw(error(instantiation_error, (=..)/2))                 % 8.5.3.3 c)
        ;  T \== [],
           nonvar(H),
           \+ atom(H),
-       	  throw(error(type_error(atom, H), (=..)/2))                 % 8.5.3.3 d)
+          throw(error(type_error(atom, H), (=..)/2))                 % 8.5.3.3 d)
        ;  compound(H),
           T == [],
-       	  throw(error(type_error(atomic, H), (=..)/2))               % 8.5.3.3 e)
+          throw(error(type_error(atomic, H), (=..)/2))               % 8.5.3.3 e)
        ;  var(Term),
           max_arity(M),
           N - 1 > M,
-       	  throw(error(representation_error(max_arity), (=..)/2))     % 8.5.3.3 g)
+          throw(error(representation_error(max_arity), (=..)/2))     % 8.5.3.3 g)
        ;  true
        )
     ;  var(Term)    ->
@@ -380,7 +380,7 @@ univ_errors(Term, List, N) :-
 
 Term =.. List :-
     '$call_with_default_policy'(univ_errors(Term, List, N)),
-	'$call_with_default_policy'(univ_worker(Term, List, N)).
+    '$call_with_default_policy'(univ_worker(Term, List, N)).
 
 
 :- non_counted_backtracking univ_worker/3.
@@ -482,12 +482,12 @@ must_be_var_names_list_([], List).
 must_be_var_names_list_([VarName | VarNames], List) :-
     (  nonvar(VarName) ->
        (  VarName = (Atom = _) ->
-	      (  atom(Atom) ->
+          (  atom(Atom) ->
              must_be_var_names_list_(VarNames, List)
-	      ;  var(Atom)  ->
+          ;  var(Atom)  ->
              throw(error(instantiation_error, write_term/2))
-	      ;  throw(error(domain_error(write_option, variable_names(List)), write_term/2))
-	      )
+          ;  throw(error(domain_error(write_option, variable_names(List)), write_term/2))
+          )
        ;  throw(error(domain_error(write_option, variable_names(List)), write_term/2))
        )
     ;  throw(error(instantiation_error, write_term/2))
@@ -638,8 +638,8 @@ findall(Template, Goal, Solutions) :-
     '$lh_length'(LhLength),
     '$call_with_default_policy'(
         catch(builtins:'$iterate_find_all'(Template, Goal, Solutions, LhLength),
-			  Error,
-			  ( builtins:truncate_lh_to(LhLength), builtins:throw(Error) ))
+              Error,
+              ( builtins:truncate_lh_to(LhLength), builtins:throw(Error) ))
     ).
 
 
@@ -662,9 +662,9 @@ findall(Template, Goal, Solutions0, Solutions1) :-
     '$lh_length'(LhLength),
     '$call_with_default_policy'(
         catch(builtins:'$iterate_find_all_diff'(Template, Goal, Solutions0,
-							                    Solutions1, LhLength),
-			  Error,
-			  ( builtins:truncate_lh_to(LhLength), builtins:throw(Error) ))
+                                                Solutions1, LhLength),
+              Error,
+              ( builtins:truncate_lh_to(LhLength), builtins:throw(Error) ))
     ).
 
 set_difference([X|Xs], [Y|Ys], Zs) :-
@@ -768,8 +768,8 @@ setof(Template, Goal, Solution) :-
     (  var(B) -> true
     ;  functor(B, Name, _) ->
        (  atom(Name), Name \== '.' -> true
-	   ;  throw(error(type_error(callable, B), clause/2))
-	   )
+       ;  throw(error(type_error(callable, B), clause/2))
+       )
     ;  throw(error(type_error(callable, B), clause/2))
     ).
 
@@ -778,13 +778,13 @@ setof(Template, Goal, Solution) :-
        throw(error(instantiation_error, clause/2))
     ;  callable(H), functor(H, Name, Arity) ->
        (  '$head_is_dynamic'(Module, H) ->
-		  '$clause_body_is_valid'(B),
-		  Module:'$clause'(H, B)
+          '$clause_body_is_valid'(B),
+          Module:'$clause'(H, B)
        ;  '$no_such_predicate'(Module, H) ->
           '$fail'
-	   ;  throw(error(permission_error(access, private_procedure, Name/Arity),
-					  clause/2))
-	   )
+       ;  throw(error(permission_error(access, private_procedure, Name/Arity),
+                      clause/2))
+       )
     ;  throw(error(type_error(callable, H), clause/2))
     ).
 
@@ -795,18 +795,18 @@ clause(H, B) :-
     ;  callable(H), functor(H, Name, Arity) ->
        (  Name == (:),
           Arity =:= 2 ->
-		  arg(1, H, Module),
-		  arg(2, H, F),
-		  '$module_clause'(F, B, Module)
-	   ;  '$head_is_dynamic'(user, H) ->
+          arg(1, H, Module),
+          arg(2, H, F),
+          '$module_clause'(F, B, Module)
+       ;  '$head_is_dynamic'(user, H) ->
           '$clause_body_is_valid'(B),
-		  '$clause'(H, B)
+          '$clause'(H, B)
        ;  '$no_such_predicate'(user, H) ->  %% '$no_such_predicate' fails if
-	                                        %% H is not callable.
+                                            %% H is not callable.
           '$fail'
-	   ;  throw(error(permission_error(access, private_procedure, Name/Arity),
-					  clause/2))
-	   )
+       ;  throw(error(permission_error(access, private_procedure, Name/Arity),
+                      clause/2))
+       )
     ;  throw(error(type_error(callable, H), clause/2))
     ).
 
@@ -833,14 +833,14 @@ asserta_clause(Head, Body) :-
     ;  callable(Head), functor(Head, Name, Arity) ->
        ( Name == (:),
          Arity =:= 2 ->
-	     arg(1, Head, Module),
-	     arg(2, Head, HeadAndBody),
+         arg(1, Head, Module),
+         arg(2, Head, HeadAndBody),
          (  HeadAndBody = (F :- Body1) ->
             true
          ;  F = HeadAndBody,
             Body1 = true
          ),
-	     module_asserta_clause(F, Body1, Module)
+         module_asserta_clause(F, Body1, Module)
        ; '$head_is_dynamic'(user, Head) ->
           call_asserta(Head, Body, Name, Arity, user)
        ; '$no_such_predicate'(user, Head) ->
@@ -868,7 +868,7 @@ module_assertz_clause(Head, Body, Module) :-
        (  '$head_is_dynamic'(Module, Head) ->
           call_assertz(Head, Body, Name, Arity, Module)
        ;  '$no_such_predicate'(Module, Head) ->
-	      call_assertz(Head, Body, Name, Arity, Module)
+          call_assertz(Head, Body, Name, Arity, Module)
        ;  throw(error(permission_error(modify, static_procedure, Name/Arity),
                       assertz/1))
        )
@@ -887,18 +887,18 @@ assertz_clause(Head, Body) :-
     ;  callable(Head), functor(Head, Name, Arity) ->
        (  Name == (:),
           Arity =:= 2 ->
-	      arg(1, Head, Module),
-	      arg(2, Head, HeadAndBody),
+          arg(1, Head, Module),
+          arg(2, Head, HeadAndBody),
           (  HeadAndBody = (F :- Body1) ->
              true
           ;  F = HeadAndBody,
              Body1 = true
           ),
-	      module_assertz_clause(F, Body1, Module)
+          module_assertz_clause(F, Body1, Module)
        ;  '$head_is_dynamic'(user, Head) ->
-	      call_assertz(Head, Body, Name, Arity, user)
+          call_assertz(Head, Body, Name, Arity, user)
        ;  '$no_such_predicate'(user, Head) ->
-	      call_assertz(Head, Body, Name, Arity, user)
+          call_assertz(Head, Body, Name, Arity, user)
        ;  throw(error(permission_error(modify, static_procedure, Name/Arity),
                       assertz/1))
        )
@@ -982,14 +982,14 @@ retract_clause(Head, Body) :-
     ;  callable(Head), functor(Head, Name, Arity) ->
        (  Name == (:),
           Arity =:= 2 ->
-	      arg(1, Head, Module),
-	      arg(2, Head, HeadAndBody),
+          arg(1, Head, Module),
+          arg(2, Head, HeadAndBody),
           (  HeadAndBody = (F :- Body1) ->
              true
           ;  F = HeadAndBody,
              Body1 = true
           ),
-	      retract_module_clause(F, Body1, Module)
+          retract_module_clause(F, Body1, Module)
        ;  '$no_such_predicate'(user, Head) ->
           '$fail'
        ;  '$head_is_dynamic'(user, Head) ->
@@ -1026,18 +1026,20 @@ module_abolish(Pred, Module) :-
        (  var(Name)  ->
           throw(error(instantiation_error, abolish/1))
        ;  integer(Arity) ->
-	      (  \+ atom(Name) ->
+          (  \+ atom(Name) ->
              throw(error(type_error(atom, Name), abolish/1))
-	      ;  Arity < 0 ->
+          ;  Arity < 0 ->
              throw(error(domain_error(not_less_than_zero, Arity), abolish/1))
-	      ;  max_arity(N), Arity > N ->
+          ;  max_arity(N), Arity > N ->
              throw(error(representation_error(max_arity), abolish/1))
-	      ;  functor(Head, Name, Arity) ->
-	         (  '$head_is_dynamic'(Module, Head) ->
-	            '$abolish_clause'(Module, Name, Arity)
-	         ;  throw(error(permission_error(modify, static_procedure, Pred), abolish/1))
-	         )
-	      )
+          ;  functor(Head, Name, Arity) ->
+             (  '$head_is_dynamic'(Module, Head) ->
+                '$abolish_clause'(Module, Name, Arity)
+             ;  '$no_such_predicate'(Module, Head) ->
+                true
+             ;  throw(error(permission_error(modify, static_procedure, Pred), abolish/1))
+             )
+          )
        ;  throw(error(type_error(integer, Arity), abolish/1))
        )
     ;  throw(error(type_error(predicate_indicator, Module:Pred), abolish/1))
@@ -1057,20 +1059,20 @@ abolish(Pred) :-
        ;  var(Arity) ->
           throw(error(instantiation_error, abolish/1))
        ;  integer(Arity) ->
-	      (  \+ atom(Name) ->
+          (  \+ atom(Name) ->
              throw(error(type_error(atom, Name), abolish/1))
-	      ;  Arity < 0 ->
+          ;  Arity < 0 ->
              throw(error(domain_error(not_less_than_zero, Arity), abolish/1))
-	      ;  max_arity(N), Arity > N ->
+          ;  max_arity(N), Arity > N ->
              throw(error(representation_error(max_arity), abolish/1))
-	      ;  functor(Head, Name, Arity) ->
-	         (  '$head_is_dynamic'(user, Head) ->
+          ;  functor(Head, Name, Arity) ->
+             (  '$head_is_dynamic'(user, Head) ->
                 '$abolish_clause'(user, Name, Arity)
-	         ;  '$no_such_predicate'(user, Head) ->
+             ;  '$no_such_predicate'(user, Head) ->
                 true
-	         ;  throw(error(permission_error(modify, static_procedure, Pred), abolish/1))
-	         )
-	      )
+             ;  throw(error(permission_error(modify, static_procedure, Pred), abolish/1))
+             )
+          )
        ;  throw(error(type_error(integer, Arity), abolish/1))
        )
     ;  throw(error(type_error(predicate_indicator, Pred), abolish/1))
@@ -1162,10 +1164,10 @@ op(Priority, OpSpec, Op) :-
     ;  Op == '|'     ->
        (  op_priority(Priority),
           op_specifier(OpSpec),
-		  lists:member(OpSpec, [xfx, xfy, yfx]),
+          lists:member(OpSpec, [xfx, xfy, yfx]),
           ( Priority >= 1001 ; Priority == 0 )
-	   -> '$op'(Priority, OpSpec, Op)
-	   ;  throw(error(permission_error(create, operator, (|)), op/3))) % www.complang.tuwien.ac.at/ulrich/iso-prolog/conformity_testing#72
+       -> '$op'(Priority, OpSpec, Op)
+       ;  throw(error(permission_error(create, operator, (|)), op/3))) % www.complang.tuwien.ac.at/ulrich/iso-prolog/conformity_testing#72
     ;  valid_op(Op), op_priority(Priority), op_specifier(OpSpec) ->
        '$op'(Priority, OpSpec, Op)
     ;  list_of_op_atoms(Op), op_priority(Priority), op_specifier(OpSpec) ->
@@ -1190,13 +1192,13 @@ atom_length(Atom, Length) :-
     ;  atom(Atom) ->
        (  var(Length) ->
           '$atom_length'(Atom, Length)
-	   ;  integer(Length), Length >= 0 ->
+       ;  integer(Length), Length >= 0 ->
           '$atom_length'(Atom, Length)
-	   ;  integer(Length) ->
+       ;  integer(Length) ->
           throw(error(domain_error(not_less_than_zero, Length), atom_length/2))
-	   % 8.16.1.3 d)
-	   ;  throw(error(type_error(integer, Length), atom_length/2)) % 8.16.1.3 c)
-	   )
+       % 8.16.1.3 d)
+       ;  throw(error(type_error(integer, Length), atom_length/2)) % 8.16.1.3 c)
+       )
     ;  throw(error(type_error(atom, Atom), atom_length/2)) % 8.16.1.3 b)
     ).
 
@@ -1244,16 +1246,16 @@ atom_concat(Atom_1, Atom_2, Atom_12) :-
        (  var(Atom_12) ->
           throw(error(instantiation_error, atom_concat/3))
        ;  atom_chars(Atom_12, Atom_12_Chars),
-	      lists:append(BeforeChars, AfterChars, Atom_12_Chars),
-	      atom_chars(Atom_1, BeforeChars),
-	      atom_chars(Atom_2, AfterChars)
+          lists:append(BeforeChars, AfterChars, Atom_12_Chars),
+          atom_chars(Atom_1, BeforeChars),
+          atom_chars(Atom_2, AfterChars)
        )
     ;  var(Atom_2) ->
        (  var(Atom_12) -> throw(error(instantiation_error, atom_concat/3))
        ;  atom_chars(Atom_1, Atom_1_Chars),
-	      atom_chars(Atom_12, Atom_12_Chars),
-	      lists:append(Atom_1_Chars, Atom_2_Chars, Atom_12_Chars),
-	      atom_chars(Atom_2, Atom_2_Chars)
+          atom_chars(Atom_12, Atom_12_Chars),
+          lists:append(Atom_1_Chars, Atom_2_Chars, Atom_12_Chars),
+          atom_chars(Atom_2, Atom_2_Chars)
        )
     ;  atom_chars(Atom_1, Atom_1_Chars),
        atom_chars(Atom_2, Atom_2_Chars),
@@ -1325,10 +1327,10 @@ chars_or_vars([], _).
 chars_or_vars([C|Cs], PI) :-
     (  nonvar(C) ->
        (  catch(builtins:atom_length(C, 1), _, false) ->
-	      (  nonvar(Cs) ->
+          (  nonvar(Cs) ->
              chars_or_vars(Cs, PI)
-	      ;  false
-	      )
+          ;  false
+          )
        ;  throw(error(type_error(character, C), PI))
        )
     ;  chars_or_vars(Cs, PI)
@@ -1341,9 +1343,9 @@ codes_or_vars([], _).
 codes_or_vars([C|Cs], PI) :-
     (  nonvar(C) ->
        (  catch(builtins:char_code(_, C), _, false) ->
-	      (  nonvar(Cs) -> codes_or_vars(Cs, PI)
-	      ;  false
-	      )
+          (  nonvar(Cs) -> codes_or_vars(Cs, PI)
+          ;  false
+          )
        ;  integer(C) ->
           throw(error(representation_error(character_code), PI))
        ;  throw(error(type_error(integer, C), PI))
