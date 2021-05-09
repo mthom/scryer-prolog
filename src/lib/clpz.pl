@@ -2968,7 +2968,7 @@ clpz_expansion(Var in Dom, In) :-
         (   ground(Dom), Dom = L..U, integer(L), integer(U) ->
             expansion_simpler(
                 (   integer(Var) ->
-                    between(L, U, Var)
+                    between:between(L, U, Var)
                 ;   clpz:clpz_in(Var, Dom)
                 ), In)
         ;   In = clpz:clpz_in(Var, Dom)
@@ -3045,7 +3045,9 @@ expansion_simpler(Var =:= Expr0, Goal) :-
         (   maplist(call, Gs) -> Value is Expr, Goal = (Var =:= Value)
         ;   Goal = false
         ).
-expansion_simpler(between(L,U,V), Goal) :- maplist(integer, [L,U,V]), !,
+expansion_simpler(between:between(L,U,V), Goal) :-
+        maplist(integer, [L,U,V]),
+        !,
         (   between(L,U,V) -> Goal = true
         ;   Goal = false
         ).
