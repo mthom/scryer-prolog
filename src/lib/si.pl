@@ -20,14 +20,15 @@
 
        https://stackoverflow.com/questions/27306453/safer-type-tests-in-prolog
 
-   "si" can also be read as "safe inference", so possibly also other
-   predicates are candidates for this library.
+   "si" can also be read as "sound inference" or "safe inference", so possibly
+   also other predicates are candidates for this library.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 :- module(si, [atom_si/1,
                integer_si/1,
                atomic_si/1,
-               list_si/1]).
+               list_si/1,
+               string_si/1]).
 
 :- use_module(library(lists)).
 
@@ -45,3 +46,7 @@ atomic_si(AC) :-
 list_si(L) :-
    \+ \+ length(L, _),
    sort(L, _).
+
+string_si(String) :-
+   list_si(String),
+   maplist(atom_si, String).
