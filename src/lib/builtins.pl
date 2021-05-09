@@ -1124,7 +1124,7 @@ list_of_op_atoms([]).
 op_priority(Priority) :-
     integer(Priority), !,
     (  ( Priority < 0 ; Priority > 1200 ) ->
-       throw(error(domain_error(operator_priority, Priority))) % 8.14.3.3 h)
+       throw(error(domain_error(operator_priority, Priority), op/3)) % 8.14.3.3 h)
     ;  true
     ).
 
