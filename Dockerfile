@@ -1,11 +1,13 @@
 # See https://github.com/LukeMathWalker/cargo-chef
-FROM lukemathwalker/cargo-chef as planner
+FROM rust as planner
 WORKDIR /scryer-prolog
+RUN cargo install cargo-chef 
 COPY . .
 RUN cargo chef prepare --recipe-path recipe.json
 
-FROM lukemathwalker/cargo-chef as cacher
+FROM rust as cacher
 WORKDIR /scryer-prolog
+RUN cargo install cargo-chef
 COPY --from=planner /scryer-prolog/recipe.json recipe.json
 RUN cargo chef cook --release --recipe-path recipe.json
 
