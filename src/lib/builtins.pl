@@ -615,8 +615,12 @@ handle_ball(C, C, R) :-
 handle_ball(_, _, _) :-
     '$unwind_stack'.
 
-throw(Ball) :- '$set_ball'(Ball), '$unwind_stack'.
-
+throw(Ball) :-
+    (   var(Ball) ->
+        '$set_ball'(error(instantiation_error,throw/1))
+    ;   '$set_ball'(Ball)
+    ),
+    '$unwind_stack'.
 
 :- non_counted_backtracking '$iterate_find_all'/4.
 '$iterate_find_all'(Template, Goal, _, LhOffset) :-
