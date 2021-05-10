@@ -1293,7 +1293,12 @@ char_code(Char, Code) :-
        ;  throw(error(type_error(integer, Code), char_code/2))
        )
     ;  atom_length(Char, 1) ->
-       '$char_code'(Char, Code)
+       (  var(Code) ->
+          '$char_code'(Char, Code)
+       ;  integer(Code) ->
+          '$char_code'(Char, Code)
+       ;  throw(error(type_error(integer, Code), char_code/2))
+       )
     ;  throw(error(type_error(character, Char), char_code/2))
     ).
 
