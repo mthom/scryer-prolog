@@ -1459,7 +1459,7 @@ open(SourceSink, Mode, Stream, StreamOptions) :-
     ;  \+ atom(Mode) ->
        throw(error(type_error(atom, Mode), open/4)) % 8.11.5.3d)
     ;  nonvar(Stream) ->
-       throw(error(type_error(variable, Stream), open/4)) % 8.11.5.3f)
+       throw(error(uninstantiation_error(Stream), open/4)) % 8.11.5.3f)
     ;
        parse_stream_options(StreamOptions, [Alias, EOFAction, Reposition, Type], open/4),
        '$open'(SourceSink, Mode, Stream, Alias, EOFAction, Reposition, Type)
