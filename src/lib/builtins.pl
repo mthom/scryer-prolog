@@ -1296,6 +1296,8 @@ char_code(Char, Code) :-
           '$char_code'(Char, Code)
        ;  throw(error(type_error(integer, Code), char_code/2))
        )
+    ;  \+ atom(Char) ->
+       throw(error(type_error(character, Char), char_code/2))
     ;  atom_length(Char, 1) ->
        (  var(Code) ->
           '$char_code'(Char, Code)
