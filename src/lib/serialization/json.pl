@@ -1,5 +1,4 @@
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   Written Apr 2021 by Aram Panasenco (panasenco@ucla.edu)
    Part of Scryer Prolog.
    
    `json_chars//1` can be used with [`phrase_from_file/2`](src/lib/pio.pl)
@@ -43,6 +42,8 @@
 :- use_module(library(dcgs)).
 :- use_module(library(dif)).
 :- use_module(library(lists)).
+:- use_module(library(pairs)).
+:- use_module(library(si)).
 
 /*  The DCGs are written to match the McKeeman form presented on the right side of
     https://www.json.org/json-en.html as closely as possible. Note that the names in
@@ -52,42 +53,46 @@ json_chars(Internal) --> json_element(Internal).
 /*  Because it's impossible to distinguish between an empty list [] and an empty
     string "" in Prolog, we force lists and strings in Prolog to be wrapped in terms
     list() and string() respectively. */
-json_value(ordpairs(Pairs)) --> json_object(Pairs).
-json_value(list(List))      --> json_array(List).
-json_value(string(Chars))   --> json_string(Chars).
-json_value(Number)          --> json_number(Number).
-json_value(true)            --> "true".
-json_value(false)           --> "false".
-json_value(null)            --> "null".
+json_value(keysorted(Pairs)) --> json_object(Pairs).
+json_value(list(List))       --> json_array(List).
+json_value(string(Chars))    --> json_string(Chars).
+json_value(Number)           --> json_number(Number).
+json_value(true)             --> "true".
+json_value(false)            --> "false".
+json_value(null)             --> "null".
 
-/*  Use of `finite_list/1` is not intended to change the logic, but instead to adjust
-    the 'control' or 'search strategy' used to execute the logic. Logically speaking,
-    permuting a list before ordering it is nonsensical. For a general overview of the
-    idea of separating 'logic' and 'control', read:
-    https://www.doc.ic.ac.uk/~rak/papers/algorithm%20=%20logic%20+%20control.pdf
-    For an introduction to search strategies in Prolog, read:
-    https://www.metalevel.at/prolog/sorting#searching
-*/
+uniquestringkeysortedlist_si(Pairs) :-
+    list_si(Pairs),
+    pairs_keys(Pairs, Keys),
+    maplist(string_si, Keys),
+    sort(Keys, Keys).
 
-finite_list(List) :-
-        nonvar(List),
-        instantiated_finite_list(List).
-
-instantiated_finite_list([]).
-instantiated_finite_list([_|T]) :-
-    finite_list(T).
-
-json_object([])           --> "{", json_ws, "}".
+json_object([])                         --> "{", json_ws, "}".
 json_object([OrdKey-OrdValue|OrdPairs]) -->
         "{",
-        { (   finite_list(OrdPairs) ->
-              permutation([OrdKey-OrdValue|OrdPairs], [Key-Value|Pairs])
-          ;   true
+        { catch(
+              (   uniquestringkeysortedlist_si([OrdKey-OrdValue|OrdPairs]) ->
+                  DelayInstantiationError = false,
+                  permutation([OrdKey-OrdValue|OrdPairs], [Key-Value|Pairs])
+              ;   throw(error(type_error(
+                      uniquestringkeysortedlist,
+                      [OrdKey-OrdValue|OrdPairs]
+                  ), json_object//1))
+              ),
+              error(instantiation_error, _),
+              DelayInstantiationError = true
           ) },
         json_members(Pairs, Key-Value),
         "}",
-        { (   \+ finite_list(OrdPairs) ->
-              keysort([Key-Value|Pairs], [OrdKey-OrdValue|OrdPairs])
+        { (   DelayInstantiationError ->
+              keysort([Key-Value|Pairs], [OrdKey-OrdValue|OrdPairs]),
+              (   uniquestringkeysortedlist_si([OrdKey-OrdValue|OrdPairs]) ->
+                  true
+              ;   throw(error(type_error(
+                      uniquestringkeysortedlist,
+                      [OrdKey-OrdValue|OrdPairs]
+                  ), json_object//1))
+              )
           ;   true
           ) }.
 

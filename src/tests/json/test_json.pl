@@ -29,7 +29,7 @@ test_json_read :-
     name_parse("pass_smallfloat.json", 0.000000000000123456789),
     name_parse("pass_bigfloat.json", 12345678900000000000000000000000000.0),
     name_parse("pass_array.json", list([1,2,3,4,5,6,7])),
-    name_parse("pass_object.json", ordpairs(["key"-null, "object"-ordpairs([])])),
+    name_parse("pass_object.json", keysorted(["key"-null, "object"-keysorted([])])),
     time(name_parse("pass_everything.json", _)).
 
 minify_sample_json :-
@@ -63,8 +63,8 @@ test_json_int_float :-
     \+ integer(SmallFloat).
 
 test_json_unordered :-
-    once(phrase(json_chars(ordpairs(["x"-null,"y"-null])), "{\"x\":null,\"y\":null}")),
-    once(phrase(json_chars(ordpairs(["x"-null,"y"-null])), "{\"y\":null,\"x\":null}")).
+    once(phrase(json_chars(keysorted(["x"-null,"y"-null])), "{\"x\":null,\"y\":null}")),
+    once(phrase(json_chars(keysorted(["x"-null,"y"-null])), "{\"y\":null,\"x\":null}")).
 
 test_json :-
     test_json_read,
