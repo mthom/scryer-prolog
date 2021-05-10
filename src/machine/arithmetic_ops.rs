@@ -676,6 +676,10 @@ impl MachineState {
                 MachineError::type_error(self.heap.h(), ValidType::Integer, n2),
                 stub,
             )),
+            (Number::Fixnum(_), n2) => Err(self.error_form(
+                MachineError::type_error(self.heap.h(), ValidType::Integer, n2),
+                stub,
+            )),
             (n1, _) => Err(self.error_form(
                 MachineError::type_error(self.heap.h(), ValidType::Integer, n1),
                 stub,
@@ -713,6 +717,10 @@ impl MachineState {
                 _ => Ok(Number::from(Integer::from(&*n1 << u32::max_value()))),
             },
             (Number::Integer(_), n2) => Err(self.error_form(
+                MachineError::type_error(self.heap.h(), ValidType::Integer, n2),
+                stub,
+            )),
+            (Number::Fixnum(_), n2) => Err(self.error_form(
                 MachineError::type_error(self.heap.h(), ValidType::Integer, n2),
                 stub,
             )),
