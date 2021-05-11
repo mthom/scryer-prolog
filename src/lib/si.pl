@@ -48,5 +48,4 @@ list_si(L) :-
    sort(L, _).
 
 string_si(String) :-
-   list_si(String),
-   maplist(atom_si, String).
+   catch(atom_chars(_, String), error(type_error(_,_),_), false).
