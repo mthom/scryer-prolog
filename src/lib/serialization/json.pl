@@ -41,6 +41,7 @@
 
 :- use_module(library(dcgs)).
 :- use_module(library(dif)).
+:- use_module(library(freeze)).
 :- use_module(library(lists)).
 :- use_module(library(pairs)).
 :- use_module(library(si)).
@@ -67,34 +68,23 @@ uniquestringkeysortedlist_si(Pairs) :-
     maplist(string_si, Keys),
     sort(Keys, Keys).
 
-json_object([])                         --> "{", json_ws, "}".
-json_object([OrdKey-OrdValue|OrdPairs]) -->
+json_object([])                                  --> "{", json_ws, "}".
+json_object([SortedKey-SortedValue|SortedPairs]) -->
         "{",
-        { catch(
-              (   uniquestringkeysortedlist_si([OrdKey-OrdValue|OrdPairs]) ->
-                  DelayInstantiationError = false,
-                  permutation([OrdKey-OrdValue|OrdPairs], [Key-Value|Pairs])
-              ;   throw(error(type_error(
-                      uniquestringkeysortedlist,
-                      [OrdKey-OrdValue|OrdPairs]
-                  ), json_object//1))
-              ),
-              error(instantiation_error, _),
-              DelayInstantiationError = true
-          ) },
-        json_members(Pairs, Key-Value),
-        "}",
-        { (   DelayInstantiationError ->
-              keysort([Key-Value|Pairs], [OrdKey-OrdValue|OrdPairs]),
-              (   uniquestringkeysortedlist_si([OrdKey-OrdValue|OrdPairs]) ->
+        { freeze(SortedKey, (
+              (   uniquestringkeysortedlist_si([SortedKey-SortedValue|SortedPairs]) ->
                   true
               ;   throw(error(type_error(
                       uniquestringkeysortedlist,
-                      [OrdKey-OrdValue|OrdPairs]
+                      [SortedKey-SortedValue|SortedPairs]
                   ), json_object//1))
-              )
-          ;   true
-          ) }.
+              ),
+              permutation([SortedKey-SortedValue|SortedPairs], [Key-Value|Pairs]))
+          )
+        },
+        json_members(Pairs, Key-Value),
+        "}",
+        { keysort([Key-Value|Pairs], [SortedKey-SortedValue|SortedPairs]) }.
 
 /*  `json_members//2` below is implemented with a lagged argument to take advantage of
     first argument indexing. This is a pure performance-driven decision that doesn't
