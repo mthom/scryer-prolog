@@ -28,6 +28,7 @@
                integer_si/1,
                atomic_si/1,
                list_si/1,
+               char_si/1,
                string_si/1]).
 
 :- use_module(library(lists)).
@@ -47,5 +48,24 @@ list_si(L) :-
    \+ \+ length(L, _),
    sort(L, _).
 
+char_si(Char) :-
+   atom_si(Char),
+   atom_length(Char, 1).
+
+char_info_accumulator(Char, Uninstantiated0-NonChar0, Uninstantiated1-NonChar1) :-
+    (   catch(
+            (char_si(Char), Uninstantiated1 = Uninstantiated0),
+            error(instantiation_error, _),
+            Uninstantiated1 = true
+        ) ->
+        NonChar1 = NonChar0
+    ;   NonChar1 = true
+    ).
+
 string_si(String) :-
-   catch(atom_chars(_, String), error(type_error(_,_),_), false).
+    list_si(String),
+    foldl(char_info_accumulator, String, false-false, Uninstantiated-false),
+    (   Uninstantiated ->
+        throw(error(instantiation_error, string_si/1))
+    ;   true
+    ).

@@ -10,7 +10,8 @@ test_string :-
     string_si([]),
     \+ string_si(['']),
     L = [a|L], 
-    \+ string_si(L).
+    \+ string_si(L),
+    \+ string_si([_,non_char]).
 
 test_si :-
     test_string.
