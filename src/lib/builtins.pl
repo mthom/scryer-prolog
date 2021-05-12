@@ -13,7 +13,7 @@
                      fail/0, false/0, findall/3, findall/4,
                      flush_output/0, flush_output/1, get_byte/1,
                      get_byte/2, get_char/1, get_char/2, get_code/1,
-                     get_code/2, halt/0, halt/1, max_arity/1, nl/0,
+                     get_code/2, halt/0, halt/1, nl/0,
                      nl/1, number_chars/2, number_codes/2, once/1,
                      op/3, open/3, open/4, peek_byte/1, peek_byte/2,
                      peek_char/1, peek_char/2, peek_code/1,
@@ -28,10 +28,6 @@
                      write_canonical/1, write_canonical/2,
                      write_term/2, write_term/3, writeq/1, writeq/2]).
 
-
-% the maximum arity flag. needs to be replaced with
-% current_prolog_flag(max_arity, MAX_ARITY).
-max_arity(1023).
 
 % unify.
 X = X.
@@ -126,6 +122,8 @@ Module : Predicate :-
 
 % flags.
 
+current_prolog_flag(Flag, Value) :- Flag == max_arity, !, Value == 1023.
+current_prolog_flag(max_arity, 1023).
 current_prolog_flag(Flag, Value) :- Flag == bounded, !, Value == false.
 current_prolog_flag(bounded, false).
 current_prolog_flag(Flag, Value) :- Flag == integer_rounding_function, !, Value == toward_zero.
@@ -368,7 +366,7 @@ univ_errors(Term, List, N) :-
           T == [],
           throw(error(type_error(atomic, H), (=..)/2))               % 8.5.3.3 e)
        ;  var(Term),
-          max_arity(M),
+          current_prolog_flag(max_arity, M),
           N - 1 > M,
           throw(error(representation_error(max_arity), (=..)/2))     % 8.5.3.3 g)
        ;  true
@@ -1034,7 +1032,7 @@ module_abolish(Pred, Module) :-
              throw(error(type_error(atom, Name), abolish/1))
           ;  Arity < 0 ->
              throw(error(domain_error(not_less_than_zero, Arity), abolish/1))
-          ;  max_arity(N), Arity > N ->
+          ;  current_prolog_flag(max_arity, N), Arity > N ->
              throw(error(representation_error(max_arity), abolish/1))
           ;  functor(Head, Name, Arity) ->
              (  '$head_is_dynamic'(Module, Head) ->
@@ -1067,7 +1065,7 @@ abolish(Pred) :-
              throw(error(type_error(atom, Name), abolish/1))
           ;  Arity < 0 ->
              throw(error(domain_error(not_less_than_zero, Arity), abolish/1))
-          ;  max_arity(N), Arity > N ->
+          ;  current_prolog_flag(max_arity, N), Arity > N ->
              throw(error(representation_error(max_arity), abolish/1))
           ;  functor(Head, Name, Arity) ->
              (  '$head_is_dynamic'(user, Head) ->
