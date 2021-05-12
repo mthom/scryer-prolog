@@ -1607,7 +1607,9 @@ stream_property(S, P) :-
 
 
 at_end_of_stream(S_or_a) :-
-    (  atom(S_or_a) ->
+    (  var(S_or_a) ->
+       throw(error(instantiation_error, at_end_of_stream/1))
+    ;  atom(S_or_a) ->
        stream_property(S, alias(S_or_a))
     ;  S = S_or_a
     ),
