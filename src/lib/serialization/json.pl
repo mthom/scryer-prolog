@@ -65,7 +65,7 @@ json_value(null)             --> "null".
 uniquestringkeysortedlist_si(Pairs) :-
     list_si(Pairs),
     pairs_keys(Pairs, Keys),
-    maplist(string_si, Keys),
+    maplist_si(maplist_si(char_si), Keys),
     sort(Keys, Keys).
 
 json_object([])                                  --> "{", json_ws, "}".
@@ -122,30 +122,6 @@ json_string(Chars) --> "\"", json_characters(Chars), "\"".
 json_characters("")           --> "".
 json_characters([Char|Chars]) --> json_character(Char), json_characters(Chars).
 
-/*  Variable instantiation checks (`var/1` and `nonvar/1`) used below are also intended
-    to change the search strategy and not the logic, just like `finite_list/1` in
-    `json_object//1` above.
-    It's tempting to use instantiation checks to be more strict while generating and
-    more relaxed while parsing. In fact, the early version of this library aimed to
-    return exactly one result when generating. However, doing that is **wrong** and
-    leads to difficult-to-catch bugs. Instead, the search strategy should be adjusted
-    to return the most ideal and strictest answer FIRST and then return less ideal
-    answers on backtracking. As an example, consider a string containing just the
-    forward slash. The JSON standard recommends the forward slash be escaped with a
-    backslash, but allows it to not be escaped. Attempting to force stricter behavior
-    with instantiation checks can lead to this confusing mess:
-    ```
-    phrase(json:json_characters("/"), External).
-       External = "\\/".
-    ?- phrase(json:json_characters(Internal), "/").
-       Internal = "/"
-    ;  false.
-    ?- phrase(json:json_characters("/"), "/").
-    false.
-    ```
-    To avoid such bugs, instantiation checks are never used to reduce the number of
-    right answers, but rather to adjust the *path* used to traverse those answers. */
-
 escape_char('"', '"').
 escape_char('\\', '\\').
 escape_char('/', '/').
@@ -167,19 +143,19 @@ json_character(PrintChar)  -->
       PrintCharCode >= 32 }.
 json_character(EscapeChar) -->
         "\\u",
+        { freeze(EscapeChar, (
+            char_code(EscapeChar, EscapeCharCode),
+            H1 is (EscapeCharCode // 16^3) mod 16,
+            H2 is (EscapeCharCode // 16^2) mod 16,
+            H3 is (EscapeCharCode // 16^1) mod 16,
+            H4 is (EscapeCharCode // 16^0) mod 16
+          )) },
         json_hex(H1),
         json_hex(H2),
         json_hex(H3),
         json_hex(H4),
-        { (   nonvar(H1) ->
-              EscapeCharCode is H1 * 16^3 + H2 * 16^2 + H3 * 16 + H4,
-              char_code(EscapeChar, EscapeCharCode)
-          ;   char_code(EscapeChar, EscapeCharCode),
-              H1 is (EscapeCharCode // 16^3) mod 16,
-              H2 is (EscapeCharCode // 16^2) mod 16,
-              H3 is (EscapeCharCode // 16^1) mod 16,
-              H4 is (EscapeCharCode // 16^0) mod 16
-          ) }.
+        { EscapeCharCode is H1 * 16^3 + H2 * 16^2 + H3 * 16 + H4,
+          char_code(EscapeChar, EscapeCharCode) }.
 
 json_hex(Digit) --> json_digit(Digit).
 json_hex(10)    --> "a".

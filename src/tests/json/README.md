@@ -31,6 +31,12 @@ After making the code more general:
    % CPU time: 0.217 seconds
 ```
 
+After replacing instantiation checks with `freeze/2` and `maplist_si/2`:
+```
+?- test_json:test_json_read.
+   % CPU time: 0.963 seconds
+```
+
 ### Write
 
 Without first argument indexing optimizations:
@@ -49,4 +55,10 @@ After making the code more general:
 ```
 ?- test_json:test_json_minify.
    % CPU time: 0.013 seconds
+```
+
+After replacing instantiation checks with `freeze/2` and `maplist_si/2`:
+```
+?- test_json:test_json_minify.
+   % CPU time: 0.314 seconds
 ```
