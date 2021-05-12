@@ -985,13 +985,8 @@ retract_clause(Head, Body) :-
        (  Name == (:),
           Arity =:= 2 ->
           arg(1, Head, Module),
-          arg(2, Head, HeadAndBody),
-          (  HeadAndBody = (F :- Body1) ->
-             true
-          ;  F = HeadAndBody,
-             Body1 = true
-          ),
-          retract_module_clause(F, Body1, Module)
+          arg(2, Head, Head1),
+          retract_module_clause(Head1, Body, Module)
        ;  '$no_such_predicate'(user, Head) ->
           '$fail'
        ;  '$head_is_dynamic'(user, Head) ->
