@@ -1016,7 +1016,7 @@ retract(Clause) :-
 :- meta_predicate retractall(0).
 
 retractall(Head) :-
-   retract((Head :- _)),
+   retract_clause(Head, _),
    false.
 retractall(_).
 
