@@ -1023,7 +1023,7 @@ retractall(_).
 
 module_abolish(Pred, Module) :-
     (  var(Pred) ->
-       throw(error(instantiation_error), abolish/1)
+       throw(error(instantiation_error, abolish/1))
     ;  Pred = Name/Arity ->
        (  var(Name)  ->
           throw(error(instantiation_error, abolish/1))
@@ -1052,7 +1052,7 @@ module_abolish(Pred, Module) :-
 
 abolish(Pred) :-
     (  var(Pred) ->
-       throw(error(instantiation_error), abolish/1)
+       throw(error(instantiation_error, abolish/1))
     ;  Pred = Module:InnerPred ->
        module_abolish(InnerPred, Module)
     ;  Pred = Name/Arity ->
