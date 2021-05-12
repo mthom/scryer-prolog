@@ -1395,7 +1395,7 @@ number_codes(N, Chs) :-
 subsumes_term(General, Specific) :-
    \+ \+ (
       term_variables(Specific, SVs1),
-      General = Specific,
+      unify_with_occurs_check(General, Specific),
       term_variables(SVs1, SVs2),
       SVs1 == SVs2
    ).
