@@ -3,7 +3,7 @@
     Author:        Markus Triska
     E-mail:        triska@metalevel.at
     WWW:           https://www.metalevel.at
-    Copyright (C): 2016-2020 Markus Triska
+    Copyright (C): 2016-2021 Markus Triska
 
     This library provides CLP(ℤ):
 
@@ -4283,13 +4283,13 @@ tuples_in(Tuples, Relation) :-
         must_be(list(list), Tuples),
         maplist(maplist(fd_variable), Tuples),
         must_be(list(list(integer)), Relation),
-        maplist(relation_tuple(Relation), Tuples),
-        do_queue.
+        maplist(relation_tuple(Relation), Tuples).
 
 relation_tuple(Relation, Tuple) :-
         relation_unifiable(Relation, Tuple, Us, _, _),
         (   ground(Tuple) -> memberchk(Tuple, Relation)
-        ;   phrase(tuple_domain(Tuple, Us), _),
+        ;   new_queue(Q),
+            phrase((tuple_domain(Tuple, Us),do_queue), [Q], _),
             (   Tuple = [_,_|_] -> tuple_freeze(Tuple, Us)
             ;   true
             )
