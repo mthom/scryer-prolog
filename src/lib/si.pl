@@ -27,9 +27,9 @@
 :- module(si, [atom_si/1,
                integer_si/1,
                atomic_si/1,
-               list_si/1,
                char_si/1,
-               string_si/1]).
+               list_si/1,
+               maplist_si/2]).
 
 :- use_module(library(lists)).
 
@@ -44,28 +44,30 @@ integer_si(I) :-
 atomic_si(AC) :-
    functor(AC,_,0).
 
-list_si(L) :-
-   \+ \+ length(L, _),
-   sort(L, _).
-
 char_si(Char) :-
    atom_si(Char),
    atom_length(Char, 1).
 
-char_info_accumulator(Char, Uninstantiated0-NonChar0, Uninstantiated1-NonChar1) :-
-    (   catch(
-            (char_si(Char), Uninstantiated1 = Uninstantiated0),
-            error(instantiation_error, _),
-            Uninstantiated1 = true
-        ) ->
-        NonChar1 = NonChar0
-    ;   NonChar1 = true
+list_si(L) :-
+   \+ \+ length(L, _),
+   sort(L, _).
+
+maplist_si(Cont1, List) :-
+    list_si(List),
+    maplist_success_inst0_inst1(Cont1, List, true, true, Instantiated),
+    (   Instantiated ->
+        true
+    ;   throw(error(instantiation_error, maplist_si/2))
     ).
 
-string_si(String) :-
-    list_si(String),
-    foldl(char_info_accumulator, String, false-false, Uninstantiated-false),
-    (   Uninstantiated ->
-        throw(error(instantiation_error, string_si/1))
-    ;   true
+maplist_success_inst0_inst1(_, [], true, Instantiated, Instantiated).
+maplist_success_inst0_inst1(Cont1, [E1|E1s], Success, Instantiated0, Instantiated) :-
+    (   catch(
+            (call(Cont1, E1), Instantiated1 = Instantiated0),
+            error(instantiation_error, _),
+            Instantiated1 = false
+        ) ->
+        maplist_success_inst0_inst1(Cont1, E1s, Success, Instantiated1, Instantiated)
+    ;   Instantiated = Instantiated1,
+        Success = false
     ).

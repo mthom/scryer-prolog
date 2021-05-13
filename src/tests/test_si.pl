@@ -3,15 +3,15 @@
 :- use_module(library(si)).
 
 test_string :-
-    string_si([a,b]),
-    \+ string_si([a|non_string]),
-    \+ string_si(abc),
-    \+ string_si([0'a]),
-    string_si([]),
-    \+ string_si(['']),
+    maplist_si(char_si, [a,b]),
+    \+ maplist_si(char_si, [a|non_string]),
+    \+ maplist_si(char_si, abc),
+    \+ maplist_si(char_si, [0'a]),
+    maplist_si(char_si, []),
+    \+ maplist_si(char_si, ['']),
     L = [a|L], 
-    \+ string_si(L),
-    \+ string_si([_,non_char]).
+    \+ maplist_si(char_si, L),
+    \+ maplist_si(char_si, [_,non_char]).
 
 test_si :-
     test_string.
