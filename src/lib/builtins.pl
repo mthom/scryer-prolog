@@ -1627,7 +1627,7 @@ set_stream_position(S_or_a, Position) :-
     ;  Position = position_and_lines_read(P, _),
        is_stream_position(Position) ->
        '$set_stream_position'(S_or_a, P)
-    ;  throw(error(domain_error(stream_position, Position)))
+    ;  throw(error(domain_error(stream_position, Position), set_stream_position/2))
     ).
 
 callable(X) :-
