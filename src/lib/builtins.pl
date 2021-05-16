@@ -1083,8 +1083,17 @@ abolish(Pred) :-
 
 
 current_predicate(Pred) :-
-    (  nonvar(Pred), Pred \= _ / _
-    -> throw(error(type_error(predicate_indicator, Pred), current_predicate/1))
+    (  var(Pred) ->
+       '$get_next_db_ref'(Ref, _),
+       '$iterate_db_refs'(Ref, Pred)
+    ;  Pred \= _/_ ->
+       throw(error(type_error(predicate_indicator, Pred), current_predicate/1))
+    ;  Pred = Name/Arity,
+       (  nonvar(Name), \+ atom(Name)
+       ;  nonvar(Arity), \+ integer(Arity)
+       ;  integer(Arity), Arity < 0
+       ) ->
+       throw(error(type_error(predicate_indicator, Pred), current_predicate/1))
     ;  '$get_next_db_ref'(Ref, _),
        '$iterate_db_refs'(Ref, Pred)
     ).
