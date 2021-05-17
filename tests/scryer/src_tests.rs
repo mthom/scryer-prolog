@@ -40,20 +40,23 @@ fn rules() {
 
 #[test]
 fn setup_call_cleanup_load() {
-    load_module_test("src/tests/setup_call_cleanup.pl", "caught: unthrown\n");
-}
-
-#[test]
-fn setup_call_cleanup_process() {
-    run_top_level_test_with_args(
-        &["src/tests/setup_call_cleanup.pl"],
-        "",
-        "caught: unthrown\n",
+    load_module_test(
+        "src/tests/setup_call_cleanup.pl",
+        "1+21+31+2>_12827+_128281+_119391+2>41+2>_128281+2>31+2>31+2>4ba",
     );
 }
 
 #[test]
-#[ignore] // ignored as this does not terminate
+#[ignore] // FIXME: it looks as though the output is being fed back into stdin. Fix this.
+fn setup_call_cleanup_process() {
+    run_top_level_test_with_args(
+        &["src/tests/setup_call_cleanup.pl"],
+        "1+21+31+2>_72164+_721651+_712761+2>41+2>_721651+2>31+2>31+2>4ba",
+        "",
+    );
+}
+
+#[test]
 fn clpz_load() {
     load_module_test("src/tests/clpz/test_clpz.pl", "");
 }

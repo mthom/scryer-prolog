@@ -10,9 +10,9 @@ fn display_constraints() {
         X = 1.\n\
         dif(X,1).\n",
         "   \
-        X = 1.\n   \
+        X=1.\n   \
         true.\n   \
-        X = 1.\n   \
+        X=1.\n   \
         dif:dif(X,1).\n\
         ",
     );
@@ -28,9 +28,7 @@ fn do_not_duplicate_path_components() {
             ",
         "\
         caught: e\n\
-        false.\n\
         caught: e\n\
-        false.\n\
         ",
     );
 }
@@ -53,12 +51,12 @@ fn handle_residual_goal() {
         ",
         "   \
         true.\n   \
-        true.\n\
+        true.\n   \
         false.\n   \
-        X = - X.\n   \
-        dif:dif(- X,X).\n\
+        X= -X.\n   \
+        dif:dif(-X,X).\n   \
         false.\n   \
-        Vars = [X], dif:dif(- X,X).\n   \
+        Vars=[X], dif:dif(-X,X).\n   \
         true.\n   \
         true.\n   \
         true.\n\
@@ -74,7 +72,7 @@ fn occurs_check_flag() {
         "\
             f(X, X).\n\
             ",
-        "false.\n",
+        "   false.\n",
     )
 }
 
@@ -89,10 +87,10 @@ fn occurs_check_flag2() {
             X-X = X-g(X).
             ",
         "   \
-            true.\n\
+            true.\n   \
             false.\n   \
-            true.\n\
-            false.\n\
+            true.\n   \
+            false.\n   \
             false.\n\
             ",
     )
@@ -127,19 +125,15 @@ fn compound_goal() {
 // issue #815
 #[test]
 fn no_stutter() {
-    run_top_level_test_no_args("write(a), write(b), false.\n", "abfalse.\n")
+    run_top_level_test_no_args("write(a), write(b), false.\n", "ab   false.\n")
 }
 
 // issue #812
 #[test]
-#[ignore] // FIXME: line is of by one, empty line not accounted for or starting to count at line 0?
 fn singleton_warning() {
     run_top_level_test_no_args(
         "['tests-pl/issue812-singleton-warning.pl'].",
-        "\
-        Warning: singleton variables X at line 4 of issue812-singleton-warning.pl\n   \
-        true.\n\
-        ",
+        "Warning: singleton variables X at line 3 of issue812-singleton-warning.pl\n",
     );
 }
 

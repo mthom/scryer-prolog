@@ -547,7 +547,10 @@ impl<'a> ChunkedIterator<'a> {
                     arity = 1;
                     break;
                 }
-                ChunkedTerm::BodyTerm(&QueryTerm::UnblockedCut(..)) => result.push(term),
+                ChunkedTerm::BodyTerm(&QueryTerm::UnblockedCut(..)) => {
+                    self.deep_cut_encountered = true;
+                    result.push(term);
+                }
                 ChunkedTerm::BodyTerm(&QueryTerm::Clause(_, ClauseType::Inlined(_), ..)) => {
                     result.push(term)
                 }
