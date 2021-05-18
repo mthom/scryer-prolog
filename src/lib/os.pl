@@ -14,7 +14,8 @@
 
 :- module(os, [getenv/2,
                setenv/2,
-               unsetenv/1]).
+               unsetenv/1,
+               pid/1]).
 
 :- use_module(library(error)).
 :- use_module(library(charsio)).
@@ -32,6 +33,10 @@ setenv(Key, Value) :-
 unsetenv(Key) :-
         must_be_env_var(Key),
         '$unsetenv'(Key).
+
+pid(PID) :-
+        can_be(integer, PID),
+        '$pid'(PID).	
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    For now, we only support a restricted subset of variable names.
