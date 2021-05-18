@@ -900,6 +900,18 @@ impl MachineState {
                     }
                 }
             }
+            &SystemClauseType::RenameFile => {
+                let file = self.heap_pstr_iter(self[temp_v!(1)]).to_string();
+                let renamed = self.heap_pstr_iter(self[temp_v!(2)]).to_string();
+
+                match fs::rename(file, renamed) {
+                    Ok(_) => {}
+                    _ => {
+                        self.fail = true;
+                        return Ok(());
+                    }
+                }
+            }
             &SystemClauseType::DeleteDirectory => {
                 let directory = self.heap_pstr_iter(self[temp_v!(1)]).to_string();
 

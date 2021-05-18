@@ -51,6 +51,7 @@
                   file_exists/1,
                   directory_exists/1,
                   delete_file/1,
+				  rename_file/2,
 				  delete_directory/1,
                   make_directory/1,
                   make_directory_path/1,
@@ -100,6 +101,12 @@ delete_file(File) :-
         file_must_exist(File, delete_file/1),
         list_of_chars(File),
         '$delete_file'(File).
+
+rename_file(File, Renamed) :-
+        file_must_exist(File, rename_file/2),
+        list_of_chars(File),
+		list_of_chars(Renamed),
+        '$rename_file'(File, Renamed).
 
 delete_directory(Directory) :-
         directory_must_exist(Directory, delete_directory/1),
