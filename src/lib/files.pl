@@ -51,6 +51,7 @@
                   file_exists/1,
                   directory_exists/1,
                   delete_file/1,
+				  delete_directory/1,
                   make_directory/1,
                   working_directory/2,
                   path_canonical/2,
@@ -95,9 +96,19 @@ delete_file(File) :-
         list_of_chars(File),
         '$delete_file'(File).
 
+delete_directory(Directory) :-
+        directory_must_exist(Directory, delete_directory/1),
+        list_of_chars(Directory),
+        '$delete_directory'(Directory).
+
 file_must_exist(File, Context) :-
         (   file_exists(File) -> true
         ;   throw(error(existence_error(file, File), Context))
+        ).
+
+directory_must_exist(Directory, Context) :-
+        (   directory_exists(Directory) -> true
+        ;   throw(error(existence_error(directory, Directory), Context))
         ).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -

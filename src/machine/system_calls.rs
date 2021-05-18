@@ -889,6 +889,17 @@ impl MachineState {
                     }
                 }
             }
+            &SystemClauseType::DeleteDirectory => {
+                let directory = self.heap_pstr_iter(self[temp_v!(1)]).to_string();
+
+                match fs::remove_dir(directory) {
+                    Ok(_) => {}
+                    _ => {
+                        self.fail = true;
+                        return Ok(());
+                    }
+                }
+            }
             &SystemClauseType::WorkingDirectory => {
                 if let Ok(dir) = env::current_dir() {
                     let current = match dir.to_str() {
