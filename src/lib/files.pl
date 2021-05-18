@@ -53,6 +53,7 @@
                   delete_file/1,
 				  delete_directory/1,
                   make_directory/1,
+                  make_directory_path/1,
                   working_directory/2,
                   path_canonical/2,
                   path_segments/2,
@@ -90,6 +91,10 @@ directory_exists(Directory) :-
 make_directory(Directory) :-
         list_of_chars(Directory),
         '$make_directory'(Directory).
+
+make_directory_path(Directory) :-
+        list_of_chars(Directory),
+        '$make_directory_path'(Directory).
 
 delete_file(File) :-
         file_must_exist(File, delete_file/1),

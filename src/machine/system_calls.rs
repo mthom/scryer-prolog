@@ -878,6 +878,17 @@ impl MachineState {
                     }
                 }
             }
+            &SystemClauseType::MakeDirectoryPath => {
+                let directory = self.heap_pstr_iter(self[temp_v!(1)]).to_string();
+
+                match fs::create_dir_all(directory) {
+                    Ok(_) => {}
+                    _ => {
+                        self.fail = true;
+                        return Ok(());
+                    }
+                }
+            }
             &SystemClauseType::DeleteFile => {
                 let file = self.heap_pstr_iter(self[temp_v!(1)]).to_string();
 
