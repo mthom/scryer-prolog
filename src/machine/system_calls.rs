@@ -41,6 +41,7 @@ use std::net::{TcpListener, TcpStream};
 use std::num::NonZeroU32;
 use std::ops::Sub;
 use std::rc::Rc;
+use std::process;
 
 use chrono::{offset::Local, DateTime};
 use cpu_time::ProcessTime;
@@ -5362,6 +5363,12 @@ impl MachineState {
             &SystemClauseType::UnsetEnv => {
                 let key = self.heap_pstr_iter(self[temp_v!(1)]).to_string();
                 env::remove_var(key);
+            }
+            &SystemClauseType::PID => {
+                let a1 = self[temp_v!(1)];
+                let pid = process::id();
+                let addr = self.heap.put_constant(Constant::Integer(Rc::new(Integer::from(pid))));
+                (self.unify_fn)(self, a1, addr);
             }
             &SystemClauseType::CharsBase64 => {
                 let padding = self.atom_argument_to_string(3);
