@@ -171,7 +171,11 @@ submit_query_and_print_results_(_, _) :-
 
 
 submit_query_and_print_results(Term0, VarList) :-
-    expand_goal(call(Term0), user, call(Term)),
+    (  functor(Term0, call, _) ->
+       Term = Term0 % prevent pre-mature expansion of incomplete goal
+                    % in the first argument, which is done by call/N
+    ;  expand_goal(call(Term0), user, call(Term))
+    ),
     setup_call_cleanup(bb_put('$first_answer', true),
                        submit_query_and_print_results_(Term, VarList),
                        bb_put('$first_answer', false)).

@@ -586,10 +586,16 @@ strip_module(Goal, M, G) :-
 expand_subgoal(UnexpandedGoals, MS, Module, ExpandedGoals, HeadVars) :-
     (  var(UnexpandedGoals) ->
        UnexpandedGoals = ExpandedGoals
-    ;  goal_expansion(UnexpandedGoals, Module, UnexpandedGoals1),
-       (  Module \== user ->
-          goal_expansion(UnexpandedGoals1, user, Goals)
-       ;  Goals = UnexpandedGoals1
+    ;  (  MS == 0 ->
+          % only expand complete goals. call/N will take care of incomplete goals
+          % by calling goal expansion after it is supplied the remaining arguments.
+          (  goal_expansion(UnexpandedGoals, Module, UnexpandedGoals1),
+             (  Module \== user ->
+                goal_expansion(UnexpandedGoals1, user, Goals)
+             ;  Goals = UnexpandedGoals1
+             )
+          )
+       ;  Goals = UnexpandedGoals
        ),
        (  inner_meta_specs(MS, Goals, _, MetaSpecs) ->
           expand_module_names(Goals, MetaSpecs, Module, ExpandedGoals, HeadVars)
@@ -740,14 +746,6 @@ thread_goals(Goals0, Goals1, Hole, Functor) :-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
-call_clause(M:G1, G0) :-
-    functor(G1, F, _),
-    atom(F),
-    atom(M),
-    F \== [],
-    !,
-    expand_goal(M:G1, M, G0).
-
 % The '$call' functor is an escape hatch from goal expansion. So far,
 % it is used only to avoid infinite recursion into expand_goal/3.
 
@@ -770,11 +768,15 @@ call_clause('$call'(G), G0) :-
     ).
 
 call_clause(G, G0) :-
-    functor(G, F, _),
+    strip_module(G, M, G1),
+    functor(G1, F, _),
     atom(F),
     F \== [],
-    load_context(M),
-    expand_goal(M:G, M, G0).
+    (  var(M) ->
+       load_context(M)
+    ;  true
+    ),
+    expand_goal(M:G1, M, G0).
 
 
 call(G) :-
@@ -785,16 +787,6 @@ call(G) :-
     ;  type_error(callable, G, call/1)
     ).
 
-
-call_clause(M:G1, Args, _, G0) :-
-    atom(M),
-    G1 =.. [F | As],
-    atom(F),
-    F \== [],
-    !,
-    append(As, Args, As1),
-    G2 =.. [F | As1],
-    expand_goal(M:G2, M, G0).
 
 call_clause('$call'(G1), Args, N, G0) :-
     (  var(G1),
@@ -819,10 +811,14 @@ call_clause('$call'(G1), Args, N, G0) :-
     ).
 
 call_clause(G, Args, _, G0) :-
-    G =.. [F | As],
+    strip_module(G, M, G1),
+    G1 =.. [F | As],
     atom(F),
     F \== [],
-    load_context(M),
+    (  var(M) ->
+       load_context(M)
+    ;  true
+    ),
     append(As, Args, As1),
     G2 =.. [F | As1],
     expand_goal(M:G2, M, G0).

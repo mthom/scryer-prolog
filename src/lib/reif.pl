@@ -4,7 +4,7 @@
 
 :- use_module(library(dif)).
 
-:- meta_predicate if_(0, 0, 0).
+:- meta_predicate if_(1, 0, 0).
 
 if_(If_1, Then_0, Else_0) :-
     call(If_1, T),
