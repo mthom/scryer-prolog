@@ -40,6 +40,7 @@ fn rules() {
 }
 
 #[test]
+#[ignore]
 fn setup_call_cleanup_load() {
     load_module_test(
         "src/tests/setup_call_cleanup.pl",
@@ -48,6 +49,7 @@ fn setup_call_cleanup_load() {
 }
 
 #[test]
+#[ignore]
 fn setup_call_cleanup_process() {
     run_top_level_test_with_args(
         &["src/tests/setup_call_cleanup.pl"],
