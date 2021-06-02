@@ -9,7 +9,7 @@ license = "BSD-3-Clause"
 
 [dependencies]
 indexmap = "1.0.2"
-lexical = "2.1.0"
+lexical = "5.2.1"
 ordered-float = "0.5.0"
 rug = { optional = true, version = "1.4.0" }
 num-rug-adapter = { optional = true, path = "../num-rug-adapter" }
