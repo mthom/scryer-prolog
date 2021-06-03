@@ -2982,7 +2982,7 @@ clpz_expansion(A #<==> B, Reif) :-
         phrase(expr_conds(Y0, Y), Cs),
         list_goal(Cs0, Cond),
         Expr =.. [F,X,Y],
-        expansion_simpler(( Cond, ( var(B) ; integer(B) ) ->
+        expansion_simpler(( Cond, ( var(B) ; integer(B), clpz:between(0, 1, B) ) ->
                             (   Expr ->
                                 B = 1
                             ;   B = 0
