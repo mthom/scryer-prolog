@@ -555,7 +555,7 @@ impl<'a, R: Read> Lexer<'a, R> {
     fn vacate_with_float(&mut self, mut token: String) -> Token {
         self.return_char(token.pop().unwrap());
 
-        let result = OrderedFloat(parse_lossy::<f64, _>(token.as_bytes()));
+        let result = OrderedFloat(parse_lossy::<f64, _>(token.as_bytes()).unwrap());
         Token::Constant(Constant::Float(result))
     }
 
@@ -633,13 +633,13 @@ impl<'a, R: Read> Lexer<'a, R> {
                             token.push(self.skip_char()?);
                         }
 
-                        let n = OrderedFloat(parse_lossy::<f64, _>(token.as_bytes()));
+                        let n = OrderedFloat(parse_lossy::<f64, _>(token.as_bytes()).unwrap());
                         Ok(Token::Constant(Constant::Float(n)))
                     } else {
                         return Ok(self.vacate_with_float(token));
                     }
                 } else {
-                    let n = OrderedFloat(parse_lossy::<f64, _>(token.as_bytes()));
+                    let n = OrderedFloat(parse_lossy::<f64, _>(token.as_bytes()).unwrap());
                     Ok(Token::Constant(Constant::Float(n)))
                 }
             } else {
