@@ -2963,6 +2963,7 @@ clpz_expandable(_ #=< _).
 clpz_expandable(_ #> _).
 clpz_expandable(_ #< _).
 clpz_expandable(_ #\= _).
+clpz_expandable(_ #<==> _).
 
 clpz_expansion(Var in Dom, In) :-
         (   ground(Dom), Dom = L..U, integer(L), integer(U) ->
@@ -2973,6 +2974,22 @@ clpz_expansion(Var in Dom, In) :-
                 ), In)
         ;   In = clpz:clpz_in(Var, Dom)
         ).
+clpz_expansion(A #<==> B, Reif) :-
+        nonvar(A),
+        A =.. [F0,X0,Y0],
+        clpz_builtin(F0, F),
+        phrase(expr_conds(X0, X), Cs0, Cs),
+        phrase(expr_conds(Y0, Y), Cs),
+        list_goal(Cs0, Cond),
+        Expr =.. [F,X,Y],
+        expansion_simpler(( Cond, ( var(B) ; integer(B) ) ->
+                            (   Expr ->
+                                B = 1
+                            ;   B = 0
+                            )
+                          ; clpz:reify(A, RA),
+                            clpz:reify(B, RA)
+                          ), Reif).
 clpz_expansion(X0 #= Y0, Equal) :-
         phrase(expr_conds(X0, X), CsX),
         phrase(expr_conds(Y0, Y), CsY),
@@ -3020,6 +3037,13 @@ clpz_expansion(X0 #\= Y0, Neq) :-
               ;   clpz:clpz_neq(X0, Y0)
               ), Neq).
 
+
+clpz_builtin(#=, =:=).
+clpz_builtin(#\=, =\=).
+clpz_builtin(#>, >).
+clpz_builtin(#<, <).
+clpz_builtin(#>=, >=).
+clpz_builtin(#=<, =<).
 
 expansion_simpler((True->Then0;_), Then) :-
         is_true(True), !,
