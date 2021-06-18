@@ -123,5 +123,5 @@ rational_numerator_denominator(R, N, D) :-
     number_chars(D, Ds).
 
 popcount(X, N) :-
-    integer(X),
+    must_be(integer, X),
     '$popcount'(X, N).
