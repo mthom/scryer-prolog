@@ -122,6 +122,7 @@
 :- use_module(library(error), [domain_error/3, type_error/3]).
 :- use_module(library(si)).
 :- use_module(library(freeze)).
+:- use_module(library(arithmetic)).
 
 % :- use_module(library(types)).
 
@@ -2567,7 +2568,7 @@ parse_clpz(E, R,
              m(\A)             => [p(pfunction(\, A, R))],
              m(msb(A))         => [p(pfunction(msb, A, R))],
              m(lsb(A))         => [p(pfunction(lsb, A, R))],
-             m(popcount(A))    => [p(pfunction(popcount, A, R))],
+             m(popcount(A))    => [p(ppopcount(A, R))],
              m(A<<B)           => [p(pfunction(<<, A, B, R))],
              m(A>>B)           => [p(pfunction(>>, A, B, R))],
              m(A/\B)           => [p(pfunction(/\, A, B, R))],
@@ -2954,7 +2955,9 @@ expr_conds(A0\/B0, A\/B) --> expr_conds(A0, A), expr_conds(B0, B).
 expr_conds(xor(A0,B0), xor(A,B)) --> expr_conds(A0, A), expr_conds(B0, B).
 expr_conds(lsb(A0), lsb(A)) --> expr_conds(A0, A).
 expr_conds(msb(A0), msb(A)) --> expr_conds(A0, A).
-expr_conds(popcount(A0), popcount(A)) --> expr_conds(A0, A).
+expr_conds(popcount(A0), Count) -->
+        expr_conds(A0, A),
+        [I is A, arithmetic:popcount(I, Count)].
 
 clpz_expandable(_ in _).
 clpz_expandable(_ #= _).
@@ -5472,6 +5475,18 @@ run_propagator(pexp(X,Y,Z), MState) -->
             fd_put(Z, ZD1, ZPs)
         ;   true
         ).
+
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% % Y = popcount(X)
+
+run_propagator(ppopcount(X,Y), MState) -->
+        (   nonvar(X) ->
+            kill(MState),
+            queue_goal(popcount(X, Y))
+        ;   true
+        ).
+
+
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% % Z = X xor Y
 
@@ -7679,6 +7694,7 @@ attribute_goal_(prem(X,Y,Z))           --> [?(X) rem ?(Y) #= ?(Z)].
 attribute_goal_(pmax(X,Y,Z))           --> [?(Z) #= max(?(X),?(Y))].
 attribute_goal_(pmin(X,Y,Z))           --> [?(Z) #= min(?(X),?(Y))].
 attribute_goal_(pxor(X,Y,Z))           --> [?(Z) #= xor(?(X), ?(Y))].
+attribute_goal_(ppopcount(X,Y))        --> [?(Y) #= popcount(?(X))].
 attribute_goal_(scalar_product_neq(Cs,Vs,C)) -->
         [Left #\= Right],
         { scalar_product_left_right([-1|Cs], [C|Vs], Left, Right) }.
