@@ -1,5 +1,5 @@
 :- module(arithmetic, [expmod/4, lsb/2, msb/2, number_to_rational/2,
-                       number_to_rational/3,
+                       number_to_rational/3, popcount/2,
                        rational_numerator_denominator/3]).
 
 :- use_module(library(charsio), [write_term_to_chars/3]).
@@ -121,3 +121,7 @@ rational_numerator_denominator(R, N, D) :-
     append(Ns, [' ', r, d, i, v, ' '|Ds], Cs),
     number_chars(N, Ns),
     number_chars(D, Ds).
+
+popcount(X, N) :-
+    must_be(integer, X),
+    '$popcount'(X, N).

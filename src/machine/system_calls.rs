@@ -5539,6 +5539,19 @@ impl MachineState {
             &SystemClauseType::DebugHook => {
                 self.fail = false;
             }
+            &SystemClauseType::PopCount => {
+                let number  = self.store(self.deref(self[temp_v!(1)]));
+                let count = match Number::try_from((number, &self.heap)) {
+                    Ok(Number::Fixnum(n)) => Integer::from(n.count_ones()),
+                    Ok(Number::Integer(n)) => Integer::from((&*n).count_ones().unwrap()),
+                    _ => {
+                        unreachable!()
+                    }
+                };
+
+                let pop_count = self.heap.to_unifiable(HeapCellValue::Integer(Rc::new(count)));
+                (self.unify_fn)(self, self[temp_v!(2)], pop_count);
+            }
         };
 
         return_from_clause!(self.last_call, self)

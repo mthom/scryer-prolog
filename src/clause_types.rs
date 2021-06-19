@@ -310,6 +310,7 @@ pub(crate) enum SystemClauseType {
     SetSTOWithErrorAsUnify,
     HomeDirectory,
     DebugHook,
+    PopCount
 }
 
 impl SystemClauseType {
@@ -603,6 +604,7 @@ impl SystemClauseType {
                 clause_name!("$set_sto_with_error_as_unify")
             }
             &SystemClauseType::DebugHook => clause_name!("$debug_hook"),
+            &SystemClauseType::PopCount => clause_name!("$popcount"),
         }
     }
 
@@ -854,6 +856,7 @@ impl SystemClauseType {
             ("$set_sto_with_error_as_unify", 0) => Some(SystemClauseType::SetSTOWithErrorAsUnify),
             ("$home_directory", 1) => Some(SystemClauseType::HomeDirectory),
             ("$debug_hook", 0) => Some(SystemClauseType::DebugHook),
+            ("$popcount", 2) => Some(SystemClauseType::PopCount),
             _ => None,
         }
     }
