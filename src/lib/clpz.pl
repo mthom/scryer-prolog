@@ -2959,6 +2959,12 @@ expr_conds(popcount(A0), Count) -->
         expr_conds(A0, A),
         [I is A, arithmetic:popcount(I, Count)].
 
+no_popcount_t(Gs, T) :-
+        (   member(arithmetic:popcount(_, _), Gs) ->
+            T = false
+        ;   T = true
+        ).
+
 clpz_expandable(_ in _).
 clpz_expandable(_ #= _).
 clpz_expandable(_ #>= _).
@@ -2998,14 +3004,16 @@ clpz_expansion(X0 #= Y0, Equal) :-
         phrase(expr_conds(Y0, Y), CsY),
         list_goal(CsX, CondX),
         list_goal(CsY, CondY),
+        no_popcount_t(CsY, YT),
+        no_popcount_t(CsX, XT),
         expansion_simpler(
                 (   CondX ->
-                    (   var(Y) -> Y is X
+                    (   YT, var(Y) -> Y is X
                     ;   CondY -> X =:= Y
                     ;   T is X, clpz:clpz_equal(T, Y0)
                     )
                 ;   CondY ->
-                    (   var(X) -> X is Y
+                    (   XT, var(X) -> X is Y
                     ;   T is Y, clpz:clpz_equal(X0, T)
                     )
                 ;   clpz:clpz_equal(X0, Y0)
