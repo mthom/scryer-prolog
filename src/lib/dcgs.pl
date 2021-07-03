@@ -3,7 +3,9 @@
 		   phrase/2,
 		   phrase/3,
                    seq//1,
-                   seqq//1]).
+                   seqq//1,
+                   ... //0
+           ]).
 
 :- use_module(library(error)).
 :- use_module(library(lists), [append/3]).
@@ -188,3 +190,6 @@ seq([E|Es]) --> [E], seq(Es).
 % Describes a sequence of sequences
 seqq([]) --> [].
 seqq([Es|Ess]) --> seq(Es), seqq(Ess).
+
+% Describes an arbitrary number of elements
+... --> [] | [_], ... .
