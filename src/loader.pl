@@ -87,8 +87,7 @@ unload_evacuable(Evacuable) :-
     '$pop_load_state_payload'(Evacuable),
     '$pop_load_context'.
 
-run_initialization_goals :-
-    prolog_load_context(module, Module),
+run_initialization_goals(Module) :-
     (  predicate_property(Module:'$initialization_goals'(_), dynamic) ->
        findall(Module:Goal, '$call'(builtins:retract(Module:'$initialization_goals'(Goal))), Goals),
        abolish(Module:'$initialization_goals'/1),
@@ -96,6 +95,14 @@ run_initialization_goals :-
           true
        ;  true %% initialization goals can fail without thwarting the load.
        )
+    ;  true
+    ).
+
+run_initialization_goals :-
+    prolog_load_context(module, Module),
+    run_initialization_goals(user),
+    (  Module \== user ->
+       run_initialization_goals(Module)
     ;  true
     ).
 
