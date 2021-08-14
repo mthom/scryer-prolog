@@ -344,12 +344,16 @@ pow10(D, N0-Pow0, N-Pow) :-
         N is N0 + D*10^Pow0,
         Pow is Pow0 + 1.
 
+radix_error(lowercase, R) --> format_("~~~dr", [R]).
+radix_error(uppercase, R) --> format_("~~~dR", [R]).
+
 integer_to_radix(I0, R, Which, Cs) :-
         I is I0, % evaluate compound expression
         must_be(integer, I),
         must_be(integer, R),
         (   \+ between(2, 36, R) ->
-            domain_error(radix, R, format_//2)
+            phrase(radix_error(Which,R), Es),
+            domain_error(format_string, Es, format_//2)
         ;   true
         ),
         digits(Which, Ds),
