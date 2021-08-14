@@ -31,6 +31,7 @@
      ~Nr   where N is an integer between 2 and 36: format the
            next argument, which must be an integer, in radix N.
            The characters "a" to "z" are used for radices 10 to 36.
+           If N is omitted, it defaults to 8 (octal).
      ~NR   like ~Nr, except that "A" to "Z" are used for radices > 9
      ~|    place a tab stop at this position
      ~N|   where N is an integer: place a tab stop at text column N
@@ -55,7 +56,7 @@
 
    If at all possible, format_//2 should be used, to stress pure parts
    that enable easy testing etc. If necessary, you can emit the list Ls
-   with maplist(write, Ls).
+   with maplist(put_char, Ls).
 
    The entire library only works if the Prolog flag double_quotes
    is set to chars, the default value in Scryer Prolog. This should
@@ -249,11 +250,15 @@ cells([~|Fs0], Args0, Tab, Es, VNs) -->
               append(Bs, ['.'|Ds], Chars)
           ) },
         cells(Fs, Args, Tab, [chars(Chars)|Es], VNs).
+cells([~,r|Fs], Args, Tab, Es, VNs) --> !,
+        cells([~,'8',r|Fs], Args, Tab, Es, VNs).
 cells([~|Fs0], Args0, Tab, Es, VNs) -->
         { numeric_argument(Fs0, Num, [r|Fs], Args0, [Arg|Args]) },
         !,
         { integer_to_radix(Arg, Num, lowercase, Cs) },
         cells(Fs, Args, Tab, [chars(Cs)|Es], VNs).
+cells([~,'R'|Fs], Args, Tab, Es, VNs) --> !,
+        cells([~,'8','R'|Fs], Args, Tab, Es, VNs).
 cells([~|Fs0], Args0, Tab, Es, VNs) -->
         { numeric_argument(Fs0, Num, ['R'|Fs], Args0, [Arg|Args]) },
         !,
