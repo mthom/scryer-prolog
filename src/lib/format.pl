@@ -284,9 +284,11 @@ cells([~|Fs0], Args0, Tab0, Es, VNs) -->
         { Tab is Tab0 + Num },
         cell(Tab0, Tab, Es),
         cells(Fs, Args, Tab, [], VNs).
-cells([~,C|_], _, _, _, _) -->
-        { atom_chars(A, [~,C]),
-          domain_error(format_string, A, format_//2) }.
+cells([~|Cs], Args, _, _, _) -->
+        (   { Args == [] } ->
+            { domain_error(non_empty_list, [], format_//2) }
+        ;   { domain_error(format_string, [~|Cs], format_//2) }
+        ).
 cells(Fs0, Args, Tab, Es, VNs) -->
         { phrase(upto_what(Fs1, ~), Fs0, Fs),
           Fs1 = [_|_] },
