@@ -10,6 +10,8 @@
 :- use_module(library('$project_atts')).
 :- use_module(library('$atts')).
 
+:- dynamic(custom_init_file/0).
+
 load_scryerrc :-
     ( '$home_directory'(HomeDir) ->
         append(HomeDir, "./scryerrc", ScryerrcFile),
@@ -35,6 +37,7 @@ load_init_file(ScryerrcFile) :-
         Args = Args0
     ),
     delegate_task(Args, []),
+    (\+ custom_init_file -> load_scryerrc ; true),
     repl.
 '$repl'(_) :-
     (   \+ argv(_) -> asserta('$toplevel':argv([]))
@@ -46,6 +49,7 @@ load_init_file(ScryerrcFile) :-
 delegate_task([], []).
 delegate_task([], Goals0) :-
     reverse(Goals0, Goals),
+    (\+ custom_init_file -> load_scryerrc ; true),
     run_goals(Goals),
     repl.
 
@@ -89,12 +93,14 @@ gather_goal(Type, Args0, Goals) :-
     delegate_task(Args, [Gs|Goals]).
 
 init_file(Args0, Goals) :-
+    \+ custom_init_file,
     length(Args0, N),
     (   N < 1 -> print_help, halt
     ;   true
     ),
     [File|Args] = Args0,
     load_init_file(File),
+    asserta('custom_init_file'),
     delegate_task(Args, Goals).
 
 arg_type(g).
