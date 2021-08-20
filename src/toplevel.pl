@@ -11,14 +11,17 @@
 :- use_module(library('$atts')).
 
 load_scryerrc :-
-    (  '$home_directory'(HomeDir) ->
-       append(HomeDir, "/.scryerrc", ScryerrcFile),
-       (  file_exists(ScryerrcFile) ->
-          atom_chars(ScryerrcFileAtom, ScryerrcFile),
-          catch(use_module(ScryerrcFileAtom), E, print_exception(E))
-       ;  true
-       )
-    ;  true
+    ( '$home_directory'(HomeDir) ->
+        append(HomeDir, "./scryerrc", ScryerrcFile),
+        ( load_init_file(ScryerrcFile) -> true ; true)
+    ;   true
+    ).
+
+load_init_file(ScryerrcFile) :-
+    ( file_exists(ScryerrcFile) ->
+        atom_chars(ScryerrcFileAtom, ScryerrcFile),
+        catch(use_module(ScryerrcFileAtom), E, print_exception(E))
+    ;   true
     ).
 
 :- dynamic(argv/1).
@@ -31,7 +34,6 @@ load_scryerrc :-
     ;   asserta('$toplevel':argv([])),
         Args = Args0
     ),
-    load_scryerrc,
     delegate_task(Args, []),
     repl.
 '$repl'(_) :-
@@ -46,29 +48,33 @@ delegate_task([], Goals0) :-
     reverse(Goals0, Goals),
     run_goals(Goals),
     repl.
+
 delegate_task([Arg0|Args], Goals0) :-
-    (   member(Arg0, ["-h", "--help"]) -> print_help
-    ;   member(Arg0, ["-v", "--version"]) -> print_version
+    (   member(Arg0, ["-h", "--help"]) -> print_help(Args, ArgsOut)
+    ;   member(Arg0, ["-v", "--version"]) -> print_version(Args, ArgsOut)
     ;   member(Arg0, ["-g", "--goal"]) -> gather_goal(g, Args, Goals0)
+    ;   member(Arg0, ["-f"]) -> init_file(Args, ArgsOut)
     ;   atom_chars(Mod, Arg0),
         catch(use_module(Mod), E, print_exception(E))
     ),
-    delegate_task(Args, Goals0).
+    delegate_task(ArgsOut, Goals0).
 
-print_help :-
+print_help(Args, Args) :-
     write('Usage: scryer-prolog [OPTIONS] [FILES] [-- ARGUMENTS]'),
     nl, nl,
     write('Options:'), nl,
-    write('   -h, --help           '),
+    write('   -h, --help             '),
     write('Display this message'), nl,
-    write('   -v, --version        '),
+    write('   -v, --version          '),
     write('Print version information and exit'), nl,
-    write('   -g, --goal GOAL      '),
+    write('   -g, --goal GOAL        '),
     write('Run the query GOAL'), nl,
+    write('   -f FILE                '),
+    write('Run the provided initialization file instead of the default (~/.scryerrc)'),nl,
     % write('                        '),
     halt.
 
-print_version :-
+print_version(Args, Args) :-
     '$scryer_prolog_version'(Version),
     write(Version), nl,
     halt.
@@ -81,6 +87,14 @@ gather_goal(Type, Args0, Goals) :-
     [Gs1|Args] = Args0,
     Gs =.. [Type, Gs1],
     delegate_task(Args, [Gs|Goals]).
+
+init_file(Args0, Args) :-
+    length(Args0, N),
+    (   N < 1 -> print_help, halt
+    ;   true
+    ),
+    [File|Args] = Args0,
+    load_init_file(File).
 
 arg_type(g).
 arg_type(t).
