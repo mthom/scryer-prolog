@@ -50,16 +50,16 @@ delegate_task([], Goals0) :-
     repl.
 
 delegate_task([Arg0|Args], Goals0) :-
-    (   member(Arg0, ["-h", "--help"]) -> print_help(Args, ArgsOut)
-    ;   member(Arg0, ["-v", "--version"]) -> print_version(Args, ArgsOut)
+    (   member(Arg0, ["-h", "--help"]) -> print_help
+    ;   member(Arg0, ["-v", "--version"]) -> print_version
     ;   member(Arg0, ["-g", "--goal"]) -> gather_goal(g, Args, Goals0)
-    ;   member(Arg0, ["-f"]) -> init_file(Args, ArgsOut)
+    ;   member(Arg0, ["-f"]) -> init_file(Args, Goals0)
     ;   atom_chars(Mod, Arg0),
         catch(use_module(Mod), E, print_exception(E))
     ),
-    delegate_task(ArgsOut, Goals0).
+    delegate_task(Args, Goals0).
 
-print_help(Args, Args) :-
+print_help :-
     write('Usage: scryer-prolog [OPTIONS] [FILES] [-- ARGUMENTS]'),
     nl, nl,
     write('Options:'), nl,
@@ -74,7 +74,7 @@ print_help(Args, Args) :-
     % write('                        '),
     halt.
 
-print_version(Args, Args) :-
+print_version :-
     '$scryer_prolog_version'(Version),
     write(Version), nl,
     halt.
@@ -88,13 +88,14 @@ gather_goal(Type, Args0, Goals) :-
     Gs =.. [Type, Gs1],
     delegate_task(Args, [Gs|Goals]).
 
-init_file(Args0, Args) :-
+init_file(Args0, Goals) :-
     length(Args0, N),
     (   N < 1 -> print_help, halt
     ;   true
     ),
     [File|Args] = Args0,
-    load_init_file(File).
+    load_init_file(File),
+    delegate_task(Args, Goals).
 
 arg_type(g).
 arg_type(t).
