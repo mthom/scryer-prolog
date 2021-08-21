@@ -10,20 +10,17 @@
 :- use_module(library('$project_atts')).
 :- use_module(library('$atts')).
 
-:- dynamic(custom_init_file/0).
+:- dynamic(disabled_init_file/0).
 
 load_scryerrc :-
-    ( '$home_directory'(HomeDir) ->
-        append(HomeDir, "./scryerrc", ScryerrcFile),
-        ( load_init_file(ScryerrcFile) -> true ; true)
-    ;   true
-    ).
-
-load_init_file(ScryerrcFile) :-
-    ( file_exists(ScryerrcFile) ->
-        atom_chars(ScryerrcFileAtom, ScryerrcFile),
-        catch(use_module(ScryerrcFileAtom), E, print_exception(E))
-    ;   true
+    (  '$home_directory'(HomeDir) ->
+       append(HomeDir, "/.scryerrc", ScryerrcFile),
+       (  file_exists(ScryerrcFile) ->
+          atom_chars(ScryerrcFileAtom, ScryerrcFile),
+          catch(use_module(ScryerrcFileAtom), E, print_exception(E))
+       ;  true
+       )
+    ;  true
     ).
 
 :- dynamic(argv/1).
@@ -37,7 +34,7 @@ load_init_file(ScryerrcFile) :-
         Args = Args0
     ),
     delegate_task(Args, []),
-    (\+ custom_init_file -> load_scryerrc ; true),
+    (\+ disabled_init_file -> load_scryerrc ; true),
     repl.
 '$repl'(_) :-
     (   \+ argv(_) -> asserta('$toplevel':argv([]))
@@ -49,7 +46,7 @@ load_init_file(ScryerrcFile) :-
 delegate_task([], []).
 delegate_task([], Goals0) :-
     reverse(Goals0, Goals),
-    (\+ custom_init_file -> load_scryerrc ; true),
+    (\+ disabled_init_file -> load_scryerrc ; true),
     run_goals(Goals),
     repl.
 
@@ -57,7 +54,7 @@ delegate_task([Arg0|Args], Goals0) :-
     (   member(Arg0, ["-h", "--help"]) -> print_help
     ;   member(Arg0, ["-v", "--version"]) -> print_version
     ;   member(Arg0, ["-g", "--goal"]) -> gather_goal(g, Args, Goals0)
-    ;   member(Arg0, ["-f"]) -> init_file(Args, Goals0)
+    ;   member(Arg0, ["-f"]) -> init_file
     ;   atom_chars(Mod, Arg0),
         catch(use_module(Mod), E, print_exception(E))
     ),
@@ -73,8 +70,8 @@ print_help :-
     write('Print version information and exit'), nl,
     write('   -g, --goal GOAL        '),
     write('Run the query GOAL'), nl,
-    write('   -f FILE                '),
-    write('Run the provided initialization file instead of the default (~/.scryerrc)'),nl,
+    write('   -f                     '),
+    write('Do not load initialization file (~/.scryerrc)'),nl,
     % write('                        '),
     halt.
 
@@ -92,16 +89,8 @@ gather_goal(Type, Args0, Goals) :-
     Gs =.. [Type, Gs1],
     delegate_task(Args, [Gs|Goals]).
 
-init_file(Args0, Goals) :-
-    \+ custom_init_file,
-    length(Args0, N),
-    (   N < 1 -> print_help, halt
-    ;   true
-    ),
-    [File|Args] = Args0,
-    load_init_file(File),
-    asserta('custom_init_file'),
-    delegate_task(Args, Goals).
+init_file :-
+    asserta('disabled_init_file').
 
 arg_type(g).
 arg_type(t).
