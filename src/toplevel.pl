@@ -17,7 +17,7 @@ load_scryerrc :-
        append(HomeDir, "/.scryerrc", ScryerrcFile),
        (  file_exists(ScryerrcFile) ->
           atom_chars(ScryerrcFileAtom, ScryerrcFile),
-          catch(use_module(ScryerrcFileAtom), E, print_exception(E))
+          catch(consult(ScryerrcFileAtom), E, print_exception(E))
        ;  true
        )
     ;  true
@@ -56,7 +56,7 @@ delegate_task([Arg0|Args], Goals0) :-
     ;   member(Arg0, ["-g", "--goal"]) -> gather_goal(g, Args, Goals0)
     ;   member(Arg0, ["-f"]) -> init_file
     ;   atom_chars(Mod, Arg0),
-        catch(use_module(Mod), E, print_exception(E))
+        catch(consult(Mod), E, print_exception(E))
     ),
     delegate_task(Args, Goals0).
 
