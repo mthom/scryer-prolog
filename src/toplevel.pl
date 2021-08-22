@@ -10,7 +10,7 @@
 :- use_module(library('$project_atts')).
 :- use_module(library('$atts')).
 
-:- dynamic(disabled_init_file/0).
+:- dynamic(disable_init_file/0).
 
 load_scryerrc :-
     (  '$home_directory'(HomeDir) ->
@@ -34,7 +34,7 @@ load_scryerrc :-
         Args = Args0
     ),
     delegate_task(Args, []),
-    (\+ disabled_init_file -> load_scryerrc ; true),
+    (\+ disable_init_file -> load_scryerrc ; true),
     repl.
 '$repl'(_) :-
     (   \+ argv(_) -> asserta('$toplevel':argv([]))
@@ -46,7 +46,7 @@ load_scryerrc :-
 delegate_task([], []).
 delegate_task([], Goals0) :-
     reverse(Goals0, Goals),
-    (\+ disabled_init_file -> load_scryerrc ; true),
+    (\+ disable_init_file -> load_scryerrc ; true),
     run_goals(Goals),
     repl.
 
@@ -71,7 +71,7 @@ print_help :-
     write('   -g, --goal GOAL        '),
     write('Run the query GOAL'), nl,
     write('   -f                     '),
-    write('Do not load initialization file (~/.scryerrc)'),nl,
+    write('Fast startup. Do not load initialization file (~/.scryerrc)'),nl,
     % write('                        '),
     halt.
 
@@ -90,7 +90,7 @@ gather_goal(Type, Args0, Goals) :-
     delegate_task(Args, [Gs|Goals]).
 
 init_file :-
-    asserta('disabled_init_file').
+    asserta('disable_init_file').
 
 arg_type(g).
 arg_type(t).
