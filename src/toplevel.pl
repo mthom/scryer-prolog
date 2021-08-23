@@ -10,7 +10,7 @@
 :- use_module(library('$project_atts')).
 :- use_module(library('$atts')).
 
-:- dynamic(disable_init_file/0).
+:- dynamic(disabled_init_file/0).
 
 load_scryerrc :-
     (  '$home_directory'(HomeDir) ->
@@ -34,7 +34,7 @@ load_scryerrc :-
         Args = Args0
     ),
     delegate_task(Args, []),
-    (\+ disable_init_file -> load_scryerrc ; true),
+    (\+ disabled_init_file -> load_scryerrc ; true),
     repl.
 '$repl'(_) :-
     (   \+ argv(_) -> asserta('$toplevel':argv([]))
@@ -46,7 +46,7 @@ load_scryerrc :-
 delegate_task([], []).
 delegate_task([], Goals0) :-
     reverse(Goals0, Goals),
-    (\+ disable_init_file -> load_scryerrc ; true),
+    (\+ disabled_init_file -> load_scryerrc ; true),
     run_goals(Goals),
     repl.
 
@@ -54,7 +54,7 @@ delegate_task([Arg0|Args], Goals0) :-
     (   member(Arg0, ["-h", "--help"]) -> print_help
     ;   member(Arg0, ["-v", "--version"]) -> print_version
     ;   member(Arg0, ["-g", "--goal"]) -> gather_goal(g, Args, Goals0)
-    ;   member(Arg0, ["-f"]) -> init_file
+    ;   member(Arg0, ["-f"]) -> disable_init_file
     ;   atom_chars(Mod, Arg0),
         catch(consult(Mod), E, print_exception(E))
     ),
@@ -89,8 +89,8 @@ gather_goal(Type, Args0, Goals) :-
     Gs =.. [Type, Gs1],
     delegate_task(Args, [Gs|Goals]).
 
-init_file :-
-    asserta('disable_init_file').
+disable_init_file :-
+    asserta('disabled_init_file').
 
 arg_type(g).
 arg_type(t).
