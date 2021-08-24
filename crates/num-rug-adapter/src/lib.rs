@@ -117,6 +117,11 @@ impl Integer {
     pub fn gcd(&self, other: &Self) -> Self {
         Integer(num_integer::Integer::gcd(&self.0, &other.0))
     }
+
+    #[inline]
+    pub fn count_ones(&self) -> Option<u32> {
+        Some(self.0.to_u32_digits().1.iter().map(|&d| d.count_ones()).sum())
+    }
 }
 
 impl From<&Integer> for Integer {
