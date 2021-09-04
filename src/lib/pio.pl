@@ -9,9 +9,9 @@
 :- use_module(library(lists), [member/2]).
 :- use_module(library(format), [format/3]).
 
-:- meta_predicate phrase_from_file(2, ?).
-:- meta_predicate phrase_from_file(2, ?, ?).
-:- meta_predicate phrase_to_file(2, ?).
+:- meta_predicate(phrase_from_file(2, ?)).
+:- meta_predicate(phrase_from_file(2, ?, ?)).
+:- meta_predicate(phrase_to_file(2, ?)).
 
 phrase_from_file(NT, File) :-
     phrase_from_file(NT, File, []).
