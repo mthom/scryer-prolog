@@ -8,7 +8,8 @@
                    prolog_load_context/2,
                    strip_module/3,
                    use_module/1,
-                   use_module/2
+                   use_module/2,
+                   current_module/1
                   ]).
 
 
@@ -463,6 +464,14 @@ use_module(Module, Exports) :-
     (  Exports == [] ->
        remove_module(Module, Evacuable)
     ;  use_module(Module, Exports, Evacuable)
+    ).
+
+current_module(Module) :-
+    (  var(Module) ->
+       instantiation_error(current_module/1)
+    ;  \+ atom(Module) ->
+       type_error(atom, Module, current_module/1)
+    ;  '$module_exists'(Module)
     ).
 
 
