@@ -1175,6 +1175,18 @@ impl MachineState {
                 self.interms[t - 1] = self.floor(n1);
                 self.p += 1;
             }
+            &ArithmeticInstruction::FloatIntegerPart(ref a1, t) => {
+                let n1 = try_or_fail!(self, self.get_number(a1));
+
+                self.interms[t - 1] = self.trunc(n1);
+                self.p += 1;
+            }
+            &ArithmeticInstruction::FloatFractionalPart(ref a1, t) => {
+                let n1 = try_or_fail!(self, self.get_number(a1));
+
+                self.interms[t - 1] = self.fract(n1);
+                self.p += 1;
+            }
             &ArithmeticInstruction::Plus(ref a1, t) => {
                 let n1 = try_or_fail!(self, self.get_number(a1));
 

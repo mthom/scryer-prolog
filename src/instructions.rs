@@ -373,6 +373,8 @@ pub(crate) enum ArithmeticInstruction {
     Round(ArithmeticTerm, usize),
     Ceiling(ArithmeticTerm, usize),
     Floor(ArithmeticTerm, usize),
+    FloatIntegerPart(ArithmeticTerm, usize),
+    FloatFractionalPart(ArithmeticTerm, usize),
     Neg(ArithmeticTerm, usize),
     Plus(ArithmeticTerm, usize),
     BitwiseComplement(ArithmeticTerm, usize),
@@ -495,6 +497,8 @@ impl ArithmeticInstruction {
             &ArithmeticInstruction::Floor(ref at, t) => {
                 arith_instr_unary_functor(h, "floor", at, t)
             }
+            &ArithmeticInstruction::FloatIntegerPart(ref at, t) => arith_instr_unary_functor(h, "trunc", at, t),
+            &ArithmeticInstruction::FloatFractionalPart(ref at, t) => arith_instr_unary_functor(h, "fract", at, t),
             &ArithmeticInstruction::Neg(ref at, t) => arith_instr_unary_functor(h, "-", at, t),
             &ArithmeticInstruction::Plus(ref at, t) => arith_instr_unary_functor(h, "+", at, t),
             &ArithmeticInstruction::BitwiseComplement(ref at, t) => {

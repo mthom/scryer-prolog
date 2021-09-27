@@ -165,6 +165,8 @@ impl<'a> ArithmeticEvaluator<'a> {
             "round" => Ok(ArithmeticInstruction::Round(a1, t)),
             "ceiling" => Ok(ArithmeticInstruction::Ceiling(a1, t)),
             "floor" => Ok(ArithmeticInstruction::Floor(a1, t)),
+            "float_integer_part" => Ok(ArithmeticInstruction::FloatIntegerPart(a1, t)),
+            "float_fractional_part" => Ok(ArithmeticInstruction::FloatFractionalPart(a1, t)),
             "sign" => Ok(ArithmeticInstruction::Sign(a1, t)),
             "\\" => Ok(ArithmeticInstruction::BitwiseComplement(a1, t)),
             _ => Err(ArithmeticError::NonEvaluableFunctor(

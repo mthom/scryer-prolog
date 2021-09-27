@@ -649,6 +649,8 @@ impl fmt::Display for ArithmeticInstruction {
             &ArithmeticInstruction::Ceiling(ref a, ref t) => write!(f, "ceiling {}, @{}", a, t),
             &ArithmeticInstruction::Floor(ref a, ref t) => write!(f, "floor {}, @{}", a, t),
             &ArithmeticInstruction::Float(ref a, ref t) => write!(f, "float {}, @{}", a, t),
+            &ArithmeticInstruction::FloatIntegerPart(ref a, ref t) => write!(f, "float_integer_part {}, @{}", a, t),
+            &ArithmeticInstruction::FloatFractionalPart(ref a, ref t) => write!(f, "float_fractional_part {}, @{}", a, t),
         }
     }
 }
