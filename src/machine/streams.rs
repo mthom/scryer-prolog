@@ -164,10 +164,10 @@ impl Drop for StreamInstance {
     fn drop(&mut self) {
         match self {
             StreamInstance::TcpStream(_, ref mut tcp_stream) => {
-                tcp_stream.shutdown(Shutdown::Both).unwrap();
+                tcp_stream.shutdown(Shutdown::Both).unwrap_or(())
             }
             StreamInstance::TlsStream(_, ref mut tls_stream) => {
-                tls_stream.shutdown().unwrap();
+                tls_stream.shutdown().unwrap_or(());
             }
             _ => {}
         }
@@ -633,6 +633,20 @@ impl Stream {
             | StreamInstance::Bytes(_)
             | StreamInstance::OutputFile(..) => true,
             _ => false,
+        }
+    }
+
+    pub(crate) fn is_closed(&self) -> bool {
+        match self.stream_inst.0.borrow_mut().stream_inst {
+            StreamInstance::Null => true,
+            StreamInstance::TcpStream(_, ref mut tcp_stream) => {
+                let mut buf = [0;8];
+                match tcp_stream.peek(&mut buf) {
+                    Ok(n_bytes) => n_bytes == 0,
+                    Err(_) => true
+                }
+            },
+            _ => false
         }
     }
 

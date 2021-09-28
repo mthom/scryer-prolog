@@ -2704,10 +2704,29 @@ impl MachineState {
                 }
 
                 if !stream.is_stdin() && !stream.is_stdout() && !stream.is_stderr() {
-                    stream.close();
+                    if stream.is_closed() {
+                        let stub = MachineError::functor_stub(
+                            clause_name!("close"),
+                            1,
+                        );
 
-                    if let Some(ref alias) = stream.options().alias {
-                        indices.stream_aliases.remove(alias);
+                        let addr = self.heap.to_unifiable(
+                            HeapCellValue::Stream(stream.clone()),
+                        );
+
+                        return Err(self.error_form(
+                            MachineError::existence_error(
+                                self.heap.h(),
+                                ExistenceError::Stream(addr),
+                            ),
+                            stub,
+                        ));
+                    } else {
+                        stream.close();
+
+                        if let Some(ref alias) = stream.options().alias {
+                            indices.stream_aliases.remove(alias);
+                        }
                     }
                 }
             }
