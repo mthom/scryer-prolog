@@ -752,20 +752,7 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
             .heap
             .truncate(machine_st.stack.index_or_frame(b).prelude.h);
 
-        let attr_var_init_queue_b = machine_st
-            .stack
-            .index_or_frame(b)
-            .prelude
-            .attr_var_init_queue_b;
-        let attr_var_init_bindings_b = machine_st
-            .stack
-            .index_or_frame(b)
-            .prelude
-            .attr_var_init_bindings_b;
-
-        machine_st
-            .attr_var_init
-            .backtrack(attr_var_init_queue_b, attr_var_init_bindings_b);
+        machine_st.attr_var_init.reset();
 
         machine_st.hb = machine_st.heap.h();
         machine_st.p += 1;
@@ -808,20 +795,7 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
             .heap
             .truncate(machine_st.stack.index_or_frame(b).prelude.h);
 
-        let attr_var_init_queue_b = machine_st
-            .stack
-            .index_or_frame(b)
-            .prelude
-            .attr_var_init_queue_b;
-        let attr_var_init_bindings_b = machine_st
-            .stack
-            .index_or_frame(b)
-            .prelude
-            .attr_var_init_bindings_b;
-
-        machine_st
-            .attr_var_init
-            .backtrack(attr_var_init_queue_b, attr_var_init_bindings_b);
+        machine_st.attr_var_init.reset();
 
         machine_st.hb = machine_st.heap.h();
         machine_st.p = CodePtr::Local(dir_entry!(machine_st.p.local().abs_loc() + offset));
@@ -862,20 +836,7 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
             .heap
             .truncate(machine_st.stack.index_or_frame(b).prelude.h);
 
-        let attr_var_init_queue_b = machine_st
-            .stack
-            .index_or_frame(b)
-            .prelude
-            .attr_var_init_queue_b;
-        let attr_var_init_bindings_b = machine_st
-            .stack
-            .index_or_frame(b)
-            .prelude
-            .attr_var_init_bindings_b;
-
-        machine_st
-            .attr_var_init
-            .backtrack(attr_var_init_queue_b, attr_var_init_bindings_b);
+        machine_st.attr_var_init.reset();
 
         machine_st.b = machine_st.stack.index_or_frame(b).prelude.b;
         machine_st.stack.truncate(b);
@@ -918,20 +879,7 @@ pub(crate) trait CallPolicy: Any + fmt::Debug {
             .heap
             .truncate(machine_st.stack.index_or_frame(b).prelude.h);
 
-        let attr_var_init_queue_b = machine_st
-            .stack
-            .index_or_frame(b)
-            .prelude
-            .attr_var_init_queue_b;
-        let attr_var_init_bindings_b = machine_st
-            .stack
-            .index_or_frame(b)
-            .prelude
-            .attr_var_init_bindings_b;
-
-        machine_st
-            .attr_var_init
-            .backtrack(attr_var_init_queue_b, attr_var_init_bindings_b);
+        machine_st.attr_var_init.reset();
 
         machine_st.b = machine_st.stack.index_or_frame(b).prelude.b;
         machine_st.stack.truncate(b);

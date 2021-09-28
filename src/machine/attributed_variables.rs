@@ -34,12 +34,6 @@ impl AttrVarInitializer {
         self.attr_var_queue.clear();
         self.bindings.clear();
     }
-
-    #[inline]
-    pub(super) fn backtrack(&mut self, queue_b: usize, bindings_b: usize) {
-        self.attr_var_queue.truncate(queue_b);
-        self.bindings.truncate(bindings_b);
-    }
 }
 
 impl MachineState {

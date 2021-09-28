@@ -112,8 +112,6 @@ pub(crate) struct OrFramePrelude {
     pub(crate) pstr_tr: usize,
     pub(crate) h: usize,
     pub(crate) b0: usize,
-    pub(crate) attr_var_init_queue_b: usize,
-    pub(crate) attr_var_init_bindings_b: usize,
 }
 
 #[derive(Debug)]
