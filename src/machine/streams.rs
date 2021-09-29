@@ -160,20 +160,6 @@ impl StreamInstance {
     }
 }
 
-impl Drop for StreamInstance {
-    fn drop(&mut self) {
-        match self {
-            StreamInstance::TcpStream(_, ref mut tcp_stream) => {
-                tcp_stream.shutdown(Shutdown::Both).unwrap_or(())
-            }
-            StreamInstance::TlsStream(_, ref mut tls_stream) => {
-                tls_stream.shutdown().unwrap_or(());
-            }
-            _ => {}
-        }
-    }
-}
-
 impl fmt::Debug for StreamInstance {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -596,8 +582,18 @@ impl Stream {
     }
 
     #[inline]
-    pub(crate) fn close(&mut self) {
+    pub(crate) fn close(&mut self) -> Result<(), std::io::Error> {
+        let result = match self.stream_inst.0.borrow_mut().stream_inst {
+            StreamInstance::TcpStream(_, ref mut tcp_stream) => {
+                tcp_stream.shutdown(Shutdown::Both)
+            },
+            StreamInstance::TlsStream(_, ref mut tls_stream) => {
+                tls_stream.shutdown()
+            }
+            _ => Ok(())
+        };
         self.stream_inst.0.borrow_mut().stream_inst = StreamInstance::Null;
+        result
     }
 
     #[inline]
@@ -633,20 +629,6 @@ impl Stream {
             | StreamInstance::Bytes(_)
             | StreamInstance::OutputFile(..) => true,
             _ => false,
-        }
-    }
-
-    pub(crate) fn is_closed(&self) -> bool {
-        match self.stream_inst.0.borrow_mut().stream_inst {
-            StreamInstance::Null => true,
-            StreamInstance::TcpStream(_, ref mut tcp_stream) => {
-                let mut buf = [0;8];
-                match tcp_stream.peek(&mut buf) {
-                    Ok(n_bytes) => n_bytes == 0,
-                    Err(_) => true
-                }
-            },
-            _ => false
         }
     }
 

@@ -2704,7 +2704,12 @@ impl MachineState {
                 }
 
                 if !stream.is_stdin() && !stream.is_stdout() && !stream.is_stderr() {
-                    if stream.is_closed() {
+                    let close_result = stream.close();
+
+                    if let Some(ref alias) = stream.options().alias {
+                        indices.stream_aliases.remove(alias);
+                    }
+                    if let Err(_) = close_result {
                         let stub = MachineError::functor_stub(
                             clause_name!("close"),
                             1,
@@ -2721,12 +2726,6 @@ impl MachineState {
                             ),
                             stub,
                         ));
-                    } else {
-                        stream.close();
-
-                        if let Some(ref alias) = stream.options().alias {
-                            indices.stream_aliases.remove(alias);
-                        }
                     }
                 }
             }
