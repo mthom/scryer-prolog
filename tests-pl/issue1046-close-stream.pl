@@ -2,6 +2,10 @@
 :- use_module(library(time)).
 :- use_module(library(format)).
 
+% Manual test to fix issue 1046
+% Server must be executed first, then client
+% The expected error is an exception thrown here, not a panic
+
 test :-
     Addr = '0.0.0.0',
     Port = 5000,
