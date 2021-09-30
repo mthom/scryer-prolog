@@ -9,7 +9,7 @@
 test :-
     Addr = '0.0.0.0',
     Port = 5000,
-    once(socket_server_open(Addr:Port, Socket)),
+    socket_server_open(Addr:Port, Socket),
     format("Listening at port ~d\n", [Port]),
     socket_server_accept(Socket, _Client, Stream, [type(binary)]),
     format(Stream, "FIRST\r\n", []),
