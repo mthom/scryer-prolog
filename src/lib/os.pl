@@ -15,6 +15,8 @@
 :- module(os, [getenv/2,
                setenv/2,
                unsetenv/1,
+               shell/1,
+               shell/2,
                pid/1]).
 
 :- use_module(library(error)).
@@ -34,9 +36,13 @@ unsetenv(Key) :-
         must_be_env_var(Key),
         '$unsetenv'(Key).
 
+shell(Command) :- shell(Command, 0).
+shell(Command, Status) :-
+    '$shell'(Command, Status).
+
 pid(PID) :-
         can_be(integer, PID),
-        '$pid'(PID).	
+        '$pid'(PID).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    For now, we only support a restricted subset of variable names.
