@@ -22,6 +22,7 @@
 :- use_module(library(error)).
 :- use_module(library(charsio)).
 :- use_module(library(lists)).
+:- use_module(library(si)).
 
 getenv(Key, Value) :-
         must_be_env_var(Key),
@@ -38,7 +39,13 @@ unsetenv(Key) :-
 
 shell(Command) :- shell(Command, 0).
 shell(Command, Status) :-
-    '$shell'(Command, Status).
+    (   atom_si(Command) ->
+        atom_chars(Command, CommandChars)
+    ;   Command = CommandChars
+    ),
+    must_be_chars(CommandChars),
+    can_be(integer, Status),
+    '$shell'(CommandChars, Status).
 
 pid(PID) :-
         can_be(integer, PID),
