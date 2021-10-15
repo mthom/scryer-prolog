@@ -39,13 +39,9 @@ unsetenv(Key) :-
 
 shell(Command) :- shell(Command, 0).
 shell(Command, Status) :-
-    (   atom_si(Command) ->
-        atom_chars(Command, CommandChars)
-    ;   Command = CommandChars
-    ),
-    must_be_chars(CommandChars),
+    must_be_chars(Command),
     can_be(integer, Status),
-    '$shell'(CommandChars, Status).
+    '$shell'(Command, Status).
 
 pid(PID) :-
         can_be(integer, PID),
