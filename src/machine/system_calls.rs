@@ -5382,6 +5382,56 @@ impl MachineState {
                 let key = self.heap_pstr_iter(self[temp_v!(1)]).to_string();
                 env::remove_var(key);
             }
+            &SystemClauseType::Shell => {
+                // shell executes a command in a system shell
+                // the code looks for a SHELL env var to do it in a UNIX-style
+                // if not found, the code looks for COMSPEC env var to do it in a DOS-style
+                // the output is printed directly to stdout
+                // the output status code is returned after finishing
+                fn command_result(machine: &mut MachineState, command: std::io::Result<process::ExitStatus>) {
+                    match command {
+                        Ok(status) => {
+                            match status.code() {
+                                Some(code) => {
+                                    let addr = machine.heap.put_constant(Constant::Integer(Rc::new(Integer::from(code))));
+                                    (machine.unify_fn)(machine, machine[temp_v!(2)], addr);
+                                }
+                                _ => {
+                                    machine.fail = true;
+                                }
+                            }
+                        }
+                        _ => {
+                            machine.fail = true;
+                        }
+                    }
+                }
+
+                let command = self.heap_pstr_iter(self[temp_v!(1)]).to_string();
+                match env::var("SHELL") {
+                    Ok(value) => {
+                        let command = process::Command::new(&value)
+                            .arg("-c")
+                            .arg(command)
+                            .status();
+                        command_result(self, command);
+                    }
+                    _ => {
+                        match env::var("COMSPEC") {
+                            Ok(value) => {
+                                let command = process::Command::new(&value)
+                                    .arg("/C")
+                                    .arg(command)
+                                    .status();
+                                command_result(self, command);
+                            }
+                            _ => {
+                                self.fail = true;
+                            }
+                        }
+                    }
+                };
+            }
             &SystemClauseType::PID => {
                 let a1 = self[temp_v!(1)];
                 let pid = process::id();
