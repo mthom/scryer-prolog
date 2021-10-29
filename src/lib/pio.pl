@@ -6,7 +6,7 @@
 :- use_module(library(error)).
 :- use_module(library(freeze)).
 :- use_module(library(iso_ext), [setup_call_cleanup/3, partial_string/3]).
-:- use_module(library(lists), [member/2]).
+:- use_module(library(lists), [member/2, maplist/2]).
 :- use_module(library(format), [format/3]).
 
 :- meta_predicate(phrase_from_file(2, ?)).
@@ -18,8 +18,6 @@ phrase_from_file(NT, File) :-
 
 phrase_from_file(NT, File, Options) :-
     (   var(File) -> instantiation_error(phrase_from_file/3)
-    ;   (\+ atom(File) ; File = []) ->
-            domain_error(source_sink, File, phrase_from_file/3)
     ;   must_be(list, Options),
         (   member(Var, Options), var(Var) -> instantiation_error(phrase_from_file/3)
         ;   member(type(Type), Options) ->
