@@ -5432,6 +5432,20 @@ impl MachineState {
                     }
                 };
             }
+            &SystemClauseType::AbsoluteFileName => {
+                let path = self.heap_pstr_iter(self[temp_v!(1)]).to_string();
+                match env::current_dir() {
+                    Ok(mut cwd) => {
+                        cwd.push(path);
+                        let cstr = self.heap.put_complete_string(&cwd.to_str().unwrap());
+                        (self.unify_fn)(self, self[temp_v!(2)], cstr);
+                    }
+                    Err(_) => {
+                        self.fail = true;
+                        return Ok(());
+                    }
+                }
+            }
             &SystemClauseType::PID => {
                 let a1 = self[temp_v!(1)];
                 let pid = process::id();

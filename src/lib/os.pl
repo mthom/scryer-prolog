@@ -17,6 +17,7 @@
                unsetenv/1,
                shell/1,
                shell/2,
+               absolute_file_name/2,
                pid/1]).
 
 :- use_module(library(error)).
@@ -42,6 +43,10 @@ shell(Command, Status) :-
     must_be_chars(Command),
     can_be(integer, Status),
     '$shell'(Command, Status).
+
+absolute_file_name(File, Absolute) :-
+    must_be_chars(File),
+    '$absolute_file_name'(File, Absolute).
 
 pid(PID) :-
         can_be(integer, PID),
