@@ -6,7 +6,7 @@
 :- use_module(library(error)).
 :- use_module(library(freeze)).
 :- use_module(library(iso_ext), [setup_call_cleanup/3, partial_string/3]).
-:- use_module(library(lists), [member/2, maplist/2]).
+:- use_module(library(lists), [member/2]).
 :- use_module(library(format), [format/3]).
 
 :- meta_predicate(phrase_from_file(2, ?)).
