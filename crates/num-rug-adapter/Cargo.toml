@@ -2,7 +2,7 @@
 name = "num-rug-adapter"
 version = "0.1.5"
 authors = ["Marco A L Barbosa <malbarbo@gmail.com>"]
-edition = "2018"
+edition = "2021"
 description = "An adapter to use num crate where rug is needed."
 license = "MIT/Apache-2.0"
 repository = "https://github.com/malbarbo/num-rug-adapter"
