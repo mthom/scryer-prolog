@@ -620,8 +620,11 @@ encoding_chars(octet, Bs, Cs) :-
         ),
         must_be_byte_chars(Cs, crypto_encoding).
 encoding_chars(utf8, Cs, Cs) :-
-        must_be(list, Cs),
-        maplist(must_be(character), Cs).
+        (   partial_string(Cs) ->
+            true
+        ;   must_be(list, Cs),
+            maplist(must_be(character), Cs)
+        ).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    Digital signatures with Ed25519
