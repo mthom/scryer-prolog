@@ -46,6 +46,7 @@
 :- use_module(library(format)).
 :- use_module(library(charsio)).
 :- use_module(library(si)).
+:- use_module(library(iso_ext), [partial_string/1]).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    hex_bytes(?Hex, ?Bytes) is det.
@@ -104,12 +105,18 @@ must_be_bytes(Bytes, Context) :-
 
 
 must_be_byte_chars(Chars, Context) :-
-        must_be(list, Chars),
-        (   member(Char, Chars),
-            char_code(Char, Code),
-            \+ between(0, 255, Code) ->
-            domain_error(byte_char, Char, Context)
-        ;   true
+        (   partial_string(Chars) ->
+            (   '$first_non_octet'(Chars, F) ->
+                domain_error(byte_char, F, Context)
+            ;   true
+            )
+        ;   must_be(list, Chars),
+            (   member(Char, Chars),
+                char_code(Char, Code),
+                \+ between(0, 255, Code) ->
+                domain_error(byte_char, Char, Context)
+            ;   true
+            )
         ).
 
 
