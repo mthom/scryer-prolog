@@ -221,6 +221,7 @@ pub(crate) enum SystemClauseType {
     NumberToCodes,
     OpDeclaration,
     Open,
+    SetStreamOptions,
     NextStream,
     PartialStringTail,
     PeekByte,
@@ -478,6 +479,7 @@ impl SystemClauseType {
             &SystemClauseType::Halt => clause_name!("$halt"),
             &SystemClauseType::HeadIsDynamic => clause_name!("$head_is_dynamic"),
             &SystemClauseType::Open => clause_name!("$open"),
+            &SystemClauseType::SetStreamOptions => clause_name!("$set_stream_options"),
             &SystemClauseType::OpDeclaration => clause_name!("$op"),
             &SystemClauseType::InstallSCCCleaner => clause_name!("$install_scc_cleaner"),
             &SystemClauseType::InstallInferenceCounter => {
@@ -701,6 +703,7 @@ impl SystemClauseType {
             ("$number_to_codes", 2) => Some(SystemClauseType::NumberToCodes),
             ("$op", 3) => Some(SystemClauseType::OpDeclaration),
             ("$open", 7) => Some(SystemClauseType::Open),
+            ("$set_stream_options", 5) => Some(SystemClauseType::SetStreamOptions),
             ("$redo_attr_var_binding", 2) => Some(SystemClauseType::RedoAttrVarBinding),
             ("$remove_call_policy_check", 1) => Some(SystemClauseType::RemoveCallPolicyCheck),
             ("$remove_inference_counter", 2) => Some(SystemClauseType::RemoveInferenceCounter),
