@@ -10,7 +10,7 @@
 :- use_module(library(iso_ext)).
 :- use_module(library(error)).
 :- use_module(library(lists)).
-:- use_module(library(iso_ext), [partial_string/1]).
+:- use_module(library(iso_ext), [partial_string/1,partial_string/3]).
 
 fabricate_var_name(VarType, VarName, N) :-
     char_code('A', AC),
