@@ -390,6 +390,13 @@ format(Fs, Args) :-
 
 format(Stream, Fs, Args) :-
         phrase(format_(Fs, Args), Cs),
+        (   stream_property(Stream, type(binary)) ->
+            (   '$first_non_octet'(Cs, N) ->
+                domain_error(byte_char, N, format/3)
+            ;   true
+            )
+        ;   true
+        ),
         % we use a specialised internal predicate that uses only a
         % single "write" operation for efficiency. It is equivalent to
         % maplist(put_char(Stream), Cs). It also works for binary streams.

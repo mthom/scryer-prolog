@@ -2042,18 +2042,6 @@ impl MachineState {
 
                 if stream.options().stream_type == StreamType::Binary {
                     for c in string.chars() {
-                        if c as u32 > 255 {
-                            let stub = MachineError::functor_stub(clause_name!("$put_chars"), 2);
-
-                            let err = MachineError::type_error(
-                                self.heap.h(),
-                                ValidType::Byte,
-                                Addr::Char(c),
-                            );
-
-                            return Err(self.error_form(err, stub));
-                        }
-
                         bytes.push(c as u8);
                     }
                 } else {
@@ -5486,18 +5474,6 @@ impl MachineState {
                 } else {
                     let mut bytes = vec![];
                     for c in self.heap_pstr_iter(self[temp_v!(1)]).to_string().chars() {
-                        if c as u32 > 255 {
-                            let stub = MachineError::functor_stub(clause_name!("chars_base64"), 3);
-
-                            let err = MachineError::type_error(
-                                self.heap.h(),
-                                ValidType::Byte,
-                                Addr::Char(c),
-                            );
-
-                            return Err(self.error_form(err, stub));
-                        }
-
                         bytes.push(c as u8);
                     }
                     let b64 = base64::encode_config(bytes, config);

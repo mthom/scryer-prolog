@@ -239,7 +239,10 @@ chars_base64(Cs, Bs, Options) :-
             must_be_characters(Bs),
             '$chars_base64'(Cs, Bs, Padding, Charset)
         ;   must_be_characters(Cs),
-            '$chars_base64'(Cs, Bs, Padding, Charset)
+            (   '$first_non_octet'(Cs, N) ->
+                domain_error(byte_char, N, chars_base64/3)
+            ;   '$chars_base64'(Cs, Bs, Padding, Charset)
+            )
         ).
 
 must_be_characters(Cs) :-
