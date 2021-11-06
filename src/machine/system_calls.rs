@@ -2443,10 +2443,10 @@ impl MachineState {
                 }
 
                 if stream.at_end_of_stream() {
-                    let end_of_file = clause_name!("end_of_file");
+                    let end_of_file = Integer::from(-1);
                     let end_of_file = self
                         .heap
-                        .to_unifiable(HeapCellValue::Atom(end_of_file, None));
+                        .to_unifiable(HeapCellValue::Integer(Rc::new(end_of_file)));
 
                     stream.set_past_end_of_stream();
 
