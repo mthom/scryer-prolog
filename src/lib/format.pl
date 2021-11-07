@@ -73,6 +73,7 @@
 :- module(format, [format_//2,
                    format/2,
                    format/3,
+                   portray_clause_//1,
                    portray_clause/1,
                    portray_clause/2,
                    listing/1
