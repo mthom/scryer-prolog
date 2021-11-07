@@ -1,6 +1,7 @@
 :- module(charsio, [char_type/2,
                     chars_utf8bytes/2,
                     get_single_char/1,
+                    read_n_chars/3,
                     read_line_to_chars/3,
                     read_term_from_chars/2,
                     write_term_to_chars/3,
@@ -198,6 +199,29 @@ read_line_to_chars(Stream, Cs0, Cs) :-
             (   C == '\n' -> Rest = Cs
             ;   read_line_to_chars(Stream, Rest, Cs)
             )
+        ).
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   Read N characters from Stream.
+
+   If N is a variable, read until EOF, unifying N with the number of
+   characters read.
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+read_n_chars(Stream, N, Cs) :-
+        can_be(integer, N),
+        (   var(N) ->
+            read_to_eof(Stream, Cs),
+            length(Cs, N)
+        ;   N >= 0,
+            '$get_n_chars'(Stream, N, Cs)
+        ).
+
+read_to_eof(Stream, Cs) :-
+        '$get_n_chars'(Stream, 512, Cs0),
+        (   Cs0 == [] -> Cs = []
+        ;   partial_string(Cs0, Cs, Rest),
+            read_to_eof(Stream, Rest)
         ).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
