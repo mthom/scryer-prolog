@@ -2042,18 +2042,6 @@ impl MachineState {
 
                 if stream.options().stream_type == StreamType::Binary {
                     for c in string.chars() {
-                        if c as u32 > 255 {
-                            let stub = MachineError::functor_stub(clause_name!("$put_chars"), 2);
-
-                            let err = MachineError::type_error(
-                                self.heap.h(),
-                                ValidType::Byte,
-                                Addr::Char(c),
-                            );
-
-                            return Err(self.error_form(err, stub));
-                        }
-
                         bytes.push(c as u8);
                     }
                 } else {
@@ -5340,6 +5328,18 @@ impl MachineState {
                 let cstr = self.heap.put_complete_string(&string);
                 (self.unify_fn)(self, self[temp_v!(3)], cstr);
             }
+            &SystemClauseType::FirstNonOctet => {
+                for c in self.heap_pstr_iter(self[temp_v!(1)]).to_string().chars() {
+                    if c as u32 > 255 {
+                        let chars = clause_name!(String::from(c.to_string()), self.atom_tbl);
+                        let non_octet = self.heap.to_unifiable(HeapCellValue::Atom(chars, None));
+                        (self.unify_fn)(self, self[temp_v!(2)], non_octet);
+                        return return_from_clause!(self.last_call, self);
+                    }
+                }
+                self.fail = true;
+                return Ok(());
+            }
             &SystemClauseType::LoadHTML => {
                 let string = self.heap_pstr_iter(self[temp_v!(1)]).to_string();
                 let doc = select::document::Document::from_read(string.as_bytes()).unwrap();
@@ -5474,18 +5474,6 @@ impl MachineState {
                 } else {
                     let mut bytes = vec![];
                     for c in self.heap_pstr_iter(self[temp_v!(1)]).to_string().chars() {
-                        if c as u32 > 255 {
-                            let stub = MachineError::functor_stub(clause_name!("chars_base64"), 3);
-
-                            let err = MachineError::type_error(
-                                self.heap.h(),
-                                ValidType::Byte,
-                                Addr::Char(c),
-                            );
-
-                            return Err(self.error_form(err, stub));
-                        }
-
                         bytes.push(c as u8);
                     }
                     let b64 = base64::encode_config(bytes, config);

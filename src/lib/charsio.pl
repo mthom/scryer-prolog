@@ -10,6 +10,7 @@
 :- use_module(library(iso_ext)).
 :- use_module(library(error)).
 :- use_module(library(lists)).
+:- use_module(library(iso_ext), [partial_string/1,partial_string/3]).
 
 fabricate_var_name(VarType, VarName, N) :-
     char_code('A', AC),
@@ -235,10 +236,18 @@ chars_base64(Cs, Bs, Options) :-
         ;   domain_error(charset, Charset, chars_base64/3)
         ),
         (   var(Cs) ->
-            must_be(list, Bs),
-            maplist(must_be(character), Bs),
+            must_be_characters(Bs),
             '$chars_base64'(Cs, Bs, Padding, Charset)
+        ;   must_be_characters(Cs),
+            (   '$first_non_octet'(Cs, N) ->
+                domain_error(byte_char, N, chars_base64/3)
+            ;   '$chars_base64'(Cs, Bs, Padding, Charset)
+            )
+        ).
+
+must_be_characters(Cs) :-
+        (   partial_string(Cs) ->
+            true
         ;   must_be(list, Cs),
-            maplist(must_be(character), Cs),
-            '$chars_base64'(Cs, Bs, Padding, Charset)
+            maplist(must_be(character), Cs)
         ).

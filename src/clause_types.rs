@@ -296,6 +296,7 @@ pub(crate) enum SystemClauseType {
     Ed25519NewKeyPair,
     Ed25519KeyPairPublicKey,
     Curve25519ScalarMult,
+    FirstNonOctet,
     LoadHTML,
     LoadXML,
     GetEnv,
@@ -588,6 +589,7 @@ impl SystemClauseType {
                 clause_name!("$ed25519_keypair_public_key")
             }
             &SystemClauseType::Curve25519ScalarMult => clause_name!("$curve25519_scalar_mult"),
+            &SystemClauseType::FirstNonOctet => clause_name!("$first_non_octet"),
             &SystemClauseType::LoadHTML => clause_name!("$load_html"),
             &SystemClauseType::LoadXML => clause_name!("$load_xml"),
             &SystemClauseType::GetEnv => clause_name!("$getenv"),
@@ -810,6 +812,7 @@ impl SystemClauseType {
             ("$ed25519_new_keypair", 1) => Some(SystemClauseType::Ed25519NewKeyPair),
             ("$ed25519_keypair_public_key", 2) => Some(SystemClauseType::Ed25519KeyPairPublicKey),
             ("$curve25519_scalar_mult", 3) => Some(SystemClauseType::Curve25519ScalarMult),
+            ("$first_non_octet", 2) => Some(SystemClauseType::FirstNonOctet),
             ("$load_html", 3) => Some(SystemClauseType::LoadHTML),
             ("$load_xml", 3) => Some(SystemClauseType::LoadXML),
             ("$getenv", 2) => Some(SystemClauseType::GetEnv),
