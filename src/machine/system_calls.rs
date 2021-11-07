@@ -3208,6 +3208,22 @@ impl MachineState {
 
                 self.bind(stream_var.as_var().unwrap(), stream);
             }
+            &SystemClauseType::SetStreamOptions => {
+                let mut stream = self.get_stream_or_alias(
+                    self[temp_v!(1)],
+                    &indices.stream_aliases,
+                    "open",
+                    4,
+                )?;
+
+                let alias = self[temp_v!(2)];
+                let eof_action = self[temp_v!(3)];
+                let reposition = self[temp_v!(4)];
+                let stream_type = self[temp_v!(5)];
+
+                let options = self.to_stream_options(alias, eof_action, reposition, stream_type);
+                *stream.options_mut() = options;
+            }
             &SystemClauseType::TruncateIfNoLiftedHeapGrowthDiff => {
                 self.truncate_if_no_lifted_heap_diff(|h| Addr::HeapCell(h))
             }
