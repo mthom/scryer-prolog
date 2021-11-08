@@ -1442,7 +1442,10 @@ parse_stream_options_(reposition(Bool), reposition-Bool) :-
        throw(error(domain_error(stream_option, reposition(Bool)), _))
     ).
 parse_stream_options_(alias(A), alias-A) :-
-    (  atom(A), A \== [], !, true
+    (  var(A) ->
+       throw(error(instantiation_error, open/4)) % 8.1.3 7)
+    ;
+       atom(A), A \== [] -> true
     ;
        throw(error(domain_error(stream_option, alias(A)), _))
     ).
