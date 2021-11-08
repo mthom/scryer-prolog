@@ -464,6 +464,8 @@ The modules that ship with Scryer&nbsp;Prolog are also called
   file, reading lazily only as much as is needed. Due to the compact
   internal string representation, also extremely large files can be
   efficiently processed with Scryer&nbsp;Prolog in this way.
+  `phrase_to_file/2` and `phrase_to_stream/2` write lists of
+  characters described by DCGs to files and streams, respectively.
 * [`lambda`](src/lib/lambda.pl)
   Lambda expressions to simplify higher order programming.
 * [`charsio`](src/lib/charsio.pl) Various predicates that are useful
