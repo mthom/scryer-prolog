@@ -165,10 +165,10 @@ cells([], Args, Tab, Es, _) --> !,
 cells([~,~|Fs], Args, Tab, Es, VNs) --> !,
         cells(Fs, Args, Tab, [chars("~")|Es], VNs).
 cells([~,w|Fs], [Arg|Args], Tab, Es, VNs) --> !,
-        { write_term_to_chars(Arg, [variable_names(VNs)], Chars) },
+        { write_term_to_chars(Arg, [numbervars(true),variable_names(VNs)], Chars) },
         cells(Fs, Args, Tab, [chars(Chars)|Es], VNs).
 cells([~,q|Fs], [Arg|Args], Tab, Es, VNs) --> !,
-        { write_term_to_chars(Arg, [quoted(true),variable_names(VNs)], Chars) },
+        { write_term_to_chars(Arg, [quoted(true),numbervars(true),variable_names(VNs)], Chars) },
         cells(Fs, Args, Tab, [chars(Chars)|Es], VNs).
 cells([~,a|Fs], [Arg|Args], Tab, Es, VNs) --> !,
         { atom_chars(Arg, Chars) },
