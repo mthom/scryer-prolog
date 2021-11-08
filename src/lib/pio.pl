@@ -1,3 +1,14 @@
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   Pure I/O
+   ========
+
+   Our goal is to encourage the use of definite clause grammars (DCGs)
+   for describing strings. The predicates phrase_from_file/[2,3],
+   phrase_to_file/2 and phrase_to_stream/2 let us apply DCGs transparently
+   to files and streams, and therefore decouple side-effects from
+   declarative descriptions.
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
 :- module(pio, [phrase_from_file/2,
                 phrase_from_file/3,
                 phrase_to_file/2,
@@ -15,6 +26,13 @@
 :- meta_predicate(phrase_from_file(2, ?, ?)).
 :- meta_predicate(phrase_to_file(2, ?)).
 :- meta_predicate(phrase_to_stream(2, ?)).
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   phrase_from_file(GRBody, File)
+
+   True if grammar rule body GRBody covers the contents of File,
+   represented as a list of characters.
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 phrase_from_file(NT, File) :-
     phrase_from_file(NT, File, []).
