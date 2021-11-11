@@ -339,7 +339,7 @@ pub(crate) struct HCPrinter<'a, Outputter> {
     state_stack: Vec<TokenOrRedirect>,
     toplevel_spec: Option<DirectedOp>,
     heap_locs: ReverseHeapVarDict,
-    printed_vars: IndexSet<Addr>,
+    _printed_vars: IndexSet<Addr>,
     last_item_idx: usize,
     cyclic_terms: IndexMap<Addr, usize>,
     non_cyclic_terms: IndexSet<usize>,
@@ -348,7 +348,7 @@ pub(crate) struct HCPrinter<'a, Outputter> {
     pub(crate) numbervars: bool,
     pub(crate) quoted: bool,
     pub(crate) ignore_ops: bool,
-    pub(crate) print_strings_as_strs: bool,
+    pub(crate) _print_strings_as_strs: bool,
     pub(crate) max_depth: usize,
 }
 
@@ -466,7 +466,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             state_stack: vec![],
             heap_locs: ReverseHeapVarDict::new(),
             toplevel_spec: None,
-            printed_vars: IndexSet::new(),
+            _printed_vars: IndexSet::new(),
             last_item_idx: 0,
             numbervars: false,
             numbervars_offset: Integer::from(0),
@@ -475,7 +475,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             cyclic_terms: IndexMap::new(),
             non_cyclic_terms: IndexSet::new(),
             var_names: IndexMap::new(),
-            print_strings_as_strs: false,
+            _print_strings_as_strs: false,
             max_depth: 0,
         }
     }

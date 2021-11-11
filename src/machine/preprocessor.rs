@@ -553,14 +553,14 @@ fn qualified_clause_to_query_term<'a>(
 
 #[derive(Debug)]
 pub(crate) struct Preprocessor {
-    flags: MachineFlags,
+    _flags: MachineFlags,
     queue: VecDeque<VecDeque<Term>>,
 }
 
 impl Preprocessor {
     pub(super) fn new(flags: MachineFlags) -> Self {
         Preprocessor {
-            flags,
+            _flags: flags,
             queue: VecDeque::new(),
         }
     }

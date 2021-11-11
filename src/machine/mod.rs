@@ -109,7 +109,7 @@ impl LoadContext {
 #[derive(Debug)]
 pub struct Machine {
     pub(super) machine_st: MachineState,
-    pub(super) inner_heap: Heap,
+    pub(super) _inner_heap: Heap,
     pub(super) policies: MachinePolicies,
     pub(super) indices: IndexStore,
     pub(super) code_repo: CodeRepo,
@@ -280,7 +280,7 @@ impl Machine {
 
         let mut wam = Machine {
             machine_st: MachineState::new(),
-            inner_heap: Heap::new(),
+            _inner_heap: Heap::new(),
             policies: MachinePolicies::new(),
             indices: IndexStore::new(),
             code_repo: CodeRepo::new(),
