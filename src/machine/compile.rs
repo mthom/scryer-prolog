@@ -1351,7 +1351,7 @@ impl<'a> LoadState<'a> {
         settings: CodeGenSettings,
         atom_tbl: TabledData<Atom>,
     ) -> Result<StandaloneCompileResult, SessionError> {
-        let mut preprocessor = Preprocessor::new(self.wam.machine_st.flags);
+        let mut preprocessor = Preprocessor::new();
         let mut cg = CodeGenerator::<DebrayAllocator>::new(atom_tbl.clone(), settings);
 
         let clause = self.try_term_to_tl(term, &mut preprocessor)?;
@@ -1389,7 +1389,7 @@ impl<'a> LoadState<'a> {
             CodeGenerator::<DebrayAllocator>::new(self.wam.machine_st.atom_tbl.clone(), settings);
 
         let mut clauses = vec![];
-        let mut preprocessor = Preprocessor::new(self.wam.machine_st.flags);
+        let mut preprocessor = Preprocessor::new();
 
         for term in predicates.predicates.drain(0..) {
             clauses.push(self.try_term_to_tl(term, &mut preprocessor)?);
