@@ -183,6 +183,8 @@ partial_string_tail(String, Tail) :-
 :- dynamic(i_call_nth_nesting/2).
 :- dynamic(i_call_nth_counter/1).
 
+:- meta_predicate(call_nth(0, ?)).
+
 call_nth(Goal, N) :-
     can_be(integer, N),
     (   integer(N), N =< 0,
