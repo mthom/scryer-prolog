@@ -73,6 +73,7 @@
 :- module(format, [format_//2,
                    format/2,
                    format/3,
+                   portray_clause_//1,
                    portray_clause/1,
                    portray_clause/2,
                    listing/1
@@ -83,6 +84,7 @@
 :- use_module(library(error)).
 :- use_module(library(charsio)).
 :- use_module(library(between)).
+:- use_module(library(pio)).
 
 format_(Fs, Args) -->
         { must_be(list, Fs),
@@ -389,18 +391,7 @@ format(Fs, Args) :-
         format(Stream, Fs, Args).
 
 format(Stream, Fs, Args) :-
-        phrase(format_(Fs, Args), Cs),
-        (   stream_property(Stream, type(binary)) ->
-            (   '$first_non_octet'(Cs, N) ->
-                domain_error(byte_char, N, format/3)
-            ;   true
-            )
-        ;   true
-        ),
-        % we use a specialised internal predicate that uses only a
-        % single "write" operation for efficiency. It is equivalent to
-        % maplist(put_char(Stream), Cs). It also works for binary streams.
-        '$put_chars'(Stream, Cs),
+        phrase_to_stream(format_(Fs, Args), Stream),
         flush_output(Stream).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -477,8 +468,8 @@ portray_clause(Term) :-
         portray_clause(Out, Term).
 
 portray_clause(Stream, Term) :-
-        phrase(portray_clause_(Term), Ls),
-        format(Stream, "~s", [Ls]).
+        phrase_to_stream(portray_clause_(Term), Stream),
+        flush_output(Stream).
 
 portray_clause_(Term) -->
         { unique_variable_names(Term, VNs) },
