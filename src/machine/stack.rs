@@ -109,7 +109,6 @@ pub(crate) struct OrFramePrelude {
     pub(crate) b: usize,
     pub(crate) bp: LocalCodePtr,
     pub(crate) tr: usize,
-    pub(crate) pstr_tr: usize,
     pub(crate) h: usize,
     pub(crate) b0: usize,
 }

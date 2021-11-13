@@ -435,7 +435,6 @@ pub(crate) struct Module {
     pub(crate) meta_predicates: MetaPredicateDir,
     pub(crate) extensible_predicates: ExtensiblePredicates,
     pub(crate) local_extensible_predicates: LocalExtensiblePredicates,
-    pub(crate) is_impromptu_module: bool,
     pub(crate) listing_src: ListingSource,
 }
 
@@ -447,7 +446,6 @@ impl Module {
             code_dir: CodeDir::new(),
             op_dir: default_op_dir(),
             meta_predicates: MetaPredicateDir::new(),
-            is_impromptu_module: false,
             extensible_predicates: ExtensiblePredicates::new(),
             local_extensible_predicates: LocalExtensiblePredicates::new(),
             listing_src,
@@ -460,7 +458,6 @@ impl Module {
             code_dir: CodeDir::new(),
             op_dir: OpDir::new(),
             meta_predicates: MetaPredicateDir::new(),
-            is_impromptu_module: false,
             extensible_predicates: ExtensiblePredicates::new(),
             local_extensible_predicates: LocalExtensiblePredicates::new(),
             listing_src: ListingSource::DynamicallyGenerated,

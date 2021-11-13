@@ -7,7 +7,6 @@ use lazy_static::lazy_static;
 use crate::clause_types::*;
 use crate::forms::*;
 use crate::instructions::*;
-use crate::machine::heap::*;
 use crate::machine::loader::*;
 use crate::machine::term_stream::{LiveTermStream, LoadStatePayload, TermStream};
 use crate::read::*;
@@ -109,7 +108,6 @@ impl LoadContext {
 #[derive(Debug)]
 pub struct Machine {
     pub(super) machine_st: MachineState,
-    pub(super) inner_heap: Heap,
     pub(super) policies: MachinePolicies,
     pub(super) indices: IndexStore,
     pub(super) code_repo: CodeRepo,
@@ -280,7 +278,6 @@ impl Machine {
 
         let mut wam = Machine {
             machine_st: MachineState::new(),
-            inner_heap: Heap::new(),
             policies: MachinePolicies::new(),
             indices: IndexStore::new(),
             code_repo: CodeRepo::new(),
