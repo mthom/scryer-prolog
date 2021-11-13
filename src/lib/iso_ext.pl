@@ -23,11 +23,11 @@
                                type_error/3]).
 
 
-:- meta_predicate call_cleanup(0, 0).
+:- meta_predicate(call_cleanup(0, 0)).
 
-:- meta_predicate setup_call_cleanup(0, 0, 0).
+:- meta_predicate(setup_call_cleanup(0, 0, 0)).
 
-:- meta_predicate forall(0, 0).
+:- meta_predicate(forall(0, 0)).
 
 forall(Generate, Test) :-
     \+ (Generate, \+ Test).
@@ -131,7 +131,7 @@ handle_ile(B, E, _) :-
     '$remove_call_policy_check'(B),
     '$call_with_default_policy'(throw(E)).
 
-:- meta_predicate call_with_inference_limit(0, ?, ?).
+:- meta_predicate(call_with_inference_limit(0, ?, ?)).
 
 call_with_inference_limit(G, L, R) :-
     '$get_current_block'(Bb),
@@ -182,6 +182,8 @@ partial_string_tail(String, Tail) :-
 
 :- dynamic(i_call_nth_nesting/2).
 :- dynamic(i_call_nth_counter/1).
+
+:- meta_predicate(call_nth(0, ?)).
 
 call_nth(Goal, N) :-
     can_be(integer, N),
