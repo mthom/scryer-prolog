@@ -1,37 +1,39 @@
-use prolog_parser::ast::*;
+use crate::parser::ast::*;
 
+use crate::atom_table::*;
 use crate::clause_types::*;
 use crate::forms::*;
 use crate::instructions::*;
 use crate::iterators::*;
+use crate::types::*;
 
 pub(crate) trait CompilationTarget<'a> {
     type Iterator: Iterator<Item = TermRef<'a>>;
 
-    fn iter(_: &'a Term) -> Self::Iterator;
+    fn iter(term: &'a Term) -> Self::Iterator;
 
-    fn to_constant(_: Level, _: Constant, _: RegType) -> Self;
-    fn to_list(_: Level, _: RegType) -> Self;
-    fn to_structure(_: ClauseType, _: usize, _: RegType) -> Self;
+    fn to_constant(lvl: Level, literal: Literal, r: RegType) -> Self;
+    fn to_list(lvl: Level, r: RegType) -> Self;
+    fn to_structure(ct: ClauseType, arity: usize, r: RegType) -> Self;
 
-    fn to_void(_: usize) -> Self;
+    fn to_void(num_subterms: usize) -> Self;
     fn is_void_instr(&self) -> bool;
 
-    fn to_pstr(lvl: Level, string: String, r: RegType, has_tail: bool) -> Self;
+    fn to_pstr(lvl: Level, string: Atom, r: RegType, has_tail: bool) -> Self;
 
     fn incr_void_instr(&mut self);
 
-    fn constant_subterm(_: Constant) -> Self;
+    fn constant_subterm(literal: Literal) -> Self;
 
-    fn argument_to_variable(_: RegType, _: usize) -> Self;
-    fn argument_to_value(_: RegType, _: usize) -> Self;
+    fn argument_to_variable(r: RegType, r: usize) -> Self;
+    fn argument_to_value(r: RegType, val: usize) -> Self;
 
-    fn move_to_register(_: RegType, _: usize) -> Self;
+    fn move_to_register(r: RegType, val: usize) -> Self;
 
-    fn subterm_to_variable(_: RegType) -> Self;
-    fn subterm_to_value(_: RegType) -> Self;
+    fn subterm_to_variable(r: RegType) -> Self;
+    fn subterm_to_value(r: RegType) -> Self;
 
-    fn clause_arg_to_instr(_: RegType) -> Self;
+    fn clause_arg_to_instr(r: RegType) -> Self;
 }
 
 impl<'a> CompilationTarget<'a> for FactInstruction {
@@ -41,8 +43,8 @@ impl<'a> CompilationTarget<'a> for FactInstruction {
         breadth_first_iter(term, false) // do not iterate over the root clause if one exists.
     }
 
-    fn to_constant(lvl: Level, constant: Constant, reg: RegType) -> Self {
-        FactInstruction::GetConstant(lvl, constant, reg)
+    fn to_constant(lvl: Level, constant: Literal, reg: RegType) -> Self {
+        FactInstruction::GetConstant(lvl, HeapCellValue::from(constant), reg)
     }
 
     fn to_structure(ct: ClauseType, arity: usize, reg: RegType) -> Self {
@@ -53,8 +55,8 @@ impl<'a> CompilationTarget<'a> for FactInstruction {
         FactInstruction::GetList(lvl, reg)
     }
 
-    fn to_void(subterms: usize) -> Self {
-        FactInstruction::UnifyVoid(subterms)
+    fn to_void(num_subterms: usize) -> Self {
+        FactInstruction::UnifyVoid(num_subterms)
     }
 
     fn is_void_instr(&self) -> bool {
@@ -64,7 +66,7 @@ impl<'a> CompilationTarget<'a> for FactInstruction {
         }
     }
 
-    fn to_pstr(lvl: Level, string: String, r: RegType, has_tail: bool) -> Self {
+    fn to_pstr(lvl: Level, string: Atom, r: RegType, has_tail: bool) -> Self {
         FactInstruction::GetPartialString(lvl, string, r, has_tail)
     }
 
@@ -75,8 +77,8 @@ impl<'a> CompilationTarget<'a> for FactInstruction {
         }
     }
 
-    fn constant_subterm(constant: Constant) -> Self {
-        FactInstruction::UnifyConstant(constant)
+    fn constant_subterm(constant: Literal) -> Self {
+        FactInstruction::UnifyConstant(HeapCellValue::from(constant))
     }
 
     fn argument_to_variable(arg: RegType, val: usize) -> Self {
@@ -115,15 +117,15 @@ impl<'a> CompilationTarget<'a> for QueryInstruction {
         QueryInstruction::PutStructure(ct, arity, r)
     }
 
-    fn to_constant(lvl: Level, constant: Constant, reg: RegType) -> Self {
-        QueryInstruction::PutConstant(lvl, constant, reg)
+    fn to_constant(lvl: Level, constant: Literal, reg: RegType) -> Self {
+        QueryInstruction::PutConstant(lvl, HeapCellValue::from(constant), reg)
     }
 
     fn to_list(lvl: Level, reg: RegType) -> Self {
         QueryInstruction::PutList(lvl, reg)
     }
 
-    fn to_pstr(lvl: Level, string: String, r: RegType, has_tail: bool) -> Self {
+    fn to_pstr(lvl: Level, string: Atom, r: RegType, has_tail: bool) -> Self {
         QueryInstruction::PutPartialString(lvl, string, r, has_tail)
     }
 
@@ -145,8 +147,8 @@ impl<'a> CompilationTarget<'a> for QueryInstruction {
         }
     }
 
-    fn constant_subterm(constant: Constant) -> Self {
-        QueryInstruction::SetConstant(constant)
+    fn constant_subterm(constant: Literal) -> Self {
+        QueryInstruction::SetConstant(HeapCellValue::from(constant))
     }
 
     fn argument_to_variable(arg: RegType, val: usize) -> Self {

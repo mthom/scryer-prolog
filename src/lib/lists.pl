@@ -3,7 +3,7 @@
 		          maplist/3, maplist/4, maplist/5, maplist/6,
 		          maplist/7, maplist/8, maplist/9, same_length/2, nth0/3,
 		          sum_list/2, transpose/2, list_to_set/2, list_max/2,
-                          list_min/2, permutation/2]).
+                  list_min/2, permutation/2]).
 
 /*  Author:        Mark Thom, Jan Wielemaker, and Richard O'Keefe
     Copyright (c)  2018-2021, Mark Thom

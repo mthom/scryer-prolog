@@ -1,33 +1,38 @@
-use prolog_parser::ast::*;
-use prolog_parser::parser::OpDesc;
-use prolog_parser::{clause_name, is_infix, is_postfix};
+use crate::arena::*;
+use crate::atom_table::*;
+use crate::parser::ast::*;
+use crate::parser::parser::CompositeOpDesc;
+use crate::parser::rug::{Integer, Rational};
+use crate::{is_infix, is_postfix};
 
 use crate::clause_types::*;
+use crate::machine::heap::*;
 use crate::machine::loader::PredicateQueue;
 use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
-use crate::rug::{Integer, Rational};
-use ordered_float::OrderedFloat;
+use crate::types::*;
 
 use indexmap::{IndexMap, IndexSet};
+use ordered_float::OrderedFloat;
 
 use slice_deque::*;
 
 use std::cell::Cell;
+use std::convert::TryFrom;
 use std::ops::AddAssign;
 use std::path::PathBuf;
 use std::rc::Rc;
 
-pub(crate) type PredicateKey = (ClauseName, usize); // name, arity.
+pub type PredicateKey = (Atom, usize); // name, arity.
 
-pub(crate) type Predicate = Vec<PredicateClause>;
+pub type Predicate = Vec<PredicateClause>;
 
 // vars of predicate, toplevel offset.  Vec<Term> is always a vector
 // of vars (we get their adjoining cells this way).
-pub(crate) type JumpStub = Vec<Term>;
+pub type JumpStub = Vec<Term>;
 
 #[derive(Debug, Clone)]
-pub(crate) enum TopLevel {
+pub enum TopLevel {
     Fact(Term), // Term, line_num, col_num
     Predicate(Predicate),
     Query(Vec<QueryTerm>),
@@ -35,7 +40,7 @@ pub(crate) enum TopLevel {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) enum AppendOrPrepend {
+pub enum AppendOrPrepend {
     Append,
     Prepend,
 }
@@ -51,7 +56,7 @@ impl AppendOrPrepend {
 }
 
 #[derive(Debug, Clone, Copy)]
-pub(crate) enum Level {
+pub enum Level {
     Deep,
     Root,
     Shallow,
@@ -67,12 +72,12 @@ impl Level {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) enum QueryTerm {
+pub enum QueryTerm {
     // register, clause type, subterms, use default call policy.
-    Clause(Cell<RegType>, ClauseType, Vec<Box<Term>>, bool),
+    Clause(Cell<RegType>, ClauseType, Vec<Term>, bool),
     BlockedCut, // a cut which is 'blocked by letters', like the P term in P -> Q.
     UnblockedCut(Cell<VarReg>),
-    GetLevelAndUnify(Cell<VarReg>, Rc<Var>),
+    GetLevelAndUnify(Cell<VarReg>, Rc<String>),
     Jump(JumpStub),
 }
 
@@ -95,25 +100,25 @@ impl QueryTerm {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct Rule {
-    pub(crate) head: (ClauseName, Vec<Box<Term>>, QueryTerm),
+pub struct Rule {
+    pub(crate) head: (Atom, Vec<Term>, QueryTerm),
     pub(crate) clauses: Vec<QueryTerm>,
 }
 
 #[derive(Clone, Debug, Hash)]
-pub(crate) enum ListingSource {
+pub enum ListingSource {
     DynamicallyGenerated,
-    File(ClauseName, PathBuf), // filename, path
+    File(Atom, PathBuf), // filename, path
     User,
 }
 
 impl ListingSource {
-    pub(crate) fn from_file_and_path(filename: ClauseName, path_buf: PathBuf) -> Self {
+    pub(crate) fn from_file_and_path(filename: Atom, path_buf: PathBuf) -> Self {
         ListingSource::File(filename, path_buf)
     }
 }
 
-pub(crate) trait ClauseInfo {
+pub trait ClauseInfo {
     fn is_consistent(&self, clauses: &PredicateQueue) -> bool {
         match clauses.first() {
             Some(cl) => {
@@ -123,14 +128,14 @@ pub(crate) trait ClauseInfo {
         }
     }
 
-    fn name(&self) -> Option<ClauseName>;
+    fn name(&self) -> Option<Atom>;
     fn arity(&self) -> usize;
 }
 
 impl ClauseInfo for PredicateKey {
     #[inline]
-    fn name(&self) -> Option<ClauseName> {
-        Some(self.0.clone())
+    fn name(&self) -> Option<Atom> {
+        Some(self.0)
     }
 
     #[inline]
@@ -140,28 +145,32 @@ impl ClauseInfo for PredicateKey {
 }
 
 impl ClauseInfo for Term {
-    fn name(&self) -> Option<ClauseName> {
+    fn name(&self) -> Option<Atom> {
+        //, atom_tbl: &AtomTable) -> Option<StringBuffer> {
         match self {
-            Term::Clause(_, ref name, ref terms, _) => {
+            Term::Clause(_, name, terms) => {
+                // let str_buf = StringBuffer::from(*name, atom_tbl);
+
                 match name.as_str() {
+                    // str_buf.as_str() {
                     ":-" => {
                         match terms.len() {
-                            1 => None, // a declaration.
-                            2 => terms[0].name(),
-                            _ => Some(clause_name!(":-")),
+                            1 => None,            // a declaration.
+                            2 => terms[0].name(), //.map(|name| StringBuffer::from(name, atom_tbl)),
+                            _ => Some(*name),
                         }
                     }
-                    _ => Some(name.clone()),
+                    _ => Some(*name), //str_buf),
                 }
             }
-            Term::Constant(_, Constant::Atom(ref name, _)) => Some(name.clone()),
+            Term::Literal(_, Literal::Atom(name)) => Some(*name), //Some(StringBuffer::from(*name, atom_tbl)),
             _ => None,
         }
     }
 
     fn arity(&self) -> usize {
         match self {
-            Term::Clause(_, ref name, ref terms, _) => match name.as_str() {
+            Term::Clause(_, name, terms) => match name.as_str() {
                 ":-" => match terms.len() {
                     1 => 0,
                     2 => terms[0].arity(),
@@ -175,8 +184,8 @@ impl ClauseInfo for Term {
 }
 
 impl ClauseInfo for Rule {
-    fn name(&self) -> Option<ClauseName> {
-        Some(self.head.0.clone())
+    fn name(&self) -> Option<Atom> {
+        Some(self.head.0)
     }
 
     fn arity(&self) -> usize {
@@ -185,7 +194,7 @@ impl ClauseInfo for Rule {
 }
 
 impl ClauseInfo for PredicateClause {
-    fn name(&self) -> Option<ClauseName> {
+    fn name(&self) -> Option<Atom> {
         match self {
             &PredicateClause::Fact(ref term, ..) => term.name(),
             &PredicateClause::Rule(ref rule, ..) => rule.name(),
@@ -200,23 +209,21 @@ impl ClauseInfo for PredicateClause {
     }
 }
 
-// pub(crate) type CompiledResult = (Predicate, VecDeque<TopLevel>);
-
 #[derive(Debug, Clone)]
-pub(crate) enum PredicateClause {
+pub enum PredicateClause {
     Fact(Term),
     Rule(Rule),
 }
 
 impl PredicateClause {
-    // TODO: add this to `Term` in `prolog_parser` like `first_arg`.
-    pub(crate) fn args(&self) -> Option<&[Box<Term>]> {
-        match *self {
-            PredicateClause::Fact(ref term, ..) => match term {
-                Term::Clause(_, _, args, _) => Some(&args),
+    // TODO: add this to `Term` in `crate::parser` like `first_arg`.
+    pub(crate) fn args(&self) -> Option<&[Term]> {
+        match self {
+            PredicateClause::Fact(term, ..) => match term {
+                Term::Clause(_, _, args) => Some(&args),
                 _ => None,
             },
-            PredicateClause::Rule(ref rule, ..) => {
+            PredicateClause::Rule(rule, ..) => {
                 if rule.head.1.is_empty() {
                     None
                 } else {
@@ -228,36 +235,26 @@ impl PredicateClause {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) enum ModuleSource {
-    Library(ClauseName),
-    File(ClauseName),
+pub enum ModuleSource {
+    Library(Atom),
+    File(Atom),
 }
 
 impl ModuleSource {
     pub(crate) fn as_functor_stub(&self) -> MachineStub {
         match self {
-            ModuleSource::Library(ref name) => {
-                functor!("library", [clause_name(name.clone())])
+            ModuleSource::Library(name) => {
+                functor!(atom!("library"), [atom(name)])
             }
-            ModuleSource::File(ref name) => {
-                functor!(clause_name(name.clone()))
+            ModuleSource::File(name) => {
+                functor!(name)
             }
         }
     }
 }
 
-// pub(crate) type ScopedPredicateKey = (ClauseName, PredicateKey); // module name, predicate indicator.
-
-/*
-#[derive(Debug, Clone)]
-pub(crate) enum MultiFileIndicator {
-    LocalScoped(ClauseName, usize), // name, arity
-    ModuleScoped(ScopedPredicateKey),
-}
-*/
-
 #[derive(Clone, Copy, Hash, Debug)]
-pub(crate) enum MetaSpec {
+pub enum MetaSpec {
     Minus,
     Plus,
     Either,
@@ -265,71 +262,71 @@ pub(crate) enum MetaSpec {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) enum Declaration {
-    Dynamic(ClauseName, usize),
-    MetaPredicate(ClauseName, ClauseName, Vec<MetaSpec>), // module name, name, meta-specs
+pub enum Declaration {
+    Dynamic(Atom, usize),
+    MetaPredicate(Atom, Atom, Vec<MetaSpec>), // module name, name, meta-specs
     Module(ModuleDecl),
-    NonCountedBacktracking(ClauseName, usize), // name, arity
+    NonCountedBacktracking(Atom, usize), // name, arity
     Op(OpDecl),
     UseModule(ModuleSource),
     UseQualifiedModule(ModuleSource, IndexSet<ModuleExport>),
 }
 
-#[derive(Debug, Clone, Eq, Hash, PartialEq, Ord, PartialOrd)]
-pub(crate) struct OpDecl {
-    pub(crate) prec: usize,
-    pub(crate) spec: Specifier,
-    pub(crate) name: ClauseName,
+#[derive(Debug, Clone, Copy, Eq, Hash, PartialEq, Ord, PartialOrd)]
+pub struct OpDecl {
+    pub(crate) op_desc: OpDesc,
+    pub(crate) name: Atom,
 }
+
+#[inline(always)]
+pub(crate) fn fixity(spec: u32) -> Fixity {
+    match spec {
+        XFY | XFX | YFX => Fixity::In,
+        XF | YF => Fixity::Post,
+        FX | FY => Fixity::Pre,
+        _ => unreachable!(),
+    }
+}
+
 
 impl OpDecl {
     #[inline]
-    pub(crate) fn new(prec: usize, spec: Specifier, name: ClauseName) -> Self {
-        Self { prec, spec, name }
+    pub(crate) fn new(op_desc: OpDesc, name: Atom) -> Self {
+        Self { op_desc, name }
     }
 
     #[inline]
     pub(crate) fn remove(&mut self, op_dir: &mut OpDir) {
-        let prec = self.prec;
-        self.prec = 0;
+        let prec = self.op_desc.get_prec();
+        self.op_desc.set(0, self.op_desc.get_spec());
 
         self.insert_into_op_dir(op_dir);
-        self.prec = prec;
+        self.op_desc.set(prec, self.op_desc.get_spec());
     }
 
-    #[inline]
-    pub(crate) fn fixity(&self) -> Fixity {
-        match self.spec {
-            XFY | XFX | YFX => Fixity::In,
-            XF | YF => Fixity::Post,
-            FX | FY => Fixity::Pre,
-            _ => unreachable!(),
-        }
-    }
+    pub(crate) fn insert_into_op_dir(&self, op_dir: &mut OpDir) -> Option<OpDesc> {
+        let key = (self.name, fixity(self.op_desc.get_spec() as u32));
 
-    pub(crate) fn insert_into_op_dir(&self, op_dir: &mut OpDir) -> Option<(usize, Specifier)> {
-        let key = (self.name.clone(), self.fixity());
-
-        match op_dir.get(&key) {
+        match op_dir.get_mut(&key) {
             Some(cell) => {
-                return Some(cell.shared_op_desc().replace((self.prec, self.spec)));
+                let (old_prec, old_spec) = cell.get();
+                cell.set(self.op_desc.get_prec(), self.op_desc.get_spec());
+                return Some(OpDesc::build_with(old_prec, old_spec));
             }
             None => {}
         }
 
-        op_dir
-            .insert(key, OpDirValue::new(self.spec, self.prec))
-            .map(|op_dir_value| op_dir_value.shared_op_desc().get())
+        op_dir.insert(key, self.op_desc)
     }
 
     pub(crate) fn submit(
         &self,
-        existing_desc: Option<OpDesc>,
+        existing_desc: Option<CompositeOpDesc>,
         op_dir: &mut OpDir,
     ) -> Result<(), SessionError> {
-        let (spec, name) = (self.spec, self.name.clone());
+        let (spec, name) = (self.op_desc.get_spec(), self.name.clone());
 
-        if is_infix!(spec) {
+        if is_infix!(spec as u32) {
             if let Some(desc) = existing_desc {
                 if desc.post > 0 {
                     return Err(SessionError::OpIsInfixAndPostFix(name));
@@ -337,7 +334,7 @@ impl OpDecl {
             }
         }
 
-        if is_postfix!(spec) {
+        if is_postfix!(spec as u32) {
             if let Some(desc) = existing_desc {
                 if desc.inf > 0 {
                     return Err(SessionError::OpIsInfixAndPostFix(name));
@@ -350,22 +347,51 @@ impl OpDecl {
     }
 }
 
+#[derive(Debug)]
+pub enum AtomOrString {
+    Atom(Atom),
+    String(String),
+}
+
+impl AtomOrString {
+    #[inline]
+    pub fn as_str(&self) -> &str {
+        match self {
+            AtomOrString::Atom(atom) => atom.as_str(),
+            AtomOrString::String(string) => string.as_str(),
+        }
+    }
+
+    #[inline]
+    pub fn to_string(self) -> String {
+        match self {
+            AtomOrString::Atom(atom) => {
+                atom.as_str().to_owned()
+            }
+            AtomOrString::String(string) => {
+                string
+            }
+        }
+    }
+}
+
+//TODO: try to rid yourself and the earth of the next two functions.
 pub(crate) fn fetch_atom_op_spec(
-    name: ClauseName,
-    spec: Option<SharedOpDesc>,
+    name: Atom,
+    spec: Option<OpDesc>,
     op_dir: &OpDir,
-) -> Option<SharedOpDesc> {
-    fetch_op_spec_from_existing(name.clone(), 1, spec.clone(), op_dir)
+) -> Option<OpDesc> {
+    fetch_op_spec_from_existing(name, 1, spec, op_dir)
         .or_else(|| fetch_op_spec_from_existing(name, 2, spec, op_dir))
 }
 
 pub(crate) fn fetch_op_spec_from_existing(
-    name: ClauseName,
+    name: Atom,
     arity: usize,
-    spec: Option<SharedOpDesc>,
+    op_desc: Option<OpDesc>,
     op_dir: &OpDir,
-) -> Option<SharedOpDesc> {
-    if let Some(ref op_desc) = &spec {
+) -> Option<OpDesc> {
+    if let Some(ref op_desc) = &op_desc {
         if op_desc.arity() != arity {
             /* it's possible to extend operator functors with
              * additional terms. When that happens,
@@ -374,61 +400,53 @@ pub(crate) fn fetch_op_spec_from_existing(
         }
     }
 
-    spec.or_else(|| fetch_op_spec(name, arity, op_dir))
+    op_desc.or_else(|| fetch_op_spec(name, arity, op_dir))
 }
 
-pub(crate) fn fetch_op_spec(
-    name: ClauseName,
-    arity: usize,
-    op_dir: &OpDir,
-) -> Option<SharedOpDesc> {
+pub(crate) fn fetch_op_spec(name: Atom, arity: usize, op_dir: &OpDir) -> Option<OpDesc> {
     match arity {
-        2 => op_dir
-            .get(&(name, Fixity::In))
-            .and_then(|OpDirValue(spec)| {
-                if spec.prec() > 0 {
-                    Some(spec.clone())
-                } else {
-                    None
-                }
-            }),
+        2 => op_dir.get(&(name, Fixity::In)).and_then(|op_desc| {
+            if op_desc.get_prec() > 0 {
+                Some(*op_desc)
+            } else {
+                None
+            }
+        }),
         1 => {
-            if let Some(OpDirValue(spec)) = op_dir.get(&(name.clone(), Fixity::Pre)) {
-                if spec.prec() > 0 {
-                    return Some(spec.clone());
+            if let Some(op_desc) = op_dir.get(&(name.clone(), Fixity::Pre)) {
+                if op_desc.get_prec() > 0 {
+                    return Some(*op_desc);
                 }
             }
 
-            op_dir
-                .get(&(name.clone(), Fixity::Post))
-                .and_then(|OpDirValue(spec)| {
-                    if spec.prec() > 0 {
-                        Some(spec.clone())
-                    } else {
-                        None
-                    }
-                })
+            op_dir.get(&(name, Fixity::Post)).and_then(|op_desc| {
+                if op_desc.get_prec() > 0 {
+                    Some(*op_desc)
+                } else {
+                    None
+                }
+            })
         }
         _ => None,
     }
 }
 
-pub(crate) type ModuleDir = IndexMap<ClauseName, Module>;
+pub(crate) type ModuleDir = IndexMap<Atom, Module>;
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq)]
-pub(crate) enum ModuleExport {
+pub enum ModuleExport {
     OpDecl(OpDecl),
     PredicateKey(PredicateKey),
 }
 
 #[derive(Debug, Clone)]
-pub(crate) struct ModuleDecl {
-    pub(crate) name: ClauseName,
+pub struct ModuleDecl {
+    pub(crate) name: Atom,
     pub(crate) exports: Vec<ModuleExport>,
 }
 
 #[derive(Debug)]
-pub(crate) struct Module {
+pub struct Module {
     pub(crate) module_decl: ModuleDecl,
     pub(crate) code_dir: CodeDir,
     pub(crate) op_dir: OpDir,
@@ -440,7 +458,10 @@ pub(crate) struct Module {
 
 // Module's and related types are defined in forms.
 impl Module {
-    pub(crate) fn new(module_decl: ModuleDecl, listing_src: ListingSource) -> Self {
+    pub(crate) fn new(
+        module_decl: ModuleDecl,
+        listing_src: ListingSource,
+    ) -> Self {
         Module {
             module_decl,
             code_dir: CodeDir::new(),
@@ -465,61 +486,115 @@ impl Module {
     }
 }
 
-#[derive(Debug, Clone)]
-pub(crate) enum Number {
+#[derive(Debug, Copy, Clone)]
+pub enum Number {
     Float(OrderedFloat<f64>),
-    Integer(Rc<Integer>),
-    Rational(Rc<Rational>),
-    Fixnum(isize),
-}
-
-impl From<Integer> for Number {
-    #[inline]
-    fn from(n: Integer) -> Self {
-        Number::Integer(Rc::new(n))
-    }
-}
-
-impl From<Rational> for Number {
-    #[inline]
-    fn from(n: Rational) -> Self {
-        Number::Rational(Rc::new(n))
-    }
-}
-
-impl From<isize> for Number {
-    #[inline]
-    fn from(n: isize) -> Self {
-        Number::Fixnum(n)
-    }
+    Integer(TypedArenaPtr<Integer>),
+    Rational(TypedArenaPtr<Rational>),
+    Fixnum(Fixnum),
 }
 
 impl Default for Number {
+    #[inline]
     fn default() -> Self {
-        Number::Float(OrderedFloat(0f64))
+        Number::Fixnum(Fixnum::build_with(0))
     }
 }
 
-impl Into<Constant> for Number {
+pub trait ArenaFrom<T> {
+    fn arena_from(value: T, arena: &mut Arena) -> Self;
+}
+
+impl ArenaFrom<Integer> for Number {
     #[inline]
-    fn into(self) -> Constant {
-        match self {
-            Number::Fixnum(n) => Constant::Fixnum(n),
-            Number::Integer(n) => Constant::Integer(n),
-            Number::Float(f) => Constant::Float(f),
-            Number::Rational(r) => Constant::Rational(r),
+    fn arena_from(value: Integer, arena: &mut Arena) -> Number {
+        Number::Integer(arena_alloc!(value, arena))
+    }
+}
+
+impl ArenaFrom<Rational> for Number {
+    #[inline]
+    fn arena_from(value: Rational, arena: &mut Arena) -> Number {
+        Number::Rational(arena_alloc!(value, arena))
+    }
+}
+
+impl ArenaFrom<usize> for Number {
+    #[inline]
+    fn arena_from(value: usize, arena: &mut Arena) -> Number {
+        match i64::try_from(value) {
+            Ok(value) => Fixnum::build_with_checked(value)
+                .map(Number::Fixnum)
+                .unwrap_or_else(|_| Number::Integer(arena_alloc!(Integer::from(value), arena))),
+            Err(_) => Number::Integer(arena_alloc!(Integer::from(value), arena)),
         }
     }
 }
 
-impl Into<HeapCellValue> for Number {
+impl ArenaFrom<u64> for Number {
     #[inline]
-    fn into(self) -> HeapCellValue {
-        match self {
-            Number::Fixnum(n) => HeapCellValue::Addr(Addr::Fixnum(n)),
-            Number::Integer(n) => HeapCellValue::Integer(n),
-            Number::Float(f) => HeapCellValue::Addr(Addr::Float(f)),
-            Number::Rational(r) => HeapCellValue::Rational(r),
+    fn arena_from(value: u64, arena: &mut Arena) -> Number {
+        match i64::try_from(value) {
+            Ok(value) => Fixnum::build_with_checked(value)
+                .map(Number::Fixnum)
+                .unwrap_or_else(|_| Number::Integer(arena_alloc!(Integer::from(value), arena))),
+            Err(_) => Number::Integer(arena_alloc!(Integer::from(value), arena)),
+        }
+    }
+}
+
+impl ArenaFrom<i64> for Number {
+    #[inline]
+    fn arena_from(value: i64, arena: &mut Arena) -> Number {
+        Fixnum::build_with_checked(value)
+            .map(Number::Fixnum)
+            .unwrap_or_else(|_| Number::Integer(arena_alloc!(Integer::from(value), arena)))
+    }
+}
+
+impl ArenaFrom<isize> for Number {
+    #[inline]
+    fn arena_from(value: isize, arena: &mut Arena) -> Number {
+        Fixnum::build_with_checked(value as i64)
+            .map(Number::Fixnum)
+            .unwrap_or_else(|_| Number::Integer(arena_alloc!(Integer::from(value), arena)))
+    }
+}
+
+impl ArenaFrom<u32> for Number {
+    #[inline]
+    fn arena_from(value: u32, _arena: &mut Arena) -> Number {
+        Number::Fixnum(Fixnum::build_with(value as i64))
+    }
+}
+
+impl ArenaFrom<i32> for Number {
+    #[inline]
+    fn arena_from(value: i32, _arena: &mut Arena) -> Number {
+        Number::Fixnum(Fixnum::build_with(value as i64))
+    }
+}
+
+impl ArenaFrom<Number> for Literal {
+    #[inline]
+    fn arena_from(value: Number, arena: &mut Arena) -> Literal {
+        match value {
+            Number::Fixnum(n) => Literal::Fixnum(n),
+            Number::Integer(n) => Literal::Integer(n),
+            Number::Float(f) => Literal::Float(arena_alloc!(f, arena)),
+            Number::Rational(r) => Literal::Rational(r),
+        }
+    }
+}
+
+impl ArenaFrom<Number> for HeapCellValue {
+    #[inline]
+    fn arena_from(value: Number, arena: &mut Arena) -> HeapCellValue {
+        match value {
+            Number::Fixnum(n) => fixnum_as_cell!(n),
+            Number::Integer(n) => typed_arena_ptr_as_cell!(n),
+            Number::Float(n) => typed_arena_ptr_as_cell!(arena_alloc!(n, arena)),
+            Number::Rational(n) => typed_arena_ptr_as_cell!(n),
         }
     }
 }
@@ -528,9 +603,9 @@ impl Number {
     #[inline]
     pub(crate) fn is_positive(&self) -> bool {
         match self {
-            &Number::Fixnum(n) => n > 0,
+            &Number::Fixnum(n) => n.get_num() > 0,
             &Number::Integer(ref n) => &**n > &0,
-            &Number::Float(OrderedFloat(f)) => f.is_sign_positive(),
+            &Number::Float(f) => f.is_sign_positive(),
             &Number::Rational(ref r) => &**r > &0,
         }
     }
@@ -538,7 +613,7 @@ impl Number {
     #[inline]
     pub(crate) fn is_negative(&self) -> bool {
         match self {
-            &Number::Fixnum(n) => n < 0,
+            &Number::Fixnum(n) => n.get_num() < 0,
             &Number::Integer(ref n) => &**n < &0,
             &Number::Float(OrderedFloat(f)) => f.is_sign_negative(),
             &Number::Rational(ref r) => &**r < &0,
@@ -548,36 +623,20 @@ impl Number {
     #[inline]
     pub(crate) fn is_zero(&self) -> bool {
         match self {
-            &Number::Fixnum(n) => n == 0,
+            &Number::Fixnum(n) => n.get_num() == 0,
             &Number::Integer(ref n) => &**n == &0,
             &Number::Float(f) => f == OrderedFloat(0f64),
             &Number::Rational(ref r) => &**r == &0,
-        }
-    }
-
-    #[inline]
-    pub(crate) fn abs(self) -> Self {
-        match self {
-            Number::Fixnum(n) => {
-                if let Some(n) = n.checked_abs() {
-                    Number::from(n)
-                } else {
-                    Number::from(Integer::from(n).abs())
-                }
-            }
-            Number::Integer(n) => Number::from(Integer::from(n.abs_ref())),
-            Number::Float(f) => Number::Float(OrderedFloat(f.abs())),
-            Number::Rational(r) => Number::from(Rational::from(r.abs_ref())),
         }
     }
 }
 
 #[derive(Debug, Clone)]
 pub(crate) enum OptArgIndexKey {
-    Constant(usize, usize, Constant, Vec<Constant>), // index, IndexingCode location, opt arg, alternatives
-    List(usize, usize),                              // index, IndexingCode location
+    Literal(usize, usize, Literal, Vec<Literal>), // index, IndexingCode location, opt arg, alternatives
+    List(usize, usize),                           // index, IndexingCode location
     None,
-    Structure(usize, usize, ClauseName, usize), // index, IndexingCode location, name, arity
+    Structure(usize, usize, Atom, usize), // index, IndexingCode location, name, arity
 }
 
 impl OptArgIndexKey {
@@ -589,7 +648,7 @@ impl OptArgIndexKey {
     #[inline]
     pub(crate) fn arg_num(&self) -> usize {
         match &self {
-            OptArgIndexKey::Constant(arg_num, ..)
+            OptArgIndexKey::Literal(arg_num, ..)
             | OptArgIndexKey::Structure(arg_num, ..)
             | OptArgIndexKey::List(arg_num, _) => {
                 // these are always at least 1.
@@ -607,7 +666,7 @@ impl OptArgIndexKey {
     #[inline]
     pub(crate) fn switch_on_term_loc(&self) -> Option<usize> {
         match &self {
-            OptArgIndexKey::Constant(_, loc, ..)
+            OptArgIndexKey::Literal(_, loc, ..)
             | OptArgIndexKey::Structure(_, loc, ..)
             | OptArgIndexKey::List(_, loc) => Some(*loc),
             OptArgIndexKey::None => None,
@@ -617,7 +676,7 @@ impl OptArgIndexKey {
     #[inline]
     pub(crate) fn set_switch_on_term_loc(&mut self, value: usize) {
         match self {
-            OptArgIndexKey::Constant(_, ref mut loc, ..)
+            OptArgIndexKey::Literal(_, ref mut loc, ..)
             | OptArgIndexKey::Structure(_, ref mut loc, ..)
             | OptArgIndexKey::List(_, ref mut loc) => {
                 *loc = value;
@@ -631,7 +690,7 @@ impl AddAssign<usize> for OptArgIndexKey {
     #[inline]
     fn add_assign(&mut self, n: usize) {
         match self {
-            OptArgIndexKey::Constant(_, ref mut o, ..)
+            OptArgIndexKey::Literal(_, ref mut o, ..)
             | OptArgIndexKey::List(_, ref mut o)
             | OptArgIndexKey::Structure(_, ref mut o, ..) => {
                 *o += n;
@@ -700,6 +759,7 @@ pub(crate) struct LocalPredicateSkeleton {
     pub(crate) is_multifile: bool,
     pub(crate) clause_clause_locs: SliceDeque<usize>,
     pub(crate) clause_assert_margin: usize,
+    pub(crate) retracted_dynamic_clauses: Option<Vec<ClauseIndexInfo>>, // always None if non-dynamic.
 }
 
 impl LocalPredicateSkeleton {
@@ -711,6 +771,7 @@ impl LocalPredicateSkeleton {
             is_multifile: false,
             clause_clause_locs: sdeq![],
             clause_assert_margin: 0,
+            retracted_dynamic_clauses: Some(vec![]),
         }
     }
 
@@ -729,6 +790,20 @@ impl LocalPredicateSkeleton {
     pub(crate) fn reset(&mut self) {
         self.clause_clause_locs.clear();
         self.clause_assert_margin = 0;
+    }
+
+    #[inline]
+    pub(crate) fn add_retracted_dynamic_clause_info(&mut self, clause_info: ClauseIndexInfo) {
+        debug_assert_eq!(self.is_dynamic, true);
+
+        if self.retracted_dynamic_clauses.is_none() {
+            self.retracted_dynamic_clauses = Some(vec![]);
+        }
+
+        self.retracted_dynamic_clauses
+            .as_mut()
+            .unwrap()
+            .push(clause_info);
     }
 }
 
@@ -781,3 +856,12 @@ impl PredicateSkeleton {
         }
     }
 }
+
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum IndexingCodePtr {
+    External(usize),        // the index points past the indexing instruction prelude.
+    DynamicExternal(usize), // an External index of a dynamic predicate, potentially invalidated by retraction.
+    Fail,
+    Internal(usize), // the index points into the indexing instruction prelude.
+}
+

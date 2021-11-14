@@ -1,13 +1,15 @@
 use crate::heap_iter::*;
 use crate::machine::*;
-use prolog_parser::temp_v;
+use crate::parser::ast::*;
+use crate::temp_v;
+use crate::types::*;
 
 use indexmap::IndexSet;
 
 use std::cmp::Ordering;
 use std::vec::IntoIter;
 
-pub(super) type Bindings = Vec<(usize, Addr)>;
+pub(super) type Bindings = Vec<(usize, HeapCellValue)>;
 
 #[derive(Debug)]
 pub(super) struct AttrVarInitializer {
@@ -37,7 +39,7 @@ impl AttrVarInitializer {
 }
 
 impl MachineState {
-    pub(super) fn push_attr_var_binding(&mut self, h: usize, addr: Addr) {
+    pub(super) fn push_attr_var_binding(&mut self, h: usize, addr: HeapCellValue) {
         if self.attr_var_init.bindings.is_empty() {
             self.attr_var_init.instigating_p = self.p.local();
 
@@ -53,28 +55,24 @@ impl MachineState {
         self.attr_var_init.bindings.push((h, addr));
     }
 
-    fn populate_var_and_value_lists(&mut self) -> (Addr, Addr) {
+    fn populate_var_and_value_lists(&mut self) -> (HeapCellValue, HeapCellValue) {
         let iter = self
             .attr_var_init
             .bindings
             .iter()
-            .map(|(ref h, _)| HeapCellValue::Addr(Addr::AttrVar(*h)));
+            .map(|(ref h, _)| attr_var_as_cell!(*h));
 
-        let var_list_addr = Addr::HeapCell(self.heap.to_list(iter));
+        let var_list_addr = heap_loc_as_cell!(iter_to_heap_list(&mut self.heap, iter));
 
-        let iter = self
-            .attr_var_init
-            .bindings
-            .drain(0..)
-            .map(|(_, addr)| HeapCellValue::Addr(addr));
+        let iter = self.attr_var_init.bindings.drain(0..).map(|(_, ref v)| *v);
 
-        let value_list_addr = Addr::HeapCell(self.heap.to_list(iter));
+        let value_list_addr = heap_loc_as_cell!(iter_to_heap_list(&mut self.heap, iter));
         (var_list_addr, value_list_addr)
     }
 
     fn verify_attributes(&mut self) {
         for (h, _) in &self.attr_var_init.bindings {
-            self.heap[*h] = HeapCellValue::Addr(Addr::AttrVar(*h));
+            self.heap[*h] = attr_var_as_cell!(*h);
         }
 
         let (var_list_addr, value_list_addr) = self.populate_var_and_value_lists();
@@ -83,19 +81,26 @@ impl MachineState {
         self[temp_v!(2)] = value_list_addr;
     }
 
-    pub(super) fn gather_attr_vars_created_since(&self, b: usize) -> IntoIter<Addr> {
+    pub(super) fn gather_attr_vars_created_since(&mut self, b: usize) -> IntoIter<HeapCellValue> {
         let mut attr_vars: Vec<_> = self.attr_var_init.attr_var_queue[b..]
             .iter()
-            .filter_map(|h| match self.store(self.deref(Addr::HeapCell(*h))) {
-                Addr::AttrVar(h) => Some(Addr::AttrVar(h)),
-                _ => None,
+            .filter_map(|h| {
+                read_heap_cell!(self.store(self.deref(heap_loc_as_cell!(*h))), //Addr::HeapCell(*h))) {
+                    (HeapCellValueTag::AttrVar, h) => {
+                        Some(attr_var_as_cell!(h))
+                    }
+                    _ => {
+                        None
+                    }
+                )
             })
             .collect();
 
-        attr_vars
-            .sort_unstable_by(|a1, a2| self.compare_term_test(a1, a2).unwrap_or(Ordering::Less));
+        attr_vars.sort_unstable_by(|a1, a2| {
+	    compare_term_test!(self, *a1, *a2).unwrap_or(Ordering::Less)
+	});
 
-        self.term_dedup(&mut attr_vars);
+	attr_vars.dedup();
         attr_vars.into_iter()
     }
 
@@ -109,8 +114,10 @@ impl MachineState {
             self.stack.index_and_frame_mut(e)[i] = self[RegType::Temp(i)];
         }
 
-        self.stack.index_and_frame_mut(e)[self.num_of_args + 1] = Addr::CutPoint(self.b0);
-        self.stack.index_and_frame_mut(e)[self.num_of_args + 2] = Addr::Usize(self.num_of_args);
+        self.stack.index_and_frame_mut(e)[self.num_of_args + 1] =
+            fixnum_as_cell!(Fixnum::build_with(self.b0 as i64));
+        self.stack.index_and_frame_mut(e)[self.num_of_args + 2] =
+            fixnum_as_cell!(Fixnum::build_with(self.num_of_args as i64));
 
         self.verify_attributes();
 
@@ -119,33 +126,51 @@ impl MachineState {
         self.p = CodePtr::Local(LocalCodePtr::DirEntry(p));
     }
 
-    pub(super) fn attr_vars_of_term(&self, addr: Addr) -> Vec<Addr> {
+    pub(super) fn attr_vars_of_term(&mut self, cell: HeapCellValue) -> Vec<HeapCellValue> {
         let mut seen_set = IndexSet::new();
         let mut seen_vars = vec![];
 
-        let mut iter = self.acyclic_pre_order_iter(addr);
+        let mut iter = stackful_preorder_iter(&mut self.heap, cell);
 
-        while let Some(addr) = iter.next() {
-            if let HeapCellValue::Addr(Addr::AttrVar(h)) = self.heap.index_addr(&addr).as_ref() {
-                if seen_set.contains(h) {
-                    continue;
+        while let Some(value) = iter.next() {
+            read_heap_cell!(value,
+                (HeapCellValueTag::AttrVar, h) => {
+                    if seen_set.contains(&h) {
+                        continue;
+                    }
+
+                    seen_vars.push(value);
+                    seen_set.insert(h);
+
+                    let mut l = h + 1;
+                    // let mut list_elements = vec![];
+                    // let iter_stack_len = iter.stack_len();
+
+                    loop {
+                        read_heap_cell!(iter.heap[l],
+                            (HeapCellValueTag::Lis) => {
+                                iter.push_stack(l);
+                                // l = elem + 1;
+                                break;
+                            }
+                            (HeapCellValueTag::Var | HeapCellValueTag::AttrVar, h) => {
+                                if h == l {
+                                    break;
+                                } else {
+                                    l = h;
+                                }
+                            }
+                            _ => {
+                                break;
+                            }
+                        )
+                    }
+
+                    // iter.stack_slice_from(iter_stack_len ..).reverse();
                 }
-
-                seen_vars.push(addr);
-                seen_set.insert(*h);
-
-                let mut l = h + 1;
-                let mut list_elements = vec![];
-
-                while let Addr::Lis(elem) = self.store(self.deref(Addr::HeapCell(l))) {
-                    list_elements.push(self.heap[elem].as_addr(elem));
-                    l = elem + 1;
+                _ => {
                 }
-
-                for element in list_elements.into_iter().rev() {
-                    iter.stack().push(element);
-                }
-            }
+            );
         }
 
         seen_vars

@@ -1,0 +1,11 @@
+[package]
+name = "static-string-indexing"
+version = "0.1.0"
+edition = "2018"
+
+[dependencies]
+proc-macro2 = "*"
+syn = { version = "*", features = ['full', 'visit', 'extra-traits'] }
+indexmap = "*"
+walkdir = "2"
+quote = "*"

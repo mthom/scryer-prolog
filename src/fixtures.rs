@@ -1,4 +1,4 @@
-use prolog_parser::ast::*;
+use crate::parser::ast::*;
 
 use crate::forms::*;
 use crate::instructions::*;
@@ -84,8 +84,8 @@ type VariableFixture<'a> = (VarStatus, Vec<&'a Cell<VarReg>>);
 
 #[derive(Debug)]
 pub(crate) struct VariableFixtures<'a> {
-    perm_vars: IndexMap<Rc<Var>, VariableFixture<'a>>,
-    last_chunk_temp_vars: IndexSet<Rc<Var>>,
+    perm_vars: IndexMap<Rc<String>, VariableFixture<'a>>,
+    last_chunk_temp_vars: IndexSet<Rc<String>>,
 }
 
 impl<'a> VariableFixtures<'a> {
@@ -96,11 +96,11 @@ impl<'a> VariableFixtures<'a> {
         }
     }
 
-    pub(crate) fn insert(&mut self, var: Rc<Var>, vs: VariableFixture<'a>) {
+    pub(crate) fn insert(&mut self, var: Rc<String>, vs: VariableFixture<'a>) {
         self.perm_vars.insert(var, vs);
     }
 
-    pub(crate) fn insert_last_chunk_temp_var(&mut self, var: Rc<Var>) {
+    pub(crate) fn insert_last_chunk_temp_var(&mut self, var: Rc<String>) {
         self.last_chunk_temp_vars.insert(var);
     }
 
@@ -115,7 +115,7 @@ impl<'a> VariableFixtures<'a> {
         // Compute the conflict set of u.
 
         // 1.
-        let mut use_sets: IndexMap<Rc<Var>, OccurrenceSet> = IndexMap::new();
+        let mut use_sets: IndexMap<Rc<String>, OccurrenceSet> = IndexMap::new();
 
         for (var, &mut (ref mut var_status, _)) in self.iter_mut() {
             if let &mut VarStatus::Temp(_, ref mut var_data) = var_status {
@@ -153,11 +153,11 @@ impl<'a> VariableFixtures<'a> {
         }
     }
 
-    fn get_mut(&mut self, u: Rc<Var>) -> Option<&mut VariableFixture<'a>> {
+    fn get_mut(&mut self, u: Rc<String>) -> Option<&mut VariableFixture<'a>> {
         self.perm_vars.get_mut(&u)
     }
 
-    fn iter_mut(&mut self) -> indexmap::map::IterMut<Rc<Var>, VariableFixture<'a>> {
+    fn iter_mut(&mut self) -> indexmap::map::IterMut<Rc<String>, VariableFixture<'a>> {
         self.perm_vars.iter_mut()
     }
 
@@ -218,11 +218,11 @@ impl<'a> VariableFixtures<'a> {
         }
     }
 
-    pub(crate) fn into_iter(self) -> indexmap::map::IntoIter<Rc<Var>, VariableFixture<'a>> {
+    pub(crate) fn into_iter(self) -> indexmap::map::IntoIter<Rc<String>, VariableFixture<'a>> {
         self.perm_vars.into_iter()
     }
 
-    fn values(&self) -> indexmap::map::Values<Rc<Var>, VariableFixture<'a>> {
+    fn values(&self) -> indexmap::map::Values<Rc<String>, VariableFixture<'a>> {
         self.perm_vars.values()
     }
 

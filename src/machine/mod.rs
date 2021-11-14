@@ -1,65 +1,68 @@
-use prolog_parser::ast::*;
-use prolog_parser::tabled_rc::*;
-use prolog_parser::{clause_name, temp_v};
+pub mod arithmetic_ops;
+pub mod attributed_variables;
+pub mod code_repo;
+pub mod code_walker;
+#[macro_use]
+pub mod loader;
+pub mod compile;
+pub mod copier;
+pub mod gc;
+pub mod heap;
+pub mod load_state;
+pub mod machine_errors;
+pub mod machine_indices;
+pub mod machine_state;
+pub mod machine_state_impl;
+pub mod mock_wam;
+pub mod partial_string;
+pub mod preprocessor;
+pub mod stack;
+pub mod streams;
+pub mod system_calls;
+pub mod term_stream;
 
-use lazy_static::lazy_static;
-
-use crate::clause_types::*;
+use crate::atom_table::*;
 use crate::forms::*;
 use crate::instructions::*;
-use crate::machine::loader::*;
-use crate::machine::term_stream::{LiveTermStream, LoadStatePayload, TermStream};
-use crate::read::*;
-
-mod attributed_variables;
-pub(super) mod code_repo;
-pub(crate) mod code_walker;
-#[macro_use]
-pub(crate) mod loader;
-mod compile;
-mod copier;
-pub(crate) mod heap;
-mod load_state;
-pub(crate) mod machine_errors;
-pub(crate) mod machine_indices;
-pub(super) mod machine_state;
-pub(crate) mod partial_string;
-mod preprocessor;
-mod raw_block;
-mod stack;
-pub(crate) mod streams;
-mod term_stream;
-
-#[macro_use]
-mod arithmetic_ops;
-#[macro_use]
-mod machine_state_impl;
-mod system_calls;
-
 use crate::machine::code_repo::*;
 use crate::machine::compile::*;
+use crate::machine::heap::*;
+use crate::machine::loader::*;
 use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
 use crate::machine::machine_state::*;
-pub use crate::machine::streams::Stream;
+use crate::machine::streams::*;
+use crate::types::*;
 
 use indexmap::IndexMap;
 
-//use std::convert::TryFrom;
-use prolog_parser::ast::ClauseName;
-use std::fs::File;
-use std::mem;
+use lazy_static::lazy_static;
+
+use std::env;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
+
+lazy_static! {
+    pub static ref INTERRUPT: AtomicBool = AtomicBool::new(false);
+}
+
+#[derive(Debug)]
+pub struct Machine {
+    pub(super) machine_st: MachineState,
+    pub(super) inner_heap: Heap,
+    pub(super) policies: MachinePolicies,
+    pub(super) indices: IndexStore,
+    pub(super) code_repo: CodeRepo,
+    pub(super) user_input: Stream,
+    pub(super) user_output: Stream,
+    pub(super) user_error: Stream,
+    pub(super) load_contexts: Vec<LoadContext>,
+}
 
 #[derive(Debug)]
 pub(crate) struct MachinePolicies {
     call_policy: Box<dyn CallPolicy>,
     cut_policy: Box<dyn CutPolicy>,
-}
-
-lazy_static! {
-    pub static ref INTERRUPT: AtomicBool = AtomicBool::new(false);
 }
 
 impl MachinePolicies {
@@ -80,10 +83,10 @@ impl Default for MachinePolicies {
 }
 
 #[derive(Debug)]
-pub(super) struct LoadContext {
+pub struct LoadContext {
     pub(super) path: PathBuf,
     pub(super) stream: Stream,
-    pub(super) module: ClauseName,
+    pub(super) module: Atom,
 }
 
 impl LoadContext {
@@ -100,32 +103,49 @@ impl LoadContext {
         LoadContext {
             path: path_buf,
             stream,
-            module: clause_name!("user"),
+            module: atom!("user"),
         }
     }
 }
 
-#[derive(Debug)]
-pub struct Machine {
-    pub(super) machine_st: MachineState,
-    pub(super) policies: MachinePolicies,
-    pub(super) indices: IndexStore,
-    pub(super) code_repo: CodeRepo,
-    pub(super) user_input: Stream,
-    pub(super) user_output: Stream,
-    pub(super) user_error: Stream,
-    pub(super) load_contexts: Vec<LoadContext>,
-}
-
 #[inline]
 fn current_dir() -> PathBuf {
-    std::env::current_dir().unwrap_or(PathBuf::from("./"))
+    env::current_dir().unwrap_or(PathBuf::from("./"))
 }
 
 include!(concat!(env!("OUT_DIR"), "/libraries.rs"));
 
+pub struct MachinePreludeView<'a> {
+    pub indices: &'a mut IndexStore,
+    pub code_repo: &'a mut CodeRepo,
+    pub load_contexts: &'a mut Vec<LoadContext>,
+}
+
 impl Machine {
-    fn run_module_predicate(&mut self, module_name: ClauseName, key: PredicateKey) {
+    #[inline]
+    pub fn prelude_view_and_machine_st(&mut self) -> (MachinePreludeView, &mut MachineState) {
+        (
+            MachinePreludeView {
+                indices: &mut self.indices,
+                code_repo: &mut self.code_repo,
+                load_contexts: &mut self.load_contexts,
+            },
+            &mut self.machine_st
+        )
+    }
+
+    pub fn throw_session_error(&mut self, err: SessionError, key: PredicateKey) {
+        let err = self.machine_st.session_error(err);
+        let stub = functor_stub(key.0, key.1);
+        let err = self.machine_st.error_form(err, stub);
+
+        self.machine_st.throw_exception(err);
+        return;
+    }
+}
+
+impl Machine {
+    fn run_module_predicate(&mut self, module_name: Atom, key: PredicateKey) {
         if let Some(module) = self.indices.modules.get(&module_name) {
             if let Some(ref code_index) = module.code_dir.get(&key) {
                 let p = code_index.local().unwrap();
@@ -140,27 +160,29 @@ impl Machine {
         unreachable!();
     }
 
-    pub fn load_file(&mut self, path: String, stream: Stream) {
-        self.machine_st[temp_v!(1)] =
-            Addr::Stream(self.machine_st.heap.push(HeapCellValue::Stream(stream)));
+    pub fn load_file(&mut self, path: &str, stream: Stream) {
+        self.machine_st.registers[1] = stream_as_cell!(stream);
+        self.machine_st.registers[2] = atom_as_cell!(
+            self.machine_st.atom_tbl.build_with(path)
+        );
 
-        self.machine_st[temp_v!(2)] = Addr::Con(self.machine_st.heap.push(HeapCellValue::Atom(
-            clause_name!(path, self.machine_st.atom_tbl),
-            None,
-        )));
-
-        self.run_module_predicate(clause_name!("loader"), (clause_name!("file_load"), 2));
+        self.run_module_predicate(atom!("loader"), (atom!("file_load"), 2));
     }
 
     fn load_top_level(&mut self) {
         let mut path_buf = current_dir();
-        path_buf.push("toplevel.pl");
 
-        let path = path_buf.to_str().unwrap().to_string();
+        path_buf.push("src/toplevel.pl");
 
-        self.load_file(path, Stream::from(include_str!("../toplevel.pl")));
+        let path = path_buf.to_str().unwrap();
+        let toplevel_stream = Stream::from_static_string(
+            include_str!("../toplevel.pl"),
+            &mut self.machine_st.arena,
+        );
 
-        if let Some(toplevel) = self.indices.modules.get(&clause_name!("$toplevel")) {
+        self.load_file(path, toplevel_stream);
+
+        if let Some(toplevel) = self.indices.modules.get(&atom!("$toplevel")) {
             load_module(
                 &mut self.indices.code_dir,
                 &mut self.indices.op_dir,
@@ -178,9 +200,15 @@ impl Machine {
         path_buf.push("machine/attributed_variables.pl");
 
         bootstrapping_compile(
-            Stream::from(include_str!("attributed_variables.pl")),
+            Stream::from_static_string(
+                include_str!("attributed_variables.pl"),
+                &mut self.machine_st.arena,
+            ),
             self,
-            ListingSource::from_file_and_path(clause_name!("attributed_variables"), path_buf),
+            ListingSource::from_file_and_path(
+                atom!("attributed_variables"),
+                path_buf,
+            ),
         )
         .unwrap();
 
@@ -188,44 +216,49 @@ impl Machine {
         path_buf.push("machine/project_attributes.pl");
 
         bootstrapping_compile(
-            Stream::from(include_str!("project_attributes.pl")),
+            Stream::from_static_string(
+                include_str!("project_attributes.pl"),
+                &mut self.machine_st.arena,
+            ),
             self,
-            ListingSource::from_file_and_path(clause_name!("project_attributes"), path_buf),
+            ListingSource::from_file_and_path(atom!("project_attributes"), path_buf),
         )
         .unwrap();
 
-        if let Some(module) = self.indices.modules.get(&clause_name!("$atts")) {
-            if let Some(code_index) = module.code_dir.get(&(clause_name!("driver"), 2)) {
+        if let Some(module) = self.indices.modules.get(&atom!("$atts")) {
+            if let Some(code_index) = module.code_dir.get(&(atom!("driver"), 2)) {
                 self.machine_st.attr_var_init.verify_attrs_loc = code_index.local().unwrap();
             }
         }
     }
 
     pub fn run_top_level(&mut self) {
-        use std::env;
-
         let mut arg_pstrs = vec![];
 
         for arg in env::args() {
-            arg_pstrs.push(self.machine_st.heap.put_complete_string(&arg));
+            arg_pstrs.push(put_complete_string(
+                &mut self.machine_st.heap,
+                &arg,
+                &mut self.machine_st.atom_tbl,
+            ));
         }
 
-        let list_addr = Addr::HeapCell(self.machine_st.heap.to_list(arg_pstrs.into_iter()));
+        self.machine_st.registers[1] = heap_loc_as_cell!(
+            iter_to_heap_list(&mut self.machine_st.heap, arg_pstrs.into_iter())
+        );
 
-        self.machine_st[temp_v!(1)] = list_addr;
-
-        self.run_module_predicate(clause_name!("$toplevel"), (clause_name!("$repl"), 1));
+        self.run_module_predicate(atom!("$toplevel"), (atom!("$repl"), 1));
     }
 
     pub(crate) fn configure_modules(&mut self) {
         fn update_call_n_indices(loader: &Module, target_code_dir: &mut CodeDir) {
             for arity in 1..66 {
-                let key = (clause_name!("call"), arity);
+                let key = (atom!("call"), arity);
 
                 match loader.code_dir.get(&key) {
                     Some(src_code_index) => {
                         let target_code_index = target_code_dir
-                            .entry(key.clone())
+                            .entry(key)
                             .or_insert_with(|| CodeIndex::new(IndexPtr::Undefined));
 
                         target_code_index.set(src_code_index.get());
@@ -237,15 +270,15 @@ impl Machine {
             }
         }
 
-        if let Some(loader) = self.indices.modules.swap_remove(&clause_name!("loader")) {
-            if let Some(builtins) = self.indices.modules.get_mut(&clause_name!("builtins")) {
+        if let Some(loader) = self.indices.modules.swap_remove(&atom!("loader")) {
+            if let Some(builtins) = self.indices.modules.get_mut(&atom!("builtins")) {
                 // Import loader's exports into the builtins module so they will be
                 // implicitly included in every further module.
                 load_module(
                     &mut builtins.code_dir,
                     &mut builtins.op_dir,
                     &mut builtins.meta_predicates,
-                    &CompilationTarget::Module(clause_name!("builtins")),
+                    &CompilationTarget::Module(atom!("builtins")),
                     &loader,
                 );
 
@@ -257,7 +290,7 @@ impl Machine {
                     builtins
                         .module_decl
                         .exports
-                        .push(ModuleExport::PredicateKey((clause_name!("call"), arity)));
+                        .push(ModuleExport::PredicateKey((atom!("call"), arity)));
                 }
             }
 
@@ -267,17 +300,24 @@ impl Machine {
 
             update_call_n_indices(&loader, &mut self.indices.code_dir);
 
-            self.indices.modules.insert(clause_name!("loader"), loader);
+            self.indices.modules.insert(atom!("loader"), loader);
         } else {
             unreachable!()
         }
     }
 
-    pub fn new(user_input: Stream, user_output: Stream, user_error: Stream) -> Self {
+    pub fn new() -> Self {
         use ref_thread_local::RefThreadLocal;
 
+        let mut machine_st = MachineState::new();
+
+        let user_input = Stream::stdin(&mut machine_st.arena);
+        let user_output = Stream::stdout(&mut machine_st.arena);
+        let user_error = Stream::stderr(&mut machine_st.arena);
+
         let mut wam = Machine {
-            machine_st: MachineState::new(),
+            machine_st,
+            inner_heap: Heap::new(),
             policies: MachinePolicies::new(),
             indices: IndexStore::new(),
             code_repo: CodeRepo::new(),
@@ -293,23 +333,29 @@ impl Machine {
         lib_path.push("lib");
 
         bootstrapping_compile(
-            Stream::from(LIBRARIES.borrow()["ops_and_meta_predicates"]),
+            Stream::from_static_string(
+                LIBRARIES.borrow()["ops_and_meta_predicates"],
+                &mut wam.machine_st.arena,
+            ),
             &mut wam,
             ListingSource::from_file_and_path(
-                clause_name!("ops_and_meta_predicates.pl"),
+                atom!("ops_and_meta_predicates.pl"),
                 lib_path.clone(),
             ),
         )
         .unwrap();
 
         bootstrapping_compile(
-            Stream::from(LIBRARIES.borrow()["builtins"]),
+            Stream::from_static_string(
+                LIBRARIES.borrow()["builtins"],
+                &mut wam.machine_st.arena,
+            ),
             &mut wam,
-            ListingSource::from_file_and_path(clause_name!("builtins.pl"), lib_path.clone()),
+            ListingSource::from_file_and_path(atom!("builtins.pl"), lib_path.clone()),
         )
         .unwrap();
 
-        if let Some(builtins) = wam.indices.modules.get(&clause_name!("builtins")) {
+        if let Some(builtins) = wam.indices.modules.get(&atom!("builtins")) {
             load_module(
                 &mut wam.indices.code_dir,
                 &mut wam.indices.op_dir,
@@ -324,15 +370,15 @@ impl Machine {
         lib_path.pop(); // remove the "lib" at the end
 
         bootstrapping_compile(
-            Stream::from(include_str!("../loader.pl")),
+            Stream::from_static_string(include_str!("../loader.pl"), &mut wam.machine_st.arena),
             &mut wam,
-            ListingSource::from_file_and_path(clause_name!("loader.pl"), lib_path.clone()),
+            ListingSource::from_file_and_path(atom!("loader.pl"), lib_path.clone()),
         )
         .unwrap();
 
         wam.configure_modules();
 
-        if let Some(loader) = wam.indices.modules.get(&clause_name!("loader")) {
+        if let Some(loader) = wam.indices.modules.get(&atom!("loader")) {
             load_module(
                 &mut wam.indices.code_dir,
                 &mut wam.indices.op_dir,
@@ -352,38 +398,21 @@ impl Machine {
     }
 
     pub(crate) fn configure_streams(&mut self) {
-        self.user_input.options_mut().alias = Some(clause_name!("user_input"));
+        self.user_input.options_mut().set_alias_to_atom_opt(Some(atom!("user_input")));
 
         self.indices
             .stream_aliases
-            .insert(clause_name!("user_input"), self.user_input.clone());
+            .insert(atom!("user_input"), self.user_input);
 
-        self.indices.streams.insert(self.user_input.clone());
+        self.indices.streams.insert(self.user_input);
 
-        self.user_output.options_mut().alias = Some(clause_name!("user_output"));
-
-        self.indices
-            .stream_aliases
-            .insert(clause_name!("user_output"), self.user_output.clone());
-
-        self.user_error.options_mut().alias = Some(clause_name!("user_error"));
+        self.user_output.options_mut().set_alias_to_atom_opt(Some(atom!("user_output")));
 
         self.indices
             .stream_aliases
-            .insert(clause_name!("user_error"), self.user_error.clone());
+            .insert(atom!("user_output"), self.user_output);
 
-        self.indices.streams.insert(self.user_output.clone());
-    }
-
-    fn throw_session_error(&mut self, err: SessionError, key: PredicateKey) {
-        let h = self.machine_st.heap.h();
-
-        let err = MachineError::session_error(h, err);
-        let stub = MachineError::functor_stub(key.0, key.1);
-        let err = self.machine_st.error_form(err, stub);
-
-        self.machine_st.throw_exception(err);
-        return;
+        self.indices.streams.insert(self.user_output);
     }
 
     fn handle_toplevel_command(&mut self, code_ptr: REPLCodePtr, p: LocalCodePtr) {
@@ -604,13 +633,14 @@ impl MachineState {
         self.b0 = self.stack.index_or_frame(b).prelude.b0;
         self.p = CodePtr::Local(self.stack.index_or_frame(b).prelude.bp);
 
+        self.pdl.clear();
         self.fail = false;
     }
 
     fn check_machine_index(&mut self, code_repo: &CodeRepo) -> bool {
         match self.p {
-            CodePtr::Local(LocalCodePtr::DirEntry(p))
-            | CodePtr::Local(LocalCodePtr::IndexingBuf(p, ..))
+            CodePtr::Local(LocalCodePtr::DirEntry(p)) |
+            CodePtr::Local(LocalCodePtr::IndexingBuf(p, ..))
                 if p < code_repo.code.len() => {}
             CodePtr::Local(LocalCodePtr::Halt) | CodePtr::REPL(..) => {
                 return false;
@@ -690,7 +720,9 @@ impl MachineState {
                     self.p = CodePtr::Local(self.attr_var_init.cp);
 
                     let instigating_p = CodePtr::Local(self.attr_var_init.instigating_p);
-                    let instigating_instr = code_repo.lookup_instr(false, &instigating_p).unwrap();
+                    let instigating_instr = code_repo
+                        .lookup_instr(false, &instigating_p)
+                        .unwrap();
 
                     if !instigating_instr.as_ref().is_head_instr() {
                         let cp = self.p.local();

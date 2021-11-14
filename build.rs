@@ -1,8 +1,11 @@
+use static_string_indexing::index_static_strings;
+
 use std::env;
 use std::fs;
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
+use std::process::Command;
 
 fn find_prolog_files(libraries: &mut File, prefix: &str, current_dir: &Path) {
     let entries = match current_dir.read_dir() {
@@ -48,6 +51,21 @@ fn main() {
         let mut m = IndexMap::new();\n",
         )
         .unwrap();
+
     find_prolog_files(&mut libraries, "", &lib_path);
     libraries.write_all(b"\n        m\n    };\n}\n").unwrap();
+
+    let static_atoms_path = Path::new("src/static_atoms.rs");
+    let mut static_atoms_file = File::create(&static_atoms_path).unwrap();
+
+    let quoted_output = index_static_strings();
+
+    static_atoms_file
+        .write_all(quoted_output.to_string().as_bytes())
+        .unwrap();
+
+    Command::new("rustfmt")
+        .arg(static_atoms_path.as_os_str())
+        .spawn().unwrap()
+        .wait().unwrap();
 }

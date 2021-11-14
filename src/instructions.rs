@@ -1,46 +1,42 @@
-use prolog_parser::ast::*;
-use prolog_parser::clause_name;
+use crate::arena::*;
+use crate::atom_table::*;
+use crate::parser::ast::*;
 
 use crate::clause_types::*;
 use crate::forms::*;
-use crate::indexing::IndexingCodePtr;
+use crate::types::*;
 use crate::machine::heap::*;
 use crate::machine::machine_errors::MachineStub;
-use crate::machine::machine_indices::*;
-use crate::rug::Integer;
 
 use indexmap::IndexMap;
-
 use slice_deque::SliceDeque;
-
-use std::rc::Rc;
 
 fn reg_type_into_functor(r: RegType) -> MachineStub {
     match r {
-        RegType::Temp(r) => functor!("x", [integer(r)]),
-        RegType::Perm(r) => functor!("y", [integer(r)]),
+        RegType::Temp(r) => functor!(atom!("x"), [fixnum(r)]),
+        RegType::Perm(r) => functor!(atom!("y"), [fixnum(r)]),
     }
 }
 
 impl Level {
     fn into_functor(self) -> MachineStub {
         match self {
-            Level::Root => functor!("level", [atom("root")]),
-            Level::Shallow => functor!("level", [atom("shallow")]),
-            Level::Deep => functor!("level", [atom("deep")]),
+            Level::Root => functor!(atom!("level"), [atom(atom!("root"))]),
+            Level::Shallow => functor!(atom!("level"), [atom(atom!("shallow"))]),
+            Level::Deep => functor!(atom!("level"), [atom(atom!("deep"))]),
         }
     }
 }
 
 impl ArithmeticTerm {
-    fn into_functor(&self) -> MachineStub {
+    fn into_functor(&self, arena: &mut Arena) -> MachineStub {
         match self {
             &ArithmeticTerm::Reg(r) => reg_type_into_functor(r),
             &ArithmeticTerm::Interm(i) => {
-                functor!("intermediate", [integer(i)])
+                functor!(atom!("intermediate"), [fixnum(i)])
             }
-            &ArithmeticTerm::Number(ref n) => {
-                vec![n.clone().into()]
+            &ArithmeticTerm::Number(n) => {
+                vec![HeapCellValue::from((n, arena))]
             }
         }
     }
@@ -87,33 +83,30 @@ impl ChoiceInstruction {
                 match (death, next_or_fail) {
                     (Death::Infinity, NextOrFail::Next(i)) => {
                         functor!(
-                            "dynamic_else",
-                            [integer(birth), atom("inf"), integer(i)]
+                            atom!("dynamic_else"),
+                            [fixnum(birth), atom(atom!("inf")), fixnum(i)]
                         )
                     }
                     (Death::Infinity, NextOrFail::Fail(i)) => {
-                        let next_functor = functor!("fail", [integer(i)]);
+                        let next_functor = functor!(atom!("fail"), [fixnum(i)]);
 
                         functor!(
-                            "dynamic_else",
-                            [integer(birth), atom("inf"), aux(h, 0)],
+                            atom!("dynamic_else"),
+                            [fixnum(birth), atom(atom!("inf")), str(h, 0)],
                             [next_functor]
                         )
                     }
                     (Death::Finite(d), NextOrFail::Fail(i)) => {
-                        let next_functor = functor!("fail", [integer(i)]);
+                        let next_functor = functor!(atom!("fail"), [fixnum(i)]);
 
                         functor!(
-                            "dynamic_else",
-                            [integer(birth), integer(d), aux(h, 0)],
+                            atom!("dynamic_else"),
+                            [fixnum(birth), fixnum(d), str(h, 0)],
                             [next_functor]
                         )
                     }
                     (Death::Finite(d), NextOrFail::Next(i)) => {
-                        functor!(
-                            "dynamic_else",
-                            [integer(birth), integer(d), integer(i)]
-                        )
+                        functor!(atom!("dynamic_else"), [fixnum(birth), fixnum(d), fixnum(i)])
                     }
                 }
             }
@@ -121,50 +114,50 @@ impl ChoiceInstruction {
                 match (death, next_or_fail) {
                     (Death::Infinity, NextOrFail::Next(i)) => {
                         functor!(
-                            "dynamic_internal_else",
-                            [integer(birth), atom("inf"), integer(i)]
+                            atom!("dynamic_internal_else"),
+                            [fixnum(birth), atom(atom!("inf")), fixnum(i)]
                         )
                     }
                     (Death::Infinity, NextOrFail::Fail(i)) => {
-                        let next_functor = functor!("fail", [integer(i)]);
+                        let next_functor = functor!(atom!("fail"), [fixnum(i)]);
 
                         functor!(
-                            "dynamic_internal_else",
-                            [integer(birth), atom("inf"), aux(h, 0)],
+                            atom!("dynamic_internal_else"),
+                            [fixnum(birth), atom(atom!("inf")), str(h, 0)],
                             [next_functor]
                         )
                     }
                     (Death::Finite(d), NextOrFail::Fail(i)) => {
-                        let next_functor = functor!("fail", [integer(i)]);
+                        let next_functor = functor!(atom!("fail"), [fixnum(i)]);
 
                         functor!(
-                            "dynamic_internal_else",
-                            [integer(birth), integer(d), aux(h, 0)],
+                            atom!("dynamic_internal_else"),
+                            [fixnum(birth), fixnum(d), str(h, 0)],
                             [next_functor]
                         )
                     }
                     (Death::Finite(d), NextOrFail::Next(i)) => {
                         functor!(
-                            "dynamic_internal_else",
-                            [integer(birth), integer(d), integer(i)]
+                            atom!("dynamic_internal_else"),
+                            [fixnum(birth), fixnum(d), fixnum(i)]
                         )
                     }
                 }
             }
             &ChoiceInstruction::TryMeElse(offset) => {
-                functor!("try_me_else", [integer(offset)])
+                functor!(atom!("try_me_else"), [fixnum(offset)])
             }
             &ChoiceInstruction::RetryMeElse(offset) => {
-                functor!("retry_me_else", [integer(offset)])
+                functor!(atom!("retry_me_else"), [fixnum(offset)])
             }
             &ChoiceInstruction::TrustMe(offset) => {
-                functor!("trust_me", [integer(offset)])
+                functor!(atom!("trust_me"), [fixnum(offset)])
             }
             &ChoiceInstruction::DefaultRetryMeElse(offset) => {
-                functor!("default_retry_me_else", [integer(offset)])
+                functor!(atom!("default_retry_me_else"), [fixnum(offset)])
             }
             &ChoiceInstruction::DefaultTrustMe(offset) => {
-                functor!("default_trust_me", [integer(offset)])
+                functor!(atom!("default_trust_me"), [fixnum(offset)])
             }
         }
     }
@@ -183,18 +176,18 @@ impl CutInstruction {
         match self {
             &CutInstruction::Cut(r) => {
                 let rt_stub = reg_type_into_functor(r);
-                functor!("cut", [aux(h, 0)], [rt_stub])
+                functor!(atom!("cut"), [str(h, 0)], [rt_stub])
             }
             &CutInstruction::GetLevel(r) => {
                 let rt_stub = reg_type_into_functor(r);
-                functor!("get_level", [aux(h, 0)], [rt_stub])
+                functor!(atom!("get_level"), [str(h, 0)], [rt_stub])
             }
             &CutInstruction::GetLevelAndUnify(r) => {
                 let rt_stub = reg_type_into_functor(r);
-                functor!("get_level_and_unify", [aux(h, 0)], [rt_stub])
+                functor!(atom!("get_level_and_unify"), [str(h, 0)], [rt_stub])
             }
             &CutInstruction::NeckCut => {
-                functor!("neck_cut")
+                functor!(atom!("neck_cut"))
             }
         }
     }
@@ -219,13 +212,13 @@ impl IndexedChoiceInstruction {
     pub(crate) fn to_functor(&self) -> MachineStub {
         match self {
             &IndexedChoiceInstruction::Try(offset) => {
-                functor!("try", [integer(offset)])
+                functor!(atom!("try"), [fixnum(offset)])
             }
             &IndexedChoiceInstruction::Trust(offset) => {
-                functor!("trust", [integer(offset)])
+                functor!(atom!("trust"), [fixnum(offset)])
             }
             &IndexedChoiceInstruction::Retry(offset) => {
-                functor!("retry", [integer(offset)])
+                functor!(atom!("retry"), [fixnum(offset)])
             }
         }
     }
@@ -276,9 +269,16 @@ impl Line {
         }
     }
 
-    pub(crate) fn enqueue_functors(&self, mut h: usize, functors: &mut Vec<MachineStub>) {
+    pub(crate) fn enqueue_functors(
+        &self,
+        mut h: usize,
+        arena: &mut Arena,
+        functors: &mut Vec<MachineStub>,
+    ) {
         match self {
-            &Line::Arithmetic(ref arith_instr) => functors.push(arith_instr.to_functor(h)),
+            &Line::Arithmetic(ref arith_instr) => {
+                functors.push(arith_instr.to_functor(h, arena))
+            }
             &Line::Choice(ref choice_instr) => functors.push(choice_instr.to_functor(h)),
             &Line::Control(ref control_instr) => functors.push(control_instr.to_functor()),
             &Line::Cut(ref cut_instr) => functors.push(cut_instr.to_functor(h)),
@@ -300,7 +300,11 @@ impl Line {
                         }
                         IndexingLine::DynamicIndexedChoice(indexed_choice_instrs) => {
                             for indexed_choice_instr in indexed_choice_instrs {
-                                let section = functor!("dynamic", [integer(*indexed_choice_instr)]);
+                                let section = functor!(
+                                    atom!("dynamic"),
+                                    [fixnum(*indexed_choice_instr)]
+                                );
+
                                 h += section.len();
                                 functors.push(section);
                             }
@@ -312,7 +316,7 @@ impl Line {
                 functors.push(indexed_choice_instr.to_functor())
             }
             &Line::DynamicIndexedChoice(ref indexed_choice_instr) => {
-                functors.push(functor!("dynamic", [integer(*indexed_choice_instr)]));
+                functors.push(functor!(atom!("dynamic"), [fixnum(*indexed_choice_instr)]));
             }
             &Line::Query(ref query_instr) => functors.push(query_instr.to_functor(h)),
         }
@@ -336,7 +340,7 @@ pub(crate) fn to_indexing_line(line: &Line) -> Option<&Vec<IndexingLine>> {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) enum ArithmeticInstruction {
+pub enum ArithmeticInstruction {
     Add(ArithmeticTerm, ArithmeticTerm, usize),
     Sub(ArithmeticTerm, ArithmeticTerm, usize),
     Mul(ArithmeticTerm, ArithmeticTerm, usize),
@@ -380,132 +384,175 @@ pub(crate) enum ArithmeticInstruction {
 
 fn arith_instr_unary_functor(
     h: usize,
-    name: &'static str,
+    name: Atom,
+    arena: &mut Arena,
     at: &ArithmeticTerm,
     t: usize,
 ) -> MachineStub {
-    let at_stub = at.into_functor();
-
-    functor!(name, [aux(h, 0), integer(t)], [at_stub])
+    let at_stub = at.into_functor(arena);
+    functor!(name, [str(h, 0), fixnum(t)], [at_stub])
 }
 
 fn arith_instr_bin_functor(
     h: usize,
-    name: &'static str,
+    name: Atom,
+    arena: &mut Arena,
     at_1: &ArithmeticTerm,
     at_2: &ArithmeticTerm,
     t: usize,
 ) -> MachineStub {
-    let at_1_stub = at_1.into_functor();
-    let at_2_stub = at_2.into_functor();
+    let at_1_stub = at_1.into_functor(arena);
+    let at_2_stub = at_2.into_functor(arena);
 
     functor!(
         name,
-        [aux(h, 0), aux(h, 1), integer(t)],
+        [str(h, 0), str(h, 1), fixnum(t)],
         [at_1_stub, at_2_stub]
     )
 }
 
 impl ArithmeticInstruction {
-    pub(crate) fn to_functor(&self, h: usize) -> MachineStub {
+    pub(crate) fn to_functor(
+        &self,
+        h: usize,
+        arena: &mut Arena,
+    ) -> MachineStub {
         match self {
             &ArithmeticInstruction::Add(ref at_1, ref at_2, t) => {
-                arith_instr_bin_functor(h, "add", at_1, at_2, t)
+                arith_instr_bin_functor(h, atom!("add"), arena, at_1, at_2, t)
             }
             &ArithmeticInstruction::Sub(ref at_1, ref at_2, t) => {
-                arith_instr_bin_functor(h, "sub", at_1, at_2, t)
+                arith_instr_bin_functor(h, atom!("sub"), arena, at_1, at_2, t)
             }
             &ArithmeticInstruction::Mul(ref at_1, ref at_2, t) => {
-                arith_instr_bin_functor(h, "mul", at_1, at_2, t)
+                arith_instr_bin_functor(h, atom!("mul"), arena, at_1, at_2, t)
             }
             &ArithmeticInstruction::IntPow(ref at_1, ref at_2, t) => {
-                arith_instr_bin_functor(h, "int_pow", at_1, at_2, t)
+                arith_instr_bin_functor(h, atom!("int_pow"), arena, at_1, at_2, t)
             }
             &ArithmeticInstruction::Pow(ref at_1, ref at_2, t) => {
-                arith_instr_bin_functor(h, "pow", at_1, at_2, t)
+                arith_instr_bin_functor(h, atom!("pow"), arena, at_1, at_2, t)
             }
             &ArithmeticInstruction::IDiv(ref at_1, ref at_2, t) => {
-                arith_instr_bin_functor(h, "idiv", at_1, at_2, t)
+                arith_instr_bin_functor(h, atom!("idiv"), arena, at_1, at_2, t)
             }
             &ArithmeticInstruction::Max(ref at_1, ref at_2, t) => {
-                arith_instr_bin_functor(h, "max", at_1, at_2, t)
+                arith_instr_bin_functor(h, atom!("max"), arena, at_1, at_2, t)
             }
             &ArithmeticInstruction::Min(ref at_1, ref at_2, t) => {
-                arith_instr_bin_functor(h, "min", at_1, at_2, t)
+                arith_instr_bin_functor(h, atom!("min"), arena, at_1, at_2, t)
             }
             &ArithmeticInstruction::IntFloorDiv(ref at_1, ref at_2, t) => {
-                arith_instr_bin_functor(h, "int_floor_div", at_1, at_2, t)
+                arith_instr_bin_functor(h, atom!("int_floor_div"), arena, at_1, at_2, t)
             }
             &ArithmeticInstruction::RDiv(ref at_1, ref at_2, t) => {
-                arith_instr_bin_functor(h, "rdiv", at_1, at_2, t)
+                arith_instr_bin_functor(h, atom!("rdiv"), arena, at_1, at_2, t)
             }
             &ArithmeticInstruction::Div(ref at_1, ref at_2, t) => {
-                arith_instr_bin_functor(h, "div", at_1, at_2, t)
+                arith_instr_bin_functor(h, atom!("div"), arena, at_1, at_2, t)
             }
             &ArithmeticInstruction::Shl(ref at_1, ref at_2, t) => {
-                arith_instr_bin_functor(h, "shl", at_1, at_2, t)
+                arith_instr_bin_functor(h, atom!("shl"), arena, at_1, at_2, t)
             }
             &ArithmeticInstruction::Shr(ref at_1, ref at_2, t) => {
-                arith_instr_bin_functor(h, "shr", at_1, at_2, t)
+                arith_instr_bin_functor(h, atom!("shr"), arena, at_1, at_2, t)
             }
             &ArithmeticInstruction::Xor(ref at_1, ref at_2, t) => {
-                arith_instr_bin_functor(h, "xor", at_1, at_2, t)
+                arith_instr_bin_functor(h, atom!("xor"), arena, at_1, at_2, t)
             }
             &ArithmeticInstruction::And(ref at_1, ref at_2, t) => {
-                arith_instr_bin_functor(h, "and", at_1, at_2, t)
+                arith_instr_bin_functor(h, atom!("and"), arena, at_1, at_2, t)
             }
             &ArithmeticInstruction::Or(ref at_1, ref at_2, t) => {
-                arith_instr_bin_functor(h, "or", at_1, at_2, t)
+                arith_instr_bin_functor(h, atom!("or"), arena, at_1, at_2, t)
             }
             &ArithmeticInstruction::Mod(ref at_1, ref at_2, t) => {
-                arith_instr_bin_functor(h, "mod", at_1, at_2, t)
+                arith_instr_bin_functor(h, atom!("mod"), arena, at_1, at_2, t)
             }
             &ArithmeticInstruction::Rem(ref at_1, ref at_2, t) => {
-                arith_instr_bin_functor(h, "rem", at_1, at_2, t)
+                arith_instr_bin_functor(h, atom!("rem"), arena, at_1, at_2, t)
             }
             &ArithmeticInstruction::ATan2(ref at_1, ref at_2, t) => {
-                arith_instr_bin_functor(h, "rem", at_1, at_2, t)
+                arith_instr_bin_functor(h, atom!("rem"), arena, at_1, at_2, t)
             }
             &ArithmeticInstruction::Gcd(ref at_1, ref at_2, t) => {
-                arith_instr_bin_functor(h, "gcd", at_1, at_2, t)
+                arith_instr_bin_functor(h, atom!("gcd"), arena, at_1, at_2, t)
             }
-            &ArithmeticInstruction::Sign(ref at, t) => arith_instr_unary_functor(h, "sign", at, t),
-            &ArithmeticInstruction::Cos(ref at, t) => arith_instr_unary_functor(h, "cos", at, t),
-            &ArithmeticInstruction::Sin(ref at, t) => arith_instr_unary_functor(h, "sin", at, t),
-            &ArithmeticInstruction::Tan(ref at, t) => arith_instr_unary_functor(h, "tan", at, t),
-            &ArithmeticInstruction::Log(ref at, t) => arith_instr_unary_functor(h, "log", at, t),
-            &ArithmeticInstruction::Exp(ref at, t) => arith_instr_unary_functor(h, "exp", at, t),
-            &ArithmeticInstruction::ACos(ref at, t) => arith_instr_unary_functor(h, "acos", at, t),
-            &ArithmeticInstruction::ASin(ref at, t) => arith_instr_unary_functor(h, "asin", at, t),
-            &ArithmeticInstruction::ATan(ref at, t) => arith_instr_unary_functor(h, "atan", at, t),
-            &ArithmeticInstruction::Sqrt(ref at, t) => arith_instr_unary_functor(h, "sqrt", at, t),
-            &ArithmeticInstruction::Abs(ref at, t) => arith_instr_unary_functor(h, "abs", at, t),
+            &ArithmeticInstruction::Sign(ref at, t) => {
+                arith_instr_unary_functor(h, atom!("sign"), arena, at, t)
+            }
+            &ArithmeticInstruction::Cos(ref at, t) => {
+                arith_instr_unary_functor(h, atom!("cos"), arena, at, t)
+            }
+            &ArithmeticInstruction::Sin(ref at, t) => {
+                arith_instr_unary_functor(h, atom!("sin"), arena, at, t)
+            }
+            &ArithmeticInstruction::Tan(ref at, t) => {
+                arith_instr_unary_functor(h, atom!("tan"), arena, at, t)
+            }
+            &ArithmeticInstruction::Log(ref at, t) => {
+                arith_instr_unary_functor(h, atom!("log"), arena, at, t)
+            }
+            &ArithmeticInstruction::Exp(ref at, t) => {
+                arith_instr_unary_functor(h, atom!("exp"), arena, at, t)
+            }
+            &ArithmeticInstruction::ACos(ref at, t) => {
+                arith_instr_unary_functor(h, atom!("acos"), arena, at, t)
+            }
+            &ArithmeticInstruction::ASin(ref at, t) => {
+                arith_instr_unary_functor(h, atom!("asin"), arena, at, t)
+            }
+            &ArithmeticInstruction::ATan(ref at, t) => {
+                arith_instr_unary_functor(h, atom!("atan"), arena, at, t)
+            }
+            &ArithmeticInstruction::Sqrt(ref at, t) => {
+                arith_instr_unary_functor(h, atom!("sqrt"), arena, at, t)
+            }
+            &ArithmeticInstruction::Abs(ref at, t) => {
+                arith_instr_unary_functor(h, atom!("abs"), arena, at, t)
+            }
             &ArithmeticInstruction::Float(ref at, t) => {
-                arith_instr_unary_functor(h, "float", at, t)
+                arith_instr_unary_functor(h, atom!("float"), arena, at, t)
             }
             &ArithmeticInstruction::Truncate(ref at, t) => {
-                arith_instr_unary_functor(h, "truncate", at, t)
+                arith_instr_unary_functor(h, atom!("truncate"), arena, at, t)
             }
             &ArithmeticInstruction::Round(ref at, t) => {
-                arith_instr_unary_functor(h, "round", at, t)
+                arith_instr_unary_functor(h, atom!("round"), arena, at, t)
             }
             &ArithmeticInstruction::Ceiling(ref at, t) => {
-                arith_instr_unary_functor(h, "ceiling", at, t)
+                arith_instr_unary_functor(h, atom!("ceiling"), arena, at, t)
             }
             &ArithmeticInstruction::Floor(ref at, t) => {
-                arith_instr_unary_functor(h, "floor", at, t)
+                arith_instr_unary_functor(h, atom!("floor"), arena, at, t)
             }
-            &ArithmeticInstruction::Neg(ref at, t) => arith_instr_unary_functor(h, "-", at, t),
-            &ArithmeticInstruction::Plus(ref at, t) => arith_instr_unary_functor(h, "+", at, t),
-            &ArithmeticInstruction::BitwiseComplement(ref at, t) => {
-                arith_instr_unary_functor(h, "\\", at, t)
-            }
+            &ArithmeticInstruction::Neg(ref at, t) => arith_instr_unary_functor(
+                h,
+                atom!("-"),
+                arena,
+                at,
+                t,
+            ),
+            &ArithmeticInstruction::Plus(ref at, t) => arith_instr_unary_functor(
+                h,
+                atom!("+"),
+                arena,
+                at,
+                t,
+            ),
+            &ArithmeticInstruction::BitwiseComplement(ref at, t) => arith_instr_unary_functor(
+                h,
+                atom!("\\"),
+                arena,
+                at,
+                t,
+            ),
         }
     }
 }
 
 #[derive(Debug)]
-pub(crate) enum ControlInstruction {
+pub enum ControlInstruction {
     Allocate(usize), // num_frames.
     // name, arity, perm_vars after threshold, last call, use default call policy.
     CallClause(ClauseType, usize, usize, bool, bool),
@@ -529,25 +576,25 @@ impl ControlInstruction {
     pub(crate) fn to_functor(&self) -> MachineStub {
         match self {
             &ControlInstruction::Allocate(num_frames) => {
-                functor!("allocate", [integer(num_frames)])
+                functor!(atom!("allocate"), [fixnum(num_frames)])
             }
             &ControlInstruction::CallClause(ref ct, arity, _, false, _) => {
-                functor!("call", [clause_name(ct.name()), integer(arity)])
+                functor!(atom!("call"), [atom(ct.name()), fixnum(arity)])
             }
             &ControlInstruction::CallClause(ref ct, arity, _, true, _) => {
-                functor!("execute", [clause_name(ct.name()), integer(arity)])
+                functor!(atom!("execute"), [atom(ct.name()), fixnum(arity)])
             }
             &ControlInstruction::Deallocate => {
-                functor!("deallocate")
+                functor!(atom!("deallocate"))
             }
             &ControlInstruction::JmpBy(_, offset, ..) => {
-                functor!("jmp_by", [integer(offset)])
+                functor!(atom!("jmp_by"), [fixnum(offset)])
             }
             &ControlInstruction::RevJmpBy(offset) => {
-                functor!("rev_jmp_by", [integer(offset)])
+                functor!(atom!("rev_jmp_by"), [fixnum(offset)])
             }
             &ControlInstruction::Proceed => {
-                functor!("proceed")
+                functor!(atom!("proceed"))
             }
         }
     }
@@ -564,8 +611,22 @@ pub(crate) enum IndexingInstruction {
         IndexingCodePtr,
         IndexingCodePtr,
     ),
-    SwitchOnConstant(IndexMap<Constant, IndexingCodePtr>),
-    SwitchOnStructure(IndexMap<(ClauseName, usize), IndexingCodePtr>),
+    SwitchOnConstant(IndexMap<Literal, IndexingCodePtr>),
+    SwitchOnStructure(IndexMap<(Atom, usize), IndexingCodePtr>),
+}
+
+impl IndexingCodePtr {
+    #[allow(dead_code)]
+    pub(crate) fn to_functor(self) -> MachineStub {
+        match self {
+            IndexingCodePtr::DynamicExternal(o) => functor!(atom!("dynamic_external"), [fixnum(o)]),
+            IndexingCodePtr::External(o) => functor!(atom!("external"), [fixnum(o)]),
+            IndexingCodePtr::Internal(o) => functor!(atom!("internal"), [fixnum(o)]),
+            IndexingCodePtr::Fail => {
+                vec![atom_as_cell!(atom!("fail"))]
+            },
+        }
+    }
 }
 
 impl IndexingInstruction {
@@ -573,9 +634,9 @@ impl IndexingInstruction {
         match self {
             &IndexingInstruction::SwitchOnTerm(arg, vars, constants, lists, structures) => {
                 functor!(
-                    "switch_on_term",
+                    atom!("switch_on_term"),
                     [
-                        integer(arg),
+                        fixnum(arg),
                         indexing_code_ptr(h, vars),
                         indexing_code_ptr(h, constants),
                         indexing_code_ptr(h, lists),
@@ -591,26 +652,23 @@ impl IndexingInstruction {
 
                 for (c, ptr) in constants.iter() {
                     let key_value_pair = functor!(
-                        ":",
-                        SharedOpDesc::new(600, XFY),
-                        [constant(c), indexing_code_ptr(h + 3, *ptr)]
+                        atom!(":"),
+                        [literal(*c), indexing_code_ptr(h + 3, *ptr)]
                     );
 
-                    key_value_list_stub.push(HeapCellValue::Addr(Addr::Lis(h + 1)));
-                    key_value_list_stub.push(HeapCellValue::Addr(Addr::Str(h + 3)));
-                    key_value_list_stub.push(HeapCellValue::Addr(Addr::HeapCell(
-                        h + 3 + key_value_pair.len(),
-                    )));
+                    key_value_list_stub.push(list_loc_as_cell!(h + 1));
+                    key_value_list_stub.push(str_loc_as_cell!(h + 3));
+                    key_value_list_stub.push(heap_loc_as_cell!(h + 3 + key_value_pair.len()));
 
                     h += key_value_pair.len() + 3;
                     key_value_list_stub.extend(key_value_pair.into_iter());
                 }
 
-                key_value_list_stub.push(HeapCellValue::Addr(Addr::EmptyList));
+                key_value_list_stub.push(empty_list_as_cell!());
 
                 functor!(
-                    "switch_on_constant",
-                    [aux(orig_h, 0)],
+                    atom!("switch_on_constant"),
+                    [str(orig_h, 0)],
                     [key_value_list_stub]
                 )
             }
@@ -622,33 +680,29 @@ impl IndexingInstruction {
 
                 for ((name, arity), ptr) in structures.iter() {
                     let predicate_indicator_stub = functor!(
-                        "/",
-                        SharedOpDesc::new(400, YFX),
-                        [clause_name(name.clone()), integer(*arity)]
+                        atom!("/"),
+                        [atom(name), fixnum(*arity)]
                     );
 
                     let key_value_pair = functor!(
-                        ":",
-                        SharedOpDesc::new(600, XFY),
-                        [aux(h + 3, 0), indexing_code_ptr(h + 3, *ptr)],
+                        atom!(":"),
+                        [str(h + 3, 0), indexing_code_ptr(h + 3, *ptr)],
                         [predicate_indicator_stub]
                     );
 
-                    key_value_list_stub.push(HeapCellValue::Addr(Addr::Lis(h + 1)));
-                    key_value_list_stub.push(HeapCellValue::Addr(Addr::Str(h + 3)));
-                    key_value_list_stub.push(HeapCellValue::Addr(Addr::HeapCell(
-                        h + 3 + key_value_pair.len(),
-                    )));
+                    key_value_list_stub.push(list_loc_as_cell!(h + 1));
+                    key_value_list_stub.push(str_loc_as_cell!(h + 3));
+                    key_value_list_stub.push(heap_loc_as_cell!(h + 3 + key_value_pair.len()));
 
                     h += key_value_pair.len() + 3;
                     key_value_list_stub.extend(key_value_pair.into_iter());
                 }
 
-                key_value_list_stub.push(HeapCellValue::Addr(Addr::EmptyList));
+                key_value_list_stub.push(empty_list_as_cell!());
 
                 functor!(
-                    "switch_on_structure",
-                    [aux(orig_h, 0)],
+                    atom!("switch_on_structure"),
+                    [str(orig_h, 0)],
                     [key_value_list_stub]
                 )
             }
@@ -657,14 +711,14 @@ impl IndexingInstruction {
 }
 
 #[derive(Debug, Clone)]
-pub(crate) enum FactInstruction {
-    GetConstant(Level, Constant, RegType),
+pub enum FactInstruction {
+    GetConstant(Level, HeapCellValue, RegType),
     GetList(Level, RegType),
-    GetPartialString(Level, String, RegType, bool),
+    GetPartialString(Level, Atom, RegType, bool),
     GetStructure(ClauseType, usize, RegType),
     GetValue(RegType, usize),
     GetVariable(RegType, usize),
-    UnifyConstant(Constant),
+    UnifyConstant(HeapCellValue),
     UnifyLocalValue(RegType),
     UnifyVariable(RegType),
     UnifyValue(RegType),
@@ -674,13 +728,13 @@ pub(crate) enum FactInstruction {
 impl FactInstruction {
     pub(crate) fn to_functor(&self, h: usize) -> MachineStub {
         match self {
-            &FactInstruction::GetConstant(lvl, ref c, r) => {
+            &FactInstruction::GetConstant(lvl, c, r) => {
                 let lvl_stub = lvl.into_functor();
                 let rt_stub = reg_type_into_functor(r);
 
                 functor!(
-                    "get_constant",
-                    [aux(h, 0), constant(h, c), aux(h, 1)],
+                    atom!("get_constant"),
+                    [str(h, 0), cell(c), str(h, 1)],
                     [lvl_stub, rt_stub]
                 )
             }
@@ -688,15 +742,24 @@ impl FactInstruction {
                 let lvl_stub = lvl.into_functor();
                 let rt_stub = reg_type_into_functor(r);
 
-                functor!("get_list", [aux(h, 0), aux(h, 1)], [lvl_stub, rt_stub])
+                functor!(
+                    atom!("get_list"),
+                    [str(h, 0), str(h, 1)],
+                    [lvl_stub, rt_stub]
+                )
             }
-            &FactInstruction::GetPartialString(lvl, ref s, r, has_tail) => {
+            &FactInstruction::GetPartialString(lvl, s, r, has_tail) => {
                 let lvl_stub = lvl.into_functor();
                 let rt_stub = reg_type_into_functor(r);
 
                 functor!(
-                    "get_partial_string",
-                    [aux(h, 0), string(h, s), aux(h, 1), boolean(has_tail)],
+                    atom!("get_partial_string"),
+                    [
+                        str(h, 0),
+                        string(h, s),
+                        str(h, 1),
+                        boolean(has_tail)
+                    ],
                     [lvl_stub, rt_stub]
                 )
             }
@@ -704,41 +767,41 @@ impl FactInstruction {
                 let rt_stub = reg_type_into_functor(r);
 
                 functor!(
-                    "get_structure",
-                    [clause_name(ct.name()), integer(arity), aux(h, 0)],
+                    atom!("get_structure"),
+                    [atom(ct.name()), fixnum(arity), str(h, 0)],
                     [rt_stub]
                 )
             }
             &FactInstruction::GetValue(r, arg) => {
                 let rt_stub = reg_type_into_functor(r);
 
-                functor!("get_value", [aux(h, 0), integer(arg)], [rt_stub])
+                functor!(atom!("get_value"), [str(h, 0), fixnum(arg)], [rt_stub])
             }
             &FactInstruction::GetVariable(r, arg) => {
                 let rt_stub = reg_type_into_functor(r);
 
-                functor!("get_variable", [aux(h, 0), integer(arg)], [rt_stub])
+                functor!(atom!("get_variable"), [str(h, 0), fixnum(arg)], [rt_stub])
             }
-            &FactInstruction::UnifyConstant(ref c) => {
-                functor!("unify_constant", [constant(h, c)], [])
+            &FactInstruction::UnifyConstant(c) => {
+                functor!(atom!("unify_constant"), [cell(c)])
             }
             &FactInstruction::UnifyLocalValue(r) => {
                 let rt_stub = reg_type_into_functor(r);
 
-                functor!("unify_local_value", [aux(h, 0)], [rt_stub])
+                functor!(atom!("unify_local_value"), [str(h, 0)], [rt_stub])
             }
             &FactInstruction::UnifyVariable(r) => {
                 let rt_stub = reg_type_into_functor(r);
 
-                functor!("unify_variable", [aux(h, 0)], [rt_stub])
+                functor!(atom!("unify_variable"), [str(h, 0)], [rt_stub])
             }
             &FactInstruction::UnifyValue(r) => {
                 let rt_stub = reg_type_into_functor(r);
 
-                functor!("unify_value", [aux(h, 0)], [rt_stub])
+                functor!(atom!("unify_value"), [str(h, 0)], [rt_stub])
             }
             &FactInstruction::UnifyVoid(vars) => {
-                functor!("unify_void", [integer(vars)])
+                functor!(atom!("unify_void"), [fixnum(vars)])
             }
         }
     }
@@ -747,14 +810,14 @@ impl FactInstruction {
 #[derive(Debug, Clone)]
 pub(crate) enum QueryInstruction {
     GetVariable(RegType, usize),
-    PutConstant(Level, Constant, RegType),
+    PutConstant(Level, HeapCellValue, RegType),
     PutList(Level, RegType),
-    PutPartialString(Level, String, RegType, bool),
+    PutPartialString(Level, Atom, RegType, bool),
     PutStructure(ClauseType, usize, RegType),
     PutUnsafeValue(usize, usize),
     PutValue(RegType, usize),
     PutVariable(RegType, usize),
-    SetConstant(Constant),
+    SetConstant(HeapCellValue),
     SetLocalValue(RegType),
     SetVariable(RegType),
     SetValue(RegType),
@@ -765,15 +828,15 @@ impl QueryInstruction {
     pub(crate) fn to_functor(&self, h: usize) -> MachineStub {
         match self {
             &QueryInstruction::PutUnsafeValue(norm, arg) => {
-                functor!("put_unsafe_value", [integer(norm), integer(arg)])
+                functor!(atom!("put_unsafe_value"), [fixnum(norm), fixnum(arg)])
             }
-            &QueryInstruction::PutConstant(lvl, ref c, r) => {
+            &QueryInstruction::PutConstant(lvl, c, r) => {
                 let lvl_stub = lvl.into_functor();
                 let rt_stub = reg_type_into_functor(r);
 
                 functor!(
-                    "put_constant",
-                    [aux(h, 0), constant(h, c), aux(h, 1)],
+                    atom!("put_constant"),
+                    [str(h, 0), cell(c), str(h, 1)],
                     [lvl_stub, rt_stub]
                 )
             }
@@ -781,15 +844,24 @@ impl QueryInstruction {
                 let lvl_stub = lvl.into_functor();
                 let rt_stub = reg_type_into_functor(r);
 
-                functor!("put_list", [aux(h, 0), aux(h, 1)], [lvl_stub, rt_stub])
+                functor!(
+                    atom!("put_list"),
+                    [str(h, 0), str(h, 1)],
+                    [lvl_stub, rt_stub]
+                )
             }
-            &QueryInstruction::PutPartialString(lvl, ref s, r, has_tail) => {
+            &QueryInstruction::PutPartialString(lvl, s, r, has_tail) => {
                 let lvl_stub = lvl.into_functor();
                 let rt_stub = reg_type_into_functor(r);
 
                 functor!(
-                    "put_partial_string",
-                    [aux(h, 0), string(h, s), aux(h, 1), boolean(has_tail)],
+                    atom!("put_partial_string"),
+                    [
+                        str(h, 0),
+                        string(h, s),
+                        str(h, 1),
+                        boolean(has_tail)
+                    ],
                     [lvl_stub, rt_stub]
                 )
             }
@@ -797,46 +869,46 @@ impl QueryInstruction {
                 let rt_stub = reg_type_into_functor(r);
 
                 functor!(
-                    "put_structure",
-                    [clause_name(ct.name()), integer(arity), aux(h, 0)],
+                    atom!("put_structure"),
+                    [atom(ct.name()), fixnum(arity), str(h, 0)],
                     [rt_stub]
                 )
             }
             &QueryInstruction::PutValue(r, arg) => {
                 let rt_stub = reg_type_into_functor(r);
 
-                functor!("put_value", [aux(h, 0), integer(arg)], [rt_stub])
+                functor!(atom!("put_value"), [str(h, 0), fixnum(arg)], [rt_stub])
             }
             &QueryInstruction::GetVariable(r, arg) => {
                 let rt_stub = reg_type_into_functor(r);
 
-                functor!("get_variable", [aux(h, 0), integer(arg)], [rt_stub])
+                functor!(atom!("get_variable"), [str(h, 0), fixnum(arg)], [rt_stub])
             }
             &QueryInstruction::PutVariable(r, arg) => {
                 let rt_stub = reg_type_into_functor(r);
 
-                functor!("put_variable", [aux(h, 0), integer(arg)], [rt_stub])
+                functor!(atom!("put_variable"), [str(h, 0), fixnum(arg)], [rt_stub])
             }
-            &QueryInstruction::SetConstant(ref c) => {
-                functor!("set_constant", [constant(h, c)], [])
+            &QueryInstruction::SetConstant(c) => {
+                functor!(atom!("set_constant"), [cell(c)], [])
             }
             &QueryInstruction::SetLocalValue(r) => {
                 let rt_stub = reg_type_into_functor(r);
 
-                functor!("set_local_value", [aux(h, 0)], [rt_stub])
+                functor!(atom!("set_local_value"), [str(h, 0)], [rt_stub])
             }
             &QueryInstruction::SetVariable(r) => {
                 let rt_stub = reg_type_into_functor(r);
 
-                functor!("set_variable", [aux(h, 0)], [rt_stub])
+                functor!(atom!("set_variable"), [str(h, 0)], [rt_stub])
             }
             &QueryInstruction::SetValue(r) => {
                 let rt_stub = reg_type_into_functor(r);
 
-                functor!("set_value", [aux(h, 0)], [rt_stub])
+                functor!(atom!("set_value"), [str(h, 0)], [rt_stub])
             }
             &QueryInstruction::SetVoid(vars) => {
-                functor!("set_void", [integer(vars)])
+                functor!(atom!("set_void"), [fixnum(vars)])
             }
         }
     }

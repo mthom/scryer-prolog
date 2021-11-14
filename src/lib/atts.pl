@@ -24,30 +24,42 @@
     '$absent_from_list'(Ls, Attr).
 
 '$absent_from_list'(X, Attr) :-
-    (  var(X) -> true
-    ;  X = [L|Ls], L \= Attr -> '$absent_from_list'(Ls, Attr)
+    (  var(X) ->
+       true
+    ;  X = [L|Ls],
+       L \= Attr ->
+       '$absent_from_list'(Ls, Attr)
     ).
 
 '$get_attr'(V, Attr) :-
-    '$get_attr_list'(V, Ls), nonvar(Ls), '$get_from_list'(Ls, V, Attr).
+    '$get_attr_list'(V, Ls),
+    nonvar(Ls),
+    '$get_from_list'(Ls, V, Attr).
 
 '$get_from_list'([L|Ls], V, Attr) :-
     nonvar(L),
-    (  L \= Attr -> nonvar(Ls), '$get_from_list'(Ls, V, Attr)
-    ;  L = Attr, '$enqueue_attr_var'(V)
+    (  L \= Attr ->
+       nonvar(Ls),
+       '$get_from_list'(Ls, V, Attr)
+    ;  L = Attr,
+       '$enqueue_attr_var'(V)
     ).
 
 '$put_attr'(V, Attr) :-
-    '$get_attr_list'(V, Ls), '$add_to_list'(Ls, V, Attr).
+    '$get_attr_list'(V, Ls),
+    '$add_to_list'(Ls, V, Attr).
 
 '$add_to_list'(Ls, V, Attr) :-
-    ( var(Ls) ->
-      Ls = [Attr | _], '$enqueue_attr_var'(V)
-    ; Ls = [_ | Ls0], '$add_to_list'(Ls0, V, Attr)
+    (  var(Ls) ->
+       Ls = [Attr | _],
+       '$enqueue_attr_var'(V)
+    ;  Ls = [_ | Ls0],
+       '$add_to_list'(Ls0, V, Attr)
     ).
 
 '$del_attr'(Ls0, _, _) :-
-    var(Ls0), !.
+    var(Ls0),
+    !.
 '$del_attr'(Ls0, V, Attr) :-
     Ls0 = [Att | Ls1],
     nonvar(Att),
@@ -134,22 +146,22 @@ put_attr(Name, Arity, Module) -->
     [(put_atts(V, +Attr) :-
           !,
           functor(Attr, Head, Arity),
-		  functor(AttrForm, Head, Arity),
-		  '$get_attr_list'(V, Ls),
-		  atts:'$del_attr'(Ls, V, Module:AttrForm),
-		  atts:'$put_attr'(V, Module:Attr)),
+	      functor(AttrForm, Head, Arity),
+	      '$get_attr_list'(V, Ls),
+	      atts:'$del_attr'(Ls, V, Module:AttrForm),
+	      atts:'$put_attr'(V, Module:Attr)),
      (put_atts(V,  Attr) :-
           !,
           functor(Attr, Head, Arity),
-		  functor(AttrForm, Head, Arity),
-		  '$get_attr_list'(V, Ls),
-		  atts:'$del_attr'(Ls, V, Module:AttrForm),
-		  atts:'$put_attr'(V, Module:Attr)),
+	      functor(AttrForm, Head, Arity),
+	      '$get_attr_list'(V, Ls),
+	      atts:'$del_attr'(Ls, V, Module:AttrForm),
+	      atts:'$put_attr'(V, Module:Attr)),
      (put_atts(V, -Attr) :-
           !,
           functor(Attr, _, _),
-		  '$get_attr_list'(V, Ls),
-		  atts:'$del_attr'(Ls, V, Module:Attr))].
+	      '$get_attr_list'(V, Ls),
+	      atts:'$del_attr'(Ls, V, Module:Attr))].
 
 get_attr(Name, Arity, Module) -->
     { functor(Attr, Name, Arity) },

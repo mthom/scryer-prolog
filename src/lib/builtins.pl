@@ -347,11 +347,11 @@ call_or_cut_interp((G1 -> G2), B) :-
 :- non_counted_backtracking univ_errors/3.
 univ_errors(Term, List, N) :-
     '$skip_max_list'(N, -1, List, R),
-    ( var(R)        ->
-      (  var(Term),
-         throw(error(instantiation_error, (=..)/2))      % 8.5.3.3 a)
-      ;  true
-      )
+    (  var(R)        ->
+       (  var(Term),
+          throw(error(instantiation_error, (=..)/2))      % 8.5.3.3 a)
+       ;  true
+       )
     ;  R \== []     ->
        throw(error(type_error(list, List), (=..)/2))                % 8.5.3.3 b)
     ;  List = [H|T] ->
@@ -388,9 +388,10 @@ univ_worker(Term, List, _) :-
     !,
     '$call_with_default_policy'(List = [Term]).
 univ_worker(Term, [Name|Args], N) :-
-    var(Term), !,
+    var(Term),
+    !,
     '$call_with_default_policy'(Arity is N-1),
-    '$call_with_default_policy'(functor(Term, Name, Arity)),
+    '$call_with_default_policy'(functor(Term, Name, Arity)), % Term = {var}, Name = nonvar, Arity = 0.
     '$call_with_default_policy'(get_args(Args, Term, 1, Arity)).
 univ_worker(Term, List, _) :-
     '$call_with_default_policy'(functor(Term, Name, Arity)),
@@ -679,9 +680,9 @@ set_difference([], _, []) :- !.
 set_difference(Xs, [], Xs).
 
 group_by_variant([V2-S2 | Pairs], V1-S1, [S2 | Solutions], Pairs0) :-
-    iso_ext:variant(V1, V2),
+    V1 = V2, % \+ \+ (V1 = V2), % (2) % iso_ext:variant(V1, V2), % (1)
     !,
-    V1 = V2,
+    % V1 = V2, % (3)
     group_by_variant(Pairs, V2-S2, Solutions, Pairs0).
 group_by_variant(Pairs, _, [], Pairs).
 
@@ -1075,17 +1076,16 @@ abolish(Pred) :-
     ;  throw(error(type_error(predicate_indicator, Pred), abolish/1))
     ).
 
-'$iterate_db_refs'(Ref, Name/Arity) :-
-    '$lookup_db_ref'(Ref, Name, Arity).
-'$iterate_db_refs'(Ref, Name/Arity) :-
-    '$get_next_db_ref'(Ref, NextRef),
-    '$iterate_db_refs'(NextRef, Name/Arity).
-
+'$iterate_db_refs'(Name, Arity, Name/Arity). % :-
+%   '$lookup_db_ref'(Ref, Name, Arity).
+'$iterate_db_refs'(RName, RArity, Name/Arity) :-
+    '$get_next_db_ref'(RName, RArity, RRName, RRArity),
+    '$iterate_db_refs'(RRName, RRArity, Name/Arity).
 
 current_predicate(Pred) :-
     (  var(Pred) ->
-       '$get_next_db_ref'(Ref, _),
-       '$iterate_db_refs'(Ref, Pred)
+       '$get_next_db_ref'(RN, RA, _, _),
+       '$iterate_db_refs'(RN, RA, Pred)
     ;  Pred \= _/_ ->
        throw(error(type_error(predicate_indicator, Pred), current_predicate/1))
     ;  Pred = Name/Arity,
@@ -1094,15 +1094,14 @@ current_predicate(Pred) :-
        ;  integer(Arity), Arity < 0
        ) ->
        throw(error(type_error(predicate_indicator, Pred), current_predicate/1))
-    ;  '$get_next_db_ref'(Ref, _),
-       '$iterate_db_refs'(Ref, Pred)
+    ;  '$get_next_db_ref'(RN, RA, _, _),
+       '$iterate_db_refs'(RN, RA, Pred)
     ).
 
-'$iterate_op_db_refs'(Ref, Priority, Spec, Op) :-
-    '$lookup_op_db_ref'(Ref, Priority, Spec, Op).
-'$iterate_op_db_refs'(Ref, Priority, Spec, Op) :-
-    '$get_next_op_db_ref'(Ref, NextRef),
-    '$iterate_op_db_refs'(NextRef, Priority, Spec, Op).
+'$iterate_op_db_refs'(RPriority, RSpec, ROp, _, RPriority, RSpec, ROp).
+'$iterate_op_db_refs'(RPriority, RSpec, ROp, OssifiedOpDir, Priority, Spec, Op) :-
+    '$get_next_op_db_ref'(RPriority, RSpec, ROp, OssifiedOpDir, RRPriority, RRSpec, RROp),
+    '$iterate_op_db_refs'(RRPriority, RRSpec, RROp, OssifiedOpDir, Priority, Spec, Op).
 
 can_be_op_priority(Priority) :- var(Priority).
 can_be_op_priority(Priority) :- op_priority(Priority).
@@ -1114,8 +1113,8 @@ current_op(Priority, Spec, Op) :-
     (  can_be_op_priority(Priority),
        can_be_op_specifier(Spec),
        error:can_be(atom, Op) ->
-       '$get_next_op_db_ref'(Ref, _),
-       '$iterate_op_db_refs'(Ref, Priority, Spec, Op)
+       '$get_next_op_db_ref'(RPriority, RSpec, ROp, OssifiedOpDir, _, _, Op),
+       '$iterate_op_db_refs'(RPriority, RSpec, ROp, OssifiedOpDir, Priority, Spec, Op)
     ).
 
 list_of_op_atoms(Var) :-

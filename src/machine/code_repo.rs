@@ -3,7 +3,7 @@ use crate::instructions::*;
 use crate::machine::machine_indices::*;
 
 #[derive(Debug)]
-pub(crate) struct CodeRepo {
+pub struct CodeRepo {
     pub(super) code: Code,
 }
 

@@ -1,53 +1,43 @@
-use prolog_parser::ast::*;
-use prolog_parser::clause_name;
+use crate::parser::ast::*;
 
+use crate::arena::*;
+use crate::atom_table::*;
 use crate::clause_types::*;
 use crate::fixtures::*;
 use crate::forms::*;
 use crate::instructions::*;
+
 use crate::machine::code_repo::CodeRepo;
 use crate::machine::heap::*;
+use crate::machine::loader::*;
+use crate::machine::machine_errors::MachineStub;
 use crate::machine::machine_state::*;
-use crate::machine::partial_string::*;
-use crate::machine::raw_block::RawBlockTraits;
 use crate::machine::streams::Stream;
-use crate::machine::term_stream::LoadStatePayload;
-use crate::machine::CompilationTarget;
-use crate::rug::{Integer, Rational};
-use ordered_float::OrderedFloat;
 
 use indexmap::IndexMap;
 
 use std::cell::Cell;
 use std::cmp::Ordering;
-use std::collections::{BTreeMap, BTreeSet};
-use std::convert::TryFrom;
+use std::collections::BTreeSet;
 use std::fmt;
-// use std::mem;
-use std::net::TcpListener;
 use std::ops::{Add, AddAssign, Deref, Sub, SubAssign};
 use std::rc::Rc;
 
+use crate::types::*;
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) struct OrderedOpDirKey(pub(crate) ClauseName, pub(crate) Fixity);
+pub(crate) struct OrderedOpDirKey(pub(crate) Atom, pub(crate) Fixity);
 
-pub(crate) type OssifiedOpDir = BTreeMap<OrderedOpDirKey, (usize, Specifier)>;
+pub(crate) type OssifiedOpDir = IndexMap<(Atom, Fixity), (usize, Specifier)>;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub(crate) enum DBRef {
-    NamedPred(ClauseName, usize, Option<SharedOpDesc>),
-    Op(
-        usize,
-        Specifier,
-        ClauseName,
-        Rc<OssifiedOpDir>,
-        SharedOpDesc,
-    ),
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DBRef {
+    NamedPred(Atom, usize),
+    Op(Atom, Fixity, TypedArenaPtr<OssifiedOpDir>),
 }
 
 // 7.2
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
-pub(crate) enum TermOrderCategory {
+pub enum TermOrderCategory {
     Variable,
     FloatingPoint,
     Integer,
@@ -55,43 +45,95 @@ pub(crate) enum TermOrderCategory {
     Compound,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub(crate) enum Addr {
-    AttrVar(usize),
-    Char(char),
-    Con(usize),
-    CutPoint(usize),
-    EmptyList,
-    Fixnum(isize),
-    Float(OrderedFloat<f64>),
-    Lis(usize),
-    LoadStatePayload(usize),
-    HeapCell(usize),
-    PStrLocation(usize, usize), // location of pstr in heap, offset into string in bytes.
-    StackCell(usize, usize),
-    Str(usize),
-    Stream(usize),
-    TcpListener(usize),
-    Usize(usize),
-}
+// the position-dependent heap template:
 
-#[derive(Debug, Clone, Copy, Hash, Eq, PartialEq, PartialOrd)]
-pub(crate) enum Ref {
-    AttrVar(usize),
-    HeapCell(usize),
-    StackCell(usize, usize),
-}
+/*
+        read_heap_cell!(
+            (HeapCellValueTag::AttrVar, n) => {
+            }
+            (HeapCellValueTag::Lis, n) => {
+            }
+            (HeapCellValueTag::Var, n) => {
+            }
+            (HeapCellValueTag::Str, n) => {
+            }
+            (HeapCellValueTag::PStrOffset, n) => {
+            }
+            _ => {
+            }
+        )
+*/
 
-impl Ref {
-    pub(crate) fn as_addr(self) -> Addr {
-        match self {
-            Ref::AttrVar(h) => Addr::AttrVar(h),
-            Ref::HeapCell(h) => Addr::HeapCell(h),
-            Ref::StackCell(fr, sc) => Addr::StackCell(fr, sc),
-        }
+impl PartialEq<Ref> for HeapCellValue {
+    fn eq(&self, r: &Ref) -> bool {
+        self.as_var() == Some(*r)
     }
 }
 
+impl PartialOrd<Ref> for HeapCellValue {
+    fn partial_cmp(&self, r: &Ref) -> Option<Ordering> {
+        read_heap_cell!(*self,
+            (HeapCellValueTag::StackVar, s1) => {
+                match r.get_tag() {
+                    RefTag::StackCell => {
+                        let s2 = r.get_value() as usize;
+                        s1.partial_cmp(&s2)
+                    }
+                    _ => Some(Ordering::Greater),
+                }
+            }
+            (HeapCellValueTag::Var | HeapCellValueTag::AttrVar, h1) => {
+                match r.get_tag() {
+                    RefTag::StackCell => Some(Ordering::Less),
+                    _ => {
+                        let h2 = r.get_value() as usize;
+                        h1.partial_cmp(&h2)
+                    }
+                }
+            }
+            _ => {
+                None
+            }
+        )
+    }
+}
+/*
+impl HeapCellValue {
+    #[inline]
+    pub fn as_constant_index(self, machine_st: &MachineState) -> Option<Literal> {
+        read_heap_cell!(self,
+            (HeapCellValueTag::Char, c) => Some(Literal::Char(c)),
+            (HeapCellValueTag::Atom, (name, arity)) => {
+                if arity == 0 {
+                    Some(Literal::Atom(name))
+                } else {
+                    None
+                }
+            }
+            (HeapCellValueTag::Fixnum, n) => {
+                Some(Literal::Fixnum(n))
+            }
+            (HeapCellValueTag::F64, f) => {
+                Some(Literal::Float(f))
+            }
+            (HeapCellValueTag::Cons, ptr) => {
+                match_untyped_arena_ptr!(ptr,
+                     (ArenaHeaderTag::Integer, n) => {
+                         Some(Literal::Integer(n))
+                     }
+                     (ArenaHeaderTag::Rational, r) => {
+                         Some(Literal::Rational(r))
+                     }
+                     _ => {
+                         None
+                     }
+                )
+            }
+        )
+    }
+}
+*/
+/*
 impl Ord for Ref {
     fn cmp(&self, other: &Ref) -> Ordering {
         match (self, other) {
@@ -111,31 +153,6 @@ impl Ord for Ref {
 impl PartialEq<Ref> for Addr {
     fn eq(&self, r: &Ref) -> bool {
         self.as_var() == Some(*r)
-    }
-}
-
-// for use crate::in MachineState::bind.
-impl PartialOrd<Ref> for Addr {
-    fn partial_cmp(&self, r: &Ref) -> Option<Ordering> {
-        match self {
-            &Addr::StackCell(fr, sc) => match *r {
-                Ref::AttrVar(_) | Ref::HeapCell(_) => Some(Ordering::Greater),
-                Ref::StackCell(fr1, sc1) => {
-                    if fr1 < fr || (fr1 == fr && sc1 < sc) {
-                        Some(Ordering::Greater)
-                    } else if fr1 == fr && sc1 == sc {
-                        Some(Ordering::Equal)
-                    } else {
-                        Some(Ordering::Less)
-                    }
-                }
-            },
-            &Addr::HeapCell(h) | &Addr::AttrVar(h) => match r {
-                Ref::StackCell(..) => Some(Ordering::Less),
-                Ref::AttrVar(h1) | Ref::HeapCell(h1) => h.partial_cmp(h1),
-            },
-            _ => None,
-        }
     }
 }
 
@@ -171,116 +188,10 @@ impl Addr {
         }
     }
 
-    pub(super) fn order_category(&self, heap: &Heap) -> Option<TermOrderCategory> {
-        match Number::try_from((*self, heap)) {
-            Ok(Number::Integer(_)) | Ok(Number::Fixnum(_)) | Ok(Number::Rational(_)) => {
-                Some(TermOrderCategory::Integer)
-            }
-            Ok(Number::Float(_)) => Some(TermOrderCategory::FloatingPoint),
-            _ => match self {
-                Addr::HeapCell(_) | Addr::AttrVar(_) | Addr::StackCell(..) => {
-                    Some(TermOrderCategory::Variable)
-                }
-                Addr::Float(_) => Some(TermOrderCategory::FloatingPoint),
-                &Addr::Con(h) => match &heap[h] {
-                    HeapCellValue::Atom(..) => Some(TermOrderCategory::Atom),
-                    HeapCellValue::DBRef(_) => None,
-                    _ => {
-                        unreachable!()
-                    }
-                },
-                Addr::Char(_) | Addr::EmptyList => Some(TermOrderCategory::Atom),
-                Addr::Fixnum(_) | Addr::Usize(_) => Some(TermOrderCategory::Integer),
-                Addr::Lis(_) | Addr::PStrLocation(..) | Addr::Str(_) => {
-                    Some(TermOrderCategory::Compound)
-                }
-                Addr::CutPoint(_)
-                | Addr::LoadStatePayload(_)
-                | Addr::Stream(_)
-                | Addr::TcpListener(_) => None,
-            },
-        }
-    }
-
-    pub(crate) fn as_constant_index(&self, machine_st: &MachineState) -> Option<Constant> {
-        match self {
-            &Addr::Char(c) => Some(Constant::Char(c)),
-            &Addr::Con(h) => match &machine_st.heap[h] {
-                &HeapCellValue::Atom(ref name, _) if name.is_char() => {
-                    Some(Constant::Char(name.as_str().chars().next().unwrap()))
-                }
-                &HeapCellValue::Atom(ref name, _) => Some(Constant::Atom(name.clone(), None)),
-                &HeapCellValue::Integer(ref n) => Some(Constant::Integer(n.clone())),
-                &HeapCellValue::Rational(ref n) => Some(Constant::Rational(n.clone())),
-                _ => None,
-            },
-            &Addr::EmptyList => Some(Constant::EmptyList),
-            &Addr::Fixnum(n) => Some(Constant::Fixnum(n)),
-            &Addr::Float(f) => Some(Constant::Float(f)),
-            &Addr::Usize(n) => Some(Constant::Usize(n)),
-            _ => None,
-        }
-    }
-
     pub(crate) fn is_protected(&self, e: usize) -> bool {
         match self {
             &Addr::StackCell(addr, _) if addr >= e => false,
             _ => true,
-        }
-    }
-}
-
-impl Add<usize> for Addr {
-    type Output = Addr;
-
-    fn add(self, rhs: usize) -> Self::Output {
-        match self {
-            Addr::Stream(h) => Addr::Stream(h + rhs),
-            Addr::Con(h) => Addr::Con(h + rhs),
-            Addr::Lis(a) => Addr::Lis(a + rhs),
-            Addr::AttrVar(h) => Addr::AttrVar(h + rhs),
-            Addr::HeapCell(h) => Addr::HeapCell(h + rhs),
-            Addr::Str(s) => Addr::Str(s + rhs),
-            Addr::PStrLocation(h, n) => Addr::PStrLocation(h + rhs, n),
-            _ => self,
-        }
-    }
-}
-
-impl Sub<i64> for Addr {
-    type Output = Addr;
-
-    fn sub(self, rhs: i64) -> Self::Output {
-        if rhs < 0 {
-            match self {
-                Addr::Stream(h) => Addr::Stream(h + rhs.abs() as usize),
-                Addr::Con(h) => Addr::Con(h + rhs.abs() as usize),
-                Addr::Lis(a) => Addr::Lis(a + rhs.abs() as usize),
-                Addr::AttrVar(h) => Addr::AttrVar(h + rhs.abs() as usize),
-                Addr::HeapCell(h) => Addr::HeapCell(h + rhs.abs() as usize),
-                Addr::Str(s) => Addr::Str(s + rhs.abs() as usize),
-                Addr::PStrLocation(h, n) => Addr::PStrLocation(h + rhs.abs() as usize, n),
-                _ => self,
-            }
-        } else {
-            self.sub(rhs as usize)
-        }
-    }
-}
-
-impl Sub<usize> for Addr {
-    type Output = Addr;
-
-    fn sub(self, rhs: usize) -> Self::Output {
-        match self {
-            Addr::Stream(h) => Addr::Stream(h - rhs),
-            Addr::Con(h) => Addr::Con(h - rhs),
-            Addr::Lis(a) => Addr::Lis(a - rhs),
-            Addr::AttrVar(h) => Addr::AttrVar(h - rhs),
-            Addr::HeapCell(h) => Addr::HeapCell(h - rhs),
-            Addr::Str(s) => Addr::Str(s - rhs),
-            Addr::PStrLocation(h, n) => Addr::PStrLocation(h - rhs, n),
-            _ => self,
         }
     }
 }
@@ -305,72 +216,9 @@ impl From<Ref> for TrailRef {
         TrailRef::Ref(r)
     }
 }
-
-#[derive(Debug)]
-pub(crate) enum HeapCellValue {
-    Addr(Addr),
-    Atom(ClauseName, Option<SharedOpDesc>),
-    DBRef(DBRef),
-    Integer(Rc<Integer>),
-    LoadStatePayload(Box<LoadStatePayload>),
-    NamedStr(usize, ClauseName, Option<SharedOpDesc>), // arity, name, precedence/Specifier if it has one.
-    Rational(Rc<Rational>),
-    PartialString(PartialString, bool), // the partial string, a bool indicating whether it came from a Constant.
-    Stream(Stream),
-    TcpListener(TcpListener),
-}
-
-impl HeapCellValue {
-    #[inline]
-    pub(crate) fn as_addr(&self, focus: usize) -> Addr {
-        match self {
-            HeapCellValue::Addr(ref a) => *a,
-            HeapCellValue::Atom(..)
-            | HeapCellValue::DBRef(..)
-            | HeapCellValue::Integer(..)
-            | HeapCellValue::Rational(..) => Addr::Con(focus),
-            HeapCellValue::LoadStatePayload(_) => Addr::LoadStatePayload(focus),
-            HeapCellValue::NamedStr(_, _, _) => Addr::Str(focus),
-            HeapCellValue::PartialString(..) => Addr::PStrLocation(focus, 0),
-            HeapCellValue::Stream(_) => Addr::Stream(focus),
-            HeapCellValue::TcpListener(_) => Addr::TcpListener(focus),
-        }
-    }
-
-    #[inline]
-    pub(crate) fn context_free_clone(&self) -> HeapCellValue {
-        match self {
-            &HeapCellValue::Addr(addr) => HeapCellValue::Addr(addr),
-            &HeapCellValue::Atom(ref name, ref op) => HeapCellValue::Atom(name.clone(), op.clone()),
-            &HeapCellValue::DBRef(ref db_ref) => HeapCellValue::DBRef(db_ref.clone()),
-            &HeapCellValue::Integer(ref n) => HeapCellValue::Integer(n.clone()),
-            &HeapCellValue::LoadStatePayload(_) => {
-                HeapCellValue::Atom(clause_name!("$live_term_stream"), None)
-            }
-            &HeapCellValue::NamedStr(arity, ref name, ref op) => {
-                HeapCellValue::NamedStr(arity, name.clone(), op.clone())
-            }
-            &HeapCellValue::Rational(ref r) => HeapCellValue::Rational(r.clone()),
-            &HeapCellValue::PartialString(ref pstr, has_tail) => {
-                HeapCellValue::PartialString(pstr.clone(), has_tail)
-            }
-            &HeapCellValue::Stream(ref stream) => HeapCellValue::Stream(stream.clone()),
-            &HeapCellValue::TcpListener(_) => {
-                HeapCellValue::Atom(clause_name!("$tcp_listener"), None)
-            }
-        }
-    }
-}
-
-impl From<Addr> for HeapCellValue {
-    #[inline]
-    fn from(value: Addr) -> HeapCellValue {
-        HeapCellValue::Addr(value)
-    }
-}
-
+*/
 #[derive(Debug, Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub(crate) enum IndexPtr {
+pub enum IndexPtr {
     DynamicUndefined, // a predicate, declared as dynamic, whose location in code is as yet undefined.
     DynamicIndex(usize),
     Index(usize),
@@ -378,7 +226,7 @@ pub(crate) enum IndexPtr {
 }
 
 #[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq)]
-pub(crate) struct CodeIndex(pub(crate) Rc<Cell<IndexPtr>>);
+pub struct CodeIndex(pub(crate) Rc<Cell<IndexPtr>>);
 
 impl Deref for CodeIndex {
     type Target = Cell<IndexPtr>;
@@ -419,7 +267,7 @@ impl Default for CodeIndex {
 }
 
 #[derive(Debug, Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
-pub(crate) enum REPLCodePtr {
+pub enum REPLCodePtr {
     AddDiscontiguousPredicate,
     AddDynamicPredicate,
     AddMultifilePredicate,
@@ -456,12 +304,11 @@ pub(crate) enum REPLCodePtr {
     AddNonCountedBacktracking,
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub(crate) enum CodePtr {
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum CodePtr {
     BuiltInClause(BuiltInClauseType, LocalCodePtr), // local is the successor call.
     CallN(usize, LocalCodePtr, bool),               // arity, local, last call.
     Local(LocalCodePtr),
-    // DynamicTransaction(DynamicTransactionType, LocalCodePtr), // the type of transaction, the return pointer.
     REPL(REPLCodePtr, LocalCodePtr), // the REPL code, the return pointer.
     VerifyAttrInterrupt(usize), // location of the verify attribute interrupt code in the CodeDir.
 }
@@ -488,7 +335,7 @@ impl CodePtr {
 }
 
 #[derive(Copy, Clone, Debug, PartialEq)]
-pub(crate) enum LocalCodePtr {
+pub enum LocalCodePtr {
     DirEntry(usize), // offset
     Halt,
     IndexingBuf(usize, usize, usize), // DirEntry offset, first internal offset, second internal offset
@@ -496,7 +343,7 @@ pub(crate) enum LocalCodePtr {
 }
 
 impl LocalCodePtr {
-    pub(crate) fn assign_if_local(&mut self, cp: CodePtr) {
+    pub fn assign_if_local(&mut self, cp: CodePtr) {
         match cp {
             CodePtr::Local(local) => *self = local,
             _ => {}
@@ -504,7 +351,7 @@ impl LocalCodePtr {
     }
 
     #[inline]
-    pub(crate) fn abs_loc(&self) -> usize {
+    pub fn abs_loc(&self) -> usize {
         match self {
             LocalCodePtr::DirEntry(ref p) => *p,
             LocalCodePtr::IndexingBuf(ref p, ..) => *p,
@@ -528,33 +375,21 @@ impl LocalCodePtr {
         false
     }
 
-    pub(crate) fn as_functor<T: RawBlockTraits>(&self, heap: &mut HeapTemplate<T>) -> Addr {
-        let addr = Addr::HeapCell(heap.h());
-
+    pub(crate) fn as_functor(&self) -> MachineStub {
         match self {
             LocalCodePtr::DirEntry(p) => {
-                heap.append(functor!("dir_entry", [integer(*p)]));
+                functor!(atom!("dir_entry"), [fixnum(*p)])
             }
             LocalCodePtr::Halt => {
-                heap.append(functor!("halt"));
+                functor!(atom!("halt"))
             }
-            /*
-            LocalCodePtr::TopLevel(chunk_num, offset) => {
-                heap.append(functor!(
-                    "top_level",
-                    [integer(*chunk_num), integer(*offset)]
-                ));
-            }
-            */
             LocalCodePtr::IndexingBuf(p, o, i) => {
-                heap.append(functor!(
-                    "indexed_buf",
-                    [integer(*p), integer(*o), integer(*i)]
-                ));
+                functor!(
+                    atom!("indexed_buf"),
+                    [fixnum(*p), fixnum(*o), fixnum(*i)]
+                )
             }
         }
-
-        addr
     }
 }
 
@@ -614,9 +449,8 @@ impl AddAssign<usize> for LocalCodePtr {
     #[inline]
     fn add_assign(&mut self, rhs: usize) {
         match self {
-            &mut LocalCodePtr::DirEntry(ref mut p) /* |
-            &mut LocalCodePtr::TopLevel(_, ref mut p) */    => *p += rhs,
-            &mut LocalCodePtr::IndexingBuf(_, _, ref mut i) => *i += rhs,
+            &mut LocalCodePtr::DirEntry(ref mut i)
+            | &mut LocalCodePtr::IndexingBuf(_, _, ref mut i) => *i += rhs,
             &mut LocalCodePtr::Halt => unreachable!(),
         }
     }
@@ -627,11 +461,7 @@ impl Add<usize> for CodePtr {
 
     fn add(self, rhs: usize) -> Self::Output {
         match self {
-            p @ CodePtr::REPL(..) | p @ CodePtr::VerifyAttrInterrupt(_) => {
-                // |
-                // p @ CodePtr::DynamicTransaction(..) => {
-                p
-            }
+            p @ CodePtr::REPL(..) | p @ CodePtr::VerifyAttrInterrupt(_) => p,
             CodePtr::Local(local) => CodePtr::Local(local + rhs),
             CodePtr::BuiltInClause(_, local) | CodePtr::CallN(_, local, _) => {
                 CodePtr::Local(local + rhs)
@@ -660,12 +490,12 @@ impl SubAssign<usize> for CodePtr {
     }
 }
 
-pub(crate) type HeapVarDict = IndexMap<Rc<Var>, Addr>;
-pub(crate) type AllocVarDict = IndexMap<Rc<Var>, VarData>;
+pub(crate) type HeapVarDict = IndexMap<Rc<String>, HeapCellValue>;
+pub(crate) type AllocVarDict = IndexMap<Rc<String>, VarData>;
 
-pub(crate) type GlobalVarDir = IndexMap<ClauseName, (Ball, Option<Addr>)>;
+pub(crate) type GlobalVarDir = IndexMap<Atom, (Ball, Option<HeapCellValue>)>;
 
-pub(crate) type StreamAliasDir = IndexMap<ClauseName, Stream>;
+pub(crate) type StreamAliasDir = IndexMap<Atom, Stream>;
 pub(crate) type StreamDir = BTreeSet<Stream>;
 
 pub(crate) type MetaPredicateDir = IndexMap<PredicateKey, Vec<MetaSpec>>;
@@ -676,7 +506,7 @@ pub(crate) type LocalExtensiblePredicates =
     IndexMap<(CompilationTarget, PredicateKey), LocalPredicateSkeleton>;
 
 #[derive(Debug)]
-pub(crate) struct IndexStore {
+pub struct IndexStore {
     pub(super) code_dir: CodeDir,
     pub(super) extensible_predicates: ExtensiblePredicates,
     pub(super) local_extensible_predicates: LocalExtensiblePredicates,
@@ -688,31 +518,21 @@ pub(crate) struct IndexStore {
     pub(super) stream_aliases: StreamAliasDir,
 }
 
-impl Default for IndexStore {
-    #[inline]
-    fn default() -> Self {
-        index_store!(CodeDir::new(), default_op_dir(), ModuleDir::new())
-    }
-}
-
 impl IndexStore {
     pub(crate) fn get_predicate_skeleton_mut(
         &mut self,
         compilation_target: &CompilationTarget,
         key: &PredicateKey,
     ) -> Option<&mut PredicateSkeleton> {
-        match (key.0.as_str(), key.1) {
-            //            ("term_expansion", 2) => self.extensible_predicates.get_mut(key),
-            _ => match compilation_target {
-                CompilationTarget::User => self.extensible_predicates.get_mut(key),
-                CompilationTarget::Module(ref module_name) => {
-                    if let Some(module) = self.modules.get_mut(module_name) {
-                        module.extensible_predicates.get_mut(key)
-                    } else {
-                        None
-                    }
+        match compilation_target {
+            CompilationTarget::User => self.extensible_predicates.get_mut(key),
+            CompilationTarget::Module(ref module_name) => {
+                if let Some(module) = self.modules.get_mut(module_name) {
+                    module.extensible_predicates.get_mut(key)
+                } else {
+                    None
                 }
-            },
+            }
         }
     }
 
@@ -737,7 +557,7 @@ impl IndexStore {
         &mut self,
         mut src_compilation_target: CompilationTarget,
         local_compilation_target: CompilationTarget,
-        listing_src_file_name: Option<ClauseName>,
+        listing_src_file_name: Option<Atom>,
         key: PredicateKey,
     ) -> Option<&mut LocalPredicateSkeleton> {
         if let Some(filename) = listing_src_file_name {
@@ -748,8 +568,8 @@ impl IndexStore {
             CompilationTarget::User => self
                 .local_extensible_predicates
                 .get_mut(&(local_compilation_target, key)),
-            CompilationTarget::Module(ref module_name) => {
-                if let Some(module) = self.modules.get_mut(module_name) {
+            CompilationTarget::Module(module_name) => {
+                if let Some(module) = self.modules.get_mut(&module_name) {
                     module
                         .local_extensible_predicates
                         .get_mut(&(local_compilation_target, key))
@@ -764,7 +584,7 @@ impl IndexStore {
         &self,
         mut src_compilation_target: CompilationTarget,
         local_compilation_target: CompilationTarget,
-        listing_src_file_name: Option<ClauseName>,
+        listing_src_file_name: Option<Atom>,
         key: PredicateKey,
     ) -> Option<&LocalPredicateSkeleton> {
         if let Some(filename) = listing_src_file_name {
@@ -775,8 +595,8 @@ impl IndexStore {
             CompilationTarget::User => self
                 .local_extensible_predicates
                 .get(&(local_compilation_target, key)),
-            CompilationTarget::Module(ref module_name) => {
-                if let Some(module) = self.modules.get(module_name) {
+            CompilationTarget::Module(module_name) => {
+                if let Some(module) = self.modules.get(&module_name) {
                     module
                         .local_extensible_predicates
                         .get(&(local_compilation_target, key))
@@ -806,35 +626,30 @@ impl IndexStore {
 
     pub(crate) fn get_predicate_code_index(
         &self,
-        name: ClauseName,
+        name: Atom,
         arity: usize,
-        module: ClauseName,
-        op_spec: Option<SharedOpDesc>,
+        module: Atom,
     ) -> Option<CodeIndex> {
-        if module.as_str() == "user" {
-            match ClauseType::from(name, arity, op_spec) {
+        if module == atom!("user") {
+            match ClauseType::from(name, arity) {
                 ClauseType::Named(name, arity, _) => self.code_dir.get(&(name, arity)).cloned(),
-                ClauseType::Op(name, spec, ..) => self.code_dir.get(&(name, spec.arity())).cloned(),
                 _ => None,
             }
         } else {
-            self.modules.get(&module).and_then(|module| {
-                match ClauseType::from(name, arity, op_spec) {
+            self.modules
+                .get(&module)
+                .and_then(|module| match ClauseType::from(name, arity) {
                     ClauseType::Named(name, arity, _) => {
                         module.code_dir.get(&(name, arity)).cloned()
                     }
-                    ClauseType::Op(name, spec, ..) => {
-                        module.code_dir.get(&(name, spec.arity())).cloned()
-                    }
                     _ => None,
-                }
-            })
+                })
         }
     }
 
     pub(crate) fn get_meta_predicate_spec(
         &self,
-        name: ClauseName,
+        name: Atom,
         arity: usize,
         compilation_target: &CompilationTarget,
     ) -> Option<&Vec<MetaSpec>> {
@@ -850,9 +665,13 @@ impl IndexStore {
         }
     }
 
-    pub(crate) fn is_dynamic_predicate(&self, module_name: ClauseName, key: PredicateKey) -> bool {
-        match module_name.as_str() {
-            "user" => self
+    pub(crate) fn is_dynamic_predicate(
+        &self,
+        module_name: Atom,
+        key: PredicateKey,
+    ) -> bool {
+        match module_name {
+            atom!("user") => self
                 .extensible_predicates
                 .get(&key)
                 .map(|skeleton| skeleton.core.is_dynamic)
@@ -870,19 +689,19 @@ impl IndexStore {
 
     #[inline]
     pub(super) fn new() -> Self {
-        IndexStore::default()
+        index_store!(CodeDir::new(), default_op_dir(), ModuleDir::new())
     }
 
     pub(super) fn get_cleaner_sites(&self) -> (usize, usize) {
-        let r_w_h = clause_name!("run_cleaners_with_handling");
-        let r_wo_h = clause_name!("run_cleaners_without_handling");
-        let iso_ext = clause_name!("iso_ext");
+        let r_w_h = atom!("run_cleaners_with_handling");
+        let r_wo_h = atom!("run_cleaners_without_handling");
+        let iso_ext = atom!("iso_ext");
 
         let r_w_h = self
-            .get_predicate_code_index(r_w_h, 0, iso_ext.clone(), None)
+            .get_predicate_code_index(r_w_h, 0, iso_ext)
             .and_then(|item| item.local());
         let r_wo_h = self
-            .get_predicate_code_index(r_wo_h, 1, iso_ext, None)
+            .get_predicate_code_index(r_wo_h, 1, iso_ext)
             .and_then(|item| item.local());
 
         if let Some(r_w_h) = r_w_h {
@@ -895,7 +714,7 @@ impl IndexStore {
     }
 }
 
-pub(crate) type CodeDir = BTreeMap<PredicateKey, CodeIndex>;
+pub(crate) type CodeDir = IndexMap<PredicateKey, CodeIndex>;
 
 pub(crate) enum RefOrOwned<'a, T: 'a> {
     Borrowed(&'a T),
@@ -916,16 +735,6 @@ impl<'a, T> RefOrOwned<'a, T> {
         match self {
             &RefOrOwned::Borrowed(r) => r,
             &RefOrOwned::Owned(ref r) => r,
-        }
-    }
-
-    pub(crate) fn to_owned(self) -> T
-    where
-        T: Clone,
-    {
-        match self {
-            RefOrOwned::Borrowed(item) => item.clone(),
-            RefOrOwned::Owned(item) => item,
         }
     }
 }

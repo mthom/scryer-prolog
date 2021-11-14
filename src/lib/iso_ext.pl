@@ -14,7 +14,7 @@
                     partial_string_tail/2,
                     setup_call_cleanup/3,
                     call_nth/2,
-                    variant/2,
+%                   variant/2,
                     copy_term_nat/2]).
 
 :- use_module(library(error), [can_be/2,
@@ -22,6 +22,7 @@
                                instantiation_error/1,
                                type_error/3]).
 
+:- use_module(library(lists), [maplist/3]).
 
 :- meta_predicate(call_cleanup(0, 0)).
 
@@ -160,14 +161,12 @@ call_with_inference_limit(_, _, R, Bb, B) :-
     '$erase_ball',
     '$call_with_default_policy'(handle_ile(B, Ball, R)).
 
-variant(X, Y) :- '$variant'(X, Y).
-
 partial_string(String, L, L0) :-
     (  String == [] ->
        L = L0
     ;  catch(atom_chars(Atom, String),
-         error(E, _),
-         throw(error(E, partial_string/3))),
+             error(E, _),
+             throw(error(E, partial_string/3))),
        '$create_partial_string'(Atom, L, L0)
     ).
 

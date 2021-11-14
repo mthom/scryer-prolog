@@ -1,4 +1,3 @@
-
 :- module(loader, [consult/1,
                    expand_goal/3,
                    expand_term/2,
@@ -508,7 +507,8 @@ open_file(Path, Stream) :-
     ;  catch(open(Path, read, Stream),
              error(existence_error(source_sink, _), _),
              ( atom_concat(Path, '.pl', ExtendedPath),
-               open(ExtendedPath, read, Stream) )
+               open(ExtendedPath, read, Stream)
+             )
             )
     ).
 
