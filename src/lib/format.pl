@@ -325,7 +325,7 @@ cell(From, To, Es0) -->
             [cell(From,To,Es)]
         ).
 
-%?- format:numeric_argument("2f", Num, ['f'|Fs], Args0, Args).
+%?- format:numeric_argument("2f", Num, [f|Fs], Args0, Args).
 
 %?- format:numeric_argument("100b", Num, Rs, Args0, Args).
 
