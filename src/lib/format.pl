@@ -328,30 +328,28 @@ cell(From, To, Es0) -->
             [cell(From,To,Es)]
         ).
 
-%?- numeric_argument("2f", Num, ['f'|Fs], Args0, Args).
+%?- format:numeric_argument("2f", Num, ['f'|Fs], Args0, Args).
 
-%?- numeric_argument("100b", Num, Rs, Args0, Args).
+%?- format:numeric_argument("100b", Num, Rs, Args0, Args).
 
 numeric_argument(Ds, Num, Rest, Args0, Args) :-
         (   Ds = [*|Rest] ->
             Args0 = [Num|Args]
-        ;   numeric_argument_(Ds, [], Ns, Rest),
-            foldl(pow10, Ns, 0-0, Num-_),
+        ;   phrase(numeric_argument_(Ds, Rest), Ns),
+            foldl(plus_times10, Ns, 0, Num),
             Args0 = Args
         ).
 
-numeric_argument_([D|Ds], Ns0, Ns, Rest) :-
-        (   member(D, "0123456789") ->
-            number_chars(N, [D]),
-            numeric_argument_(Ds, [N|Ns0], Ns, Rest)
-        ;   Ns = Ns0,
-            Rest = [D|Ds]
+numeric_argument_([D|Ds], Rest) -->
+        (   { member(D, "0123456789") } ->
+            { number_chars(N, [D]) },
+            [N],
+            numeric_argument_(Ds, Rest)
+        ;   { Rest = [D|Ds] }
         ).
 
 
-pow10(D, N0-Pow0, N-Pow) :-
-        N is N0 + D*10^Pow0,
-        Pow is Pow0 + 1.
+plus_times10(D, N0, N) :- N is D + N0*10.
 
 radix_error(lowercase, R) --> format_("~~~dr", [R]).
 radix_error(uppercase, R) --> format_("~~~dR", [R]).
