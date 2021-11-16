@@ -373,8 +373,7 @@ integer_to_radix_(0, _, _) --> !.
 integer_to_radix_(I0, R, Ds) -->
         { M is I0 mod R,
           nth0(M, Ds, D),
-          I is I0 // R
-          },
+          I is I0 // R },
         [D],
         integer_to_radix_(I, R, Ds).
 
