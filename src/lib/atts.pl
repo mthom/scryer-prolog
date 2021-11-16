@@ -101,13 +101,13 @@ expand_terms(Atts, Module) -->
 
 put_attrs_var_check -->
     [(put_atts(Var, Attr) :- nonvar(Var),
-                             throw(error(type_error(variable, Var), put_atts/2))),
+                             throw(error(uninstantiation_error(Var), put_atts/2))),
      (put_atts(Var, Attr) :- var(Attr),
                              throw(error(instantiation_error, put_atts/2)))].
 
 get_attrs_var_check(Module) -->
     [(get_atts(Var, Attr) :- nonvar(Var),
-                             throw(error(type_error(variable, Var), get_atts/2))),
+                             throw(error(uninstantiation_error(Var), get_atts/2))),
      (get_atts(Var, Attr) :- var(Attr),
                              !,
                              '$get_attr_list'(Var, Ls),

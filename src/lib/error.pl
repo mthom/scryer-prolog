@@ -40,7 +40,7 @@ must_be_(Type, _) :-
         instantiation_error(must_be/2).
 must_be_(var, Term) :-
         (   var(Term) -> true
-        ;   throw(error(uninstantiation_error, must_be/2))
+        ;   throw(error(uninstantiation_error(Term), must_be/2))
         ).
 must_be_(integer, Term) :- check_(integer, integer, Term).
 must_be_(atom, Term)    :- check_(atom, atom, Term).
