@@ -56,7 +56,12 @@
 
    If at all possible, format_//2 should be used, to stress pure parts
    that enable easy testing etc. If necessary, you can emit the list Ls
-   with maplist(put_char, Ls).
+   with maplist(put_char, Ls) or, much faster, with format("~s", [Ls]).
+   Ideally, however, you use phrase_to_file/2 or phrase_to_stream/2
+   from library(pio) to write the described list directly to a file
+   or stream, respectively: phrase_to_stream(format_(..., [...]), S).
+   The advantage of this is that an ideal implementation writes
+   the characters as they become known, without manifesting the list.
 
    The entire library only works if the Prolog flag double_quotes
    is set to chars, the default value in Scryer Prolog. This should
