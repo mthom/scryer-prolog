@@ -3580,6 +3580,54 @@ impl MachineState {
                 let n = Fixnum::build_with(i64::try_from(self.b0).unwrap());
                 self.unify_fixnum(n, self.registers[1]);
             }
+            &SystemClauseType::GetStaggeredCutPoint => {
+                use std::sync::Once;
+
+                let b = self.store(self.deref(self.registers[1]));
+
+                static mut SEMICOLON_SECOND_BRANCH_LOC: usize = 0;
+                static LOC_INIT: Once = Once::new();
+
+                let semicolon_second_clause_p = unsafe {
+                    LOC_INIT.call_once(|| {
+                        match indices.code_dir.get(&(atom!(";"), 2)).map(|cell| cell.get()) {
+                            Some(IndexPtr::Index(p)) => {
+                                match code_repo.code[p] {
+                                    Line::Choice(ChoiceInstruction::TryMeElse(o)) => {
+                                        SEMICOLON_SECOND_BRANCH_LOC = p + o;
+                                    }
+                                    _ => {
+                                        unreachable!();
+                                    }
+                                }
+                            }
+                            _ => {
+                                unreachable!();
+                            }
+                        }
+                    });
+
+                    LocalCodePtr::DirEntry(SEMICOLON_SECOND_BRANCH_LOC)
+                };
+
+                let staggered_b0 = if self.b > 0 {
+                    let or_frame = self.stack.index_or_frame(self.b);
+
+                    if or_frame.prelude.bp == semicolon_second_clause_p {
+                        or_frame.prelude.b0
+                    } else {
+                        self.b0
+                    }
+                } else {
+                    self.b0
+                };
+
+                let staggered_b0 = integer_as_cell!(
+                    Number::arena_from(staggered_b0, &mut self.arena)
+                );
+
+                self.bind(b.as_var().unwrap(), staggered_b0);
+            }
             &SystemClauseType::InstallNewBlock => {
                 self.install_new_block(self.registers[1]);
             }

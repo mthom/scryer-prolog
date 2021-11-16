@@ -1,4 +1,4 @@
-:- module(builtins, [(=)/2, (\=)/2, (\+)/1, (',')/2, (->)/2, (;)/2,
+:- module(builtins, [(=)/2, (\=)/2, (\+)/1, !/0, (',')/2, (->)/2, (;)/2,
                      (=..)/2, (:)/2, (:)/3, (:)/4, (:)/5, (:)/6,
                      (:)/7, (:)/8, (:)/9, (:)/10, (:)/11, (:)/12,
                      abolish/1, asserta/1, assertz/1,
@@ -61,10 +61,8 @@ call(G, A, B, C, D, E, F, G, H) :- '$call'(G, A, B, C, D, E, F, G, H).
 
 
 Module : Predicate :-
-    ( atom(Module) ->
-      '$module_call'(Module, Predicate)
-    ;
-      throw(error(type_error(atom, Module), (:)/2))
+    ( atom(Module) -> '$module_call'(Module, Predicate)
+    ; throw(error(type_error(atom, Module), (:)/2))
     ).
 
 
@@ -205,142 +203,115 @@ repeat.
 repeat :- repeat.
 
 
+:- meta_predicate ','(0,0).
 
-:- meta_predicate ','(0, 0).
+:- meta_predicate ;(0,0).
 
-:- meta_predicate ','(0, +, +).
+:- meta_predicate ->(0,0).
 
-:- meta_predicate ;(0, 0).
+% '!' is for internal use as a callable no-op within if/then/else.
+% Where it shouldn't be a no-op, it's interpreted under the expected
+% semantics by comma_dispatch/3.
 
-:- meta_predicate ;(0, 0, +).
+! :- '$get_staggered_cp'(B), '$set_cp'(B).
 
-:- meta_predicate ->(0, 0).
+G1 -> G2 :- '$get_staggered_cp'(B), call('$call'(G1)), '$set_cp'(B), call('$call'(G2)).
 
-:- meta_predicate ->(0, 0, +).
+G ; _ :- call('$call'(G)).
+_ ; G :- call('$call'(G)).
 
+','(G1, G2) :- '$get_staggered_cp'(B), comma_dispatch(G1,G2,B).
 
-','(G1, G2) :-
-    '$get_b_value'(B),
-    (  '$call_with_default_policy'(var(G1)) ->
-       throw(error(instantiation_error, (',')/2))
-    ;  '$call_with_default_policy'(','(G1, G2, B))
-    ).
+set_cp(B) :- '$set_cp'(B).
 
+:- non_counted_backtracking comma_dispatch_prep/3.
 
-';'(G1, G2) :-
-    '$get_b_value'(B),
-    (  '$call_with_default_policy'(var(G1)) ->
-       throw(error(instantiation_error, (';')/2))
-    ;  '$call_with_default_policy'(';'(G1, G2, B))
-    ).
-
-
-G1 -> G2 :-
-    '$get_b_value'(B),
-    (  '$call_with_default_policy'(var(G1)) ->
-       throw(error(instantiation_error, (->)/2))
-    ;  '$call_with_default_policy'(->(G1, G2, B))
-    ).
-
-
-:-non_counted_backtracking call_or_cut/3.
-
-call_or_cut(G, B, ErrorPI) :-
-    (  '$call_with_default_policy'(var(G)) ->
-       throw(error(instantiation_error, ErrorPI))
-    ;  '$call_with_default_policy'(call_or_cut(G, B))
-    ).
-
-
-:- non_counted_backtracking control_functor/1.
-
-control_functor(_:G) :- nonvar(G), control_functor(G).
-control_functor(call(_:C)) :- C == !.
-control_functor(!).
-control_functor((_,_)).
-control_functor((_;_)).
-control_functor((_->_)).
-
-
-:- non_counted_backtracking call_or_cut/2.
-
-call_or_cut(G, B) :-
-    (  nonvar(G),
-       '$call_with_default_policy'(control_functor(G)) ->
-       '$call_with_default_policy'(call_or_cut_interp(G, B))
-    ;  call(G)
-    ).
-
-
-:- non_counted_backtracking call_or_cut_interp/2.
-
-call_or_cut_interp(_ : G, B) :-
-    call_or_cut_interp(G, B).
-call_or_cut_interp(call(_ : !), B) :-
-    !. % '$set_cp'(B).
-call_or_cut_interp(!, B) :-
-    '$set_cp'(B).
-call_or_cut_interp((G1, G2), B) :-
-    '$call_with_default_policy'(','(G1, G2, B)).
-call_or_cut_interp((G1 ; G2), B) :-
-    '$call_with_default_policy'(';'(G1, G2, B)).
-call_or_cut_interp((G1 -> G2), B) :-
-    '$call_with_default_policy'(->(G1, G2, B)).
-
-
-:- non_counted_backtracking (',')/3.
-
-','(G1, G2, B) :-
-    (  nonvar(G1),
-       '$call_with_default_policy'(control_functor(G1)) ->
-       '$call_with_default_policy'(call_or_cut_interp(G1, B)),
-       '$call_with_default_policy'(call_or_cut(G2, B, (',')/2))
-    ;  call(G1),
-       '$call_with_default_policy'(call_or_cut(G2, B, (',')/2))
-    ).
-
-:- non_counted_backtracking (;)/3.
-
-';'(G1, G2, B) :-
-    (  nonvar(G1),
-       '$call_with_default_policy'(control_functor(G1)) ->
-       '$call_with_default_policy'(';-interp'(G1, G2, B))
-    ;  call(G1)
-    ;  '$call_with_default_policy'(call_or_cut(G2, B, (;)/2))
-    ).
-
-
-:- non_counted_backtracking ';-interp'/3.
-
-';-interp'((G1 -> G2), G3, B) :-
-    !,
-    (  '$call_with_default_policy'(call_or_cut(G1, B, (->)/2)) ->
-       '$call_with_default_policy'(call_or_cut(G2, B, (->)/2))
-    ;  '$call_with_default_policy'(call_or_cut(G3, B, (;)/2))
-    ).
-';-interp'(_:(G1 -> G2), G3, B) :-
-    !,
-    (  '$call_with_default_policy'(call_or_cut(G1, B, (->)/2)) ->
-       '$call_with_default_policy'(call_or_cut(G2, B, (->)/2))
-    ;  '$call_with_default_policy'(call_or_cut(G3, B, (;)/2))
-    ).
-';-interp'(G1, G2, B) :-
-    (  '$call_with_default_policy'(call_or_cut_interp(G1, B))
-    ;  '$call_with_default_policy'(call_or_cut(G2, B, (;)/2))
-    ).
-
-
-:- non_counted_backtracking (->)/3.
-
-->(G1, G2, B) :-
-    (  nonvar(G1),
-       '$call_with_default_policy'(control_functor(G1)) ->
-       (  '$call_with_default_policy'(call_or_cut_interp(G1, B)) ->
-          '$call_with_default_policy'(call_or_cut(G2, B, (->)/2))
+comma_dispatch_prep(Gs, B, [Cont|Conts]) :-
+    (  callable(Gs) ->
+       (  functor(Gs, ',', 2) ->
+          arg(1, Gs, G1),
+          arg(2, Gs, G2),
+          (  G1 == ! ->
+             Cont = builtins:set_cp(B)
+          ;  callable(G1) ->
+             Cont = G1
+          ;  Cont = throw(error(type_error(callable, G1), call/1))
+          ),
+          comma_dispatch_prep(G2, B, Conts)
+       ;  Cont = Gs,
+          Conts = []
        )
-    ;  call(G1) ->
-       '$call_with_default_policy'(call_or_cut(G2, B, (->)/2))
+    ;  Gs == ! ->
+       Cont = builtins:set_cp(B),
+       Conts = []
+    ;  Cont = throw(error(type_error(callable, Gs), call/1)),
+       Conts = []
     ).
+
+
+:- non_counted_backtracking comma_dispatch_call_list/1.
+
+comma_dispatch_call_list([]).
+comma_dispatch_call_list([G1,G2,G3,G4,G5,G6,G7,G8|Gs]) :-
+    !,
+    '$call'(G1),
+    '$call'(G2),
+    '$call'(G3),
+    '$call'(G4),
+    '$call'(G5),
+    '$call'(G6),
+    '$call'(G7),
+    '$call'(G8),
+    comma_dispatch_call_list(Gs).
+comma_dispatch_call_list([G1,G2,G3,G4,G5,G6,G7]) :-
+    !,
+    '$call'(G1),
+    '$call'(G2),
+    '$call'(G3),
+    '$call'(G4),
+    '$call'(G5),
+    '$call'(G6),
+    '$call'(G7).
+comma_dispatch_call_list([G1,G2,G3,G4,G5,G6]) :-
+    !,
+    '$call'(G1),
+    '$call'(G2),
+    '$call'(G3),
+    '$call'(G4),
+    '$call'(G5),
+    '$call'(G6).
+comma_dispatch_call_list([G1,G2,G3,G4,G5]) :-
+    !,
+    '$call'(G1),
+    '$call'(G2),
+    '$call'(G3),
+    '$call'(G4),
+    '$call'(G5).
+comma_dispatch_call_list([G1,G2,G3,G4]) :-
+    !,
+    '$call'(G1),
+    '$call'(G2),
+    '$call'(G3),
+    '$call'(G4).
+comma_dispatch_call_list([G1,G2,G3]) :-
+    !,
+    '$call'(G1),
+    '$call'(G2),
+    '$call'(G3).
+comma_dispatch_call_list([G1,G2]) :-
+    !,
+    '$call'(G1),
+    '$call'(G2).
+comma_dispatch_call_list([G1]) :-
+    '$call'(G1).
+
+
+:- non_counted_backtracking comma_dispatch/3.
+
+comma_dispatch(G1, G2, B) :-
+    comma_dispatch_prep((G1, G2), B, Conts),
+    comma_dispatch_call_list(Conts).
+
 
 % univ.
 

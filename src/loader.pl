@@ -629,6 +629,8 @@ expand_module_name(ESG0, M, ESG) :-
        ESG = M:ESG0
     ;  ESG0 = _:_ ->
        ESG = ESG0
+    ;  predicate_property(ESG0, built_in) ->
+       ESG = ESG0
     ;  ESG = M:ESG0
     ).
 
@@ -656,7 +658,8 @@ expand_module_names(Goals, MetaSpecs, Module, ExpandedGoals, HeadVars) :-
     (  GoalFunctor == (:),
        SubGoals = [M, SubGoal] ->
        expand_module_names(SubGoal, MetaSpecs, M, ExpandedSubGoal, HeadVars),
-       ExpandedGoals = M:ExpandedSubGoal
+       expand_module_name(ExpandedSubGoal, M, ExpandedGoals)
+       % ExpandedGoals = M:ExpandedSubGoal
     ;  expand_meta_predicate_subgoals(SubGoals, MetaSpecs, Module, ExpandedGoalList, HeadVars),
        ExpandedGoals =.. [GoalFunctor | ExpandedGoalList]
     ).

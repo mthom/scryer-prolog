@@ -202,9 +202,9 @@ impl MachineState {
                 RefTag::HeapCell => {
                     self.heap[r1.get_value() as usize] = t2;
                 }
-		RefTag::AttrVar => {
-		    self.bind_attr_var(r1.get_value() as usize, t2);
-		}
+                RefTag::AttrVar => {
+                    self.bind_attr_var(r1.get_value() as usize, t2);
+                }
             };
 
             self.trail(TrailRef::Ref(r1));
@@ -1457,7 +1457,7 @@ impl MachineState {
             let order_cat_v2 = v2.order_category();
 
             if order_cat_v1 != order_cat_v2 {
-		        self.pdl.clear();
+                self.pdl.clear();
                 return Some(order_cat_v1.cmp(&order_cat_v2));
             }
 
@@ -1467,7 +1467,7 @@ impl MachineState {
                     let v2 = v2.as_var().unwrap();
 
                     if v1 != v2 {
-			            self.pdl.clear();
+                        self.pdl.clear();
                         return Some(v1.cmp(&v2));
                     }
                 }
@@ -1476,7 +1476,7 @@ impl MachineState {
                     let v2 = cell_as_f64_ptr!(v2);
 
                     if v1 != v2 {
-			            self.pdl.clear();
+                        self.pdl.clear();
                         return Some(v1.cmp(&v2));
                     }
                 }
@@ -1485,7 +1485,7 @@ impl MachineState {
                     let v2 = Number::try_from(v2).unwrap();
 
                     if v1 != v2 {
-			            self.pdl.clear();
+                        self.pdl.clear();
                         return Some(v1.cmp(&v2));
                     }
                 }
@@ -1495,18 +1495,18 @@ impl MachineState {
                             read_heap_cell!(v2,
                                 (HeapCellValueTag::Atom, (n2, _a2)) => {
                                     if n1 != n2 {
-					                    self.pdl.clear();
+                                        self.pdl.clear();
                                         return Some(n1.cmp(&n2));
                                     }
                                 }
                                 (HeapCellValueTag::Char, c2) => {
                                     if let Some(c1) = n1.as_char() {
                                         if c1 != c2 {
-					                        self.pdl.clear();
+                                            self.pdl.clear();
                                             return Some(c1.cmp(&c2));
                                         }
                                     } else {
-					                    self.pdl.clear();
+                                        self.pdl.clear();
                                         return Some(Ordering::Greater);
                                     }
                                 }
@@ -1520,17 +1520,17 @@ impl MachineState {
                                 (HeapCellValueTag::Atom, (n2, _a2)) => {
                                     if let Some(c2) = n2.as_char() {
                                         if c1 != c2 {
-					                        self.pdl.clear();
+                                            self.pdl.clear();
                                             return Some(c1.cmp(&c2));
                                         }
                                     } else {
-					                    self.pdl.clear();
+                                        self.pdl.clear();
                                         return Some(Ordering::Less);
                                     }
                                 }
                                 (HeapCellValueTag::Char, c2) => {
                                     if c1 != c2 {
-					                    self.pdl.clear();
+                                        self.pdl.clear();
                                         return Some(c1.cmp(&c2));
                                     }
                                 }
@@ -1634,7 +1634,7 @@ impl MachineState {
                                             self.heap.pop();
                                             self.heap.pop();
 
-					                        self.pdl.clear();
+                                            self.pdl.clear();
 
                                             return Some(ordering);
                                         }
@@ -1675,7 +1675,7 @@ impl MachineState {
                                             self.pdl.push(self.heap[l1]);
                                         }
                                         ordering => {
-					                        self.pdl.clear();
+                                            self.pdl.clear();
                                             return Some(ordering);
                                         }
                                     }
@@ -1698,7 +1698,7 @@ impl MachineState {
                                     self.heap.pop();
                                     self.heap.pop();
 
-				                    self.pdl.clear();
+                                    self.pdl.clear();
 
                                     return Some(ordering);
                                 }
@@ -1730,7 +1730,7 @@ impl MachineState {
                                             }
                                         }
                                         ordering => {
-					                        self.pdl.clear();
+                                            self.pdl.clear();
                                             return Some(ordering);
                                         }
                                     }
@@ -1754,7 +1754,7 @@ impl MachineState {
                                             self.pdl.push(self.heap[s1+2]);
                                         }
                                         ordering => {
-					                        self.pdl.clear();
+                                            self.pdl.clear();
                                             return Some(ordering);
                                         }
                                     }
@@ -1772,7 +1772,7 @@ impl MachineState {
                                             self.heap.pop();
                                             self.heap.pop();
 
-					                        self.pdl.clear();
+                                            self.pdl.clear();
 
                                             return Some(ordering);
                                         }
@@ -1793,7 +1793,7 @@ impl MachineState {
                 }
                 None => {
                     if v1 != v2 {
-			            self.pdl.clear();
+                        self.pdl.clear();
                         return None;
                     }
                 }
@@ -1873,8 +1873,8 @@ impl MachineState {
                         None => unreachable!(),
                     }
                 }
-		TrailEntryTag::TrailedAttachedValue => {
-		}
+        TrailEntryTag::TrailedAttachedValue => {
+        }
             }
         }
     }
@@ -3307,11 +3307,11 @@ impl MachineState {
             self.heap.push(atom_as_cell!(name, arity));
 
             for i in 0..arity {
-		self.heap.push(heap_loc_as_cell!(h + i + 1));
-	    }
+        self.heap.push(heap_loc_as_cell!(h + i + 1));
+        }
 
             str_loc_as_cell!(h)
-	};
+    };
 
         (self.bind_fn)(self, r, f_a);
     }
@@ -3441,10 +3441,10 @@ impl MachineState {
                     Err(self.error_form(err, stub_gen()))
                 }
             }
-	    (HeapCellValueTag::CStr, cstr_atom) => {
-		let cstr = cstr_atom.as_str();
-		Ok(cstr.chars().map(|c| char_as_cell!(c)).collect())		
-	    }
+            (HeapCellValueTag::CStr, cstr_atom) => {
+                let cstr = cstr_atom.as_str();
+                Ok(cstr.chars().map(|c| char_as_cell!(c)).collect())
+            }
             _ => {
                 let err = self.type_error(ValidType::List, store_v);
                 Err(self.error_form(err, stub_gen()))
