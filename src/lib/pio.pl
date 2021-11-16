@@ -109,6 +109,9 @@ phrase_to_stream(GRBody, Stream) :-
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 phrase_to_file(GRBody, File) :-
-        setup_call_cleanup(open(File, write, Stream),
+        phrase_to_file(GRBody, File).
+
+phrase_to_file(GRBody, File, Options) :-
+        setup_call_cleanup(open(File, write, Stream, Options),
                            phrase_to_stream(GRBody, Stream),
                            close(Stream)).
