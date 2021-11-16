@@ -128,14 +128,11 @@ format_elements([E|Es]) -->
         format_element(E),
         format_elements(Es).
 
-format_element(chars(Cs)) --> list(Cs).
+format_element(chars(Cs)) --> seq(Cs).
 format_element(glue(Fill,Num)) -->
         { length(Ls, Num),
           maplist(=(Fill), Ls) },
-        list(Ls).
-
-list([]) --> [].
-list([L|Ls]) --> [L], list(Ls).
+        seq(Ls).
 
 elements_gluevars([], N, N) --> [].
 elements_gluevars([E|Es], N0, N) -->
@@ -192,11 +189,11 @@ cells([~|Fs0], Args0, Tab, Es, VNs) -->
                   Delta is Num - L,
                   length(Zs, Delta),
                   maplist(=('0'), Zs),
-                  phrase(("0.",list(Zs),list(Cs0)), Cs)
+                  phrase(("0.",seq(Zs),seq(Cs0)), Cs)
               ;   BeforeComma is L - Num,
                   length(Bs, BeforeComma),
                   append(Bs, Ds, Cs0),
-                  phrase((list(Bs),".",list(Ds)), Cs)
+                  phrase((seq(Bs),".",seq(Ds)), Cs)
               ) }
         ),
         cells(Fs, Args, Tab, [chars(Cs)|Es], VNs).
@@ -204,7 +201,7 @@ cells([~|Fs0], Args0, Tab, Es, VNs) -->
         { numeric_argument(Fs0, Num, ['D'|Fs], Args0, [Arg|Args]) },
         !,
         { number_chars(Num, NCs),
-          phrase(("~",list(NCs),"d"), FStr),
+          phrase(("~",seq(NCs),"d"), FStr),
           phrase(format_(FStr, [Arg]), Cs0),
           phrase(upto_what(Bs0, .), Cs0, Ds),
           reverse(Bs0, Bs1),
@@ -320,7 +317,7 @@ upto_what([C|Cs], W) --> [C], !, upto_what(Cs, W).
 upto_what([], _) --> [].
 
 groups_of_three([A,B,C,D|Rs]) --> !, [A,B,C], ",", groups_of_three([D|Rs]).
-groups_of_three(Ls) --> list(Ls).
+groups_of_three(Ls) --> seq(Ls).
 
 cell(From, To, Es0) -->
         (   { Es0 == [] } -> []
@@ -488,7 +485,7 @@ var_name(V, Name=V, Num0, Num) :-
 
 literal(Lit, VNs) -->
         { write_term_to_chars(Lit, [quoted(true),variable_names(VNs)], Ls) },
-        list(Ls).
+        seq(Ls).
 
 portray_(Var, VNs) --> { var(Var) }, !, literal(Var, VNs).
 portray_((Head :- Body), VNs) --> !,
