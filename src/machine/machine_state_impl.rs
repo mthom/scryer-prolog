@@ -882,6 +882,8 @@ impl MachineState {
 
         if !value.is_constant() {
             for addr in stackful_preorder_iter(&mut self.heap, value) {
+                let addr = unmark_cell_bits!(addr);
+
                 if let Some(inner_r) = addr.as_var() {
                     if r == inner_r {
                         occurs_triggered = true;
