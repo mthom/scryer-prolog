@@ -114,16 +114,23 @@ impl BrentAlgState {
     }
 
     #[inline(always)]
+    pub fn teleport_tortoise(&mut self) {
+        if self.lam == self.power {
+            self.tortoise = self.hare;
+            self.power <<= 1;
+            self.lam = 0;
+        }
+    }
+
+    #[inline(always)]
     pub fn step(&mut self, hare: usize) -> Option<CycleSearchResult> {
         self.hare = hare;
         self.lam += 1;
 
         if self.tortoise == self.hare {
             return Some(CycleSearchResult::NotList);
-        } else if self.lam == self.power {
-            self.tortoise = self.hare;
-            self.power <<= 1;
-            self.lam = 0;
+        } else {
+            self.teleport_tortoise();
         }
 
         None

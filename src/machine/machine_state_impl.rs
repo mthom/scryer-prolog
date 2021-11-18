@@ -343,6 +343,13 @@ impl MachineState {
             (HeapCellValueTag::CStr, cstr_atom) => {
                 self.fail = atom != cstr_atom;
             }
+            (HeapCellValueTag::Str | HeapCellValueTag::Lis | HeapCellValueTag::PStrLoc) => {
+                self.unify_partial_string(atom_as_cstr_cell!(atom), value);
+
+                if !self.pdl.is_empty() {
+                    self.unify();
+                }
+            }
             _ => {
                 self.fail = true;
             }
@@ -367,12 +374,20 @@ impl MachineState {
         match compare_pstr_prefixes(&mut pstr_iter1, &mut pstr_iter2) {
             PStrCmpResult::Ordered(Ordering::Equal) => {}
             PStrCmpResult::Ordered(Ordering::Less) => {
-                self.pdl.push(empty_list_as_cell!());
-                self.pdl.push(pstr_iter2.focus);
+                if pstr_iter2.focus.as_var().is_none() {
+                    self.fail = true;
+                } else {
+                    self.pdl.push(empty_list_as_cell!());
+                    self.pdl.push(pstr_iter2.focus);
+                }
             }
             PStrCmpResult::Ordered(Ordering::Greater) => {
-                self.pdl.push(empty_list_as_cell!());
-                self.pdl.push(pstr_iter1.focus);
+                if pstr_iter1.focus.as_var().is_none() {
+                    self.fail = true;
+                } else {
+                    self.pdl.push(empty_list_as_cell!());
+                    self.pdl.push(pstr_iter1.focus);
+                }
             }
             continuable @ PStrCmpResult::FirstIterContinuable(iteratee) |
             continuable @ PStrCmpResult::SecondIterContinuable(iteratee) => {
@@ -1014,12 +1029,20 @@ impl MachineState {
         match compare_pstr_prefixes(&mut pstr_iter1, &mut pstr_iter2) {
             PStrCmpResult::Ordered(Ordering::Equal) => {}
             PStrCmpResult::Ordered(Ordering::Less) => {
-                self.pdl.push(empty_list_as_cell!());
-                self.pdl.push(pstr_iter2.focus);
+                if pstr_iter2.focus.as_var().is_none() {
+                    self.fail = true;
+                } else {
+                    self.pdl.push(empty_list_as_cell!());
+                    self.pdl.push(pstr_iter2.focus);
+                }
             }
             PStrCmpResult::Ordered(Ordering::Greater) => {
-                self.pdl.push(empty_list_as_cell!());
-                self.pdl.push(pstr_iter1.focus);
+                if pstr_iter1.focus.as_var().is_none() {
+                    self.fail = true;
+                } else {
+                    self.pdl.push(empty_list_as_cell!());
+                    self.pdl.push(pstr_iter1.focus);
+                }
             }
             continuable @ PStrCmpResult::FirstIterContinuable(iteratee) |
             continuable @ PStrCmpResult::SecondIterContinuable(iteratee) => {

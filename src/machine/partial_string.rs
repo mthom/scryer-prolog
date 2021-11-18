@@ -539,18 +539,33 @@ pub fn compare_pstr_prefixes<'a>(
     i2: &mut HeapPStrIter<'a>,
 ) -> PStrCmpResult {
     #[inline(always)]
-    fn consolidate_step(iter: &mut HeapPStrIter, step: &PStrIterStep) -> bool {
-        iter.focus = iter.heap[step.next_hare];
+    fn step(iter: &mut HeapPStrIter, hare: usize) -> Option<PStrIterStep> {
+        let result = iter.step(hare);
+
+        iter.focus = iter.heap[hare];
 
         if iter.focus.is_string_terminator(iter.heap) {
             iter.focus = empty_list_as_cell!();
         }
 
-        !iter.brent_st.step(step.next_hare).is_some()
+        result
     }
 
-    let mut r1 = i1.step(i1.brent_st.hare);
-    let mut r2 = i2.step(i2.brent_st.hare);
+    #[inline(always)]
+    fn cycle_detection_step(i1: &mut HeapPStrIter, i2: &HeapPStrIter, step: &PStrIterStep) -> bool {
+        if i1.cycle_detected() {
+            i1.brent_st.hare = step.next_hare;
+            i2.cycle_detected()
+        } else if i1.brent_st.step(step.next_hare).is_some() {
+            i1.stepper = HeapPStrIter::post_cycle_discovery_stepper;
+            i2.cycle_detected()
+        } else {
+            false
+        }
+    }
+
+    let mut r1 = step(i1, i1.brent_st.hare);
+    let mut r2 = step(i2, i2.brent_st.hare);
 
     loop {
         if let Some(step_1) = r1.as_mut() {
@@ -561,21 +576,14 @@ pub fn compare_pstr_prefixes<'a>(
                             return PStrCmpResult::Ordered(c1.cmp(&c2));
                         }
 
-                        let c1_result = consolidate_step(i1, &step_1);
-                        let c2_result = consolidate_step(i2, &step_2);
+                        cycle_detection_step(i1, i2, &step_1);
+                        let both_cyclic = cycle_detection_step(i2, i1, &step_2);
 
-                        if c1_result {
-                            r1 = i1.step(i1.brent_st.hare);
-                        }
+                        r1 = step(i1, i1.brent_st.hare);
+                        r2 = step(i2, i2.brent_st.hare);
 
-                        if c2_result {
-                            r2 = i2.step(i2.brent_st.hare);
-                        }
-
-                        if c1_result && c2_result {
+                        if !both_cyclic {
                             continue;
-                        } else {
-                            break;
                         }
                     }
                     (PStrIteratee::Char(_, c1), PStrIteratee::PStrSegment(f2, pstr_atom, n)) => {
@@ -591,36 +599,29 @@ pub fn compare_pstr_prefixes<'a>(
                             if n1 < pstr_atom.len() {
                                 step_2.iteratee = PStrIteratee::PStrSegment(f2, pstr_atom, n1);
 
-                                if consolidate_step(i1, &step_1) {
-                                    r1 = i1.step(step_1.next_hare);
+                                let c1_result = cycle_detection_step(i1, i2, &step_1);
+                                r1 = step(i1, i1.brent_st.hare);
+
+                                if !c1_result {
                                     continue;
-                                } else {
-                                    break;
                                 }
                             } else {
-                                let c1_result = consolidate_step(i1, &step_1);
-                                let c2_result = consolidate_step(i2, &step_2);
+                                cycle_detection_step(i1, i2, &step_1);
+                                let both_cyclic = cycle_detection_step(i2, i1, &step_2);
 
-                                if c1_result {
-                                    r1 = i1.step(i1.brent_st.hare);
-                                }
+                                r1 = step(i1, i1.brent_st.hare);
+                                r2 = step(i2, i2.brent_st.hare);
 
-                                if c2_result {
-                                    r2 = i2.step(i2.brent_st.hare);
-                                }
-
-                                if c1_result && c2_result {
+                                if !both_cyclic {
                                     continue;
-                                } else {
-                                    break;
                                 }
                             }
                         } else {
-                            if consolidate_step(i2, &step_2) {
-                                r2 = i2.step(step_2.next_hare);
+                            let c2_result = cycle_detection_step(i2, i1, &step_2);
+                            r2 = step(i2, i2.brent_st.hare);
+
+                            if !c2_result {
                                 continue;
-                            } else {
-                                break;
                             }
                         }
                     }
@@ -637,54 +638,42 @@ pub fn compare_pstr_prefixes<'a>(
                             if n1 < pstr_atom.len() {
                                 step_1.iteratee = PStrIteratee::PStrSegment(f1, pstr_atom, n1);
 
-                                if consolidate_step(i2, &step_2) {
-                                    r2 = i2.step(step_2.next_hare);
+                                let c2_result = cycle_detection_step(i2, i1, &step_2);
+                                r2 = step(i2, step_2.next_hare);
+
+                                if !c2_result {
                                     continue;
-                                } else {
-                                    break;
                                 }
                             } else {
-                                let c1_result = consolidate_step(i1, &step_1);
-                                let c2_result = consolidate_step(i2, &step_2);
+                                cycle_detection_step(i1, i2, &step_1);
+                                let both_cyclic = cycle_detection_step(i2, i1, &step_2);
 
-                                if c1_result {
-                                    r1 = i1.step(i1.brent_st.hare);
-                                }
+                                r1 = step(i1, i1.brent_st.hare);
+                                r2 = step(i2, i2.brent_st.hare);
 
-                                if c2_result {
-                                    r2 = i2.step(i2.brent_st.hare);
-                                }
-
-                                if c1_result && c2_result {
+                                if !both_cyclic {
                                     continue;
-                                } else {
-                                    break;
                                 }
                             }
                         } else {
-                            if consolidate_step(i1, &step_1) {
-                                r1 = i1.step(step_1.next_hare);
+                            let c1_result = cycle_detection_step(i1, i2, &step_1);
+                            r1 = step(i1, i1.brent_st.hare);
+
+                            if !c1_result {
                                 continue;
-                            } else {
-                                break;
                             }
                         }
                     }
                     (PStrIteratee::PStrSegment(f1, pstr1_atom, n1),
                      PStrIteratee::PStrSegment(f2, pstr2_atom, n2)) => {
                         if pstr1_atom == pstr2_atom && n1 == n2 {
-                            let c_result1 = consolidate_step(i1, &step_1);
-                            let c_result2 = consolidate_step(i2, &step_2);
+                            cycle_detection_step(i1, i2, &step_1);
+                            let both_cyclic = cycle_detection_step(i2, i1, &step_2);
 
-                            if c_result1 {
-                                r1 = i1.step(step_1.next_hare);
-                            }
+                            r1 = step(i1, i1.brent_st.hare);
+                            r2 = step(i2, i2.brent_st.hare);
 
-                            if c_result2 {
-                                r2 = i2.step(step_2.next_hare);
-                            }
-
-                            if c_result1 && c_result2 {
+                            if !both_cyclic {
                                 continue;
                             }
 
@@ -699,41 +688,32 @@ pub fn compare_pstr_prefixes<'a>(
 
                         match str1.len().cmp(&str2.len()) {
                             Ordering::Equal if str1 == str2 => {
-                                let c_result1 = consolidate_step(i1, &step_1);
-                                let c_result2 = consolidate_step(i2, &step_2);
+                                cycle_detection_step(i1, i2, &step_1);
+                                let both_cyclic = cycle_detection_step(i2, i1, &step_2);
 
-                                if c_result1 {
-                                    r1 = i1.step(step_1.next_hare);
-                                }
+                                r1 = step(i1, i1.brent_st.hare);
+                                r2 = step(i2, i2.brent_st.hare);
 
-                                if c_result2 {
-                                    r2 = i2.step(step_2.next_hare);
-                                }
-
-                                if c_result1 && c_result2 {
+                                if !both_cyclic {
                                     continue;
                                 }
-
-                                break;
                             }
                             Ordering::Less if str2.starts_with(str1) => {
                                 step_2.iteratee = PStrIteratee::PStrSegment(f2, pstr2_atom, n2 + str1.len());
+                                let c1_result = cycle_detection_step(i1, i2, &step_1);
+                                r1 = step(i1, i1.brent_st.hare);
 
-                                if consolidate_step(i1, &step_1) {
-                                    r1 = i1.step(step_1.next_hare);
+                                if !c1_result {
                                     continue;
-                                } else {
-                                    break;
                                 }
                             }
                             Ordering::Greater if str1.starts_with(str2) => {
                                 step_1.iteratee = PStrIteratee::PStrSegment(f1, pstr1_atom, n1 + str2.len());
+                                let c2_result = cycle_detection_step(i2, i1, &step_2);
+                                r2 = step(i2, i2.brent_st.hare);
 
-                                if consolidate_step(i2, &step_2) {
-                                    r2 = i2.step(step_2.next_hare);
+                                if !c2_result {
                                     continue;
-                                } else {
-                                    break;
                                 }
                             }
                             _ => {
@@ -757,22 +737,33 @@ pub fn compare_pstr_prefixes<'a>(
     // and thus matched by the compare_pstr_prefixes loop previously,
     // so here it suffices to check if they are both continuable.
 
-    if i1.focus == i2.focus {
-        PStrCmpResult::Ordered(Ordering::Equal)
-    } else if i1.focus == empty_list_as_cell!() {
-        PStrCmpResult::Ordered(Ordering::Less)
-    } else if i2.focus == empty_list_as_cell!() {
-        PStrCmpResult::Ordered(Ordering::Greater)
-    } else if i1.is_continuable() {
-        if i2.is_continuable() {
-            return PStrCmpResult::Ordered(Ordering::Equal);
-        }
+    let r1_at_end = r1.is_none();
+    let r2_at_end = r2.is_none();
 
-        PStrCmpResult::FirstIterContinuable(r1.unwrap().iteratee)
-    } else if i2.is_continuable() {
-        PStrCmpResult::SecondIterContinuable(r2.unwrap().iteratee)
+    if r1_at_end && r2_at_end {
+        if i1.focus == i2.focus {
+            PStrCmpResult::Ordered(Ordering::Equal)
+        } else {
+            PStrCmpResult::Unordered
+        }
+    } else if r1_at_end {
+        if i1.focus == empty_list_as_cell!() {
+            PStrCmpResult::Ordered(Ordering::Less)
+        } else {
+            PStrCmpResult::SecondIterContinuable(r2.unwrap().iteratee)
+        }
+    } else if r2_at_end {
+        if i2.focus == empty_list_as_cell!() {
+            PStrCmpResult::Ordered(Ordering::Greater)
+        } else {
+            PStrCmpResult::FirstIterContinuable(r1.unwrap().iteratee)
+        }
     } else {
-        PStrCmpResult::Unordered
+        if i1.is_continuable() && i2.is_continuable() {
+            PStrCmpResult::Ordered(Ordering::Equal)
+        } else {
+            PStrCmpResult::Unordered
+        }
     }
 }
 
