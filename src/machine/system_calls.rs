@@ -2213,6 +2213,8 @@ impl MachineState {
                             if self.fail {
                                 return Ok(());
                             }
+
+                            break;
                         }
                         _ => {
                             self.eof_action(
