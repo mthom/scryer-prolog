@@ -1,15 +1,24 @@
 :- module(dcgs,
           [op(1105, xfy, '|'),
-		   phrase/2,
-		   phrase/3,
-                   seq//1,
-                   seqq//1,
-                   ... //0
-           ]).
+           phrase/2,
+           phrase/3,
+           seq//1,
+           seqq//1,
+           ... //0
+          ]).
 
 :- use_module(library(error)).
-:- use_module(library(lists), [append/3]).
+:- use_module(library(lists), [append/3, member/2]).
 :- use_module(library(loader), [strip_module/3]).
+
+load_context(GRBody, Module, GRBody0) :-
+    strip_module(GRBody, Module, GRBody0),
+    (  nonvar(Module) ->
+       true
+    ;  prolog_load_context(module, Module) ->
+       true
+    ;  true
+    ).
 
 :- meta_predicate phrase(2, ?).
 
@@ -18,77 +27,78 @@
 phrase(GRBody, S0) :-
     phrase(GRBody, S0, []).
 
-
 phrase(GRBody, S0, S) :-
     (  var(GRBody) ->
        throw(error(instantiation_error, phrase/3))
-    ;  strip_module(GRBody, Module, GRBody0),
+    ;  load_context(GRBody, Module, GRBody0),
        dcg_constr(GRBody0) ->
        (  var(Module) ->
           phrase_(GRBody0, S0, S)
-       ;  phrase_(Module:GRBody0, S0, S)
+       ;  phrase_(GRBody0, S0, S, Module)
        )
     ;  functor(GRBody, _, _) ->
        call(GRBody, S0, S)
     ;  throw(error(type_error(callable, GRBody), phrase/3))
     ).
 
-phrase_([], S, S).
-phrase_(!, S, S).
-phrase_(_:[], S, S) :- !.
-phrase_(_:!, S, S) :- !.
-phrase_((A, B), S0, S) :-
-    phrase(A, S0, S1), phrase(B, S1, S).
-phrase_(M:(A, B), S0, S) :-
-    !,
-    phrase(M:A, S0, S1), phrase(M:B, S1, S).
-phrase_((A -> B ; C), S0, S) :-
-    !,
-    (  phrase(A, S0, S1) ->
-       phrase(B, S1, S)
-    ;  phrase(C, S0, S)
-    ).
-phrase_(M:(A -> B ; C), S0, S) :-
-    !,
+phrase_([], S, S, _).
+phrase_(!, S, S, _).
+phrase_((A, B), S0, S, M) :-
+    phrase(M:A, S0, S1),
+    phrase(M:B, S1, S).
+phrase_((A -> B ; C), S0, S, M) :-
     (  phrase(M:A, S0, S1) ->
        phrase(M:B, S1, S)
     ;  phrase(M:C, S0, S)
     ).
-phrase_((A ; B), S0, S) :-
-    (  phrase(A, S0, S) ; phrase(B, S0, S)  ).
-phrase_(M:(A ; B), S0, S) :-
-    !,
-    (  phrase(M:A, S0, S) ; phrase(M:B, S0, S)  ).
-phrase_((A | B), S0, S) :-
-    (  phrase(A, S0, S) ; phrase(B, S0, S)  ).
-phrase_(M:(A | B), S0, S) :-
-    !,
-    (  phrase(M:A, S0, S) ; phrase(M:B, S0, S)  ).
-phrase_({G}, S0, S) :-
-    (  call(G), S0 = S  ).
-phrase_(M:{G}, S0, S) :-
-    !,
-    (  call(M:G), S0 = S  ).
-phrase_(call(G), S0, S) :-
-    call(G, S0, S).
-phrase_(M:call(G), S0, S) :-
-    !,
+phrase_((A ; B), S0, S, M) :-
+    (  phrase(M:A, S0, S)
+    ;  phrase(M:B, S0, S)
+    ).
+phrase_((A | B), S0, S, M) :-
+    (  phrase(M:A, S0, S)
+    ;  phrase(M:B, S0, S)
+    ).
+phrase_({G}, S, S, M) :-
+    call(M:G).
+phrase_(call(G), S0, S, M) :-
     call(M:G, S0, S).
-phrase_((A -> B), S0, S) :-
-    phrase((A -> B ; fail), S0, S).
-phrase_(M:(A -> B), S0, S) :-
-    !,
-    phrase((M:A -> M:B ; fail), S0, S).
-phrase_(phrase(NonTerminal), S0, S) :-
-    phrase(NonTerminal, S0, S).
-phrase_(M:phrase(NonTerminal), S0, S) :-
-    !,
-    phrase(M:NonTerminal, S0, S).
-phrase_([T|Ts], S0, S) :-
-    append([T|Ts], S, S0).
-phrase_(_:[T|Ts], S0, S) :-
+phrase_((A -> B), S0, S, M) :-
+    (  phrase(M:A, S0, S1) ->
+       phrase(M:B, S1, S)
+    ;  fail
+    ).
+phrase_(phrase(NonTerminal), S0, S, M) :-
+    phrase(NonTerminal, S0, S, M).
+phrase_([T|Ts], S0, S, _) :-
     append([T|Ts], S, S0).
 
+phrase_([], S, S).
+phrase_(!, S, S).
+phrase_(M:G, S0, S) :-
+    phrase_(G, S0, S, M).
+phrase_((A, B), S0, S) :-
+    phrase(A, S0, S1),
+    phrase(B, S1, S).
+phrase_((A -> B ; C), S0, S) :-
+    (  phrase(A, S0, S1) ->
+       phrase(B, S1, S)
+    ;  phrase(C, S0, S)
+    ).
+phrase_((A ; B), S0, S) :-
+    (  phrase(A, S0, S) ; phrase(B, S0, S)  ).
+phrase_((A | B), S0, S) :-
+    (  phrase(A, S0, S) ; phrase(B, S0, S)  ).
+phrase_({G}, S0, S) :-
+    (  call(G), S0 = S  ).
+phrase_(call(G), S0, S) :-
+    call(G, S0, S).
+phrase_((A -> B), S0, S) :-
+    phrase((A -> B ; fail), S0, S).
+phrase_(phrase(NonTerminal), S0, S) :-
+    phrase(NonTerminal, S0, S).
+phrase_([T|Ts], S0, S) :-
+    append([T|Ts], S, S0).
 
 % The same version of the below two dcg_rule clauses, but with module scoping.
 dcg_rule(( M:NonTerminal, Terminals --> GRBody ), ( M:Head :- Body )) :-
@@ -193,3 +203,25 @@ seqq([Es|Ess]) --> seq(Es), seqq(Ess).
 
 % Describes an arbitrary number of elements
 ... --> [] | [_], ... .
+
+user:goal_expansion(phrase(GRBody, S, S0), phrase(GRBody1, S, S0)) :-
+    strip_module(GRBody, M, GRBody0),
+    var(M),
+    prolog_load_context(module, M),
+    (  nonvar(GRBody0) ->
+       GRBody0 \== [],
+       dcg_constr(GRBody0),
+       predicate_property(GRBody0, meta_predicate(_))
+    ),
+    GRBody1 = M:GRBody0.
+
+user:goal_expansion(phrase(GRBody, S), phrase(GRBody1, S, [])) :-
+    strip_module(GRBody, M, GRBody0),
+    var(M),
+    prolog_load_context(module, M),
+    (  nonvar(GRBody0) ->
+       GRBody0 \== [],
+       dcg_constr(GRBody0),
+       predicate_property(GRBody0, meta_predicate(_))
+    ),
+    GRBody1 = M:GRBody0.

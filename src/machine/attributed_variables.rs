@@ -86,21 +86,21 @@ impl MachineState {
             .iter()
             .filter_map(|h| {
                 read_heap_cell!(self.store(self.deref(heap_loc_as_cell!(*h))), //Addr::HeapCell(*h))) {
-                    (HeapCellValueTag::AttrVar, h) => {
-                        Some(attr_var_as_cell!(h))
-                    }
-                    _ => {
-                        None
-                    }
+                                (HeapCellValueTag::AttrVar, h) => {
+                                    Some(attr_var_as_cell!(h))
+                                }
+                                _ => {
+                                    None
+                                }
                 )
             })
             .collect();
 
         attr_vars.sort_unstable_by(|a1, a2| {
-	    compare_term_test!(self, *a1, *a2).unwrap_or(Ordering::Less)
-	});
+            compare_term_test!(self, *a1, *a2).unwrap_or(Ordering::Less)
+        });
 
-	attr_vars.dedup();
+        attr_vars.dedup();
         attr_vars.into_iter()
     }
 

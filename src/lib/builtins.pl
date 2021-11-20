@@ -61,61 +61,61 @@ call(G, A, B, C, D, E, F, G, H) :- '$call'(G, A, B, C, D, E, F, G, H).
 
 
 Module : Predicate :-
-    ( atom(Module) -> '$module_call'(Module, Predicate)
-    ; throw(error(type_error(atom, Module), (:)/2))
+    (  atom(Module) -> '$module_call'(Module, Predicate)
+    ;  throw(error(type_error(atom, Module), (:)/2))
     ).
 
 
 % dynamic module resolution.
 
 :(Module, Predicate, A1) :-
-    ( atom(Module) -> '$module_call'(A1, Module, Predicate)
-    ; throw(error(type_error(atom, Module), (:)/2))
+    (  atom(Module) -> '$module_call'(A1, Module, Predicate)
+    ;  throw(error(type_error(atom, Module), (:)/2))
     ).
 
 :(Module, Predicate, A1, A2) :-
-    ( atom(Module) -> '$module_call'(A1, A2, Module, Predicate)
-    ; throw(error(type_error(atom, Module), (:)/2))
+    (  atom(Module) -> '$module_call'(A1, A2, Module, Predicate)
+    ;  throw(error(type_error(atom, Module), (:)/2))
     ).
 
 :(Module, Predicate, A1, A2, A3) :-
-    ( atom(Module) -> '$module_call'(A1, A2, A3, Module, Predicate)
-    ; throw(error(type_error(atom, Module), (:)/2))
+    (  atom(Module) -> '$module_call'(A1, A2, A3, Module, Predicate)
+    ;  throw(error(type_error(atom, Module), (:)/2))
     ).
 
 :(Module, Predicate, A1, A2, A3, A4) :-
-    ( atom(Module) -> '$module_call'(A1, A2, A3, A4, Module, Predicate)
-    ; throw(error(type_error(atom, Module), (:)/2))
+    (  atom(Module) -> '$module_call'(A1, A2, A3, A4, Module, Predicate)
+    ;  throw(error(type_error(atom, Module), (:)/2))
     ).
 
 :(Module, Predicate, A1, A2, A3, A4, A5) :-
-    ( atom(Module) -> '$module_call'(A1, A2, A3, A4, A5, Module, Predicate)
-    ; throw(error(type_error(atom, Module), (:)/2))
+    (  atom(Module) -> '$module_call'(A1, A2, A3, A4, A5, Module, Predicate)
+    ;  throw(error(type_error(atom, Module), (:)/2))
     ).
 
 :(Module, Predicate, A1, A2, A3, A4, A5, A6) :-
-    ( atom(Module) -> '$module_call'(A1, A2, A3, A4, A5, A6, Module, Predicate)
-    ; throw(error(type_error(atom, Module), (:)/2))
+    (  atom(Module) -> '$module_call'(A1, A2, A3, A4, A5, A6, Module, Predicate)
+    ;  throw(error(type_error(atom, Module), (:)/2))
     ).
 
 :(Module, Predicate, A1, A2, A3, A4, A5, A6, A7) :-
-    ( atom(Module) -> '$module_call'(A1, A2, A3, A4, A5, A6, A7, Module, Predicate)
-    ; throw(error(type_error(atom, Module), (:)/2))
+    (  atom(Module) -> '$module_call'(A1, A2, A3, A4, A5, A6, A7, Module, Predicate)
+    ;  throw(error(type_error(atom, Module), (:)/2))
     ).
 
 :(Module, Predicate, A1, A2, A3, A4, A5, A6, A7, A8) :-
-    ( atom(Module) -> '$module_call'(A1, A2, A3, A4, A5, A6, A7, A8, Module, Predicate)
-    ; throw(error(type_error(atom, Module), (:)/2))
+    (  atom(Module) -> '$module_call'(A1, A2, A3, A4, A5, A6, A7, A8, Module, Predicate)
+    ;  throw(error(type_error(atom, Module), (:)/2))
     ).
 
 :(Module, Predicate, A1, A2, A3, A4, A5, A6, A7, A8, A9) :-
-    ( atom(Module) -> '$module_call'(A1, A2, A3, A4, A5, A6, A7, A8, A9, Module, Predicate)
-    ; throw(error(type_error(atom, Module), (:)/2))
+    (  atom(Module) -> '$module_call'(A1, A2, A3, A4, A5, A6, A7, A8, A9, Module, Predicate)
+    ;  throw(error(type_error(atom, Module), (:)/2))
     ).
 
 :(Module, Predicate, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10) :-
-    ( atom(Module) -> '$module_call'(A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, Module, Predicate)
-    ; throw(error(type_error(atom, Module), (:)/2))
+    (  atom(Module) -> '$module_call'(A1, A2, A3, A4, A5, A6, A7, A8, A9, A10, Module, Predicate)
+    ;  throw(error(type_error(atom, Module), (:)/2))
     ).
 
 % flags.
