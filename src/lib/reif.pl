@@ -38,7 +38,7 @@ i_tfilter([E|Es], C_2, Fs0) :-
    if_(call(C_2, E), Fs0 = [E|Fs], Fs0 = Fs),
    i_tfilter(Es, C_2, Fs).
 
-:- meta_predicate tpartition(1, ?, ?).
+:- meta_predicate(tpartition(2, ?, ?, ?)).
 
 tpartition(P_2, Xs, Ts, Fs) :-
    i_tpartition(Xs, P_2, Ts, Fs).
