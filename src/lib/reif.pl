@@ -60,7 +60,7 @@ i_tpartition([X|Xs], P_2, Ts0, Fs0) :-
 ';'(A_1, B_1, T) :-
     if_(A_1, T = true, call(B_1, T)).
 
-:- meta_predicate cond_t(0, 0, ?).
+:- meta_predicate(cond_t(1, 0, ?)).
 
 cond_t(If_1, Then_0, T) :-
    if_(If_1, ( Then_0, T = true ), T = false ).
