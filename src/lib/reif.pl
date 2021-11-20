@@ -4,7 +4,7 @@
 
 :- use_module(library(dif)).
 
-:- meta_predicate if_(1, 0, 0).
+:- meta_predicate(if_(1, 0, 0)).
 
 if_(If_1, Then_0, Else_0) :-
     call(If_1, T),
@@ -50,12 +50,12 @@ i_tpartition([X|Xs], P_2, Ts0, Fs0) :-
       , ( Fs0 = [X|Fs], Ts0 = Ts ) ),
    i_tpartition(Xs, P_2, Ts, Fs).
 
-:- meta_predicate ','(0, 0, ?).
+:- meta_predicate(','(1, 1, ?)).
 
 ','(A_1, B_1, T) :-
     if_(A_1, call(B_1, T), T = false).
 
-:- meta_predicate ';'(0, 0, ?).
+:- meta_predicate(';'(1, 1, ?)).
 
 ';'(A_1, B_1, T) :-
     if_(A_1, T = true, call(B_1, T)).
