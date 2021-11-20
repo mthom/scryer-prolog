@@ -28,7 +28,7 @@ dif(X, Y, T) :-
 non(true, false).
 non(false, true).
 
-:- meta_predicate tfilter(2, ?, ?).
+:- meta_predicate(tfilter(2, ?, ?)).
 
 tfilter(C_2, Es, Fs) :-
    i_tfilter(Es, C_2, Fs).
