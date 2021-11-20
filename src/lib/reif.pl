@@ -72,7 +72,7 @@ i_memberd_t([], _, false).
 i_memberd_t([X|Xs], E, T) :-
    if_( X = E, T = true, i_memberd_t(Xs, E, T) ).
 
-:- meta_predicate tmember(1, ?).
+:- meta_predicate(tmember(2, ?)).
 
 tmember(P_2, [X|Xs]) :-
    if_( call(P_2, X), true, tmember(P_2, Xs) ).
