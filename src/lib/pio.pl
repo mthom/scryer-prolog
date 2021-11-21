@@ -12,6 +12,7 @@
 :- module(pio, [phrase_from_file/2,
                 phrase_from_file/3,
                 phrase_to_file/2,
+                phrase_to_file/3,
                 phrase_to_stream/2
                ]).
 
@@ -109,6 +110,9 @@ phrase_to_stream(GRBody, Stream) :-
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 phrase_to_file(GRBody, File) :-
-        setup_call_cleanup(open(File, write, Stream),
+        phrase_to_file(GRBody, File, []).
+
+phrase_to_file(GRBody, File, Options) :-
+        setup_call_cleanup(open(File, write, Stream, Options),
                            phrase_to_stream(GRBody, Stream),
                            close(Stream)).
