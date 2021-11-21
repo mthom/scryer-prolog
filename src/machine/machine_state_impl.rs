@@ -2974,7 +2974,7 @@ impl MachineState {
     // arg(+N, +Term, ?Arg)
     pub fn try_arg(&mut self) -> CallResult {
         let stub_gen = || functor_stub(atom!("arg"), 3);
-        let n = self.registers[1]; //self.store(self.deref(self.registers[1])); // TODO: necessary?
+        let n = self.store(self.deref(self.registers[1]));
 
         read_heap_cell!(n,
             (HeapCellValueTag::Var | HeapCellValueTag::AttrVar | HeapCellValueTag::StackVar) => {

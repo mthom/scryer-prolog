@@ -209,10 +209,6 @@ repeat :- repeat.
 
 :- meta_predicate ->(0,0).
 
-% '!' is for internal use as a callable no-op within if/then/else.
-% Where it shouldn't be a no-op, it's interpreted under the expected
-% semantics by comma_dispatch/3.
-
 ! :- '$get_staggered_cp'(B), '$set_cp'(B).
 
 G1 -> G2 :- '$get_staggered_cp'(B), call('$call'(G1)), '$set_cp'(B), call('$call'(G2)).

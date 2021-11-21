@@ -3795,12 +3795,12 @@ impl MachineState {
                 self.reset_block(addr);
             }
             &SystemClauseType::ResetContinuationMarker => {
-                self.registers[3] = atom_as_cell!(atom!("none"));
-
                 let h = self.heap.len();
-                self.heap.push(heap_loc_as_cell!(h));
 
+                self.registers[3] = atom_as_cell!(atom!("none"));
                 self.registers[4] = heap_loc_as_cell!(h);
+
+                self.heap.push(heap_loc_as_cell!(h));
             }
             &SystemClauseType::SetBall => {
                 self.set_ball();
