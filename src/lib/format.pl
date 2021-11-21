@@ -56,7 +56,12 @@
 
    If at all possible, format_//2 should be used, to stress pure parts
    that enable easy testing etc. If necessary, you can emit the list Ls
-   with maplist(put_char, Ls).
+   with maplist(put_char, Ls) or, much faster, with format("~s", [Ls]).
+   Ideally, however, you use phrase_to_file/[2,3] or phrase_to_stream/2
+   from library(pio) to write the described list directly to a file
+   or stream, respectively: phrase_to_stream(format_(..., [...]), S).
+   The advantage of this is that an ideal implementation writes
+   the characters as they become known, without manifesting the list.
 
    The entire library only works if the Prolog flag double_quotes
    is set to chars, the default value in Scryer Prolog. This should
@@ -123,14 +128,11 @@ format_elements([E|Es]) -->
         format_element(E),
         format_elements(Es).
 
-format_element(chars(Cs)) --> list(Cs).
+format_element(chars(Cs)) --> seq(Cs).
 format_element(glue(Fill,Num)) -->
         { length(Ls, Num),
           maplist(=(Fill), Ls) },
-        list(Ls).
-
-list([]) --> [].
-list([L|Ls]) --> [L], list(Ls).
+        seq(Ls).
 
 elements_gluevars([], N, N) --> [].
 elements_gluevars([E|Es], N0, N) -->
@@ -187,11 +189,11 @@ cells([~|Fs0], Args0, Tab, Es, VNs) -->
                   Delta is Num - L,
                   length(Zs, Delta),
                   maplist(=('0'), Zs),
-                  phrase(("0.",list(Zs),list(Cs0)), Cs)
+                  phrase(("0.",seq(Zs),seq(Cs0)), Cs)
               ;   BeforeComma is L - Num,
                   length(Bs, BeforeComma),
                   append(Bs, Ds, Cs0),
-                  phrase((list(Bs),".",list(Ds)), Cs)
+                  phrase((seq(Bs),".",seq(Ds)), Cs)
               ) }
         ),
         cells(Fs, Args, Tab, [chars(Cs)|Es], VNs).
@@ -199,7 +201,7 @@ cells([~|Fs0], Args0, Tab, Es, VNs) -->
         { numeric_argument(Fs0, Num, ['D'|Fs], Args0, [Arg|Args]) },
         !,
         { number_chars(Num, NCs),
-          phrase(("~",list(NCs),"d"), FStr),
+          phrase(("~",seq(NCs),"d"), FStr),
           phrase(format_(FStr, [Arg]), Cs0),
           phrase(upto_what(Bs0, .), Cs0, Ds),
           reverse(Bs0, Bs1),
@@ -315,7 +317,7 @@ upto_what([C|Cs], W) --> [C], !, upto_what(Cs, W).
 upto_what([], _) --> [].
 
 groups_of_three([A,B,C,D|Rs]) --> !, [A,B,C], ",", groups_of_three([D|Rs]).
-groups_of_three(Ls) --> list(Ls).
+groups_of_three(Ls) --> seq(Ls).
 
 cell(From, To, Es0) -->
         (   { Es0 == [] } -> []
@@ -323,30 +325,28 @@ cell(From, To, Es0) -->
             [cell(From,To,Es)]
         ).
 
-%?- numeric_argument("2f", Num, ['f'|Fs], Args0, Args).
+%?- format:numeric_argument("2f", Num, [f|Fs], Args0, Args).
 
-%?- numeric_argument("100b", Num, Rs, Args0, Args).
+%?- format:numeric_argument("100b", Num, Rs, Args0, Args).
 
 numeric_argument(Ds, Num, Rest, Args0, Args) :-
         (   Ds = [*|Rest] ->
             Args0 = [Num|Args]
-        ;   numeric_argument_(Ds, [], Ns, Rest),
-            foldl(pow10, Ns, 0-0, Num-_),
+        ;   phrase(numeric_argument_(Ds, Rest), Ns),
+            foldl(plus_times10, Ns, 0, Num),
             Args0 = Args
         ).
 
-numeric_argument_([D|Ds], Ns0, Ns, Rest) :-
-        (   member(D, "0123456789") ->
-            number_chars(N, [D]),
-            numeric_argument_(Ds, [N|Ns0], Ns, Rest)
-        ;   Ns = Ns0,
-            Rest = [D|Ds]
+numeric_argument_([D|Ds], Rest) -->
+        (   { member(D, "0123456789") } ->
+            { number_chars(N, [D]) },
+            [N],
+            numeric_argument_(Ds, Rest)
+        ;   { Rest = [D|Ds] }
         ).
 
 
-pow10(D, N0-Pow0, N-Pow) :-
-        N is N0 + D*10^Pow0,
-        Pow is Pow0 + 1.
+plus_times10(D, N0, N) :- N is D + N0*10.
 
 radix_error(lowercase, R) --> format_("~~~dr", [R]).
 radix_error(uppercase, R) --> format_("~~~dR", [R]).
@@ -373,8 +373,7 @@ integer_to_radix_(0, _, _) --> !.
 integer_to_radix_(I0, R, Ds) -->
         { M is I0 mod R,
           nth0(M, Ds, D),
-          I is I0 // R
-          },
+          I is I0 // R },
         [D],
         integer_to_radix_(I, R, Ds).
 
@@ -485,7 +484,7 @@ var_name(V, Name=V, Num0, Num) :-
 
 literal(Lit, VNs) -->
         { write_term_to_chars(Lit, [quoted(true),variable_names(VNs)], Ls) },
-        list(Ls).
+        seq(Ls).
 
 portray_(Var, VNs) --> { var(Var) }, !, literal(Var, VNs).
 portray_((Head :- Body), VNs) --> !,
