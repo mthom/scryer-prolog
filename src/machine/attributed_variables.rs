@@ -82,19 +82,23 @@ impl MachineState {
     }
 
     pub(super) fn gather_attr_vars_created_since(&mut self, b: usize) -> IntoIter<HeapCellValue> {
-        let mut attr_vars: Vec<_> = self.attr_var_init.attr_var_queue[b..]
-            .iter()
-            .filter_map(|h| {
-                read_heap_cell!(self.store(self.deref(heap_loc_as_cell!(*h))), //Addr::HeapCell(*h))) {
-                                (HeapCellValueTag::AttrVar, h) => {
-                                    Some(attr_var_as_cell!(h))
-                                }
-                                _ => {
-                                    None
-                                }
-                )
-            })
-            .collect();
+        let mut attr_vars: Vec<_> = if b >= self.attr_var_init.attr_var_queue.len() {
+            vec![]
+        } else {
+            self.attr_var_init.attr_var_queue[b..]
+                .iter()
+                .filter_map(|h| {
+                    read_heap_cell!(self.store(self.deref(heap_loc_as_cell!(*h))),
+                        (HeapCellValueTag::AttrVar, h) => {
+                            Some(attr_var_as_cell!(h))
+                        }
+                        _ => {
+                            None
+                        }
+                    )
+                })
+                .collect()
+        };
 
         attr_vars.sort_unstable_by(|a1, a2| {
             compare_term_test!(self, *a1, *a2).unwrap_or(Ordering::Less)
