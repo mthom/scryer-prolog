@@ -220,6 +220,12 @@ _ ; G :- call('$call'(G)).
 
 set_cp(B) :- '$set_cp'(B).
 
+:- non_counted_backtracking comma_dispatch/3.
+
+comma_dispatch(G1, G2, B) :-
+    comma_dispatch_prep((G1, G2), B, Conts),
+    comma_dispatch_call_list(Conts).
+
 :- non_counted_backtracking comma_dispatch_prep/3.
 
 comma_dispatch_prep(Gs, B, [Cont|Conts]) :-
@@ -227,20 +233,18 @@ comma_dispatch_prep(Gs, B, [Cont|Conts]) :-
        (  functor(Gs, ',', 2) ->
           arg(1, Gs, G1),
           arg(2, Gs, G2),
-          (  G1 == ! ->
+          (  nonvar(G1), ( G1 = ! ; G1 = _:! ) ->
              Cont = builtins:set_cp(B)
-          ;  callable(G1) ->
-             Cont = G1
-          ;  Cont = throw(error(type_error(callable, G1), call/1))
+          ;  Cont = G1
           ),
           comma_dispatch_prep(G2, B, Conts)
+       ;  ( Gs = ! ; Gs = _:! ) ->
+          Cont = builtins:set_cp(B),
+          Conts = []
        ;  Cont = Gs,
           Conts = []
        )
-    ;  Gs == ! ->
-       Cont = builtins:set_cp(B),
-       Conts = []
-    ;  Cont = throw(error(type_error(callable, Gs), call/1)),
+    ;  Cont = Gs,
        Conts = []
     ).
 
@@ -300,13 +304,6 @@ comma_dispatch_call_list([G1,G2]) :-
     '$call'(G2).
 comma_dispatch_call_list([G1]) :-
     '$call'(G1).
-
-
-:- non_counted_backtracking comma_dispatch/3.
-
-comma_dispatch(G1, G2, B) :-
-    comma_dispatch_prep((G1, G2), B, Conts),
-    comma_dispatch_call_list(Conts).
 
 
 % univ.

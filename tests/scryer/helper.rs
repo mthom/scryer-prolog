@@ -45,7 +45,7 @@ pub(crate) fn load_module_test<T: Expectable>(file: &str, expected: T) {
     //         &mut wam.machine_st.arena,
     //     ),
     // );
-    // 
+    //
     // let output = output.bytes().unwrap();
     // expected.assert_eq(output.as_slice());
 }
