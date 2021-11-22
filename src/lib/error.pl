@@ -1,15 +1,14 @@
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   Written September 2018 by Markus Triska (triska@metalevel.at)
+   I place this code in the public domain. Use it in any way you want.
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
 :- module(error, [must_be/2,
                   can_be/2,
                   instantiation_error/1,
                   domain_error/3,
                   type_error/3
                   ]).
-
-/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   Written September 2018 by Markus Triska (triska@metalevel.at)
-   I place this code in the public domain. Use it in any way you want.
-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
-
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    must_be(Type, Term)
@@ -25,10 +24,12 @@
 
    Currently, the following types are supported:
 
-       - integer
        - atom
-       - list
        - boolean
+       - character
+       - chars
+       - integer
+       - list
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 must_be(Type, Term) :-
@@ -45,9 +46,26 @@ must_be_(var, Term) :-
 must_be_(integer, Term) :- check_(integer, integer, Term).
 must_be_(atom, Term)    :- check_(atom, atom, Term).
 must_be_(character, T)  :- check_(error:character, character, T).
+must_be_(chars, Ls) :-
+        (   ground(Ls), '$is_partial_string'(Ls) ->
+            % The expected case (success) uses a very fast test.
+            % We cannot use partial_string/1 from library(iso_ext),
+            % because that library itself imports library(error).
+            true
+        ;   must_be(list, Ls),
+            all_characters(Ls)
+        ).
 must_be_(list, Term)    :- check_(error:ilist, list, Term).
 must_be_(type, Term)    :- check_(error:type, type, Term).
 must_be_(boolean, Term) :- check_(error:boolean, boolean, Term).
+
+% We cannot use maplist(must_be(character), Cs), because library(lists)
+% uses library(error), so importing it would create a cyclic dependency.
+
+all_characters([]).
+all_characters([C|Cs]) :-
+        must_be(character, C),
+        all_characters(Cs).
 
 check_(Pred, Type, Term) :-
         (   var(Term) -> instantiation_error(must_be/2)
@@ -69,6 +87,7 @@ type(type).
 type(integer).
 type(atom).
 type(character).
+type(chars).
 type(list).
 type(var).
 type(boolean).
@@ -97,6 +116,7 @@ can_be(Type, Term) :-
 can_(integer, Term) :- integer(Term).
 can_(atom, Term)    :- atom(Term).
 can_(character, T)  :- character(T).
+can_(chars, Ls)     :- '$is_partial_string'(Ls).
 can_(list, Term)    :- list_or_partial_list(Term).
 can_(boolean, Term) :- boolean(Term).
 
