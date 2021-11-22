@@ -3250,6 +3250,9 @@ impl MachineState {
                             self.fail = true;
                         }
                     }
+                    Ok(Number::Float(_)) => {
+                        self.p += 1;
+                    }
                     _ => {
                         self.fail = true;
                     }
