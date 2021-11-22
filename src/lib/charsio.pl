@@ -260,18 +260,11 @@ chars_base64(Cs, Bs, Options) :-
         ;   domain_error(charset, Charset, chars_base64/3)
         ),
         (   var(Cs) ->
-            must_be_characters(Bs),
+            must_be(chars, Bs),
             '$chars_base64'(Cs, Bs, Padding, Charset)
-        ;   must_be_characters(Cs),
+        ;   must_be(chars, Cs),
             (   '$first_non_octet'(Cs, N) ->
                 domain_error(byte_char, N, chars_base64/3)
             ;   '$chars_base64'(Cs, Bs, Padding, Charset)
             )
-        ).
-
-must_be_characters(Cs) :-
-        (   partial_string(Cs) ->
-            true
-        ;   must_be(list, Cs),
-            maplist(must_be(character), Cs)
         ).
