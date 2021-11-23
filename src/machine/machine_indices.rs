@@ -45,25 +45,6 @@ pub enum TermOrderCategory {
     Compound,
 }
 
-// the position-dependent heap template:
-
-/*
-        read_heap_cell!(
-            (HeapCellValueTag::AttrVar, n) => {
-            }
-            (HeapCellValueTag::Lis, n) => {
-            }
-            (HeapCellValueTag::Var, n) => {
-            }
-            (HeapCellValueTag::Str, n) => {
-            }
-            (HeapCellValueTag::PStrOffset, n) => {
-            }
-            _ => {
-            }
-        )
-*/
-
 impl PartialEq<Ref> for HeapCellValue {
     fn eq(&self, r: &Ref) -> bool {
         self.as_var() == Some(*r)
@@ -82,7 +63,10 @@ impl PartialOrd<Ref> for HeapCellValue {
                     _ => Some(Ordering::Greater),
                 }
             }
-            (HeapCellValueTag::Var | HeapCellValueTag::AttrVar, h1) => {
+            (HeapCellValueTag::AttrVar | HeapCellValueTag::Var, h1) => {
+            // _ if self.is_ref() => {
+            //     let h1 = self.get_value();
+
                 match r.get_tag() {
                     RefTag::StackCell => Some(Ordering::Less),
                     _ => {

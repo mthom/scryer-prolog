@@ -343,21 +343,27 @@ impl HeapCellValue {
     }
 
     #[inline]
-    pub fn is_string_terminator(self, heap: &[HeapCellValue]) -> bool {
-        read_heap_cell!(self,
-            (HeapCellValueTag::Atom, (name, arity)) => {
-                name == atom!("[]") && arity == 0
-            }
-            (HeapCellValueTag::CStr) => {
-                true
-            }
-            (HeapCellValueTag::PStrOffset, pstr_offset) => {
-                heap[pstr_offset].get_tag() == HeapCellValueTag::CStr
-            }
-            _ => {
-                false
-            }
-        )
+    pub fn is_string_terminator(mut self, heap: &[HeapCellValue]) -> bool {
+        loop {
+            return read_heap_cell!(self,
+                (HeapCellValueTag::Atom, (name, arity)) => {
+                    name == atom!("[]") && arity == 0
+                }
+                (HeapCellValueTag::CStr) => {
+                    true
+                }
+                (HeapCellValueTag::PStrLoc, h) => {
+                    self = heap[h];
+                    continue;
+                }
+                (HeapCellValueTag::PStrOffset, pstr_offset) => {
+                    heap[pstr_offset].get_tag() == HeapCellValueTag::CStr
+                }
+                _ => {
+                    false
+                }
+            );
+        }
     }
 
     #[inline(always)]

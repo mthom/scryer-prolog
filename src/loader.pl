@@ -691,14 +691,10 @@ expand_goal_cases((\+ Goals0), Module, ExpandedGoals, HeadVars) :-
 expand_goal_cases((Module:Goals0), _, ExpandedGoals, HeadVars) :-
     expand_goal(Goals0, Module, Goals1, HeadVars),
     ExpandedGoals = (Module:Goals1).
-expand_goal_cases(call(Goals0), _, ExpandedGoals, HeadVars) :-
-    expand_goal(Goals0, Module, Goals1, HeadVars),
-    ExpandedGoals = call(Goals1).
 
 expand_goal(UnexpandedGoals, Module, ExpandedGoals, HeadVars) :-
     (  var(UnexpandedGoals) ->
-       UnexpandedGoals = ExpandedGoals
-       % expand_module_names(call(UnexpandedGoals), [0], Module, ExpandedGoals, HeadVars)
+       expand_module_names(call(UnexpandedGoals), [0], Module, ExpandedGoals, HeadVars)
     ;  goal_expansion(UnexpandedGoals, Module, UnexpandedGoals1),
        (  Module \== user ->
           goal_expansion(UnexpandedGoals1, user, Goals)
