@@ -155,14 +155,14 @@ instruction_match(Term, VarList) :-
     ;  Term = [Item] ->
        !,
        (  atom(Item) ->
-	      (  Item == user ->
-	         catch(load(user_input), E, print_exception_with_check(E))
-	      ;
-             submit_query_and_print_results(consult(Item), [])
-	      )
+          (  Item == user ->
+             catch(load(user_input), E, print_exception_with_check(E))
+          ;
+          submit_query_and_print_results(consult(Item), [])
+          )
        ;  catch(type_error(atom, Item, repl/0),
-		        E,
-		        print_exception_with_check(E))
+                E,
+                print_exception_with_check(E))
        )
     ;  Term = end_of_file ->
        halt
@@ -184,7 +184,7 @@ submit_query_and_print_results_(_, _) :-
 submit_query_and_print_results(Term0, VarList) :-
     (  functor(Term0, call, _) ->
        Term = Term0 % prevent pre-mature expansion of incomplete goal
-                    % in the first argument, which is done by call/N
+    % in the first argument, which is done by call/N
     ;  expand_goal(Term0, user, Term)
     ),
     setup_call_cleanup(bb_put('$first_answer', true),
@@ -194,10 +194,10 @@ submit_query_and_print_results(Term0, VarList) :-
 
 needs_bracketing(Value, Op) :-
     catch((functor(Value, F, _),
-	   current_op(EqPrec, EqSpec, Op),
-	   current_op(FPrec, _, F)),
-	  _,
-	  false),
+           current_op(EqPrec, EqSpec, Op),
+           current_op(FPrec, _, F)),
+          _,
+          false),
     (  EqPrec < FPrec ->
        true
     ;  FPrec > 0, F == Value, graphic_token_char(F) ->
@@ -211,15 +211,15 @@ needs_bracketing(Value, Op) :-
 write_goal(G, VarList, MaxDepth) :-
     (  G = (Var = Value) ->
        (  var(Value) ->
-	  select((Var = _), VarList, NewVarList)
+          select((Var = _), VarList, NewVarList)
        ;  VarList = NewVarList
        ),
        write(Var),
        write(' = '),
        (  needs_bracketing(Value, (=)) ->
-	  write('('),
-	  write_term(Value, [quoted(true), variable_names(NewVarList), max_depth(MaxDepth)]),
-	  write(')')
+          write('('),
+          write_term(Value, [quoted(true), variable_names(NewVarList), max_depth(MaxDepth)]),
+          write(')')
        ;  write_term(Value, [quoted(true), variable_names(NewVarList), max_depth(MaxDepth)])
        )
     ;  G == [] ->
@@ -230,20 +230,20 @@ write_goal(G, VarList, MaxDepth) :-
 write_last_goal(G, VarList, MaxDepth) :-
     (  G = (Var = Value) ->
        (  var(Value) ->
-	  select((Var = _), VarList, NewVarList)
+          select((Var = _), VarList, NewVarList)
        ;  VarList = NewVarList
        ),
        write(Var),
        write(' = '),
        (  needs_bracketing(Value, (=)) ->
-	  write('('),
-	  write_term(Value, [quoted(true), variable_names(NewVarList), max_depth(MaxDepth)]),
-	  write(')')
+          write('('),
+          write_term(Value, [quoted(true), variable_names(NewVarList), max_depth(MaxDepth)]),
+          write(')')
        ;  write_term(Value, [quoted(true), variable_names(NewVarList), max_depth(MaxDepth)]),
-	  (  trailing_period_is_ambiguous(Value) ->
-	     write(' ')
-	  ;  true
-	  )
+          (  trailing_period_is_ambiguous(Value) ->
+             write(' ')
+          ;  true
+          )
        )
     ;  G == [] ->
        write('true')
@@ -301,11 +301,11 @@ write_eqs_and_read_input(B, VarList) :-
     ),
     (  B0 == B ->
        (  Goals == [] ->
-	  write('true.'), nl
+          write('true.'), nl
        ;  loader:thread_goals(Goals, ThreadedGoals, (',')),
-	  write_eq(ThreadedGoals, NewVarList0, 20),
-	  write('.'),
-	  nl
+          write_eq(ThreadedGoals, NewVarList0, 20),
+          write('.'),
+          nl
        )
     ;  loader:thread_goals(Goals, ThreadedGoals, (',')),
        write_eq(ThreadedGoals, NewVarList0, 20),

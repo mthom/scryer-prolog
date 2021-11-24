@@ -2495,17 +2495,17 @@ impl MachineState {
             &SystemClauseType::HeadIsDynamic => {
                 let module_name = cell_as_atom!(self.store(self.deref(self.registers[1])));
 
-		let (name, arity) = read_heap_cell!(self.store(self.deref(self.registers[2])),
-		    (HeapCellValueTag::Str, s) => {
-			cell_as_atom_cell!(self.heap[s]).get_name_and_arity()
-		    }
+		        let (name, arity) = read_heap_cell!(self.store(self.deref(self.registers[2])),
+                    (HeapCellValueTag::Str, s) => {
+			            cell_as_atom_cell!(self.heap[s]).get_name_and_arity()
+		            }
                     (HeapCellValueTag::Atom, (name, _arity)) => {
-			(name, 0)
-		    }
+			            (name, 0)
+		            }
                     _ => {
-			unreachable!()
-		    }
-		);
+			            unreachable!()
+		            }
+		        );
 
                 self.fail = !indices.is_dynamic_predicate(module_name, (name, arity));
             }

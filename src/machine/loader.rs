@@ -380,13 +380,6 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         LS::evacuate(self)
     }
 
-    /*
-    #[inline(always)]
-    pub(crate) fn load_state(&mut self) -> &mut LoadStatePayload<<LS as LoadState<'a>>::TS> {
-        self.payload.as_mut()
-    }
-    */
-
     fn dequeue_terms(&mut self) -> Result<Option<Declaration>, SessionError> {
         while !self.payload.term_stream.eof()? {
             let load_state = &mut self.payload;
@@ -395,7 +388,6 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
 
             let term = load_state.term_stream.next(&composite_op_dir)?;
 
-            // if is_consistent is false, self.predicates is not empty.
             if !term.is_consistent(&load_state.predicates) {
                 self.compile_and_submit()?;
             }
@@ -449,14 +441,6 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
     pub(super) fn read_term_from_heap(&mut self, heap_term_loc: RegType) -> Result<Term, SessionError> {
         let machine_st = LS::machine_st(&mut self.payload);
         let term_addr = machine_st[heap_term_loc];
-
-        /*
-        if let Ok(lit) = Literal::try_from(term_addr) {
-            return Ok(Term::Literal(Cell::default(), lit));
-        } else if machine_st.is_cyclic_term(term_addr) {
-            return Err(SessionError::from(CompilationError::CannotParseCyclicTerm));
-        }
-        */
 
         let mut term_stack = vec![];
         let mut iter = stackful_post_order_iter(&mut machine_st.heap, term_addr);

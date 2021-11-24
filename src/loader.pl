@@ -709,15 +709,6 @@ expand_goal(UnexpandedGoals, Module, ExpandedGoals, HeadVars) :-
        )
     ).
 
-thread_goals([SG|SGs], G, F) :-
-    (  SGs \== [], functor(G, F, 2) ->
-       arg(1, G, SG),
-       arg(2, G, Gs1),
-       thread_goals(SGs, Gs1, F)
-    ;  SG = G,
-       SGs = []
-    ).
-
 thread_goals(Goals0, Goals1, Hole, Functor) :-
     (  var(Goals0) ->
        Goals1 =.. [Functor, Goals0, Hole]
@@ -731,7 +722,6 @@ thread_goals(Goals0, Goals1, Hole, Functor) :-
        )
     ).
 
-/*
 thread_goals(Goals0, Goals1, Functor) :-
     (  var(Goals0) ->
        Goals0 = Goals1
@@ -744,7 +734,6 @@ thread_goals(Goals0, Goals1, Functor) :-
        ;  Goals1 = Goals0
        )
     ).
-*/
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %
