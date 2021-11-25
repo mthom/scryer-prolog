@@ -964,13 +964,14 @@ retract_clause(Head, Body) :-
 :- meta_predicate retract(0).
 
 retract(Clause0) :-
-    strip_module(Clause0, Module, Clause),
-    (   Clause = (Head :- Body) ->
-        true
-    ;   Head = Clause,
-        Body = true
-    ),
-    retract_clause(Module:Head, Body).
+    loader:strip_module(Clause0, Module, Clause),
+    (  Clause \= (_ :- _) ->
+       Head = Clause,
+       Body = true,
+       retract_module_clause(Head, Body, Module)
+    ;  Clause = (Head :- Body) ->
+       retract_module_clause(Head, Body, Module)
+    ).
 
 
 :- meta_predicate retractall(0).
