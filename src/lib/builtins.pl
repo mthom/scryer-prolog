@@ -988,8 +988,10 @@ module_abolish(Pred, Module) :-
     ;  Pred = Name/Arity ->
        (  var(Name)  ->
           throw(error(instantiation_error, abolish/1))
+       ;  var(Arity) ->
+          throw(error(instantiation_error, abolish/1))
        ;  integer(Arity) ->
-          (  \+ atom(Name) ->
+          (\+ atom(Name) ->
              throw(error(type_error(atom, Name), abolish/1))
           ;  Arity < 0 ->
              throw(error(domain_error(not_less_than_zero, Arity), abolish/1))
@@ -1003,7 +1005,6 @@ module_abolish(Pred, Module) :-
              ;  throw(error(permission_error(modify, static_procedure, Pred), abolish/1))
              )
           )
-       ;  var(Arity) -> throw(error(instantiation_error, abolish/1))
        ;  throw(error(type_error(integer, Arity), abolish/1))
        )
     ;  throw(error(type_error(predicate_indicator, Module:Pred), abolish/1))
