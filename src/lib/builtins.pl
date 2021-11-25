@@ -1003,6 +1003,7 @@ module_abolish(Pred, Module) :-
              ;  throw(error(permission_error(modify, static_procedure, Pred), abolish/1))
              )
           )
+       ;  var(Arity) -> throw(error(instantiation_error, abolish/1))
        ;  throw(error(type_error(integer, Arity), abolish/1))
        )
     ;  throw(error(type_error(predicate_indicator, Module:Pred), abolish/1))
