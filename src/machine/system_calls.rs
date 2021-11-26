@@ -1512,6 +1512,7 @@ impl MachineState {
                     match stream.peek_char().map(|result| result.map_err(|e| e.kind())) {
                         Some(Ok(d)) => {
                             self.unify_char(d, a2);
+                            break;
                         }
                         Some(Err(ErrorKind::PermissionDenied)) => {
                             self.fail = true;
@@ -1614,6 +1615,7 @@ impl MachineState {
                     match result.map(|result| result.map_err(|e| e.kind())) {
                         Some(Ok(c)) => {
                             self.unify_fixnum(Fixnum::build_with(c as i64), addr);
+                            break;
                         }
                         Some(Err(ErrorKind::PermissionDenied)) => {
                             self.fail = true;
