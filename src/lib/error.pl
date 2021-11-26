@@ -47,13 +47,13 @@ must_be_(integer, Term) :- check_(integer, integer, Term).
 must_be_(atom, Term)    :- check_(atom, atom, Term).
 must_be_(character, T)  :- check_(error:character, character, T).
 must_be_(chars, Ls) :-
-        (   ground(Ls), '$is_partial_string'(Ls) ->
+        must_be(list, Ls),
+        (   '$is_partial_string'(Ls) ->
             % The expected case (success) uses a very fast test.
             % We cannot use partial_string/1 from library(iso_ext),
             % because that library itself imports library(error).
             true
-        ;   must_be(list, Ls),
-            all_characters(Ls)
+        ;   all_characters(Ls)
         ).
 must_be_(list, Term)    :- check_(error:ilist, list, Term).
 must_be_(type, Term)    :- check_(error:type, type, Term).
