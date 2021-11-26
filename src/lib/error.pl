@@ -79,9 +79,12 @@ character(C) :-
         atom(C),
         atom_length(C, 1).
 
-ilist(V) :- var(V), instantiation_error(must_be/2).
-ilist([]).
-ilist([_|Ls]) :- ilist(Ls).
+ilist(Ls) :-
+        '$skip_max_list'(_, -1, Ls, Rs),
+        (   var(Rs) ->
+            instantiation_error(must_be/2)
+        ;   Rs == []
+        ).
 
 type(type).
 type(integer).
@@ -120,10 +123,11 @@ can_(chars, Ls)     :- '$is_partial_string'(Ls).
 can_(list, Term)    :- list_or_partial_list(Term).
 can_(boolean, Term) :- boolean(Term).
 
-list_or_partial_list(Var) :- var(Var).
-list_or_partial_list([]).
-list_or_partial_list([_|Ls]) :-
-        list_or_partial_list(Ls).
+list_or_partial_list(Ls) :-
+        '$skip_max_list'(_, -1, Ls, Rs),
+        (   var(Rs) -> true
+        ;   Rs == []
+        ).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    Shorthands for throwing ISO errors.
