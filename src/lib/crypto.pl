@@ -1,5 +1,5 @@
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   Written May 2020 by Markus Triska (triska@metalevel.at)
+   Written 2020, 2021 by Markus Triska (triska@metalevel.at)
    Part of Scryer Prolog.
 
    Predicates for cryptographic applications.
@@ -46,7 +46,6 @@
 :- use_module(library(format)).
 :- use_module(library(charsio)).
 :- use_module(library(si)).
-:- use_module(library(iso_ext), [partial_string/1]).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    hex_bytes(?Hex, ?Bytes) is det.
@@ -105,20 +104,11 @@ must_be_bytes(Bytes, Context) :-
 
 
 must_be_byte_chars(Chars, Context) :-
-        (   partial_string(Chars) ->
-            (   '$first_non_octet'(Chars, F) ->
-                domain_error(byte_char, F, Context)
-            ;   true
-            )
-        ;   must_be(list, Chars),
-            (   member(Char, Chars),
-                char_code(Char, Code),
-                \+ between(0, 255, Code) ->
-                domain_error(byte_char, Char, Context)
-            ;   true
-            )
+        must_be(chars, Chars),
+        (   '$first_non_octet'(Chars, F) ->
+            domain_error(byte_char, F, Context)
+        ;   true
         ).
-
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    Cryptographically secure random numbers
@@ -620,11 +610,7 @@ encoding_chars(octet, Bs, Cs) :-
         ),
         must_be_byte_chars(Cs, crypto_encoding).
 encoding_chars(utf8, Cs, Cs) :-
-        (   partial_string(Cs) ->
-            true
-        ;   must_be(list, Cs),
-            maplist(must_be(character), Cs)
-        ).
+        must_be(chars, Cs).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    Digital signatures with Ed25519
