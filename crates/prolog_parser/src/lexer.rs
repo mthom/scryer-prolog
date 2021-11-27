@@ -559,16 +559,37 @@ impl<'a, R: Read> Lexer<'a, R> {
         Token::Constant(Constant::Float(result))
     }
 
+    fn skip_underscore_in_number(&mut self) -> Result<char, ParserError> {
+        let mut c = self.lookahead_char()?;
+
+        if c == '_' {
+            self.skip_char()?;
+            c = self.lookahead_char()?;
+            while layout_char!(c) {
+                self.skip_char()?;
+                c = self.lookahead_char()?;
+            }
+
+            if decimal_digit_char!(c) {
+                Ok(c)
+            } else {
+                Err(ParserError::ParseBigInt(self.line_num, self.col_num))
+            }
+        } else {
+            Ok(c)
+        }
+    }
+
     pub fn number_token(&mut self) -> Result<Token, ParserError> {
         let mut token = String::new();
 
         token.push(self.skip_char()?);
-        let mut c = self.lookahead_char()?;
+        let mut c = self.skip_underscore_in_number()?;
 
         while decimal_digit_char!(c) {
             token.push(c);
             self.skip_char()?;
-            c = self.lookahead_char()?;
+            c = self.skip_underscore_in_number()?;
         }
 
         if decimal_point_char!(c) {
