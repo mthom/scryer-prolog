@@ -1,7 +1,6 @@
 use crate::arena::*;
 use crate::atom_table::*;
 use crate::parser::ast::*;
-use crate::temp_v;
 
 use crate::clause_types::*;
 use crate::forms::*;
@@ -490,7 +489,7 @@ pub trait CallPolicy: Any + fmt::Debug {
             }
             &BuiltInClauseType::Read => {
                 let stream = machine_st.get_stream_or_alias(
-                    machine_st[temp_v!(1)],
+                    machine_st.registers[1],
                     stream_aliases,
                     atom!("read"),
                     2,

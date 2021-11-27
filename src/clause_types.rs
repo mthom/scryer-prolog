@@ -157,7 +157,7 @@ pub fn clause_type_form(name: Atom, arity: usize) -> Option<ClauseType> {
         ))),
         (atom!("keysort"), 2) => Some(ClauseType::BuiltIn(BuiltInClauseType::KeySort)),
         (atom!("\\=="), 2) => Some(ClauseType::BuiltIn(BuiltInClauseType::NotEq)),
-        (atom!("read"), 1) => Some(ClauseType::BuiltIn(BuiltInClauseType::Read)),
+        (atom!("read"), 2) => Some(ClauseType::BuiltIn(BuiltInClauseType::Read)),
         (atom!("sort"), 2) => Some(ClauseType::BuiltIn(BuiltInClauseType::Sort)),
         _ => None,
     }

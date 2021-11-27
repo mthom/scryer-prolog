@@ -1369,9 +1369,7 @@ impl MachineState {
         arity: usize,
     ) -> MachineStub {
         let stub = functor_stub(caller, arity);
-        let payload = vec![stream_as_cell!(stream)];
-
-        let err = self.permission_error(perm, err_atom, payload);
+        let err = self.permission_error(perm, err_atom, stream_as_cell!(stream));
 
         return self.error_form(err, stub);
     }
