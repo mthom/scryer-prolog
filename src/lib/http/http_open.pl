@@ -33,7 +33,7 @@
 http_open(Address, Stream, Options) :-
         must_be(list, Options),
         must_be(list, Address),
-        once(phrase((list(SchemeCs), "://", list(Rest)), Address)),
+        once(phrase((seq(SchemeCs), "://", seq(Rest)), Address)),
         atom_chars(Scheme, SchemeCs),
         chars_host_url(Rest, Host, URL),
         connect(Scheme, Host, Stream0),
@@ -48,14 +48,11 @@ Connection: close\r\n\r\n\
         read_header_lines(Stream0, HeaderLines),
         handle_response(D1, HeaderLines, Stream0, Stream).
 
-list([]) --> [].
-list([L|Ls]) --> [L], list(Ls).
-
 handle_response('2', _, Stream, Stream).              % ok
 handle_response('3', HeaderLines, Stream0, Stream) :- % redirect
         close(Stream0),
         once((member(Line, HeaderLines),
-              phrase(("Location: ",list(Location),"\r\n"), Line))),
+              phrase(("Location: ",seq(Location),"\r\n"), Line))),
         http_open(Location, Stream, []).
 
 % Status-Line = HTTP-Version SP Status-Code SP Reason-Phrase CRLF
@@ -69,7 +66,7 @@ read_header_lines(Stream, Hs) :-
         ).
 
 chars_host_url(Cs, Host, [/|Us]) :-
-        (   phrase((list(Hs),"/",list(Us)), Cs) ->
+        (   phrase((seq(Hs),"/",seq(Us)), Cs) ->
             true
         ;   Hs = Cs,
             Us = []
