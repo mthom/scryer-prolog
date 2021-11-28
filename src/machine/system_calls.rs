@@ -2977,8 +2977,16 @@ impl MachineState {
                 let options  = self.to_stream_options(alias, eof_action, reposition, stream_type);
                 let src_sink = self.store(self.deref(self.registers[1]));
 
-                if let Some(atom_or_string) = self.value_to_str_like(src_sink) {
-                    let file_spec  = self.atom_tbl.build_with(atom_or_string.as_str());
+                if let Some(str_like) = self.value_to_str_like(src_sink) {
+                    let file_spec = match str_like {
+                        AtomOrString::Atom(atom) => {
+                            atom
+                        }
+                        AtomOrString::String(string) => {
+                            self.atom_tbl.build_with(&string)
+                        }
+                    };
+
                     let mut stream = self.stream_from_file_spec(file_spec, indices, &options)?;
 
                     *stream.options_mut() = options;

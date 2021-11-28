@@ -1231,7 +1231,12 @@ impl MachineState {
         let alias = read_heap_cell!(self.store(MachineState::deref(self, alias)),
             (HeapCellValueTag::Atom, (name, arity)) => {
                 debug_assert_eq!(arity, 0);
-                Some(name)
+
+                if name != atom!("[]") {
+                    Some(name)
+                } else {
+                    None
+                }
             }
             _ => {
                 None
