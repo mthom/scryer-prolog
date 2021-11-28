@@ -47,13 +47,13 @@ must_be_(integer, Term) :- check_(integer, integer, Term).
 must_be_(atom, Term)    :- check_(atom, atom, Term).
 must_be_(character, T)  :- check_(error:character, character, T).
 must_be_(chars, Ls) :-
-        (   ground(Ls), '$is_partial_string'(Ls) ->
+        must_be(list, Ls),
+        (   '$is_partial_string'(Ls) ->
             % The expected case (success) uses a very fast test.
             % We cannot use partial_string/1 from library(iso_ext),
             % because that library itself imports library(error).
             true
-        ;   must_be(list, Ls),
-            all_characters(Ls)
+        ;   all_characters(Ls)
         ).
 must_be_(list, Term)    :- check_(error:ilist, list, Term).
 must_be_(type, Term)    :- check_(error:type, type, Term).
@@ -79,9 +79,12 @@ character(C) :-
         atom(C),
         atom_length(C, 1).
 
-ilist(V) :- var(V), instantiation_error(must_be/2).
-ilist([]).
-ilist([_|Ls]) :- ilist(Ls).
+ilist(Ls) :-
+        '$skip_max_list'(_, -1, Ls, Rs),
+        (   var(Rs) ->
+            instantiation_error(must_be/2)
+        ;   Rs == []
+        ).
 
 type(type).
 type(integer).
@@ -120,10 +123,11 @@ can_(chars, Ls)     :- '$is_partial_string'(Ls).
 can_(list, Term)    :- list_or_partial_list(Term).
 can_(boolean, Term) :- boolean(Term).
 
-list_or_partial_list(Var) :- var(Var).
-list_or_partial_list([]).
-list_or_partial_list([_|Ls]) :-
-        list_or_partial_list(Ls).
+list_or_partial_list(Ls) :-
+        '$skip_max_list'(_, -1, Ls, Rs),
+        (   var(Rs) -> true
+        ;   Rs == []
+        ).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    Shorthands for throwing ISO errors.
