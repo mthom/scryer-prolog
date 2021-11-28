@@ -481,6 +481,10 @@ impl<'a, R: Read> Parser<'a, R> {
             return false;
         }
 
+        if self.terms.len() < 1 + arity {
+            return false;
+        }
+
         let stack_len = self.stack.len() - 2 * arity - 1;
         let idx = self.terms.len() - arity;
 
@@ -637,6 +641,13 @@ impl<'a, R: Read> Parser<'a, R> {
 
             term
         };
+
+        if arity > self.terms.len() {
+            return Err(ParserError::IncompleteReduction(
+                self.lexer.line_num,
+                self.lexer.col_num
+            ))
+        }
 
         let idx = self.terms.len() - arity;
 
