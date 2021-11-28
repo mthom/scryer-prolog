@@ -1477,7 +1477,11 @@ open(SourceSink, Mode, Stream, StreamOptions) :-
        (   SourceSink = stream(S0) ->
            '$set_stream_options'(S0, Alias, EOFAction, Reposition, Type),
            Stream = S0
-       ;   '$open'(SourceSink, Mode, Stream, Alias, EOFAction, Reposition, Type)
+       ;   (
+                atom(SourceSink) ->
+                atom_chars(SourceSink, SourceSinkString)
+           ;    SourceSink = SourceSinkString
+           ), '$open'(SourceSinkString, Mode, Stream, Alias, EOFAction, Reposition, Type)
        )
     ).
 

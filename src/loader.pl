@@ -506,7 +506,7 @@ open_file(Path, Stream) :-
     (  atom_concat(_, '.pl', Path) ->
        open(Path, read, Stream)
     ;  catch(open(Path, read, Stream),
-             error(existence_error(source_sink, Path), _),
+             error(existence_error(source_sink, _), _),
              ( atom_concat(Path, '.pl', ExtendedPath),
                open(ExtendedPath, read, Stream) )
             )
