@@ -110,7 +110,13 @@ impl Read for ByteStream {
 impl Write for ByteStream {
     #[inline]
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        self.0.write(buf)
+        let pos = self.0.position();
+
+        self.0.seek(SeekFrom::End(0))?;
+        let result = self.0.write(buf);
+        self.0.seek(SeekFrom::Start(pos))?;
+
+        result
     }
 
     #[inline]
