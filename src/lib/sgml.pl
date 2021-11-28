@@ -64,9 +64,6 @@ load_html(Source, Es, Options) :-
 load_xml(Source, Es, Options) :-
         load_structure_(Source, Es, Options, xml).
 
-list([]) --> [].
-list([L|Ls]) --> [L], list(Ls).
-
 load_structure_([], [], _, _).
 load_structure_([C|Cs], [E], Options, What) :-
         load_(What, [C|Cs], E, Options).
@@ -74,7 +71,7 @@ load_structure_(file(Fs), [E], Options, What) :-
         must_be(list, Options),
         must_be(list, Fs),
         atom_chars(File, Fs),
-        once(phrase_from_file(list(Cs), File)),
+        once(phrase_from_file(seq(Cs), File)),
         load_(What, Cs, E, Options).
 load_structure_(stream(Stream), [E], Options, What) :-
         must_be(list, Options),

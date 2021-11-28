@@ -540,7 +540,7 @@ xpath_condition(contains(Haystack, Needle), Value) :-          % contains(Haysta
     !,
     val_or_function(Haystack, Value, HaystackValue),
     val_or_function(Needle, Value, NeedleValue),
-    (   phrase((list(_),list(NeedleValue),list(_)), HaystackValue)
+    (   phrase((...,seq(NeedleValue),...), HaystackValue)
     ->  true
     ).
 xpath_condition(Spec, Dom) :-
@@ -626,10 +626,7 @@ text_of_list([H|T]) -->
 
 text_of_1(element(_,_,Content)) -->
         text_of_list(Content).
-text_of_1([C|Cs]) --> list([C|Cs]).
-
-list([]) --> [].
-list([L|Ls]) --> [L], list(Ls).
+text_of_1([C|Cs]) --> seq([C|Cs]).
 
 % For now, we use number_chars/2 to parse XML numbers.
 % If the need arises, we can extend this to additional

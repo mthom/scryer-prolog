@@ -59,14 +59,11 @@ format_time([], _) --> [].
 format_time(['%','%'|Fs], T) --> !, "%", format_time(Fs, T).
 format_time(['%',Spec|Fs], T) --> !,
         (   { member(Spec=Value, T) } ->
-            list(Value)
+            seq(Value)
         ;   { domain_error(time_specifier, Spec, format_time//2) }
         ),
         format_time(Fs, T).
 format_time([F|Fs], T) --> [F], format_time(Fs, T).
-
-list([]) --> [].
-list([L|Ls]) --> [L], list(Ls).
 
 max_sleep_time(0xfffffffffffffbff).
 
