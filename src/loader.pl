@@ -94,7 +94,10 @@ run_initialization_goals(Module) :-
        abolish(Module:'$initialization_goals'/1),
        (  maplist(Module:call, Goals) ->
           true
-       ;  true %% initialization goals can fail without thwarting the load.
+       ;  %% initialization goals can fail without thwarting the load.
+          write('Warning: initialization/1 failed for: '),
+          writeq(maplist(Module:call, Goals)),
+          nl
        )
     ;  true
     ).
