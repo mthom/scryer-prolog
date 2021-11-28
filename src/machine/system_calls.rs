@@ -3169,31 +3169,10 @@ impl MachineState {
 
                 let options = self.to_stream_options(alias, eof_action, reposition, stream_type);
 
-                let mut stream = match self.store(self.deref(self[temp_v!(1)])) {
-                    Addr::Con(h) if self.heap.atom_at(h) => match &self.heap[h] {
-                        &HeapCellValue::Atom(ref atom, _) => {
-                            self.stream_from_file_spec(atom.clone(), indices, &options)?
-                        }
-                        _ => {
-                            unreachable!()
-                        }
-                    },
-                    Addr::Char(c) => {
-                        let atom = clause_name!(c.to_string(), self.atom_tbl);
-                        self.stream_from_file_spec(atom, indices, &options)?
-                    }
-                    Addr::PStrLocation(h, n) => match &self.heap[h] {
-                        &HeapCellValue::PartialString(_, _has_tail @ false) => {
-                            let mut heap_pstr_iter = self.heap_pstr_iter(Addr::PStrLocation(h, n));
+                let mut iter = self.heap_pstr_iter(self[temp_v!(1)]);
+                let file_spec = clause_name!(iter.to_string(), self.atom_tbl);
 
-                            let file_spec = clause_name!(heap_pstr_iter.to_string(), self.atom_tbl);
-
-                            self.stream_from_file_spec(file_spec, indices, &options)?
-                        }
-                        _ => self.stream_from_file_spec(clause_name!(""), indices, &options)?,
-                    },
-                    _ => self.stream_from_file_spec(clause_name!(""), indices, &options)?,
-                };
+                let mut stream = self.stream_from_file_spec(file_spec, indices, &options)?;
 
                 *stream.options_mut() = options;
 
