@@ -795,7 +795,7 @@ call_clause(G, G0) :-
        load_context(M)
     ;  true
     ),
-    expand_goal(M:G1, M, G0).
+    expand_goal(call(M:G1), M, call(G0)).
 
 
 call(G) :-
@@ -840,7 +840,7 @@ call_clause(G, Args, _, G0) :-
     ),
     append(As, Args, As1),
     G2 =.. [F | As1],
-    expand_goal(M:G2, M, G0).
+    expand_goal(call(M:G2), M, call(G0)).
 
 
 call(A,B) :-
