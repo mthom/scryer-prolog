@@ -237,11 +237,6 @@ impl Write for NamedTlsStream {
     }
 }
 
-/*
-#[derive(Debug)]
-pub struct NullStream {}
-*/
-
 #[derive(Debug)]
 pub struct StandardOutputStream {}
 
@@ -374,65 +369,6 @@ macro_rules! arena_allocated_impl_for_stream {
         }
     };
 }
-
-/*
-pub mod testing {
-    use super::PausedPrologStream;
-
-    impl PausedPrologStream {
-        #[allow(dead_code)]
-        pub fn write_test_input(&mut self, string: &str) {
-            self.bytes.extend(string.as_bytes().iter().rev());
-        }
-    }
-}
-*/
-/*
-impl ArenaAllocated for PausedPrologStream {
-    type PtrToAllocated = TypedArenaPtr<PausedPrologStream>;
-
-    #[inline]
-    fn tag() -> ArenaHeaderTag {
-        ArenaHeaderTag::PausedPrologStream
-    }
-
-    #[inline]
-    fn size(&self) -> usize {
-        mem::size_of::<PausedPrologStream>()
-    }
-
-    #[inline]
-    fn copy_to_arena(self, dst: *mut Self) -> Self::PtrToAllocated {
-        unsafe {
-            ptr::write(dst, self);
-            TypedArenaPtr::new(dst as *mut Self)
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct PausedPrologStream {
-    bytes: Vec<u8>,
-    paused_stream: Stream,
-}
-
-impl PausedPrologStream {
-    #[inline]
-    pub fn new() -> Self {
-        PausedPrologStream {
-            bytes: vec![],
-            paused_stream: Stream::Null(StreamOptions::default()),
-        }
-    }
-}
-
-impl Read for PausedPrologStream {
-    #[inline]
-    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        self.paused_stream.read(buf)
-    }
-}
-*/
 
 arena_allocated_impl_for_stream!(CharReader<ByteStream>, ByteStream);
 arena_allocated_impl_for_stream!(CharReader<InputFileStream>, InputFileStream);
@@ -592,21 +528,6 @@ impl Stream {
             Stream::StandardError(ref mut ptr) => &mut ptr.options,
         }
     }
-
-    /*
-    fn unpause_stream(&mut self) {
-        let stream_inst = match self {
-            Stream::PausedProlog(paused) if paused.bytes.is_empty() => {
-                mem::replace(&mut paused.paused_stream, Stream::Null(StreamOptions::default()))
-            }
-            _ => {
-                return;
-            }
-        };
-
-        *self = stream_inst;
-    }
-    */
 
     #[inline]
     pub(crate) fn add_lines_read(&mut self, incr_num_lines_read: usize) {

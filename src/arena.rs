@@ -373,51 +373,42 @@ impl Arena {
 unsafe fn drop_slab_in_place(value: &mut AllocSlab) {
     match value.header.tag() {
         ArenaHeaderTag::Integer => {
-            ptr::drop_in_place(value.payload_offset() as *mut Integer);
+            ptr::drop_in_place(value.payload_offset::<Integer>());
         }
         ArenaHeaderTag::Rational => {
-            ptr::drop_in_place(value.payload_offset() as *mut Rational);
+            ptr::drop_in_place(value.payload_offset::<Rational>());
         }
         ArenaHeaderTag::InputFileStream => {
-            ptr::drop_in_place(value.payload_offset() as *mut InputFileStream);
+            ptr::drop_in_place(value.payload_offset::<InputFileStream>());
         }
         ArenaHeaderTag::OutputFileStream => {
-            ptr::drop_in_place(value.payload_offset() as *mut OutputFileStream);
+            ptr::drop_in_place(value.payload_offset::<OutputFileStream>());
         }
         ArenaHeaderTag::NamedTcpStream => {
-            ptr::drop_in_place(value.payload_offset() as *mut NamedTcpStream);
+            ptr::drop_in_place(value.payload_offset::<NamedTcpStream>());
         }
         ArenaHeaderTag::NamedTlsStream => {
-            ptr::drop_in_place(value.payload_offset() as *mut NamedTlsStream);
+            ptr::drop_in_place(value.payload_offset::<NamedTlsStream>());
         }
-        // ArenaHeaderTag::PausedPrologStream => {
-        //     // idea: PausedPrologStream with only the buffer of unread characters.
-        //     // no stream to be wrapped, no nuttin'.
-        //     ptr::drop_in_place(value.payload_offset() as *mut PausedPrologStream);
-        // }
         ArenaHeaderTag::ReadlineStream => {
-            ptr::drop_in_place(value.payload_offset() as *mut ReadlineStream);
+            ptr::drop_in_place(value.payload_offset::<ReadlineStream>());
         }
         ArenaHeaderTag::StaticStringStream => {
-            ptr::drop_in_place(value.payload_offset() as *mut StaticStringStream);
+            ptr::drop_in_place(value.payload_offset::<StaticStringStream>());
         }
         ArenaHeaderTag::ByteStream => {
-            ptr::drop_in_place(value.payload_offset() as *mut ByteStream);
+            ptr::drop_in_place(value.payload_offset::<ByteStream>());
         }
         ArenaHeaderTag::OssifiedOpDir => {
-            ptr::drop_in_place(
-                mem::transmute::<_, *mut OssifiedOpDir>(value.payload_offset())
-            );
+            ptr::drop_in_place(value.payload_offset::<OssifiedOpDir>());
         }
         ArenaHeaderTag::LiveLoadState | ArenaHeaderTag::InactiveLoadState => {
-            ptr::drop_in_place(
-                mem::transmute::<_, *mut LiveLoadState>(value.payload_offset())
-            );
+            ptr::drop_in_place(value.payload_offset::<LiveLoadState>());
         }
         ArenaHeaderTag::Dropped => {
         }
         ArenaHeaderTag::TcpListener => {
-            ptr::drop_in_place(value.payload_offset() as *mut TcpListener);
+            ptr::drop_in_place(value.payload_offset::<TcpListener>());
         }
         ArenaHeaderTag::F64 | ArenaHeaderTag::StandardOutputStream |
         ArenaHeaderTag::StandardErrorStream | ArenaHeaderTag::NullStream => {
@@ -458,10 +449,10 @@ impl AllocSlab {
         self.header.size() as usize + mem::size_of::<AllocSlab>()
     }
 
-    fn payload_offset(&self) -> *const u8 {
+    fn payload_offset<T>(&self) -> *mut T {
         let mut ptr = (self as *const AllocSlab) as usize;
         ptr += mem::size_of::<AllocSlab>();
-        ptr as *const u8
+        ptr as *mut T
     }
 }
 
