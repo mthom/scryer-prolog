@@ -66,8 +66,7 @@ extend_var_list_([V|Vs], N, VarList, NewVarList, VarType) :-
 
 
 char_type(Char, Type) :-
-    (   var(Char) -> instantiation_error(char_type/2)
-    ;   atom_length(Char, 1) ->
+        must_be(character, Char),
         (   ground(Type) ->
             (   ctype(Type) ->
                 '$char_type'(Char, Type)
@@ -75,9 +74,7 @@ char_type(Char, Type) :-
             )
         ;   ctype(Type),
             '$char_type'(Char, Type)
-        )
-    ;   type_error(in_character, Char, char_type/2)
-    ).
+        ).
 
 
 ctype(alnum).
