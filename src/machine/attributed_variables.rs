@@ -143,6 +143,8 @@ impl MachineState {
                         continue;
                     }
 
+                    let value = unmark_cell_bits!(value);
+
                     seen_vars.push(value);
                     seen_set.insert(h);
 

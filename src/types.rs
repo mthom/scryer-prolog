@@ -221,9 +221,9 @@ impl TrailEntry {
     #[inline(always)]
     pub(crate) fn get_tag(self) -> TrailEntryTag {
         match self.tag_or_err() {
-	    Ok(tag) => tag,
-	    Err(_) => TrailEntryTag::TrailedAttachedValue,
-	}
+	        Ok(tag) => tag,
+	        Err(_) => TrailEntryTag::TrailedAttachedValue,
+	    }
     }
 
     #[inline]

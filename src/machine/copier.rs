@@ -166,8 +166,7 @@ impl<T: CopierTarget> CopyTermState<T> {
                 self.trail.push((Ref::attr_var(h), attr_var_as_cell!(h)));
 
                 if let AttrVarPolicy::DeepCopy = self.attr_var_policy {
-                    self.target
-                        .push(attr_var_as_cell!(threshold));
+                    self.target.push(attr_var_as_cell!(threshold));
 
                     let list_val = self.target[h + 1];
                     self.target.push(list_val);
@@ -195,57 +194,13 @@ impl<T: CopierTarget> CopyTermState<T> {
             _ => {}
         );
 
-        if addr == ra {
-            self.reinstantiate_var(addr, self.scan);
+        if rd == ra {
+            self.reinstantiate_var(ra, self.scan);
             self.scan += 1;
         } else {
             *self.value_at_scan() = ra;
-            // self.copy_compound(rd, ra);
         }
     }
-
-    /*
-    fn copy_compound(&mut self, rd: HeapCellValue, ra: HeapCellValue) {
-        let h = rd.get_value();
-        let trail_item = self.target[h];
-        let threshold = self.target.threshold();
-
-        self.trail.push((Ref::heap_cell(h), trail_item));
-        self.target[self.scan].set_value(threshold);
-
-        read_heap_cell!(ra,
-            (HeapCellValueTag::Atom, (_name, arity)) => {
-                self.target.push(ra);
-
-                for i in 0..arity {
-                    self.target.push(self.target[h + 1 + i]);
-                }
-
-                self.target[h] = str_loc_as_cell!(self.scan + 1);
-            }
-            (HeapCellValueTag::PStr | HeapCellValueTag::PStrOffset) => {
-                self.target.push(ra);
-                self.target.push(self.target[h + 1]);
-
-                self.target[h] = pstr_loc_as_cell!(self.scan + 1);
-            }
-            (HeapCellValueTag::CStr, cstr_atom) => {
-                self.target[h] = atom_as_cstr_cell!(cstr_atom);
-            }
-            (HeapCellValueTag::Str, s) => {
-                self.copy_structure(s);
-                return;
-            }
-            _ => {
-                *self.value_at_scan() = rd;
-                self.trail.pop();
-                return;
-            }
-        );
-
-        self.scan += 1;
-    }
-    */
 
     fn copy_structure(&mut self, addr: usize) {
         read_heap_cell!(self.target[addr],
