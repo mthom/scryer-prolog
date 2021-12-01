@@ -954,7 +954,7 @@ retract_module_clause(Head, Body, Module) :-
     ).
 
 
-first_match_index([Clause | Clauses], Clause, N, N) :-
+first_match_index([Clause | _], Clause, N, N) :-
     !.
 first_match_index([_ | Clauses], Clause, N0, N) :-
     N1 is N0 + 1,
