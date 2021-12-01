@@ -729,6 +729,7 @@ impl Sub<i64> for HeapCellValue {
                 tag @ HeapCellValueTag::Str |
                 tag @ HeapCellValueTag::Lis |
                 tag @ HeapCellValueTag::PStrOffset |
+                tag @ HeapCellValueTag::PStrLoc |
                 tag @ HeapCellValueTag::Var |
                 tag @ HeapCellValueTag::AttrVar => {
                     HeapCellValue::build_with(tag, (self.get_value() + rhs.abs() as usize) as u64)

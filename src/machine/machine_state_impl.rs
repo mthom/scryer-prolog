@@ -3046,17 +3046,58 @@ impl MachineState {
                                 } else {
                                     let offset = (offset + c.len_utf8()) as i64;
                                     let h_len = self.heap.len();
+                                    let pstr_atom: Atom = pstr.into();
 
-                                    self.heap.push(pstr_offset_as_cell!(h_len));
-                                    self.heap.push(fixnum_as_cell!(Fixnum::build_with(offset)));
+                                    if pstr_atom.len() > offset as usize {
+                                        self.heap.push(pstr_offset_as_cell!(h));
+                                        self.heap.push(fixnum_as_cell!(Fixnum::build_with(offset)));
 
-                                    unify_fn!(self, pstr_loc_as_cell!(h_len), a3);
+                                        unify_fn!(self, pstr_loc_as_cell!(h_len), a3);
+                                    } else {
+                                        match self.heap[h].get_tag() {
+                                            HeapCellValueTag::CStr => {
+                                                self.unify_atom(atom!("[]"), self.store(self.deref(a3)));
+                                            }
+                                            HeapCellValueTag::PStr => {
+                                                unify_fn!(self, self.heap[h+1], a3);
+                                            }
+                                            _ => {
+                                                unreachable!();
+                                            }
+                                        }
+                                    }
                                 }
                             } else {
                                 unreachable!()
                             }
                         } else {
                             self.fail = true;
+                        }
+                    }
+                    (HeapCellValueTag::CStr, cstr_atom) => {
+                        let cstr = PartialString::from(cstr_atom);
+
+                        if let Some(c) = cstr.as_str_from(0).chars().next() {
+                            if n == 1 {
+                                self.unify_char(c, self.store(self.deref(self.registers[3])));
+                            } else if n == 2 {
+                                let offset = c.len_utf8() as i64;
+                                let h_len = self.heap.len();
+
+                                if cstr_atom.len() > offset as usize {
+                                    self.heap.push(atom_as_cstr_cell!(cstr_atom));
+                                    self.heap.push(pstr_offset_as_cell!(h_len));
+                                    self.heap.push(fixnum_as_cell!(Fixnum::build_with(offset)));
+
+                                    unify_fn!(self, pstr_loc_as_cell!(h_len+1), self.registers[3]);
+                                } else {
+                                    self.unify_atom(atom!("[]"), self.store(self.deref(self.registers[3])));
+                                }
+                            } else {
+                                self.fail = true;
+                            }
+                        } else {
+                            unreachable!()
                         }
                     }
                     _ => {
@@ -3361,7 +3402,7 @@ impl MachineState {
                 let (name, arity) = cell_as_atom_cell!(self.heap[s]).get_name_and_arity();
                 self.try_functor_compound_case(name, arity);
             }
-            (HeapCellValueTag::Lis | HeapCellValueTag::PStrOffset) => {
+            (HeapCellValueTag::Lis | HeapCellValueTag::PStrLoc | HeapCellValueTag::CStr) => {
                 self.try_functor_compound_case(atom!("."), 2);
             }
             (HeapCellValueTag::Var | HeapCellValueTag::AttrVar | HeapCellValueTag::StackVar) => {

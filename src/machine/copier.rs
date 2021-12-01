@@ -107,36 +107,63 @@ impl<T: CopierTarget> CopyTermState<T> {
     fn copy_partial_string(&mut self, scan_tag: HeapCellValueTag, pstr_loc: usize) {
         read_heap_cell!(self.target[pstr_loc],
             (HeapCellValueTag::PStrLoc, h) => {
-                if h >= self.old_h {
-                    *self.value_at_scan() = match scan_tag {
-                        HeapCellValueTag::PStrLoc => {
-                            pstr_loc_as_cell!(h)
-                        }
-                        tag => {
-                            debug_assert!(tag == HeapCellValueTag::PStrOffset);
-                            pstr_offset_as_cell!(h)
-                        }
-                    };
+                debug_assert!(h >= self.old_h);
 
-                    self.scan += 1;
-                    return;
-                }
+                *self.value_at_scan() = match scan_tag {
+                    HeapCellValueTag::PStrLoc => {
+                        pstr_loc_as_cell!(h)
+                    }
+                    tag => {
+                        debug_assert_eq!(tag, HeapCellValueTag::PStrOffset);
+                        pstr_offset_as_cell!(h)
+                    }
+                };
+
+                self.scan += 1;
+                return;
+            }
+            (HeapCellValueTag::Var, h) => {
+                debug_assert!(h >= self.old_h);
+                debug_assert_eq!(scan_tag, HeapCellValueTag::PStrOffset);
+
+                *self.value_at_scan() = pstr_offset_as_cell!(h);
+                self.scan += 1;
+
+                return;
             }
             _ => {}
         );
 
         let threshold = self.target.threshold();
 
-        *self.value_at_scan() = pstr_loc_as_cell!(threshold);
+        let replacement = read_heap_cell!(self.target[pstr_loc],
+            (HeapCellValueTag::CStr) => {
+                debug_assert_eq!(scan_tag, HeapCellValueTag::PStrOffset);
+
+                *self.value_at_scan() = pstr_offset_as_cell!(threshold);
+                self.target.push(self.target[pstr_loc]);
+
+                heap_loc_as_cell!(threshold)
+            }
+            _ => {
+                *self.value_at_scan() = if scan_tag == HeapCellValueTag::PStrLoc {
+                    pstr_loc_as_cell!(threshold)
+                } else {
+                    debug_assert_eq!(scan_tag, HeapCellValueTag::PStrOffset);
+                    pstr_offset_as_cell!(threshold)
+                };
+
+                self.target.push(self.target[pstr_loc]);
+                self.target.push(self.target[pstr_loc + 1]);
+
+                pstr_loc_as_cell!(threshold)
+            }
+        );
+
         self.scan += 1;
 
-        self.target.push(self.target[pstr_loc]);
-
-        let replacement = pstr_loc_as_cell!(threshold);
         let trail_item = mem::replace(&mut self.target[pstr_loc], replacement);
-
         self.trail.push((Ref::heap_cell(pstr_loc), trail_item));
-        self.target.push(self.target[pstr_loc + 1]);
     }
 
     fn reinstantiate_var(&mut self, addr: HeapCellValue, frontier: usize) {
@@ -185,7 +212,7 @@ impl<T: CopierTarget> CopyTermState<T> {
         read_heap_cell!(ra,
             (HeapCellValueTag::AttrVar | HeapCellValueTag::Var, h) => {
                 if h >= self.old_h {
-                    *self.value_at_scan() = rd;
+                    *self.value_at_scan() = ra;
                     self.scan += 1;
 
                     return;
