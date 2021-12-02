@@ -33,13 +33,13 @@ $(G_0) :-
 :- meta_predicate($(2, ?, ?)).
 :- meta_predicate($-(2, ?, ?)).
 
-$-G_2 --> \A^B^
-   catch(phrase(G_2, A, B), Ex, (
-      portray_clause(exception:Ex:G_2=(A, B)), throw(Ex)
+$-G_2 --> \Xs0^Xs^
+   catch(phrase(G_2, Xs0, Xs), Ex, (
+      portray_clause(exception:Ex:G_2=(Xs0, Xs)), throw(Ex)
    )).
 
-$G_2 --> \A^B^(
-   portray_clause(call:G_2=(A, B)),
-   phrase($-G_2, A, B),
-   portray_clause(exit:G_2=(A, B))
+$G_2 --> \Xs0^Xs^(
+   portray_clause(call:G_2=(Xs0, Xs)),
+   phrase($-G_2, Xs0, Xs),
+   portray_clause(exit:G_2=(Xs0, Xs))
 ).
