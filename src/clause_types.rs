@@ -273,6 +273,7 @@ pub(crate) enum SystemClauseType {
     SocketServerOpen,
     SocketServerAccept,
     SocketServerClose,
+    TLSAcceptClient,
     Succeed,
     TermAttributedVariables,
     TermVariables,
@@ -563,6 +564,7 @@ impl SystemClauseType {
             &SystemClauseType::SocketServerOpen => clause_name!("$socket_server_open"),
             &SystemClauseType::SocketServerAccept => clause_name!("$socket_server_accept"),
             &SystemClauseType::SocketServerClose => clause_name!("$socket_server_close"),
+            &SystemClauseType::TLSAcceptClient => clause_name!("$tls_accept_client"),
             &SystemClauseType::Succeed => clause_name!("$succeed"),
             &SystemClauseType::TermAttributedVariables => {
                 clause_name!("$term_attributed_variables")
@@ -744,6 +746,7 @@ impl SystemClauseType {
             ("$socket_server_open", 3) => Some(SystemClauseType::SocketServerOpen),
             ("$socket_server_accept", 7) => Some(SystemClauseType::SocketServerAccept),
             ("$socket_server_close", 1) => Some(SystemClauseType::SocketServerClose),
+            ("$tls_accept_client", 4) => Some(SystemClauseType::TLSAcceptClient),
             ("$store_global_var", 2) => Some(SystemClauseType::StoreGlobalVar),
             ("$store_backtrackable_global_var", 2) => {
                 Some(SystemClauseType::StoreBacktrackableGlobalVar)

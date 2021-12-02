@@ -117,7 +117,7 @@ enum StreamInstance {
     Stderr,
     Stdout,
     TcpStream(ClauseName, TcpStream),
-    TlsStream(ClauseName, TlsStream<TcpStream>),
+    TlsStream(ClauseName, TlsStream<Stream>),
 }
 
 impl StreamInstance {
@@ -543,7 +543,7 @@ impl Stream {
     }
 
     #[inline]
-    pub(crate) fn from_tls_stream(address: ClauseName, tls_stream: TlsStream<TcpStream>) -> Self {
+    pub(crate) fn from_tls_stream(address: ClauseName, tls_stream: TlsStream<Stream>) -> Self {
         Stream::from_inst(StreamInstance::TlsStream(address, tls_stream))
     }
 

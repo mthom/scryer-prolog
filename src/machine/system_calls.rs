@@ -65,7 +65,7 @@ use openssl::nid::Nid;
 
 use sodiumoxide::crypto::scalarmult::curve25519::*;
 
-use native_tls::TlsConnector;
+use native_tls::{TlsConnector,TlsAcceptor,Identity};
 
 use base64;
 use roxmltree;
@@ -4194,8 +4194,9 @@ impl MachineState {
                                 "false" => Stream::from_tcp_stream(socket_addr, tcp_stream),
                                 "true" => {
                                     let connector = TlsConnector::new().unwrap();
+                                    let stream = Stream::from_tcp_stream(socket_addr, tcp_stream);
                                     let stream =
-                                        match connector.connect(socket_atom.as_str(), tcp_stream) {
+                                        match connector.connect(socket_atom.as_str(), stream) {
                                             Ok(tls_stream) => tls_stream,
                                             Err(_) => {
                                                 return Err(self.open_permission_error(
@@ -4206,7 +4207,8 @@ impl MachineState {
                                             }
                                         };
 
-                                    Stream::from_tls_stream(socket_addr, stream)
+                                    let addr = clause_name!("TLS".to_string(), self.atom_tbl);
+                                    Stream::from_tls_stream(addr, stream)
                                 }
                                 _ => {
                                     unreachable!()
@@ -4415,6 +4417,49 @@ impl MachineState {
                         ));
                     }
                 }
+            }
+            &SystemClauseType::TLSAcceptClient => {
+                let pkcs12 = self.string_encoding_bytes(1, "octet");
+                let password = self.heap_pstr_iter(self[temp_v!(2)]).to_string();
+                let identity =
+                    match Identity::from_pkcs12(&pkcs12, &password) {
+                        Ok(identity) => identity,
+                        Err(_) => {
+                            return Err(self.open_permission_error(
+                                self[temp_v!(1)],
+                                "tls_server_negotiate",
+                                3,
+                            ));
+                        }
+                    };
+
+                let stream0 = self.get_stream_or_alias(
+                    self[temp_v!(3)],
+                    &indices.stream_aliases,
+                    "tls_server_negotiate",
+                    3,
+                )?;
+
+                let acceptor = TlsAcceptor::new(identity).unwrap();
+
+                let stream =
+                    match acceptor.accept(stream0) {
+                        Ok(tls_stream) => tls_stream,
+                        Err(_) => {
+                            return Err(self.open_permission_error(
+                                self[temp_v!(3)],
+                                "tls_server_negotiate",
+                                3,
+                            ));
+                        }
+                    };
+                let addr = clause_name!("TLS".to_string(), self.atom_tbl);
+                let stream = Stream::from_tls_stream(addr, stream);
+                indices.streams.insert(stream.clone());
+
+                let stream = self.heap.to_unifiable(HeapCellValue::Stream(stream));
+                let stream_addr = self.store(self.deref(self[temp_v!(4)]));
+                self.bind(stream_addr.as_var().unwrap(), stream);
             }
             &SystemClauseType::SetStreamPosition => {
                 let mut stream = self.get_stream_or_alias(
