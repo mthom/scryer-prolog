@@ -954,7 +954,7 @@ retract_module_clause(Head, Body, Module) :-
     ).
 
 
-first_match_index([Clause | Clauses], Clause, N, N) :-
+first_match_index([Clause | _], Clause, N, N) :-
     !.
 first_match_index([_ | Clauses], Clause, N0, N) :-
     N1 is N0 + 1,
@@ -998,14 +998,14 @@ retract_clause(Head, Body) :-
 
 :- meta_predicate retract(0).
 
-retract(Clause) :-
-    (  Clause \= (_ :- _) ->
-       Head = Clause,
-       Body = true,
-       retract_clause(Head, Body)
-    ;  Clause = (Head :- Body) ->
-       retract_clause(Head, Body)
-    ).
+retract(Clause0) :-
+    strip_module(Clause0, Module, Clause),
+    (   Clause = (Head :- Body) ->
+        true
+    ;   Head = Clause,
+        Body = true
+    ),
+    retract_clause(Module:Head, Body).
 
 
 :- meta_predicate retractall(0).
