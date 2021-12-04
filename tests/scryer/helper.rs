@@ -29,25 +29,10 @@ impl Expectable for &[u8] {
 /// Tests whether the file can be successfully loaded
 /// and produces the expected output during it
 pub(crate) fn load_module_test<T: Expectable>(file: &str, expected: T) {
-    use scryer_prolog::*;
+    use scryer_prolog::machine::mock_wam::*;
 
-    // let input = machine::Stream::from("");
-    // let output = machine::Stream::from(String::new());
-    // let error = machine::Stream::from(String::new());
-
-    let mut wam = machine::Machine::new(); // input, output.clone(), error);
+    let mut wam = Machine::with_test_streams();
     expected.assert_eq(wam.test_load_file(file).as_slice());
-
-    // wam.load_file(
-    //     file.into(),
-    //     machine::Stream::from_owned_string(
-    //         std::fs::read_to_string(AsRef::<std::path::Path>::as_ref(file)).unwrap(),
-    //         &mut wam.machine_st.arena,
-    //     ),
-    // );
-    //
-    // let output = output.bytes().unwrap();
-    // expected.assert_eq(output.as_slice());
 }
 
 pub const SCRYER_PROLOG: &str = "scryer-prolog";
