@@ -81,15 +81,42 @@ sleep(T) :-
 
 :- meta_predicate time(0).
 
+:- dynamic(time_id/1).
+:- dynamic(time_state/2).
+
+time_next_id(N) :-
+        (   retract(time_id(N0)) ->
+            N is N0 + 1
+        ;   N = 0
+        ),
+        asserta(time_id(N)).
+
 time(Goal) :-
         '$cpu_now'(T0),
-        setup_call_cleanup(true,
-                           (   Goal,
-                               report_time(T0)
+        time_next_id(ID),
+        setup_call_cleanup(asserta(time_state(ID, T0)),
+                           (   call_cleanup(catch(Goal, E, (report_time(ID),throw(E))),
+                                            Det = true),
+                               time_true(ID),
+                               (   Det == true -> !
+                               ;   true
+                               )
+                           ;   report_time(ID),
+                               false
                            ),
-                           report_time(T0)).
+                           retract(time_state(ID, _))).
 
-report_time(T0) :-
+time_true(ID) :-
+        report_time(ID).
+time_true(ID)  :-
+        % on backtracking, update the stored walltime for this ID
+        retract(time_state(ID, _)),
+        '$cpu_now'(T0),
+        asserta(time_state(ID, T0)),
+        false.
+
+report_time(ID) :-
+        time_state(ID, T0),
         '$cpu_now'(T),
         Time is T - T0,
         (   bb_get('$first_answer', true) ->
@@ -99,28 +126,26 @@ report_time(T0) :-
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ?- time((true;false)).
-   % CPU time: 0.000 seconds
-   true
-;  % CPU time: 0.001 seconds
-   false.
+%@    % CPU time: 0.006 seconds
+%@    true
+%@ ;  % CPU time: 0.001 seconds
+%@    false.
 
 :- time(use_module(library(clpz))).
-   % CPU time: 0.000 seconds
-   % CPU time: 0.001 seconds
-   true.
+%@    % CPU time: 3.711 seconds
+%@    true.
 
 :- time(use_module(library(lists))).
-   % CPU time: 0.000 seconds
-   % CPU time: 0.001 seconds
-   true.
+%@    % CPU time: 0.006 seconds
+%@    true.
 
-?- time(member(X, [a,b,c])).
-   % CPU time: 0.000 seconds
-   X = a
-;  % CPU time: 0.002 seconds
-   X = b
-;  % CPU time: 0.004 seconds
-   X = c
-;  % CPU time: 0.007 seconds
-   false.
+?- time(member(X, "abc")).
+%@    % CPU time: 0.005 seconds
+%@    X = a
+%@ ;  % CPU time: 0.000 seconds
+%@    X = b
+%@ ;  % CPU time: 0.000 seconds
+%@    X = c
+%@ ;  % CPU time: 0.000 seconds
+%@    false.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
