@@ -503,22 +503,29 @@ impl MachineState {
     }
 
     pub(super) fn error_form(&mut self, err: MachineError, src: FunctorStub) -> MachineStub {
-        let location = err.location;
-        let err_len = err.len();
-
         let h = self.heap.len();
+        let location = err.location;
+        let stub_addition_len = if err.len() == 1 {
+            0 // if err contains 1 cell, it can be inlined at stub[1].
+        } else {
+            err.len()
+        };
 
         let mut stub = vec![
             atom_as_cell!(atom!("error"), 2),
             str_loc_as_cell!(h + 3),
-            str_loc_as_cell!(h + 3 + err_len),
+            str_loc_as_cell!(h + 3 + stub_addition_len),
         ];
 
-        stub.extend(err.into_iter(3));
+        if stub_addition_len > 0 {
+            stub.extend(err.into_iter(3));
+        } else {
+            stub[1] = err.stub[0];
+        }
 
         if let Some((line_num, _)) = location {
             stub.push(atom_as_cell!(atom!(":"), 2));
-            stub.push(str_loc_as_cell!(h + 6 + err_len));
+            stub.push(str_loc_as_cell!(h + 6 + stub_addition_len));
             stub.push(integer_as_cell!(Number::arena_from(
                 line_num,
                 &mut self.arena
