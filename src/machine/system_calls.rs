@@ -354,7 +354,7 @@ impl MachineState {
                     let cstr = PartialString::from(cstr_atom);
                     let pstr_chars = cstr.as_str_from(0).chars().count();
 
-                    if pstr_chars < max_steps {
+                    if pstr_chars <= max_steps {
                         CycleSearchResult::ProperList(pstr_chars)
                     } else {
                         CycleSearchResult::UntouchedCStr(cstr_atom, max_steps)
@@ -734,7 +734,7 @@ impl MachineState {
                 // avoid allocating a String if possible ...
                 Some(AtomOrString::Atom(cstr_atom))
             }
-            (HeapCellValueTag::Atom, (atom, arity)) => {
+            (HeapCellValueTag::Atom, (atom, arity)) => { // TODO: Char??
                 if arity == 0 {
                     // ... likewise.
                     Some(AtomOrString::Atom(atom))
@@ -2698,13 +2698,13 @@ impl MachineState {
             &SystemClauseType::EnqueueAttributedVar => {
                 let addr = self.store(self.deref(self.registers[1]));
 
-		read_heap_cell!(addr,
-		    (HeapCellValueTag::AttrVar, h) => {
-			self.attr_var_init.attr_var_queue.push(h);
-		    }
-		    _ => {
-		    }
-		);
+		        read_heap_cell!(addr,
+		            (HeapCellValueTag::AttrVar, h) => {
+			            self.attr_var_init.attr_var_queue.push(h);
+		            }
+		            _ => {
+		            }
+		        );
             }
             &SystemClauseType::GetNextDBRef => {
                 let a1 = self.store(self.deref(self.registers[1]));
@@ -4424,11 +4424,6 @@ impl MachineState {
             &SystemClauseType::UnwindStack => {
                 self.unwind_stack();
             }
-            /*
-            &SystemClauseType::Variant => {
-                self.fail = self.structural_eq_test();
-            }
-            */
             &SystemClauseType::WAMInstructions => {
                 let module_name = cell_as_atom!(self.store(self.deref(self.registers[1])));
 
