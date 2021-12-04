@@ -48,7 +48,7 @@ test_queries_on_rules :-
     \+ \+ retract((p(f(f(a), g(b), X), g(b), h) :- q(X, _))),
     \+ \+ assertz((p(_, f(_, Y, _)) :- h(Y))),
     assertz(h(y)),
-    \+ \+ findall(Y, p(_, f(_, Y, _)), [y]).
+    \+ \+ findall(Y, p(_, f(_, Y, _)), [y]),
     p(_, f(_, y, _)),
     \+ p(_, f(_, z, _)),
     \+ \+ retract((p(_, f(_, Y, _)) :- h(Y))),
