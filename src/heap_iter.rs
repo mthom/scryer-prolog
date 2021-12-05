@@ -204,9 +204,6 @@ impl<'a> StackfulPreOrderHeapIter<'a> {
 
                    return Some(self.heap[h]);
                }
-               // (HeapCellValueTag::StackVar) => {
-               //     unreachable!() // TODO: here, crashing.
-               // }
                _ => {
                    return Some(*cell);
                }

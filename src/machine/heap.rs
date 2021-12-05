@@ -67,6 +67,10 @@ impl TryFrom<HeapCellValue> for Literal {
                      (ArenaHeaderTag::Rational, n) => {
                          Ok(Literal::Rational(n))
                      }
+                     (ArenaHeaderTag::F64, f) => {
+                         // remove this redundancy.
+                         Ok(Literal::Float(F64Ptr(f)))
+                     }
                      _ => {
                          Err(())
                      }

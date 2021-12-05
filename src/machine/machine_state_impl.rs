@@ -2847,15 +2847,15 @@ impl MachineState {
             }
             &QueryInstruction::SetLocalValue(reg) => {
                 let addr = self.deref(self[reg]);
-                let h = self.heap.len();
+                let stored_v = self.store(addr);
 
-                if addr < Ref::heap_cell(h) {
-                    self.heap.push(addr);
-                    return;
+                if stored_v.is_stack_var() {
+                    let h = self.heap.len();
+                    self.heap.push(heap_loc_as_cell!(h));
+                    (self.bind_fn)(self, Ref::heap_cell(h), stored_v);
+                } else {
+                    self.heap.push(stored_v);
                 }
-
-                self.heap.push(heap_loc_as_cell!(h));
-                (self.bind_fn)(self, Ref::heap_cell(h), addr);
             }
             &QueryInstruction::SetVariable(reg) => {
                 let h = self.heap.len();
@@ -2956,6 +2956,7 @@ impl MachineState {
             return false;
         }
 
+        let addr = self.store(self.deref(addr));
         let mut iter = stackful_preorder_iter(&mut self.heap, addr);
 
         while let Some(value) = iter.next() {
@@ -3624,9 +3625,15 @@ impl MachineState {
             return false;
         }
 
-        let value = self.registers[1];
+        let value = self.store(self.deref(self.registers[1]));
+
+        if value.is_stack_var() {
+            return true;
+        }
 
         for v in stackful_preorder_iter(&mut self.heap, value) {
+            let v = unmark_cell_bits!(v);
+
             if v.is_var() {
                 return true;
             }

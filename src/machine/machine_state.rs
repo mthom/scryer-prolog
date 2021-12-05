@@ -966,9 +966,8 @@ impl MachineState {
         loop {
             match self.read(stream, &indices.op_dir) {
                 Ok(term_write_result) => {
-                    let term = self.registers[2];
+                    let term = self.store(self.deref(self.registers[2]));
                     unify_fn!(self, heap_loc_as_cell!(term_write_result.heap_loc), term);
-                    let term = self.store(self.deref(term));
 
                     if self.fail {
                         return Ok(());

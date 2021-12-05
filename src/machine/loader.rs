@@ -446,6 +446,8 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         let mut iter = stackful_post_order_iter(&mut machine_st.heap, term_addr);
 
         while let Some(addr) = iter.next() {
+            let addr = unmark_cell_bits!(addr);
+
             read_heap_cell!(addr,
                 (HeapCellValueTag::Lis) => {
                     let tail = term_stack.pop().unwrap();
@@ -459,7 +461,6 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                 }
                 (HeapCellValueTag::Cons | HeapCellValueTag::CStr | HeapCellValueTag::Fixnum |
                  HeapCellValueTag::Char | HeapCellValueTag::F64) => {
-		    let addr = unmark_cell_bits!(addr);
                     term_stack.push(Term::Literal(Cell::default(), Literal::try_from(addr).unwrap()));
                 }
                 (HeapCellValueTag::Atom, (name, arity)) => {
@@ -490,7 +491,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                         ));
                     }
                 }
-                (HeapCellValueTag::PStrOffset, h) => {
+                (HeapCellValueTag::PStrLoc, h) => {
                     let string = cell_as_atom_cell!(iter.heap[h]).get_name();
                     let tail = term_stack.pop().unwrap();
 

@@ -846,6 +846,6 @@ mod tests {
         wam.heap.push(pstr_as_cell!(atom!("a string")));
         wam.heap.push(empty_list_as_cell!());
 
-        assert!(!wam.is_cyclic_term(heap_loc_as_cell!(0)));
+        assert!(!wam.is_cyclic_term(pstr_loc_as_cell!(0)));
     }
 }

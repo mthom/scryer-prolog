@@ -538,6 +538,9 @@ impl<'a, 'b: 'a, TermMarker: Allocator<'a>> CodeGenerator<'b, TermMarker> {
                 &Term::AnonVar | &Term::Clause(..) | &Term::Cons(..) | &Term::PartialString(..) => {
                     code.push(fail!());
                 }
+                &Term::Literal(_, Literal::String(_)) => {
+                    code.push(fail!());
+                }
                 &Term::Literal(..) => {
                     code.push(succeed!());
                 }
@@ -548,7 +551,8 @@ impl<'a, 'b: 'a, TermMarker: Allocator<'a>> CodeGenerator<'b, TermMarker> {
                 }
             },
             &InlinedClauseType::IsCompound(..) => match &terms[0] {
-                &Term::Clause(..) | &Term::Cons(..) => {
+                &Term::Clause(..) | &Term::Cons(..) | &Term::PartialString(..) |
+                &Term::Literal(_, Literal::String(..)) => {
                     code.push(succeed!());
                 }
                 &Term::Var(ref vr, ref name) => {
@@ -591,7 +595,6 @@ impl<'a, 'b: 'a, TermMarker: Allocator<'a>> CodeGenerator<'b, TermMarker> {
                 | &Term::Literal(_, Literal::Rational(_))
                 | &Term::Literal(_, Literal::Integer(_))
                 | &Term::Literal(_, Literal::Fixnum(_)) => {
-                    // | &Term::Literal(_, Literal::Usize(_)) => {
                     code.push(succeed!());
                 }
                 &Term::Var(ref vr, ref name) => {
@@ -618,7 +621,6 @@ impl<'a, 'b: 'a, TermMarker: Allocator<'a>> CodeGenerator<'b, TermMarker> {
             },
             &InlinedClauseType::IsInteger(..) => match &terms[0] {
                 &Term::Literal(_, Literal::Integer(_)) | &Term::Literal(_, Literal::Fixnum(_)) => {
-                    // | &Term::Literal(_, Literal::Usize(_)) => {
                     code.push(succeed!());
                 }
                 &Term::Var(ref vr, ref name) => {
