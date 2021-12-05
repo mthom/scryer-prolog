@@ -1,5 +1,5 @@
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   Written June 2020 by Markus Triska (triska@metalevel.at)
+   Written 2020, 2021 by Markus Triska (triska@metalevel.at)
    Part of Scryer Prolog.
 
    http_open(+Address, -Stream, +Options)
@@ -29,6 +29,7 @@
 :- use_module(library(charsio)).
 :- use_module(library(dcgs)).
 :- use_module(library(lists), [member/2]).
+:- use_module(library(tls)).
 
 http_open(Address, Stream, Options) :-
         must_be(list, Options),
@@ -74,7 +75,10 @@ chars_host_url(Cs, Host, [/|Us]) :-
         atom_chars(Host, Hs).
 
 connect(https, Host, Stream) :-
-        socket_client_open(Host:443, Stream, [tls(true)]).
+        socket_client_open(Host:443, Stream0, []),
+        atom_chars(Host, HostChars),
+        tls_client_context(Context, [hostname(HostChars)]),
+        tls_client_negotiate(Context, Stream0, Stream).
 connect(http, Host, Stream) :-
         socket_client_open(Host:80, Stream, []).
 
