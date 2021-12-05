@@ -11,6 +11,7 @@
 :- use_module(library(iso_ext)).
 :- use_module(library(error)).
 :- use_module(library(lists)).
+:- use_module(library(options)).
 :- use_module(library(iso_ext), [partial_string/1,partial_string/3]).
 
 fabricate_var_name(VarType, VarName, N) :-
@@ -241,16 +242,8 @@ read_to_eof(Stream, Cs) :-
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 chars_base64(Cs, Bs, Options) :-
-        must_be(list, Options),
-        (   member(O, Options), var(O) ->
-            instantiation_error(chars_base64/3)
-        ;   (   member(padding(Padding), Options) -> true
-            ;   Padding = true
-            ),
-            (   member(charset(Charset), Options) -> true
-            ;   Charset = standard
-            )
-        ),
+        option(padding(Padding), Options, true),
+        option(charset(Charset), Options, standard),
         must_be(boolean, Padding),
         must_be(atom, Charset),
         (   member(Charset, [standard,url]) -> true
