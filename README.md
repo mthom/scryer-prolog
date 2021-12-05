@@ -537,10 +537,6 @@ The modules that ship with Scryer&nbsp;Prolog are also called
   is often used together with [`library(sgml)`](src/lib/sgml.pl).
 * [`sockets`](src/lib/sockets.pl)
   Predicates for opening and accepting TCP connections as streams.
-  TLS negotiation is performed via the option `tls(true)` in
-  `socket_client_open/3`, yielding secure encrypted connections.
-  TLS *servers* can be created with `tls_server_context/2` and
-  `tls_server_negotiate/3`.
 * [`os`](src/lib/os.pl)
   Predicates for reasoning about environment&nbsp;variables.
 * [`iso_ext`](src/lib/iso_ext.pl)

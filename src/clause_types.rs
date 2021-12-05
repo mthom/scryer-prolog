@@ -742,7 +742,7 @@ impl SystemClauseType {
             ("$set_seed", 1) => Some(SystemClauseType::SetSeed),
             ("$skip_max_list", 4) => Some(SystemClauseType::SkipMaxList),
             ("$sleep", 1) => Some(SystemClauseType::Sleep),
-            ("$socket_client_open", 8) => Some(SystemClauseType::SocketClientOpen),
+            ("$socket_client_open", 7) => Some(SystemClauseType::SocketClientOpen),
             ("$socket_server_open", 3) => Some(SystemClauseType::SocketServerOpen),
             ("$socket_server_accept", 7) => Some(SystemClauseType::SocketServerAccept),
             ("$socket_server_close", 1) => Some(SystemClauseType::SocketServerClose),
