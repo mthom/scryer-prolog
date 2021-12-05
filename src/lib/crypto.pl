@@ -46,6 +46,7 @@
 :- use_module(library(format)).
 :- use_module(library(charsio)).
 :- use_module(library(si)).
+:- use_module(library(options)).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    hex_bytes(?Hex, ?Bytes) is det.
@@ -288,15 +289,6 @@ crypto_data_hkdf(Data0, L, Bytes, Options0) :-
 hkdf_algorithm(sha256).
 hkdf_algorithm(sha384).
 hkdf_algorithm(sha512).
-
-option(What, Options, Default) :-
-        (   member(V, Options), var(V) ->
-            instantiation_error(option/3)
-        ;   true
-        ),
-        (   member(What, Options) -> true
-        ;   What =.. [_,Default]
-        ).
 
 chars_bytes_(Cs, Bytes, Context) :-
         must_be(list, Cs),
