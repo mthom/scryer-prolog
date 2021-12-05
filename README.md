@@ -550,6 +550,8 @@ The modules that ship with Scryer&nbsp;Prolog are also called
   ECDH key&nbsp;exchange over Curve25519 (X25519), authenticated symmetric
   encryption with ChaCha20-Poly1305, and reasoning about elliptic curves.
 * [`uuid`](src/lib/uuid.pl) UUIDv4 generation and hex representation
+* [`tls`](src/lib/tls.pl)
+  Predicates for negotiating TLS connections explicitly.
 
 To use predicates provided by the `lists` library, write:
 
