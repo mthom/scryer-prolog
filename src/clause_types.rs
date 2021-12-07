@@ -481,7 +481,6 @@ impl SystemClauseType {
             &SystemClauseType::Maybe => atom!("maybe"),
             &SystemClauseType::CpuNow => atom!("$cpu_now"),
             &SystemClauseType::CurrentTime => atom!("$current_time"),
-            //          &SystemClauseType::ModuleHeadIsDynamic => atom!("$module_head_is_dynamic"),
             &SystemClauseType::ModuleExists => atom!("$module_exists"),
             &SystemClauseType::NextStream => atom!("$next_stream"),
             &SystemClauseType::NoSuchPredicate => atom!("$no_such_predicate"),

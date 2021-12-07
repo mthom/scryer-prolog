@@ -69,7 +69,8 @@ Module : Predicate :-
 % dynamic module resolution.
 
 :(Module, Predicate, A1) :-
-    (  atom(Module) -> '$module_call'(A1, Module, Predicate)
+    (  atom(Module) ->
+       '$module_call'(A1, Module, Predicate)
     ;  throw(error(type_error(atom, Module), (:)/2))
     ).
 
@@ -262,7 +263,7 @@ comma_dispatch_call_list([G1,G2,G3,G4,G5,G6,G7,G8|Gs]) :-
     '$call'(G6),
     '$call'(G7),
     '$call'(G8),
-    comma_dispatch_call_list(Gs).
+    '$call_with_default_policy'(comma_dispatch_call_list(Gs)).
 comma_dispatch_call_list([G1,G2,G3,G4,G5,G6,G7]) :-
     !,
     '$call'(G1),
@@ -585,7 +586,9 @@ throw(Ball) :-
     ),
     '$unwind_stack'.
 
+
 :- non_counted_backtracking '$iterate_find_all'/4.
+
 '$iterate_find_all'(Template, Goal, _, LhOffset) :-
     call(Goal),
     '$copy_to_lh'(LhOffset, Template),
@@ -601,14 +604,13 @@ truncate_lh_to(LhLength) :- '$truncate_lh_to'(LhLength).
 :- meta_predicate findall(?, 0, ?).
 
 findall(Template, Goal, Solutions) :-
-    error:can_be(list, Solutions),
+    '$call_with_default_policy'(error:can_be(list, Solutions)),
     '$lh_length'(LhLength),
     '$call_with_default_policy'(
         catch(builtins:'$iterate_find_all'(Template, Goal, Solutions, LhLength),
               Error,
               ( builtins:truncate_lh_to(LhLength), builtins:throw(Error) ))
     ).
-
 
 :- non_counted_backtracking '$iterate_find_all_diff'/5.
 
@@ -624,8 +626,8 @@ findall(Template, Goal, Solutions) :-
 :- meta_predicate findall(?, 0, ?, ?).
 
 findall(Template, Goal, Solutions0, Solutions1) :-
-    error:can_be(list, Solutions0),
-    error:can_be(list, Solutions1),
+    '$call_with_default_policy'(error:can_be(list, Solutions0)),
+    '$call_with_default_policy'(error:can_be(list, Solutions1)),
     '$lh_length'(LhLength),
     '$call_with_default_policy'(
         catch(builtins:'$iterate_find_all_diff'(Template, Goal, Solutions0,
@@ -819,13 +821,14 @@ asserta_clause(Head, Body) :-
 
 :- meta_predicate asserta(0).
 
-asserta(Clause) :-
+asserta(Clause0) :-
+    loader:strip_module(Clause0, Module, Clause),
     (  Clause \= (_ :- _) ->
        Head = Clause,
        Body = true,
-       asserta_clause(Head, Body)
+       module_asserta_clause(Head, Body, Module)
     ;  Clause = (Head :- Body) ->
-       asserta_clause(Head, Body)
+       module_asserta_clause(Head, Body, Module)
     ).
 
 module_assertz_clause(Head, Body, Module) :-
@@ -874,13 +877,14 @@ assertz_clause(Head, Body) :-
 
 :- meta_predicate assertz(0).
 
-assertz(Clause) :-
+assertz(Clause0) :-
+    loader:strip_module(Clause0, Module, Clause),
     (  Clause \= (_ :- _) ->
        Head = Clause,
        Body = true,
-       assertz_clause(Head, Body)
+       module_assertz_clause(Head, Body, Module)
     ;  Clause = (Head :- Body) ->
-       assertz_clause(Head, Body)
+       module_assertz_clause(Head, Body, Module)
     ).
 
 

@@ -257,8 +257,8 @@ expand_term_goals(Terms0, Terms) :-
              Terms = (Module:Head2 :- Body1)
           ;  type_error(atom, Module, load/1)
           )
-       ;  prolog_load_context(module, Target),
-          module_expanded_head_variables(Head1, HeadVars),
+       ;  module_expanded_head_variables(Head1, HeadVars),
+          prolog_load_context(module, Target),
           expand_goal(Body0, Target, Body1, HeadVars),
           Terms = (Head1 :- Body1)
        )

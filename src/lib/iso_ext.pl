@@ -24,10 +24,6 @@
 
 :- use_module(library(lists), [maplist/3]).
 
-:- meta_predicate(call_cleanup(0, 0)).
-
-:- meta_predicate(setup_call_cleanup(0, 0, 0)).
-
 :- meta_predicate(forall(0, 0)).
 
 forall(Generate, Test) :-
@@ -56,14 +52,17 @@ bb_get(Key, Value) :-
     ).
 
 
+% setup_call_cleanup.
+
+:- meta_predicate(call_cleanup(0, 0)).
+
 call_cleanup(G, C) :- setup_call_cleanup(true, G, C).
 
-
-% setup_call_cleanup.
+:- meta_predicate(setup_call_cleanup(0, 0, 0)).
 
 setup_call_cleanup(S, G, C) :-
     '$get_b_value'(B),
-    call(S),
+    '$call'(S),
     '$set_cp_by_default'(B),
     '$get_current_block'(Bb),
     (  C = _:CC,
@@ -71,6 +70,8 @@ setup_call_cleanup(S, G, C) :-
        instantiation_error(setup_call_cleanup/3)
     ;  '$call_with_default_policy'(scc_helper(C, G, Bb))
     ).
+
+:- meta_predicate(scc_helper(?,0,?)).
 
 :- non_counted_backtracking scc_helper/3.
 scc_helper(C, G, Bb) :-
@@ -140,11 +141,17 @@ call_with_inference_limit(G, L, R) :-
     '$call_with_default_policy'(call_with_inference_limit(G, L, R, Bb, B)),
     '$remove_call_policy_check'(B).
 
+install_inference_counter(B, L, Count0) :-
+    '$install_inference_counter'(B, L, Count0).
+
+:- meta_predicate(call_with_inference_limit(0,?,?,?,?)).
+
 :- non_counted_backtracking call_with_inference_limit/5.
+
 call_with_inference_limit(G, L, R, Bb, B) :-
     '$install_new_block'(NBb),
     '$install_inference_counter'(B, L, Count0),
-    call(G),
+    '$call'(G),
     '$inference_level'(R, B),
     '$remove_inference_counter'(B, Count1),
     '$call_with_default_policy'(is(Diff, L - (Count1 - Count0))),

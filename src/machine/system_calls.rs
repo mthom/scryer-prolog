@@ -407,29 +407,29 @@ impl MachineState {
     }
 
     fn term_variables_under_max_depth(
-	    &mut self,
-	    term: HeapCellValue,
-	    max_depth: usize,
-	    list_of_vars: HeapCellValue,
+        &mut self,
+        term: HeapCellValue,
+        max_depth: usize,
+        list_of_vars: HeapCellValue,
     ) {
-	    let mut seen_set = IndexSet::new();
+        let mut seen_set = IndexSet::new();
 
-	    {
-	        let mut iter = stackful_post_order_iter(&mut self.heap, term);
+        {
+            let mut iter = stackful_post_order_iter(&mut self.heap, term);
 
             while let Some(value) = iter.next() {
-		        if iter.parent_stack_len() >= max_depth {
-		            iter.pop_stack();
-		            continue;
-		        }
+                if iter.parent_stack_len() >= max_depth {
+                    iter.pop_stack();
+                    continue;
+                }
 
-		        let value = unmark_cell_bits!(value);
+                let value = unmark_cell_bits!(value);
 
-		        if value.is_var() && !seen_set.contains(&value) {
-		            seen_set.insert(value);
-		        }
+                if value.is_var() && !seen_set.contains(&value) {
+                    seen_set.insert(value);
+                }
             }
-	    }
+        }
 
         let outcome = heap_loc_as_cell!(
             iter_to_heap_list(
@@ -2499,17 +2499,17 @@ impl MachineState {
             &SystemClauseType::HeadIsDynamic => {
                 let module_name = cell_as_atom!(self.store(self.deref(self.registers[1])));
 
-		        let (name, arity) = read_heap_cell!(self.store(self.deref(self.registers[2])),
+                let (name, arity) = read_heap_cell!(self.store(self.deref(self.registers[2])),
                     (HeapCellValueTag::Str, s) => {
-			            cell_as_atom_cell!(self.heap[s]).get_name_and_arity()
-		            }
+                        cell_as_atom_cell!(self.heap[s]).get_name_and_arity()
+                    }
                     (HeapCellValueTag::Atom, (name, _arity)) => {
-			            (name, 0)
-		            }
+                        (name, 0)
+                    }
                     _ => {
-			            unreachable!()
-		            }
-		        );
+                        unreachable!()
+                    }
+                );
 
                 self.fail = !indices.is_dynamic_predicate(module_name, (name, arity));
             }
@@ -2698,13 +2698,13 @@ impl MachineState {
             &SystemClauseType::EnqueueAttributedVar => {
                 let addr = self.store(self.deref(self.registers[1]));
 
-		        read_heap_cell!(addr,
-		            (HeapCellValueTag::AttrVar, h) => {
-			            self.attr_var_init.attr_var_queue.push(h);
-		            }
-		            _ => {
-		            }
-		        );
+                read_heap_cell!(addr,
+                    (HeapCellValueTag::AttrVar, h) => {
+                        self.attr_var_init.attr_var_queue.push(h);
+                    }
+                    _ => {
+                    }
+                );
             }
             &SystemClauseType::GetNextDBRef => {
                 let a1 = self.store(self.deref(self.registers[1]));
@@ -4384,12 +4384,12 @@ impl MachineState {
                 unify_fn!(self, a2, outcome);
             }
             &SystemClauseType::TermVariablesUnderMaxDepth => {
-		        // Term, MaxDepth, VarList
-		        let max_depth = cell_as_fixnum!(
-		            self.store(self.deref(self.registers[2]))
-		        ).get_num() as usize;
+                // Term, MaxDepth, VarList
+                let max_depth = cell_as_fixnum!(
+                    self.store(self.deref(self.registers[2]))
+                ).get_num() as usize;
 
-		        self.term_variables_under_max_depth(self.registers[1], max_depth, self.registers[3]);
+                self.term_variables_under_max_depth(self.registers[1], max_depth, self.registers[3]);
             }
             &SystemClauseType::TruncateLiftedHeapTo => {
                 let a1 = self.store(self.deref(self.registers[1]));
