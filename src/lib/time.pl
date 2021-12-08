@@ -120,32 +120,33 @@ report_time(ID) :-
         '$cpu_now'(T),
         Time is T - T0,
         (   bb_get('$first_answer', true) ->
-            format("   % CPU time: ~3f seconds~n", [Time])
-        ;   format("% CPU time: ~3f seconds~n   ", [Time])
-        ).
+            Pre = "   ", Post = ""
+        ;   Pre = "", Post = "   "
+        ),
+        format("~s% CPU time: ~3fs~n~s", [Pre,Time,Post]).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ?- time((true;false)).
-%@    % CPU time: 0.006 seconds
+%@    % CPU time: 0.006s
 %@    true
-%@ ;  % CPU time: 0.001 seconds
+%@ ;  % CPU time: 0.001s
 %@    false.
 
 :- time(use_module(library(clpz))).
-%@    % CPU time: 3.711 seconds
+%@    % CPU time: 3.711s
 %@    true.
 
 :- time(use_module(library(lists))).
-%@    % CPU time: 0.006 seconds
+%@    % CPU time: 0.006s
 %@    true.
 
 ?- time(member(X, "abc")).
-%@    % CPU time: 0.005 seconds
+%@    % CPU time: 0.005s
 %@    X = a
-%@ ;  % CPU time: 0.000 seconds
+%@ ;  % CPU time: 0.000s
 %@    X = b
-%@ ;  % CPU time: 0.000 seconds
+%@ ;  % CPU time: 0.000s
 %@    X = c
-%@ ;  % CPU time: 0.000 seconds
+%@ ;  % CPU time: 0.000s
 %@    false.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
