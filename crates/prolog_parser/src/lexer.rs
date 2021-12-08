@@ -791,7 +791,7 @@ impl<'a, R: Read> Lexer<'a, R> {
             let cr = self.lookahead_char();
 
             match cr {
-                Ok(c) if layout_char!(c) || new_line_char!(c) => {
+                Ok(c) if layout_char!(c) => {
                     self.skip_char()?;
                     layout_inserted = true;
                 }
