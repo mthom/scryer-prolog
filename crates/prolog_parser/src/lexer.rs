@@ -564,11 +564,8 @@ impl<'a, R: Read> Lexer<'a, R> {
 
         if c == '_' {
             self.skip_char()?;
+            self.scan_for_layout()?;
             c = self.lookahead_char()?;
-            while layout_char!(c) {
-                self.skip_char()?;
-                c = self.lookahead_char()?;
-            }
 
             if decimal_digit_char!(c) {
                 Ok(c)
