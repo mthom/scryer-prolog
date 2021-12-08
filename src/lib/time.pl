@@ -1,5 +1,5 @@
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   Written 2020 by Markus Triska (triska@metalevel.at)
+   Written 2020, 2021 by Markus Triska (triska@metalevel.at)
    Part of Scryer Prolog.
 
    This library provides predicates for reasoning about time.
@@ -109,7 +109,7 @@ time(Goal) :-
 time_true(ID) :-
         report_time(ID).
 time_true(ID)  :-
-        % on backtracking, update the stored walltime for this ID
+        % on backtracking, update the stored CPU time for this ID
         retract(time_state(ID, _)),
         '$cpu_now'(T0),
         asserta(time_state(ID, T0)),
