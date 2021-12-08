@@ -1,7 +1,6 @@
 use crate::arena::*;
 use crate::atom_table::*;
 use crate::types::*;
-
 use crate::clause_types::*;
 use crate::forms::*;
 use crate::heap_iter::*;
@@ -3377,11 +3376,15 @@ impl MachineState {
             self.heap.push(atom_as_cell!(name, arity));
 
             for i in 0..arity {
-        self.heap.push(heap_loc_as_cell!(h + i + 1));
-        }
+                self.heap.push(heap_loc_as_cell!(h + i + 1));
+            }
 
-            str_loc_as_cell!(h)
-    };
+            if arity == 0 {
+                heap_loc_as_cell!(h)
+            } else {
+                str_loc_as_cell!(h)
+            }
+        };
 
         (self.bind_fn)(self, r, f_a);
     }

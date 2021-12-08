@@ -590,7 +590,7 @@ throw(Ball) :-
 :- non_counted_backtracking '$iterate_find_all'/4.
 
 '$iterate_find_all'(Template, Goal, _, LhOffset) :-
-    call(Goal),
+    '$call'(Goal),
     '$copy_to_lh'(LhOffset, Template),
     '$fail'.
 '$iterate_find_all'(_, _, Solutions, LhOffset) :-
