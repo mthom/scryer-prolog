@@ -154,7 +154,7 @@ abnf_lf --> "\n".
 
 abnf_lwsp --> "".
 abnf_lwsp --> abnf_wsp, abnf_lwsp.
-abnf_lwsp --> abnf_clrf, abnf_wsp, abnf_lwsp.
+abnf_lwsp --> abnf_crlf, abnf_wsp, abnf_lwsp.
 
 abnf_octet(Char) --> [Char], char_type(Char, octet).
 
