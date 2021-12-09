@@ -746,11 +746,11 @@ setof(Template, Goal, Solution) :-
     (  var(H) ->
        throw(error(instantiation_error, clause/2))
     ;  callable(H), functor(H, Name, Arity) ->
-       (  '$head_is_dynamic'(Module, H) ->
+       (  '$no_such_predicate'(Module, H) ->
+          '$fail'
+       ;  '$head_is_dynamic'(Module, H) ->
           '$clause_body_is_valid'(B),
           Module:'$clause'(H, B)
-       ;  '$no_such_predicate'(Module, H) ->
-          '$fail'
        ;  throw(error(permission_error(access, private_procedure, Name/Arity),
                       clause/2))
        )
@@ -767,12 +767,11 @@ clause(H, B) :-
           arg(1, H, Module),
           arg(2, H, F),
           '$module_clause'(F, B, Module)
+       ;  '$no_such_predicate'(user, H) ->
+          '$fail'
        ;  '$head_is_dynamic'(user, H) ->
           '$clause_body_is_valid'(B),
           '$clause'(H, B)
-       ;  '$no_such_predicate'(user, H) ->  %% '$no_such_predicate' fails if
-                                            %% H is not callable.
-          '$fail'
        ;  throw(error(permission_error(access, private_procedure, Name/Arity),
                       clause/2))
        )

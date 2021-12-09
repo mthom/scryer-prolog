@@ -1974,13 +1974,21 @@ impl Machine {
             loader
                 .wam_prelude
                 .indices
-                .get_predicate_skeleton_mut(&compilation_target, &key)
-                .map(|skeleton| skeleton.reset());
+                .remove_predicate_skeleton(&compilation_target, &key);
 
             let code_index = loader
                 .get_or_insert_code_index(key, compilation_target);
 
-            code_index.set(IndexPtr::DynamicUndefined);
+            code_index.set(IndexPtr::Undefined);
+
+            /*
+            loader
+                .wam_prelude
+                .indices
+                .get_predicate_skeleton_mut(&compilation_target, &key)
+                .map(|skeleton| skeleton.reset());
+
+            */
 
             loader.payload.compilation_target = clause_clause_compilation_target;
 
@@ -2269,7 +2277,6 @@ impl Machine {
             ClauseType::Named(name, arity, _) => {
                 if let Some(module) = self.indices.modules.get(&(atom!("builtins"))) {
                     self.machine_st.fail = !module.code_dir.contains_key(&(name, arity));
-
                     return;
                 }
             }

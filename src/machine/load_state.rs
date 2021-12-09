@@ -459,7 +459,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
     }
 
     pub(super) fn remove_replaced_in_situ_module(&mut self, module_name: Atom) {
-        let removed_module = match self.wam_prelude.indices.modules.remove(&module_name) {
+        let mut removed_module = match self.wam_prelude.indices.modules.remove(&module_name) {
             Some(module) => module,
             None => return,
         };
@@ -467,22 +467,29 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         for (key, code_index) in &removed_module.code_dir {
             match removed_module
                 .local_extensible_predicates
-                .get(&(CompilationTarget::User, key.clone()))
+                .get(&(CompilationTarget::User, *key))
             {
                 Some(skeleton) if skeleton.is_multifile => continue,
                 _ => {}
             }
 
-            if code_index.get() != IndexPtr::Undefined {
-                let old_index_ptr = code_index.replace(IndexPtr::Undefined);
+            let old_index_ptr = code_index.replace(IndexPtr::Undefined);
 
-                self.payload.retraction_info
-                    .push_record(RetractionRecord::ReplacedModulePredicate(
-                        module_name.clone(),
-                        key.clone(),
-                        old_index_ptr,
-                    ));
-            }
+            self.payload.retraction_info
+                .push_record(RetractionRecord::ReplacedModulePredicate(
+                    module_name,
+                    *key,
+                    old_index_ptr,
+                ));
+        }
+
+        for (key, skeleton) in removed_module.extensible_predicates.drain(..) {
+            self.payload.retraction_info
+                .push_record(RetractionRecord::RemovedSkeleton(
+                    CompilationTarget::Module(module_name),
+                    key,
+                    skeleton,
+                ));
         }
 
         self.wam_prelude.indices.modules.insert(module_name, removed_module);
@@ -861,7 +868,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         let mut module = Module::new(module_decl, listing_src);
 
         self.import_builtins_in_module(
-            module_name.clone(),
+            module_name,
             &mut module.code_dir,
             &mut module.op_dir,
             &mut module.meta_predicates,
@@ -904,10 +911,10 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         module_decl: ModuleDecl,
         listing_src: &ListingSource,
     ) {
-        let module_name = module_decl.name.clone();
+        let module_name = module_decl.name;
 
-        self.remove_module_exports(module_name.clone());
-        self.remove_replaced_in_situ_module(module_name.clone());
+        self.remove_module_exports(module_name);
+        self.remove_replaced_in_situ_module(module_name);
 
         match self.wam_prelude.indices.modules.get_mut(&module_name) {
             Some(module) => {
@@ -970,7 +977,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             None => {
                 self.payload
                     .retraction_info
-                    .push_record(RetractionRecord::AddedModule(module_name.clone()));
+                    .push_record(RetractionRecord::AddedModule(module_name));
 
                 Module::new(module_decl, listing_src)
             }

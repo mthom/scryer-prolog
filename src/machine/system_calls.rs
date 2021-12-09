@@ -3365,7 +3365,7 @@ impl MachineState {
                             .unwrap_or(IndexPtr::DynamicUndefined);
 
                             match index {
-                                IndexPtr::DynamicUndefined => false,
+                                IndexPtr::DynamicUndefined | IndexPtr::Undefined => false,
                                 _ => true,
                             }
                         }

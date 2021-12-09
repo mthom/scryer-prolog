@@ -89,6 +89,8 @@ unload_evacuable(Evacuable) :-
 
 run_initialization_goals(Module) :-
     (  predicate_property(Module:'$initialization_goals'(_), dynamic) ->
+       % FIXME: failing here. also, see add_module.
+       '$debug_hook',
        findall(Module:Goal, '$call'(builtins:retract(Module:'$initialization_goals'(Goal))), Goals),
        abolish(Module:'$initialization_goals'/1),
        (  maplist(Module:call, Goals) ->
