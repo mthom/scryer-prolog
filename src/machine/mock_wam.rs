@@ -315,9 +315,7 @@ impl Machine {
         );
 
         self.load_file(file.into(), stream);
-
-        let output = self.user_output.bytes().map(|b| b.unwrap()).collect();
-        output
+        self.user_output.bytes().map(|b| b.unwrap()).collect()
     }
 }
 

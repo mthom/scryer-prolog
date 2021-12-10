@@ -65,3 +65,4 @@ slice-deque = "0.3.0"
 [dev-dependencies]
 assert_cmd = "1.0.3"
 predicates-core = "1.0.2"
+serial_test = "0.5.1"

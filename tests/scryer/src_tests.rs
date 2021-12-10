@@ -1,25 +1,31 @@
 use crate::helper::{load_module_test, run_top_level_test_with_args};
+use serial_test::serial;
 
+#[serial]
 #[test]
 fn builtins() {
     load_module_test("src/tests/builtins.pl", "");
 }
 
+#[serial]
 #[test]
 fn call_with_inference_limit() {
     load_module_test("src/tests/call_with_inference_limit.pl", "");
 }
 
+#[serial]
 #[test]
 fn facts() {
     load_module_test("src/tests/facts.pl", "");
 }
 
+#[serial]
 #[test]
 fn hello_world() {
     load_module_test("src/tests/hello_world.pl", "Hello World!\n");
 }
 
+#[serial]
 #[test]
 fn syntax_error() {
     load_module_test(
@@ -28,36 +34,37 @@ fn syntax_error() {
     );
 }
 
+#[serial]
 #[test]
-#[ignore] // fails to halt
 fn predicates() {
     load_module_test("src/tests/predicates.pl", "");
 }
 
+#[serial]
 #[test]
 fn rules() {
     load_module_test("src/tests/rules.pl", "");
 }
 
+#[serial]
 #[test]
-#[ignore]
 fn setup_call_cleanup_load() {
     load_module_test(
         "src/tests/setup_call_cleanup.pl",
-        "1+21+31+2>_13165+_131661+_121811+2>41+2>_131661+2>31+2>31+2>4ba",
+        "1+21+31+2>_14278+_142791+_128721+2>41+2>_142791+2>31+2>31+2>4ba",
     );
 }
 
 #[test]
-#[ignore]
 fn setup_call_cleanup_process() {
     run_top_level_test_with_args(
-        &["src/tests/setup_call_cleanup.pl"],
+        &["src/tests/setup_call_cleanup.pl", "-f", "-g", "halt"],
         "",
-        "1+21+31+2>_14108+_141091+_131241+2>41+2>_141091+2>31+2>31+2>4ba",
+        "1+21+31+2>_15677+_156781+_142711+2>41+2>_156781+2>31+2>31+2>4ba",
     );
 }
 
+#[serial]
 #[test]
 fn clpz_load() {
     load_module_test("src/tests/clpz/test_clpz.pl", "");

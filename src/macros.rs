@@ -303,7 +303,6 @@ macro_rules! match_untyped_arena_ptr_pat {
             | ArenaHeaderTag::ReadlineStream
             | ArenaHeaderTag::StaticStringStream
             | ArenaHeaderTag::ByteStream
-            | ArenaHeaderTag::NullStream
             | ArenaHeaderTag::StandardOutputStream
             | ArenaHeaderTag::StandardErrorStream
     };

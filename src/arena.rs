@@ -371,6 +371,8 @@ impl Arena {
 }
 
 unsafe fn drop_slab_in_place(value: &mut AllocSlab) {
+    use crate::parser::char_reader::CharReader;
+
     match value.header.tag() {
         ArenaHeaderTag::Integer => {
             ptr::drop_in_place(value.payload_offset::<Integer>());
@@ -379,25 +381,25 @@ unsafe fn drop_slab_in_place(value: &mut AllocSlab) {
             ptr::drop_in_place(value.payload_offset::<Rational>());
         }
         ArenaHeaderTag::InputFileStream => {
-            ptr::drop_in_place(value.payload_offset::<InputFileStream>());
+            ptr::drop_in_place(value.payload_offset::<StreamLayout<CharReader<InputFileStream>>>());
         }
         ArenaHeaderTag::OutputFileStream => {
-            ptr::drop_in_place(value.payload_offset::<OutputFileStream>());
+            ptr::drop_in_place(value.payload_offset::<StreamLayout<OutputFileStream>>());
         }
         ArenaHeaderTag::NamedTcpStream => {
-            ptr::drop_in_place(value.payload_offset::<NamedTcpStream>());
+            ptr::drop_in_place(value.payload_offset::<StreamLayout<CharReader<NamedTcpStream>>>());
         }
         ArenaHeaderTag::NamedTlsStream => {
-            ptr::drop_in_place(value.payload_offset::<NamedTlsStream>());
+            ptr::drop_in_place(value.payload_offset::<StreamLayout<CharReader<NamedTlsStream>>>());
         }
         ArenaHeaderTag::ReadlineStream => {
-            ptr::drop_in_place(value.payload_offset::<ReadlineStream>());
+            ptr::drop_in_place(value.payload_offset::<StreamLayout<ReadlineStream>>());
         }
         ArenaHeaderTag::StaticStringStream => {
-            ptr::drop_in_place(value.payload_offset::<StaticStringStream>());
+            ptr::drop_in_place(value.payload_offset::<StreamLayout<StaticStringStream>>());
         }
         ArenaHeaderTag::ByteStream => {
-            ptr::drop_in_place(value.payload_offset::<ByteStream>());
+            ptr::drop_in_place(value.payload_offset::<StreamLayout<CharReader<ByteStream>>>());
         }
         ArenaHeaderTag::OssifiedOpDir => {
             ptr::drop_in_place(value.payload_offset::<OssifiedOpDir>());
@@ -410,8 +412,13 @@ unsafe fn drop_slab_in_place(value: &mut AllocSlab) {
         ArenaHeaderTag::TcpListener => {
             ptr::drop_in_place(value.payload_offset::<TcpListener>());
         }
-        ArenaHeaderTag::F64 | ArenaHeaderTag::StandardOutputStream |
-        ArenaHeaderTag::StandardErrorStream | ArenaHeaderTag::NullStream => {
+        ArenaHeaderTag::StandardOutputStream => {
+            ptr::drop_in_place(value.payload_offset::<StreamLayout<StandardOutputStream>>());
+        }
+        ArenaHeaderTag::StandardErrorStream => {
+            ptr::drop_in_place(value.payload_offset::<StreamLayout<StandardErrorStream>>());
+        }
+        ArenaHeaderTag::F64 | ArenaHeaderTag::NullStream => {
         }
     }
 }
