@@ -1125,8 +1125,11 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             return self.push_list(max_depth);
         }
 
+        // let end_h = heap_pstr_iter.focus();
+        // let end_cell = self.iter.heap[end_h];
+
         let end_h = heap_pstr_iter.focus();
-        let end_cell = self.iter.heap[end_h];
+        let end_cell = heap_pstr_iter.focus;
 
         self.remove_list_children(focus);
 
@@ -1142,8 +1145,8 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         }
 
         if self.ignore_ops {
-            if !self.print_string_as_functor(end_h, max_depth) {
-                if end_cell.get_tag() == HeapCellValueTag::CStr {
+            if !self.print_string_as_functor(focus, max_depth) {
+                if end_cell == empty_list_as_cell!() { // end_cell.get_tag() == HeapCellValueTag::CStr {
                     append_str!(self, "[]");
                 } else {
                     if self.outputter.ends_with(",") {
@@ -1182,20 +1185,18 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
             if self.max_depth > 0 && iter.next().is_some() {
                 self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
+                self.state_stack.push(TokenOrRedirect::HeadTailSeparator);
             } else {
                 if iter.cycle_detected() {
                     self.iter.heap[end_h].set_forwarding_bit(true);
                 }
 
-                if end_cell.get_tag() == HeapCellValueTag::CStr {
-                    self.state_stack.push(TokenOrRedirect::Atom(atom!("[]")));
-                } else {
+                if end_cell != empty_list_as_cell!() {
                     self.state_stack.push(TokenOrRedirect::FunctorRedirect(max_depth));
+                    self.state_stack.push(TokenOrRedirect::HeadTailSeparator);
                     self.iter.push_stack(end_h);
                 }
             }
-
-            self.state_stack.push(TokenOrRedirect::HeadTailSeparator);
 
             if self.outputter.ends_with(",") {
                 self.outputter.truncate(self.outputter.len() - ','.len_utf8());

@@ -833,13 +833,6 @@ impl PredicateSkeleton {
         }
     }
 
-    #[inline]
-    pub(crate) fn reset(&mut self) {
-        self.core.clause_clause_locs.clear();
-        self.core.clause_assert_margin = 0;
-        self.clauses.clear();
-    }
-
     pub(crate) fn target_pos_of_clause_clause_loc(
         &self,
         clause_clause_loc: usize,
