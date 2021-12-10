@@ -143,7 +143,7 @@ fn no_stutter() {
 #[test] // FIXME: the line number is of by one (should be 4), empty line not accounted for or starting to count at line 0?
 fn singleton_warning() {
     run_top_level_test_no_args(
-        "['tests-pl/issue812-singleton-warning.pl'].\
+        "['tests-pl/issue812-singleton-warning.pl'].\n\
          halt.\n",
         "\
         Warning: singleton variables X at line 3 of issue812-singleton-warning.pl\n   \
@@ -151,7 +151,7 @@ fn singleton_warning() {
         ",
     );
 }
- */
+*/
 
 // issue #807
 #[test]
