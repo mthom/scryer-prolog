@@ -344,6 +344,8 @@ impl HeapCellValue {
 
     #[inline]
     pub fn is_string_terminator(mut self, heap: &[HeapCellValue]) -> bool {
+        use crate::machine::heap::*;
+
         loop {
             return read_heap_cell!(self,
                 (HeapCellValueTag::Atom, (name, arity)) => {
@@ -354,6 +356,16 @@ impl HeapCellValue {
                 }
                 (HeapCellValueTag::PStrLoc, h) => {
                     self = heap[h];
+                    continue;
+                }
+                (HeapCellValueTag::AttrVar | HeapCellValueTag::Var, h) => {
+                    let cell = heap_bound_store(heap, heap_bound_deref(heap, heap[h]));
+
+                    if cell.is_var() {
+                        return false;
+                    }
+
+                    self = cell;
                     continue;
                 }
                 (HeapCellValueTag::PStrOffset, pstr_offset) => {
