@@ -667,9 +667,17 @@ impl MachineState {
 
         read_heap_cell!(value,
             (HeapCellValueTag::F64, f2) => {
-                if *f1 != *f2 {
-                    self.fail = true;
-                }
+                self.fail = **f1 != **f2;
+            }
+            (HeapCellValueTag::Cons, cons_ptr) => {
+                match_untyped_arena_ptr!(cons_ptr,
+                     (ArenaHeaderTag::F64, f2) => {
+                         self.fail = **f1 != **F64Ptr(f2);
+                     }
+                     _ => {
+                         self.fail = true;
+                     }
+                );
             }
             _ => {
                 self.fail = true;
