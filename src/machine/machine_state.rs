@@ -597,7 +597,7 @@ pub trait CallPolicy: Any + fmt::Debug {
                 return_from_clause!(machine_st.last_call, machine_st)
             }
             &BuiltInClauseType::Is(r, ref at) => {
-                let n1 = machine_st[r];
+                let n1 = machine_st.store(machine_st.deref(machine_st[r]));
                 let n2 = machine_st.get_number(at)?;
 
                 match n2 {
