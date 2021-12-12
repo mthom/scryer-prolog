@@ -292,6 +292,7 @@ impl<'a, 'b> TermWriter<'a, 'b> {
                 },
             &TermRef::PartialString(..) => pstr_loc_as_cell!(h),
             &TermRef::Literal(_, _, literal) => HeapCellValue::from(*literal),
+            &TermRef::Clause(_,_,_,subterms) if subterms.len() == 0 => heap_loc_as_cell!(h),
             &TermRef::Clause(..) => str_loc_as_cell!(h),
         }
     }
@@ -319,7 +320,11 @@ impl<'a, 'b> TermWriter<'a, 'b> {
                     self.push_stub_addr();
                 }
                 &TermRef::Clause(Level::Root, _, ref ct, subterms) => {
-                    self.heap.push(str_loc_as_cell!(heap_loc + 1));
+                    self.heap.push(if subterms.len() == 0 {
+                        heap_loc_as_cell!(heap_loc + 1)
+                    } else {
+                        str_loc_as_cell!(heap_loc + 1)
+                    });
 
                     self.queue.push_back((subterms.len(), h + 2));
                     let named = atom_as_cell!(ct.name(), subterms.len());
