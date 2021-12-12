@@ -643,6 +643,7 @@ expand_meta_predicate_subgoals([SG | SGs], [MS | MSs], M, [ESG | ESGs], HeadVars
           MS >= 0
        )  ->
        (  var(SG),
+          MS =:= 0,
           pairs:same_key(SG, HeadVars, [_|_], _) ->
           expand_subgoal(SG, MS, M, ESG, HeadVars)
        ;  expand_subgoal(SG, MS, M, ESG0, HeadVars),

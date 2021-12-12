@@ -439,7 +439,7 @@ mod tests {
             ]
         ));
 
-        for _ in 0..2 { //00000 {
+        for _ in 0..200000 {
             let mut iter = stackless_preorder_iter(&mut wam.machine_st.heap, heap_loc_as_cell!(0));
 
             assert_eq!(

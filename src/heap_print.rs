@@ -1125,9 +1125,6 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             return self.push_list(max_depth);
         }
 
-        // let end_h = heap_pstr_iter.focus();
-        // let end_cell = self.iter.heap[end_h];
-
         let end_h = heap_pstr_iter.focus();
         let end_cell = heap_pstr_iter.focus;
 
@@ -1146,7 +1143,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
         if self.ignore_ops {
             if !self.print_string_as_functor(focus, max_depth) {
-                if end_cell == empty_list_as_cell!() { // end_cell.get_tag() == HeapCellValueTag::CStr {
+                if end_cell == empty_list_as_cell!() {
                     append_str!(self, "[]");
                 } else {
                     if self.outputter.ends_with(",") {
