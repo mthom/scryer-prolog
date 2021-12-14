@@ -564,11 +564,8 @@ impl<'a, R: Read> Lexer<'a, R> {
 
         if c == '_' {
             self.skip_char()?;
+            self.scan_for_layout()?;
             c = self.lookahead_char()?;
-            while layout_char!(c) {
-                self.skip_char()?;
-                c = self.lookahead_char()?;
-            }
 
             if decimal_digit_char!(c) {
                 Ok(c)
@@ -791,7 +788,7 @@ impl<'a, R: Read> Lexer<'a, R> {
             let cr = self.lookahead_char();
 
             match cr {
-                Ok(c) if layout_char!(c) || new_line_char!(c) => {
+                Ok(c) if layout_char!(c) => {
                     self.skip_char()?;
                     layout_inserted = true;
                 }
