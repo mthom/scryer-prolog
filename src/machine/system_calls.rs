@@ -4176,45 +4176,7 @@ impl MachineState {
                     Ok(tcp_stream) => {
                         let socket_addr = clause_name!(socket_addr, self.atom_tbl);
 
-                        let mut stream = {
-                            let tls = match self.store(self.deref(self[temp_v!(8)])) {
-                                Addr::Con(h) if self.heap.atom_at(h) => {
-                                    if let HeapCellValue::Atom(ref atom, _) = &self.heap[h] {
-                                        atom.as_str()
-                                    } else {
-                                        unreachable!()
-                                    }
-                                }
-                                _ => {
-                                    unreachable!()
-                                }
-                            };
-
-                            match tls {
-                                "false" => Stream::from_tcp_stream(socket_addr, tcp_stream),
-                                "true" => {
-                                    let connector = TlsConnector::new().unwrap();
-                                    let stream = Stream::from_tcp_stream(socket_addr, tcp_stream);
-                                    let stream =
-                                        match connector.connect(socket_atom.as_str(), stream) {
-                                            Ok(tls_stream) => tls_stream,
-                                            Err(_) => {
-                                                return Err(self.open_permission_error(
-                                                    addr,
-                                                    "socket_client_open",
-                                                    3,
-                                                ));
-                                            }
-                                        };
-
-                                    let addr = clause_name!("TLS".to_string(), self.atom_tbl);
-                                    Stream::from_tls_stream(addr, stream)
-                                }
-                                _ => {
-                                    unreachable!()
-                                }
-                            }
-                        };
+                        let mut stream = Stream::from_tcp_stream(socket_addr, tcp_stream);
 
                         *stream.options_mut() = options;
 
@@ -4417,6 +4379,37 @@ impl MachineState {
                         ));
                     }
                 }
+            }
+            &SystemClauseType::TLSClientConnect => {
+                let hostname = self.heap_pstr_iter(self[temp_v!(1)]).to_string();
+
+                let stream0 = self.get_stream_or_alias(
+                    self[temp_v!(2)],
+                    &indices.stream_aliases,
+                    "tls_client_negotiate",
+                    3,
+                )?;
+
+                let connector = TlsConnector::new().unwrap();
+                let stream =
+                    match connector.connect(&hostname, stream0) {
+                        Ok(tls_stream) => tls_stream,
+                        Err(_) => {
+                            return Err(self.open_permission_error(
+                                self[temp_v!(1)],
+                                "tls_client_negotiate",
+                                3,
+                            ));
+                        }
+                    };
+
+                let addr = clause_name!("TLS".to_string(), self.atom_tbl);
+                let stream = Stream::from_tls_stream(addr, stream);
+                indices.streams.insert(stream.clone());
+
+                let stream = self.heap.to_unifiable(HeapCellValue::Stream(stream));
+                let stream_addr = self.store(self.deref(self[temp_v!(3)]));
+                self.bind(stream_addr.as_var().unwrap(), stream);
             }
             &SystemClauseType::TLSAcceptClient => {
                 let pkcs12 = self.string_encoding_bytes(1, "octet");
