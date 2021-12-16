@@ -322,8 +322,26 @@ impl CodePtr {
 pub enum LocalCodePtr {
     DirEntry(usize), // offset
     Halt,
-    IndexingBuf(usize, usize, usize), // DirEntry offset, first internal offset, second internal offset
-                                      // TopLevel(usize, usize), // chunk_num, offset
+    // IndexingBuf(usize, usize, usize), // DirEntry offset, first internal offset, second internal offset
+                                         // TopLevel(usize, usize), // chunk_num, offset
+}
+
+impl MachineState {
+    pub(crate) fn is_reset_cont_marker(&self, code_repo: &CodeRepo, p: LocalCodePtr) -> bool {
+        match code_repo.lookup_instr(self, &CodePtr::Local(p)) {
+            Some(line) => match line.as_ref() {
+                Line::Control(ControlInstruction::CallClause(ref ct, ..)) => {
+                    if let ClauseType::System(SystemClauseType::ResetContinuationMarker) = *ct {
+                        return true;
+                    }
+                }
+                _ => {}
+            },
+            None => {}
+        }
+
+        false
+    }
 }
 
 impl LocalCodePtr {
@@ -338,25 +356,9 @@ impl LocalCodePtr {
     pub fn abs_loc(&self) -> usize {
         match self {
             LocalCodePtr::DirEntry(ref p) => *p,
-            LocalCodePtr::IndexingBuf(ref p, ..) => *p,
+            // LocalCodePtr::IndexingBuf(ref p, ..) => *p,
             LocalCodePtr::Halt => unreachable!(),
         }
-    }
-
-    pub(crate) fn is_reset_cont_marker(&self, code_repo: &CodeRepo, last_call: bool) -> bool {
-        match code_repo.lookup_instr(last_call, &CodePtr::Local(*self)) {
-            Some(line) => match line.as_ref() {
-                Line::Control(ControlInstruction::CallClause(ref ct, ..)) => {
-                    if let ClauseType::System(SystemClauseType::ResetContinuationMarker) = *ct {
-                        return true;
-                    }
-                }
-                _ => {}
-            },
-            None => {}
-        }
-
-        false
     }
 
     pub(crate) fn as_functor(&self) -> MachineStub {
@@ -367,12 +369,14 @@ impl LocalCodePtr {
             LocalCodePtr::Halt => {
                 functor!(atom!("halt"))
             }
+            /*
             LocalCodePtr::IndexingBuf(p, o, i) => {
                 functor!(
                     atom!("indexed_buf"),
                     [fixnum(*p), fixnum(*o), fixnum(*i)]
                 )
             }
+            */
         }
     }
 }
@@ -399,7 +403,7 @@ impl Add<usize> for LocalCodePtr {
         match self {
             LocalCodePtr::DirEntry(p) => LocalCodePtr::DirEntry(p + rhs),
             LocalCodePtr::Halt => unreachable!(),
-            LocalCodePtr::IndexingBuf(p, o, i) => LocalCodePtr::IndexingBuf(p, o, i + rhs),
+            // LocalCodePtr::IndexingBuf(p, o, i) => LocalCodePtr::IndexingBuf(p, o, i + rhs),
         }
     }
 }
@@ -412,9 +416,9 @@ impl Sub<usize> for LocalCodePtr {
         match self {
             LocalCodePtr::DirEntry(p) => p.checked_sub(rhs).map(LocalCodePtr::DirEntry),
             LocalCodePtr::Halt => unreachable!(),
-            LocalCodePtr::IndexingBuf(p, o, i) => i
-                .checked_sub(rhs)
-                .map(|r| LocalCodePtr::IndexingBuf(p, o, r)),
+            // LocalCodePtr::IndexingBuf(p, o, i) => i
+            //     .checked_sub(rhs)
+            //     .map(|r| LocalCodePtr::IndexingBuf(p, o, r)),
         }
     }
 }
@@ -424,7 +428,7 @@ impl SubAssign<usize> for LocalCodePtr {
     fn sub_assign(&mut self, rhs: usize) {
         match self {
             LocalCodePtr::DirEntry(ref mut p) => *p -= rhs,
-            LocalCodePtr::Halt | LocalCodePtr::IndexingBuf(..) => unreachable!(),
+            LocalCodePtr::Halt => unreachable!() // | LocalCodePtr::IndexingBuf(..) => unreachable!(),
         }
     }
 }
@@ -433,8 +437,8 @@ impl AddAssign<usize> for LocalCodePtr {
     #[inline]
     fn add_assign(&mut self, rhs: usize) {
         match self {
-            &mut LocalCodePtr::DirEntry(ref mut i)
-            | &mut LocalCodePtr::IndexingBuf(_, _, ref mut i) => *i += rhs,
+            &mut LocalCodePtr::DirEntry(ref mut i) => *i += rhs,
+            // | &mut LocalCodePtr::IndexingBuf(_, _, ref mut i) => *i += rhs,
             &mut LocalCodePtr::Halt => unreachable!(),
         }
     }

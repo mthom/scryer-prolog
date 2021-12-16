@@ -37,6 +37,8 @@ impl MachineState {
             pdl: Vec::with_capacity(1024),
             s: HeapPtr::default(),
             p: CodePtr::default(),
+            oip: 0,
+            iip: 0,
             b: 0,
             b0: 0,
             e: 0,
@@ -1905,8 +1907,8 @@ impl MachineState {
                         None => unreachable!(),
                     }
                 }
-        TrailEntryTag::TrailedAttachedValue => {
-        }
+                TrailEntryTag::TrailedAttachedValue => {
+                }
             }
         }
     }
@@ -2758,7 +2760,9 @@ impl MachineState {
                 }
                 &IndexingLine::IndexedChoice(_) => {
                     if let LocalCodePtr::DirEntry(p) = self.p.local() {
-                        self.p = CodePtr::Local(LocalCodePtr::IndexingBuf(p, index, 0));
+                        self.p = CodePtr::Local(LocalCodePtr::DirEntry(p));
+                        self.oip = index as u32;
+                        self.iip = 0;
                     } else {
                         unreachable!()
                     }
@@ -2769,7 +2773,9 @@ impl MachineState {
                     self.dynamic_mode = FirstOrNext::First;
 
                     if let LocalCodePtr::DirEntry(p) = self.p.local() {
-                        self.p = CodePtr::Local(LocalCodePtr::IndexingBuf(p, index, 0));
+                        self.p = CodePtr::Local(LocalCodePtr::DirEntry(p));
+                        self.oip = index as u32;
+                        self.iip = 0;
                     } else {
                         unreachable!()
                     }
@@ -3886,9 +3892,11 @@ impl MachineState {
     ) {
         let p = self.p.local();
 
-        match code_repo.find_living_dynamic(p, self.cc) {
+        match self.find_living_dynamic(&code_repo.code, self.oip, self.iip) {
             Some((offset, oi, ii, is_next_clause)) => {
-                self.p = CodePtr::Local(LocalCodePtr::IndexingBuf(p.abs_loc(), oi, ii));
+                self.p = CodePtr::Local(LocalCodePtr::DirEntry(p.abs_loc()));
+                self.oip = oi;
+                self.iip = ii;
 
                 match self.dynamic_mode {
                     FirstOrNext::First if !is_next_clause => {
@@ -3898,14 +3906,15 @@ impl MachineState {
                         // there's a leading DynamicElse that sets self.cc.
                         // self.cc = self.global_clock;
 
-                        match code_repo.find_living_dynamic(
-                            LocalCodePtr::IndexingBuf(p.abs_loc(), oi, ii + 1),
-                            self.cc,
-                        ) {
+                        // see that there is a following dynamic_else
+                        // clause so we avoid generating a choice
+                        // point in case there isn't.
+                        match self.find_living_dynamic(&code_repo.code, oi, ii + 1) {
                             Some(_) => {
                                 self.registers[self.num_of_args + 1] =
                                     fixnum_as_cell!(Fixnum::build_with(self.cc as i64));
-                                self.num_of_args += 1;
+
+                                self.num_of_args += 2;
 
                                 self.execute_indexed_choice_instr(
                                     &IndexedChoiceInstruction::Try(offset),
@@ -3913,39 +3922,39 @@ impl MachineState {
                                     global_variables,
                                 );
 
-                                self.num_of_args -= 1;
+                                self.num_of_args -= 2;
                             }
                             None => {
-                                self.p =
-                                    CodePtr::Local(LocalCodePtr::DirEntry(p.abs_loc() + offset));
+                                self.p = CodePtr::Local(LocalCodePtr::DirEntry(p.abs_loc() + offset));
+                                self.oip = 0;
+                                self.iip = 0;
                             }
                         }
                     }
                     FirstOrNext::Next => {
+                        let b = self.b;
                         let n = self
                             .stack
-                            .index_or_frame(self.b)
+                            .index_or_frame(b)
                             .prelude
                             .univ_prelude
                             .num_cells;
 
-                        self.cc = cell_as_fixnum!(self.stack[n - 1]).get_num() as usize;
+                        self.cc = cell_as_fixnum!(self.stack[stack_loc!(OrFrame, b, n-2)])
+                            .get_num() as usize;
 
                         if is_next_clause {
-                            match code_repo.find_living_dynamic(
-                                LocalCodePtr::IndexingBuf(p.abs_loc(), oi, ii + 1),
-                                self.cc,
-                            ) {
+                            match self.find_living_dynamic(&code_repo.code, self.oip, self.iip) {
                                 Some(_) => {
                                     try_or_fail!(
                                         self,
-                                        call_policy.retry(self, offset, global_variables,)
-                                    )
+                                        call_policy.retry(self, offset, global_variables)
+                                    );
                                 }
                                 None => {
                                     try_or_fail!(
                                         self,
-                                        call_policy.trust(self, offset, global_variables,)
+                                        call_policy.trust(self, offset, global_variables)
                                     )
                                 }
                             }
@@ -3979,19 +3988,36 @@ impl MachineState {
                 or_frame.prelude.e = self.e;
                 or_frame.prelude.cp = self.cp;
                 or_frame.prelude.b = self.b;
-                or_frame.prelude.bp = self.p.local() + 1;
+                or_frame.prelude.bp = self.p.local(); // + 1; in self.iip now!
+                or_frame.prelude.boip = self.oip;
+                or_frame.prelude.biip = self.iip + 1;
                 or_frame.prelude.tr = self.tr;
                 or_frame.prelude.h = self.heap.len();
                 or_frame.prelude.b0 = self.b0;
 
                 self.b = b;
 
-                for i in 1..n + 1 {
-                    self.stack.index_or_frame_mut(b)[i - 1] = self.registers[i];
+                for i in 0..n {
+                    or_frame[i] = self.registers[i+1];
                 }
+
+                /*
+                self.iip += 1;
+
+                let oip_b = self.oip.to_ne_bytes();
+                let iip_b = self.iip.to_ne_bytes();
+
+                or_frame[n] = HeapCellValue::from_bytes(
+                    [oip_b[0], oip_b[1], oip_b[2], oip_b[3],
+                     iip_b[0], iip_b[1], iip_b[2], iip_b[3]],
+                );
+                */
 
                 self.hb = self.heap.len();
                 self.p = CodePtr::Local(dir_entry!(self.p.local().abs_loc() + offset));
+
+                self.oip = 0;
+                self.iip = 0;
             }
             &IndexedChoiceInstruction::Retry(l) => {
                 try_or_fail!(self, call_policy.retry(self, l, global_variables));
@@ -4017,7 +4043,7 @@ impl MachineState {
 
                 let p = self.p.local().abs_loc();
 
-                match code_repo.find_living_dynamic_else(p, self.cc) {
+                match self.find_living_dynamic_else(&code_repo.code, p) {
                     Some((p, next_i)) => {
                         self.p = CodePtr::Local(LocalCodePtr::DirEntry(p));
 
@@ -4028,7 +4054,7 @@ impl MachineState {
                             FirstOrNext::First => {
                                 self.cc = self.global_clock;
 
-                                match code_repo.find_living_dynamic_else(p + next_i, self.cc) {
+                                match self.find_living_dynamic_else(&code_repo.code, p + next_i) {
                                     Some(_) => {
                                         self.registers[self.num_of_args + 1] =
                                             fixnum_as_cell!(Fixnum::build_with(self.cc as i64));
@@ -4056,11 +4082,11 @@ impl MachineState {
                                     .univ_prelude
                                     .num_cells;
 
-                                self.cc = cell_as_fixnum!(self.stack.index_or_frame(self.b)[n - 1])
+                                self.cc = cell_as_fixnum!(self.stack[stack_loc!(OrFrame, self.b, n-1)])
                                     .get_num() as usize;
 
                                 if next_i > 0 {
-                                    match code_repo.find_living_dynamic_else(p + next_i, self.cc) {
+                                    match self.find_living_dynamic_else(&code_repo.code, p + next_i) {
                                         Some(_) => {
                                             try_or_fail!(
                                                 self,
@@ -4094,7 +4120,7 @@ impl MachineState {
             &ChoiceInstruction::DynamicInternalElse(..) => {
                 let p = self.p.local().abs_loc();
 
-                match code_repo.find_living_dynamic_else(p, self.cc) {
+                match self.find_living_dynamic_else(&code_repo.code, p) {
                     Some((p, next_i)) => {
                         self.p = CodePtr::Local(LocalCodePtr::DirEntry(p));
 
@@ -4103,7 +4129,7 @@ impl MachineState {
                                 self.p = CodePtr::Local(LocalCodePtr::DirEntry(p + 1));
                             }
                             FirstOrNext::First => {
-                                match code_repo.find_living_dynamic_else(p + next_i, self.cc) {
+                                match self.find_living_dynamic_else(&code_repo.code, p + next_i) {
                                     Some(_) => {
                                         self.registers[self.num_of_args + 1] =
                                             fixnum_as_cell!(Fixnum::build_with(self.cc as i64));
@@ -4131,11 +4157,11 @@ impl MachineState {
                                     .univ_prelude
                                     .num_cells;
 
-                                self.cc = cell_as_fixnum!(self.stack.index_or_frame(self.b)[n - 1])
+                                self.cc = cell_as_fixnum!(self.stack[stack_loc!(OrFrame, self.b, n-1)])
                                     .get_num() as usize;
 
                                 if next_i > 0 {
-                                    match code_repo.find_living_dynamic_else(p + next_i, self.cc) {
+                                    match self.find_living_dynamic_else(&code_repo.code, p + next_i) {
                                         Some(_) => {
                                             try_or_fail!(
                                                 self,
@@ -4149,14 +4175,14 @@ impl MachineState {
                                         None => {
                                             try_or_fail!(
                                                 self,
-                                                call_policy.trust_me(self, global_variables,)
+                                                call_policy.trust_me(self, global_variables)
                                             )
                                         }
                                     }
                                 } else {
                                     try_or_fail!(
                                         self,
-                                        call_policy.trust_me(self, global_variables,)
+                                        call_policy.trust_me(self, global_variables)
                                     )
                                 }
                             }
@@ -4179,6 +4205,8 @@ impl MachineState {
                 or_frame.prelude.cp = self.cp;
                 or_frame.prelude.b = self.b;
                 or_frame.prelude.bp = self.p.local() + offset;
+                or_frame.prelude.boip = 0;
+                or_frame.prelude.biip = 0;
                 or_frame.prelude.tr = self.tr;
                 or_frame.prelude.h = self.heap.len();
                 or_frame.prelude.b0 = self.b0;

@@ -3145,7 +3145,7 @@ impl MachineState {
                 let p_functor = self.store(self.deref(self.registers[2]));
                 let p = to_local_code_ptr(&self.heap, p_functor).unwrap();
 
-                let num_cells = match code_repo.lookup_instr(self.last_call, &CodePtr::Local(p)) {
+                let num_cells = match code_repo.lookup_instr(self, &CodePtr::Local(p)) {
                     Some(line) => {
                         let perm_vars = match line.as_ref() {
                             Line::Control(ref ctrl_instr) => ctrl_instr.perm_vars(),
@@ -3720,7 +3720,7 @@ impl MachineState {
                     }
                 };
 
-                if p.is_reset_cont_marker(code_repo, self.last_call) {
+                if self.is_reset_cont_marker(&code_repo, p) {
                     return return_from_clause!(self.last_call, self);
                 }
 
@@ -4408,7 +4408,7 @@ impl MachineState {
                 let mut cp = self.cp;
 
                 while e > 0 {
-                    if cp.is_reset_cont_marker(code_repo, self.last_call) {
+                    if self.is_reset_cont_marker(code_repo, cp) {
                         self.e = e;
                         self.p = CodePtr::Local(cp + 1); // skip the reset marker.
 

@@ -612,7 +612,7 @@ impl MachineState {
         user_input: &mut Stream,
         user_output: &mut Stream,
     ) {
-        let instr = match code_repo.lookup_instr(self.last_call, &self.p) {
+        let instr = match code_repo.lookup_instr(self, &self.p) {
             Some(instr) => instr,
             None => return,
         };
@@ -629,9 +629,13 @@ impl MachineState {
 
     fn backtrack(&mut self) {
         let b = self.b;
+        let or_frame = self.stack.index_or_frame(b);
 
-        self.b0 = self.stack.index_or_frame(b).prelude.b0;
-        self.p = CodePtr::Local(self.stack.index_or_frame(b).prelude.bp);
+        self.b0 = or_frame.prelude.b0;
+        self.p = CodePtr::Local(or_frame.prelude.bp);
+
+        self.oip = or_frame.prelude.boip;
+        self.iip = or_frame.prelude.biip;
 
         self.pdl.clear();
         self.fail = false;
@@ -639,8 +643,7 @@ impl MachineState {
 
     fn check_machine_index(&mut self, code_repo: &CodeRepo) -> bool {
         match self.p {
-            CodePtr::Local(LocalCodePtr::DirEntry(p)) |
-            CodePtr::Local(LocalCodePtr::IndexingBuf(p, ..))
+            CodePtr::Local(LocalCodePtr::DirEntry(p))
                 if p < code_repo.code.len() => {}
             CodePtr::Local(LocalCodePtr::Halt) | CodePtr::REPL(..) => {
                 return false;
@@ -661,7 +664,7 @@ impl MachineState {
         user_output: &mut Stream,
     ) -> bool {
         loop {
-            let instr = match code_repo.lookup_instr(self.last_call, &self.p) {
+            let instr = match code_repo.lookup_instr(self, &self.p) {
                 Some(instr) => {
                     if instr.as_ref().is_head_instr() {
                         instr
@@ -721,7 +724,7 @@ impl MachineState {
 
                     let instigating_p = CodePtr::Local(self.attr_var_init.instigating_p);
                     let instigating_instr = code_repo
-                        .lookup_instr(false, &instigating_p)
+                        .lookup_instr(self, &instigating_p)
                         .unwrap();
 
                     if !instigating_instr.as_ref().is_head_instr() {

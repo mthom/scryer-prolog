@@ -121,6 +121,8 @@ pub(crate) struct OrFramePrelude {
     pub(crate) cp: LocalCodePtr,
     pub(crate) b: usize,
     pub(crate) bp: LocalCodePtr,
+    pub(crate) boip: u32,
+    pub(crate) biip: u32,
     pub(crate) tr: usize,
     pub(crate) h: usize,
     pub(crate) b0: usize,

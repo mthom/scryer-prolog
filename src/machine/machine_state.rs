@@ -63,6 +63,8 @@ pub struct MachineState {
     pub(super) pdl: Vec<HeapCellValue>,
     pub(super) s: HeapPtr,
     pub(super) p: CodePtr,
+    pub(super) oip: u32, // first internal code ptr
+    pub(super) iip : u32, // second internal code ptr
     pub(super) b: usize,
     pub(super) b0: usize,
     pub(super) e: usize,
@@ -81,7 +83,7 @@ pub struct MachineState {
     pub(super) ball: Ball,
     pub(super) lifted_heap: Heap,
     pub(super) interms: Vec<Number>, // intermediate numbers.
-    pub(super) last_call: bool,
+    pub(super) last_call: bool, // TODO: REMOVE THIS.
     pub(crate) flags: MachineFlags,
     pub(crate) cc: usize,
     pub(crate) global_clock: usize,
@@ -191,37 +193,33 @@ pub trait CallPolicy: Any + fmt::Debug {
         global_variables: &mut GlobalVarDir,
     ) -> CallResult {
         let b = machine_st.b;
-        let n = machine_st
-            .stack
-            .index_or_frame(b)
-            .prelude
-            .univ_prelude
-            .num_cells;
+        let or_frame = machine_st.stack.index_or_frame_mut(b);
+        let n = or_frame.prelude.univ_prelude.num_cells;
 
-        for i in 1..n + 1 {
-            machine_st.registers[i] = machine_st.stack[stack_loc!(OrFrame, b, i - 1)];
+        for i in 0..n {
+            machine_st.registers[i + 1] = or_frame[i];
         }
 
         machine_st.num_of_args = n;
-        machine_st.e = machine_st.stack.index_or_frame(b).prelude.e;
-        machine_st.cp = machine_st.stack.index_or_frame(b).prelude.cp;
+        machine_st.e = or_frame.prelude.e;
+        machine_st.cp = or_frame.prelude.cp;
 
-        machine_st.stack.index_or_frame_mut(b).prelude.bp = machine_st.p.local() + offset;
+        or_frame.prelude.bp = machine_st.p.local() + offset;
 
-        let old_tr = machine_st.stack.index_or_frame(b).prelude.tr;
+        let old_tr = or_frame.prelude.tr;
         let curr_tr = machine_st.tr;
+        let target_h = or_frame.prelude.h;
 
-        machine_st.unwind_trail(old_tr, curr_tr, global_variables);
-        machine_st.tr = machine_st.stack.index_or_frame(b).prelude.tr;
-
-        machine_st.trail.truncate(machine_st.tr);
-        machine_st
-            .heap
-            .truncate(machine_st.stack.index_or_frame(b).prelude.h);
+        machine_st.tr = or_frame.prelude.tr;
 
         machine_st.attr_var_init.reset();
         machine_st.hb = machine_st.heap.len();
         machine_st.p += 1;
+
+        machine_st.unwind_trail(old_tr, curr_tr, global_variables);
+
+        machine_st.trail.truncate(machine_st.tr);
+        machine_st.heap.truncate(target_h);
 
         Ok(())
     }
@@ -233,37 +231,37 @@ pub trait CallPolicy: Any + fmt::Debug {
         global_variables: &mut GlobalVarDir,
     ) -> CallResult {
         let b = machine_st.b;
-        let n = machine_st
-            .stack
-            .index_or_frame(b)
-            .prelude
-            .univ_prelude
-            .num_cells;
+        let or_frame = machine_st.stack.index_or_frame_mut(b);
+        let n = or_frame.prelude.univ_prelude.num_cells;
 
-        for i in 1..n + 1 {
-            machine_st.registers[i] = machine_st.stack.index_or_frame(b)[i - 1];
+        for i in 0..n {
+            machine_st.registers[i+1] = or_frame[i];
         }
 
         machine_st.num_of_args = n;
-        machine_st.e = machine_st.stack.index_or_frame(b).prelude.e;
-        machine_st.cp = machine_st.stack.index_or_frame(b).prelude.cp;
+        machine_st.e = or_frame.prelude.e;
+        machine_st.cp = or_frame.prelude.cp;
 
-        machine_st.stack.index_or_frame_mut(b).prelude.bp = machine_st.p.local() + 1;
+        // WAS: or_frame.prelude.bp = machine_st.p.local() + 1;
+        or_frame.prelude.biip += 1;
 
-        let old_tr = machine_st.stack.index_or_frame(b).prelude.tr;
+        let old_tr = or_frame.prelude.tr;
         let curr_tr = machine_st.tr;
+        let target_h = or_frame.prelude.h;
+
+        machine_st.tr = or_frame.prelude.tr;
+        machine_st.attr_var_init.reset();
 
         machine_st.unwind_trail(old_tr, curr_tr, global_variables);
-        machine_st.tr = machine_st.stack.index_or_frame(b).prelude.tr;
 
         machine_st.trail.truncate(machine_st.tr);
-        machine_st
-            .heap
-            .truncate(machine_st.stack.index_or_frame(b).prelude.h);
+        machine_st.heap.truncate(target_h);
 
-        machine_st.attr_var_init.reset();
         machine_st.hb = machine_st.heap.len();
         machine_st.p = CodePtr::Local(dir_entry!(machine_st.p.local().abs_loc() + offset));
+
+        machine_st.oip = 0;
+        machine_st.iip = 0;
 
         Ok(())
     }
@@ -275,38 +273,37 @@ pub trait CallPolicy: Any + fmt::Debug {
         global_variables: &mut GlobalVarDir,
     ) -> CallResult {
         let b = machine_st.b;
-        let n = machine_st
-            .stack
-            .index_or_frame(b)
-            .prelude
-            .univ_prelude
-            .num_cells;
+        let or_frame = machine_st.stack.index_or_frame(b);
+        let n = or_frame.prelude.univ_prelude.num_cells;
 
-        for i in 1..n + 1 {
-            machine_st.registers[i] = machine_st.stack[stack_loc!(OrFrame, b, i - 1)];
+        for i in 0..n {
+            machine_st.registers[i+1] = or_frame[i];
         }
 
         machine_st.num_of_args = n;
-        machine_st.e = machine_st.stack.index_or_frame(b).prelude.e;
-        machine_st.cp = machine_st.stack.index_or_frame(b).prelude.cp;
+        machine_st.e = or_frame.prelude.e;
+        machine_st.cp = or_frame.prelude.cp;
 
-        let old_tr = machine_st.stack.index_or_frame(b).prelude.tr;
+        let old_tr = or_frame.prelude.tr;
         let curr_tr = machine_st.tr;
+        let target_h = or_frame.prelude.h;
 
-        machine_st.unwind_trail(old_tr, curr_tr, global_variables);
-        machine_st.tr = machine_st.stack.index_or_frame(b).prelude.tr;
-
-        machine_st.trail.truncate(machine_st.tr);
-        machine_st
-            .heap
-            .truncate(machine_st.stack.index_or_frame(b).prelude.h);
+        machine_st.tr = or_frame.prelude.tr;
 
         machine_st.attr_var_init.reset();
-        machine_st.b = machine_st.stack.index_or_frame(b).prelude.b;
+        machine_st.b = or_frame.prelude.b;
+
+        machine_st.unwind_trail(old_tr, curr_tr, global_variables);
+
+        machine_st.trail.truncate(machine_st.tr);
         machine_st.stack.truncate(b);
+        machine_st.heap.truncate(target_h);
 
         machine_st.hb = machine_st.heap.len();
         machine_st.p = CodePtr::Local(dir_entry!(machine_st.p.local().abs_loc() + offset));
+
+        machine_st.oip = 0;
+        machine_st.iip = 0;
 
         Ok(())
     }
@@ -317,35 +314,31 @@ pub trait CallPolicy: Any + fmt::Debug {
         global_variables: &mut GlobalVarDir,
     ) -> CallResult {
         let b = machine_st.b;
-        let n = machine_st
-            .stack
-            .index_or_frame(b)
-            .prelude
-            .univ_prelude
-            .num_cells;
+        let or_frame = machine_st.stack.index_or_frame(b);
+        let n = or_frame.prelude.univ_prelude.num_cells;
 
-        for i in 1..n + 1 {
-            machine_st.registers[i] = machine_st.stack[stack_loc!(OrFrame, b, i - 1)];
+        for i in 0..n {
+            machine_st.registers[i+1] = or_frame[i];
         }
 
         machine_st.num_of_args = n;
-        machine_st.e = machine_st.stack.index_or_frame(b).prelude.e;
-        machine_st.cp = machine_st.stack.index_or_frame(b).prelude.cp;
+        machine_st.e = or_frame.prelude.e;
+        machine_st.cp = or_frame.prelude.cp;
 
-        let old_tr = machine_st.stack.index_or_frame(b).prelude.tr;
+        let old_tr = or_frame.prelude.tr;
         let curr_tr = machine_st.tr;
+        let target_h = or_frame.prelude.h;
 
-        machine_st.unwind_trail(old_tr, curr_tr, global_variables);
-        machine_st.tr = machine_st.stack.index_or_frame(b).prelude.tr;
-
-        machine_st.trail.truncate(machine_st.tr);
-        machine_st
-            .heap
-            .truncate(machine_st.stack.index_or_frame(b).prelude.h);
+        machine_st.tr = or_frame.prelude.tr;
 
         machine_st.attr_var_init.reset();
-        machine_st.b = machine_st.stack.index_or_frame(b).prelude.b;
+        machine_st.b = or_frame.prelude.b;
+
+        machine_st.unwind_trail(old_tr, curr_tr, global_variables);
+
+        machine_st.trail.truncate(machine_st.tr);
         machine_st.stack.truncate(b);
+        machine_st.heap.truncate(target_h);
 
         machine_st.hb = machine_st.heap.len();
         machine_st.p += 1;
@@ -754,7 +747,6 @@ impl<'a> IndexMut<usize> for CopyTerm<'a> {
     }
 }
 
-// the ordinary, heap term copier, used by duplicate_term.
 impl<'a> CopierTarget for CopyTerm<'a> {
     #[inline(always)]
     fn threshold(&self) -> usize {
@@ -827,7 +819,6 @@ impl<'a> IndexMut<usize> for CopyBallTerm<'a> {
     }
 }
 
-// the ordinary, heap term copier, used by duplicate_term.
 impl<'a> CopierTarget for CopyBallTerm<'a> {
     fn threshold(&self) -> usize {
         self.heap_boundary + self.stub.len()

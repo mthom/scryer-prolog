@@ -20,9 +20,9 @@ impl fmt::Display for LocalCodePtr {
         match self {
             LocalCodePtr::DirEntry(p) => write!(f, "LocalCodePtr::DirEntry({})", p),
             LocalCodePtr::Halt => write!(f, "LocalCodePtr::Halt"),
-            LocalCodePtr::IndexingBuf(p, o, i) => {
-                write!(f, "LocalCodePtr::IndexingBuf({}, {}, {})", p, o, i)
-            }
+            // LocalCodePtr::IndexingBuf(p, o, i) => {
+            //     write!(f, "LocalCodePtr::IndexingBuf({}, {}, {})", p, o, i)
+            // }
         }
     }
 }
