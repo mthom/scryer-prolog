@@ -274,6 +274,7 @@ pub(crate) enum SystemClauseType {
     SocketServerAccept,
     SocketServerClose,
     TLSAcceptClient,
+    TLSClientConnect,
     Succeed,
     TermAttributedVariables,
     TermVariables,
@@ -565,6 +566,7 @@ impl SystemClauseType {
             &SystemClauseType::SocketServerAccept => clause_name!("$socket_server_accept"),
             &SystemClauseType::SocketServerClose => clause_name!("$socket_server_close"),
             &SystemClauseType::TLSAcceptClient => clause_name!("$tls_accept_client"),
+            &SystemClauseType::TLSClientConnect => clause_name!("$tls_client_connect"),
             &SystemClauseType::Succeed => clause_name!("$succeed"),
             &SystemClauseType::TermAttributedVariables => {
                 clause_name!("$term_attributed_variables")
@@ -742,11 +744,12 @@ impl SystemClauseType {
             ("$set_seed", 1) => Some(SystemClauseType::SetSeed),
             ("$skip_max_list", 4) => Some(SystemClauseType::SkipMaxList),
             ("$sleep", 1) => Some(SystemClauseType::Sleep),
-            ("$socket_client_open", 8) => Some(SystemClauseType::SocketClientOpen),
+            ("$socket_client_open", 7) => Some(SystemClauseType::SocketClientOpen),
             ("$socket_server_open", 3) => Some(SystemClauseType::SocketServerOpen),
             ("$socket_server_accept", 7) => Some(SystemClauseType::SocketServerAccept),
             ("$socket_server_close", 1) => Some(SystemClauseType::SocketServerClose),
             ("$tls_accept_client", 4) => Some(SystemClauseType::TLSAcceptClient),
+            ("$tls_client_connect", 3) => Some(SystemClauseType::TLSClientConnect),
             ("$store_global_var", 2) => Some(SystemClauseType::StoreGlobalVar),
             ("$store_backtrackable_global_var", 2) => {
                 Some(SystemClauseType::StoreBacktrackableGlobalVar)

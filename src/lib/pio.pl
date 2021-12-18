@@ -19,7 +19,7 @@
 :- use_module(library(dcgs)).
 :- use_module(library(error)).
 :- use_module(library(freeze)).
-:- use_module(library(iso_ext), [setup_call_cleanup/3, partial_string/1, partial_string/3]).
+:- use_module(library(iso_ext), [setup_call_cleanup/3, partial_string/3]).
 :- use_module(library(lists), [member/2, maplist/2]).
 :- use_module(library(charsio), [read_n_chars/3]).
 
@@ -87,11 +87,7 @@ reader_step(Stream, Pos, Xs0) :-
 
 phrase_to_stream(GRBody, Stream) :-
         phrase(GRBody, Cs),
-        (   partial_string(Cs) -> % very efficiently check for a string
-            true                  % (success is the expected case here)
-        ;   must_be(list, Cs),
-            maplist(must_be(character), Cs)
-        ),
+        must_be(chars, Cs),
         (   stream_property(Stream, type(binary)) ->
             (   '$first_non_octet'(Cs, N) ->
                 domain_error(byte_char, N, phrase_to_stream/2)
