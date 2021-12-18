@@ -95,7 +95,7 @@ strings.
 
 ## Installing Scryer Prolog
 
-### Native Install (Unix Only)
+### Native Install
 
 First, install the latest stable version of
 [Rust](https://www.rust-lang.org/en-US/install.html) using your
@@ -130,7 +130,11 @@ $> cargo run [--release]
 The optional `--release` flag will perform various optimizations,
 producing a faster executable.
 
-### Docker Install (All Platforms)
+On Windows, Scryer Prolog is easier to build inside a [MSYS2](https://www.msys2.org/)
+environment as some crates may require native C compilation. However, 
+the resulting binary does not need MSYS2 to run.
+
+### Docker Install
 
 First, install [Docker](https://docs.docker.com/get-docker/) on Linux,
 Windows, or Mac.
