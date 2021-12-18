@@ -226,8 +226,6 @@ impl Machine {
 
         let mut wam = Machine {
             machine_st,
-            inner_heap: Heap::new(),
-            policies: MachinePolicies::new(),
             indices: IndexStore::new(),
             code_repo: CodeRepo::new(),
             user_input,

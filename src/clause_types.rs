@@ -799,11 +799,13 @@ impl SystemClauseType {
             (atom!("$ed25519_new_keypair"), 1) => Some(SystemClauseType::Ed25519NewKeyPair),
             (atom!("$ed25519_keypair_public_key"), 2) => Some(SystemClauseType::Ed25519KeyPairPublicKey),
             (atom!("$curve25519_scalar_mult"), 3) => Some(SystemClauseType::Curve25519ScalarMult),
+            (atom!("$first_non_octet"), 2) => Some(SystemClauseType::FirstNonOctet),
             (atom!("$load_html"), 3) => Some(SystemClauseType::LoadHTML),
             (atom!("$load_xml"), 3) => Some(SystemClauseType::LoadXML),
             (atom!("$getenv"), 2) => Some(SystemClauseType::GetEnv),
             (atom!("$setenv"), 2) => Some(SystemClauseType::SetEnv),
             (atom!("$unsetenv"), 1) => Some(SystemClauseType::UnsetEnv),
+            (atom!("$shell"), 2) => Some(SystemClauseType::Shell),
             (atom!("$pid"), 1) => Some(SystemClauseType::PID),
             (atom!("$chars_base64"), 4) => Some(SystemClauseType::CharsBase64),
             (atom!("$load_library_as_stream"), 3) => Some(SystemClauseType::LoadLibraryAsStream),
@@ -847,6 +849,7 @@ impl SystemClauseType {
             (atom!("$set_sto_with_error_as_unify"), 0) => Some(SystemClauseType::SetSTOWithErrorAsUnify),
             (atom!("$home_directory"), 1) => Some(SystemClauseType::HomeDirectory),
             (atom!("$debug_hook"), 0) => Some(SystemClauseType::DebugHook),
+            (atom!("$popcount"), 2) => Some(SystemClauseType::PopCount),
             _ => None,
         }
     }

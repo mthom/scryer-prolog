@@ -1371,12 +1371,16 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         term: Term,
         settings: CodeGenSettings,
     ) -> Result<StandaloneCompileResult, SessionError> {
-        let mut preprocessor = Preprocessor::new(LS::machine_st(&mut self.payload).flags);
+        let mut preprocessor = Preprocessor::new();
 
         let clause = self.try_term_to_tl(term, &mut preprocessor)?;
         let queue = preprocessor.parse_queue(self)?;
 
-        let mut cg = CodeGenerator::<DebrayAllocator>::new(&mut LS::machine_st(&mut self.payload).atom_tbl, settings);
+        let mut cg = CodeGenerator::<DebrayAllocator>::new(
+            &mut LS::machine_st(&mut self.payload).atom_tbl,
+            settings,
+        );
+
         let mut clause_code = cg.compile_predicate(&vec![clause])?;
 
         compile_appendix(
@@ -1405,7 +1409,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         let mut code_ptr = code_len;
 
         let mut clauses = vec![];
-        let mut preprocessor = Preprocessor::new(LS::machine_st(&mut self.payload).flags);
+        let mut preprocessor = Preprocessor::new();
 
         for term in predicates.predicates.drain(0..) {
             clauses.push(self.try_term_to_tl(term, &mut preprocessor)?);

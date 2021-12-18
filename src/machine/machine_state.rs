@@ -1,11 +1,9 @@
 use crate::arena::*;
 use crate::atom_table::*;
-use crate::parser::ast::*;
-
-use crate::clause_types::*;
 use crate::forms::*;
 use crate::heap_iter::*;
 use crate::heap_print::*;
+use crate::machine::Machine;
 use crate::machine::attributed_variables::*;
 use crate::machine::copier::*;
 use crate::machine::heap::*;
@@ -13,20 +11,15 @@ use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
 use crate::machine::stack::*;
 use crate::machine::streams::*;
+use crate::parser::ast::*;
 use crate::types::*;
 
 use crate::parser::rug::Integer;
 
-use downcast::{
-    downcast, downcast_methods, downcast_methods_core, downcast_methods_std, impl_downcast, Any,
-};
-
 use indexmap::IndexMap;
 
-use std::cmp::Ordering;
 use std::convert::TryFrom;
 use std::fmt;
-use std::mem;
 use std::ops::{Index, IndexMut};
 use std::rc::Rc;
 
@@ -83,6 +76,9 @@ pub struct MachineState {
     pub(super) ball: Ball,
     pub(super) lifted_heap: Heap,
     pub(super) interms: Vec<Number>, // intermediate numbers.
+    // locations of cleaners, cut points, the previous block. for setup_call_cleanup.
+    pub(super) cont_pts: Vec<(HeapCellValue, usize, usize)>,
+    pub(super) cwil: CWIL,
     pub(super) last_call: bool, // TODO: REMOVE THIS.
     pub(crate) flags: MachineFlags,
     pub(crate) cc: usize,
@@ -90,6 +86,8 @@ pub struct MachineState {
     pub(crate) dynamic_mode: FirstOrNext,
     pub(crate) unify_fn: fn(&mut MachineState),
     pub(crate) bind_fn: fn(&mut MachineState, Ref, HeapCellValue),
+    pub(crate) run_cleaners_fn: fn(&mut Machine) -> bool,
+    pub(crate) increment_call_count_fn: fn(&mut MachineState) -> CallResult,
 }
 
 impl fmt::Debug for MachineState {
@@ -177,505 +175,6 @@ impl IndexMut<RegType> for MachineState {
 }
 
 pub type CallResult = Result<(), Vec<HeapCellValue>>;
-
-pub trait CutPolicy: Any + fmt::Debug {
-    // returns true iff we fail or cut redirected the MachineState's p itself
-    fn cut(&mut self, machine_st: &mut MachineState, r: RegType) -> bool;
-}
-
-downcast!(dyn CutPolicy);
-
-pub trait CallPolicy: Any + fmt::Debug {
-    fn retry_me_else(
-        &mut self,
-        machine_st: &mut MachineState,
-        offset: usize,
-        global_variables: &mut GlobalVarDir,
-    ) -> CallResult {
-        let b = machine_st.b;
-        let or_frame = machine_st.stack.index_or_frame_mut(b);
-        let n = or_frame.prelude.univ_prelude.num_cells;
-
-        for i in 0..n {
-            machine_st.registers[i + 1] = or_frame[i];
-        }
-
-        machine_st.num_of_args = n;
-        machine_st.e = or_frame.prelude.e;
-        machine_st.cp = or_frame.prelude.cp;
-
-        or_frame.prelude.bp = machine_st.p.local() + offset;
-
-        let old_tr = or_frame.prelude.tr;
-        let curr_tr = machine_st.tr;
-        let target_h = or_frame.prelude.h;
-
-        machine_st.tr = or_frame.prelude.tr;
-
-        machine_st.attr_var_init.reset();
-        machine_st.hb = machine_st.heap.len();
-        machine_st.p += 1;
-
-        machine_st.unwind_trail(old_tr, curr_tr, global_variables);
-
-        machine_st.trail.truncate(machine_st.tr);
-        machine_st.heap.truncate(target_h);
-
-        Ok(())
-    }
-
-    fn retry(
-        &mut self,
-        machine_st: &mut MachineState,
-        offset: usize,
-        global_variables: &mut GlobalVarDir,
-    ) -> CallResult {
-        let b = machine_st.b;
-        let or_frame = machine_st.stack.index_or_frame_mut(b);
-        let n = or_frame.prelude.univ_prelude.num_cells;
-
-        for i in 0..n {
-            machine_st.registers[i+1] = or_frame[i];
-        }
-
-        machine_st.num_of_args = n;
-        machine_st.e = or_frame.prelude.e;
-        machine_st.cp = or_frame.prelude.cp;
-
-        // WAS: or_frame.prelude.bp = machine_st.p.local() + 1;
-        or_frame.prelude.biip += 1;
-
-        let old_tr = or_frame.prelude.tr;
-        let curr_tr = machine_st.tr;
-        let target_h = or_frame.prelude.h;
-
-        machine_st.tr = or_frame.prelude.tr;
-        machine_st.attr_var_init.reset();
-
-        machine_st.unwind_trail(old_tr, curr_tr, global_variables);
-
-        machine_st.trail.truncate(machine_st.tr);
-        machine_st.heap.truncate(target_h);
-
-        machine_st.hb = machine_st.heap.len();
-        machine_st.p = CodePtr::Local(dir_entry!(machine_st.p.local().abs_loc() + offset));
-
-        machine_st.oip = 0;
-        machine_st.iip = 0;
-
-        Ok(())
-    }
-
-    fn trust(
-        &mut self,
-        machine_st: &mut MachineState,
-        offset: usize,
-        global_variables: &mut GlobalVarDir,
-    ) -> CallResult {
-        let b = machine_st.b;
-        let or_frame = machine_st.stack.index_or_frame(b);
-        let n = or_frame.prelude.univ_prelude.num_cells;
-
-        for i in 0..n {
-            machine_st.registers[i+1] = or_frame[i];
-        }
-
-        machine_st.num_of_args = n;
-        machine_st.e = or_frame.prelude.e;
-        machine_st.cp = or_frame.prelude.cp;
-
-        let old_tr = or_frame.prelude.tr;
-        let curr_tr = machine_st.tr;
-        let target_h = or_frame.prelude.h;
-
-        machine_st.tr = or_frame.prelude.tr;
-
-        machine_st.attr_var_init.reset();
-        machine_st.b = or_frame.prelude.b;
-
-        machine_st.unwind_trail(old_tr, curr_tr, global_variables);
-
-        machine_st.trail.truncate(machine_st.tr);
-        machine_st.stack.truncate(b);
-        machine_st.heap.truncate(target_h);
-
-        machine_st.hb = machine_st.heap.len();
-        machine_st.p = CodePtr::Local(dir_entry!(machine_st.p.local().abs_loc() + offset));
-
-        machine_st.oip = 0;
-        machine_st.iip = 0;
-
-        Ok(())
-    }
-
-    fn trust_me(
-        &mut self,
-        machine_st: &mut MachineState,
-        global_variables: &mut GlobalVarDir,
-    ) -> CallResult {
-        let b = machine_st.b;
-        let or_frame = machine_st.stack.index_or_frame(b);
-        let n = or_frame.prelude.univ_prelude.num_cells;
-
-        for i in 0..n {
-            machine_st.registers[i+1] = or_frame[i];
-        }
-
-        machine_st.num_of_args = n;
-        machine_st.e = or_frame.prelude.e;
-        machine_st.cp = or_frame.prelude.cp;
-
-        let old_tr = or_frame.prelude.tr;
-        let curr_tr = machine_st.tr;
-        let target_h = or_frame.prelude.h;
-
-        machine_st.tr = or_frame.prelude.tr;
-
-        machine_st.attr_var_init.reset();
-        machine_st.b = or_frame.prelude.b;
-
-        machine_st.unwind_trail(old_tr, curr_tr, global_variables);
-
-        machine_st.trail.truncate(machine_st.tr);
-        machine_st.stack.truncate(b);
-        machine_st.heap.truncate(target_h);
-
-        machine_st.hb = machine_st.heap.len();
-        machine_st.p += 1;
-
-        Ok(())
-    }
-
-    fn context_call(
-        &mut self,
-        machine_st: &mut MachineState,
-        name: Atom,
-        arity: usize,
-        idx: &CodeIndex,
-    ) -> CallResult {
-        if machine_st.last_call {
-            self.try_execute(machine_st, name, arity, idx)
-        } else {
-            self.try_call(machine_st, name, arity, idx)
-        }
-    }
-
-    fn try_call(
-        &mut self,
-        machine_st: &mut MachineState,
-        name: Atom,
-        arity: usize,
-        idx: &CodeIndex,
-    ) -> CallResult {
-        match idx.get() {
-            IndexPtr::DynamicUndefined => {
-                machine_st.fail = true;
-                return Ok(());
-            }
-            IndexPtr::Undefined => {
-                return Err(machine_st.throw_undefined_error(name, arity));
-            }
-            IndexPtr::DynamicIndex(compiled_tl_index) => {
-                machine_st.dynamic_mode = FirstOrNext::First;
-                machine_st.call_at_index(arity, dir_entry!(compiled_tl_index));
-            }
-            IndexPtr::Index(compiled_tl_index) => {
-                machine_st.call_at_index(arity, dir_entry!(compiled_tl_index));
-            }
-        }
-
-        Ok(())
-    }
-
-    fn try_execute(
-        &mut self,
-        machine_st: &mut MachineState,
-        name: Atom,
-        arity: usize,
-        idx: &CodeIndex,
-    ) -> CallResult {
-        match idx.get() {
-            IndexPtr::DynamicUndefined => {
-                machine_st.fail = true;
-                return Ok(());
-            }
-            IndexPtr::Undefined => {
-                return Err(machine_st.throw_undefined_error(name, arity));
-            }
-            IndexPtr::DynamicIndex(compiled_tl_index) => {
-                machine_st.dynamic_mode = FirstOrNext::First;
-                machine_st.execute_at_index(arity, dir_entry!(compiled_tl_index));
-            }
-            IndexPtr::Index(compiled_tl_index) => {
-                machine_st.execute_at_index(arity, dir_entry!(compiled_tl_index))
-            }
-        }
-
-        Ok(())
-    }
-
-    fn call_builtin(
-        &mut self,
-        machine_st: &mut MachineState,
-        ct: &BuiltInClauseType,
-        _code_dir: &CodeDir,
-        op_dir: &OpDir,
-        stream_aliases: &StreamAliasDir,
-    ) -> CallResult {
-        match ct {
-            &BuiltInClauseType::AcyclicTerm => {
-                let addr = machine_st.registers[1];
-                machine_st.fail = machine_st.is_cyclic_term(addr);
-                return_from_clause!(machine_st.last_call, machine_st)
-            }
-            &BuiltInClauseType::Arg => {
-                machine_st.try_arg()?;
-                return_from_clause!(machine_st.last_call, machine_st)
-            }
-            &BuiltInClauseType::Compare => {
-                let stub_gen = || functor_stub(atom!("compare"), 3);
-
-                let a1 = machine_st.store(machine_st.deref(machine_st.registers[1]));
-                let a2 = machine_st.registers[2];
-                let a3 = machine_st.registers[3];
-
-                read_heap_cell!(a1,
-                    (HeapCellValueTag::Str, s) => {
-                        let (name, arity) = cell_as_atom_cell!(machine_st.heap[s])
-                            .get_name_and_arity();
-
-                        match name {
-                            atom!(">") | atom!("<") | atom!("=") if arity == 2 => {
-                            }
-                            _ => {
-                                let err = machine_st.domain_error(DomainErrorType::Order, a1);
-                                return Err(machine_st.error_form(err, stub_gen()));
-                            }
-                        }
-                    }
-                    (HeapCellValueTag::AttrVar | HeapCellValueTag::Var | HeapCellValueTag::StackVar) => {
-                    }
-                    _ => {
-                        let err = machine_st.type_error(ValidType::Atom, a1);
-                        return Err(machine_st.error_form(err, stub_gen()));
-                    }
-                );
-
-                let atom = match compare_term_test!(machine_st, a2, a3) {
-                    Some(Ordering::Greater) => {
-                        atom!(">")
-                    }
-                    Some(Ordering::Equal) => {
-                        atom!("=")
-                    }
-                    None | Some(Ordering::Less) => {
-                        atom!("<")
-                    }
-                };
-
-                machine_st.unify_atom(atom, a1);
-                return_from_clause!(machine_st.last_call, machine_st)
-            }
-            &BuiltInClauseType::CompareTerm(qt) => {
-                machine_st.compare_term(qt);
-                return_from_clause!(machine_st.last_call, machine_st)
-            }
-            &BuiltInClauseType::Read => {
-                let stream = machine_st.get_stream_or_alias(
-                    machine_st.registers[1],
-                    stream_aliases,
-                    atom!("read"),
-                    2,
-                )?;
-
-                match machine_st.read(stream, op_dir) {
-                    Ok(offset) => {
-                        let value = machine_st.registers[2];
-                        unify_fn!(machine_st, value, heap_loc_as_cell!(offset.heap_loc));
-                    }
-                    Err(ParserError::UnexpectedEOF) => {
-                        let value = machine_st.registers[2];
-                        machine_st.unify_atom(atom!("end_of_file"), value);
-                    }
-                    Err(e) => {
-                        let stub = functor_stub(atom!("read"), 2);
-                        let err = machine_st.syntax_error(e);
-
-                        return Err(machine_st.error_form(err, stub));
-                    }
-                };
-
-                return_from_clause!(machine_st.last_call, machine_st)
-            }
-            &BuiltInClauseType::CopyTerm => {
-                machine_st.copy_term(AttrVarPolicy::DeepCopy);
-                return_from_clause!(machine_st.last_call, machine_st)
-            }
-            &BuiltInClauseType::Eq => {
-                let a1 = machine_st.registers[1];
-                let a2 = machine_st.registers[2];
-
-                machine_st.fail = machine_st.eq_test(a1, a2);
-                return_from_clause!(machine_st.last_call, machine_st)
-            }
-            &BuiltInClauseType::Ground => {
-                machine_st.fail = machine_st.ground_test();
-                return_from_clause!(machine_st.last_call, machine_st)
-            }
-            &BuiltInClauseType::Functor => {
-                machine_st.try_functor()?;
-                return_from_clause!(machine_st.last_call, machine_st)
-            }
-            &BuiltInClauseType::NotEq => {
-                let a1 = machine_st.registers[1];
-                let a2 = machine_st.registers[2];
-
-                machine_st.fail =
-                    if let Some(Ordering::Equal) = compare_term_test!(machine_st, a1, a2) {
-                        true
-                    } else {
-                        false
-                    };
-
-                return_from_clause!(machine_st.last_call, machine_st)
-            }
-            &BuiltInClauseType::Sort => {
-                machine_st.check_sort_errors()?;
-
-                let stub_gen = || functor_stub(atom!("sort"), 2);
-                let mut list = machine_st.try_from_list(machine_st.registers[1], stub_gen)?;
-
-                list.sort_unstable_by(|v1, v2| {
-                    compare_term_test!(machine_st, *v1, *v2).unwrap_or(Ordering::Less)
-                });
-
-                list.dedup_by(|v1, v2| {
-                    compare_term_test!(machine_st, *v1, *v2) == Some(Ordering::Equal)
-                });
-
-                let heap_addr = heap_loc_as_cell!(
-                    iter_to_heap_list(&mut machine_st.heap, list.into_iter())
-                );
-
-                let r2 = machine_st.registers[2];
-                unify_fn!(machine_st, r2, heap_addr);
-
-                return_from_clause!(machine_st.last_call, machine_st)
-            }
-            &BuiltInClauseType::KeySort => {
-                machine_st.check_keysort_errors()?;
-
-                let stub_gen = || functor_stub(atom!("keysort"), 2);
-                let list = machine_st.try_from_list(machine_st.registers[1], stub_gen)?;
-
-                let mut key_pairs = Vec::with_capacity(list.len());
-
-                for val in list {
-                    let key = machine_st.project_onto_key(val)?;
-                    key_pairs.push((key, val));
-                }
-
-                key_pairs.sort_by(|a1, a2| {
-                    compare_term_test!(machine_st, a1.0, a2.0).unwrap_or(Ordering::Less)
-                });
-
-                let key_pairs = key_pairs.into_iter().map(|kp| kp.1);
-                let heap_addr = heap_loc_as_cell!(
-                    iter_to_heap_list(&mut machine_st.heap, key_pairs)
-                );
-
-                let r2 = machine_st.registers[2];
-                unify_fn!(machine_st, r2, heap_addr);
-
-                return_from_clause!(machine_st.last_call, machine_st)
-            }
-            &BuiltInClauseType::Is(r, ref at) => {
-                let n1 = machine_st.store(machine_st.deref(machine_st[r]));
-                let n2 = machine_st.get_number(at)?;
-
-                match n2 {
-                    Number::Fixnum(n) => machine_st.unify_fixnum(n, n1),
-                    Number::Float(n) => {
-                        // TODO: argghh.. deal with it.
-                        let n = arena_alloc!(n, &mut machine_st.arena);
-                        machine_st.unify_f64(n, n1)
-                    }
-                    Number::Integer(n) => machine_st.unify_big_int(n, n1),
-                    Number::Rational(n) => machine_st.unify_rational(n, n1),
-                }
-
-                return_from_clause!(machine_st.last_call, machine_st)
-            }
-        }
-    }
-
-    fn call_clause_type(
-        &mut self,
-        machine_st: &mut MachineState,
-        key: PredicateKey,
-        code_dir: &CodeDir,
-        op_dir: &OpDir,
-        stream_aliases: &StreamAliasDir,
-    ) -> CallResult {
-        let (name, arity) = key;
-
-        match ClauseType::from(name, arity) {
-            ClauseType::BuiltIn(built_in) => {
-                machine_st.setup_built_in_call(built_in);
-                self.call_builtin(machine_st, &built_in, code_dir, op_dir, stream_aliases)?;
-            }
-            ClauseType::CallN => {
-                machine_st.handle_internal_call_n(arity);
-
-                if machine_st.fail {
-                    return Ok(());
-                }
-
-                machine_st.p = CodePtr::CallN(arity, machine_st.p.local(), machine_st.last_call);
-            }
-            ClauseType::Inlined(inlined) => {
-                machine_st.execute_inlined(&inlined);
-
-                if machine_st.last_call {
-                    machine_st.p = CodePtr::Local(machine_st.cp);
-                }
-            }
-            ClauseType::Named(..) => {
-                if let Some(idx) = code_dir.get(&(name, arity)) {
-                    self.context_call(machine_st, name, arity, idx)?;
-                } else {
-                    return Err(machine_st.throw_undefined_error(name, arity));
-                }
-            }
-            ClauseType::System(_) => {
-                let (name, arity) = key;
-                let name = functor!(name);
-
-                let stub = functor_stub(atom!("call"), arity + 1);
-                let err = machine_st.type_error(ValidType::Callable, name);
-
-                return Err(machine_st.error_form(err, stub));
-            }
-        }
-
-        Ok(())
-    }
-
-    fn call_n(
-        &mut self,
-        machine_st: &mut MachineState,
-        arity: usize,
-        code_dir: &CodeDir,
-        op_dir: &OpDir,
-        stream_aliases: &StreamAliasDir,
-    ) -> CallResult {
-        if let Some(key) = machine_st.setup_call_n(arity) {
-            self.call_clause_type(machine_st, key, code_dir, op_dir, stream_aliases)?;
-        }
-
-        Ok(())
-    }
-}
 
 #[inline(always)]
 pub fn pstr_loc_and_offset(heap: &[HeapCellValue], index: usize) -> (usize, Fixnum) {
@@ -866,6 +365,26 @@ impl<'a> CopierTarget for CopyBallTerm<'a> {
 }
 
 impl MachineState {
+    pub(crate) fn increment_call_count(&mut self) -> CallResult {
+        if self.cwil.inference_limit_exceeded || self.ball.stub.len() > 0 {
+            return Ok(());
+        }
+
+        if let Some(&(ref limit, bp)) = self.cwil.limits.last() {
+            if self.cwil.count == *limit {
+                self.cwil.inference_limit_exceeded = true;
+
+                return Err(
+                    functor!(atom!("inference_limit_exceeded"), [fixnum(bp)])
+                );
+            } else {
+                self.cwil.count += 1;
+            }
+        }
+
+        Ok(())
+    }
+
     #[allow(dead_code)]
     pub(super) fn try_char_list(&mut self, addrs: Vec<HeapCellValue>) -> Result<String, MachineError> {
         let mut chars = String::new();
@@ -958,7 +477,7 @@ impl MachineState {
             match self.read(stream, &indices.op_dir) {
                 Ok(term_write_result) => {
                     let term = self.registers[2];
-                    unify_fn!(self, heap_loc_as_cell!(term_write_result.heap_loc), term);
+                    unify_fn!(*self, heap_loc_as_cell!(term_write_result.heap_loc), term);
                     let term = heap_loc_as_cell!(term_write_result.heap_loc);
 
                     if self.fail {
@@ -1004,7 +523,7 @@ impl MachineState {
                         iter_to_heap_list(&mut self.heap, singleton_var_list.into_iter())
                     );
 
-                    unify_fn!(self, singletons_offset, singleton_addr);
+                    unify_fn!(*self, singletons_offset, singleton_addr);
 
                     if self.fail {
                         return Ok(());
@@ -1015,7 +534,7 @@ impl MachineState {
                         iter_to_heap_list(&mut self.heap, var_list.into_iter())
                     );
 
-                    unify_fn!(self, vars_offset, vars_addr);
+                    unify_fn!(*self, vars_offset, vars_addr);
 
                     if self.fail {
                         return Ok(());
@@ -1026,7 +545,7 @@ impl MachineState {
                         iter_to_heap_list(&mut self.heap, list_of_var_eqs.into_iter())
                     );
 
-                    return Ok(unify_fn!(self, var_names_offset, var_names_addr));
+                    return Ok(unify_fn!(*self, var_names_offset, var_names_addr));
                 }
                 Err(err) => {
                     if let ParserError::UnexpectedEOF = err {
@@ -1163,83 +682,96 @@ impl MachineState {
         (name, usize::try_from(arity.get_num()).unwrap())
     }
 
-    pub(super) fn module_lookup(
-        &mut self,
-        indices: &IndexStore,
-        call_policy: &mut Box<dyn CallPolicy>,
-        key: PredicateKey,
-        module_name: Atom,
-        _last_call: bool,
-        stream_aliases: &StreamAliasDir,
-    ) -> CallResult {
-        if module_name == atom!("user") {
-            return call_policy.call_clause_type(
-                self,
-                key,
-                &indices.code_dir,
-                &indices.op_dir,
-                stream_aliases,
-            );
-        } else if let Some(module) = indices.modules.get(&module_name) {
-            return call_policy.call_clause_type(
-                self,
-                key,
-                &module.code_dir,
-                &module.op_dir,
-                stream_aliases,
-            );
+    #[inline(always)]
+    pub(super) fn cut_body(&mut self, value: HeapCellValue) {
+        let b = self.b;
+
+        read_heap_cell!(value,
+            (HeapCellValueTag::Fixnum, b0) => {
+                let b0 = b0.get_num() as usize;
+
+                if b > b0 {
+                    self.b = b0;
+                }
+            }
+            _ => {
+                self.fail = true;
+            }
+        );
+    }
+
+    #[inline(always)]
+    pub(super) fn try_me_else(&mut self, offset: usize) {
+        let n = self.num_of_args;
+        let b = self.stack.allocate_or_frame(n);
+        let or_frame = self.stack.index_or_frame_mut(b);
+
+        or_frame.prelude.univ_prelude.num_cells = n;
+        or_frame.prelude.e = self.e;
+        or_frame.prelude.cp = self.cp;
+        or_frame.prelude.b = self.b;
+        or_frame.prelude.bp = self.p.local() + offset;
+        or_frame.prelude.boip = 0;
+        or_frame.prelude.biip = 0;
+        or_frame.prelude.tr = self.tr;
+        or_frame.prelude.h = self.heap.len();
+        or_frame.prelude.b0 = self.b0;
+
+        self.b = b;
+
+        for i in 0..n {
+            self.stack[stack_loc!(OrFrame, b, i)] = self.registers[i+1];
         }
 
-        let (name, arity) = key;
+        self.hb = self.heap.len();
+        self.p += 1;
+    }
 
-        let stub = functor_stub(name, arity);
-        let err = self.module_resolution_error(module_name, name, arity);
+    #[inline(always)]
+    pub(super) fn indexed_try(&mut self, offset: usize) {
+        let n = self.num_of_args;
+        let b = self.stack.allocate_or_frame(n);
+        let or_frame = self.stack.index_or_frame_mut(b);
 
-        return Err(self.error_form(err, stub));
+        or_frame.prelude.univ_prelude.num_cells = n;
+        or_frame.prelude.e = self.e;
+        or_frame.prelude.cp = self.cp;
+        or_frame.prelude.b = self.b;
+        or_frame.prelude.bp = self.p.local(); // + 1; in self.iip now!
+        or_frame.prelude.boip = self.oip;
+        or_frame.prelude.biip = self.iip + 1;
+        or_frame.prelude.tr = self.tr;
+        or_frame.prelude.h = self.heap.len();
+        or_frame.prelude.b0 = self.b0;
+
+        self.b = b;
+
+        for i in 0..n {
+            or_frame[i] = self.registers[i+1];
+        }
+
+        self.hb = self.heap.len();
+        self.p = CodePtr::Local(dir_entry!(self.p.local().abs_loc() + offset));
+
+        self.oip = 0;
+        self.iip = 0;
     }
 }
 
 #[derive(Debug)]
-pub(crate) struct CWILCallPolicy {
-    pub(crate) prev_policy: Box<dyn CallPolicy>,
+pub(crate) struct CWIL {
     count: Integer,
     limits: Vec<(Integer, usize)>,
     inference_limit_exceeded: bool,
 }
 
-impl CWILCallPolicy {
-    pub(crate) fn new_in_place(policy: &mut Box<dyn CallPolicy>) {
-        let mut prev_policy: Box<dyn CallPolicy> = Box::new(DefaultCallPolicy {});
-        mem::swap(&mut prev_policy, policy);
-
-        let new_policy = CWILCallPolicy {
-            prev_policy,
+impl CWIL {
+    pub(crate) fn new() -> Self {
+        CWIL {
             count: Integer::from(0),
             limits: vec![],
             inference_limit_exceeded: false,
-        };
-
-        *policy = Box::new(new_policy);
-    }
-
-    fn increment(&mut self, machine_st: &MachineState) -> CallResult {
-        if self.inference_limit_exceeded || machine_st.ball.stub.len() > 0 {
-            return Ok(());
         }
-
-        if let Some(&(ref limit, bp)) = self.limits.last() {
-            if self.count == *limit {
-                self.inference_limit_exceeded = true;
-
-                return Err(
-                    functor!(atom!("inference_limit_exceeded"), [fixnum(bp)])
-                );
-            } else {
-                self.count += 1;
-            }
-        }
-
-        Ok(())
     }
 
     pub(crate) fn add_limit(&mut self, limit: usize, b: usize) -> &Integer {
@@ -1254,6 +786,7 @@ impl CWILCallPolicy {
         &self.count
     }
 
+    #[inline(always)]
     pub(crate) fn remove_limit(&mut self, b: usize) -> &Integer {
         if let Some((_, bp)) = self.limits.last() {
             if bp == &b {
@@ -1264,207 +797,15 @@ impl CWILCallPolicy {
         &self.count
     }
 
+    #[inline(always)]
+    pub(crate) fn reset(&mut self) {
+        self.count = Integer::from(0);
+        self.limits.clear();
+        self.inference_limit_exceeded = false;
+    }
+
+    #[inline(always)]
     pub(crate) fn is_empty(&self) -> bool {
         self.limits.is_empty()
     }
-
-    pub(crate) fn into_inner(&mut self) -> Box<dyn CallPolicy> {
-        let mut new_inner: Box<dyn CallPolicy> = Box::new(DefaultCallPolicy {});
-        mem::swap(&mut self.prev_policy, &mut new_inner);
-        new_inner
-    }
 }
-
-impl CallPolicy for CWILCallPolicy {
-    fn context_call(
-        &mut self,
-        machine_st: &mut MachineState,
-        name: Atom,
-        arity: usize,
-        idx: &CodeIndex,
-    ) -> CallResult {
-        self.prev_policy.context_call(machine_st, name, arity, idx)?;
-        self.increment(machine_st)
-    }
-
-    fn retry_me_else(
-        &mut self,
-        machine_st: &mut MachineState,
-        offset: usize,
-        global_variables: &mut GlobalVarDir,
-    ) -> CallResult {
-        self.prev_policy.retry_me_else(machine_st, offset, global_variables)?;
-        self.increment(machine_st)
-    }
-
-    fn retry(
-        &mut self,
-        machine_st: &mut MachineState,
-        offset: usize,
-        global_variables: &mut GlobalVarDir,
-    ) -> CallResult {
-        self.prev_policy.retry(machine_st, offset, global_variables)?;
-        self.increment(machine_st)
-    }
-
-    fn trust_me(
-        &mut self,
-        machine_st: &mut MachineState,
-        global_variables: &mut GlobalVarDir,
-    ) -> CallResult {
-        self.prev_policy.trust_me(machine_st, global_variables)?;
-        self.increment(machine_st)
-    }
-
-    fn trust(
-        &mut self,
-        machine_st: &mut MachineState,
-        offset: usize,
-        global_variables: &mut GlobalVarDir,
-    ) -> CallResult {
-        self.prev_policy.trust(machine_st, offset, global_variables)?;
-        self.increment(machine_st)
-    }
-
-    fn call_builtin(
-        &mut self,
-        machine_st: &mut MachineState,
-        ct: &BuiltInClauseType,
-        code_dir: &CodeDir,
-        op_dir: &OpDir,
-        stream_aliases: &StreamAliasDir,
-    ) -> CallResult {
-        self.prev_policy.call_builtin(machine_st, ct, code_dir, op_dir, stream_aliases)?;
-        self.increment(machine_st)
-    }
-
-    fn call_n(
-        &mut self,
-        machine_st: &mut MachineState,
-        arity: usize,
-        code_dir: &CodeDir,
-        op_dir: &OpDir,
-        stream_aliases: &StreamAliasDir,
-    ) -> CallResult {
-        self.prev_policy.call_n(machine_st, arity, code_dir, op_dir, stream_aliases)?;
-        self.increment(machine_st)
-    }
-}
-
-downcast!(dyn CallPolicy);
-
-#[derive(Debug)]
-pub(crate) struct DefaultCallPolicy {}
-
-impl CallPolicy for DefaultCallPolicy {}
-
-fn cut_body(machine_st: &mut MachineState, addr: HeapCellValue) -> bool {
-    let b = machine_st.b;
-
-    read_heap_cell!(addr,
-        (HeapCellValueTag::Fixnum, b0) => {
-            let b0 = b0.get_num() as usize;
-
-            if b > b0 {
-                machine_st.b = b0;
-            }
-        }
-        _ => {
-            machine_st.fail = true;
-            return true;
-        }
-    );
-
-    false
-}
-
-#[derive(Debug)]
-pub(crate) struct DefaultCutPolicy {}
-
-pub(super) fn deref_cut(machine_st: &mut MachineState, r: RegType) {
-    let addr = machine_st.store(machine_st.deref(machine_st[r]));
-    cut_body(machine_st, addr);
-}
-
-impl CutPolicy for DefaultCutPolicy {
-    fn cut(&mut self, machine_st: &mut MachineState, r: RegType) -> bool {
-        let addr = machine_st[r];
-        cut_body(machine_st, addr)
-    }
-}
-
-#[derive(Debug)]
-pub(crate) struct SCCCutPolicy {
-    // locations of cleaners, cut points, the previous block
-    cont_pts: Vec<(HeapCellValue, usize, usize)>,
-    r_c_w_h: usize,
-    r_c_wo_h: usize,
-}
-
-impl SCCCutPolicy {
-    pub(crate) fn new(r_c_w_h: usize, r_c_wo_h: usize) -> Self {
-        SCCCutPolicy {
-            cont_pts: vec![],
-            r_c_w_h,
-            r_c_wo_h,
-        }
-    }
-
-    pub(crate) fn out_of_cont_pts(&self) -> bool {
-        self.cont_pts.is_empty()
-    }
-
-    pub(crate) fn push_cont_pt(&mut self, addr: HeapCellValue, b: usize, prev_b: usize) {
-        self.cont_pts.push((addr, b, prev_b));
-    }
-
-    pub(crate) fn pop_cont_pt(&mut self) -> Option<(HeapCellValue, usize, usize)> {
-        self.cont_pts.pop()
-    }
-
-    fn run_cleaners(&self, machine_st: &mut MachineState) -> bool {
-        if let Some(&(_, b_cutoff, prev_block)) = self.cont_pts.last() {
-            if machine_st.b < b_cutoff {
-                let (idx, arity) = if machine_st.block > prev_block {
-                    (dir_entry!(self.r_c_w_h), 0)
-                } else {
-                    machine_st.registers[1] = fixnum_as_cell!(Fixnum::build_with(b_cutoff as i64));
-                    (dir_entry!(self.r_c_wo_h), 1)
-                };
-
-                if machine_st.last_call {
-                    machine_st.execute_at_index(arity, idx);
-                } else {
-                    machine_st.call_at_index(arity, idx);
-                }
-
-                return true;
-            }
-        }
-
-        false
-    }
-}
-
-impl CutPolicy for SCCCutPolicy {
-    fn cut(&mut self, machine_st: &mut MachineState, r: RegType) -> bool {
-        let b = machine_st.b;
-
-        read_heap_cell!(machine_st[r],
-            (HeapCellValueTag::Fixnum, b0) => {
-                let b0 = b0.get_num() as usize;
-
-                if b > b0 {
-                    machine_st.b = b0;
-                }
-            }
-            _ => {
-                machine_st.fail = true;
-                return true;
-            }
-        );
-
-        self.run_cleaners(machine_st)
-    }
-}
-

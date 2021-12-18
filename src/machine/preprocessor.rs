@@ -542,14 +542,12 @@ fn qualified_clause_to_query_term<'a, LS: LoadState<'a>>(
 
 #[derive(Debug)]
 pub(crate) struct Preprocessor {
-    flags: MachineFlags,
     queue: VecDeque<VecDeque<Term>>,
 }
 
 impl Preprocessor {
-    pub(super) fn new(flags: MachineFlags) -> Self {
+    pub(super) fn new() -> Self {
         Preprocessor {
-            flags,
             queue: VecDeque::new(),
         }
     }

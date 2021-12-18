@@ -19,7 +19,7 @@ use crate::types::*;
 
 use ordered_float::OrderedFloat;
 
-use indexmap::{IndexMap, IndexSet};
+use indexmap::IndexMap;
 
 use std::cell::Cell;
 use std::convert::TryFrom;
@@ -490,11 +490,7 @@ pub struct HCPrinter<'a, Outputter> {
     op_dir: &'a OpDir,
     state_stack: Vec<TokenOrRedirect>,
     toplevel_spec: Option<DirectedOp>,
-    // heap_locs: ReverseHeapVarDict,
-    printed_vars: IndexSet<HeapCellValue>,
     last_item_idx: usize,
-    // cyclic_terms: IndexMap<HeapCellValue, usize>,
-    // non_cyclic_terms: IndexSet<usize>,
     pub var_names: IndexMap<HeapCellValue, Rc<String>>,
     pub numbervars_offset: Integer,
     pub numbervars: bool,
@@ -530,7 +526,6 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             op_dir,
             state_stack: vec![],
             toplevel_spec: None,
-            printed_vars: IndexSet::new(),
             last_item_idx: 0,
             numbervars: false,
             numbervars_offset: Integer::from(0),

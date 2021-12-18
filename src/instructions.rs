@@ -339,7 +339,7 @@ pub(crate) fn to_indexing_line(line: &Line) -> Option<&Vec<IndexingLine>> {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Copy, Clone)]
 pub enum ArithmeticInstruction {
     Add(ArithmeticTerm, ArithmeticTerm, usize),
     Sub(ArithmeticTerm, ArithmeticTerm, usize),

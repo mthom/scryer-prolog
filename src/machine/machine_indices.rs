@@ -6,8 +6,7 @@ use crate::clause_types::*;
 use crate::fixtures::*;
 use crate::forms::*;
 use crate::instructions::*;
-
-use crate::machine::code_repo::CodeRepo;
+use crate::machine::*;
 use crate::machine::heap::*;
 use crate::machine::loader::*;
 use crate::machine::machine_errors::MachineStub;
@@ -19,9 +18,13 @@ use indexmap::IndexMap;
 use std::cell::Cell;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
-use std::fmt;
 use std::ops::{Add, AddAssign, Deref, Sub, SubAssign};
 use std::rc::Rc;
+
+// these statics store the locations of one-off control instructions
+// in the code vector.
+
+pub static HALT_CODE: usize = 0;
 
 use crate::types::*;
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -81,126 +84,7 @@ impl PartialOrd<Ref> for HeapCellValue {
         )
     }
 }
-/*
-impl HeapCellValue {
-    #[inline]
-    pub fn as_constant_index(self, machine_st: &MachineState) -> Option<Literal> {
-        read_heap_cell!(self,
-            (HeapCellValueTag::Char, c) => Some(Literal::Char(c)),
-            (HeapCellValueTag::Atom, (name, arity)) => {
-                if arity == 0 {
-                    Some(Literal::Atom(name))
-                } else {
-                    None
-                }
-            }
-            (HeapCellValueTag::Fixnum, n) => {
-                Some(Literal::Fixnum(n))
-            }
-            (HeapCellValueTag::F64, f) => {
-                Some(Literal::Float(f))
-            }
-            (HeapCellValueTag::Cons, ptr) => {
-                match_untyped_arena_ptr!(ptr,
-                     (ArenaHeaderTag::Integer, n) => {
-                         Some(Literal::Integer(n))
-                     }
-                     (ArenaHeaderTag::Rational, r) => {
-                         Some(Literal::Rational(r))
-                     }
-                     _ => {
-                         None
-                     }
-                )
-            }
-        )
-    }
-}
-*/
-/*
-impl Ord for Ref {
-    fn cmp(&self, other: &Ref) -> Ordering {
-        match (self, other) {
-            (Ref::AttrVar(h1), Ref::AttrVar(h2))
-            | (Ref::HeapCell(h1), Ref::HeapCell(h2))
-            | (Ref::HeapCell(h1), Ref::AttrVar(h2))
-            | (Ref::AttrVar(h1), Ref::HeapCell(h2)) => h1.cmp(&h2),
-            (Ref::StackCell(fr1, sc1), Ref::StackCell(fr2, sc2)) => {
-                fr1.cmp(&fr2).then_with(|| sc1.cmp(&sc2))
-            }
-            (Ref::StackCell(..), _) => Ordering::Greater,
-            (_, Ref::StackCell(..)) => Ordering::Less,
-        }
-    }
-}
 
-impl PartialEq<Ref> for Addr {
-    fn eq(&self, r: &Ref) -> bool {
-        self.as_var() == Some(*r)
-    }
-}
-
-impl Addr {
-    #[inline]
-    pub(crate) fn is_heap_bound(&self) -> bool {
-        match self {
-            Addr::Char(_)
-            | Addr::EmptyList
-            | Addr::CutPoint(_)
-            | Addr::Usize(_)
-            | Addr::Fixnum(_)
-            | Addr::Float(_) => false,
-            _ => true,
-        }
-    }
-
-    #[inline]
-    pub(crate) fn is_ref(&self) -> bool {
-        match self {
-            Addr::HeapCell(_) | Addr::StackCell(_, _) | Addr::AttrVar(_) => true,
-            _ => false,
-        }
-    }
-
-    #[inline]
-    pub(crate) fn as_var(&self) -> Option<Ref> {
-        match self {
-            &Addr::AttrVar(h) => Some(Ref::AttrVar(h)),
-            &Addr::HeapCell(h) => Some(Ref::HeapCell(h)),
-            &Addr::StackCell(fr, sc) => Some(Ref::StackCell(fr, sc)),
-            _ => None,
-        }
-    }
-
-    pub(crate) fn is_protected(&self, e: usize) -> bool {
-        match self {
-            &Addr::StackCell(addr, _) if addr >= e => false,
-            _ => true,
-        }
-    }
-}
-
-impl SubAssign<usize> for Addr {
-    fn sub_assign(&mut self, rhs: usize) {
-        *self = self.clone() - rhs;
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum TrailRef {
-    Ref(Ref),
-    AttrVarHeapLink(usize),
-    AttrVarListLink(usize, usize),
-    BlackboardEntry(usize),
-    BlackboardOffset(usize, usize), // key atom heap location, key value heap location
-}
-
-impl From<Ref> for TrailRef {
-    fn from(r: Ref) -> Self {
-        TrailRef::Ref(r)
-    }
-}
-*/
 #[derive(Debug, Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub enum IndexPtr {
     DynamicUndefined, // a predicate, declared as dynamic, whose location in code is as yet undefined.
@@ -326,10 +210,10 @@ pub enum LocalCodePtr {
                                          // TopLevel(usize, usize), // chunk_num, offset
 }
 
-impl MachineState {
-    pub(crate) fn is_reset_cont_marker(&self, code_repo: &CodeRepo, p: LocalCodePtr) -> bool {
-        match code_repo.lookup_instr(self, &CodePtr::Local(p)) {
-            Some(line) => match line.as_ref() {
+impl Machine {
+    pub(crate) fn is_reset_cont_marker(&self, p: LocalCodePtr) -> bool {
+        match self.code_repo.lookup_instr(&self.machine_st, &CodePtr::Local(p)) {
+            Some(line) => match line.as_ref(&self.code_repo.code) {
                 Line::Control(ControlInstruction::CallClause(ref ct, ..)) => {
                     if let ClauseType::System(SystemClauseType::ResetContinuationMarker) = *ct {
                         return true;
@@ -679,50 +563,6 @@ impl IndexStore {
     pub(super) fn new() -> Self {
         index_store!(CodeDir::new(), default_op_dir(), ModuleDir::new())
     }
-
-    pub(super) fn get_cleaner_sites(&self) -> (usize, usize) {
-        let r_w_h = atom!("run_cleaners_with_handling");
-        let r_wo_h = atom!("run_cleaners_without_handling");
-        let iso_ext = atom!("iso_ext");
-
-        let r_w_h = self
-            .get_predicate_code_index(r_w_h, 0, iso_ext)
-            .and_then(|item| item.local());
-        let r_wo_h = self
-            .get_predicate_code_index(r_wo_h, 1, iso_ext)
-            .and_then(|item| item.local());
-
-        if let Some(r_w_h) = r_w_h {
-            if let Some(r_wo_h) = r_wo_h {
-                return (r_w_h, r_wo_h);
-            }
-        }
-
-        return (0, 0);
-    }
 }
 
 pub(crate) type CodeDir = IndexMap<PredicateKey, CodeIndex>;
-
-pub(crate) enum RefOrOwned<'a, T: 'a> {
-    Borrowed(&'a T),
-    Owned(T),
-}
-
-impl<'a, T: 'a + fmt::Debug> fmt::Debug for RefOrOwned<'a, T> {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            &RefOrOwned::Borrowed(ref borrowed) => write!(f, "Borrowed({:?})", borrowed),
-            &RefOrOwned::Owned(ref owned) => write!(f, "Owned({:?})", owned),
-        }
-    }
-}
-
-impl<'a, T> RefOrOwned<'a, T> {
-    pub(crate) fn as_ref(&'a self) -> &'a T {
-        match self {
-            &RefOrOwned::Borrowed(r) => r,
-            &RefOrOwned::Owned(ref r) => r,
-        }
-    }
-}

@@ -98,7 +98,8 @@ scc_helper(_, _, _) :-
 
 :- non_counted_backtracking run_cleaners_with_handling/0.
 run_cleaners_with_handling :-
-    '$get_scc_cleaner'(C), '$get_level'(B),
+    '$get_scc_cleaner'(C),
+    '$get_level'(B),
     '$call_with_default_policy'(catch(C, _, true)),
     '$set_cp_by_default'(B),
     '$call_with_default_policy'(run_cleaners_with_handling).
