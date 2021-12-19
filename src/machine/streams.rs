@@ -19,6 +19,7 @@ use std::mem;
 use std::net::{Shutdown, TcpStream};
 use std::ops::DerefMut;
 use std::rc::Rc;
+use std::time::Duration;
 
 use native_tls::TlsStream;
 
@@ -594,6 +595,26 @@ impl Stream {
         };
         self.stream_inst.0.borrow_mut().stream_inst = StreamInstance::Null;
         result
+    }
+
+    #[inline]
+    pub(crate) fn set_read_timeout(&mut self, duration: Option<Duration>) -> Result<(), std::io::Error> {
+        match self.stream_inst.0.borrow_mut().stream_inst {
+            StreamInstance::TcpStream(_, ref mut tcp_stream) => {
+                tcp_stream.set_read_timeout(duration)
+            }
+            _ => Ok(())
+        }
+    }
+
+    #[inline]
+    pub(crate) fn set_write_timeout(&mut self, duration: Option<Duration>) -> Result<(), std::io::Error> {
+        match self.stream_inst.0.borrow_mut().stream_inst {
+            StreamInstance::TcpStream(_, ref mut tcp_stream) => {
+                tcp_stream.set_write_timeout(duration)
+            }
+            _ => Ok(())
+        }
     }
 
     #[inline]

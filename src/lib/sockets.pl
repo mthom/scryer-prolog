@@ -3,7 +3,9 @@
                     socket_server_open/2,
                     socket_server_accept/4,
                     socket_server_close/1,
-                    current_hostname/1]).
+                    current_hostname/1,
+                    set_read_timeout/2,
+                    set_write_timeout/2]).
 
 :- use_module(library(error)).
 
@@ -55,3 +57,9 @@ socket_server_close(ServerSocket) :-
 
 current_hostname(HostName) :-
     '$current_hostname'(HostName).
+
+set_read_timeout(Stream, Timeout) :-
+    '$set_read_timeout'(Stream, Timeout).
+
+set_write_timeout(Stream, Timeout) :-
+    '$set_write_timeout'(Stream, Timeout).
