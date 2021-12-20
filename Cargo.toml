@@ -12,7 +12,11 @@ categories = ["command-line-utilities"]
 build = "build.rs"
 
 [workspace]
-members = ["crates/num-rug-adapter", "crates/static-string-indexing"]
+members = ["crates/num-rug-adapter",
+           "crates/static-string-indexing",
+           "crates/instructions-template",
+           "crates/to-syn-value",
+           "crates/to-syn-value_derive"]
 
 [features]
 num = ["num-rug-adapter"]
@@ -24,6 +28,7 @@ default = ["rug"]
 [build-dependencies]
 indexmap = "1.0.2"
 static-string-indexing = { path = "./crates/static-string-indexing" }
+instructions-template = { path = "./crates/instructions-template" }
 proc-macro2 = "*"
 
 [dependencies]
@@ -31,13 +36,13 @@ cpu-time = "1.0.0"
 crossterm = "0.16.0"
 dirs-next = "2.0.0"
 divrem = "0.1.0"
+fxhash = "0.2.1"
 git-version = "0.3.4"
 hostname = "0.3.1"
 indexmap = "1.0.2"
 lazy_static = "1.4.0"
 lexical = "5.2.2"
 libc = "0.2.62"
-# temporary to remove unnecessary braces warnings.
 modular-bitfield = { git = "https://github.com/mthom/modular-bitfield" } # modular-bitfield = "0.11.2"
 nix = "0.15.0"
 num-rug-adapter = { optional = true, path = "./crates/num-rug-adapter" }

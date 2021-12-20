@@ -1,9 +1,7 @@
 use core::marker::PhantomData;
 
-use crate::types::*;
-
-use crate::machine::machine_indices::*;
 use crate::raw_block::*;
+use crate::types::*;
 
 use std::mem;
 use std::ops::{Index, IndexMut};
@@ -47,8 +45,7 @@ pub(crate) struct FramePrelude {
 pub(crate) struct AndFramePrelude {
     pub(crate) univ_prelude: FramePrelude,
     pub(crate) e: usize,
-    pub(crate) cp: LocalCodePtr,
-    pub(crate) interrupt_cp: LocalCodePtr, // TODO: get rid of it!
+    pub(crate) cp: usize,
 }
 
 #[derive(Debug)]
@@ -118,9 +115,9 @@ impl IndexMut<usize> for Stack {
 pub(crate) struct OrFramePrelude {
     pub(crate) univ_prelude: FramePrelude,
     pub(crate) e: usize,
-    pub(crate) cp: LocalCodePtr,
+    pub(crate) cp: usize,
     pub(crate) b: usize,
-    pub(crate) bp: LocalCodePtr,
+    pub(crate) bp: usize,
     pub(crate) boip: u32,
     pub(crate) biip: u32,
     pub(crate) tr: usize,

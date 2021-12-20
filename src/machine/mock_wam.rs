@@ -227,7 +227,7 @@ impl Machine {
         let mut wam = Machine {
             machine_st,
             indices: IndexStore::new(),
-            code_repo: CodeRepo::new(),
+            code: Code::new(),
             user_input,
             user_output,
             user_error,
@@ -238,6 +238,8 @@ impl Machine {
 
         lib_path.pop();
         lib_path.push("lib");
+
+        wam.add_impls_to_indices();
 
         bootstrapping_compile(
             Stream::from_static_string(
@@ -262,7 +264,7 @@ impl Machine {
         )
             .unwrap();
 
-        if let Some(builtins) = wam.indices.modules.get(&atom!("builtins")) {
+        if let Some(ref mut builtins) = wam.indices.modules.get_mut(&atom!("builtins")) {
             load_module(
                 &mut wam.indices.code_dir,
                 &mut wam.indices.op_dir,
@@ -270,6 +272,8 @@ impl Machine {
                 &CompilationTarget::User,
                 builtins,
             );
+
+            import_builtin_impls(&wam.indices.code_dir, builtins);
         } else {
             unreachable!()
         }

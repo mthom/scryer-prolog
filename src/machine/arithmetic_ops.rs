@@ -3,7 +3,6 @@ use divrem::*;
 use crate::arena::*;
 use crate::arithmetic::*;
 use crate::atom_table::*;
-use crate::clause_types::*;
 use crate::forms::*;
 use crate::heap_iter::*;
 use crate::machine::machine_errors::*;
@@ -1080,7 +1079,7 @@ impl MachineState {
     pub fn get_number(&mut self, at: &ArithmeticTerm) -> Result<Number, MachineStub> {
         match at {
             &ArithmeticTerm::Reg(r) => {
-		let value = self.store(self.deref(self[r]));
+		        let value = self.store(self.deref(self[r]));
 
                 match Number::try_from(value) {
                     Ok(n) => Ok(n),

@@ -158,7 +158,7 @@ instruction_match(Term, VarList) :-
           (  Item == user ->
              catch(load(user_input), E, print_exception_with_check(E))
           ;
-          submit_query_and_print_results(consult(Item), [])
+             submit_query_and_print_results(consult(Item), [])
           )
        ;  catch(type_error(atom, Item, repl/0),
                 E,
@@ -184,7 +184,7 @@ submit_query_and_print_results_(_, _) :-
 submit_query_and_print_results(Term0, VarList) :-
     (  functor(Term0, call, _) ->
        Term = Term0 % prevent pre-mature expansion of incomplete goal
-    % in the first argument, which is done by call/N
+                    % in the first argument, which is done by call/N
     ;  expand_goal(Term0, user, Term)
     ),
     setup_call_cleanup(bb_put('$first_answer', true),

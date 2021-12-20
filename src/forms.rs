@@ -1,16 +1,16 @@
 use crate::arena::*;
 use crate::atom_table::*;
-use crate::parser::ast::*;
-use crate::parser::parser::CompositeOpDesc;
-use crate::parser::rug::{Integer, Rational};
-use crate::{is_infix, is_postfix};
-
-use crate::clause_types::*;
+use crate::instructions::*;
 use crate::machine::heap::*;
 use crate::machine::loader::PredicateQueue;
 use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
+use crate::parser::ast::*;
+use crate::parser::parser::CompositeOpDesc;
+use crate::parser::rug::{Integer, Rational};
 use crate::types::*;
+
+use fxhash::FxBuildHasher;
 
 use indexmap::{IndexMap, IndexSet};
 use ordered_float::OrderedFloat;
@@ -19,9 +19,12 @@ use slice_deque::*;
 
 use std::cell::Cell;
 use std::convert::TryFrom;
+use std::fmt;
 use std::ops::AddAssign;
 use std::path::PathBuf;
 use std::rc::Rc;
+
+use crate::{is_infix, is_postfix};
 
 pub type PredicateKey = (Atom, usize); // name, arity.
 
@@ -375,7 +378,6 @@ impl AtomOrString {
     }
 }
 
-//TODO: try to rid yourself and the earth of the next two functions.
 pub(crate) fn fetch_atom_op_spec(
     name: Atom,
     spec: Option<OpDesc>,
@@ -431,7 +433,7 @@ pub(crate) fn fetch_op_spec(name: Atom, arity: usize, op_dir: &OpDir) -> Option<
     }
 }
 
-pub(crate) type ModuleDir = IndexMap<Atom, Module>;
+pub(crate) type ModuleDir = IndexMap<Atom, Module, FxBuildHasher>;
 
 #[derive(Debug, Clone, Eq, Hash, PartialEq)]
 pub enum ModuleExport {
@@ -464,11 +466,13 @@ impl Module {
     ) -> Self {
         Module {
             module_decl,
-            code_dir: CodeDir::new(),
+            code_dir: CodeDir::with_hasher(FxBuildHasher::default()),
             op_dir: default_op_dir(),
-            meta_predicates: MetaPredicateDir::new(),
-            extensible_predicates: ExtensiblePredicates::new(),
-            local_extensible_predicates: LocalExtensiblePredicates::new(),
+            meta_predicates: MetaPredicateDir::with_hasher(FxBuildHasher::default()),
+            extensible_predicates: ExtensiblePredicates::with_hasher(FxBuildHasher::default()),
+            local_extensible_predicates: LocalExtensiblePredicates::with_hasher(
+                FxBuildHasher::default(),
+            ),
             listing_src,
         }
     }
@@ -476,11 +480,13 @@ impl Module {
     pub(crate) fn new_in_situ(module_decl: ModuleDecl) -> Self {
         Module {
             module_decl,
-            code_dir: CodeDir::new(),
-            op_dir: OpDir::new(),
-            meta_predicates: MetaPredicateDir::new(),
-            extensible_predicates: ExtensiblePredicates::new(),
-            local_extensible_predicates: LocalExtensiblePredicates::new(),
+            code_dir: CodeDir::with_hasher(FxBuildHasher::default()),
+            op_dir: OpDir::with_hasher(FxBuildHasher::default()),
+            meta_predicates: MetaPredicateDir::with_hasher(FxBuildHasher::default()),
+            extensible_predicates: ExtensiblePredicates::with_hasher(FxBuildHasher::default()),
+            local_extensible_predicates: LocalExtensiblePredicates::with_hasher(
+                FxBuildHasher::default()
+            ),
             listing_src: ListingSource::DynamicallyGenerated,
         }
     }
@@ -495,9 +501,19 @@ pub enum Number {
 }
 
 impl Default for Number {
-    #[inline]
     fn default() -> Self {
         Number::Fixnum(Fixnum::build_with(0))
+    }
+}
+
+impl fmt::Display for Number {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Number::Float(fl) => write!(f, "{}", fl),
+            Number::Integer(n) => write!(f, "{}", n),
+            Number::Rational(r) => write!(f, "{}", r),
+            Number::Fixnum(n) => write!(f, "{}", n.get_num()),
+        }
     }
 }
 
@@ -849,12 +865,3 @@ impl PredicateSkeleton {
         }
     }
 }
-
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum IndexingCodePtr {
-    External(usize),        // the index points past the indexing instruction prelude.
-    DynamicExternal(usize), // an External index of a dynamic predicate, potentially invalidated by retraction.
-    Fail,
-    Internal(usize), // the index points into the indexing instruction prelude.
-}
-

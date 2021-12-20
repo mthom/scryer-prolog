@@ -1,6 +1,5 @@
 use crate::arena::*;
 use crate::atom_table::*;
-use crate::clause_types::*;
 use crate::forms::*;
 use crate::instructions::*;
 use crate::machine::loader::CompilationTarget;
@@ -15,18 +14,7 @@ use ordered_float::OrderedFloat;
 
 use std::fmt;
 
-impl fmt::Display for LocalCodePtr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            LocalCodePtr::DirEntry(p) => write!(f, "LocalCodePtr::DirEntry({})", p),
-            LocalCodePtr::Halt => write!(f, "LocalCodePtr::Halt"),
-            // LocalCodePtr::IndexingBuf(p, o, i) => {
-            //     write!(f, "LocalCodePtr::IndexingBuf({}, {}, {})", p, o, i)
-            // }
-        }
-    }
-}
-
+/*
 impl fmt::Display for REPLCodePtr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -77,6 +65,7 @@ impl fmt::Display for REPLCodePtr {
         }
     }
 }
+*/
 
 impl fmt::Display for IndexPtr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -97,6 +86,7 @@ impl fmt::Display for CompilationTarget {
     }
 }
 
+/*
 impl fmt::Display for FactInstruction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -221,6 +211,7 @@ impl fmt::Display for ClauseType {
         }
     }
 }
+*/
 
 impl fmt::Display for HeapCellValue {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -269,82 +260,10 @@ impl fmt::Display for HeapCellValue {
                 unreachable!()
             }
         )
-        /*
-        match self {
-            &HeapCellValue::Addr(ref addr) => write!(f, "{}", addr),
-            &HeapCellValue::Atom(ref atom, _) => write!(f, "{}", atom.as_str()),
-            &HeapCellValue::DBRef(ref db_ref) => write!(f, "{}", db_ref),
-            &HeapCellValue::Integer(ref n) => write!(f, "{}", n),
-            &HeapCellValue::LoadStatePayload(_) => write!(f, "LoadStatePayload"),
-            &HeapCellValue::Rational(ref n) => write!(f, "{}", n),
-            &HeapCellValue::NamedStr(arity, ref name, Some(ref cell)) => write!(
-                f,
-                "{}/{} (op, priority: {}, spec: {})",
-                name.as_str(),
-                arity,
-                cell.prec(),
-                cell.assoc()
-            ),
-            &HeapCellValue::NamedStr(arity, ref name, None) => {
-                write!(f, "{}/{}", name.as_str(), arity)
-            }
-            &HeapCellValue::PartialString(ref pstr, has_tail) => {
-                write!(
-                    f,
-                    "pstr ( buf: \"{}\", has_tail({}) )",
-                    pstr.as_str_from(0),
-                    has_tail,
-                )
-            }
-            &HeapCellValue::Stream(ref stream) => {
-                write!(f, "$stream({})", stream.as_ptr() as usize)
-            }
-            &HeapCellValue::TcpListener(ref tcp_listener) => {
-                write!(f, "$tcp_listener({})", tcp_listener.local_addr().unwrap())
-            }
-        }
-        */
     }
 }
 
 /*
-impl fmt::Display for DBRef {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            &DBRef::NamedPred(ref name, arity, _) => write!(f, "db_ref:named:{}/{}", name, arity),
-            &DBRef::Op(priority, spec, ref name, ..) => {
-                write!(f, "db_ref:op({}, {}, {})", priority, spec, name)
-            }
-        }
-    }
-}
-*/
-
-/*
-impl fmt::Display for Addr {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            &Addr::Char(c) => write!(f, "Addr::Char({})", c),
-            &Addr::EmptyList => write!(f, "Addr::EmptyList"),
-            &Addr::Fixnum(n) => write!(f, "Addr::Fixnum({})", n),
-            &Addr::Float(fl) => write!(f, "Addr::Float({})", fl),
-            &Addr::CutPoint(cp) => write!(f, "Addr::CutPoint({})", cp),
-            &Addr::Con(ref c) => write!(f, "Addr::Con({})", c),
-            &Addr::Lis(l) => write!(f, "Addr::Lis({})", l),
-            &Addr::LoadStatePayload(s) => write!(f, "Addr::LoadStatePayload({})", s),
-            &Addr::AttrVar(h) => write!(f, "Addr::AttrVar({})", h),
-            &Addr::HeapCell(h) => write!(f, "Addr::HeapCell({})", h),
-            &Addr::StackCell(fr, sc) => write!(f, "Addr::StackCell({}, {})", fr, sc),
-            &Addr::Str(s) => write!(f, "Addr::Str({})", s),
-            &Addr::PStrLocation(h, n) => write!(f, "Addr::PStrLocation({}, {})", h, n),
-            &Addr::Stream(stream) => write!(f, "Addr::Stream({})", stream),
-            &Addr::TcpListener(tcp_listener) => write!(f, "Addr::TcpListener({})", tcp_listener),
-            &Addr::Usize(cp) => write!(f, "Addr::Usize({})", cp),
-        }
-    }
-}
-*/
-
 impl fmt::Display for ControlInstruction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -375,6 +294,7 @@ impl fmt::Display for ControlInstruction {
         }
     }
 }
+*/
 
 impl fmt::Display for IndexedChoiceInstruction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -386,6 +306,7 @@ impl fmt::Display for IndexedChoiceInstruction {
     }
 }
 
+/*
 impl fmt::Display for ChoiceInstruction {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -443,6 +364,7 @@ impl fmt::Display for ChoiceInstruction {
         }
     }
 }
+*/
 
 impl fmt::Display for IndexingCodePtr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -602,6 +524,7 @@ impl fmt::Display for IndexingLine {
     }
 }
 
+/*
 impl fmt::Display for Line {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -625,17 +548,8 @@ impl fmt::Display for Line {
         }
     }
 }
-
-impl fmt::Display for Number {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            Number::Float(fl) => write!(f, "{}", fl),
-            Number::Integer(n) => write!(f, "{}", n),
-            Number::Rational(r) => write!(f, "{}", r),
-            Number::Fixnum(n) => write!(f, "{}", n.get_num()),
-        }
-    }
-}
+*/
+/*
 
 impl fmt::Display for ArithmeticTerm {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -745,7 +659,8 @@ impl fmt::Display for CutInstruction {
         }
     }
 }
-
+*/
+/*
 impl fmt::Display for Level {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
@@ -754,3 +669,4 @@ impl fmt::Display for Level {
         }
     }
 }
+*/

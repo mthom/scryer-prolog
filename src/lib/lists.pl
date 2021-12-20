@@ -56,13 +56,16 @@ length(Xs, N) :-
     !,
     '$skip_max_list'(M, -1, Xs, Xs0),
     (  Xs0 == [] -> N = M
-    ;  var(Xs0)  -> length_addendum(Xs0, N, M)).
+    ;  var(Xs0)  -> length_addendum(Xs0, N, M)
+    ).
 length(Xs, N) :-
     integer(N),
-    N >= 0, !,
+    N >= 0,
+    !,
     '$skip_max_list'(M, N, Xs, Xs0),
     (  Xs0 == [] -> N = M
-    ;  var(Xs0)  -> R is N-M, length_rundown(Xs0, R)).
+    ;  var(Xs0)  -> R is N-M, length_rundown(Xs0, R)
+    ).
 length(_, N) :-
     integer(N), !,
     domain_error(not_less_than_zero, N, length/2).

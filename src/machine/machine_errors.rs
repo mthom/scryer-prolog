@@ -538,13 +538,18 @@ impl MachineState {
 
     pub(super) fn throw_exception(&mut self, err: MachineStub) {
         let h = self.heap.len();
+        let err_len = err.len();
 
         self.ball.boundary = 0;
         self.ball.stub.truncate(0);
 
         self.heap.extend(err.into_iter());
 
-        self.registers[1] = str_loc_as_cell!(h);
+        self.registers[1] = if err_len == 1 {
+            heap_loc_as_cell!(h)
+        } else {
+            str_loc_as_cell!(h)
+        };
 
         self.set_ball();
         self.unwind_stack();

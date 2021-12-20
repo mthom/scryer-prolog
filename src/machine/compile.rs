@@ -38,7 +38,7 @@ pub(super) fn bootstrapping_compile(
     );
 
     let payload = BootstrappingLoadState(
-        LoadStatePayload::new(wam_prelude.code_repo.code.len(), term_stream)
+        LoadStatePayload::new(wam_prelude.code.len(), term_stream)
     );
 
     let loader: Loader<'_, BootstrappingLoadState> = Loader { payload, wam_prelude };
@@ -73,7 +73,8 @@ pub(super) fn compile_appendix(
         let code_len = code.len();
 
         match &mut code[jmp_by_offset] {
-            &mut Line::Control(ControlInstruction::JmpBy(_, ref mut offset, ..)) => {
+            &mut Instruction::JmpByCall(_, ref mut offset, ..) |
+            &mut Instruction::JmpByExecute(_, ref mut offset, ..) => {
                 *offset = code_len - jmp_by_offset;
             }
             _ => {
@@ -144,20 +145,20 @@ fn derelictize_try_me_else(
     retraction_info: &mut RetractionInfo,
 ) -> Option<usize> {
     match &mut code[index] {
-        Line::Choice(ChoiceInstruction::DynamicElse(_, _, NextOrFail::Next(0))) => None,
-        Line::Choice(ChoiceInstruction::DynamicElse(_, _, NextOrFail::Next(ref mut o))) => {
+        Instruction::DynamicElse(_, _, NextOrFail::Next(0)) => None,
+        Instruction::DynamicElse(_, _, NextOrFail::Next(ref mut o)) => {
             retraction_info.push_record(RetractionRecord::ReplacedDynamicElseOffset(index, *o));
             Some(mem::replace(o, 0))
         }
-        Line::Choice(ChoiceInstruction::DynamicInternalElse(_, _, NextOrFail::Next(0))) => None,
-        Line::Choice(ChoiceInstruction::DynamicInternalElse(_, _, NextOrFail::Next(ref mut o))) => {
+        Instruction::DynamicInternalElse(_, _, NextOrFail::Next(0)) => None,
+        Instruction::DynamicInternalElse(_, _, NextOrFail::Next(ref mut o)) => {
             retraction_info.push_record(RetractionRecord::ReplacedDynamicElseOffset(index, *o));
             Some(mem::replace(o, 0))
         }
-        Line::Choice(ChoiceInstruction::DynamicElse(_, _, NextOrFail::Fail(_)))
-        | Line::Choice(ChoiceInstruction::DynamicInternalElse(_, _, NextOrFail::Fail(_))) => None,
-        Line::Choice(ChoiceInstruction::TryMeElse(0)) => None,
-        Line::Choice(ChoiceInstruction::TryMeElse(ref mut o)) => {
+        Instruction::DynamicElse(_, _, NextOrFail::Fail(_)) |
+        Instruction::DynamicInternalElse(_, _, NextOrFail::Fail(_)) => None,
+        Instruction::TryMeElse(0) => None,
+        Instruction::TryMeElse(ref mut o) => {
             retraction_info.push_record(RetractionRecord::ModifiedTryMeElse(index, *o));
             Some(mem::replace(o, 0))
         }
@@ -183,7 +184,7 @@ fn merge_indices(
             let clause_loc =
                 find_inner_choice_instr(code, skeleton[clause_index].clause_start, index_loc);
 
-            let target_indexing_line = to_indexing_line_mut(&mut code[target_index_loc]).unwrap();
+            let target_indexing_line = code[target_index_loc].to_indexing_line_mut().unwrap();
 
             skeleton[clause_index]
                 .opt_arg_index_key
@@ -210,8 +211,8 @@ fn merge_indices(
 fn find_outer_choice_instr(code: &Code, mut index: usize) -> usize {
     loop {
         match &code[index] {
-            Line::Choice(ChoiceInstruction::DynamicElse(_, _, NextOrFail::Next(i)))
-            | Line::Choice(ChoiceInstruction::DynamicInternalElse(_, _, NextOrFail::Next(i)))
+            Instruction::DynamicElse(_, _, NextOrFail::Next(i)) |
+            Instruction::DynamicInternalElse(_, _, NextOrFail::Next(i))
                 if *i > 0 =>
             {
                 index += i;
@@ -226,15 +227,15 @@ fn find_outer_choice_instr(code: &Code, mut index: usize) -> usize {
 fn find_inner_choice_instr(code: &Code, mut index: usize, index_loc: usize) -> usize {
     loop {
         match &code[index] {
-            Line::Choice(ChoiceInstruction::TryMeElse(o))
-            | Line::Choice(ChoiceInstruction::RetryMeElse(o)) => {
+            Instruction::TryMeElse(o) |
+            Instruction::RetryMeElse(o) => {
                 if *o > 0 {
                     return index;
                 } else {
                     index = index_loc;
                 }
             }
-            &Line::Choice(ChoiceInstruction::DynamicElse(_, _, next_or_fail)) => match next_or_fail
+            &Instruction::DynamicElse(_, _, next_or_fail) => match next_or_fail
             {
                 NextOrFail::Next(i) => {
                     if i == 0 {
@@ -247,7 +248,7 @@ fn find_inner_choice_instr(code: &Code, mut index: usize, index_loc: usize) -> u
                     index = index_loc;
                 }
             },
-            &Line::Choice(ChoiceInstruction::DynamicInternalElse(_, _, next_or_fail)) => {
+            &Instruction::DynamicInternalElse(_, _, next_or_fail) => {
                 match next_or_fail {
                     NextOrFail::Next(i) => {
                         if i == 0 {
@@ -261,20 +262,20 @@ fn find_inner_choice_instr(code: &Code, mut index: usize, index_loc: usize) -> u
                     }
                 }
             }
-            Line::Choice(ChoiceInstruction::TrustMe(_)) => {
+            Instruction::TrustMe(_) => {
                 return index;
             }
-            Line::IndexingCode(indexing_code) => match &indexing_code[0] {
+            Instruction::IndexingCode(indexing_code) => match &indexing_code[0] {
                 IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(_, v, ..)) => match v {
                     IndexingCodePtr::External(v) => {
                         index += v;
                     }
                     IndexingCodePtr::DynamicExternal(v) => match &code[index + v] {
-                        &Line::Choice(ChoiceInstruction::DynamicInternalElse(
+                        &Instruction::DynamicInternalElse(
                             _,
                             _,
                             NextOrFail::Next(0),
-                        )) => {
+                        ) => {
                             return index + v;
                         }
                         _ => {
@@ -287,7 +288,7 @@ fn find_inner_choice_instr(code: &Code, mut index: usize, index_loc: usize) -> u
                     unreachable!();
                 }
             },
-            Line::Control(ControlInstruction::RevJmpBy(offset)) => {
+            Instruction::RevJmpBy(offset) => {
                 index -= offset;
             }
             _ => {
@@ -310,9 +311,7 @@ fn remove_index_from_subsequence(
 ) {
     if let Some(index_loc) = opt_arg_index_key.switch_on_term_loc() {
         let clause_start = find_inner_choice_instr(code, clause_start, index_loc);
-
-        let target_indexing_line = to_indexing_line_mut(&mut code[index_loc]).unwrap();
-
+        let target_indexing_line = code[index_loc].to_indexing_line_mut().unwrap();
         let offset = clause_start - index_loc + 1;
 
         remove_index(opt_arg_index_key, target_indexing_line, offset);
@@ -351,7 +350,7 @@ fn merge_indexed_subsequences(
     );
 
     match &mut code[inner_try_me_else_loc] {
-        Line::Choice(ChoiceInstruction::TryMeElse(ref mut o)) => {
+        Instruction::TryMeElse(ref mut o) => {
             retraction_info.push_record(RetractionRecord::ModifiedTryMeElse(
                 inner_try_me_else_loc,
                 *o,
@@ -359,15 +358,15 @@ fn merge_indexed_subsequences(
 
             match *o {
                 0 => {
-                    code[inner_try_me_else_loc] = Line::Choice(ChoiceInstruction::TrustMe(0));
+                    code[inner_try_me_else_loc] = Instruction::TrustMe(0);
                 }
                 o => match &code[inner_try_me_else_loc + o] {
-                    Line::Control(ControlInstruction::RevJmpBy(0)) => {
-                        code[inner_try_me_else_loc] = Line::Choice(ChoiceInstruction::TrustMe(o));
+                    Instruction::RevJmpBy(0) => {
+                        code[inner_try_me_else_loc] = Instruction::TrustMe(o);
                     }
                     _ => {
                         code[inner_try_me_else_loc] =
-                            Line::Choice(ChoiceInstruction::RetryMeElse(o));
+                            Instruction::RetryMeElse(o);
                     }
                 },
             }
@@ -403,7 +402,7 @@ fn merge_indexed_subsequences(
             );
         }
         None => match &mut code[outer_threaded_choice_instr_loc] {
-            Line::Choice(ChoiceInstruction::TryMeElse(ref mut o)) => {
+            Instruction::TryMeElse(ref mut o) => {
                 retraction_info
                     .push_record(RetractionRecord::ModifiedTryMeElse(inner_trust_me_loc, *o));
 
@@ -461,60 +460,55 @@ fn blunt_leading_choice_instr(
 ) -> usize {
     loop {
         match &mut code[instr_loc] {
-            Line::Choice(ChoiceInstruction::RetryMeElse(o)) => {
+            Instruction::RetryMeElse(o) => {
                 retraction_info.push_record(RetractionRecord::ModifiedRetryMeElse(instr_loc, *o));
-
-                code[instr_loc] = Line::Choice(ChoiceInstruction::TryMeElse(*o));
-
+                code[instr_loc] = Instruction::TryMeElse(*o);
                 return instr_loc;
             }
-            Line::Choice(ChoiceInstruction::DynamicElse(_, _, NextOrFail::Next(_)))
-            | Line::Choice(ChoiceInstruction::DynamicInternalElse(_, _, NextOrFail::Next(_))) => {
+            Instruction::DynamicElse(_, _, NextOrFail::Next(_)) |
+            Instruction::DynamicInternalElse(_, _, NextOrFail::Next(_)) => {
                 return instr_loc;
             }
-            &mut Line::Choice(ChoiceInstruction::DynamicElse(b, d, NextOrFail::Fail(o))) => {
+            &mut Instruction::DynamicElse(b, d, NextOrFail::Fail(o)) => {
                 retraction_info.push_record(RetractionRecord::AppendedNextOrFail(
                     instr_loc,
                     NextOrFail::Fail(o),
                 ));
 
-                code[instr_loc] =
-                    Line::Choice(ChoiceInstruction::DynamicElse(b, d, NextOrFail::Next(0)));
-
+                code[instr_loc] = Instruction::DynamicElse(b, d, NextOrFail::Next(0));
                 return instr_loc;
             }
-            &mut Line::Choice(ChoiceInstruction::DynamicInternalElse(
+            &mut Instruction::DynamicInternalElse(
                 b,
                 d,
                 NextOrFail::Fail(o),
-            )) => {
+            ) => {
                 retraction_info.push_record(RetractionRecord::AppendedNextOrFail(
                     instr_loc,
                     NextOrFail::Fail(o),
                 ));
 
-                code[instr_loc] = Line::Choice(ChoiceInstruction::DynamicInternalElse(
+                code[instr_loc] = Instruction::DynamicInternalElse(
                     b,
                     d,
                     NextOrFail::Next(0),
-                ));
+                );
 
                 return instr_loc;
             }
-            Line::Choice(ChoiceInstruction::TrustMe(o)) => {
-                retraction_info
-                    .push_record(RetractionRecord::AppendedTrustMe(instr_loc, *o, false));
+            Instruction::TrustMe(o) => {
+                retraction_info.push_record(RetractionRecord::AppendedTrustMe(instr_loc, *o, false));
 
-                code[instr_loc] = Line::Choice(ChoiceInstruction::TryMeElse(0));
+                code[instr_loc] = Instruction::TryMeElse(0);
                 return instr_loc + 1;
             }
-            Line::Choice(ChoiceInstruction::TryMeElse(0)) => {
+            Instruction::TryMeElse(0) => {
                 return instr_loc + 1;
             }
-            Line::Choice(ChoiceInstruction::TryMeElse(o)) => {
+            Instruction::TryMeElse(o) => {
                 instr_loc += *o;
             }
-            Line::Control(ControlInstruction::RevJmpBy(o)) => {
+            Instruction::RevJmpBy(o) => {
                 instr_loc -= *o;
             }
             _ => {
@@ -530,7 +524,7 @@ fn set_switch_var_offset_to_choice_instr(
     offset: usize,
     retraction_info: &mut RetractionInfo,
 ) {
-    let target_indexing_line = to_indexing_line_mut(&mut code[index_loc]).unwrap();
+    let target_indexing_line = code[index_loc].to_indexing_line_mut().unwrap();
 
     let v = match &target_indexing_line[0] {
         &IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(_, v, ..)) => match v {
@@ -543,9 +537,9 @@ fn set_switch_var_offset_to_choice_instr(
     };
 
     match &code[index_loc + v] {
-        Line::Choice(ChoiceInstruction::TryMeElse(_))
-        | Line::Choice(ChoiceInstruction::DynamicElse(..))
-        | Line::Choice(ChoiceInstruction::DynamicInternalElse(..)) => {}
+        Instruction::TryMeElse(_) |
+        Instruction::DynamicElse(..) |
+        Instruction::DynamicInternalElse(..) => {}
         _ => {
             set_switch_var_offset(code, index_loc, offset, retraction_info);
         }
@@ -559,7 +553,7 @@ fn set_switch_var_offset(
     offset: usize,
     retraction_info: &mut RetractionInfo,
 ) {
-    let target_indexing_line = to_indexing_line_mut(&mut code[index_loc]).unwrap();
+    let target_indexing_line = code[index_loc].to_indexing_line_mut().unwrap();
 
     let old_v = match &mut target_indexing_line[0] {
         IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(_, ref mut v, ..)) => match *v {
@@ -585,72 +579,67 @@ fn internalize_choice_instr_at(
     retraction_info: &mut RetractionInfo,
 ) {
     match &mut code[instr_loc] {
-        Line::Choice(ChoiceInstruction::DynamicElse(_, _, NextOrFail::Fail(_)))
-        | Line::Choice(ChoiceInstruction::DynamicInternalElse(_, _, NextOrFail::Fail(_))) => {}
-        Line::Choice(ChoiceInstruction::DynamicElse(_, _, ref mut o @ NextOrFail::Next(0))) => {
+        Instruction::DynamicElse(_, _, NextOrFail::Fail(_)) |
+        Instruction::DynamicInternalElse(_, _, NextOrFail::Fail(_)) => {
+        }
+        Instruction::DynamicElse(_, _, ref mut o @ NextOrFail::Next(0)) => {
             retraction_info.push_record(RetractionRecord::ReplacedDynamicElseOffset(instr_loc, 0));
             *o = NextOrFail::Fail(0);
         }
-        &mut Line::Choice(ChoiceInstruction::DynamicElse(b, d, NextOrFail::Next(o))) => {
+        &mut Instruction::DynamicElse(b, d, NextOrFail::Next(o)) => {
             retraction_info.push_record(RetractionRecord::AppendedNextOrFail(
                 instr_loc,
                 NextOrFail::Next(o),
             ));
 
             match &mut code[instr_loc + o] {
-                Line::Control(ControlInstruction::RevJmpBy(p)) if *p == 0 => {
-                    code[instr_loc] =
-                        Line::Choice(ChoiceInstruction::DynamicElse(b, d, NextOrFail::Fail(o)));
+                Instruction::RevJmpBy(p) if *p == 0 => {
+                    code[instr_loc] = Instruction::DynamicElse(b, d, NextOrFail::Fail(o));
                 }
                 _ => {
-                    code[instr_loc] =
-                        Line::Choice(ChoiceInstruction::DynamicElse(b, d, NextOrFail::Next(o)));
+                    code[instr_loc] = Instruction::DynamicElse(b, d, NextOrFail::Next(o));
                 }
             }
         }
-        Line::Choice(ChoiceInstruction::DynamicInternalElse(
-            _,
-            _,
-            ref mut o @ NextOrFail::Next(0),
-        )) => {
+        Instruction::DynamicInternalElse(_, _, ref mut o @ NextOrFail::Next(0)) => {
             retraction_info.push_record(RetractionRecord::ReplacedDynamicElseOffset(instr_loc, 0));
             *o = NextOrFail::Fail(0);
         }
-        &mut Line::Choice(ChoiceInstruction::DynamicInternalElse(b, d, NextOrFail::Next(o))) => {
+        &mut Instruction::DynamicInternalElse(b, d, NextOrFail::Next(o)) => {
             retraction_info.push_record(RetractionRecord::ReplacedDynamicElseOffset(instr_loc, o));
 
             match &mut code[instr_loc + o] {
-                Line::Control(ControlInstruction::RevJmpBy(p)) if *p == 0 => {
-                    code[instr_loc] = Line::Choice(ChoiceInstruction::DynamicInternalElse(
+                Instruction::RevJmpBy(p) if *p == 0 => {
+                    code[instr_loc] = Instruction::DynamicInternalElse(
                         b,
                         d,
                         NextOrFail::Fail(o),
-                    ));
+                    );
                 }
                 _ => {
-                    code[instr_loc] = Line::Choice(ChoiceInstruction::DynamicInternalElse(
+                    code[instr_loc] = Instruction::DynamicInternalElse(
                         b,
                         d,
                         NextOrFail::Next(o),
-                    ));
+                    );
                 }
             }
         }
-        Line::Choice(ChoiceInstruction::TryMeElse(0)) => {
+        Instruction::TryMeElse(0) => {
             retraction_info.push_record(RetractionRecord::ModifiedTryMeElse(instr_loc, 0));
-            code[instr_loc] = Line::Choice(ChoiceInstruction::TrustMe(0));
+            code[instr_loc] = Instruction::TrustMe(0);
         }
-        Line::Choice(ChoiceInstruction::TryMeElse(o)) => {
+        Instruction::TryMeElse(o) => {
             let o = *o;
 
             retraction_info.push_record(RetractionRecord::ModifiedTryMeElse(instr_loc, o));
 
             match &mut code[instr_loc + o] {
-                Line::Control(ControlInstruction::RevJmpBy(p)) if *p == 0 => {
-                    code[instr_loc] = Line::Choice(ChoiceInstruction::TrustMe(o));
+                Instruction::RevJmpBy(p) if *p == 0 => {
+                    code[instr_loc] = Instruction::TrustMe(o);
                 }
                 _ => {
-                    code[instr_loc] = Line::Choice(ChoiceInstruction::RetryMeElse(o));
+                    code[instr_loc] = Instruction::RetryMeElse(o);
                 }
             }
         }
@@ -668,8 +657,7 @@ fn thread_choice_instr_at_to(
 ) {
     loop {
         match &mut code[instr_loc] {
-            Line::Choice(ChoiceInstruction::TryMeElse(ref mut o))
-            | Line::Choice(ChoiceInstruction::RetryMeElse(ref mut o))
+            Instruction::TryMeElse(ref mut o) | Instruction::RetryMeElse(ref mut o)
                 if target_loc >= instr_loc =>
             {
                 retraction_info.push_record(RetractionRecord::ReplacedChoiceOffset(instr_loc, *o));
@@ -677,82 +665,80 @@ fn thread_choice_instr_at_to(
                 *o = target_loc - instr_loc;
                 return;
             }
-            Line::Choice(ChoiceInstruction::DynamicElse(_, _, NextOrFail::Next(ref mut o)))
-            | Line::Choice(ChoiceInstruction::DynamicInternalElse(
+            Instruction::DynamicElse(_, _, NextOrFail::Next(ref mut o)) |
+            Instruction::DynamicInternalElse(
                 _,
                 _,
                 NextOrFail::Next(ref mut o),
-            )) if target_loc >= instr_loc => {
+            ) if target_loc >= instr_loc => {
                 retraction_info
                     .push_record(RetractionRecord::ReplacedDynamicElseOffset(instr_loc, *o));
                 *o = target_loc - instr_loc;
                 return;
             }
-            Line::Choice(ChoiceInstruction::DynamicElse(_, _, NextOrFail::Next(o)))
-            | Line::Choice(ChoiceInstruction::DynamicInternalElse(_, _, NextOrFail::Next(o))) => {
+            Instruction::DynamicElse(_, _, NextOrFail::Next(o)) |
+            Instruction::DynamicInternalElse(_, _, NextOrFail::Next(o)) => {
                 instr_loc += *o;
             }
-            Line::Choice(ChoiceInstruction::TryMeElse(o))
-            | Line::Choice(ChoiceInstruction::RetryMeElse(o)) => {
+            Instruction::TryMeElse(o)
+            | Instruction::RetryMeElse(o) => {
                 instr_loc += *o;
             }
-            Line::Control(ControlInstruction::RevJmpBy(ref mut o)) if instr_loc >= target_loc => {
+            Instruction::RevJmpBy(ref mut o) if instr_loc >= target_loc => {
                 retraction_info.push_record(RetractionRecord::ModifiedRevJmpBy(instr_loc, *o));
 
                 *o = instr_loc - target_loc;
                 return;
             }
-            &mut Line::Control(ControlInstruction::RevJmpBy(o)) => {
+            &mut Instruction::RevJmpBy(o) => {
                 instr_loc -= o;
             }
-            &mut Line::Choice(ChoiceInstruction::DynamicElse(birth, death, ref mut fail))
+            &mut Instruction::DynamicElse(birth, death, ref mut fail)
                 if target_loc >= instr_loc =>
             {
                 retraction_info.push_record(RetractionRecord::AppendedNextOrFail(instr_loc, *fail));
 
-                code[instr_loc] = Line::Choice(ChoiceInstruction::DynamicElse(
+                code[instr_loc] = instr!("dynamic_else",
                     birth,
                     death,
-                    NextOrFail::Next(target_loc - instr_loc),
-                ));
+                    NextOrFail::Next(target_loc - instr_loc)
+                );
 
                 return;
             }
-            Line::Choice(ChoiceInstruction::DynamicElse(_, _, NextOrFail::Fail(o))) if *o > 0 => {
+            Instruction::DynamicElse(_, _, NextOrFail::Fail(o)) if *o > 0 => {
                 instr_loc += *o;
             }
-            &mut Line::Choice(ChoiceInstruction::DynamicInternalElse(
+            &mut Instruction::DynamicInternalElse(
                 birth,
                 death,
                 ref mut fail,
-            )) if target_loc >= instr_loc => {
+            ) if target_loc >= instr_loc => {
                 retraction_info.push_record(RetractionRecord::AppendedNextOrFail(instr_loc, *fail));
 
-                code[instr_loc] = Line::Choice(ChoiceInstruction::DynamicInternalElse(
+                code[instr_loc] = instr!("dynamic_internal_else",
                     birth,
                     death,
-                    NextOrFail::Next(target_loc - instr_loc),
-                ));
+                    NextOrFail::Next(target_loc - instr_loc)
+                );
 
                 return;
             }
-            Line::Choice(ChoiceInstruction::DynamicInternalElse(_, _, NextOrFail::Fail(o)))
+            Instruction::DynamicInternalElse(_, _, NextOrFail::Fail(o))
                 if *o > 0 =>
             {
                 instr_loc += *o;
             }
-            Line::Choice(ChoiceInstruction::TrustMe(ref mut o)) if target_loc >= instr_loc => {
+            Instruction::TrustMe(ref mut o) if target_loc >= instr_loc => {
                 retraction_info.push_record(
                     RetractionRecord::AppendedTrustMe(instr_loc, *o, false),
                     //choice_instr.is_default()),
                 );
 
-                code[instr_loc] =
-                    Line::Choice(ChoiceInstruction::RetryMeElse(target_loc - instr_loc));
-
+                code[instr_loc] = instr!("retry_me_else", target_loc - instr_loc);
                 return;
             }
-            Line::Choice(ChoiceInstruction::TrustMe(o)) if *o > 0 => {
+            Instruction::TrustMe(o) if *o > 0 => {
                 instr_loc += *o;
             }
             _ => {
@@ -769,7 +755,7 @@ fn remove_non_leading_clause(
     retraction_info: &mut RetractionInfo,
 ) -> Option<IndexPtr> {
     match &mut code[non_indexed_choice_instr_loc] {
-        Line::Choice(ChoiceInstruction::RetryMeElse(ref mut o)) => {
+        Instruction::RetryMeElse(ref mut o) => {
             let o = *o;
 
             thread_choice_instr_at_to(
@@ -781,19 +767,19 @@ fn remove_non_leading_clause(
 
             None
         }
-        Line::Choice(ChoiceInstruction::TrustMe(_)) => {
+        Instruction::TrustMe(_) => {
             match &mut code[preceding_choice_instr_loc] {
-                Line::Choice(ChoiceInstruction::RetryMeElse(o)) => {
+                Instruction::RetryMeElse(o) => {
                     retraction_info.push_record(RetractionRecord::ModifiedRetryMeElse(
                         preceding_choice_instr_loc,
                         *o,
                     ));
 
-                    code[preceding_choice_instr_loc] = Line::Choice(ChoiceInstruction::TrustMe(0));
+                    code[preceding_choice_instr_loc] = Instruction::TrustMe(0);
 
                     None
                 }
-                Line::Choice(ChoiceInstruction::TryMeElse(ref mut o)) => {
+                Instruction::TryMeElse(ref mut o) => {
                     retraction_info.push_record(RetractionRecord::ModifiedTryMeElse(
                         preceding_choice_instr_loc,
                         *o,
@@ -850,7 +836,7 @@ fn remove_leading_unindexed_clause(
     retraction_info: &mut RetractionInfo,
 ) -> Option<IndexPtr> {
     match &mut code[non_indexed_choice_instr_loc] {
-        Line::Choice(ChoiceInstruction::TryMeElse(ref mut o)) => {
+        Instruction::TryMeElse(ref mut o) => {
             if *o > 0 {
                 retraction_info.push_record(RetractionRecord::ModifiedTryMeElse(
                     non_indexed_choice_instr_loc,
@@ -878,7 +864,7 @@ fn remove_leading_unindexed_clause(
 
 fn find_dynamic_outer_choice_instr(code: &Code, index_loc: usize) -> usize {
     match &code[index_loc] {
-        Line::IndexingCode(indexing_code) => match &indexing_code[0] {
+        Instruction::IndexingCode(indexing_code) => match &indexing_code[0] {
             &IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(
                 _,
                 IndexingCodePtr::DynamicExternal(v),
@@ -951,22 +937,16 @@ fn prepend_compiled_clause(
                 let inner_thread_rev_offset =
                     3 + prepend_queue.len() + clause_loc - skeleton.clauses[1].clause_start;
 
-                prepend_queue.push_back(Line::Control(ControlInstruction::RevJmpBy(
-                    inner_thread_rev_offset,
-                )));
+                prepend_queue.push_back(Instruction::RevJmpBy(inner_thread_rev_offset));
 
-                prepend_queue.push_front(Line::Choice(
-                    settings.internal_try_me_else(prepend_queue.len()),
-                ));
+                prepend_queue.push_front(settings.internal_try_me_else(prepend_queue.len()));
 
                 // prepend_queue is now:
                 //      | TryMeElse N_2
                 //      | (clause_code)
                 // +N_2 | RevJmpBy (RetryMeElse(M_1) or TryMeElse(0) at index_loc + 1)
 
-                prepend_queue.push_front(Line::Control(ControlInstruction::RevJmpBy(
-                    1 + clause_loc - index_loc,
-                )));
+                prepend_queue.push_front(Instruction::RevJmpBy(1 + clause_loc - index_loc));
 
                 let outer_thread_choice_offset = // outer_thread_choice_loc WAS index_loc - 1..
                     match derelictize_try_me_else(code, outer_thread_choice_loc, retraction_info) {
@@ -978,7 +958,7 @@ fn prepend_compiled_clause(
                                 next_subseq_offset;
 
                             prepend_queue.push_back(
-                                Line::Control(ControlInstruction::RevJmpBy(outer_thread_rev_offset))
+                                Instruction::RevJmpBy(outer_thread_rev_offset)
                             );
 
                             prepend_queue.len()
@@ -994,17 +974,13 @@ fn prepend_compiled_clause(
                             // awaiting the addition of unindexed
                             // clauses.
 
-                            prepend_queue.push_back(
-                                Line::Control(ControlInstruction::RevJmpBy(0)),
-                            );
+                            prepend_queue.push_back(Instruction::RevJmpBy(0));
 
                             0
                         }
                     };
 
-                prepend_queue.push_front(Line::Choice(
-                    settings.try_me_else(outer_thread_choice_offset),
-                ));
+                prepend_queue.push_front(settings.try_me_else(outer_thread_choice_offset));
 
                 // prepend_queue is now:
                 //     | TryMeElse N_3
@@ -1014,7 +990,7 @@ fn prepend_compiled_clause(
                 // N_2 | RevJmpBy (RetryMeElse(M_1) or TryMeElse(0) at index_loc + 1)
                 // N_3 | RevJmpBy (TryMeElse(N_1) at index_loc - 1 or TrustMe if N_1 == 0)
 
-                let target_indexing_line = to_indexing_line_mut(&mut code[index_loc]).unwrap();
+                let target_indexing_line = code[index_loc].to_indexing_line_mut().unwrap();
 
                 merge_clause_index(
                     target_indexing_line,
@@ -1060,19 +1036,19 @@ fn prepend_compiled_clause(
 
                 // this is a stub for chaining inner-threaded choice
                 // instructions.
-                prepend_queue.push_back(Line::Control(ControlInstruction::RevJmpBy(0)));
+                prepend_queue.push_back(Instruction::RevJmpBy(0));
 
                 let prepend_queue_len = prepend_queue.len();
 
                 match &mut prepend_queue[1] {
-                    Line::Choice(ChoiceInstruction::TryMeElse(ref mut o)) if *o == 0 => {
+                    Instruction::TryMeElse(ref mut o) if *o == 0 => {
                         *o = prepend_queue_len - 2;
                     }
-                    Line::Choice(ChoiceInstruction::DynamicInternalElse(
+                    Instruction::DynamicInternalElse(
                         _,
                         _,
                         ref mut o @ NextOrFail::Next(0),
-                    )) => {
+                    ) => {
                         *o = NextOrFail::Fail(prepend_queue_len - 2);
                     }
                     _ => {
@@ -1080,11 +1056,8 @@ fn prepend_compiled_clause(
                     }
                 }
 
-                prepend_queue.push_back(Line::Control(ControlInstruction::RevJmpBy(
-                    inner_thread_rev_offset,
-                )));
-
-                prepend_queue.push_front(Line::Choice(settings.try_me_else(prepend_queue.len())));
+                prepend_queue.push_back(Instruction::RevJmpBy(inner_thread_rev_offset));
+                prepend_queue.push_front(settings.try_me_else(prepend_queue.len()));
 
                 // prepend_queue is now:
                 //      | TryMeElse(N_2)
@@ -1114,11 +1087,8 @@ fn prepend_compiled_clause(
                 let inner_thread_rev_offset =
                     1 + prepend_queue.len() + clause_loc - old_clause_start;
 
-                prepend_queue.push_back(Line::Control(ControlInstruction::RevJmpBy(
-                    inner_thread_rev_offset,
-                )));
-
-                prepend_queue.push_front(Line::Choice(settings.try_me_else(prepend_queue.len())));
+                prepend_queue.push_back(Instruction::RevJmpBy(inner_thread_rev_offset));
+                prepend_queue.push_front(settings.try_me_else(prepend_queue.len()));
 
                 // prepend_queue is now:
                 //      | TryMeElse(N_2)
@@ -1142,11 +1112,8 @@ fn prepend_compiled_clause(
                 let inner_thread_rev_offset =
                     1 + prepend_queue.len() + clause_loc - old_clause_start;
 
-                prepend_queue.push_back(Line::Control(ControlInstruction::RevJmpBy(
-                    inner_thread_rev_offset,
-                )));
-
-                prepend_queue.push_front(Line::Choice(settings.try_me_else(prepend_queue.len())));
+                prepend_queue.push_back(Instruction::RevJmpBy(inner_thread_rev_offset));
+                prepend_queue.push_front(settings.try_me_else(prepend_queue.len()));
 
                 // prepend_queue is now:
                 //      | TryMeElse(N_2)
@@ -1205,7 +1172,7 @@ fn append_compiled_clause(
         .switch_on_term_loc()
     {
         Some(index_loc) if lower_bound_arg_num == target_arg_num => {
-            code.push(Line::Choice(settings.internal_trust_me()));
+            code.push(settings.internal_trust_me());
 
             code.extend(clause_code.drain(3..)); // skip the indexing code
 
@@ -1218,7 +1185,7 @@ fn append_compiled_clause(
                 skeleton.clauses[target_pos].clause_start,
             ));
 
-            let target_indexing_line = to_indexing_line_mut(&mut code[index_loc]).unwrap();
+            let target_indexing_line = code[index_loc].to_indexing_line_mut().unwrap();
 
             merge_clause_index(
                 target_indexing_line,
@@ -1252,7 +1219,7 @@ fn append_compiled_clause(
             target_pos_clause_start // skeleton.clauses[target_pos - 1].clause_start
         }
         _ => {
-            code.push(Line::Choice(settings.trust_me()));
+            code.push(settings.trust_me());
 
             skeleton.clauses[target_pos].opt_arg_index_key += clause_loc;
             code.extend(clause_code.drain(1..));
@@ -1331,9 +1298,9 @@ fn print_overwrite_warning(
     key: &PredicateKey,
     is_dynamic: bool,
 ) {
-    if let CompilationTarget::Module(ref module_name) = compilation_target {
-        match module_name.as_str() {
-            "builtins" | "loader" => return,
+    if let CompilationTarget::Module(module_name) = compilation_target {
+        match module_name {
+            atom!("builtins") | atom!("loader") => return,
             _ => {}
         }
     }
@@ -1405,7 +1372,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
     ) -> Result<CodeIndex, SessionError> {
         let code_index = self.get_or_insert_code_index(key, predicates.compilation_target);
 
-        let code_len = self.wam_prelude.code_repo.code.len();
+        let code_len = self.wam_prelude.code.len();
         let mut code_ptr = code_len;
 
         let mut clauses = vec![];
@@ -1443,7 +1410,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             }
 
             match &mut code[0] {
-                Line::Choice(ChoiceInstruction::TryMeElse(0)) => {
+                Instruction::TryMeElse(0) => {
                     code_ptr += 1;
                 }
                 _ => {}
@@ -1514,7 +1481,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             index_ptr,
         );
 
-        self.wam_prelude.code_repo.code.extend(code.into_iter());
+        self.wam_prelude.code.extend(code.into_iter());
         Ok(code_index)
     }
 
@@ -1690,7 +1657,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             mut standalone_skeleton,
         } = self.compile_standalone_clause(clause, settings)?;
 
-        let code_len = self.wam_prelude.code_repo.code.len();
+        let code_len = self.wam_prelude.code.len();
 
         let skeleton = match self
             .wam_prelude
@@ -1717,7 +1684,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                 let global_clock = LS::machine_st(&mut self.payload).global_clock;
 
                 let result = append_compiled_clause(
-                    &mut self.wam_prelude.code_repo.code,
+                    &mut self.wam_prelude.code,
                     clause_code,
                     skeleton,
                     &mut self.payload.retraction_info,
@@ -1757,7 +1724,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                 let global_clock = LS::machine_st(&mut self.payload).global_clock;
 
                 let new_code_ptr = prepend_compiled_clause(
-                    &mut self.wam_prelude.code_repo.code,
+                    &mut self.wam_prelude.code,
                     compilation_target,
                     key,
                     clause_code,
@@ -1801,16 +1768,16 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             .switch_on_term_loc()
         {
             Some(index_loc) => find_inner_choice_instr(
-                &self.wam_prelude.code_repo.code,
+                &self.wam_prelude.code,
                 skeleton.clauses[target_pos].clause_start,
                 index_loc,
             ),
             None => skeleton.clauses[target_pos].clause_start,
         };
 
-        match &mut self.wam_prelude.code_repo.code[clause_loc] {
-            Line::Choice(ChoiceInstruction::DynamicElse(_, ref mut d, _))
-            | Line::Choice(ChoiceInstruction::DynamicInternalElse(_, ref mut d, _)) => {
+        match &mut self.wam_prelude.code[clause_loc] {
+            Instruction::DynamicElse(_, ref mut d, _) |
+            Instruction::DynamicInternalElse(_, ref mut d, _) => {
                 *d = Death::Finite(LS::machine_st(&mut self.payload).global_clock);
             }
             _ => unreachable!(),
@@ -1840,7 +1807,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             }
         };
 
-        let code = &mut self.wam_prelude.code_repo.code;
+        let code = &mut self.wam_prelude.code;
         let lower_bound = lower_bound_of_target_clause(skeleton, target_pos);
         let lower_bound_is_unindexed = !skeleton.clauses[lower_bound].opt_arg_index_key.is_some();
 
@@ -1975,13 +1942,11 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     Some(later_indexing_loc) if later_indexing_loc < target_indexing_loc => {
                         let target_indexing_line = mem::replace(
                             &mut code[target_indexing_loc],
-                            Line::Control(ControlInstruction::RevJmpBy(
-                                target_indexing_loc - later_indexing_loc,
-                            )),
+                            Instruction::RevJmpBy(target_indexing_loc - later_indexing_loc),
                         );
 
                         match target_indexing_line {
-                            Line::IndexingCode(indexing_code) => {
+                            Instruction::IndexingCode(indexing_code) => {
                                 self.payload.retraction_info.push_record(
                                     RetractionRecord::ReplacedIndexingLine(
                                         target_indexing_loc,
@@ -2073,7 +2038,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                             );
 
                             match &mut code[preceding_choice_instr_loc] {
-                                Line::Choice(ChoiceInstruction::TryMeElse(0)) => {
+                                Instruction::TryMeElse(0) => {
                                     set_switch_var_offset(
                                         code,
                                         index_loc,

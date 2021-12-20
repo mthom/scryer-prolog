@@ -1,4 +1,5 @@
 use static_string_indexing::index_static_strings;
+use instructions_template::generate_instructions_rs;
 
 use std::env;
 use std::fs;
@@ -54,6 +55,20 @@ fn main() {
 
     find_prolog_files(&mut libraries, "", &lib_path);
     libraries.write_all(b"\n        m\n    };\n}\n").unwrap();
+
+    let instructions_path = Path::new("src/instructions.rs");
+    let mut instructions_file = File::create(&instructions_path).unwrap();
+
+    let quoted_output = generate_instructions_rs();
+
+    instructions_file
+        .write_all(quoted_output.to_string().as_bytes())
+        .unwrap();
+
+    Command::new("rustfmt")
+        .arg(instructions_path.as_os_str())
+        .spawn().unwrap()
+        .wait().unwrap();
 
     let static_atoms_path = Path::new("src/static_atoms.rs");
     let mut static_atoms_file = File::create(&static_atoms_path).unwrap();

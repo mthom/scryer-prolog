@@ -1,6 +1,5 @@
 pub mod arithmetic_ops;
 pub mod attributed_variables;
-pub mod code_repo;
 pub mod code_walker;
 #[macro_use]
 pub mod loader;
@@ -22,11 +21,10 @@ pub mod streams;
 pub mod system_calls;
 pub mod term_stream;
 
-use crate::arena::*;
+use crate::arithmetic::*;
 use crate::atom_table::*;
-use crate::clause_types::*;
 use crate::forms::*;
-use crate::machine::code_repo::*;
+use crate::instructions::*;
 use crate::machine::compile::*;
 use crate::machine::copier::*;
 use crate::machine::heap::*;
@@ -57,7 +55,7 @@ lazy_static! {
 pub struct Machine {
     pub(super) machine_st: MachineState,
     pub(super) indices: IndexStore,
-    pub(super) code_repo: CodeRepo,
+    pub(super) code: Code,
     pub(super) user_input: Stream,
     pub(super) user_output: Stream,
     pub(super) user_error: Stream,
@@ -97,10 +95,65 @@ fn current_dir() -> PathBuf {
 
 include!(concat!(env!("OUT_DIR"), "/libraries.rs"));
 
+pub static BREAK_FROM_DISPATCH_LOOP_LOC: usize = 0;
+pub static INSTALL_VERIFY_ATTR_INTERRUPT: usize = 1;
+pub static VERIFY_ATTR_INTERRUPT_LOC: usize = 2;
+
 pub struct MachinePreludeView<'a> {
     pub indices: &'a mut IndexStore,
-    pub code_repo: &'a mut CodeRepo,
+    pub code: &'a mut Code,
     pub load_contexts: &'a mut Vec<LoadContext>,
+}
+
+pub(crate) fn import_builtin_impls(code_dir: &CodeDir, builtins: &mut Module) {
+    let keys = [
+        (atom!("@>"), 2),
+        (atom!("@<"), 2),
+        (atom!("@>="), 2),
+        (atom!("@=<"), 2),
+        (atom!("=="), 2),
+        (atom!("\\=="), 2),
+        (atom!(">"), 2),
+        (atom!("<"), 2),
+        (atom!(">="), 2),
+        (atom!("=<"), 2),
+        (atom!("=:="), 2),
+        (atom!("=\\="), 2),
+        (atom!("is"), 2),
+        (atom!("acyclic_term"), 1),
+        (atom!("arg"), 3),
+        (atom!("compare"), 3),
+        (atom!("copy_term"), 2),
+        (atom!("functor"), 3),
+        (atom!("ground"), 1),
+        (atom!("keysort"), 2),
+        (atom!("read"), 1),
+        (atom!("sort"), 2),
+        (atom!("$call"), 1),
+        (atom!("$call"), 2),
+        (atom!("$call"), 3),
+        (atom!("$call"), 4),
+        (atom!("$call"), 5),
+        (atom!("$call"), 6),
+        (atom!("$call"), 7),
+        (atom!("$call"), 8),
+        (atom!("$call"), 9),
+        (atom!("atom"), 1),
+        (atom!("atomic"), 1),
+        (atom!("compound"), 1),
+        (atom!("integer"), 1),
+        (atom!("number"), 1),
+        (atom!("rational"), 1),
+        (atom!("float"), 1),
+        (atom!("nonvar"), 1),
+        (atom!("var"), 1),
+    ];
+
+    for key in keys {
+        let idx = code_dir.get(&key).unwrap();
+        builtins.code_dir.insert(key, idx.clone());
+        builtins.module_decl.exports.push(ModuleExport::PredicateKey(key));
+    }
 }
 
 impl Machine {
@@ -109,7 +162,7 @@ impl Machine {
         (
             MachinePreludeView {
                 indices: &mut self.indices,
-                code_repo: &mut self.code_repo,
+                code: &mut self.code,
                 load_contexts: &mut self.load_contexts,
             },
             &mut self.machine_st
@@ -122,7 +175,6 @@ impl Machine {
         let err = self.machine_st.error_form(err, stub);
 
         self.machine_st.throw_exception(err);
-        return;
     }
 
     fn run_module_predicate(&mut self, module_name: Atom, key: PredicateKey) {
@@ -130,10 +182,10 @@ impl Machine {
             if let Some(ref code_index) = module.code_dir.get(&key) {
                 let p = code_index.local().unwrap();
 
-                self.machine_st.cp = LocalCodePtr::Halt;
-                self.machine_st.p = CodePtr::Local(LocalCodePtr::DirEntry(p));
+                self.machine_st.cp = BREAK_FROM_DISPATCH_LOOP_LOC;
+                self.machine_st.p = p;
 
-                return self.run_query();
+                return self.dispatch_loop();
             }
         }
 
@@ -286,6 +338,61 @@ impl Machine {
         }
     }
 
+    pub(crate) fn add_impls_to_indices(&mut self) {
+        let impls_offset = self.code.len() + 3;
+
+        self.code.extend(vec![
+            Instruction::BreakFromDispatchLoop,
+            Instruction::InstallVerifyAttr,
+            Instruction::VerifyAttrInterrupt,
+            Instruction::ExecuteTermGreaterThan(0),
+            Instruction::ExecuteTermLessThan(0),
+            Instruction::ExecuteTermGreaterThanOrEqual(0),
+            Instruction::ExecuteTermLessThanOrEqual(0),
+            Instruction::ExecuteTermEqual(0),
+            Instruction::ExecuteTermNotEqual(0),
+            Instruction::ExecuteNumberGreaterThan(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2)), 0),
+            Instruction::ExecuteNumberLessThan(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2)), 0),
+            Instruction::ExecuteNumberGreaterThanOrEqual(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2)), 0),
+            Instruction::ExecuteNumberLessThanOrEqual(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2)), 0),
+            Instruction::ExecuteNumberEqual(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2)), 0),
+            Instruction::ExecuteNumberNotEqual(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2)), 0),
+            Instruction::ExecuteIs(temp_v!(1), ar_reg!(temp_v!(2)), 0),
+            Instruction::ExecuteAcyclicTerm(0),
+            Instruction::ExecuteArg(0),
+            Instruction::ExecuteCompare(0),
+            Instruction::ExecuteCopyTerm(0),
+            Instruction::ExecuteFunctor(0),
+            Instruction::ExecuteGround(0),
+            Instruction::ExecuteKeySort(0),
+            Instruction::ExecuteRead(0),
+            Instruction::ExecuteSort(0),
+            Instruction::ExecuteN(1, 0),
+            Instruction::ExecuteN(2, 0),
+            Instruction::ExecuteN(3, 0),
+            Instruction::ExecuteN(4, 0),
+            Instruction::ExecuteN(5, 0),
+            Instruction::ExecuteN(6, 0),
+            Instruction::ExecuteN(7, 0),
+            Instruction::ExecuteN(8, 0),
+            Instruction::ExecuteN(9, 0),
+            Instruction::ExecuteIsAtom(temp_v!(1), 0),
+            Instruction::ExecuteIsAtomic(temp_v!(1), 0),
+            Instruction::ExecuteIsCompound(temp_v!(1), 0),
+            Instruction::ExecuteIsInteger(temp_v!(1), 0),
+            Instruction::ExecuteIsNumber(temp_v!(1), 0),
+            Instruction::ExecuteIsRational(temp_v!(1), 0),
+            Instruction::ExecuteIsFloat(temp_v!(1), 0),
+            Instruction::ExecuteIsNonVar(temp_v!(1), 0),
+            Instruction::ExecuteIsVar(temp_v!(1), 0)
+        ].into_iter());
+
+        for (p, instr) in self.code[impls_offset ..].iter().enumerate() {
+            let key = instr.to_name_and_arity();
+            self.indices.code_dir.insert(key, CodeIndex::new(IndexPtr::Index(p + impls_offset)));
+        }
+    }
+
     pub fn new() -> Self {
         use ref_thread_local::RefThreadLocal;
 
@@ -298,7 +405,7 @@ impl Machine {
         let mut wam = Machine {
             machine_st,
             indices: IndexStore::new(),
-            code_repo: CodeRepo::new(),
+            code: vec![],
             user_input,
             user_output,
             user_error,
@@ -309,6 +416,8 @@ impl Machine {
 
         lib_path.pop();
         lib_path.push("lib");
+
+        wam.add_impls_to_indices();
 
         bootstrapping_compile(
             Stream::from_static_string(
@@ -333,7 +442,7 @@ impl Machine {
         )
         .unwrap();
 
-        if let Some(builtins) = wam.indices.modules.get(&atom!("builtins")) {
+        if let Some(builtins) = wam.indices.modules.get_mut(&atom!("builtins")) {
             load_module(
                 &mut wam.indices.code_dir,
                 &mut wam.indices.op_dir,
@@ -341,6 +450,8 @@ impl Machine {
                 &CompilationTarget::User,
                 builtins,
             );
+
+            import_builtin_impls(&wam.indices.code_dir, builtins);
         } else {
             unreachable!()
         }
@@ -399,507 +510,12 @@ impl Machine {
         self.indices.streams.insert(self.user_error);
     }
 
-    fn handle_toplevel_command(&mut self, code_ptr: REPLCodePtr, p: LocalCodePtr) {
-        match code_ptr {
-            REPLCodePtr::AddDiscontiguousPredicate => {
-                self.add_discontiguous_predicate();
-            }
-            REPLCodePtr::AddDynamicPredicate => {
-                self.add_dynamic_predicate();
-            }
-            REPLCodePtr::AddMultifilePredicate => {
-                self.add_multifile_predicate();
-            }
-            REPLCodePtr::AddGoalExpansionClause => {
-                self.add_goal_expansion_clause();
-            }
-            REPLCodePtr::AddTermExpansionClause => {
-                self.add_term_expansion_clause();
-            }
-            REPLCodePtr::AddInSituFilenameModule => {
-                self.add_in_situ_filename_module();
-            }
-            REPLCodePtr::ClauseToEvacuable => {
-                self.clause_to_evacuable();
-            }
-            REPLCodePtr::ScopedClauseToEvacuable => {
-                self.scoped_clause_to_evacuable();
-            }
-            REPLCodePtr::ConcludeLoad => {
-                self.conclude_load();
-            }
-            REPLCodePtr::PopLoadContext => {
-                self.pop_load_context();
-            }
-            REPLCodePtr::PushLoadContext => {
-                self.push_load_context();
-            }
-            REPLCodePtr::PopLoadStatePayload => {
-                self.pop_load_state_payload();
-            }
-            REPLCodePtr::UseModule => {
-                self.use_module();
-            }
-            REPLCodePtr::LoadCompiledLibrary => {
-                self.load_compiled_library();
-            }
-            REPLCodePtr::DeclareModule => {
-                self.declare_module();
-            }
-            REPLCodePtr::PushLoadStatePayload => {
-                self.push_load_state_payload();
-            }
-            REPLCodePtr::LoadContextSource => {
-                self.load_context_source();
-            }
-            REPLCodePtr::LoadContextFile => {
-                self.load_context_file();
-            }
-            REPLCodePtr::LoadContextDirectory => {
-                self.load_context_directory();
-            }
-            REPLCodePtr::LoadContextModule => {
-                self.load_context_module();
-            }
-            REPLCodePtr::LoadContextStream => {
-                self.load_context_stream();
-            }
-            REPLCodePtr::MetaPredicateProperty => {
-                self.meta_predicate_property();
-            }
-            REPLCodePtr::BuiltInProperty => {
-                self.builtin_property();
-            }
-            REPLCodePtr::MultifileProperty => {
-                self.multifile_property();
-            }
-            REPLCodePtr::DiscontiguousProperty => {
-                self.discontiguous_property();
-            }
-            REPLCodePtr::DynamicProperty => {
-                self.dynamic_property();
-            }
-            REPLCodePtr::Assertz => {
-                self.compile_assert(AppendOrPrepend::Append);
-            }
-            REPLCodePtr::Asserta => {
-                self.compile_assert(AppendOrPrepend::Prepend);
-            }
-            REPLCodePtr::Retract => {
-                self.retract_clause();
-            }
-            REPLCodePtr::AbolishClause => {
-                self.abolish_clause();
-            }
-            REPLCodePtr::IsConsistentWithTermQueue => {
-                self.is_consistent_with_term_queue();
-            }
-            REPLCodePtr::FlushTermQueue => {
-                self.flush_term_queue();
-            }
-            REPLCodePtr::RemoveModuleExports => {
-                self.remove_module_exports();
-            }
-            REPLCodePtr::AddNonCountedBacktracking => {
-                self.add_non_counted_backtracking();
-            }
-        }
-
-        self.machine_st.p = CodePtr::Local(p);
-    }
-
-    pub(crate) fn run_query(&mut self) {
-        while !self.machine_st.p.is_halt() {
-            self.query_stepper();
-
-            match self.machine_st.p {
-                CodePtr::REPL(code_ptr, p) => {
-                    self.handle_toplevel_command(code_ptr, p);
-
-                    if self.machine_st.fail {
-                        self.backtrack();
-                    }
-                }
-                _ => {
-                    break;
-                }
-            };
-        }
-    }
-
-    fn execute_instr(&mut self) {
-        let instr = match self.code_repo.lookup_instr(&self.machine_st, &self.machine_st.p) {
-            Some(instr) => instr,
-            None => return,
-        };
-
-        self.dispatch_instr(instr);
-    }
-
-    fn backtrack(&mut self) {
-        let b = self.machine_st.b;
-        let or_frame = self.machine_st.stack.index_or_frame(b);
-
-        self.machine_st.b0 = or_frame.prelude.b0;
-        self.machine_st.p = CodePtr::Local(or_frame.prelude.bp);
-
-        self.machine_st.oip = or_frame.prelude.boip;
-        self.machine_st.iip = or_frame.prelude.biip;
-
-        self.machine_st.pdl.clear();
-        self.machine_st.fail = false;
-    }
-
-    fn check_machine_index(&mut self) -> bool {
-        match self.machine_st.p {
-            CodePtr::Local(LocalCodePtr::DirEntry(p))
-                if p < self.code_repo.code.len() => {}
-            CodePtr::Local(LocalCodePtr::Halt) | CodePtr::REPL(..) => {
-                return false;
-            }
-            _ => {}
-        }
-
-        true
-    }
-
-    // return true iff verify_attr_interrupt is called.
-    fn verify_attr_stepper(&mut self) -> bool {
-        loop {
-            let instr = match self.code_repo.lookup_instr(&self.machine_st, &self.machine_st.p) {
-                Some(instr) => {
-                    if instr.as_ref(&self.code_repo.code).is_head_instr() {
-                        instr
-                    } else {
-                        let cp = self.machine_st.p.local();
-                        self.run_verify_attr_interrupt(cp);
-                        return true;
-                    }
-                }
-                None => return false,
-            };
-
-            self.dispatch_instr(instr);
-
-            if self.machine_st.fail {
-                self.backtrack();
-            }
-
-            if !self.check_machine_index() {
-                return false;
-            }
-        }
-    }
-
-    fn run_verify_attr_interrupt(&mut self, cp: LocalCodePtr) {
+    #[inline(always)]
+    pub(crate) fn run_verify_attr_interrupt(&mut self) { //, cp: usize) {
         let p = self.machine_st.attr_var_init.verify_attrs_loc;
 
-        self.machine_st.attr_var_init.cp = cp;
+        // self.machine_st.attr_var_init.cp = cp;
         self.machine_st.verify_attr_interrupt(p);
-    }
-
-    fn query_stepper(&mut self) {
-        loop {
-            self.execute_instr();
-
-            if self.machine_st.fail {
-                self.backtrack();
-            }
-
-            match self.machine_st.p {
-                CodePtr::VerifyAttrInterrupt(_) => {
-                    self.machine_st.p = CodePtr::Local(self.machine_st.attr_var_init.cp);
-
-                    let instigating_p = CodePtr::Local(self.machine_st.attr_var_init.instigating_p);
-                    let instigating_instr = self.code_repo
-                        .lookup_instr(&self.machine_st, &instigating_p)
-                        .unwrap();
-
-                    if !instigating_instr.as_ref(&self.code_repo.code).is_head_instr() {
-                        let cp = self.machine_st.p.local();
-                        self.run_verify_attr_interrupt(cp);
-                    } else if !self.verify_attr_stepper() {
-                        if self.machine_st.fail {
-                            break;
-                        }
-
-                        let cp = self.machine_st.p.local();
-                        self.run_verify_attr_interrupt(cp);
-                    }
-                }
-                _ => {
-                    if !self.check_machine_index() {
-                        break;
-                    }
-                }
-            }
-        }
-    }
-
-    pub fn execute_inlined(&mut self, inlined: &InlinedClauseType) {
-        match inlined {
-            &InlinedClauseType::CompareNumber(cmp, ref at_1, ref at_2) => {
-                let n1 = try_or_fail!(self.machine_st, self.machine_st.get_number(at_1));
-                let n2 = try_or_fail!(self.machine_st, self.machine_st.get_number(at_2));
-
-                self.machine_st.compare_numbers(cmp, n1, n2);
-            }
-            &InlinedClauseType::IsAtom(r1) => {
-                let d = self.machine_st.store(self.machine_st.deref(self.machine_st[r1]));
-
-                read_heap_cell!(d,
-                    (HeapCellValueTag::Atom, (_name, arity)) => {
-                        if arity == 0 {
-                            self.machine_st.p += 1;
-                        } else {
-                            self.machine_st.fail = true;
-                        }
-                    }
-                    (HeapCellValueTag::Char) => {
-                        self.machine_st.p += 1;
-                    }
-                    _ => {
-                        self.machine_st.fail = true;
-                    }
-                );
-            }
-            &InlinedClauseType::IsAtomic(r1) => {
-                let d = self.machine_st.store(self.machine_st.deref(self.machine_st[r1]));
-
-                read_heap_cell!(d,
-                    (HeapCellValueTag::Char | HeapCellValueTag::Fixnum | HeapCellValueTag::F64 |
-                     HeapCellValueTag::Cons) => {
-                        self.machine_st.p += 1;
-                    }
-                    (HeapCellValueTag::Atom, (_name, arity)) => {
-                        if arity == 0 {
-                            self.machine_st.p += 1;
-                        } else {
-                            self.machine_st.fail = true;
-                        }
-                    }
-                    _ => {
-                        self.machine_st.fail = true;
-                    }
-                );
-            }
-            &InlinedClauseType::IsInteger(r1) => {
-                let d = self.machine_st.store(self.machine_st.deref(self.machine_st[r1]));
-
-                match Number::try_from(d) {
-                    Ok(Number::Fixnum(_)) => {
-                        self.machine_st.p += 1;
-                    }
-                    Ok(Number::Integer(_)) => {
-                        self.machine_st.p += 1;
-                    }
-                    Ok(Number::Rational(n)) => {
-                        if n.denom() == &1 {
-                            self.machine_st.p += 1;
-                        } else {
-                            self.machine_st.fail = true;
-                        }
-                    }
-                    _ => {
-                        self.machine_st.fail = true;
-                    }
-                }
-            }
-            &InlinedClauseType::IsCompound(r1) => {
-                let d = self.machine_st.store(self.machine_st.deref(self.machine_st[r1]));
-
-                read_heap_cell!(d,
-                    (HeapCellValueTag::Str | HeapCellValueTag::Lis |
-                     HeapCellValueTag::PStrLoc | HeapCellValueTag::CStr) => {
-                        self.machine_st.p += 1;
-                    }
-                    (HeapCellValueTag::Atom, (_name, arity)) => {
-                        if arity > 0 {
-                            self.machine_st.p += 1;
-                        } else {
-                            self.machine_st.fail = true;
-                        }
-                    }
-                    _ => {
-                        self.machine_st.fail = true;
-                    }
-                );
-            }
-            &InlinedClauseType::IsFloat(r1) => {
-                let d = self.machine_st.store(self.machine_st.deref(self.machine_st[r1]));
-
-                match Number::try_from(d) {
-                    Ok(Number::Float(_)) => {
-                        self.machine_st.p += 1;
-                    }
-                    _ => {
-                        self.machine_st.fail = true;
-                    }
-                }
-            }
-            &InlinedClauseType::IsNumber(r1) => {
-                let d = self.machine_st.store(self.machine_st.deref(self.machine_st[r1]));
-
-                match Number::try_from(d) {
-                    Ok(Number::Fixnum(_)) => {
-                        self.machine_st.p += 1;
-                    }
-                    Ok(Number::Integer(_)) => {
-                        self.machine_st.p += 1;
-                    }
-                    Ok(Number::Rational(n)) => {
-                        if n.denom() == &1 {
-                            self.machine_st.p += 1;
-                        } else {
-                            self.machine_st.fail = true;
-                        }
-                    }
-                    Ok(Number::Float(_)) => {
-                        self.machine_st.p += 1;
-                    }
-                    _ => {
-                        self.machine_st.fail = true;
-                    }
-                }
-            }
-            &InlinedClauseType::IsRational(r1) => {
-                let d = self.machine_st.store(self.machine_st.deref(self.machine_st[r1]));
-
-                read_heap_cell!(d,
-                    (HeapCellValueTag::Cons, ptr) => {
-                        match_untyped_arena_ptr!(ptr,
-                             (ArenaHeaderTag::Rational, _r) => {
-                                 self.machine_st.p += 1;
-                             }
-                             _ => {
-                                 self.machine_st.fail = true;
-                             }
-                        );
-                    }
-                    _ => {
-                        self.machine_st.fail = true;
-                    }
-                );
-            }
-            &InlinedClauseType::IsNonVar(r1) => {
-                let d = self.machine_st.store(self.machine_st.deref(self.machine_st[r1]));
-
-                match d.get_tag() {
-                    HeapCellValueTag::AttrVar
-                    | HeapCellValueTag::Var
-                    | HeapCellValueTag::StackVar => {
-                        self.machine_st.fail = true;
-                    }
-                    _ => {
-                        self.machine_st.p += 1;
-                    }
-                }
-            }
-            &InlinedClauseType::IsVar(r1) => {
-                let d = self.machine_st.store(self.machine_st.deref(self.machine_st[r1]));
-
-                match d.get_tag() {
-                    HeapCellValueTag::AttrVar |
-                    HeapCellValueTag::Var |
-                    HeapCellValueTag::StackVar => {
-                        self.machine_st.p += 1;
-                    }
-                    _ => {
-                        self.machine_st.fail = true;
-                    }
-                }
-            }
-        }
-    }
-
-    #[inline(always)]
-    pub(super) fn execute_dynamic_indexed_choice_instr(&mut self) {
-        let p = self.machine_st.p.local();
-
-        match self.find_living_dynamic(self.machine_st.oip, self.machine_st.iip) {
-            Some((offset, oi, ii, is_next_clause)) => {
-                self.machine_st.p = CodePtr::Local(LocalCodePtr::DirEntry(p.abs_loc()));
-                self.machine_st.oip = oi;
-                self.machine_st.iip = ii;
-
-                match self.machine_st.dynamic_mode {
-                    FirstOrNext::First if !is_next_clause => {
-                        self.machine_st.p =
-                            CodePtr::Local(LocalCodePtr::DirEntry(p.abs_loc() + offset));
-                    }
-                    FirstOrNext::First => {
-                        // there's a leading DynamicElse that sets self.machine_st.cc.
-                        // self.machine_st.cc = self.machine_st.global_clock;
-
-                        // see that there is a following dynamic_else
-                        // clause so we avoid generating a choice
-                        // point in case there isn't.
-                        match self.find_living_dynamic(oi, ii + 1) {
-                            Some(_) => {
-                                self.machine_st.registers[self.machine_st.num_of_args + 1] =
-                                    fixnum_as_cell!(Fixnum::build_with(self.machine_st.cc as i64));
-
-                                self.machine_st.num_of_args += 2;
-                                self.machine_st.indexed_try(offset);
-                                self.machine_st.num_of_args -= 2;
-                            }
-                            None => {
-                                self.machine_st.p =
-                                    CodePtr::Local(LocalCodePtr::DirEntry(p.abs_loc() + offset));
-                                self.machine_st.oip = 0;
-                                self.machine_st.iip = 0;
-                            }
-                        }
-                    }
-                    FirstOrNext::Next => {
-                        let b = self.machine_st.b;
-                        let n = self.machine_st
-                            .stack
-                            .index_or_frame(b)
-                            .prelude
-                            .univ_prelude
-                            .num_cells;
-
-                        self.machine_st.cc = cell_as_fixnum!(
-                            self.machine_st.stack[stack_loc!(OrFrame, b, n-2)]
-                        ).get_num() as usize;
-
-                        if is_next_clause {
-                            match self.find_living_dynamic(self.machine_st.oip, self.machine_st.iip) {
-                                Some(_) => {
-                                    self.retry(offset);
-
-                                    try_or_fail!(
-                                        self.machine_st,
-                                        (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                                    );
-                                }
-                                None => {
-                                    self.trust(offset);
-
-                                    try_or_fail!(
-                                        self.machine_st,
-                                        (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                                    );
-                                }
-                            }
-                        } else {
-                            self.trust(offset);
-
-                            try_or_fail!(
-                                self.machine_st,
-                                (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                            );
-                        }
-                    }
-                }
-            }
-            None => {
-                self.machine_st.fail = true;
-            }
-        }
-
-        self.machine_st.dynamic_mode = FirstOrNext::Next;
     }
 
     #[inline(always)]
@@ -916,7 +532,7 @@ impl Machine {
         self.machine_st.e = or_frame.prelude.e;
         self.machine_st.cp = or_frame.prelude.cp;
 
-        or_frame.prelude.bp = self.machine_st.p.local() + offset;
+        or_frame.prelude.bp = self.machine_st.p + offset;
 
         let old_tr = or_frame.prelude.tr;
         let curr_tr = self.machine_st.tr;
@@ -924,14 +540,15 @@ impl Machine {
 
         self.machine_st.tr = or_frame.prelude.tr;
 
-        self.machine_st.attr_var_init.reset();
+        self.reset_attr_var_state();
         self.machine_st.hb = self.machine_st.heap.len();
-        self.machine_st.p += 1;
 
         self.unwind_trail(old_tr, curr_tr);
 
         self.machine_st.trail.truncate(self.machine_st.tr);
         self.machine_st.heap.truncate(target_h);
+
+        self.machine_st.p += 1;
     }
 
     #[inline(always)]
@@ -948,7 +565,7 @@ impl Machine {
         self.machine_st.e = or_frame.prelude.e;
         self.machine_st.cp = or_frame.prelude.cp;
 
-        // WAS: or_frame.prelude.bp = self.machine_st.p.local() + 1;
+        // WAS: or_frame.prelude.bp = self.machine_st.p + 1;
         or_frame.prelude.biip += 1;
 
         let old_tr = or_frame.prelude.tr;
@@ -956,7 +573,7 @@ impl Machine {
         let target_h = or_frame.prelude.h;
 
         self.machine_st.tr = or_frame.prelude.tr;
-        self.machine_st.attr_var_init.reset();
+        self.reset_attr_var_state();
 
         self.unwind_trail(old_tr, curr_tr);
 
@@ -964,7 +581,7 @@ impl Machine {
         self.machine_st.heap.truncate(target_h);
 
         self.machine_st.hb = self.machine_st.heap.len();
-        self.machine_st.p = CodePtr::Local(dir_entry!(self.machine_st.p.local().abs_loc() + offset));
+        self.machine_st.p = self.machine_st.p + offset;
 
         self.machine_st.oip = 0;
         self.machine_st.iip = 0;
@@ -989,10 +606,9 @@ impl Machine {
         let target_h = or_frame.prelude.h;
 
         self.machine_st.tr = or_frame.prelude.tr;
-
-        self.machine_st.attr_var_init.reset();
         self.machine_st.b = or_frame.prelude.b;
 
+        self.reset_attr_var_state();
         self.unwind_trail(old_tr, curr_tr);
 
         self.machine_st.trail.truncate(self.machine_st.tr);
@@ -1000,7 +616,7 @@ impl Machine {
         self.machine_st.heap.truncate(target_h);
 
         self.machine_st.hb = self.machine_st.heap.len();
-        self.machine_st.p = CodePtr::Local(dir_entry!(self.machine_st.p.local().abs_loc() + offset));
+        self.machine_st.p = self.machine_st.p + offset;
 
         self.machine_st.oip = 0;
         self.machine_st.iip = 0;
@@ -1025,10 +641,9 @@ impl Machine {
         let target_h = or_frame.prelude.h;
 
         self.machine_st.tr = or_frame.prelude.tr;
-
-        self.machine_st.attr_var_init.reset();
         self.machine_st.b = or_frame.prelude.b;
 
+        self.reset_attr_var_state();
         self.unwind_trail(old_tr, curr_tr);
 
         self.machine_st.trail.truncate(self.machine_st.tr);
@@ -1040,30 +655,20 @@ impl Machine {
     }
 
     #[inline(always)]
-    fn context_call(&mut self, name: Atom, arity: usize, idx: CodeIndex) -> CallResult {
-        if self.machine_st.last_call {
-            self.try_execute(name, arity, idx)
-        } else {
-            self.try_call(name, arity, idx)
-        }
-    }
-
-    #[inline(always)]
-    fn try_call(&mut self, name: Atom, arity: usize, idx: CodeIndex) -> CallResult {
-        match idx.get() {
+    fn try_call(&mut self, name: Atom, arity: usize, idx: IndexPtr) -> CallResult {
+        match idx {
             IndexPtr::DynamicUndefined => {
                 self.machine_st.fail = true;
-                return Ok(());
             }
             IndexPtr::Undefined => {
                 return Err(self.machine_st.throw_undefined_error(name, arity));
             }
             IndexPtr::DynamicIndex(compiled_tl_index) => {
                 self.machine_st.dynamic_mode = FirstOrNext::First;
-                self.machine_st.call_at_index(arity, dir_entry!(compiled_tl_index));
+                self.machine_st.call_at_index(arity, compiled_tl_index);
             }
             IndexPtr::Index(compiled_tl_index) => {
-                self.machine_st.call_at_index(arity, dir_entry!(compiled_tl_index));
+                self.machine_st.call_at_index(arity, compiled_tl_index);
             }
         }
 
@@ -1071,21 +676,20 @@ impl Machine {
     }
 
     #[inline(always)]
-    fn try_execute(&mut self, name: Atom, arity: usize, idx: CodeIndex) -> CallResult {
-        match idx.get() {
+    fn try_execute(&mut self, name: Atom, arity: usize, idx: IndexPtr) -> CallResult {
+        match idx {
             IndexPtr::DynamicUndefined => {
                 self.machine_st.fail = true;
-                return Ok(());
             }
             IndexPtr::Undefined => {
                 return Err(self.machine_st.throw_undefined_error(name, arity));
             }
             IndexPtr::DynamicIndex(compiled_tl_index) => {
                 self.machine_st.dynamic_mode = FirstOrNext::First;
-                self.machine_st.execute_at_index(arity, dir_entry!(compiled_tl_index));
+                self.machine_st.execute_at_index(arity, compiled_tl_index);
             }
             IndexPtr::Index(compiled_tl_index) => {
-                self.machine_st.execute_at_index(arity, dir_entry!(compiled_tl_index))
+                self.machine_st.execute_at_index(arity, compiled_tl_index)
             }
         }
 
@@ -1093,265 +697,67 @@ impl Machine {
     }
 
     #[inline(always)]
-    fn call_builtin(&mut self, ct: &BuiltInClauseType) -> CallResult {
-        match ct {
-            &BuiltInClauseType::AcyclicTerm => {
-                let addr = self.machine_st.registers[1];
-                self.machine_st.fail = self.machine_st.is_cyclic_term(addr);
-                return_from_clause!(self.machine_st.last_call, self.machine_st)
-            }
-            &BuiltInClauseType::Arg => {
-                self.machine_st.try_arg()?;
-                return_from_clause!(self.machine_st.last_call, self.machine_st)
-            }
-            &BuiltInClauseType::Compare => {
-                let stub_gen = || functor_stub(atom!("compare"), 3);
-
-                let a1 = self.machine_st.store(self.machine_st.deref(self.machine_st.registers[1]));
-                let a2 = self.machine_st.registers[2];
-                let a3 = self.machine_st.registers[3];
-
-                read_heap_cell!(a1,
-                    (HeapCellValueTag::Str, s) => {
-                        let (name, arity) = cell_as_atom_cell!(self.machine_st.heap[s])
-                            .get_name_and_arity();
-
-                        match name {
-                            atom!(">") | atom!("<") | atom!("=") if arity == 2 => {
-                            }
-                            _ => {
-                                let err = self.machine_st.domain_error(DomainErrorType::Order, a1);
-                                return Err(self.machine_st.error_form(err, stub_gen()));
-                            }
-                        }
-                    }
-                    (HeapCellValueTag::AttrVar | HeapCellValueTag::Var | HeapCellValueTag::StackVar) => {
-                    }
-                    _ => {
-                        let err = self.machine_st.type_error(ValidType::Atom, a1);
-                        return Err(self.machine_st.error_form(err, stub_gen()));
-                    }
-                );
-
-                let atom = match compare_term_test!(self.machine_st, a2, a3) {
-                    Some(Ordering::Greater) => {
-                        atom!(">")
-                    }
-                    Some(Ordering::Equal) => {
-                        atom!("=")
-                    }
-                    None | Some(Ordering::Less) => {
-                        atom!("<")
-                    }
-                };
-
-                self.machine_st.unify_atom(atom, a1);
-                return_from_clause!(self.machine_st.last_call, self.machine_st)
-            }
-            &BuiltInClauseType::CompareTerm(qt) => {
-                self.machine_st.compare_term(qt);
-                return_from_clause!(self.machine_st.last_call, self.machine_st)
-            }
-            &BuiltInClauseType::Read => {
-                let stream = self.machine_st.get_stream_or_alias(
-                    self.machine_st.registers[1],
-                    &self.indices.stream_aliases,
-                    atom!("read"),
-                    2,
-                )?;
-
-                match self.machine_st.read(stream, &self.indices.op_dir) {
-                    Ok(offset) => {
-                        let value = self.machine_st.registers[2];
-                        unify_fn!(&mut self.machine_st, value, heap_loc_as_cell!(offset.heap_loc));
-                    }
-                    Err(ParserError::UnexpectedEOF) => {
-                        let value = self.machine_st.registers[2];
-                        self.machine_st.unify_atom(atom!("end_of_file"), value);
-                    }
-                    Err(e) => {
-                        let stub = functor_stub(atom!("read"), 2);
-                        let err = self.machine_st.syntax_error(e);
-
-                        return Err(self.machine_st.error_form(err, stub));
-                    }
-                };
-
-                return_from_clause!(self.machine_st.last_call, self.machine_st)
-            }
-            &BuiltInClauseType::CopyTerm => {
-                self.machine_st.copy_term(AttrVarPolicy::DeepCopy);
-                return_from_clause!(self.machine_st.last_call, self.machine_st)
-            }
-            &BuiltInClauseType::Eq => {
-                let a1 = self.machine_st.registers[1];
-                let a2 = self.machine_st.registers[2];
-
-                self.machine_st.fail = self.machine_st.eq_test(a1, a2);
-                return_from_clause!(self.machine_st.last_call, self.machine_st)
-            }
-            &BuiltInClauseType::Ground => {
-                self.machine_st.fail = self.machine_st.ground_test();
-                return_from_clause!(self.machine_st.last_call, self.machine_st)
-            }
-            &BuiltInClauseType::Functor => {
-                self.machine_st.try_functor()?;
-                return_from_clause!(self.machine_st.last_call, self.machine_st)
-            }
-            &BuiltInClauseType::NotEq => {
-                let a1 = self.machine_st.registers[1];
-                let a2 = self.machine_st.registers[2];
-
-                self.machine_st.fail =
-                    if let Some(Ordering::Equal) = compare_term_test!(self.machine_st, a1, a2) {
-                        true
-                    } else {
-                        false
-                    };
-
-                return_from_clause!(self.machine_st.last_call, self.machine_st)
-            }
-            &BuiltInClauseType::Sort => {
-                self.machine_st.check_sort_errors()?;
-
-                let stub_gen = || functor_stub(atom!("sort"), 2);
-                let mut list = self.machine_st.try_from_list(self.machine_st.registers[1], stub_gen)?;
-
-                list.sort_unstable_by(|v1, v2| {
-                    compare_term_test!(self.machine_st, *v1, *v2).unwrap_or(Ordering::Less)
-                });
-
-                list.dedup_by(|v1, v2| {
-                    compare_term_test!(self.machine_st, *v1, *v2) == Some(Ordering::Equal)
-                });
-
-                let heap_addr = heap_loc_as_cell!(
-                    iter_to_heap_list(&mut self.machine_st.heap, list.into_iter())
-                );
-
-                let r2 = self.machine_st.registers[2];
-                unify_fn!(&mut self.machine_st, r2, heap_addr);
-
-                return_from_clause!(self.machine_st.last_call, self.machine_st)
-            }
-            &BuiltInClauseType::KeySort => {
-                self.machine_st.check_keysort_errors()?;
-
-                let stub_gen = || functor_stub(atom!("keysort"), 2);
-                let list = self.machine_st.try_from_list(self.machine_st.registers[1], stub_gen)?;
-
-                let mut key_pairs = Vec::with_capacity(list.len());
-
-                for val in list {
-                    let key = self.machine_st.project_onto_key(val)?;
-                    key_pairs.push((key, val));
-                }
-
-                key_pairs.sort_by(|a1, a2| {
-                    compare_term_test!(self.machine_st, a1.0, a2.0).unwrap_or(Ordering::Less)
-                });
-
-                let key_pairs = key_pairs.into_iter().map(|kp| kp.1);
-                let heap_addr = heap_loc_as_cell!(
-                    iter_to_heap_list(&mut self.machine_st.heap, key_pairs)
-                );
-
-                let r2 = self.machine_st.registers[2];
-                unify_fn!(&mut self.machine_st, r2, heap_addr);
-
-                return_from_clause!(self.machine_st.last_call, self.machine_st)
-            }
-            &BuiltInClauseType::Is(r, ref at) => {
-                let n1 = self.machine_st.store(self.machine_st.deref(self.machine_st[r]));
-                let n2 = self.machine_st.get_number(at)?;
-
-                match n2 {
-                    Number::Fixnum(n) => self.machine_st.unify_fixnum(n, n1),
-                    Number::Float(n) => {
-                        // TODO: argghh.. deal with it.
-                        let n = arena_alloc!(n, &mut self.machine_st.arena);
-                        self.machine_st.unify_f64(n, n1)
-                    }
-                    Number::Integer(n) => self.machine_st.unify_big_int(n, n1),
-                    Number::Rational(n) => self.machine_st.unify_rational(n, n1),
-                }
-
-                return_from_clause!(self.machine_st.last_call, self.machine_st)
-            }
-        }
-    }
-
-    #[inline(always)]
-    fn call_clause_type(&mut self, module_name: Atom, key: PredicateKey) -> CallResult {
+    fn call_clause(&mut self, module_name: Atom, key: PredicateKey) -> CallResult {
         let (name, arity) = key;
 
-        match ClauseType::from(name, arity) {
-            ClauseType::BuiltIn(built_in) => {
-                self.machine_st.setup_built_in_call(built_in);
-                self.call_builtin(&built_in)?;
+        if module_name == atom!("user") {
+            if let Some(idx) = self.indices.code_dir.get(&(name, arity)).cloned() {
+                self.try_call(name, arity, idx.get())
+            } else {
+                Err(self.machine_st.throw_undefined_error(name, arity))
             }
-            ClauseType::CallN => {
-                self.machine_st.handle_internal_call_n(arity);
-
-                if self.machine_st.fail {
-                    return Ok(());
-                }
-
-                self.machine_st.p = CodePtr::CallN(
-                    arity,
-                    self.machine_st.p.local(),
-                    self.machine_st.last_call,
-                );
-            }
-            ClauseType::Inlined(inlined) => {
-                self.execute_inlined(&inlined);
-
-                if self.machine_st.last_call {
-                    self.machine_st.p = CodePtr::Local(self.machine_st.cp);
-                }
-            }
-            ClauseType::Named(..) if module_name == atom!("user") => {
-                return if let Some(idx) = self.indices.code_dir.get(&(name, arity)).cloned() {
-                    self.context_call(name, arity, idx)
+        } else {
+            if let Some(module) = self.indices.modules.get(&module_name) {
+                if let Some(idx) = module.code_dir.get(&(name, arity)).cloned() {
+                    self.try_call(name, arity, idx.get())
                 } else {
                     Err(self.machine_st.throw_undefined_error(name, arity))
-                };
-            }
-            ClauseType::Named(..) => {
-                return if let Some(module) = self.indices.modules.get(&module_name) {
-                    if let Some(idx) = module.code_dir.get(&(name, arity)).cloned() {
-                        self.context_call(name, arity, idx)
-                    } else {
-                        Err(self.machine_st.throw_undefined_error(name, arity))
-                    }
-                } else {
-                    let stub = functor_stub(name, arity);
-                    let err = self.machine_st.module_resolution_error(module_name, name, arity);
+                }
+            } else {
+                let stub = functor_stub(name, arity);
+                let err = self.machine_st.module_resolution_error(module_name, name, arity);
 
-                    Err(self.machine_st.error_form(err, stub))
-                };
-            }
-            ClauseType::System(_) => {
-                let (name, arity) = key;
-                let name = functor!(name);
-
-                let stub = functor_stub(atom!("call"), arity + 1);
-                let err = self.machine_st.type_error(ValidType::Callable, name);
-
-                return Err(self.machine_st.error_form(err, stub));
+                Err(self.machine_st.error_form(err, stub))
             }
         }
+    }
 
-        Ok(())
+    #[inline(always)]
+    fn execute_clause(&mut self, module_name: Atom, key: PredicateKey) -> CallResult {
+        let (name, arity) = key;
+
+        if module_name == atom!("user") {
+            if let Some(idx) = self.indices.code_dir.get(&(name, arity)).cloned() {
+                self.try_execute(name, arity, idx.get())
+            } else {
+                Err(self.machine_st.throw_undefined_error(name, arity))
+            }
+        } else {
+            if let Some(module) = self.indices.modules.get(&module_name) {
+                if let Some(idx) = module.code_dir.get(&(name, arity)).cloned() {
+                    self.try_execute(name, arity, idx.get())
+                } else {
+                    Err(self.machine_st.throw_undefined_error(name, arity))
+                }
+            } else {
+                let stub = functor_stub(name, arity);
+                let err = self.machine_st.module_resolution_error(module_name, name, arity);
+
+                Err(self.machine_st.error_form(err, stub))
+            }
+        }
     }
 
     #[inline(always)]
     fn call_n(&mut self, module_name: Atom, arity: usize) -> CallResult {
-        if let Some(key) = self.machine_st.setup_call_n(arity) {
-            self.call_clause_type(module_name, key)?;
-        }
+        let key = self.machine_st.setup_call_n(arity)?;
+        self.call_clause(module_name, key)
+    }
 
-        (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
+    #[inline(always)]
+    fn execute_n(&mut self, module_name: Atom, arity: usize) -> CallResult {
+        let key = self.machine_st.setup_call_n(arity)?;
+        self.execute_clause(module_name, key)
     }
 
     #[inline(always)]
@@ -1383,21 +789,16 @@ impl Machine {
         if let Some(&(_, b_cutoff, prev_block)) = self.machine_st.cont_pts.last() {
             if self.machine_st.b < b_cutoff {
                 let (idx, arity) = if self.machine_st.block > prev_block {
-                    (dir_entry!(r_c_w_h), 0)
+                    (r_c_w_h, 0)
                 } else {
                     self.machine_st.registers[1] = fixnum_as_cell!(
                         Fixnum::build_with(b_cutoff as i64)
                     );
 
-                    (dir_entry!(r_c_wo_h), 1)
+                    (r_c_wo_h, 1)
                 };
 
-                if self.machine_st.last_call {
-                    self.machine_st.execute_at_index(arity, idx);
-                } else {
-                    self.machine_st.call_at_index(arity, idx);
-                }
-
+                self.machine_st.call_at_index(arity, idx);
                 return true;
             }
         }
@@ -1407,7 +808,7 @@ impl Machine {
 
     pub(super) fn unwind_trail(&mut self, a1: usize, a2: usize) {
         // the sequence is reversed to respect the chronology of trail
-        // additions, now that deleted attributes can be undeleted by
+        // additions now that deleted attributes can be undeleted by
         // backtracking.
         for i in (a1..a2).rev() {
             let h = self.machine_st.trail[i].get_value() as usize;

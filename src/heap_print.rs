@@ -1,5 +1,6 @@
 use crate::arena::*;
 use crate::atom_table::*;
+use crate::instructions::*;
 use crate::parser::ast::*;
 use crate::parser::rug::{Integer, Rational};
 use crate::{
@@ -8,7 +9,6 @@ use crate::{
     sign_char, single_quote_char, small_letter_char, solo_char, variable_indicator_char,
 };
 
-use crate::clause_types::*;
 use crate::forms::*;
 use crate::heap_iter::*;
 use crate::machine::heap::*;

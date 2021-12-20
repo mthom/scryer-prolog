@@ -272,10 +272,10 @@ impl UnsafeVarMarker {
         }
     }
 
-    pub(crate) fn mark_safe_vars(&mut self, query_instr: &QueryInstruction) -> bool {
+    pub(crate) fn mark_safe_vars(&mut self, query_instr: &Instruction) -> bool {
         match query_instr {
-            &QueryInstruction::PutVariable(r @ RegType::Temp(_), _)
-            | &QueryInstruction::SetVariable(r) => {
+            &Instruction::PutVariable(r @ RegType::Temp(_), _) |
+            &Instruction::SetVariable(r) => {
                 self.safe_vars.insert(r);
                 true
             }
@@ -283,10 +283,10 @@ impl UnsafeVarMarker {
         }
     }
 
-    pub(crate) fn mark_phase(&mut self, query_instr: &QueryInstruction, phase: usize) {
+    pub(crate) fn mark_phase(&mut self, query_instr: &Instruction, phase: usize) {
         match query_instr {
-            &QueryInstruction::PutValue(r @ RegType::Perm(_), _)
-            | &QueryInstruction::SetValue(r) => {
+            &Instruction::PutValue(r @ RegType::Perm(_), _) |
+            &Instruction::SetValue(r) => {
                 let p = self.unsafe_vars.entry(r).or_insert(0);
                 *p = phase;
             }
@@ -294,21 +294,21 @@ impl UnsafeVarMarker {
         }
     }
 
-    pub(crate) fn mark_unsafe_vars(&mut self, query_instr: &mut QueryInstruction, phase: usize) {
+    pub(crate) fn mark_unsafe_vars(&mut self, query_instr: &mut Instruction, phase: usize) {
         match query_instr {
-            &mut QueryInstruction::PutValue(RegType::Perm(i), arg) => {
+            &mut Instruction::PutValue(RegType::Perm(i), arg) => {
                 if let Some(p) = self.unsafe_vars.swap_remove(&RegType::Perm(i)) {
                     if p == phase {
-                        *query_instr = QueryInstruction::PutUnsafeValue(i, arg);
+                        *query_instr = Instruction::PutUnsafeValue(i, arg);
                         self.safe_vars.insert(RegType::Perm(i));
                     } else {
                         self.unsafe_vars.insert(RegType::Perm(i), p);
                     }
                 }
             }
-            &mut QueryInstruction::SetValue(r) => {
+            &mut Instruction::SetValue(r) => {
                 if !self.safe_vars.contains(&r) {
-                    *query_instr = QueryInstruction::SetLocalValue(r);
+                    *query_instr = Instruction::SetLocalValue(r);
 
                     self.safe_vars.insert(r);
                     self.unsafe_vars.remove(&r);

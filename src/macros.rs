@@ -1,9 +1,3 @@
-macro_rules! interm {
-    ($n: expr) => {
-        ArithmeticTerm::Interm($n)
-    };
-}
-
 /* A simple macro to count the arguments in a variadic list
  * of token trees.
  */
@@ -524,6 +518,35 @@ macro_rules! functor_term {
     );
 }
 
+macro_rules! compare_number_instr {
+    ($cmp: expr, $at_1: expr, $at_2: expr) => {{
+        $cmp.set_terms($at_1, $at_2);
+        call_clause!(ClauseType::Inlined(InlinedClauseType::CompareNumber($cmp)), 0)
+    }};
+}
+
+macro_rules! call_clause {
+    ($clause_type:expr, $pvs:expr) => {{
+        let mut instr = $clause_type.to_instr();
+        instr.perm_vars_mut().map(|pvs| *pvs = $pvs);
+        instr
+    }};
+}
+
+macro_rules! call_clause_by_default {
+    ($clause_type:expr, $pvs:expr) => {{
+        let mut instr = $clause_type.to_instr().to_default();
+        instr.perm_vars_mut().map(|pvs| *pvs = $pvs);
+        instr
+    }};
+}
+
+macro_rules! interm {
+    ($n: expr) => {
+        ArithmeticTerm::Interm($n)
+    };
+}
+
 macro_rules! ar_reg {
     ($r: expr) => {
         ArithmeticTerm::Reg($r)
@@ -545,227 +568,16 @@ macro_rules! index_store {
     ($code_dir:expr, $op_dir:expr, $modules:expr) => {
         IndexStore {
             code_dir: $code_dir,
-            extensible_predicates: ExtensiblePredicates::new(),
-            local_extensible_predicates: LocalExtensiblePredicates::new(),
-            global_variables: GlobalVarDir::new(),
-            meta_predicates: MetaPredicateDir::new(),
+            extensible_predicates: ExtensiblePredicates::with_hasher(FxBuildHasher::default()),
+            local_extensible_predicates: LocalExtensiblePredicates::with_hasher(FxBuildHasher::default()),
+            global_variables: GlobalVarDir::with_hasher(FxBuildHasher::default()),
+            meta_predicates: MetaPredicateDir::with_hasher(FxBuildHasher::default()),
             modules: $modules,
             op_dir: $op_dir,
             streams: StreamDir::new(),
-            stream_aliases: StreamAliasDir::new(),
+            stream_aliases: StreamAliasDir::with_hasher(FxBuildHasher::default()),
         }
     };
-}
-
-macro_rules! is_atom {
-    ($r:expr) => {
-        call_clause!(ClauseType::Inlined(InlinedClauseType::IsAtom($r)), 1, 0)
-    };
-}
-
-macro_rules! is_atomic {
-    ($r:expr) => {
-        call_clause!(ClauseType::Inlined(InlinedClauseType::IsAtomic($r)), 1, 0)
-    };
-}
-
-macro_rules! is_integer {
-    ($r:expr) => {
-        call_clause!(ClauseType::Inlined(InlinedClauseType::IsInteger($r)), 1, 0)
-    };
-}
-
-macro_rules! is_compound {
-    ($r:expr) => {
-        call_clause!(ClauseType::Inlined(InlinedClauseType::IsCompound($r)), 1, 0)
-    };
-}
-
-macro_rules! is_float {
-    ($r:expr) => {
-        call_clause!(ClauseType::Inlined(InlinedClauseType::IsFloat($r)), 1, 0)
-    };
-}
-
-macro_rules! is_rational {
-    ($r:expr) => {
-        call_clause!(ClauseType::Inlined(InlinedClauseType::IsRational($r)), 1, 0)
-    };
-}
-
-macro_rules! is_number {
-    ($r:expr) => {
-        call_clause!(ClauseType::Inlined(InlinedClauseType::IsNumber($r)), 1, 0)
-    };
-}
-
-macro_rules! is_nonvar {
-    ($r:expr) => {
-        call_clause!(ClauseType::Inlined(InlinedClauseType::IsNonVar($r)), 1, 0)
-    };
-}
-
-macro_rules! is_var {
-    ($r:expr) => {
-        call_clause!(ClauseType::Inlined(InlinedClauseType::IsVar($r)), 1, 0)
-    };
-}
-
-macro_rules! call_clause {
-    ($ct:expr, $arity:expr, $pvs:expr) => {
-        Line::Control(ControlInstruction::CallClause(
-            $ct, $arity, $pvs, false, false,
-        ))
-    };
-    ($ct:expr, $arity:expr, $pvs:expr, $lco:expr) => {
-        Line::Control(ControlInstruction::CallClause(
-            $ct, $arity, $pvs, $lco, false,
-        ))
-    };
-}
-
-macro_rules! call_clause_by_default {
-    ($ct:expr, $arity:expr, $pvs:expr) => {
-        Line::Control(ControlInstruction::CallClause(
-            $ct, $arity, $pvs, false, true,
-        ))
-    };
-    ($ct:expr, $arity:expr, $pvs:expr, $lco:expr) => {
-        Line::Control(ControlInstruction::CallClause(
-            $ct, $arity, $pvs, $lco, true,
-        ))
-    };
-}
-
-macro_rules! proceed {
-    () => {
-        Line::Control(ControlInstruction::Proceed)
-    };
-}
-
-macro_rules! is_call {
-    ($r:expr, $at:expr) => {
-        call_clause!(ClauseType::BuiltIn(BuiltInClauseType::Is($r, $at)), 2, 0)
-    };
-}
-
-macro_rules! is_call_by_default {
-    ($r:expr, $at:expr) => {
-        call_clause_by_default!(ClauseType::BuiltIn(BuiltInClauseType::Is($r, $at)), 2, 0)
-    };
-}
-
-macro_rules! set_cp {
-    ($r:expr) => {
-        call_clause!(ClauseType::System(SystemClauseType::SetCutPoint($r)), 1, 0)
-    };
-}
-
-macro_rules! succeed {
-    () => {
-        call_clause!(ClauseType::System(SystemClauseType::Succeed), 0, 0)
-    };
-}
-
-macro_rules! fail {
-    () => {
-        call_clause!(ClauseType::System(SystemClauseType::Fail), 0, 0)
-    };
-}
-
-macro_rules! compare_number_instr {
-    ($cmp: expr, $at_1: expr, $at_2: expr) => {{
-        let ct = ClauseType::Inlined(InlinedClauseType::CompareNumber($cmp, $at_1, $at_2));
-        call_clause!(ct, 2, 0)
-    }};
-}
-
-macro_rules! jmp_call {
-    ($arity:expr, $offset:expr, $pvs:expr) => {
-        Line::Control(ControlInstruction::JmpBy($arity, $offset, $pvs, false))
-    };
-}
-
-macro_rules! return_from_clause {
-    ($lco:expr, $machine_st:expr) => {{
-        if let CodePtr::VerifyAttrInterrupt(_) = $machine_st.p {
-            return Ok(());
-        }
-
-        if $lco {
-            $machine_st.p = CodePtr::Local($machine_st.cp);
-        } else {
-            $machine_st.p += 1;
-        }
-
-        Ok(())
-    }};
-}
-
-macro_rules! dir_entry {
-    ($idx:expr) => {
-        LocalCodePtr::DirEntry($idx)
-    };
-}
-
-macro_rules! put_constant {
-    ($lvl:expr, $cons:expr, $r:expr) => {
-        QueryInstruction::PutConstant($lvl, $cons, $r)
-    };
-}
-
-macro_rules! get_level_and_unify {
-    ($r: expr) => {
-        Line::Cut(CutInstruction::GetLevelAndUnify($r))
-    };
-}
-
-/*
-macro_rules! unwind_protect {
-    ($e: expr, $protected: expr) => {
-        match $e {
-            Err(e) => {
-                $protected;
-                return Err(e);
-            }
-            _ => {}
-        }
-    };
-}
-*/
-/*
-macro_rules! discard_result {
-    ($f: expr) => {
-        match $f {
-            _ => (),
-        }
-    };
-}
-*/
-
-macro_rules! try_or_fail {
-    ($s:expr, $e:expr) => {{
-        match $e {
-            Ok(val) => val,
-            Err(msg) => {
-                $s.throw_exception(msg);
-                return;
-            }
-        }
-    }};
-}
-
-macro_rules! try_or_fail_gen {
-    ($s:expr, $e:expr) => {{
-        match $e {
-            Ok(val) => val,
-            Err(msg_fn) => {
-                let e = msg_fn($s);
-                $s.throw_exception(e);
-                return;
-            }
-        }
-    }};
 }
 
 macro_rules! unify {

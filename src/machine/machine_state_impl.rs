@@ -1,13 +1,11 @@
 use crate::arena::*;
 use crate::atom_table::*;
 use crate::types::*;
-use crate::clause_types::*;
 use crate::forms::*;
 use crate::heap_iter::*;
 use crate::machine::attributed_variables::*;
 use crate::machine::copier::*;
 use crate::machine::heap::*;
-use crate::machine::Machine;
 use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
 use crate::machine::machine_state::*;
@@ -23,11 +21,6 @@ use indexmap::IndexSet;
 use std::cmp::Ordering;
 use std::convert::TryFrom;
 
-// TODO: move this block to.. a place.
-impl Machine {
-
-}
-
 impl MachineState {
     pub(crate) fn new() -> Self {
         MachineState {
@@ -35,14 +28,14 @@ impl MachineState {
             atom_tbl: AtomTable::new(),
             pdl: Vec::with_capacity(1024),
             s: HeapPtr::default(),
-            p: CodePtr::default(),
+            p: 0,
             oip: 0,
             iip: 0,
             b: 0,
             b0: 0,
             e: 0,
             num_of_args: 0,
-            cp: LocalCodePtr::default(),
+            cp: 0,
             attr_var_init: AttrVarInitializer::new(0),
             fail: false,
             heap: Heap::with_capacity(256 * 256),
@@ -58,7 +51,6 @@ impl MachineState {
             interms: vec![Number::default();256],
             cont_pts: Vec::with_capacity(256),
             cwil: CWIL::new(),
-            last_call: false,
             flags: MachineFlags::default(),
             cc: 0,
             global_clock: 0,
@@ -202,16 +194,16 @@ impl MachineState {
             match r1.get_tag() {
                 RefTag::StackCell => {
                     self.stack[r1.get_value() as usize] = t2;
+                    self.trail(TrailRef::Ref(r1));
                 }
                 RefTag::HeapCell => {
                     self.heap[r1.get_value() as usize] = t2;
+                    self.trail(TrailRef::Ref(r1));
                 }
                 RefTag::AttrVar => {
                     self.bind_attr_var(r1.get_value() as usize, t2);
                 }
             };
-
-            self.trail(TrailRef::Ref(r1));
         } else {
             read_heap_cell!(a2,
                 (HeapCellValueTag::StackVar, s) => {
@@ -862,17 +854,6 @@ impl MachineState {
             addr,
             AttrVarPolicy::DeepCopy,
         );
-    }
-
-    pub fn copy_term(&mut self, attr_var_policy: AttrVarPolicy) {
-        let old_h = self.heap.len();
-
-        let a1 = self.registers[1];
-        let a2 = self.registers[2];
-
-        copy_term(CopyTerm::new(self), a1, attr_var_policy);
-
-        unify_fn!(*self, heap_loc_as_cell!(old_h), a2);
     }
 
     pub(super) fn unwind_stack(&mut self) {
@@ -1912,9 +1893,6 @@ impl MachineState {
                 );
             }
             Some(PStrPrefixCmpResult { prefix_len, .. }) => {
-                // TODO: this is woefully insufficient! you need to
-                // match the remaining portion of string if offset <
-                // pstr.len().
                 let focus = heap_pstr_iter.focus();
                 let tail_addr = self.heap[focus];
 
@@ -1996,23 +1974,7 @@ impl MachineState {
         )
     }
 
-    pub(super) fn handle_internal_call_n(&mut self, arity: usize) {
-        let arity = arity + 1;
-        let pred = self.registers[1];
-
-        for i in 2..arity {
-            self.registers[i - 1] = self.registers[i];
-        }
-
-        if arity > 1 {
-            self.registers[arity - 1] = pred;
-            return;
-        }
-
-        self.fail = true;
-    }
-
-    pub(super) fn setup_call_n(&mut self, arity: usize) -> Option<PredicateKey> {
+    pub(super) fn setup_call_n(&mut self, arity: usize) -> Result<PredicateKey, MachineStub> {
         let addr = self.store(self.deref(self.registers[arity]));
 
         let (name, narity) = read_heap_cell!(addr,
@@ -2022,10 +1984,7 @@ impl MachineState {
                 if narity + arity > MAX_ARITY {
                     let stub = functor_stub(atom!("call"), arity + 1);
                     let err = self.representation_error(RepFlag::MaxArity);
-                    let representation_error = self.error_form(err, stub);
-
-                    self.throw_exception(representation_error);
-                    return None;
+                    return Err(self.error_form(err, stub));
                 }
 
                 for i in (1..arity).rev() {
@@ -2039,12 +1998,8 @@ impl MachineState {
                 (name, narity)
             }
             (HeapCellValueTag::Atom, (name, arity)) => {
-                if arity == 0 {
-                    (name, 0)
-                } else {
-                    self.fail = true;
-                    return None;
-                }
+                debug_assert_eq!(arity, 0);
+                (name, 0)
             }
             (HeapCellValueTag::Char, c) => {
                 (self.atom_tbl.build_with(&c.to_string()), 0)
@@ -2052,22 +2007,16 @@ impl MachineState {
             (HeapCellValueTag::Var | HeapCellValueTag::AttrVar | HeapCellValueTag::StackVar, _h) => {
                 let stub = functor_stub(atom!("call"), arity + 1);
                 let err = self.instantiation_error();
-                let instantiation_error = self.error_form(err, stub);
-
-                self.throw_exception(instantiation_error);
-                return None;
+                return Err(self.error_form(err, stub));
             }
             _ => {
                 let stub = functor_stub(atom!("call"), arity + 1);
                 let err = self.type_error(ValidType::Callable, addr);
-                let type_error = self.error_form(err, stub);
-
-                self.throw_exception(type_error);
-                return None;
+                return Err(self.error_form(err, stub));
             }
         );
 
-        Some((name, arity + narity - 1))
+        Ok((name, arity + narity - 1))
     }
 
     #[inline]
@@ -2231,45 +2180,6 @@ impl MachineState {
         );
 
         Ok(())
-    }
-
-    pub fn compare_numbers(&mut self, cmp: CompareNumberQT, n1: Number, n2: Number) {
-        let ordering = n1.cmp(&n2);
-
-        self.fail = match cmp {
-            CompareNumberQT::GreaterThan if ordering == Ordering::Greater => false,
-            CompareNumberQT::GreaterThanOrEqual if ordering != Ordering::Less => false,
-            CompareNumberQT::LessThan if ordering == Ordering::Less => false,
-            CompareNumberQT::LessThanOrEqual if ordering != Ordering::Greater => false,
-            CompareNumberQT::NotEqual if ordering != Ordering::Equal => false,
-            CompareNumberQT::Equal if ordering == Ordering::Equal => false,
-            _ => true,
-        };
-
-        self.p += 1;
-    }
-
-    pub fn compare_term(&mut self, qt: CompareTermQT) {
-        let a1 = self.registers[1];
-        let a2 = self.registers[2];
-
-        match compare_term_test!(self, a1, a2) {
-            Some(Ordering::Greater) => match qt {
-                CompareTermQT::GreaterThan | CompareTermQT::GreaterThanOrEqual => {}
-                _ => self.fail = true,
-            },
-            Some(Ordering::Equal) => match qt {
-                CompareTermQT::GreaterThanOrEqual | CompareTermQT::LessThanOrEqual => {}
-                _ => self.fail = true,
-            },
-            Some(Ordering::Less) => match qt {
-                CompareTermQT::LessThan | CompareTermQT::LessThanOrEqual => {}
-                _ => self.fail = true,
-            },
-            None => {
-                self.fail = true;
-            }
-        }
     }
 
     // returns true on failure, false on success.
@@ -2652,12 +2562,14 @@ impl MachineState {
         )
     }
 
+    /*
     pub fn setup_built_in_call(&mut self, ct: BuiltInClauseType) {
         self.num_of_args = ct.arity();
         self.b0 = self.b;
 
         self.p = CodePtr::BuiltInClause(ct, self.p.local());
     }
+    */
 
     pub fn deallocate(&mut self) {
         let e = self.e;

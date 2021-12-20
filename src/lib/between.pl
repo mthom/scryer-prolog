@@ -12,9 +12,7 @@ between(Lower, Upper, X) :-
     (   nonvar(X) ->
         Lower =< X,
         X =< Upper
-    ;   % compare(Ord, Lower, Upper),
-        % between_(Ord, Lower, Upper, X)
-        Lower =< Upper,
+    ;   Lower =< Upper,
         between_(Lower, Upper, X)
     ).
 
@@ -26,16 +24,6 @@ between_(Lower, Upper, Lower1) :-
           between_(Lower0, Upper, Lower1)
        )
     ).
-
-/*
-between_(<, Lower0, Upper, X) :-
-    (   X = Lower0
-    ;   Lower1 is Lower0 + 1,
-        compare(Ord, Lower1, Upper),
-        between_(Ord, Lower1, Upper, X)
-    ).
-between_(=, Upper, Upper, Upper).
-*/
 
 enumerate_nats(I, I).
 enumerate_nats(I0, N) :-

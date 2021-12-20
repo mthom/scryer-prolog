@@ -15,8 +15,9 @@ pub(super) type Bindings = Vec<(usize, HeapCellValue)>;
 pub(super) struct AttrVarInitializer {
     pub(super) attr_var_queue: Vec<usize>,
     pub(super) bindings: Bindings,
-    pub(super) cp: LocalCodePtr,
-    pub(super) instigating_p: LocalCodePtr,
+    pub(super) p: usize,
+    pub(super) cp: usize,
+    // pub(super) instigating_p: usize,
     pub(super) verify_attrs_loc: usize,
 }
 
@@ -25,8 +26,8 @@ impl AttrVarInitializer {
         AttrVarInitializer {
             attr_var_queue: vec![],
             bindings: vec![],
-            instigating_p: LocalCodePtr::default(),
-            cp: LocalCodePtr::default(),
+            p: 0,
+            cp: 0,
             verify_attrs_loc,
         }
     }
@@ -41,15 +42,14 @@ impl AttrVarInitializer {
 impl MachineState {
     pub(super) fn push_attr_var_binding(&mut self, h: usize, addr: HeapCellValue) {
         if self.attr_var_init.bindings.is_empty() {
-            self.attr_var_init.instigating_p = self.p.local();
+            // save self.p and self.cp and ensure that the next
+            // instruction is InstallVerifyAttrInterrupt.
 
-            if self.last_call {
-                self.attr_var_init.cp = self.cp;
-            } else {
-                self.attr_var_init.cp = self.p.local() + 1;
-            }
+            self.attr_var_init.p = self.p;
+            self.attr_var_init.cp = self.cp;
 
-            self.p = CodePtr::VerifyAttrInterrupt(self.attr_var_init.verify_attrs_loc);
+            self.p = INSTALL_VERIFY_ATTR_INTERRUPT - 1;
+            self.cp = INSTALL_VERIFY_ATTR_INTERRUPT;
         }
 
         self.attr_var_init.bindings.push((h, addr));
@@ -109,25 +109,27 @@ impl MachineState {
     }
 
     pub(super) fn verify_attr_interrupt(&mut self, p: usize) {
-        self.allocate(self.num_of_args + 2);
+        self.allocate(self.num_of_args + 3);
 
         let e = self.e;
-        self.stack.index_and_frame_mut(e).prelude.interrupt_cp = self.attr_var_init.cp;
+        let and_frame = self.stack.index_and_frame_mut(e);
 
         for i in 1..self.num_of_args + 1 {
-            self.stack.index_and_frame_mut(e)[i] = self[RegType::Temp(i)];
+            and_frame[i] = self.registers[i];
         }
 
-        self.stack.index_and_frame_mut(e)[self.num_of_args + 1] =
+        and_frame[self.num_of_args + 1] =
             fixnum_as_cell!(Fixnum::build_with(self.b0 as i64));
-        self.stack.index_and_frame_mut(e)[self.num_of_args + 2] =
+        and_frame[self.num_of_args + 2] =
             fixnum_as_cell!(Fixnum::build_with(self.num_of_args as i64));
+        and_frame[self.num_of_args + 3] =
+            fixnum_as_cell!(Fixnum::build_with(self.attr_var_init.cp as i64));
 
         self.verify_attributes();
 
-        self.num_of_args = 2;
+        self.num_of_args = 3;
         self.b0 = self.b;
-        self.p = CodePtr::Local(LocalCodePtr::DirEntry(p));
+        self.p = p;
     }
 
     pub(super) fn attr_vars_of_term(&mut self, cell: HeapCellValue) -> Vec<HeapCellValue> {

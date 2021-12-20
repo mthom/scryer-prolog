@@ -1,4 +1,3 @@
-use crate::clause_types::*;
 use crate::forms::*;
 use crate::machine::loader::*;
 use crate::machine::machine_errors::*;
@@ -8,6 +7,7 @@ use crate::machine::term_stream::*;
 use crate::machine::*;
 use crate::parser::ast::*;
 
+use fxhash::FxBuildHasher;
 use indexmap::IndexSet;
 use ref_thread_local::RefThreadLocal;
 use slice_deque::{sdeq, SliceDeque};
@@ -753,7 +753,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
 
     pub(super) fn get_clause_type(&mut self, name: Atom, arity: usize) -> ClauseType {
         match ClauseType::from(name, arity) {
-            ClauseType::Named(name, arity, _) => {
+            ClauseType::Named(arity, name, _) => {
                 let payload_compilation_target = self.payload.compilation_target;
 
                 let idx = self.get_or_insert_code_index(
@@ -761,7 +761,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     payload_compilation_target,
                 );
 
-                ClauseType::Named(name, arity, idx)
+                ClauseType::Named(arity, name, idx)
             }
             ct => ct,
         }
@@ -774,11 +774,11 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         arity: usize,
     ) -> ClauseType {
         match ClauseType::from(name, arity) {
-            ClauseType::Named(name, arity, _) => {
+            ClauseType::Named(arity, name, _) => {
                 let key = (name, arity);
                 let idx = self.get_or_insert_qualified_code_index(module_name, key);
 
-                ClauseType::Named(name, arity, idx)
+                ClauseType::Named(arity, name, idx)
             }
             ct => ct,
         }
@@ -922,7 +922,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
 
                 let local_extensible_predicates = mem::replace(
                     &mut module.local_extensible_predicates,
-                    LocalExtensiblePredicates::new(),
+                    LocalExtensiblePredicates::with_hasher(FxBuildHasher::default()),
                 );
 
                 for ((compilation_target, key), skeleton) in local_extensible_predicates.iter() {
@@ -1162,11 +1162,11 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
 
             let subloader: Loader<'_, BootstrappingLoadState> = Loader {
                 payload: BootstrappingLoadState(
-                    LoadStatePayload::new(self.wam_prelude.code_repo.code.len(), term_stream)
+                    LoadStatePayload::new(self.wam_prelude.code.len(), term_stream)
                 ),
                 wam_prelude: MachinePreludeView {
                     indices: self.wam_prelude.indices,
-                    code_repo: self.wam_prelude.code_repo,
+                    code: self.wam_prelude.code,
                     load_contexts: self.wam_prelude.load_contexts,
                 }
             };
@@ -1225,11 +1225,11 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
 
             let subloader: Loader<'_, BootstrappingLoadState> = Loader {
                 payload: BootstrappingLoadState(
-                    LoadStatePayload::new(self.wam_prelude.code_repo.code.len(), term_stream),
+                    LoadStatePayload::new(self.wam_prelude.code.len(), term_stream),
                 ),
                 wam_prelude: MachinePreludeView {
                     indices: self.wam_prelude.indices,
-                    code_repo: self.wam_prelude.code_repo,
+                    code: self.wam_prelude.code,
                     load_contexts: self.wam_prelude.load_contexts,
                 }
             };

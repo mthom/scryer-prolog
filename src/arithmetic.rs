@@ -1,6 +1,5 @@
 use crate::arena::*;
 use crate::atom_table::*;
-use crate::clause_types::*;
 use crate::fixtures::*;
 use crate::forms::*;
 use crate::instructions::*;
@@ -25,6 +24,29 @@ use std::ops::Div;
 use std::rc::Rc;
 use std::vec::Vec;
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
+pub enum ArithmeticTerm {
+    Reg(RegType),
+    Interm(usize),
+    Number(Number),
+}
+
+impl ArithmeticTerm {
+    pub(crate) fn interm_or(&self, interm: usize) -> usize {
+        if let &ArithmeticTerm::Interm(interm) = self {
+            interm
+        } else {
+            interm
+        }
+    }
+}
+
+impl Default for ArithmeticTerm {
+    fn default() -> Self {
+        ArithmeticTerm::Number(Number::default())
+    }
+}
+
 #[derive(Debug)]
 pub(crate) struct ArithInstructionIterator<'a> {
     state_stack: Vec<TermIterState<'a>>,
@@ -46,7 +68,7 @@ impl<'a> ArithInstructionIterator<'a> {
                     Ok(TermIterState::Clause(Level::Shallow, 0, cell, ct, terms))
                 }
                 ClauseType::Inlined(InlinedClauseType::IsFloat(_)) => {
-                    let ct = ClauseType::Named(atom!("float"), 1, CodeIndex::default());
+                    let ct = ClauseType::Named(1, atom!("float"), CodeIndex::default());
                     Ok(TermIterState::Clause(Level::Shallow, 0, cell, ct, terms))
                 }
                 _ => Err(ArithmeticError::NonEvaluableFunctor(
@@ -174,27 +196,27 @@ impl<'a> ArithmeticEvaluator<'a> {
         name: Atom,
         a1: ArithmeticTerm,
         t: usize,
-    ) -> Result<ArithmeticInstruction, ArithmeticError> {
+    ) -> Result<Instruction, ArithmeticError> {
         match name {
-            atom!("abs") => Ok(ArithmeticInstruction::Abs(a1, t)),
-            atom!("-") => Ok(ArithmeticInstruction::Neg(a1, t)),
-            atom!("+") => Ok(ArithmeticInstruction::Plus(a1, t)),
-            atom!("cos") => Ok(ArithmeticInstruction::Cos(a1, t)),
-            atom!("sin") => Ok(ArithmeticInstruction::Sin(a1, t)),
-            atom!("tan") => Ok(ArithmeticInstruction::Tan(a1, t)),
-            atom!("log") => Ok(ArithmeticInstruction::Log(a1, t)),
-            atom!("exp") => Ok(ArithmeticInstruction::Exp(a1, t)),
-            atom!("sqrt") => Ok(ArithmeticInstruction::Sqrt(a1, t)),
-            atom!("acos") => Ok(ArithmeticInstruction::ACos(a1, t)),
-            atom!("asin") => Ok(ArithmeticInstruction::ASin(a1, t)),
-            atom!("atan") => Ok(ArithmeticInstruction::ATan(a1, t)),
-            atom!("float") => Ok(ArithmeticInstruction::Float(a1, t)),
-            atom!("truncate") => Ok(ArithmeticInstruction::Truncate(a1, t)),
-            atom!("round") => Ok(ArithmeticInstruction::Round(a1, t)),
-            atom!("ceiling") => Ok(ArithmeticInstruction::Ceiling(a1, t)),
-            atom!("floor") => Ok(ArithmeticInstruction::Floor(a1, t)),
-            atom!("sign") => Ok(ArithmeticInstruction::Sign(a1, t)),
-            atom!("\\") => Ok(ArithmeticInstruction::BitwiseComplement(a1, t)),
+            atom!("abs") => Ok(Instruction::Abs(a1, t)),
+            atom!("-") => Ok(Instruction::Neg(a1, t)),
+            atom!("+") => Ok(Instruction::Plus(a1, t)),
+            atom!("cos") => Ok(Instruction::Cos(a1, t)),
+            atom!("sin") => Ok(Instruction::Sin(a1, t)),
+            atom!("tan") => Ok(Instruction::Tan(a1, t)),
+            atom!("log") => Ok(Instruction::Log(a1, t)),
+            atom!("exp") => Ok(Instruction::Exp(a1, t)),
+            atom!("sqrt") => Ok(Instruction::Sqrt(a1, t)),
+            atom!("acos") => Ok(Instruction::ACos(a1, t)),
+            atom!("asin") => Ok(Instruction::ASin(a1, t)),
+            atom!("atan") => Ok(Instruction::ATan(a1, t)),
+            atom!("float") => Ok(Instruction::Float(a1, t)),
+            atom!("truncate") => Ok(Instruction::Truncate(a1, t)),
+            atom!("round") => Ok(Instruction::Round(a1, t)),
+            atom!("ceiling") => Ok(Instruction::Ceiling(a1, t)),
+            atom!("floor") => Ok(Instruction::Floor(a1, t)),
+            atom!("sign") => Ok(Instruction::Sign(a1, t)),
+            atom!("\\") => Ok(Instruction::BitwiseComplement(a1, t)),
             _ => Err(ArithmeticError::NonEvaluableFunctor(Literal::Atom(name), 1)),
         }
     }
@@ -205,28 +227,28 @@ impl<'a> ArithmeticEvaluator<'a> {
         a1: ArithmeticTerm,
         a2: ArithmeticTerm,
         t: usize,
-    ) -> Result<ArithmeticInstruction, ArithmeticError> {
+    ) -> Result<Instruction, ArithmeticError> {
         match name {
-            atom!("+") => Ok(ArithmeticInstruction::Add(a1, a2, t)),
-            atom!("-") => Ok(ArithmeticInstruction::Sub(a1, a2, t)),
-            atom!("/") => Ok(ArithmeticInstruction::Div(a1, a2, t)),
-            atom!("//") => Ok(ArithmeticInstruction::IDiv(a1, a2, t)),
-            atom!("max") => Ok(ArithmeticInstruction::Max(a1, a2, t)),
-            atom!("min") => Ok(ArithmeticInstruction::Min(a1, a2, t)),
-            atom!("div") => Ok(ArithmeticInstruction::IntFloorDiv(a1, a2, t)),
-            atom!("rdiv") => Ok(ArithmeticInstruction::RDiv(a1, a2, t)),
-            atom!("*") => Ok(ArithmeticInstruction::Mul(a1, a2, t)),
-            atom!("**") => Ok(ArithmeticInstruction::Pow(a1, a2, t)),
-            atom!("^") => Ok(ArithmeticInstruction::IntPow(a1, a2, t)),
-            atom!(">>") => Ok(ArithmeticInstruction::Shr(a1, a2, t)),
-            atom!("<<") => Ok(ArithmeticInstruction::Shl(a1, a2, t)),
-            atom!("/\\") => Ok(ArithmeticInstruction::And(a1, a2, t)),
-            atom!("\\/") => Ok(ArithmeticInstruction::Or(a1, a2, t)),
-            atom!("xor") => Ok(ArithmeticInstruction::Xor(a1, a2, t)),
-            atom!("mod") => Ok(ArithmeticInstruction::Mod(a1, a2, t)),
-            atom!("rem") => Ok(ArithmeticInstruction::Rem(a1, a2, t)),
-            atom!("gcd") => Ok(ArithmeticInstruction::Gcd(a1, a2, t)),
-            atom!("atan2") => Ok(ArithmeticInstruction::ATan2(a1, a2, t)),
+            atom!("+") => Ok(Instruction::Add(a1, a2, t)),
+            atom!("-") => Ok(Instruction::Sub(a1, a2, t)),
+            atom!("/") => Ok(Instruction::Div(a1, a2, t)),
+            atom!("//") => Ok(Instruction::IDiv(a1, a2, t)),
+            atom!("max") => Ok(Instruction::Max(a1, a2, t)),
+            atom!("min") => Ok(Instruction::Min(a1, a2, t)),
+            atom!("div") => Ok(Instruction::IntFloorDiv(a1, a2, t)),
+            atom!("rdiv") => Ok(Instruction::RDiv(a1, a2, t)),
+            atom!("*") => Ok(Instruction::Mul(a1, a2, t)),
+            atom!("**") => Ok(Instruction::Pow(a1, a2, t)),
+            atom!("^") => Ok(Instruction::IntPow(a1, a2, t)),
+            atom!(">>") => Ok(Instruction::Shr(a1, a2, t)),
+            atom!("<<") => Ok(Instruction::Shl(a1, a2, t)),
+            atom!("/\\") => Ok(Instruction::And(a1, a2, t)),
+            atom!("\\/") => Ok(Instruction::Or(a1, a2, t)),
+            atom!("xor") => Ok(Instruction::Xor(a1, a2, t)),
+            atom!("mod") => Ok(Instruction::Mod(a1, a2, t)),
+            atom!("rem") => Ok(Instruction::Rem(a1, a2, t)),
+            atom!("gcd") => Ok(Instruction::Gcd(a1, a2, t)),
+            atom!("atan2") => Ok(Instruction::ATan2(a1, a2, t)),
             _ => Err(ArithmeticError::NonEvaluableFunctor(Literal::Atom(name), 2)),
         }
     }
@@ -244,7 +266,7 @@ impl<'a> ArithmeticEvaluator<'a> {
         &mut self,
         name: Atom,
         arity: usize,
-    ) -> Result<ArithmeticInstruction, ArithmeticError> {
+    ) -> Result<Instruction, ArithmeticError> {
         match arity {
             1 => {
                 let a1 = self.interm.pop().unwrap();
@@ -310,7 +332,7 @@ impl<'a> ArithmeticEvaluator<'a> {
                     self.interm.push(ArithmeticTerm::Reg(r));
                 }
                 ArithTermRef::Op(name, arity) => {
-                    code.push(Line::Arithmetic(self.instr_from_clause(name, arity)?));
+                    code.push(self.instr_from_clause(name, arity)?);
                 }
             }
         }

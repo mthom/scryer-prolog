@@ -2,29 +2,21 @@ use crate::parser::ast::*;
 
 use crate::arena::*;
 use crate::atom_table::*;
-use crate::clause_types::*;
 use crate::fixtures::*;
 use crate::forms::*;
 use crate::instructions::*;
-use crate::machine::*;
-use crate::machine::heap::*;
 use crate::machine::loader::*;
-use crate::machine::machine_errors::MachineStub;
 use crate::machine::machine_state::*;
 use crate::machine::streams::Stream;
 
+use fxhash::FxBuildHasher;
 use indexmap::IndexMap;
 
 use std::cell::Cell;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
-use std::ops::{Add, AddAssign, Deref, Sub, SubAssign};
+use std::ops::Deref;
 use std::rc::Rc;
-
-// these statics store the locations of one-off control instructions
-// in the code vector.
-
-pub static HALT_CODE: usize = 0;
 
 use crate::types::*;
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -134,6 +126,7 @@ impl Default for CodeIndex {
     }
 }
 
+/*
 #[derive(Debug, Clone, Copy, PartialOrd, Ord, PartialEq, Eq)]
 pub enum REPLCodePtr {
     AddDiscontiguousPredicate,
@@ -174,156 +167,28 @@ pub enum REPLCodePtr {
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum CodePtr {
-    BuiltInClause(BuiltInClauseType, LocalCodePtr), // local is the successor call.
-    CallN(usize, LocalCodePtr, bool),               // arity, local, last call.
-    Local(LocalCodePtr),
-    REPL(REPLCodePtr, LocalCodePtr), // the REPL code, the return pointer.
+    BuiltInClause(BuiltInClauseType, usize), // local is the successor call.
+    CallN(usize, usize, bool),               // arity, local, last call.
+    Local(usize),
+    REPL(REPLCodePtr, usize), // the REPL code, the return pointer.
     VerifyAttrInterrupt(usize), // location of the verify attribute interrupt code in the CodeDir.
 }
 
 impl CodePtr {
-    pub(crate) fn local(&self) -> LocalCodePtr {
+    pub(crate) fn local(&self) -> usize {
         match self {
-            &CodePtr::BuiltInClause(_, ref local)
-            | &CodePtr::CallN(_, ref local, _)
-            | &CodePtr::Local(ref local) => local.clone(),
-            &CodePtr::VerifyAttrInterrupt(p) => LocalCodePtr::DirEntry(p),
-            &CodePtr::REPL(_, p) => p, // | &CodePtr::DynamicTransaction(_, p) => p,
+            &CodePtr::BuiltInClause(_, ref local) |
+            &CodePtr::CallN(_, ref local, _) |
+            &CodePtr::Local(ref local) => *local,
+            &CodePtr::VerifyAttrInterrupt(p) => p,
+            &CodePtr::REPL(_, p) => p,
         }
     }
 
-    #[inline]
-    pub(crate) fn is_halt(&self) -> bool {
-        if let CodePtr::Local(LocalCodePtr::Halt) = self {
-            true
-        } else {
-            false
-        }
-    }
-}
-
-#[derive(Copy, Clone, Debug, PartialEq)]
-pub enum LocalCodePtr {
-    DirEntry(usize), // offset
-    Halt,
-    // IndexingBuf(usize, usize, usize), // DirEntry offset, first internal offset, second internal offset
-                                         // TopLevel(usize, usize), // chunk_num, offset
-}
-
-impl Machine {
-    pub(crate) fn is_reset_cont_marker(&self, p: LocalCodePtr) -> bool {
-        match self.code_repo.lookup_instr(&self.machine_st, &CodePtr::Local(p)) {
-            Some(line) => match line.as_ref(&self.code_repo.code) {
-                Line::Control(ControlInstruction::CallClause(ref ct, ..)) => {
-                    if let ClauseType::System(SystemClauseType::ResetContinuationMarker) = *ct {
-                        return true;
-                    }
-                }
-                _ => {}
-            },
-            None => {}
-        }
-
-        false
-    }
-}
-
-impl LocalCodePtr {
-    pub fn assign_if_local(&mut self, cp: CodePtr) {
-        match cp {
-            CodePtr::Local(local) => *self = local,
+    pub fn assign_if_local(&self, cp: &mut usize) {
+        match self {
+            CodePtr::Local(local) => *cp = *local,
             _ => {}
-        }
-    }
-
-    #[inline]
-    pub fn abs_loc(&self) -> usize {
-        match self {
-            LocalCodePtr::DirEntry(ref p) => *p,
-            // LocalCodePtr::IndexingBuf(ref p, ..) => *p,
-            LocalCodePtr::Halt => unreachable!(),
-        }
-    }
-
-    pub(crate) fn as_functor(&self) -> MachineStub {
-        match self {
-            LocalCodePtr::DirEntry(p) => {
-                functor!(atom!("dir_entry"), [fixnum(*p)])
-            }
-            LocalCodePtr::Halt => {
-                functor!(atom!("halt"))
-            }
-            /*
-            LocalCodePtr::IndexingBuf(p, o, i) => {
-                functor!(
-                    atom!("indexed_buf"),
-                    [fixnum(*p), fixnum(*o), fixnum(*i)]
-                )
-            }
-            */
-        }
-    }
-}
-
-impl Default for CodePtr {
-    #[inline]
-    fn default() -> Self {
-        CodePtr::Local(LocalCodePtr::default())
-    }
-}
-
-impl Default for LocalCodePtr {
-    #[inline]
-    fn default() -> Self {
-        LocalCodePtr::DirEntry(0)
-    }
-}
-
-impl Add<usize> for LocalCodePtr {
-    type Output = LocalCodePtr;
-
-    #[inline]
-    fn add(self, rhs: usize) -> Self::Output {
-        match self {
-            LocalCodePtr::DirEntry(p) => LocalCodePtr::DirEntry(p + rhs),
-            LocalCodePtr::Halt => unreachable!(),
-            // LocalCodePtr::IndexingBuf(p, o, i) => LocalCodePtr::IndexingBuf(p, o, i + rhs),
-        }
-    }
-}
-
-impl Sub<usize> for LocalCodePtr {
-    type Output = Option<LocalCodePtr>;
-
-    #[inline]
-    fn sub(self, rhs: usize) -> Self::Output {
-        match self {
-            LocalCodePtr::DirEntry(p) => p.checked_sub(rhs).map(LocalCodePtr::DirEntry),
-            LocalCodePtr::Halt => unreachable!(),
-            // LocalCodePtr::IndexingBuf(p, o, i) => i
-            //     .checked_sub(rhs)
-            //     .map(|r| LocalCodePtr::IndexingBuf(p, o, r)),
-        }
-    }
-}
-
-impl SubAssign<usize> for LocalCodePtr {
-    #[inline]
-    fn sub_assign(&mut self, rhs: usize) {
-        match self {
-            LocalCodePtr::DirEntry(ref mut p) => *p -= rhs,
-            LocalCodePtr::Halt => unreachable!() // | LocalCodePtr::IndexingBuf(..) => unreachable!(),
-        }
-    }
-}
-
-impl AddAssign<usize> for LocalCodePtr {
-    #[inline]
-    fn add_assign(&mut self, rhs: usize) {
-        match self {
-            &mut LocalCodePtr::DirEntry(ref mut i) => *i += rhs,
-            // | &mut LocalCodePtr::IndexingBuf(_, _, ref mut i) => *i += rhs,
-            &mut LocalCodePtr::Halt => unreachable!(),
         }
     }
 }
@@ -333,7 +198,9 @@ impl Add<usize> for CodePtr {
 
     fn add(self, rhs: usize) -> Self::Output {
         match self {
-            p @ CodePtr::REPL(..) | p @ CodePtr::VerifyAttrInterrupt(_) => p,
+            p @ CodePtr::REPL(..) | p @ CodePtr::VerifyAttrInterrupt(_) => {
+                p
+            }
             CodePtr::Local(local) => CodePtr::Local(local + rhs),
             CodePtr::BuiltInClause(_, local) | CodePtr::CallN(_, local, _) => {
                 CodePtr::Local(local + rhs)
@@ -362,20 +229,30 @@ impl SubAssign<usize> for CodePtr {
     }
 }
 
-pub(crate) type HeapVarDict = IndexMap<Rc<String>, HeapCellValue>;
-pub(crate) type AllocVarDict = IndexMap<Rc<String>, VarData>;
+impl Default for CodePtr {
+    #[inline]
+    fn default() -> Self {
+        CodePtr::Local(0)
+    }
+}
+*/
 
-pub(crate) type GlobalVarDir = IndexMap<Atom, (Ball, Option<HeapCellValue>)>;
+pub(crate) type HeapVarDict = IndexMap<Rc<String>, HeapCellValue, FxBuildHasher>;
+pub(crate) type AllocVarDict = IndexMap<Rc<String>, VarData, FxBuildHasher>;
 
-pub(crate) type StreamAliasDir = IndexMap<Atom, Stream>;
+pub(crate) type GlobalVarDir = IndexMap<Atom, (Ball, Option<HeapCellValue>), FxBuildHasher>;
+
+pub(crate) type StreamAliasDir = IndexMap<Atom, Stream, FxBuildHasher>;
 pub(crate) type StreamDir = BTreeSet<Stream>;
 
-pub(crate) type MetaPredicateDir = IndexMap<PredicateKey, Vec<MetaSpec>>;
+pub(crate) type MetaPredicateDir = IndexMap<PredicateKey, Vec<MetaSpec>, FxBuildHasher>;
 
-pub(crate) type ExtensiblePredicates = IndexMap<PredicateKey, PredicateSkeleton>;
+pub(crate) type ExtensiblePredicates = IndexMap<PredicateKey, PredicateSkeleton, FxBuildHasher>;
 
 pub(crate) type LocalExtensiblePredicates =
-    IndexMap<(CompilationTarget, PredicateKey), LocalPredicateSkeleton>;
+    IndexMap<(CompilationTarget, PredicateKey), LocalPredicateSkeleton, FxBuildHasher>;
+
+pub(crate) type CodeDir = IndexMap<PredicateKey, CodeIndex, FxBuildHasher>;
 
 #[derive(Debug)]
 pub struct IndexStore {
@@ -504,14 +381,14 @@ impl IndexStore {
     ) -> Option<CodeIndex> {
         if module == atom!("user") {
             match ClauseType::from(name, arity) {
-                ClauseType::Named(name, arity, _) => self.code_dir.get(&(name, arity)).cloned(),
+                ClauseType::Named(arity, name, _) => self.code_dir.get(&(name, arity)).cloned(),
                 _ => None,
             }
         } else {
             self.modules
                 .get(&module)
                 .and_then(|module| match ClauseType::from(name, arity) {
-                    ClauseType::Named(name, arity, _) => {
+                    ClauseType::Named(arity, name, _) => {
                         module.code_dir.get(&(name, arity)).cloned()
                     }
                     _ => None,
@@ -561,8 +438,10 @@ impl IndexStore {
 
     #[inline]
     pub(super) fn new() -> Self {
-        index_store!(CodeDir::new(), default_op_dir(), ModuleDir::new())
+        index_store!(
+            CodeDir::with_hasher(FxBuildHasher::default()),
+            default_op_dir(),
+            ModuleDir::with_hasher(FxBuildHasher::default())
+        )
     }
 }
-
-pub(crate) type CodeDir = IndexMap<PredicateKey, CodeIndex>;

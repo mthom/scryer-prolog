@@ -1,6 +1,5 @@
 use crate::arena::*;
 use crate::atom_table::*;
-use crate::clause_types::*;
 use crate::forms::*;
 use crate::heap_iter::*;
 use crate::indexing::*;
@@ -327,7 +326,7 @@ impl<'a> LoadState<'a> for BootstrappingLoadState<'a> {
             loader.compile_and_submit()?;
         }
 
-        let repo_len = loader.wam_prelude.code_repo.code.len();
+        let repo_len = loader.wam_prelude.code.len();
 
         loader
             .payload
@@ -363,7 +362,7 @@ pub struct Loader<'a, LS: LoadState<'a>> {
 impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
     #[inline]
     pub(super) fn new(wam: &'a mut Machine, term_stream: <LS as LoadState<'a>>::TS) -> Self {
-        let payload = LoadStatePayload::new(wam.code_repo.code.len(), term_stream);
+        let payload = LoadStatePayload::new(wam.code.len(), term_stream);
         let (wam_prelude, machine_st) = wam.prelude_view_and_machine_st();
 
         Self {
@@ -696,8 +695,8 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                 RetractionRecord::AddedIndex(index_key, clause_loc) => {
                     // WAS: inner_index_locs) => {
                     if let Some(index_loc) = index_key.switch_on_term_loc() {
-                        let indexing_code = match &mut self.wam_prelude.code_repo.code[index_loc] {
-                            Line::IndexingCode(indexing_code) => indexing_code,
+                        let indexing_code = match &mut self.wam_prelude.code[index_loc] {
+                            Instruction::IndexingCode(indexing_code) => indexing_code,
                             _ => {
                                 unreachable!()
                             }
@@ -743,10 +742,10 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     // write the retraction logic of this arm.
                 }
                 RetractionRecord::ReplacedChoiceOffset(instr_loc, offset) => {
-                    match self.wam_prelude.code_repo.code[instr_loc] {
-                        Line::Choice(ChoiceInstruction::TryMeElse(ref mut o))
-                        | Line::Choice(ChoiceInstruction::RetryMeElse(ref mut o))
-                        | Line::Choice(ChoiceInstruction::DefaultRetryMeElse(ref mut o)) => {
+                    match self.wam_prelude.code[instr_loc] {
+                        Instruction::TryMeElse(ref mut o) |
+                        Instruction::RetryMeElse(ref mut o) |
+                        Instruction::DefaultRetryMeElse(ref mut o) => {
                             *o = offset;
                         }
                         _ => {
@@ -755,22 +754,15 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     }
                 }
                 RetractionRecord::AppendedTrustMe(instr_loc, offset, is_default) => {
-                    match self.wam_prelude.code_repo.code[instr_loc] {
-                        Line::Choice(ref mut choice_instr) => {
-                            *choice_instr = if is_default {
-                                ChoiceInstruction::DefaultTrustMe(offset)
-                            } else {
-                                ChoiceInstruction::TrustMe(offset)
-                            };
-                        }
-                        _ => {
-                            unreachable!();
-                        }
-                    }
+                    self.wam_prelude.code[instr_loc] = if is_default {
+                        Instruction::DefaultTrustMe(offset)
+                    } else {
+                        Instruction::TrustMe(offset)
+                    };
                 }
                 RetractionRecord::ReplacedSwitchOnTermVarIndex(index_loc, old_v) => {
-                    match self.wam_prelude.code_repo.code[index_loc] {
-                        Line::IndexingCode(ref mut indexing_code) => match &mut indexing_code[0] {
+                    match self.wam_prelude.code[index_loc] {
+                        Instruction::IndexingCode(ref mut indexing_code) => match &mut indexing_code[0] {
                             IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(
                                 _,
                                 ref mut v,
@@ -784,16 +776,13 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     }
                 }
                 RetractionRecord::ModifiedTryMeElse(instr_loc, o) => {
-                    self.wam_prelude.code_repo.code[instr_loc] =
-                        Line::Choice(ChoiceInstruction::TryMeElse(o));
+                    self.wam_prelude.code[instr_loc] = Instruction::TryMeElse(o);
                 }
                 RetractionRecord::ModifiedRetryMeElse(instr_loc, o) => {
-                    self.wam_prelude.code_repo.code[instr_loc] =
-                        Line::Choice(ChoiceInstruction::RetryMeElse(o));
+                    self.wam_prelude.code[instr_loc] = Instruction::RetryMeElse(o);
                 }
                 RetractionRecord::ModifiedRevJmpBy(instr_loc, o) => {
-                    self.wam_prelude.code_repo.code[instr_loc] =
-                        Line::Control(ControlInstruction::RevJmpBy(o));
+                    self.wam_prelude.code[instr_loc] = Instruction::RevJmpBy(o);
                 }
                 RetractionRecord::SkeletonClausePopBack(compilation_target, key) => {
                     match self
@@ -959,7 +948,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     }
                 }
                 RetractionRecord::ReplacedIndexingLine(index_loc, indexing_code) => {
-                    self.wam_prelude.code_repo.code[index_loc] = Line::IndexingCode(indexing_code);
+                    self.wam_prelude.code[index_loc] = Instruction::IndexingCode(indexing_code);
                 }
                 RetractionRecord::RemovedLocalSkeletonClauseLocations(
                     compilation_target,
@@ -992,34 +981,34 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     }
                 }
                 RetractionRecord::ReplacedDynamicElseOffset(instr_loc, next) => {
-                    match self.wam_prelude.code_repo.code[instr_loc] {
-                        Line::Choice(ChoiceInstruction::DynamicElse(
+                    match self.wam_prelude.code[instr_loc] {
+                        Instruction::DynamicElse(
                             _,
                             _,
                             NextOrFail::Next(ref mut o),
-                        ))
-                        | Line::Choice(ChoiceInstruction::DynamicInternalElse(
+                        )
+                        | Instruction::DynamicInternalElse(
                             _,
                             _,
                             NextOrFail::Next(ref mut o),
-                        )) => {
+                        ) => {
                             *o = next;
                         }
                         _ => {}
                     }
                 }
                 RetractionRecord::AppendedNextOrFail(instr_loc, fail) => {
-                    match self.wam_prelude.code_repo.code[instr_loc] {
-                        Line::Choice(ChoiceInstruction::DynamicElse(
+                    match self.wam_prelude.code[instr_loc] {
+                        Instruction::DynamicElse(
                             _,
                             _,
                             ref mut next_or_fail,
-                        ))
-                        | Line::Choice(ChoiceInstruction::DynamicInternalElse(
+                        )
+                        | Instruction::DynamicInternalElse(
                             _,
                             _,
                             ref mut next_or_fail,
-                        )) => {
+                        ) => {
                             *next_or_fail = fail;
                         }
                         _ => {}
@@ -1384,7 +1373,7 @@ impl<'a> MachinePreludeView<'a> {
 }
 
 impl Machine {
-    pub(crate) fn use_module(&mut self) {
+    pub(crate) fn use_module(&mut self) -> CallResult {
         let subevacuable_addr = self
             .machine_st
             .store(self.machine_st.deref(self.machine_st.registers[2]));
@@ -1395,7 +1384,7 @@ impl Machine {
             match payload.compilation_target {
                 CompilationTarget::Module(module_name) => module_name,
                 CompilationTarget::User => {
-                    return;
+                    return Ok(());
                 }
             }
         });
@@ -1415,10 +1404,10 @@ impl Machine {
         };
 
         let result = use_module();
-        self.restore_load_state_payload(result);
+        self.restore_load_state_payload(result)
     }
 
-    pub(crate) fn load_compiled_library(&mut self) {
+    pub(crate) fn load_compiled_library(&mut self) -> CallResult {
         let library = cell_as_atom!(
             self.machine_st.store(self.machine_st.deref(self.machine_st.registers[1]))
         );
@@ -1426,7 +1415,7 @@ impl Machine {
         if let Some(module) = self.indices.modules.get(&library) {
             if let ListingSource::DynamicallyGenerated = module.listing_src {
                 self.machine_st.fail = true;
-                return;
+                return Ok(());
             }
 
             let mut loader = self.loader_from_heap_evacuable(temp_v!(3));
@@ -1444,13 +1433,14 @@ impl Machine {
             };
 
             let result = import_module();
-            self.restore_load_state_payload(result);
+            self.restore_load_state_payload(result)
         } else {
             self.machine_st.fail = true;
+            Ok(())
         }
     }
 
-    pub(crate) fn declare_module(&mut self) {
+    pub(crate) fn declare_module(&mut self) -> CallResult {
         let module_name = cell_as_atom!(
             self.machine_st.store(self.machine_st.deref(self.machine_st.registers[1]))
         );
@@ -1471,34 +1461,34 @@ impl Machine {
         };
 
         let result = declare_module();
-        self.restore_load_state_payload(result);
+        self.restore_load_state_payload(result)
     }
 
     #[inline]
-    pub(crate) fn add_discontiguous_predicate(&mut self) {
+    pub(crate) fn add_discontiguous_predicate(&mut self) -> CallResult {
         self.add_extensible_predicate_declaration(
             |loader, compilation_target, clause_name, arity| {
                 loader.add_discontiguous_predicate(compilation_target, clause_name, arity)
             },
-        );
+        )
     }
 
     #[inline]
-    pub(crate) fn add_dynamic_predicate(&mut self) {
+    pub(crate) fn add_dynamic_predicate(&mut self) -> CallResult {
         self.add_extensible_predicate_declaration(
             |loader, compilation_target, clause_name, arity| {
                 loader.add_dynamic_predicate(compilation_target, clause_name, arity)
             },
-        );
+        )
     }
 
     #[inline]
-    pub(crate) fn add_multifile_predicate(&mut self) {
+    pub(crate) fn add_multifile_predicate(&mut self) -> CallResult {
         self.add_extensible_predicate_declaration(
             |loader, compilation_target, clause_name, arity| {
                 loader.add_multifile_predicate(compilation_target, clause_name, arity)
             },
-        );
+        )
     }
 
     fn add_extensible_predicate_declaration(
@@ -1509,7 +1499,7 @@ impl Machine {
             Atom,
             usize,
         ) -> Result<(), SessionError>,
-    ) {
+    ) -> CallResult {
         let module_name = cell_as_atom!(
             self.machine_st.store(self.machine_st.deref(self.machine_st.registers[1]))
         );
@@ -1543,10 +1533,10 @@ impl Machine {
         };
 
         let result = add_predicate_decl();
-        self.restore_load_state_payload(result);
+        self.restore_load_state_payload(result)
     }
 
-    pub(crate) fn add_term_expansion_clause(&mut self) {
+    pub(crate) fn add_term_expansion_clause(&mut self) -> CallResult {
         let mut loader = self.loader_from_heap_evacuable(temp_v!(2));
 
         let add_clause = || {
@@ -1564,10 +1554,10 @@ impl Machine {
         };
 
         let result = add_clause();
-        self.restore_load_state_payload(result);
+        self.restore_load_state_payload(result)
     }
 
-    pub(crate) fn add_goal_expansion_clause(&mut self) {
+    pub(crate) fn add_goal_expansion_clause(&mut self) -> CallResult {
         let target_module_name = cell_as_atom!(
             self.machine_st.store(self.machine_st.deref(self.machine_st.registers[1]))
         );
@@ -1594,10 +1584,10 @@ impl Machine {
         };
 
         let result = add_clause();
-        self.restore_load_state_payload(result);
+        self.restore_load_state_payload(result)
     }
 
-    pub(crate) fn add_in_situ_filename_module(&mut self) {
+    pub(crate) fn add_in_situ_filename_module(&mut self) -> CallResult {
         let mut loader = self.loader_from_heap_evacuable(temp_v!(1));
 
         let add_in_situ_filename_module = || {
@@ -1643,7 +1633,7 @@ impl Machine {
         };
 
         let result = add_in_situ_filename_module();
-        self.restore_load_state_payload(result);
+        self.restore_load_state_payload(result)
     }
 
     pub(crate) fn loader_from_heap_evacuable<'a>(
@@ -1668,15 +1658,13 @@ impl Machine {
     pub(crate) fn push_load_state_payload(&mut self) {
         let payload = arena_alloc!(
             LoadStatePayload::new(
-                self.code_repo.code.len(),
+                self.code.len(),
                 LiveTermStream::new(ListingSource::User),
             ),
             &mut self.machine_st.arena
         );
 
-        let var = self.machine_st.deref(
-            self.machine_st.registers[1]
-        );
+        let var = self.machine_st.deref(self.machine_st.registers[1]);
 
         self.machine_st.bind(
             var.as_var().unwrap(),
@@ -1718,38 +1706,40 @@ impl Machine {
         self.load_contexts.pop();
     }
 
-    pub(crate) fn push_load_context(&mut self) {
-        let stream = try_or_fail!(
-            self.machine_st,
-            self.machine_st.get_stream_or_alias(
-                self.machine_st.registers[1],
-                &self.indices.stream_aliases,
-                atom!("$push_load_context"),
-                2,
-            )
-        );
+    pub(crate) fn push_load_context(&mut self) -> CallResult {
+        let stream = self.machine_st.get_stream_or_alias(
+            self.machine_st.registers[1],
+            &self.indices.stream_aliases,
+            atom!("$push_load_context"),
+            2,
+        )?;
 
         let path = cell_as_atom!(
             self.machine_st.store(self.machine_st.deref(self.machine_st.registers[2]))
         );
 
         self.load_contexts.push(LoadContext::new(path.as_str(), stream));
+        Ok(())
     }
 
     pub(crate) fn restore_load_state_payload(
         &mut self,
         result: Result<TypedArenaPtr<LiveLoadState>, SessionError>,
-    ) {
+    ) -> CallResult {
         match result {
             Ok(_payload) => {
+                Ok(())
             }
             Err(e) => {
-                self.throw_session_error(e, (atom!("load"), 1));
+                let err = self.machine_st.session_error(e);
+                let stub = functor_stub(atom!("load"), 1);
+
+                Err(self.machine_st.error_form(err, stub))
             }
         }
     }
 
-    pub(crate) fn scoped_clause_to_evacuable(&mut self) {
+    pub(crate) fn scoped_clause_to_evacuable(&mut self) -> CallResult {
         let module_name = cell_as_atom!(
             self.machine_st.store(self.machine_st.deref(self.machine_st.registers[1]))
         );
@@ -1762,18 +1752,18 @@ impl Machine {
         };
 
         let result = loader.read_and_enqueue_term(temp_v!(2), compilation_target);
-        self.restore_load_state_payload(result);
+        self.restore_load_state_payload(result)
     }
 
-    pub(crate) fn clause_to_evacuable(&mut self) {
+    pub(crate) fn clause_to_evacuable(&mut self) -> CallResult {
         let loader = self.loader_from_heap_evacuable(temp_v!(2));
         let compilation_target = loader.payload.compilation_target;
 
         let result = loader.read_and_enqueue_term(temp_v!(1), compilation_target);
-        self.restore_load_state_payload(result);
+        self.restore_load_state_payload(result)
     }
 
-    pub(crate) fn conclude_load(&mut self) {
+    pub(crate) fn conclude_load(&mut self) -> CallResult {
         let mut loader = self.loader_from_heap_evacuable(temp_v!(1));
 
         let compile_final_terms = || {
@@ -1786,7 +1776,7 @@ impl Machine {
         };
 
         let result = compile_final_terms();
-        self.restore_load_state_payload(result);
+        self.restore_load_state_payload(result)
     }
 
     pub(crate) fn load_context_source(&mut self) {
@@ -1852,7 +1842,7 @@ impl Machine {
         }
     }
 
-    pub(crate) fn compile_assert<'a>(&'a mut self, append_or_prepend: AppendOrPrepend) {
+    pub(crate) fn compile_assert<'a>(&'a mut self, append_or_prepend: AppendOrPrepend) -> CallResult {
         let key = self
             .machine_st
             .read_predicate_key(self.machine_st[temp_v!(3)], self.machine_st[temp_v!(4)]);
@@ -1906,26 +1896,27 @@ impl Machine {
         };
 
         match compile_assert() {
-            Ok(_) => {}
+            Ok(_) => Ok(()),
             Err(e) => {
-                let error_pi = match append_or_prepend {
-                    AppendOrPrepend::Append  => (atom!("assertz"), 1),
-                    AppendOrPrepend::Prepend => (atom!("asserta"), 1),
+                let stub = match append_or_prepend {
+                    AppendOrPrepend::Append  => functor_stub(atom!("assertz"), 1),
+                    AppendOrPrepend::Prepend => functor_stub(atom!("asserta"), 1),
                 };
+                let err = self.machine_st.session_error(e);
 
-                self.throw_session_error(e, error_pi);
+                Err(self.machine_st.error_form(err, stub))
             }
         }
     }
 
-    pub(crate) fn abolish_clause(&mut self) {
+    pub(crate) fn abolish_clause(&mut self) -> CallResult {
         let module_name = cell_as_atom!(
             self.machine_st.store(self.machine_st.deref(self.machine_st.registers[1]))
         );
 
         let key = self
             .machine_st
-            .read_predicate_key(self.machine_st[temp_v!(2)], self.machine_st[temp_v!(3)]);
+            .read_predicate_key(self.machine_st.registers[2], self.machine_st.registers[3]);
 
         let compilation_target = match module_name {
             atom!("user") => CompilationTarget::User,
@@ -2000,14 +1991,16 @@ impl Machine {
         };
 
         match abolish_clause() {
-            Ok(_) => {}
+            Ok(_) => Ok(()),
             Err(e) => {
-                self.throw_session_error(e, (atom!("abolish"), 1));
+                let stub = functor_stub(atom!("abolish"), 1);
+                let err = self.machine_st.session_error(e);
+                Err(self.machine_st.error_form(err, stub))
             }
         }
     }
 
-    pub(crate) fn retract_clause(&mut self) {
+    pub(crate) fn retract_clause(&mut self) -> CallResult {
         let key = self
             .machine_st
             .read_predicate_key(self.machine_st[temp_v!(1)], self.machine_st[temp_v!(2)]);
@@ -2066,14 +2059,17 @@ impl Machine {
         };
 
         match retract_clause() {
-            Ok(_) => {}
+            Ok(_) => Ok(()),
             Err(e) => {
-                self.throw_session_error(e, (atom!("retract"), 1));
+                let stub = functor_stub(atom!("retract"), 1);
+                let err = self.machine_st.session_error(e);
+
+                Err(self.machine_st.error_form(err, stub))
             }
         }
     }
 
-    pub(crate) fn is_consistent_with_term_queue(&mut self) {
+    pub(crate) fn is_consistent_with_term_queue(&mut self) -> CallResult {
         let module_name = cell_as_atom!(
             self.machine_st.store(self.machine_st.deref(self.machine_st.registers[1]))
         );
@@ -2095,10 +2091,10 @@ impl Machine {
              || !key.is_consistent(&loader.payload.predicates);
 
         let result = LiveLoadAndMachineState::evacuate(loader);
-        self.restore_load_state_payload(result);
+        self.restore_load_state_payload(result)
     }
 
-    pub(crate) fn flush_term_queue(&mut self) {
+    pub(crate) fn flush_term_queue(&mut self) -> CallResult {
         let mut loader = self.loader_from_heap_evacuable(temp_v!(1));
 
         let flush_term_queue = || {
@@ -2110,10 +2106,10 @@ impl Machine {
         };
 
         let result = flush_term_queue();
-        self.restore_load_state_payload(result);
+        self.restore_load_state_payload(result)
     }
 
-    pub(crate) fn remove_module_exports(&mut self) {
+    pub(crate) fn remove_module_exports(&mut self) -> CallResult {
         let module_name = cell_as_atom!(
             self.machine_st.store(self.machine_st.deref(self.machine_st.registers[1]))
         );
@@ -2126,10 +2122,10 @@ impl Machine {
         };
 
         let result = remove_module_exports();
-        self.restore_load_state_payload(result);
+        self.restore_load_state_payload(result)
     }
 
-    pub(crate) fn add_non_counted_backtracking(&mut self) {
+    pub(crate) fn add_non_counted_backtracking(&mut self) -> CallResult {
         let key = self
             .machine_st
             .read_predicate_key(self.machine_st[temp_v!(1)], self.machine_st[temp_v!(2)]);
@@ -2138,7 +2134,7 @@ impl Machine {
         loader.payload.non_counted_bt_preds.insert(key);
 
         let result = LiveLoadAndMachineState::evacuate(loader);
-        self.restore_load_state_payload(result);
+        self.restore_load_state_payload(result)
     }
 
     pub(crate) fn meta_predicate_property(&mut self) {
@@ -2271,10 +2267,10 @@ impl Machine {
             .read_predicate_key(self.machine_st.registers[1], self.machine_st.registers[2]);
 
         match ClauseType::from(key.0, key.1) {
-            ClauseType::BuiltIn(_) | ClauseType::Inlined(..) | ClauseType::CallN => {
+            ClauseType::BuiltIn(_) | ClauseType::Inlined(..) | ClauseType::CallN(_) => {
                 return;
             }
-            ClauseType::Named(name, arity, _) => {
+            ClauseType::Named(arity, name, _) => {
                 if let Some(module) = self.indices.modules.get(&(atom!("builtins"))) {
                     self.machine_st.fail = !module.code_dir.contains_key(&(name, arity));
                     return;

@@ -13,6 +13,7 @@ use std::vec::Vec;
 
 use rug::{Integer, Rational};
 
+use fxhash::FxBuildHasher;
 use indexmap::IndexMap;
 use modular_bitfield::error::OutOfBounds;
 use modular_bitfield::prelude::*;
@@ -286,7 +287,7 @@ impl OpDesc {
 }
 
 // name and fixity -> operator type and precedence.
-pub type OpDir = IndexMap<(Atom, Fixity), OpDesc>;
+pub type OpDir = IndexMap<(Atom, Fixity), OpDesc, FxBuildHasher>;
 
 #[derive(Debug, Clone, Copy)]
 pub struct MachineFlags {
@@ -329,7 +330,7 @@ impl Default for DoubleQuotes {
 }
 
 pub fn default_op_dir() -> OpDir {
-    let mut op_dir = OpDir::new();
+    let mut op_dir = OpDir::with_hasher(FxBuildHasher::default());
 
     op_dir.insert(
         (atom!(":-"), Fixity::In),

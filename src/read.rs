@@ -12,6 +12,8 @@ use crate::machine::streams::*;
 use crate::parser::char_reader::*;
 use crate::types::*;
 
+use fxhash::FxBuildHasher;
+
 use rustyline::error::ReadlineError;
 use rustyline::{Cmd, Config, Editor, KeyEvent};
 
@@ -257,7 +259,7 @@ impl<'a, 'b> TermWriter<'a, 'b> {
             heap,
             atom_tbl,
             queue: SubtermDeque::new(),
-            var_dict: HeapVarDict::new(),
+            var_dict: HeapVarDict::with_hasher(FxBuildHasher::default()),
         }
     }
 

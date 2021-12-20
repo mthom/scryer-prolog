@@ -4,7 +4,6 @@ use crate::types::*;
 
 use core::marker::PhantomData;
 
-// TODO: rename to 'unmark_if_iter', 'mark_if_gc'
 pub(crate) trait UnmarkPolicy {
     fn unmark(heap: &mut [HeapCellValue], current: usize) -> bool;
     fn mark(heap: &mut [HeapCellValue], current: usize);

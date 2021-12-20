@@ -55,14 +55,14 @@ pub struct MachineState {
     pub arena: Arena,
     pub(super) pdl: Vec<HeapCellValue>,
     pub(super) s: HeapPtr,
-    pub(super) p: CodePtr,
+    pub(super) p: usize,
     pub(super) oip: u32, // first internal code ptr
     pub(super) iip : u32, // second internal code ptr
     pub(super) b: usize,
     pub(super) b0: usize,
     pub(super) e: usize,
     pub(super) num_of_args: usize,
-    pub(super) cp: LocalCodePtr,
+    pub(super) cp: usize,
     pub(super) attr_var_init: AttrVarInitializer,
     pub(super) fail: bool,
     pub heap: Heap,
@@ -79,7 +79,6 @@ pub struct MachineState {
     // locations of cleaners, cut points, the previous block. for setup_call_cleanup.
     pub(super) cont_pts: Vec<(HeapCellValue, usize, usize)>,
     pub(super) cwil: CWIL,
-    pub(super) last_call: bool, // TODO: REMOVE THIS.
     pub(crate) flags: MachineFlags,
     pub(crate) cc: usize,
     pub(crate) global_clock: usize,
@@ -115,7 +114,6 @@ impl fmt::Debug for MachineState {
             .field("ball", &self.ball)
             .field("lifted_heap", &self.lifted_heap)
             .field("interms", &self.interms)
-            .field("last_call", &self.last_call)
             .field("flags", &self.flags)
             .field("cc", &self.cc)
             .field("global_clock", &self.global_clock)
@@ -365,6 +363,20 @@ impl<'a> CopierTarget for CopyBallTerm<'a> {
 }
 
 impl MachineState {
+    pub(crate) fn backtrack(&mut self) {
+        let b = self.b;
+        let or_frame = self.stack.index_or_frame(b);
+
+        self.b0 = or_frame.prelude.b0;
+        self.p = or_frame.prelude.bp;
+
+        self.oip = or_frame.prelude.boip;
+        self.iip = or_frame.prelude.biip;
+
+        self.pdl.clear();
+        self.fail = false;
+    }
+
     pub(crate) fn increment_call_count(&mut self) -> CallResult {
         if self.cwil.inference_limit_exceeded || self.ball.stub.len() > 0 {
             return Ok(());
@@ -422,17 +434,19 @@ impl MachineState {
         self.error_form(err, stub)
     }
 
-    pub(super) fn call_at_index(&mut self, arity: usize, p: LocalCodePtr) {
-        self.cp.assign_if_local(self.p + 1);
+    #[inline(always)]
+    pub(super) fn call_at_index(&mut self, arity: usize, p: usize) {
+        self.cp = self.p + 1;
+        self.p = p;
         self.num_of_args = arity;
         self.b0 = self.b;
-        self.p = CodePtr::Local(p);
     }
 
-    pub(super) fn execute_at_index(&mut self, arity: usize, p: LocalCodePtr) {
+    #[inline(always)]
+    pub(super) fn execute_at_index(&mut self, arity: usize, p: usize) {
         self.num_of_args = arity;
         self.b0 = self.b;
-        self.p = CodePtr::Local(p);
+        self.p = p;
     }
 
     pub fn read_term(&mut self, stream: Stream, indices: &mut IndexStore) -> CallResult {
@@ -467,7 +481,7 @@ impl MachineState {
 
         if stream.past_end_of_stream() {
             if EOFAction::Reset != stream.options().eof_action() {
-                return return_from_clause!(self.last_call, self);
+                return Ok(());
             } else if self.fail {
                 return Ok(());
             }
@@ -710,7 +724,7 @@ impl MachineState {
         or_frame.prelude.e = self.e;
         or_frame.prelude.cp = self.cp;
         or_frame.prelude.b = self.b;
-        or_frame.prelude.bp = self.p.local() + offset;
+        or_frame.prelude.bp = self.p + offset;
         or_frame.prelude.boip = 0;
         or_frame.prelude.biip = 0;
         or_frame.prelude.tr = self.tr;
@@ -720,7 +734,7 @@ impl MachineState {
         self.b = b;
 
         for i in 0..n {
-            self.stack[stack_loc!(OrFrame, b, i)] = self.registers[i+1];
+            or_frame[i] = self.registers[i+1];
         }
 
         self.hb = self.heap.len();
@@ -737,7 +751,7 @@ impl MachineState {
         or_frame.prelude.e = self.e;
         or_frame.prelude.cp = self.cp;
         or_frame.prelude.b = self.b;
-        or_frame.prelude.bp = self.p.local(); // + 1; in self.iip now!
+        or_frame.prelude.bp = self.p; // + 1; in self.iip now!
         or_frame.prelude.boip = self.oip;
         or_frame.prelude.biip = self.iip + 1;
         or_frame.prelude.tr = self.tr;
@@ -751,7 +765,7 @@ impl MachineState {
         }
 
         self.hb = self.heap.len();
-        self.p = CodePtr::Local(dir_entry!(self.p.local().abs_loc() + offset));
+        self.p = self.p + offset;
 
         self.oip = 0;
         self.iip = 0;

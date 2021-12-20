@@ -1,9 +1,8 @@
 use crate::atom_table::*;
-use crate::parser::ast::*;
-
-use crate::clause_types::*;
 use crate::forms::*;
+use crate::instructions::*;
 use crate::machine::machine_indices::*;
+use crate::parser::ast::*;
 
 use std::cell::Cell;
 use std::collections::VecDeque;
@@ -52,7 +51,7 @@ impl<'a> TermIterState<'a> {
         match term {
             Term::AnonVar => TermIterState::AnonVar(lvl),
             Term::Clause(cell, name, subterms) => {
-                let ct = ClauseType::Named(name.clone(), subterms.len(), CodeIndex::default());
+                let ct = ClauseType::Named(subterms.len(), *name, CodeIndex::default());
                 TermIterState::Clause(lvl, 0, cell, ct, subterms)
             }
             Term::Cons(cell, head, tail) => {
@@ -112,8 +111,8 @@ impl<'a> QueryIterator<'a> {
 
     fn new(term: &'a QueryTerm) -> Self {
         match term {
-            &QueryTerm::Clause(ref cell, ClauseType::CallN, ref terms, _) => {
-                let state = TermIterState::Clause(Level::Root, 1, cell, ClauseType::CallN, terms);
+            &QueryTerm::Clause(ref cell, ClauseType::CallN(arity), ref terms, _) => {
+                let state = TermIterState::Clause(Level::Root, 1, cell, ClauseType::CallN(arity), terms);
                 QueryIterator {
                     state_stack: vec![state],
                 }
@@ -164,7 +163,7 @@ impl<'a> Iterator for QueryIterator<'a> {
                 TermIterState::Clause(lvl, child_num, cell, ct, child_terms) => {
                     if child_num == child_terms.len() {
                         match ct {
-                            ClauseType::CallN => {
+                            ClauseType::CallN(_) => {
                                 self.push_subterm(Level::Shallow, &child_terms[0]);
                             }
                             ClauseType::Named(..) => {
@@ -499,7 +498,7 @@ impl<'a> ChunkedIterator<'a> {
                 }
                 ChunkedTerm::BodyTerm(&QueryTerm::Clause(
                     _,
-                    ClauseType::CallN,
+                    ClauseType::CallN(_),
                     ref subterms,
                     _,
                 )) => {

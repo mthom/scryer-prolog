@@ -3,6 +3,7 @@ use crate::temp_v;
 
 use crate::fixtures::*;
 use crate::forms::*;
+use crate::instructions::*;
 use crate::machine::machine_indices::*;
 
 use std::cell::Cell;
@@ -11,7 +12,7 @@ use std::rc::Rc;
 pub(crate) trait Allocator<'a> {
     fn new() -> Self;
 
-    fn mark_anon_var<Target>(&mut self, _: Level, _: GenContext, _: &mut Vec<Target>)
+    fn mark_anon_var<Target>(&mut self, _: Level, _: GenContext, _: &mut Code)
     where
         Target: crate::targets::CompilationTarget<'a>;
     fn mark_non_var<Target>(
@@ -19,7 +20,7 @@ pub(crate) trait Allocator<'a> {
         _: Level,
         _: GenContext,
         _: &'a Cell<RegType>,
-        _: &mut Vec<Target>,
+        _: &mut Code,
     ) where
         Target: crate::targets::CompilationTarget<'a>;
     fn mark_reserved_var<Target>(
@@ -28,7 +29,7 @@ pub(crate) trait Allocator<'a> {
         _: Level,
         _: &'a Cell<VarReg>,
         _: GenContext,
-        _: &mut Vec<Target>,
+        _: &mut Code,
         _: RegType,
         _: bool,
     ) where
@@ -39,7 +40,7 @@ pub(crate) trait Allocator<'a> {
         _: Level,
         _: &'a Cell<VarReg>,
         _: GenContext,
-        _: &mut Vec<Target>,
+        _: &mut Code,
     ) where
         Target: crate::targets::CompilationTarget<'a>;
 

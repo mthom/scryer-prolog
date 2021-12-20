@@ -1,6 +1,6 @@
 use crate::atom_table::*;
-use crate::clause_types::*;
 use crate::forms::*;
+use crate::instructions::*;
 use crate::iterators::*;
 use crate::machine::loader::*;
 use crate::machine::machine_errors::*;
@@ -206,34 +206,6 @@ fn setup_use_module_decl(mut terms: Vec<Term>) -> Result<ModuleSource, Compilati
         _ => Err(CompilationError::InvalidUseModuleDecl),
     }
 }
-
-/*
-fn setup_double_quotes(mut terms: Vec<Box<Term>>) -> Result<DoubleQuotes, CompilationError> {
-    let dbl_quotes = *terms.pop().unwrap();
-
-    match terms[0].as_ref() {
-        Term::Literal(_, Literal::Atom(ref name, _))
-            if name.as_str() == "double_quotes" => {
-                match dbl_quotes {
-                    Term::Literal(_, Literal::Atom(name, _)) => {
-                        match name.as_str() {
-                            "atom"  => Ok(DoubleQuotes::Atom),
-                            "chars" => Ok(DoubleQuotes::Chars),
-                            "codes" => Ok(DoubleQuotes::Codes),
-                            _ => Err(CompilationError::InvalidDoubleQuotesDecl),
-                        }
-                    }
-                    _ => {
-                        Err(CompilationError::InvalidDoubleQuotesDecl)
-                    }
-                }
-            },
-        _ => {
-            Err(CompilationError::InvalidDoubleQuotesDecl)
-        }
-    }
-}
- */
 
 type UseModuleExport = (ModuleSource, IndexSet<ModuleExport>);
 
@@ -735,7 +707,7 @@ impl Preprocessor {
             },
             Term::Var(..) => Ok(QueryTerm::Clause(
                 Cell::default(),
-                ClauseType::CallN,
+                ClauseType::CallN(1),
                 vec![term],
                 false,
             )),

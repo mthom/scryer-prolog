@@ -59,14 +59,12 @@ call(G, A, B, C, D, E, F, G) :- '$call'(G, A, B, C, D, E, F, G).
 
 call(G, A, B, C, D, E, F, G, H) :- '$call'(G, A, B, C, D, E, F, G, H).
 
+% dynamic module resolution.
 
 Module : Predicate :-
     (  atom(Module) -> '$module_call'(Module, Predicate)
     ;  throw(error(type_error(atom, Module), (:)/2))
     ).
-
-
-% dynamic module resolution.
 
 :(Module, Predicate, A1) :-
     (  atom(Module) ->
