@@ -415,21 +415,12 @@ impl MachineState {
                         return Ok(());
                     }
 
-                    let list_of_var_eqs = push_var_eq_functors(
-                        &mut self.heap,
-                        term_write_result.var_dict.iter(),
-                        &indices.op_dir,
-                        self.atom_tbl.clone(),
-                    );
-
                     let mut singleton_var_set: IndexMap<Ref, bool> = IndexMap::new();
-                    let mut var_list = vec![];
 
                     for addr in self.acyclic_pre_order_iter(term) {
                         if let Some(var) = addr.as_var() {
                             if !singleton_var_set.contains_key(&var) {
                                 singleton_var_set.insert(var, true);
-                                var_list.push(addr);
                             } else {
                                 singleton_var_set.insert(var, false);
                             }
@@ -449,9 +440,28 @@ impl MachineState {
                         self.atom_tbl.clone(),
                     );
 
+                    let mut var_list = Vec::with_capacity(singleton_var_set.len());
+
+                    for (var_name, addr) in term_write_result.var_dict {
+                        if let Some(var) = addr.as_var() {
+                            let idx = singleton_var_set.get_index_of(&var).unwrap();
+                            var_list.push((var_name, addr, idx));
+                        }
+                    }
+
+                    var_list.sort_by(|(_,_,idx_1),(_,_,idx_2)| idx_1.cmp(idx_2));
+
+                    let list_of_var_eqs = push_var_eq_functors(
+                        &mut self.heap,
+                        var_list.iter().map(|(var_name, var,_)| (var_name,var)),
+                        &indices.op_dir,
+                        self.atom_tbl.clone(),
+                    );
+
                     let singleton_addr = self[temp_v!(3)];
-                    let singletons_offset =
-                        Addr::HeapCell(self.heap.to_list(singleton_var_list.into_iter()));
+                    let singletons_offset = Addr::HeapCell(self.heap.to_list(
+                        singleton_var_list.into_iter()
+                    ));
 
                     (self.unify_fn)(self, singletons_offset, singleton_addr);
 
@@ -460,7 +470,9 @@ impl MachineState {
                     }
 
                     let vars_addr = self[temp_v!(4)];
-                    let vars_offset = Addr::HeapCell(self.heap.to_list(var_list.into_iter()));
+                    let vars_offset = Addr::HeapCell(self.heap.to_list(
+                        var_list.into_iter().map(|(_,var,_)| var)
+                    ));
 
                     (self.unify_fn)(self, vars_offset, vars_addr);
 
