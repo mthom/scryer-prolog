@@ -1,6 +1,4 @@
-/*  Part of SWI-Prolog
-
-    Author:        R.A.O'Keefe, Vitor Santos Costa, Jan Wielemaker
+/*  Author:        R.A.O'Keefe, Vitor Santos Costa, Jan Wielemaker
     E-mail:        J.Wielemaker@vu.nl
     WWW:           http://www.swi-prolog.org
     Copyright (c)  1984-2021, VU University Amsterdam
@@ -133,11 +131,9 @@ vertices_edges_to_ugraph(Vertices, Edges, Graph) :-
 
 % replace with real msort/2 when available
 msort_(List, Sorted) :-
-    maplist(item_pair, List, Pairs),
+    pairs_keys(Pairs, List),
     keysort(Pairs, SortedPairs),
     pairs_keys(SortedPairs, Sorted).
-
-item_pair(X, X-X).
 
 add_vertices(Graph, Vertices, NewGraph) :-
     % msort/2 not available in Scryer Prolog yet: msort(Vertices, V1),
