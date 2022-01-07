@@ -26,6 +26,8 @@ considered ready for merging into master, among them:
 * Greatly reducing the number of instructions used to compile disjunctives
 * Storing short atoms to heap cells without writing them to the atom table
 
+The rebis-dev branch should be built with **Rust 1.57 and up**.
+
 ## Phase 1
 
 Produce an implementation of the Warren Abstract Machine in Rust, done
