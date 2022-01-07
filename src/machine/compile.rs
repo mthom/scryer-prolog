@@ -1,18 +1,22 @@
-use prolog_parser::clause_name;
-
+use crate::atom_table::*;
 use crate::codegen::*;
 use crate::debray_allocator::*;
-use crate::indexing::{merge_clause_index, remove_index, IndexingCodePtr};
+use crate::forms::*;
+use crate::indexing::{merge_clause_index, remove_index};
+use crate::instructions::*;
 use crate::machine::load_state::*;
 use crate::machine::loader::*;
+use crate::machine::machine_errors::*;
 use crate::machine::preprocessor::*;
 use crate::machine::term_stream::*;
 use crate::machine::*;
+use crate::parser::ast::*;
 
 use slice_deque::{sdeq, SliceDeque};
 
 use std::cell::Cell;
 use std::collections::VecDeque;
+use std::mem;
 use std::ops::Range;
 
 struct StandaloneCompileResult {
@@ -25,17 +29,21 @@ pub(super) fn bootstrapping_compile(
     wam: &mut Machine,
     listing_src: ListingSource,
 ) -> Result<(), SessionError> {
-    let stream = &mut parsing_stream(stream)?;
-    let term_stream = BootstrappingTermStream::from_prolog_stream(
+    let (wam_prelude, machine_st) = wam.prelude_view_and_machine_st();
+
+    let term_stream = BootstrappingTermStream::from_char_reader(
         stream,
-        wam.machine_st.atom_tbl.clone(),
-        wam.machine_st.flags,
+        machine_st,
         listing_src,
     );
 
-    let loader = Loader::new(term_stream, wam);
-    loader.load()?;
+    let payload = BootstrappingLoadState(
+        LoadStatePayload::new(wam_prelude.code.len(), term_stream)
+    );
 
+    let loader: Loader<'_, BootstrappingLoadState> = Loader { payload, wam_prelude };
+
+    loader.load()?;
     Ok(())
 }
 
@@ -57,7 +65,7 @@ pub(super) fn compile_appendix(
     mut queue: VecDeque<TopLevel>,
     jmp_by_locs: Vec<usize>,
     non_counted_bt: bool,
-    atom_tbl: TabledData<Atom>,
+    atom_tbl: &mut AtomTable,
 ) -> Result<(), CompilationError> {
     let mut jmp_by_locs = VecDeque::from(jmp_by_locs);
 
@@ -65,7 +73,8 @@ pub(super) fn compile_appendix(
         let code_len = code.len();
 
         match &mut code[jmp_by_offset] {
-            &mut Line::Control(ControlInstruction::JmpBy(_, ref mut offset, ..)) => {
+            &mut Instruction::JmpByCall(_, ref mut offset, ..) |
+            &mut Instruction::JmpByExecute(_, ref mut offset, ..) => {
                 *offset = code_len - jmp_by_offset;
             }
             _ => {
@@ -80,7 +89,7 @@ pub(super) fn compile_appendix(
             non_counted_bt,
         };
 
-        let mut cg = CodeGenerator::<DebrayAllocator>::new(atom_tbl.clone(), settings);
+        let mut cg = CodeGenerator::<DebrayAllocator>::new(atom_tbl, settings);
 
         let tl = queue.pop_front().unwrap();
         let decl_code = compile_relation(&mut cg, &tl)?;
@@ -136,20 +145,20 @@ fn derelictize_try_me_else(
     retraction_info: &mut RetractionInfo,
 ) -> Option<usize> {
     match &mut code[index] {
-        Line::Choice(ChoiceInstruction::DynamicElse(_, _, NextOrFail::Next(0))) => None,
-        Line::Choice(ChoiceInstruction::DynamicElse(_, _, NextOrFail::Next(ref mut o))) => {
+        Instruction::DynamicElse(_, _, NextOrFail::Next(0)) => None,
+        Instruction::DynamicElse(_, _, NextOrFail::Next(ref mut o)) => {
             retraction_info.push_record(RetractionRecord::ReplacedDynamicElseOffset(index, *o));
             Some(mem::replace(o, 0))
         }
-        Line::Choice(ChoiceInstruction::DynamicInternalElse(_, _, NextOrFail::Next(0))) => None,
-        Line::Choice(ChoiceInstruction::DynamicInternalElse(_, _, NextOrFail::Next(ref mut o))) => {
+        Instruction::DynamicInternalElse(_, _, NextOrFail::Next(0)) => None,
+        Instruction::DynamicInternalElse(_, _, NextOrFail::Next(ref mut o)) => {
             retraction_info.push_record(RetractionRecord::ReplacedDynamicElseOffset(index, *o));
             Some(mem::replace(o, 0))
         }
-        Line::Choice(ChoiceInstruction::DynamicElse(_, _, NextOrFail::Fail(_)))
-        | Line::Choice(ChoiceInstruction::DynamicInternalElse(_, _, NextOrFail::Fail(_))) => None,
-        Line::Choice(ChoiceInstruction::TryMeElse(0)) => None,
-        Line::Choice(ChoiceInstruction::TryMeElse(ref mut o)) => {
+        Instruction::DynamicElse(_, _, NextOrFail::Fail(_)) |
+        Instruction::DynamicInternalElse(_, _, NextOrFail::Fail(_)) => None,
+        Instruction::TryMeElse(0) => None,
+        Instruction::TryMeElse(ref mut o) => {
             retraction_info.push_record(RetractionRecord::ModifiedTryMeElse(index, *o));
             Some(mem::replace(o, 0))
         }
@@ -164,6 +173,7 @@ fn merge_indices(
     target_index_loc: usize,
     index_range: Range<usize>,
     skeleton: &mut [ClauseIndexInfo],
+    retracted_dynamic_clauses: &Option<Vec<ClauseIndexInfo>>,
     retraction_info: &mut RetractionInfo,
 ) {
     for clause_index in index_range {
@@ -174,7 +184,7 @@ fn merge_indices(
             let clause_loc =
                 find_inner_choice_instr(code, skeleton[clause_index].clause_start, index_loc);
 
-            let target_indexing_line = to_indexing_line_mut(&mut code[target_index_loc]).unwrap();
+            let target_indexing_line = code[target_index_loc].to_indexing_line_mut().unwrap();
 
             skeleton[clause_index]
                 .opt_arg_index_key
@@ -183,6 +193,7 @@ fn merge_indices(
             merge_clause_index(
                 target_indexing_line,
                 &mut skeleton[0..clause_index + 1],
+                retracted_dynamic_clauses,
                 clause_loc,
                 AppendOrPrepend::Append,
             );
@@ -200,8 +211,8 @@ fn merge_indices(
 fn find_outer_choice_instr(code: &Code, mut index: usize) -> usize {
     loop {
         match &code[index] {
-            Line::Choice(ChoiceInstruction::DynamicElse(_, _, NextOrFail::Next(i)))
-            | Line::Choice(ChoiceInstruction::DynamicInternalElse(_, _, NextOrFail::Next(i)))
+            Instruction::DynamicElse(_, _, NextOrFail::Next(i)) |
+            Instruction::DynamicInternalElse(_, _, NextOrFail::Next(i))
                 if *i > 0 =>
             {
                 index += i;
@@ -216,15 +227,15 @@ fn find_outer_choice_instr(code: &Code, mut index: usize) -> usize {
 fn find_inner_choice_instr(code: &Code, mut index: usize, index_loc: usize) -> usize {
     loop {
         match &code[index] {
-            Line::Choice(ChoiceInstruction::TryMeElse(o))
-            | Line::Choice(ChoiceInstruction::RetryMeElse(o)) => {
+            Instruction::TryMeElse(o) |
+            Instruction::RetryMeElse(o) => {
                 if *o > 0 {
                     return index;
                 } else {
                     index = index_loc;
                 }
             }
-            &Line::Choice(ChoiceInstruction::DynamicElse(_, _, next_or_fail)) => match next_or_fail
+            &Instruction::DynamicElse(_, _, next_or_fail) => match next_or_fail
             {
                 NextOrFail::Next(i) => {
                     if i == 0 {
@@ -237,7 +248,7 @@ fn find_inner_choice_instr(code: &Code, mut index: usize, index_loc: usize) -> u
                     index = index_loc;
                 }
             },
-            &Line::Choice(ChoiceInstruction::DynamicInternalElse(_, _, next_or_fail)) => {
+            &Instruction::DynamicInternalElse(_, _, next_or_fail) => {
                 match next_or_fail {
                     NextOrFail::Next(i) => {
                         if i == 0 {
@@ -251,20 +262,20 @@ fn find_inner_choice_instr(code: &Code, mut index: usize, index_loc: usize) -> u
                     }
                 }
             }
-            Line::Choice(ChoiceInstruction::TrustMe(_)) => {
+            Instruction::TrustMe(_) => {
                 return index;
             }
-            Line::IndexingCode(indexing_code) => match &indexing_code[0] {
+            Instruction::IndexingCode(indexing_code) => match &indexing_code[0] {
                 IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(_, v, ..)) => match v {
                     IndexingCodePtr::External(v) => {
                         index += v;
                     }
                     IndexingCodePtr::DynamicExternal(v) => match &code[index + v] {
-                        &Line::Choice(ChoiceInstruction::DynamicInternalElse(
+                        &Instruction::DynamicInternalElse(
                             _,
                             _,
                             NextOrFail::Next(0),
-                        )) => {
+                        ) => {
                             return index + v;
                         }
                         _ => {
@@ -277,7 +288,7 @@ fn find_inner_choice_instr(code: &Code, mut index: usize, index_loc: usize) -> u
                     unreachable!();
                 }
             },
-            Line::Control(ControlInstruction::RevJmpBy(offset)) => {
+            Instruction::RevJmpBy(offset) => {
                 index -= offset;
             }
             _ => {
@@ -300,9 +311,7 @@ fn remove_index_from_subsequence(
 ) {
     if let Some(index_loc) = opt_arg_index_key.switch_on_term_loc() {
         let clause_start = find_inner_choice_instr(code, clause_start, index_loc);
-
-        let target_indexing_line = to_indexing_line_mut(&mut code[index_loc]).unwrap();
-
+        let target_indexing_line = code[index_loc].to_indexing_line_mut().unwrap();
         let offset = clause_start - index_loc + 1;
 
         remove_index(opt_arg_index_key, target_indexing_line, offset);
@@ -341,7 +350,7 @@ fn merge_indexed_subsequences(
     );
 
     match &mut code[inner_try_me_else_loc] {
-        Line::Choice(ChoiceInstruction::TryMeElse(ref mut o)) => {
+        Instruction::TryMeElse(ref mut o) => {
             retraction_info.push_record(RetractionRecord::ModifiedTryMeElse(
                 inner_try_me_else_loc,
                 *o,
@@ -349,15 +358,15 @@ fn merge_indexed_subsequences(
 
             match *o {
                 0 => {
-                    code[inner_try_me_else_loc] = Line::Choice(ChoiceInstruction::TrustMe(0));
+                    code[inner_try_me_else_loc] = Instruction::TrustMe(0);
                 }
                 o => match &code[inner_try_me_else_loc + o] {
-                    Line::Control(ControlInstruction::RevJmpBy(0)) => {
-                        code[inner_try_me_else_loc] = Line::Choice(ChoiceInstruction::TrustMe(o));
+                    Instruction::RevJmpBy(0) => {
+                        code[inner_try_me_else_loc] = Instruction::TrustMe(o);
                     }
                     _ => {
                         code[inner_try_me_else_loc] =
-                            Line::Choice(ChoiceInstruction::RetryMeElse(o));
+                            Instruction::RetryMeElse(o);
                     }
                 },
             }
@@ -393,7 +402,7 @@ fn merge_indexed_subsequences(
             );
         }
         None => match &mut code[outer_threaded_choice_instr_loc] {
-            Line::Choice(ChoiceInstruction::TryMeElse(ref mut o)) => {
+            Instruction::TryMeElse(ref mut o) => {
                 retraction_info
                     .push_record(RetractionRecord::ModifiedTryMeElse(inner_trust_me_loc, *o));
 
@@ -422,13 +431,24 @@ fn delete_from_skeleton(
         skeleton.core.clause_assert_margin -= 1;
     }
 
-    retraction_info.push_record(RetractionRecord::RemovedSkeletonClause(
-        compilation_target,
-        key,
-        target_pos,
-        clause_index_info,
-        clause_clause_loc,
-    ));
+    if skeleton.core.is_dynamic {
+        skeleton.core.add_retracted_dynamic_clause_info(clause_index_info);
+
+        retraction_info.push_record(RetractionRecord::RemovedDynamicSkeletonClause(
+            compilation_target,
+            key,
+            target_pos,
+            clause_clause_loc,
+        ));
+    } else {
+        retraction_info.push_record(RetractionRecord::RemovedSkeletonClause(
+            compilation_target,
+            key,
+            target_pos,
+            clause_index_info,
+            clause_clause_loc,
+        ));
+    }
 
     clause_clause_loc
 }
@@ -440,60 +460,55 @@ fn blunt_leading_choice_instr(
 ) -> usize {
     loop {
         match &mut code[instr_loc] {
-            Line::Choice(ChoiceInstruction::RetryMeElse(o)) => {
+            Instruction::RetryMeElse(o) => {
                 retraction_info.push_record(RetractionRecord::ModifiedRetryMeElse(instr_loc, *o));
-
-                code[instr_loc] = Line::Choice(ChoiceInstruction::TryMeElse(*o));
-
+                code[instr_loc] = Instruction::TryMeElse(*o);
                 return instr_loc;
             }
-            Line::Choice(ChoiceInstruction::DynamicElse(_, _, NextOrFail::Next(_)))
-            | Line::Choice(ChoiceInstruction::DynamicInternalElse(_, _, NextOrFail::Next(_))) => {
+            Instruction::DynamicElse(_, _, NextOrFail::Next(_)) |
+            Instruction::DynamicInternalElse(_, _, NextOrFail::Next(_)) => {
                 return instr_loc;
             }
-            &mut Line::Choice(ChoiceInstruction::DynamicElse(b, d, NextOrFail::Fail(o))) => {
+            &mut Instruction::DynamicElse(b, d, NextOrFail::Fail(o)) => {
                 retraction_info.push_record(RetractionRecord::AppendedNextOrFail(
                     instr_loc,
                     NextOrFail::Fail(o),
                 ));
 
-                code[instr_loc] =
-                    Line::Choice(ChoiceInstruction::DynamicElse(b, d, NextOrFail::Next(0)));
-
+                code[instr_loc] = Instruction::DynamicElse(b, d, NextOrFail::Next(0));
                 return instr_loc;
             }
-            &mut Line::Choice(ChoiceInstruction::DynamicInternalElse(
+            &mut Instruction::DynamicInternalElse(
                 b,
                 d,
                 NextOrFail::Fail(o),
-            )) => {
+            ) => {
                 retraction_info.push_record(RetractionRecord::AppendedNextOrFail(
                     instr_loc,
                     NextOrFail::Fail(o),
                 ));
 
-                code[instr_loc] = Line::Choice(ChoiceInstruction::DynamicInternalElse(
+                code[instr_loc] = Instruction::DynamicInternalElse(
                     b,
                     d,
                     NextOrFail::Next(0),
-                ));
+                );
 
                 return instr_loc;
             }
-            Line::Choice(ChoiceInstruction::TrustMe(o)) => {
-                retraction_info
-                    .push_record(RetractionRecord::AppendedTrustMe(instr_loc, *o, false));
+            Instruction::TrustMe(o) => {
+                retraction_info.push_record(RetractionRecord::AppendedTrustMe(instr_loc, *o, false));
 
-                code[instr_loc] = Line::Choice(ChoiceInstruction::TryMeElse(0));
+                code[instr_loc] = Instruction::TryMeElse(0);
                 return instr_loc + 1;
             }
-            Line::Choice(ChoiceInstruction::TryMeElse(0)) => {
+            Instruction::TryMeElse(0) => {
                 return instr_loc + 1;
             }
-            Line::Choice(ChoiceInstruction::TryMeElse(o)) => {
+            Instruction::TryMeElse(o) => {
                 instr_loc += *o;
             }
-            Line::Control(ControlInstruction::RevJmpBy(o)) => {
+            Instruction::RevJmpBy(o) => {
                 instr_loc -= *o;
             }
             _ => {
@@ -509,7 +524,7 @@ fn set_switch_var_offset_to_choice_instr(
     offset: usize,
     retraction_info: &mut RetractionInfo,
 ) {
-    let target_indexing_line = to_indexing_line_mut(&mut code[index_loc]).unwrap();
+    let target_indexing_line = code[index_loc].to_indexing_line_mut().unwrap();
 
     let v = match &target_indexing_line[0] {
         &IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(_, v, ..)) => match v {
@@ -522,9 +537,9 @@ fn set_switch_var_offset_to_choice_instr(
     };
 
     match &code[index_loc + v] {
-        Line::Choice(ChoiceInstruction::TryMeElse(_))
-        | Line::Choice(ChoiceInstruction::DynamicElse(..))
-        | Line::Choice(ChoiceInstruction::DynamicInternalElse(..)) => {}
+        Instruction::TryMeElse(_) |
+        Instruction::DynamicElse(..) |
+        Instruction::DynamicInternalElse(..) => {}
         _ => {
             set_switch_var_offset(code, index_loc, offset, retraction_info);
         }
@@ -538,7 +553,7 @@ fn set_switch_var_offset(
     offset: usize,
     retraction_info: &mut RetractionInfo,
 ) {
-    let target_indexing_line = to_indexing_line_mut(&mut code[index_loc]).unwrap();
+    let target_indexing_line = code[index_loc].to_indexing_line_mut().unwrap();
 
     let old_v = match &mut target_indexing_line[0] {
         IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(_, ref mut v, ..)) => match *v {
@@ -564,73 +579,67 @@ fn internalize_choice_instr_at(
     retraction_info: &mut RetractionInfo,
 ) {
     match &mut code[instr_loc] {
-        Line::Choice(ChoiceInstruction::DynamicElse(_, _, NextOrFail::Fail(_)))
-        | Line::Choice(ChoiceInstruction::DynamicInternalElse(_, _, NextOrFail::Fail(_))) => {}
-        Line::Choice(ChoiceInstruction::DynamicElse(_, _, ref mut o @ NextOrFail::Next(0))) => {
+        Instruction::DynamicElse(_, _, NextOrFail::Fail(_)) |
+        Instruction::DynamicInternalElse(_, _, NextOrFail::Fail(_)) => {
+        }
+        Instruction::DynamicElse(_, _, ref mut o @ NextOrFail::Next(0)) => {
             retraction_info.push_record(RetractionRecord::ReplacedDynamicElseOffset(instr_loc, 0));
             *o = NextOrFail::Fail(0);
         }
-        &mut Line::Choice(ChoiceInstruction::DynamicElse(b, d, NextOrFail::Next(o))) => {
+        &mut Instruction::DynamicElse(b, d, NextOrFail::Next(o)) => {
             retraction_info.push_record(RetractionRecord::AppendedNextOrFail(
                 instr_loc,
                 NextOrFail::Next(o),
             ));
 
             match &mut code[instr_loc + o] {
-                Line::Control(ControlInstruction::RevJmpBy(p)) if *p == 0 => {
-                    code[instr_loc] =
-                        Line::Choice(ChoiceInstruction::DynamicElse(b, d, NextOrFail::Fail(o)));
+                Instruction::RevJmpBy(p) if *p == 0 => {
+                    code[instr_loc] = Instruction::DynamicElse(b, d, NextOrFail::Fail(o));
                 }
                 _ => {
-                    code[instr_loc] =
-                        Line::Choice(ChoiceInstruction::DynamicElse(b, d, NextOrFail::Next(o)));
+                    code[instr_loc] = Instruction::DynamicElse(b, d, NextOrFail::Next(o));
                 }
             }
         }
-        Line::Choice(ChoiceInstruction::DynamicInternalElse(
-            _,
-            _,
-            ref mut o @ NextOrFail::Next(0),
-        )) => {
+        Instruction::DynamicInternalElse(_, _, ref mut o @ NextOrFail::Next(0)) => {
             retraction_info.push_record(RetractionRecord::ReplacedDynamicElseOffset(instr_loc, 0));
             *o = NextOrFail::Fail(0);
         }
-        &mut Line::Choice(ChoiceInstruction::DynamicInternalElse(b, d, NextOrFail::Next(o))) => {
+        &mut Instruction::DynamicInternalElse(b, d, NextOrFail::Next(o)) => {
             retraction_info.push_record(RetractionRecord::ReplacedDynamicElseOffset(instr_loc, o));
 
             match &mut code[instr_loc + o] {
-                Line::Control(ControlInstruction::RevJmpBy(p)) if *p == 0 => {
-                    code[instr_loc] = Line::Choice(ChoiceInstruction::DynamicInternalElse(
+                Instruction::RevJmpBy(p) if *p == 0 => {
+                    code[instr_loc] = Instruction::DynamicInternalElse(
                         b,
                         d,
                         NextOrFail::Fail(o),
-                    ));
+                    );
                 }
                 _ => {
-                    code[instr_loc] = Line::Choice(ChoiceInstruction::DynamicInternalElse(
+                    code[instr_loc] = Instruction::DynamicInternalElse(
                         b,
                         d,
                         NextOrFail::Next(o),
-                    ));
+                    );
                 }
             }
         }
-        Line::Choice(ChoiceInstruction::TryMeElse(0)) => {
+        Instruction::TryMeElse(0) => {
             retraction_info.push_record(RetractionRecord::ModifiedTryMeElse(instr_loc, 0));
-
-            code[instr_loc] = Line::Choice(ChoiceInstruction::TrustMe(0));
+            code[instr_loc] = Instruction::TrustMe(0);
         }
-        Line::Choice(ChoiceInstruction::TryMeElse(o)) => {
+        Instruction::TryMeElse(o) => {
             let o = *o;
 
             retraction_info.push_record(RetractionRecord::ModifiedTryMeElse(instr_loc, o));
 
             match &mut code[instr_loc + o] {
-                Line::Control(ControlInstruction::RevJmpBy(p)) if *p == 0 => {
-                    code[instr_loc] = Line::Choice(ChoiceInstruction::TrustMe(o));
+                Instruction::RevJmpBy(p) if *p == 0 => {
+                    code[instr_loc] = Instruction::TrustMe(o);
                 }
                 _ => {
-                    code[instr_loc] = Line::Choice(ChoiceInstruction::RetryMeElse(o));
+                    code[instr_loc] = Instruction::RetryMeElse(o);
                 }
             }
         }
@@ -648,8 +657,7 @@ fn thread_choice_instr_at_to(
 ) {
     loop {
         match &mut code[instr_loc] {
-            Line::Choice(ChoiceInstruction::TryMeElse(ref mut o))
-            | Line::Choice(ChoiceInstruction::RetryMeElse(ref mut o))
+            Instruction::TryMeElse(ref mut o) | Instruction::RetryMeElse(ref mut o)
                 if target_loc >= instr_loc =>
             {
                 retraction_info.push_record(RetractionRecord::ReplacedChoiceOffset(instr_loc, *o));
@@ -657,82 +665,80 @@ fn thread_choice_instr_at_to(
                 *o = target_loc - instr_loc;
                 return;
             }
-            Line::Choice(ChoiceInstruction::DynamicElse(_, _, NextOrFail::Next(ref mut o)))
-            | Line::Choice(ChoiceInstruction::DynamicInternalElse(
+            Instruction::DynamicElse(_, _, NextOrFail::Next(ref mut o)) |
+            Instruction::DynamicInternalElse(
                 _,
                 _,
                 NextOrFail::Next(ref mut o),
-            )) if target_loc >= instr_loc => {
+            ) if target_loc >= instr_loc => {
                 retraction_info
                     .push_record(RetractionRecord::ReplacedDynamicElseOffset(instr_loc, *o));
                 *o = target_loc - instr_loc;
                 return;
             }
-            Line::Choice(ChoiceInstruction::DynamicElse(_, _, NextOrFail::Next(o)))
-            | Line::Choice(ChoiceInstruction::DynamicInternalElse(_, _, NextOrFail::Next(o))) => {
+            Instruction::DynamicElse(_, _, NextOrFail::Next(o)) |
+            Instruction::DynamicInternalElse(_, _, NextOrFail::Next(o)) => {
                 instr_loc += *o;
             }
-            Line::Choice(ChoiceInstruction::TryMeElse(o))
-            | Line::Choice(ChoiceInstruction::RetryMeElse(o)) => {
+            Instruction::TryMeElse(o)
+            | Instruction::RetryMeElse(o) => {
                 instr_loc += *o;
             }
-            Line::Control(ControlInstruction::RevJmpBy(ref mut o)) if instr_loc >= target_loc => {
+            Instruction::RevJmpBy(ref mut o) if instr_loc >= target_loc => {
                 retraction_info.push_record(RetractionRecord::ModifiedRevJmpBy(instr_loc, *o));
 
                 *o = instr_loc - target_loc;
                 return;
             }
-            &mut Line::Control(ControlInstruction::RevJmpBy(o)) => {
+            &mut Instruction::RevJmpBy(o) => {
                 instr_loc -= o;
             }
-            &mut Line::Choice(ChoiceInstruction::DynamicElse(birth, death, ref mut fail))
+            &mut Instruction::DynamicElse(birth, death, ref mut fail)
                 if target_loc >= instr_loc =>
             {
                 retraction_info.push_record(RetractionRecord::AppendedNextOrFail(instr_loc, *fail));
 
-                code[instr_loc] = Line::Choice(ChoiceInstruction::DynamicElse(
+                code[instr_loc] = instr!("dynamic_else",
                     birth,
                     death,
-                    NextOrFail::Next(target_loc - instr_loc),
-                ));
+                    NextOrFail::Next(target_loc - instr_loc)
+                );
 
                 return;
             }
-            Line::Choice(ChoiceInstruction::DynamicElse(_, _, NextOrFail::Fail(o))) if *o > 0 => {
+            Instruction::DynamicElse(_, _, NextOrFail::Fail(o)) if *o > 0 => {
                 instr_loc += *o;
             }
-            &mut Line::Choice(ChoiceInstruction::DynamicInternalElse(
+            &mut Instruction::DynamicInternalElse(
                 birth,
                 death,
                 ref mut fail,
-            )) if target_loc >= instr_loc => {
+            ) if target_loc >= instr_loc => {
                 retraction_info.push_record(RetractionRecord::AppendedNextOrFail(instr_loc, *fail));
 
-                code[instr_loc] = Line::Choice(ChoiceInstruction::DynamicInternalElse(
+                code[instr_loc] = instr!("dynamic_internal_else",
                     birth,
                     death,
-                    NextOrFail::Next(target_loc - instr_loc),
-                ));
+                    NextOrFail::Next(target_loc - instr_loc)
+                );
 
                 return;
             }
-            Line::Choice(ChoiceInstruction::DynamicInternalElse(_, _, NextOrFail::Fail(o)))
+            Instruction::DynamicInternalElse(_, _, NextOrFail::Fail(o))
                 if *o > 0 =>
             {
                 instr_loc += *o;
             }
-            Line::Choice(ChoiceInstruction::TrustMe(ref mut o)) if target_loc >= instr_loc => {
+            Instruction::TrustMe(ref mut o) if target_loc >= instr_loc => {
                 retraction_info.push_record(
                     RetractionRecord::AppendedTrustMe(instr_loc, *o, false),
                     //choice_instr.is_default()),
                 );
 
-                code[instr_loc] =
-                    Line::Choice(ChoiceInstruction::RetryMeElse(target_loc - instr_loc));
-
+                code[instr_loc] = instr!("retry_me_else", target_loc - instr_loc);
                 return;
             }
-            Line::Choice(ChoiceInstruction::TrustMe(o)) if *o > 0 => {
+            Instruction::TrustMe(o) if *o > 0 => {
                 instr_loc += *o;
             }
             _ => {
@@ -749,7 +755,7 @@ fn remove_non_leading_clause(
     retraction_info: &mut RetractionInfo,
 ) -> Option<IndexPtr> {
     match &mut code[non_indexed_choice_instr_loc] {
-        Line::Choice(ChoiceInstruction::RetryMeElse(ref mut o)) => {
+        Instruction::RetryMeElse(ref mut o) => {
             let o = *o;
 
             thread_choice_instr_at_to(
@@ -761,19 +767,19 @@ fn remove_non_leading_clause(
 
             None
         }
-        Line::Choice(ChoiceInstruction::TrustMe(_)) => {
+        Instruction::TrustMe(_) => {
             match &mut code[preceding_choice_instr_loc] {
-                Line::Choice(ChoiceInstruction::RetryMeElse(o)) => {
+                Instruction::RetryMeElse(o) => {
                     retraction_info.push_record(RetractionRecord::ModifiedRetryMeElse(
                         preceding_choice_instr_loc,
                         *o,
                     ));
 
-                    code[preceding_choice_instr_loc] = Line::Choice(ChoiceInstruction::TrustMe(0));
+                    code[preceding_choice_instr_loc] = Instruction::TrustMe(0);
 
                     None
                 }
-                Line::Choice(ChoiceInstruction::TryMeElse(ref mut o)) => {
+                Instruction::TryMeElse(ref mut o) => {
                     retraction_info.push_record(RetractionRecord::ModifiedTryMeElse(
                         preceding_choice_instr_loc,
                         *o,
@@ -804,8 +810,8 @@ fn finalize_retract(
     retraction_info: &mut RetractionInfo,
 ) -> usize {
     let clause_clause_loc = delete_from_skeleton(
-        compilation_target.clone(),
-        key.clone(),
+        compilation_target,
+        key,
         skeleton,
         target_pos,
         retraction_info,
@@ -830,7 +836,7 @@ fn remove_leading_unindexed_clause(
     retraction_info: &mut RetractionInfo,
 ) -> Option<IndexPtr> {
     match &mut code[non_indexed_choice_instr_loc] {
-        Line::Choice(ChoiceInstruction::TryMeElse(ref mut o)) => {
+        Instruction::TryMeElse(ref mut o) => {
             if *o > 0 {
                 retraction_info.push_record(RetractionRecord::ModifiedTryMeElse(
                     non_indexed_choice_instr_loc,
@@ -858,7 +864,7 @@ fn remove_leading_unindexed_clause(
 
 fn find_dynamic_outer_choice_instr(code: &Code, index_loc: usize) -> usize {
     match &code[index_loc] {
-        Line::IndexingCode(indexing_code) => match &indexing_code[0] {
+        Instruction::IndexingCode(indexing_code) => match &indexing_code[0] {
             &IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(
                 _,
                 IndexingCodePtr::DynamicExternal(v),
@@ -920,7 +926,7 @@ fn prepend_compiled_clause(
 
                 retraction_info.push_record(RetractionRecord::SkeletonClauseStartReplaced(
                     compilation_target,
-                    key.clone(),
+                    key,
                     1,
                     skeleton.clauses[1].clause_start,
                 ));
@@ -931,22 +937,16 @@ fn prepend_compiled_clause(
                 let inner_thread_rev_offset =
                     3 + prepend_queue.len() + clause_loc - skeleton.clauses[1].clause_start;
 
-                prepend_queue.push_back(Line::Control(ControlInstruction::RevJmpBy(
-                    inner_thread_rev_offset,
-                )));
+                prepend_queue.push_back(Instruction::RevJmpBy(inner_thread_rev_offset));
 
-                prepend_queue.push_front(Line::Choice(
-                    settings.internal_try_me_else(prepend_queue.len()),
-                ));
+                prepend_queue.push_front(settings.internal_try_me_else(prepend_queue.len()));
 
                 // prepend_queue is now:
                 //      | TryMeElse N_2
                 //      | (clause_code)
                 // +N_2 | RevJmpBy (RetryMeElse(M_1) or TryMeElse(0) at index_loc + 1)
 
-                prepend_queue.push_front(Line::Control(ControlInstruction::RevJmpBy(
-                    1 + clause_loc - index_loc,
-                )));
+                prepend_queue.push_front(Instruction::RevJmpBy(1 + clause_loc - index_loc));
 
                 let outer_thread_choice_offset = // outer_thread_choice_loc WAS index_loc - 1..
                     match derelictize_try_me_else(code, outer_thread_choice_loc, retraction_info) {
@@ -958,7 +958,7 @@ fn prepend_compiled_clause(
                                 next_subseq_offset;
 
                             prepend_queue.push_back(
-                                Line::Control(ControlInstruction::RevJmpBy(outer_thread_rev_offset))
+                                Instruction::RevJmpBy(outer_thread_rev_offset)
                             );
 
                             prepend_queue.len()
@@ -974,17 +974,13 @@ fn prepend_compiled_clause(
                             // awaiting the addition of unindexed
                             // clauses.
 
-                            prepend_queue.push_back(
-                                Line::Control(ControlInstruction::RevJmpBy(0)),
-                            );
+                            prepend_queue.push_back(Instruction::RevJmpBy(0));
 
                             0
                         }
                     };
 
-                prepend_queue.push_front(Line::Choice(
-                    settings.try_me_else(outer_thread_choice_offset),
-                ));
+                prepend_queue.push_front(settings.try_me_else(outer_thread_choice_offset));
 
                 // prepend_queue is now:
                 //     | TryMeElse N_3
@@ -994,11 +990,12 @@ fn prepend_compiled_clause(
                 // N_2 | RevJmpBy (RetryMeElse(M_1) or TryMeElse(0) at index_loc + 1)
                 // N_3 | RevJmpBy (TryMeElse(N_1) at index_loc - 1 or TrustMe if N_1 == 0)
 
-                let target_indexing_line = to_indexing_line_mut(&mut code[index_loc]).unwrap();
+                let target_indexing_line = code[index_loc].to_indexing_line_mut().unwrap();
 
                 merge_clause_index(
                     target_indexing_line,
                     &mut skeleton.clauses,
+                    &skeleton.core.retracted_dynamic_clauses,
                     clause_loc + 2, // == skeleton.clauses[0].clause_start
                     AppendOrPrepend::Prepend,
                 );
@@ -1039,19 +1036,19 @@ fn prepend_compiled_clause(
 
                 // this is a stub for chaining inner-threaded choice
                 // instructions.
-                prepend_queue.push_back(Line::Control(ControlInstruction::RevJmpBy(0)));
+                prepend_queue.push_back(Instruction::RevJmpBy(0));
 
                 let prepend_queue_len = prepend_queue.len();
 
                 match &mut prepend_queue[1] {
-                    Line::Choice(ChoiceInstruction::TryMeElse(ref mut o)) if *o == 0 => {
+                    Instruction::TryMeElse(ref mut o) if *o == 0 => {
                         *o = prepend_queue_len - 2;
                     }
-                    Line::Choice(ChoiceInstruction::DynamicInternalElse(
+                    Instruction::DynamicInternalElse(
                         _,
                         _,
                         ref mut o @ NextOrFail::Next(0),
-                    )) => {
+                    ) => {
                         *o = NextOrFail::Fail(prepend_queue_len - 2);
                     }
                     _ => {
@@ -1059,11 +1056,8 @@ fn prepend_compiled_clause(
                     }
                 }
 
-                prepend_queue.push_back(Line::Control(ControlInstruction::RevJmpBy(
-                    inner_thread_rev_offset,
-                )));
-
-                prepend_queue.push_front(Line::Choice(settings.try_me_else(prepend_queue.len())));
+                prepend_queue.push_back(Instruction::RevJmpBy(inner_thread_rev_offset));
+                prepend_queue.push_front(settings.try_me_else(prepend_queue.len()));
 
                 // prepend_queue is now:
                 //      | TryMeElse(N_2)
@@ -1093,11 +1087,8 @@ fn prepend_compiled_clause(
                 let inner_thread_rev_offset =
                     1 + prepend_queue.len() + clause_loc - old_clause_start;
 
-                prepend_queue.push_back(Line::Control(ControlInstruction::RevJmpBy(
-                    inner_thread_rev_offset,
-                )));
-
-                prepend_queue.push_front(Line::Choice(settings.try_me_else(prepend_queue.len())));
+                prepend_queue.push_back(Instruction::RevJmpBy(inner_thread_rev_offset));
+                prepend_queue.push_front(settings.try_me_else(prepend_queue.len()));
 
                 // prepend_queue is now:
                 //      | TryMeElse(N_2)
@@ -1121,11 +1112,8 @@ fn prepend_compiled_clause(
                 let inner_thread_rev_offset =
                     1 + prepend_queue.len() + clause_loc - old_clause_start;
 
-                prepend_queue.push_back(Line::Control(ControlInstruction::RevJmpBy(
-                    inner_thread_rev_offset,
-                )));
-
-                prepend_queue.push_front(Line::Choice(settings.try_me_else(prepend_queue.len())));
+                prepend_queue.push_back(Instruction::RevJmpBy(inner_thread_rev_offset));
+                prepend_queue.push_front(settings.try_me_else(prepend_queue.len()));
 
                 // prepend_queue is now:
                 //      | TryMeElse(N_2)
@@ -1184,7 +1172,7 @@ fn append_compiled_clause(
         .switch_on_term_loc()
     {
         Some(index_loc) if lower_bound_arg_num == target_arg_num => {
-            code.push(Line::Choice(settings.internal_trust_me()));
+            code.push(settings.internal_trust_me());
 
             code.extend(clause_code.drain(3..)); // skip the indexing code
 
@@ -1197,11 +1185,12 @@ fn append_compiled_clause(
                 skeleton.clauses[target_pos].clause_start,
             ));
 
-            let target_indexing_line = to_indexing_line_mut(&mut code[index_loc]).unwrap();
+            let target_indexing_line = code[index_loc].to_indexing_line_mut().unwrap();
 
             merge_clause_index(
                 target_indexing_line,
                 &mut skeleton.clauses[lower_bound..],
+                &skeleton.core.retracted_dynamic_clauses,
                 clause_loc,
                 AppendOrPrepend::Append,
             );
@@ -1230,7 +1219,7 @@ fn append_compiled_clause(
             target_pos_clause_start // skeleton.clauses[target_pos - 1].clause_start
         }
         _ => {
-            code.push(Line::Choice(settings.trust_me()));
+            code.push(settings.trust_me());
 
             skeleton.clauses[target_pos].opt_arg_index_key += clause_loc;
             code.extend(clause_code.drain(1..));
@@ -1309,9 +1298,9 @@ fn print_overwrite_warning(
     key: &PredicateKey,
     is_dynamic: bool,
 ) {
-    if let CompilationTarget::Module(ref module_name) = compilation_target {
-        match module_name.as_str() {
-            "builtins" | "loader" => return,
+    if let CompilationTarget::Module(module_name) = compilation_target {
+        match module_name {
+            atom!("builtins") | atom!("loader") => return,
             _ => {}
         }
     }
@@ -1322,21 +1311,20 @@ fn print_overwrite_warning(
         _ => {}
     }
 
-    println!("Warning: overwriting {}/{}", key.0, key.1);
+    println!("Warning: overwriting {}/{}", key.0.as_str(), key.1);
 }
 
-impl<'a> LoadState<'a> {
-    pub(super) fn listing_src_file_name(&self) -> Option<ClauseName> {
-        if let Some(load_context) = self.wam.load_contexts.last() {
+impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
+    pub(super) fn listing_src_file_name(&mut self) -> Option<Atom> {
+        if let Some(load_context) = self.wam_prelude.load_contexts.last() {
             if !load_context.path.is_file() {
                 return None;
             }
 
             if let Some(path_str) = load_context.path.to_str() {
                 if !path_str.is_empty() {
-                    return Some(clause_name!(
-                        path_str.to_string(),
-                        self.wam.machine_st.atom_tbl
+                    return Some(LS::machine_st(&mut self.payload).atom_tbl.build_with(
+                        path_str
                     ));
                 }
             }
@@ -1349,13 +1337,16 @@ impl<'a> LoadState<'a> {
         &mut self,
         term: Term,
         settings: CodeGenSettings,
-        atom_tbl: TabledData<Atom>,
     ) -> Result<StandaloneCompileResult, SessionError> {
         let mut preprocessor = Preprocessor::new();
-        let mut cg = CodeGenerator::<DebrayAllocator>::new(atom_tbl.clone(), settings);
 
         let clause = self.try_term_to_tl(term, &mut preprocessor)?;
         let queue = preprocessor.parse_queue(self)?;
+
+        let mut cg = CodeGenerator::<DebrayAllocator>::new(
+            &mut LS::machine_st(&mut self.payload).atom_tbl,
+            settings,
+        );
 
         let mut clause_code = cg.compile_predicate(&vec![clause])?;
 
@@ -1364,7 +1355,7 @@ impl<'a> LoadState<'a> {
             queue,
             cg.jmp_by_locs,
             settings.non_counted_bt,
-            atom_tbl,
+            cg.atom_tbl,
         )?;
 
         Ok(StandaloneCompileResult {
@@ -1376,17 +1367,13 @@ impl<'a> LoadState<'a> {
     fn compile(
         &mut self,
         key: PredicateKey,
-        predicates: &mut PredicateQueue,
+        mut predicates: PredicateQueue,
         settings: CodeGenSettings,
     ) -> Result<CodeIndex, SessionError> {
-        let code_index =
-            self.get_or_insert_code_index(key.clone(), predicates.compilation_target.clone());
+        let code_index = self.get_or_insert_code_index(key, predicates.compilation_target);
 
-        let code_len = self.wam.code_repo.code.len();
+        let code_len = self.wam_prelude.code.len();
         let mut code_ptr = code_len;
-
-        let mut cg =
-            CodeGenerator::<DebrayAllocator>::new(self.wam.machine_st.atom_tbl.clone(), settings);
 
         let mut clauses = vec![];
         let mut preprocessor = Preprocessor::new();
@@ -1396,6 +1383,12 @@ impl<'a> LoadState<'a> {
         }
 
         let queue = preprocessor.parse_queue(self)?;
+
+        let mut cg = CodeGenerator::<DebrayAllocator>::new(
+            &mut LS::machine_st(&mut self.payload).atom_tbl,
+            settings,
+        );
+
         let mut code = cg.compile_predicate(&clauses)?;
 
         compile_appendix(
@@ -1403,7 +1396,7 @@ impl<'a> LoadState<'a> {
             queue,
             cg.jmp_by_locs,
             settings.non_counted_bt,
-            self.wam.machine_st.atom_tbl.clone(),
+            cg.atom_tbl,
         )?;
 
         if settings.is_extensible {
@@ -1417,41 +1410,45 @@ impl<'a> LoadState<'a> {
             }
 
             match &mut code[0] {
-                Line::Choice(ChoiceInstruction::TryMeElse(0)) => {
+                Instruction::TryMeElse(0) => {
                     code_ptr += 1;
                 }
                 _ => {}
             }
 
             match self
-                .wam
+                .wam_prelude
                 .indices
                 .get_predicate_skeleton_mut(&predicates.compilation_target, &key)
             {
                 Some(skeleton) => {
-                    self.retraction_info
-                        .push_record(RetractionRecord::SkeletonClauseTruncateBack(
-                            predicates.compilation_target.clone(),
-                            key.clone(),
-                            skeleton.clauses.len(),
-                        ));
+                    let skeleton_clause_len = skeleton.clauses.len();
 
                     skeleton.clauses.extend(cg.skeleton.clauses.into_iter());
                     skeleton
                         .core
                         .clause_clause_locs
                         .extend_from_slice(&clause_clause_locs[0..]);
+
+                    self.payload.retraction_info
+                        .push_record(RetractionRecord::SkeletonClauseTruncateBack(
+                            predicates.compilation_target,
+                            key,
+                            skeleton_clause_len,
+                        ));
                 }
                 None => {
                     cg.skeleton
-                        .core
-                        .clause_clause_locs
-                        .extend_from_slice(&clause_clause_locs[0..]);
+                      .core
+                      .clause_clause_locs
+                      .extend_from_slice(&clause_clause_locs[0..]);
+
+                    let skeleton = cg.skeleton;
 
                     self.add_extensible_predicate(
-                        key.clone(),
-                        cg.skeleton,
-                        predicates.compilation_target.clone(),
+                        key,
+                        skeleton,
+                        predicates.compilation_target,
                     );
                 }
             };
@@ -1477,14 +1474,14 @@ impl<'a> LoadState<'a> {
         };
 
         set_code_index(
-            &mut self.retraction_info,
+            &mut self.payload.retraction_info,
             &predicates.compilation_target,
             key,
             &code_index,
             index_ptr,
         );
 
-        self.wam.code_repo.code.extend(code.into_iter());
+        self.wam_prelude.code.extend(code.into_iter());
         Ok(code_index)
     }
 
@@ -1494,18 +1491,22 @@ impl<'a> LoadState<'a> {
         key: &PredicateKey,
         clause_clause_locs: SliceDeque<usize>,
     ) {
-        match self.wam.indices.get_local_predicate_skeleton_mut(
-            self.compilation_target.clone(),
-            compilation_target.clone(),
-            self.listing_src_file_name(),
-            key.clone(),
+        let listing_src_file_name = self.listing_src_file_name();
+
+        match self.wam_prelude.indices.get_local_predicate_skeleton_mut(
+            self.payload.compilation_target,
+            *compilation_target,
+            listing_src_file_name,
+            *key,
         ) {
             Some(skeleton) => {
-                self.retraction_info.push_record(
+                let payload_compilation_target = self.payload.compilation_target;
+
+                self.payload.retraction_info.push_record(
                     RetractionRecord::SkeletonLocalClauseTruncateBack(
-                        self.compilation_target.clone(),
-                        compilation_target.clone(),
-                        key.clone(),
+                        payload_compilation_target,
+                        *compilation_target,
+                        *key,
                         skeleton.clause_clause_locs.len(),
                     ),
                 );
@@ -1519,8 +1520,8 @@ impl<'a> LoadState<'a> {
                 skeleton.clause_clause_locs = clause_clause_locs;
 
                 self.add_local_extensible_predicate(
-                    compilation_target.clone(),
-                    key.clone(),
+                    *compilation_target,
+                    *key,
                     skeleton,
                 );
             }
@@ -1533,18 +1534,22 @@ impl<'a> LoadState<'a> {
         key: &PredicateKey,
         code_len: usize,
     ) {
-        match self.wam.indices.get_local_predicate_skeleton_mut(
-            self.compilation_target.clone(),
-            compilation_target.clone(),
-            self.listing_src_file_name(),
-            key.clone(),
+        let listing_src_file_name = self.listing_src_file_name();
+
+        match self.wam_prelude.indices.get_local_predicate_skeleton_mut(
+            self.payload.compilation_target,
+            *compilation_target,
+            listing_src_file_name,
+            *key,
         ) {
             Some(skeleton) => {
-                self.retraction_info.push_record(
+                let payload_compilation_target = self.payload.compilation_target;
+
+                self.payload.retraction_info.push_record(
                     RetractionRecord::SkeletonLocalClauseClausePopFront(
-                        self.compilation_target.clone(),
-                        compilation_target.clone(),
-                        key.clone(),
+                        payload_compilation_target,
+                        *compilation_target,
+                        *key,
                     ),
                 );
 
@@ -1555,8 +1560,8 @@ impl<'a> LoadState<'a> {
                 skeleton.clause_clause_locs.push_front(code_len);
 
                 self.add_local_extensible_predicate(
-                    compilation_target.clone(),
-                    key.clone(),
+                    *compilation_target,
+                    *key,
                     skeleton,
                 );
             }
@@ -1569,18 +1574,22 @@ impl<'a> LoadState<'a> {
         key: &PredicateKey,
         code_len: usize,
     ) {
-        match self.wam.indices.get_local_predicate_skeleton_mut(
-            self.compilation_target.clone(),
-            compilation_target.clone(),
-            self.listing_src_file_name(),
-            key.clone(),
+        let listing_src_file_name = self.listing_src_file_name();
+
+        match self.wam_prelude.indices.get_local_predicate_skeleton_mut(
+            self.payload.compilation_target,
+            *compilation_target,
+            listing_src_file_name,
+            *key,
         ) {
             Some(skeleton) => {
-                self.retraction_info.push_record(
+                let payload_compilation_target = self.payload.compilation_target;
+
+                self.payload.retraction_info.push_record(
                     RetractionRecord::SkeletonLocalClauseClausePopBack(
-                        self.compilation_target.clone(),
-                        compilation_target.clone(),
-                        key.clone(),
+                        payload_compilation_target,
+                        *compilation_target,
+                        *key,
                     ),
                 );
 
@@ -1591,8 +1600,8 @@ impl<'a> LoadState<'a> {
                 skeleton.clause_clause_locs.push_back(code_len);
 
                 self.add_local_extensible_predicate(
-                    compilation_target.clone(),
-                    key.clone(),
+                    *compilation_target,
+                    *key,
                     skeleton,
                 );
             }
@@ -1608,13 +1617,13 @@ impl<'a> LoadState<'a> {
         append_or_prepend: AppendOrPrepend,
     ) -> Result<CodeIndex, SessionError> {
         let settings = match self
-            .wam
+            .wam_prelude
             .indices
             .get_predicate_skeleton_mut(&compilation_target, &key)
         {
             Some(skeleton) if !skeleton.clauses.is_empty() => CodeGenSettings {
                 global_clock_tick: if skeleton.core.is_dynamic {
-                    Some(self.wam.machine_st.global_clock)
+                    Some(LS::machine_st(&mut self.payload).global_clock)
                 } else {
                     None
                 },
@@ -1625,7 +1634,7 @@ impl<'a> LoadState<'a> {
                 let settings = CodeGenSettings {
                     global_clock_tick: if let Some(skeleton) = skeleton_opt {
                         if skeleton.core.is_dynamic {
-                            Some(self.wam.machine_st.global_clock)
+                            Some(LS::machine_st(&mut self.payload).global_clock)
                         } else {
                             None
                         }
@@ -1639,21 +1648,19 @@ impl<'a> LoadState<'a> {
                 let mut predicate_queue = predicate_queue![clause];
                 predicate_queue.compilation_target = compilation_target;
 
-                return self.compile(key, &mut predicate_queue, settings);
+                return self.compile(key, predicate_queue, settings);
             }
         };
-
-        let atom_tbl = self.wam.machine_st.atom_tbl.clone();
 
         let StandaloneCompileResult {
             clause_code,
             mut standalone_skeleton,
-        } = self.compile_standalone_clause(clause, settings, atom_tbl)?;
+        } = self.compile_standalone_clause(clause, settings)?;
 
-        let code_len = self.wam.code_repo.code.len();
+        let code_len = self.wam_prelude.code.len();
 
         let skeleton = match self
-            .wam
+            .wam_prelude
             .indices
             .get_predicate_skeleton_mut(&compilation_target, &key)
         {
@@ -1668,28 +1675,30 @@ impl<'a> LoadState<'a> {
 
                 skeleton.core.clause_clause_locs.push_back(code_len);
 
-                self.retraction_info
+                self.payload.retraction_info
                     .push_record(RetractionRecord::SkeletonClausePopBack(
-                        compilation_target.clone(),
-                        key.clone(),
+                        compilation_target,
+                        key,
                     ));
 
+                let global_clock = LS::machine_st(&mut self.payload).global_clock;
+
                 let result = append_compiled_clause(
-                    &mut self.wam.code_repo.code,
+                    &mut self.wam_prelude.code,
                     clause_code,
                     skeleton,
-                    &mut self.retraction_info,
-                    self.wam.machine_st.global_clock,
+                    &mut self.payload.retraction_info,
+                    global_clock,
                 );
 
                 self.push_back_to_local_predicate_skeleton(&compilation_target, &key, code_len);
 
                 let code_index =
-                    self.get_or_insert_code_index(key.clone(), compilation_target.clone());
+                    self.get_or_insert_code_index(key, compilation_target);
 
                 if let Some(new_code_ptr) = result {
                     set_code_index(
-                        &mut self.retraction_info,
+                        &mut self.payload.retraction_info,
                         &compilation_target,
                         key,
                         &code_index,
@@ -1706,29 +1715,31 @@ impl<'a> LoadState<'a> {
                 skeleton.core.clause_clause_locs.push_front(code_len);
                 skeleton.core.clause_assert_margin += 1;
 
-                self.retraction_info
+                self.payload.retraction_info
                     .push_record(RetractionRecord::SkeletonClausePopFront(
-                        compilation_target.clone(),
-                        key.clone(),
+                        compilation_target,
+                        key,
                     ));
 
+                let global_clock = LS::machine_st(&mut self.payload).global_clock;
+
                 let new_code_ptr = prepend_compiled_clause(
-                    &mut self.wam.code_repo.code,
-                    compilation_target.clone(),
-                    key.clone(),
+                    &mut self.wam_prelude.code,
+                    compilation_target,
+                    key,
                     clause_code,
                     skeleton,
-                    &mut self.retraction_info,
-                    self.wam.machine_st.global_clock,
+                    &mut self.payload.retraction_info,
+                    global_clock,
                 );
 
                 self.push_front_to_local_predicate_skeleton(&compilation_target, &key, code_len);
 
                 let code_index =
-                    self.get_or_insert_code_index(key.clone(), compilation_target.clone());
+                    self.get_or_insert_code_index(key, compilation_target);
 
                 set_code_index(
-                    &mut self.retraction_info,
+                    &mut self.payload.retraction_info,
                     &compilation_target,
                     key,
                     &code_index,
@@ -1742,9 +1753,9 @@ impl<'a> LoadState<'a> {
 
     pub(super) fn retract_dynamic_clause(&mut self, key: PredicateKey, target_pos: usize) -> usize {
         let skeleton = match self
-            .wam
+            .wam_prelude
             .indices
-            .get_predicate_skeleton_mut(&self.compilation_target, &key)
+            .get_predicate_skeleton_mut(&self.payload.compilation_target, &key)
         {
             Some(skeleton) => skeleton,
             None => {
@@ -1757,38 +1768,38 @@ impl<'a> LoadState<'a> {
             .switch_on_term_loc()
         {
             Some(index_loc) => find_inner_choice_instr(
-                &self.wam.code_repo.code,
+                &self.wam_prelude.code,
                 skeleton.clauses[target_pos].clause_start,
                 index_loc,
             ),
             None => skeleton.clauses[target_pos].clause_start,
         };
 
-        match &mut self.wam.code_repo.code[clause_loc] {
-            Line::Choice(ChoiceInstruction::DynamicElse(_, ref mut d, _))
-            | Line::Choice(ChoiceInstruction::DynamicInternalElse(_, ref mut d, _)) => {
-                *d = Death::Finite(self.wam.machine_st.global_clock);
+        match &mut self.wam_prelude.code[clause_loc] {
+            Instruction::DynamicElse(_, ref mut d, _) |
+            Instruction::DynamicInternalElse(_, ref mut d, _) => {
+                *d = Death::Finite(LS::machine_st(&mut self.payload).global_clock);
             }
             _ => unreachable!(),
         }
 
         delete_from_skeleton(
-            self.compilation_target.clone(),
+            self.payload.compilation_target,
             key,
             skeleton,
             target_pos,
-            &mut self.retraction_info,
+            &mut self.payload.retraction_info,
         )
     }
 
     pub(super) fn retract_clause(&mut self, key: PredicateKey, target_pos: usize) -> usize {
-        let code_index =
-            self.get_or_insert_code_index(key.clone(), self.compilation_target.clone());
+        let payload_compilation_target = self.payload.compilation_target;
+        let code_index = self.get_or_insert_code_index(key, payload_compilation_target);
 
         let skeleton = match self
-            .wam
+            .wam_prelude
             .indices
-            .get_predicate_skeleton_mut(&self.compilation_target, &key)
+            .get_predicate_skeleton_mut(&payload_compilation_target, &key)
         {
             Some(skeleton) => skeleton,
             None => {
@@ -1796,7 +1807,7 @@ impl<'a> LoadState<'a> {
             }
         };
 
-        let code = &mut self.wam.code_repo.code;
+        let code = &mut self.wam_prelude.code;
         let lower_bound = lower_bound_of_target_clause(skeleton, target_pos);
         let lower_bound_is_unindexed = !skeleton.clauses[lower_bound].opt_arg_index_key.is_some();
 
@@ -1818,13 +1829,13 @@ impl<'a> LoadState<'a> {
                         code,
                         &skeleton.clauses[target_pos].opt_arg_index_key,
                         inner_clause_start,
-                        &mut self.retraction_info,
+                        &mut self.payload.retraction_info,
                     );
 
                     match derelictize_try_me_else(
                         code,
                         inner_clause_start,
-                        &mut self.retraction_info,
+                        &mut self.payload.retraction_info,
                     ) {
                         Some(offset) => {
                             let instr_loc = find_inner_choice_instr(
@@ -1836,20 +1847,20 @@ impl<'a> LoadState<'a> {
                             let clause_loc = blunt_leading_choice_instr(
                                 code,
                                 instr_loc,
-                                &mut self.retraction_info,
+                                &mut self.payload.retraction_info,
                             );
 
                             set_switch_var_offset(
                                 code,
                                 index_loc,
                                 clause_loc - index_loc,
-                                &mut self.retraction_info,
+                                &mut self.payload.retraction_info,
                             );
 
-                            self.retraction_info.push_record(
+                            self.payload.retraction_info.push_record(
                                 RetractionRecord::SkeletonClauseStartReplaced(
-                                    self.compilation_target.clone(),
-                                    key.clone(),
+                                    payload_compilation_target,
+                                    key,
                                     target_pos + 1,
                                     skeleton.clauses[target_pos + 1].clause_start,
                                 ),
@@ -1866,12 +1877,12 @@ impl<'a> LoadState<'a> {
 
                             return finalize_retract(
                                 key,
-                                self.compilation_target.clone(),
+                                payload_compilation_target,
                                 skeleton,
                                 code_index,
                                 target_pos,
                                 index_ptr_opt,
-                                &mut self.retraction_info,
+                                &mut self.payload.retraction_info,
                             );
                         }
                         None => {
@@ -1883,24 +1894,24 @@ impl<'a> LoadState<'a> {
                                     code,
                                     preceding_choice_instr_loc,
                                     skeleton.clauses[target_pos].clause_start - 2,
-                                    &mut self.retraction_info,
+                                    &mut self.payload.retraction_info,
                                 )
                             } else {
                                 remove_leading_unindexed_clause(
                                     code,
                                     skeleton.clauses[target_pos].clause_start - 2,
-                                    &mut self.retraction_info,
+                                    &mut self.payload.retraction_info,
                                 )
                             };
 
                             return finalize_retract(
                                 key,
-                                self.compilation_target.clone(),
+                                payload_compilation_target,
                                 skeleton,
                                 code_index,
                                 target_pos,
                                 index_ptr_opt,
-                                &mut self.retraction_info,
+                                &mut self.payload.retraction_info,
                             );
                         }
                     }
@@ -1931,14 +1942,12 @@ impl<'a> LoadState<'a> {
                     Some(later_indexing_loc) if later_indexing_loc < target_indexing_loc => {
                         let target_indexing_line = mem::replace(
                             &mut code[target_indexing_loc],
-                            Line::Control(ControlInstruction::RevJmpBy(
-                                target_indexing_loc - later_indexing_loc,
-                            )),
+                            Instruction::RevJmpBy(target_indexing_loc - later_indexing_loc),
                         );
 
                         match target_indexing_line {
-                            Line::IndexingCode(indexing_code) => {
-                                self.retraction_info.push_record(
+                            Instruction::IndexingCode(indexing_code) => {
+                                self.payload.retraction_info.push_record(
                                     RetractionRecord::ReplacedIndexingLine(
                                         target_indexing_loc,
                                         indexing_code,
@@ -1953,7 +1962,7 @@ impl<'a> LoadState<'a> {
                             skeleton,
                             lower_bound,
                             target_pos + 1,
-                            &mut self.retraction_info,
+                            &mut self.payload.retraction_info,
                         );
 
                         merge_indices(
@@ -1961,14 +1970,15 @@ impl<'a> LoadState<'a> {
                             later_indexing_loc,
                             0..target_pos - lower_bound,
                             &mut skeleton.clauses[lower_bound..],
-                            &mut self.retraction_info,
+                            &skeleton.core.retracted_dynamic_clauses,
+                            &mut self.payload.retraction_info,
                         );
 
                         set_switch_var_offset(
                             code,
                             later_indexing_loc,
                             lower_bound_clause_start - later_indexing_loc,
-                            &mut self.retraction_info,
+                            &mut self.payload.retraction_info,
                         );
                     }
                     _ => {
@@ -1977,7 +1987,7 @@ impl<'a> LoadState<'a> {
                             skeleton,
                             lower_bound,
                             target_pos + 1,
-                            &mut self.retraction_info,
+                            &mut self.payload.retraction_info,
                         );
 
                         merge_indices(
@@ -1985,14 +1995,15 @@ impl<'a> LoadState<'a> {
                             target_indexing_loc,
                             target_pos + 1 - lower_bound..skeleton.clauses.len() - lower_bound,
                             &mut skeleton.clauses[lower_bound..],
-                            &mut self.retraction_info,
+                            &skeleton.core.retracted_dynamic_clauses,
+                            &mut self.payload.retraction_info,
                         );
 
                         set_switch_var_offset_to_choice_instr(
                             code,
                             target_indexing_loc,
                             lower_bound_clause_start - target_indexing_loc,
-                            &mut self.retraction_info,
+                            &mut self.payload.retraction_info,
                         );
                     }
                 };
@@ -2005,7 +2016,7 @@ impl<'a> LoadState<'a> {
                         code,
                         &skeleton.clauses[target_pos].opt_arg_index_key,
                         skeleton.clauses[target_pos].clause_start,
-                        &mut self.retraction_info,
+                        &mut self.payload.retraction_info,
                     );
 
                     match skeleton.clauses[target_pos]
@@ -2023,16 +2034,16 @@ impl<'a> LoadState<'a> {
                                 code,
                                 preceding_choice_instr_loc,
                                 skeleton.clauses[target_pos].clause_start,
-                                &mut self.retraction_info,
+                                &mut self.payload.retraction_info,
                             );
 
                             match &mut code[preceding_choice_instr_loc] {
-                                Line::Choice(ChoiceInstruction::TryMeElse(0)) => {
+                                Instruction::TryMeElse(0) => {
                                     set_switch_var_offset(
                                         code,
                                         index_loc,
                                         preceding_choice_instr_loc + 1 - index_loc,
-                                        &mut self.retraction_info,
+                                        &mut self.payload.retraction_info,
                                     );
                                 }
                                 _ => {}
@@ -2052,7 +2063,7 @@ impl<'a> LoadState<'a> {
                                 code,
                                 preceding_choice_instr_loc,
                                 skeleton.clauses[target_pos].clause_start,
-                                &mut self.retraction_info,
+                                &mut self.payload.retraction_info,
                             )
                         }
                     }
@@ -2060,7 +2071,7 @@ impl<'a> LoadState<'a> {
                     remove_leading_unindexed_clause(
                         code,
                         skeleton.clauses[target_pos].clause_start,
-                        &mut self.retraction_info,
+                        &mut self.payload.retraction_info,
                     )
                 }
             }
@@ -2068,17 +2079,17 @@ impl<'a> LoadState<'a> {
 
         finalize_retract(
             key,
-            self.compilation_target.clone(),
+            payload_compilation_target,
             skeleton,
             code_index,
             target_pos,
             index_ptr_opt,
-            &mut self.retraction_info,
+            &mut self.payload.retraction_info,
         )
     }
 }
 
-impl<'a, TS: TermStream> Loader<'a, TS> {
+impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
     pub(super) fn compile_clause_clauses<ClauseIter: Iterator<Item = (Term, Term)>>(
         &mut self,
         key: PredicateKey,
@@ -2089,24 +2100,23 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
         let clause_predicates = clause_clauses.map(|(head, body)| {
             Term::Clause(
                 Cell::default(),
-                clause_name!("$clause"),
-                vec![Box::new(head), Box::new(body)],
-                None,
+                atom!("$clause"),
+                vec![head, body],
             )
         });
 
         let clause_clause_compilation_target = match compilation_target {
-            CompilationTarget::User => CompilationTarget::Module(clause_name!("builtins")),
-            _ => compilation_target.clone(),
+            CompilationTarget::User => CompilationTarget::Module(atom!("builtins")),
+            _ => compilation_target,
         };
 
         let mut num_clause_predicates = 0;
 
         for clause_term in clause_predicates {
-            self.load_state.incremental_compile_clause(
-                (clause_name!("$clause"), 2),
+            self.incremental_compile_clause(
+                (atom!("$clause"), 2),
                 clause_term,
-                clause_clause_compilation_target.clone(),
+                clause_clause_compilation_target,
                 false, // non_counted_bt is false.
                 append_or_prepend,
             )?;
@@ -2115,8 +2125,7 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
         }
 
         let locs_vec: Vec<_> = match self
-            .load_state
-            .wam
+            .wam_prelude
             .indices
             .get_predicate_skeleton_mut(&compilation_target, &key)
         {
@@ -2136,9 +2145,9 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
             }
         };
 
-        match self.load_state.wam.indices.get_predicate_skeleton_mut(
+        match self.wam_prelude.indices.get_predicate_skeleton_mut(
             &clause_clause_compilation_target,
-            &(clause_name!("$clause"), 2),
+            &(atom!("$clause"), 2),
         ) {
             Some(skeleton) if append_or_prepend.is_append() => {
                 for _ in 0..num_clause_predicates {
@@ -2168,6 +2177,7 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
 
     pub(super) fn compile_and_submit(&mut self) -> Result<(), SessionError> {
         let key = self
+            .payload
             .predicates
             .first()
             .and_then(|cl| {
@@ -2176,23 +2186,24 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
             })
             .ok_or(SessionError::NamelessEntry)?;
 
+        let listing_src_file_name = self.listing_src_file_name();
+        let payload_compilation_target = self.payload.compilation_target;
+
         let mut predicate_info = self
-            .load_state
-            .wam
+            .wam_prelude
             .indices
-            .get_predicate_skeleton(&self.predicates.compilation_target, &key)
+            .get_predicate_skeleton(&self.payload.predicates.compilation_target, &key)
             .map(|skeleton| skeleton.predicate_info())
             .unwrap_or_default();
 
         let local_predicate_info = self
-            .load_state
-            .wam
+            .wam_prelude
             .indices
             .get_local_predicate_skeleton(
-                self.load_state.compilation_target.clone(),
-                self.predicates.compilation_target.clone(),
-                self.load_state.listing_src_file_name(),
-                key.clone(),
+                payload_compilation_target,
+                self.payload.predicates.compilation_target,
+                listing_src_file_name,
+                key,
             )
             .map(|skeleton| skeleton.predicate_info())
             .unwrap_or_default();
@@ -2202,54 +2213,55 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
         }
 
         let do_incremental_compile =
-            if self.load_state.compilation_target == self.predicates.compilation_target {
+            if payload_compilation_target == self.payload.predicates.compilation_target {
                 predicate_info.compile_incrementally()
             } else {
                 local_predicate_info.is_multifile && predicate_info.compile_incrementally()
             };
 
-        let predicates_len = self.predicates.len();
-        let non_counted_bt = self.non_counted_bt_preds.contains(&key);
+        let predicates_len = self.payload.predicates.len();
+        let non_counted_bt = self.payload.non_counted_bt_preds.contains(&key);
 
         if do_incremental_compile {
-            for term in self.predicates.predicates.drain(0..) {
-                self.load_state.incremental_compile_clause(
-                    key.clone(),
+            let predicates = self.payload.predicates.take();
+
+            for term in predicates.predicates {
+                self.incremental_compile_clause(
+                    key,
                     term,
-                    self.predicates.compilation_target.clone(),
+                    payload_compilation_target,
                     non_counted_bt,
                     AppendOrPrepend::Append,
                 )?;
             }
         } else {
-            if self.load_state.compilation_target != self.predicates.compilation_target {
+            if payload_compilation_target != self.payload.predicates.compilation_target {
                 if !local_predicate_info.is_extensible {
                     if predicate_info.is_multifile {
                         println!(
                             "Warning: overwriting multifile predicate {}:{}/{} because \
                                   it was not locally declared multifile.",
-                            self.predicates.compilation_target, key.0, key.1
+                            self.payload.predicates.compilation_target, key.0.as_str(), key.1
                         );
                     }
 
                     if let Some(skeleton) = self
-                        .load_state
-                        .wam
+                        .wam_prelude
                         .indices
-                        .remove_predicate_skeleton(&self.predicates.compilation_target, &key)
+                        .remove_predicate_skeleton(&self.payload.predicates.compilation_target, &key)
                     {
                         if predicate_info.is_dynamic {
                             let clause_clause_compilation_target =
-                                match &self.predicates.compilation_target {
+                                match self.payload.predicates.compilation_target {
                                     CompilationTarget::User => {
-                                        CompilationTarget::Module(clause_name!("builtins"))
+                                        CompilationTarget::Module(atom!("builtins"))
                                     }
-                                    module => module.clone(),
+                                    module => module,
                                 };
 
-                            self.load_state.retract_local_clauses_by_locs(
+                            self.retract_local_clauses_by_locs(
                                 clause_clause_compilation_target,
-                                (clause_name!("$clause"), 2),
+                                (atom!("$clause"), 2),
                                 (0..skeleton.clauses.len()).map(Some).collect(),
                                 false, // the builtin M:'$clause'/2 is never dynamic.
                             );
@@ -2257,10 +2269,10 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
                             predicate_info.is_dynamic = false;
                         }
 
-                        self.load_state.retraction_info.push_record(
+                        self.payload.retraction_info.push_record(
                             RetractionRecord::RemovedSkeleton(
-                                self.predicates.compilation_target.clone(),
-                                key.clone(),
+                                payload_compilation_target,
+                                key,
                                 skeleton,
                             ),
                         );
@@ -2270,7 +2282,7 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
 
             let settings = CodeGenSettings {
                 global_clock_tick: if predicate_info.is_dynamic {
-                    Some(self.load_state.wam.machine_st.global_clock)
+                    Some(LS::machine_st(&mut self.payload).global_clock)
                 } else {
                     None
                 },
@@ -2278,20 +2290,19 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
                 non_counted_bt,
             };
 
-            let code_index =
-                self.load_state
-                    .compile(key.clone(), &mut self.predicates, settings)?;
+            let predicates = self.payload.predicates.take();
+            let code_index = self.compile(key, predicates, settings)?;
 
-            if let Some(filename) = self.load_state.listing_src_file_name() {
-                match self.load_state.wam.indices.modules.get_mut(&filename) {
+            if let Some(filename) = self.listing_src_file_name() {
+                match self.wam_prelude.indices.modules.get_mut(&filename) {
                     Some(ref mut module) => {
                         let index_ptr = code_index.get();
-                        let code_index = module.code_dir.entry(key.clone()).or_insert(code_index);
+                        let code_index = module.code_dir.entry(key).or_insert(code_index);
 
                         set_code_index(
-                            &mut self.load_state.retraction_info,
+                            &mut self.payload.retraction_info,
                             &CompilationTarget::Module(filename),
-                            key.clone(),
+                            key,
                             &code_index,
                             index_ptr,
                         );
@@ -2302,13 +2313,14 @@ impl<'a, TS: TermStream> Loader<'a, TS> {
         }
 
         if predicate_info.is_dynamic {
-            self.load_state.wam.machine_st.global_clock += 1;
+            LS::machine_st(&mut self.payload).global_clock += 1;
 
-            let clauses_vec: Vec<_> = self.clause_clauses.drain(0..predicates_len).collect();
+            let clauses_vec: Vec<_> = self.payload
+                .clause_clauses.drain(0..predicates_len).collect();
 
             self.compile_clause_clauses(
                 key,
-                self.predicates.compilation_target.clone(),
+                payload_compilation_target,
                 clauses_vec.into_iter(),
                 AppendOrPrepend::Append,
             )?;

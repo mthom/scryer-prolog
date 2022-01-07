@@ -1,6 +1,6 @@
 [package]
 name = "scryer-prolog"
-version = "0.8.128"
+version = "0.9.0"
 authors = ["Mark Thom <markjordanthom@gmail.com>"]
 edition = "2021"
 description = "A modern Prolog implementation written mostly in Rust."
@@ -12,34 +12,45 @@ categories = ["command-line-utilities"]
 build = "build.rs"
 
 [workspace]
-members = ["crates/prolog_parser", "crates/num-rug-adapter"]
+members = ["crates/num-rug-adapter",
+           "crates/static-string-indexing",
+           "crates/instructions-template",
+           "crates/to-syn-value",
+           "crates/to-syn-value_derive"]
+
+[features]
+num = ["num-rug-adapter"]
+# no default features to make num tests work
+# workaround for --no-default-features and --features not working intuitively for workspaces with a root package
+# see rust-lang/cargo#7160
+default = ["rug"]
 
 [build-dependencies]
 indexmap = "1.0.2"
-
-[features]
-default = ["rug", "prolog_parser/rug"]
-num = ["num-rug-adapter", "prolog_parser/num"]
+static-string-indexing = { path = "./crates/static-string-indexing" }
+instructions-template = { path = "./crates/instructions-template" }
+proc-macro2 = "*"
 
 [dependencies]
 cpu-time = "1.0.0"
 crossterm = "0.16.0"
 dirs-next = "2.0.0"
 divrem = "0.1.0"
-downcast = "0.10.0"
+fxhash = "0.2.1"
 git-version = "0.3.4"
 hostname = "0.3.1"
 indexmap = "1.0.2"
 lazy_static = "1.4.0"
+lexical = "5.2.2"
 libc = "0.2.62"
 ctrlc = "3.2.1"
+modular-bitfield = { git = "https://github.com/mthom/modular-bitfield" } # modular-bitfield = "0.11.2"
 num-rug-adapter = { optional = true, path = "./crates/num-rug-adapter" }
-ordered-float = "0.5.0"
-prolog_parser = { path = "./crates/prolog_parser", default-features = false }
+ordered-float = "2.1.1"
+phf = { version = "0.9",  features = ["macros"] }
 ref_thread_local = "0.0.0"
-rug = { version = "1.4.0", optional = true }
-rustyline = "7.0.0"
-unicode_reader = "1.0.0"
+rug = { version = "1.12.0", optional = true }
+rustyline = "9.0.0"
 ring = "0.16.13"
 ripemd160 = "0.8.0"
 sha3 = "0.8.2"
@@ -50,9 +61,15 @@ chrono = "0.4.11"
 select = "0.4.3"
 roxmltree = "0.11.0"
 base64 = "0.12.3"
+smallvec = "*"
 sodiumoxide = "0.2.6"
+static_assertions = "1.1.0"
 slice-deque = "0.3.0"
 
 [dev-dependencies]
 assert_cmd = "1.0.3"
 predicates-core = "1.0.2"
+serial_test = "0.5.1"
+
+[profile.release]
+debug = true

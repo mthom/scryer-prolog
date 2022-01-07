@@ -2,44 +2,46 @@ use crate::instructions::*;
 
 use indexmap::IndexSet;
 
-fn capture_offset(line: &Line, index: usize, stack: &mut Vec<usize>) -> bool {
+fn capture_offset(line: &Instruction, index: usize, stack: &mut Vec<usize>) -> bool {
     match line {
-        &Line::Choice(ChoiceInstruction::TryMeElse(offset)) if offset > 0 => {
+        &Instruction::TryMeElse(offset) if offset > 0 => {
             stack.push(index + offset);
         }
-        &Line::Choice(ChoiceInstruction::DefaultRetryMeElse(offset))
-        | &Line::Choice(ChoiceInstruction::RetryMeElse(offset))
+        &Instruction::DefaultRetryMeElse(offset) |
+        &Instruction::RetryMeElse(offset)
             if offset > 0 =>
         {
             stack.push(index + offset);
         }
-        &Line::Choice(ChoiceInstruction::DynamicElse(_, _, NextOrFail::Next(offset)))
+        &Instruction::DynamicElse(_, _, NextOrFail::Next(offset))
             if offset > 0 =>
         {
             stack.push(index + offset);
         }
-        &Line::Choice(ChoiceInstruction::DynamicInternalElse(_, _, NextOrFail::Next(offset)))
+        &Instruction::DynamicInternalElse(_, _, NextOrFail::Next(offset))
             if offset > 0 =>
         {
             stack.push(index + offset);
         }
-        &Line::Control(ControlInstruction::JmpBy(_, offset, _, false)) => {
+        &Instruction::JmpByCall(_, offset, _) => {
             stack.push(index + offset);
         }
-        &Line::Control(ControlInstruction::JmpBy(_, offset, _, true)) => {
+        &Instruction::JmpByExecute(_, offset, _) => {
             stack.push(index + offset);
             return true;
         }
-        &Line::Control(ControlInstruction::Proceed)
-        | &Line::Control(ControlInstruction::CallClause(_, _, _, true, _)) => {
+        &Instruction::Proceed => {
             return true;
         }
-        &Line::Control(ControlInstruction::RevJmpBy(offset)) => {
+        &Instruction::RevJmpBy(offset) => {
             if offset > 0 {
                 stack.push(index - offset);
             } else {
                 return true;
             }
+        }
+        instr if instr.is_execute() => {
+            return true;
         }
         _ => {}
     };
@@ -51,7 +53,7 @@ fn capture_offset(line: &Line, index: usize, stack: &mut Vec<usize>) -> bool {
  * begin in code at the offset p. Each instruction is passed to the
  * walker function.
  */
-pub(crate) fn walk_code(code: &Code, p: usize, mut walker: impl FnMut(&Line)) {
+pub(crate) fn walk_code(code: &Code, p: usize, mut walker: impl FnMut(&Instruction)) {
     let mut stack = vec![p];
     let mut visited_indices = IndexSet::new();
 

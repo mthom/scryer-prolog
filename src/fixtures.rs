@@ -1,4 +1,4 @@
-use prolog_parser::ast::*;
+use crate::parser::ast::*;
 
 use crate::forms::*;
 use crate::instructions::*;
@@ -84,8 +84,8 @@ type VariableFixture<'a> = (VarStatus, Vec<&'a Cell<VarReg>>);
 
 #[derive(Debug)]
 pub(crate) struct VariableFixtures<'a> {
-    perm_vars: IndexMap<Rc<Var>, VariableFixture<'a>>,
-    last_chunk_temp_vars: IndexSet<Rc<Var>>,
+    perm_vars: IndexMap<Rc<String>, VariableFixture<'a>>,
+    last_chunk_temp_vars: IndexSet<Rc<String>>,
 }
 
 impl<'a> VariableFixtures<'a> {
@@ -96,11 +96,11 @@ impl<'a> VariableFixtures<'a> {
         }
     }
 
-    pub(crate) fn insert(&mut self, var: Rc<Var>, vs: VariableFixture<'a>) {
+    pub(crate) fn insert(&mut self, var: Rc<String>, vs: VariableFixture<'a>) {
         self.perm_vars.insert(var, vs);
     }
 
-    pub(crate) fn insert_last_chunk_temp_var(&mut self, var: Rc<Var>) {
+    pub(crate) fn insert_last_chunk_temp_var(&mut self, var: Rc<String>) {
         self.last_chunk_temp_vars.insert(var);
     }
 
@@ -115,7 +115,7 @@ impl<'a> VariableFixtures<'a> {
         // Compute the conflict set of u.
 
         // 1.
-        let mut use_sets: IndexMap<Rc<Var>, OccurrenceSet> = IndexMap::new();
+        let mut use_sets: IndexMap<Rc<String>, OccurrenceSet> = IndexMap::new();
 
         for (var, &mut (ref mut var_status, _)) in self.iter_mut() {
             if let &mut VarStatus::Temp(_, ref mut var_data) = var_status {
@@ -153,11 +153,11 @@ impl<'a> VariableFixtures<'a> {
         }
     }
 
-    fn get_mut(&mut self, u: Rc<Var>) -> Option<&mut VariableFixture<'a>> {
+    fn get_mut(&mut self, u: Rc<String>) -> Option<&mut VariableFixture<'a>> {
         self.perm_vars.get_mut(&u)
     }
 
-    fn iter_mut(&mut self) -> indexmap::map::IterMut<Rc<Var>, VariableFixture<'a>> {
+    fn iter_mut(&mut self) -> indexmap::map::IterMut<Rc<String>, VariableFixture<'a>> {
         self.perm_vars.iter_mut()
     }
 
@@ -218,11 +218,11 @@ impl<'a> VariableFixtures<'a> {
         }
     }
 
-    pub(crate) fn into_iter(self) -> indexmap::map::IntoIter<Rc<Var>, VariableFixture<'a>> {
+    pub(crate) fn into_iter(self) -> indexmap::map::IntoIter<Rc<String>, VariableFixture<'a>> {
         self.perm_vars.into_iter()
     }
 
-    fn values(&self) -> indexmap::map::Values<Rc<Var>, VariableFixture<'a>> {
+    fn values(&self) -> indexmap::map::Values<Rc<String>, VariableFixture<'a>> {
         self.perm_vars.values()
     }
 
@@ -272,10 +272,10 @@ impl UnsafeVarMarker {
         }
     }
 
-    pub(crate) fn mark_safe_vars(&mut self, query_instr: &QueryInstruction) -> bool {
+    pub(crate) fn mark_safe_vars(&mut self, query_instr: &Instruction) -> bool {
         match query_instr {
-            &QueryInstruction::PutVariable(r @ RegType::Temp(_), _)
-            | &QueryInstruction::SetVariable(r) => {
+            &Instruction::PutVariable(r @ RegType::Temp(_), _) |
+            &Instruction::SetVariable(r) => {
                 self.safe_vars.insert(r);
                 true
             }
@@ -283,10 +283,10 @@ impl UnsafeVarMarker {
         }
     }
 
-    pub(crate) fn mark_phase(&mut self, query_instr: &QueryInstruction, phase: usize) {
+    pub(crate) fn mark_phase(&mut self, query_instr: &Instruction, phase: usize) {
         match query_instr {
-            &QueryInstruction::PutValue(r @ RegType::Perm(_), _)
-            | &QueryInstruction::SetValue(r) => {
+            &Instruction::PutValue(r @ RegType::Perm(_), _) |
+            &Instruction::SetValue(r) => {
                 let p = self.unsafe_vars.entry(r).or_insert(0);
                 *p = phase;
             }
@@ -294,21 +294,21 @@ impl UnsafeVarMarker {
         }
     }
 
-    pub(crate) fn mark_unsafe_vars(&mut self, query_instr: &mut QueryInstruction, phase: usize) {
+    pub(crate) fn mark_unsafe_vars(&mut self, query_instr: &mut Instruction, phase: usize) {
         match query_instr {
-            &mut QueryInstruction::PutValue(RegType::Perm(i), arg) => {
+            &mut Instruction::PutValue(RegType::Perm(i), arg) => {
                 if let Some(p) = self.unsafe_vars.swap_remove(&RegType::Perm(i)) {
                     if p == phase {
-                        *query_instr = QueryInstruction::PutUnsafeValue(i, arg);
+                        *query_instr = Instruction::PutUnsafeValue(i, arg);
                         self.safe_vars.insert(RegType::Perm(i));
                     } else {
                         self.unsafe_vars.insert(RegType::Perm(i), p);
                     }
                 }
             }
-            &mut QueryInstruction::SetValue(r) => {
+            &mut Instruction::SetValue(r) => {
                 if !self.safe_vars.contains(&r) {
-                    *query_instr = QueryInstruction::SetLocalValue(r);
+                    *query_instr = Instruction::SetLocalValue(r);
 
                     self.safe_vars.insert(r);
                     self.unsafe_vars.remove(&r);

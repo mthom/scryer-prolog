@@ -1,5 +1,4 @@
 fn main() {
-    use scryer_prolog::read::readline;
     use scryer_prolog::*;
     use std::sync::atomic::Ordering;
 
@@ -7,10 +6,7 @@ fn main() {
         scryer_prolog::machine::INTERRUPT.store(true, Ordering::Relaxed);
     }).unwrap();
 
-    let mut wam = machine::Machine::new(
-        readline::input_stream(),
-        machine::Stream::stdout(),
-        machine::Stream::stderr(),
-    );
+    let mut wam = machine::Machine::new();
+
     wam.run_top_level();
 }
