@@ -1,4 +1,3 @@
-
 :- module(loader, [consult/1,
                    expand_goal/3,
                    expand_term/2,
@@ -90,6 +89,7 @@ unload_evacuable(Evacuable) :-
 
 run_initialization_goals(Module) :-
     (  predicate_property(Module:'$initialization_goals'(_), dynamic) ->
+       % FIXME: failing here. also, see add_module.
        findall(Module:Goal, '$call'(builtins:retract(Module:'$initialization_goals'(Goal))), Goals),
        abolish(Module:'$initialization_goals'/1),
        (  maplist(Module:call, Goals) ->
@@ -258,8 +258,8 @@ expand_term_goals(Terms0, Terms) :-
              Terms = (Module:Head2 :- Body1)
           ;  type_error(atom, Module, load/1)
           )
-       ;  prolog_load_context(module, Target),
-          module_expanded_head_variables(Head1, HeadVars),
+       ;  module_expanded_head_variables(Head1, HeadVars),
+          prolog_load_context(module, Target),
           expand_goal(Body0, Target, Body1, HeadVars),
           Terms = (Head1 :- Body1)
        )
@@ -315,6 +315,7 @@ compile_dispatch(user:goal_expansion(Term, Terms), Evacuable) :-
     '$add_goal_expansion_clause'(user, goal_expansion(Term, Terms), Evacuable).
 compile_dispatch((user:goal_expansion(Term, Terms) :- Body), Evacuable) :-
     '$add_goal_expansion_clause'(user, (goal_expansion(Term, Terms) :- Body), Evacuable).
+
 
 remove_module(Module, Evacuable) :-
     (  nonvar(Module),
@@ -508,7 +509,8 @@ open_file(Path, Stream) :-
     ;  catch(open(Path, read, Stream),
              error(existence_error(source_sink, _), _),
              ( atom_concat(Path, '.pl', ExtendedPath),
-               open(ExtendedPath, read, Stream) )
+               open(ExtendedPath, read, Stream)
+             )
             )
     ).
 
@@ -540,15 +542,15 @@ use_module(Module, Exports, Evacuable) :-
 
 
 check_predicate_property(meta_predicate, Module, Name, Arity, MetaPredicateTerm) :-
-    '$cpp_meta_predicate_property'(Module, Name, Arity, MetaPredicateTerm).
+    '$meta_predicate_property'(Module, Name, Arity, MetaPredicateTerm).
 check_predicate_property(built_in, _, Name, Arity, built_in) :-
-    '$cpp_built_in_property'(Name, Arity).
+    '$built_in_property'(Name, Arity).
 check_predicate_property(dynamic, Module, Name, Arity, dynamic) :-
-    '$cpp_dynamic_property'(Module, Name, Arity).
+    '$dynamic_property'(Module, Name, Arity).
 check_predicate_property(multifile, Module, Name, Arity, multifile) :-
-    '$cpp_multifile_property'(Module, Name, Arity).
+    '$multifile_property'(Module, Name, Arity).
 check_predicate_property(discontiguous, Module, Name, Arity, discontiguous) :-
-    '$cpp_discontiguous_property'(Module, Name, Arity).
+    '$discontiguous_property'(Module, Name, Arity).
 
 
 
@@ -629,6 +631,8 @@ expand_module_name(ESG0, M, ESG) :-
        ESG = M:ESG0
     ;  ESG0 = _:_ ->
        ESG = ESG0
+    ;  predicate_property(ESG0, built_in) ->
+       ESG = ESG0
     ;  ESG = M:ESG0
     ).
 
@@ -638,6 +642,7 @@ expand_meta_predicate_subgoals([SG | SGs], [MS | MSs], M, [ESG | ESGs], HeadVars
           MS >= 0
        )  ->
        (  var(SG),
+          MS =:= 0,
           pairs:same_key(SG, HeadVars, [_|_], _) ->
           expand_subgoal(SG, MS, M, ESG, HeadVars)
        ;  expand_subgoal(SG, MS, M, ESG0, HeadVars),
@@ -656,7 +661,8 @@ expand_module_names(Goals, MetaSpecs, Module, ExpandedGoals, HeadVars) :-
     (  GoalFunctor == (:),
        SubGoals = [M, SubGoal] ->
        expand_module_names(SubGoal, MetaSpecs, M, ExpandedSubGoal, HeadVars),
-       ExpandedGoals = M:ExpandedSubGoal
+       expand_module_name(ExpandedSubGoal, M, ExpandedGoals)
+       % ExpandedGoals = M:ExpandedSubGoal
     ;  expand_meta_predicate_subgoals(SubGoals, MetaSpecs, Module, ExpandedGoalList, HeadVars),
        ExpandedGoals =.. [GoalFunctor | ExpandedGoalList]
     ).
@@ -705,19 +711,6 @@ expand_goal(UnexpandedGoals, Module, ExpandedGoals, HeadVars) :-
        )
     ).
 
-thread_goals(Goals0, Goals1, Functor) :-
-    (  var(Goals0) ->
-       Goals0 = Goals1
-    ;  (  Goals0 = [G | Gs] ->
-          (  Gs = [] ->
-             Goals1 = G
-          ;  Goals1 =.. [Functor, G, Goals2],
-             thread_goals(Gs, Goals2, Functor)
-          )
-       ;  Goals1 = Goals0
-       )
-    ).
-
 thread_goals(Goals0, Goals1, Hole, Functor) :-
     (  var(Goals0) ->
        Goals1 =.. [Functor, Goals0, Hole]
@@ -731,6 +724,18 @@ thread_goals(Goals0, Goals1, Hole, Functor) :-
        )
     ).
 
+thread_goals(Goals0, Goals1, Functor) :-
+    (  var(Goals0) ->
+       Goals0 = Goals1
+    ;  (  Goals0 = [G | Gs] ->
+          (  Gs = [] ->
+             Goals1 = G
+          ;  Goals1 =.. [Functor, G, Goals2],
+             thread_goals(Gs, Goals2, Functor)
+          )
+       ;  Goals1 = Goals0
+       )
+    ).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %

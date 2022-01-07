@@ -41,6 +41,8 @@
 	    trie_get_all_values/2		% +Trie, -Value
 	  ]).
 
+:- use_module(library(format)).
+
 :- use_module(library(assoc)).
 :- use_module(library(atts)).
 :- use_module(library(lists)).

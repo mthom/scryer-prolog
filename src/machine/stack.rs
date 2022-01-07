@@ -1,16 +1,13 @@
 use core::marker::PhantomData;
 
-use crate::machine::machine_indices::*;
-use crate::machine::raw_block::*;
+use crate::raw_block::*;
+use crate::types::*;
 
 use std::mem;
 use std::ops::{Index, IndexMut};
 use std::ptr;
 
-#[derive(Debug)]
-struct StackTraits {}
-
-impl RawBlockTraits for StackTraits {
+impl RawBlockTraits for Stack {
     #[inline]
     fn init_size() -> usize {
         10 * 1024 * 1024
@@ -18,31 +15,23 @@ impl RawBlockTraits for StackTraits {
 
     #[inline]
     fn align() -> usize {
-        mem::align_of::<Addr>()
-    }
-
-    #[inline]
-    fn base_offset(base: *const u8) -> *const u8 {
-        unsafe { base.offset(Self::align() as isize) }
+        mem::align_of::<HeapCellValue>()
     }
 }
 
-const fn prelude_size<Prelude>() -> usize {
-    let size = mem::size_of::<Prelude>();
-    let align = mem::align_of::<Addr>();
-
-    (size & !(align - 1)) + align
+#[inline(always)]
+pub const fn prelude_size<Prelude>() -> usize {
+    mem::size_of::<Prelude>()
 }
 
 #[derive(Debug)]
-pub(crate) struct Stack {
-    buf: RawBlock<StackTraits>,
-    _marker: PhantomData<Addr>,
+pub struct Stack {
+    buf: RawBlock<Stack>,
+    _marker: PhantomData<HeapCellValue>,
 }
 
 impl Drop for Stack {
     fn drop(&mut self) {
-        self.drop_in_place();
         self.buf.deallocate();
     }
 }
@@ -56,8 +45,7 @@ pub(crate) struct FramePrelude {
 pub(crate) struct AndFramePrelude {
     pub(crate) univ_prelude: FramePrelude,
     pub(crate) e: usize,
-    pub(crate) cp: LocalCodePtr,
-    pub(crate) interrupt_cp: LocalCodePtr,
+    pub(crate) cp: usize,
 }
 
 #[derive(Debug)]
@@ -67,22 +55,22 @@ pub(crate) struct AndFrame {
 
 impl AndFrame {
     pub(crate) fn size_of(num_cells: usize) -> usize {
-        prelude_size::<AndFramePrelude>() + num_cells * mem::size_of::<Addr>()
+        prelude_size::<AndFramePrelude>() + num_cells * mem::size_of::<HeapCellValue>()
     }
 }
 
 impl Index<usize> for AndFrame {
-    type Output = Addr;
+    type Output = HeapCellValue;
 
     fn index(&self, index: usize) -> &Self::Output {
         let prelude_offset = prelude_size::<AndFramePrelude>();
-        let index_offset = (index - 1) * mem::size_of::<Addr>();
+        let index_offset = (index - 1) * mem::size_of::<HeapCellValue>();
 
         unsafe {
             let ptr = mem::transmute::<&AndFrame, *const u8>(self);
             let ptr = ptr as usize + prelude_offset + index_offset;
 
-            &*(ptr as *const Addr)
+            &*(ptr as *const HeapCellValue)
         }
     }
 }
@@ -90,13 +78,35 @@ impl Index<usize> for AndFrame {
 impl IndexMut<usize> for AndFrame {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         let prelude_offset = prelude_size::<AndFramePrelude>();
-        let index_offset = (index - 1) * mem::size_of::<Addr>();
+        let index_offset = (index - 1) * mem::size_of::<HeapCellValue>();
 
         unsafe {
             let ptr = mem::transmute::<&mut AndFrame, *const u8>(self);
             let ptr = ptr as usize + prelude_offset + index_offset;
 
-            &mut *(ptr as *mut Addr)
+            &mut *(ptr as *mut HeapCellValue)
+        }
+    }
+}
+
+impl Index<usize> for Stack {
+    type Output = HeapCellValue;
+
+    #[inline]
+    fn index(&self, index: usize) -> &Self::Output {
+        unsafe {
+            let ptr = self.buf.base as usize + index;
+            &*(ptr as *const HeapCellValue)
+        }
+    }
+}
+
+impl IndexMut<usize> for Stack {
+    #[inline]
+    fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        unsafe {
+            let ptr = self.buf.base as usize + index;
+            &mut *(ptr as *mut HeapCellValue)
         }
     }
 }
@@ -105,9 +115,11 @@ impl IndexMut<usize> for AndFrame {
 pub(crate) struct OrFramePrelude {
     pub(crate) univ_prelude: FramePrelude,
     pub(crate) e: usize,
-    pub(crate) cp: LocalCodePtr,
+    pub(crate) cp: usize,
     pub(crate) b: usize,
-    pub(crate) bp: LocalCodePtr,
+    pub(crate) bp: usize,
+    pub(crate) boip: u32,
+    pub(crate) biip: u32,
     pub(crate) tr: usize,
     pub(crate) h: usize,
     pub(crate) b0: usize,
@@ -119,18 +131,18 @@ pub(crate) struct OrFrame {
 }
 
 impl Index<usize> for OrFrame {
-    type Output = Addr;
+    type Output = HeapCellValue;
 
     #[inline]
     fn index(&self, index: usize) -> &Self::Output {
         let prelude_offset = prelude_size::<OrFramePrelude>();
-        let index_offset = index * mem::size_of::<Addr>();
+        let index_offset = index * mem::size_of::<HeapCellValue>();
 
         unsafe {
             let ptr = mem::transmute::<&OrFrame, *const u8>(self);
             let ptr = ptr as usize + prelude_offset + index_offset;
 
-            &*(ptr as *const Addr)
+            &*(ptr as *const HeapCellValue)
         }
     }
 }
@@ -139,20 +151,20 @@ impl IndexMut<usize> for OrFrame {
     #[inline]
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         let prelude_offset = prelude_size::<OrFramePrelude>();
-        let index_offset = index * mem::size_of::<Addr>();
+        let index_offset = index * mem::size_of::<HeapCellValue>();
 
         unsafe {
             let ptr = mem::transmute::<&mut OrFrame, *const u8>(self);
             let ptr = ptr as usize + prelude_offset + index_offset;
 
-            &mut *(ptr as *mut Addr)
+            &mut *(ptr as *mut HeapCellValue)
         }
     }
 }
 
 impl OrFrame {
     pub(crate) fn size_of(num_cells: usize) -> usize {
-        prelude_size::<OrFramePrelude>() + num_cells * mem::size_of::<Addr>()
+        prelude_size::<OrFramePrelude>() + num_cells * mem::size_of::<HeapCellValue>()
     }
 }
 
@@ -164,25 +176,38 @@ impl Stack {
         }
     }
 
+    #[inline(always)]
+    unsafe fn alloc(&mut self, frame_size: usize) -> *mut u8 {
+        loop {
+            let ptr = self.buf.alloc(frame_size);
+
+            if ptr.is_null() {
+                self.buf.grow();
+            } else {
+                return ptr;
+            }
+        }
+    }
+
     pub(crate) fn allocate_and_frame(&mut self, num_cells: usize) -> usize {
         let frame_size = AndFrame::size_of(num_cells);
 
         unsafe {
-            let new_top = self.buf.new_block(frame_size);
-            let e = self.buf.top as usize - self.buf.base as usize;
+            let e = self.buf.ptr as usize - self.buf.base as usize;
+            let new_ptr = self.alloc(frame_size);
+            let mut offset = prelude_size::<AndFramePrelude>();
 
             for idx in 0..num_cells {
-                let offset = prelude_size::<AndFramePrelude>() + idx * mem::size_of::<Addr>();
                 ptr::write(
-                    (self.buf.top as usize + offset) as *mut Addr,
-                    Addr::StackCell(e, idx + 1),
+                    (new_ptr as usize + offset) as *mut HeapCellValue,
+                    stack_loc_as_cell!(AndFrame, e, idx + 1),
                 );
+
+                offset += mem::size_of::<HeapCellValue>();
             }
 
-            let and_frame = &mut *(self.buf.top as *mut AndFrame);
+            let and_frame = &mut *(new_ptr as *mut AndFrame);
             and_frame.prelude.univ_prelude.num_cells = num_cells;
-
-            self.buf.top = new_top;
 
             e
         }
@@ -192,27 +217,27 @@ impl Stack {
         let frame_size = OrFrame::size_of(num_cells);
 
         unsafe {
-            let new_top = self.buf.new_block(frame_size);
-            let b = self.buf.top as usize - self.buf.base as usize;
+            let b = self.buf.ptr as usize - self.buf.base as usize;
+            let new_ptr = self.alloc(frame_size);
+            let mut offset = prelude_size::<OrFramePrelude>();
 
             for idx in 0..num_cells {
-                let offset = prelude_size::<OrFramePrelude>() + idx * mem::size_of::<Addr>();
                 ptr::write(
-                    (self.buf.top as usize + offset) as *mut Addr,
-                    Addr::StackCell(b, idx),
+                    (new_ptr as usize + offset) as *mut HeapCellValue,
+                    stack_loc_as_cell!(OrFrame, b, idx),
                 );
+
+                offset += mem::size_of::<HeapCellValue>();
             }
 
-            let or_frame = &mut *(self.buf.top as *mut OrFrame);
+            let or_frame = &mut *(new_ptr as *mut OrFrame);
             or_frame.prelude.univ_prelude.num_cells = num_cells;
-
-            self.buf.top = new_top;
 
             b
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) fn index_and_frame(&self, e: usize) -> &AndFrame {
         unsafe {
             let ptr = self.buf.base as usize + e;
@@ -220,7 +245,7 @@ impl Stack {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) fn index_and_frame_mut(&mut self, e: usize) -> &mut AndFrame {
         unsafe {
             let ptr = self.buf.base as usize + e;
@@ -228,7 +253,7 @@ impl Stack {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) fn index_or_frame(&self, b: usize) -> &OrFrame {
         unsafe {
             let ptr = self.buf.base as usize + b;
@@ -236,7 +261,7 @@ impl Stack {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) fn index_or_frame_mut(&mut self, b: usize) -> &mut OrFrame {
         unsafe {
             let ptr = self.buf.base as usize + b;
@@ -244,31 +269,65 @@ impl Stack {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) fn truncate(&mut self, b: usize) {
-        if b == 0 {
-            self.inner_truncate(mem::align_of::<Addr>());
-        } else {
-            self.inner_truncate(b);
+        let base = self.buf.base as usize + b;
+
+        if base < self.buf.ptr as usize {
+            self.buf.ptr = base as *mut _;
         }
     }
+}
 
-    #[inline]
-    fn inner_truncate(&mut self, b: usize) {
-        let base = b + self.buf.base as usize;
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-        if base < self.buf.top as usize {
-            self.buf.top = base as *const _;
+    use crate::machine::mock_wam::*;
+
+    #[test]
+    fn stack_tests() {
+        let mut wam = MockWAM::new();
+
+        let e = wam.machine_st.stack.allocate_and_frame(10); // create an AND frame!
+        let and_frame = wam.machine_st.stack.index_and_frame_mut(e);
+
+        assert_eq!(
+            e,
+            0// 10 * mem::size_of::<HeapCellValue>() + prelude_size::<AndFrame>()
+        );
+
+        assert_eq!(and_frame.prelude.univ_prelude.num_cells, 10);
+
+        for idx in 0..10 {
+            assert_eq!(and_frame[idx + 1], stack_loc_as_cell!(AndFrame, e, idx + 1));
         }
-    }
 
-    pub(crate) fn drop_in_place(&mut self) {
-        self.truncate(mem::align_of::<Addr>());
+        and_frame[5] = empty_list_as_cell!();
 
-        debug_assert!(if self.buf.top.is_null() {
-            self.buf.top == self.buf.base
-        } else {
-            self.buf.top as usize == self.buf.base as usize + mem::align_of::<Addr>()
-        });
+        assert_eq!(and_frame[5], empty_list_as_cell!());
+
+        let b = wam.machine_st.stack.allocate_or_frame(5);
+
+        let or_frame = wam.machine_st.stack.index_or_frame_mut(b);
+
+        for idx in 0..5 {
+            assert_eq!(or_frame[idx], stack_loc_as_cell!(OrFrame, b, idx));
+        }
+
+        let next_e = wam.machine_st.stack.allocate_and_frame(9); // create an AND frame!
+        let and_frame = wam.machine_st.stack.index_and_frame_mut(next_e);
+
+        for idx in 0..9 {
+            assert_eq!(and_frame[idx + 1], stack_loc_as_cell!(AndFrame, next_e, idx + 1));
+        }
+
+        let and_frame = wam.machine_st.stack.index_and_frame(e);
+        assert_eq!(and_frame[5], empty_list_as_cell!());
+
+        assert_eq!(
+            wam.machine_st.stack[stack_loc!(AndFrame, e, 5)],
+            empty_list_as_cell!()
+        );
     }
 }

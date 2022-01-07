@@ -1,0 +1,14 @@
+[package]
+name = "to-syn-value_derive"
+version = "0.1.0"
+authors = ["Mark Thom <markjordanthom@gmail.com>"]
+edition = "2021"
+publish = false
+
+[lib]
+proc-macro = true
+
+[dependencies]
+proc-macro2 = "*"
+syn = { version = "*", features = ['full', 'visit', 'extra-traits'] }
+quote = "*"

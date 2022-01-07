@@ -1,10 +1,10 @@
-use prolog_parser::ast::*;
-use prolog_parser::temp_v;
+use crate::parser::ast::*;
+use crate::temp_v;
 
 use crate::fixtures::*;
 use crate::forms::*;
+use crate::instructions::*;
 use crate::machine::machine_indices::*;
-use crate::targets::*;
 
 use std::cell::Cell;
 use std::rc::Rc;
@@ -12,42 +12,42 @@ use std::rc::Rc;
 pub(crate) trait Allocator<'a> {
     fn new() -> Self;
 
-    fn mark_anon_var<Target>(&mut self, _: Level, _: GenContext, _: &mut Vec<Target>)
+    fn mark_anon_var<Target>(&mut self, _: Level, _: GenContext, _: &mut Code)
     where
-        Target: CompilationTarget<'a>;
+        Target: crate::targets::CompilationTarget<'a>;
     fn mark_non_var<Target>(
         &mut self,
         _: Level,
         _: GenContext,
         _: &'a Cell<RegType>,
-        _: &mut Vec<Target>,
+        _: &mut Code,
     ) where
-        Target: CompilationTarget<'a>;
+        Target: crate::targets::CompilationTarget<'a>;
     fn mark_reserved_var<Target>(
         &mut self,
-        _: Rc<Var>,
+        _: Rc<String>,
         _: Level,
         _: &'a Cell<VarReg>,
         _: GenContext,
-        _: &mut Vec<Target>,
+        _: &mut Code,
         _: RegType,
         _: bool,
     ) where
-        Target: CompilationTarget<'a>;
+        Target: crate::targets::CompilationTarget<'a>;
     fn mark_var<Target>(
         &mut self,
-        _: Rc<Var>,
+        _: Rc<String>,
         _: Level,
         _: &'a Cell<VarReg>,
         _: GenContext,
-        _: &mut Vec<Target>,
+        _: &mut Code,
     ) where
-        Target: CompilationTarget<'a>;
+        Target: crate::targets::CompilationTarget<'a>;
 
     fn reset(&mut self);
     fn reset_contents(&mut self) {}
     fn reset_arg(&mut self, _: usize);
-    fn reset_at_head(&mut self, _: &Vec<Box<Term>>);
+    fn reset_at_head(&mut self, args: &Vec<Term>);
 
     fn advance_arg(&mut self);
 
@@ -83,17 +83,17 @@ pub(crate) trait Allocator<'a> {
         perm_vs
     }
 
-    fn get(&self, var: Rc<Var>) -> RegType {
+    fn get(&self, var: Rc<String>) -> RegType {
         self.bindings()
             .get(&var)
             .map_or(temp_v!(0), |v| v.as_reg_type())
     }
 
-    fn is_unbound(&self, var: Rc<Var>) -> bool {
+    fn is_unbound(&self, var: Rc<String>) -> bool {
         self.get(var).reg_num() == 0
     }
 
-    fn record_register(&mut self, var: Rc<Var>, r: RegType) {
+    fn record_register(&mut self, var: Rc<String>, r: RegType) {
         match self.bindings_mut().get_mut(&var).unwrap() {
             &mut VarData::Temp(_, ref mut s, _) => *s = r.reg_num(),
             &mut VarData::Perm(ref mut s) => *s = r.reg_num(),

@@ -20,12 +20,6 @@
 :- use_module(library(reif)).
 
 
-permutation([], []).
-permutation([X|Xs], Ys) :-
-    permutation(Xs, Yss),
-    select(X, Ys, Yss).
-
-
 valid_time([H1,H2,M1,M2], T) :-
     memberd_t(H1, [0,1,2], TH1),
     memberd_t(H2, [0,1,2,3,4,5,6,7,8,9], TH2),
