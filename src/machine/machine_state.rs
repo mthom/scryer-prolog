@@ -499,13 +499,6 @@ impl MachineState {
                     }
 
                     let mut singleton_var_set: IndexMap<Ref, bool> = IndexMap::new();
-                    let mut var_list = vec![];
-
-                    let list_of_var_eqs = push_var_eq_functors(
-                        &mut self.heap,
-                        term_write_result.var_dict.iter(),
-                        &mut self.atom_tbl,
-                    );
 
                     for addr in stackful_preorder_iter(&mut self.heap, term) {
                         let addr = unmark_cell_bits!(addr);
@@ -513,7 +506,6 @@ impl MachineState {
                         if let Some(var) = addr.as_var() {
                             if !singleton_var_set.contains_key(&var) {
                                 singleton_var_set.insert(var, true);
-                                var_list.push(addr);
                             } else {
                                 singleton_var_set.insert(var, false);
                             }
@@ -532,6 +524,23 @@ impl MachineState {
                         &mut self.atom_tbl,
                     );
 
+                    let mut var_list = Vec::with_capacity(singleton_var_set.len());
+
+                    for (var_name, addr) in term_write_result.var_dict {
+                        if let Some(var) = addr.as_var() {
+                            let idx = singleton_var_set.get_index_of(&var).unwrap();
+                            var_list.push((var_name, addr, idx));
+                        }
+                    }
+
+                    var_list.sort_by(|(_,_,idx_1),(_,_,idx_2)| idx_1.cmp(idx_2));
+
+                    let list_of_var_eqs = push_var_eq_functors(
+                        &mut self.heap,
+                        var_list.iter().map(|(var_name, var,_)| (var_name,var)),
+                        &mut self.atom_tbl,
+                    );
+
                     let singleton_addr = self.registers[3];
                     let singletons_offset = heap_loc_as_cell!(
                         iter_to_heap_list(&mut self.heap, singleton_var_list.into_iter())
@@ -545,7 +554,7 @@ impl MachineState {
 
                     let vars_addr = self.registers[4];
                     let vars_offset = heap_loc_as_cell!(
-                        iter_to_heap_list(&mut self.heap, var_list.into_iter())
+                        iter_to_heap_list(&mut self.heap, var_list.into_iter().map(|(_,cell,_)| cell))
                     );
 
                     unify_fn!(*self, vars_offset, vars_addr);
