@@ -3148,7 +3148,7 @@ impl Machine {
     #[inline(always)]
     pub(crate) fn current_time(&mut self) {
         let timestamp = self.systemtime_to_timestamp(SystemTime::now());
-        self.machine_st.unify_atom(timestamp, self.machine_st.registers[1]);
+        self.machine_st.unify_complete_string(timestamp, self.machine_st.registers[1]);
     }
 
     #[inline(always)]
