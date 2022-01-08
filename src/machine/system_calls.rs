@@ -4115,7 +4115,7 @@ impl Machine {
 
         let socket_atom = cell_as_atom!(addr);
 
-        let _port = read_heap_cell!(port,
+        let port = read_heap_cell!(port,
             (HeapCellValueTag::Atom, (name, arity)) => {
                 debug_assert_eq!(arity, 0);
                 name
@@ -4132,9 +4132,10 @@ impl Machine {
         );
 
         let socket_addr = if socket_atom == atom!("") {
-            atom!("127.0.0.1")
+            atom!("127.0.0.1:80")
         } else {
-            socket_atom
+            let buffer = format!("{}:{}", socket_atom.as_str(), port.as_str());
+            self.machine_st.atom_tbl.build_with(&buffer)
         };
 
         let alias = self.machine_st.registers[4];

@@ -25,7 +25,7 @@ socket_client_open(Addr, Stream, Options) :-
     builtins:parse_stream_options(Options,
                                   [Alias, EOFAction, Reposition, Type],
                                   socket_client_open/3),
-    '$socket_client_open'(Address, Port, Stream, Alias, EOFAction, Reposition, Type).
+    '$socket_client_open'(Address, Port, Stream, Alias, EOFAction, Reposition, Type, false).
 
 
 socket_server_open(Addr, ServerSocket) :-
