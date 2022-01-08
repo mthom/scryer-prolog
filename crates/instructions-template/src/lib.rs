@@ -101,7 +101,7 @@ enum BuiltInClauseType {
     Is(RegType, ArithmeticTerm),
     #[strum_discriminants(strum(props(Arity = "2", Name = "keysort")))]
     KeySort,
-    #[strum_discriminants(strum(props(Arity = "1", Name = "read")))]
+    #[strum_discriminants(strum(props(Arity = "2", Name = "read")))]
     Read,
     #[strum_discriminants(strum(props(Arity = "2", Name = "sort")))]
     Sort,
