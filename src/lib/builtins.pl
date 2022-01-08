@@ -225,6 +225,11 @@ comma_dispatch(G1, G2, B) :-
     comma_dispatch_prep((G1, G2), B, Conts),
     comma_dispatch_call_list(Conts).
 
+:- non_counted_backtracking cont_list_to_goal/2.
+
+cont_list_goal([Cont], Cont) :- !.
+cont_list_goal(Conts, builtins:comma_dispatch_call_list(Conts)).
+
 :- non_counted_backtracking comma_dispatch_prep/3.
 
 comma_dispatch_prep(Gs, B, [Cont|Conts]) :-
@@ -232,13 +237,29 @@ comma_dispatch_prep(Gs, B, [Cont|Conts]) :-
        (  functor(Gs, ',', 2) ->
           arg(1, Gs, G1),
           arg(2, Gs, G2),
-          (  nonvar(G1), ( G1 = ! ; G1 = _:! ) ->
-             Cont = builtins:set_cp(B)
-          ;  Cont = G1
-          ),
+          comma_dispatch_prep(G1, B, IConts1),
+          cont_list_goal(IConts1, Cont),
           comma_dispatch_prep(G2, B, Conts)
        ;  ( Gs = ! ; Gs = _:! ) ->
           Cont = builtins:set_cp(B),
+          Conts = []
+       ;  functor(Gs, ';', 2) ->
+          arg(1, Gs, G1),
+          arg(2, Gs, G2),
+          comma_dispatch_prep(G1, B, IConts0),
+          comma_dispatch_prep(G2, B, IConts1),
+          cont_list_goal(IConts0, Cont0),
+          cont_list_goal(IConts1, Cont1),
+          Cont = ( Cont0 ; Cont1 ),
+          Conts = []
+       ;  functor(Gs, ->, 2) ->
+          arg(1, Gs, G1),
+          arg(2, Gs, G2),
+          comma_dispatch_prep(G1, B, IConts1),
+          comma_dispatch_prep(G2, B, IConts2),
+          cont_list_goal(IConts1, Cont1),
+          cont_list_goal(IConts2, Cont2),
+          Cont = (Cont1 -> Cont2),
           Conts = []
        ;  Cont = Gs,
           Conts = []
@@ -246,7 +267,6 @@ comma_dispatch_prep(Gs, B, [Cont|Conts]) :-
     ;  Cont = Gs,
        Conts = []
     ).
-
 
 :- non_counted_backtracking comma_dispatch_call_list/1.
 
