@@ -573,6 +573,7 @@ The modules that ship with Scryer&nbsp;Prolog are also called
 * [`uuid`](src/lib/uuid.pl) UUIDv4 generation and hex representation
 * [`tls`](src/lib/tls.pl)
   Predicates for negotiating TLS connections explicitly.
+* [`ugraphs`](src/lib/ugraphs.pl) Graph manipulation library
 
 To use predicates provided by the `lists` library, write:
 
