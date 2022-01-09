@@ -442,7 +442,7 @@ enum SystemClauseType {
     SkipMaxList,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$sleep")))]
     Sleep,
-    #[strum_discriminants(strum(props(Arity = "8", Name = "$socket_client_open")))]
+    #[strum_discriminants(strum(props(Arity = "7", Name = "$socket_client_open")))]
     SocketClientOpen,
     #[strum_discriminants(strum(props(Arity = "3", Name = "$socket_server_open")))]
     SocketServerOpen,
