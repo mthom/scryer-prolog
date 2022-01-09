@@ -4161,42 +4161,7 @@ impl Machine {
 
         let stream = match TcpStream::connect(socket_addr.as_str()).map_err(|e| e.kind()) {
             Ok(tcp_stream) => {
-                let mut stream = {
-                    let tls = cell_as_atom!(self.machine_st.store(self.machine_st.deref(
-                        self.machine_st.registers[8]
-                    )));
-
-                    match tls {
-                        atom!("false") => {
-                            Stream::from_tcp_stream(socket_addr, tcp_stream, &mut self.machine_st.arena)
-                        }
-                        atom!("true") => {
-                            let connector = TlsConnector::new().unwrap();
-                            let stream = Stream::from_tcp_stream(
-                                socket_addr,
-                                tcp_stream,
-                                &mut self.machine_st.arena,
-                            );
-
-                            let stream =
-                                match connector.connect(socket_atom.as_str(), stream) {
-                                    Ok(tls_stream) => tls_stream,
-                                    Err(_) => {
-                                        return Err(self.machine_st.open_permission_error(
-                                            addr,
-                                            atom!("socket_client_open"),
-                                            3,
-                                        ));
-                                    }
-                                };
-
-                            Stream::from_tls_stream(atom!("TLS"), stream, &mut self.machine_st.arena)
-                        }
-                        _ => {
-                            unreachable!()
-                        }
-                    }
-                };
+                let mut stream = Stream::from_tcp_stream(socket_addr, tcp_stream, &mut self.machine_st.arena);
 
                 *stream.options_mut() = options;
 
