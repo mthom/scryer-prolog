@@ -84,7 +84,7 @@ impl<'ast> Visit<'ast> for StaticStrVisitor {
     }
 }
 
-pub fn index_static_strings() -> TokenStream {
+pub fn index_static_strings(instruction_rs_path: &std::path::Path) -> TokenStream {
     use quote::*;
 
     use std::ffi::OsStr;
@@ -103,19 +103,13 @@ pub fn index_static_strings() -> TokenStream {
 
     let mut visitor = StaticStrVisitor::new();
 
-    for entry in WalkDir::new("src/").into_iter().filter_entry(filter_rust_files) {
-        let entry = entry.unwrap();
-
-        if entry.path().is_dir() {
-            continue;
-        }
-
-        let mut file = match File::open(entry.path()) {
-            Ok(file) => file,
-            Err(_) => continue,
-        };
-
+    fn process_filepath(path: &std::path::Path) -> std::result::Result<syn::File, ()> {
         let mut src = String::new();
+
+        let mut file = match File::open(path) {
+            Ok(file) => file,
+            Err(_) => return Err(()),
+        };
 
         match file.read_to_string(&mut src) {
             Ok(_) => {}
@@ -127,14 +121,36 @@ pub fn index_static_strings() -> TokenStream {
         let syntax = match syn::parse_file(&src) {
             Ok(s) => s,
             Err(e) => {
-                panic!("parse error: {} in file {:?}", e, entry.path());
+                panic!("parse error: {} in file {:?}", e, path);
             }
+        };
+        Ok(syntax)
+    }
+
+    for entry in WalkDir::new("src/")
+        .into_iter()
+        .filter_entry(filter_rust_files)
+    {
+        let entry = entry.unwrap();
+
+        if entry.path().is_dir() {
+            continue;
+        }
+
+        let syntax = match process_filepath(entry.path()) {
+            Ok(syntax) => syntax,
+            Err(_) => continue,
         };
 
         visitor.visit_file(&syntax);
     }
 
-    let indices = (0 .. visitor.static_strs.len()).map(|i| i << 3);
+    match process_filepath(instruction_rs_path) {
+        Ok(syntax) => visitor.visit_file(&syntax),
+        Err(_) => {}
+    }
+
+    let indices = (0..visitor.static_strs.len()).map(|i| i << 3);
     let indices_iter = indices.clone();
 
     let static_strs_len = visitor.static_strs.len();

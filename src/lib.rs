@@ -21,7 +21,9 @@ mod heap_iter;
 pub mod heap_print;
 mod indexing;
 #[macro_use]
-pub mod instructions;
+pub mod instructions {
+    include!(concat!(env!("OUT_DIR"), "/instructions.rs"));
+}
 mod iterators;
 pub mod machine;
 mod raw_block;
@@ -29,3 +31,5 @@ pub mod read;
 mod targets;
 pub mod types;
 pub mod write;
+
+use instructions::instr;
