@@ -603,33 +603,33 @@ impl Ord for Number {
             }
             (&Number::Fixnum(n1), &Number::Float(n2)) => OrderedFloat(n1.get_num() as f64).cmp(&n2),
             (&Number::Float(n1), &Number::Fixnum(n2)) => n1.cmp(&OrderedFloat(n2.get_num() as f64)),
-            (&Number::Integer(ref n1), &Number::Integer(ref n2)) => n1.cmp(n2),
-            (&Number::Integer(ref n1), Number::Float(n2)) => OrderedFloat(n1.to_f64()).cmp(n2),
+            (&Number::Integer(n1), &Number::Integer(n2)) => (*n1).cmp(&*n2),
+            (&Number::Integer(n1), Number::Float(n2)) => OrderedFloat(n1.to_f64()).cmp(n2),
             (&Number::Float(n1), &Number::Integer(ref n2)) => n1.cmp(&OrderedFloat(n2.to_f64())),
-            (&Number::Integer(ref n1), &Number::Rational(ref n2)) => {
+            (&Number::Integer(n1), &Number::Rational(n2)) => {
                 #[cfg(feature = "num")]
                 {
                     Rational::from(&**n1).cmp(n2)
                 }
                 #[cfg(not(feature = "num"))]
                 {
-                    (&**n1).partial_cmp(&**n2).unwrap_or(Ordering::Less)
+                    (&*n1).partial_cmp(&*n2).unwrap_or(Ordering::Less)
                 }
             }
-            (&Number::Rational(ref n1), &Number::Integer(ref n2)) => {
+            (&Number::Rational(n1), &Number::Integer(n2)) => {
                 #[cfg(feature = "num")]
                 {
                     (&**n1).cmp(&Rational::from(&**n2))
                 }
                 #[cfg(not(feature = "num"))]
                 {
-                    (&**n1).partial_cmp(&**n2).unwrap_or(Ordering::Less)
+                    (&*n1).partial_cmp(&*n2).unwrap_or(Ordering::Less)
                 }
             }
-            (&Number::Rational(ref n1), &Number::Float(n2)) => OrderedFloat(n1.to_f64()).cmp(&n2),
-            (&Number::Float(n1), &Number::Rational(ref n2)) => n1.cmp(&OrderedFloat(n2.to_f64())),
+            (&Number::Rational(n1), &Number::Float(n2)) => OrderedFloat(n1.to_f64()).cmp(&n2),
+            (&Number::Float(n1), &Number::Rational(n2)) => n1.cmp(&OrderedFloat(n2.to_f64())),
             (&Number::Float(f1), &Number::Float(f2)) => f1.cmp(&f2),
-            (&Number::Rational(ref r1), &Number::Rational(ref r2)) => r1.cmp(&r2),
+            (&Number::Rational(r1), &Number::Rational(r2)) => (*r1).cmp(&*r2),
         }
     }
 }
