@@ -29,6 +29,8 @@
      ~ND   like ~Nd, separating digits to the left of the decimal point
            in groups of three, using the character "," (comma)
      ~NU   like ~ND, using "_" (underscore) to separate groups of digits
+     ~NL   format an integer so that at most N digits appear on a line.
+           If N is 0 or omitted, it defaults to 72.
      ~Nr   where N is an integer between 2 and 36: format the
            next argument, which must be an integer, in radix N.
            The characters "a" to "z" are used for radices 10 to 36.
@@ -208,6 +210,16 @@ cells([~|Fs0], Args0, Tab, Es, VNs) -->
         !,
         { separate_digits_fractional(Arg, '_', Num, Cs) },
         cells(Fs, Args, Tab, [chars(Cs)|Es], VNs).
+cells([~|Fs0], Args0, Tab, Es, VNs) -->
+        { numeric_argument(Fs0, Num0, ['L'|Fs], Args0, [Arg|Args]) },
+        !,
+        { (   Num0 =:= 0 ->
+              Num = 72
+          ;   Num = Num0
+          ),
+          phrase(format_("~d", [Arg]), Cs0),
+          phrase(split_lines_width(Cs0, Num), Cs) },
+        cells(Fs, Args, Tab, [chars(Cs)|Es], VNs).
 cells([~,i|Fs], [_|Args], Tab, Es, VNs) --> !,
         cells(Fs, Args, Tab, Es, VNs).
 cells([~,n|Fs], Args, Tab, Es, VNs) --> !,
@@ -327,6 +339,14 @@ upto_what([], _) --> [].
 
 groups_of_three([A,B,C,D|Rs], Sep) --> !, [A,B,C,Sep], groups_of_three([D|Rs], Sep).
 groups_of_three(Ls, _) --> seq(Ls).
+
+split_lines_width(Cs, Num) -->
+        (   { length(Prefix, Num),
+              append(Prefix, [R|Rs], Cs) } ->
+            seq(Prefix), "_\n",
+            split_lines_width([R|Rs], Num)
+        ;   seq(Cs)
+        ).
 
 cell(From, To, Es0) -->
         (   { Es0 == [] } -> []
