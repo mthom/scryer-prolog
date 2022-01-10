@@ -83,4 +83,6 @@ fn main() {
         .arg(static_atoms_path.as_os_str())
         .spawn().unwrap()
         .wait().unwrap();
+
+    println!("cargo:rerun-if-changed=src/");
 }
