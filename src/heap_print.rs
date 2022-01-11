@@ -1358,7 +1358,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
         read_heap_cell!(addr,
             (HeapCellValueTag::Atom, (name, arity)) => {
-                if name == atom!("[]") {
+                if name == atom!("[]") && arity == 0 {
                     if !self.at_cdr("") {
                         append_str!(self, "[]");
                     }
