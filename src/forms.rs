@@ -360,6 +360,7 @@ impl AtomOrString {
     #[inline]
     pub fn as_str(&self) -> &str {
         match self {
+            AtomOrString::Atom(atom) if atom == &atom!("[]") => "",
             AtomOrString::Atom(atom) => atom.as_str(),
             AtomOrString::String(string) => string.as_str(),
         }
