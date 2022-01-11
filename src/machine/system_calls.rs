@@ -2947,7 +2947,17 @@ impl Machine {
             };
 
             let unossified_op_dir = if !orig_op.is_var() {
-                let orig_op = cell_as_atom!(orig_op);
+                let orig_op = read_heap_cell!(orig_op,
+                    (HeapCellValueTag::Atom, (name, _arity)) => {
+                        name
+                    }
+                    (HeapCellValueTag::Char, c) => {
+                        self.machine_st.atom_tbl.build_with(&c.to_string())
+                    }
+                    _ => {
+                        unreachable!()
+                    }
+                );
 
                 let op_descs = [
                     self.indices.op_dir.get_key_value(&(orig_op, Fixity::In)),
