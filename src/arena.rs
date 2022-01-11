@@ -72,8 +72,16 @@ impl ArenaHeader {
     }
 }
 
-#[derive(Debug, PartialEq, PartialOrd, Eq, Ord)]
+#[derive(Debug, PartialOrd, Ord)]
 pub struct TypedArenaPtr<T: ?Sized>(ptr::NonNull<T>);
+
+impl<T: ?Sized + PartialEq> PartialEq for TypedArenaPtr<T> {
+    fn eq(&self, other: &TypedArenaPtr<T>) -> bool {
+        self.0 == other.0 || &**self == &**other
+    }
+}
+
+impl<T: ?Sized + PartialEq> Eq for TypedArenaPtr<T> {}
 
 impl<T: ?Sized + Hash> Hash for TypedArenaPtr<T> {
     #[inline(always)]
