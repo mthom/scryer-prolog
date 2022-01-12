@@ -20,7 +20,7 @@ for the introduction of a mark-compacting garbage collector.
 Several performance enhancing changes are due before rebis-dev will be
 considered ready for merging into master, among them:
 
-* Replacing choice points pivoting on inlined deterministic predicates
+* Replacing choice points pivoting on inlined semi-deterministic predicates
   (`atom`, `var`, etc) with if/else ladders
 * Inlining all built-ins and system call instructions
 * Greatly reducing the number of instructions used to compile disjunctives
