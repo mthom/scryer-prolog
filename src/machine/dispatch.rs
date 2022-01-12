@@ -266,7 +266,7 @@ impl Machine {
         }
     }
 
-    pub(super) fn find_living_dynamic(&self, oi: u32, mut ii: u32) -> Option<(usize, u32, u32, bool)> {
+    pub(super) fn find_living_dynamic(&self, oi: u32, mut ii: u32) -> Option<(usize, u32, u32, usize, bool)> {
         let p = self.machine_st.p;
 
         let indexed_choice_instrs = match &self.code[p] {
@@ -287,8 +287,10 @@ impl Machine {
                         death,
                         next_or_fail,
                     ) => {
+                        let len = indexed_choice_instrs.len();
+
                         if birth < self.machine_st.cc && Death::Finite(self.machine_st.cc) <= death {
-                            return Some((offset, oi, ii, next_or_fail.is_next()));
+                            return Some((offset, oi, ii, len, next_or_fail.is_next()));
                         } else {
                             ii += 1;
                         }
@@ -3037,7 +3039,7 @@ impl Machine {
                             let p = self.machine_st.p;
 
                             match self.find_living_dynamic(self.machine_st.oip, self.machine_st.iip) {
-                                Some((offset, oi, ii, is_next_clause)) => {
+                                Some((offset, oi, ii, _, is_next_clause)) => {
                                     self.machine_st.p = p;
                                     self.machine_st.oip = oi;
                                     self.machine_st.iip = ii;
@@ -3084,7 +3086,11 @@ impl Machine {
 
                                             if is_next_clause {
                                                 match self.find_living_dynamic(self.machine_st.oip, self.machine_st.iip) {
-                                                    Some(_) => {
+                                                    // if we're executing the last instruction
+                                                    // of the internal block pointed to by
+                                                    // self.machine_st.iip, we want trust, not retry.
+                                                    // this is true iff ii + 1 < len.
+                                                    Some((_,_,ii,len,_)) if (ii as usize) + 1 < len => {
                                                         self.retry(offset);
 
                                                         try_or_throw!(
@@ -3092,7 +3098,7 @@ impl Machine {
                                                             (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
                                                         );
                                                     }
-                                                    None => {
+                                                    _ => {
                                                         self.trust(offset);
 
                                                         try_or_throw!(
