@@ -1334,6 +1334,9 @@ impl MachineState {
                          (ArenaHeaderTag::Rational, r) => {
                              self.interms.push(Number::Rational(r));
                          }
+                         (ArenaHeaderTag::F64, fl) => {
+                             self.interms.push(Number::Float(*fl));
+                         }
                          _ => {
                              std::mem::drop(iter);
 
