@@ -1,4 +1,5 @@
 use crate::helper::{load_module_test, run_top_level_test_no_args, run_top_level_test_with_args};
+use serial_test::serial;
 
 // issue #857
 #[test]
@@ -164,6 +165,7 @@ fn ignored_constraint() {
 }
 
 // issue #831
+#[serial]
 #[test]
 fn call_0() {
     load_module_test(
