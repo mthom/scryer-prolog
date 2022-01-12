@@ -21,7 +21,7 @@ pub struct Atom {
 
 const_assert!(mem::size_of::<Atom>() == 8);
 
-include!("./static_atoms.rs");
+include!(concat!(env!("OUT_DIR"), "/static_atoms.rs"));
 
 impl<'a> From<&'a Atom> for Atom {
     #[inline]
