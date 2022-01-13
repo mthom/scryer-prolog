@@ -1852,7 +1852,7 @@ impl Machine {
                             }
                         };
 
-                        self.machine_st.unify_char(c, a2);
+                        self.machine_st.unify_char(c, a1);
                         return Ok(());
                     }
                     Ok(Number::Fixnum(n)) => {
@@ -5266,7 +5266,12 @@ impl Machine {
 
         let complete_string = {
             let buffer = String::from_iter(in_out.iter().map(|b| *b as char));
-            put_complete_string(&mut self.machine_st.heap, &buffer, &mut self.machine_st.atom_tbl)
+
+            if buffer.len() == 0 {
+                empty_list_as_cell!()
+            } else {
+                atom_as_cstr_cell!(self.machine_st.atom_tbl.build_with(&buffer))
+            }
         };
 
         unify!(self.machine_st, self.machine_st.registers[6], tag_list);
@@ -5315,7 +5320,11 @@ impl Machine {
                 }
             };
 
-            put_complete_string(&mut self.machine_st.heap, &buffer, &mut self.machine_st.atom_tbl)
+            if buffer.len() == 0 {
+                empty_list_as_cell!()
+            } else {
+                atom_as_cstr_cell!(self.machine_st.atom_tbl.build_with(&buffer))
+            }
         };
 
         unify!(self.machine_st, self.machine_st.registers[6], complete_string);
@@ -5361,17 +5370,19 @@ impl Machine {
             .affine_coordinates_gfp(&group, &mut rx, &mut ry, &mut bnctx)
             .ok();
 
-        let sx = put_complete_string(
-            &mut self.machine_st.heap,
-            &rx.to_dec_str().unwrap(),
-            &mut self.machine_st.atom_tbl,
-        );
+        let sx = rx.to_dec_str().unwrap();
+        let sx = if sx.len() == 0 {
+            empty_list_as_cell!()
+        } else {
+            atom_as_cstr_cell!(self.machine_st.atom_tbl.build_with(&sx))
+        };
 
-        let sy = put_complete_string(
-            &mut self.machine_st.heap,
-            &ry.to_dec_str().unwrap(),
-            &mut self.machine_st.atom_tbl,
-        );
+        let sy = ry.to_dec_str().unwrap();
+        let sy = if sy.len() == 0 {
+            empty_list_as_cell!()
+        } else {
+            atom_as_cstr_cell!(self.machine_st.atom_tbl.build_with(&sy))
+        };
 
         unify!(self.machine_st, self.machine_st.registers[4], sx);
         unify!(self.machine_st, self.machine_st.registers[5], sy);
@@ -5382,11 +5393,12 @@ impl Machine {
         let pkcs8_bytes = signature::Ed25519KeyPair::generate_pkcs8(rng()).unwrap();
         let complete_string = {
             let buffer = String::from_iter(pkcs8_bytes.as_ref().iter().map(|b| *b as char));
-            put_complete_string(
-                &mut self.machine_st.heap,
-                &buffer,
-                &mut self.machine_st.atom_tbl,
-            )
+
+            if buffer.len() == 0 {
+                empty_list_as_cell!()
+            } else {
+                atom_as_cstr_cell!(self.machine_st.atom_tbl.build_with(&buffer))
+            }
         };
 
         unify!(self.machine_st, self.machine_st.registers[1], complete_string)
@@ -5409,11 +5421,11 @@ impl Machine {
                 key_pair.public_key().as_ref().iter().map(|b| *b as char),
             );
 
-            put_complete_string(
-                &mut self.machine_st.heap,
-                &buffer,
-                &mut self.machine_st.atom_tbl,
-            )
+            if buffer.len() == 0 {
+                empty_list_as_cell!()
+            } else {
+                atom_as_cstr_cell!(self.machine_st.atom_tbl.build_with(&buffer))
+            }
         };
 
         unify!(self.machine_st, self.machine_st.registers[2], complete_string);
@@ -5478,7 +5490,11 @@ impl Machine {
         let result = scalarmult(&scalar, &point).unwrap();
 
         let string = String::from_iter(result[..].iter().map(|b| *b as char));
-        let cstr = put_complete_string(&mut self.machine_st.heap, &string, &mut self.machine_st.atom_tbl);
+        let cstr = if string.len() == 0 {
+            empty_list_as_cell!()
+        } else {
+            atom_as_cstr_cell!(self.machine_st.atom_tbl.build_with(&string))
+        };
 
         unify!(self.machine_st, self.machine_st.registers[3], cstr);
     }
@@ -5663,11 +5679,11 @@ impl Machine {
             match bytes {
                 Ok(bs) => {
                     let string = String::from_iter(bs.iter().map(|b| *b as char));
-                    let cstr = put_complete_string(
-                        &mut self.machine_st.heap,
-                        &string,
-                        &mut self.machine_st.atom_tbl,
-                    );
+                    let cstr = if string.len() == 0 {
+                        empty_list_as_cell!()
+                    } else {
+                        atom_as_cstr_cell!(self.machine_st.atom_tbl.build_with(&string))
+                    };
 
                     unify!(self.machine_st, self.machine_st.registers[1], cstr);
                 }
@@ -5694,11 +5710,11 @@ impl Machine {
             }
 
             let b64 = base64::encode_config(bytes, config);
-            let cstr = put_complete_string(
-                &mut self.machine_st.heap,
-                &b64,
-                &mut self.machine_st.atom_tbl,
-            );
+            let cstr = if b64.len() == 0 {
+                empty_list_as_cell!()
+            } else {
+                atom_as_cstr_cell!(self.machine_st.atom_tbl.build_with(&b64))
+            };
 
             unify!(self.machine_st, self.machine_st.registers[2], cstr);
         }
