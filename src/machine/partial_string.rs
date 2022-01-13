@@ -44,10 +44,10 @@ impl PartialString {
     #[inline]
     pub(super) fn new<'a>(src: &'a str, atom_tbl: &mut AtomTable) -> Option<(Self, &'a str)> {
         let terminator_idx = scan_for_terminator(src.chars());
-        let pstr = PartialString(atom_tbl.build_with(src));
+        let pstr = PartialString(atom_tbl.build_with(&src[.. terminator_idx]));
 
-        Some(if terminator_idx != src.as_bytes().len() {
-            (pstr, &src[terminator_idx..])
+        Some(if terminator_idx <  src.as_bytes().len() {
+            (pstr, &src[terminator_idx + 1..])
         } else {
             (pstr, "")
         })
