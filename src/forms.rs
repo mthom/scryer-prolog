@@ -384,8 +384,8 @@ pub(crate) fn fetch_atom_op_spec(
     spec: Option<OpDesc>,
     op_dir: &OpDir,
 ) -> Option<OpDesc> {
-    fetch_op_spec_from_existing(name, 1, spec, op_dir)
-        .or_else(|| fetch_op_spec_from_existing(name, 2, spec, op_dir))
+    fetch_op_spec_from_existing(name, 2, spec, op_dir)
+        .or_else(|| fetch_op_spec_from_existing(name, 1, spec, op_dir))
 }
 
 pub(crate) fn fetch_op_spec_from_existing(
@@ -429,6 +429,9 @@ pub(crate) fn fetch_op_spec(name: Atom, arity: usize, op_dir: &OpDir) -> Option<
                     None
                 }
             })
+        }
+        0 => {
+            fetch_atom_op_spec(name, None, op_dir)
         }
         _ => None,
     }

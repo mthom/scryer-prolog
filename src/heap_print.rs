@@ -88,7 +88,7 @@ fn needs_bracketing(child_desc: OpDesc, op: &DirectedOp) -> bool {
                 true
             } else if (is_postfix!(spec) || is_infix!(spec)) && !is_postfix!(child_desc.get_spec())
             {
-                *cell == child_desc && child_desc.get_prec() == priority
+                *cell != child_desc && child_desc.get_prec() == priority
             } else {
                 false
             }
@@ -191,10 +191,10 @@ enum NumberFocus {
 }
 
 impl NumberFocus {
-    fn is_positive(&self) -> bool {
+    fn is_negative(&self) -> bool {
         match self {
-            NumberFocus::Unfocused(n) => n.is_positive(),
-            NumberFocus::Denominator(r) | NumberFocus::Numerator(r) => **r > 0,
+            NumberFocus::Unfocused(n) => n.is_negative(),
+            NumberFocus::Denominator(r) | NumberFocus::Numerator(r) => **r < 0,
         }
     }
 }
@@ -922,7 +922,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
     fn print_number(&mut self, n: NumberFocus, op: &Option<DirectedOp>) {
         let add_brackets = if let Some(op) = op {
-            op.is_negative_sign() && n.is_positive()
+            op.is_negative_sign() && !n.is_negative()
         } else {
             false
         };
@@ -934,22 +934,19 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         match n {
             NumberFocus::Unfocused(n) => match n {
                 Number::Float(fl) => {
-                    if &fl == &OrderedFloat(0f64) {
-                        push_space_if_amb!(self, "0.0", {
-                            append_str!(self, "0.0");
-                        });
-                    } else {
-                        let OrderedFloat(fl) = fl;
-                        let output_str = format!("{0:<20?}", fl);
+                    let OrderedFloat(fl) = fl;
+                    let output_str = format!("{0:<20?}", fl);
 
-                        push_space_if_amb!(self, &output_str, {
-                            append_str!(self, &output_str.trim());
-                        });
-                    }
+                    push_space_if_amb!(self, &output_str, {
+                        append_str!(self, &output_str.trim());
+                    });
                 }
                 Number::Rational(r) => {
                     self.print_rational(r, add_brackets);
                     return;
+                }
+                Number::Fixnum(n) => {
+                    append_str!(self, &format!("{}", n.get_num()));
                 }
                 n => {
                     let output_str = format!("{}", n);
@@ -1427,7 +1424,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 }
             }
             (HeapCellValueTag::Fixnum, n) => {
-                append_str!(self, &format!("{}", n.get_num()));
+                self.print_number(NumberFocus::Unfocused(Number::Fixnum(n)), &op);
             }
             (HeapCellValueTag::F64, f) => {
                 self.print_number(NumberFocus::Unfocused(Number::Float(**f)), &op);
