@@ -62,7 +62,9 @@ Extend Scryer Prolog to include the following, among other features:
 - [x] Incremental compilation and loading process, newly written,
       primarily in Prolog.
 - [ ] A compacting garbage collector satisfying the five properties of
-      "Precise Garbage Collection in Prolog." (_in progress_)
+      "Precise Garbage Collection in Prolog." (_in progress_, see
+      the [`rebis-dev` branch](https://github.com/mthom/scryer-prolog/tree/rebis-dev)
+      and its [announcement](https://github.com/mthom/scryer-prolog/discussions/1167))
 - [ ] Mode declarations.
 
 ## Phase 3
