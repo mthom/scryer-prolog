@@ -266,7 +266,7 @@ impl Machine {
         }
     }
 
-    pub(super) fn find_living_dynamic(&self, oi: u32, mut ii: u32) -> Option<(usize, u32, u32, usize, bool)> {
+    pub(super) fn find_living_dynamic(&self, oi: u32, mut ii: u32) -> Option<(usize, u32, u32, bool)> {
         let p = self.machine_st.p;
 
         let indexed_choice_instrs = match &self.code[p] {
@@ -287,10 +287,8 @@ impl Machine {
                         death,
                         next_or_fail,
                     ) => {
-                        let len = indexed_choice_instrs.len();
-
                         if birth < self.machine_st.cc && Death::Finite(self.machine_st.cc) <= death {
-                            return Some((offset, oi, ii, len, next_or_fail.is_next()));
+                            return Some((offset, oi, ii, next_or_fail.is_next()));
                         } else {
                             ii += 1;
                         }
@@ -3039,7 +3037,7 @@ impl Machine {
                             let p = self.machine_st.p;
 
                             match self.find_living_dynamic(self.machine_st.oip, self.machine_st.iip) {
-                                Some((offset, oi, ii, _, is_next_clause)) => {
+                                Some((offset, oi, ii, is_next_clause)) => {
                                     self.machine_st.p = p;
                                     self.machine_st.oip = oi;
                                     self.machine_st.iip = ii;
@@ -3060,9 +3058,9 @@ impl Machine {
                                                     self.machine_st.registers[self.machine_st.num_of_args + 1] =
                                                         fixnum_as_cell!(Fixnum::build_with(self.machine_st.cc as i64));
 
-                                                    self.machine_st.num_of_args += 2;
+                                                    self.machine_st.num_of_args += 1;
                                                     self.machine_st.indexed_try(offset);
-                                                    self.machine_st.num_of_args -= 2;
+                                                    self.machine_st.num_of_args -= 1;
                                                 }
                                                 None => {
                                                     self.machine_st.p = p + offset;
@@ -3081,16 +3079,16 @@ impl Machine {
                                                 .num_cells;
 
                                             self.machine_st.cc = cell_as_fixnum!(
-                                                self.machine_st.stack[stack_loc!(OrFrame, b, n-2)]
+                                                self.machine_st.stack[stack_loc!(OrFrame, b, n-1)]
                                             ).get_num() as usize;
 
                                             if is_next_clause {
-                                                match self.find_living_dynamic(self.machine_st.oip, self.machine_st.iip) {
+                                                match self.find_living_dynamic(self.machine_st.oip, self.machine_st.iip + 1) {
                                                     // if we're executing the last instruction
                                                     // of the internal block pointed to by
                                                     // self.machine_st.iip, we want trust, not retry.
                                                     // this is true iff ii + 1 < len.
-                                                    Some((_,_,ii,len,_)) if (ii as usize) + 1 < len => {
+                                                    Some(_) => {
                                                         self.retry(offset);
 
                                                         try_or_throw!(
