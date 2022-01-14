@@ -2167,8 +2167,31 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     skeleton.core.clause_clause_locs.push_front(loc);
                 }
             }
+            None if append_or_prepend.is_append() => {
+                let mut skeleton = PredicateSkeleton::new();
+
+                for loc in locs_vec {
+                    skeleton.core.clause_clause_locs.push_back(loc);
+                }
+
+                self.add_extensible_predicate(
+                    (atom!("$clause"), 2),
+                    skeleton,
+                    clause_clause_compilation_target,
+                );
+            }
             None => {
-                unreachable!();
+                let mut skeleton = PredicateSkeleton::new();
+
+                for loc in locs_vec.into_iter().rev() {
+                    skeleton.core.clause_clause_locs.push_back(loc);
+                }
+
+                self.add_extensible_predicate(
+                    (atom!("$clause"), 2),
+                    skeleton,
+                    clause_clause_compilation_target,
+                );
             }
         }
 
@@ -2315,8 +2338,10 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         if predicate_info.is_dynamic {
             LS::machine_st(&mut self.payload).global_clock += 1;
 
+            let clause_clauses_len = self.payload.clause_clauses.len();
             let clauses_vec: Vec<_> = self.payload
-                .clause_clauses.drain(0..predicates_len).collect();
+                .clause_clauses.drain(0..std::cmp::min(predicates_len, clause_clauses_len))
+                .collect();
 
             self.compile_clause_clauses(
                 key,
