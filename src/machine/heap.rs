@@ -147,7 +147,9 @@ pub(crate) fn put_complete_string(
             }
         }
         None => {
-            empty_list_as_cell!()
+            let h = heap.len();
+            heap.push(empty_list_as_cell!());
+            heap_loc_as_cell!(h)
         }
     }
 }
