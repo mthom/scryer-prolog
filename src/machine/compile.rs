@@ -235,19 +235,20 @@ fn find_inner_choice_instr(code: &Code, mut index: usize, index_loc: usize) -> u
                     index = index_loc;
                 }
             }
-            &Instruction::DynamicElse(_, _, next_or_fail) => match next_or_fail
-            {
-                NextOrFail::Next(i) => {
-                    if i == 0 {
+            &Instruction::DynamicElse(_, _, next_or_fail) => {
+                match next_or_fail {
+                    NextOrFail::Next(i) => {
+                        if i == 0 {
+                            index = index_loc;
+                        } else {
+                            return index;
+                        }
+                    }
+                    NextOrFail::Fail(_) => {
                         index = index_loc;
-                    } else {
-                        return index;
                     }
                 }
-                NextOrFail::Fail(_) => {
-                    index = index_loc;
-                }
-            },
+            }
             &Instruction::DynamicInternalElse(_, _, next_or_fail) => {
                 match next_or_fail {
                     NextOrFail::Next(i) => {
@@ -1173,7 +1174,6 @@ fn append_compiled_clause(
     {
         Some(index_loc) if lower_bound_arg_num == target_arg_num => {
             code.push(settings.internal_trust_me());
-
             code.extend(clause_code.drain(3..)); // skip the indexing code
 
             // set skeleton[target_pos].opt_arg_index_key to
@@ -1796,24 +1796,19 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         let payload_compilation_target = self.payload.compilation_target;
         let code_index = self.get_or_insert_code_index(key, payload_compilation_target);
 
-        let skeleton = match self
+        let skeleton = self
             .wam_prelude
             .indices
             .get_predicate_skeleton_mut(&payload_compilation_target, &key)
-        {
-            Some(skeleton) => skeleton,
-            None => {
-                unreachable!();
-            }
-        };
+            .unwrap();
 
         let code = &mut self.wam_prelude.code;
         let lower_bound = lower_bound_of_target_clause(skeleton, target_pos);
         let lower_bound_is_unindexed = !skeleton.clauses[lower_bound].opt_arg_index_key.is_some();
 
         if target_pos == 0 || (lower_bound + 1 == target_pos && lower_bound_is_unindexed) {
-            // the clause preceding target_pos, if there is one, is of key type
-            // OptArgIndexKey::None.
+            // the clause preceding target_pos, if there is one, is of
+            // key type OptArgIndexKey::None.
             match skeleton.clauses[target_pos]
                 .opt_arg_index_key
                 .switch_on_term_loc()
@@ -2024,29 +2019,91 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                         .switch_on_term_loc()
                     {
                         Some(index_loc) => {
-                            let preceding_choice_instr_loc = find_inner_choice_instr(
+                            let clause_start = find_inner_choice_instr(
                                 code,
-                                skeleton.clauses[target_pos - 1].clause_start,
+                                skeleton.clauses[target_pos].clause_start,
                                 index_loc,
                             );
 
-                            remove_non_leading_clause(
-                                code,
-                                preceding_choice_instr_loc,
-                                skeleton.clauses[target_pos].clause_start,
-                                &mut self.payload.retraction_info,
-                            );
+                            let lower_bound_clause_start = skeleton.clauses[lower_bound].clause_start;
+                            let preceding_choice_instr_loc;
 
-                            match &mut code[preceding_choice_instr_loc] {
+                            match &mut code[clause_start] {
                                 Instruction::TryMeElse(0) => {
-                                    set_switch_var_offset(
+                                    preceding_choice_instr_loc = if skeleton.clauses[lower_bound]
+                                        .opt_arg_index_key
+                                        .is_some()
+                                    {
+                                        lower_bound_clause_start - 2
+                                    } else {
+                                        lower_bound_clause_start
+                                    };
+
+                                    remove_non_leading_clause(
                                         code,
-                                        index_loc,
-                                        preceding_choice_instr_loc + 1 - index_loc,
+                                        preceding_choice_instr_loc,
+                                        skeleton.clauses[target_pos].clause_start - 2,
                                         &mut self.payload.retraction_info,
                                     );
                                 }
-                                _ => {}
+                                Instruction::TryMeElse(_) => {
+                                    let new_target_loc = blunt_leading_choice_instr(
+                                        code,
+                                        clause_start,
+                                        &mut self.payload.retraction_info,
+                                    );
+
+                                    derelictize_try_me_else(
+                                        code,
+                                        clause_start,
+                                        &mut self.payload.retraction_info,
+                                    );
+
+                                    set_switch_var_offset(
+                                        code,
+                                        index_loc,
+                                        new_target_loc - index_loc,
+                                        &mut self.payload.retraction_info,
+                                    );
+
+                                    self.payload.retraction_info.push_record(
+                                        RetractionRecord::SkeletonClauseStartReplaced(
+                                            payload_compilation_target,
+                                            key,
+                                            target_pos + 1,
+                                            skeleton.clauses[target_pos + 1].clause_start,
+                                        ),
+                                    );
+
+                                    skeleton.clauses[target_pos + 1].clause_start =
+                                        skeleton.clauses[target_pos].clause_start;
+                                }
+                                _ => {
+                                    preceding_choice_instr_loc = find_inner_choice_instr(
+                                        code,
+                                        skeleton.clauses[target_pos - 1].clause_start,
+                                        index_loc,
+                                    );
+
+                                    remove_non_leading_clause(
+                                        code,
+                                        preceding_choice_instr_loc,
+                                        skeleton.clauses[target_pos].clause_start,
+                                        &mut self.payload.retraction_info,
+                                    );
+
+                                    match &mut code[preceding_choice_instr_loc] {
+                                        Instruction::TryMeElse(0) => {
+                                            set_switch_var_offset(
+                                                code,
+                                                index_loc,
+                                                preceding_choice_instr_loc + 1 - index_loc,
+                                                &mut self.payload.retraction_info,
+                                            );
+                                        }
+                                        _ => {}
+                                    }
+                                }
                             }
 
                             None
