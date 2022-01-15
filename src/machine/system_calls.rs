@@ -555,7 +555,7 @@ impl MachineState {
         let outcome = heap_loc_as_cell!(
             iter_to_heap_list(
                 &mut self.heap,
-                seen_set.into_iter().rev(),
+                seen_set.into_iter(),
             )
         );
 

@@ -292,7 +292,7 @@ write_eqs_and_read_input(B, VarList) :-
     % one layer of depth added for (=/2) functor
     maplist(\Term^Vs^term_variables_under_max_depth(Term, 22, Vs), Equations, EquationVars),
     append([AttrGoalVars | EquationVars], Vars1),
-    sort(Vars1, Vars2),
+    term_variables(Vars1, Vars2), % deduplicate vars of Vars1 but preserve their order.
     charsio:extend_var_list(Vars2, VarList, NewVarList0, fabricated),
     (   bb_get('$first_answer', true) ->
         write('   '),
