@@ -262,7 +262,7 @@ enum SystemClauseType {
     DeleteFile,
     #[strum_discriminants(strum(props(Arity = "2", Name = "$rename_file")))]
     RenameFile,
-    #[strum_discriminants(strum(props(Arity = "2", Name = "working_directory")))]
+    #[strum_discriminants(strum(props(Arity = "2", Name = "$working_directory")))]
     WorkingDirectory,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$delete_directory")))]
     DeleteDirectory,
