@@ -735,8 +735,14 @@ impl MachineState {
     pub fn value_to_str_like(&mut self, value: HeapCellValue) -> Option<AtomOrString> {
         read_heap_cell!(value,
             (HeapCellValueTag::CStr, cstr_atom) => {
-                // avoid allocating a String if possible ...
-                Some(AtomOrString::Atom(cstr_atom))
+                // avoid allocating a String if possible:
+                // We must be careful to preserve the string "[]" as is,
+                // instead of turning it into the atom [], i.e., "".
+                if cstr_atom == atom!("[]") {
+                    Some(AtomOrString::String("[]".to_string()))
+                } else {
+                    Some(AtomOrString::Atom(cstr_atom))
+                }
             }
             (HeapCellValueTag::Atom, (atom, arity)) => {
                 if arity == 0 {
