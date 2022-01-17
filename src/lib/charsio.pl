@@ -3,7 +3,7 @@
                     get_single_char/1,
                     read_n_chars/3,
                     read_line_to_chars/3,
-                    read_term_from_chars/2,
+                    read_from_chars/2,
                     write_term_to_chars/3,
                     chars_base64/3]).
 
@@ -113,17 +113,17 @@ get_single_char(C) :-
     ).
 
 
-read_term_from_chars(Chars, Term) :-
+read_from_chars(Chars, Term) :-
     (  var(Chars) ->
-       instantiation_error(read_term_from_chars/2)
+       instantiation_error(read_from_chars/2)
     ;  nonvar(Term) ->
-       throw(error(uninstantiation_error(Term), read_term_from_chars/2))
+       throw(error(uninstantiation_error(Term), read_from_chars/2))
     ;  '$skip_max_list'(_, -1, Chars, Chars0),
        Chars0 == [],
        partial_string(Chars) ->
        true
     ;
-       type_error(complete_string, Chars, read_term_from_chars/2)
+       type_error(complete_string, Chars, read_from_chars/2)
     ),
     '$read_term_from_chars'(Chars, Term).
 
