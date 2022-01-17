@@ -1,7 +1,7 @@
 :- module(charsio, [char_type/2,
                     chars_utf8bytes/2,
                     get_single_char/1,
-                    read_n_chars/3,
+                    get_n_chars/3,
                     read_line_to_chars/3,
                     read_from_chars/2,
                     write_term_to_chars/3,
@@ -205,7 +205,7 @@ read_line_to_chars(Stream, Cs0, Cs) :-
    characters read.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
-read_n_chars(Stream, N, Cs) :-
+get_n_chars(Stream, N, Cs) :-
         can_be(integer, N),
         (   var(N) ->
             read_to_eof(Stream, Cs),
