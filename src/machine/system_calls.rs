@@ -1155,7 +1155,9 @@ impl Machine {
                 return Ok(());
             }
 
-            if let Some(next) = self.machine_st.value_to_str_like(self.machine_st.registers[2]) {
+            let target = self.machine_st.store(self.machine_st.deref(self.machine_st.registers[2]));
+
+            if let Some(next) = self.machine_st.value_to_str_like(target) {
                 if env::set_current_dir(std::path::Path::new(next.as_str())).is_ok() {
                     return Ok(());
                 }
