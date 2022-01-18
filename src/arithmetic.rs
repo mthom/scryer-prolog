@@ -345,7 +345,7 @@ impl<'a> ArithmeticEvaluator<'a> {
 pub(crate) fn rnd_i<'a>(n: &'a Number, arena: &mut Arena) -> Number {
     match n {
         &Number::Integer(_) | &Number::Fixnum(_) => *n,
-        &Number::Float(OrderedFloat(f)) => fixnum!(Number, f.round() as i64, arena),
+        &Number::Float(OrderedFloat(f)) => fixnum!(Number, f.floor() as i64, arena),
         &Number::Rational(ref r) => {
             let r_ref = r.fract_floor_ref();
             let (mut fract, mut floor) = (Rational::new(), Integer::new());

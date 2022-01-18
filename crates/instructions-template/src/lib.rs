@@ -617,83 +617,83 @@ enum InstructionTemplate {
     #[strum_discriminants(strum(props(Arity = "1", Name = "default_trust_me")))]
     TryMeElse(usize),
     // arithmetic instruction
-    #[strum_discriminants(strum(props(Arity = "3", Name = "add")))]
+    #[strum_discriminants(strum(props(Arity = "2", Name = "add")))]
     Add(ArithmeticTerm, ArithmeticTerm, usize),
-    #[strum_discriminants(strum(props(Arity = "3", Name = "sub")))]
+    #[strum_discriminants(strum(props(Arity = "2", Name = "sub")))]
     Sub(ArithmeticTerm, ArithmeticTerm, usize),
-    #[strum_discriminants(strum(props(Arity = "3", Name = "mul")))]
+    #[strum_discriminants(strum(props(Arity = "2", Name = "mul")))]
     Mul(ArithmeticTerm, ArithmeticTerm, usize),
-    #[strum_discriminants(strum(props(Arity = "3", Name = "pow")))]
+    #[strum_discriminants(strum(props(Arity = "2", Name = "pow")))]
     Pow(ArithmeticTerm, ArithmeticTerm, usize),
-    #[strum_discriminants(strum(props(Arity = "3", Name = "int_pow")))]
+    #[strum_discriminants(strum(props(Arity = "2", Name = "int_pow")))]
     IntPow(ArithmeticTerm, ArithmeticTerm, usize),
-    #[strum_discriminants(strum(props(Arity = "3", Name = "i_div")))]
+    #[strum_discriminants(strum(props(Arity = "2", Name = "i_div")))]
     IDiv(ArithmeticTerm, ArithmeticTerm, usize),
-    #[strum_discriminants(strum(props(Arity = "3", Name = "max")))]
+    #[strum_discriminants(strum(props(Arity = "2", Name = "max")))]
     Max(ArithmeticTerm, ArithmeticTerm, usize),
-    #[strum_discriminants(strum(props(Arity = "3", Name = "min")))]
+    #[strum_discriminants(strum(props(Arity = "2", Name = "min")))]
     Min(ArithmeticTerm, ArithmeticTerm, usize),
-    #[strum_discriminants(strum(props(Arity = "3", Name = "int_floor_div")))]
+    #[strum_discriminants(strum(props(Arity = "1", Name = "int_floor_div")))]
     IntFloorDiv(ArithmeticTerm, ArithmeticTerm, usize),
-    #[strum_discriminants(strum(props(Arity = "3", Name = "r_div")))]
+    #[strum_discriminants(strum(props(Arity = "2", Name = "r_div")))]
     RDiv(ArithmeticTerm, ArithmeticTerm, usize),
-    #[strum_discriminants(strum(props(Arity = "3", Name = "div")))]
+    #[strum_discriminants(strum(props(Arity = "2", Name = "div")))]
     Div(ArithmeticTerm, ArithmeticTerm, usize),
-    #[strum_discriminants(strum(props(Arity = "3", Name = "shl")))]
+    #[strum_discriminants(strum(props(Arity = "2", Name = "shl")))]
     Shl(ArithmeticTerm, ArithmeticTerm, usize),
-    #[strum_discriminants(strum(props(Arity = "3", Name = "shr")))]
+    #[strum_discriminants(strum(props(Arity = "2", Name = "shr")))]
     Shr(ArithmeticTerm, ArithmeticTerm, usize),
-    #[strum_discriminants(strum(props(Arity = "3", Name = "xor")))]
+    #[strum_discriminants(strum(props(Arity = "2", Name = "xor")))]
     Xor(ArithmeticTerm, ArithmeticTerm, usize),
-    #[strum_discriminants(strum(props(Arity = "3", Name = "and")))]
+    #[strum_discriminants(strum(props(Arity = "2", Name = "and")))]
     And(ArithmeticTerm, ArithmeticTerm, usize),
-    #[strum_discriminants(strum(props(Arity = "3", Name = "or")))]
+    #[strum_discriminants(strum(props(Arity = "2", Name = "or")))]
     Or(ArithmeticTerm, ArithmeticTerm, usize),
-    #[strum_discriminants(strum(props(Arity = "3", Name = "mod")))]
+    #[strum_discriminants(strum(props(Arity = "2", Name = "mod")))]
     Mod(ArithmeticTerm, ArithmeticTerm, usize),
-    #[strum_discriminants(strum(props(Arity = "3", Name = "rem")))]
+    #[strum_discriminants(strum(props(Arity = "2", Name = "rem")))]
     Rem(ArithmeticTerm, ArithmeticTerm, usize),
-    #[strum_discriminants(strum(props(Arity = "3", Name = "gcd")))]
+    #[strum_discriminants(strum(props(Arity = "2", Name = "gcd")))]
     Gcd(ArithmeticTerm, ArithmeticTerm, usize),
-    #[strum_discriminants(strum(props(Arity = "2", Name = "sign")))]
+    #[strum_discriminants(strum(props(Arity = "1", Name = "sign")))]
     Sign(ArithmeticTerm, usize),
-    #[strum_discriminants(strum(props(Arity = "2", Name = "cos")))]
+    #[strum_discriminants(strum(props(Arity = "1", Name = "cos")))]
     Cos(ArithmeticTerm, usize),
-    #[strum_discriminants(strum(props(Arity = "2", Name = "sin")))]
+    #[strum_discriminants(strum(props(Arity = "1", Name = "sin")))]
     Sin(ArithmeticTerm, usize),
-    #[strum_discriminants(strum(props(Arity = "2", Name = "tan")))]
+    #[strum_discriminants(strum(props(Arity = "1", Name = "tan")))]
     Tan(ArithmeticTerm, usize),
-    #[strum_discriminants(strum(props(Arity = "2", Name = "log")))]
+    #[strum_discriminants(strum(props(Arity = "1", Name = "log")))]
     Log(ArithmeticTerm, usize),
-    #[strum_discriminants(strum(props(Arity = "2", Name = "exp")))]
+    #[strum_discriminants(strum(props(Arity = "1", Name = "exp")))]
     Exp(ArithmeticTerm, usize),
-    #[strum_discriminants(strum(props(Arity = "2", Name = "acos")))]
+    #[strum_discriminants(strum(props(Arity = "1", Name = "acos")))]
     ACos(ArithmeticTerm, usize),
-    #[strum_discriminants(strum(props(Arity = "2", Name = "asin")))]
+    #[strum_discriminants(strum(props(Arity = "1", Name = "asin")))]
     ASin(ArithmeticTerm, usize),
-    #[strum_discriminants(strum(props(Arity = "2", Name = "atan")))]
+    #[strum_discriminants(strum(props(Arity = "1", Name = "atan")))]
     ATan(ArithmeticTerm, usize),
-    #[strum_discriminants(strum(props(Arity = "3", Name = "atan2")))]
+    #[strum_discriminants(strum(props(Arity = "1", Name = "atan2")))]
     ATan2(ArithmeticTerm, ArithmeticTerm, usize),
-    #[strum_discriminants(strum(props(Arity = "2", Name = "sqrt")))]
+    #[strum_discriminants(strum(props(Arity = "1", Name = "sqrt")))]
     Sqrt(ArithmeticTerm, usize),
-    #[strum_discriminants(strum(props(Arity = "2", Name = "abs")))]
+    #[strum_discriminants(strum(props(Arity = "1", Name = "abs")))]
     Abs(ArithmeticTerm, usize),
-    #[strum_discriminants(strum(props(Arity = "2", Name = "float")))]
+    #[strum_discriminants(strum(props(Arity = "1", Name = "float")))]
     Float(ArithmeticTerm, usize),
-    #[strum_discriminants(strum(props(Arity = "2", Name = "truncate")))]
+    #[strum_discriminants(strum(props(Arity = "1", Name = "truncate")))]
     Truncate(ArithmeticTerm, usize),
-    #[strum_discriminants(strum(props(Arity = "2", Name = "round")))]
+    #[strum_discriminants(strum(props(Arity = "1", Name = "round")))]
     Round(ArithmeticTerm, usize),
-    #[strum_discriminants(strum(props(Arity = "2", Name = "ceiling")))]
+    #[strum_discriminants(strum(props(Arity = "1", Name = "ceiling")))]
     Ceiling(ArithmeticTerm, usize),
-    #[strum_discriminants(strum(props(Arity = "2", Name = "floor")))]
+    #[strum_discriminants(strum(props(Arity = "1", Name = "floor")))]
     Floor(ArithmeticTerm, usize),
-    #[strum_discriminants(strum(props(Arity = "2", Name = "neg")))]
+    #[strum_discriminants(strum(props(Arity = "1", Name = "neg")))]
     Neg(ArithmeticTerm, usize),
-    #[strum_discriminants(strum(props(Arity = "2", Name = "plus")))]
+    #[strum_discriminants(strum(props(Arity = "1", Name = "plus")))]
     Plus(ArithmeticTerm, usize),
-    #[strum_discriminants(strum(props(Arity = "2", Name = "bitwise_complement")))]
+    #[strum_discriminants(strum(props(Arity = "1", Name = "bitwise_complement")))]
     BitwiseComplement(ArithmeticTerm, usize),
     // control instructions
     #[strum_discriminants(strum(props(Arity = "1", Name = "allocate")))]
