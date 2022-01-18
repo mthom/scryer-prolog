@@ -122,18 +122,10 @@ impl<'a, R: CharRead> Lexer<'a, R> {
     }
 
     pub fn eof(&mut self) -> Result<bool, ParserError> {
-        if self.reader.peek_char().is_none() {
-            return Ok(true);
-        }
-
         let mut c = is_not_eof!(self.reader, self.lookahead_char());
 
         while layout_char!(c) {
             self.skip_char(c);
-
-            if self.reader.peek_char().is_none() {
-                return Ok(true);
-            }
 
             c = is_not_eof!(self.reader, self.lookahead_char());
         }
@@ -1049,6 +1041,10 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                     } else {
                         Ok(Token::Literal(Literal::String(atom)))
                     };
+                }
+
+                if c == '\u{0}' {
+                    return Err(ParserError::UnexpectedEOF);
                 }
 
                 self.name_token(c)
