@@ -2,6 +2,7 @@
                         copy_term/3]).
 
 :- use_module(library(charsio)).
+:- use_module(library(error)).
 :- use_module(library(files)).
 :- use_module(library(iso_ext)).
 :- use_module(library(lambda)).
@@ -153,7 +154,6 @@ instruction_match(Term, VarList) :-
     (  var(Term) ->
        throw(error(instantiation_error, repl/0))
     ;  Term = [Item] ->
-       !,
        (  atom(Item) ->
           (  Item == user ->
              catch(load(user_input), E, print_exception_with_check(E))
