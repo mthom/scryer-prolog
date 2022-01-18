@@ -112,7 +112,7 @@ run_goals([g(Gs0)|Goals]) :-
     (   ends_with_dot(Gs0) -> Gs1 = Gs0
     ;   append(Gs0, ".", Gs1)
     ),
-    read_term_from_chars(Gs1, Goal),
+    read_from_chars(Gs1, Goal),
     (   catch(
             user:Goal,
             Exception,
