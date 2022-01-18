@@ -2728,11 +2728,11 @@ impl Machine {
         }
 
         if !stream.is_stdin() && !stream.is_stdout() && !stream.is_stderr() {
-            let close_result = stream.close();
-
             if let Some(alias) = stream.options().get_alias() {
                 self.indices.stream_aliases.remove(&alias);
             }
+
+            let close_result = stream.close();
 
             if let Err(_) = close_result {
                 let stub = functor_stub(atom!("close"), 1);
