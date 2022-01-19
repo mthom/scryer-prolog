@@ -933,8 +933,11 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
         match n {
             NumberFocus::Unfocused(n) => match n {
-                Number::Float(fl) => {
-                    let OrderedFloat(fl) = fl;
+                Number::Float(OrderedFloat(mut fl)) => {
+                    if OrderedFloat(fl) == -0f64 {
+                        fl = 0f64;
+                    }
+
                     let output_str = format!("{0:<20?}", fl);
 
                     push_space_if_amb!(self, &output_str, {
@@ -944,9 +947,6 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 Number::Rational(r) => {
                     self.print_rational(r, add_brackets);
                     return;
-                }
-                Number::Fixnum(n) => {
-                    append_str!(self, &format!("{}", n.get_num()));
                 }
                 n => {
                     let output_str = format!("{}", n);

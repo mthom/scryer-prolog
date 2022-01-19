@@ -635,7 +635,7 @@ impl Number {
         match self {
             &Number::Fixnum(n) => n.get_num() < 0,
             &Number::Integer(ref n) => &**n < &0,
-            &Number::Float(OrderedFloat(f)) => f.is_sign_negative(),
+            &Number::Float(OrderedFloat(f)) => f.is_sign_negative() && OrderedFloat(f) != -0f64,
             &Number::Rational(ref r) => &**r < &0,
         }
     }
@@ -645,7 +645,7 @@ impl Number {
         match self {
             &Number::Fixnum(n) => n.get_num() == 0,
             &Number::Integer(ref n) => &**n == &0,
-            &Number::Float(f) => f == OrderedFloat(0f64),
+            &Number::Float(f) => f == OrderedFloat(0f64) || f == OrderedFloat(-0f64),
             &Number::Rational(ref r) => &**r == &0,
         }
     }
