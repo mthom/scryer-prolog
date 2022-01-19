@@ -92,14 +92,17 @@ run_initialization_goals(Module) :-
        % FIXME: failing here. also, see add_module.
        findall(Module:Goal, '$call'(builtins:retract(Module:'$initialization_goals'(Goal))), Goals),
        abolish(Module:'$initialization_goals'/1),
-       (  maplist(Module:call, Goals) ->
-          true
-       ;  %% initialization goals can fail without thwarting the load.
-          write('Warning: initialization/1 failed for: '),
-          writeq(maplist(Module:call, Goals)),
-          nl
-       )
+       maplist(loader:success_or_warning(Module), Goals)
     ;  true
+    ).
+
+success_or_warning(Module, Goal) :-
+    (   Module:call(Goal) ->
+        true
+    ;   %% initialization goals can fail without thwarting the load.
+        write('Warning: initialization/1 failed for: '),
+        writeq(Goal),
+        nl
     ).
 
 run_initialization_goals :-
