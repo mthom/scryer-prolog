@@ -94,12 +94,6 @@ number_to_rational(Eps0, Real0, Fraction) :-
     ),
     !.
 
-number(X) :-
-    (   integer(X)
-    ;   float(X)
-    ;   rational(X)
-    ).
-
 stern_brocot_(Qnn/Qnd, Qpn/Qpd, A/B, C/D, Fraction) :-
     Fn1 is A + C,
     Fd1 is B + D,
