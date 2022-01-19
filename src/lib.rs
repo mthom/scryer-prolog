@@ -30,6 +30,5 @@ mod raw_block;
 pub mod read;
 mod targets;
 pub mod types;
-pub mod write;
 
 use instructions::instr;

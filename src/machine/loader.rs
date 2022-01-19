@@ -18,6 +18,7 @@ use slice_deque::{sdeq, SliceDeque};
 
 use std::cell::Cell;
 use std::convert::TryFrom;
+use std::fmt;
 use std::mem;
 use std::ops::{Deref, DerefMut};
 use std::rc::Rc;
@@ -156,6 +157,15 @@ pub enum CompilationTarget {
     User,
 }
 
+impl fmt::Display for CompilationTarget {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            CompilationTarget::User => write!(f, "user"),
+            CompilationTarget::Module(ref module_name) => write!(f, "{}", module_name.as_str()),
+        }
+    }
+}
+
 impl Default for CompilationTarget {
     #[inline]
     fn default() -> Self {
@@ -252,6 +262,10 @@ pub trait LoadState<'a>: Sized {
     fn should_drop_load_state(loader: &Loader<'a, Self>) -> bool;
     fn reset_machine(loader: &mut Loader<'a, Self>);
     fn machine_st(loader: &mut Self::LoaderFieldType) -> &mut MachineState;
+    fn err_on_builtin_overwrite(
+        loader: &Loader<'a, Self>,
+        key: PredicateKey,
+    ) -> Result<(), SessionError>;
 }
 
 pub struct LiveLoadAndMachineState<'a> {
@@ -309,6 +323,20 @@ impl<'a> LoadState<'a> for LiveLoadAndMachineState<'a> {
     fn machine_st(loader: &mut Self::LoaderFieldType) -> &mut MachineState {
         loader.machine_st
     }
+
+    #[inline(always)]
+    fn err_on_builtin_overwrite(
+        loader: &Loader<'a, Self>,
+        key: PredicateKey,
+    ) -> Result<(), SessionError> {
+        if let Some(builtins) = loader.wam_prelude.indices.modules.get(&atom!("builtins")) {
+            if builtins.module_decl.exports.contains(&ModuleExport::PredicateKey(key)) {
+                return Err(SessionError::CannotOverwriteBuiltIn(key));
+            }
+        }
+
+        Ok(())
+    }
 }
 
 impl<'a> LoadState<'a> for BootstrappingLoadState<'a> {
@@ -351,6 +379,14 @@ impl<'a> LoadState<'a> for BootstrappingLoadState<'a> {
     #[inline(always)]
     fn machine_st(loader: &mut Self::LoaderFieldType) -> &mut MachineState {
         &mut loader.term_stream.parser.lexer.machine_st
+    }
+
+    #[inline(always)]
+    fn err_on_builtin_overwrite(
+        _loader: &Loader<'a, Self>,
+        _key: PredicateKey,
+    ) -> Result<(), SessionError> {
+        Ok(())
     }
 }
 

@@ -1295,7 +1295,7 @@ fn mergeable_indexed_subsequences(
 fn print_overwrite_warning(
     compilation_target: &CompilationTarget,
     code_ptr: IndexPtr,
-    key: &PredicateKey,
+    key: PredicateKey,
     is_dynamic: bool,
 ) {
     if let CompilationTarget::Module(module_name) = compilation_target {
@@ -1371,6 +1371,8 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         settings: CodeGenSettings,
     ) -> Result<CodeIndex, SessionError> {
         let code_index = self.get_or_insert_code_index(key, predicates.compilation_target);
+
+        LS::err_on_builtin_overwrite(self, key)?;
 
         let code_len = self.wam_prelude.code.len();
         let mut code_ptr = code_len;
@@ -1463,7 +1465,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         print_overwrite_warning(
             &predicates.compilation_target,
             code_index.get(),
-            &key,
+            key,
             settings.is_dynamic(),
         );
 

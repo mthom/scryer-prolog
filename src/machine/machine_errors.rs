@@ -401,18 +401,14 @@ impl MachineState {
 
     pub(super) fn session_error(&mut self, err: SessionError) -> MachineError {
         match err {
-            // SessionError::CannotOverwriteBuiltIn(pred_str) |
-            /*
-            SessionError::CannotOverwriteImport(pred_str) => {
-                Self::permission_error(
-                    atom_tbl,
-                    h,
+            SessionError::CannotOverwriteBuiltIn(key) => {
+            // SessionError::CannotOverwriteImport(pred_atom) => {
+                self.permission_error(
                     Permission::Modify,
                     atom!("private_procedure"),
-                    functor!(atom(pred_str)),
+                    functor_stub(key.0, key.1).into_iter().collect::<MachineStub>(),
                 )
             }
-            */
             SessionError::ExistenceError(err) => self.existence_error(err),
             // SessionError::InvalidFileName(filename) => {
             //     Self::existence_error(h, ExistenceError::Module(filename))
@@ -903,7 +899,7 @@ pub enum ExistenceError {
 #[derive(Debug)]
 pub enum SessionError {
     CompilationError(CompilationError),
-    // CannotOverwriteBuiltIn(Atom),
+    CannotOverwriteBuiltIn(PredicateKey),
     // CannotOverwriteImport(Atom),
     ExistenceError(ExistenceError),
     // InvalidFileName(Atom),
