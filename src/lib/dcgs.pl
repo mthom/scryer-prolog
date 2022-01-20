@@ -25,47 +25,48 @@ load_context(GRBody, Module, GRBody0) :-
 :- meta_predicate phrase(2, ?, ?).
 
 phrase(GRBody, S0) :-
-    phrase(GRBody, S0, []).
+    load_context(GRBody, Module, GRBody0),
+    phrase(GRBody0, S0, [], Module).
 
 phrase(GRBody, S0, S) :-
+    load_context(GRBody, Module, GRBody0),
+    phrase(GRBody0, S0, S, Module).
+
+phrase(GRBody, S0, S, Module) :-
     (  var(GRBody) ->
        throw(error(instantiation_error, phrase/3))
-    ;  load_context(GRBody, Module, GRBody0),
-       dcg_constr(GRBody0) ->
-       (  var(Module) ->
-          phrase_(GRBody0, S0, S)
-       ;  phrase_(GRBody0, S0, S, Module)
-       )
-    ;  functor(GRBody, _, _) ->
-       call(GRBody, S0, S)
-    ;  throw(error(type_error(callable, GRBody), phrase/3))
+    ;  dcg_constr(GRBody) ->
+       phrase_(GRBody, S0, S, Module)
+    ;  callable(GRBody) ->
+       call(Module:GRBody, S0, S)
+    ;  throw(error(type_error(callable, Module:GRBody), phrase/3))
     ).
 
 phrase_([], S, S, _).
 phrase_(!, S, S, _).
 phrase_((A, B), S0, S, M) :-
-    phrase(M:A, S0, S1),
-    phrase(M:B, S1, S).
+    phrase(A, S0, S1, M),
+    phrase(B, S1, S, M).
 phrase_((A -> B ; C), S0, S, M) :-
-    (  phrase(M:A, S0, S1) ->
-       phrase(M:B, S1, S)
-    ;  phrase(M:C, S0, S)
+    (  phrase(A, S0, S1, M) ->
+       phrase(B, S1, S, M)
+    ;  phrase(C, S0, S, M)
     ).
 phrase_((A ; B), S0, S, M) :-
-    (  phrase(M:A, S0, S)
-    ;  phrase(M:B, S0, S)
+    (  phrase(A, S0, S, M)
+    ;  phrase(B, S0, S, M)
     ).
 phrase_((A | B), S0, S, M) :-
-    (  phrase(M:A, S0, S)
-    ;  phrase(M:B, S0, S)
+    (  phrase(A, S0, S, M)
+    ;  phrase(B, S0, S, M)
     ).
 phrase_({G}, S, S, M) :-
     call(M:G).
 phrase_(call(G), S0, S, M) :-
     call(M:G, S0, S).
 phrase_((A -> B), S0, S, M) :-
-    (  phrase(M:A, S0, S1) ->
-       phrase(M:B, S1, S)
+    (  phrase(A, S0, S1, M) ->
+       phrase(B, S1, S, M)
     ;  fail
     ).
 phrase_(phrase(NonTerminal), S0, S, M) :-
@@ -73,32 +74,6 @@ phrase_(phrase(NonTerminal), S0, S, M) :-
 phrase_([T|Ts], S0, S, _) :-
     append([T|Ts], S, S0).
 
-phrase_([], S, S).
-phrase_(!, S, S).
-phrase_(M:G, S0, S) :-
-    phrase_(G, S0, S, M).
-phrase_((A, B), S0, S) :-
-    phrase(A, S0, S1),
-    phrase(B, S1, S).
-phrase_((A -> B ; C), S0, S) :-
-    (  phrase(A, S0, S1) ->
-       phrase(B, S1, S)
-    ;  phrase(C, S0, S)
-    ).
-phrase_((A ; B), S0, S) :-
-    (  phrase(A, S0, S) ; phrase(B, S0, S)  ).
-phrase_((A | B), S0, S) :-
-    (  phrase(A, S0, S) ; phrase(B, S0, S)  ).
-phrase_({G}, S0, S) :-
-    (  call(G), S0 = S  ).
-phrase_(call(G), S0, S) :-
-    call(G, S0, S).
-phrase_((A -> B), S0, S) :-
-    phrase((A -> B ; fail), S0, S).
-phrase_(phrase(NonTerminal), S0, S) :-
-    phrase(NonTerminal, S0, S).
-phrase_([T|Ts], S0, S) :-
-    append([T|Ts], S, S0).
 
 % The same version of the below two dcg_rule clauses, but with module scoping.
 dcg_rule(( M:NonTerminal, Terminals --> GRBody ), ( M:Head :- Body )) :-
