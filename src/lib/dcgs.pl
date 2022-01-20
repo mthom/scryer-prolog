@@ -72,6 +72,7 @@ phrase_((A -> B), S0, S, M) :-
 phrase_(phrase(NonTerminal), S0, S, M) :-
     phrase(NonTerminal, S0, S, M).
 phrase_([T|Ts], S0, S, _) :-
+    must_be(list, [T|Ts]),
     append([T|Ts], S, S0).
 
 
