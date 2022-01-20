@@ -1,6 +1,7 @@
 use crate::atom_table::*;
 use crate::parser::ast::*;
 
+use crate::machine::heap::*;
 use crate::machine::machine_errors::CycleSearchResult;
 use crate::machine::system_calls::BrentAlgState;
 use crate::types::*;
@@ -296,7 +297,12 @@ impl<'a> HeapPStrIter<'a> {
                     };
                 }
                 (HeapCellValueTag::Lis, h) => {
-                    return if let Some(c) = self.heap[h].as_char() {
+                    let value = heap_bound_store(
+                        self.heap,
+                        heap_bound_deref(self.heap, self.heap[h]),
+                    );
+
+                    return if let Some(c) = value.as_char() {
                         Some(PStrIterStep {
                             iteratee: PStrIteratee::Char(curr_hare, c),
                             next_hare: h+1,
@@ -310,7 +316,12 @@ impl<'a> HeapPStrIter<'a> {
                         .get_name_and_arity();
 
                     return if name == atom!(".") && arity == 2 {
-                        if let Some(c) = self.heap[s+1].as_char() {
+                        let value = heap_bound_store(
+                            self.heap,
+                            heap_bound_deref(self.heap, self.heap[s+1]),
+                        );
+
+                        if let Some(c) = value.as_char() {
                             Some(PStrIterStep {
                                 iteratee: PStrIteratee::Char(curr_hare, c),
                                 next_hare: s+2,
