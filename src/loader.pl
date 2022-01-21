@@ -629,12 +629,15 @@ expand_subgoal(UnexpandedGoals, MS, Module, ExpandedGoals, HeadVars) :-
     ).
 
 
-expand_module_name(ESG0, M, ESG) :-
+expand_module_name(ESG0, MS, M, ESG) :-
     (  var(ESG0) ->
        ESG = M:ESG0
     ;  ESG0 = _:_ ->
        ESG = ESG0
-    ;  predicate_property(ESG0, built_in) ->
+    ;  functor(ESG0, F, A0),
+       A is A0 + MS,
+       functor(EESG0, F, A),
+       predicate_property(EESG0, built_in) ->
        ESG = ESG0
     ;  ESG = M:ESG0
     ).
@@ -645,11 +648,10 @@ expand_meta_predicate_subgoals([SG | SGs], [MS | MSs], M, [ESG | ESGs], HeadVars
           MS >= 0
        )  ->
        (  var(SG),
-          MS =:= 0,
           pairs:same_key(SG, HeadVars, [_|_], _) ->
           expand_subgoal(SG, MS, M, ESG, HeadVars)
        ;  expand_subgoal(SG, MS, M, ESG0, HeadVars),
-          expand_module_name(ESG0, M, ESG)
+          expand_module_name(ESG0, MS, M, ESG)
        ),
        expand_meta_predicate_subgoals(SGs, MSs, M, ESGs, HeadVars)
     ;  ESG = SG,
@@ -664,8 +666,7 @@ expand_module_names(Goals, MetaSpecs, Module, ExpandedGoals, HeadVars) :-
     (  GoalFunctor == (:),
        SubGoals = [M, SubGoal] ->
        expand_module_names(SubGoal, MetaSpecs, M, ExpandedSubGoal, HeadVars),
-       expand_module_name(ExpandedSubGoal, M, ExpandedGoals)
-       % ExpandedGoals = M:ExpandedSubGoal
+       expand_module_name(ExpandedSubGoal, 0, M, ExpandedGoals)
     ;  expand_meta_predicate_subgoals(SubGoals, MetaSpecs, Module, ExpandedGoalList, HeadVars),
        ExpandedGoals =.. [GoalFunctor | ExpandedGoalList]
     ).
