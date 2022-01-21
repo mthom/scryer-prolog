@@ -578,15 +578,13 @@ predicate_property(Callable, Property) :-
        atom(Module),
        nonvar(Callable0) ->
        functor(Callable0, Name, Arity),
-       (  atom(Name),
-          Name \== [] ->
+       (  atom(Name) ->
           extract_predicate_property(Property, PropertyType),
           check_predicate_property(PropertyType, Module, Name, Arity, Property)
        ;  type_error(callable, Callable0, predicate_property/2)
        )
     ;  functor(Callable, Name, Arity),
-       (  atom(Name),
-          Name \== [] ->
+       (  atom(Name) ->
           extract_predicate_property(Property, PropertyType),
           load_context(Module),
           check_predicate_property(PropertyType, Module, Name, Arity, Property)
