@@ -156,6 +156,9 @@ seqq([Es|Ess]) --> seq(Es), seqq(Ess).
 user:goal_expansion(phrase(GRBody, S, S0), GRBody1) :-
     load_context(GRBody, M, GRBody0),
     nonvar(GRBody0),
-    dcg_body(GRBody0, S, S0, GRBody1, M).
+    catch(dcgs:dcg_body(GRBody0, S, S0, GRBody1, M),
+          error(E, must_be/2),
+          (  GRBody1 = throw(error(E, must_be/2))  )
+         ).
 
 user:goal_expansion(phrase(GRBody, S), phrase(GRBody, S, [])).
