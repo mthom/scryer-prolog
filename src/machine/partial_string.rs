@@ -499,28 +499,6 @@ impl<'a> Iterator for PStrCharsIter<'a> {
             }
         }
 
-        /*
-        if !self.iter.at_string_terminator() {
-            // at a cycle. emit the final character.
-            match self.iter.step(self.iter.brent_st.hare) {
-                Some(PStrIterStep { iteratee: PStrIteratee::Char(_, c), .. }) => {
-                    self.iter.focus = empty_list_as_cell!();
-                    return Some(c);
-                }
-                Some(PStrIterStep { iteratee: PStrIteratee::PStrSegment(_, pstr_atom, _), .. }) => {
-                    self.iter.focus = empty_list_as_cell!();
-
-                    let c = PartialString::from(pstr_atom).as_str_from(0).chars().next().unwrap();
-                    return Some(c);
-                }
-                _ => {
-                    self.iter.focus = empty_list_as_cell!();
-                    return None;
-                }
-            }
-        }
-        */
-
         None
     }
 }

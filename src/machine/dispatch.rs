@@ -2769,6 +2769,7 @@ impl Machine {
                             let (h, n) = pstr_loc_and_offset(&self.machine_st.heap, h);
 
                             self.machine_st.s = HeapPtr::PStrChar(h, n.get_num() as usize);
+                            self.machine_st.s_offset = 0;
                             self.machine_st.mode = MachineMode::Read;
                         }
                         (HeapCellValueTag::CStr) => {
@@ -2776,10 +2777,12 @@ impl Machine {
                             self.machine_st.heap.push(store_v);
 
                             self.machine_st.s = HeapPtr::PStrChar(h, 0);
+                            self.machine_st.s_offset = 0;
                             self.machine_st.mode = MachineMode::Read;
                         }
                         (HeapCellValueTag::Lis, l) => {
                             self.machine_st.s = HeapPtr::HeapCell(l);
+                            self.machine_st.s_offset = 0;
                             self.machine_st.mode = MachineMode::Read;
                         }
                         (HeapCellValueTag::AttrVar | HeapCellValueTag::Var | HeapCellValueTag::StackVar) => {
@@ -2827,6 +2830,7 @@ impl Machine {
                                 (HeapCellValueTag::Atom, (result_name, result_arity)) => {
                                     if arity == result_arity && name == result_name {
                                         self.machine_st.s = HeapPtr::HeapCell(a + 1);
+                                        self.machine_st.s_offset = 0;
                                         self.machine_st.mode = MachineMode::Read;
                                     } else {
                                         self.machine_st.backtrack();
@@ -2883,7 +2887,7 @@ impl Machine {
                                 self.machine_st.backtrack();
                                 continue;
                             } else {
-                                self.machine_st.increment_s_ptr(1);
+                                self.machine_st.s_offset += 1;
                             }
                         }
                         MachineMode::Write => {
@@ -2905,7 +2909,7 @@ impl Machine {
                                 self.machine_st.backtrack();
                                 continue;
                             } else {
-                                self.machine_st.increment_s_ptr(1);
+                                self.machine_st.s_offset += 1;
                             }
                         }
                         MachineMode::Write => {
@@ -2917,7 +2921,7 @@ impl Machine {
                                     let value = self.machine_st.heap[hc];
 
                                     self.machine_st.heap.push(value);
-                                    self.machine_st.increment_s_ptr(1);
+                                    self.machine_st.s_offset += 1;
                                 }
                                 _ => {
                                     self.machine_st.heap.push(heap_loc_as_cell!(h));
@@ -2937,7 +2941,7 @@ impl Machine {
                     match self.machine_st.mode {
                         MachineMode::Read => {
                             self.machine_st[reg] = self.machine_st.read_s();
-                            self.machine_st.increment_s_ptr(1);
+                            self.machine_st.s_offset += 1;
                         }
                         MachineMode::Write => {
                             let h = self.machine_st.heap.len();
@@ -2961,7 +2965,7 @@ impl Machine {
                                 self.machine_st.backtrack();
                                 continue;
                             } else {
-                                self.machine_st.increment_s_ptr(1);
+                                self.machine_st.s_offset += 1;
                             }
                         }
                         MachineMode::Write => {
@@ -2988,7 +2992,7 @@ impl Machine {
                 &Instruction::UnifyVoid(n) => {
                     match self.machine_st.mode {
                         MachineMode::Read => {
-                            self.machine_st.increment_s_ptr(n);
+                            self.machine_st.s_offset += n;
                         }
                         MachineMode::Write => {
                             let h = self.machine_st.heap.len();

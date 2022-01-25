@@ -28,6 +28,7 @@ impl MachineState {
             atom_tbl: AtomTable::new(),
             pdl: Vec::with_capacity(1024),
             s: HeapPtr::default(),
+            s_offset: 0,
             p: 0,
             oip: 0,
             iip: 0,
@@ -77,6 +78,7 @@ impl MachineState {
         )
     }
 
+    #[inline]
     pub fn deref(&self, mut addr: HeapCellValue) -> HeapCellValue {
         loop {
             let value = self.store(addr);
@@ -1390,28 +1392,25 @@ impl MachineState {
     }
 
     pub(crate) fn read_s(&mut self) -> HeapCellValue {
-        match &self.s {
-            &HeapPtr::HeapCell(h) => self.deref(self.heap[h]),
-            &HeapPtr::PStrChar(h, n) => {
+        match &mut self.s {
+            &mut HeapPtr::HeapCell(h) => self.deref(self.heap[h + self.s_offset]),
+            &mut HeapPtr::PStrChar(h, n) if self.s_offset == 0 => {
                 read_heap_cell!(self.heap[h],
                     (HeapCellValueTag::PStr, pstr_atom) => {
                         let pstr = PartialString::from(pstr_atom);
 
                         if let Some(c) = pstr.as_str_from(n).chars().next() {
                             char_as_cell!(c)
-                        } else { // if has_tail {
-                            self.deref(self.heap[h+1]) // heap_loc_as_cell!(h+1)
+                        } else {
+                            self.deref(self.heap[h+1])
                         }
-                        // } else {
-                        //     empty_list_as_cell!()
-                        // }
                     }
                     (HeapCellValueTag::CStr, cstr_atom) => {
                         let pstr = PartialString::from(cstr_atom);
 
                         if let Some(c) = pstr.as_str_from(n).chars().next() {
                             char_as_cell!(c)
-                        } else { // if has_tail {
+                        } else {
                             empty_list_as_cell!()
                         }
                     }
@@ -1420,14 +1419,25 @@ impl MachineState {
                     }
                 )
             }
-            &HeapPtr::PStrLocation(h, n) => {
+            &mut HeapPtr::PStrChar(h, ref mut n) |
+            &mut HeapPtr::PStrLocation(h, ref mut n) => {
                 read_heap_cell!(self.heap[h],
                     (HeapCellValueTag::PStr, pstr_atom) => {
-                        if n < pstr_atom.len() {
+                        let pstr = PartialString::from(pstr_atom);
+                        let n_offset: usize = pstr.as_str_from(*n)
+                            .chars()
+                            .take(self.s_offset)
+                            .map(|c| c.len_utf8())
+                            .sum();
+
+                        self.s_offset = 0;
+                        *n += n_offset;
+
+                        if *n < pstr_atom.len() {
                             let h_len = self.heap.len();
 
                             self.heap.push(pstr_offset_as_cell!(h));
-                            self.heap.push(fixnum_as_cell!(Fixnum::build_with(n as i64)));
+                            self.heap.push(fixnum_as_cell!(Fixnum::build_with(*n as i64)));
 
                             pstr_loc_as_cell!(h_len)
                         } else {
@@ -1435,11 +1445,21 @@ impl MachineState {
                         }
                     }
                     (HeapCellValueTag::CStr, cstr_atom) => {
-                        if n < cstr_atom.len() {
+                        let pstr = PartialString::from(cstr_atom);
+                        let n_offset: usize = pstr.as_str_from(*n)
+                            .chars()
+                            .take(self.s_offset)
+                            .map(|c| c.len_utf8())
+                            .sum();
+
+                        self.s_offset = 0;
+                        *n += n_offset;
+
+                        if *n < cstr_atom.len() {
                             let h_len = self.heap.len();
 
                             self.heap.push(pstr_offset_as_cell!(h));
-                            self.heap.push(fixnum_as_cell!(Fixnum::build_with(n as i64)));
+                            self.heap.push(fixnum_as_cell!(Fixnum::build_with(*n as i64)));
 
                             pstr_loc_as_cell!(h_len)
                         } else {
@@ -1821,30 +1841,6 @@ impl MachineState {
         Some(Ordering::Equal)
     }
 
-    pub(crate) fn increment_s_ptr(&mut self, rhs: usize) {
-        match &mut self.s {
-            HeapPtr::HeapCell(ref mut h) => {
-                *h += rhs;
-            }
-            &mut HeapPtr::PStrChar(h, ref mut n) | &mut HeapPtr::PStrLocation(h, ref mut n) => {
-                read_heap_cell!(self.heap[h],
-                    (HeapCellValueTag::PStr | HeapCellValueTag::CStr, pstr_atom) => {
-                        let pstr = PartialString::from(pstr_atom);
-
-                        for c in pstr.as_str_from(*n).chars().take(rhs) {
-                            *n += c.len_utf8();
-                        }
-
-                        self.s = HeapPtr::PStrLocation(h, *n);
-                    }
-                    _ => {
-                        unreachable!()
-                    }
-                )
-            }
-        }
-    }
-
     pub fn match_partial_string(&mut self, value: HeapCellValue, string: Atom, has_tail: bool) {
         let h = self.heap.len();
         self.heap.push(value);
@@ -1860,23 +1856,35 @@ impl MachineState {
                     (HeapCellValueTag::PStr | HeapCellValueTag::CStr, pstr_atom) => {
                         if has_tail {
                             self.s = HeapPtr::PStrLocation(focus, offset);
+                            self.s_offset = 0;
                             self.mode = MachineMode::Read;
                         } else if offset == pstr_atom.len() {
-                            let focus_addr = heap_pstr_iter.focus;
-                            unify!(self, focus_addr, empty_list_as_cell!());
+                            let focus = heap_pstr_iter.focus;
+                            unify!(self, focus, empty_list_as_cell!());
                         } else {
                             self.fail = true;
                         }
                     }
                     (HeapCellValueTag::PStrLoc | HeapCellValueTag::PStrOffset, h) => {
-                        if has_tail {
-                            let (h, _) = pstr_loc_and_offset(&self.heap, h);
+                        let (focus, _) = pstr_loc_and_offset(&self.heap, h);
+                        let pstr_atom = read_heap_cell!(self.heap[focus],
+                            (HeapCellValueTag::CStr | HeapCellValueTag::PStr, pstr_atom) => {
+                                pstr_atom
+                            }
+                            _ => {
+                                unreachable!()
+                            }
+                        );
 
-                            self.s = HeapPtr::PStrLocation(h, offset);
+                        if has_tail {
+                            self.s = HeapPtr::PStrLocation(focus, offset);
+                            self.s_offset = 0;
                             self.mode = MachineMode::Read;
+                        } else if offset == pstr_atom.len() {
+                            let focus = heap_pstr_iter.focus;
+                            unify!(self, focus, empty_list_as_cell!());
                         } else {
-                            let end_cell = heap_pstr_iter.focus;
-                            self.fail = end_cell != empty_list_as_cell!();
+                            self.fail = true;
                         }
                     }
                     _ => {
@@ -1884,6 +1892,7 @@ impl MachineState {
 
                         if has_tail {
                             self.s = HeapPtr::HeapCell(focus);
+                            self.s_offset = 0;
                             self.mode = MachineMode::Read;
                         } else {
                             let focus = heap_pstr_iter.focus;
@@ -1900,6 +1909,7 @@ impl MachineState {
 
                 let target_cell = if has_tail {
                     self.s = HeapPtr::HeapCell(h + 1);
+                    self.s_offset = 0;
                     self.mode = MachineMode::Read;
 
                     put_partial_string(
