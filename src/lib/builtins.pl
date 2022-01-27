@@ -698,15 +698,15 @@ rightmost_power(Term, FinalTerm, Xs) :-
 
 findall_with_existential(Template, Goal, PairedSolutions, Witnesses0, Witnesses) :-
     (  nonvar(Goal),
-       (  Goal = _ ^ _
-       ;  Goal = _ : (_ ^ _)
-       )  ->
-       rightmost_power(Goal, Goal1, ExistentialVars0),
+       loader:strip_module(Goal, M, Goal1),
+       (  Goal1 = _ ^ _  ) ->
+       rightmost_power(Goal1, Goal2, ExistentialVars0),
        term_variables(ExistentialVars0, ExistentialVars),
        sort(Witnesses0, Witnesses1),
        sort(ExistentialVars, ExistentialVars1),
        set_difference(Witnesses1, ExistentialVars1, Witnesses),
-       findall(Witnesses-Template, Goal1, PairedSolutions)
+       expand_goal(M:Goal2, M, Goal3),
+       findall(Witnesses-Template, Goal3, PairedSolutions)
     ;  Witnesses = Witnesses0,
        findall(Witnesses-Template, Goal, PairedSolutions)
     ).
