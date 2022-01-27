@@ -211,50 +211,56 @@ impl BrentAlgState {
 impl MachineState {
     #[inline(always)]
     pub fn brents_alg_step(&self, brent_st: &mut BrentAlgState) -> Option<CycleSearchResult> {
-        let deref_v = self.deref(self.heap[brent_st.hare]);
-        let store_v = self.store(deref_v);
+        loop {
+            let store_v = self.heap[brent_st.hare];
 
-        if let Some(var) = store_v.as_var() {
-            return Some(CycleSearchResult::PartialList(brent_st.num_steps(), var));
-        }
-
-        if store_v == empty_list_as_cell!() {
-            return Some(CycleSearchResult::ProperList(brent_st.num_steps()));
-        }
-
-        read_heap_cell!(store_v,
-            (HeapCellValueTag::PStrLoc, h) => {
-                brent_st.add_pstr_chars_and_step(&self.heap, h)
-            }
-            (HeapCellValueTag::PStrOffset) => {
-                brent_st.add_pstr_chars_and_step(&self.heap, brent_st.hare)
-            }
-            (HeapCellValueTag::CStr, cstr_atom) => {
-                let cstr = PartialString::from(cstr_atom);
-
-                brent_st.pstr_chars += cstr.as_str_from(0).chars().count();
-                Some(CycleSearchResult::ProperList(brent_st.num_steps()))
-            }
-            (HeapCellValueTag::Lis, h) => {
-                brent_st.step(h+1)
-            }
-            (HeapCellValueTag::Str, s) => {
-                let (name, arity) = cell_as_atom_cell!(self.heap[s]).get_name_and_arity();
-
-                if name == atom!(".") && arity == 2 {
-                    brent_st.step(s+2)
-                } else {
-                    Some(CycleSearchResult::NotList)
+            read_heap_cell!(store_v,
+                (HeapCellValueTag::PStrLoc, h) => {
+                    return brent_st.add_pstr_chars_and_step(&self.heap, h);
                 }
-            }
-            (HeapCellValueTag::Atom, (_name, arity)) => {
-                debug_assert!(arity == 0);
-                Some(CycleSearchResult::NotList)
-            }
-            _ => {
-                Some(CycleSearchResult::NotList)
-            }
-        )
+                (HeapCellValueTag::PStrOffset) => {
+                    return brent_st.add_pstr_chars_and_step(&self.heap, brent_st.hare);
+                }
+                (HeapCellValueTag::CStr, cstr_atom) => {
+                    let cstr = PartialString::from(cstr_atom);
+
+                    brent_st.pstr_chars += cstr.as_str_from(0).chars().count();
+                    return Some(CycleSearchResult::ProperList(brent_st.num_steps()));
+                }
+                (HeapCellValueTag::Lis, h) => {
+                    return brent_st.step(h+1);
+                }
+                (HeapCellValueTag::Str, s) => {
+                    let (name, arity) = cell_as_atom_cell!(self.heap[s]).get_name_and_arity();
+
+                    return if name == atom!(".") && arity == 2 {
+                        brent_st.step(s+2)
+                    } else {
+                        Some(CycleSearchResult::NotList)
+                    };
+                }
+                (HeapCellValueTag::Atom, (name, arity)) => {
+                    debug_assert!(arity == 0);
+
+                    return if name == atom!("[]") {
+                        Some(CycleSearchResult::ProperList(brent_st.num_steps()))
+                    } else {
+                        Some(CycleSearchResult::NotList)
+                    };
+                }
+                (HeapCellValueTag::AttrVar | HeapCellValueTag::Var, h) => {
+                    if brent_st.hare == h {
+                        let r = store_v.as_var().unwrap();
+                        return Some(CycleSearchResult::PartialList(brent_st.num_steps(), r));
+                    }
+
+                    brent_st.hare = h;
+                }
+                _ => {
+                    return Some(CycleSearchResult::NotList);
+                }
+            );
+        }
     }
 
     pub fn detect_cycles(&self, value: HeapCellValue) -> CycleSearchResult {
