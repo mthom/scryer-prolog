@@ -330,7 +330,7 @@ read_input(ThreadedGoals, NewVarList) :-
        help_message,
        read_input(ThreadedGoals, NewVarList)
     ;  member(C, ['\n', .]) ->
-       nl, write(';  ...'), nl
+       nl, write(';  ... .'), nl
     ;  read_input(ThreadedGoals, NewVarList)
     ).
 
