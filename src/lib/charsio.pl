@@ -118,7 +118,7 @@ read_from_chars(Chars, Term) :-
        instantiation_error(read_from_chars/2)
     ;  nonvar(Term) ->
        throw(error(uninstantiation_error(Term), read_from_chars/2))
-    ;  '$skip_max_list'(_, -1, Chars, Chars0),
+    ;  '$skip_max_list'(_, _, Chars, Chars0),
        Chars0 == [],
        partial_string(Chars) ->
        true

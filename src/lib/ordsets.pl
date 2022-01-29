@@ -89,7 +89,7 @@ because the order it relies on may have been changed.
 %   setof/3.
 
 is_ordset(Term) :-
-    '$skip_max_list'(_, -1, Term, Tail), Tail == [], %% is_list(Term),
+    '$skip_max_list'(_, _, Term, Tail), Tail == [], %% is_list(Term),
     is_ordset2(Term).
 
 is_ordset2([]).

@@ -133,7 +133,7 @@ impl BrentAlgState {
         self.lam += 1;
 
         if self.tortoise == self.hare {
-            return Some(CycleSearchResult::NotList);
+            return Some(CycleSearchResult::Cyclic(self.lam));
         } else {
             self.teleport_tortoise();
         }
@@ -158,19 +158,22 @@ impl BrentAlgState {
                 let pstr = cell_as_string!(heap[self.hare]);
                 self.pstr_chars += pstr.as_str_from(n).chars().count();
 
-                CycleSearchResult::PStrLocation(self.num_steps(), n)
+                return CycleSearchResult::PStrLocation(self.num_steps(), n);
             }
             (HeapCellValueTag::Atom, (name, arity)) => {
-                if name == atom!("[]") && arity == 0 {
+                return if name == atom!("[]") && arity == 0 {
                     CycleSearchResult::ProperList(self.num_steps())
                 } else {
                     CycleSearchResult::NotList
-                }
+                };
+            }
+            (HeapCellValueTag::Lis, l) => {
+                return CycleSearchResult::UntouchedList(self.num_steps(), l);
             }
             _ => {
-                CycleSearchResult::NotList
+                return CycleSearchResult::NotList;
             }
-        )
+        );
     }
 
     fn add_pstr_chars_and_step(&mut self, heap: &[HeapCellValue], h: usize) -> Option<CycleSearchResult> {
@@ -218,14 +221,8 @@ impl MachineState {
                 (HeapCellValueTag::PStrLoc, h) => {
                     return brent_st.add_pstr_chars_and_step(&self.heap, h);
                 }
-                (HeapCellValueTag::PStrOffset) => {
+                (HeapCellValueTag::CStr | HeapCellValueTag::PStrOffset) => {
                     return brent_st.add_pstr_chars_and_step(&self.heap, brent_st.hare);
-                }
-                (HeapCellValueTag::CStr, cstr_atom) => {
-                    let cstr = PartialString::from(cstr_atom);
-
-                    brent_st.pstr_chars += cstr.as_str_from(0).chars().count();
-                    return Some(CycleSearchResult::ProperList(brent_st.num_steps()));
                 }
                 (HeapCellValueTag::Lis, h) => {
                     return brent_st.step(h+1);
@@ -264,9 +261,7 @@ impl MachineState {
     }
 
     pub fn detect_cycles(&self, value: HeapCellValue) -> CycleSearchResult {
-        let deref_v = self.deref(value);
-        let store_v = self.store(deref_v);
-
+        let store_v = self.store(self.deref(value));
         let mut pstr_chars = 0;
 
         let hare = read_heap_cell!(store_v,
@@ -310,11 +305,14 @@ impl MachineState {
                 }
             }
             (HeapCellValueTag::Atom, (name, arity)) => {
-                if name == atom!("[]") && arity == 0 {
-                    return CycleSearchResult::EmptyList;
+                return if name == atom!("[]") && arity == 0 {
+                    CycleSearchResult::EmptyList
                 } else {
-                    return CycleSearchResult::NotList;
-                }
+                    CycleSearchResult::NotList
+                };
+            }
+            (HeapCellValueTag::AttrVar | HeapCellValueTag::StackVar | HeapCellValueTag::Var) => {
+                return CycleSearchResult::PartialList(0, store_v.as_var().unwrap());
             }
             _ => {
                 return CycleSearchResult::NotList;
@@ -334,9 +332,7 @@ impl MachineState {
     }
 
     pub fn detect_cycles_with_max(&self, max_steps: usize, value: HeapCellValue) -> CycleSearchResult {
-        let deref_v = self.deref(value);
-        let store_v = self.store(deref_v);
-
+        let store_v = self.store(self.deref(value));
         let mut pstr_chars = 0;
 
         let hare = read_heap_cell!(store_v,
@@ -344,7 +340,7 @@ impl MachineState {
                 if max_steps > 0 {
                     offset+1
                 } else {
-                    return CycleSearchResult::UntouchedList(offset);
+                    return CycleSearchResult::UntouchedList(0, offset);
                 }
             }
             (HeapCellValueTag::PStrLoc, h) => {
@@ -398,7 +394,7 @@ impl MachineState {
                     if max_steps > 0 {
                         s + 2
                     } else {
-                        return CycleSearchResult::UntouchedList(s + 1);
+                        return CycleSearchResult::UntouchedList(0, s + 1);
                     }
                 } else {
                     return CycleSearchResult::NotList;
@@ -411,6 +407,9 @@ impl MachineState {
                     CycleSearchResult::NotList
                 };
             }
+            (HeapCellValueTag::AttrVar | HeapCellValueTag::StackVar | HeapCellValueTag::Var) => {
+                return CycleSearchResult::PartialList(0, store_v.as_var().unwrap());
+            }
             _ => {
                 return CycleSearchResult::NotList;
             }
@@ -422,7 +421,7 @@ impl MachineState {
         brent_st.pstr_chars = pstr_chars;
 
         loop {
-            if brent_st.num_steps() == max_steps {
+            if brent_st.num_steps() >= max_steps {
                 return brent_st.to_result(&self.heap);
             }
 
@@ -432,9 +431,48 @@ impl MachineState {
         }
     }
 
-    fn finalize_skip_max_list(&mut self, n: usize, value: HeapCellValue) {
-        let target_n = self.registers[1];
-        self.unify_fixnum(Fixnum::build_with(n as i64), target_n);
+    fn skip_max_list_cycle(&mut self, lam: usize) {
+        fn step(heap: &Heap, mut value: HeapCellValue) -> usize {
+            loop {
+                read_heap_cell!(value,
+                    (HeapCellValueTag::PStrLoc, h) => {
+                        let (h_offset, _) = pstr_loc_and_offset(&heap, h);
+                        return h_offset+1;
+                    }
+                    (HeapCellValueTag::Lis, h) => {
+                        return h+1;
+                    }
+                    (HeapCellValueTag::Str, s) => {
+                        return s+2;
+                    }
+                    (HeapCellValueTag::AttrVar | HeapCellValueTag::Var, h) => {
+                        value = heap[h];
+                    }
+                    _ => {
+                        unreachable!();
+                    }
+                );
+            }
+        }
+
+        let mut hare = step(&self.heap, self.registers[3]);
+        let mut tortoise = hare;
+
+        for _ in 0 .. lam {
+            hare = step(&self.heap, self.heap[hare]);
+        }
+
+        while hare != tortoise {
+            hare = step(&self.heap, self.heap[hare]);
+            tortoise = step(&self.heap, self.heap[tortoise]);
+        }
+
+        unify!(self, self.registers[4], self.heap[hare]);
+    }
+
+    fn finalize_skip_max_list(&mut self, n: i64, value: HeapCellValue) {
+        let target_n = self.store(self.deref(self.registers[1]));
+        self.unify_fixnum(Fixnum::build_with(n), target_n);
 
         if !self.fail {
             let xs = self.registers[4];
@@ -442,94 +480,76 @@ impl MachineState {
         }
     }
 
-    fn skip_max_list_result(&mut self, max_steps: Option<i64>) {
-        let search_result = if let Some(max_steps) = max_steps {
-            if max_steps == -1 {
-                self.detect_cycles(self.registers[3])
-            } else {
-                self.detect_cycles_with_max(max_steps as usize, self.registers[3])
-            }
-        } else {
+    fn skip_max_list_result(&mut self, max_steps: i64) {
+        let search_result = if max_steps == -1 {
             self.detect_cycles(self.registers[3])
+        } else {
+            self.detect_cycles_with_max(max_steps as usize, self.registers[3])
         };
 
         match search_result {
             CycleSearchResult::PStrLocation(steps, pstr_loc) => {
-                self.finalize_skip_max_list(steps, heap_loc_as_cell!(pstr_loc));
+                self.finalize_skip_max_list(steps as i64, pstr_loc_as_cell!(pstr_loc));
             }
-            CycleSearchResult::UntouchedList(l) => {
-                self.finalize_skip_max_list(0, list_loc_as_cell!(l));
+            CycleSearchResult::UntouchedList(n, l) => {
+                self.finalize_skip_max_list(n as i64, list_loc_as_cell!(l));
             }
             CycleSearchResult::UntouchedCStr(cstr_atom, n) => {
-                self.finalize_skip_max_list(n, string_as_cstr_cell!(cstr_atom));
+                self.finalize_skip_max_list(n as i64, string_as_cstr_cell!(cstr_atom));
             }
             CycleSearchResult::EmptyList => {
                 self.finalize_skip_max_list(0, empty_list_as_cell!());
             }
             CycleSearchResult::PartialList(n, r) => {
-                self.finalize_skip_max_list(n, r.as_heap_cell_value());
+                self.finalize_skip_max_list(n as i64, r.as_heap_cell_value());
             }
             CycleSearchResult::ProperList(steps) => {
-                self.finalize_skip_max_list(steps, empty_list_as_cell!())
+                self.finalize_skip_max_list(steps as i64, empty_list_as_cell!())
             }
             CycleSearchResult::NotList => {
-                let xs0 = self.registers[3];
-                self.finalize_skip_max_list(0, xs0);
+                let n = self.store(self.deref(self.registers[2]));
+
+                self.unify_fixnum(Fixnum::build_with(max_steps), n);
+                self.finalize_skip_max_list(max_steps, self.registers[3]);
+            }
+            CycleSearchResult::Cyclic(lam) => {
+                self.skip_max_list_cycle(lam);
             }
         };
     }
 
     pub fn skip_max_list(&mut self) -> CallResult {
         let max_steps = self.store(self.deref(self.registers[2]));
+        let mut max_old = -1i64;
 
-        if max_steps.is_var() {
-            let stub = functor_stub(atom!("$skip_max_list"), 4);
-            let err = self.instantiation_error();
+        if !max_steps.is_var() {
+            let max_steps = Number::try_from(max_steps);
 
-            return Err(self.error_form(err, stub));
-        }
+            let max_steps_n = match max_steps {
+                Ok(Number::Fixnum(n)) => Some(n.get_num()),
+                Ok(Number::Integer(n)) => n.to_i64(),
+                _ => None,
+            };
 
-        let max_steps_n = match Number::try_from(max_steps) {
-            Ok(Number::Fixnum(n)) => Some(n.get_num()),
-            Ok(Number::Integer(n)) => n.to_i64(),
-            _ => None,
-        };
-
-        if max_steps_n.map(|i| i >= -1).unwrap_or(false) {
-            let n = self.store(self.deref(self.registers[1]));
-
-            match Number::try_from(n) {
-                Ok(Number::Integer(n)) => {
-                    if &*n == &0 {
-                        let xs0 = self.registers[3];
-                        let xs = self.registers[4];
-
-                        unify!(self, xs0, xs);
+            if let Some(max_steps) = max_steps_n {
+                if max_steps.abs() as usize <= 1 << 63 {
+                    if max_steps >= 0 {
+                        max_old = max_steps;
                     } else {
-                        self.skip_max_list_result(max_steps_n);
+                        self.fail = true;
+                        return Ok(());
                     }
+                } else if max_steps < 0 {
+                    self.fail = true;
+                    return Ok(());
                 }
-                Ok(Number::Fixnum(n)) => {
-                    if n.get_num() == 0 {
-                        let xs0 = self.registers[3];
-                        let xs = self.registers[4];
-
-                        unify!(self, xs0, xs);
-                    } else {
-                        self.skip_max_list_result(max_steps_n);
-                    }
-                }
-                _ => {
-                    self.skip_max_list_result(max_steps_n);
-                }
+            } else if !max_steps.map(|n| n.is_integer()).unwrap_or(false) {
+                self.fail = true;
+                return Ok(());
             }
-        } else {
-            let stub = functor_stub(atom!("$skip_max_list"), 4);
-            let err = self.type_error(ValidType::Integer, max_steps);
-
-            return Err(self.error_form(err, stub));
         }
 
+        self.skip_max_list_result(max_old);
         Ok(())
     }
 

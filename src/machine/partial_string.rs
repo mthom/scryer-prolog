@@ -371,7 +371,10 @@ impl<'a> HeapPStrIter<'a> {
 
         match self.brent_st.step(next_hare) {
             Some(cycle_result) => {
-                debug_assert!(cycle_result == CycleSearchResult::NotList);
+                debug_assert!(match cycle_result {
+                    CycleSearchResult::Cyclic(_) => true,
+                    _ => false,
+                });
 
                 self.walk_hare_to_cycle_end();
                 self.stepper = HeapPStrIter::post_cycle_discovery_stepper;
