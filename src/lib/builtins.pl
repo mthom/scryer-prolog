@@ -329,7 +329,7 @@ comma_dispatch_call_list([G1]) :-
 
 :- non_counted_backtracking univ_errors/3.
 univ_errors(Term, List, N) :-
-    '$skip_max_list'(N, -1, List, R),
+    '$skip_max_list'(N, _, List, R),
     (  var(R)        ->
        (  var(Term),
           throw(error(instantiation_error, (=..)/2))      % 8.5.3.3 a)
@@ -399,7 +399,7 @@ get_args([Arg|Args], Func, I0, N) :-
 :- meta_predicate parse_options_list(?, 0, ?, ?, ?).
 
 parse_options_list(Options, Selector, DefaultPairs, OptionValues, Stub) :-
-    '$skip_max_list'(_, -1, Options, Tail),
+    '$skip_max_list'(_, _, Options, Tail),
     (  Tail == [] ->
        true
     ;  var(Tail) ->
@@ -452,7 +452,7 @@ parse_write_options_(max_depth(MaxDepth), max_depth-MaxDepth) :-
     ).
 
 must_be_var_names_list(VarNames) :-
-    '$skip_max_list'(_, -1, VarNames, Tail),
+    '$skip_max_list'(_, _, VarNames, Tail),
     (  Tail == [] ->
        must_be_var_names_list_(VarNames, VarNames)
     ;  var(Tail)  ->
@@ -549,7 +549,7 @@ can_be_list(List, _)  :-
     var(List),
     !.
 can_be_list(List, _)  :-
-    '$skip_max_list'(_, -1, List, Tail),
+    '$skip_max_list'(_, _, List, Tail),
     (  var(Tail) ->
        true
     ;  Tail == []
@@ -1196,7 +1196,7 @@ atom_length(Atom, Length) :-
     ).
 
 atom_chars(Atom, List) :-
-    '$skip_max_list'(_, -1, List, Tail),
+    '$skip_max_list'(_, _, List, Tail),
     (  ( Tail == [] ; var(Tail) ) ->
        true
     ;  throw(error(type_error(list, List), atom_chars/2))
@@ -1214,7 +1214,7 @@ atom_chars(Atom, List) :-
     ).
 
 atom_codes(Atom, List) :-
-    '$skip_max_list'(_, -1, List, Tail),
+    '$skip_max_list'(_, _, List, Tail),
     (  ( Tail == [] ; var(Tail) ) ->
        true
     ;  throw(error(type_error(list, List), atom_codes/2))
@@ -1271,9 +1271,9 @@ sub_atom(Atom, Before, Length, After, Sub_atom) :-
     ;  atom_chars(Atom, AtomChars),
        lists:append(BeforeChars, LengthAndAfterChars, AtomChars),
        lists:append(LengthChars, AfterChars, LengthAndAfterChars),
-       '$skip_max_list'(Before, -1, BeforeChars, []),
-       '$skip_max_list'(Length, -1, LengthChars, []),
-       '$skip_max_list'(After, -1, AfterChars, []),
+       '$skip_max_list'(Before, _, BeforeChars, []),
+       '$skip_max_list'(Length, _, LengthChars, []),
+       '$skip_max_list'(After, _, AfterChars, []),
        atom_chars(Sub_atom, LengthChars)
     ).
 

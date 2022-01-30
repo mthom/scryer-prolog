@@ -649,6 +649,14 @@ impl Number {
             &Number::Rational(ref r) => &**r == &0,
         }
     }
+
+    #[inline]
+    pub(crate) fn is_integer(&self) -> bool {
+        match self {
+            Number::Fixnum(_) | Number::Integer(_) => true,
+            _ => false,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]

@@ -768,12 +768,13 @@ impl EvalError {
 // used by '$skip_max_list'.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CycleSearchResult {
+    Cyclic(usize),
     EmptyList,
     NotList,
     PartialList(usize, Ref), // the list length (up to max), and an offset into the heap.
     ProperList(usize),       // the list length.
     PStrLocation(usize, usize), // list length (up to max), the heap address of the PStrOffset
-    UntouchedList(usize),       // the address of an uniterated Addr::Lis(address).
+    UntouchedList(usize, usize),   // list length (up to max), the address of an uniterated Addr::Lis(address).
     UntouchedCStr(Atom, usize),
 }
 

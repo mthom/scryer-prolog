@@ -80,7 +80,7 @@ character(C) :-
         atom_length(C, 1).
 
 ilist(Ls) :-
-        '$skip_max_list'(_, -1, Ls, Rs),
+        '$skip_max_list'(_, _, Ls, Rs),
         (   var(Rs) ->
             instantiation_error(must_be/2)
         ;   Rs == []
@@ -124,7 +124,7 @@ can_(list, Term)    :- list_or_partial_list(Term).
 can_(boolean, Term) :- boolean(Term).
 
 list_or_partial_list(Ls) :-
-        '$skip_max_list'(_, -1, Ls, Rs),
+        '$skip_max_list'(_, _, Ls, Rs),
         (   var(Rs) -> true
         ;   Rs == []
         ).

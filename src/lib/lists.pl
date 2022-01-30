@@ -50,27 +50,20 @@
 :- meta_predicate foldl(3, ?, ?, ?).
 :- meta_predicate foldl(4, ?, ?, ?, ?).
 
-
-length(Xs, N) :-
-    var(N),
-    !,
-    '$skip_max_list'(M, -1, Xs, Xs0),
-    (  Xs0 == [] -> N = M
-    ;  var(Xs0)  -> length_addendum(Xs0, N, M)
-    ).
-length(Xs, N) :-
-    integer(N),
-    N >= 0,
-    !,
-    '$skip_max_list'(M, N, Xs, Xs0),
-    (  Xs0 == [] -> N = M
-    ;  var(Xs0)  -> R is N-M, length_rundown(Xs0, R)
-    ).
+length(Xs0, N) :-
+   '$skip_max_list'(M, N, Xs0,Xs),
+   !,
+   (  Xs == [] -> N = M
+   ;  nonvar(Xs) -> var(N), throw(error(resource_error(finite_memory),_))
+   ;  nonvar(N) -> R is N-M, length_rundown(Xs, R)
+   ;  N == Xs -> throw(error(resource_error(finite_memory),_))
+   ;  length_addendum(Xs, N, M)
+   ).
 length(_, N) :-
-    integer(N), !,
-    domain_error(not_less_than_zero, N, length/2).
+   integer(N), !,
+   domain_error(not_less_than_zero, N, length/2).
 length(_, N) :-
-    type_error(integer, N, length/2).
+   type_error(integer, N, length/2).
 
 length_addendum([], N, N).
 length_addendum([_|Xs], N, M) :-
@@ -288,8 +281,8 @@ list_min_(N, Min0, Min) :-
 %           or partial list.
 
 permutation(Xs, Ys) :-
-    '$skip_max_list'(Xlen, -1, Xs, XTail),
-    '$skip_max_list'(Ylen, -1, Ys, YTail),
+    '$skip_max_list'(Xlen, _, Xs, XTail),
+    '$skip_max_list'(Ylen, _, Ys, YTail),
     (   XTail == [], YTail == []            % both proper lists
     ->  Xlen == Ylen
     ;   var(XTail), YTail == []             % partial, proper

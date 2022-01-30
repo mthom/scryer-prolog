@@ -2080,7 +2080,7 @@ impl MachineState {
 
                 let n = match n {
                     Number::Fixnum(n) => n.get_num() as usize,
-                    Number::Integer(n) => n.to_usize().unwrap(),
+                    Number::Integer(n) if *n >= 0 && *n <= std::usize::MAX => n.to_usize().unwrap(),
                     _ => {
                         self.fail = true;
                         return Ok(());
