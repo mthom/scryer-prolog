@@ -462,12 +462,21 @@ impl MachineState {
             hare = step(&self.heap, self.heap[hare]);
         }
 
+        let mut count = 1;
+
         while hare != tortoise {
             hare = step(&self.heap, self.heap[hare]);
             tortoise = step(&self.heap, self.heap[tortoise]);
+
+            count += 1;
         }
 
-        unify!(self, self.registers[4], self.heap[hare]);
+        let target_n = self.store(self.deref(self.registers[1]));
+        self.unify_fixnum(Fixnum::build_with(count), target_n);
+
+        if !self.fail {
+            unify!(self, self.registers[4], self.heap[hare]);
+        }
     }
 
     fn finalize_skip_max_list(&mut self, n: i64, value: HeapCellValue) {
