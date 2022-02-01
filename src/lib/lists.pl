@@ -54,9 +54,9 @@ length(Xs0, N) :-
    '$skip_max_list'(M, N, Xs0,Xs),
    !,
    (  Xs == [] -> N = M
-   ;  nonvar(Xs) -> var(N), throw(error(resource_error(finite_memory),_))
+   ;  nonvar(Xs) -> var(N), throw(error(resource_error(finite_memory),length/2))
    ;  nonvar(N) -> R is N-M, length_rundown(Xs, R)
-   ;  N == Xs -> throw(error(resource_error(finite_memory),_))
+   ;  N == Xs -> throw(error(resource_error(finite_memory),length/2))
    ;  length_addendum(Xs, N, M)
    ).
 length(_, N) :-
