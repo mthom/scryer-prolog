@@ -962,6 +962,8 @@ impl Machine {
                     match self.find_living_dynamic_else(p) {
                         Some((p, next_i)) => {
                             self.machine_st.p = p;
+                            self.machine_st.oip = 0;
+                            self.machine_st.iip = 0;
 
                             match self.machine_st.dynamic_mode {
                                 FirstOrNext::First if next_i == 0 => {
@@ -1044,6 +1046,8 @@ impl Machine {
                     match self.find_living_dynamic_else(p) {
                         Some((p, next_i)) => {
                             self.machine_st.p = p;
+                            self.machine_st.oip = 0;
+                            self.machine_st.iip = 0;
 
                             match self.machine_st.dynamic_mode {
                                 FirstOrNext::First if next_i == 0 => {

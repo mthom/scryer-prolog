@@ -439,15 +439,19 @@ impl MachineState {
     pub(super) fn call_at_index(&mut self, arity: usize, p: usize) {
         self.cp = self.p + 1;
         self.p = p;
+        self.oip = 0;
+        self.iip = 0;
         self.num_of_args = arity;
         self.b0 = self.b;
     }
 
     #[inline(always)]
     pub(super) fn execute_at_index(&mut self, arity: usize, p: usize) {
+        self.p = p;
+        self.oip = 0;
+        self.iip = 0;
         self.num_of_args = arity;
         self.b0 = self.b;
-        self.p = p;
     }
 
     pub fn read_term(&mut self, stream: Stream, indices: &mut IndexStore) -> CallResult {

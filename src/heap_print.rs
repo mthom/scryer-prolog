@@ -376,7 +376,7 @@ impl HCValueOutputter for PrinterOutputter {
     }
 
     fn range_from(&self, index: RangeFrom<usize>) -> &str {
-        &self.contents.as_str()[index]
+        &self.contents.as_str().get(index).unwrap_or("")
     }
 }
 
