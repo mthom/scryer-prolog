@@ -938,10 +938,20 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                         fl = 0f64;
                     }
 
-                    let output_str = format!("{0:<20?}", fl);
+                    let output_str = if fl.fract() == 0f64 {
+                        if fl.abs() >= 1.0e16 {
+                            format!("{:.1e}", fl.trunc())
+                        } else {
+                            format!("{:.1}", fl.trunc())
+                        }
+                    } else if 0f64 < fl.fract().abs() && fl.fract().abs() <= 1.0e-16 {
+                        format!("{:>1e}", fl)
+                    } else {
+                        format!("{}", fl)
+                    };
 
                     push_space_if_amb!(self, &output_str, {
-                        append_str!(self, &output_str.trim());
+                        append_str!(self, &output_str);
                     });
                 }
                 Number::Rational(r) => {
