@@ -372,7 +372,7 @@ impl<'a> HeapPStrIter<'a> {
         match self.brent_st.step(next_hare) {
             Some(cycle_result) => {
                 debug_assert!(match cycle_result {
-                    CycleSearchResult::Cyclic(_) => true,
+                    CycleSearchResult::Cyclic(..) => true,
                     _ => false,
                 });
 

@@ -432,7 +432,7 @@ impl MachineState {
     }
 
     fn skip_max_list_cycle(&mut self, lam: usize) {
-        fn step(heap: &Heap, mut value: HeapCellValue) -> usize {
+        fn step(heap: &[HeapCellValue], mut value: HeapCellValue) -> usize {
             loop {
                 read_heap_cell!(value,
                     (HeapCellValueTag::PStrLoc, h) => {
@@ -455,27 +455,43 @@ impl MachineState {
             }
         }
 
-        let mut hare = step(&self.heap, self.registers[3]);
+        let h = self.heap.len();
+        self.heap.push(self.registers[3]);
+
+        let mut hare = h;
         let mut tortoise = hare;
 
         for _ in 0 .. lam {
             hare = step(&self.heap, self.heap[hare]);
         }
 
-        let mut count = 1;
+        let mut prev_hare = hare;
 
         while hare != tortoise {
+            prev_hare = hare;
             hare = step(&self.heap, self.heap[hare]);
             tortoise = step(&self.heap, self.heap[tortoise]);
-
-            count += 1;
         }
 
+        // now compute the num_steps of the list prefix until hare is
+        // reached in the fashion of a C do-while loop since hare
+        // may point to the beginning of a cycle.
+
+        let mut brent_st = BrentAlgState::new(h);
+
+        self.brents_alg_step(&mut brent_st);
+
+        while prev_hare != brent_st.hare {
+            self.brents_alg_step(&mut brent_st);
+        }
+
+        self.heap.pop();
+
         let target_n = self.store(self.deref(self.registers[1]));
-        self.unify_fixnum(Fixnum::build_with(count), target_n);
+        self.unify_fixnum(Fixnum::build_with(brent_st.num_steps() as i64), target_n);
 
         if !self.fail {
-            unify!(self, self.registers[4], self.heap[hare]);
+            unify!(self, self.registers[4], self.heap[prev_hare]);
         }
     }
 
