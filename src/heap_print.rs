@@ -1148,10 +1148,6 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 if end_cell == empty_list_as_cell!() {
                     append_str!(self, "[]");
                 } else {
-                    if self.outputter.ends_with(",") {
-                        self.outputter.truncate(self.outputter.len() - ','.len_utf8());
-                    }
-
                     self.state_stack.push(TokenOrRedirect::FunctorRedirect(max_depth));
                     self.iter.push_stack(end_h);
                 }
