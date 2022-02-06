@@ -495,9 +495,18 @@ impl MachineState {
         loop {
             match self.read(stream, &indices.op_dir) {
                 Ok(term_write_result) => {
+                    let heap_loc = read_heap_cell!(self.heap[term_write_result.heap_loc],
+                        (HeapCellValueTag::PStr | HeapCellValueTag::PStrOffset) => {
+                            pstr_loc_as_cell!(term_write_result.heap_loc)
+                        }
+                        _ => {
+                            heap_loc_as_cell!(term_write_result.heap_loc)
+                        }
+                    );
+
                     let term = self.registers[2];
-                    unify_fn!(*self, heap_loc_as_cell!(term_write_result.heap_loc), term);
-                    let term = heap_loc_as_cell!(term_write_result.heap_loc);
+                    unify_fn!(*self, heap_loc, term);
+                    let term = heap_loc;
 
                     if self.fail {
                         return Ok(());
