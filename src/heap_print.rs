@@ -1188,14 +1188,18 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                         self.state_stack.push(TokenOrRedirect::HeadTailSeparator);
                     }
 
-                    for (char_count, c) in pstr.chars().rev().enumerate() {
+                    let state_stack_len = self.state_stack.len();
+
+                    for (char_count, c) in pstr.chars().enumerate() {
                         if max_depth > 0 && char_count + 1 >= max_depth {
                             break;
                         }
 
-                        self.state_stack.push(TokenOrRedirect::Char(c));
                         self.state_stack.push(TokenOrRedirect::Comma);
+                        self.state_stack.push(TokenOrRedirect::Char(c));
                     }
+
+                    self.state_stack[state_stack_len ..].reverse();
 
                     if let Some(TokenOrRedirect::Comma) = self.state_stack.last() {
                         self.state_stack.pop();
