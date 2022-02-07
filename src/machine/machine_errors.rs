@@ -5,6 +5,7 @@ use crate::forms::*;
 use crate::machine::heap::*;
 use crate::machine::loader::CompilationTarget;
 use crate::machine::machine_state::*;
+use crate::machine::system_calls::BrentAlgState;
 use crate::types::*;
 
 pub type MachineStub = Vec<HeapCellValue>;
@@ -783,10 +784,10 @@ impl MachineState {
     pub(super) fn check_sort_errors(&mut self) -> CallResult {
         let stub_gen = || functor_stub(atom!("sort"), 2);
 
-        let list = self.registers[1];
+        let list = self.store(self.deref(self.registers[1]));
         let sorted = self.registers[2];
 
-        match self.detect_cycles(list) {
+        match BrentAlgState::detect_cycles(&self.heap, list) {
             CycleSearchResult::PartialList(..) => {
                 let err = self.instantiation_error();
                 return Err(self.error_form(err, stub_gen()))
@@ -798,7 +799,7 @@ impl MachineState {
             _ => {}
         };
 
-        match self.detect_cycles(sorted) {
+        match BrentAlgState::detect_cycles(&self.heap, sorted) {
             CycleSearchResult::NotList if !sorted.is_var() => {
                 let err = self.type_error(ValidType::List, sorted);
                 Err(self.error_form(err, stub_gen()))
@@ -810,7 +811,7 @@ impl MachineState {
     fn check_for_list_pairs(&mut self, mut list: HeapCellValue) -> CallResult {
         let stub_gen = || functor_stub(atom!("keysort"), 2);
 
-        match self.detect_cycles(list) {
+        match BrentAlgState::detect_cycles(&self.heap, list) {
             CycleSearchResult::NotList if !list.is_var() => {
                 let err = self.type_error(ValidType::List, list);
                 Err(self.error_form(err, stub_gen()))
@@ -872,7 +873,7 @@ impl MachineState {
         let pairs = self.store(self.deref(self[temp_v!(1)]));
         let sorted = self.store(self.deref(self[temp_v!(2)]));
 
-        match self.detect_cycles(pairs) {
+        match BrentAlgState::detect_cycles(&self.heap, pairs) {
             CycleSearchResult::PartialList(..) => {
                 let err = self.instantiation_error();
                 Err(self.error_form(err, stub_gen()))

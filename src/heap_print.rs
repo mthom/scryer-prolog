@@ -13,6 +13,7 @@ use crate::forms::*;
 use crate::heap_iter::*;
 use crate::machine::heap::*;
 use crate::machine::machine_indices::*;
+use crate::machine::machine_state::pstr_loc_and_offset;
 use crate::machine::partial_string::*;
 use crate::machine::streams::*;
 use crate::types::*;
@@ -203,6 +204,7 @@ impl NumberFocus {
 enum TokenOrRedirect {
     Atom(Atom),
     BarAsOp,
+    Char(char),
     Op(Atom, OpDesc),
     NumberedVar(String),
     CompositeRedirect(usize, DirectedOp),
@@ -1130,20 +1132,23 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         let end_h = heap_pstr_iter.focus();
         let end_cell = heap_pstr_iter.focus;
 
-        self.remove_list_children(focus);
-
         if self.check_max_depth(&mut max_depth) {
+            self.remove_list_children(focus);
             self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
             return;
         }
 
-        let at_cdr = self.at_cdr(",");
+        let at_cdr = self.outputter.ends_with("|");
 
         if !at_cdr && !self.ignore_ops && end_cell.is_string_terminator(&self.iter.heap) {
+            self.remove_list_children(focus);
             return self.print_proper_string(focus, max_depth);
         }
 
         if self.ignore_ops {
+            self.at_cdr(",");
+            self.remove_list_children(focus);
+
             if !self.print_string_as_functor(focus, max_depth) {
                 if end_cell == empty_list_as_cell!() {
                     append_str!(self, "[]");
@@ -1153,49 +1158,52 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 }
             }
         } else {
-            let switch = if !at_cdr {
-                push_char!(self, '[');
-                true
-            } else {
-                false
-            };
+            let value  = heap_bound_store(
+                self.iter.heap,
+                heap_bound_deref(self.iter.heap, self.iter.heap[focus]),
+            );
 
-            let heap_pstr_iter = HeapPStrIter::new(self.iter.heap, focus);
-
-            let mut iter = heap_pstr_iter.chars();
-            let mut char_count = 0;
-
-            while let Some(c) = iter.next() {
-                print_char!(self, self.quoted, c);
-                push_char!(self, ',');
-
-                char_count += 1;
-
-                if max_depth > 0 && max_depth <= char_count {
-                    break;
+            read_heap_cell!(value,
+                (HeapCellValueTag::Lis) => {
+                    return self.push_list(max_depth);
                 }
-            }
+                _ => {
+                    let switch = Rc::new(Cell::new((!at_cdr, 0)));
+                    self.state_stack.push(TokenOrRedirect::CloseList(switch.clone()));
 
-            self.state_stack.push(TokenOrRedirect::CloseList(Rc::new(Cell::new((switch, 0)))));
+                    let (h, offset) = pstr_loc_and_offset(self.iter.heap, focus);
+                    let pstr = cell_as_string!(self.iter.heap[h]);
 
-            if self.max_depth > 0 && iter.next().is_some() {
-                self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
-                self.state_stack.push(TokenOrRedirect::HeadTailSeparator);
-            } else {
-                if iter.cycle_detected() {
-                    self.iter.heap[end_h].set_forwarding_bit(true);
+                    let pstr = pstr.as_str_from(offset.get_num() as usize);
+
+                    if max_depth > 0 && pstr.chars().count() + 1 >= max_depth {
+                        if value.get_tag() != HeapCellValueTag::CStr {
+                            self.iter.pop_stack();
+                        }
+
+                        self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
+                        self.state_stack.push(TokenOrRedirect::HeadTailSeparator);
+                    } else if end_cell != empty_list_as_cell!() {
+                        self.state_stack.push(TokenOrRedirect::FunctorRedirect(max_depth));
+                        self.state_stack.push(TokenOrRedirect::HeadTailSeparator);
+                    }
+
+                    for (char_count, c) in pstr.chars().rev().enumerate() {
+                        if max_depth > 0 && char_count + 1 >= max_depth {
+                            break;
+                        }
+
+                        self.state_stack.push(TokenOrRedirect::Char(c));
+                        self.state_stack.push(TokenOrRedirect::Comma);
+                    }
+
+                    if let Some(TokenOrRedirect::Comma) = self.state_stack.last() {
+                        self.state_stack.pop();
+                    }
+
+                    self.state_stack.push(TokenOrRedirect::OpenList(switch));
                 }
-
-                if end_cell != empty_list_as_cell!() {
-                    self.state_stack.push(TokenOrRedirect::FunctorRedirect(max_depth));
-                    self.state_stack.push(TokenOrRedirect::HeadTailSeparator);
-                    self.iter.push_stack(end_h);
-                }
-            }
-
-            if self.outputter.ends_with(",") {
-                self.outputter.truncate(self.outputter.len() - ','.len_utf8());
-            }
+            );
         }
     }
 
@@ -1507,6 +1515,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 match loc_data {
                     TokenOrRedirect::Atom(atom) => self.print_atom(atom),
                     TokenOrRedirect::BarAsOp => append_str!(self, " | "),
+                    TokenOrRedirect::Char(c) => print_char!(self, self.quoted, c),
                     TokenOrRedirect::Op(atom, _) => self.print_op(atom.as_str()),
                     TokenOrRedirect::NumberedVar(num_var) => append_str!(self, &num_var),
                     TokenOrRedirect::CompositeRedirect(max_depth, op) => {
