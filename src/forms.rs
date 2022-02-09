@@ -219,7 +219,6 @@ pub enum PredicateClause {
 }
 
 impl PredicateClause {
-    // TODO: add this to `Term` in `crate::parser` like `first_arg`.
     pub(crate) fn args(&self) -> Option<&[Term]> {
         match self {
             PredicateClause::Fact(term, ..) => match term {
@@ -235,6 +234,13 @@ impl PredicateClause {
             }
         }
     }
+}
+
+#[derive(Debug)]
+pub struct ClauseSpan {
+    pub left: usize,
+    pub right: usize,
+    pub instantiated_arg_index: usize,
 }
 
 #[derive(Debug, Clone)]

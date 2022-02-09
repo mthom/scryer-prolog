@@ -969,68 +969,61 @@ impl<'a, 'b: 'a, TermMarker: Allocator<'a>> CodeGenerator<'b, TermMarker> {
         }
     }
 
-    /// Returns the index of the first instantiated argument.
-    fn first_instantiated_index(clauses: &[PredicateClause]) -> Option<usize> {
-        let mut optimal_index = None;
-        let has_args = match clauses.first() {
-            Some(clause) => match clause.args() {
-                Some(args) => !args.is_empty(),
-                None => false,
-            },
-            None => false,
-        };
-        if !has_args {
-            return optimal_index;
-        }
-        for clause in clauses.iter() {
-            let args = clause.args().unwrap();
-            for (i, arg) in args.iter().enumerate() {
-                if let Some(optimal_index) = optimal_index {
-                    if i >= optimal_index {
-                        break;
-                    }
-                }
-                match arg {
-                    Term::AnonVar | Term::Var(..) => (),
-                    _ => {
-                        match optimal_index {
-                            Some(ref mut optimal_i) => *optimal_i = i,
-                            None => optimal_index = Some(i),
-                        }
-                        break;
-                    }
-                }
-            }
-        }
-
-        optimal_index
-    }
-
-    fn split_predicate(clauses: &[PredicateClause], optimal_index: usize) -> Vec<(usize, usize)> {
+    fn split_predicate(clauses: &[PredicateClause]) -> Vec<ClauseSpan> {
         let mut subseqs = Vec::new();
-        let mut left_index = 0;
+        let mut left = 0;
+        let mut optimal_index = 0;
 
-        if clauses.first().unwrap().args().is_some() {
-            for (right_index, clause) in clauses.iter().enumerate() {
-                // Can unwrap safely.
-                if let Some(arg) = clause.args().unwrap().iter().nth(optimal_index) {
+        'outer: for (right, clause) in clauses.iter().enumerate() {
+            if let Some(args) = clause.args() {
+                for (instantiated_arg_index, arg) in args.iter().enumerate() {
                     match arg {
                         Term::Var(..) | Term::AnonVar => {
-                            if left_index < right_index {
-                                subseqs.push((left_index, right_index));
+                        }
+                        _ => {
+                            if optimal_index != instantiated_arg_index {
+                                if left >= right {
+                                    optimal_index = instantiated_arg_index;
+                                    continue 'outer;
+                                }
+
+                                subseqs.push(ClauseSpan {
+                                    left,
+                                    right,
+                                    instantiated_arg_index: optimal_index,
+                                });
+
+                                optimal_index = instantiated_arg_index;
+                                left = right;
                             }
 
-                            subseqs.push((right_index, right_index + 1));
-                            left_index = right_index + 1;
+                            continue 'outer;
                         }
-                        _ => (),
                     }
                 }
             }
+
+            if left < right {
+                subseqs.push(ClauseSpan { left, right, instantiated_arg_index: optimal_index });
+            }
+
+            optimal_index = 0;
+
+            subseqs.push(ClauseSpan {
+                left: right,
+                right: right + 1,
+                instantiated_arg_index: optimal_index,
+            });
+
+            left = right + 1;
         }
 
-        if left_index < clauses.len() {
-            subseqs.push((left_index, clauses.len()));
+        if left < clauses.len() {
+            subseqs.push(ClauseSpan {
+                left,
+                right: clauses.len(),
+                instantiated_arg_index: optimal_index,
+            });
         }
 
         subseqs
@@ -1134,28 +1127,36 @@ impl<'a, 'b: 'a, TermMarker: Allocator<'a>> CodeGenerator<'b, TermMarker> {
     ) -> Result<Code, CompilationError> {
         let mut code = Code::new();
 
+        /*
         let optimal_index = match Self::first_instantiated_index(&clauses) {
             Some(index) => index,
             None => 0, // Default to first argument indexing.
         };
+        */
 
-        let split_pred = Self::split_predicate(&clauses, optimal_index);
+        let split_pred = Self::split_predicate(&clauses);
         let multi_seq = split_pred.len() > 1;
 
-        for (l, r) in split_pred {
+        for ClauseSpan { left, right, instantiated_arg_index } in split_pred {
             let skel_lower_bound = self.skeleton.clauses.len();
             let code_segment = if self.settings.is_dynamic() {
-                self.compile_pred_subseq::<DynamicCodeIndices>(&clauses[l..r], optimal_index)?
+                self.compile_pred_subseq::<DynamicCodeIndices>(
+                    &clauses[left..right],
+                    instantiated_arg_index,
+                )?
             } else {
-                self.compile_pred_subseq::<StaticCodeIndices>(&clauses[l..r], optimal_index)?
+                self.compile_pred_subseq::<StaticCodeIndices>(
+                    &clauses[left..right],
+                    instantiated_arg_index,
+                )?
             };
 
             let clause_start_offset = code.len();
 
             if multi_seq {
-                let choice = match l {
+                let choice = match left {
                     0 => self.settings.try_me_else(code_segment.len() + 1),
-                    _ if r == clauses.len() => self.settings.trust_me(),
+                    _ if right == clauses.len() => self.settings.trust_me(),
                     _ => self.settings.retry_me_else(code_segment.len() + 1),
                 };
 
