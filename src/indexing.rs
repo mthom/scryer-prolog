@@ -7,6 +7,7 @@ use crate::instructions::*;
 use indexmap::IndexMap;
 use slice_deque::{sdeq, SliceDeque};
 
+use std::collections::VecDeque;
 use std::hash::Hash;
 use std::iter::once;
 use std::mem;
@@ -1138,16 +1139,16 @@ pub(crate) fn constant_key_alternatives(
 
 #[derive(Debug)]
 pub(crate) struct StaticCodeIndices {
-    constants: IndexMap<Literal, SliceDeque<IndexedChoiceInstruction>>,
-    lists: SliceDeque<IndexedChoiceInstruction>,
-    structures: IndexMap<(Atom, usize), SliceDeque<IndexedChoiceInstruction>>,
+    constants: IndexMap<Literal, VecDeque<IndexedChoiceInstruction>>,
+    lists: VecDeque<IndexedChoiceInstruction>,
+    structures: IndexMap<(Atom, usize), VecDeque<IndexedChoiceInstruction>>,
 }
 
 #[derive(Debug)]
 pub(crate) struct DynamicCodeIndices {
-    constants: IndexMap<Literal, SliceDeque<usize>>,
-    lists: SliceDeque<usize>,
-    structures: IndexMap<(Atom, usize), SliceDeque<usize>>,
+    constants: IndexMap<Literal, VecDeque<usize>>,
+    lists: VecDeque<usize>,
+    structures: IndexMap<(Atom, usize), VecDeque<usize>>,
 }
 
 pub(crate) trait Indexer {
@@ -1155,26 +1156,26 @@ pub(crate) trait Indexer {
 
     fn new() -> Self;
 
-    fn constants(&mut self) -> &mut IndexMap<Literal, SliceDeque<Self::ThirdLevelIndex>>;
-    fn lists(&mut self) -> &mut SliceDeque<Self::ThirdLevelIndex>;
-    fn structures(&mut self) -> &mut IndexMap<(Atom, usize), SliceDeque<Self::ThirdLevelIndex>>;
+    fn constants(&mut self) -> &mut IndexMap<Literal, VecDeque<Self::ThirdLevelIndex>>;
+    fn lists(&mut self) -> &mut VecDeque<Self::ThirdLevelIndex>;
+    fn structures(&mut self) -> &mut IndexMap<(Atom, usize), VecDeque<Self::ThirdLevelIndex>>;
 
     fn compute_index(is_initial_index: bool, index: usize) -> Self::ThirdLevelIndex;
 
     fn second_level_index<IndexKey: Eq + Hash>(
-        indices: IndexMap<IndexKey, SliceDeque<Self::ThirdLevelIndex>>,
-        prelude: &mut SliceDeque<IndexingLine>,
+        indices: IndexMap<IndexKey, VecDeque<Self::ThirdLevelIndex>>,
+        prelude: &mut VecDeque<IndexingLine>,
     ) -> IndexMap<IndexKey, IndexingCodePtr>;
 
     fn switch_on<IndexKey: Eq + Hash>(
         instr_fn: impl FnMut(IndexMap<IndexKey, IndexingCodePtr>) -> IndexingInstruction,
-        index: &mut IndexMap<IndexKey, SliceDeque<Self::ThirdLevelIndex>>,
-        prelude: &mut SliceDeque<IndexingLine>,
+        index: &mut IndexMap<IndexKey, VecDeque<Self::ThirdLevelIndex>>,
+        prelude: &mut VecDeque<IndexingLine>,
     ) -> IndexingCodePtr;
 
     fn switch_on_list(
-        lists: &mut SliceDeque<Self::ThirdLevelIndex>,
-        prelude: &mut SliceDeque<IndexingLine>,
+        lists: &mut VecDeque<Self::ThirdLevelIndex>,
+        prelude: &mut VecDeque<IndexingLine>,
     ) -> IndexingCodePtr;
 
     fn remove_instruction_with_offset(code: &mut SliceDeque<Self::ThirdLevelIndex>, offset: usize);
@@ -1189,23 +1190,23 @@ impl Indexer for StaticCodeIndices {
     fn new() -> Self {
         Self {
             constants: IndexMap::new(),
-            lists: sdeq![],
+            lists: VecDeque::new(),
             structures: IndexMap::new(),
         }
     }
 
     #[inline]
-    fn constants(&mut self) -> &mut IndexMap<Literal, SliceDeque<IndexedChoiceInstruction>> {
+    fn constants(&mut self) -> &mut IndexMap<Literal, VecDeque<IndexedChoiceInstruction>> {
         &mut self.constants
     }
 
     #[inline]
-    fn lists(&mut self) -> &mut SliceDeque<IndexedChoiceInstruction> {
+    fn lists(&mut self) -> &mut VecDeque<IndexedChoiceInstruction> {
         &mut self.lists
     }
 
     #[inline]
-    fn structures(&mut self) -> &mut IndexMap<(Atom, usize), SliceDeque<IndexedChoiceInstruction>> {
+    fn structures(&mut self) -> &mut IndexMap<(Atom, usize), VecDeque<IndexedChoiceInstruction>> {
         &mut self.structures
     }
 
@@ -1218,18 +1219,18 @@ impl Indexer for StaticCodeIndices {
     }
 
     fn second_level_index<IndexKey: Eq + Hash>(
-        indices: IndexMap<IndexKey, SliceDeque<IndexedChoiceInstruction>>,
-        prelude: &mut SliceDeque<IndexingLine>,
+        indices: IndexMap<IndexKey, VecDeque<IndexedChoiceInstruction>>,
+        prelude: &mut VecDeque<IndexingLine>,
     ) -> IndexMap<IndexKey, IndexingCodePtr> {
         let mut index_locs = IndexMap::new();
 
         for (key, mut code) in indices.into_iter() {
             if code.len() > 1 {
                 index_locs.insert(key, IndexingCodePtr::Internal(prelude.len() + 1));
-                cap_choice_seq_with_trust(&mut code);
+                cap_choice_seq_with_trust(code.make_contiguous());
                 prelude.push_back(IndexingLine::from(code));
             } else {
-                code.first().map(|i| {
+                code.front().map(|i| {
                     index_locs.insert(key, IndexingCodePtr::External(i.offset()));
                 });
             }
@@ -1240,8 +1241,8 @@ impl Indexer for StaticCodeIndices {
 
     fn switch_on<IndexKey: Eq + Hash>(
         mut instr_fn: impl FnMut(IndexMap<IndexKey, IndexingCodePtr>) -> IndexingInstruction,
-        index: &mut IndexMap<IndexKey, SliceDeque<IndexedChoiceInstruction>>,
-        prelude: &mut SliceDeque<IndexingLine>,
+        index: &mut IndexMap<IndexKey, VecDeque<IndexedChoiceInstruction>>,
+        prelude: &mut VecDeque<IndexingLine>,
     ) -> IndexingCodePtr {
         let index = mem::replace(index, IndexMap::new());
         let index = Self::second_level_index(index, prelude);
@@ -1261,18 +1262,18 @@ impl Indexer for StaticCodeIndices {
     }
 
     fn switch_on_list(
-        lists: &mut SliceDeque<IndexedChoiceInstruction>,
-        prelude: &mut SliceDeque<IndexingLine>,
+        lists: &mut VecDeque<IndexedChoiceInstruction>,
+        prelude: &mut VecDeque<IndexingLine>,
     ) -> IndexingCodePtr {
         if lists.len() > 1 {
-            cap_choice_seq_with_trust(lists);
-            let lists = mem::replace(lists, sdeq![]);
+            cap_choice_seq_with_trust(lists.make_contiguous());
+            let lists = mem::replace(lists, VecDeque::new());
             prelude.push_back(IndexingLine::from(lists));
 
             IndexingCodePtr::Internal(1)
         } else {
             lists
-                .first()
+                .front()
                 .map(|i| IndexingCodePtr::External(i.offset()))
                 .unwrap_or(IndexingCodePtr::Fail)
         }
@@ -1305,23 +1306,23 @@ impl Indexer for DynamicCodeIndices {
     fn new() -> Self {
         Self {
             constants: IndexMap::new(),
-            lists: sdeq![],
+            lists: VecDeque::new(),
             structures: IndexMap::new(),
         }
     }
 
     #[inline]
-    fn constants(&mut self) -> &mut IndexMap<Literal, SliceDeque<usize>> {
+    fn constants(&mut self) -> &mut IndexMap<Literal, VecDeque<usize>> {
         &mut self.constants
     }
 
     #[inline]
-    fn lists(&mut self) -> &mut SliceDeque<usize> {
+    fn lists(&mut self) -> &mut VecDeque<usize> {
         &mut self.lists
     }
 
     #[inline]
-    fn structures(&mut self) -> &mut IndexMap<(Atom, usize), SliceDeque<usize>> {
+    fn structures(&mut self) -> &mut IndexMap<(Atom, usize), VecDeque<usize>> {
         &mut self.structures
     }
 
@@ -1331,17 +1332,17 @@ impl Indexer for DynamicCodeIndices {
     }
 
     fn second_level_index<IndexKey: Eq + Hash>(
-        indices: IndexMap<IndexKey, SliceDeque<usize>>,
-        prelude: &mut SliceDeque<IndexingLine>,
+        indices: IndexMap<IndexKey, VecDeque<usize>>,
+        prelude: &mut VecDeque<IndexingLine>,
     ) -> IndexMap<IndexKey, IndexingCodePtr> {
         let mut index_locs = IndexMap::new();
 
         for (key, code) in indices.into_iter() {
             if code.len() > 1 {
                 index_locs.insert(key, IndexingCodePtr::Internal(prelude.len() + 1));
-                prelude.push_back(IndexingLine::DynamicIndexedChoice(code));
+                prelude.push_back(IndexingLine::DynamicIndexedChoice(code.into_iter().collect()));
             } else {
-                code.first().map(|i| {
+                code.front().map(|i| {
                     index_locs.insert(key, IndexingCodePtr::DynamicExternal(*i));
                 });
             }
@@ -1352,8 +1353,8 @@ impl Indexer for DynamicCodeIndices {
 
     fn switch_on<IndexKey: Eq + Hash>(
         mut instr_fn: impl FnMut(IndexMap<IndexKey, IndexingCodePtr>) -> IndexingInstruction,
-        index: &mut IndexMap<IndexKey, SliceDeque<usize>>,
-        prelude: &mut SliceDeque<IndexingLine>,
+        index: &mut IndexMap<IndexKey, VecDeque<usize>>,
+        prelude: &mut VecDeque<IndexingLine>,
     ) -> IndexingCodePtr {
         let index = mem::replace(index, IndexMap::new());
         let index = Self::second_level_index(index, prelude);
@@ -1373,16 +1374,16 @@ impl Indexer for DynamicCodeIndices {
     }
 
     fn switch_on_list(
-        lists: &mut SliceDeque<usize>,
-        prelude: &mut SliceDeque<IndexingLine>,
+        lists: &mut VecDeque<usize>,
+        prelude: &mut VecDeque<IndexingLine>,
     ) -> IndexingCodePtr {
         if lists.len() > 1 {
-            let lists = mem::replace(lists, sdeq![]);
-            prelude.push_back(IndexingLine::DynamicIndexedChoice(lists));
+            let lists = mem::replace(lists, VecDeque::new());
+            prelude.push_back(IndexingLine::DynamicIndexedChoice(lists.into_iter().collect()));
             IndexingCodePtr::Internal(1)
         } else {
             lists
-                .first()
+                .front()
                 .map(|i| IndexingCodePtr::DynamicExternal(*i))
                 .unwrap_or(IndexingCodePtr::Fail)
         }
@@ -1431,7 +1432,7 @@ impl<I: Indexer> CodeOffsets<I> {
         index: usize,
     ) -> Vec<Literal> {
         let overlapping_constants = constant_key_alternatives(constant, atom_tbl);
-        let code = self.indices.constants().entry(constant).or_insert(sdeq![]);
+        let code = self.indices.constants().entry(constant).or_insert(VecDeque::new());
 
         let is_initial_index = code.is_empty();
         code.push_back(I::compute_index(is_initial_index, index));
@@ -1441,7 +1442,7 @@ impl<I: Indexer> CodeOffsets<I> {
                 .indices
                 .constants()
                 .entry(*constant)
-                .or_insert(sdeq![]);
+                .or_insert(VecDeque::new());
 
             let is_initial_index = code.is_empty();
             let index = I::compute_index(is_initial_index, index);
@@ -1457,7 +1458,7 @@ impl<I: Indexer> CodeOffsets<I> {
             .indices
             .structures()
             .entry((name.clone(), arity))
-            .or_insert(sdeq![]);
+            .or_insert(VecDeque::new());
 
         let code_len = code.len();
         let is_initial_index = code.is_empty();
@@ -1508,7 +1509,7 @@ impl<I: Indexer> CodeOffsets<I> {
             return vec![];
         }
 
-        let mut prelude = sdeq![];
+        let mut prelude = VecDeque::new();
 
         let mut emitted_switch_on_structure = false;
         let mut emitted_switch_on_constant = false;

@@ -805,6 +805,8 @@ fn generate_instruction_preface() -> TokenStream {
         use indexmap::IndexMap;
         use slice_deque::SliceDeque;
 
+        use std::collections::VecDeque;
+
         fn reg_type_into_functor(r: RegType) -> MachineStub {
             match r {
                 RegType::Temp(r) => functor!(atom!("x"), [fixnum(r)]),
@@ -1035,10 +1037,10 @@ fn generate_instruction_preface() -> TokenStream {
             }
         }
 
-        impl From<SliceDeque<IndexedChoiceInstruction>> for IndexingLine {
+        impl From<VecDeque<IndexedChoiceInstruction>> for IndexingLine {
             #[inline]
-            fn from(instrs: SliceDeque<IndexedChoiceInstruction>) -> Self {
-                IndexingLine::IndexedChoice(instrs)
+            fn from(instrs: VecDeque<IndexedChoiceInstruction>) -> Self {
+                IndexingLine::IndexedChoice(instrs.into_iter().collect())
             }
         }
 
