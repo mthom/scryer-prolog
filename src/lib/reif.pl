@@ -79,5 +79,6 @@ tmember(P_2, [X|Xs]) :-
 
 :- meta_predicate(tmember_t(2, ?, ?)).
 
+tmember_t(_P_2, [], false).
 tmember_t(P_2, [X|Xs], T) :-
    if_( call(P_2, X), T = true, tmember_t(P_2, Xs, T) ).
