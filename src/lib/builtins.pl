@@ -240,7 +240,7 @@ comma_dispatch_prep(Gs, B, [Cont|Conts]) :-
           comma_dispatch_prep(G1, B, IConts1),
           cont_list_goal(IConts1, Cont),
           comma_dispatch_prep(G2, B, Conts)
-       ;  ( Gs = ! ; Gs = _:! ) ->
+       ;  Gs == ! ->
           Cont = builtins:set_cp(B),
           Conts = []
        ;  functor(Gs, ';', 2) ->
