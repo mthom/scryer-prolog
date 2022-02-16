@@ -1973,6 +1973,10 @@ impl MachineState {
                     | HeapCellValueTag::Str => {
                         self.match_partial_string(store_v, cstr_atom, false);
                     }
+                    HeapCellValueTag::AttrVar | HeapCellValueTag::Var => {
+                        let r = store_v.as_var().unwrap();
+                        self.bind(r, lit);
+                    }
                     _ => {
                         self.fail = true;
                     }
