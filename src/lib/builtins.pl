@@ -208,70 +208,115 @@ repeat :- repeat.
 
 :- meta_predicate ->(0,0).
 
-! :- '$get_staggered_cp'(B), '$set_cp'(B).
 
-G1 -> G2 :- '$get_staggered_cp'(B), call('$call'(G1)), '$set_cp'(B), call('$call'(G2)).
+G1 -> G2 :- control_entry_point((G1 -> G2)).
 
-G ; _ :- call('$call'(G)).
-_ ; G :- call('$call'(G)).
 
-','(G1, G2) :- '$get_staggered_cp'(B), comma_dispatch(G1,G2,B).
+:- non_counted_backtracking staggered_if_then/2.
+
+staggered_if_then(G1, G2) :-
+    '$get_staggered_cp'(B),
+    call('$call'(G1)),
+    '$set_cp'(B),
+    call('$call'(G2)).
+
+G1 ; G2 :- control_entry_point((G1 ; G2)).
+
+
+:- non_counted_backtracking staggered_sc/2.
+
+staggered_sc(G, _) :- call('$call'(G)).
+staggered_sc(_, G) :- call('$call'(G)).
+
+
+! :- !.
+
+:- non_counted_backtracking set_cp/1.
 
 set_cp(B) :- '$set_cp'(B).
 
-:- non_counted_backtracking comma_dispatch/3.
+','(G1, G2) :- control_entry_point((G1, G2)).
 
-comma_dispatch(G1, G2, B) :-
-    comma_dispatch_prep((G1, G2), B, Conts),
-    comma_dispatch_call_list(Conts).
+:- non_counted_backtracking control_entry_point/1.
+
+control_entry_point(G) :-
+    functor(G, Name, Arity),
+    catch(builtins:control_entry_point_(G),
+          dispatch_prep_error,
+          builtins:throw(error(type_error(callable, G), Name/Arity))).
+
+
+:- non_counted_backtracking control_entry_point_/1.
+
+control_entry_point_(G) :-
+    '$get_cp'(B),
+    dispatch_prep(G,B,Conts),
+    dispatch_call_list(Conts).
+
 
 :- non_counted_backtracking cont_list_to_goal/2.
 
 cont_list_goal([Cont], Cont) :- !.
-cont_list_goal(Conts, builtins:comma_dispatch_call_list(Conts)).
+cont_list_goal(Conts, builtins:dispatch_call_list(Conts)).
 
-:- non_counted_backtracking comma_dispatch_prep/3.
 
-comma_dispatch_prep(Gs, B, [Cont|Conts]) :-
+:- non_counted_backtracking module_qualified_cut/1.
+
+module_qualified_cut(Gs) :-
+    (  functor(Gs, call, 1) ->
+       arg(1, Gs, G1)
+    ;  Gs = G1
+    ),
+    functor(G1, (:), 2),
+    arg(2, G1, G2),
+    G2 == !.
+
+
+:- non_counted_backtracking dispatch_prep/3.
+
+dispatch_prep(Gs, B, [Cont|Conts]) :-
     (  callable(Gs) ->
        (  functor(Gs, ',', 2) ->
           arg(1, Gs, G1),
           arg(2, Gs, G2),
-          comma_dispatch_prep(G1, B, IConts1),
+          dispatch_prep(G1, B, IConts1),
           cont_list_goal(IConts1, Cont),
-          comma_dispatch_prep(G2, B, Conts)
-       ;  Gs == ! ->
-          Cont = builtins:set_cp(B),
-          Conts = []
+          dispatch_prep(G2, B, Conts)
        ;  functor(Gs, ';', 2) ->
           arg(1, Gs, G1),
           arg(2, Gs, G2),
-          comma_dispatch_prep(G1, B, IConts0),
-          comma_dispatch_prep(G2, B, IConts1),
+          dispatch_prep(G1, B, IConts0),
+          dispatch_prep(G2, B, IConts1),
           cont_list_goal(IConts0, Cont0),
           cont_list_goal(IConts1, Cont1),
-          Cont = ( Cont0 ; Cont1 ),
+          Cont = builtins:staggered_sc(Cont0, Cont1),
           Conts = []
        ;  functor(Gs, ->, 2) ->
           arg(1, Gs, G1),
           arg(2, Gs, G2),
-          comma_dispatch_prep(G1, B, IConts1),
-          comma_dispatch_prep(G2, B, IConts2),
+          dispatch_prep(G1, B, IConts1),
+          dispatch_prep(G2, B, IConts2),
           cont_list_goal(IConts1, Cont1),
           cont_list_goal(IConts2, Cont2),
-          Cont = (Cont1 -> Cont2),
+          Cont = builtins:staggered_if_then(Cont1, Cont2),
+          Conts = []
+       ;  ( Gs == ! ; module_qualified_cut(Gs) ) ->
+          Cont = builtins:set_cp(B),
           Conts = []
        ;  Cont = Gs,
           Conts = []
        )
-    ;  Cont = Gs,
+    ;  var(Gs) ->
+       Cont = Gs,
        Conts = []
+    ;  throw(dispatch_prep_error)
     ).
 
-:- non_counted_backtracking comma_dispatch_call_list/1.
 
-comma_dispatch_call_list([]).
-comma_dispatch_call_list([G1,G2,G3,G4,G5,G6,G7,G8|Gs]) :-
+:- non_counted_backtracking dispatch_call_list/1.
+
+dispatch_call_list([]).
+dispatch_call_list([G1,G2,G3,G4,G5,G6,G7,G8|Gs]) :-
     !,
     '$call'(G1),
     '$call'(G2),
@@ -281,8 +326,8 @@ comma_dispatch_call_list([G1,G2,G3,G4,G5,G6,G7,G8|Gs]) :-
     '$call'(G6),
     '$call'(G7),
     '$call'(G8),
-    '$call_with_default_policy'(comma_dispatch_call_list(Gs)).
-comma_dispatch_call_list([G1,G2,G3,G4,G5,G6,G7]) :-
+    '$call_with_default_policy'(dispatch_call_list(Gs)).
+dispatch_call_list([G1,G2,G3,G4,G5,G6,G7]) :-
     !,
     '$call'(G1),
     '$call'(G2),
@@ -291,7 +336,7 @@ comma_dispatch_call_list([G1,G2,G3,G4,G5,G6,G7]) :-
     '$call'(G5),
     '$call'(G6),
     '$call'(G7).
-comma_dispatch_call_list([G1,G2,G3,G4,G5,G6]) :-
+dispatch_call_list([G1,G2,G3,G4,G5,G6]) :-
     !,
     '$call'(G1),
     '$call'(G2),
@@ -299,29 +344,29 @@ comma_dispatch_call_list([G1,G2,G3,G4,G5,G6]) :-
     '$call'(G4),
     '$call'(G5),
     '$call'(G6).
-comma_dispatch_call_list([G1,G2,G3,G4,G5]) :-
+dispatch_call_list([G1,G2,G3,G4,G5]) :-
     !,
     '$call'(G1),
     '$call'(G2),
     '$call'(G3),
     '$call'(G4),
     '$call'(G5).
-comma_dispatch_call_list([G1,G2,G3,G4]) :-
+dispatch_call_list([G1,G2,G3,G4]) :-
     !,
     '$call'(G1),
     '$call'(G2),
     '$call'(G3),
     '$call'(G4).
-comma_dispatch_call_list([G1,G2,G3]) :-
+dispatch_call_list([G1,G2,G3]) :-
     !,
     '$call'(G1),
     '$call'(G2),
     '$call'(G3).
-comma_dispatch_call_list([G1,G2]) :-
+dispatch_call_list([G1,G2]) :-
     !,
     '$call'(G1),
     '$call'(G2).
-comma_dispatch_call_list([G1]) :-
+dispatch_call_list([G1]) :-
     '$call'(G1).
 
 

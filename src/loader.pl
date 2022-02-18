@@ -671,7 +671,10 @@ expand_module_names(Goals, MetaSpecs, Module, ExpandedGoals, HeadVars) :-
 
 
 expand_goal(UnexpandedGoals, Module, ExpandedGoals) :-
-    expand_goal(UnexpandedGoals, Module, ExpandedGoals, []),
+    % if a goal isn't callable, defer to call/N to report the error.
+    catch('$call'(loader:expand_goal(UnexpandedGoals, Module, ExpandedGoals, [])),
+          error(type_error(callable, _), _),
+          '$call'(UnexpandedGoals = ExpandedGoals)),
     !.
 
 expand_goal_cases((Goal0, Goals0), Module, ExpandedGoals, HeadVars) :-
@@ -716,27 +719,25 @@ expand_goal(UnexpandedGoals, Module, ExpandedGoals, HeadVars) :-
 thread_goals(Goals0, Goals1, Hole, Functor) :-
     (  var(Goals0) ->
        Goals1 =.. [Functor, Goals0, Hole]
-    ;  (  Goals0 = [G | Gs] ->
-          (  Gs == [] ->
-             Goals1 =.. [Functor, G, Hole]
-          ;  Goals1 =.. [Functor, G, Goals2],
-             thread_goals(Gs, Goals2, Hole, Functor)
-          )
-       ;  Goals1 =.. [Functor, Goals0, Hole]
+    ;  Goals0 = [G | Gs] ->
+       (  Gs == [] ->
+          Goals1 =.. [Functor, G, Hole]
+       ;  Goals1 =.. [Functor, G, Goals2],
+          thread_goals(Gs, Goals2, Hole, Functor)
        )
+    ;  Goals1 =.. [Functor, Goals0, Hole]
     ).
 
 thread_goals(Goals0, Goals1, Functor) :-
     (  var(Goals0) ->
        Goals0 = Goals1
-    ;  (  Goals0 = [G | Gs] ->
-          (  Gs = [] ->
-             Goals1 = G
-          ;  Goals1 =.. [Functor, G, Goals2],
-             thread_goals(Gs, Goals2, Functor)
-          )
-       ;  Goals1 = Goals0
+    ;  Goals0 = [G | Gs] ->
+       (  Gs = [] ->
+          Goals1 = G
+       ;  Goals1 =.. [Functor, G, Goals2],
+          thread_goals(Gs, Goals2, Functor)
        )
+    ;  Goals1 = Goals0
     ).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -780,12 +781,14 @@ call_clause('$call'(G), G0) :-
        instantiation_error(call/1)
     ;  G = M:G1,
        !,
+       callable(G1),
        functor(G1, F, _),
        atom(F),
        atom(M),
        F \== [],
        G0 = M:G1
     ;  !,
+       callable(G),
        functor(G, F, _),
        atom(F),
        F \== [],
@@ -795,6 +798,7 @@ call_clause('$call'(G), G0) :-
 
 call_clause(G, G0) :-
     strip_module(G, M, G1),
+    callable(G1),
     functor(G1, F, _),
     atom(F),
     F \== [],
@@ -825,6 +829,7 @@ call_clause('$call'(G1), Args, N, G0) :-
        F \== [],
        append(As, Args, As1),
        G3 =.. [F | As1],
+       callable(G3),
        G0 = M:G3
     ;  !,
        G1 =.. [F | As],
@@ -833,6 +838,7 @@ call_clause('$call'(G1), Args, N, G0) :-
        load_context(M),
        append(As, Args, As1),
        G2 =.. [F | As1],
+       callable(G2),
        G0 = M:G2
     ).
 
@@ -847,6 +853,7 @@ call_clause(G, Args, _, G0) :-
     ),
     append(As, Args, As1),
     G2 =.. [F | As1],
+    callable(G2),
     expand_goal(call(M:G2), M, call(G0)).
 
 

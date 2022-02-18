@@ -3929,20 +3929,24 @@ impl Machine {
 
         let semicolon_second_clause_p = unsafe {
             LOC_INIT.call_once(|| {
-                match self.indices.code_dir.get(&(atom!(";"), 2)).map(|cell| cell.get()) {
-                    Some(IndexPtr::Index(p)) => {
-                        match &self.code[p] {
-                            &Instruction::TryMeElse(o) => {
-                                SEMICOLON_SECOND_BRANCH_LOC = p + o;
-                            }
-                            _ => {
-                                unreachable!();
+                if let Some(builtins) = self.indices.modules.get(&atom!("builtins")) {
+                    match builtins.code_dir.get(&(atom!("staggered_sc"), 2)).map(|cell| cell.get()) {
+                        Some(IndexPtr::Index(p)) => {
+                            match &self.code[p] {
+                                &Instruction::TryMeElse(o) => {
+                                    SEMICOLON_SECOND_BRANCH_LOC = p + o;
+                                }
+                                _ => {
+                                    unreachable!();
+                                }
                             }
                         }
+                        _ => {
+                            unreachable!();
+                        }
                     }
-                    _ => {
-                        unreachable!();
-                    }
+                } else {
+                    unreachable!();
                 }
             });
 
