@@ -2925,8 +2925,14 @@ impl Machine {
                 let key = (self.machine_st.atom_tbl.build_with(&c.to_string()), narity);
                 Ok((module_name, key))
             }
+            (HeapCellValueTag::AttrVar | HeapCellValueTag::StackVar | HeapCellValueTag::Var) => {
+                let stub = functor_stub(atom!("call"), 1);
+                let err = self.machine_st.instantiation_error();
+
+                Err(self.machine_st.error_form(err, stub))
+            }
             _ => {
-                let stub = functor_stub(atom!("(:)"), 2);
+                let stub = functor_stub(atom!("call"), narity);
                 let err = self.machine_st.type_error(ValidType::Callable, addr);
 
                 Err(self.machine_st.error_form(err, stub))
