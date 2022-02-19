@@ -1769,11 +1769,13 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             .opt_arg_index_key
             .switch_on_term_loc()
         {
-            Some(index_loc) => find_inner_choice_instr(
-                &self.wam_prelude.code,
-                skeleton.clauses[target_pos].clause_start,
-                index_loc,
-            ),
+            Some(index_loc) => {
+                find_inner_choice_instr(
+                    &self.wam_prelude.code,
+                    skeleton.clauses[target_pos].clause_start,
+                    index_loc,
+                )
+            }
             None => skeleton.clauses[target_pos].clause_start,
         };
 

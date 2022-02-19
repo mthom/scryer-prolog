@@ -1033,12 +1033,11 @@ impl Machine {
                         }
                     }
 
+                    self.machine_st.dynamic_mode = FirstOrNext::Next;
+
                     if self.machine_st.fail {
                         self.machine_st.backtrack();
-                        continue;
                     }
-
-                    self.machine_st.dynamic_mode = FirstOrNext::Next;
                 }
                 &Instruction::DynamicInternalElse(..) => {
                     let p = self.machine_st.p;
@@ -1115,12 +1114,11 @@ impl Machine {
                         }
                     }
 
+                    self.machine_st.dynamic_mode = FirstOrNext::Next;
+
                     if self.machine_st.fail {
                         self.machine_st.backtrack();
-                        continue;
                     }
-
-                    self.machine_st.dynamic_mode = FirstOrNext::Next;
                 }
                 &Instruction::TryMeElse(offset) => {
                     self.machine_st.try_me_else(offset);
@@ -3129,10 +3127,10 @@ impl Machine {
                                 }
                             }
 
+                            self.machine_st.dynamic_mode = FirstOrNext::Next;
+
                             if self.machine_st.fail {
                                 self.machine_st.backtrack();
-                            } else {
-                                self.machine_st.dynamic_mode = FirstOrNext::Next;
                             }
                         }
                     }
