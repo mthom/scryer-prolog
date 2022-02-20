@@ -4380,6 +4380,70 @@ impl MachineState {
                     }
                 }
             }
+            &SystemClauseType::SetReadTimeout => {
+                let mut stream = self.get_stream_or_alias(
+                    self[temp_v!(1)],
+                    &indices.stream_aliases,
+                    "set_read_timeout",
+                    2,
+                )?;
+
+                let timeout = self.store(self.deref(self[temp_v!(2)]));
+                let duration = match timeout {
+                    Addr::Fixnum(n) => Some(Duration::from_secs(n as u64)),
+                    Addr::Usize(n) => Some(Duration::from_secs(n as u64)),
+                    Addr::Con(h) => match &self.heap[h] {
+                        HeapCellValue::Atom(ref name, _) => if name.as_str() == "infinite" { None } else { self.fail = true; return Ok(()) }, // this should be a domain_error probably
+                        HeapCellValue::Integer(ref n) => Some(Duration::from_secs(n.to_u64().unwrap())),
+                        _ => {
+                            let stub = MachineError::functor_stub(clause_name!("set_read_timeout"), 2);
+                            return Err(
+                                self.error_form(MachineError::type_error(0, ValidType::Number, self[temp_v!(2)]), stub)
+                            )
+                        }
+                    },
+                    _ => {
+                        let stub = MachineError::functor_stub(clause_name!("set_read_timeout"), 2);
+                        return Err(
+                            self.error_form(MachineError::type_error(0, ValidType::Number, self[temp_v!(2)]), stub)
+                        )
+                    }
+                };
+
+                stream.set_read_timeout(duration).unwrap();
+            }
+            &SystemClauseType::SetWriteTimeout => {
+                let mut stream = self.get_stream_or_alias(
+                    self[temp_v!(1)],
+                    &indices.stream_aliases,
+                    "set_write_timeout",
+                    2,
+                )?;
+
+                let timeout = self.store(self.deref(self[temp_v!(2)]));
+                let duration = match timeout {
+                    Addr::Fixnum(n) => Some(Duration::from_secs(n as u64)),
+                    Addr::Usize(n) => Some(Duration::from_secs(n as u64)),
+                    Addr::Con(h) => match &self.heap[h] {
+                        HeapCellValue::Atom(ref name, _) => if name.as_str() == "infinite" { None } else { self.fail = true; return Ok(()) }, // this should be a domain_error probably
+                        HeapCellValue::Integer(ref n) => Some(Duration::from_secs(n.to_u64().unwrap())),
+                        _ => {
+                            let stub = MachineError::functor_stub(clause_name!("set_write_timeout"), 2);
+                            return Err(
+                                self.error_form(MachineError::type_error(0, ValidType::Number, self[temp_v!(2)]), stub)
+                            )
+                        }
+                    },
+                    _ => {
+                        let stub = MachineError::functor_stub(clause_name!("set_write_timeout"), 2);
+                        return Err(
+                            self.error_form(MachineError::type_error(0, ValidType::Number, self[temp_v!(2)]), stub)
+                        )
+                    }
+                };
+
+                stream.set_write_timeout(duration).unwrap();
+            }
             &SystemClauseType::TLSClientConnect => {
                 let hostname = self.heap_pstr_iter(self[temp_v!(1)]).to_string();
 
