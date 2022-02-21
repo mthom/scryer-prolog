@@ -771,7 +771,7 @@ impl EvalError {
 pub enum CycleSearchResult {
     Cyclic(usize),
     EmptyList,
-    NotList,
+    NotList(usize, HeapCellValue), // the list length until the second argument in the heap
     PartialList(usize, Ref), // the list length (up to max), and an offset into the heap.
     ProperList(usize),       // the list length.
     PStrLocation(usize, usize), // list length (up to max), the heap address of the PStrOffset
@@ -792,7 +792,7 @@ impl MachineState {
                 let err = self.instantiation_error();
                 return Err(self.error_form(err, stub_gen()))
             }
-            CycleSearchResult::NotList => {
+            CycleSearchResult::NotList(..) => {
                 let err = self.type_error(ValidType::List, list);
                 return Err(self.error_form(err, stub_gen()));
             }
@@ -800,7 +800,7 @@ impl MachineState {
         };
 
         match BrentAlgState::detect_cycles(&self.heap, sorted) {
-            CycleSearchResult::NotList if !sorted.is_var() => {
+            CycleSearchResult::NotList(..) if !sorted.is_var() => {
                 let err = self.type_error(ValidType::List, sorted);
                 Err(self.error_form(err, stub_gen()))
             }
@@ -812,7 +812,7 @@ impl MachineState {
         let stub_gen = || functor_stub(atom!("keysort"), 2);
 
         match BrentAlgState::detect_cycles(&self.heap, list) {
-            CycleSearchResult::NotList if !list.is_var() => {
+            CycleSearchResult::NotList(..) if !list.is_var() => {
                 let err = self.type_error(ValidType::List, list);
                 Err(self.error_form(err, stub_gen()))
             }
@@ -878,7 +878,7 @@ impl MachineState {
                 let err = self.instantiation_error();
                 Err(self.error_form(err, stub_gen()))
             }
-            CycleSearchResult::NotList => {
+            CycleSearchResult::NotList(..) => {
                 let err = self.type_error(ValidType::List, pairs);
                 Err(self.error_form(err, stub_gen()))
             }

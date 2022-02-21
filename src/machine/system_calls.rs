@@ -164,14 +164,14 @@ impl BrentAlgState {
                 return if name == atom!("[]") && arity == 0 {
                     CycleSearchResult::ProperList(self.num_steps())
                 } else {
-                    CycleSearchResult::NotList
+                    CycleSearchResult::NotList(self.num_steps(), heap[self.hare])
                 };
             }
             (HeapCellValueTag::Lis, l) => {
                 return CycleSearchResult::UntouchedList(self.num_steps(), l);
             }
             _ => {
-                return CycleSearchResult::NotList;
+                return CycleSearchResult::NotList(self.num_steps(), heap[self.hare]);
             }
         );
     }
@@ -231,7 +231,7 @@ impl BrentAlgState {
                     return if name == atom!(".") && arity == 2 {
                         self.step(s+2)
                     } else {
-                        Some(CycleSearchResult::NotList)
+                        Some(CycleSearchResult::NotList(self.num_steps(), value))
                     };
                 }
                 (HeapCellValueTag::Atom, (name, arity)) => {
@@ -240,7 +240,7 @@ impl BrentAlgState {
                     return if name == atom!("[]") {
                         Some(CycleSearchResult::ProperList(self.num_steps()))
                     } else {
-                        Some(CycleSearchResult::NotList)
+                        Some(CycleSearchResult::NotList(self.num_steps(), value))
                     };
                 }
                 (HeapCellValueTag::AttrVar | HeapCellValueTag::Var, h) => {
@@ -252,7 +252,7 @@ impl BrentAlgState {
                     self.hare = h;
                 }
                 _ => {
-                    return Some(CycleSearchResult::NotList);
+                    return Some(CycleSearchResult::NotList(self.num_steps(), value));
                 }
             );
         }
@@ -298,21 +298,21 @@ impl BrentAlgState {
                 } else if name == atom!(".") && arity == 2 {
                     s + 2
                 } else {
-                    return CycleSearchResult::NotList;
+                    return CycleSearchResult::NotList(0, value);
                 }
             }
             (HeapCellValueTag::Atom, (name, arity)) => {
                 return if name == atom!("[]") && arity == 0 {
                     CycleSearchResult::EmptyList
                 } else {
-                    CycleSearchResult::NotList
+                    CycleSearchResult::NotList(0, value)
                 };
             }
             (HeapCellValueTag::AttrVar | HeapCellValueTag::StackVar | HeapCellValueTag::Var) => {
                 return CycleSearchResult::PartialList(0, value.as_var().unwrap());
             }
             _ => {
-                return CycleSearchResult::NotList;
+                return CycleSearchResult::NotList(0, value);
             }
         );
 
@@ -397,21 +397,21 @@ impl BrentAlgState {
                         return CycleSearchResult::UntouchedList(0, s + 1);
                     }
                 } else {
-                    return CycleSearchResult::NotList;
+                    return CycleSearchResult::NotList(0, value);
                 }
             }
             (HeapCellValueTag::Atom, (name, arity)) => {
                 return if name == atom!("[]") && arity == 0 {
                     CycleSearchResult::EmptyList
                 } else {
-                    CycleSearchResult::NotList
+                    CycleSearchResult::NotList(0, value)
                 };
             }
             (HeapCellValueTag::AttrVar | HeapCellValueTag::StackVar | HeapCellValueTag::Var) => {
                 return CycleSearchResult::PartialList(0, value.as_var().unwrap());
             }
             _ => {
-                return CycleSearchResult::NotList;
+                return CycleSearchResult::NotList(0, value);
             }
         );
 
@@ -540,11 +540,8 @@ impl MachineState {
             CycleSearchResult::ProperList(steps) => {
                 self.finalize_skip_max_list(steps as i64, empty_list_as_cell!())
             }
-            CycleSearchResult::NotList => {
-                let n = self.store(self.deref(self.registers[2]));
-
-                self.unify_fixnum(Fixnum::build_with(max_steps), n);
-                self.finalize_skip_max_list(max_steps, self.registers[3]);
+            CycleSearchResult::NotList(n, value) => {
+                self.finalize_skip_max_list(n as i64, value);
             }
             CycleSearchResult::Cyclic(lam) => {
                 self.skip_max_list_cycle(lam);
