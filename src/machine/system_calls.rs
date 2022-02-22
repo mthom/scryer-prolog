@@ -6003,7 +6003,7 @@ impl Machine {
 
             let tag = self.machine_st.atom_tbl.build_with(node.tag_name().name());
 
-            let result = heap_loc_as_cell!(self.machine_st.heap.len());
+            let result = str_loc_as_cell!(self.machine_st.heap.len());
 
             self.machine_st.heap.push(atom_as_cell!(atom!("element"), 3));
             self.machine_st.heap.push(atom_as_cell!(tag));
@@ -6056,7 +6056,7 @@ impl Machine {
                 );
 
                 let tag = self.machine_st.atom_tbl.build_with(name);
-                let result = heap_loc_as_cell!(self.machine_st.heap.len());
+                let result = str_loc_as_cell!(self.machine_st.heap.len());
 
                 self.machine_st.heap.push(atom_as_cell!(atom!("element"), 3));
                 self.machine_st.heap.push(atom_as_cell!(tag));

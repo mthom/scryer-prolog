@@ -58,6 +58,7 @@
 :- use_module(library(error)).
 :- use_module(library(dcgs)).
 :- use_module(library(pio)).
+:- use_module(library(charsio)).
 
 load_html(Source, Es, Options) :-
         load_structure_(Source, Es, Options, html).
@@ -75,15 +76,8 @@ load_structure_(file(Fs), [E], Options, What) :-
         load_(What, Cs, E, Options).
 load_structure_(stream(Stream), [E], Options, What) :-
         must_be(list, Options),
-        read_to_end(Stream, Cs),
+        get_n_chars(Stream, _, Cs),
         load_(What, Cs, E, Options).
 
 load_(html, Cs, E, Options) :- '$load_html'(Cs, E, Options).
 load_(xml, Cs, E, Options) :- '$load_xml'(Cs, E, Options).
-
-read_to_end(Stream, Cs) :-
-        '$get_n_chars'(Stream, 4096, Cs0),
-        (   Cs0 = [] -> Cs = []
-        ;   partial_string(Cs0, Cs, Rest),
-            read_to_end(Stream, Rest)
-        ).
