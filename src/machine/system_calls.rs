@@ -2494,9 +2494,10 @@ impl Machine {
             }
         };
 
+        let output = self.machine_st.store(self.machine_st.deref(self.machine_st.registers[3]));
         let atom = self.machine_st.atom_tbl.build_with(&string);
-        self.machine_st.unify_complete_string(atom, self.machine_st.store(self.machine_st.deref(self.machine_st.registers[3])));
 
+        self.machine_st.unify_complete_string(atom, output);
         Ok(())
     }
 

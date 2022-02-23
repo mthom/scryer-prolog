@@ -544,6 +544,9 @@ impl MachineState {
             (HeapCellValueTag::Atom, (name, arity)) => {
                 self.fail = !(arity == 0 && name == atom);
             }
+            (HeapCellValueTag::CStr, cstr_atom) if atom == atom!("[]") => {
+                self.fail = cstr_atom != atom!("");
+            }
             (HeapCellValueTag::Char, c1) => {
                 if let Some(c2) = atom.as_char() {
                     self.fail = c1 != c2;
