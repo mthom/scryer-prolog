@@ -1641,8 +1641,8 @@ impl MachineState {
                             PStrCmpResult::Ordered(ordering) => Some(ordering),
                             _ => {
                                 if iter1.num_steps() == 0 && iter2.num_steps() == 0 {
-                                    return match iter2.focus.get_tag() {
-                                        HeapCellValueTag::CStr | HeapCellValueTag::PStrLoc => {
+                                    return read_heap_cell!(iter2.focus,
+                                        (HeapCellValueTag::CStr | HeapCellValueTag::PStrLoc) => {
                                             let result = stalled_pstr_iter_handler(iter2, iter1, pdl);
 
                                             if let Some(ordering) = result {
@@ -1653,10 +1653,17 @@ impl MachineState {
                                                 result
                                             }
                                         }
+                                        (HeapCellValueTag::Atom, (name, arity)) => {
+                                            if name == atom!("[]") && arity == 0 {
+                                                return Some(Ordering::Greater);
+                                            } else {
+                                                stalled_pstr_iter_handler(iter1, iter2, pdl)
+                                            }
+                                        }
                                         _ => {
                                             stalled_pstr_iter_handler(iter1, iter2, pdl)
                                         }
-                                    };
+                                    );
                                 }
 
                                 pdl.push(iter2.focus);
