@@ -137,6 +137,15 @@ handle_ile(B, E, _) :-
 :- meta_predicate(call_with_inference_limit(0, ?, ?)).
 
 call_with_inference_limit(G, L, R) :-
+    (  integer(L) ->
+       (  L < 0 ->
+          domain_error(not_less_than_zero, L, call_with_inference_limit/3)
+       ;  true
+       )
+    ;  var(L) ->
+       instantiation_error(call_with_inference_limit/3)
+    ;  type_error(integer, L, call_with_inference_limit/3)
+    ),
     '$get_current_block'(Bb),
     '$get_b_value'(B),
     '$call_with_default_policy'(call_with_inference_limit(G, L, R, Bb, B)),
