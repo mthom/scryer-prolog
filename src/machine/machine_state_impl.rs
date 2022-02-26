@@ -333,11 +333,20 @@ impl MachineState {
 
     pub fn unify_complete_string(&mut self, atom: Atom, value: HeapCellValue) {
         if let Some(r) = value.as_var() {
-            self.bind(r, atom_as_cstr_cell!(atom));
+            if atom == atom!("") {
+                self.bind(r, atom_as_cell!(atom!("[]")));
+            } else {
+                self.bind(r, atom_as_cstr_cell!(atom));
+            }
+
             return;
         }
 
         read_heap_cell!(value,
+            (HeapCellValueTag::Atom, (cstr_atom, arity)) if atom == atom!("") => {
+                debug_assert_eq!(arity, 0);
+                self.fail = cstr_atom != atom!("[]");
+            }
             (HeapCellValueTag::CStr, cstr_atom) => {
                 self.fail = atom != cstr_atom;
             }
@@ -713,7 +722,6 @@ impl MachineState {
 
     pub fn unify(&mut self) {
         let mut tabu_list: IndexSet<(usize, usize)> = IndexSet::new();
-        // self.fail = false;
 
         while !(self.pdl.is_empty() || self.fail) {
             let s1 = self.pdl.pop().unwrap();
