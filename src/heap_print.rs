@@ -1184,6 +1184,11 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                         self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
                         self.state_stack.push(TokenOrRedirect::HeadTailSeparator);
                     } else if end_cell != empty_list_as_cell!() {
+                        if value.get_tag() != HeapCellValueTag::CStr {
+                            self.iter.pop_stack();
+                            self.iter.push_stack(h+1);
+                        }
+
                         self.state_stack.push(TokenOrRedirect::FunctorRedirect(max_depth));
                         self.state_stack.push(TokenOrRedirect::HeadTailSeparator);
                     }
@@ -1447,10 +1452,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             (HeapCellValueTag::F64, f) => {
                 self.print_number(NumberFocus::Unfocused(Number::Float(**f)), &op);
             }
-            (HeapCellValueTag::PStrOffset) => {
-                self.print_list_like(max_depth);
-            }
-            (HeapCellValueTag::PStr | HeapCellValueTag::CStr) => {
+            (HeapCellValueTag::CStr | HeapCellValueTag::PStr | HeapCellValueTag::PStrOffset) => {
                 self.print_list_like(max_depth);
             }
             (HeapCellValueTag::Lis) => {
