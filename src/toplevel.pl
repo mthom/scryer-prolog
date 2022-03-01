@@ -173,6 +173,7 @@ instruction_match(Term, VarList) :-
 
 submit_query_and_print_results_(Term, VarList) :-
     '$get_b_value'(B),
+    bb_put('$report_all', false),
     '$call'(Term),
     write_eqs_and_read_input(B, VarList),
     !.
@@ -313,7 +314,10 @@ write_eqs_and_read_input(B, VarList) :-
     ).
 
 read_input(ThreadedGoals, NewVarList) :-
-    get_single_char(C),
+    (  bb_get('$report_all', true) ->
+       C = n
+    ;  get_single_char(C)
+    ),
     (  C = w ->
        nl,
        write('   '),
@@ -331,6 +335,9 @@ read_input(ThreadedGoals, NewVarList) :-
        read_input(ThreadedGoals, NewVarList)
     ;  member(C, ['\n', .]) ->
        nl, write(';  ... .'), nl
+    ;  C = a ->
+       bb_put('$report_all', true),
+       nl, write(';  '), false
     ;  read_input(ThreadedGoals, NewVarList)
     ).
 
@@ -338,6 +345,7 @@ help_message :-
     nl, nl,
     write('SPACE, "n" or ";": next solution, if any\n'),
     write('RETURN or ".": stop enumeration\n'),
+    write('"a": enumerate all solutions\n'),
     write('"h": display this help message\n'),
     write('"w": write terms without depth limit\n'),
     write('"p": print terms with depth limit\n\n').
