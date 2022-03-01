@@ -5981,7 +5981,7 @@ impl Machine {
                     &mut self.machine_st.atom_tbl,
                 );
 
-                avec.push(heap_loc_as_cell!(self.machine_st.heap.len()));
+                avec.push(str_loc_as_cell!(self.machine_st.heap.len()));
 
                 self.machine_st.heap.push(atom_as_cell!(atom!("="), 2));
                 self.machine_st.heap.push(atom_as_cell!(name));
