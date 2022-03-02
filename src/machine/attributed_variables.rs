@@ -108,21 +108,21 @@ impl MachineState {
         attr_vars.into_iter()
     }
 
-    pub(super) fn verify_attr_interrupt(&mut self, p: usize) {
-        self.allocate(self.num_of_args + 3);
+    pub(super) fn verify_attr_interrupt(&mut self, p: usize, arity: usize) {
+        self.allocate(arity + 3);
 
         let e = self.e;
         let and_frame = self.stack.index_and_frame_mut(e);
 
-        for i in 1..self.num_of_args + 1 {
+        for i in 1..arity + 1 {
             and_frame[i] = self.registers[i];
         }
 
-        and_frame[self.num_of_args + 1] =
+        and_frame[arity + 1] =
             fixnum_as_cell!(Fixnum::build_with(self.b0 as i64));
-        and_frame[self.num_of_args + 2] =
+        and_frame[arity + 2] =
             fixnum_as_cell!(Fixnum::build_with(self.num_of_args as i64));
-        and_frame[self.num_of_args + 3] =
+        and_frame[arity + 3] =
             fixnum_as_cell!(Fixnum::build_with(self.attr_var_init.cp as i64));
 
         self.verify_attributes();

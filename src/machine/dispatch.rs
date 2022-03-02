@@ -576,7 +576,9 @@ impl Machine {
                     self.machine_st.attr_var_init.cp = p;
                 }
                 &Instruction::VerifyAttrInterrupt => {
-                    self.run_verify_attr_interrupt();
+                    let (_, arity) = self.code[VERIFY_ATTR_INTERRUPT_LOC].to_name_and_arity();
+                    let arity = std::cmp::max(arity, self.machine_st.num_of_args);
+                    self.run_verify_attr_interrupt(arity);
                 }
                 &Instruction::Add(ref a1, ref a2, t) => {
                     let stub_gen = || functor_stub(atom!("is"), 2);

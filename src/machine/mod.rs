@@ -511,11 +511,9 @@ impl Machine {
     }
 
     #[inline(always)]
-    pub(crate) fn run_verify_attr_interrupt(&mut self) { //, cp: usize) {
+    pub(crate) fn run_verify_attr_interrupt(&mut self, arity: usize) {
         let p = self.machine_st.attr_var_init.verify_attrs_loc;
-
-        // self.machine_st.attr_var_init.cp = cp;
-        self.machine_st.verify_attr_interrupt(p);
+        self.machine_st.verify_attr_interrupt(p, arity);
     }
 
     #[inline(always)]
