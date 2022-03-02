@@ -224,9 +224,10 @@ predicates it defines. For example, with the program shown above:
 ;  What = pure_world.
 ```
 
-Press `SPACE` to show further answers, if any exist. Press `RETURN` or
-&nbsp;`.` to abort the search and return to the toplevel&nbsp;prompt.
-Press&nbsp;`h` to show a help message.
+Press `SPACE` to show further answers, if any exist. Press `RETURN`
+or&nbsp;`.` to abort the search and return to the
+toplevel&nbsp;prompt. Press&nbsp;`f` to see the next 5 answers, and
+`a` to see all answers. Press&nbsp;`h` to show a help message.
 
 To quit Scryer Prolog, use the standard predicate `halt/0`:
 
