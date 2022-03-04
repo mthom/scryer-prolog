@@ -2833,7 +2833,7 @@ impl Machine {
             if let HeapCellValueTag::Lis = ls1.get_tag() {
                 let l2 = ls1.get_value();
 
-                let old_addr = self.machine_st.heap[l1+1];
+                let old_addr = self.machine_st.store(self.machine_st.deref(self.machine_st.heap[l1+1]));
                 let tail = self.machine_st.store(self.machine_st.deref(heap_loc_as_cell!(l2 + 1)));
 
                 let tail = if tail.is_var() {
@@ -3709,7 +3709,7 @@ impl Machine {
     }
 
     #[inline(always)]
-    pub(crate) fn reset_attr_var_state(&mut self) { // 1344! That's the value of self.b we need to pop this.
+    pub(crate) fn reset_attr_var_state(&mut self) {
         self.restore_instr_at_verify_attr_interrupt();
         self.machine_st.attr_var_init.reset();
     }

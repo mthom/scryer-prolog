@@ -539,7 +539,7 @@ impl Machine {
         self.machine_st.tr = or_frame.prelude.tr;
 
         self.reset_attr_var_state();
-        self.machine_st.hb = self.machine_st.heap.len();
+        self.machine_st.hb = target_h;
 
         self.unwind_trail(old_tr, curr_tr);
 
@@ -563,7 +563,6 @@ impl Machine {
         self.machine_st.e = or_frame.prelude.e;
         self.machine_st.cp = or_frame.prelude.cp;
 
-        // WAS: or_frame.prelude.bp = self.machine_st.p + 1;
         or_frame.prelude.biip += 1;
 
         let old_tr = or_frame.prelude.tr;
@@ -573,13 +572,13 @@ impl Machine {
         self.machine_st.tr = or_frame.prelude.tr;
         self.reset_attr_var_state();
 
+        self.machine_st.hb = target_h;
+        self.machine_st.p = self.machine_st.p + offset;
+
         self.unwind_trail(old_tr, curr_tr);
 
         self.machine_st.trail.truncate(self.machine_st.tr);
         self.machine_st.heap.truncate(target_h);
-
-        self.machine_st.hb = self.machine_st.heap.len();
-        self.machine_st.p = self.machine_st.p + offset;
 
         self.machine_st.oip = 0;
         self.machine_st.iip = 0;
@@ -607,14 +606,15 @@ impl Machine {
         self.machine_st.b = or_frame.prelude.b;
 
         self.reset_attr_var_state();
+
+        self.machine_st.hb = target_h;
+        self.machine_st.p = self.machine_st.p + offset;
+
         self.unwind_trail(old_tr, curr_tr);
 
         self.machine_st.trail.truncate(self.machine_st.tr);
         self.machine_st.stack.truncate(b);
         self.machine_st.heap.truncate(target_h);
-
-        self.machine_st.hb = self.machine_st.heap.len();
-        self.machine_st.p = self.machine_st.p + offset;
 
         self.machine_st.oip = 0;
         self.machine_st.iip = 0;
@@ -642,14 +642,15 @@ impl Machine {
         self.machine_st.b = or_frame.prelude.b;
 
         self.reset_attr_var_state();
+
+        self.machine_st.hb = target_h;
+        self.machine_st.p += 1;
+
         self.unwind_trail(old_tr, curr_tr);
 
         self.machine_st.trail.truncate(self.machine_st.tr);
         self.machine_st.stack.truncate(b);
         self.machine_st.heap.truncate(target_h);
-
-        self.machine_st.hb = self.machine_st.heap.len();
-        self.machine_st.p += 1;
     }
 
     #[inline(always)]
@@ -825,8 +826,13 @@ impl Machine {
                     self.machine_st.heap[h] = heap_loc_as_cell!(h);
                 }
                 TrailEntryTag::TrailedAttrVarListLink => {
-                    let l = self.machine_st.trail[i + 1].get_value();
-                    self.machine_st.heap[h] = list_loc_as_cell!(l);
+                    let value = HeapCellValue::from_bytes(
+                        self.machine_st.trail[i + 1].into_bytes()
+                    );
+
+                    if value.get_value() < self.machine_st.hb {
+                        self.machine_st.heap[h] = value;
+                    }
                 }
                 TrailEntryTag::TrailedBlackboardEntry => {
                     let key = Atom::from(h);
