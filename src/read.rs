@@ -111,6 +111,12 @@ impl ReadlineStream {
         }
     }
 
+    #[inline]
+    pub fn reset(&mut self) {
+        self.pending_input.get_mut().clear();
+        self.pending_input.set_position(0);
+    }
+
     fn call_readline(&mut self) -> std::io::Result<usize> {
         match self.rl.readline(get_prompt()) {
             Ok(text) => {

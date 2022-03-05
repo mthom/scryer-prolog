@@ -1053,7 +1053,8 @@ impl Stream {
                     file_stream.stream.get_mut().file.seek(SeekFrom::Start(0)).unwrap();
                     return true;
                 }
-                Stream::Readline(_) => {
+                Stream::Readline(ref mut readline_stream) => {
+                    readline_stream.reset();
                     return true;
                 }
                 _ => {
