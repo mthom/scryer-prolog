@@ -114,17 +114,7 @@ get_single_char(C) :-
 
 
 read_from_chars(Chars, Term) :-
-    (  var(Chars) ->
-       instantiation_error(read_from_chars/2)
-    ;  nonvar(Term) ->
-       throw(error(uninstantiation_error(Term), read_from_chars/2))
-    ;  '$skip_max_list'(_, _, Chars, Chars0),
-       Chars0 == [],
-       partial_string(Chars) ->
-       true
-    ;
-       type_error(complete_string, Chars, read_from_chars/2)
-    ),
+    must_be(chars, Chars),
     '$read_term_from_chars'(Chars, Term).
 
 
