@@ -208,7 +208,7 @@ pub(crate) struct CodeGenerator<'a, TermMarker> {
     global_jmp_by_locs_offset: usize,
 }
 
-impl<'a, 'b: 'a, TermMarker: Allocator<'a>> CodeGenerator<'b, TermMarker> {
+impl<'b, TermMarker: Allocator> CodeGenerator<'b, TermMarker> {
     pub(crate) fn new(atom_tbl: &'b mut AtomTable, settings: CodeGenSettings) -> Self {
         CodeGenerator {
             atom_tbl,
@@ -221,7 +221,7 @@ impl<'a, 'b: 'a, TermMarker: Allocator<'a>> CodeGenerator<'b, TermMarker> {
         }
     }
 
-    fn update_var_count<Iter: Iterator<Item = TermRef<'a>>>(&mut self, iter: Iter) {
+    fn update_var_count<'a, Iter: Iterator<Item = TermRef<'a>>>(&mut self, iter: Iter) {
         for term in iter {
             if let TermRef::Var(_, _, var) = term {
                 let entry = self.var_count.entry(var).or_insert(0);
@@ -230,7 +230,7 @@ impl<'a, 'b: 'a, TermMarker: Allocator<'a>> CodeGenerator<'b, TermMarker> {
         }
     }
 
-    fn get_var_count(&self, var: &'a String) -> usize {
+    fn get_var_count(&self, var: &String) -> usize {
         *self.var_count.get(var).unwrap()
     }
 
@@ -238,7 +238,7 @@ impl<'a, 'b: 'a, TermMarker: Allocator<'a>> CodeGenerator<'b, TermMarker> {
         &mut self,
         name: Rc<String>,
         term_loc: GenContext,
-        vr: &'a Cell<VarReg>,
+        vr: &Cell<VarReg>,
         code: &mut Code,
     ) -> RegType {
         let mut target = Code::new();
@@ -256,7 +256,7 @@ impl<'a, 'b: 'a, TermMarker: Allocator<'a>> CodeGenerator<'b, TermMarker> {
         name: Rc<String>,
         arg: usize,
         term_loc: GenContext,
-        vr: &'a Cell<VarReg>,
+        vr: &Cell<VarReg>,
         code: &mut Code,
     ) -> RegType {
         match self.marker.bindings().get(&name) {
@@ -273,7 +273,7 @@ impl<'a, 'b: 'a, TermMarker: Allocator<'a>> CodeGenerator<'b, TermMarker> {
         }
     }
 
-    fn add_or_increment_void_instr<Target>(target: &mut Code)
+    fn add_or_increment_void_instr<'a, Target>(target: &mut Code)
     where
         Target: crate::targets::CompilationTarget<'a>,
     {
@@ -287,10 +287,10 @@ impl<'a, 'b: 'a, TermMarker: Allocator<'a>> CodeGenerator<'b, TermMarker> {
         target.push(Target::to_void(1));
     }
 
-    fn deep_var_instr<Target: crate::targets::CompilationTarget<'a>>(
+    fn deep_var_instr<'a, Target: crate::targets::CompilationTarget<'a>>(
         &mut self,
         cell: &'a Cell<VarReg>,
-        var: &'a Rc<String>,
+        var: &Rc<String>,
         term_loc: GenContext,
         is_exposed: bool,
         target: &mut Code,
@@ -302,7 +302,7 @@ impl<'a, 'b: 'a, TermMarker: Allocator<'a>> CodeGenerator<'b, TermMarker> {
         }
     }
 
-    fn subterm_to_instr<Target: crate::targets::CompilationTarget<'a>>(
+    fn subterm_to_instr<'a, Target: crate::targets::CompilationTarget<'a>>(
         &mut self,
         subterm: &'a Term,
         term_loc: GenContext,
@@ -331,7 +331,7 @@ impl<'a, 'b: 'a, TermMarker: Allocator<'a>> CodeGenerator<'b, TermMarker> {
         };
     }
 
-    fn compile_target<Target, Iter>(
+    fn compile_target<'a, Target, Iter>(
         &mut self,
         iter: Iter,
         term_loc: GenContext,
@@ -413,7 +413,7 @@ impl<'a, 'b: 'a, TermMarker: Allocator<'a>> CodeGenerator<'b, TermMarker> {
         target
     }
 
-    fn collect_var_data(&mut self, mut iter: ChunkedIterator<'a>) -> ConjunctInfo<'a> {
+    fn collect_var_data<'a>(&mut self, mut iter: ChunkedIterator<'a>) -> ConjunctInfo<'a> {
         let mut vs = VariableFixtures::new();
 
         while let Some((chunk_num, lt_arity, chunked_terms)) = iter.next() {
@@ -490,7 +490,7 @@ impl<'a, 'b: 'a, TermMarker: Allocator<'a>> CodeGenerator<'b, TermMarker> {
         dealloc_index
     }
 
-    fn compile_inlined(
+    fn compile_inlined<'a>(
         &mut self,
         ct: &InlinedClauseType,
         terms: &'a Vec<Term>,
@@ -501,8 +501,8 @@ impl<'a, 'b: 'a, TermMarker: Allocator<'a>> CodeGenerator<'b, TermMarker> {
             &InlinedClauseType::CompareNumber(mut cmp) => {
                 self.marker.reset_arg(2);
 
-                let (mut lcode, at_1) = self.call_arith_eval(&terms[0], 1)?;
-                let (mut rcode, at_2) = self.call_arith_eval(&terms[1], 2)?;
+                let (mut lcode, at_1) = self.compile_arith_expr(&terms[0], 1, term_loc)?;
+                let (mut rcode, at_2) = self.compile_arith_expr(&terms[1], 2, term_loc)?;
 
                 let at_1 = if let &Term::Var(ref vr, ref name) = &terms[0] {
                     ArithmeticTerm::Reg(self.mark_non_callable(name.clone(), 1, term_loc, vr, code))
@@ -655,73 +655,62 @@ impl<'a, 'b: 'a, TermMarker: Allocator<'a>> CodeGenerator<'b, TermMarker> {
         Ok(())
     }
 
-    fn call_arith_eval(
+    fn compile_arith_expr(
         &mut self,
-        term: &'a Term,
+        term: &Term,
         target_int: usize,
+        term_loc: GenContext,
     ) -> Result<ArithCont, ArithmeticError> {
-        let mut evaluator = ArithmeticEvaluator::new(&self.marker.bindings(), target_int);
-        evaluator.eval(term)
+        let mut evaluator = ArithmeticEvaluator::new(&mut self.marker, target_int);
+        evaluator.eval(term, term_loc)
     }
 
     fn compile_is_call(
         &mut self,
-        terms: &'a Vec<Term>,
+        terms: &Vec<Term>,
         code: &mut Code,
         term_loc: GenContext,
         use_default_call_policy: bool,
     ) -> Result<(), CompilationError> {
-        let (mut acode, at) = self.call_arith_eval(&terms[1], 1)?;
-        code.append(&mut acode);
+        macro_rules! compile_expr {
+            ($self:expr, $terms:expr, $term_loc:expr, $code:expr) => ({
+                let (acode, at) = $self.compile_arith_expr(&$terms[1], 1, $term_loc)?;
+                $code.extend(acode.into_iter());
+                at
+            });
+        }
 
         self.marker.reset_arg(2);
 
-        match &terms[0] {
+        let at = match &terms[0] {
             &Term::Var(ref vr, ref name) => {
-                let mut target = vec![];
-
                 self.marker.mark_var::<QueryInstruction>(
                     name.clone(),
                     Level::Shallow,
                     vr,
                     term_loc,
-                    &mut target,
+                    code,
                 );
 
-                if !target.is_empty() {
-                    code.extend(target.into_iter());
-                }
+                compile_expr!(self, terms, term_loc, code)
             }
-            &Term::Literal(_, c @ Literal::Integer(_))
-            | &Term::Literal(_, c @ Literal::Fixnum(_)) => {
+            &Term::Literal(_, c @ Literal::Integer(_) |
+                              c @ Literal::Float(_) |
+                              c @ Literal::Rational(_) |
+                              c @ Literal::Fixnum(_)) => {
                 let v = HeapCellValue::from(c);
                 code.push(instr!("put_constant", Level::Shallow, v, temp_v!(1)));
 
                 self.marker.advance_arg();
-            }
-            &Term::Literal(_, c @ Literal::Float(_)) => {
-                let v = HeapCellValue::from(c);
-                code.push(instr!("put_constant", Level::Shallow, v, temp_v!(1)));
-
-                self.marker.advance_arg();
-            }
-            &Term::Literal(_, c @ Literal::Rational(_)) => {
-                let v = HeapCellValue::from(c);
-                code.push(instr!("put_constant", Level::Shallow, v, temp_v!(1)));
-
-                self.marker.advance_arg();
+                compile_expr!(self, terms, term_loc, code)
             }
             _ => {
                 code.push(instr!("$fail", 0));
                 return Ok(());
             }
-        }
-
-        let at = if let &Term::Var(ref vr, ref name) = &terms[1] {
-            ArithmeticTerm::Reg(self.mark_non_callable(name.clone(), 2, term_loc, vr, code))
-        } else {
-            at.unwrap_or(interm!(1))
         };
+
+        let at = at.unwrap_or(interm!(1));
 
         Ok(if use_default_call_policy {
             code.push(instr!("is", default, temp_v!(1), at, 0));
@@ -731,7 +720,7 @@ impl<'a, 'b: 'a, TermMarker: Allocator<'a>> CodeGenerator<'b, TermMarker> {
     }
 
     #[inline]
-    fn compile_unblocked_cut(&mut self, code: &mut Code, cell: &'a Cell<VarReg>) {
+    fn compile_unblocked_cut(&mut self, code: &mut Code, cell: &Cell<VarReg>) {
         let r = self.marker.get(Rc::new(String::from("!")));
         cell.set(VarReg::Norm(r));
         code.push(instr!("$set_cp", cell.get().norm(), 0));
@@ -740,7 +729,7 @@ impl<'a, 'b: 'a, TermMarker: Allocator<'a>> CodeGenerator<'b, TermMarker> {
     fn compile_get_level_and_unify(
         &mut self,
         code: &mut Code,
-        cell: &'a Cell<VarReg>,
+        cell: &Cell<VarReg>,
         var: Rc<String>,
         term_loc: GenContext,
     ) {
@@ -756,7 +745,7 @@ impl<'a, 'b: 'a, TermMarker: Allocator<'a>> CodeGenerator<'b, TermMarker> {
         code.push(instr!("get_level_and_unify", cell.get().norm()));
     }
 
-    fn compile_seq(
+    fn compile_seq<'a>(
         &mut self,
         iter: ChunkedIterator<'a>,
         conjunct_info: &ConjunctInfo<'a>,
@@ -820,10 +809,10 @@ impl<'a, 'b: 'a, TermMarker: Allocator<'a>> CodeGenerator<'b, TermMarker> {
         }
     }
 
-    fn compile_cleanup(
+    fn compile_cleanup<'a>(
         &mut self,
         code: &mut Code,
-        conjunct_info: &ConjunctInfo,
+        conjunct_info: &ConjunctInfo<'a>,
         toc: &'a QueryTerm,
     ) {
         // add a proceed to bookend any trailing cuts.
@@ -850,10 +839,7 @@ impl<'a, 'b: 'a, TermMarker: Allocator<'a>> CodeGenerator<'b, TermMarker> {
         }
     }
 
-    pub(crate) fn compile_rule<'c: 'a>(
-        &mut self,
-        rule: &'c Rule,
-    ) -> Result<Code, CompilationError> {
+    pub(crate) fn compile_rule(&mut self, rule: &Rule) -> Result<Code, CompilationError> {
         let iter = ChunkedIterator::from_rule(rule);
         let conjunct_info = self.collect_var_data(iter);
 
@@ -907,7 +893,7 @@ impl<'a, 'b: 'a, TermMarker: Allocator<'a>> CodeGenerator<'b, TermMarker> {
         UnsafeVarMarker::from_safe_vars(safe_vars)
     }
 
-    pub(crate) fn compile_fact<'c: 'a>(&mut self, term: &'c Term) -> Code {
+    pub(crate) fn compile_fact(&mut self, term: &Term) -> Code {
         self.update_var_count(post_order_iter(term));
 
         let mut vs = VariableFixtures::new();
@@ -942,7 +928,7 @@ impl<'a, 'b: 'a, TermMarker: Allocator<'a>> CodeGenerator<'b, TermMarker> {
 
     fn compile_query_line(
         &mut self,
-        term: &'a QueryTerm,
+        term: &QueryTerm,
         term_loc: GenContext,
         code: &mut Code,
         num_perm_vars_left: usize,
@@ -1029,9 +1015,9 @@ impl<'a, 'b: 'a, TermMarker: Allocator<'a>> CodeGenerator<'b, TermMarker> {
         subseqs
     }
 
-    fn compile_pred_subseq<'c: 'a, I: Indexer>(
+    fn compile_pred_subseq<I: Indexer>(
         &mut self,
-        clauses: &'c [PredicateClause],
+        clauses: &[PredicateClause],
         optimal_index: usize,
     ) -> Result<Code, CompilationError> {
         let mut code = VecDeque::new();
@@ -1121,18 +1107,11 @@ impl<'a, 'b: 'a, TermMarker: Allocator<'a>> CodeGenerator<'b, TermMarker> {
         Ok(Vec::from(code))
     }
 
-    pub(crate) fn compile_predicate<'c: 'a>(
+    pub(crate) fn compile_predicate(
         &mut self,
-        clauses: &'c Vec<PredicateClause>,
+        clauses: &Vec<PredicateClause>,
     ) -> Result<Code, CompilationError> {
         let mut code = Code::new();
-
-        /*
-        let optimal_index = match Self::first_instantiated_index(&clauses) {
-            Some(index) => index,
-            None => 0, // Default to first argument indexing.
-        };
-        */
 
         let split_pred = Self::split_predicate(&clauses);
         let multi_seq = split_pred.len() > 1;

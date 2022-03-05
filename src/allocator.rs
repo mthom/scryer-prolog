@@ -5,48 +5,52 @@ use crate::fixtures::*;
 use crate::forms::*;
 use crate::instructions::*;
 use crate::machine::machine_indices::*;
+use crate::targets::*;
 
 use std::cell::Cell;
 use std::rc::Rc;
 
-pub(crate) trait Allocator<'a> {
+pub(crate) trait Allocator {
     fn new() -> Self;
 
-    fn mark_anon_var<Target>(&mut self, _: Level, _: GenContext, _: &mut Code)
-    where
-        Target: crate::targets::CompilationTarget<'a>;
-    fn mark_non_var<Target>(
+    fn mark_anon_var<'a, Target: CompilationTarget<'a>>(
         &mut self,
-        _: Level,
-        _: GenContext,
-        _: &'a Cell<RegType>,
-        _: &mut Code,
-    ) where
-        Target: crate::targets::CompilationTarget<'a>;
-    fn mark_reserved_var<Target>(
+        lvl: Level,
+        context: GenContext,
+        code: &mut Code,
+    );
+
+    fn mark_non_var<'a, Target: CompilationTarget<'a>>(
         &mut self,
-        _: Rc<String>,
-        _: Level,
-        _: &'a Cell<VarReg>,
-        _: GenContext,
-        _: &mut Code,
-        _: RegType,
-        _: bool,
-    ) where
-        Target: crate::targets::CompilationTarget<'a>;
-    fn mark_var<Target>(
+        lvl: Level,
+        context: GenContext,
+        cell: &'a Cell<RegType>,
+        code: &mut Code,
+    );
+
+    fn mark_reserved_var<'a, Target: CompilationTarget<'a>>(
         &mut self,
-        _: Rc<String>,
-        _: Level,
-        _: &'a Cell<VarReg>,
-        _: GenContext,
-        _: &mut Code,
-    ) where
-        Target: crate::targets::CompilationTarget<'a>;
+        var_name: Rc<String>,
+        lvl: Level,
+        cell: &'a Cell<VarReg>,
+        term_loc: GenContext,
+        code: &mut Code,
+        r: RegType,
+        is_new_var: bool,
+    );
+
+    fn mark_var<'a, Target: CompilationTarget<'a>>(
+        &mut self,
+        var_name: Rc<String>,
+        lvl: Level,
+        cell: &'a Cell<VarReg>,
+        context: GenContext,
+        code: &mut Code,
+    );
 
     fn reset(&mut self);
     fn reset_contents(&mut self) {}
-    fn reset_arg(&mut self, _: usize);
+    fn reset_arg(&mut self, arg_num: usize);
     fn reset_at_head(&mut self, args: &Vec<Term>);
 
     fn advance_arg(&mut self);
@@ -56,7 +60,7 @@ pub(crate) trait Allocator<'a> {
 
     fn take_bindings(self) -> AllocVarDict;
 
-    fn drain_var_data(
+    fn drain_var_data<'a>(
         &mut self,
         vs: VariableFixtures<'a>,
         num_of_chunks: usize,

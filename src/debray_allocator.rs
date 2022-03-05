@@ -126,10 +126,11 @@ impl DebrayAllocator {
         }
     }
 
-    fn evacuate_arg<'a, Target>(&mut self, chunk_num: usize, target: &mut Vec<Instruction>)
-    where
-        Target: CompilationTarget<'a>,
-    {
+    fn evacuate_arg<'a, Target: CompilationTarget<'a>>(
+        &mut self,
+        chunk_num: usize,
+        code: &mut Code,
+    ) {
         match self.alloc_in_last_goal_hint(chunk_num) {
             Some((var, r)) => {
                 let k = self.arg_c;
@@ -137,7 +138,7 @@ impl DebrayAllocator {
                 if r != k {
                     let r = RegType::Temp(r);
 
-                    target.push(Target::move_to_register(r, k));
+                    code.push(Target::move_to_register(r, k));
 
                     self.contents.swap_remove(&k);
                     self.contents.insert(r.reg_num(), var.clone());
@@ -207,7 +208,7 @@ impl DebrayAllocator {
     }
 }
 
-impl<'a> Allocator<'a> for DebrayAllocator {
+impl Allocator for DebrayAllocator {
     fn new() -> DebrayAllocator {
         DebrayAllocator {
             arity: 0,
@@ -219,42 +220,37 @@ impl<'a> Allocator<'a> for DebrayAllocator {
         }
     }
 
-    fn mark_anon_var<Target>(
+    fn mark_anon_var<'a, Target: CompilationTarget<'a>>(
         &mut self,
         lvl: Level,
         term_loc: GenContext,
-        target: &mut Vec<Instruction>,
-    )
-    where
-        Target: CompilationTarget<'a>,
-    {
+        code: &mut Code,
+    ) {
         let r = RegType::Temp(self.alloc_reg_to_non_var());
 
         match lvl {
-            Level::Deep => target.push(Target::subterm_to_variable(r)),
+            Level::Deep => code.push(Target::subterm_to_variable(r)),
             Level::Root | Level::Shallow => {
                 let k = self.arg_c;
 
                 if let GenContext::Last(chunk_num) = term_loc {
-                    self.evacuate_arg::<Target>(chunk_num, target);
+                    self.evacuate_arg::<Target>(chunk_num, code);
                 }
 
                 self.arg_c += 1;
 
-                target.push(Target::argument_to_variable(r, k));
+                code.push(Target::argument_to_variable(r, k));
             }
         };
     }
 
-    fn mark_non_var<Target>(
+    fn mark_non_var<'a, Target: CompilationTarget<'a>>(
         &mut self,
         lvl: Level,
         term_loc: GenContext,
-        cell: &Cell<RegType>,
-        target: &mut Vec<Instruction>,
-    ) where
-        Target: CompilationTarget<'a>,
-    {
+        cell: &'a Cell<RegType>,
+        code: &mut Code,
+    ) {
         let r = cell.get();
 
         let r = match lvl {
@@ -262,7 +258,7 @@ impl<'a> Allocator<'a> for DebrayAllocator {
                 let k = self.arg_c;
 
                 if let GenContext::Last(chunk_num) = term_loc {
-                    self.evacuate_arg::<Target>(chunk_num, target);
+                    self.evacuate_arg::<Target>(chunk_num, code);
                 }
 
                 self.arg_c += 1;
@@ -278,18 +274,18 @@ impl<'a> Allocator<'a> for DebrayAllocator {
         cell.set(r);
     }
 
-    fn mark_var<Target: CompilationTarget<'a>>(
+    fn mark_var<'a, Target: CompilationTarget<'a>>(
         &mut self,
         var: Rc<String>,
         lvl: Level,
         cell: &'a Cell<VarReg>,
         term_loc: GenContext,
-        target: &mut Vec<Instruction>,
+        code: &mut Code,
     ) {
         let (r, is_new_var) = match self.get(var.clone()) {
             RegType::Temp(0) => {
                 // here, r is temporary *and* unassigned.
-                let o = self.alloc_reg_to_var::<Target>(&var, lvl, term_loc, target);
+                let o = self.alloc_reg_to_var::<Target>(&var, lvl, term_loc, code);
                 cell.set(VarReg::Norm(RegType::Temp(o)));
 
                 (RegType::Temp(o), true)
@@ -303,16 +299,16 @@ impl<'a> Allocator<'a> for DebrayAllocator {
             r => (r, false),
         };
 
-        self.mark_reserved_var::<Target>(var, lvl, cell, term_loc, target, r, is_new_var);
+        self.mark_reserved_var::<Target>(var, lvl, cell, term_loc, code, r, is_new_var);
     }
 
-    fn mark_reserved_var<Target: CompilationTarget<'a>>(
+    fn mark_reserved_var<'a, Target: CompilationTarget<'a>>(
         &mut self,
         var: Rc<String>,
         lvl: Level,
         cell: &'a Cell<VarReg>,
         term_loc: GenContext,
-        target: &mut Vec<Instruction>,
+        code: &mut Code,
         r: RegType,
         is_new_var: bool,
     ) {
@@ -321,7 +317,7 @@ impl<'a> Allocator<'a> for DebrayAllocator {
                 let k = self.arg_c;
 
                 if self.is_curr_arg_distinct_from(&var) {
-                    self.evacuate_arg::<Target>(term_loc.chunk_num(), target);
+                    self.evacuate_arg::<Target>(term_loc.chunk_num(), code);
                 }
 
                 self.arg_c += 1;
@@ -330,24 +326,24 @@ impl<'a> Allocator<'a> for DebrayAllocator {
 
                 if !self.in_place(&var, term_loc, r, k) {
                     if is_new_var {
-                        target.push(Target::argument_to_variable(r, k));
+                        code.push(Target::argument_to_variable(r, k));
                     } else {
-                        target.push(Target::argument_to_value(r, k));
+                        code.push(Target::argument_to_value(r, k));
                     }
                 }
             }
             Level::Deep if is_new_var => {
                 if let GenContext::Head = term_loc {
                     if self.occurs_shallowly_in_head(&var, r.reg_num()) {
-                        target.push(Target::subterm_to_value(r));
+                        code.push(Target::subterm_to_value(r));
                     } else {
-                        target.push(Target::subterm_to_variable(r));
+                        code.push(Target::subterm_to_variable(r));
                     }
                 } else {
-                    target.push(Target::subterm_to_variable(r));
+                    code.push(Target::subterm_to_variable(r));
                 }
             }
-            Level::Deep => target.push(Target::subterm_to_value(r)),
+            Level::Deep => code.push(Target::subterm_to_value(r)),
         };
 
         if !r.is_perm() {

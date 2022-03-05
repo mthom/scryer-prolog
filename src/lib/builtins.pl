@@ -229,7 +229,7 @@ staggered_sc(G, _) :- call('$call'(G)).
 staggered_sc(_, G) :- call('$call'(G)).
 
 
-! :- !.
+!.
 
 :- non_counted_backtracking set_cp/1.
 

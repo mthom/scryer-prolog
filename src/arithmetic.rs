@@ -1,3 +1,4 @@
+use crate::allocator::*;
 use crate::arena::*;
 use crate::atom_table::*;
 use crate::fixtures::*;
@@ -96,7 +97,7 @@ impl<'a> ArithInstructionIterator<'a> {
 pub(crate) enum ArithTermRef<'a> {
     Literal(&'a Literal),
     Op(Atom, usize), // name, arity.
-    Var(&'a Cell<VarReg>, Rc<String>),
+    Var(Level, &'a Cell<VarReg>, Rc<String>),
 }
 
 impl<'a> Iterator for ArithInstructionIterator<'a> {
@@ -124,8 +125,11 @@ impl<'a> Iterator for ArithInstructionIterator<'a> {
                     }
                 }
                 TermIterState::Literal(_, _, c) => return Some(Ok(ArithTermRef::Literal(c))),
-                TermIterState::Var(_, cell, var) => {
-                    return Some(Ok(ArithTermRef::Var(cell, var.clone())));
+                TermIterState::Var(lvl, cell, var) => {
+                    // the expression is the second argument of an
+                    // is/2 but the iterator can't see that, so the
+                    // level needs to be demoted manually.
+                    return Some(Ok(ArithTermRef::Var(lvl.child_level(), cell, var.clone())));
                 }
                 _ => {
                     return Some(Err(ArithmeticError::NonEvaluableFunctor(
@@ -141,8 +145,8 @@ impl<'a> Iterator for ArithInstructionIterator<'a> {
 }
 
 #[derive(Debug)]
-pub(crate) struct ArithmeticEvaluator<'a> {
-    bindings: &'a AllocVarDict,
+pub(crate) struct ArithmeticEvaluator<'a, TermMarker> {
+    marker: &'a mut TermMarker,
     interm: Vec<ArithmeticTerm>,
     interm_c: usize,
 }
@@ -182,10 +186,10 @@ fn push_literal(interm: &mut Vec<ArithmeticTerm>, c: &Literal) -> Result<(), Ari
     Ok(())
 }
 
-impl<'a> ArithmeticEvaluator<'a> {
-    pub(crate) fn new(bindings: &'a AllocVarDict, target_int: usize) -> Self {
+impl<'a, TermMarker: Allocator> ArithmeticEvaluator<'a, TermMarker> {
+    pub(crate) fn new(marker: &'a mut TermMarker, target_int: usize) -> Self {
         ArithmeticEvaluator {
-            bindings,
+            marker,
             interm: Vec::new(),
             interm_c: target_int,
         }
@@ -311,20 +315,46 @@ impl<'a> ArithmeticEvaluator<'a> {
         }
     }
 
-    pub(crate) fn eval(&mut self, src: &'a Term) -> Result<ArithCont, ArithmeticError> {
+    pub(crate) fn eval(
+        &mut self,
+        src: &'a Term,
+        term_loc: GenContext,
+    ) -> Result<ArithCont, ArithmeticError>
+    {
         let mut code = vec![];
         let mut iter = src.iter()?;
 
         while let Some(term_ref) = iter.next() {
             match term_ref? {
                 ArithTermRef::Literal(c) => push_literal(&mut self.interm, c)?,
-                ArithTermRef::Var(cell, name) => {
+                ArithTermRef::Var(lvl, cell, name) => {
                     let r = if cell.get().norm().reg_num() == 0 {
-                        match self.bindings.get(&name) {
-                            Some(&VarData::Temp(_, t, _)) if t != 0 => RegType::Temp(t),
-                            Some(&VarData::Perm(p)) if p != 0 => RegType::Perm(p),
-                            _ => return Err(ArithmeticError::UninstantiatedVar),
-                        }
+                        let mut getter = || {
+                            use crate::targets::QueryInstruction;
+
+                            loop {
+                                match self.marker.bindings().get(&name) {
+                                    Some(&VarData::Temp(_, t, _)) if t != 0 =>
+                                        return RegType::Temp(t),
+                                    Some(&VarData::Perm(p)) if p != 0 =>
+                                        return RegType::Perm(p),
+                                    _ => {
+                                        self.marker.mark_var::<QueryInstruction>(
+                                            name.clone(),
+                                            lvl,
+                                            cell,
+                                            term_loc,
+                                            &mut code,
+                                        );
+                                    }
+                                }
+                            }
+                        };
+
+                        getter()
+                        /*
+                         _ => return Err(ArithmeticError::UninstantiatedVar),
+                         */
                     } else {
                         cell.get().norm()
                     };
