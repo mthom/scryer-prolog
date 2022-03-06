@@ -58,12 +58,11 @@ impl MachineState {
         let a3 = self.registers[3];
 
         read_heap_cell!(a1,
-            (HeapCellValueTag::Str, s) => {
-                let (name, arity) = cell_as_atom_cell!(self.heap[s])
-                    .get_name_and_arity();
+            (HeapCellValueTag::Atom, (name, arity)) => {
+                debug_assert_eq!(arity, 0);
 
                 match name {
-                    atom!(">") | atom!("<") | atom!("=") if arity == 2 => {
+                    atom!(">") | atom!("<") | atom!("=") => {
                     }
                     _ => {
                         let err = self.domain_error(DomainErrorType::Order, a1);
