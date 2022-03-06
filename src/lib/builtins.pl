@@ -1218,11 +1218,14 @@ op(Priority, OpSpec, Op) :-
 halt :- halt(0).
 
 halt(N) :-
-        must_be_number(N, halt/1),
-        (   -2^31 =< N, N =< 2^31 - 1 ->
-            '$halt'(N)
-        ;   throw(error(domain_error(exit_code, N), halt/1))
-        ).
+    (   var(N) ->
+        throw(error(instantiation_error, halt/1)) % 8.17.4.3 a)
+    ;   \+ integer(N) ->
+        throw(error(type_error(integer, N), halt/1)) % 8.17.4.3 b)
+    ;   -2^31 =< N, N =< 2^31 - 1 ->
+        '$halt'(N)
+    ;   throw(error(domain_error(exit_code, N), halt/1))
+    ).
 
 atom_length(Atom, Length) :-
     (  var(Atom)  ->
