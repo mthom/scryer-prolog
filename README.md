@@ -112,20 +112,8 @@ Rust updated to the latest stable release; any existing Rust
 distribution should be uninstalled from your system before rustup is
 used.
 
-Scryer Prolog can be installed with cargo, like so:
-
-```
-$> cargo install scryer-prolog
-```
-
-cargo will download and install the libraries Scryer Prolog uses
-automatically from crates.io. You can find the `scryer-prolog`
-executable in `~/.cargo/bin`.
-
-Publishing Rust crates to crates.io and pushing to git are entirely
-distinct, independent processes, so to be sure you have the latest
-commit, it is recommended to clone directly from this git repository,
-which can be done as follows:
+Currently the only way to install the latest version of Scryer is to
+clone directly from this git repository, which can be done as follows:
 
 ```
 $> git clone https://github.com/mthom/scryer-prolog
