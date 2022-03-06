@@ -280,9 +280,30 @@ in any clause of a predicate's definition.
 
 ### Strings and partial strings
 
+A very compact internal representation of *strings* is one of the key
+innovations of Scryer Prolog. This means that terms which appear as
+lists of characters to Prolog programs are stored in packed
+UTF-8&nbsp;encoding by the engine.
+
+Without this innovation, storing a list of characters in memory
+would use one memory&nbsp;cell per character, one memory&nbsp;cell per
+list constructor, and one memory&nbsp;cell for each tail that occurs
+in the list. Since one memory&nbsp;cell takes 8&nbsp;bytes on 64-bit
+machines, the packed representation used by Scryer&nbsp;Prolog yields
+an up&nbsp;to **24-fold&nbsp;reduction** of memory usage, and
+corresponding reduction of memory&nbsp;accesses when creating and
+processing strings.
+
+Scryer Prolog's compact internal string representation makes it
+ideally suited for the use case Prolog was originally developed for:
+efficient and convenient text processing, especially with definite
+clause grammars (DCGs) as provided by
+[`library(dcgs)`](src/lib/dcgs.pl) and
+[`library(pio)`](src/lib/pio.pl) to transparently apply DCGs to files.
+
 In Scryer Prolog, the default value of the Prolog flag `double_quotes`
 is `chars`, which is also the recommended setting. This means that
-double-quoted strings are interpreted as lists of *characters*, in the
+lists of characters can be written as double-quoted strings, in the
 tradition of Marseille&nbsp;Prolog.
 
 For example, the following query succeeds:
@@ -292,15 +313,9 @@ For example, the following query succeeds:
    true.
 ```
 
-Internally, strings are represented very compactly in packed
-UTF-8&nbsp;encoding. A naive representation of strings as lists of
-characters would use one memory&nbsp;cell per character, one
-memory&nbsp;cell per list constructor, and one memory&nbsp;cell for
-each tail that occurs in the list. Since one memory&nbsp;cell takes
-8&nbsp;bytes on 64-bit machines, the packed representation used by
-Scryer&nbsp;Prolog yields an up&nbsp;to **24-fold&nbsp;reduction** of
-memory usage, and corresponding reduction of memory&nbsp;accesses when
-creating and processing strings.
+This shows that the string `"abc"`, which is represented as a sequence
+of 3&nbsp;bytes internally, appears to Prolog programs as a list of
+characters.
 
 Scryer Prolog uses the same efficient encoding for *partial* strings,
 which appear to Prolog code as partial lists of characters. The
@@ -323,13 +338,11 @@ the above example, posting <tt>Ls0&nbsp;=&nbsp;[a,b,c|Ls]</tt> yields
 the exact same internal representation, and has the advantage that
 only the standard predicate&nbsp;`(=)/2` is used.
 
-Definite clause grammars as provided by
-[`library(dcgs)`](src/lib/dcgs.pl), and the predicates from
-[`library(lists)`](src/lib/lists.pl), are ideally suited for reasoning
-about strings.
-
-Partial strings were first proposed by Ulrich Neumerkel in issue
-[#95](https://github.com/mthom/scryer-prolog/issues/95).
+The efficient internal representation of strings and partial strings
+was first proposed and explained by Ulrich Neumerkel in
+issues&nbsp;[#24](https://github.com/mthom/scryer-prolog/issues/24)
+and&nbsp;[#95](https://github.com/mthom/scryer-prolog/issues/95), and
+Scryer&nbsp;Prolog is the first Prolog&nbsp;system that implements it.
 
 ### Occurs check and cyclic terms
 
