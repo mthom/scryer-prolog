@@ -1720,7 +1720,7 @@ impl MachineState {
                                     let (name, arity) = cell_as_atom_cell!(self.heap[s2])
                                         .get_name_and_arity();
 
-                                    match (atom!("."), 2).cmp(&(name, arity)) {
+                                    match (2, atom!(".")).cmp(&(arity, name)) {
                                         Ordering::Equal => {
                                             tabu_list.insert((l1, s2));
 
@@ -1776,7 +1776,7 @@ impl MachineState {
                                     let (n2, a2) = cell_as_atom_cell!(self.heap[s2])
                                         .get_name_and_arity();
 
-                                    match (n1,a1).cmp(&(n2,a2)) {
+                                    match (a1,n1).cmp(&(a2, n2)) {
                                         Ordering::Equal => {
                                             tabu_list.insert((s1, s2));
 
@@ -1801,7 +1801,7 @@ impl MachineState {
                                     let (n1, a1) = cell_as_atom_cell!(self.heap[s1])
                                         .get_name_and_arity();
 
-                                    match (n1,a1).cmp(&(atom!("."), 2)) {
+                                    match (a1,n1).cmp(&(2, atom!("."))) {
                                         Ordering::Equal => {
                                             self.pdl.push(self.heap[l2]);
                                             self.pdl.push(self.heap[s1+1]);
