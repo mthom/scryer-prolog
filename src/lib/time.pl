@@ -49,11 +49,11 @@
 :- use_module(library(error)).
 :- use_module(library(dcgs)).
 :- use_module(library(lists)).
-:- use_module(library(charsio), [read_term_from_chars/2]).
+:- use_module(library(charsio), [read_from_chars/2]).
 
 current_time(T) :-
         '$current_time'(T0),
-        read_term_from_chars(T0, T).
+        read_from_chars(T0, T).
 
 format_time([], _) --> [].
 format_time(['%','%'|Fs], T) --> !, "%", format_time(Fs, T).

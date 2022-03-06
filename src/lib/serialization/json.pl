@@ -1,29 +1,29 @@
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    Written Apr 2021 by Aram Panasenco (panasenco@ucla.edu)
    Part of Scryer Prolog.
-   
+
    `json_chars//1` can be used with [`phrase_from_file/2`](src/lib/pio.pl)
    or [`phrase/2`](src/lib/dcgs.pl) to parse and generate [JSON](https://www.json.org/json-en.html).
-   
+
    BSD 3-Clause License
-   
+
    Copyright (c) 2021, Aram Panasenco
    All rights reserved.
-   
+
    Redistribution and use in source and binary forms, with or without
    modification, are permitted provided that the following conditions are met:
-   
+
    * Redistributions of source code must retain the above copyright notice, this
      list of conditions and the following disclaimer.
-   
+
    * Redistributions in binary form must reproduce the above copyright notice,
      this list of conditions and the following disclaimer in the documentation
      and/or other materials provided with the distribution.
-   
+
    * Neither the name of the copyright holder nor the names of its
      contributors may be used to endorse or promote products derived from
      this software without specific prior written permission.
-   
+
    THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
    AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
    IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
@@ -44,7 +44,7 @@
 :- use_module(library(dif)).
 :- use_module(library(lists)).
 
-/*  The DCGs are written to match the McKeeman form presented on the right side of https://www.json.org/json-en.html 
+/*  The DCGs are written to match the McKeeman form presented on the right side of https://www.json.org/json-en.html
     as closely as possible. Note that the names in the McKeeman form conflict with the pictures on the site. */
 json_chars(Internal) --> json_element(Internal).
 

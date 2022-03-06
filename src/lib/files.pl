@@ -174,7 +174,7 @@ file_creation_time(File, T) :-
 file_time_(File, Which, T) :-
         file_must_exist(File, file_time_/3),
         '$file_time'(File, Which, T0),
-        read_term_from_chars(T0, T).
+        read_from_chars(T0, T).
 
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -

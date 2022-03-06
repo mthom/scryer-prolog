@@ -1,14 +1,15 @@
-use crate::ast::*;
-use crate::lexer::*;
-use crate::tabled_rc::*;
+use crate::arena::*;
+use crate::atom_table::*;
+use crate::parser::ast::*;
+use crate::parser::char_reader::*;
+use crate::parser::lexer::*;
 
 use ordered_float::OrderedFloat;
 
-use crate::rug::ops::NegAssign;
+use rug::ops::NegAssign;
 
 use std::cell::Cell;
-use std::io::Read;
-use std::mem::swap;
+use std::mem;
 use std::rc::Rc;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -50,69 +51,114 @@ struct TokenDesc {
     spec: u32,
 }
 
-pub fn get_clause_spec(
-    name: ClauseName,
-    arity: usize,
-    op_dir: &CompositeOpDir,
-) -> Option<SharedOpDesc> {
-    match arity {
-        1 => {
-            /* This is a clause with an operator principal functor. Prefix operators
-            are supposed over post.
-             */
-            if let Some(OpDirValue(cell)) = op_dir.get(name.clone(), Fixity::Pre) {
-                return Some(cell.clone());
-            }
-
-            if let Some(OpDirValue(cell)) = op_dir.get(name, Fixity::Post) {
-                return Some(cell.clone());
+fn is_partial_string(
+    head: Term,
+    mut tail: Term,
+    atom_tbl: &mut AtomTable,
+) -> Result<(Atom, Option<Box<Term>>), Term> {
+    let mut string = match &head {
+        Term::Literal(_, Literal::Atom(atom)) => {
+            if let Some(c) = atom.as_char() {
+                c.to_string()
+            } else {
+                return Err(Term::Cons(Cell::default(), Box::new(head), Box::new(tail)));
             }
         }
-        2 => {
-            if let Some(OpDirValue(cell)) = op_dir.get(name, Fixity::In) {
-                return Some(cell.clone());
-            }
+        Term::Literal(_, Literal::Char(c)) => c.to_string(),
+        _ => {
+            return Err(Term::Cons(Cell::default(), Box::new(head), Box::new(tail)));
         }
-        _ => {}
     };
 
-    None
+    let mut orig_tail = Box::new(tail);
+    let mut tail_ref = &mut orig_tail;
+
+    loop {
+        match &mut **tail_ref {
+            Term::Cons(_, prev, succ) => {
+                match prev.as_ref() {
+                    Term::Literal(_, Literal::Atom(atom)) => {
+                        if let Some(c) = atom.as_char() {
+                            string.push(c);
+                        } else {
+                            return Err(Term::Cons(Cell::default(), Box::new(head), orig_tail));
+                        }
+                    }
+                    Term::Literal(_, Literal::Char(c)) => {
+                        string.push(*c);
+                    }
+                    _ => {
+                        return Err(Term::Cons(Cell::default(), Box::new(head), orig_tail));
+                    }
+                }
+
+                tail_ref = succ;
+            }
+            tail_ref => {
+                tail = mem::replace(tail_ref, Term::AnonVar);
+                break;
+            }
+        }
+    }
+
+    match &tail {
+        Term::AnonVar | Term::Var(..) => {
+            let pstr_atom = atom_tbl.build_with(&string);
+            Ok((pstr_atom, Some(Box::new(tail))))
+        }
+        Term::Literal(_, Literal::Atom(atom!("[]"))) => {
+            let pstr_atom = atom_tbl.build_with(&string);
+            Ok((pstr_atom, None))
+        }
+        Term::Literal(_, Literal::String(tail)) => {
+            string += tail.as_str();
+            let pstr_atom = atom_tbl.build_with(&string);
+            Ok((pstr_atom, None))
+        }
+        _ => {
+            let pstr_atom = atom_tbl.build_with(&string);
+            Ok((pstr_atom, Some(Box::new(tail))))
+        }
+    }
 }
 
-pub fn get_op_desc(name: ClauseName, op_dir: &CompositeOpDir) -> Option<OpDesc> {
-    let mut op_desc = OpDesc {
+pub fn get_op_desc(
+    name: Atom,
+    op_dir: &CompositeOpDir,
+) -> Option<CompositeOpDesc> {
+    let mut op_desc = CompositeOpDesc {
         pre: 0,
         inf: 0,
         post: 0,
         spec: 0,
     };
 
-    if let Some(OpDirValue(cell)) = op_dir.get(name.clone(), Fixity::Pre) {
+    if let Some(cell) = op_dir.get(name, Fixity::Pre) {
         let (pri, spec) = cell.get();
 
         if pri > 0 {
-            op_desc.pre = pri;
-            op_desc.spec |= spec;
-        } else if name.as_str() == "-" {
+            op_desc.pre = pri as usize;
+            op_desc.spec |= spec as u32;
+        } else if name == atom!("-") {
             op_desc.spec |= NEGATIVE_SIGN;
         }
     }
 
-    if let Some(OpDirValue(cell)) = op_dir.get(name.clone(), Fixity::Post) {
+    if let Some(cell) = op_dir.get(name, Fixity::Post) {
         let (pri, spec) = cell.get();
 
         if pri > 0 {
-            op_desc.post = pri;
-            op_desc.spec |= spec;
+            op_desc.post = pri as usize;
+            op_desc.spec |= spec as u32;
         }
     }
 
-    if let Some(OpDirValue(cell)) = op_dir.get(name.clone(), Fixity::In) {
+    if let Some(cell) = op_dir.get(name, Fixity::In) {
         let (pri, spec) = cell.get();
 
         if pri > 0 {
-            op_desc.inf = pri;
-            op_desc.spec |= spec;
+            op_desc.inf = pri as usize;
+            op_desc.spec |= spec as u32;
         }
     }
 
@@ -121,6 +167,31 @@ pub fn get_op_desc(name: ClauseName, op_dir: &CompositeOpDir) -> Option<OpDesc> 
     } else {
         Some(op_desc)
     }
+}
+
+pub fn get_clause_spec(name: Atom, arity: usize, op_dir: &CompositeOpDir) -> Option<OpDesc> {
+    match arity {
+        1 => {
+            /* This is a clause with an operator principal functor. Prefix operators
+            are supposed over post.
+             */
+            if let Some(cell) = op_dir.get(name, Fixity::Pre) {
+                return Some(cell);
+            }
+
+            if let Some(cell) = op_dir.get(name, Fixity::Post) {
+                return Some(cell);
+            }
+        }
+        2 => {
+            if let Some(cell) = op_dir.get(name, Fixity::In) {
+                return Some(cell);
+            }
+        }
+        _ => {}
+    };
+
+    None
 }
 
 fn affirm_xfx(priority: usize, d2: TokenDesc, d3: TokenDesc, d1: TokenDesc) -> bool {
@@ -164,23 +235,8 @@ fn affirm_fx(priority: usize, d1: TokenDesc, d2: TokenDesc) -> bool {
     d2.priority <= priority && is_term!(d1.spec) && d1.priority < d2.priority
 }
 
-fn sep_to_atom(tt: TokenType) -> Option<ClauseName> {
-    match tt {
-        TokenType::Open | TokenType::OpenCT => Some(clause_name!("(")),
-        TokenType::Close => Some(clause_name!(")")),
-        TokenType::OpenList => Some(clause_name!("[")),
-        TokenType::CloseList => Some(clause_name!("]")),
-        TokenType::OpenCurly => Some(clause_name!("{")),
-        TokenType::CloseCurly => Some(clause_name!("}")),
-        TokenType::HeadTailSeparator => Some(clause_name!("|")),
-        TokenType::Comma => Some(clause_name!(",")),
-        TokenType::End => Some(clause_name!(".")),
-        _ => None,
-    }
-}
-
 #[derive(Debug, Clone, Copy)]
-pub struct OpDesc {
+pub struct CompositeOpDesc {
     pub pre: usize,
     pub inf: usize,
     pub post: usize,
@@ -188,14 +244,14 @@ pub struct OpDesc {
 }
 
 #[derive(Debug)]
-pub struct Parser<'a, R: Read> {
-    lexer: Lexer<'a, R>,
+pub struct Parser<'a, R> {
+    pub lexer: Lexer<'a, R>,
     tokens: Vec<Token>,
     stack: Vec<TokenDesc>,
     terms: Vec<Term>,
 }
 
-fn read_tokens<R: Read>(lexer: &mut Lexer<R>) -> Result<Vec<Token>, ParserError> {
+fn read_tokens<R: CharRead>(lexer: &mut Lexer<R>) -> Result<Vec<Token>, ParserError> {
     let mut tokens = vec![];
 
     loop {
@@ -209,7 +265,10 @@ fn read_tokens<R: Read>(lexer: &mut Lexer<R>) -> Result<Vec<Token>, ParserError>
                 }
             }
             Err(ParserError::UnexpectedEOF) if !tokens.is_empty() => {
-                return Err(ParserError::IncompleteReduction(lexer.line_num, lexer.col_num));
+                return Err(ParserError::IncompleteReduction(
+                    lexer.line_num,
+                    lexer.col_num,
+                ));
             }
             Err(e) => {
                 return Err(e);
@@ -222,17 +281,43 @@ fn read_tokens<R: Read>(lexer: &mut Lexer<R>) -> Result<Vec<Token>, ParserError>
     Ok(tokens)
 }
 
-impl<'a, R: Read> Parser<'a, R> {
-    pub fn new(
-        stream: &'a mut ParsingStream<R>,
-        atom_tbl: TabledData<Atom>,
-        flags: MachineFlags,
-    ) -> Self {
+fn atomize_term(atom_tbl: &mut AtomTable, term: &Term) -> Option<Atom> {
+    match term {
+        Term::Literal(_, ref c) => atomize_constant(atom_tbl, *c),
+        _ => None,
+    }
+}
+
+fn atomize_constant(atom_tbl: &mut AtomTable, c: Literal) -> Option<Atom> {
+    match c {
+        Literal::Atom(ref name) => Some(*name),
+        Literal::Char(c) => Some(atom_tbl.build_with(&c.to_string())),
+        _ => None,
+    }
+}
+
+impl<'a, R: CharRead> Parser<'a, R> {
+    pub fn new(stream: R, machine_st: &'a mut MachineState) -> Self {
         Parser {
-            lexer: Lexer::new(atom_tbl, flags, stream),
+            lexer: Lexer::new(stream, machine_st),
             tokens: vec![],
             stack: Vec::new(),
             terms: Vec::new(),
+        }
+    }
+
+    fn sep_to_atom(&mut self, tt: TokenType) -> Option<Atom> {
+        match tt {
+            TokenType::Open | TokenType::OpenCT => Some(atom!("(")),
+            TokenType::Close => Some(atom!(")")),
+            TokenType::OpenList => Some(atom!("[")),
+            TokenType::CloseList => Some(atom!("]")),
+            TokenType::OpenCurly => Some(atom!("{")),
+            TokenType::CloseCurly => Some(atom!("}")),
+            TokenType::HeadTailSeparator => Some(atom!("|")),
+            TokenType::Comma => Some(atom!(",")),
+            TokenType::End => Some(atom!(".")),
+            _ => None,
         }
     }
 
@@ -246,25 +331,12 @@ impl<'a, R: Read> Parser<'a, R> {
         self.lexer.col_num
     }
 
-    #[inline]
-    pub fn get_atom_tbl(&self) -> TabledData<Atom> {
-        self.lexer.atom_tbl.clone()
-    }
-
-    #[inline]
-    pub fn set_atom_tbl(&mut self, atom_tbl: TabledData<Atom>) {
-        self.lexer.atom_tbl = atom_tbl;
-    }
-
-    fn get_term_name(&mut self, td: TokenDesc) -> Option<(ClauseName, Option<SharedOpDesc>)> {
+    fn get_term_name(&mut self, td: TokenDesc) -> Option<Atom> {
         match td.tt {
-            TokenType::HeadTailSeparator => Some((
-                clause_name!("|"),
-                Some(SharedOpDesc::new(td.priority, td.spec)),
-            )),
-            TokenType::Comma => Some((clause_name!(","), Some(SharedOpDesc::new(1000, XFY)))),
+            TokenType::HeadTailSeparator => Some(atom!("|")),
+            TokenType::Comma => Some(atom!(",")),
             TokenType::Term => match self.terms.pop() {
-                Some(Term::Constant(_, Constant::Atom(atom, spec))) => Some((atom, spec)),
+                Some(Term::Literal(_, Literal::Atom(atom))) => Some(atom),
                 Some(term) => {
                     self.terms.push(term);
                     None
@@ -277,14 +349,9 @@ impl<'a, R: Read> Parser<'a, R> {
 
     fn push_binary_op(&mut self, td: TokenDesc, spec: Specifier) {
         if let Some(arg2) = self.terms.pop() {
-            if let Some((name, shared_op_desc)) = self.get_term_name(td) {
+            if let Some(name) = self.get_term_name(td) {
                 if let Some(arg1) = self.terms.pop() {
-                    let term = Term::Clause(
-                        Cell::default(),
-                        name,
-                        vec![Box::new(arg1), Box::new(arg2)],
-                        shared_op_desc,
-                    );
+                    let term = Term::Clause(Cell::default(), name, vec![arg1, arg2]);
 
                     self.terms.push(term);
                     self.stack.push(TokenDesc {
@@ -301,12 +368,11 @@ impl<'a, R: Read> Parser<'a, R> {
         if let Some(mut arg1) = self.terms.pop() {
             if let Some(mut name) = self.terms.pop() {
                 if is_postfix!(assoc) {
-                    swap(&mut arg1, &mut name);
+                    mem::swap(&mut arg1, &mut name);
                 }
 
-                if let Term::Constant(_, Constant::Atom(name, shared_op_desc)) = name {
-                    let term =
-                        Term::Clause(Cell::default(), name, vec![Box::new(arg1)], shared_op_desc);
+                if let Term::Literal(_, Literal::Atom(name)) = name {
+                    let term = Term::Clause(Cell::default(), name, vec![arg1]);
 
                     self.terms.push(term);
                     self.stack.push(TokenDesc {
@@ -319,17 +385,8 @@ impl<'a, R: Read> Parser<'a, R> {
         }
     }
 
-    fn promote_atom_op(
-        &mut self,
-        atom: ClauseName,
-        priority: usize,
-        assoc: u32,
-        op_dir_val: Option<&OpDirValue>,
-    ) {
-        let spec = op_dir_val.map(|op_dir_val| op_dir_val.shared_op_desc());
-
-        self.terms
-            .push(Term::Constant(Cell::default(), Constant::Atom(atom, spec)));
+    fn promote_atom_op(&mut self, atom: Atom, priority: usize, assoc: u32) {
+        self.terms.push(Term::Literal(Cell::default(), Literal::Atom(atom)));
         self.stack.push(TokenDesc {
             tt: TokenType::Term,
             priority,
@@ -339,15 +396,15 @@ impl<'a, R: Read> Parser<'a, R> {
 
     fn shift(&mut self, token: Token, priority: usize, spec: Specifier) {
         let tt = match token {
-            Token::Constant(Constant::String(s)) if self.lexer.flags.double_quotes.is_codes() => {
-                let mut list = Term::Constant(Cell::default(), Constant::EmptyList);
+            Token::Literal(Literal::String(s)) if self.lexer.machine_st.flags.double_quotes.is_codes() => {
+                let mut list = Term::Literal(Cell::default(), Literal::Atom(atom!("[]")));
 
-                for c in s.chars().rev() {
+                for c in s.as_str().chars().rev() {
                     list = Term::Cons(
                         Cell::default(),
-                        Box::new(Term::Constant(
+                        Box::new(Term::Literal(
                             Cell::default(),
-                            Constant::Fixnum(c as isize),
+                            Literal::Fixnum(Fixnum::build_with(c as i64)),
                         )),
                         Box::new(list),
                     );
@@ -356,15 +413,19 @@ impl<'a, R: Read> Parser<'a, R> {
                 self.terms.push(list);
                 TokenType::Term
             }
-            Token::Constant(c) => {
-                self.terms.push(Term::Constant(Cell::default(), c));
+            Token::Literal(Literal::String(s)) if self.lexer.machine_st.flags.double_quotes.is_chars() => {
+                self.terms.push(Term::PartialString(Cell::default(), s, None));
+                TokenType::Term
+            }
+            Token::Literal(c) => {
+                self.terms.push(Term::Literal(Cell::default(), c));
                 TokenType::Term
             }
             Token::Var(v) => {
                 if v.trim() == "_" {
                     self.terms.push(Term::AnonVar);
                 } else {
-                    self.terms.push(Term::Var(Cell::default(), v));
+                    self.terms.push(Term::Var(Cell::default(), Rc::new(v)));
                 }
 
                 TokenType::Term
@@ -457,7 +518,7 @@ impl<'a, R: Read> Parser<'a, R> {
         None
     }
 
-    fn reduce_term(&mut self, op_dir: &CompositeOpDir) -> bool {
+    fn reduce_term(&mut self) -> bool {
         if self.stack.is_empty() {
             return false;
         }
@@ -489,22 +550,40 @@ impl<'a, R: Read> Parser<'a, R> {
         let idx = self.terms.len() - arity;
 
         if TokenType::Term == self.stack[stack_len].tt {
-            if self.atomize_term(&self.terms[idx - 1]).is_some() {
+            if atomize_term(&mut self.lexer.machine_st.atom_tbl, &self.terms[idx - 1]).is_some() {
                 self.stack.truncate(stack_len + 1);
 
-                let mut subterms: Vec<_> = self.terms.drain(idx..).map(Box::new).collect();
+                let mut subterms: Vec<_> = self.terms.drain(idx..).collect();
 
-                if let Some(name) = self.terms.pop().and_then(|t| self.atomize_term(&t)) {
+                if let Some(name) = self
+                    .terms
+                    .pop()
+                    .and_then(|t| atomize_term(&mut self.lexer.machine_st.atom_tbl, &t))
+                {
                     // reduce the '.' functor to a cons cell if it applies.
-                    if name.as_str() == "." && subterms.len() == 2 {
+                    if name == atom!(".") && subterms.len() == 2 {
                         let tail = subterms.pop().unwrap();
                         let head = subterms.pop().unwrap();
 
-                        self.terms.push(Term::Cons(Cell::default(), head, tail));
+                        self.terms.push(
+                            match is_partial_string(head, tail, &mut self.lexer.machine_st.atom_tbl) {
+                                Ok((string_buf, tail_opt)) => {
+                                    Term::PartialString(Cell::default(), string_buf, tail_opt)
+                                }
+                                Err(term) => term,
+                            },
+                        );
+
+                        /*
+                        self.terms.push(Term::Cons(
+                            Cell::default(),
+                            Box::new(head),
+                            Box::new(tail),
+                        ));
+                        */
                     } else {
-                        let spec = get_clause_spec(name.clone(), subterms.len(), op_dir);
                         self.terms
-                            .push(Term::Clause(Cell::default(), name, subterms, spec));
+                            .push(Term::Clause(Cell::default(), name, subterms));
                     }
 
                     if let Some(&mut TokenDesc {
@@ -544,8 +623,8 @@ impl<'a, R: Read> Parser<'a, R> {
                  * an operator, so expand the
                  * terms it compacted out again. */
                 match (term.name(), term.arity()) {
-                    (Some(name), 2) if name.as_str() == "," => {
-                        let terms = unfold_by_str(term, ",");
+                    (Some(name), 2) if name == atom!(",") => {
+                        let terms = unfold_by_str(term, name); // notice: name == "," here.
                         let arity = terms.len() - 1;
 
                         self.terms.extend(terms.into_iter());
@@ -603,8 +682,7 @@ impl<'a, R: Read> Parser<'a, R> {
                 td.tt = TokenType::Term;
                 td.priority = 0;
 
-                self.terms
-                    .push(Term::Constant(Cell::default(), Constant::EmptyList));
+                self.terms.push(Term::Literal(Cell::default(), Literal::Atom(atom!("[]"))));
                 return Ok(true);
             }
         }
@@ -621,7 +699,7 @@ impl<'a, R: Read> Parser<'a, R> {
         let list_len = self.stack.len() - 2 * arity;
 
         let end_term = if self.stack[idx].tt != TokenType::HeadTailSeparator {
-            Term::Constant(Cell::default(), Constant::EmptyList)
+            Term::Literal(Cell::default(), Literal::Atom(atom!("[]")))
         } else {
             let term = match self.terms.pop() {
                 Some(term) => term,
@@ -662,7 +740,18 @@ impl<'a, R: Read> Parser<'a, R> {
             priority: 0,
             spec: TERM,
         });
-        self.terms.push(list);
+
+        self.terms.push(match list {
+            Term::Cons(_, head, tail) => {
+                match is_partial_string(*head, *tail, &mut self.lexer.machine_st.atom_tbl) {
+                    Ok((string_buf, tail_opt)) => {
+                        Term::PartialString(Cell::default(), string_buf, tail_opt)
+                    }
+                    Err(term) => term,
+                }
+            }
+            term => term,
+        });
 
         Ok(true)
     }
@@ -678,7 +767,11 @@ impl<'a, R: Read> Parser<'a, R> {
                 td.priority = 0;
                 td.spec = TERM;
 
-                let term = Term::Constant(Cell::default(), atom!("{}", self.lexer.atom_tbl));
+                let term = Term::Literal(
+                    Cell::default(),
+                    Literal::Atom(atom!("{}")),
+                );
+
                 self.terms.push(term);
                 return Ok(true);
             }
@@ -710,9 +803,8 @@ impl<'a, R: Read> Parser<'a, R> {
 
                         self.terms.push(Term::Clause(
                             Cell::default(),
-                            clause_name!("{}"),
-                            vec![Box::new(term)],
-                            None,
+                            atom!("{}"),
+                            vec![term],
                         ));
 
                         return Ok(true);
@@ -744,27 +836,28 @@ impl<'a, R: Read> Parser<'a, R> {
                     return false;
                 }
 
-                if let Some(atom) = sep_to_atom(self.stack[idx].tt) {
+                if let Some(atom) = self.sep_to_atom(self.stack[idx].tt) {
                     self.terms
-                        .push(Term::Constant(Cell::default(), Constant::Atom(atom, None)));
+                        .push(Term::Literal(Cell::default(), Literal::Atom(atom)));
                 }
 
                 self.stack[idx].spec = TERM;
                 self.stack[idx].tt = TokenType::Term;
                 self.stack[idx].priority = 0;
+
                 true
             }
             _ => false,
         }
     }
 
-    fn shift_op(&mut self, name: ClauseName, op_dir: &CompositeOpDir) -> Result<bool, ParserError> {
-        if let Some(OpDesc {
+    fn shift_op(&mut self, name: Atom, op_dir: &CompositeOpDir) -> Result<bool, ParserError> {
+        if let Some(CompositeOpDesc {
             pre,
             inf,
             post,
             spec,
-        }) = get_op_desc(name.clone(), op_dir)
+        }) = get_op_desc(name, op_dir)
         {
             if (pre > 0 && inf + post > 0) || is_negate!(spec) {
                 match self.tokens.last().ok_or(ParserError::UnexpectedEOF)? {
@@ -775,15 +868,9 @@ impl<'a, R: Read> Parser<'a, R> {
                         // or post == 0.
                         self.reduce_op(inf + post);
 
-                        let fixity = if inf > 0 { Fixity::In } else { Fixity::Post };
-                        let op_dir_val = op_dir.get(name.clone(), fixity);
+                        // let fixity = if inf > 0 { Fixity::In } else { Fixity::Post };
 
-                        self.promote_atom_op(
-                            name,
-                            inf + post,
-                            spec & (XFX | XFY | YFX | YF | XF),
-                            op_dir_val,
-                        );
+                        self.promote_atom_op(name, inf + post, spec & (XFX | XFY | YFX | YF | XF));
                     }
                     _ => {
                         self.reduce_op(inf + post);
@@ -791,49 +878,22 @@ impl<'a, R: Read> Parser<'a, R> {
                         if let Some(TokenDesc { spec: pspec, .. }) = self.stack.last().cloned() {
                             // rterm.c: 412
                             if is_term!(pspec) {
-                                let fixity = if inf > 0 { Fixity::In } else { Fixity::Post };
-                                let op_dir_val = op_dir.get(name.clone(), fixity);
-
                                 self.promote_atom_op(
                                     name,
                                     inf + post,
                                     spec & (XFX | XFY | YFX | XF | YF),
-                                    op_dir_val,
                                 );
                             } else {
-                                let op_dir_val = op_dir.get(name.clone(), Fixity::Pre);
-                                self.promote_atom_op(
-                                    name,
-                                    pre,
-                                    spec & (FX | FY | NEGATIVE_SIGN),
-                                    op_dir_val,
-                                );
+                                self.promote_atom_op(name, pre, spec & (FX | FY | NEGATIVE_SIGN));
                             }
                         } else {
-                            let op_dir_val = op_dir.get(name.clone(), Fixity::Pre);
-                            self.promote_atom_op(
-                                name,
-                                pre,
-                                spec & (FX | FY | NEGATIVE_SIGN),
-                                op_dir_val,
-                            );
+                            self.promote_atom_op(name, pre, spec & (FX | FY | NEGATIVE_SIGN));
                         }
                     }
                 }
             } else {
-                let op_dir_val = op_dir.get(
-                    name.clone(),
-                    if pre + inf == 0 {
-                        Fixity::Post
-                    } else if post + pre == 0 {
-                        Fixity::In
-                    } else {
-                        Fixity::Pre
-                    },
-                );
-
                 self.reduce_op(pre + inf + post); // only one non-zero priority among these.
-                self.promote_atom_op(name, pre + inf + post, spec, op_dir_val);
+                self.promote_atom_op(name, pre + inf + post, spec);
             }
 
             Ok(true)
@@ -843,38 +903,23 @@ impl<'a, R: Read> Parser<'a, R> {
         }
     }
 
-    fn atomize_term(&self, term: &Term) -> Option<ClauseName> {
-        match term {
-            Term::Constant(_, ref c) => self.atomize_constant(c),
-            _ => None,
-        }
-    }
-
-    fn atomize_constant(&self, c: &Constant) -> Option<ClauseName> {
-        match c {
-            Constant::Atom(ref name, _) => Some(name.clone()),
-            Constant::Char(c) => Some(clause_name!(c.to_string(), self.lexer.atom_tbl)),
-            Constant::EmptyList => Some(clause_name!(c.to_string(), self.lexer.atom_tbl)),
-            _ => None,
-        }
-    }
-
-    fn negate_number<N, Negator, ToConstant>(&mut self, n: N, negator: Negator, constr: ToConstant)
+    fn negate_number<N, Negator, ToLiteral>(&mut self, n: N, negator: Negator, constr: ToLiteral)
     where
         Negator: Fn(N) -> N,
-        ToConstant: Fn(N) -> Constant,
+        ToLiteral: Fn(N, &mut Arena) -> Literal,
     {
         if let Some(desc) = self.stack.last().cloned() {
             if let Some(term) = self.terms.last().cloned() {
                 match term {
-                    Term::Constant(_, Constant::Atom(ref name, _))
-                        if name.as_str() == "-"
-                            && (is_prefix!(desc.spec) || is_negate!(desc.spec)) =>
+                    Term::Literal(_, Literal::Atom(name))
+                        if name == atom!("-") && (is_prefix!(desc.spec) || is_negate!(desc.spec)) =>
                     {
                         self.stack.pop();
                         self.terms.pop();
 
-                        self.shift(Token::Constant(constr(negator(n))), 0, TERM);
+                        let literal = constr(negator(n), &mut self.lexer.machine_st.arena);
+                        self.shift(Token::Literal(literal), 0, TERM);
+
                         return;
                     }
                     _ => {}
@@ -882,43 +927,45 @@ impl<'a, R: Read> Parser<'a, R> {
             }
         }
 
-        self.shift(Token::Constant(constr(n)), 0, TERM);
+        let literal = constr(n, &mut self.lexer.machine_st.arena);
+        self.shift(Token::Literal(literal), 0, TERM);
     }
 
     fn shift_token(&mut self, token: Token, op_dir: &CompositeOpDir) -> Result<(), ParserError> {
-        fn negate_rc<T: NegAssign>(mut t: Rc<T>) -> Rc<T> {
-            if let Some(t) = Rc::get_mut(&mut t) {
-                t.neg_assign();
-            };
-
+        fn negate_rc<T: NegAssign>(mut t: TypedArenaPtr<T>) -> TypedArenaPtr<T> {
+            (&mut t).neg_assign();
             t
         }
 
         match token {
-            Token::Constant(Constant::Fixnum(n)) => self.negate_number(n, |n| -n, Constant::Fixnum),
-            Token::Constant(Constant::Integer(n)) => {
-                self.negate_number(n, negate_rc, Constant::Integer)
+            Token::Literal(Literal::Fixnum(n)) => {
+                self.negate_number(n, |n| -n, |n, _| Literal::Fixnum(n))
             }
-            Token::Constant(Constant::Rational(n)) => {
-                self.negate_number(n, negate_rc, Constant::Rational)
+            Token::Literal(Literal::Integer(n)) => {
+                self.negate_number(n, negate_rc, |n, _| Literal::Integer(n))
             }
-            Token::Constant(Constant::Float(n)) => {
-                self.negate_number(n, |n| OrderedFloat(-n.into_inner()), Constant::Float)
+            Token::Literal(Literal::Rational(n)) => {
+                self.negate_number(n, negate_rc, |r, _| Literal::Rational(r))
             }
-            Token::Constant(c) => {
-                if let Some(name) = self.atomize_constant(&c) {
+            Token::Literal(Literal::Float(n)) => self.negate_number(
+                **n,
+                |n| OrderedFloat(-n.into_inner()),
+                |n, arena| Literal::Float(arena_alloc!(n, arena)),
+            ),
+            Token::Literal(c) => {
+                if let Some(name) = atomize_constant(&mut self.lexer.machine_st.atom_tbl, c) {
                     if !self.shift_op(name, op_dir)? {
-                        self.shift(Token::Constant(c), 0, TERM);
+                        self.shift(Token::Literal(c), 0, TERM);
                     }
                 } else {
-                    self.shift(Token::Constant(c), 0, TERM);
+                    self.shift(Token::Literal(c), 0, TERM);
                 }
             }
             Token::Var(v) => self.shift(Token::Var(v), 0, TERM),
             Token::Open => self.shift(Token::Open, 1300, DELIMITER),
             Token::OpenCT => self.shift(Token::OpenCT, 1300, DELIMITER),
             Token::Close => {
-                if !self.reduce_term(op_dir) {
+                if !self.reduce_term() {
                     if !self.reduce_brackets() {
                         return Err(ParserError::IncompleteReduction(
                             self.lexer.line_num,
@@ -949,8 +996,10 @@ impl<'a, R: Read> Parser<'a, R> {
                 /* '|' as an operator must have priority > 1000 and can only be infix.
                  * See: http://www.complang.tuwien.ac.at/ulrich/iso-prolog/dtc2#Res_A78
                  */
-                let (priority, spec) = get_op_desc(clause_name!("|"), op_dir)
-                    .map(|OpDesc { inf, spec, .. }| (inf, spec))
+                let bar_atom = atom!("|");
+
+                let (priority, spec) = get_op_desc(bar_atom, op_dir)
+                    .map(|CompositeOpDesc { inf, spec, .. }| (inf, spec))
                     .unwrap_or((1000, DELIMITER));
 
                 self.reduce_op(priority);
@@ -990,7 +1039,7 @@ impl<'a, R: Read> Parser<'a, R> {
     }
 
     #[inline]
-    pub fn num_lines_read(&self) -> usize {
+    pub fn lines_read(&self) -> usize {
         self.lexer.line_num
     }
 

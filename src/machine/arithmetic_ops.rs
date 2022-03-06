@@ -1,35 +1,95 @@
 use divrem::*;
 
-use prolog_parser::ast::*;
-use prolog_parser::clause_name;
-
+use crate::arena::*;
 use crate::arithmetic::*;
-use crate::clause_types::*;
+use crate::atom_table::*;
 use crate::forms::*;
+use crate::heap_iter::*;
 use crate::machine::machine_errors::*;
-use crate::machine::machine_indices::*;
 use crate::machine::machine_state::*;
-use crate::rug::{Integer, Rational};
+use crate::parser::ast::*;
+use crate::parser::rug::{Integer, Rational};
+use crate::types::*;
+
+use crate::fixnum;
+
 use ordered_float::*;
 
 use std::cmp;
 use std::convert::TryFrom;
 use std::f64;
 use std::mem;
-use std::rc::Rc;
 
 #[macro_export]
 macro_rules! try_numeric_result {
-    ($s: ident, $e: expr, $caller: expr) => {
+    ($e: expr, $stub_gen: expr) => {
         match $e {
             Ok(val) => Ok(val),
-            Err(e) => {
-                let caller_copy = $caller.iter().map(|v| v.context_free_clone()).collect();
+            Err(e) => Err(Box::new(move |machine_st: &mut MachineState| {
+                let stub = $stub_gen();
+                let evaluation_error = machine_st.evaluation_error(e);
 
-                Err($s.error_form(MachineError::evaluation_error(e), caller_copy))
+                machine_st.error_form(evaluation_error, stub)
+            }) as Box<dyn Fn(&mut MachineState) -> MachineStub>),
+        }
+    };
+}
+
+macro_rules! drop_iter_on_err {
+    ($self:expr, $iter: expr, $result: expr) => {
+        match $result {
+            Ok(val) => val,
+            Err(stub_gen) => {
+                std::mem::drop($iter);
+                return Err(stub_gen($self));
             }
         }
     };
+}
+
+fn zero_divisor_eval_error(
+    stub_gen: impl Fn() -> FunctorStub + 'static,
+) -> MachineStubGen {
+    Box::new(move |machine_st| {
+        let eval_error = machine_st.evaluation_error(EvalError::ZeroDivisor);
+        let stub = stub_gen();
+
+        machine_st.error_form(eval_error, stub)
+    })
+}
+
+fn undefined_eval_error(
+    stub_gen: impl Fn() -> FunctorStub + 'static,
+) -> MachineStubGen {
+    Box::new(move |machine_st| {
+        let eval_error = machine_st.evaluation_error(EvalError::Undefined);
+        let stub = stub_gen();
+
+        machine_st.error_form(eval_error, stub)
+    })
+}
+
+fn numerical_type_error(
+    valid_type: ValidType,
+    n: Number,
+    stub_gen: impl Fn() -> FunctorStub + 'static,
+) -> MachineStubGen {
+    Box::new(move |machine_st| {
+        let type_error = machine_st.type_error(valid_type, n);
+        let stub = stub_gen();
+
+        machine_st.error_form(type_error, stub)
+    })
+}
+
+pub(crate) fn sign(n: Number) -> Number {
+    if n.is_positive() {
+        Number::Fixnum(Fixnum::build_with(1))
+    } else if n.is_negative() {
+        Number::Fixnum(Fixnum::build_with(-1))
+    } else {
+        Number::Fixnum(Fixnum::build_with(0))
+    }
 }
 
 fn isize_gcd(n1: isize, n2: isize) -> Option<isize> {
@@ -80,935 +140,1293 @@ fn isize_gcd(n1: isize, n2: isize) -> Option<isize> {
     Some(n1 << shift as isize)
 }
 
-impl MachineState {
-    pub(crate) fn get_number(&mut self, at: &ArithmeticTerm) -> Result<Number, MachineStub> {
-        match at {
-            &ArithmeticTerm::Reg(r) => self.arith_eval_by_metacall(r),
-            &ArithmeticTerm::Interm(i) => {
-                Ok(mem::replace(&mut self.interms[i - 1], Number::Fixnum(0)))
-            }
-            &ArithmeticTerm::Number(ref n) => Ok(n.clone()),
-        }
-    }
-
-    pub(super) fn rational_from_number(&self, n: Number) -> Result<Rc<Rational>, MachineError> {
-        match n {
-            Number::Fixnum(n) => Ok(Rc::new(Rational::from(n))),
-            Number::Rational(r) => Ok(r),
-            Number::Float(OrderedFloat(f)) => match Rational::from_f64(f) {
-                Some(r) => Ok(Rc::new(r)),
-                None => Err(MachineError::instantiation_error()),
+pub(crate) fn add(lhs: Number, rhs: Number, arena: &mut Arena) -> Result<Number, EvalError> {
+    match (lhs, rhs) {
+        (Number::Fixnum(n1), Number::Fixnum(n2)) => Ok(
+            if let Some(result) = n1.get_num().checked_add(n2.get_num()) {
+                fixnum!(Number, result, arena)
+            } else {
+                Number::arena_from(
+                    Integer::from(n1.get_num()) + Integer::from(n2.get_num()),
+                    arena,
+                )
             },
-            Number::Integer(n) => Ok(Rc::new(Rational::from(&*n))),
+        ),
+        (Number::Fixnum(n1), Number::Integer(n2)) | (Number::Integer(n2), Number::Fixnum(n1)) => {
+            Ok(Number::arena_from(
+                Integer::from(n1.get_num()) + &*n2,
+                arena,
+            ))
+        }
+        (Number::Fixnum(n1), Number::Rational(n2)) | (Number::Rational(n2), Number::Fixnum(n1)) => {
+            Ok(Number::arena_from(
+                Rational::from(n1.get_num()) + &*n2,
+                arena,
+            ))
+        }
+        (Number::Fixnum(n1), Number::Float(OrderedFloat(n2)))
+        | (Number::Float(OrderedFloat(n2)), Number::Fixnum(n1)) => {
+            Ok(Number::Float(add_f(float_fn_to_f(n1.get_num())?, n2)?))
+        }
+        (Number::Integer(n1), Number::Integer(n2)) => {
+            Ok(Number::arena_from(Integer::from(&*n1) + &*n2, arena)) // add_i
+        }
+        (Number::Integer(n1), Number::Float(OrderedFloat(n2)))
+        | (Number::Float(OrderedFloat(n2)), Number::Integer(n1)) => {
+            Ok(Number::Float(add_f(float_i_to_f(&n1)?, n2)?))
+        }
+        (Number::Integer(n1), Number::Rational(n2))
+        | (Number::Rational(n2), Number::Integer(n1)) => {
+            Ok(Number::arena_from(Rational::from(&*n1) + &*n2, arena))
+        }
+        (Number::Rational(n1), Number::Float(OrderedFloat(n2)))
+        | (Number::Float(OrderedFloat(n2)), Number::Rational(n1)) => {
+            Ok(Number::Float(add_f(float_r_to_f(&n1)?, n2)?))
+        }
+        (Number::Float(OrderedFloat(f1)), Number::Float(OrderedFloat(f2))) => {
+            Ok(Number::Float(add_f(f1, f2)?))
+        }
+        (Number::Rational(r1), Number::Rational(r2)) => {
+            Ok(Number::arena_from(Rational::from(&*r1) + &*r2, arena))
+        }
+    }
+}
+
+pub(crate) fn neg(n: Number, arena: &mut Arena) -> Number {
+    match n {
+        Number::Fixnum(n) => {
+            if let Some(n) = n.get_num().checked_neg() {
+                fixnum!(Number, n, arena)
+            } else {
+                Number::arena_from(-Integer::from(n.get_num()), arena)
+            }
+        }
+        Number::Integer(n) => Number::arena_from(-Integer::from(&*n), arena),
+        Number::Float(OrderedFloat(f)) => Number::Float(OrderedFloat(-f)),
+        Number::Rational(r) => Number::arena_from(-Rational::from(&*r), arena),
+    }
+}
+
+pub(crate) fn abs(n: Number, arena: &mut Arena) -> Number {
+    match n {
+        Number::Fixnum(n) => {
+            if let Some(n) = n.get_num().checked_abs() {
+                fixnum!(Number, n, arena)
+            } else {
+                Number::arena_from(Integer::from(n.get_num()).abs(), arena)
+            }
+        }
+        Number::Integer(n) => Number::arena_from(Integer::from(n.abs_ref()), arena),
+        Number::Float(f) => Number::Float(f.abs()),
+        Number::Rational(r) => Number::arena_from(Rational::from(r.abs_ref()), arena),
+    }
+}
+
+#[inline]
+pub(crate) fn sub(lhs: Number, rhs: Number, arena: &mut Arena) -> Result<Number, EvalError> {
+    let neg_result = neg(rhs, arena);
+    add(lhs, neg_result, arena)
+}
+
+pub(crate) fn mul(lhs: Number, rhs: Number, arena: &mut Arena) -> Result<Number, EvalError> {
+    match (lhs, rhs) {
+        (Number::Fixnum(n1), Number::Fixnum(n2)) => Ok(
+            if let Some(result) = n1.get_num().checked_mul(n2.get_num()) {
+                fixnum!(Number, result, arena)
+            } else {
+                Number::arena_from(
+                    Integer::from(n1.get_num()) * Integer::from(n2.get_num()),
+                    arena,
+                )
+            },
+        ),
+        (Number::Fixnum(n1), Number::Integer(n2)) | (Number::Integer(n2), Number::Fixnum(n1)) => {
+            Ok(Number::arena_from(
+                Integer::from(n1.get_num()) * &*n2,
+                arena,
+            ))
+        }
+        (Number::Fixnum(n1), Number::Rational(n2)) | (Number::Rational(n2), Number::Fixnum(n1)) => {
+            Ok(Number::arena_from(
+                Rational::from(n1.get_num()) * &*n2,
+                arena,
+            ))
+        }
+        (Number::Fixnum(n1), Number::Float(OrderedFloat(n2)))
+        | (Number::Float(OrderedFloat(n2)), Number::Fixnum(n1)) => {
+            Ok(Number::Float(mul_f(float_fn_to_f(n1.get_num())?, n2)?))
+        }
+        (Number::Integer(n1), Number::Integer(n2)) => {
+            Ok(Number::arena_from(Integer::from(&*n1) * &*n2, arena)) // mul_i
+        }
+        (Number::Integer(n1), Number::Float(OrderedFloat(n2)))
+        | (Number::Float(OrderedFloat(n2)), Number::Integer(n1)) => {
+            Ok(Number::Float(mul_f(float_i_to_f(&n1)?, n2)?))
+        }
+        (Number::Integer(n1), Number::Rational(n2))
+        | (Number::Rational(n2), Number::Integer(n1)) => {
+            Ok(Number::arena_from(Rational::from(&*n1) * &*n2, arena))
+        }
+        (Number::Rational(n1), Number::Float(OrderedFloat(n2)))
+        | (Number::Float(OrderedFloat(n2)), Number::Rational(n1)) => {
+            Ok(Number::Float(mul_f(float_r_to_f(&n1)?, n2)?))
+        }
+        (Number::Float(OrderedFloat(f1)), Number::Float(OrderedFloat(f2))) => {
+            Ok(Number::Float(mul_f(f1, f2)?))
+        }
+        (Number::Rational(r1), Number::Rational(r2)) => {
+            Ok(Number::arena_from(Rational::from(&*r1) * &*r2, arena))
+        }
+    }
+}
+
+pub(crate) fn div(n1: Number, n2: Number) -> Result<Number, MachineStubGen> {
+    let stub_gen = || functor_stub(atom!("/"), 2);
+
+    if n2.is_zero() {
+        Err(zero_divisor_eval_error(stub_gen))
+    } else {
+        try_numeric_result!(n1 / n2, stub_gen)
+    }
+}
+
+pub(crate) fn float_pow(n1: Number, n2: Number) -> Result<Number, MachineStubGen> {
+    let f1 = result_f(&n1, rnd_f);
+    let f2 = result_f(&n2, rnd_f);
+
+    let stub_gen = || {
+        let pow_atom = atom!("**");
+        functor_stub(pow_atom, 2)
+    };
+
+    let f1 = try_numeric_result!(f1, stub_gen)?;
+    let f2 = try_numeric_result!(f2, stub_gen)?;
+
+    let result = result_f(&Number::Float(OrderedFloat(f1.powf(f2))), rnd_f);
+
+    Ok(Number::Float(OrderedFloat(try_numeric_result!(
+        result, stub_gen
+    )?)))
+}
+
+pub(crate) fn int_pow(n1: Number, n2: Number, arena: &mut Arena) -> Result<Number, MachineStubGen> {
+    if n1.is_zero() && n2.is_negative() {
+        let stub_gen = || {
+            let is_atom = atom!("is");
+            functor_stub(is_atom, 2)
+        };
+
+        return Err(undefined_eval_error(stub_gen));
+    }
+
+    let stub_gen = || {
+        let caret_atom = atom!("^");
+        functor_stub(caret_atom, 2)
+    };
+
+    match (n1, n2) {
+        (Number::Fixnum(n1), Number::Fixnum(n2)) => {
+            let n1_i = n1.get_num();
+            let n2_i = n2.get_num();
+
+            if !(n1_i == 1 || n1_i == 0 || n1_i == -1) && n2_i < 0 {
+                let n = Number::Fixnum(n1);
+                Err(numerical_type_error(ValidType::Float, n, stub_gen))
+            } else {
+                if let Ok(n2_u) = u32::try_from(n2_i) {
+                    if let Some(result) = n1_i.checked_pow(n2_u) {
+                        return Ok(Number::arena_from(result, arena));
+                    }
+                }
+
+                let n1 = Integer::from(n1_i);
+                let n2 = Integer::from(n2_i);
+
+                Ok(Number::arena_from(binary_pow(n1, &n2), arena))
+            }
+        }
+        (Number::Fixnum(n1), Number::Integer(n2)) => {
+            let n1_i = n1.get_num();
+
+            if !(n1_i == 1 || n1_i == 0 || n1_i == -1) && &*n2 < &0 {
+                let n = Number::Fixnum(n1);
+                Err(numerical_type_error(ValidType::Float, n, stub_gen))
+            } else {
+                let n1 = Integer::from(n1_i);
+                Ok(Number::arena_from(binary_pow(n1, &*n2), arena))
+            }
+        }
+        (Number::Integer(n1), Number::Fixnum(n2)) => {
+            let n2_i = n2.get_num();
+
+            if !(&*n1 == &1 || &*n1 == &0 || &*n1 == &-1) && n2_i < 0 {
+                let n = Number::Integer(n1);
+                Err(numerical_type_error(ValidType::Float, n, stub_gen))
+            } else {
+                let n2 = Integer::from(n2_i);
+                Ok(Number::arena_from(binary_pow((*n1).clone(), &n2), arena))
+            }
+        }
+        (Number::Integer(n1), Number::Integer(n2)) => {
+            if !(&*n1 == &1 || &*n1 == &0 || &*n1 == &-1) && &*n2 < &0 {
+                let n = Number::Integer(n1);
+                Err(numerical_type_error(ValidType::Float, n, stub_gen))
+            } else {
+                Ok(Number::arena_from(binary_pow((*n1).clone(), &*n2), arena))
+            }
+        }
+        (n1, Number::Integer(n2)) => {
+            let f1 = float(n1)?;
+            let f2 = float(Number::Integer(n2))?;
+
+            unary_float_fn_template(Number::Float(OrderedFloat(f1)), |f| f.powf(f2))
+                .map(|f| Number::Float(OrderedFloat(f)))
+        }
+        (n1, n2) => {
+            let f2 = float(n2)?;
+
+            if n1.is_negative() && f2 != f2.floor() {
+                return Err(undefined_eval_error(stub_gen));
+            }
+
+            let f1 = float(n1)?;
+
+            unary_float_fn_template(Number::Float(OrderedFloat(f1)), |f| f.powf(f2))
+                .map(|f| Number::Float(OrderedFloat(f)))
+        }
+    }
+}
+
+pub(crate) fn pow(n1: Number, n2: Number, culprit: Atom) -> Result<Number, MachineStubGen> {
+    if n2.is_negative() && n1.is_zero() {
+        let stub_gen = move || functor_stub(culprit, 2);
+
+        return Err(undefined_eval_error(stub_gen));
+    }
+
+    float_pow(n1, n2)
+}
+
+#[inline]
+pub(crate) fn float(n: Number) -> Result<f64, MachineStubGen> {
+    let stub_gen = || {
+        let is_atom = atom!("is");
+        functor_stub(is_atom, 2)
+    };
+
+    try_numeric_result!(result_f(&n, rnd_f), stub_gen)
+}
+
+#[inline]
+pub(crate) fn unary_float_fn_template<FloatFn>(
+    n1: Number,
+    f: FloatFn,
+) -> Result<f64, MachineStubGen>
+where
+    FloatFn: Fn(f64) -> f64,
+{
+    let stub_gen = || {
+        let is_atom = atom!("is");
+        functor_stub(is_atom, 2)
+    };
+
+    let f1 = try_numeric_result!(result_f(&n1, rnd_f), stub_gen)?;
+    let f1 = result_f(&Number::Float(OrderedFloat(f(f1))), rnd_f);
+
+    try_numeric_result!(f1, stub_gen)
+}
+
+pub(crate) fn max(n1: Number, n2: Number) -> Result<Number, MachineStubGen> {
+    match (n1, n2) {
+        (Number::Fixnum(n1), Number::Fixnum(n2)) => {
+            if n1.get_num() > n2.get_num() {
+                Ok(Number::Fixnum(n1))
+            } else {
+                Ok(Number::Fixnum(n2))
+            }
+        }
+        (Number::Fixnum(n1), Number::Integer(n2)) => {
+            if &*n2 > &n1.get_num() {
+                Ok(Number::Integer(n2))
+            } else {
+                Ok(Number::Fixnum(n1))
+            }
+        }
+        (Number::Integer(n1), Number::Fixnum(n2)) => {
+            if &*n1 > &n2.get_num() {
+                Ok(Number::Integer(n1))
+            } else {
+                Ok(Number::Fixnum(n2))
+            }
+        }
+        (Number::Integer(n1), Number::Integer(n2)) => {
+            if n1 > n2 {
+                Ok(Number::Integer(n1))
+            } else {
+                Ok(Number::Integer(n2))
+            }
+        }
+        (n1, n2) => {
+            let stub_gen = || {
+                let max_atom = atom!("max");
+                functor_stub(max_atom, 2)
+            };
+
+            let f1 = try_numeric_result!(result_f(&n1, rnd_f), stub_gen)?;
+            let f2 = try_numeric_result!(result_f(&n2, rnd_f), stub_gen)?;
+
+            Ok(Number::Float(cmp::max(OrderedFloat(f1), OrderedFloat(f2))))
+        }
+    }
+}
+
+pub(crate) fn min(n1: Number, n2: Number) -> Result<Number, MachineStubGen> {
+    match (n1, n2) {
+        (Number::Fixnum(n1), Number::Fixnum(n2)) => {
+            if n1.get_num() < n2.get_num() {
+                Ok(Number::Fixnum(n1))
+            } else {
+                Ok(Number::Fixnum(n2))
+            }
+        }
+        (Number::Fixnum(n1), Number::Integer(n2)) => {
+            if &*n2 < &n1.get_num() {
+                Ok(Number::Integer(n2))
+            } else {
+                Ok(Number::Fixnum(n1))
+            }
+        }
+        (Number::Integer(n1), Number::Fixnum(n2)) => {
+            if &*n1 < &n2.get_num() {
+                Ok(Number::Integer(n1))
+            } else {
+                Ok(Number::Fixnum(n2))
+            }
+        }
+        (Number::Integer(n1), Number::Integer(n2)) => {
+            if n1 < n2 {
+                Ok(Number::Integer(n1))
+            } else {
+                Ok(Number::Integer(n2))
+            }
+        }
+        (n1, n2) => {
+            let stub_gen = || {
+                let min_atom = atom!("min");
+                functor_stub(min_atom, 2)
+            };
+
+            let f1 = try_numeric_result!(result_f(&n1, rnd_f), stub_gen)?;
+            let f2 = try_numeric_result!(result_f(&n2, rnd_f), stub_gen)?;
+
+            Ok(Number::Float(cmp::min(OrderedFloat(f1), OrderedFloat(f2))))
+        }
+    }
+}
+
+pub fn rational_from_number(
+    n: Number,
+    stub_gen: impl Fn() -> FunctorStub + 'static,
+    arena: &mut Arena,
+) -> Result<TypedArenaPtr<Rational>, MachineStubGen> {
+    match n {
+        Number::Fixnum(n) => Ok(arena_alloc!(Rational::from(n.get_num()), arena)),
+        Number::Rational(r) => Ok(r),
+        Number::Float(OrderedFloat(f)) => match Rational::from_f64(f) {
+            Some(r) => Ok(arena_alloc!(r, arena)),
+            None => Err(Box::new(move |machine_st| {
+                let instantiation_error = machine_st.instantiation_error();
+                let stub = stub_gen();
+
+                machine_st.error_form(instantiation_error, stub)
+            })),
+        },
+        Number::Integer(n) => Ok(arena_alloc!(Rational::from(&*n), arena)),
+    }
+}
+
+pub(crate) fn rdiv(
+    r1: TypedArenaPtr<Rational>,
+    r2: TypedArenaPtr<Rational>,
+) -> Result<Rational, MachineStubGen> {
+    if &*r2 == &0 {
+        let stub_gen = || {
+            let rdiv_atom = atom!("rdiv");
+            functor_stub(rdiv_atom, 2)
+        };
+
+        Err(zero_divisor_eval_error(stub_gen))
+    } else {
+        Ok(Rational::from(&*r1 / &*r2))
+    }
+}
+
+pub(crate) fn idiv(n1: Number, n2: Number, arena: &mut Arena) -> Result<Number, MachineStubGen> {
+    let stub_gen = || {
+        let idiv_atom = atom!("//");
+        functor_stub(idiv_atom, 2)
+    };
+
+    match (n1, n2) {
+        (Number::Fixnum(n1), Number::Fixnum(n2)) => {
+            if n2.get_num() == 0 {
+                Err(zero_divisor_eval_error(stub_gen))
+            } else {
+                if let Some(result) = n1.get_num().checked_div(n2.get_num()) {
+                    Ok(Number::arena_from(result, arena))
+                } else {
+                    let n1 = Integer::from(n1.get_num());
+                    let n2 = Integer::from(n2.get_num());
+
+                    Ok(Number::arena_from(n1 / n2, arena))
+                }
+            }
+        }
+        (Number::Fixnum(n1), Number::Integer(n2)) => {
+            if &*n2 == &0 {
+                Err(zero_divisor_eval_error(stub_gen))
+            } else {
+                Ok(Number::arena_from(Integer::from(n1) / &*n2, arena))
+            }
+        }
+        (Number::Integer(n2), Number::Fixnum(n1)) => {
+            if n1.get_num() == 0 {
+                Err(zero_divisor_eval_error(stub_gen))
+            } else {
+                Ok(Number::arena_from(&*n2 / Integer::from(n1), arena))
+            }
+        }
+        (Number::Integer(n1), Number::Integer(n2)) => {
+            if &*n2 == &0 {
+                Err(zero_divisor_eval_error(stub_gen))
+            } else {
+                Ok(Number::arena_from(
+                    <(Integer, Integer)>::from(n1.div_rem_ref(&*n2)).0,
+                    arena,
+                ))
+            }
+        }
+        (Number::Fixnum(_), n2) | (Number::Integer(_), n2) => {
+            Err(numerical_type_error(ValidType::Integer, n2, stub_gen))
+        }
+        (n1, _) => Err(numerical_type_error(ValidType::Integer, n1, stub_gen)),
+    }
+}
+
+pub(crate) fn int_floor_div(
+    n1: Number,
+    n2: Number,
+    arena: &mut Arena,
+) -> Result<Number, MachineStubGen> {
+    let stub_gen = || {
+        let div_atom = atom!("div");
+        functor_stub(div_atom, 2)
+    };
+
+    let modulus = modulus(n1, n2, arena)?;
+    let n1 = try_numeric_result!(sub(n1, modulus, arena), stub_gen)?;
+
+    idiv(n1, n2, arena)
+}
+
+pub(crate) fn shr(n1: Number, n2: Number, arena: &mut Arena) -> Result<Number, MachineStubGen> {
+    let stub_gen = || {
+        let shr_atom = atom!(">>");
+        functor_stub(shr_atom, 2)
+    };
+
+    match (n1, n2) {
+        (Number::Fixnum(n1), Number::Fixnum(n2)) => {
+            let n1_i = n1.get_num();
+            let n2_i = n2.get_num();
+
+            let n1 = Integer::from(n1_i);
+
+            if let Ok(n2) = u32::try_from(n2_i) {
+                return Ok(Number::arena_from(n1 >> n2, arena));
+            } else {
+                return Ok(Number::arena_from(n1 >> u32::max_value(), arena));
+            }
+        }
+        (Number::Fixnum(n1), Number::Integer(n2)) => {
+            let n1 = Integer::from(n1.get_num());
+
+            match n2.to_u32() {
+                Some(n2) => Ok(Number::arena_from(n1 >> n2, arena)),
+                _ => Ok(Number::arena_from(n1 >> u32::max_value(), arena)),
+            }
+        }
+        (Number::Integer(n1), Number::Fixnum(n2)) => match u32::try_from(n2.get_num()) {
+            Ok(n2) => Ok(Number::arena_from(Integer::from(&*n1 >> n2), arena)),
+            _ => Ok(Number::arena_from(
+                Integer::from(&*n1 >> u32::max_value()),
+                arena,
+            )),
+        },
+        (Number::Integer(n1), Number::Integer(n2)) => match n2.to_u32() {
+            Some(n2) => Ok(Number::arena_from(Integer::from(&*n1 >> n2), arena)),
+            _ => Ok(Number::arena_from(
+                Integer::from(&*n1 >> u32::max_value()),
+                arena,
+            )),
+        },
+        (Number::Integer(_), n2) => Err(numerical_type_error(ValidType::Integer, n2, stub_gen)),
+        (Number::Fixnum(_), n2) => Err(numerical_type_error(ValidType::Integer, n2, stub_gen)),
+        (n1, _) => Err(numerical_type_error(ValidType::Integer, n1, stub_gen)),
+    }
+}
+
+pub(crate) fn shl(n1: Number, n2: Number, arena: &mut Arena) -> Result<Number, MachineStubGen> {
+    let stub_gen = || {
+        let shl_atom = atom!(">>");
+        functor_stub(shl_atom, 2)
+    };
+
+    match (n1, n2) {
+        (Number::Fixnum(n1), Number::Fixnum(n2)) => {
+            let n1_i = n1.get_num();
+            let n2_i = n2.get_num();
+
+            let n1 = Integer::from(n1_i);
+
+            if let Ok(n2) = u32::try_from(n2_i) {
+                return Ok(Number::arena_from(n1 << n2, arena));
+            } else {
+                return Ok(Number::arena_from(n1 << u32::max_value(), arena));
+            }
+        }
+        (Number::Fixnum(n1), Number::Integer(n2)) => {
+            let n1 = Integer::from(n1.get_num());
+
+            match n2.to_u32() {
+                Some(n2) => Ok(Number::arena_from(n1 << n2, arena)),
+                _ => Ok(Number::arena_from(n1 << u32::max_value(), arena)),
+            }
+        }
+        (Number::Integer(n1), Number::Fixnum(n2)) => match u32::try_from(n2.get_num()) {
+            Ok(n2) => Ok(Number::arena_from(Integer::from(&*n1 << n2), arena)),
+            _ => Ok(Number::arena_from(
+                Integer::from(&*n1 << u32::max_value()),
+                arena,
+            )),
+        },
+        (Number::Integer(n1), Number::Integer(n2)) => match n2.to_u32() {
+            Some(n2) => Ok(Number::arena_from(Integer::from(&*n1 << n2), arena)),
+            _ => Ok(Number::arena_from(
+                Integer::from(&*n1 << u32::max_value()),
+                arena,
+            )),
+        },
+        (Number::Integer(_), n2) => Err(numerical_type_error(ValidType::Integer, n2, stub_gen)),
+        (Number::Fixnum(_), n2) => Err(numerical_type_error(ValidType::Integer, n2, stub_gen)),
+        (n1, _) => Err(numerical_type_error(ValidType::Integer, n1, stub_gen)),
+    }
+}
+
+pub(crate) fn and(n1: Number, n2: Number, arena: &mut Arena) -> Result<Number, MachineStubGen> {
+    let stub_gen = || {
+        let and_atom = atom!("/\\");
+        functor_stub(and_atom, 2)
+    };
+
+    match (n1, n2) {
+        (Number::Fixnum(n1), Number::Fixnum(n2)) => {
+            Ok(Number::arena_from(n1.get_num() & n2.get_num(), arena))
+        }
+        (Number::Fixnum(n1), Number::Integer(n2)) => {
+            let n1 = Integer::from(n1.get_num());
+            Ok(Number::arena_from(n1 & &*n2, arena))
+        }
+        (Number::Integer(n1), Number::Fixnum(n2)) => Ok(Number::arena_from(
+            &*n1 & Integer::from(n2.get_num()),
+            arena,
+        )),
+        (Number::Integer(n1), Number::Integer(n2)) => {
+            Ok(Number::arena_from(Integer::from(&*n1 & &*n2), arena))
+        }
+        (Number::Integer(_), n2) | (Number::Fixnum(_), n2) => {
+            Err(numerical_type_error(ValidType::Integer, n2, stub_gen))
+        }
+        (n1, _) => Err(numerical_type_error(ValidType::Integer, n1, stub_gen)),
+    }
+}
+
+pub(crate) fn or(n1: Number, n2: Number, arena: &mut Arena) -> Result<Number, MachineStubGen> {
+    let stub_gen = || {
+        let or_atom = atom!("\\/");
+        functor_stub(or_atom, 2)
+    };
+
+    match (n1, n2) {
+        (Number::Fixnum(n1), Number::Fixnum(n2)) => {
+            Ok(Number::arena_from(n1.get_num() | n2.get_num(), arena))
+        }
+        (Number::Fixnum(n1), Number::Integer(n2)) => {
+            let n1 = Integer::from(n1.get_num());
+            Ok(Number::arena_from(n1 | &*n2, arena))
+        }
+        (Number::Integer(n1), Number::Fixnum(n2)) => Ok(Number::arena_from(
+            &*n1 | Integer::from(n2.get_num()),
+            arena,
+        )),
+        (Number::Integer(n1), Number::Integer(n2)) => {
+            Ok(Number::arena_from(Integer::from(&*n1 | &*n2), arena))
+        }
+        (Number::Integer(_), n2) | (Number::Fixnum(_), n2) => {
+            Err(numerical_type_error(ValidType::Integer, n2, stub_gen))
+        }
+        (n1, _) => Err(numerical_type_error(ValidType::Integer, n1, stub_gen)),
+    }
+}
+
+pub(crate) fn xor(n1: Number, n2: Number, arena: &mut Arena) -> Result<Number, MachineStubGen> {
+    let stub_gen = || {
+        let xor_atom = atom!("xor");
+        functor_stub(xor_atom, 2)
+    };
+
+    match (n1, n2) {
+        (Number::Fixnum(n1), Number::Fixnum(n2)) => {
+            Ok(Number::arena_from(n1.get_num() ^ n2.get_num(), arena))
+        }
+        (Number::Fixnum(n1), Number::Integer(n2)) => {
+            let n1 = Integer::from(n1.get_num());
+            Ok(Number::arena_from(n1 ^ &*n2, arena))
+        }
+        (Number::Integer(n1), Number::Fixnum(n2)) => Ok(Number::arena_from(
+            &*n1 ^ Integer::from(n2.get_num()),
+            arena,
+        )),
+        (Number::Integer(n1), Number::Integer(n2)) => {
+            Ok(Number::arena_from(Integer::from(&*n1 ^ &*n2), arena))
+        }
+        (Number::Integer(_), n2) | (Number::Fixnum(_), n2) => {
+            Err(numerical_type_error(ValidType::Integer, n2, stub_gen))
+        }
+        _ => Err(numerical_type_error(ValidType::Integer, n2, stub_gen)),
+    }
+}
+
+pub(crate) fn modulus(x: Number, y: Number, arena: &mut Arena) -> Result<Number, MachineStubGen> {
+    let stub_gen = || {
+        let mod_atom = atom!("mod");
+        functor_stub(mod_atom, 2)
+    };
+
+    match (x, y) {
+        (Number::Fixnum(n1), Number::Fixnum(n2)) => {
+            let n2_i = n2.get_num();
+
+            if n2_i == 0 {
+                Err(zero_divisor_eval_error(stub_gen))
+            } else {
+                let n1_i = n1.get_num();
+                Ok(Number::arena_from(n1_i.rem_floor(n2_i), arena))
+            }
+        }
+        (Number::Fixnum(n1), Number::Integer(n2)) => {
+            if &*n2 == &0 {
+                Err(zero_divisor_eval_error(stub_gen))
+            } else {
+                let n1 = Integer::from(n1.get_num());
+                Ok(Number::arena_from(
+                    <(Integer, Integer)>::from(n1.div_rem_floor_ref(&*n2)).1,
+                    arena,
+                ))
+            }
+        }
+        (Number::Integer(n1), Number::Fixnum(n2)) => {
+            let n2_i = n2.get_num();
+
+            if n2_i == 0 {
+                Err(zero_divisor_eval_error(stub_gen))
+            } else {
+                let n2 = Integer::from(n2_i);
+                Ok(Number::arena_from(
+                    <(Integer, Integer)>::from(n1.div_rem_floor_ref(&n2)).1,
+                    arena,
+                ))
+            }
+        }
+        (Number::Integer(x), Number::Integer(y)) => {
+            if &*y == &0 {
+                Err(zero_divisor_eval_error(stub_gen))
+            } else {
+                Ok(Number::arena_from(
+                    <(Integer, Integer)>::from(x.div_rem_floor_ref(&*y)).1,
+                    arena,
+                ))
+            }
+        }
+        (Number::Integer(_), n2) | (Number::Fixnum(_), n2) => {
+            Err(numerical_type_error(ValidType::Integer, n2, stub_gen))
+        }
+        (n1, _) => Err(numerical_type_error(ValidType::Integer, n1, stub_gen)),
+    }
+}
+
+pub(crate) fn remainder(x: Number, y: Number, arena: &mut Arena) -> Result<Number, MachineStubGen> {
+    let stub_gen = || {
+        let rem_atom = atom!("rem");
+        functor_stub(rem_atom, 2)
+    };
+
+    match (x, y) {
+        (Number::Fixnum(n1), Number::Fixnum(n2)) => {
+            let n2_i = n2.get_num();
+
+            if n2_i == 0 {
+                Err(zero_divisor_eval_error(stub_gen))
+            } else {
+                let n1_i = n1.get_num();
+                Ok(Number::arena_from(n1_i % n2_i, arena))
+            }
+        }
+        (Number::Fixnum(n1), Number::Integer(n2)) => {
+            if &*n2 == &0 {
+                Err(zero_divisor_eval_error(stub_gen))
+            } else {
+                let n1 = Integer::from(n1.get_num());
+                Ok(Number::arena_from(n1 % &*n2, arena))
+            }
+        }
+        (Number::Integer(n1), Number::Fixnum(n2)) => {
+            let n2_i = n2.get_num();
+
+            if n2_i == 0 {
+                Err(zero_divisor_eval_error(stub_gen))
+            } else {
+                let n2 = Integer::from(n2_i);
+                Ok(Number::arena_from(&*n1 % n2, arena))
+            }
+        }
+        (Number::Integer(n1), Number::Integer(n2)) => {
+            if &*n2 == &0 {
+                Err(zero_divisor_eval_error(stub_gen))
+            } else {
+                Ok(Number::arena_from(Integer::from(&*n1 % &*n2), arena))
+            }
+        }
+        (Number::Integer(_), n2) | (Number::Fixnum(_), n2) => {
+            Err(numerical_type_error(ValidType::Integer, n2, stub_gen))
+        }
+        (n1, _) => Err(numerical_type_error(ValidType::Integer, n1, stub_gen)),
+    }
+}
+
+pub(crate) fn gcd(n1: Number, n2: Number, arena: &mut Arena) -> Result<Number, MachineStubGen> {
+    let stub_gen = || {
+        let gcd_atom = atom!("gcd");
+        functor_stub(gcd_atom, 2)
+    };
+
+    match (n1, n2) {
+        (Number::Fixnum(n1), Number::Fixnum(n2)) => {
+            let n1_i = n1.get_num() as isize;
+            let n2_i = n2.get_num() as isize;
+
+            if let Some(result) = isize_gcd(n1_i, n2_i) {
+                Ok(Number::arena_from(result, arena))
+            } else {
+                Ok(Number::arena_from(
+                    Integer::from(n1_i).gcd(&Integer::from(n2_i)),
+                    arena,
+                ))
+            }
+        }
+        (Number::Fixnum(n1), Number::Integer(n2)) | (Number::Integer(n2), Number::Fixnum(n1)) => {
+            let n1 = Integer::from(n1.get_num());
+            Ok(Number::arena_from(Integer::from(n2.gcd_ref(&n1)), arena))
+        }
+        (Number::Integer(n1), Number::Integer(n2)) => {
+            Ok(Number::arena_from(Integer::from(n1.gcd_ref(&n2)), arena))
+        }
+        (Number::Float(f), _) | (_, Number::Float(f)) => {
+            let n = Number::Float(f);
+            Err(numerical_type_error(ValidType::Integer, n, stub_gen))
+        }
+        (Number::Rational(r), _) | (_, Number::Rational(r)) => {
+            let n = Number::Rational(r);
+            Err(numerical_type_error(ValidType::Integer, n, stub_gen))
+        }
+    }
+}
+
+pub(crate) fn atan2(n1: Number, n2: Number) -> Result<f64, MachineStubGen> {
+    if n1.is_zero() && n2.is_zero() {
+        let stub_gen = || {
+            let is_atom = atom!("is");
+            functor_stub(is_atom, 2)
+        };
+
+        Err(undefined_eval_error(stub_gen))
+    } else {
+        let f1 = float(n1)?;
+        let f2 = float(n2)?;
+
+        unary_float_fn_template(Number::Float(OrderedFloat(f1)), |f| f.atan2(f2))
+    }
+}
+
+#[inline]
+pub(crate) fn sin(n1: Number) -> Result<f64, MachineStubGen> {
+    unary_float_fn_template(n1, |f| f.sin())
+}
+
+#[inline]
+pub(crate) fn cos(n1: Number) -> Result<f64, MachineStubGen> {
+    unary_float_fn_template(n1, |f| f.cos())
+}
+
+#[inline]
+pub(crate) fn tan(n1: Number) -> Result<f64, MachineStubGen> {
+    unary_float_fn_template(n1, |f| f.tan())
+}
+
+#[inline]
+pub(crate) fn log(n1: Number) -> Result<f64, MachineStubGen> {
+    unary_float_fn_template(n1, |f| f.log(f64::consts::E))
+}
+
+#[inline]
+pub(crate) fn exp(n1: Number) -> Result<f64, MachineStubGen> {
+    unary_float_fn_template(n1, |f| f.exp())
+}
+
+#[inline]
+pub(crate) fn asin(n1: Number) -> Result<f64, MachineStubGen> {
+    unary_float_fn_template(n1, |f| f.asin())
+}
+
+#[inline]
+pub(crate) fn acos(n1: Number) -> Result<f64, MachineStubGen> {
+    unary_float_fn_template(n1, |f| f.acos())
+}
+
+#[inline]
+pub(crate) fn atan(n1: Number) -> Result<f64, MachineStubGen> {
+    unary_float_fn_template(n1, |f| f.atan())
+}
+
+#[inline]
+pub(crate) fn sqrt(n1: Number) -> Result<f64, MachineStubGen> {
+    if n1.is_negative() {
+        let stub_gen = || {
+            let is_atom = atom!("is");
+            functor_stub(is_atom, 2)
+        };
+
+        return Err(undefined_eval_error(stub_gen));
+    }
+
+    unary_float_fn_template(n1, |f| f.sqrt())
+}
+
+#[inline]
+pub(crate) fn floor(n1: Number, arena: &mut Arena) -> Number {
+    rnd_i(&n1, arena)
+}
+
+#[inline]
+pub(crate) fn ceiling(n1: Number, arena: &mut Arena) -> Number {
+    let n1 = neg(n1, arena);
+    let n1 = floor(n1, arena);
+
+    neg(n1, arena)
+}
+
+#[inline]
+pub(crate) fn truncate(n: Number, arena: &mut Arena) -> Number {
+    if n.is_negative() {
+        let n = abs(n, arena);
+        let n = floor(n, arena);
+
+        neg(n, arena)
+    } else {
+        floor(n, arena)
+    }
+}
+
+pub(crate) fn round(n: Number, arena: &mut Arena) -> Result<Number, MachineStubGen> {
+    let stub_gen = || {
+        let is_atom = atom!("is");
+        functor_stub(is_atom, 2)
+    };
+
+    let result = add(n, Number::Float(OrderedFloat(0.5f64)), arena);
+    let result = try_numeric_result!(result, stub_gen)?;
+
+    Ok(floor(result, arena))
+}
+
+pub(crate) fn bitwise_complement(n1: Number, arena: &mut Arena) -> Result<Number, MachineStubGen> {
+    match n1 {
+        Number::Fixnum(n) => Ok(Number::Fixnum(Fixnum::build_with(!n.get_num()))),
+        Number::Integer(n1) => Ok(Number::arena_from(Integer::from(!&*n1), arena)),
+        _ => {
+            let stub_gen = || {
+                let bitwise_atom = atom!("\\");
+                functor_stub(bitwise_atom, 2)
+            };
+
+            Err(numerical_type_error(ValidType::Integer, n1, stub_gen))
+        }
+    }
+}
+
+impl MachineState {
+    #[inline]
+    pub fn get_number(&mut self, at: &ArithmeticTerm) -> Result<Number, MachineStub> {
+        match at {
+            &ArithmeticTerm::Reg(r) => {
+		        let value = self.store(self.deref(self[r]));
+
+                match Number::try_from(value) {
+                    Ok(n) => Ok(n),
+                    Err(_) => self.arith_eval_by_metacall(value),
+                }
+            }
+            &ArithmeticTerm::Interm(i) => {
+                Ok(mem::replace(&mut self.interms[i - 1], Number::Fixnum(Fixnum::build_with(0))))
+            }
+            &ArithmeticTerm::Number(n) => Ok(n),
         }
     }
 
-    pub(crate) fn get_rational(
+    pub fn get_rational(
         &mut self,
         at: &ArithmeticTerm,
-        caller: MachineStub,
-    ) -> Result<(Rc<Rational>, MachineStub), MachineStub> {
+        caller: impl Fn() -> FunctorStub + 'static,
+    ) -> Result<TypedArenaPtr<Rational>, MachineStub> {
         let n = self.get_number(at)?;
 
-        match self.rational_from_number(n) {
-            Ok(r) => Ok((r, caller)),
-            Err(e) => Err(self.error_form(e, caller)),
+        match rational_from_number(n, caller, &mut self.arena) {
+            Ok(r) => Ok(r),
+            Err(e_gen) => Err(e_gen(self))
         }
     }
 
-    pub(crate) fn arith_eval_by_metacall(&self, r: RegType) -> Result<Number, MachineStub> {
-        let caller = MachineError::functor_stub(clause_name!("is"), 2);
-        let mut interms: Vec<Number> = Vec::with_capacity(64);
+    pub(crate) fn arith_eval_by_metacall(&mut self, value: HeapCellValue) -> Result<Number, MachineStub> {
+        let stub_gen = || functor_stub(atom!("is"), 2);
+        let mut iter = stackless_post_order_iter(&mut self.heap, value);
 
-        for addr in self.post_order_iter(self[r]) {
-            match self.heap.index_addr(&addr).as_ref() {
-                &HeapCellValue::NamedStr(2, ref name, _) => {
-                    let a2 = interms.pop().unwrap();
-                    let a1 = interms.pop().unwrap();
+        while let Some(value) = iter.next() {
+            if value.is_forwarded() {
+                let (name, arity) = read_heap_cell!(value,
+                     (HeapCellValueTag::Atom, (name, arity)) => {
+                         (name, arity)
+                     }
+                     (HeapCellValueTag::Lis | HeapCellValueTag::PStr) => {
+                         (atom!("."), 2)
+                     }
+                     _ => {
+                         unreachable!()
+                     }
+                );
 
-                    match name.as_str() {
-                        "+" => interms.push(try_numeric_result!(self, a1 + a2, caller)?),
-                        "-" => interms.push(try_numeric_result!(self, a1 - a2, caller)?),
-                        "*" => interms.push(try_numeric_result!(self, a1 * a2, caller)?),
-                        "/" => interms.push(self.div(a1, a2)?),
-                        "**" => interms.push(self.pow(a1, a2, "is")?),
-                        "^" => interms.push(self.int_pow(a1, a2)?),
-                        "max" => interms.push(self.max(a1, a2)?),
-                        "min" => interms.push(self.min(a1, a2)?),
-                        "rdiv" => {
-                            let r1 = self.rational_from_number(a1);
-                            let r2 =
-                                r1.and_then(|r1| self.rational_from_number(a2).map(|r2| (r1, r2)));
+                std::mem::drop(iter);
 
-                            match r2 {
-                                Ok((r1, r2)) => {
-                                    let result = Number::Rational(Rc::new(self.rdiv(r1, r2)?));
-                                    interms.push(result);
-                                }
-                                Err(e) => {
-                                    return Err(self.error_form(e, caller));
-                                }
+                let evaluable_error = self.evaluable_error(name, arity);
+                let stub = stub_gen();
+
+                return Err(self.error_form(evaluable_error, stub));
+            }
+
+            read_heap_cell!(value,
+                (HeapCellValueTag::Atom, (name, arity)) => {
+                    if arity == 2 {
+                        let a1 = self.interms.pop().unwrap();
+                        let a2 = self.interms.pop().unwrap();
+
+                        match name {
+                            atom!("+") => self.interms.push(drop_iter_on_err!(
+                                self,
+                                iter,
+                                try_numeric_result!(add(a1, a2, &mut self.arena), stub_gen)
+                            )),
+                            atom!("-") => self.interms.push(drop_iter_on_err!(
+                                self,
+                                iter,
+                                try_numeric_result!(sub(a1, a2, &mut self.arena), stub_gen)
+                            )),
+                            atom!("*") => self.interms.push(drop_iter_on_err!(
+                                self,
+                                iter,
+                                try_numeric_result!(mul(a1, a2, &mut self.arena), stub_gen)
+                            )),
+                            atom!("/") => self.interms.push(
+                                drop_iter_on_err!(self, iter, div(a1, a2))
+                            ),
+                            atom!("**") => self.interms.push(
+                                drop_iter_on_err!(self, iter, pow(a1, a2, atom!("is")))
+                            ),
+                            atom!("^") => self.interms.push(
+                                drop_iter_on_err!(self, iter, int_pow(a1, a2, &mut self.arena))
+                            ),
+                            atom!("max") => self.interms.push(
+                                drop_iter_on_err!(self, iter, max(a1, a2))
+                            ),
+                            atom!("min") => self.interms.push(
+                                drop_iter_on_err!(self, iter, min(a1, a2))
+                            ),
+                            atom!("rdiv") => {
+                                let r1 = drop_iter_on_err!(
+                                    self,
+                                    iter,
+                                    rational_from_number(a1, stub_gen, &mut self.arena)
+                                );
+
+                                let r2 = drop_iter_on_err!(
+                                    self,
+                                    iter,
+                                    rational_from_number(a2, stub_gen, &mut self.arena)
+                                );
+
+                                let result = arena_alloc!(
+                                    drop_iter_on_err!(self, iter, rdiv(r1, r2)),
+                                    self.arena
+                                );
+
+                                self.interms.push(Number::Rational(result));
+                            }
+                            atom!("//") => self.interms.push(
+                                drop_iter_on_err!(self, iter, idiv(a1, a2, &mut self.arena))
+                            ),
+                            atom!("div") => self.interms.push(
+                                drop_iter_on_err!(self, iter, int_floor_div(a1, a2, &mut self.arena))
+                            ),
+                            atom!(">>") => self.interms.push(
+                                drop_iter_on_err!(self, iter, shr(a1, a2, &mut self.arena))
+                            ),
+                            atom!("<<") => self.interms.push(
+                                drop_iter_on_err!(self, iter, shl(a1, a2, &mut self.arena))
+                            ),
+                            atom!("/\\") => self.interms.push(
+                                drop_iter_on_err!(self, iter, and(a1, a2, &mut self.arena))
+                            ),
+                            atom!("\\/") => self.interms.push(
+                                drop_iter_on_err!(self, iter, or(a1, a2, &mut self.arena))
+                            ),
+                            atom!("xor") => self.interms.push(
+                                drop_iter_on_err!(self, iter, xor(a1, a2, &mut self.arena))
+                            ),
+                            atom!("mod") => self.interms.push(
+                                drop_iter_on_err!(self, iter, modulus(a1, a2, &mut self.arena))
+                            ),
+                            atom!("rem") => self.interms.push(
+                                drop_iter_on_err!(self, iter, remainder(a1, a2, &mut self.arena))
+                            ),
+                            atom!("atan2") => self.interms.push(Number::Float(OrderedFloat(
+                                drop_iter_on_err!(self, iter, atan2(a1, a2))
+                            ))),
+                            atom!("gcd") => self.interms.push(
+                                drop_iter_on_err!(self, iter, gcd(a1, a2, &mut self.arena))
+                            ),
+                            _ => {
+                                let evaluable_stub = functor_stub(name, 2);
+                                let stub = stub_gen();
+
+                                std::mem::drop(iter);
+
+                                let type_error = self.type_error(ValidType::Evaluable, evaluable_stub);
+                                return Err(self.error_form(type_error, stub));
                             }
                         }
-                        "//" => interms.push(self.idiv(a1, a2)?),
-                        "div" => interms.push(self.int_floor_div(a1, a2)?),
-                        ">>" => interms.push(self.shr(a1, a2)?),
-                        "<<" => interms.push(self.shl(a1, a2)?),
-                        "/\\" => interms.push(self.and(a1, a2)?),
-                        "\\/" => interms.push(self.or(a1, a2)?),
-                        "xor" => interms.push(self.xor(a1, a2)?),
-                        "mod" => interms.push(self.modulus(a1, a2)?),
-                        "rem" => interms.push(self.remainder(a1, a2)?),
-                        "atan2" => interms.push(Number::Float(OrderedFloat(self.atan2(a1, a2)?))),
-                        "gcd" => interms.push(self.gcd(a1, a2)?),
-                        _ => {
-                            let evaluable_stub = MachineError::functor_stub(name.clone(), 2);
 
-                            return Err(self.error_form(
-                                MachineError::type_error(
-                                    self.heap.h(),
+                        continue;
+                    } else if arity == 1 {
+                        let a1 = self.interms.pop().unwrap();
+
+                        match name {
+                            atom!("-") => self.interms.push(neg(a1, &mut self.arena)),
+                            atom!("+") => self.interms.push(a1),
+                            atom!("cos") => self.interms.push(Number::Float(OrderedFloat(
+                                drop_iter_on_err!(self, iter, cos(a1))
+                            ))),
+                            atom!("sin") => self.interms.push(Number::Float(OrderedFloat(
+                                drop_iter_on_err!(self, iter, sin(a1))
+                            ))),
+                            atom!("tan") => self.interms.push(Number::Float(OrderedFloat(
+                                drop_iter_on_err!(self, iter, tan(a1))
+                            ))),
+                            atom!("sqrt") => self.interms.push(Number::Float(OrderedFloat(
+                                drop_iter_on_err!(self, iter, sqrt(a1))
+                            ))),
+                            atom!("log") => self.interms.push(Number::Float(OrderedFloat(
+                                drop_iter_on_err!(self, iter, log(a1))
+                            ))),
+                            atom!("exp") => self.interms.push(Number::Float(OrderedFloat(
+                                drop_iter_on_err!(self, iter, exp(a1))
+                            ))),
+                            atom!("acos") => self.interms.push(Number::Float(OrderedFloat(
+                                drop_iter_on_err!(self, iter, acos(a1))
+                            ))),
+                            atom!("asin") => self.interms.push(Number::Float(OrderedFloat(
+                                drop_iter_on_err!(self, iter, asin(a1))
+                            ))),
+                            atom!("atan") => self.interms.push(Number::Float(OrderedFloat(
+                                drop_iter_on_err!(self, iter, atan(a1))
+                            ))),
+                            atom!("abs") => self.interms.push(abs(a1, &mut self.arena)),
+                            atom!("float") => self.interms.push(Number::Float(OrderedFloat(
+                                drop_iter_on_err!(self, iter, float(a1))
+                            ))),
+                            atom!("truncate") => self.interms.push(truncate(a1, &mut self.arena)),
+                            atom!("round") => self.interms.push(drop_iter_on_err!(self, iter, round(a1, &mut self.arena))),
+                            atom!("ceiling") => self.interms.push(ceiling(a1, &mut self.arena)),
+                            atom!("floor") => self.interms.push(floor(a1, &mut self.arena)),
+                            atom!("\\") => self.interms.push(
+                                drop_iter_on_err!(self, iter, bitwise_complement(a1, &mut self.arena))
+                            ),
+                            atom!("sign") => self.interms.push(sign(a1)),
+                            _ => {
+                                let evaluable_stub = functor_stub(name, 1);
+                                std::mem::drop(iter);
+
+                                let type_error = self.type_error(
                                     ValidType::Evaluable,
                                     evaluable_stub,
-                                ),
-                                caller,
-                            ));
+                                );
+
+                                let stub = stub_gen();
+                                return Err(self.error_form(type_error, stub));
+                            }
                         }
-                    }
-                }
-                &HeapCellValue::NamedStr(1, ref name, _) => {
-                    let a1 = interms.pop().unwrap();
 
-                    match name.as_str() {
-                        "-" => interms.push(-a1),
-                        "+" => interms.push(a1),
-                        "cos" => interms.push(Number::Float(OrderedFloat(self.cos(a1)?))),
-                        "sin" => interms.push(Number::Float(OrderedFloat(self.sin(a1)?))),
-                        "tan" => interms.push(Number::Float(OrderedFloat(self.tan(a1)?))),
-                        "sqrt" => interms.push(Number::Float(OrderedFloat(self.sqrt(a1)?))),
-                        "log" => interms.push(Number::Float(OrderedFloat(self.log(a1)?))),
-                        "exp" => interms.push(Number::Float(OrderedFloat(self.exp(a1)?))),
-                        "acos" => interms.push(Number::Float(OrderedFloat(self.acos(a1)?))),
-                        "asin" => interms.push(Number::Float(OrderedFloat(self.asin(a1)?))),
-                        "atan" => interms.push(Number::Float(OrderedFloat(self.atan(a1)?))),
-                        "abs" => interms.push(a1.abs()),
-                        "float" => interms.push(Number::Float(OrderedFloat(self.float(a1)?))),
-                        "truncate" => interms.push(self.truncate(a1)),
-                        "round" => interms.push(self.round(a1)?),
-                        "ceiling" => interms.push(self.ceiling(a1)),
-                        "floor" => interms.push(self.floor(a1)),
-                        "\\" => interms.push(self.bitwise_complement(a1)?),
-                        "sign" => interms.push(self.sign(a1)),
-                        _ => {
-                            let evaluable_stub = MachineError::functor_stub(name.clone(), 1);
-
-                            return Err(self.error_form(
-                                MachineError::type_error(
-                                    self.heap.h(),
-                                    ValidType::Evaluable,
-                                    evaluable_stub,
-                                ),
-                                caller,
-                            ));
-                        }
-                    }
-                }
-                &HeapCellValue::Addr(Addr::Fixnum(n)) => {
-                    interms.push(Number::Fixnum(n));
-                }
-                &HeapCellValue::Addr(Addr::Float(n)) => interms.push(Number::Float(n)),
-                &HeapCellValue::Integer(ref n) => interms.push(Number::Integer(n.clone())),
-                &HeapCellValue::Addr(Addr::Usize(n)) => {
-                    interms.push(Number::Integer(Rc::new(Integer::from(n))));
-                }
-                &HeapCellValue::Rational(ref n) => interms.push(Number::Rational(n.clone())),
-                &HeapCellValue::Atom(ref name, _) if name.as_str() == "pi" => {
-                    interms.push(Number::Float(OrderedFloat(f64::consts::PI)))
-                }
-                &HeapCellValue::Atom(ref name, _) if name.as_str() == "e" => {
-                    interms.push(Number::Float(OrderedFloat(f64::consts::E)))
-                }
-                &HeapCellValue::Atom(ref name, _) if name.as_str() == "epsilon" => {
-                    interms.push(Number::Float(OrderedFloat(f64::EPSILON)))
-                }
-                &HeapCellValue::NamedStr(arity, ref name, _) => {
-                    let evaluable_stub = MachineError::functor_stub(name.clone(), arity);
-
-                    return Err(self.error_form(
-                        MachineError::type_error(
-                            self.heap.h(),
-                            ValidType::Evaluable,
-                            evaluable_stub,
-                        ),
-                        caller,
-                    ));
-                }
-                &HeapCellValue::Atom(ref name, _) => {
-                    let evaluable_stub = MachineError::functor_stub(name.clone(), 0);
-
-                    return Err(self.error_form(
-                        MachineError::type_error(
-                            self.heap.h(),
-                            ValidType::Evaluable,
-                            evaluable_stub,
-                        ),
-                        caller,
-                    ));
-                }
-                &HeapCellValue::Addr(addr) if addr.is_ref() => {
-                    return Err(self.error_form(MachineError::instantiation_error(), caller));
-                }
-                val => {
-                    return Err(self.type_error(
-                        ValidType::Number,
-                        val.context_free_clone(),
-                        clause_name!("is"),
-                        2,
-                    ));
-                }
-            }
-        }
-
-        Ok(interms.pop().unwrap())
-    }
-
-    pub(crate) fn rdiv(&self, r1: Rc<Rational>, r2: Rc<Rational>) -> Result<Rational, MachineStub> {
-        if &*r2 == &0 {
-            let stub = MachineError::functor_stub(clause_name!("(rdiv)"), 2);
-            Err(self.error_form(MachineError::evaluation_error(EvalError::ZeroDivisor), stub))
-        } else {
-            Ok(Rational::from(&*r1 / &*r2))
-        }
-    }
-
-    pub(crate) fn int_floor_div(&self, n1: Number, n2: Number) -> Result<Number, MachineStub> {
-        let stub = MachineError::functor_stub(clause_name!("(div)"), 2);
-        let modulus = self.modulus(n1.clone(), n2.clone())?;
-
-        self.idiv(try_numeric_result!(self, n1 - modulus, stub)?, n2)
-    }
-
-    pub(crate) fn idiv(&self, n1: Number, n2: Number) -> Result<Number, MachineStub> {
-        match (n1, n2) {
-            (Number::Fixnum(n1), Number::Fixnum(n2)) => {
-                if n2 == 0 {
-                    let stub = MachineError::functor_stub(clause_name!("(//)"), 2);
-
-                    Err(self
-                        .error_form(MachineError::evaluation_error(EvalError::ZeroDivisor), stub))
-                } else {
-                    if let Some(result) = n1.checked_div(n2) {
-                        Ok(Number::from(result))
-                    } else {
-                        let n1 = Integer::from(n1);
-                        let n2 = Integer::from(n2);
-
-                        Ok(Number::from(n1 / n2))
-                    }
-                }
-            }
-            (Number::Fixnum(n1), Number::Integer(n2)) => {
-                if &*n2 == &0 {
-                    let stub = MachineError::functor_stub(clause_name!("(//)"), 2);
-
-                    Err(self
-                        .error_form(MachineError::evaluation_error(EvalError::ZeroDivisor), stub))
-                } else {
-                    Ok(Number::from(Integer::from(n1) / &*n2))
-                }
-            }
-            (Number::Integer(n2), Number::Fixnum(n1)) => {
-                if n1 == 0 {
-                    let stub = MachineError::functor_stub(clause_name!("(//)"), 2);
-
-                    Err(self
-                        .error_form(MachineError::evaluation_error(EvalError::ZeroDivisor), stub))
-                } else {
-                    Ok(Number::from(&*n2 / Integer::from(n1)))
-                }
-            }
-            (Number::Integer(n1), Number::Integer(n2)) => {
-                if &*n2 == &0 {
-                    let stub = MachineError::functor_stub(clause_name!("(//)"), 2);
-
-                    Err(self
-                        .error_form(MachineError::evaluation_error(EvalError::ZeroDivisor), stub))
-                } else {
-                    Ok(Number::from(
-                        <(Integer, Integer)>::from(n1.div_rem_ref(&*n2)).0,
-                    ))
-                }
-            }
-            (Number::Fixnum(_), n2) | (Number::Integer(_), n2) => {
-                let stub = MachineError::functor_stub(clause_name!("(//)"), 2);
-
-                Err(self.error_form(
-                    MachineError::type_error(self.heap.h(), ValidType::Integer, n2),
-                    stub,
-                ))
-            }
-            (n1, _) => {
-                let stub = MachineError::functor_stub(clause_name!("(//)"), 2);
-
-                Err(self.error_form(
-                    MachineError::type_error(self.heap.h(), ValidType::Integer, n1),
-                    stub,
-                ))
-            }
-        }
-    }
-
-    pub(crate) fn div(&self, n1: Number, n2: Number) -> Result<Number, MachineStub> {
-        let stub = MachineError::functor_stub(clause_name!("(/)"), 2);
-
-        if n2.is_zero() {
-            Err(self.error_form(MachineError::evaluation_error(EvalError::ZeroDivisor), stub))
-        } else {
-            try_numeric_result!(self, n1 / n2, stub)
-        }
-    }
-
-    pub(crate) fn atan2(&self, n1: Number, n2: Number) -> Result<f64, MachineStub> {
-        let stub = MachineError::functor_stub(clause_name!("is"), 2);
-
-        if n1.is_zero() && n2.is_zero() {
-            Err(self.error_form(MachineError::evaluation_error(EvalError::Undefined), stub))
-        } else {
-            let f1 = self.float(n1)?;
-            let f2 = self.float(n2)?;
-
-            self.unary_float_fn_template(Number::Float(OrderedFloat(f1)), |f| f.atan2(f2))
-        }
-    }
-
-    pub(crate) fn int_pow(&self, n1: Number, n2: Number) -> Result<Number, MachineStub> {
-        if n1.is_zero() && n2.is_negative() {
-            let stub = MachineError::functor_stub(clause_name!("is"), 2);
-            return Err(self.error_form(MachineError::evaluation_error(EvalError::Undefined), stub));
-        }
-
-        match (n1, n2) {
-            (Number::Fixnum(n1), Number::Fixnum(n2)) => {
-                if !(n1 == 1 || n1 == 0 || n1 == -1) && n2 < 0 {
-                    let n = Number::from(n1);
-                    let stub = MachineError::functor_stub(clause_name!("^"), 2);
-
-                    Err(self.error_form(
-                        MachineError::type_error(self.heap.h(), ValidType::Float, n),
-                        stub,
-                    ))
-                } else {
-                    if let Ok(n2) = u32::try_from(n2) {
-                        if let Some(result) = n1.checked_pow(n2) {
-                            return Ok(Number::from(result));
+                        continue;
+                    } else if arity == 0 {
+                        match name {
+                            atom!("pi") => {
+                                self.interms.push(Number::Float(OrderedFloat(f64::consts::PI)));
+                                continue;
+                            }
+                            atom!("e") => {
+                                self.interms.push(Number::Float(OrderedFloat(f64::consts::E)));
+                                continue;
+                            }
+                            atom!("epsilon") => {
+                                self.interms.push(Number::Float(OrderedFloat(f64::EPSILON)));
+                                continue;
+                            }
+                            _ => {
+                            }
                         }
                     }
 
-                    let n1 = Integer::from(n1);
-                    let n2 = Integer::from(n2);
+                    std::mem::drop(iter);
 
-                    Ok(Number::from(binary_pow(n1, &n2)))
+                    let evaluable_error = self.evaluable_error(name, arity);
+                    let stub = stub_gen();
+
+                    return Err(self.error_form(evaluable_error, stub));
                 }
-            }
-            (Number::Fixnum(n1), Number::Integer(n2)) => {
-                if !(n1 == 1 || n1 == 0 || n1 == -1) && &*n2 < &0 {
-                    let n = Number::from(n1);
-                    let stub = MachineError::functor_stub(clause_name!("^"), 2);
-
-                    Err(self.error_form(
-                        MachineError::type_error(self.heap.h(), ValidType::Float, n),
-                        stub,
-                    ))
-                } else {
-                    let n1 = Integer::from(n1);
-                    Ok(Number::from(binary_pow(n1, n2.as_ref())))
+                (HeapCellValueTag::Fixnum, n) => {
+                    self.interms.push(Number::Fixnum(n));
                 }
-            }
-            (Number::Integer(n1), Number::Fixnum(n2)) => {
-                if !(&*n1 == &1 || &*n1 == &0 || &*n1 == &-1) && n2 < 0 {
-                    let n = Number::Integer(n1);
-                    let stub = MachineError::functor_stub(clause_name!("^"), 2);
-
-                    Err(self.error_form(
-                        MachineError::type_error(self.heap.h(), ValidType::Float, n),
-                        stub,
-                    ))
-                } else {
-                    let n2 = Integer::from(n2);
-                    Ok(Number::from(binary_pow(n1.as_ref().clone(), &n2)))
+                (HeapCellValueTag::F64, fl) => {
+                    self.interms.push(Number::Float(**fl));
                 }
-            }
-            (Number::Integer(n1), Number::Integer(n2)) => {
-                if !(&*n1 == &1 || &*n1 == &0 || &*n1 == &-1) && &*n2 < &0 {
-                    let n = Number::Integer(n1);
-                    let stub = MachineError::functor_stub(clause_name!("^"), 2);
+                (HeapCellValueTag::Cons, ptr) => {
+                    match_untyped_arena_ptr!(ptr,
+                         (ArenaHeaderTag::Integer, n) => {
+                             self.interms.push(Number::Integer(n));
+                         }
+                         (ArenaHeaderTag::Rational, r) => {
+                             self.interms.push(Number::Rational(r));
+                         }
+                         (ArenaHeaderTag::F64, fl) => {
+                             self.interms.push(Number::Float(*fl));
+                         }
+                         _ => {
+                             std::mem::drop(iter);
 
-                    Err(self.error_form(
-                        MachineError::type_error(self.heap.h(), ValidType::Float, n),
-                        stub,
-                    ))
-                } else {
-                    Ok(Number::from(binary_pow(n1.as_ref().clone(), n2.as_ref())))
+                             let type_error = self.type_error(ValidType::Evaluable, value);
+                             let stub = stub_gen();
+
+                             return Err(self.error_form(type_error, stub));
+                         }
+                    )
                 }
-            }
-            (n1, Number::Integer(n2)) => {
-                let f1 = self.float(n1)?;
-                let f2 = self.float(Number::Integer(n2))?;
+                (HeapCellValueTag::Var | HeapCellValueTag::AttrVar) => {
+                    std::mem::drop(iter);
 
-                self.unary_float_fn_template(Number::Float(OrderedFloat(f1)), |f| f.powf(f2))
-                    .map(|f| Number::Float(OrderedFloat(f)))
-            }
-            (n1, n2) => {
-                let f2 = self.float(n2)?;
+                    let instantiation_error = self.instantiation_error();
+                    let stub = stub_gen();
 
-                if n1.is_negative() && f2 != f2.floor() {
-                    let stub = MachineError::functor_stub(clause_name!("is"), 2);
-                    return Err(
-                        self.error_form(MachineError::evaluation_error(EvalError::Undefined), stub)
-                    );
+                    return Err(self.error_form(instantiation_error, stub));
                 }
+                _ => {
+                    std::mem::drop(iter);
 
-                let f1 = self.float(n1)?;
-                self.unary_float_fn_template(Number::Float(OrderedFloat(f1)), |f| f.powf(f2))
-                    .map(|f| Number::Float(OrderedFloat(f)))
-            }
-        }
-    }
+                    let type_error = self.type_error(ValidType::Evaluable, value);
+                    let stub = stub_gen();
 
-    pub(crate) fn gcd(&self, n1: Number, n2: Number) -> Result<Number, MachineStub> {
-        match (n1, n2) {
-            (Number::Fixnum(n1), Number::Fixnum(n2)) => {
-                if let Some(result) = isize_gcd(n1, n2) {
-                    Ok(Number::Fixnum(result))
-                } else {
-                    Ok(Number::from(Integer::from(n1).gcd(&Integer::from(n2))))
+                    return Err(self.error_form(type_error, stub));
                 }
-            }
-            (Number::Fixnum(n1), Number::Integer(n2))
-            | (Number::Integer(n2), Number::Fixnum(n1)) => {
-                let n1 = Integer::from(n1);
-                Ok(Number::from(Integer::from(n2.gcd_ref(&n1))))
-            }
-            (Number::Integer(n1), Number::Integer(n2)) => {
-                Ok(Number::from(Integer::from(n1.gcd_ref(&n2))))
-            }
-            (Number::Float(f), _) | (_, Number::Float(f)) => {
-                let n = Number::Float(f);
-                let stub = MachineError::functor_stub(clause_name!("gcd"), 2);
-
-                Err(self.error_form(
-                    MachineError::type_error(self.heap.h(), ValidType::Integer, n),
-                    stub,
-                ))
-            }
-            (Number::Rational(r), _) | (_, Number::Rational(r)) => {
-                let n = Number::Rational(r);
-                let stub = MachineError::functor_stub(clause_name!("gcd"), 2);
-
-                Err(self.error_form(
-                    MachineError::type_error(self.heap.h(), ValidType::Integer, n),
-                    stub,
-                ))
-            }
-        }
-    }
-
-    pub(crate) fn float_pow(&self, n1: Number, n2: Number) -> Result<Number, MachineStub> {
-        let f1 = result_f(&n1, rnd_f);
-        let f2 = result_f(&n2, rnd_f);
-
-        let stub = MachineError::functor_stub(clause_name!("(**)"), 2);
-
-        let f1 = try_numeric_result!(self, f1, stub)?;
-        let f2 = try_numeric_result!(self, f2, stub)?;
-
-        let result = result_f(&Number::Float(OrderedFloat(f1.powf(f2))), rnd_f);
-
-        Ok(Number::Float(OrderedFloat(try_numeric_result!(
-            self, result, stub
-        )?)))
-    }
-
-    pub(crate) fn pow(
-        &self,
-        n1: Number,
-        n2: Number,
-        culprit: &'static str,
-    ) -> Result<Number, MachineStub> {
-        if n2.is_negative() && n1.is_zero() {
-            let stub = MachineError::functor_stub(clause_name!(culprit), 2);
-            return Err(self.error_form(MachineError::evaluation_error(EvalError::Undefined), stub));
+            )
         }
 
-        self.float_pow(n1, n2)
+        Ok(self.interms.pop().unwrap())
     }
+}
 
-    #[inline]
-    pub(crate) fn unary_float_fn_template<FloatFn>(
-        &self,
-        n1: Number,
-        f: FloatFn,
-    ) -> Result<f64, MachineStub>
-    where
-        FloatFn: Fn(f64) -> f64,
-    {
-        let stub = MachineError::functor_stub(clause_name!("is"), 2);
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::machine::mock_wam::*;
 
-        let f1 = try_numeric_result!(self, result_f(&n1, rnd_f), stub)?;
-        let f1 = result_f(&Number::Float(OrderedFloat(f(f1))), rnd_f);
+    #[test]
+    fn arith_eval_by_metacall_tests() {
+        let mut wam = MachineState::new();
+        let mut op_dir = default_op_dir();
 
-        try_numeric_result!(self, f1, stub)
-    }
+        op_dir.insert(
+            (atom!("+"), Fixity::In),
+            OpDesc::build_with(500, YFX as u8),
+        );
+        op_dir.insert(
+            (atom!("-"), Fixity::In),
+            OpDesc::build_with(500, YFX as u8),
+        );
+        op_dir.insert(
+            (atom!("-"), Fixity::Pre),
+            OpDesc::build_with(200, FY as u8),
+        );
+        op_dir.insert(
+            (atom!("*"), Fixity::In),
+            OpDesc::build_with(400, YFX as u8),
+        );
+        op_dir.insert(
+            (atom!("/"), Fixity::In),
+            OpDesc::build_with(400, YFX as u8),
+        );
 
-    #[inline]
-    pub(crate) fn sin(&self, n1: Number) -> Result<f64, MachineStub> {
-        self.unary_float_fn_template(n1, |f| f.sin())
-    }
+        let term_write_result =
+            parse_and_write_parsed_term_to_heap(&mut wam, "3 + 4 - 1 + 2.", &op_dir).unwrap();
 
-    #[inline]
-    pub(crate) fn cos(&self, n1: Number) -> Result<f64, MachineStub> {
-        self.unary_float_fn_template(n1, |f| f.cos())
-    }
+        assert_eq!(
+            wam.arith_eval_by_metacall(heap_loc_as_cell!(term_write_result.heap_loc)),
+            Ok(Number::Fixnum(Fixnum::build_with(8))),
+        );
 
-    #[inline]
-    pub(crate) fn tan(&self, n1: Number) -> Result<f64, MachineStub> {
-        self.unary_float_fn_template(n1, |f| f.tan())
-    }
+        wam.heap.clear();
 
-    #[inline]
-    pub(crate) fn log(&self, n1: Number) -> Result<f64, MachineStub> {
-        self.unary_float_fn_template(n1, |f| f.log(f64::consts::E))
-    }
+        let term_write_result =
+            parse_and_write_parsed_term_to_heap(&mut wam, "5 * 4 - 1.", &op_dir).unwrap();
 
-    #[inline]
-    pub(crate) fn exp(&self, n1: Number) -> Result<f64, MachineStub> {
-        self.unary_float_fn_template(n1, |f| f.exp())
-    }
+        assert_eq!(
+            wam.arith_eval_by_metacall(heap_loc_as_cell!(term_write_result.heap_loc)),
+            Ok(Number::Fixnum(Fixnum::build_with(19))),
+        );
 
-    #[inline]
-    pub(crate) fn asin(&self, n1: Number) -> Result<f64, MachineStub> {
-        self.unary_float_fn_template(n1, |f| f.asin())
-    }
+        wam.heap.clear();
 
-    #[inline]
-    pub(crate) fn acos(&self, n1: Number) -> Result<f64, MachineStub> {
-        self.unary_float_fn_template(n1, |f| f.acos())
-    }
+        let term_write_result =
+            parse_and_write_parsed_term_to_heap(&mut wam, "sign(-1).", &op_dir).unwrap();
 
-    #[inline]
-    pub(crate) fn atan(&self, n1: Number) -> Result<f64, MachineStub> {
-        self.unary_float_fn_template(n1, |f| f.atan())
-    }
-
-    #[inline]
-    pub(crate) fn sqrt(&self, n1: Number) -> Result<f64, MachineStub> {
-        if n1.is_negative() {
-            let stub = MachineError::functor_stub(clause_name!("is"), 2);
-            return Err(self.error_form(MachineError::evaluation_error(EvalError::Undefined), stub));
-        }
-
-        self.unary_float_fn_template(n1, |f| f.sqrt())
-    }
-
-    #[inline]
-    pub(crate) fn float(&self, n: Number) -> Result<f64, MachineStub> {
-        let stub = MachineError::functor_stub(clause_name!("is"), 2);
-        try_numeric_result!(self, result_f(&n, rnd_f), stub)
-    }
-
-    #[inline]
-    pub(crate) fn floor(&self, n1: Number) -> Number {
-        rnd_i(&n1).to_owned()
-    }
-
-    #[inline]
-    pub(crate) fn ceiling(&self, n1: Number) -> Number {
-        -self.floor(-n1)
-    }
-
-    #[inline]
-    pub(crate) fn truncate(&self, n: Number) -> Number {
-        if n.is_negative() {
-            -self.floor(n.abs())
-        } else {
-            self.floor(n)
-        }
-    }
-
-    pub(crate) fn round(&self, n: Number) -> Result<Number, MachineStub> {
-        let stub = MachineError::functor_stub(clause_name!("is"), 2);
-
-        let result = n + Number::Float(OrderedFloat(0.5f64));
-        let result = try_numeric_result!(self, result, stub)?;
-
-        Ok(self.floor(result))
-    }
-
-    pub(crate) fn shr(&self, n1: Number, n2: Number) -> Result<Number, MachineStub> {
-        let stub = MachineError::functor_stub(clause_name!("(>>)"), 2);
-
-        match (n1, n2) {
-            (Number::Fixnum(n1), Number::Fixnum(n2)) => {
-                let n1 = Integer::from(n1);
-
-                if let Ok(n2) = u32::try_from(n2) {
-                    return Ok(Number::from(n1 >> n2));
-                } else {
-                    return Ok(Number::from(n1 >> u32::max_value()));
-                }
-            }
-            (Number::Fixnum(n1), Number::Integer(n2)) => {
-                let n1 = Integer::from(n1);
-
-                match n2.to_u32() {
-                    Some(n2) => Ok(Number::from(n1 >> n2)),
-                    _ => Ok(Number::from(n1 >> u32::max_value())),
-                }
-            }
-            (Number::Integer(n1), Number::Fixnum(n2)) => match u32::try_from(n2) {
-                Ok(n2) => Ok(Number::from(Integer::from(&*n1 >> n2))),
-                _ => Ok(Number::from(Integer::from(&*n1 >> u32::max_value()))),
-            },
-            (Number::Integer(n1), Number::Integer(n2)) => match n2.to_u32() {
-                Some(n2) => Ok(Number::from(Integer::from(&*n1 >> n2))),
-                _ => Ok(Number::from(Integer::from(&*n1 >> u32::max_value()))),
-            },
-            (Number::Integer(_), n2) => Err(self.error_form(
-                MachineError::type_error(self.heap.h(), ValidType::Integer, n2),
-                stub,
-            )),
-            (Number::Fixnum(_), n2) => Err(self.error_form(
-                MachineError::type_error(self.heap.h(), ValidType::Integer, n2),
-                stub,
-            )),
-            (n1, _) => Err(self.error_form(
-                MachineError::type_error(self.heap.h(), ValidType::Integer, n1),
-                stub,
-            )),
-        }
-    }
-
-    pub(crate) fn shl(&self, n1: Number, n2: Number) -> Result<Number, MachineStub> {
-        let stub = MachineError::functor_stub(clause_name!("(<<)"), 2);
-
-        match (n1, n2) {
-            (Number::Fixnum(n1), Number::Fixnum(n2)) => {
-                let n1 = Integer::from(n1);
-
-                if let Ok(n2) = u32::try_from(n2) {
-                    return Ok(Number::from(n1 << n2));
-                } else {
-                    return Ok(Number::from(n1 << u32::max_value()));
-                }
-            }
-            (Number::Fixnum(n1), Number::Integer(n2)) => {
-                let n1 = Integer::from(n1);
-
-                match n2.to_u32() {
-                    Some(n2) => Ok(Number::from(n1 << n2)),
-                    _ => Ok(Number::from(n1 << u32::max_value())),
-                }
-            }
-            (Number::Integer(n1), Number::Fixnum(n2)) => match u32::try_from(n2) {
-                Ok(n2) => Ok(Number::from(Integer::from(&*n1 << n2))),
-                _ => Ok(Number::from(Integer::from(&*n1 << u32::max_value()))),
-            },
-            (Number::Integer(n1), Number::Integer(n2)) => match n2.to_u32() {
-                Some(n2) => Ok(Number::from(Integer::from(&*n1 << n2))),
-                _ => Ok(Number::from(Integer::from(&*n1 << u32::max_value()))),
-            },
-            (Number::Integer(_), n2) => Err(self.error_form(
-                MachineError::type_error(self.heap.h(), ValidType::Integer, n2),
-                stub,
-            )),
-            (Number::Fixnum(_), n2) => Err(self.error_form(
-                MachineError::type_error(self.heap.h(), ValidType::Integer, n2),
-                stub,
-            )),
-            (n1, _) => Err(self.error_form(
-                MachineError::type_error(self.heap.h(), ValidType::Integer, n1),
-                stub,
-            )),
-        }
-    }
-
-    pub(crate) fn bitwise_complement(&self, n1: Number) -> Result<Number, MachineStub> {
-        let stub = MachineError::functor_stub(clause_name!("(\\)"), 2);
-
-        match n1 {
-            Number::Fixnum(n) => Ok(Number::Fixnum(!n)),
-            Number::Integer(n1) => Ok(Number::from(Integer::from(!&*n1))),
-            _ => Err(self.error_form(
-                MachineError::type_error(self.heap.h(), ValidType::Integer, n1),
-                stub,
-            )),
-        }
-    }
-
-    pub(crate) fn xor(&self, n1: Number, n2: Number) -> Result<Number, MachineStub> {
-        let stub = MachineError::functor_stub(clause_name!("(xor)"), 2);
-
-        match (n1, n2) {
-            (Number::Fixnum(n1), Number::Fixnum(n2)) => Ok(Number::from(n1 ^ n2)),
-            (Number::Fixnum(n1), Number::Integer(n2)) => {
-                let n1 = Integer::from(n1);
-                Ok(Number::from(n1 ^ &*n2))
-            }
-            (Number::Integer(n1), Number::Fixnum(n2)) => Ok(Number::from(&*n1 ^ Integer::from(n2))),
-            (Number::Integer(n1), Number::Integer(n2)) => {
-                Ok(Number::from(Integer::from(&*n1 ^ &*n2)))
-            }
-            (Number::Integer(_), n2) | (Number::Fixnum(_), n2) => Err(self.error_form(
-                MachineError::type_error(self.heap.h(), ValidType::Integer, n2),
-                stub,
-            )),
-            (n1, _) => Err(self.error_form(
-                MachineError::type_error(self.heap.h(), ValidType::Integer, n1),
-                stub,
-            )),
-        }
-    }
-
-    pub(crate) fn and(&self, n1: Number, n2: Number) -> Result<Number, MachineStub> {
-        let stub = MachineError::functor_stub(clause_name!("(/\\)"), 2);
-
-        match (n1, n2) {
-            (Number::Fixnum(n1), Number::Fixnum(n2)) => Ok(Number::from(n1 & n2)),
-            (Number::Fixnum(n1), Number::Integer(n2)) => {
-                let n1 = Integer::from(n1);
-                Ok(Number::from(n1 & &*n2))
-            }
-            (Number::Integer(n1), Number::Fixnum(n2)) => Ok(Number::from(&*n1 & Integer::from(n2))),
-            (Number::Integer(n1), Number::Integer(n2)) => {
-                Ok(Number::from(Integer::from(&*n1 & &*n2)))
-            }
-            (Number::Integer(_), n2) | (Number::Fixnum(_), n2) => Err(self.error_form(
-                MachineError::type_error(self.heap.h(), ValidType::Integer, n2),
-                stub,
-            )),
-            (n1, _) => Err(self.error_form(
-                MachineError::type_error(self.heap.h(), ValidType::Integer, n1),
-                stub,
-            )),
-        }
-    }
-
-    pub(crate) fn or(&self, n1: Number, n2: Number) -> Result<Number, MachineStub> {
-        let stub = MachineError::functor_stub(clause_name!("(\\/)"), 2);
-
-        match (n1, n2) {
-            (Number::Fixnum(n1), Number::Fixnum(n2)) => Ok(Number::from(n1 | n2)),
-            (Number::Fixnum(n1), Number::Integer(n2)) => {
-                let n1 = Integer::from(n1);
-                Ok(Number::from(n1 | &*n2))
-            }
-            (Number::Integer(n1), Number::Fixnum(n2)) => Ok(Number::from(&*n1 | Integer::from(n2))),
-            (Number::Integer(n1), Number::Integer(n2)) => {
-                Ok(Number::from(Integer::from(&*n1 | &*n2)))
-            }
-            (Number::Integer(_), n2) | (Number::Fixnum(_), n2) => Err(self.error_form(
-                MachineError::type_error(self.heap.h(), ValidType::Integer, n2),
-                stub,
-            )),
-            (n1, _) => Err(self.error_form(
-                MachineError::type_error(self.heap.h(), ValidType::Integer, n1),
-                stub,
-            )),
-        }
-    }
-
-    pub(crate) fn modulus(&self, x: Number, y: Number) -> Result<Number, MachineStub> {
-        let stub = MachineError::functor_stub(clause_name!("(mod)"), 2);
-
-        match (x, y) {
-            (Number::Fixnum(n1), Number::Fixnum(n2)) => {
-                if n2 == 0 {
-                    Err(self
-                        .error_form(MachineError::evaluation_error(EvalError::ZeroDivisor), stub))
-                } else {
-                    Ok(Number::from(n1.rem_floor(n2)))
-                }
-            }
-            (Number::Fixnum(n1), Number::Integer(n2)) => {
-                if &*n2 == &0 {
-                    Err(self
-                        .error_form(MachineError::evaluation_error(EvalError::ZeroDivisor), stub))
-                } else {
-                    let n1 = Integer::from(n1);
-                    Ok(Number::from(
-                        <(Integer, Integer)>::from(n1.div_rem_floor_ref(&*n2)).1,
-                    ))
-                }
-            }
-            (Number::Integer(n1), Number::Fixnum(n2)) => {
-                if n2 == 0 {
-                    Err(self
-                        .error_form(MachineError::evaluation_error(EvalError::ZeroDivisor), stub))
-                } else {
-                    let n2 = Integer::from(n2);
-                    Ok(Number::from(
-                        <(Integer, Integer)>::from(n1.div_rem_floor_ref(&n2)).1,
-                    ))
-                }
-            }
-            (Number::Integer(x), Number::Integer(y)) => {
-                if &*y == &0 {
-                    Err(self
-                        .error_form(MachineError::evaluation_error(EvalError::ZeroDivisor), stub))
-                } else {
-                    Ok(Number::from(
-                        <(Integer, Integer)>::from(x.div_rem_floor_ref(&*y)).1,
-                    ))
-                }
-            }
-            (Number::Integer(_), n2) | (Number::Fixnum(_), n2) => Err(self.error_form(
-                MachineError::type_error(self.heap.h(), ValidType::Integer, n2),
-                stub,
-            )),
-            (n1, _) => Err(self.error_form(
-                MachineError::type_error(self.heap.h(), ValidType::Integer, n1),
-                stub,
-            )),
-        }
-    }
-
-    pub(crate) fn remainder(&self, n1: Number, n2: Number) -> Result<Number, MachineStub> {
-        let stub = MachineError::functor_stub(clause_name!("(rem)"), 2);
-
-        match (n1, n2) {
-            (Number::Fixnum(n1), Number::Fixnum(n2)) => {
-                if n2 == 0 {
-                    Err(self
-                        .error_form(MachineError::evaluation_error(EvalError::ZeroDivisor), stub))
-                } else {
-                    Ok(Number::from(n1 % n2))
-                }
-            }
-            (Number::Fixnum(n1), Number::Integer(n2)) => {
-                if &*n2 == &0 {
-                    Err(self
-                        .error_form(MachineError::evaluation_error(EvalError::ZeroDivisor), stub))
-                } else {
-                    let n1 = Integer::from(n1);
-                    Ok(Number::from(n1 % &*n2))
-                }
-            }
-            (Number::Integer(n1), Number::Fixnum(n2)) => {
-                if n2 == 0 {
-                    Err(self
-                        .error_form(MachineError::evaluation_error(EvalError::ZeroDivisor), stub))
-                } else {
-                    let n2 = Integer::from(n2);
-                    Ok(Number::from(&*n1 % n2))
-                }
-            }
-            (Number::Integer(n1), Number::Integer(n2)) => {
-                if &*n2 == &0 {
-                    Err(self
-                        .error_form(MachineError::evaluation_error(EvalError::ZeroDivisor), stub))
-                } else {
-                    Ok(Number::from(Integer::from(&*n1 % &*n2)))
-                }
-            }
-            (Number::Integer(_), n2) | (Number::Fixnum(_), n2) => Err(self.error_form(
-                MachineError::type_error(self.heap.h(), ValidType::Integer, n2),
-                stub,
-            )),
-            (n1, _) => Err(self.error_form(
-                MachineError::type_error(self.heap.h(), ValidType::Integer, n1),
-                stub,
-            )),
-        }
-    }
-
-    pub(crate) fn max(&self, n1: Number, n2: Number) -> Result<Number, MachineStub> {
-        match (n1, n2) {
-            (Number::Fixnum(n1), Number::Fixnum(n2)) => {
-                if n1 > n2 {
-                    Ok(Number::Fixnum(n1))
-                } else {
-                    Ok(Number::Fixnum(n2))
-                }
-            }
-            (Number::Fixnum(n1), Number::Integer(n2)) => {
-                if &*n2 > &n1 {
-                    Ok(Number::Integer(n2))
-                } else {
-                    Ok(Number::Fixnum(n1))
-                }
-            }
-            (Number::Integer(n1), Number::Fixnum(n2)) => {
-                if &*n1 > &n2 {
-                    Ok(Number::Integer(n1))
-                } else {
-                    Ok(Number::Fixnum(n2))
-                }
-            }
-            (Number::Integer(n1), Number::Integer(n2)) => {
-                if n1 > n2 {
-                    Ok(Number::Integer(n1))
-                } else {
-                    Ok(Number::Integer(n2))
-                }
-            }
-            (n1, n2) => {
-                let stub = MachineError::functor_stub(clause_name!("max"), 2);
-
-                let f1 = try_numeric_result!(self, result_f(&n1, rnd_f), stub)?;
-                let f2 = try_numeric_result!(self, result_f(&n2, rnd_f), stub)?;
-
-                Ok(Number::Float(cmp::max(OrderedFloat(f1), OrderedFloat(f2))))
-            }
-        }
-    }
-
-    pub(crate) fn min(&self, n1: Number, n2: Number) -> Result<Number, MachineStub> {
-        match (n1, n2) {
-            (Number::Fixnum(n1), Number::Fixnum(n2)) => {
-                if n1 < n2 {
-                    Ok(Number::Fixnum(n1))
-                } else {
-                    Ok(Number::Fixnum(n2))
-                }
-            }
-            (Number::Fixnum(n1), Number::Integer(n2)) => {
-                if &*n2 < &n1 {
-                    Ok(Number::Integer(n2))
-                } else {
-                    Ok(Number::Fixnum(n1))
-                }
-            }
-            (Number::Integer(n1), Number::Fixnum(n2)) => {
-                if &*n1 < &n2 {
-                    Ok(Number::Integer(n1))
-                } else {
-                    Ok(Number::Fixnum(n2))
-                }
-            }
-            (Number::Integer(n1), Number::Integer(n2)) => {
-                if n1 < n2 {
-                    Ok(Number::Integer(n1))
-                } else {
-                    Ok(Number::Integer(n2))
-                }
-            }
-            (n1, n2) => {
-                let stub = MachineError::functor_stub(clause_name!("max"), 2);
-
-                let f1 = try_numeric_result!(self, result_f(&n1, rnd_f), stub)?;
-                let f2 = try_numeric_result!(self, result_f(&n2, rnd_f), stub)?;
-
-                Ok(Number::Float(cmp::min(OrderedFloat(f1), OrderedFloat(f2))))
-            }
-        }
-    }
-
-    pub(crate) fn sign(&self, n: Number) -> Number {
-        if n.is_positive() {
-            Number::from(1)
-        } else if n.is_negative() {
-            Number::from(-1)
-        } else {
-            Number::from(0)
-        }
+        assert_eq!(
+            wam.arith_eval_by_metacall(heap_loc_as_cell!(term_write_result.heap_loc)),
+            Ok(Number::Fixnum(Fixnum::build_with(-1)))
+        );
     }
 }

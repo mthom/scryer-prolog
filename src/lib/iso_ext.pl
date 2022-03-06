@@ -14,7 +14,7 @@
                     partial_string_tail/2,
                     setup_call_cleanup/3,
                     call_nth/2,
-                    variant/2,
+%                   variant/2,
                     copy_term_nat/2]).
 
 :- use_module(library(error), [can_be/2,
@@ -22,10 +22,7 @@
                                instantiation_error/1,
                                type_error/3]).
 
-
-:- meta_predicate(call_cleanup(0, 0)).
-
-:- meta_predicate(setup_call_cleanup(0, 0, 0)).
+:- use_module(library(lists), [maplist/3]).
 
 :- meta_predicate(forall(0, 0)).
 
@@ -55,14 +52,17 @@ bb_get(Key, Value) :-
     ).
 
 
+% setup_call_cleanup.
+
+:- meta_predicate(call_cleanup(0, 0)).
+
 call_cleanup(G, C) :- setup_call_cleanup(true, G, C).
 
-
-% setup_call_cleanup.
+:- meta_predicate(setup_call_cleanup(0, 0, 0)).
 
 setup_call_cleanup(S, G, C) :-
     '$get_b_value'(B),
-    call(S),
+    '$call'(S),
     '$set_cp_by_default'(B),
     '$get_current_block'(Bb),
     (  C = _:CC,
@@ -70,6 +70,8 @@ setup_call_cleanup(S, G, C) :-
        instantiation_error(setup_call_cleanup/3)
     ;  '$call_with_default_policy'(scc_helper(C, G, Bb))
     ).
+
+:- meta_predicate(scc_helper(?,0,?)).
 
 :- non_counted_backtracking scc_helper/3.
 scc_helper(C, G, Bb) :-
@@ -96,7 +98,8 @@ scc_helper(_, _, _) :-
 
 :- non_counted_backtracking run_cleaners_with_handling/0.
 run_cleaners_with_handling :-
-    '$get_scc_cleaner'(C), '$get_level'(B),
+    '$get_scc_cleaner'(C),
+    '$get_level'(B),
     '$call_with_default_policy'(catch(C, _, true)),
     '$set_cp_by_default'(B),
     '$call_with_default_policy'(run_cleaners_with_handling).
@@ -134,16 +137,31 @@ handle_ile(B, E, _) :-
 :- meta_predicate(call_with_inference_limit(0, ?, ?)).
 
 call_with_inference_limit(G, L, R) :-
+    (  integer(L) ->
+       (  L < 0 ->
+          domain_error(not_less_than_zero, L, call_with_inference_limit/3)
+       ;  true
+       )
+    ;  var(L) ->
+       instantiation_error(call_with_inference_limit/3)
+    ;  type_error(integer, L, call_with_inference_limit/3)
+    ),
     '$get_current_block'(Bb),
     '$get_b_value'(B),
     '$call_with_default_policy'(call_with_inference_limit(G, L, R, Bb, B)),
     '$remove_call_policy_check'(B).
 
+install_inference_counter(B, L, Count0) :-
+    '$install_inference_counter'(B, L, Count0).
+
+:- meta_predicate(call_with_inference_limit(0,?,?,?,?)).
+
 :- non_counted_backtracking call_with_inference_limit/5.
+
 call_with_inference_limit(G, L, R, Bb, B) :-
     '$install_new_block'(NBb),
     '$install_inference_counter'(B, L, Count0),
-    call(G),
+    '$call'(G),
     '$inference_level'(R, B),
     '$remove_inference_counter'(B, Count1),
     '$call_with_default_policy'(is(Diff, L - (Count1 - Count0))),
@@ -160,14 +178,12 @@ call_with_inference_limit(_, _, R, Bb, B) :-
     '$erase_ball',
     '$call_with_default_policy'(handle_ile(B, Ball, R)).
 
-variant(X, Y) :- '$variant'(X, Y).
-
 partial_string(String, L, L0) :-
     (  String == [] ->
        L = L0
     ;  catch(atom_chars(Atom, String),
-         error(E, _),
-         throw(error(E, partial_string/3))),
+             error(E, _),
+             throw(error(E, partial_string/3))),
        '$create_partial_string'(Atom, L, L0)
     ).
 

@@ -1,33 +1,21 @@
-use prolog_parser::ast::*;
-use prolog_parser::clause_name;
-use prolog_parser::tabled_rc::*;
+use crate::atom_table::*;
+use crate::parser::ast::*;
 
 use crate::forms::*;
 use crate::instructions::*;
 
-use crate::rug::Integer;
 use indexmap::IndexMap;
-
 use slice_deque::{sdeq, SliceDeque};
 
-use std::convert::TryFrom;
+use std::collections::VecDeque;
 use std::hash::Hash;
 use std::iter::once;
 use std::mem;
-use std::rc::Rc;
-
-#[derive(Debug, Clone, Copy)]
-pub(crate) enum IndexingCodePtr {
-    External(usize), // the index points past the indexing instruction prelude.
-    DynamicExternal(usize), // an External index of a dynamic predicate, potentially invalidated by retraction.
-    Fail,
-    Internal(usize), // the index points into the indexing instruction prelude.
-}
 
 #[derive(Debug, Clone, Copy)]
 enum OptArgIndexKeyType {
     Structure,
-    Constant,
+    Literal,
     // List,
 }
 
@@ -35,7 +23,7 @@ impl OptArgIndexKey {
     #[inline]
     fn has_key_type(&self, key_type: OptArgIndexKeyType) -> bool {
         match (self, key_type) {
-            (OptArgIndexKey::Constant(..), OptArgIndexKeyType::Constant)
+            (OptArgIndexKey::Literal(..), OptArgIndexKeyType::Literal)
             | (OptArgIndexKey::Structure(..), OptArgIndexKeyType::Structure)
             // | (OptArgIndexKey::List(..), OptArgIndexKeyType::List)
             => true,
@@ -45,11 +33,12 @@ impl OptArgIndexKey {
 }
 
 #[inline]
-fn search_skeleton_for_first_key_type(
-    skeleton: &[ClauseIndexInfo],
+fn search_skeleton_for_first_key_type<'a>(
+    skeleton: &'a [ClauseIndexInfo],
+    retracted_dynamic_clauses: &'a Option<Vec<ClauseIndexInfo>>,
     key_type: OptArgIndexKeyType,
     append_or_prepend: AppendOrPrepend,
-) -> Option<&OptArgIndexKey> {
+) -> Option<&'a OptArgIndexKey> {
     if append_or_prepend.is_append() {
         for clause_index_info in skeleton.iter().rev() {
             if clause_index_info.opt_arg_index_key.has_key_type(key_type) {
@@ -64,11 +53,20 @@ fn search_skeleton_for_first_key_type(
         }
     }
 
+    if let Some(retracted_clauses) = retracted_dynamic_clauses {
+        for clause_index_info in retracted_clauses.iter().rev() {
+            if clause_index_info.opt_arg_index_key.has_key_type(key_type) {
+                return Some(&clause_index_info.opt_arg_index_key);
+            }
+        }
+    }
+
     None
 }
 
 struct IndexingCodeMergingPtr<'a> {
     skeleton: &'a mut [ClauseIndexInfo],
+    retracted_dynamic_clauses: &'a Option<Vec<ClauseIndexInfo>>,
     indexing_code: &'a mut Vec<IndexingLine>,
     offset: usize,
     append_or_prepend: AppendOrPrepend,
@@ -79,22 +77,22 @@ impl<'a> IndexingCodeMergingPtr<'a> {
     #[inline]
     fn new(
         skeleton: &'a mut [ClauseIndexInfo],
+        retracted_dynamic_clauses: &'a Option<Vec<ClauseIndexInfo>>,
         indexing_code: &'a mut Vec<IndexingLine>,
         append_or_prepend: AppendOrPrepend,
     ) -> Self {
         let is_dynamic = match &indexing_code[0] {
-            IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(_, v, ..)) => {
-                match v {
-                    IndexingCodePtr::External(_) => false,
-                    IndexingCodePtr::DynamicExternal(_) => true,
-                    _ => unreachable!()
-                }
-            }
-            _ => unreachable!()
+            IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(_, v, ..)) => match v {
+                IndexingCodePtr::External(_) => false,
+                IndexingCodePtr::DynamicExternal(_) => true,
+                _ => unreachable!(),
+            },
+            _ => unreachable!(),
         };
 
         Self {
             skeleton,
+            retracted_dynamic_clauses,
             indexing_code,
             offset: 0,
             append_or_prepend,
@@ -105,15 +103,16 @@ impl<'a> IndexingCodeMergingPtr<'a> {
     fn internalize_constant(&mut self, constant_ptr: IndexingCodePtr) {
         let constant_key = search_skeleton_for_first_key_type(
             self.skeleton,
-            OptArgIndexKeyType::Constant,
+            self.retracted_dynamic_clauses,
+            OptArgIndexKeyType::Literal,
             self.append_or_prepend,
         );
 
         let mut constants = IndexMap::new();
 
         match constant_key {
-            Some(OptArgIndexKey::Constant(_, _, ref constant, _)) => {
-                constants.insert(constant.clone(), constant_ptr);
+            Some(OptArgIndexKey::Literal(_, _, constant, _)) => {
+                constants.insert(*constant, constant_ptr);
             }
             _ => {
                 if let IndexingCodePtr::DynamicExternal(_) = constant_ptr {
@@ -145,7 +144,7 @@ impl<'a> IndexingCodeMergingPtr<'a> {
     fn add_static_indexed_choice_for_constant(
         &mut self,
         external: usize,
-        constant: Constant,
+        constant: Literal,
         index: usize,
     ) {
         let third_level_index = if self.append_or_prepend.is_append() {
@@ -179,7 +178,7 @@ impl<'a> IndexingCodeMergingPtr<'a> {
     fn add_dynamic_indexed_choice_for_constant(
         &mut self,
         external: usize,
-        constant: Constant,
+        constant: Literal,
         index: usize,
     ) {
         let third_level_index = if self.append_or_prepend.is_append() {
@@ -232,8 +231,8 @@ impl<'a> IndexingCodeMergingPtr<'a> {
 
     fn index_overlapping_constant(
         &mut self,
-        orig_constant: &Constant,
-        overlapping_constant: Constant,
+        orig_constant: Literal,
+        overlapping_constant: Literal,
         index: usize,
     ) {
         loop {
@@ -252,7 +251,7 @@ impl<'a> IndexingCodeMergingPtr<'a> {
                         }
                         IndexingCodePtr::DynamicExternal(_) | IndexingCodePtr::External(_) => {
                             let mut constants = IndexMap::new();
-                            constants.insert(orig_constant.clone(), *c);
+                            constants.insert(orig_constant, *c);
 
                             *c = IndexingCodePtr::Internal(indexing_code_len);
 
@@ -282,10 +281,18 @@ impl<'a> IndexingCodeMergingPtr<'a> {
                             );
                         }
                         Some(IndexingCodePtr::DynamicExternal(o)) => {
-                            self.add_dynamic_indexed_choice_for_constant(o, overlapping_constant, index);
+                            self.add_dynamic_indexed_choice_for_constant(
+                                o,
+                                overlapping_constant,
+                                index,
+                            );
                         }
                         Some(IndexingCodePtr::External(o)) => {
-                            self.add_static_indexed_choice_for_constant(o, overlapping_constant, index);
+                            self.add_static_indexed_choice_for_constant(
+                                o,
+                                overlapping_constant,
+                                index,
+                            );
                         }
                         Some(IndexingCodePtr::Internal(o)) => {
                             self.offset += o;
@@ -307,7 +314,7 @@ impl<'a> IndexingCodeMergingPtr<'a> {
         }
     }
 
-    fn index_constant(&mut self, constant: Constant, index: usize) {
+    fn index_constant(&mut self, constant: Literal, index: usize) {
         loop {
             let indexing_code_len = self.indexing_code.len();
 
@@ -338,10 +345,16 @@ impl<'a> IndexingCodeMergingPtr<'a> {
                 IndexingLine::Indexing(IndexingInstruction::SwitchOnConstant(constants)) => {
                     match constants.get(&constant).cloned() {
                         None | Some(IndexingCodePtr::Fail) if self.is_dynamic => {
-                            constants.insert(constant, IndexingCodePtr::DynamicExternal(index));
+                            constants.insert(
+                                constant,
+                                IndexingCodePtr::DynamicExternal(index),
+                            );
                         }
                         None | Some(IndexingCodePtr::Fail) => {
-                            constants.insert(constant, IndexingCodePtr::External(index));
+                            constants.insert(
+                                constant,
+                                IndexingCodePtr::External(index),
+                            );
                         }
                         Some(IndexingCodePtr::DynamicExternal(o)) => {
                             self.add_dynamic_indexed_choice_for_constant(o, constant, index);
@@ -372,6 +385,7 @@ impl<'a> IndexingCodeMergingPtr<'a> {
     fn internalize_structure(&mut self, structure_ptr: IndexingCodePtr) {
         let structure_key = search_skeleton_for_first_key_type(
             self.skeleton,
+            self.retracted_dynamic_clauses,
             OptArgIndexKeyType::Structure,
             self.append_or_prepend,
         );
@@ -379,8 +393,8 @@ impl<'a> IndexingCodeMergingPtr<'a> {
         let mut structures = IndexMap::new();
 
         match structure_key {
-            Some(OptArgIndexKey::Structure(_, _, ref name, ref arity)) => {
-                structures.insert((name.clone(), *arity), structure_ptr);
+            Some(OptArgIndexKey::Structure(_, _, name, arity)) => {
+                structures.insert((*name, *arity), structure_ptr);
             }
             _ => {
                 if let IndexingCodePtr::DynamicExternal(_) = structure_ptr {
@@ -428,8 +442,7 @@ impl<'a> IndexingCodeMergingPtr<'a> {
         };
 
         let indexing_code_len = self.indexing_code.len();
-        self.indexing_code
-            .push(IndexingLine::IndexedChoice(third_level_index));
+        self.indexing_code.push(IndexingLine::IndexedChoice(third_level_index));
 
         match &mut self.indexing_code[self.offset] {
             IndexingLine::Indexing(IndexingInstruction::SwitchOnStructure(ref mut structures)) => {
@@ -599,6 +612,7 @@ impl<'a> IndexingCodeMergingPtr<'a> {
 pub(crate) fn merge_clause_index(
     target_indexing_code: &mut Vec<IndexingLine>,
     skeleton: &mut [ClauseIndexInfo], // the clause to be merged is the last element in the skeleton.
+    retracted_clauses: &Option<Vec<ClauseIndexInfo>>,
     new_clause_loc: usize,            // the absolute location of the new clause in the code vector.
     append_or_prepend: AppendOrPrepend,
 ) {
@@ -609,27 +623,28 @@ pub(crate) fn merge_clause_index(
 
     let mut merging_ptr = IndexingCodeMergingPtr::new(
         skeleton,
+        retracted_clauses,
         target_indexing_code,
         append_or_prepend,
     );
 
     match &opt_arg_index_key {
-        OptArgIndexKey::Constant(_, index_loc, ref constant, ref overlapping_constants) => {
+        OptArgIndexKey::Literal(_, index_loc, constant, ref overlapping_constants) => {
             let offset = new_clause_loc - index_loc + 1;
-            merging_ptr.index_constant(constant.clone(), offset);
+            merging_ptr.index_constant(*constant, offset);
 
             for overlapping_constant in overlapping_constants {
                 merging_ptr.offset = 0;
 
                 merging_ptr.index_overlapping_constant(
-                    constant,
-                    overlapping_constant.clone(),
+                    *constant,
+                    *overlapping_constant,
                     offset,
                 );
             }
         }
-        OptArgIndexKey::Structure(_, index_loc, ref name, ref arity) => {
-            merging_ptr.index_structure((name.clone(), *arity), new_clause_loc - index_loc + 1);
+        OptArgIndexKey::Structure(_, index_loc, name, arity) => {
+            merging_ptr.index_structure((*name, *arity), new_clause_loc - index_loc + 1);
         }
         OptArgIndexKey::List(_, index_loc) => {
             merging_ptr.index_list(new_clause_loc - index_loc + 1);
@@ -650,13 +665,13 @@ pub(crate) fn merge_clause_index(
 }
 
 pub(crate) fn remove_constant_indices(
-    constant: &Constant,
-    overlapping_constants: &[Constant],
+    constant: Literal,
+    overlapping_constants: &[Literal],
     indexing_code: &mut Vec<IndexingLine>,
     offset: usize,
 ) {
     let mut index = 0;
-    let iter = once(constant).chain(overlapping_constants.iter());
+    let iter = once(&constant).chain(overlapping_constants.iter());
 
     match &mut indexing_code[index] {
         IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(_, _, ref mut c, ..)) => {
@@ -688,11 +703,13 @@ pub(crate) fn remove_constant_indices(
                 )) => {
                     constants_index = index;
 
-                    match constants.get(constant).cloned() {
-                        Some(IndexingCodePtr::DynamicExternal(_)) |
-                        Some(IndexingCodePtr::External(_)) |
-                        Some(IndexingCodePtr::Fail) => {
-                            constants.remove(constant);
+                    let constant = *constant;
+
+                    match constants.get(&constant).cloned() {
+                        Some(IndexingCodePtr::DynamicExternal(_))
+                        | Some(IndexingCodePtr::External(_))
+                        | Some(IndexingCodePtr::Fail) => {
+                            constants.remove(&constant);
                             break;
                         }
                         Some(IndexingCodePtr::Internal(o)) => {
@@ -704,13 +721,14 @@ pub(crate) fn remove_constant_indices(
                     }
                 }
                 IndexingLine::IndexedChoice(ref mut indexed_choice_instrs) => {
-                    StaticCodeIndices::remove_instruction_with_offset(indexed_choice_instrs, offset);
+                    StaticCodeIndices::remove_instruction_with_offset(
+                        indexed_choice_instrs,
+                        offset,
+                    );
 
                     if indexed_choice_instrs.len() == 1 {
                         if let Some(indexed_choice_instr) = indexed_choice_instrs.pop_back() {
-                            let ext = IndexingCodePtr::External(
-                                indexed_choice_instr.offset()
-                            );
+                            let ext = IndexingCodePtr::External(indexed_choice_instr.offset());
 
                             match &mut indexing_code[constants_index] {
                                 IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(
@@ -724,7 +742,7 @@ pub(crate) fn remove_constant_indices(
                                 IndexingLine::Indexing(IndexingInstruction::SwitchOnConstant(
                                     ref mut constants,
                                 )) => {
-                                    constants.insert(constant.clone(), ext);
+                                    constants.insert(*constant, ext);
                                 }
                                 _ => {
                                     unreachable!()
@@ -736,7 +754,10 @@ pub(crate) fn remove_constant_indices(
                     break;
                 }
                 IndexingLine::DynamicIndexedChoice(ref mut indexed_choice_instrs) => {
-                    DynamicCodeIndices::remove_instruction_with_offset(indexed_choice_instrs, offset);
+                    DynamicCodeIndices::remove_instruction_with_offset(
+                        indexed_choice_instrs,
+                        offset,
+                    );
 
                     if indexed_choice_instrs.len() == 1 {
                         if let Some(indexed_choice_instr) = indexed_choice_instrs.pop_back() {
@@ -754,7 +775,7 @@ pub(crate) fn remove_constant_indices(
                                 IndexingLine::Indexing(IndexingInstruction::SwitchOnConstant(
                                     ref mut constants,
                                 )) => {
-                                    constants.insert(constant.clone(), ext);
+                                    constants.insert(*constant, ext);
                                 }
                                 _ => {
                                     unreachable!()
@@ -790,7 +811,7 @@ pub(crate) fn remove_constant_indices(
 }
 
 pub(crate) fn remove_structure_index(
-    name: &ClauseName,
+    name: Atom,
     arity: usize,
     indexing_code: &mut Vec<IndexingLine>,
     offset: usize,
@@ -825,7 +846,8 @@ pub(crate) fn remove_structure_index(
                 structures_index = index;
 
                 match structures.get(&(name.clone(), arity)).cloned() {
-                    Some(IndexingCodePtr::DynamicExternal(_)) | Some(IndexingCodePtr::External(_)) => {
+                    Some(IndexingCodePtr::DynamicExternal(_))
+                    | Some(IndexingCodePtr::External(_)) => {
                         structures.remove(&(name.clone(), arity));
                         break;
                     }
@@ -1012,27 +1034,14 @@ pub(crate) fn remove_index(
     clause_loc: usize,
 ) {
     match opt_arg_index_key {
-        OptArgIndexKey::Constant(_, _, ref constant, ref overlapping_constants) => {
-            remove_constant_indices(
-                constant,
-                overlapping_constants,
-                indexing_code,
-                clause_loc,
-            );
+        OptArgIndexKey::Literal(_, _, constant, ref overlapping_constants) => {
+            remove_constant_indices(*constant, overlapping_constants, indexing_code, clause_loc);
         }
-        OptArgIndexKey::Structure(_, _, ref name, ref arity) => {
-            remove_structure_index(
-                name,
-                *arity,
-                indexing_code,
-                clause_loc,
-            );
+        OptArgIndexKey::Structure(_, _, name, arity) => {
+            remove_structure_index(*name, *arity, indexing_code, clause_loc);
         }
         OptArgIndexKey::List(..) => {
-            remove_list_index(
-                indexing_code,
-                clause_loc,
-            );
+            remove_list_index(indexing_code, clause_loc);
         }
         OptArgIndexKey::None => {
             unreachable!()
@@ -1076,49 +1085,52 @@ fn uncap_choice_seq_with_try(prelude: &mut [IndexedChoiceInstruction]) {
     });
 }
 
-pub(crate) fn constant_key_alternatives(constant: &Constant, atom_tbl: TabledData<Atom>) -> Vec<Constant> {
+pub(crate) fn constant_key_alternatives(
+    constant: Literal,
+    atom_tbl: &mut AtomTable,
+    // arena: &mut Arena,
+) -> Vec<Literal> {
     let mut constants = vec![];
 
     match constant {
-        Constant::Atom(ref name, ref op) => {
-            if name.is_char() {
-                let c = name.as_str().chars().next().unwrap();
-                constants.push(Constant::Char(c));
-            }
-
-            if op.is_some() {
-                constants.push(Constant::Atom(name.clone(), None));
+        Literal::Atom(ref name) => {
+            if let Some(c) = name.as_char() {
+                constants.push(Literal::Char(c));
             }
         }
-        Constant::Char(c) => {
-            let atom = clause_name!(c.to_string(), atom_tbl);
-            constants.push(Constant::Atom(atom, None));
+        Literal::Char(c) => {
+            let atom = atom_tbl.build_with(&c.to_string());
+            constants.push(Literal::Atom(atom));
         }
-        Constant::Fixnum(ref n) => {
-            constants.push(Constant::Integer(Rc::new(Integer::from(*n))));
+        /*
+        Literal::Fixnum(ref n) => {
+            constants.push(Literal::Integer(arena_alloc!(n, arena))); //Rc::new(Integer::from(*n))));
 
+            /*
             if *n >= 0 {
                 if let Ok(n) = usize::try_from(*n) {
-                    constants.push(Constant::Usize(n));
+                    constants.push(Literal::Usize(n));
                 }
             }
+            */
         }
-        Constant::Integer(ref n) => {
+        */
+        Literal::Integer(ref n) => {
             if let Some(n) = n.to_isize() {
-                constants.push(Constant::Fixnum(n));
-            }
-
-            if let Some(n) = n.to_usize() {
-                constants.push(Constant::Usize(n));
+                Fixnum::build_with_checked(n as i64).map(|n| {
+                    constants.push(Literal::Fixnum(n));
+                }).unwrap();
             }
         }
-        Constant::Usize(n) => {
-            constants.push(Constant::Integer(Rc::new(Integer::from(*n))));
+        /*
+        Literal::Usize(n) => {
+            constants.push(Literal::Integer(Rc::new(Integer::from(*n))));
 
             if let Ok(n) = isize::try_from(*n) {
-                constants.push(Constant::Fixnum(n));
+                constants.push(Literal::Fixnum(n));
             }
         }
+        */
         _ => {}
     }
 
@@ -1127,16 +1139,16 @@ pub(crate) fn constant_key_alternatives(constant: &Constant, atom_tbl: TabledDat
 
 #[derive(Debug)]
 pub(crate) struct StaticCodeIndices {
-    constants: IndexMap<Constant, SliceDeque<IndexedChoiceInstruction>>,
-    lists: SliceDeque<IndexedChoiceInstruction>,
-    structures: IndexMap<(ClauseName, usize), SliceDeque<IndexedChoiceInstruction>>,
+    constants: IndexMap<Literal, VecDeque<IndexedChoiceInstruction>>,
+    lists: VecDeque<IndexedChoiceInstruction>,
+    structures: IndexMap<(Atom, usize), VecDeque<IndexedChoiceInstruction>>,
 }
 
 #[derive(Debug)]
 pub(crate) struct DynamicCodeIndices {
-    constants: IndexMap<Constant, SliceDeque<usize>>,
-    lists: SliceDeque<usize>,
-    structures: IndexMap<(ClauseName, usize), SliceDeque<usize>>,
+    constants: IndexMap<Literal, VecDeque<usize>>,
+    lists: VecDeque<usize>,
+    structures: IndexMap<(Atom, usize), VecDeque<usize>>,
 }
 
 pub(crate) trait Indexer {
@@ -1144,32 +1156,29 @@ pub(crate) trait Indexer {
 
     fn new() -> Self;
 
-    fn constants(&mut self) -> &mut IndexMap<Constant, SliceDeque<Self::ThirdLevelIndex>>;
-    fn lists(&mut self) -> &mut SliceDeque<Self::ThirdLevelIndex>;
-    fn structures(&mut self) -> &mut IndexMap<(ClauseName, usize), SliceDeque<Self::ThirdLevelIndex>>;
+    fn constants(&mut self) -> &mut IndexMap<Literal, VecDeque<Self::ThirdLevelIndex>>;
+    fn lists(&mut self) -> &mut VecDeque<Self::ThirdLevelIndex>;
+    fn structures(&mut self) -> &mut IndexMap<(Atom, usize), VecDeque<Self::ThirdLevelIndex>>;
 
     fn compute_index(is_initial_index: bool, index: usize) -> Self::ThirdLevelIndex;
 
     fn second_level_index<IndexKey: Eq + Hash>(
-        indices: IndexMap<IndexKey, SliceDeque<Self::ThirdLevelIndex>>,
-        prelude: &mut SliceDeque<IndexingLine>,
+        indices: IndexMap<IndexKey, VecDeque<Self::ThirdLevelIndex>>,
+        prelude: &mut VecDeque<IndexingLine>,
     ) -> IndexMap<IndexKey, IndexingCodePtr>;
 
     fn switch_on<IndexKey: Eq + Hash>(
         instr_fn: impl FnMut(IndexMap<IndexKey, IndexingCodePtr>) -> IndexingInstruction,
-        index: &mut IndexMap<IndexKey, SliceDeque<Self::ThirdLevelIndex>>,
-        prelude: &mut SliceDeque<IndexingLine>,
+        index: &mut IndexMap<IndexKey, VecDeque<Self::ThirdLevelIndex>>,
+        prelude: &mut VecDeque<IndexingLine>,
     ) -> IndexingCodePtr;
 
     fn switch_on_list(
-        lists: &mut SliceDeque<Self::ThirdLevelIndex>,
-        prelude: &mut SliceDeque<IndexingLine>,
+        lists: &mut VecDeque<Self::ThirdLevelIndex>,
+        prelude: &mut VecDeque<IndexingLine>,
     ) -> IndexingCodePtr;
 
-    fn remove_instruction_with_offset(
-        code: &mut SliceDeque<Self::ThirdLevelIndex>,
-        offset: usize,
-    );
+    fn remove_instruction_with_offset(code: &mut SliceDeque<Self::ThirdLevelIndex>, offset: usize);
 
     fn var_offset_wrapper(var_offset: usize) -> IndexingCodePtr;
 }
@@ -1181,23 +1190,23 @@ impl Indexer for StaticCodeIndices {
     fn new() -> Self {
         Self {
             constants: IndexMap::new(),
-            lists: sdeq![],
+            lists: VecDeque::new(),
             structures: IndexMap::new(),
         }
     }
 
     #[inline]
-    fn constants(&mut self) -> &mut IndexMap<Constant, SliceDeque<IndexedChoiceInstruction>> {
+    fn constants(&mut self) -> &mut IndexMap<Literal, VecDeque<IndexedChoiceInstruction>> {
         &mut self.constants
     }
 
     #[inline]
-    fn lists(&mut self) -> &mut SliceDeque<IndexedChoiceInstruction> {
+    fn lists(&mut self) -> &mut VecDeque<IndexedChoiceInstruction> {
         &mut self.lists
     }
 
     #[inline]
-    fn structures(&mut self) -> &mut IndexMap<(ClauseName, usize), SliceDeque<IndexedChoiceInstruction>> {
+    fn structures(&mut self) -> &mut IndexMap<(Atom, usize), VecDeque<IndexedChoiceInstruction>> {
         &mut self.structures
     }
 
@@ -1210,18 +1219,18 @@ impl Indexer for StaticCodeIndices {
     }
 
     fn second_level_index<IndexKey: Eq + Hash>(
-        indices: IndexMap<IndexKey, SliceDeque<IndexedChoiceInstruction>>,
-        prelude: &mut SliceDeque<IndexingLine>,
+        indices: IndexMap<IndexKey, VecDeque<IndexedChoiceInstruction>>,
+        prelude: &mut VecDeque<IndexingLine>,
     ) -> IndexMap<IndexKey, IndexingCodePtr> {
         let mut index_locs = IndexMap::new();
 
         for (key, mut code) in indices.into_iter() {
             if code.len() > 1 {
                 index_locs.insert(key, IndexingCodePtr::Internal(prelude.len() + 1));
-                cap_choice_seq_with_trust(&mut code);
+                cap_choice_seq_with_trust(code.make_contiguous());
                 prelude.push_back(IndexingLine::from(code));
             } else {
-                code.first().map(|i| {
+                code.front().map(|i| {
                     index_locs.insert(key, IndexingCodePtr::External(i.offset()));
                 });
             }
@@ -1232,8 +1241,8 @@ impl Indexer for StaticCodeIndices {
 
     fn switch_on<IndexKey: Eq + Hash>(
         mut instr_fn: impl FnMut(IndexMap<IndexKey, IndexingCodePtr>) -> IndexingInstruction,
-        index: &mut IndexMap<IndexKey, SliceDeque<IndexedChoiceInstruction>>,
-        prelude: &mut SliceDeque<IndexingLine>,
+        index: &mut IndexMap<IndexKey, VecDeque<IndexedChoiceInstruction>>,
+        prelude: &mut VecDeque<IndexingLine>,
     ) -> IndexingCodePtr {
         let index = mem::replace(index, IndexMap::new());
         let index = Self::second_level_index(index, prelude);
@@ -1253,25 +1262,28 @@ impl Indexer for StaticCodeIndices {
     }
 
     fn switch_on_list(
-        lists: &mut SliceDeque<IndexedChoiceInstruction>,
-        prelude: &mut SliceDeque<IndexingLine>,
+        lists: &mut VecDeque<IndexedChoiceInstruction>,
+        prelude: &mut VecDeque<IndexingLine>,
     ) -> IndexingCodePtr {
         if lists.len() > 1 {
-            cap_choice_seq_with_trust(lists);
-            let lists = mem::replace(lists, sdeq![]);
+            cap_choice_seq_with_trust(lists.make_contiguous());
+            let lists = mem::replace(lists, VecDeque::new());
             prelude.push_back(IndexingLine::from(lists));
 
             IndexingCodePtr::Internal(1)
         } else {
             lists
-                .first()
+                .front()
                 .map(|i| IndexingCodePtr::External(i.offset()))
                 .unwrap_or(IndexingCodePtr::Fail)
         }
     }
 
     #[inline]
-    fn remove_instruction_with_offset(code: &mut SliceDeque<IndexedChoiceInstruction>, offset: usize) {
+    fn remove_instruction_with_offset(
+        code: &mut SliceDeque<IndexedChoiceInstruction>,
+        offset: usize,
+    ) {
         for (index, line) in code.iter().enumerate() {
             if offset == line.offset() {
                 code.remove(index);
@@ -1294,23 +1306,23 @@ impl Indexer for DynamicCodeIndices {
     fn new() -> Self {
         Self {
             constants: IndexMap::new(),
-            lists: sdeq![],
+            lists: VecDeque::new(),
             structures: IndexMap::new(),
         }
     }
 
     #[inline]
-    fn constants(&mut self) -> &mut IndexMap<Constant, SliceDeque<usize>> {
+    fn constants(&mut self) -> &mut IndexMap<Literal, VecDeque<usize>> {
         &mut self.constants
     }
 
     #[inline]
-    fn lists(&mut self) -> &mut SliceDeque<usize> {
+    fn lists(&mut self) -> &mut VecDeque<usize> {
         &mut self.lists
     }
 
     #[inline]
-    fn structures(&mut self) -> &mut IndexMap<(ClauseName, usize), SliceDeque<usize>> {
+    fn structures(&mut self) -> &mut IndexMap<(Atom, usize), VecDeque<usize>> {
         &mut self.structures
     }
 
@@ -1320,17 +1332,17 @@ impl Indexer for DynamicCodeIndices {
     }
 
     fn second_level_index<IndexKey: Eq + Hash>(
-        indices: IndexMap<IndexKey, SliceDeque<usize>>,
-        prelude: &mut SliceDeque<IndexingLine>,
+        indices: IndexMap<IndexKey, VecDeque<usize>>,
+        prelude: &mut VecDeque<IndexingLine>,
     ) -> IndexMap<IndexKey, IndexingCodePtr> {
         let mut index_locs = IndexMap::new();
 
         for (key, code) in indices.into_iter() {
             if code.len() > 1 {
                 index_locs.insert(key, IndexingCodePtr::Internal(prelude.len() + 1));
-                prelude.push_back(IndexingLine::DynamicIndexedChoice(code));
+                prelude.push_back(IndexingLine::DynamicIndexedChoice(code.into_iter().collect()));
             } else {
-                code.first().map(|i| {
+                code.front().map(|i| {
                     index_locs.insert(key, IndexingCodePtr::DynamicExternal(*i));
                 });
             }
@@ -1341,8 +1353,8 @@ impl Indexer for DynamicCodeIndices {
 
     fn switch_on<IndexKey: Eq + Hash>(
         mut instr_fn: impl FnMut(IndexMap<IndexKey, IndexingCodePtr>) -> IndexingInstruction,
-        index: &mut IndexMap<IndexKey, SliceDeque<usize>>,
-        prelude: &mut SliceDeque<IndexingLine>,
+        index: &mut IndexMap<IndexKey, VecDeque<usize>>,
+        prelude: &mut VecDeque<IndexingLine>,
     ) -> IndexingCodePtr {
         let index = mem::replace(index, IndexMap::new());
         let index = Self::second_level_index(index, prelude);
@@ -1362,16 +1374,16 @@ impl Indexer for DynamicCodeIndices {
     }
 
     fn switch_on_list(
-        lists: &mut SliceDeque<usize>,
-        prelude: &mut SliceDeque<IndexingLine>,
+        lists: &mut VecDeque<usize>,
+        prelude: &mut VecDeque<IndexingLine>,
     ) -> IndexingCodePtr {
         if lists.len() > 1 {
-            let lists = mem::replace(lists, sdeq![]);
-            prelude.push_back(IndexingLine::DynamicIndexedChoice(lists));
+            let lists = mem::replace(lists, VecDeque::new());
+            prelude.push_back(IndexingLine::DynamicIndexedChoice(lists.into_iter().collect()));
             IndexingCodePtr::Internal(1)
         } else {
             lists
-                .first()
+                .front()
                 .map(|i| IndexingCodePtr::DynamicExternal(*i))
                 .unwrap_or(IndexingCodePtr::Fail)
         }
@@ -1395,19 +1407,13 @@ impl Indexer for DynamicCodeIndices {
 
 #[derive(Debug)]
 pub(crate) struct CodeOffsets<I: Indexer> {
-    atom_tbl: TabledData<Atom>,
     indices: I,
     optimal_index: usize,
 }
 
 impl<I: Indexer> CodeOffsets<I> {
-    pub(crate) fn new(
-        atom_tbl: TabledData<Atom>,
-        indices: I,
-        optimal_index: usize,
-    ) -> Self {
+    pub(crate) fn new(indices: I, optimal_index: usize) -> Self {
         CodeOffsets {
-            atom_tbl,
             indices,
             optimal_index,
         }
@@ -1419,15 +1425,24 @@ impl<I: Indexer> CodeOffsets<I> {
         self.indices.lists().push_back(index);
     }
 
-    fn index_constant(&mut self, constant: &Constant, index: usize) -> Vec<Constant> {
-        let overlapping_constants = constant_key_alternatives(constant, self.atom_tbl.clone());
-        let code = self.indices.constants().entry(constant.clone()).or_insert(sdeq![]);
+    fn index_constant(
+        &mut self,
+        atom_tbl: &mut AtomTable,
+        constant: Literal,
+        index: usize,
+    ) -> Vec<Literal> {
+        let overlapping_constants = constant_key_alternatives(constant, atom_tbl);
+        let code = self.indices.constants().entry(constant).or_insert(VecDeque::new());
 
         let is_initial_index = code.is_empty();
         code.push_back(I::compute_index(is_initial_index, index));
 
         for constant in &overlapping_constants {
-            let code = self.indices.constants().entry(constant.clone()).or_insert(sdeq![]);
+            let code = self
+                .indices
+                .constants()
+                .entry(*constant)
+                .or_insert(VecDeque::new());
 
             let is_initial_index = code.is_empty();
             let index = I::compute_index(is_initial_index, index);
@@ -1438,11 +1453,12 @@ impl<I: Indexer> CodeOffsets<I> {
         overlapping_constants
     }
 
-    fn index_structure(&mut self, name: &ClauseName, arity: usize, index: usize) -> usize {
-        let code = self.indices
+    fn index_structure(&mut self, name: Atom, arity: usize, index: usize) -> usize {
+        let code = self
+            .indices
             .structures()
             .entry((name.clone(), arity))
-            .or_insert(sdeq![]);
+            .or_insert(VecDeque::new());
 
         let code_len = code.len();
         let is_initial_index = code.is_empty();
@@ -1456,28 +1472,25 @@ impl<I: Indexer> CodeOffsets<I> {
         optimal_arg: &Term,
         index: usize,
         clause_index_info: &mut ClauseIndexInfo,
+        atom_tbl: &mut AtomTable,
     ) {
         match optimal_arg {
-            &Term::Clause(_, ref name, ref terms, _) => {
+            &Term::Clause(_, name, ref terms) => {
                 clause_index_info.opt_arg_index_key =
                     OptArgIndexKey::Structure(self.optimal_index, 0, name.clone(), terms.len());
 
                 self.index_structure(name, terms.len(), index);
             }
-            &Term::Cons(..) | &Term::Constant(_, Constant::String(_)) => {
+            &Term::Cons(..) | &Term::Literal(_, Literal::String(_)) | &Term::PartialString(..) => {
                 clause_index_info.opt_arg_index_key = OptArgIndexKey::List(self.optimal_index, 0);
 
                 self.index_list(index);
             }
-            &Term::Constant(_, ref constant) => {
-                let overlapping_constants = self.index_constant(constant, index);
+            &Term::Literal(_, constant) => {
+                let overlapping_constants = self.index_constant(atom_tbl, constant, index);
 
-                clause_index_info.opt_arg_index_key = OptArgIndexKey::Constant(
-                    self.optimal_index,
-                    0,
-                    constant.clone(),
-                    overlapping_constants,
-                );
+                clause_index_info.opt_arg_index_key =
+                    OptArgIndexKey::Literal(self.optimal_index, 0, constant, overlapping_constants);
             }
             _ => {}
         }
@@ -1496,7 +1509,7 @@ impl<I: Indexer> CodeOffsets<I> {
             return vec![];
         }
 
-        let mut prelude = sdeq![];
+        let mut prelude = VecDeque::new();
 
         let mut emitted_switch_on_structure = false;
         let mut emitted_switch_on_constant = false;

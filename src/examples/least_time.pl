@@ -11,19 +11,13 @@
  */
 
 :- module(least_time, [find_min_time/2,
-		               write_time_nl/1]).
+                       write_time_nl/1]).
 
 
 :- use_module(library(dcgs)).
 :- use_module(library(format)).
 :- use_module(library(lists)).
 :- use_module(library(reif)).
-
-
-permutation([], []).
-permutation([X|Xs], Ys) :-
-    permutation(Xs, Yss),
-    select(X, Ys, Yss).
 
 
 valid_time([H1,H2,M1,M2], T) :-
@@ -33,10 +27,10 @@ valid_time([H1,H2,M1,M2], T) :-
     memberd_t(M2, [0,1,2,3,4,5,6,7,8,9], TM2),
     (  maplist(=(true), [TH1, TH2, TM1, TM2]) ->
        (  H1 =:= 2 ->
-	      (  H2 =< 3 ->
-	         T = true
-	      ;  T = false
-	      )
+          (  H2 =< 3 ->
+             T = true
+          ;  T = false
+          )
        ;  T = true
        )
     ;  T = false

@@ -1,25 +1,34 @@
-#[cfg(feature = "num-rug-adapter")]
-use num_rug_adapter as rug;
-#[cfg(feature = "rug")]
-use rug;
+#![recursion_limit = "4112"]
 
 #[macro_use]
-mod macros;
+extern crate static_assertions;
+
+#[macro_use]
+pub mod macros;
+#[macro_use]
+pub mod atom_table;
+#[macro_use]
+pub mod arena;
+#[macro_use]
+pub mod parser;
 mod allocator;
 mod arithmetic;
-mod clause_types;
-mod codegen;
+pub mod codegen;
 mod debray_allocator;
 mod fixtures;
 mod forms;
 mod heap_iter;
-mod heap_print;
+pub mod heap_print;
 mod indexing;
-mod instructions;
+#[macro_use]
+pub mod instructions {
+    include!(concat!(env!("OUT_DIR"), "/instructions.rs"));
+}
 mod iterators;
 pub mod machine;
+mod raw_block;
 pub mod read;
 mod targets;
-mod write;
+pub mod types;
 
-use machine::*;
+use instructions::instr;

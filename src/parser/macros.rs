@@ -54,9 +54,9 @@ macro_rules! back_quote_char {
 }
 
 #[macro_export]
-macro_rules! binary_digit_char {
+macro_rules! octet_char {
     ($c: expr) => {
-        $c >= '0' && $c <= '1'
+        ('\u{0000}'..='\u{00FF}').contains(&$c)
     };
 }
 
@@ -172,9 +172,9 @@ macro_rules! octal_digit_char {
 }
 
 #[macro_export]
-macro_rules! octet_char {
+macro_rules! binary_digit_char {
     ($c: expr) => {
-        ('\u{0000}'..='\u{00FF}').contains(&$c)
+        $c >= '0' && $c <= '1'
     };
 }
 

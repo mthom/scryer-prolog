@@ -4,9 +4,9 @@
    This library provides reasoning about UUID (only version 4 right now).
    There are three predicates:
     * uuidv4/1, to generate a new UUIDv4
-    * uuidv4_string/1, to generate a new UUIDv4 in string hex representation 
+    * uuidv4_string/1, to generate a new UUIDv4 in string hex representation
     * uuid_string/2, to converte between UUID list of bytes and UUID hex representation
-   
+
    Examples:
    ?- uuidv4(X).
       X = [42,147,248,242,117,196,79,2,129,159|...].
@@ -30,7 +30,7 @@
 :- use_module(library(dcgs)).
 :- use_module(library(lists)).
 
-/* 
+/*
 An UUID is made of 16 bytes, composed of 5 sections:
 time_low - 4
 time_mid - 2

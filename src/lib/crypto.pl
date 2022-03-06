@@ -1,5 +1,5 @@
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   Written 2020, 2021 by Markus Triska (triska@metalevel.at)
+   Written 2020, 2021, 2022 by Markus Triska (triska@metalevel.at)
    Part of Scryer Prolog.
 
    Predicates for cryptographic applications.
@@ -46,6 +46,7 @@
 :- use_module(library(format)).
 :- use_module(library(charsio)).
 :- use_module(library(si)).
+:- use_module(library(iso_ext), [partial_string/3]).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    hex_bytes(?Hex, ?Bytes) is det.
@@ -594,7 +595,9 @@ crypto_data_decrypt(CipherText0, Algorithm, Key, IV, PlainText, Options) :-
         member(Encoding, [utf8,octet]),
         encoding_chars(octet, CipherText0, CipherText1),
         maplist(char_code, TagChars, Tag),
-        append(CipherText1, TagChars, CipherText),
+        % we append the tag very efficiently, retaining a compact
+        % internal string representation of the ciphertext
+        partial_string(CipherText1, CipherText, TagChars),
         (   Algorithm = 'chacha20-poly1305' -> true
         ;   domain_error('chacha20-poly1305', Algorithm, crypto_data_decrypt/6)
         ),

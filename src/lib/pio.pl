@@ -21,7 +21,7 @@
 :- use_module(library(freeze)).
 :- use_module(library(iso_ext), [setup_call_cleanup/3, partial_string/3]).
 :- use_module(library(lists), [member/2, maplist/2]).
-:- use_module(library(charsio), [read_n_chars/3]).
+:- use_module(library(charsio), [get_n_chars/3]).
 
 :- meta_predicate(phrase_from_file(2, ?)).
 :- meta_predicate(phrase_from_file(2, ?, ?)).
@@ -62,7 +62,7 @@ reader_step(Stream, Pos, Xs0) :-
         set_stream_position(Stream, Pos),
         (   at_end_of_stream(Stream)
         ->  Xs0 = []
-        ;   read_n_chars(Stream, 4096, Cs),
+        ;   get_n_chars(Stream, 4096, Cs),
             partial_string(Cs, Xs0, Xs),
             stream_to_lazy_list(Stream, Xs)
         ).

@@ -1,48 +1,53 @@
-use prolog_parser::ast::*;
-use prolog_parser::parser::*;
-
-use crate::machine::machine_errors::CompilationError;
+use crate::forms::*;
 use crate::machine::*;
+use crate::machine::load_state::*;
+use crate::machine::loader::*;
+use crate::machine::machine_errors::*;
+use crate::parser::ast::*;
+use crate::parser::parser::*;
+
+use crate::predicate_queue;
 
 use indexmap::IndexSet;
 
 use std::collections::VecDeque;
 use std::fmt;
 
-pub(crate) trait TermStream: Sized {
-    type Evacuable;
+pub struct LoadStatePayload<TS> {
+    pub term_stream: TS,
+    pub(super) compilation_target: CompilationTarget,
+    pub(super) retraction_info: RetractionInfo,
+    pub(super) module_op_exports: ModuleOpExports,
+    pub(super) non_counted_bt_preds: IndexSet<PredicateKey>,
+    pub(super) predicates: PredicateQueue,
+    pub(super) clause_clauses: Vec<(Term, Term)>,
+}
 
+pub trait TermStream: Sized {
     fn next(&mut self, op_dir: &CompositeOpDir) -> Result<Term, CompilationError>;
     fn eof(&mut self) -> Result<bool, CompilationError>;
     fn listing_src(&self) -> &ListingSource;
-    fn evacuate<'a>(loader: Loader<'a, Self>) -> Result<Self::Evacuable, SessionError>;
 }
 
 #[derive(Debug)]
-pub(super) struct BootstrappingTermStream<'a> {
+pub struct BootstrappingTermStream<'a> {
     listing_src: ListingSource,
-    parser: Parser<'a, Stream>,
+    pub(super) parser: Parser<'a, Stream>,
 }
 
 impl<'a> BootstrappingTermStream<'a> {
     #[inline]
-    pub(super) fn from_prolog_stream(
-        stream: &'a mut PrologStream,
-        atom_tbl: TabledData<Atom>,
-        flags: MachineFlags,
+    pub(super) fn from_char_reader(
+        stream: Stream,
+        machine_st: &'a mut MachineState,
         listing_src: ListingSource,
     ) -> Self {
-        let parser = Parser::new(stream, atom_tbl, flags);
-        Self {
-            parser,
-            listing_src,
-        }
+        let parser = Parser::new(stream, machine_st);
+        Self { parser, listing_src }
     }
 }
 
 impl<'a> TermStream for BootstrappingTermStream<'a> {
-    type Evacuable = CompilationTarget;
-
     #[inline]
     fn next(&mut self, op_dir: &CompositeOpDir) -> Result<Term, CompilationError> {
         self.parser.reset();
@@ -61,24 +66,9 @@ impl<'a> TermStream for BootstrappingTermStream<'a> {
     fn listing_src(&self) -> &ListingSource {
         &self.listing_src
     }
-
-    fn evacuate(mut loader: Loader<Self>) -> Result<Self::Evacuable, SessionError> {
-        if !loader.predicates.is_empty() {
-            loader.compile_and_submit()?;
-        }
-
-        loader
-            .load_state
-            .retraction_info
-            .reset(loader.load_state.wam.code_repo.code.len());
-
-        loader.load_state.remove_module_op_exports();
-
-        Ok(loader.load_state.compilation_target.take())
-    }
 }
 
-pub(crate) struct LiveTermStream {
+pub struct LiveTermStream {
     pub(super) term_queue: VecDeque<Term>,
     pub(super) listing_src: ListingSource,
 }
@@ -93,28 +83,18 @@ impl LiveTermStream {
     }
 }
 
-pub(crate) struct LoadStatePayload {
-    pub(super) term_stream: LiveTermStream,
-    pub(super) compilation_target: CompilationTarget,
-    pub(super) retraction_info: RetractionInfo,
-    pub(super) module_op_exports: Vec<(OpDecl, Option<(usize, Specifier)>)>,
-    pub(super) non_counted_bt_preds: IndexSet<PredicateKey>,
-    pub(super) predicates: PredicateQueue,
-    pub(super) clause_clauses: Vec<(Term, Term)>,
-}
-
-impl fmt::Debug for LoadStatePayload {
+impl<TS> fmt::Debug for LoadStatePayload<TS> {
     fn fmt(&self, fmt: &mut fmt::Formatter) -> fmt::Result {
         write!(fmt, "LoadStatePayload")
     }
 }
 
-impl LoadStatePayload {
-    pub(super) fn new(wam: &Machine) -> Self {
+impl<TS> LoadStatePayload<TS> {
+    pub(super) fn new(code_repo_len: usize, term_stream: TS) -> Self {
         Self {
-            term_stream: LiveTermStream::new(ListingSource::User),
+            term_stream,
             compilation_target: CompilationTarget::default(),
-            retraction_info: RetractionInfo::new(wam.code_repo.code.len()),
+            retraction_info: RetractionInfo::new(code_repo_len),
             module_op_exports: vec![],
             non_counted_bt_preds: IndexSet::new(),
             predicates: predicate_queue![],
@@ -124,8 +104,6 @@ impl LoadStatePayload {
 }
 
 impl TermStream for LiveTermStream {
-    type Evacuable = LoadStatePayload;
-
     #[inline]
     fn next(&mut self, _: &CompositeOpDir) -> Result<Term, CompilationError> {
         Ok(self.term_queue.pop_front().unwrap())
@@ -139,10 +117,5 @@ impl TermStream for LiveTermStream {
     #[inline]
     fn listing_src(&self) -> &ListingSource {
         &self.listing_src
-    }
-
-    #[inline]
-    fn evacuate(loader: Loader<Self>) -> Result<LoadStatePayload, SessionError> {
-        Ok(loader.to_load_state_payload())
     }
 }

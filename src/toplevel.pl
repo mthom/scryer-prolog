@@ -2,8 +2,10 @@
                         copy_term/3]).
 
 :- use_module(library(charsio)).
+:- use_module(library(error)).
 :- use_module(library(files)).
 :- use_module(library(iso_ext)).
+:- use_module(library(lambda)).
 :- use_module(library(lists)).
 :- use_module(library(si)).
 
@@ -17,7 +19,7 @@ load_scryerrc :-
        append(HomeDir, "/.scryerrc", ScryerrcFile),
        (  file_exists(ScryerrcFile) ->
           atom_chars(ScryerrcFileAtom, ScryerrcFile),
-          catch(consult(ScryerrcFileAtom), E, print_exception(E))
+          catch(use_module(ScryerrcFileAtom), E, print_exception(E))
        ;  true
        )
     ;  true
@@ -111,7 +113,7 @@ run_goals([g(Gs0)|Goals]) :-
     (   ends_with_dot(Gs0) -> Gs1 = Gs0
     ;   append(Gs0, ".", Gs1)
     ),
-    read_term_from_chars(Gs1, Goal),
+    read_from_chars(Gs1, Goal),
     (   catch(
             user:Goal,
             Exception,
@@ -152,26 +154,27 @@ instruction_match(Term, VarList) :-
     (  var(Term) ->
        throw(error(instantiation_error, repl/0))
     ;  Term = [Item] ->
-       !,
        (  atom(Item) ->
-	      (  Item == user ->
-	         catch(load(user_input), E, print_exception_with_check(E))
-	      ;
+          (  Item == user ->
+             catch(load(user_input), E, print_exception_with_check(E))
+          ;
              submit_query_and_print_results(consult(Item), [])
-	      )
+          )
        ;  catch(type_error(atom, Item, repl/0),
-		        E,
-		        print_exception_with_check(E))
+                E,
+                print_exception_with_check(E))
        )
     ;  Term = end_of_file ->
        halt
     ;
-       submit_query_and_print_results(Term, VarList)
+    submit_query_and_print_results(Term, VarList)
     ).
 
 
 submit_query_and_print_results_(Term, VarList) :-
     '$get_b_value'(B),
+    bb_put('$report_all', false),
+    bb_put('$report_n_more', 0),
     '$call'(Term),
     write_eqs_and_read_input(B, VarList),
     !.
@@ -184,7 +187,7 @@ submit_query_and_print_results(Term0, VarList) :-
     (  functor(Term0, call, _) ->
        Term = Term0 % prevent pre-mature expansion of incomplete goal
                     % in the first argument, which is done by call/N
-    ;  expand_goal(call(Term0), user, call(Term))
+    ;  expand_goal(Term0, user, Term)
     ),
     setup_call_cleanup(bb_put('$first_answer', true),
                        submit_query_and_print_results_(Term, VarList),
@@ -193,10 +196,10 @@ submit_query_and_print_results(Term0, VarList) :-
 
 needs_bracketing(Value, Op) :-
     catch((functor(Value, F, _),
-	       current_op(EqPrec, EqSpec, Op),
-	       current_op(FPrec, _, F)),
-	      _,
-	      false),
+           current_op(EqPrec, EqSpec, Op),
+           current_op(FPrec, _, F)),
+          _,
+          false),
     (  EqPrec < FPrec ->
        true
     ;  FPrec > 0, F == Value, graphic_token_char(F) ->
@@ -210,15 +213,15 @@ needs_bracketing(Value, Op) :-
 write_goal(G, VarList, MaxDepth) :-
     (  G = (Var = Value) ->
        (  var(Value) ->
-	      select((Var = _), VarList, NewVarList)
+          select((Var = _), VarList, NewVarList)
        ;  VarList = NewVarList
        ),
        write(Var),
        write(' = '),
        (  needs_bracketing(Value, (=)) ->
-	      write('('),
-	      write_term(Value, [quoted(true), variable_names(NewVarList), max_depth(MaxDepth)]),
-	      write(')')
+          write('('),
+          write_term(Value, [quoted(true), variable_names(NewVarList), max_depth(MaxDepth)]),
+          write(')')
        ;  write_term(Value, [quoted(true), variable_names(NewVarList), max_depth(MaxDepth)])
        )
     ;  G == [] ->
@@ -229,20 +232,20 @@ write_goal(G, VarList, MaxDepth) :-
 write_last_goal(G, VarList, MaxDepth) :-
     (  G = (Var = Value) ->
        (  var(Value) ->
-	      select((Var = _), VarList, NewVarList)
+          select((Var = _), VarList, NewVarList)
        ;  VarList = NewVarList
        ),
        write(Var),
        write(' = '),
        (  needs_bracketing(Value, (=)) ->
-	      write('('),
-	      write_term(Value, [quoted(true), variable_names(NewVarList), max_depth(MaxDepth)]),
-	      write(')')
+          write('('),
+          write_term(Value, [quoted(true), variable_names(NewVarList), max_depth(MaxDepth)]),
+          write(')')
        ;  write_term(Value, [quoted(true), variable_names(NewVarList), max_depth(MaxDepth)]),
-	      (  trailing_period_is_ambiguous(Value) ->
-	         write(' ')
-	      ;  true
-	      )
+          (  trailing_period_is_ambiguous(Value) ->
+             write(' ')
+          ;  true
+          )
        )
     ;  G == [] ->
        write('true')
@@ -272,8 +275,13 @@ trailing_period_is_ambiguous(Value) :-
     ValueChars \== ['.'],
     graphic_token_char(Char).
 
+term_variables_under_max_depth(Term, MaxDepth, Vars) :-
+    '$term_variables_under_max_depth'(Term, MaxDepth, Vars).
+
 write_eqs_and_read_input(B, VarList) :-
-    term_variables(VarList, Vars0),
+    gather_query_vars(VarList, OrigVars),
+    % one layer of depth added for (=/2) functor
+    '$term_variables_under_max_depth'(OrigVars, 22, Vars0),
     '$term_attributed_variables'(VarList, AttrVars),
     '$project_atts':project_attributes(Vars0, AttrVars),
     copy_term(AttrVars, AttrVars, AttrGoals),
@@ -281,12 +289,13 @@ write_eqs_and_read_input(B, VarList) :-
     append([Vars0, AttrGoalVars, AttrVars], Vars),
     charsio:extend_var_list(Vars, VarList, NewVarList, fabricated),
     '$get_b_value'(B0),
-    gather_query_vars(VarList, OrigVars),
     gather_equations(NewVarList, OrigVars, Equations),
     append(Equations, AttrGoals, Goals),
-    term_variables(Equations, EquationVars),
-    append([AttrGoalVars, EquationVars], Vars1),
-    charsio:extend_var_list(Vars1, VarList, NewVarList0, fabricated),
+    % one layer of depth added for (=/2) functor
+    maplist(\Term^Vs^term_variables_under_max_depth(Term, 22, Vs), Equations, EquationVars),
+    append([AttrGoalVars | EquationVars], Vars1),
+    term_variables(Vars1, Vars2), % deduplicate vars of Vars1 but preserve their order.
+    charsio:extend_var_list(Vars2, VarList, NewVarList0, fabricated),
     (   bb_get('$first_answer', true) ->
         write('   '),
         bb_put('$first_answer', false)
@@ -294,11 +303,11 @@ write_eqs_and_read_input(B, VarList) :-
     ),
     (  B0 == B ->
        (  Goals == [] ->
-	      write('true.'), nl
+          write('true.'), nl
        ;  loader:thread_goals(Goals, ThreadedGoals, (',')),
-	      write_eq(ThreadedGoals, NewVarList0, 20),
-	      write('.'),
-	      nl
+          write_eq(ThreadedGoals, NewVarList0, 20),
+          write('.'),
+          nl
        )
     ;  loader:thread_goals(Goals, ThreadedGoals, (',')),
        write_eq(ThreadedGoals, NewVarList0, 20),
@@ -306,7 +315,14 @@ write_eqs_and_read_input(B, VarList) :-
     ).
 
 read_input(ThreadedGoals, NewVarList) :-
-    get_single_char(C),
+    (  bb_get('$report_all', true) ->
+       C = n
+    ;  bb_get('$report_n_more', N), N > 1 ->
+       N1 is N - 1,
+       bb_put('$report_n_more', N1),
+       C = n
+    ;  get_single_char(C)
+    ),
     (  C = w ->
        nl,
        write('   '),
@@ -323,7 +339,13 @@ read_input(ThreadedGoals, NewVarList) :-
        help_message,
        read_input(ThreadedGoals, NewVarList)
     ;  member(C, ['\n', .]) ->
-       nl, write(';  ...'), nl
+       nl, write(';  ... .'), nl
+    ;  C = a ->
+       bb_put('$report_all', true),
+       nl, write(';  '), false
+    ;  C = f ->
+       bb_put('$report_n_more', 5),
+       nl, write(';  '), false
     ;  read_input(ThreadedGoals, NewVarList)
     ).
 
@@ -331,6 +353,8 @@ help_message :-
     nl, nl,
     write('SPACE, "n" or ";": next solution, if any\n'),
     write('RETURN or ".": stop enumeration\n'),
+    write('"a": enumerate all solutions\n'),
+    write('"f": enumerate the next 5 solutions\n'),
     write('"h": display this help message\n'),
     write('"w": write terms without depth limit\n'),
     write('"p": print terms with depth limit\n\n').
@@ -340,7 +364,7 @@ gather_query_vars([_ = Var | Vars], QueryVars) :-
        QueryVars = [Var | QueryVars0],
        gather_query_vars(Vars, QueryVars0)
     ;
-       gather_query_vars(Vars, QueryVars)
+    gather_query_vars(Vars, QueryVars)
     ).
 gather_query_vars([], []).
 
@@ -358,8 +382,8 @@ select_all([OtherVar = OtherValue | Pairs], Var, Value, Vars, NewPairs) :-
        Vars = [OtherVar = OtherValue | Vars0],
        select_all(Pairs, Var, Value, Vars0, NewPairs)
     ;
-       NewPairs = [OtherVar = OtherValue | NewPairs0],
-       select_all(Pairs, Var, Value, Vars, NewPairs0)
+    NewPairs = [OtherVar = OtherValue | NewPairs0],
+    select_all(Pairs, Var, Value, Vars, NewPairs0)
     ).
 
 gather_equations([], _, []).
@@ -370,11 +394,11 @@ gather_equations([Var = Value | Pairs], OrigVarList, Goals) :-
           append([Var = Value | VarEqs], Goals0, Goals),
           gather_equations(NewPairs, OrigVarList, Goals0)
        ;
-          gather_equations(Pairs, OrigVarList, Goals)
+       gather_equations(Pairs, OrigVarList, Goals)
        )
     ;
-       Goals = [Var = Value | Goals0],
-       gather_equations(Pairs, OrigVarList, Goals0)
+    Goals = [Var = Value | Goals0],
+    gather_equations(Pairs, OrigVarList, Goals0)
     ).
 
 print_exception(E) :-

@@ -61,10 +61,14 @@ Extend Scryer Prolog to include the following, among other features:
   - [x] A simple sockets library representing TCP connections as streams.  
 - [x] Incremental compilation and loading process, newly written,
       primarily in Prolog.
+- [ ] Improvements to the WAM compiler and heap representation:
+  - [ ] Replacing choice points pivoting on inlined semi-deterministic predicates
+        (`atom`, `var`, etc) with if/else ladders. (_in progress_)
+  - [ ] Inlining all built-ins and system call instructions.
+  - [ ] Greatly reducing the number of instructions used to compile disjunctives.
+  - [ ] Storing short atoms to heap cells without writing them to the atom table.
 - [ ] A compacting garbage collector satisfying the five properties of
-      "Precise Garbage Collection in Prolog." (_in progress_, see
-      the [`rebis-dev` branch](https://github.com/mthom/scryer-prolog/tree/rebis-dev)
-      and its [announcement](https://github.com/mthom/scryer-prolog/discussions/1167))
+      "Precise Garbage Collection in Prolog." (_in progress_)
 - [ ] Mode declarations.
 
 ## Phase 3
@@ -131,6 +135,8 @@ $> cargo run [--release]
 
 The optional `--release` flag will perform various optimizations,
 producing a faster executable.
+
+Scryer Prolog must be built with **Rust 1.57 and up**.
 
 ### Docker Install (All Platforms)
 
@@ -205,9 +211,10 @@ predicates it defines. For example, with the program shown above:
 ;  What = pure_world.
 ```
 
-Press `SPACE` to show further answers, if any exist. Press `RETURN` or
-&nbsp;`.` to abort the search and return to the toplevel&nbsp;prompt.
-Press&nbsp;`h` to show a help message.
+Press `SPACE` to show further answers, if any exist. Press `RETURN`
+or&nbsp;`.` to abort the search and return to the
+toplevel&nbsp;prompt. Press&nbsp;`f` to see the next 5 answers, and
+`a` to see all answers. Press&nbsp;`h` to show a help message.
 
 To quit Scryer Prolog, use the standard predicate `halt/0`:
 
@@ -554,6 +561,7 @@ The modules that ship with Scryer&nbsp;Prolog are also called
 * [`uuid`](src/lib/uuid.pl) UUIDv4 generation and hex representation
 * [`tls`](src/lib/tls.pl)
   Predicates for negotiating TLS connections explicitly.
+* [`ugraphs`](src/lib/ugraphs.pl) Graph manipulation library
 
 To use predicates provided by the `lists` library, write:
 
