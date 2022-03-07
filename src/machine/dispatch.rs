@@ -2528,15 +2528,8 @@ impl Machine {
                     let d = self.machine_st.store(self.machine_st.deref(self.machine_st[r]));
 
                     match Number::try_from(d) {
-                        Ok(Number::Fixnum(_) | Number::Integer(_) | Number::Float(_)) => {
+                        Ok(_) => {
                             self.machine_st.p += 1;
-                        }
-                        Ok(Number::Rational(n)) => {
-                            if n.denom() == &1 {
-                                self.machine_st.p += 1;
-                            } else {
-                                self.machine_st.backtrack();
-                            }
                         }
                         _ => {
                             self.machine_st.backtrack();
@@ -2547,15 +2540,8 @@ impl Machine {
                     let d = self.machine_st.store(self.machine_st.deref(self.machine_st[r]));
 
                     match Number::try_from(d) {
-                        Ok(Number::Fixnum(_) | Number::Integer(_) | Number::Float(_)) => {
+                        Ok(_) => {
                             self.machine_st.p = self.machine_st.cp;
-                        }
-                        Ok(Number::Rational(n)) => {
-                            if n.denom() == &1 {
-                                self.machine_st.p = self.machine_st.cp;
-                            } else {
-                                self.machine_st.backtrack();
-                            }
                         }
                         _ => {
                             self.machine_st.backtrack();
@@ -2568,12 +2554,12 @@ impl Machine {
                     read_heap_cell!(d,
                         (HeapCellValueTag::Cons, ptr) => {
                             match_untyped_arena_ptr!(ptr,
-                                                     (ArenaHeaderTag::Rational, _r) => {
-                                                         self.machine_st.p += 1;
-                                                     }
-                                                     _ => {
-                                                         self.machine_st.backtrack();
-                                                     }
+                                 (ArenaHeaderTag::Rational, _r) => {
+                                     self.machine_st.p += 1;
+                                 }
+                                 _ => {
+                                     self.machine_st.backtrack();
+                                 }
                             );
                         }
                         _ => {
