@@ -203,8 +203,11 @@ partial_string_tail(String, Tail) :-
 
 call_nth(Goal, N) :-
     can_be(integer, N),
-    (   integer(N), N =< 0,
-        domain_error(positive_integer, N, call_nth/2)
+    (   integer(N) ->
+        (   N < 0 ->
+            domain_error(not_less_than_zero, N, call_nth/2)
+        ;   N > 0
+        )
     ;   true
     ),
     setup_call_cleanup(call_nth_nesting(ID),
