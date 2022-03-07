@@ -119,9 +119,9 @@ Module : Predicate :-
 
 % flags.
 
-current_prolog_flag(Flag, Value) :- Flag == max_arity, !, Value == 1023.
+current_prolog_flag(Flag, Value) :- Flag == max_arity, !, Value = 1023.
 current_prolog_flag(max_arity, 1023).
-current_prolog_flag(Flag, Value) :- Flag == bounded, !, Value == false.
+current_prolog_flag(Flag, Value) :- Flag == bounded, !, Value = false.
 current_prolog_flag(bounded, false).
 current_prolog_flag(Flag, Value) :- Flag == integer_rounding_function, !, Value == toward_zero.
 current_prolog_flag(integer_rounding_function, toward_zero).
