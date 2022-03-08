@@ -484,6 +484,24 @@ macro_rules! print_char {
     };
 }
 
+pub fn fmt_float(mut fl: f64) -> String {
+    if OrderedFloat(fl) == -0f64 {
+        fl = 0f64;
+    }
+
+    if fl.fract() == 0f64 {
+        if fl.abs() >= 1.0e16 {
+            format!("{:.1e}", fl.trunc())
+        } else {
+            format!("{:.1}", fl.trunc())
+        }
+    } else if 0f64 < fl.fract().abs() && fl.fract().abs() <= 1.0e-16 {
+        format!("{0:.15e}", fl)
+    } else {
+        format!("{}", fl)
+    }
+}
+
 #[derive(Debug)]
 pub struct HCPrinter<'a, Outputter> {
     outputter: Outputter,
@@ -935,22 +953,8 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
         match n {
             NumberFocus::Unfocused(n) => match n {
-                Number::Float(OrderedFloat(mut fl)) => {
-                    if OrderedFloat(fl) == -0f64 {
-                        fl = 0f64;
-                    }
-
-                    let output_str = if fl.fract() == 0f64 {
-                        if fl.abs() >= 1.0e16 {
-                            format!("{:.1e}", fl.trunc())
-                        } else {
-                            format!("{:.1}", fl.trunc())
-                        }
-                    } else if 0f64 < fl.fract().abs() && fl.fract().abs() <= 1.0e-16 {
-                        format!("{:>1e}", fl)
-                    } else {
-                        format!("{}", fl)
-                    };
+                Number::Float(OrderedFloat(fl)) => {
+                    let output_str = fmt_float(fl);
 
                     push_space_if_amb!(self, &output_str, {
                         append_str!(self, &output_str);

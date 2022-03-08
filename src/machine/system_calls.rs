@@ -1818,7 +1818,7 @@ impl Machine {
 
         let string = match Number::try_from(n) {
             Ok(Number::Float(OrderedFloat(n))) => {
-                format!("{0:<20?}", n)
+                fmt_float(n)
             }
             Ok(Number::Fixnum(n)) => n.get_num().to_string(),
             Ok(Number::Integer(n)) => n.to_string(),
