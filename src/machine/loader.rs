@@ -2192,8 +2192,10 @@ impl Machine {
             .get_meta_predicate_spec(predicate_name, arity, &compilation_target)
         {
             Some(meta_specs) => {
-                let list_loc = iter_to_heap_list(
-                    &mut self.machine_st.heap,
+                let term_loc = self.machine_st.heap.len();
+
+                self.machine_st.heap.push(atom_as_cell!(predicate_name, arity));
+                self.machine_st.heap.extend(
                     meta_specs.iter().map(|meta_spec| match meta_spec {
                         MetaSpec::Minus => atom_as_cell!(atom!("+")),
                         MetaSpec::Plus => atom_as_cell!(atom!("-")),
@@ -2201,12 +2203,13 @@ impl Machine {
                         MetaSpec::RequiresExpansionWithArgument(ref arg_num) => {
                             fixnum_as_cell!(Fixnum::build_with(*arg_num as i64))
                         }
-                    }));
+                    })
+                );
 
                 let heap_loc = self.machine_st.heap.len();
 
                 self.machine_st.heap.push(atom_as_cell!(atom!("meta_predicate"), 1));
-                self.machine_st.heap.push(heap_loc_as_cell!(list_loc));
+                self.machine_st.heap.push(str_loc_as_cell!(term_loc));
 
                 unify!(self.machine_st, str_loc_as_cell!(heap_loc), self.machine_st.registers[4]);
             }

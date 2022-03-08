@@ -209,7 +209,8 @@ compile_term(Term, Evacuable) :-
 
 inner_meta_specs(0, HeadArg, InnerHeadArgs, InnerMetaSpecs) :-
     !,
-    predicate_property(HeadArg, meta_predicate(InnerMetaSpecs)),
+    predicate_property(HeadArg, meta_predicate(InnerMetaSpecs0)),
+    InnerMetaSpecs0 =.. [_ | InnerMetaSpecs],
     HeadArg =.. [_ | InnerHeadArgs].
 
 inner_meta_specs(N, HeadArg, InnerHeadArgs, InnerMetaSpecs) :-
@@ -219,7 +220,8 @@ inner_meta_specs(N, HeadArg, InnerHeadArgs, InnerMetaSpecs) :-
     length(InnerHeadArgs1, N),
     append(InnerHeadArgs, InnerHeadArgs1, InnerHeadArgs0),
     CompleteHeadArg =.. [Functor | InnerHeadArgs0],
-    predicate_property(CompleteHeadArg, meta_predicate(InnerMetaSpecs)).
+    predicate_property(CompleteHeadArg, meta_predicate(InnerMetaSpecs0)),
+    InnerMetaSpecs0 =.. [_ | InnerMetaSpecs].
 
 
 module_expanded_head_variables_([], _, HeadVars, HeadVars).
@@ -242,7 +244,8 @@ module_expanded_head_variables_([HeadArg | HeadArgs], [MetaSpec | MetaSpecs], He
 module_expanded_head_variables(Head, HeadVars) :-
     (  var(Head) ->
        instantiation_error(load/1)
-    ;  predicate_property(Head, meta_predicate(MetaSpecs)),
+    ;  predicate_property(Head, meta_predicate(MetaSpecs0)),
+       MetaSpecs0 =.. [_ | MetaSpecs],
        Head =.. [_ | HeadArgs] ->
        module_expanded_head_variables_(HeadArgs, MetaSpecs, HeadVars, [])
     ;  HeadVars = []
@@ -709,7 +712,8 @@ expand_goal(UnexpandedGoals, Module, ExpandedGoals, HeadVars) :-
        ),
        (  expand_goal_cases(Goals, Module, ExpandedGoals, HeadVars) ->
           true
-       ;  predicate_property(Module:Goals, meta_predicate(MetaSpecs)) ->
+       ;  predicate_property(Module:Goals, meta_predicate(MetaSpecs0)),
+          MetaSpecs0 =.. [_ | MetaSpecs] ->
           expand_module_names(Goals, MetaSpecs, Module, ExpandedGoals, HeadVars)
        ;  thread_goals(Goals, ExpandedGoals, (','))
        ;  Goals = ExpandedGoals
