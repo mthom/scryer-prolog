@@ -1288,7 +1288,11 @@ impl Machine {
                 if let Some(str_like) = self.machine_st.value_to_str_like(a2) {
                     let atom = match str_like {
                         AtomOrString::Atom(atom) => {
-                            atom
+                            if atom == atom!("[]") {
+                                self.machine_st.atom_tbl.build_with("")
+                            } else {
+                                atom
+                            }
                         }
                         AtomOrString::String(string) => {
                             self.machine_st.atom_tbl.build_with(&string)
