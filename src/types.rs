@@ -5,9 +5,6 @@ use crate::machine::machine_indices::*;
 use crate::machine::partial_string::PartialString;
 use crate::machine::streams::*;
 use crate::parser::ast::Fixnum;
-use crate::parser::rug::{Integer, Rational};
-
-use ordered_float::OrderedFloat;
 
 use std::cmp::Ordering;
 use std::convert::TryFrom;
@@ -242,56 +239,6 @@ pub struct HeapCellValue {
     f: bool,
     m: bool,
     tag: HeapCellValueTag,
-}
-
-impl fmt::Display for HeapCellValue {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        read_heap_cell!(*self,
-            (HeapCellValueTag::Atom, (name, arity)) => {
-                if arity == 0 {
-                    write!(f, "{}", name.as_str())
-                } else {
-                    write!(
-                        f,
-                        "{}/{}",
-                        name.as_str(),
-                        arity
-                    )
-                }
-            }
-            (HeapCellValueTag::PStr, pstr_atom) => {
-                let pstr = PartialString::from(pstr_atom);
-
-                write!(
-                    f,
-                    "pstr ( \"{}\", )",
-                    pstr.as_str_from(0)
-                )
-            }
-            (HeapCellValueTag::Cons, c) => {
-                match_untyped_arena_ptr!(c,
-                     (ArenaHeaderTag::Integer, n) => {
-                         write!(f, "{}", n)
-                     }
-                     (ArenaHeaderTag::Rational, r) => {
-                         write!(f, "{}", r)
-                     }
-                     (ArenaHeaderTag::F64, fl) => {
-                         write!(f, "{}", fl)
-                     }
-                     (ArenaHeaderTag::Stream, stream) => {
-                         write!(f, "$stream({})", stream.as_ptr() as usize)
-                     }
-                     _ => {
-                         write!(f, "")
-                     }
-                )
-            }
-            _ => {
-                unreachable!()
-            }
-        )
-    }
 }
 
 impl fmt::Debug for HeapCellValue {

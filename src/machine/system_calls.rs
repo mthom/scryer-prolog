@@ -3302,8 +3302,8 @@ impl Machine {
             .get_name();
 
         let op = read_heap_cell!(self.machine_st.store(self.machine_st.deref(op)),
-            (HeapCellValueTag::Char) => {
-                self.machine_st.atom_tbl.build_with(&op.to_string())
+            (HeapCellValueTag::Char, c) => {
+                self.machine_st.atom_tbl.build_with(&c.to_string())
             }
             (HeapCellValueTag::Atom, (name, _arity)) => {
                 name

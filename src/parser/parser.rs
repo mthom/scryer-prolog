@@ -823,13 +823,13 @@ impl<'a, R: CharRead> Parser<'a, R> {
 
         self.reduce_op(1400);
 
-        if self.stack.len() == 1 {
+        if self.stack.len() <= 1 {
             return false;
         }
 
         let idx = self.stack.len() - 2;
-
         let td = self.stack.remove(idx);
+
         match td.tt {
             TokenType::Open | TokenType::OpenCT => {
                 if self.stack[idx].tt == TokenType::Comma {
