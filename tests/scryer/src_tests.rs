@@ -51,7 +51,7 @@ fn rules() {
 fn setup_call_cleanup_load() {
     load_module_test(
         "src/tests/setup_call_cleanup.pl",
-        "1+21+31+2>_17737+_177381+_158071+2>41+2>_177381+2>31+2>31+2>4ba"
+        "1+21+31+2>A+B1+G1+2>41+2>B1+2>31+2>31+2>4ba",
     );
 }
 
@@ -60,7 +60,7 @@ fn setup_call_cleanup_process() {
     run_top_level_test_with_args(
         &["src/tests/setup_call_cleanup.pl", "-f", "-g", "halt"],
         "",
-        "1+21+31+2>_19590+_195911+_176601+2>41+2>_195911+2>31+2>31+2>4ba"
+        "1+21+31+2>A+B1+G1+2>41+2>B1+2>31+2>31+2>4ba",
     );
 }
 
