@@ -641,7 +641,18 @@ impl MachineState {
                                     continue;
                                 }
 
-                                var_names.insert(var, Rc::new(cell_as_atom!(atom).as_str().to_owned()));
+                                read_heap_cell!(atom,
+                                    (HeapCellValueTag::Char, c) => {
+                                        var_names.insert(var, Rc::new(c.to_string()));
+                                    }
+                                    (HeapCellValueTag::Atom, (name, _arity)) => {
+                                        debug_assert_eq!(_arity, 0);
+                                        var_names.insert(var, Rc::new(name.as_str().to_owned()));
+                                    }
+                                    _ => {
+                                        unreachable!();
+                                    }
+                                );
                             }
                         }
                         _ => {
