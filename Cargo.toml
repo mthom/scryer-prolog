@@ -49,7 +49,7 @@ num-rug-adapter = { optional = true, path = "./crates/num-rug-adapter" }
 ordered-float = "2.1.1"
 phf = { version = "0.9",  features = ["macros"] }
 ref_thread_local = "0.0.0"
-rug = { version = "1.12.0", optional = true }
+rug = { version = "1.15.0", optional = true }
 rustyline = "9.0.0"
 ring = "0.16.13"
 ripemd160 = "0.8.0"

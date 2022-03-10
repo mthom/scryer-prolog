@@ -961,8 +961,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                     });
                 }
                 Number::Rational(r) => {
-                    self.print_rational(r, add_brackets);
-                    return;
+                    self.print_rational(r);
                 }
                 n => {
                     let output_str = format!("{}", n);
@@ -993,11 +992,17 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         }
     }
 
-    fn print_rational(&mut self, r: TypedArenaPtr<Rational>, add_brackets: bool) {
+    fn print_rational(&mut self, r: TypedArenaPtr<Rational>) {
         match self.op_dir.get(&(atom!("rdiv"), Fixity::In)) {
             Some(op_desc) => {
-                if add_brackets {
-                    self.state_stack.push(TokenOrRedirect::Close);
+                if r.is_integer() {
+                    let output_str = format!("{}", r);
+
+                    push_space_if_amb!(self, &output_str, {
+                        append_str!(self, &output_str);
+                    });
+
+                    return;
                 }
 
                 let rdiv_ct = atom!("rdiv");
