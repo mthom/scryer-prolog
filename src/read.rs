@@ -1,7 +1,6 @@
 use crate::parser::ast::*;
 use crate::parser::parser::*;
 
-use crate::arena::*;
 use crate::atom_table::*;
 use crate::forms::*;
 use crate::iterators::*;
@@ -78,21 +77,16 @@ fn get_prompt() -> &'static str {
     }
 }
 
-#[inline]
-pub fn input_stream(arena: &mut Arena) -> Stream {
-    let input_stream = ReadlineStream::new("");
-    Stream::from_readline_stream(input_stream, arena)
-}
-
 #[derive(Debug)]
 pub struct ReadlineStream {
     rl: Editor<()>,
     pending_input: Cursor<String>,
+    add_history: bool,
 }
 
 impl ReadlineStream {
     #[inline]
-    pub fn new(pending_input: &str) -> Self {
+    pub fn new(pending_input: &str, add_history: bool) -> Self {
         let config = Config::builder().check_cursor_position(true).build();
         let mut rl = Editor::<()>::with_config(config);
 
@@ -108,6 +102,7 @@ impl ReadlineStream {
         ReadlineStream {
             rl,
             pending_input: Cursor::new(pending_input.to_owned()),
+            add_history: add_history,
         }
     }
 
@@ -143,6 +138,9 @@ impl ReadlineStream {
     }
 
     fn save_history(&mut self) {
+        if !self.add_history {
+            return;
+        };
         if let Some(mut path) = dirs_next::home_dir() {
             path.push(HISTORY_FILE);
             if path.exists() {
