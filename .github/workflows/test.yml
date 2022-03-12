@@ -38,13 +38,3 @@ jobs:
         with:
           command: test
           args: --verbose --all --no-default-features --features num
-  msrv:
-    steps:
-      - name: Checkout sources
-        uses: actions/checkout@v2
-      - name: Install cargo-msrv
-        uses: baptiste0928/cargo-install@v1.1.0
-        with:
-          crate: cargo-msrv
-      - name: Verify MSRV
-        run: cargo msrv --verify
