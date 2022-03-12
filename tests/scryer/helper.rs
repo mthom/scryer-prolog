@@ -65,6 +65,7 @@ pub fn run_top_level_test_with_args<
     Command::cargo_bin(SCRYER_PROLOG)
         .unwrap()
         .arg("-f")
+        .arg("--no-add-history")
         .args(args)
         .write_stdin(stdin)
         .assert()

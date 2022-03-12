@@ -426,9 +426,9 @@ impl Stream {
     }
 
     #[inline]
-    pub fn stdin(arena: &mut Arena) -> Stream {
+    pub fn stdin(arena: &mut Arena, add_history: bool) -> Stream {
         Stream::Readline(arena_alloc!(
-            StreamLayout::new(ReadlineStream::new("")),
+            StreamLayout::new(ReadlineStream::new("", add_history)),
             arena
         ))
     }

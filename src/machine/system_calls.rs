@@ -4094,7 +4094,7 @@ impl Machine {
         match result {
             Ok(()) => Ok(()),
             Err(e) => {
-                self.user_input = input_stream(&mut self.machine_st.arena);
+                self.user_input.reset();
                 return Err(e);
             }
         }

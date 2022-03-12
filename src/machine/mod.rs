@@ -1,3 +1,4 @@
+pub mod args;
 pub mod arithmetic_ops;
 pub mod attributed_variables;
 pub mod code_walker;
@@ -25,6 +26,7 @@ use crate::arithmetic::*;
 use crate::atom_table::*;
 use crate::forms::*;
 use crate::instructions::*;
+use crate::machine::args::*;
 use crate::machine::compile::*;
 use crate::machine::copier::*;
 use crate::machine::heap::*;
@@ -396,9 +398,10 @@ impl Machine {
     pub fn new() -> Self {
         use ref_thread_local::RefThreadLocal;
 
+        let args = MachineArgs::new();
         let mut machine_st = MachineState::new();
 
-        let user_input = Stream::stdin(&mut machine_st.arena);
+        let user_input = Stream::stdin(&mut machine_st.arena, args.add_history);
         let user_output = Stream::stdout(&mut machine_st.arena);
         let user_error = Stream::stderr(&mut machine_st.arena);
 

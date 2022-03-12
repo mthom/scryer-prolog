@@ -57,6 +57,7 @@ delegate_task([Arg0|Args], Goals0) :-
     ;   member(Arg0, ["-v", "--version"]) -> print_version
     ;   member(Arg0, ["-g", "--goal"]) -> gather_goal(g, Args, Goals0)
     ;   member(Arg0, ["-f"]) -> disable_init_file
+    ;   member(Arg0, ["--no-add-history"]) -> ignore_machine_arg
     ;   atom_chars(Mod, Arg0),
         catch(consult(Mod), E, print_exception(E))
     ),
@@ -73,7 +74,9 @@ print_help :-
     write('   -g, --goal GOAL        '),
     write('Run the query GOAL'), nl,
     write('   -f                     '),
-    write('Fast startup. Do not load initialization file (~/.scryerrc)'),nl,
+    write('Fast startup. Do not load initialization file (~/.scryerrc)'), nl,
+    write('   --no-add-history       '),
+    write('Prevent adding input to history file (~/.scryer_history)'), nl,
     % write('                        '),
     halt.
 
@@ -93,6 +96,8 @@ gather_goal(Type, Args0, Goals) :-
 
 disable_init_file :-
     asserta('disabled_init_file').
+
+ignore_machine_arg.
 
 arg_type(g).
 arg_type(t).
