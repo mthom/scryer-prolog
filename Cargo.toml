@@ -10,6 +10,7 @@ license = "BSD-3-Clause"
 keywords = ["prolog", "prolog-interpreter", "prolog-system"]
 categories = ["command-line-utilities"]
 build = "build.rs"
+rust-version = "1.57"
 
 [workspace]
 members = ["crates/num-rug-adapter",
