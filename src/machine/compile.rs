@@ -1212,7 +1212,11 @@ fn append_compiled_clause(
                 );
 
                 if lower_bound == 0 && !skeleton.core.is_dynamic {
-                    code_ptr_opt = Some(target_pos_clause_start);
+                    code_ptr_opt = Some(if index_loc < target_pos_clause_start {
+                        index_loc
+                    } else {
+                        target_pos_clause_start
+                    });
                 }
             }
 
