@@ -296,6 +296,7 @@ fn setup_meta_predicate<'a, LS: LoadState<'a>>(
                         atom!("+") => MetaSpec::Plus,
                         atom!("-") => MetaSpec::Minus,
                         atom!("?") => MetaSpec::Either,
+                        atom!(":") => MetaSpec::Colon,
                         _ => return Err(CompilationError::InvalidMetaPredicateDecl),
                     };
 

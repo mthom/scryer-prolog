@@ -267,6 +267,7 @@ pub enum MetaSpec {
     Minus,
     Plus,
     Either,
+    Colon,
     RequiresExpansionWithArgument(usize),
 }
 

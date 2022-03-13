@@ -213,6 +213,9 @@ inner_meta_specs(0, HeadArg, InnerHeadArgs, InnerMetaSpecs) :-
     InnerMetaSpecs0 =.. [_ | InnerMetaSpecs],
     HeadArg =.. [_ | InnerHeadArgs].
 
+inner_meta_specs((:), _, [], []) :-
+    !.
+
 inner_meta_specs(N, HeadArg, InnerHeadArgs, InnerMetaSpecs) :-
     integer(N),
     N >= 0,
@@ -636,6 +639,7 @@ expand_module_name(ESG0, MS, M, ESG) :-
     ;  ESG0 = _:_ ->
        ESG = ESG0
     ;  functor(ESG0, F, A0),
+       integer(MS),
        A is A0 + MS,
        functor(EESG0, F, A),
        predicate_property(EESG0, built_in) ->
@@ -647,6 +651,7 @@ expand_module_name(ESG0, MS, M, ESG) :-
 expand_meta_predicate_subgoals([SG | SGs], [MS | MSs], M, [ESG | ESGs], HeadVars) :-
     (  (  integer(MS),
           MS >= 0
+       ;  MS == (:)
        )  ->
        (  var(SG),
           pairs:same_key(SG, HeadVars, [_|_], _) ->
