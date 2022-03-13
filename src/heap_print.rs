@@ -1193,7 +1193,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                         self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
                         self.state_stack.push(TokenOrRedirect::HeadTailSeparator);
                     } else if end_cell != empty_list_as_cell!() {
-                        if value.get_tag() != HeapCellValueTag::CStr {
+                        if end_h != h+1 && value.get_tag() != HeapCellValueTag::CStr {
                             self.iter.pop_stack();
                             self.iter.push_stack(h+1);
                         }
