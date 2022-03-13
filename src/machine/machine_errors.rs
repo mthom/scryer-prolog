@@ -785,7 +785,7 @@ impl MachineState {
         let stub_gen = || functor_stub(atom!("sort"), 2);
 
         let list = self.store(self.deref(self.registers[1]));
-        let sorted = self.registers[2];
+        let sorted = self.store(self.deref(self.registers[2]));
 
         match BrentAlgState::detect_cycles(&self.heap, list) {
             CycleSearchResult::PartialList(..) => {
