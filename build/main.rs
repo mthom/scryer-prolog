@@ -1,3 +1,6 @@
+mod static_string_indexing;
+mod instructions_template;
+
 use static_string_indexing::index_static_strings;
 use instructions_template::generate_instructions_rs;
 

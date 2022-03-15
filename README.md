@@ -1,3 +1,4 @@
+
 # Scryer Prolog
 
 Scryer Prolog aims to become to ISO Prolog what GHC is to Haskell: an open
