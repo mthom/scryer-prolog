@@ -257,6 +257,19 @@ impl MachineState {
         }
     }
 
+    pub(super) fn resource_error(&mut self, value: HeapCellValue) -> MachineError {
+        let stub = functor!(
+            atom!("resource_error"),
+            [atom(atom!("finite_memory")), cell(value)]
+        );
+
+        MachineError {
+            stub,
+            location: None,
+            from: ErrorProvenance::Received,
+        }
+    }
+
     pub(super) fn type_error<T: TypeError>(
         &mut self,
         valid_type: ValidType,

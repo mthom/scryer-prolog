@@ -4119,6 +4119,14 @@ impl Machine {
                     self.cpu_now();
                     step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                 }
+                &Instruction::CallDeterministicLengthRundown(_) => {
+                    try_or_throw!(self.machine_st, self.det_length_rundown());
+                    step_or_fail!(self, self.machine_st.p += 1);
+                }
+                &Instruction::ExecuteDeterministicLengthRundown(_) => {
+                    try_or_throw!(self.machine_st, self.det_length_rundown());
+                    step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+                }
                 &Instruction::CallCurrentTime(_) => {
                     self.current_time();
                     step_or_fail!(self, self.machine_st.p += 1);

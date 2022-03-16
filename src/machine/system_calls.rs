@@ -3232,6 +3232,38 @@ impl Machine {
     }
 
     #[inline(always)]
+    pub(crate) fn det_length_rundown(&mut self) -> CallResult {
+        let stub_gen = || functor_stub(atom!("length"), 2);
+        let len = self.machine_st.store(self.machine_st.deref(self.machine_st.registers[2]));
+
+        let n = match Number::try_from(len) {
+            Ok(Number::Fixnum(n)) => n.get_num() as usize,
+            Ok(Number::Integer(n)) => match n.to_usize() {
+                Some(n) => n,
+                None => {
+                    let err = self.machine_st.resource_error(len);
+                    return Err(self.machine_st.error_form(err, stub_gen()));
+                }
+            }
+            _ => {
+                unreachable!()
+            }
+        };
+
+        let h = self.machine_st.heap.len();
+
+        iter_to_heap_list(
+            &mut self.machine_st.heap,
+            (0 .. n).map(|i| heap_loc_as_cell!(h + 2 * i + 1)),
+        );
+
+        let tail = self.machine_st.store(self.machine_st.deref(self.machine_st.registers[1]));
+        self.machine_st.bind(tail.as_var().unwrap(), heap_loc_as_cell!(h));
+
+        Ok(())
+    }
+
+    #[inline(always)]
     pub(crate) fn current_time(&mut self) {
         let timestamp = self.systemtime_to_timestamp(SystemTime::now());
         self.machine_st.unify_complete_string(timestamp, self.machine_st.registers[1]);
