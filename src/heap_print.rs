@@ -1167,7 +1167,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 }
             }
         } else {
-            let value  = heap_bound_store(
+            let value = heap_bound_store(
                 self.iter.heap,
                 heap_bound_deref(self.iter.heap, self.iter.heap[focus]),
             );
@@ -1184,18 +1184,25 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                     let pstr = cell_as_string!(self.iter.heap[h]);
 
                     let pstr = pstr.as_str_from(offset.get_num() as usize);
+                    let tag = value.get_tag();
+
+                    if tag == HeapCellValueTag::PStrOffset {
+                        // remove the fixnum offset from the iterator stack so we don't
+                        // print an extraneous number. pstr offset value cells are never
+                        // used by the iterator to mark cyclic terms so the removal is safe.
+                        self.iter.pop_stack();
+                    }
 
                     if max_depth > 0 && pstr.chars().count() + 1 >= max_depth {
-                        if value.get_tag() != HeapCellValueTag::CStr {
+                        if tag != HeapCellValueTag::PStrOffset && tag != HeapCellValueTag::CStr {
                             self.iter.pop_stack();
                         }
 
                         self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
                         self.state_stack.push(TokenOrRedirect::HeadTailSeparator);
                     } else if end_cell != empty_list_as_cell!() {
-                        if end_h != h+1 && value.get_tag() != HeapCellValueTag::CStr {
-                            self.iter.pop_stack();
-                            self.iter.push_stack(h+1);
+                        if tag == HeapCellValueTag::PStrOffset {
+                            self.iter.push_stack(end_h);
                         }
 
                         self.state_stack.push(TokenOrRedirect::FunctorRedirect(max_depth));
