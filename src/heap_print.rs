@@ -176,11 +176,15 @@ fn char_to_string(is_quoted: bool, c: char) -> String {
         '\'' | '\n' | '\r' | '\t' | '\u{0b}' | '\u{0c}' | '\u{08}' | '\u{07}' | '"' | '\\' => {
             c.to_string()
         }
+        '\u{0}'..='\u{1f}' => format!("\\x{:x}", c as u32), // print all other control characters in hex.
+        _ => c.to_string(),
+        /*
         '\u{a0}'..='\u{d6}' => c.to_string(),
         '\u{d8}'..='\u{f6}' => c.to_string(),
         '\u{f8}'..='\u{74f}' => c.to_string(),
         '\x20'..='\x7e' => c.to_string(),
         _ => format!("\\x{:x}\\", c as u32),
+        */
     }
 }
 
