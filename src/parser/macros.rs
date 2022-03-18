@@ -15,18 +15,9 @@ macro_rules! alpha_char {
             '\u{00C0}'..='\u{00D6}' => true,
             '\u{00D8}'..='\u{00F6}' => true,
             '\u{00F8}'..='\u{00FF}' => true,
-            '\u{0100}'..='\u{017F}' => true, // Latin Extended-A
-            '\u{0180}'..='\u{024F}' => true, // Latin Extended-B
-            '\u{0250}'..='\u{02AF}' => true, // IPA Extensions
-            '\u{02B0}'..='\u{02FF}' => true, // Spacing Modifier Letters
-            '\u{0300}'..='\u{036F}' => true, // Combining Diacritical Marks
-            '\u{0370}'..='\u{03FF}' => true, // Greek/Coptic
-            '\u{0400}'..='\u{04FF}' => true, // Cyrillic
-            '\u{0500}'..='\u{052F}' => true, // Cyrillic Supplement
-            '\u{0530}'..='\u{058F}' => true, // Armenian
-            '\u{0590}'..='\u{05FF}' => true, // Hebrew
-            '\u{0600}'..='\u{06FF}' => true, // Arabic
-            '\u{0700}'..='\u{074F}' => true, // Syriac
+            '\u{0100}'..='\u{FFFF}' => true, /* skip some control
+ characters but admit the remaining code points as alphabetic
+ characters. */
             _ => false,
         }
     };
