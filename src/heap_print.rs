@@ -210,7 +210,7 @@ enum TokenOrRedirect {
     CompositeRedirect(usize, DirectedOp),
     FunctorRedirect(usize),
     #[allow(unused)] IpAddr(IpAddr),
-    NumberFocus(NumberFocus, Option<DirectedOp>),
+    NumberFocus(usize, NumberFocus, Option<DirectedOp>),
     Open,
     Close,
     Comma,
@@ -664,8 +664,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         self.state_stack.push(TokenOrRedirect::Close);
 
         for _ in 0..arity {
-            self.state_stack
-                .push(TokenOrRedirect::FunctorRedirect(max_depth));
+            self.state_stack.push(TokenOrRedirect::FunctorRedirect(max_depth));
             self.state_stack.push(TokenOrRedirect::Comma);
         }
 
@@ -940,7 +939,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         append_str!(self, &format!("0x{:x}", ptr as *const u8 as usize));
     }
 
-    fn print_number(&mut self, n: NumberFocus, op: &Option<DirectedOp>) {
+    fn print_number(&mut self, max_depth: usize, n: NumberFocus, op: &Option<DirectedOp>) {
         let add_brackets = if let Some(op) = op {
             op.is_negative_sign() && !n.is_negative()
         } else {
@@ -961,7 +960,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                     });
                 }
                 Number::Rational(r) => {
-                    self.print_rational(r);
+                    self.print_rational(max_depth, r);
                 }
                 n => {
                     let output_str = format!("{}", n);
@@ -992,7 +991,17 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         }
     }
 
-    fn print_rational(&mut self, r: TypedArenaPtr<Rational>) {
+    fn print_rational(&mut self, mut max_depth: usize, r: TypedArenaPtr<Rational>) {
+        if self.check_max_depth(&mut max_depth) {
+            self.state_stack.push(TokenOrRedirect::Close);
+            self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
+            self.state_stack.push(TokenOrRedirect::Open);
+
+            self.state_stack.push(TokenOrRedirect::Atom(atom!("rdiv")));
+
+            return;
+        }
+
         match self.op_dir.get(&(atom!("rdiv"), Fixity::In)) {
             Some(op_desc) => {
                 if r.is_integer() {
@@ -1019,8 +1028,9 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                     None
                 };
 
-                if op_desc.get_prec() > 0 {
+                if !self.ignore_ops && op_desc.get_prec() > 0 {
                     self.state_stack.push(TokenOrRedirect::NumberFocus(
+                        max_depth,
                         NumberFocus::Denominator(r),
                         left_directed_op,
                     ));
@@ -1029,6 +1039,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                         .push(TokenOrRedirect::Op(rdiv_ct, *op_desc));
 
                     self.state_stack.push(TokenOrRedirect::NumberFocus(
+                        max_depth,
                         NumberFocus::Numerator(r),
                         right_directed_op,
                     ));
@@ -1036,6 +1047,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                     self.state_stack.push(TokenOrRedirect::Close);
 
                     self.state_stack.push(TokenOrRedirect::NumberFocus(
+                        max_depth,
                         NumberFocus::Denominator(r),
                         None,
                     ));
@@ -1043,6 +1055,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                     self.state_stack.push(TokenOrRedirect::Comma);
 
                     self.state_stack.push(TokenOrRedirect::NumberFocus(
+                        max_depth,
                         NumberFocus::Numerator(r),
                         None,
                     ));
@@ -1343,6 +1356,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             self.state_stack.pop();
 
             self.state_stack.push(TokenOrRedirect::NumberFocus(
+                max_depth,
                 NumberFocus::Unfocused(port),
                 None,
             ));
@@ -1463,10 +1477,10 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 }
             }
             (HeapCellValueTag::Fixnum, n) => {
-                self.print_number(NumberFocus::Unfocused(Number::Fixnum(n)), &op);
+                self.print_number(max_depth, NumberFocus::Unfocused(Number::Fixnum(n)), &op);
             }
             (HeapCellValueTag::F64, f) => {
-                self.print_number(NumberFocus::Unfocused(Number::Float(**f)), &op);
+                self.print_number(max_depth, NumberFocus::Unfocused(Number::Float(**f)), &op);
             }
             (HeapCellValueTag::CStr | HeapCellValueTag::PStr | HeapCellValueTag::PStrOffset) => {
                 self.print_list_like(max_depth);
@@ -1494,13 +1508,13 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             (HeapCellValueTag::Cons, c) => {
                 match_untyped_arena_ptr!(c,
                     (ArenaHeaderTag::F64, f) => {
-                        self.print_number(NumberFocus::Unfocused(Number::Float(*f)), &op);
+                        self.print_number(max_depth, NumberFocus::Unfocused(Number::Float(*f)), &op);
                     }
                     (ArenaHeaderTag::Integer, n) => {
-                        self.print_number(NumberFocus::Unfocused(Number::Integer(n)), &op);
+                        self.print_number(max_depth, NumberFocus::Unfocused(Number::Integer(n)), &op);
                     }
                     (ArenaHeaderTag::Rational, r) => {
-                        self.print_number(NumberFocus::Unfocused(Number::Rational(r)), &op);
+                        self.print_number(max_depth, NumberFocus::Unfocused(Number::Rational(r)), &op);
                     }
                     (ArenaHeaderTag::Stream, stream) => {
                         self.print_stream(stream, max_depth);
@@ -1564,7 +1578,9 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                         }
                     }
                     TokenOrRedirect::HeadTailSeparator => append_str!(self, "|"),
-                    TokenOrRedirect::NumberFocus(n, op) => self.print_number(n, &op),
+                    TokenOrRedirect::NumberFocus(max_depth, n, op) => {
+                        self.print_number(max_depth, n, &op);
+                    }
                     TokenOrRedirect::Comma => append_str!(self, ","),
                     TokenOrRedirect::Space => push_char!(self, ' '),
                     TokenOrRedirect::LeftCurly => push_char!(self, '{'),
