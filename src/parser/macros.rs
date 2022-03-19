@@ -7,19 +7,7 @@ macro_rules! char_class {
 #[macro_export]
 macro_rules! alpha_char {
     ($c: expr) => {
-        match $c {
-            'a'..='z' => true,
-            'A'..='Z' => true,
-            '_' => true,
-            '\u{00A0}'..='\u{00BF}' => true,
-            '\u{00C0}'..='\u{00D6}' => true,
-            '\u{00D8}'..='\u{00F6}' => true,
-            '\u{00F8}'..='\u{00FF}' => true,
-            '\u{0100}'..='\u{FFFF}' => true, /* skip some control
- characters but admit the remaining code points as alphabetic
- characters. */
-            _ => false,
-        }
+        $c.is_alphabetic() || $c == '_'
     };
 }
 
@@ -54,7 +42,7 @@ macro_rules! octet_char {
 #[macro_export]
 macro_rules! capital_letter_char {
     ($c: expr) => {
-        ('A'..='Z').contains(&$c)
+        $c.is_uppercase()
     };
 }
 
@@ -117,7 +105,7 @@ macro_rules! exponent_char {
 #[macro_export]
 macro_rules! graphic_char {
     ($c: expr) => ($crate::char_class!($c, ['#', '$', '&', '*', '+', '-', '.', '/', ':',
-                                    '<', '=', '>', '?', '@', '^', '~']))
+                                            '<', '=', '>', '?', '@', '^', '~']))
 }
 
 #[macro_export]
@@ -165,7 +153,7 @@ macro_rules! octal_digit_char {
 #[macro_export]
 macro_rules! binary_digit_char {
     ($c: expr) => {
-        $c >= '0' && $c <= '1'
+        $c == '0' || $c == '1'
     };
 }
 
@@ -204,7 +192,7 @@ macro_rules! single_quote_char {
 #[macro_export]
 macro_rules! small_letter_char {
     ($c: expr) => {
-        ('a'..='z').contains(&$c)
+        $c.is_lowercase()
     };
 }
 
