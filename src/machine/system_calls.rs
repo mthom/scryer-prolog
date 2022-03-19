@@ -73,6 +73,10 @@ use base64;
 use roxmltree;
 use select;
 
+use hyper::{Body, Client, Method, Request, Uri};
+use hyper::body::Buf;
+use hyper_tls::HttpsConnector;
+
 ref_thread_local! {
     pub(crate) static managed RANDOM_STATE: RandState<'static> = RandState::new();
 }
@@ -3259,6 +3263,78 @@ impl Machine {
 
         let tail = self.machine_st.store(self.machine_st.deref(self.machine_st.registers[1]));
         self.machine_st.bind(tail.as_var().unwrap(), heap_loc_as_cell!(h));
+
+        Ok(())
+    }
+
+    #[inline(always)]
+    pub(crate) fn http_open(&mut self) -> CallResult {
+        let address_sink = self.machine_st.store(self.machine_st.deref(self.machine_st.registers[1]));
+        let method =  read_heap_cell!(self.machine_st.store(self.machine_st.deref(self.machine_st.registers[3])),
+            (HeapCellValueTag::Atom, (name, arity)) => {
+                debug_assert_eq!(arity, 0);
+                match name {
+                    atom!("get") => Method::GET,
+                    atom!("post") => Method::POST,
+                    atom!("put") => Method::PUT,
+                    atom!("delete") => Method::DELETE,
+                    atom!("patch") => Method::PATCH,
+                    atom!("head") => Method::HEAD,
+                    _ => unreachable!(),
+                }
+            }
+            _ => {
+                unreachable!()
+            }
+        );
+        if let Some(address_sink) = self.machine_st.value_to_str_like(address_sink) {
+            let address_string = match address_sink {
+                AtomOrString::Atom(atom) => {
+                    String::from(atom.as_str())
+                }
+                AtomOrString::String(string) => {
+                    String::from(string.as_str())
+                }
+            };
+            let address: Uri = address_string.parse().unwrap();
+
+            let stream = self.runtime.block_on(async {
+                let https = HttpsConnector::new();
+                let client = Client::builder()
+                    .build::<_, hyper::Body>(https);
+                let req = Request::builder()
+                    .method(method)
+                    .uri(address)
+                    .body(Body::empty())
+                    .unwrap();
+                let mut resp = client.request(req).await.unwrap();
+                let buf = hyper::body::aggregate(resp).await.unwrap();
+                let mut reader = buf.reader();
+
+                let mut stream = Stream::from_http_stream(
+                    self.machine_st.atom_tbl.build_with(&address_string),
+                    Box::new(reader),
+                    &mut self.machine_st.arena
+                );
+                *stream.options_mut() = StreamOptions::default();
+                if let Some(alias) = stream.options().get_alias() {
+                    self.indices.stream_aliases.insert(alias, stream);
+                }
+
+                self.indices.streams.insert(stream);
+
+                stream_as_cell!(stream)
+            });
+
+            let stream_addr = self.machine_st.store(self.machine_st.deref(self.machine_st.registers[2]));
+            self.machine_st.bind(stream_addr.as_var().unwrap(), stream);
+
+        } else {
+            let err = self.machine_st.domain_error(DomainErrorType::SourceSink, address_sink);
+            let stub = functor_stub(atom!("http_open"), 3);
+
+            return Err(self.machine_st.error_form(err, stub));
+        }
 
         Ok(())
     }

@@ -37,6 +37,7 @@ pub enum ArenaHeaderTag {
     OutputFileStream = 0b10100,
     NamedTcpStream = 0b011100,
     NamedTlsStream = 0b100000,
+    NamedHttpClientStream =  0b100001,
     ReadlineStream = 0b110000,
     StaticStringStream = 0b110100,
     ByteStream = 0b111000,
@@ -411,6 +412,9 @@ unsafe fn drop_slab_in_place(value: &mut AllocSlab) {
         }
         ArenaHeaderTag::NamedTlsStream => {
             ptr::drop_in_place(value.payload_offset::<StreamLayout<CharReader<NamedTlsStream>>>());
+        }
+        ArenaHeaderTag::NamedHttpClientStream => {
+            ptr::drop_in_place(value.payload_offset::<StreamLayout<CharReader<NamedHttpClientStream>>>());
         }
         ArenaHeaderTag::ReadlineStream => {
             ptr::drop_in_place(value.payload_offset::<StreamLayout<ReadlineStream>>());

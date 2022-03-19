@@ -48,6 +48,7 @@ use std::cmp::Ordering;
 use std::env;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
+use tokio::runtime::Runtime;
 
 lazy_static! {
     pub static ref INTERRUPT: AtomicBool = AtomicBool::new(false);
@@ -62,6 +63,7 @@ pub struct Machine {
     pub(super) user_output: Stream,
     pub(super) user_error: Stream,
     pub(super) load_contexts: Vec<LoadContext>,
+    pub(super) runtime: Runtime,
 }
 
 #[derive(Debug)]
@@ -405,6 +407,11 @@ impl Machine {
         let user_output = Stream::stdout(&mut machine_st.arena);
         let user_error = Stream::stderr(&mut machine_st.arena);
 
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+
         let mut wam = Machine {
             machine_st,
             indices: IndexStore::new(),
@@ -413,6 +420,7 @@ impl Machine {
             user_output,
             user_error,
             load_contexts: vec![],
+            runtime,
         };
 
         let mut lib_path = current_dir();
