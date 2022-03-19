@@ -82,16 +82,6 @@ fn numerical_type_error(
     })
 }
 
-pub(crate) fn sign(n: Number) -> Number {
-    if n.is_positive() {
-        Number::Fixnum(Fixnum::build_with(1))
-    } else if n.is_negative() {
-        Number::Fixnum(Fixnum::build_with(-1))
-    } else {
-        Number::Fixnum(Fixnum::build_with(0))
-    }
-}
-
 fn isize_gcd(n1: isize, n2: isize) -> Option<isize> {
     if n1 == 0 {
         return n2.checked_abs().map(|n| n as isize);
@@ -1278,7 +1268,7 @@ impl MachineState {
                             atom!("\\") => self.interms.push(
                                 drop_iter_on_err!(self, iter, bitwise_complement(a1, &mut self.arena))
                             ),
-                            atom!("sign") => self.interms.push(sign(a1)),
+                            atom!("sign") => self.interms.push(a1.sign()),
                             _ => {
                                 let evaluable_stub = functor_stub(name, 1);
                                 std::mem::drop(iter);

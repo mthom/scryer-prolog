@@ -627,6 +627,22 @@ impl ArenaFrom<Number> for HeapCellValue {
 }
 
 impl Number {
+    pub(crate) fn sign(&self) -> Number {
+        match self {
+            &Number::Float(f) if f == 0.0 => Number::Float(OrderedFloat(0f64)),
+            &Number::Float(f) => Number::Float(OrderedFloat(f.signum())),
+            _ => {
+                if self.is_positive() {
+                    Number::Fixnum(Fixnum::build_with(1))
+                } else if self.is_negative() {
+                    Number::Fixnum(Fixnum::build_with(-1))
+                } else {
+                    Number::Fixnum(Fixnum::build_with(0))
+                }
+            }
+        }
+    }
+
     #[inline]
     pub(crate) fn is_positive(&self) -> bool {
         match self {

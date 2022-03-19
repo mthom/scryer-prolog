@@ -45,7 +45,7 @@ libc = "0.2.62"
 modular-bitfield = "0.11.2"
 nix = "0.15.0"
 num-rug-adapter = { version = "0.1.6", optional = true }
-ordered-float = "2.1.1"
+ordered-float = "2.6.0"
 phf = { version = "0.9",  features = ["macros"] }
 ref_thread_local = "0.0.0"
 rug = { version = "1.15.0", optional = true }

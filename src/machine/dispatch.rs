@@ -714,7 +714,7 @@ impl Machine {
                 &Instruction::Sign(ref a1, t) => {
                     let n = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
 
-                    self.machine_st.interms[t - 1] = sign(n);
+                    self.machine_st.interms[t - 1] = n.sign();
                     self.machine_st.p += 1;
                 }
                 &Instruction::Neg(ref a1, t) => {

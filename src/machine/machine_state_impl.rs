@@ -2594,15 +2594,6 @@ impl MachineState {
         )
     }
 
-    /*
-    pub fn setup_built_in_call(&mut self, ct: BuiltInClauseType) {
-        self.num_of_args = ct.arity();
-        self.b0 = self.b;
-
-        self.p = CodePtr::BuiltInClause(ct, self.p.local());
-    }
-    */
-
     pub fn deallocate(&mut self) {
         let e = self.e;
         let frame = self.stack.index_and_frame(e);
