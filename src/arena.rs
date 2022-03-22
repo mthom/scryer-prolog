@@ -72,8 +72,14 @@ impl ArenaHeader {
     }
 }
 
-#[derive(Debug, PartialOrd, Ord)]
+#[derive(Debug)]
 pub struct TypedArenaPtr<T: ?Sized>(ptr::NonNull<T>);
+
+impl<T: ?Sized + PartialOrd> PartialOrd for TypedArenaPtr<T> {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        (**self).partial_cmp(&**other)
+    }
+}
 
 impl<T: ?Sized + PartialEq> PartialEq for TypedArenaPtr<T> {
     fn eq(&self, other: &TypedArenaPtr<T>) -> bool {
@@ -82,6 +88,12 @@ impl<T: ?Sized + PartialEq> PartialEq for TypedArenaPtr<T> {
 }
 
 impl<T: ?Sized + PartialEq> Eq for TypedArenaPtr<T> {}
+
+impl<T: ?Sized + Ord> Ord for TypedArenaPtr<T> {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        (**self).cmp(&**other)
+    }
+}
 
 impl<T: ?Sized + Hash> Hash for TypedArenaPtr<T> {
     #[inline(always)]

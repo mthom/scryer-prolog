@@ -829,12 +829,12 @@ impl Machine {
                     self.machine_st.heap[h] = heap_loc_as_cell!(h);
                 }
                 TrailEntryTag::TrailedAttrVarListLink => {
-                    let value = HeapCellValue::from_bytes(
-                        self.machine_st.trail[i + 1].into_bytes()
-                    );
+                    let l = self.machine_st.trail[i + 1].get_value() as usize;
 
-                    if value.get_value() < self.machine_st.hb {
-                        self.machine_st.heap[h] = value;
+                    if l < self.machine_st.hb {
+                        self.machine_st.heap[h] = list_loc_as_cell!(l);
+                    } else {
+                        self.machine_st.heap[h] = heap_loc_as_cell!(h);
                     }
                 }
                 TrailEntryTag::TrailedBlackboardEntry => {

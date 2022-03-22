@@ -2876,7 +2876,7 @@ impl Machine {
         debug_assert_eq!(addr.get_tag(), HeapCellValueTag::Lis);
 
         let l = addr.get_value();
-        let tail = self.machine_st.store(self.machine_st.deref(heap_loc_as_cell!(l + 1)));
+        let tail = self.machine_st.store(self.machine_st.deref(self.machine_st.heap[l + 1]));
 
         let tail = if tail.is_var() {
             self.machine_st.heap[h] = heap_loc_as_cell!(h);

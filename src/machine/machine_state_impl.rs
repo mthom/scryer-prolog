@@ -147,8 +147,9 @@ impl MachineState {
                         h as u64,
                     ));
 
-                    self.trail.push(TrailEntry::from_bytes(
-                        list_loc_as_cell!(l).into_bytes()
+                    self.trail.push(TrailEntry::build_with(
+                        TrailEntryTag::TrailedAttachedValue,
+                        l as u64,
                     ));
 
                     self.tr += 2;
@@ -2379,15 +2380,14 @@ impl MachineState {
         value: HeapCellValue,
         stub_gen: impl Fn() -> FunctorStub,
     ) -> Result<Vec<HeapCellValue>, MachineStub> {
-        let deref_v = self.deref(value);
-        let store_v = self.store(deref_v);
+        let value = self.store(self.deref(value));
 
-        read_heap_cell!(store_v,
+        read_heap_cell!(value,
             (HeapCellValueTag::Lis, l) => {
-                self.try_from_inner_list(vec![], l, stub_gen, store_v)
+                self.try_from_inner_list(vec![], l, stub_gen, value)
             }
             (HeapCellValueTag::PStrLoc, h) => {
-                self.try_from_partial_string(vec![], h, stub_gen, store_v)
+                self.try_from_partial_string(vec![], h, stub_gen, value)
             }
             (HeapCellValueTag::AttrVar | HeapCellValueTag::StackVar | HeapCellValueTag::Var) => {
                 let err = self.instantiation_error();
@@ -2397,7 +2397,7 @@ impl MachineState {
                 if name == atom!("[]") && arity == 0 {
                     Ok(vec![])
                 } else {
-                    let err = self.type_error(ValidType::List, store_v);
+                    let err = self.type_error(ValidType::List, value);
                     Err(self.error_form(err, stub_gen()))
                 }
             }
@@ -2406,7 +2406,7 @@ impl MachineState {
                 Ok(cstr.chars().map(|c| char_as_cell!(c)).collect())
             }
             _ => {
-                let err = self.type_error(ValidType::List, store_v);
+                let err = self.type_error(ValidType::List, value);
                 Err(self.error_form(err, stub_gen()))
             }
         )
@@ -2423,16 +2423,15 @@ impl MachineState {
         l += 1;
 
         loop {
-            let deref_v = self.deref(self.heap[l]);
-            let store_v = self.store(self.heap[l]);
+            let value = self.store(self.deref(self.heap[l]));
 
-            read_heap_cell!(store_v,
+            read_heap_cell!(value,
                 (HeapCellValueTag::Lis, hcp) => {
                     result.push(self.heap[hcp]);
                     l = hcp + 1;
                 }
-                (HeapCellValueTag::PStrOffset) => {
-                    return self.try_from_partial_string(result, deref_v.get_value(), stub_gen, a1);
+                (HeapCellValueTag::PStrLoc, l) => {
+                    return self.try_from_partial_string(result, l, stub_gen, a1);
                 }
                 (HeapCellValueTag::Atom, (name, arity)) => {
                     if name == atom!("[]") && arity == 0 {
@@ -2443,7 +2442,7 @@ impl MachineState {
                     }
                 }
                 _ => {
-                    if store_v.is_var() {
+                    if value.is_var() {
                         let err = self.instantiation_error();
                         return Err(self.error_form(err, stub_gen()));
                     } else {
