@@ -367,7 +367,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
         if hexadecimal_digit_char!(c) {
             self.escape_sequence_to_char(|c| hexadecimal_digit_char!(c), 16)
         } else {
-            Err(ParserError::UnexpectedChar(c, self.line_num, self.col_num))
+            Err(ParserError::IncompleteReduction(self.line_num, self.col_num))
         }
     }
 
@@ -400,11 +400,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                 },
             )
         } else {
-            // on failure, restore the token characters and backslash.
-            // self.reader.put_back_all(token.chars().map(Ok));
-            // self.reader.put_back(Ok('\\'));
-
-            Err(ParserError::UnexpectedChar(c, self.line_num, self.col_num))
+            Err(ParserError::IncompleteReduction(self.line_num, self.col_num))
         }
     }
 

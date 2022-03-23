@@ -21,8 +21,6 @@ use std::io::{Cursor, Error, ErrorKind, Read};
 
 type SubtermDeque = VecDeque<(usize, usize)>;
 
-// pub(crate) type PrologStream = ParsingStream<Stream>;
-
 impl MachineState {
     pub(crate) fn devour_whitespace(
         &mut self,
