@@ -116,7 +116,6 @@ impl<'a> StackfulPreOrderHeapIter<'a> {
         let mut parent_spec = DirectedOp::Left(atom!("-"), OpDesc::build_with(200, FY as u8));
 
         loop {
-            // match self.machine_st.store(self.machine_st.deref(addr)) {
             read_heap_cell!(self.heap[h],
                 (HeapCellValueTag::Str, s) => {
                     read_heap_cell!(self.heap[s],
@@ -156,7 +155,6 @@ impl<'a> StackfulPreOrderHeapIter<'a> {
             None => return false,
         };
 
-        // let addr = self.machine_st.store(self.machine_st.deref(addr));
         property_check(addr)
     }
 }

@@ -375,7 +375,18 @@ impl<'a, TermMarker: Allocator> ArithmeticEvaluator<'a, TermMarker> {
 pub(crate) fn rnd_i<'a>(n: &'a Number, arena: &mut Arena) -> Number {
     match n {
         &Number::Integer(_) | &Number::Fixnum(_) => *n,
-        &Number::Float(OrderedFloat(f)) => fixnum!(Number, f.floor() as i64, arena),
+        &Number::Float(OrderedFloat(f)) => {
+            let f = f.floor();
+
+            const I64_MIN_TO_F: OrderedFloat<f64> = OrderedFloat(i64::MIN as f64);
+            const I64_MAX_TO_F: OrderedFloat<f64> = OrderedFloat(i64::MIN as f64);
+
+            if I64_MIN_TO_F <= OrderedFloat(f) && OrderedFloat(f) <= I64_MAX_TO_F {
+                fixnum!(Number, f as i64, arena)
+            } else {
+                Number::Integer(arena_alloc!(Integer::from_f64(f).unwrap(), arena))
+            }
+        }
         &Number::Rational(ref r) => {
             let r_ref = r.fract_floor_ref();
             let (mut fract, mut floor) = (Rational::new(), Integer::new());
