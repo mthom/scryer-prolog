@@ -507,6 +507,7 @@ impl<'b, TermMarker: Allocator> CodeGenerator<'b, TermMarker> {
                 let at_1 = if let &Term::Var(ref vr, ref name) = &terms[0] {
                     ArithmeticTerm::Reg(self.mark_non_callable(name.clone(), 1, term_loc, vr, code))
                 } else {
+                    self.marker.advance_arg();
                     at_1.unwrap_or(interm!(1))
                 };
 
