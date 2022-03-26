@@ -66,51 +66,47 @@
 :- use_module(library(lists)).
 :- use_module(library(charsio)).
 
-list_of_chars(Cs) :-
-        must_be(list, Cs),
-        maplist(must_be(character), Cs).
-
 directory_files(Directory, Files) :-
-        list_of_chars(Directory),
+        must_be(chars, Directory),
         can_be(list, Files),
         '$directory_files'(Directory, Files).
 
 file_size(File, Size) :-
         file_must_exist(File, file_size/2),
-        list_of_chars(File),
+        must_be(chars, File),
         can_be(integer, Size),
         '$file_size'(File, Size).
 
 file_exists(File) :-
-        list_of_chars(File),
+        must_be(chars, File),
         '$file_exists'(File).
 
 directory_exists(Directory) :-
-        list_of_chars(Directory),
+        must_be(chars, Directory),
         '$directory_exists'(Directory).
 
 make_directory(Directory) :-
-        list_of_chars(Directory),
+        must_be(chars, Directory),
         '$make_directory'(Directory).
 
 make_directory_path(Directory) :-
-        list_of_chars(Directory),
+        must_be(chars, Directory),
         '$make_directory_path'(Directory).
 
 delete_file(File) :-
         file_must_exist(File, delete_file/1),
-        list_of_chars(File),
+        must_be(chars, File),
         '$delete_file'(File).
 
 rename_file(File, Renamed) :-
         file_must_exist(File, rename_file/2),
-        list_of_chars(File),
-		list_of_chars(Renamed),
+        must_be(chars, File),
+        must_be(chars, Renamed),
         '$rename_file'(File, Renamed).
 
 delete_directory(Directory) :-
         directory_must_exist(Directory, delete_directory/1),
-        list_of_chars(Directory),
+        must_be(chars, Directory),
         '$delete_directory'(Directory).
 
 file_must_exist(File, Context) :-
@@ -150,8 +146,7 @@ working_directory(Dir0, Dir) :-
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 path_canonical(Ps, Cs) :-
-        must_be(list, Ps),
-        maplist(must_be(character), Ps),
+        must_be(chars, Ps),
         can_be(list, Cs),
         '$path_canonical'(Ps, Cs).
 
@@ -205,9 +200,9 @@ path_segments(Path, Segments) :-
         '$directory_separator'(Sep),
         (   var(Path) ->
             must_be(list, Segments),
-            maplist(list_of_chars, Segments),
+            maplist(must_be(chars), Segments),
             append_with_separator(Segments, Sep, Path)
-        ;   list_of_chars(Path),
+        ;   must_be(chars, Path),
             path_to_segments(Path, Sep, Segments)
         ).
 
