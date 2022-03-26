@@ -2309,35 +2309,35 @@ impl MachineState {
                     return Err(self.error_form(err, stub_gen()));
                 }
 
+                let mut type_error = |arity| {
+                    let err = self.type_error(ValidType::Integer, arity);
+                    return Err(self.error_form(err, stub_gen()));
+                };
+
                 let arity = match Number::try_from(arity) {
-                    Ok(Number::Fixnum(n)) => Some(n.get_num()),
-                    Ok(Number::Integer(n)) => n.to_i64(),
-                    Ok(Number::Rational(n)) if n.denom() == &1 => n.numer().to_i64(),
-                    _ => {
-                        let err = self.type_error(ValidType::Integer, arity);
+                    Ok(Number::Float(_)) => {
+                        return type_error(arity);
+                    }
+                    Ok(Number::Rational(n)) if n.denom() != &1 => {
+                        return type_error(arity);
+                    }
+                    Ok(n) if n > MAX_ARITY => {
+                        // 8.5.1.3 f)
+                        let err = self.representation_error(RepFlag::MaxArity);
                         return Err(self.error_form(err, stub_gen()));
                     }
-                };
-
-                let arity = match arity {
-                    Some(arity) => arity,
-                    None => {
-                        self.fail = true;
-                        return Ok(());
+                    Ok(n) if n < 0 => {
+                        // 8.5.1.3 g)
+                        let err = self.domain_error(DomainErrorType::NotLessThanZero, n);
+                        return Err(self.error_form(err, stub_gen()));
+                    }
+                    Ok(Number::Rational(n)) => n.numer().to_i64().unwrap(),
+                    Ok(Number::Fixnum(n)) => n.get_num(),
+                    Ok(Number::Integer(n)) => n.to_i64().unwrap(),
+                    Err(_) => {
+                        return type_error(arity);
                     }
                 };
-
-                if arity > MAX_ARITY as i64 {
-                    // 8.5.1.3 f)
-                    let err = self.representation_error(RepFlag::MaxArity);
-                    return Err(self.error_form(err, stub_gen()));
-                } else if arity < 0 {
-                    // 8.5.1.3 g)
-                    let arity = Number::Fixnum(Fixnum::build_with(arity));
-                    let err = self.domain_error(DomainErrorType::NotLessThanZero, arity);
-
-                    return Err(self.error_form(err, stub_gen()));
-                }
 
                 read_heap_cell!(store_name,
                     (HeapCellValueTag::Cons | HeapCellValueTag::Char | HeapCellValueTag::Fixnum |
