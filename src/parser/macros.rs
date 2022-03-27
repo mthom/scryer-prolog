@@ -192,7 +192,7 @@ macro_rules! single_quote_char {
 #[macro_export]
 macro_rules! small_letter_char {
     ($c: expr) => {
-        $c.is_lowercase()
+        $c.is_alphabetic() && !$c.is_uppercase()
     };
 }
 
