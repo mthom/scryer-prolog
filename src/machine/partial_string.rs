@@ -622,7 +622,7 @@ pub fn compare_pstr_prefixes<'a>(
 
                         if let Some(c1) = pstr.as_str_from(n).chars().next() {
                             if c1 != c2 {
-                                return PStrCmpResult::Ordered(c2.cmp(&c1));
+                                return PStrCmpResult::Ordered(c1.cmp(&c2));
                             }
 
                             let n1 = n + c1.len_utf8();
