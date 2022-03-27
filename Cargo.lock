@@ -1532,6 +1532,7 @@ dependencies = [
  "roxmltree",
  "rug",
  "rustyline",
+ "ryu",
  "select",
  "serial_test",
  "sha3",

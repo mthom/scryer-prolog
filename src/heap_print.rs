@@ -484,17 +484,22 @@ pub fn fmt_float(mut fl: f64) -> String {
         fl = 0f64;
     }
 
-    if fl.fract() == 0f64 {
-        if fl.abs() >= 1.0e16 {
-            format!("{:.1e}", fl.trunc())
-        } else {
-            format!("{:.1}", fl.trunc())
+    let mut buffer = ryu::Buffer::new();
+    let fl_str = buffer.format(fl);
+
+    /* When printing floats with zero fractional parts in scientific notation, ryu
+     * prints "{integer part}e{exponent}" without a ".0" preceding "e",
+     * which is not valid ISO Prolog syntax. Add ".0" manually in this
+     * case.
+     */
+
+    if let Some(e_index) = fl_str.find('e') {
+        if !fl_str[0 .. e_index].contains('.') {
+            return fl_str[0 .. e_index].to_string() + ".0" + &fl_str[e_index ..];
         }
-    } else if 0f64 < fl.fract().abs() && fl.fract().abs() <= 1.0e-16 {
-        format!("{0:.15e}", fl)
-    } else {
-        format!("{}", fl)
     }
+
+    fl_str.to_string()
 }
 
 #[derive(Debug)]

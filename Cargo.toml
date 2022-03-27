@@ -64,6 +64,7 @@ smallvec = "1.8.0"
 sodiumoxide = "0.2.6"
 static_assertions = "1.1.0"
 slice-deque = "0.3.0"
+ryu = "1.0.9"
 
 [dev-dependencies]
 assert_cmd = "1.0.3"
