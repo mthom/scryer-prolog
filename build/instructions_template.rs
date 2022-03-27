@@ -540,7 +540,7 @@ enum SystemClauseType {
     CpuNow,
     #[strum_discriminants(strum(props(Arity = "2", Name = "$det_length_rundown")))]
     DeterministicLengthRundown,
-    #[strum_discriminants(strum(props(Arity = "3", Name = "$http_open")))]
+    #[strum_discriminants(strum(props(Arity = "7", Name = "$http_open")))]
     HttpOpen,
     REPL(REPLCodePtr),
 }
