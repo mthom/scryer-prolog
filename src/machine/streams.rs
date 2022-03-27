@@ -988,18 +988,35 @@ impl Stream {
 
     #[inline]
     pub(crate) fn close(&mut self) -> Result<(), std::io::Error> {
-        let result = match self {
+        let mut stream = std::mem::replace(self, Stream::Null(StreamOptions::default()));
+
+        match stream {
             Stream::NamedTcp(ref mut tcp_stream) => {
                 tcp_stream.inner_mut().tcp_stream.shutdown(Shutdown::Both)
             },
             Stream::NamedTls(ref mut tls_stream) => {
                 tls_stream.inner_mut().tls_stream.shutdown()
             }
-            _ => Ok(())
-        };
+            Stream::InputFile(mut file_stream) => {
+                // close the stream by dropping the inner File.
+                unsafe {
+                    file_stream.set_tag(ArenaHeaderTag::Dropped);
+                    std::ptr::drop_in_place(&mut file_stream.inner_mut().file as *mut _);
+                }
 
-        *self = Stream::Null(StreamOptions::default());
-        result
+                Ok(())
+            }
+            Stream::OutputFile(mut file_stream) => {
+                // close the stream by dropping the inner File.
+                unsafe {
+                    file_stream.set_tag(ArenaHeaderTag::Dropped);
+                    std::ptr::drop_in_place(&mut file_stream.file as *mut _);
+                }
+
+                Ok(())
+            }
+            _ => Ok(())
+        }
     }
 
     #[inline]
