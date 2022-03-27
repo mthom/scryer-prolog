@@ -87,9 +87,14 @@ impl ConsPtr {
             .with_tag(tag)
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn as_ptr(self) -> *mut u8 {
         self.ptr() as *mut _
+    }
+
+    #[inline(always)]
+    pub fn get_tag(self) -> ConsPtrMaskTag {
+        self.tag()
     }
 }
 

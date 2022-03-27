@@ -87,10 +87,21 @@ macro_rules! cell_as_atom_cell {
 
 macro_rules! cell_as_f64_ptr {
     ($cell:expr) => {{
-        let ptr_u64 = ConsPtr::from_bytes($cell.into_bytes());
-        F64Ptr(TypedArenaPtr::new(
-            ptr_u64.as_ptr() as *mut OrderedFloat<f64>
-        ))
+        let cons_ptr = ConsPtr::from_bytes($cell.into_bytes());
+
+        match cons_ptr.get_tag() {
+            ConsPtrMaskTag::F64 => {
+                F64Ptr(TypedArenaPtr::new(
+                    cons_ptr.as_ptr() as *mut OrderedFloat<f64>
+                ))
+            }
+            ConsPtrMaskTag::Cons => {
+                let ptr = cell_as_untyped_arena_ptr!($cell).payload_offset();
+                unsafe {
+                    F64Ptr(TypedArenaPtr::new(std::mem::transmute(ptr)))
+                }
+            }
+        }
     }};
 }
 
