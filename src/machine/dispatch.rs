@@ -4128,11 +4128,11 @@ impl Machine {
                     step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                 }
                 &Instruction::CallHttpOpen(_) => {
-                    self.http_open();
+                    try_or_throw!(self.machine_st, self.http_open());
                     step_or_fail!(self, self.machine_st.p += 1);
                 }
                 &Instruction::ExecuteHttpOpen(_) => {
-                    self.http_open();
+                    try_or_throw!(self.machine_st, self.http_open());
                     step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                 }
                 &Instruction::CallCurrentTime(_) => {
