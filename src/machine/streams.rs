@@ -1050,6 +1050,14 @@ impl Stream {
             Stream::NamedTls(ref mut tls_stream) => {
                 tls_stream.inner_mut().tls_stream.shutdown()
             }
+            Stream::NamedHttpClient(ref mut http_stream) => {
+                unsafe {
+                    http_stream.set_tag(ArenaHeaderTag::Dropped);
+                    std::ptr::drop_in_place(&mut http_stream.inner_mut().body_reader as *mut _);
+                }
+                
+                Ok(())
+            }
             Stream::InputFile(mut file_stream) => {
                 // close the stream by dropping the inner File.
                 unsafe {
