@@ -379,7 +379,7 @@ impl HCValueOutputter for PrinterOutputter {
 
 #[inline]
 fn is_numbered_var(ct: &ClauseType, arity: usize) -> bool {
-    arity == 1 && ct.name().as_str() == "$VAR"
+    arity == 1 && ct.name() == atom!("$VAR")
 }
 
 #[inline]
@@ -399,43 +399,6 @@ fn negated_op_needs_bracketing(
             })
     } else {
         false
-    }
-}
-
-pub(crate) fn numbervar(offset: &Integer, addr: HeapCellValue) -> Option<String> {
-    fn numbervar(n: Integer) -> String {
-        static CHAR_CODES: [char; 26] = [
-            'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q',
-            'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
-        ];
-
-        let i = n.mod_u(26) as usize;
-        let j = n.div_rem_floor(Integer::from(26));
-        let j = <(Integer, Integer)>::from(j).0;
-
-        if j == 0 {
-            CHAR_CODES[i].to_string()
-        } else {
-            format!("{}{}", CHAR_CODES[i], j)
-        }
-    }
-
-    match Number::try_from(addr) {
-        Ok(Number::Fixnum(n)) => {
-            if n.get_num() >= 0 {
-                Some(numbervar(offset + Integer::from(n.get_num())))
-            } else {
-                None
-            }
-        }
-        Ok(Number::Integer(n)) => {
-            if &*n >= &0 {
-                Some(numbervar(Integer::from(offset + &*n)))
-            } else {
-                None
-            }
-        }
-        _ => None,
     }
 }
 
@@ -529,6 +492,43 @@ macro_rules! push_space_if_amb {
             $action;
         }
     };
+}
+
+pub(crate) fn numbervar(offset: &Integer, addr: HeapCellValue) -> Option<String> {
+    fn numbervar(n: Integer) -> String {
+        static CHAR_CODES: [char; 26] = [
+            'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q',
+            'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
+        ];
+
+        let i = n.mod_u(26) as usize;
+        let j = n.div_rem_floor(Integer::from(26));
+        let j = <(Integer, Integer)>::from(j).0;
+
+        if j == 0 {
+            CHAR_CODES[i].to_string()
+        } else {
+            format!("{}{}", CHAR_CODES[i], j)
+        }
+    }
+
+    match Number::try_from(addr) {
+        Ok(Number::Fixnum(n)) => {
+            if n.get_num() >= 0 {
+                Some(numbervar(offset + Integer::from(n.get_num())))
+            } else {
+                None
+            }
+        }
+        Ok(Number::Integer(n)) => {
+            if &*n >= &0 {
+                Some(numbervar(Integer::from(offset + &*n)))
+            } else {
+                None
+            }
+        }
+        _ => None,
+    }
 }
 
 impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
@@ -748,8 +748,14 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
     fn format_numbered_vars(&mut self) -> bool {
         let h = self.iter.stack_last().unwrap();
 
+        let addr = self.iter.heap[h];
+        let addr = heap_bound_store(
+            &self.iter.heap,
+            heap_bound_deref(&self.iter.heap, addr),
+        );
+
         // 7.10.4
-        if let Some(var) = numbervar(&self.numbervars_offset, self.iter.heap[h]) {
+        if let Some(var) = numbervar(&self.numbervars_offset, addr) {
             self.iter.pop_stack();
             self.state_stack.push(TokenOrRedirect::NumberedVar(var));
             return true;
@@ -1295,7 +1301,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         let add_brackets = if !self.ignore_ops {
             negated_operand
                 || if let Some(ref op) = op {
-                    if self.numbervars && arity == 1 && name.as_str() == "$VAR" {
+                    if self.numbervars && arity == 1 && name == atom!("$VAR") {
                         !self.iter.immediate_leaf_has_property(|addr| {
                             match Number::try_from(addr) {
                                 Ok(Number::Integer(n)) => &*n >= &0,
