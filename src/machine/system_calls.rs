@@ -43,6 +43,7 @@ use std::mem;
 use std::net::{TcpListener, TcpStream};
 use std::num::NonZeroU32;
 use std::ops::Sub;
+use std::str::FromStr;
 use std::process;
 
 use chrono::{offset::Local, DateTime};
@@ -72,6 +73,11 @@ use native_tls::{TlsConnector,TlsAcceptor,Identity};
 use base64;
 use roxmltree;
 use select;
+
+use hyper::{Body, Client, HeaderMap, Method, Request, Uri};
+use hyper::header::{HeaderName, HeaderValue};
+use hyper::body::Buf;
+use hyper_tls::HttpsConnector;
 
 ref_thread_local! {
     pub(crate) static managed RANDOM_STATE: RandState<'static> = RandState::new();
@@ -3259,6 +3265,129 @@ impl Machine {
 
         let tail = self.machine_st.store(self.machine_st.deref(self.machine_st.registers[1]));
         self.machine_st.bind(tail.as_var().unwrap(), heap_loc_as_cell!(h));
+
+        Ok(())
+    }
+
+    #[inline(always)]
+    pub(crate) fn http_open(&mut self) -> CallResult {
+        let address_sink = self.machine_st.store(self.machine_st.deref(self.machine_st.registers[1]));
+        let method =  read_heap_cell!(self.machine_st.store(self.machine_st.deref(self.machine_st.registers[3])),
+            (HeapCellValueTag::Atom, (name, arity)) => {
+                debug_assert_eq!(arity, 0);
+                match name {
+                    atom!("get") => Method::GET,
+                    atom!("post") => Method::POST,
+                    atom!("put") => Method::PUT,
+                    atom!("delete") => Method::DELETE,
+                    atom!("patch") => Method::PATCH,
+                    atom!("head") => Method::HEAD,
+                    _ => unreachable!(),
+                }
+            }
+            _ => {
+                unreachable!()
+            }
+        );
+        let address_status = self.machine_st.store(self.machine_st.deref(self.machine_st.registers[4]));
+        let address_data = self.machine_st.store(self.machine_st.deref(self.machine_st.registers[5]));
+        let mut bytes: Vec<u8> = Vec::new();
+        if let Some(string) = self.machine_st.value_to_str_like(address_data) {
+            bytes = string.as_str().bytes().collect();
+        }
+        let stub_gen = || functor_stub(atom!("http_open"), 3);
+
+        let headers = match self.machine_st.try_from_list(self.machine_st.registers[7], stub_gen) {
+            Ok(addrs) => {
+                let mut header_map = HeaderMap::new();
+                for heap_cell in addrs{
+                   read_heap_cell!(heap_cell,
+                       (HeapCellValueTag::Str, s) => {
+                           let name = cell_as_atom_cell!(self.machine_st.heap[s]).get_name();
+                           let value = self.machine_st.value_to_str_like(self.machine_st.heap[s + 1]).unwrap();
+                           header_map.insert(HeaderName::from_str(name.as_str()).unwrap(), HeaderValue::from_str(value.as_str()).unwrap());
+                       }
+                       _ => {
+                           unreachable!()
+                       }
+                   )
+                }
+                header_map
+            },
+            Err(e) => return Err(e)
+        };
+        if let Some(address_sink) = self.machine_st.value_to_str_like(address_sink) {
+            let address_string = match address_sink {
+                AtomOrString::Atom(atom) => {
+                    String::from(atom.as_str())
+                }
+                AtomOrString::String(string) => {
+                    String::from(string.as_str())
+                }
+            };
+            let address: Uri = address_string.parse().unwrap();
+
+            let stream = self.runtime.block_on(async {
+                let https = HttpsConnector::new();
+                let client = Client::builder()
+                    .build::<_, hyper::Body>(https);
+
+                // request
+                let mut req = Request::builder()
+                    .method(method)
+                    .uri(address)
+                    .body(Body::from(bytes))
+                    .unwrap();
+                // request headers
+                *req.headers_mut() = headers;
+                // do it!
+                let resp = client.request(req).await.unwrap();
+                // status code
+                let status = resp.status().as_u16();
+                self.machine_st.unify_fixnum(Fixnum::build_with(status as i64), address_status);
+                // headers
+                let headers: Vec<HeapCellValue> = resp.headers().iter().map(|(header_name, header_value)| {
+                    let h = self.machine_st.heap.len();
+
+                    let header_term = functor!(
+                        self.machine_st.atom_tbl.build_with(header_name.as_str()),
+                        [cell(string_as_cstr_cell!(self.machine_st.atom_tbl.build_with(header_value.to_str().unwrap())))]
+                    );
+
+                    self.machine_st.heap.extend(header_term.into_iter());
+                    str_loc_as_cell!(h)
+                }).collect();
+
+                let headers_list = iter_to_heap_list(&mut self.machine_st.heap, headers.into_iter());
+                unify!(self.machine_st, heap_loc_as_cell!(headers_list), self.machine_st.registers[6]);
+                // body
+                let buf = hyper::body::aggregate(resp).await.unwrap();
+                let reader = buf.reader();
+
+                let mut stream = Stream::from_http_stream(
+                    self.machine_st.atom_tbl.build_with(&address_string),
+                    Box::new(reader),
+                    &mut self.machine_st.arena
+                );
+                *stream.options_mut() = StreamOptions::default();
+                if let Some(alias) = stream.options().get_alias() {
+                    self.indices.stream_aliases.insert(alias, stream);
+                }
+
+                self.indices.streams.insert(stream);
+
+                stream_as_cell!(stream)
+            });
+
+            let stream_addr = self.machine_st.store(self.machine_st.deref(self.machine_st.registers[2]));
+            self.machine_st.bind(stream_addr.as_var().unwrap(), stream);
+
+        } else {
+            let err = self.machine_st.domain_error(DomainErrorType::SourceSink, address_sink);
+            let stub = functor_stub(atom!("http_open"), 3);
+
+            return Err(self.machine_st.error_form(err, stub));
+        }
 
         Ok(())
     }

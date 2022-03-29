@@ -224,6 +224,11 @@ impl Machine {
         let user_output = Stream::from_owned_string("".to_owned(), &mut machine_st.arena);
         let user_error = Stream::stderr(&mut machine_st.arena);
 
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+
         let mut wam = Machine {
             machine_st,
             indices: IndexStore::new(),
@@ -232,6 +237,7 @@ impl Machine {
             user_output,
             user_error,
             load_contexts: vec![],
+            runtime
         };
 
         let mut lib_path = current_dir();

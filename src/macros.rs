@@ -305,6 +305,7 @@ macro_rules! match_untyped_arena_ptr_pat {
             | ArenaHeaderTag::OutputFileStream
             | ArenaHeaderTag::NamedTcpStream
             | ArenaHeaderTag::NamedTlsStream
+            | ArenaHeaderTag::NamedHttpClientStream
             | ArenaHeaderTag::ReadlineStream
             | ArenaHeaderTag::StaticStringStream
             | ArenaHeaderTag::ByteStream

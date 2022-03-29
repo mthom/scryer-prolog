@@ -15,10 +15,11 @@ pub use modular_bitfield::prelude::*;
 use std::cmp::Ordering;
 use std::error::Error;
 use std::fmt;
+use std::fmt::Debug;
 use std::fs::{File, OpenOptions};
 use std::hash::{Hash};
 use std::io;
-use std::io::{Cursor, ErrorKind, Read, Seek, SeekFrom, Write};
+use std::io::{BufRead, Cursor, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::mem;
 use std::net::{TcpStream, Shutdown};
 use std::ops::{Deref, DerefMut};
@@ -237,6 +238,24 @@ impl Write for NamedTlsStream {
     }
 }
 
+pub struct NamedHttpClientStream {
+    url: Atom,
+    body_reader: Box<dyn BufRead>,
+}
+
+impl Debug for NamedHttpClientStream {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Http Client Stream [{}]", self.url.as_str())
+    }
+}
+
+impl Read for NamedHttpClientStream {
+    #[inline]
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        self.body_reader.read(buf)
+    }
+}
+
 #[derive(Debug)]
 pub struct StandardOutputStream {}
 
@@ -375,6 +394,7 @@ arena_allocated_impl_for_stream!(CharReader<InputFileStream>, InputFileStream);
 arena_allocated_impl_for_stream!(OutputFileStream, OutputFileStream);
 arena_allocated_impl_for_stream!(CharReader<NamedTcpStream>, NamedTcpStream);
 arena_allocated_impl_for_stream!(CharReader<NamedTlsStream>, NamedTlsStream);
+arena_allocated_impl_for_stream!(CharReader<NamedHttpClientStream>, NamedHttpClientStream);
 arena_allocated_impl_for_stream!(ReadlineStream, ReadlineStream);
 arena_allocated_impl_for_stream!(StaticStringStream, StaticStringStream);
 arena_allocated_impl_for_stream!(StandardOutputStream, StandardOutputStream);
@@ -388,6 +408,7 @@ pub enum Stream {
     StaticString(TypedArenaPtr<StreamLayout<StaticStringStream>>),
     NamedTcp(TypedArenaPtr<StreamLayout<CharReader<NamedTcpStream>>>),
     NamedTls(TypedArenaPtr<StreamLayout<CharReader<NamedTlsStream>>>),
+    NamedHttpClient(TypedArenaPtr<StreamLayout<CharReader<NamedHttpClientStream>>>),
     Null(StreamOptions),
     Readline(TypedArenaPtr<StreamLayout<ReadlineStream>>),
     StandardOutput(TypedArenaPtr<StreamLayout<StandardOutputStream>>),
@@ -442,6 +463,7 @@ impl Stream {
             }
             ArenaHeaderTag::NamedTcpStream => Stream::NamedTcp(TypedArenaPtr::new(ptr as *mut _)),
             ArenaHeaderTag::NamedTlsStream => Stream::NamedTls(TypedArenaPtr::new(ptr as *mut _)),
+            ArenaHeaderTag::NamedHttpClientStream => Stream::NamedHttpClient(TypedArenaPtr::new(ptr as *mut _)),
             ArenaHeaderTag::ReadlineStream => Stream::Readline(TypedArenaPtr::new(ptr as *mut _)),
             ArenaHeaderTag::StaticStringStream => {
                 Stream::StaticString(TypedArenaPtr::new(ptr as *mut _))
@@ -494,6 +516,7 @@ impl Stream {
             Stream::StaticString(ptr) => ptr.header_ptr(),
             Stream::NamedTcp(ptr) => ptr.header_ptr(),
             Stream::NamedTls(ptr) => ptr.header_ptr(),
+            Stream::NamedHttpClient(ptr) => ptr.header_ptr(),
             Stream::Null(_) => ptr::null(),
             Stream::Readline(ptr) => ptr.header_ptr(),
             Stream::StandardOutput(ptr) => ptr.header_ptr(),
@@ -509,6 +532,7 @@ impl Stream {
             Stream::StaticString(ref ptr) => &ptr.options,
             Stream::NamedTcp(ref ptr) => &ptr.options,
             Stream::NamedTls(ref ptr) => &ptr.options,
+            Stream::NamedHttpClient(ref ptr) => &ptr.options,
             Stream::Null(ref options) => options,
             Stream::Readline(ref ptr) => &ptr.options,
             Stream::StandardOutput(ref ptr) => &ptr.options,
@@ -524,6 +548,7 @@ impl Stream {
             Stream::StaticString(ref mut ptr) => &mut ptr.options,
             Stream::NamedTcp(ref mut ptr) => &mut ptr.options,
             Stream::NamedTls(ref mut ptr) => &mut ptr.options,
+            Stream::NamedHttpClient(ref mut ptr) => &mut ptr.options,
             Stream::Null(ref mut options) => options,
             Stream::Readline(ref mut ptr) => &mut ptr.options,
             Stream::StandardOutput(ref mut ptr) => &mut ptr.options,
@@ -540,6 +565,7 @@ impl Stream {
             Stream::StaticString(ptr) => ptr.lines_read += incr_num_lines_read,
             Stream::NamedTcp(ptr) => ptr.lines_read += incr_num_lines_read,
             Stream::NamedTls(ptr) => ptr.lines_read += incr_num_lines_read,
+            Stream::NamedHttpClient(ptr) => ptr.lines_read += incr_num_lines_read,
             Stream::Null(_) => {}
             Stream::Readline(ptr) => ptr.lines_read += incr_num_lines_read,
             Stream::StandardOutput(ptr) => ptr.lines_read += incr_num_lines_read,
@@ -556,6 +582,7 @@ impl Stream {
             Stream::StaticString(ptr) => ptr.lines_read = value,
             Stream::NamedTcp(ptr) => ptr.lines_read = value,
             Stream::NamedTls(ptr) => ptr.lines_read = value,
+            Stream::NamedHttpClient(ptr) => ptr.lines_read = value,
             Stream::Null(_) => {}
             Stream::Readline(ptr) => ptr.lines_read = value,
             Stream::StandardOutput(ptr) => ptr.lines_read = value,
@@ -572,6 +599,7 @@ impl Stream {
             Stream::StaticString(ptr) => ptr.lines_read,
             Stream::NamedTcp(ptr) => ptr.lines_read,
             Stream::NamedTls(ptr) => ptr.lines_read,
+            Stream::NamedHttpClient(ptr) => ptr.lines_read,
             Stream::Null(_) => 0,
             Stream::Readline(ptr) => ptr.lines_read,
             Stream::StandardOutput(ptr) => ptr.lines_read,
@@ -586,6 +614,7 @@ impl CharRead for Stream {
             Stream::InputFile(file) => (*file).peek_char(),
             Stream::NamedTcp(tcp_stream) => (*tcp_stream).peek_char(),
             Stream::NamedTls(tls_stream) => (*tls_stream).peek_char(),
+            Stream::NamedHttpClient(http_stream) => (*http_stream).peek_char(),
             Stream::Readline(rl_stream) => (*rl_stream).peek_char(),
             Stream::StaticString(src) => (*src).peek_char(),
             Stream::Byte(cursor) => (*cursor).peek_char(),
@@ -604,6 +633,7 @@ impl CharRead for Stream {
             Stream::InputFile(file) => (*file).read_char(),
             Stream::NamedTcp(tcp_stream) => (*tcp_stream).read_char(),
             Stream::NamedTls(tls_stream) => (*tls_stream).read_char(),
+            Stream::NamedHttpClient(http_stream) => (*http_stream).read_char(),
             Stream::Readline(rl_stream) => (*rl_stream).read_char(),
             Stream::StaticString(src) => (*src).read_char(),
             Stream::Byte(cursor) => (*cursor).read_char(),
@@ -622,6 +652,7 @@ impl CharRead for Stream {
             Stream::InputFile(file) => file.put_back_char(c),
             Stream::NamedTcp(tcp_stream) => tcp_stream.put_back_char(c),
             Stream::NamedTls(tls_stream) => tls_stream.put_back_char(c),
+            Stream::NamedHttpClient(http_stream) => http_stream.put_back_char(c),
             Stream::Readline(rl_stream) => rl_stream.put_back_char(c),
             Stream::StaticString(src) => src.put_back_char(c),
             Stream::Byte(cursor) => cursor.put_back_char(c),
@@ -637,6 +668,7 @@ impl CharRead for Stream {
             Stream::InputFile(ref mut file) => file.consume(nread),
             Stream::NamedTcp(ref mut tcp_stream) => tcp_stream.consume(nread),
             Stream::NamedTls(ref mut tls_stream) => tls_stream.consume(nread),
+            Stream::NamedHttpClient(ref mut http_stream) => http_stream.consume(nread),
             Stream::Readline(ref mut rl_stream) => rl_stream.consume(nread),
             Stream::StaticString(ref mut src) => src.consume(nread),
             Stream::Byte(ref mut cursor) => cursor.consume(nread),
@@ -655,6 +687,7 @@ impl Read for Stream {
             Stream::InputFile(file) => (*file).read(buf),
             Stream::NamedTcp(tcp_stream) => (*tcp_stream).read(buf),
             Stream::NamedTls(tls_stream) => (*tls_stream).read(buf),
+            Stream::NamedHttpClient(http_stream) => (*http_stream).read(buf),
             Stream::Readline(rl_stream) => (*rl_stream).read(buf),
             Stream::StaticString(src) => (*src).read(buf),
             Stream::Byte(cursor) => (*cursor).read(buf),
@@ -680,6 +713,7 @@ impl Write for Stream {
             Stream::Byte(ref mut cursor) => cursor.get_mut().write(buf),
             Stream::StandardOutput(stream) => stream.write(buf),
             Stream::StandardError(stream) => stream.write(buf),
+            Stream::NamedHttpClient(_) |
             Stream::StaticString(_) |
             Stream::Readline(_) |
             Stream::InputFile(..) |
@@ -698,6 +732,7 @@ impl Write for Stream {
             Stream::Byte(ref mut cursor) => cursor.stream.get_mut().flush(),
             Stream::StandardError(stream) => stream.stream.flush(),
             Stream::StandardOutput(stream) => stream.stream.flush(),
+            Stream::NamedHttpClient(_) |
             Stream::StaticString(_) |
             Stream::Readline(_) |
             Stream::InputFile(_) |
@@ -822,6 +857,7 @@ impl Stream {
             Stream::StaticString(stream) => stream.past_end_of_stream,
             Stream::NamedTcp(stream) => stream.past_end_of_stream,
             Stream::NamedTls(stream) => stream.past_end_of_stream,
+            Stream::NamedHttpClient(stream) => stream.past_end_of_stream,
             Stream::Null(_) => false,
             Stream::Readline(stream) => stream.past_end_of_stream,
             Stream::StandardOutput(stream) => stream.past_end_of_stream,
@@ -843,6 +879,7 @@ impl Stream {
             Stream::StaticString(stream) => stream.past_end_of_stream = value,
             Stream::NamedTcp(stream) => stream.past_end_of_stream = value,
             Stream::NamedTls(stream) => stream.past_end_of_stream = value,
+            Stream::NamedHttpClient(stream) => stream.past_end_of_stream = value,
             Stream::Null(_) => {}
             Stream::Readline(stream) => stream.past_end_of_stream = value,
             Stream::StandardOutput(stream) => stream.past_end_of_stream = value,
@@ -906,6 +943,7 @@ impl Stream {
             Stream::Byte(_)
             | Stream::Readline(_)
             | Stream::StaticString(_)
+            | Stream::NamedHttpClient(_)
             | Stream::InputFile(..) => atom!("read"),
             Stream::NamedTcp(..) | Stream::NamedTls(..) => atom!("read_append"),
             Stream::OutputFile(file) if file.is_append => atom!("append"),
@@ -964,6 +1002,21 @@ impl Stream {
     }
 
     #[inline]
+    pub(crate) fn from_http_stream(
+        url: Atom,
+        http_stream: Box<dyn BufRead>,
+        arena: &mut Arena,
+    ) -> Self {
+        Stream::NamedHttpClient(arena_alloc!(
+            StreamLayout::new(CharReader::new(NamedHttpClientStream {
+                url,
+                body_reader: http_stream
+            })),
+            arena
+        ))
+    }
+
+    #[inline]
     pub(crate) fn from_file_as_output(
         file_name: Atom,
         file: File,
@@ -998,6 +1051,14 @@ impl Stream {
             },
             Stream::NamedTls(ref mut tls_stream) => {
                 tls_stream.inner_mut().tls_stream.shutdown()
+            }
+            Stream::NamedHttpClient(ref mut http_stream) => {
+                unsafe {
+                    http_stream.set_tag(ArenaHeaderTag::Dropped);
+                    std::ptr::drop_in_place(&mut http_stream.inner_mut().body_reader as *mut _);
+                }
+                
+                Ok(())
             }
             Stream::InputFile(mut file_stream) => {
                 // close the stream by dropping the inner File.
@@ -1035,6 +1096,7 @@ impl Stream {
         match self {
             Stream::NamedTcp(..)
             | Stream::NamedTls(..)
+            | Stream::NamedHttpClient(..)
             | Stream::Byte(_)
             | Stream::Readline(_)
             | Stream::StaticString(_)
