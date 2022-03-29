@@ -1526,7 +1526,10 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                         self.print_stream(stream, max_depth);
                     }
                     (ArenaHeaderTag::OssifiedOpDir, _op_dir) => {
-                        append_str!(self, "$ossified_op_dir");
+                        append_str!(self, "'$ossified_op_dir'");
+                    }
+                    (ArenaHeaderTag::Dropped, _value) => {
+                        append_str!(self, "'$dropped_value'");
                     }
                     _ => {
                     }

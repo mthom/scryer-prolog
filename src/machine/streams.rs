@@ -452,7 +452,9 @@ impl Stream {
             ArenaHeaderTag::StandardErrorStream => {
                 Stream::StandardError(TypedArenaPtr::new(ptr as *mut _))
             }
-            ArenaHeaderTag::NullStream => Stream::Null(StreamOptions::default()),
+            ArenaHeaderTag::Dropped | ArenaHeaderTag::NullStream => {
+                Stream::Null(StreamOptions::default())
+            }
             _ => unreachable!(),
         }
     }
