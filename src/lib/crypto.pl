@@ -8,7 +8,7 @@
    In Scryer Prolog, lists of characters are very efficiently represented,
    and strings have the advantage that the atom table remains unmodified.
 
-   Especially for cryptographic applications, it as an advantage that
+   Especially for cryptographic applications, it is an advantage that
    using strings leaves little trace of what was processed in the system.
 
    For predicates that accept an encoding/1 option to specify the encoding
