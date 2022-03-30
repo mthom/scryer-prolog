@@ -1621,10 +1621,13 @@ impl MachineState {
                         );
 
                         let c2 = stalled_iter.heap[l];
-                        let c1 = string_iter.chars().next().unwrap();
+                        let c1 = match string_iter.chars().next() {
+                            Some(c) => char_as_cell!(c),
+                            None => string_iter.focus,
+                        };
 
                         pdl.push(c2);
-                        pdl.push(char_as_cell!(c1));
+                        pdl.push(c1);
 
                         None
                     }
