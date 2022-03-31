@@ -9,7 +9,7 @@ use std::fs;
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
-use std::process::Command;
+use std::process::{self, Command};
 
 fn find_prolog_files(libraries: &mut File, prefix: &str, current_dir: &Path) {
     let entries = match current_dir.read_dir() {
@@ -68,10 +68,7 @@ fn main() {
         .write_all(quoted_output.to_string().as_bytes())
         .unwrap();
 
-    Command::new("rustfmt")
-        .arg(instructions_path.as_os_str())
-        .spawn().unwrap()
-        .wait().unwrap();
+    format_generated_file(instructions_path.as_path());
 
     let static_atoms_path = Path::new(&out_dir).join("static_atoms.rs");
     let mut static_atoms_file = File::create(&static_atoms_path).unwrap();
@@ -82,10 +79,24 @@ fn main() {
         .write_all(quoted_output.to_string().as_bytes())
         .unwrap();
 
-    Command::new("rustfmt")
-        .arg(static_atoms_path.as_os_str())
-        .spawn().unwrap()
-        .wait().unwrap();
+    format_generated_file(static_atoms_path.as_path());
 
     println!("cargo:rerun-if-changed=src/");
+}
+
+fn format_generated_file(path: &Path) {
+    Command::new("rustfmt")
+        .arg(path.as_os_str())
+        .spawn()
+        .unwrap_or_else(|err| {
+            eprintln!(
+                "{}: rustfmt (https://github.com/rust-lang/rustfmt) \
+                is required build time dependency and must be available \
+                in the environment's PATH variable.",
+                err
+            );
+            process::exit(1);
+        })
+        .wait()
+        .unwrap();
 }
