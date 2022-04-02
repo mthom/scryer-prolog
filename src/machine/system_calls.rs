@@ -4906,7 +4906,7 @@ impl Machine {
 
         {
             let orig_heap_len = self.machine_st.heap.len();
-            let mut iter = stackless_preorder_iter(&mut self.machine_st.heap, stored_v);
+            let mut iter = stackful_preorder_iter(&mut self.machine_st.heap, stored_v);
 
             while let Some(addr) = iter.next() {
                 let addr = unmark_cell_bits!(addr);

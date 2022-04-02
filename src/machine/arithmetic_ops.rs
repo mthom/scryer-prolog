@@ -1098,7 +1098,7 @@ impl MachineState {
 
     pub(crate) fn arith_eval_by_metacall(&mut self, value: HeapCellValue) -> Result<Number, MachineStub> {
         let stub_gen = || functor_stub(atom!("is"), 2);
-        let mut iter = stackless_post_order_iter(&mut self.heap, value);
+        let mut iter = stackful_post_order_iter(&mut self.heap, value); // was stackless!
 
         while let Some(value) = iter.next() {
             if value.is_forwarded() {
@@ -1125,8 +1125,8 @@ impl MachineState {
             read_heap_cell!(value,
                 (HeapCellValueTag::Atom, (name, arity)) => {
                     if arity == 2 {
-                        let a1 = self.interms.pop().unwrap();
                         let a2 = self.interms.pop().unwrap();
+                        let a1 = self.interms.pop().unwrap();
 
                         match name {
                             atom!("+") => self.interms.push(drop_iter_on_err!(
