@@ -210,28 +210,33 @@ call_nth(Goal, N) :-
         )
     ;   true
     ),
-    setup_call_cleanup(call_nth_nesting(ID),
+    setup_call_cleanup(call_nth_nesting(C, ID),
                        (   Goal,
-                           retract(i_call_nth_nesting(ID,N0)),
+                           bb_get(ID, N0),
                            N1 is N0 + 1,
-                           asserta(i_call_nth_nesting(ID,N1)),
+                           bb_put(ID, N1),
                            (   integer(N) ->
                                N = N1,
                                !
                            ;   N = N1
                            )
                        ),
-                       (   retract(i_call_nth_nesting(ID,_)),
-                           retract(i_call_nth_counter(ID))
+                       (   bb_get(i_call_nth_counter, C) ->
+                           C1 is C - 1,
+                           bb_put(i_call_nth_counter, C1)
+                       ;   true
                        )).
 
-call_nth_nesting(ID) :-
-    (   i_call_nth_counter(ID0) ->
-        ID is ID0 + 1
-    ;   ID = 0
+call_nth_nesting(C, ID) :-
+    (   bb_get(i_call_nth_counter, C0) ->
+        C is C0 + 1
+    ;   C = 0
     ),
-    asserta(i_call_nth_nesting(ID, 0)),
-    asserta(i_call_nth_counter(ID)).
+    number_chars(C, Cs),
+    atom_chars(Atom, Cs),
+    atom_concat(i_call_nth_nesting_, Atom, ID),
+    bb_put(ID, 0),
+    bb_put(i_call_nth_counter, C).
 
 
 copy_term_nat(Source, Dest) :-
