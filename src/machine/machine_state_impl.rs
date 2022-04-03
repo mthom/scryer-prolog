@@ -1989,20 +1989,23 @@ impl MachineState {
                 )
             }
             (HeapCellValueTag::CStr, cstr_atom) => {
-                match store_v.get_tag() {
-                    HeapCellValueTag::PStrLoc
-                    | HeapCellValueTag::Lis
-                    | HeapCellValueTag::Str => {
+                read_heap_cell!(store_v,
+                    (HeapCellValueTag::PStrLoc
+                     | HeapCellValueTag::Lis
+                     | HeapCellValueTag::Str) => {
                         self.match_partial_string(store_v, cstr_atom, false);
                     }
-                    HeapCellValueTag::AttrVar | HeapCellValueTag::Var => {
+                    (HeapCellValueTag::AttrVar | HeapCellValueTag::Var) => {
                         let r = store_v.as_var().unwrap();
                         self.bind(r, lit);
+                    }
+                    (HeapCellValueTag::CStr, cstr2_atom) => {
+                        self.fail = cstr_atom != cstr2_atom;
                     }
                     _ => {
                         self.fail = true;
                     }
-                }
+                );
             }
             _ => {
                 unreachable!()
