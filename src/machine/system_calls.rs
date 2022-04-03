@@ -4905,17 +4905,12 @@ impl Machine {
         let mut seen_set = IndexSet::new();
 
         {
-            let orig_heap_len = self.machine_st.heap.len();
             let mut iter = stackful_preorder_iter(&mut self.machine_st.heap, stored_v);
 
             while let Some(addr) = iter.next() {
                 let addr = unmark_cell_bits!(addr);
 
-                if addr.is_var() && addr.get_value() < orig_heap_len {
-                    // the length check is so we don't catalog
-                    // temporary variables created by the iterator,
-                    // that will be deleted when the iterator is
-                    // dropped, into seen_set.
+                if addr.is_var() {
                     seen_set.insert(addr);
                 }
             }

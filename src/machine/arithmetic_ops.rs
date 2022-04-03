@@ -1098,7 +1098,7 @@ impl MachineState {
 
     pub(crate) fn arith_eval_by_metacall(&mut self, value: HeapCellValue) -> Result<Number, MachineStub> {
         let stub_gen = || functor_stub(atom!("is"), 2);
-        let mut iter = stackful_post_order_iter(&mut self.heap, value); // was stackless!
+        let mut iter = stackful_post_order_iter(&mut self.heap, value);
 
         while let Some(value) = iter.next() {
             if value.is_forwarded() {

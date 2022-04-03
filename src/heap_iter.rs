@@ -1,4 +1,5 @@
-// pub(crate) use crate::machine::gc::{IteratorUMP, StacklessPreOrderHeapIter};
+#[cfg(test)]
+pub(crate) use crate::machine::gc::{IteratorUMP, StacklessPreOrderHeapIter};
 use crate::machine::heap::*;
 
 use crate::atom_table::*;
@@ -223,15 +224,14 @@ impl<'a> Iterator for StackfulPreOrderHeapIter<'a> {
     }
 }
 
-/*
 #[inline(always)]
+#[cfg(test)]
 pub(crate) fn stackless_preorder_iter(
     heap: &mut Vec<HeapCellValue>,
     cell: HeapCellValue,
 ) -> StacklessPreOrderHeapIter<IteratorUMP> {
-    StacklessPreOrderHeapIter::new(heap, cell)
+    StacklessPreOrderHeapIter::<IteratorUMP>::new(heap, cell)
 }
-*/
 
 #[inline(always)]
 pub(crate) fn stackful_preorder_iter(
@@ -337,25 +337,25 @@ pub(crate) fn stackful_post_order_iter<'a>(
     PostOrderIterator::new(StackfulPreOrderHeapIter::new(heap, cell))
 }
 
-// pub(crate) type RightistPostOrderHeapIter<'a> =
-//     PostOrderIterator<StacklessPreOrderHeapIter<'a, IteratorUMP>>;
+    #[cfg(test)]
+pub(crate) type RightistPostOrderHeapIter<'a> =
+    PostOrderIterator<StacklessPreOrderHeapIter<'a, IteratorUMP>>;
 
-/*
 #[inline]
+#[cfg(test)]
 pub(crate) fn stackless_post_order_iter<'a>(
     heap: &'a mut Heap,
     cell: HeapCellValue,
 ) -> RightistPostOrderHeapIter<'a> {
     PostOrderIterator::new(stackless_preorder_iter(heap, cell))
 }
-*/
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::machine::mock_wam::*;
 
-    /*
+
     #[test]
     fn heap_stackless_iter_tests() {
         let mut wam = MockWAM::new();
@@ -444,7 +444,7 @@ mod tests {
             ]
         ));
 
-        for _ in 0..200000 {
+        for _ in 0..200 { // 000 {
             let mut iter = stackless_preorder_iter(&mut wam.machine_st.heap, heap_loc_as_cell!(0));
 
             assert_eq!(
@@ -518,6 +518,7 @@ mod tests {
                 unmark_cell_bits!(iter.next().unwrap()),
                 atom_as_cell!(b_atom)
             );
+
             assert_eq!(
                 unmark_cell_bits!(iter.next().unwrap()),
                 atom_as_cell!(a_atom)
@@ -579,7 +580,7 @@ mod tests {
                 heap_loc_as_cell!(1),
             );
 
-            assert_eq!(iter.next(), None);
+            assert!(iter.next().is_none());
         }
 
         assert_eq!(wam.machine_st.heap[0], pstr_cell);
@@ -606,7 +607,7 @@ mod tests {
                 heap_loc_as_cell!(3),
             );
 
-            assert_eq!(iter.next(), None);
+            assert!(iter.next().is_none());
         }
 
         assert_eq!(wam.machine_st.heap[0], pstr_cell);
@@ -628,8 +629,8 @@ mod tests {
             let pstr_offset_cell = pstr_offset_as_cell!(0);
 
             assert_eq!(unmark_cell_bits!(iter.next().unwrap()), pstr_offset_cell);
-            assert_eq!(unmark_cell_bits!(iter.next().unwrap()), pstr_second_cell);
             assert_eq!(unmark_cell_bits!(iter.next().unwrap()), pstr_cell);
+            assert_eq!(unmark_cell_bits!(iter.next().unwrap()), pstr_second_cell);
 
             assert_eq!(iter.next(), None);
         }
@@ -1299,7 +1300,7 @@ mod tests {
         }
 */
     }
-*/
+
     #[test]
     fn heap_stackful_iter_tests() {
         let mut wam = MockWAM::new();
@@ -2219,7 +2220,6 @@ mod tests {
         wam.machine_st.heap.clear();
     }
 
-/*
     #[test]
     fn heap_stackless_post_order_iter() {
         let mut wam = MockWAM::new();
@@ -2312,6 +2312,11 @@ mod tests {
             wam.machine_st.heap.push(heap_loc_as_cell!(0));
 
             let mut iter = stackless_post_order_iter(&mut wam.machine_st.heap, heap_loc_as_cell!(0));
+
+            assert_eq!(
+                unmark_cell_bits!(iter.next().unwrap()),
+                heap_loc_as_cell!(1)
+            );
 
             assert_eq!(
                 unmark_cell_bits!(iter.next().unwrap()),
@@ -2632,5 +2637,4 @@ mod tests {
 
         all_cells_unmarked(&wam.machine_st.heap);
     }
-*/
 }
