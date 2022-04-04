@@ -184,6 +184,10 @@ submit_query_and_print_results_(Term, VarList) :-
     write_eqs_and_read_input(B, VarList),
     !.
 submit_query_and_print_results_(_, _) :-
+    (   bb_get('$first_answer', true) ->
+        write('   ')
+    ;   true
+    ),
     write('false.'),
     nl.
 
