@@ -30,9 +30,9 @@ fn do_not_duplicate_path_components() {
         halt.\n\
         ",
         "\
-        caught: e\n\
+        caught: e\n   \
         false.\n\
-        caught: e\n\
+        caught: e\n   \
         false.\n\
         ",
     );
@@ -57,10 +57,10 @@ fn handle_residual_goal() {
         ",
         "   \
         true.\n   \
-        true.\n\
+        true.\n   \
         false.\n   \
         X = - X.\n   \
-        dif:dif(- X,X).\n\
+        dif:dif(- X,X).\n   \
         false.\n   \
         Vars = [X], dif:dif(- X,X).\n   \
         true.\n   \
@@ -79,7 +79,7 @@ fn occurs_check_flag() {
          f(X, X).\n\
          halt.\n\
         ",
-        "false.\n",
+        "   false.\n",
     )
 }
 
@@ -95,10 +95,10 @@ fn occurs_check_flag2() {
             halt.\n\
             ",
         "   \
-            true.\n\
+            true.\n   \
             false.\n   \
-            true.\n\
-            false.\n\
+            true.\n   \
+            false.\n   \
             false.\n\
             ",
     )
@@ -136,7 +136,7 @@ fn no_stutter() {
     run_top_level_test_no_args("write(a), write(b), false.\n\
                                 halt.\n\
                                 ",
-                               "abfalse.\n")
+                               "ab   false.\n")
 }
 
 /*
