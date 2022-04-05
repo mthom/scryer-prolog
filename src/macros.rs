@@ -87,21 +87,8 @@ macro_rules! cell_as_atom_cell {
 
 macro_rules! cell_as_f64_ptr {
     ($cell:expr) => {{
-        let cons_ptr = ConsPtr::from_bytes($cell.into_bytes());
-
-        match cons_ptr.get_tag() {
-            ConsPtrMaskTag::F64 => {
-                F64Ptr(TypedArenaPtr::new(
-                    cons_ptr.as_ptr() as *mut OrderedFloat<f64>
-                ))
-            }
-            ConsPtrMaskTag::Cons => {
-                let ptr = cell_as_untyped_arena_ptr!($cell).payload_offset();
-                unsafe {
-                    F64Ptr(TypedArenaPtr::new(std::mem::transmute(ptr)))
-                }
-            }
-        }
+        let offset = $cell.get_value();
+        F64Ptr::from_offset(offset)
     }};
 }
 
@@ -253,13 +240,6 @@ macro_rules! cell_as_load_state_payload {
 macro_rules! match_untyped_arena_ptr_pat_body {
     ($ptr:ident, Integer, $n:ident, $code:expr) => {{
         let payload_ptr = unsafe { std::mem::transmute::<_, *mut Integer>($ptr.payload_offset()) };
-        let $n = TypedArenaPtr::new(payload_ptr);
-        #[allow(unused_braces)]
-        $code
-    }};
-    ($ptr:ident, F64, $n:ident, $code:expr) => {{
-        let payload_ptr =
-            unsafe { std::mem::transmute::<_, *mut OrderedFloat<f64>>($ptr.payload_offset()) };
         let $n = TypedArenaPtr::new(payload_ptr);
         #[allow(unused_braces)]
         $code

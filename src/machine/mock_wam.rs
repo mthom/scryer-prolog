@@ -609,7 +609,6 @@ mod tests {
 
     #[test]
     fn test_term_compare() {
-        use ordered_float::OrderedFloat;
         use std::cmp::Ordering;
 
         let mut wam = MachineState::new();
@@ -777,9 +776,7 @@ mod tests {
             Some(Ordering::Greater)
         );
 
-        let one_p_one = typed_arena_ptr_as_cell!(
-            arena_alloc!(OrderedFloat(1.1), &mut wam.arena)
-        );
+        let one_p_one = HeapCellValue::from(float_alloc!(1.1, &mut wam.arena));
 
         assert_eq!(
             compare_term_test!(

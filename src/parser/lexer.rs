@@ -1,5 +1,4 @@
 use lexical::parse_lossy;
-use ordered_float::*;
 
 use crate::atom_table::*;
 pub use crate::machine::machine_state::*;
@@ -633,12 +632,8 @@ impl<'a, R: CharRead> Lexer<'a, R> {
 
     fn vacate_with_float(&mut self, mut token: String) -> Result<Token, ParserError> {
         self.return_char(token.pop().unwrap());
-
-        let result = OrderedFloat(parse_lossy::<f64, _>(token.as_bytes())?);
-        Ok(Token::Literal(Literal::Float(arena_alloc!(
-            result,
-            &mut self.machine_st.arena
-        ))))
+        let n = parse_lossy::<f64, _>(token.as_bytes())?;
+        Ok(Token::Literal(Literal::Float(float_alloc!(n, self.machine_st.arena))))
     }
 
     fn skip_underscore_in_number(&mut self) -> Result<char, ParserError> {
@@ -748,20 +743,18 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                             }
                         }
 
-                        let n = OrderedFloat(parse_lossy::<f64, _>(token.as_bytes())?);
-                        Ok(Token::Literal(Literal::Float(arena_alloc!(
-                            n,
-                            &mut self.machine_st.arena
-                        ))))
+                        let n = parse_lossy::<f64, _>(token.as_bytes())?;
+                        Ok(Token::Literal(Literal::Float(
+                            float_alloc!(n, self.machine_st.arena)
+                        )))
                     } else {
                         return Ok(self.vacate_with_float(token)?);
                     }
                 } else {
-                    let n = OrderedFloat(parse_lossy::<f64, _>(token.as_bytes())?);
-                    Ok(Token::Literal(Literal::Float(arena_alloc!(
-                        n,
-                        &mut self.machine_st.arena
-                    ))))
+                    let n = parse_lossy::<f64, _>(token.as_bytes())?;
+                    Ok(Token::Literal(Literal::Float(
+                        float_alloc!(n, self.machine_st.arena)
+                    )))
                 }
             } else {
                 self.return_char('.');

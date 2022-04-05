@@ -5,7 +5,6 @@ use crate::machine::partial_string::*;
 use crate::parser::ast::*;
 use crate::types::*;
 
-use ordered_float::OrderedFloat;
 use rug::{Integer, Rational};
 
 use std::convert::TryFrom;
@@ -65,10 +64,6 @@ impl TryFrom<HeapCellValue> for Literal {
                      }
                      (ArenaHeaderTag::Rational, n) => {
                          Ok(Literal::Rational(n))
-                     }
-                     (ArenaHeaderTag::F64, f) => {
-                         // remove this redundancy.
-                         Ok(Literal::Float(F64Ptr(f)))
                      }
                      _ => {
                          Err(())

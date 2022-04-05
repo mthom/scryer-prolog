@@ -163,8 +163,7 @@ impl MachineState {
         match self.get_number(&at)? {
             Number::Fixnum(n) => self.unify_fixnum(n, n1),
             Number::Float(n) => {
-                // TODO: argghh.. allocate floats to their own area.
-                let n = arena_alloc!(n, &mut self.arena);
+                let n = float_alloc!(n.into_inner(), self.arena);
                 self.unify_f64(n, n1)
             }
             Number::Integer(n) => self.unify_big_int(n, n1),
@@ -366,8 +365,7 @@ impl Machine {
                         }
                         (HeapCellValueTag::Cons, ptr) => {
                             match ptr.get_tag() {
-                                ArenaHeaderTag::Rational | ArenaHeaderTag::Integer |
-                                ArenaHeaderTag::F64 => {
+                                ArenaHeaderTag::Rational | ArenaHeaderTag::Integer => {
                                     c
                                 }
                                 _ => {
@@ -427,9 +425,6 @@ impl Machine {
                             match_untyped_arena_ptr!(cons_ptr,
                                 (ArenaHeaderTag::Rational, r) => {
                                     Literal::Rational(r)
-                                }
-                                (ArenaHeaderTag::F64, f) => {
-                                    Literal::Float(F64Ptr(f))
                                 }
                                 (ArenaHeaderTag::Integer, n) => {
                                     Literal::Integer(n)

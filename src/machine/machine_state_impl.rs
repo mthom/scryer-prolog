@@ -14,8 +14,6 @@ use crate::machine::stack::*;
 use crate::parser::ast::*;
 use crate::parser::rug::{Integer, Rational};
 
-use ordered_float::*;
-
 use indexmap::IndexSet;
 
 use std::cmp::Ordering;
@@ -673,23 +671,13 @@ impl MachineState {
 
     pub fn unify_f64(&mut self, f1: F64Ptr, value: HeapCellValue) {
         if let Some(r) = value.as_var() {
-            self.bind(r, typed_arena_ptr_as_cell!(f1));
+            self.bind(r, HeapCellValue::from(f1));
             return;
         }
 
         read_heap_cell!(value,
             (HeapCellValueTag::F64, f2) => {
                 self.fail = **f1 != **f2;
-            }
-            (HeapCellValueTag::Cons, cons_ptr) => {
-                match_untyped_arena_ptr!(cons_ptr,
-                     (ArenaHeaderTag::F64, f2) => {
-                         self.fail = **f1 != **F64Ptr(f2);
-                     }
-                     _ => {
-                         self.fail = true;
-                     }
-                );
             }
             _ => {
                 self.fail = true;

@@ -3232,7 +3232,7 @@ impl Machine {
     #[inline(always)]
     pub(crate) fn cpu_now(&mut self) {
         let secs = ProcessTime::now().as_duration().as_secs_f64();
-        let secs = arena_alloc!(OrderedFloat(secs), &mut self.machine_st.arena);
+        let secs = float_alloc!(secs, self.machine_st.arena);
 
         self.machine_st.unify_f64(secs, self.machine_st.registers[1]);
     }

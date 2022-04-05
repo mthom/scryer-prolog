@@ -1486,7 +1486,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 self.print_number(max_depth, NumberFocus::Unfocused(Number::Fixnum(n)), &op);
             }
             (HeapCellValueTag::F64, f) => {
-                self.print_number(max_depth, NumberFocus::Unfocused(Number::Float(**f)), &op);
+                self.print_number(max_depth, NumberFocus::Unfocused(Number::Float(*f)), &op);
             }
             (HeapCellValueTag::CStr | HeapCellValueTag::PStr | HeapCellValueTag::PStrOffset) => {
                 self.print_list_like(max_depth);
@@ -1513,9 +1513,6 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             }
             (HeapCellValueTag::Cons, c) => {
                 match_untyped_arena_ptr!(c,
-                    (ArenaHeaderTag::F64, f) => {
-                        self.print_number(max_depth, NumberFocus::Unfocused(Number::Float(*f)), &op);
-                    }
                     (ArenaHeaderTag::Integer, n) => {
                         self.print_number(max_depth, NumberFocus::Unfocused(Number::Integer(n)), &op);
                     }

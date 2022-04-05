@@ -281,8 +281,8 @@ pub(crate) fn div(n1: Number, n2: Number) -> Result<Number, MachineStubGen> {
 }
 
 pub(crate) fn float_pow(n1: Number, n2: Number) -> Result<Number, MachineStubGen> {
-    let f1 = result_f(&n1, rnd_f);
-    let f2 = result_f(&n2, rnd_f);
+    let f1 = result_f(&n1);
+    let f2 = result_f(&n2);
 
     let stub_gen = || {
         let pow_atom = atom!("**");
@@ -292,7 +292,7 @@ pub(crate) fn float_pow(n1: Number, n2: Number) -> Result<Number, MachineStubGen
     let f1 = try_numeric_result!(f1, stub_gen)?;
     let f2 = try_numeric_result!(f2, stub_gen)?;
 
-    let result = result_f(&Number::Float(OrderedFloat(f1.powf(f2))), rnd_f);
+    let result = result_f(&Number::Float(OrderedFloat(f1.powf(f2))));
 
     Ok(Number::Float(OrderedFloat(try_numeric_result!(
         result, stub_gen
@@ -404,7 +404,7 @@ pub(crate) fn float(n: Number) -> Result<f64, MachineStubGen> {
         functor_stub(is_atom, 2)
     };
 
-    try_numeric_result!(result_f(&n, rnd_f), stub_gen)
+    try_numeric_result!(result_f(&n), stub_gen)
 }
 
 #[inline]
@@ -420,8 +420,8 @@ where
         functor_stub(is_atom, 2)
     };
 
-    let f1 = try_numeric_result!(result_f(&n1, rnd_f), stub_gen)?;
-    let f1 = result_f(&Number::Float(OrderedFloat(f(f1))), rnd_f);
+    let f1 = try_numeric_result!(result_f(&n1), stub_gen)?;
+    let f1 = result_f(&Number::Float(OrderedFloat(f(f1))));
 
     try_numeric_result!(f1, stub_gen)
 }
@@ -462,8 +462,8 @@ pub(crate) fn max(n1: Number, n2: Number) -> Result<Number, MachineStubGen> {
                 functor_stub(max_atom, 2)
             };
 
-            let f1 = try_numeric_result!(result_f(&n1, rnd_f), stub_gen)?;
-            let f2 = try_numeric_result!(result_f(&n2, rnd_f), stub_gen)?;
+            let f1 = try_numeric_result!(result_f(&n1), stub_gen)?;
+            let f2 = try_numeric_result!(result_f(&n2), stub_gen)?;
 
             Ok(Number::Float(cmp::max(OrderedFloat(f1), OrderedFloat(f2))))
         }
@@ -506,8 +506,8 @@ pub(crate) fn min(n1: Number, n2: Number) -> Result<Number, MachineStubGen> {
                 functor_stub(min_atom, 2)
             };
 
-            let f1 = try_numeric_result!(result_f(&n1, rnd_f), stub_gen)?;
-            let f2 = try_numeric_result!(result_f(&n2, rnd_f), stub_gen)?;
+            let f1 = try_numeric_result!(result_f(&n1), stub_gen)?;
+            let f2 = try_numeric_result!(result_f(&n2), stub_gen)?;
 
             Ok(Number::Float(cmp::min(OrderedFloat(f1), OrderedFloat(f2))))
         }
@@ -1314,7 +1314,7 @@ impl MachineState {
                     self.interms.push(Number::Fixnum(n));
                 }
                 (HeapCellValueTag::F64, fl) => {
-                    self.interms.push(Number::Float(**fl));
+                    self.interms.push(Number::Float(*fl));
                 }
                 (HeapCellValueTag::Cons, ptr) => {
                     match_untyped_arena_ptr!(ptr,
@@ -1323,9 +1323,6 @@ impl MachineState {
                          }
                          (ArenaHeaderTag::Rational, r) => {
                              self.interms.push(Number::Rational(r));
-                         }
-                         (ArenaHeaderTag::F64, fl) => {
-                             self.interms.push(Number::Float(*fl));
                          }
                          _ => {
                              std::mem::drop(iter);

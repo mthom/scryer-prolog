@@ -15,9 +15,6 @@ use std::ops::{Add, Sub, SubAssign};
 #[derive(BitfieldSpecifier, Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[bits = 6]
 pub enum HeapCellValueTag {
-    // non-constants / tags with adjoining forwarding bits.
-    Cons = 0b00,
-    F64 = 0b01,
     Str = 0b000010,
     Lis = 0b000011,
     Var = 0b000110,
@@ -26,6 +23,8 @@ pub enum HeapCellValueTag {
     PStrLoc = 0b111111,
     PStrOffset = 0b001110,
     // constants.
+    Cons = 0b0,
+    F64  = 0b000001,
     Fixnum = 0b010010,
     Char = 0b011011,
     Atom = 0b001010,
@@ -36,9 +35,6 @@ pub enum HeapCellValueTag {
 #[derive(BitfieldSpecifier, Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[bits = 6]
 pub enum HeapCellValueView {
-    // non-constants / tags with adjoining forwarding bits.
-    Cons = 0b00,
-    F64 = 0b01,
     Str = 0b000010,
     Lis = 0b000011,
     Var = 0b000110,
@@ -47,6 +43,8 @@ pub enum HeapCellValueView {
     PStrLoc = 0b111111,
     PStrOffset = 0b001110,
     // constants.
+    Cons = 0b00,
+    F64  = 0b000001,
     Fixnum = 0b010010,
     Char = 0b011011,
     Atom = 0b001010,
@@ -66,7 +64,6 @@ pub enum HeapCellValueView {
 #[bits = 2]
 pub enum ConsPtrMaskTag {
     Cons = 0b00,
-    F64 = 0b01,
 }
 
 #[bitfield]
@@ -303,11 +300,9 @@ impl<T> From<TypedArenaPtr<T>> for HeapCellValue {
 impl From<F64Ptr> for HeapCellValue {
     #[inline]
     fn from(f64_ptr: F64Ptr) -> HeapCellValue {
-        HeapCellValue::from_bytes(
-            ConsPtr::from(f64_ptr.as_ptr() as u64)
-                .with_tag(ConsPtrMaskTag::F64)
-                .with_m(false)
-                .into_bytes(),
+        HeapCellValue::build_with(
+            HeapCellValueTag::F64,
+            f64_ptr.as_offset() as u64,
         )
     }
 }
@@ -327,8 +322,10 @@ impl From<ConsPtr> for HeapCellValue {
 impl<'a> From<(Number, &mut Arena)> for HeapCellValue {
     #[inline(always)]
     fn from((n, arena): (Number, &mut Arena)) -> HeapCellValue {
+        use ordered_float::OrderedFloat;
+
         match n {
-            Number::Float(n) => HeapCellValue::from(arena_alloc!(n, arena)),
+            Number::Float(OrderedFloat(n)) => HeapCellValue::from(float_alloc!(n, arena)),
             Number::Integer(n) => HeapCellValue::from(n),
             Number::Rational(n) => HeapCellValue::from(n),
             Number::Fixnum(n) => fixnum_as_cell!(n),
@@ -501,7 +498,6 @@ impl HeapCellValue {
             Ok(tag) => tag,
             Err(_) => match ConsPtr::from_bytes(self.into_bytes()).tag() {
                 ConsPtrMaskTag::Cons => HeapCellValueTag::Cons,
-                ConsPtrMaskTag::F64 => HeapCellValueTag::F64,
             },
         }
     }
@@ -569,7 +565,7 @@ impl HeapCellValue {
     #[inline]
     pub fn get_mark_bit(self) -> bool {
         match self.get_tag() {
-            HeapCellValueTag::Cons | HeapCellValueTag::F64 => {
+            HeapCellValueTag::Cons => {
                 ConsPtr::from_bytes(self.into_bytes()).m()
             }
             _ => self.m(),
@@ -579,7 +575,7 @@ impl HeapCellValue {
     #[inline]
     pub fn set_mark_bit(&mut self, m: bool) {
         match self.get_tag() {
-            HeapCellValueTag::Cons | HeapCellValueTag::F64 => {
+            HeapCellValueTag::Cons => {
                 let value = ConsPtr::from_bytes(self.into_bytes()).with_m(m);
                 *self = HeapCellValue::from_bytes(value.into_bytes());
             }

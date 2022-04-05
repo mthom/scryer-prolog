@@ -4,8 +4,6 @@ use crate::parser::ast::*;
 use crate::parser::char_reader::*;
 use crate::parser::lexer::*;
 
-use ordered_float::OrderedFloat;
-
 use rug::ops::NegAssign;
 
 use std::cell::Cell;
@@ -949,8 +947,8 @@ impl<'a, R: CharRead> Parser<'a, R> {
             }
             Token::Literal(Literal::Float(n)) => self.negate_number(
                 **n,
-                |n| OrderedFloat(-n.into_inner()),
-                |n, arena| Literal::Float(arena_alloc!(n, arena)),
+                |n| -n,
+                |n, arena| Literal::Float(float_alloc!(n, arena))
             ),
             Token::Literal(c) => {
                 if let Some(name) = atomize_constant(&mut self.lexer.machine_st.atom_tbl, c) {

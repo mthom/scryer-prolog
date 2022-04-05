@@ -608,7 +608,7 @@ impl ArenaFrom<Number> for Literal {
         match value {
             Number::Fixnum(n) => Literal::Fixnum(n),
             Number::Integer(n) => Literal::Integer(n),
-            Number::Float(f) => Literal::Float(arena_alloc!(f, arena)),
+            Number::Float(OrderedFloat(f)) => Literal::Float(float_alloc!(f, arena)),
             Number::Rational(r) => Literal::Rational(r),
         }
     }
@@ -620,7 +620,7 @@ impl ArenaFrom<Number> for HeapCellValue {
         match value {
             Number::Fixnum(n) => fixnum_as_cell!(n),
             Number::Integer(n) => typed_arena_ptr_as_cell!(n),
-            Number::Float(n) => typed_arena_ptr_as_cell!(arena_alloc!(n, arena)),
+            Number::Float(OrderedFloat(n)) => HeapCellValue::from(float_alloc!(n, arena)),
             Number::Rational(n) => typed_arena_ptr_as_cell!(n),
         }
     }

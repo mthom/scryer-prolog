@@ -1,6 +1,7 @@
 use crate::machine::loader::LiveLoadState;
 use crate::machine::machine_indices::*;
 use crate::machine::streams::*;
+use crate::raw_block::*;
 use crate::read::*;
 
 use modular_bitfield::prelude::*;
@@ -24,10 +25,110 @@ macro_rules! arena_alloc {
     }};
 }
 
+#[macro_export]
+macro_rules! float_alloc {
+    ($e:expr, $arena:expr) => {{
+        let result = $e;
+        #[allow(unused_unsafe)]
+        unsafe { $arena.f64_tbl.build_with(result) }
+    }};
+}
+
+#[cfg(test)]
+use std::cell::RefCell;
+
+const F64_TABLE_INIT_SIZE: usize = 1 << 16;
+const F64_TABLE_ALIGN: usize = 8;
+
+#[cfg(test)]
+thread_local! {
+    static F64_TABLE_BUF_BASE: RefCell<*const u8> = RefCell::new(ptr::null_mut());
+}
+
+#[cfg(not(test))]
+static mut F64_TABLE_BUF_BASE: *const u8 = ptr::null_mut();
+
+impl RawBlockTraits for F64Table {
+    #[inline]
+    fn init_size() -> usize {
+        F64_TABLE_INIT_SIZE
+    }
+
+    #[inline]
+    fn align() -> usize {
+        F64_TABLE_ALIGN
+    }
+}
+
+#[derive(Debug)]
+pub struct F64Table {
+    block: RawBlock<F64Table>,
+}
+
+impl Drop for F64Table {
+    fn drop(&mut self) {
+        self.block.deallocate();
+    }
+}
+
+#[cfg(test)]
+fn set_f64_tbl_buf_base(ptr: *const u8) {
+    F64_TABLE_BUF_BASE.with(|f64_table_buf_base| {
+        *f64_table_buf_base.borrow_mut() = ptr;
+    });
+}
+
+#[cfg(test)]
+pub(crate) fn get_f64_tbl_buf_base() -> *const u8 {
+    F64_TABLE_BUF_BASE.with(|f64_table_buf_base| *f64_table_buf_base.borrow())
+}
+
+#[cfg(not(test))]
+fn set_f64_tbl_buf_base(ptr: *const u8) {
+    unsafe {
+        F64_TABLE_BUF_BASE = ptr;
+    }
+}
+
+#[cfg(not(test))]
+pub(crate) fn get_f64_tbl_buf_base() -> *const u8 {
+    unsafe { F64_TABLE_BUF_BASE }
+}
+
+#[inline(always)]
+pub fn lookup_float(offset: usize) -> *mut OrderedFloat<f64> {
+    let base = get_f64_tbl_buf_base() as usize;
+    (base + offset) as *mut _
+}
+
+impl F64Table {
+    #[inline]
+    pub fn new() -> Self {
+        F64Table { block: RawBlock::new() }
+    }
+
+    pub unsafe fn build_with(&mut self, value: f64) -> F64Ptr {
+        let mut ptr;
+
+        loop {
+            ptr = self.block.alloc(mem::size_of::<f64>());
+
+            if ptr.is_null() {
+                self.block.grow();
+                set_f64_tbl_buf_base(self.block.base);
+            } else {
+                break;
+            }
+        }
+
+        ptr::write(ptr as *mut f64, value);
+        F64Ptr(ptr::NonNull::new_unchecked(ptr as *mut _))
+    }
+}
+
 #[derive(BitfieldSpecifier, Copy, Clone, Debug, PartialEq)]
 #[bits = 7]
 pub enum ArenaHeaderTag {
-    F64 = 0b01,
     Integer = 0b10,
     Rational = 0b11,
     OssifiedOpDir = 0b0000100,
@@ -197,7 +298,7 @@ pub trait ArenaAllocated {
 }
 
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
-pub struct F64Ptr(pub TypedArenaPtr<OrderedFloat<f64>>);
+pub struct F64Ptr(pub ptr::NonNull<OrderedFloat<f64>>);
 
 impl fmt::Display for F64Ptr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -206,40 +307,32 @@ impl fmt::Display for F64Ptr {
 }
 
 impl Deref for F64Ptr {
-    type Target = TypedArenaPtr<OrderedFloat<f64>>;
+    type Target = OrderedFloat<f64>;
 
     #[inline]
     fn deref(&self) -> &Self::Target {
-        &self.0
+        unsafe { &*self.0.as_ptr() }
     }
 }
 
 impl DerefMut for F64Ptr {
     #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.0
+        unsafe { &mut *self.0.as_ptr() }
     }
 }
 
-impl ArenaAllocated for OrderedFloat<f64> {
-    type PtrToAllocated = F64Ptr;
-
-    #[inline]
-    fn tag() -> ArenaHeaderTag {
-        ArenaHeaderTag::F64
-    }
-
-    #[inline]
-    fn size(&self) -> usize {
-        mem::size_of::<Self>()
-    }
-
-    #[inline]
-    fn copy_to_arena(self, dst: *mut Self) -> Self::PtrToAllocated {
+impl F64Ptr {
+    #[inline(always)]
+    pub fn from_offset(offset: usize) -> Self {
         unsafe {
-            ptr::write(dst, self);
-            F64Ptr(TypedArenaPtr::new(dst as *mut Self))
+            F64Ptr(ptr::NonNull::new_unchecked(lookup_float(offset)))
         }
+    }
+
+    #[inline(always)]
+    pub fn as_offset(&self) -> usize {
+        self.0.as_ptr() as usize - get_f64_tbl_buf_base() as usize
     }
 }
 
@@ -360,7 +453,10 @@ struct AllocSlab {
 }
 
 #[derive(Debug)]
-pub struct Arena(*mut AllocSlab);
+pub struct Arena {
+    base: *mut AllocSlab,
+    pub f64_tbl: F64Table,
+}
 
 unsafe impl Send for Arena {}
 unsafe impl Sync for Arena {}
@@ -368,7 +464,7 @@ unsafe impl Sync for Arena {}
 impl Arena {
     #[inline]
     pub fn new() -> Self {
-        Arena(ptr::null_mut())
+        Arena { base: ptr::null_mut(), f64_tbl: F64Table::new() }
     }
 
     pub unsafe fn alloc<T: ArenaAllocated>(&mut self, value: T) -> T::PtrToAllocated {
@@ -379,13 +475,13 @@ impl Arena {
 
         let slab = alloc::alloc(layout) as *mut AllocSlab;
 
-        (*slab).next = self.0;
+        (*slab).next = self.base;
         (*slab).header = ArenaHeader::build_with(value.size() as u64, T::tag());
 
         let offset = (*slab).payload_offset();
         let result = value.copy_to_arena(offset as *mut T);
 
-        self.0 = slab;
+        self.base = slab;
 
         result
     }
@@ -442,14 +538,14 @@ unsafe fn drop_slab_in_place(value: &mut AllocSlab) {
         ArenaHeaderTag::StandardErrorStream => {
             ptr::drop_in_place(value.payload_offset::<StreamLayout<StandardErrorStream>>());
         }
-        ArenaHeaderTag::F64 | ArenaHeaderTag::NullStream => {
+        ArenaHeaderTag::NullStream => {
         }
     }
 }
 
 impl Drop for Arena {
     fn drop(&mut self) {
-        let mut ptr = self.0;
+        let mut ptr = self.base;
 
         while !ptr.is_null() {
             unsafe {
@@ -468,7 +564,7 @@ impl Drop for Arena {
             }
         }
 
-        self.0 = ptr::null_mut();
+        self.base = ptr::null_mut();
     }
 }
 
@@ -501,21 +597,21 @@ mod tests {
     fn float_ptr_cast() {
         let mut wam = MockWAM::new();
 
-        let f = OrderedFloat(0f64);
-        let mut fp = arena_alloc!(f, &mut wam.machine_st.arena);
-        let cell = HeapCellValue::from(fp);
+        let f = 0f64;
+        let fp = float_alloc!(f, wam.machine_st.arena);
+        let mut cell = HeapCellValue::from(fp);
 
         assert_eq!(cell.get_tag(), HeapCellValueTag::F64);
-        assert_eq!(fp.get_mark_bit(), false);
-        assert_eq!(**fp, f);
+        assert_eq!(cell.get_mark_bit(), false);
+        assert_eq!(*fp, OrderedFloat(f));
 
-        fp.mark();
+        cell.set_mark_bit(true);
 
-        assert_eq!(fp.get_mark_bit(), true);
+        assert_eq!(cell.get_mark_bit(), true);
 
         read_heap_cell!(cell,
             (HeapCellValueTag::F64, ptr) => {
-                assert_eq!(**ptr, f)
+                assert_eq!(OrderedFloat(*ptr), OrderedFloat(f))
             }
             _ => { unreachable!() }
         );
@@ -558,8 +654,8 @@ mod tests {
 
         // integer
 
-        let big_int = 2 * Integer::from(1u64 << 63);
-        let big_int_ptr: TypedArenaPtr<Integer> = arena_alloc!(big_int, &mut wam.machine_st.arena);
+        let big_int: Integer = 2 * Integer::from(1u64 << 63);
+        let big_int_ptr: TypedArenaPtr<Integer> = arena_alloc!(big_int, wam.machine_st.arena);
 
         assert!(!big_int_ptr.as_ptr().is_null());
 
@@ -763,22 +859,11 @@ mod tests {
 
         // float
 
-        let float = OrderedFloat(3.1415926f64);
-        let float_ptr = arena_alloc!(float, &mut wam.machine_st.arena);
+        let float = 3.1415926f64;
+        let float_ptr = float_alloc!(float, wam.machine_st.arena);
+        let cell = HeapCellValue::from(float_ptr);
 
-        assert!(!float_ptr.as_ptr().is_null());
-
-        let float_cell = typed_arena_ptr_as_cell!(float_ptr);
-        assert_eq!(cell.get_tag(), HeapCellValueTag::Cons);
-
-        match float_cell.to_untyped_arena_ptr() {
-            Some(untyped_arena_ptr) => {
-                assert_eq!(Some(float_ptr.header_ptr()), Some(untyped_arena_ptr.into()),);
-            }
-            None => {
-                assert!(false); // we fail.
-            }
-        }
+        assert_eq!(cell.get_tag(), HeapCellValueTag::F64);
 
         // char
 

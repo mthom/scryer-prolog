@@ -169,16 +169,16 @@ fn push_literal(interm: &mut Vec<ArithmeticTerm>, c: &Literal) -> Result<(), Ari
     match c {
         Literal::Fixnum(n) => interm.push(ArithmeticTerm::Number(Number::Fixnum(*n))),
         Literal::Integer(n) => interm.push(ArithmeticTerm::Number(Number::Integer(*n))),
-        Literal::Float(n) => interm.push(ArithmeticTerm::Number(Number::Float(***n))),
+        Literal::Float(n) => interm.push(ArithmeticTerm::Number(Number::Float(**n))),
         Literal::Rational(n) => interm.push(ArithmeticTerm::Number(Number::Rational(*n))),
         Literal::Atom(name) if name == &atom!("e") => interm.push(ArithmeticTerm::Number(
-            Number::Float(OrderedFloat(f64::consts::E)),
+            Number::Float(OrderedFloat(std::f64::consts::E))
         )),
         Literal::Atom(name) if name == &atom!("pi") => interm.push(ArithmeticTerm::Number(
-            Number::Float(OrderedFloat(f64::consts::PI)),
+            Number::Float(OrderedFloat(std::f64::consts::PI))
         )),
         Literal::Atom(name) if name == &atom!("epsilon") => interm.push(ArithmeticTerm::Number(
-            Number::Float(OrderedFloat(f64::EPSILON)),
+            Number::Float(OrderedFloat(std::f64::EPSILON))
         )),
         _ => return Err(ArithmeticError::NonEvaluableFunctor(*c, 0)),
     }
@@ -375,16 +375,16 @@ impl<'a, TermMarker: Allocator> ArithmeticEvaluator<'a, TermMarker> {
 pub(crate) fn rnd_i<'a>(n: &'a Number, arena: &mut Arena) -> Number {
     match n {
         &Number::Integer(_) | &Number::Fixnum(_) => *n,
-        &Number::Float(OrderedFloat(f)) => {
+        &Number::Float(f) => {
             let f = f.floor();
 
             const I64_MIN_TO_F: OrderedFloat<f64> = OrderedFloat(i64::MIN as f64);
             const I64_MAX_TO_F: OrderedFloat<f64> = OrderedFloat(i64::MIN as f64);
 
-            if I64_MIN_TO_F <= OrderedFloat(f) && OrderedFloat(f) <= I64_MAX_TO_F {
-                fixnum!(Number, f as i64, arena)
+            if I64_MIN_TO_F <= f && f <= I64_MAX_TO_F {
+                fixnum!(Number, f.into_inner() as i64, arena)
             } else {
-                Number::Integer(arena_alloc!(Integer::from_f64(f).unwrap(), arena))
+                Number::Integer(arena_alloc!(Integer::from_f64(f.into_inner()).unwrap(), arena))
             }
         }
         &Number::Rational(ref r) => {
@@ -415,23 +415,14 @@ pub(crate) fn rnd_f(n: &Number) -> f64 {
 }
 
 // floating point result function -- 9.1.4.2.
-pub(crate) fn result_f<Round>(n: &Number, round: Round) -> Result<f64, EvalError>
-where
-    Round: Fn(&Number) -> f64,
-{
-    let f = rnd_f(n);
-    classify_float(f, round)
+pub(crate) fn result_f(n: &Number) -> Result<f64, EvalError> {
+    classify_float(rnd_f(n))
 }
 
-fn classify_float<Round>(f: f64, round: Round) -> Result<f64, EvalError>
-where
-    Round: Fn(&Number) -> f64,
-{
+fn classify_float(f: f64) -> Result<f64, EvalError> {
     match f.classify() {
-        FpCategory::Normal | FpCategory::Zero => Ok(round(&Number::Float(OrderedFloat(f)))),
+        FpCategory::Normal | FpCategory::Zero => Ok(f),
         FpCategory::Infinite => {
-            let f = round(&Number::Float(OrderedFloat(f)));
-
             if OrderedFloat(f) == OrderedFloat(f64::MAX) {
                 Ok(f)
             } else {
@@ -439,33 +430,33 @@ where
             }
         }
         FpCategory::Nan => Err(EvalError::Undefined),
-        _ => Ok(round(&Number::Float(OrderedFloat(f)))),
+        _ => Ok(f)
     }
 }
 
 #[inline]
 pub(crate) fn float_fn_to_f(n: i64) -> Result<f64, EvalError> {
-    classify_float(n as f64, rnd_f)
+    classify_float(n as f64)
 }
 
 #[inline]
 pub(crate) fn float_i_to_f(n: &Integer) -> Result<f64, EvalError> {
-    classify_float(n.to_f64(), rnd_f)
+    classify_float(n.to_f64())
 }
 
 #[inline]
 pub(crate) fn float_r_to_f(r: &Rational) -> Result<f64, EvalError> {
-    classify_float(r.to_f64(), rnd_f)
+    classify_float(r.to_f64())
 }
 
 #[inline]
 pub(crate) fn add_f(f1: f64, f2: f64) -> Result<OrderedFloat<f64>, EvalError> {
-    Ok(OrderedFloat(classify_float(f1 + f2, rnd_f)?))
+    Ok(OrderedFloat(classify_float(f1 + f2)?))
 }
 
 #[inline]
 pub(crate) fn mul_f(f1: f64, f2: f64) -> Result<OrderedFloat<f64>, EvalError> {
-    Ok(OrderedFloat(classify_float(f1 * f2, rnd_f)?))
+    Ok(OrderedFloat(classify_float(f1 * f2)?))
 }
 
 #[inline]
@@ -473,7 +464,7 @@ fn div_f(f1: f64, f2: f64) -> Result<OrderedFloat<f64>, EvalError> {
     if FpCategory::Zero == f2.classify() {
         Err(EvalError::ZeroDivisor)
     } else {
-        Ok(OrderedFloat(classify_float(f1 / f2, rnd_f)?))
+        Ok(OrderedFloat(classify_float(f1 / f2)?))
     }
 }
 
@@ -683,9 +674,6 @@ impl TryFrom<HeapCellValue> for Number {
         read_heap_cell!(value,
            (HeapCellValueTag::Cons, c) => {
                match_untyped_arena_ptr!(c,
-                  (ArenaHeaderTag::F64, n) => {
-                      Ok(Number::Float(*n))
-                  }
                   (ArenaHeaderTag::Integer, n) => {
                       Ok(Number::Integer(n))
                   }
@@ -698,7 +686,7 @@ impl TryFrom<HeapCellValue> for Number {
                )
            }
            (HeapCellValueTag::F64, n) => {
-               Ok(Number::Float(**n))
+               Ok(Number::Float(*n))
            }
            (HeapCellValueTag::Fixnum, n) => {
                Ok(Number::Fixnum(n))
