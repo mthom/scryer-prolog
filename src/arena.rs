@@ -808,16 +808,16 @@ mod tests {
             _ => { unreachable!() }
         );
 
-        let fixnum_b_cell = fixnum_as_cell!(Fixnum::build_with(1 << 55));
+        let fixnum_b_cell = fixnum_as_cell!(Fixnum::build_with(1 << 54));
 
         assert_eq!(fixnum_b_cell.get_tag(), HeapCellValueTag::Fixnum);
 
         match fixnum_b_cell.to_fixnum() {
-            Some(n) => assert_eq!(n.get_num(), 1 << 55),
+            Some(n) => assert_eq!(n.get_num(), 1 << 54),
             None => assert!(false),
         }
 
-        match Fixnum::build_with_checked(1 << 57) {
+        match Fixnum::build_with_checked(1 << 56) {
             Ok(_) => assert!(false),
             _ => assert!(true),
         }
@@ -837,17 +837,17 @@ mod tests {
             _ => assert!(false),
         }
 
-        match Fixnum::build_with_checked((1 << 56) - 1) {
-            Ok(n) => assert_eq!(n.get_num(), (1 << 56) - 1),
+        match Fixnum::build_with_checked((1 << 55) - 1) {
+            Ok(n) => assert_eq!(n.get_num(), (1 << 55) - 1),
             _ => assert!(false),
         }
 
-        match Fixnum::build_with_checked(-(1 << 56)) {
-            Ok(n) => assert_eq!(n.get_num(), -(1 << 56)),
+        match Fixnum::build_with_checked(-(1 << 55)) {
+            Ok(n) => assert_eq!(n.get_num(), -(1 << 55)),
             _ => assert!(false),
         }
 
-        match Fixnum::build_with_checked(-(1 << 56) - 1) {
+        match Fixnum::build_with_checked(-(1 << 55) - 1) {
             Ok(_n) => assert!(false),
             _ => assert!(true),
         }

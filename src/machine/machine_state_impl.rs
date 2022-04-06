@@ -2056,7 +2056,7 @@ impl MachineState {
         let mut iter = stackful_preorder_iter(&mut self.heap, addr);
 
         while let Some(value) = iter.next() {
-            if value.is_forwarded() {
+            if value.get_forwarding_bit() {
                 let value = heap_bound_store(iter.heap, heap_bound_deref(iter.heap, value));
 
                 if value.is_compound() {

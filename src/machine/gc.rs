@@ -12,10 +12,8 @@ pub(crate) trait UnmarkPolicy {
         Self: Sized;
 }
 
-#[cfg(test)]
 pub(crate) struct IteratorUMP;
 
-#[cfg(test)]
 impl UnmarkPolicy for IteratorUMP {
     #[inline(always)]
     fn unmark(heap: &mut [HeapCellValue], current: usize) {
@@ -44,7 +42,7 @@ impl UnmarkPolicy for MarkerUMP {
 
     #[inline(always)]
     fn forward_attr_var(iter: &mut StacklessPreOrderHeapIter<Self>) -> Option<HeapCellValue> {
-        if iter.heap[iter.current + 1].get_forwarding_bit() == Some(true) {
+        if iter.heap[iter.current + 1].get_forwarding_bit() {
             return iter.forward_var();
         }
 
@@ -87,10 +85,9 @@ impl<'a, UMP: UnmarkPolicy> Drop for StacklessPreOrderHeapIter<'a, UMP> {
 impl<'a> StacklessPreOrderHeapIter<'a, MarkerUMP> {
     pub(crate) fn new(heap: &'a mut Vec<HeapCellValue>, cell: HeapCellValue) -> Self {
         let orig_heap_len = heap.len();
-        let start = orig_heap_len; // + 1;
+        let start = orig_heap_len;
 
         heap.push(cell);
-        // heap.push(heap_loc_as_cell!(orig_heap_len));
 
         heap[start].set_forwarding_bit(true);
         let next = heap[start].get_value();
@@ -106,7 +103,6 @@ impl<'a> StacklessPreOrderHeapIter<'a, MarkerUMP> {
     }
 }
 
-#[cfg(test)]
 impl<'a> StacklessPreOrderHeapIter<'a, IteratorUMP> {
     pub(crate) fn new(heap: &'a mut Vec<HeapCellValue>, cell: HeapCellValue) -> Self {
         let orig_heap_len = heap.len();
@@ -145,7 +141,7 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
     }
 
     fn forward_var(&mut self) -> Option<HeapCellValue> {
-        if self.heap[self.next].get_forwarding_bit() == Some(true) {
+        if self.heap[self.next].get_forwarding_bit() {
             return self.backward_and_return();
         }
 
@@ -167,19 +163,19 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
                     HeapCellValueTag::AttrVar => {
                         if let Some(cell) = UMP::forward_attr_var(self) { return Some(cell); }
 
-                        if self.heap[self.next].get_mark_bit() { //self.current == self.next {
+                        if self.heap[self.next].get_mark_bit() {
                             return Some(attr_var_as_cell!(self.current));
                         }
                     }
                     HeapCellValueTag::Var => {
                         if let Some(cell) = self.forward_var() { return Some(cell); }
 
-                        if self.heap[self.next].get_mark_bit() { //self.current == self.next {
+                        if self.heap[self.next].get_mark_bit() {
                             return Some(heap_loc_as_cell!(self.current));
                         }
                     }
                     HeapCellValueTag::Str => {
-                        if self.heap[self.next + 1].get_forwarding_bit() == Some(true) {
+                        if self.heap[self.next + 1].get_forwarding_bit() {
                             return self.backward_and_return();
                         }
 
@@ -203,7 +199,7 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
                     HeapCellValueTag::Lis => {
                         let last_cell_loc = self.next + 1;
 
-                        if self.heap[last_cell_loc].get_forwarding_bit() == Some(true) {
+                        if self.heap[last_cell_loc].get_forwarding_bit() {
                             return self.backward_and_return();
                         }
 
@@ -219,7 +215,7 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
                         let h = self.next;
                         let cell = self.heap[h];
 
-                        if self.heap[h+1].get_forwarding_bit() == Some(true) {
+                        if self.heap[h+1].get_forwarding_bit() {
                             return self.backward_and_return();
                         }
 
@@ -253,7 +249,7 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
 
                         let last_cell_loc = h+1;
 
-                        if self.heap[last_cell_loc].get_forwarding_bit() == Some(true) {
+                        if self.heap[last_cell_loc].get_forwarding_bit() {
                             return self.backward_and_return();
                         }
 
@@ -301,7 +297,7 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
     }
 
     fn backward(&mut self) -> bool {
-        while !self.heap[self.current].get_forwarding_bit().unwrap_or(false) {
+        while !self.heap[self.current].get_forwarding_bit() {
             let temp = self.heap[self.current].get_value();
 
             UMP::unmark(self.heap, self.current);
@@ -724,7 +720,7 @@ mod tests {
         assert!(wam.machine_st.heap[8].get_mark_bit());
 
         for cell in &wam.machine_st.heap {
-            assert!(cell.get_forwarding_bit() != Some(true));
+            assert!(!cell.get_forwarding_bit());
         }
 
         assert_eq!(unmark_cell_bits!(wam.machine_st.heap[0]), atom_as_cell!(atom!("irrelevant stuff")));
@@ -754,7 +750,7 @@ mod tests {
         assert!(wam.machine_st.heap[8].get_mark_bit());
 
         for cell in &wam.machine_st.heap {
-            assert!(cell.get_forwarding_bit() != Some(true));
+            assert!(!cell.get_forwarding_bit());
         }
 
         assert_eq!(unmark_cell_bits!(wam.machine_st.heap[0]), atom_as_cell!(atom!("irrelevant stuff")));
@@ -784,7 +780,7 @@ mod tests {
         assert!(wam.machine_st.heap[8].get_mark_bit());
 
         for cell in &wam.machine_st.heap {
-            assert!(cell.get_forwarding_bit() != Some(true));
+            assert!(!cell.get_forwarding_bit());
         }
 
         assert_eq!(unmark_cell_bits!(wam.machine_st.heap[0]), atom_as_cell!(atom!("irrelevant stuff")));
@@ -814,7 +810,7 @@ mod tests {
         assert!(wam.machine_st.heap[8].get_mark_bit());
 
         for cell in &wam.machine_st.heap {
-            assert!(cell.get_forwarding_bit() != Some(true));
+            assert!(!cell.get_forwarding_bit());
         }
 
         assert_eq!(unmark_cell_bits!(wam.machine_st.heap[0]), atom_as_cell!(atom!("irrelevant stuff")));
@@ -1175,9 +1171,7 @@ mod tests {
         wam.machine_st.heap.push(fixnum_as_cell!(Fixnum::build_with(3)));
         wam.machine_st.heap.push(fixnum_as_cell!(Fixnum::build_with(4)));
 
-        mark_cells(&mut wam.machine_st.heap, str_loc_as_cell!(1));
-
-        print_heap_terms(wam.machine_st.heap[1 ..].iter(), 0);
+        mark_cells(&mut wam.machine_st.heap, heap_loc_as_cell!(0));
 
         all_cells_marked_and_unforwarded(&wam.machine_st.heap);
 

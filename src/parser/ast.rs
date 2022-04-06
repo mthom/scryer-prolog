@@ -466,7 +466,8 @@ pub enum Fixity {
 #[repr(u64)]
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 pub struct Fixnum {
-    num: B57,
+    num: B56,
+    #[allow(unused)] f: bool,
     #[allow(unused)] m: bool,
     #[allow(unused)] tag: B6,
 }
@@ -475,7 +476,7 @@ impl Fixnum {
     #[inline]
     pub fn build_with(num: i64) -> Self {
         Fixnum::new()
-            .with_num(u64::from_ne_bytes(num.to_ne_bytes()) & ((1 << 57) - 1))
+            .with_num(u64::from_ne_bytes(num.to_ne_bytes()) & ((1 << 56) - 1))
             .with_tag(HeapCellValueTag::Fixnum as u8)
             .with_m(false)
         //num as u64).with__m(false)
@@ -483,14 +484,14 @@ impl Fixnum {
 
     #[inline]
     pub fn build_with_checked(num: i64) -> Result<Self, OutOfBounds> {
-        const UPPER_BOUND: i64 = (1 << 56) - 1;
-        const LOWER_BOUND: i64 = -(1 << 56);
+        const UPPER_BOUND: i64 = (1 << 55) - 1;
+        const LOWER_BOUND: i64 = -(1 << 55);
 
         if LOWER_BOUND <= num && num <= UPPER_BOUND {
             Ok(Fixnum::new()
                 .with_m(false)
                 .with_tag(HeapCellValueTag::Fixnum as u8)
-                .with_num(u64::from_ne_bytes(num.to_ne_bytes()) & ((1 << 57) - 1))) //num as u64 & ((1 << 57) - 1)))
+                .with_num(u64::from_ne_bytes(num.to_ne_bytes()) & ((1 << 56) - 1)))
         } else {
             Err(OutOfBounds {})
         }
@@ -499,7 +500,7 @@ impl Fixnum {
     #[inline]
     pub fn get_num(self) -> i64 {
         let n = self.num() as i64;
-        let (n, overflowed) = (n << 7).overflowing_shr(7); // sign-extend the 57-bit signed fixnum.
+        let (n, overflowed) = (n << 8).overflowing_shr(8);
         debug_assert_eq!(overflowed, false);
         n
     }

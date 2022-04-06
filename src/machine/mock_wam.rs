@@ -168,7 +168,7 @@ pub fn all_cells_marked_and_unforwarded(heap: &[HeapCellValue]) {
             idx
         );
         assert!(
-            cell.get_forwarding_bit() != Some(true),
+            !cell.get_forwarding_bit(),
             "cell {:?} at index {} is forwarded",
             cell,
             idx
@@ -187,7 +187,7 @@ pub fn all_cells_unmarked(heap: &Heap) {
         );
 
         assert!(
-            cell.get_forwarding_bit() != Some(true),
+            !cell.get_forwarding_bit(),
             "cell {:?} at index {} is still forwarded",
             cell,
             idx

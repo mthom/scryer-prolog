@@ -1,4 +1,3 @@
-#[cfg(test)]
 pub(crate) use crate::machine::gc::{IteratorUMP, StacklessPreOrderHeapIter};
 use crate::machine::heap::*;
 
@@ -91,7 +90,7 @@ impl<'a> StackfulPreOrderHeapIter<'a> {
             let h = h.value() as usize;
             let cell = self.heap[h];
 
-            if cell.get_forwarding_bit() == Some(true) {
+            if cell.get_forwarding_bit() {
                 return Some(h);
             } else if cell.get_mark_bit() && !is_readable_marked {
                 continue;
@@ -122,7 +121,7 @@ impl<'a> StackfulPreOrderHeapIter<'a> {
 
             let cell = &mut self.heap[h];
 
-            if cell.get_forwarding_bit() == Some(true) {
+            if cell.get_forwarding_bit() {
                 cell.set_forwarding_bit(false);
             } else if cell.get_mark_bit() && !is_readable_marked {
                 cell.set_mark_bit(false);
@@ -150,7 +149,7 @@ impl<'a> StackfulPreOrderHeapIter<'a> {
             self.h = h;
             let cell = &mut self.heap[h];
 
-            if cell.get_forwarding_bit() == Some(true) {
+            if cell.get_forwarding_bit() {
                 let copy = *cell;
                 cell.set_forwarding_bit(false);
                 return Some(copy);
@@ -225,7 +224,6 @@ impl<'a> Iterator for StackfulPreOrderHeapIter<'a> {
 }
 
 #[inline(always)]
-#[cfg(test)]
 pub(crate) fn stackless_preorder_iter(
     heap: &mut Vec<HeapCellValue>,
     cell: HeapCellValue,
@@ -337,12 +335,10 @@ pub(crate) fn stackful_post_order_iter<'a>(
     PostOrderIterator::new(StackfulPreOrderHeapIter::new(heap, cell))
 }
 
-    #[cfg(test)]
 pub(crate) type RightistPostOrderHeapIter<'a> =
     PostOrderIterator<StacklessPreOrderHeapIter<'a, IteratorUMP>>;
 
 #[inline]
-#[cfg(test)]
 pub(crate) fn stackless_post_order_iter<'a>(
     heap: &'a mut Heap,
     cell: HeapCellValue,

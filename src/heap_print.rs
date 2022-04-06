@@ -833,7 +833,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
     fn check_for_seen(&mut self) -> Option<HeapCellValue> {
         if let Some(addr) = self.iter.next() {
-            let is_cyclic = addr.is_forwarded();
+            let is_cyclic = addr.get_forwarding_bit();
 
             let addr = heap_bound_store(
                 self.iter.heap,

@@ -15,55 +15,55 @@ use std::ops::{Add, Sub, SubAssign};
 #[derive(BitfieldSpecifier, Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[bits = 6]
 pub enum HeapCellValueTag {
-    Str = 0b000010,
-    Lis = 0b000011,
-    Var = 0b000110,
-    StackVar = 0b000111,
-    AttrVar = 0b010011,
-    PStrLoc = 0b111111,
-    PStrOffset = 0b001110,
+    Str = 0b000011,
+    Lis = 0b000101,
+    Var = 0b000111,
+    StackVar = 0b001001,
+    AttrVar = 0b001011,
+    PStrLoc = 0b001101,
+    PStrOffset = 0b001111,
     // constants.
     Cons = 0b0,
-    F64  = 0b000001,
-    Fixnum = 0b010010,
-    Char = 0b011011,
-    Atom = 0b001010,
-    PStr = 0b001011,
-    CStr = 0b010110, // a complete string.
+    F64  = 0b010001,
+    Fixnum = 0b010011,
+    Char = 0b010101,
+    Atom = 0b010111,
+    PStr = 0b011001,
+    CStr = 0b011011,
 }
 
 #[derive(BitfieldSpecifier, Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[bits = 6]
 pub enum HeapCellValueView {
-    Str = 0b000010,
-    Lis = 0b000011,
-    Var = 0b000110,
-    StackVar = 0b000111,
-    AttrVar = 0b010011,
-    PStrLoc = 0b111111,
-    PStrOffset = 0b001110,
+    Str = 0b000011,
+    Lis = 0b000101,
+    Var = 0b000111,
+    StackVar = 0b001001,
+    AttrVar = 0b001011,
+    PStrLoc = 0b001101,
+    PStrOffset = 0b001111,
     // constants.
-    Cons = 0b00,
-    F64  = 0b000001,
-    Fixnum = 0b010010,
-    Char = 0b011011,
-    Atom = 0b001010,
-    PStr = 0b001011,
-    CStr = 0b010110,
+    Cons = 0b0,
+    F64  = 0b010001,
+    Fixnum = 0b010011,
+    Char = 0b010101,
+    Atom = 0b010111,
+    PStr = 0b011001,
+    CStr = 0b011011,
     // trail elements.
-    TrailedHeapVar = 0b011110,
+    TrailedHeapVar = 0b011101,
     TrailedStackVar = 0b011111,
-    TrailedAttrVarHeapLink = 0b101110,
-    TrailedAttrVarListLink = 0b100010,
-    TrailedAttachedValue = 0b101010,
-    TrailedBlackboardEntry = 0b100110,
-    TrailedBlackboardOffset = 0b100111,
+    TrailedAttrVarHeapLink =  0b100001,
+    TrailedAttrVarListLink =  0b100011,
+    TrailedAttachedValue =    0b100101,
+    TrailedBlackboardEntry =  0b100111,
+    TrailedBlackboardOffset = 0b101001,
 }
 
 #[derive(BitfieldSpecifier, Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
-#[bits = 2]
+#[bits = 1]
 pub enum ConsPtrMaskTag {
-    Cons = 0b00,
+    Cons = 0b0,
 }
 
 #[bitfield]
@@ -71,6 +71,7 @@ pub enum ConsPtrMaskTag {
 #[derive(Copy, Clone, Debug)]
 pub struct ConsPtr {
     ptr: B61,
+    f: bool,
     m: bool,
     tag: ConsPtrMaskTag,
 }
@@ -80,6 +81,7 @@ impl ConsPtr {
     pub fn build_with(ptr: *const ArenaHeader, tag: ConsPtrMaskTag) -> Self {
         ConsPtr::new()
             .with_ptr(ptr as *const u8 as u64)
+            .with_f(false)
             .with_m(false)
             .with_tag(tag)
     }
@@ -98,9 +100,9 @@ impl ConsPtr {
 #[derive(BitfieldSpecifier, Copy, Clone, Debug)]
 #[bits = 6]
 pub(crate) enum RefTag {
-    HeapCell = 0b0110,
-    StackCell = 0b111,
-    AttrVar = 0b10011,
+    HeapCell = 0b000111,
+    StackCell = 0b001001,
+    AttrVar = 0b001011,
 }
 
 #[bitfield]
@@ -379,11 +381,6 @@ impl HeapCellValue {
         }
     }
 
-    #[inline(always)]
-    pub fn is_forwarded(self) -> bool {
-        self.get_forwarding_bit().unwrap_or(false)
-    }
-
     #[inline]
     pub fn is_ref(self) -> bool {
         match self.get_tag() {
@@ -536,33 +533,26 @@ impl HeapCellValue {
         }
     }
 
-    #[inline]
-    pub fn get_forwarding_bit(self) -> Option<bool> {
+    #[inline(always)]
+    pub fn get_forwarding_bit(self) -> bool {
         match self.get_tag() {
-            HeapCellValueTag::Cons        // the list of non-forwardable cell tags.
-                | HeapCellValueTag::F64
-                // | HeapCellValueTag::Atom
-                // | HeapCellValueTag::PStr
-                | HeapCellValueTag::Fixnum
-                | HeapCellValueTag::Char => None,
-            _ => Some(self.f()),
+            HeapCellValueTag::Cons => ConsPtr::from_bytes(self.into_bytes()).f(),
+            _ => self.f()
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn set_forwarding_bit(&mut self, f: bool) {
         match self.get_tag() {
-            HeapCellValueTag::Cons        // the list of non-forwardable cell tags.
-                | HeapCellValueTag::F64
-                // | HeapCellValueTag::Atom
-                // | HeapCellValueTag::PStr
-                | HeapCellValueTag::Fixnum
-                | HeapCellValueTag::Char => {}
+            HeapCellValueTag::Cons => {
+                let value = ConsPtr::from_bytes(self.into_bytes()).with_f(f);
+                *self = HeapCellValue::from_bytes(value.into_bytes());
+            }
             _ => self.set_f(f),
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn get_mark_bit(self) -> bool {
         match self.get_tag() {
             HeapCellValueTag::Cons => {
@@ -572,7 +562,7 @@ impl HeapCellValue {
         }
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn set_mark_bit(&mut self, m: bool) {
         match self.get_tag() {
             HeapCellValueTag::Cons => {
