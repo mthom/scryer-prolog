@@ -104,6 +104,7 @@ impl<'a> StacklessPreOrderHeapIter<'a, MarkerUMP> {
 }
 
 impl<'a> StacklessPreOrderHeapIter<'a, IteratorUMP> {
+    #[cfg(test)]
     pub(crate) fn new(heap: &'a mut Vec<HeapCellValue>, cell: HeapCellValue) -> Self {
         let orig_heap_len = heap.len();
         let start = orig_heap_len + 1;

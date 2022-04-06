@@ -1,3 +1,4 @@
+#[cfg(test)]
 pub(crate) use crate::machine::gc::{IteratorUMP, StacklessPreOrderHeapIter};
 use crate::machine::heap::*;
 
@@ -223,6 +224,7 @@ impl<'a> Iterator for StackfulPreOrderHeapIter<'a> {
     }
 }
 
+#[cfg(test)]
 #[inline(always)]
 pub(crate) fn stackless_preorder_iter(
     heap: &mut Vec<HeapCellValue>,
@@ -335,9 +337,11 @@ pub(crate) fn stackful_post_order_iter<'a>(
     PostOrderIterator::new(StackfulPreOrderHeapIter::new(heap, cell))
 }
 
+#[cfg(test)]
 pub(crate) type RightistPostOrderHeapIter<'a> =
     PostOrderIterator<StacklessPreOrderHeapIter<'a, IteratorUMP>>;
 
+#[cfg(test)]
 #[inline]
 pub(crate) fn stackless_post_order_iter<'a>(
     heap: &'a mut Heap,
@@ -440,7 +444,7 @@ mod tests {
             ]
         ));
 
-        for _ in 0..200 { // 000 {
+        for _ in 0..200000 {
             let mut iter = stackless_preorder_iter(&mut wam.machine_st.heap, heap_loc_as_cell!(0));
 
             assert_eq!(
