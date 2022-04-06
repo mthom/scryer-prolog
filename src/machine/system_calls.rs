@@ -4919,7 +4919,7 @@ impl Machine {
         let outcome = heap_loc_as_cell!(
             filtered_iter_to_heap_list(
                 &mut self.machine_st.heap,
-                seen_set.into_iter().rev(),
+                seen_set.into_iter(),
                 |heap, value| {
                     heap_bound_store(
                         heap,
