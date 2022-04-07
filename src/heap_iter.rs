@@ -167,7 +167,12 @@ impl<'a> StackfulPreOrderHeapIter<'a> {
                    self.push_if_unmarked(vh);
 
                    self.stack.push(IterStackLoc::iterable_heap_loc(vh + 1));
-                   forward_if_referent_marked(&mut self.heap, vh + 1);
+
+                   if self.heap[vh + 1].get_mark_bit() {
+                       self.heap[vh + 1].set_forwarding_bit(true);
+                   } else {
+                       forward_if_referent_marked(&mut self.heap, vh + 1);
+                   }
 
                    self.stack.push(IterStackLoc::mark_heap_loc(vh));
                    forward_if_referent_marked(&mut self.heap, vh);
