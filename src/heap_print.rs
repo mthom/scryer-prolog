@@ -689,8 +689,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
         let op = DirectedOp::Left(name, spec);
 
-        self.state_stack
-            .push(TokenOrRedirect::CompositeRedirect(max_depth, op));
+        self.state_stack.push(TokenOrRedirect::CompositeRedirect(max_depth, op));
         self.state_stack.push(TokenOrRedirect::Space);
         self.state_stack.push(TokenOrRedirect::Atom(name));
     }
@@ -1552,51 +1551,47 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
     }
 
     pub fn print(mut self) -> Outputter {
-        loop {
-            if let Some(loc_data) = self.state_stack.pop() {
-                match loc_data {
-                    TokenOrRedirect::Atom(atom) => self.print_atom(atom),
-                    TokenOrRedirect::BarAsOp => append_str!(self, " | "),
-                    TokenOrRedirect::Char(c) => print_char!(self, self.quoted, c),
-                    TokenOrRedirect::Op(atom, _) => self.print_op(atom.as_str()),
-                    TokenOrRedirect::NumberedVar(num_var) => append_str!(self, &num_var),
-                    TokenOrRedirect::CompositeRedirect(max_depth, op) => {
-                        self.handle_heap_term(Some(op), false, max_depth)
-                    }
-                    TokenOrRedirect::FunctorRedirect(max_depth) => {
-                        self.handle_heap_term(None, true, max_depth)
-                    }
-                    TokenOrRedirect::Close => push_char!(self, ')'),
-                    TokenOrRedirect::IpAddr(ip) => self.print_ip_addr(ip),
-                    TokenOrRedirect::RawPtr(ptr) => self.print_raw_ptr(ptr),
-                    TokenOrRedirect::Open => push_char!(self, '('),
-                    TokenOrRedirect::OpenList(delimit) => {
-                        if !self.at_cdr(",") {
-                            push_char!(self, '[');
-                        } else {
-                            let (_, max_depth) = delimit.get();
-                            delimit.set((false, max_depth));
-                        }
-                    }
-                    TokenOrRedirect::CloseList(delimit) => {
-                        if delimit.get().0 {
-                            push_char!(self, ']');
-                        }
-                    }
-                    TokenOrRedirect::HeadTailSeparator => append_str!(self, "|"),
-                    TokenOrRedirect::NumberFocus(max_depth, n, op) => {
-                        self.print_number(max_depth, n, &op);
-                    }
-                    TokenOrRedirect::Comma => append_str!(self, ","),
-                    TokenOrRedirect::Space => push_char!(self, ' '),
-                    TokenOrRedirect::LeftCurly => push_char!(self, '{'),
-                    TokenOrRedirect::RightCurly => push_char!(self, '}'),
+        let spec = self.toplevel_spec.take();
+        self.handle_heap_term(spec, false, self.max_depth);
+
+        while let Some(loc_data) = self.state_stack.pop() {
+            match loc_data {
+                TokenOrRedirect::Atom(atom) => self.print_atom(atom),
+                TokenOrRedirect::BarAsOp => append_str!(self, " | "),
+                TokenOrRedirect::Char(c) => print_char!(self, self.quoted, c),
+                TokenOrRedirect::Op(atom, _) => self.print_op(atom.as_str()),
+                TokenOrRedirect::NumberedVar(num_var) => append_str!(self, &num_var),
+                TokenOrRedirect::CompositeRedirect(max_depth, op) => {
+                    self.handle_heap_term(Some(op), false, max_depth)
                 }
-            } else if !self.iter.stack_is_empty() {
-                let spec = self.toplevel_spec.take();
-                self.handle_heap_term(spec, false, self.max_depth);
-            } else {
-                break;
+                TokenOrRedirect::FunctorRedirect(max_depth) => {
+                    self.handle_heap_term(None, true, max_depth)
+                }
+                TokenOrRedirect::Close => push_char!(self, ')'),
+                TokenOrRedirect::IpAddr(ip) => self.print_ip_addr(ip),
+                TokenOrRedirect::RawPtr(ptr) => self.print_raw_ptr(ptr),
+                TokenOrRedirect::Open => push_char!(self, '('),
+                TokenOrRedirect::OpenList(delimit) => {
+                    if !self.at_cdr(",") {
+                        push_char!(self, '[');
+                    } else {
+                        let (_, max_depth) = delimit.get();
+                        delimit.set((false, max_depth));
+                    }
+                }
+                TokenOrRedirect::CloseList(delimit) => {
+                    if delimit.get().0 {
+                        push_char!(self, ']');
+                    }
+                }
+                TokenOrRedirect::HeadTailSeparator => append_str!(self, "|"),
+                TokenOrRedirect::NumberFocus(max_depth, n, op) => {
+                    self.print_number(max_depth, n, &op);
+                }
+                TokenOrRedirect::Comma => append_str!(self, ","),
+                TokenOrRedirect::Space => push_char!(self, ' '),
+                TokenOrRedirect::LeftCurly => push_char!(self, '{'),
+                TokenOrRedirect::RightCurly => push_char!(self, '}'),
             }
         }
 

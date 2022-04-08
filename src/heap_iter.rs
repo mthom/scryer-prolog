@@ -104,11 +104,6 @@ impl<'a> StackfulPreOrderHeapIter<'a> {
     }
 
     #[inline]
-    pub fn stack_is_empty(&self) -> bool {
-        self.stack.is_empty()
-    }
-
-    #[inline]
     pub fn focus(&self) -> usize {
         self.h
     }
@@ -165,14 +160,10 @@ impl<'a> StackfulPreOrderHeapIter<'a> {
                }
                (HeapCellValueTag::Lis, vh) => {
                    self.push_if_unmarked(vh);
+                   self.push_if_unmarked(vh + 1);
 
-                   self.stack.push(IterStackLoc::iterable_heap_loc(vh + 1));
-
-                   if self.heap[vh + 1].get_mark_bit() {
-                       self.heap[vh + 1].set_forwarding_bit(true);
-                   } else {
-                       forward_if_referent_marked(&mut self.heap, vh + 1);
-                   }
+                   self.stack.push(IterStackLoc::mark_heap_loc(vh + 1));
+                   forward_if_referent_marked(&mut self.heap, vh + 1);
 
                    self.stack.push(IterStackLoc::mark_heap_loc(vh));
                    forward_if_referent_marked(&mut self.heap, vh);
@@ -193,19 +184,23 @@ impl<'a> StackfulPreOrderHeapIter<'a> {
                (HeapCellValueTag::PStr) => {
                    self.push_if_unmarked(h);
 
-                   forward_if_referent_marked(&mut self.heap, h+1);
                    self.stack.push(IterStackLoc::iterable_heap_loc(h+1));
+                   forward_if_referent_marked(&mut self.heap, h+1);
 
                    return Some(self.heap[h]);
                }
                (HeapCellValueTag::Atom, (_name, arity)) => {
                    if arity > 0 {
                        self.push_if_unmarked(h);
+
+                       for h in h + 1 .. h + arity + 1 {
+                           self.push_if_unmarked(h);
+                       }
                    }
 
                    for h in (h + 1 .. h + arity + 1).rev() {
+                       self.stack.push(IterStackLoc::mark_heap_loc(h));
                        forward_if_referent_marked(&mut self.heap, h);
-                       self.stack.push(IterStackLoc::iterable_heap_loc(h));
                    }
 
                    return Some(self.heap[h]);
@@ -1716,7 +1711,9 @@ mod tests {
             );
 
             let mut link_back = list_loc_as_cell!(1);
+
             link_back.set_forwarding_bit(true);
+            link_back.set_mark_bit(true);
 
             assert_eq!(iter.next().unwrap(), link_back);
 
@@ -1738,7 +1735,9 @@ mod tests {
             );
 
             let mut cyclic_link = list_loc_as_cell!(1);
+
             cyclic_link.set_forwarding_bit(true);
+            cyclic_link.set_mark_bit(true);
 
             assert_eq!(iter.next().unwrap(), list_loc_as_cell!(1));
             assert_eq!(
@@ -1808,7 +1807,7 @@ mod tests {
             );
 
             assert_eq!(
-                iter.next().unwrap(),
+                unmark_cell_bits!(iter.next().unwrap()),
                 atom_as_cell!(atom!("y"))
             );
 
@@ -2204,7 +2203,9 @@ mod tests {
             );
 
             let mut link_back = list_loc_as_cell!(1);
+
             link_back.set_forwarding_bit(true);
+            link_back.set_mark_bit(true);
 
             assert_eq!(iter.next().unwrap(), link_back);
 
