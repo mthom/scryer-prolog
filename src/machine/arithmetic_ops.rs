@@ -1102,24 +1102,30 @@ impl MachineState {
 
         while let Some(value) = iter.next() {
             if value.get_forwarding_bit() {
+                std::mem::drop(iter);
+
                 let (name, arity) = read_heap_cell!(value,
                      (HeapCellValueTag::Atom, (name, arity)) => {
                          (name, arity)
                      }
-                     (HeapCellValueTag::Lis | HeapCellValueTag::PStr) => {
+                     (HeapCellValueTag::Str, s) => {
+                         cell_as_atom_cell!(self.heap[s]).get_name_and_arity()
+                     }
+                     (HeapCellValueTag::Lis | HeapCellValueTag::PStr | HeapCellValueTag::PStrOffset |
+                      HeapCellValueTag::PStrLoc) => {
                          (atom!("."), 2)
+                     }
+                     (HeapCellValueTag::AttrVar | HeapCellValueTag::Var) => {
+                         let err = self.instantiation_error();
+                         return Err(self.error_form(err, stub_gen()));
                      }
                      _ => {
                          unreachable!()
                      }
                 );
 
-                std::mem::drop(iter);
-
                 let evaluable_error = self.evaluable_error(name, arity);
-                let stub = stub_gen();
-
-                return Err(self.error_form(evaluable_error, stub));
+                return Err(self.error_form(evaluable_error, stub_gen()));
             }
 
             read_heap_cell!(value,
