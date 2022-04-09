@@ -2056,8 +2056,10 @@ impl MachineState {
 
         while let Some(value) = iter.next() {
             if value.get_forwarding_bit() {
-                let value = unmark_cell_bits!(value);
-                let value = heap_bound_store(iter.heap, heap_bound_deref(iter.heap, value));
+                let value = unmark_cell_bits!(heap_bound_store(
+                    iter.heap,
+                    heap_bound_deref(iter.heap, value),
+                ));
 
                 if value.is_compound() {
                     return true;

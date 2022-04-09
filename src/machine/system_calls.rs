@@ -4911,10 +4911,10 @@ impl Machine {
                 let value = unmark_cell_bits!(value);
 
                 if value.is_var() {
-                    let value = heap_bound_store(
+                    let value = unmark_cell_bits!(heap_bound_store(
                         iter.heap,
                         heap_bound_deref(iter.heap, value)
-                    );
+                    ));
 
                     if value.is_var() {
                         seen_set.insert(value);
