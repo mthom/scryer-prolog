@@ -4902,7 +4902,7 @@ impl Machine {
             return;
         }
 
-        let mut seen_set = IndexSet::new();
+        let mut seen_vec = vec![];
 
         {
             let mut iter = stackful_preorder_iter(&mut self.machine_st.heap, stored_v);
@@ -4911,22 +4911,17 @@ impl Machine {
                 let addr = unmark_cell_bits!(addr);
 
                 if addr.is_var() {
-                    seen_set.insert(addr);
+                    seen_vec.push(addr);
                 }
             }
         }
 
+        seen_vec.dedup_by(|v1, v2| {
+            compare_term_test!(self.machine_st, *v1, *v2) == Some(std::cmp::Ordering::Equal)
+        });
+
         let outcome = heap_loc_as_cell!(
-            filtered_iter_to_heap_list(
-                &mut self.machine_st.heap,
-                seen_set.into_iter(),
-                |heap, value| {
-                    heap_bound_store(
-                        heap,
-                        heap_bound_deref(heap, value),
-                    ).is_var()
-                },
-            )
+            iter_to_heap_list(&mut self.machine_st.heap, seen_vec.into_iter())
         );
 
         unify_fn!(self.machine_st, a2, outcome);
