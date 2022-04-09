@@ -609,7 +609,7 @@ impl MachineState {
 
                 let value = unmark_cell_bits!(value);
 
-                if value.is_var() && !seen_set.contains(&value) {
+                if value.is_var() {
                     seen_set.insert(value);
                 }
             }
@@ -4902,26 +4902,29 @@ impl Machine {
             return;
         }
 
-        let mut seen_vec = vec![];
+        let mut seen_set = IndexSet::new();
 
         {
             let mut iter = stackful_preorder_iter(&mut self.machine_st.heap, stored_v);
 
-            while let Some(addr) = iter.next() {
-                let addr = unmark_cell_bits!(addr);
+            while let Some(value) = iter.next() {
+                let value = unmark_cell_bits!(value);
 
-                if addr.is_var() {
-                    seen_vec.push(addr);
+                if value.is_var() {
+                    let value = heap_bound_store(
+                        iter.heap,
+                        heap_bound_deref(iter.heap, value)
+                    );
+
+                    if value.is_var() {
+                        seen_set.insert(value);
+                    }
                 }
             }
         }
 
-        seen_vec.dedup_by(|v1, v2| {
-            compare_term_test!(self.machine_st, *v1, *v2) == Some(std::cmp::Ordering::Equal)
-        });
-
         let outcome = heap_loc_as_cell!(
-            iter_to_heap_list(&mut self.machine_st.heap, seen_vec.into_iter())
+            iter_to_heap_list(&mut self.machine_st.heap, seen_set.into_iter())
         );
 
         unify_fn!(self.machine_st, a2, outcome);

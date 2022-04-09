@@ -2047,16 +2047,16 @@ impl MachineState {
     }
 
     #[inline]
-    pub fn is_cyclic_term(&mut self, addr: HeapCellValue) -> bool {
-        if addr.is_constant() {
+    pub fn is_cyclic_term(&mut self, value: HeapCellValue) -> bool {
+        if value.is_constant() {
             return false;
         }
 
-        let addr = self.store(self.deref(addr));
-        let mut iter = stackful_preorder_iter(&mut self.heap, addr);
+        let mut iter = stackful_preorder_iter(&mut self.heap, value);
 
         while let Some(value) = iter.next() {
             if value.get_forwarding_bit() {
+                let value = unmark_cell_bits!(value);
                 let value = heap_bound_store(iter.heap, heap_bound_deref(iter.heap, value));
 
                 if value.is_compound() {
@@ -2514,11 +2514,20 @@ impl MachineState {
             return true;
         }
 
-        for v in stackful_preorder_iter(&mut self.heap, value) {
-            let v = unmark_cell_bits!(v);
+        let mut iter = stackful_preorder_iter(&mut self.heap, value);
 
-            if v.is_var() {
-                return true;
+        while let Some(value) = iter.next() {
+            let value = unmark_cell_bits!(value);
+
+            if value.is_var() {
+                let value = heap_bound_store(
+                    iter.heap,
+                    heap_bound_deref(iter.heap, value),
+                );
+
+                if value.is_var() {
+                    return true;
+                }
             }
         }
 
