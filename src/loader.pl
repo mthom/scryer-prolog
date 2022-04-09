@@ -17,6 +17,14 @@
 :- use_module(library(pairs)).
 
 
+write_error(Error) :-
+    write('   '),
+    (  nonvar(Error),
+       functor(Error, error, 2) ->
+       writeq(Error)
+    ;  writeq(throw(Error))
+    ).
+
 '$print_message_and_fail'(Error) :-
     (  (  Error = error(existence_error(procedure, Expansion), Expansion)
        ;  Error = error(evaluation_error((_:_)/_),Expansion)
@@ -25,12 +33,10 @@
           ;  Expansion = term_expansion/2
           )  ->
           true
-       ;  write('caught: '),
-          writeq(Error),
+       ;  write_error(Error),
           nl
        )
-    ;  write('caught: '),
-       writeq(Error),
+    ;  write_error(Error),
        nl
     ),
     '$fail'.

@@ -129,8 +129,8 @@ run_goals([g(Gs0)|Goals]) :-
     ),
     run_goals(Goals).
 run_goals([Goal|_]) :-
-    write('caught: '),
-    write(error(domain_error(arg_type, Goal), run_goals/1)), nl,
+    loader:write_error(error(domain_error(arg_type, Goal), run_goals/1)),
+    nl,
     halt.
 
 repl :-
@@ -412,13 +412,12 @@ gather_equations([Var = Value | Pairs], OrigVarList, Goals) :-
 
 print_exception(E) :-
     (  E == error('$interrupt_thrown', repl) -> nl % print the
-    % exception on a
-    % newline to evade
-    % "^C".
+                                                   % exception on a
+                                                   % newline to evade
+                                                   % "^C".
     ;  true
     ),
-    write_term('caught: ', [quoted(false), max_depth(20)]),
-    writeq(E),
+    loader:write_error(E),
     nl.
 
 print_exception_with_check(E) :-
