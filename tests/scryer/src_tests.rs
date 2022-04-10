@@ -30,7 +30,7 @@ fn hello_world() {
 fn syntax_error() {
     load_module_test(
         "tests-pl/syntax_error.pl",
-        "caught: error(syntax_error(incomplete_reduction),read_term/3:6)\n",
+        "   error(syntax_error(incomplete_reduction),read_term/3:6)\n",
     );
 }
 

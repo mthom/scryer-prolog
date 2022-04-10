@@ -100,7 +100,7 @@ run :-
             Dss
         ),
         E,
-        (   write('caught: '), write(E), nl,
+        (   loader:write_error(E), nl,
             portray_clause([N, Settings, Vs, Gs4, Dss]), nl,
             false
         )

@@ -134,6 +134,7 @@ run_goals([Goal|_]) :-
     halt.
 
 repl :-
+    bb_put('$first_answer', true),
     catch(read_and_match, E, print_exception(E)),
     false. %% this is for GC, until we get actual GC.
 repl :-
@@ -198,9 +199,8 @@ submit_query_and_print_results(Term0, VarList) :-
                     % in the first argument, which is done by call/N
     ;  expand_goal(Term0, user, Term)
     ),
-    setup_call_cleanup(bb_put('$first_answer', true),
-                       submit_query_and_print_results_(Term, VarList),
-                       bb_put('$first_answer', false)).
+    bb_put('$first_answer', true),
+    submit_query_and_print_results_(Term, VarList).
 
 
 needs_bracketing(Value, Op) :-

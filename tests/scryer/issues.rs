@@ -29,12 +29,7 @@ fn do_not_duplicate_path_components() {
         ['tests-pl/issue852-throw_e.pl'].\n\
         halt.\n\
         ",
-        "\
-        caught: e\n   \
-        false.\n\
-        caught: e\n   \
-        false.\n\
-        ",
+        "   throw(e)\n   false.\n   throw(e)\n   false.\n",
     );
 }
 
@@ -170,6 +165,6 @@ fn ignored_constraint() {
 fn call_0() {
     load_module_test(
         "tests-pl/issue831-call0.pl",
-        "caught: error(existence_error(procedure,call/0),call/0)\n",
+        "   error(existence_error(procedure,call/0),call/0)\n",
     );
 }

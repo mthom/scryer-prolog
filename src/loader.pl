@@ -18,7 +18,14 @@
 
 
 write_error(Error) :-
-    write('   '),
+    % '$fetch_global_var' is the core system call of bb_get/2, but
+    % bb_get may not exist when write_error is first called, so fall
+    % back on '$fetch_global_var'.
+    (  '$fetch_global_var'('$first_answer', false) ->
+       true
+    ;  write('   ') % if '$first_answer' isn't defined yet or true,
+                    % print indentation.
+    ),
     (  nonvar(Error),
        functor(Error, error, 2) ->
        writeq(Error)
