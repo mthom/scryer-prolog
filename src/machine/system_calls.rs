@@ -3987,7 +3987,7 @@ impl Machine {
         )?;
 
         if !stream.is_output_stream() {
-            let stub = functor_stub(atom!("set_input"), 1);
+            let stub = functor_stub(atom!("set_output"), 1);
 
             let user_alias = atom_as_cell!(atom!("user"));
             let err = self.machine_st.permission_error(
