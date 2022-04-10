@@ -171,8 +171,8 @@ impl<'a> StackfulPreOrderHeapIter<'a> {
                    return Some(self.heap[h]);
                }
                (HeapCellValueTag::AttrVar | HeapCellValueTag::PStrLoc | HeapCellValueTag::Var, vh) => {
-                   self.push_if_unmarked(h);
-                   self.stack.push(IterStackLoc::iterable_heap_loc(vh));
+                   self.push_if_unmarked(vh);
+                   self.stack.push(IterStackLoc::mark_heap_loc(vh));
                    forward_if_referent_marked(&mut self.heap, vh);
                }
                (HeapCellValueTag::PStrOffset, offset) => {
@@ -1467,7 +1467,7 @@ mod tests {
             );
             assert_eq!(
                 unmark_cell_bits!(iter.next().unwrap()),
-                list_loc_as_cell!(1)
+                heap_loc_as_cell!(0)
             );
 
             assert_eq!(iter.next(), None);
@@ -1739,7 +1739,10 @@ mod tests {
             cyclic_link.set_forwarding_bit(true);
             cyclic_link.set_mark_bit(true);
 
-            assert_eq!(iter.next().unwrap(), list_loc_as_cell!(1));
+            assert_eq!(
+                unmark_cell_bits!(iter.next().unwrap()),
+                list_loc_as_cell!(1)
+            );
             assert_eq!(
                 unmark_cell_bits!(iter.next().unwrap()),
                 list_loc_as_cell!(1)
@@ -1803,7 +1806,7 @@ mod tests {
 
             assert_eq!(
                 unmark_cell_bits!(iter.next().unwrap()),
-                str_loc_as_cell!(1)
+                heap_loc_as_cell!(0)
             );
 
             assert_eq!(
@@ -1975,7 +1978,7 @@ mod tests {
             );
             assert_eq!(
                 unmark_cell_bits!(iter.next().unwrap()),
-                list_loc_as_cell!(1)
+                heap_loc_as_cell!(0)
             );
             assert_eq!(
                 unmark_cell_bits!(iter.next().unwrap()),

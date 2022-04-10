@@ -28,11 +28,10 @@ write_error(Error) :-
     ),
     (  nonvar(Error),
        functor(Error, error, 2) ->
-       writeq(Error),
-       write('.')
-    ;  writeq(throw(Error)),
-       write('.')
-    ).
+       writeq(Error)
+    ;  writeq(throw(Error))
+    ),
+    write('.').
 
 '$print_message_and_fail'(Error) :-
     (  (  Error = error(existence_error(procedure, Expansion), Expansion)
