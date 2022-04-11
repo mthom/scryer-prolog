@@ -109,6 +109,12 @@ impl<'a> HeapPStrIter<'a> {
         self.brent_st.num_steps()
     }
 
+    #[inline]
+    pub fn chars(mut self) -> PStrCharsIter<'a> {
+        let item = self.next();
+        PStrCharsIter { iter: self, item }
+    }
+
     pub fn compare_pstr_to_string(&mut self, s: &str) -> Option<PStrPrefixCmpResult> {
         let mut result = PStrPrefixCmpResult {
             focus: self.brent_st.hare,
@@ -116,7 +122,10 @@ impl<'a> HeapPStrIter<'a> {
             prefix_len: 0,
         };
 
-        while let Some(iteratee) = self.next() {
+        while let Some(PStrIterStep { iteratee, next_hare }) = self.step(self.brent_st.hare) {
+            self.brent_st.hare = next_hare;
+            self.focus = self.heap[next_hare];
+
             result.focus  = iteratee.focus();
             result.offset = iteratee.offset();
 
@@ -162,12 +171,6 @@ impl<'a> HeapPStrIter<'a> {
         }
 
         Some(result)
-    }
-
-    #[inline]
-    pub fn chars(mut self) -> PStrCharsIter<'a> {
-        let item = self.next();
-        PStrCharsIter { iter: self, item }
     }
 
     fn walk_hare_to_cycle_end(&mut self) {
