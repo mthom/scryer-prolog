@@ -226,7 +226,13 @@ impl<'a> HeapPStrIter<'a> {
                    return name == atom!(".") && arity == 2;
                }
                (HeapCellValueTag::Lis, h) => {
-                   return read_heap_cell!(self.heap[h],
+                   let value = self.heap[h];
+                   let value = heap_bound_store(
+                       self.heap,
+                       heap_bound_deref(self.heap, value),
+                   );
+
+                   return read_heap_cell!(value,
                        (HeapCellValueTag::Atom, (name, arity)) => {
                            arity == 0 && name.as_char().is_some()
                        }
