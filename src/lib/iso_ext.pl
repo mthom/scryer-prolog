@@ -77,7 +77,7 @@ setup_call_cleanup(S, G, C) :-
 scc_helper(C, G, Bb) :-
     '$get_cp'(Cp),
     '$install_scc_cleaner'(C, NBb),
-    call(G),
+    '$call'(G),
     ( '$check_cp'(Cp) ->
       '$reset_block'(Bb),
       '$call_with_default_policy'(run_cleaners_without_handling(Cp))
@@ -110,7 +110,7 @@ run_cleaners_with_handling :-
 run_cleaners_without_handling(Cp) :-
     '$get_scc_cleaner'(C),
     '$get_level'(B),
-    call(C),
+    '$call'(C),
     '$set_cp_by_default'(B),
     '$call_with_default_policy'(run_cleaners_without_handling(Cp)).
 run_cleaners_without_handling(Cp) :-
