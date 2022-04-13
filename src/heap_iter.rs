@@ -10,6 +10,49 @@ use modular_bitfield::prelude::*;
 use std::ops::Deref;
 use std::vec::Vec;
 
+#[derive(BitfieldSpecifier, Clone, Copy, Debug, PartialEq, Eq)]
+#[bits = 2]
+enum IterStackLocTag {
+    Iterable,
+    Marked,
+    PendingMark,
+}
+
+#[bitfield]
+#[repr(u64)]
+#[derive(Clone, Copy, Debug)]
+pub struct IterStackLoc {
+    value: B62,
+    tag: IterStackLocTag,
+}
+
+impl IterStackLoc {
+    #[inline]
+    pub fn iterable_heap_loc(h: usize) -> Self {
+        IterStackLoc::new().with_tag(IterStackLocTag::Iterable).with_value(h as u64)
+    }
+
+    #[inline]
+    pub fn mark_heap_loc(h: usize) -> Self {
+        IterStackLoc::new().with_tag(IterStackLocTag::Marked).with_value(h as u64)
+    }
+
+    #[inline]
+    pub fn pending_mark_heap_loc(h: usize) -> Self {
+        IterStackLoc::new().with_tag(IterStackLocTag::PendingMark).with_value(h as u64)
+    }
+
+    #[inline]
+    pub fn is_marked(self) -> bool {
+        self.tag() == IterStackLocTag::Marked
+    }
+
+    #[inline]
+    pub fn is_pending_mark(self) -> bool {
+        self.tag() == IterStackLocTag::PendingMark
+    }
+}
+
 #[inline]
 fn forward_if_referent_marked(heap: &mut [HeapCellValue], h: usize) {
     read_heap_cell!(heap[h],
@@ -24,26 +67,6 @@ fn forward_if_referent_marked(heap: &mut [HeapCellValue], h: usize) {
         }
         _ => {}
     )
-}
-
-#[bitfield]
-#[repr(u64)]
-#[derive(Clone, Copy, Debug)]
-pub struct IterStackLoc {
-    value: B63,
-    m: bool,
-}
-
-impl IterStackLoc {
-    #[inline]
-    pub fn iterable_heap_loc(h: usize) -> Self {
-        IterStackLoc::new().with_m(false).with_value(h as u64)
-    }
-
-    #[inline]
-    pub fn mark_heap_loc(h: usize) -> Self {
-        IterStackLoc::new().with_m(true).with_value(h as u64)
-    }
 }
 
 #[derive(Debug)]
@@ -87,7 +110,7 @@ impl<'a> StackfulPreOrderHeapIter<'a> {
     #[inline]
     pub fn stack_last(&self) -> Option<usize> {
         for h in self.stack.iter().rev() {
-            let is_readable_marked = h.m();
+            let is_readable_marked = h.is_marked();
             let h = h.value() as usize;
             let cell = self.heap[h];
 
@@ -111,7 +134,7 @@ impl<'a> StackfulPreOrderHeapIter<'a> {
     #[inline]
     pub fn pop_stack(&mut self) -> Option<HeapCellValue> {
         while let Some(h) = self.stack.pop() {
-            let is_readable_marked = h.m();
+            let is_readable_marked = h.is_marked();
             let h = h.value() as usize;
             self.h = h;
 
@@ -139,7 +162,17 @@ impl<'a> StackfulPreOrderHeapIter<'a> {
 
     fn follow(&mut self) -> Option<HeapCellValue> {
         while let Some(h) = self.stack.pop() {
-            let is_readable_marked = h.m();
+            if h.is_pending_mark() {
+                let h = h.value() as usize;
+
+                self.push_if_unmarked(h);
+                self.stack.push(IterStackLoc::mark_heap_loc(h));
+
+                forward_if_referent_marked(&mut self.heap, h);
+                continue;
+            }
+
+            let is_readable_marked = h.is_marked();
             let h = h.value() as usize;
 
             self.h = h;
@@ -155,22 +188,21 @@ impl<'a> StackfulPreOrderHeapIter<'a> {
             }
 
             read_heap_cell!(*cell,
-               (HeapCellValueTag::Str, vh) => {
-                   self.stack.push(IterStackLoc::iterable_heap_loc(vh));
+               (HeapCellValueTag::Str | HeapCellValueTag::PStrLoc, vh) => {
+                   self.push_if_unmarked(vh);
+                   self.stack.push(IterStackLoc::mark_heap_loc(vh));
                }
                (HeapCellValueTag::Lis, vh) => {
                    self.push_if_unmarked(vh);
-                   self.push_if_unmarked(vh + 1);
 
-                   self.stack.push(IterStackLoc::mark_heap_loc(vh + 1));
-                   forward_if_referent_marked(&mut self.heap, vh + 1);
-
+                   self.stack.push(IterStackLoc::pending_mark_heap_loc(vh + 1));
                    self.stack.push(IterStackLoc::mark_heap_loc(vh));
+
                    forward_if_referent_marked(&mut self.heap, vh);
 
                    return Some(self.heap[h]);
                }
-               (HeapCellValueTag::AttrVar | HeapCellValueTag::PStrLoc | HeapCellValueTag::Var, vh) => {
+               (HeapCellValueTag::AttrVar | HeapCellValueTag::Var, vh) => {
                    self.push_if_unmarked(vh);
                    self.stack.push(IterStackLoc::mark_heap_loc(vh));
                    forward_if_referent_marked(&mut self.heap, vh);
@@ -190,17 +222,14 @@ impl<'a> StackfulPreOrderHeapIter<'a> {
                    return Some(self.heap[h]);
                }
                (HeapCellValueTag::Atom, (_name, arity)) => {
-                   if arity > 0 {
-                       self.push_if_unmarked(h);
-
-                       for h in h + 1 .. h + arity + 1 {
-                           self.push_if_unmarked(h);
-                       }
+                   for h in (h + 2 .. h + arity + 1).rev() {
+                       self.stack.push(IterStackLoc::pending_mark_heap_loc(h));
                    }
 
-                   for h in (h + 1 .. h + arity + 1).rev() {
-                       self.stack.push(IterStackLoc::mark_heap_loc(h));
-                       forward_if_referent_marked(&mut self.heap, h);
+                   if arity > 0 {
+                       self.push_if_unmarked(h+1);
+                       self.stack.push(IterStackLoc::mark_heap_loc(h+1));
+                       forward_if_referent_marked(&mut self.heap, h+1);
                    }
 
                    return Some(self.heap[h]);
@@ -1313,7 +1342,7 @@ mod tests {
             .extend(functor!(f_atom, [atom(a_atom), atom(b_atom)]));
 
         {
-            let mut iter = StackfulPreOrderHeapIter::new(&mut wam.machine_st.heap, heap_loc_as_cell!(0));
+            let mut iter = StackfulPreOrderHeapIter::new(&mut wam.machine_st.heap, str_loc_as_cell!(0));
 
             assert_eq!(
                 unmark_cell_bits!(iter.next().unwrap()),
@@ -1344,7 +1373,7 @@ mod tests {
         ));
 
         for _ in 0..20 {
-            let mut iter = StackfulPreOrderHeapIter::new(&mut wam.machine_st.heap, heap_loc_as_cell!(0));
+            let mut iter = StackfulPreOrderHeapIter::new(&mut wam.machine_st.heap, str_loc_as_cell!(0));
 
             assert_eq!(
                 unmark_cell_bits!(iter.next().unwrap()),
@@ -1830,7 +1859,7 @@ mod tests {
             .extend(functor!(f_atom, [atom(a_atom), atom(b_atom)]));
 
         {
-            let mut iter = stackful_post_order_iter(&mut wam.machine_st.heap, heap_loc_as_cell!(0));
+            let mut iter = stackful_post_order_iter(&mut wam.machine_st.heap, str_loc_as_cell!(0));
 
             assert_eq!(
                 unmark_cell_bits!(iter.next().unwrap()),
@@ -1861,7 +1890,7 @@ mod tests {
         ));
 
         for _ in 0..20 { // 0000 {
-            let mut iter = stackful_post_order_iter(&mut wam.machine_st.heap, heap_loc_as_cell!(0));
+            let mut iter = stackful_post_order_iter(&mut wam.machine_st.heap, str_loc_as_cell!(0));
 
             assert_eq!(
                 unmark_cell_bits!(iter.next().unwrap()),
