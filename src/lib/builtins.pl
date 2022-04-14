@@ -971,7 +971,8 @@ call_module_retract(Head, Body, Name, Arity, Module) :-
 retract_module_clause(Head, Body, Module) :-
     (  var(Head) ->
        throw(error(instantiation_error, retract/1))
-    ;  callable(Head), functor(Head, Name, Arity) ->
+    ;  callable(Head),
+       functor(Head, Name, Arity) ->
        (  '$no_such_predicate'(Module, Head) ->
           '$fail'
        ;  '$head_is_dynamic'(Module, Head) ->
@@ -1012,7 +1013,8 @@ call_retract(Head, Body, Name, Arity) :-
 retract_clause(Head, Body) :-
     (  var(Head) ->
        throw(error(instantiation_error, retract/1))
-    ;  callable(Head), functor(Head, Name, Arity) ->
+    ;  callable(Head),
+       functor(Head, Name, Arity) ->
        (  Name == (:),
           Arity =:= 2 ->
           arg(1, Head, Module),
@@ -1032,7 +1034,10 @@ retract_clause(Head, Body) :-
 retract(Clause0) :-
     loader:strip_module(Clause0, Module, Clause),
     (  Clause \= (_ :- _) ->
-       Head = Clause,
+       loader:strip_module(Clause, Module, Head),
+       (  var(Module) -> Module = user
+       ;  true
+       ),
        Body = true,
        retract_module_clause(Head, Body, Module)
     ;  Clause = (Head :- Body) ->
