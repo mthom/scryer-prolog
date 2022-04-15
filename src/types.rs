@@ -592,7 +592,7 @@ impl HeapCellValue {
                     })
                 }
                 HeapCellValueTag::Lis | HeapCellValueTag::PStrLoc |
-		HeapCellValueTag::CStr | HeapCellValueTag::Str => {
+                HeapCellValueTag::CStr | HeapCellValueTag::Str => {
                     Some(TermOrderCategory::Compound)
                 }
                 _ => {

@@ -1545,7 +1545,7 @@ impl MachineState {
                                         }
                                     } else {
                                         self.pdl.clear();
-                                        return Some(Ordering::Greater);
+                                        return Some(n1.chars().next().cmp(&Some(c2)));
                                     }
                                 }
                                 _ => {
@@ -1563,7 +1563,7 @@ impl MachineState {
                                         }
                                     } else {
                                         self.pdl.clear();
-                                        return Some(Ordering::Less);
+                                        return Some(Some(c1).cmp(&n2.chars().next()));
                                     }
                                 }
                                 (HeapCellValueTag::Char, c2) => {
@@ -1583,41 +1583,61 @@ impl MachineState {
                     )
                 }
                 Some(TermOrderCategory::Compound) => {
-                    fn stalled_pstr_iter_handler(
-                        string_iter: HeapPStrIter,
-                        stalled_iter: HeapPStrIter,
+                    fn stalled_pstr_iter_comparator(
+                        iteratee: PStrIteratee,
+                        iter2: HeapPStrIter,
                         pdl: &mut Vec<HeapCellValue>,
                     ) -> Option<Ordering> {
-                        let l = read_heap_cell!(stalled_iter.focus,
-                            (HeapCellValueTag::Str, s) => {
-                                let (name, arity) = cell_as_atom_cell!(stalled_iter.heap[s])
-                                    .get_name_and_arity();
+                        let compound = Some(TermOrderCategory::Compound);
 
-                                if !(name == atom!(".") && arity == 2) {
-                                    pdl.clear();
-                                    return Some((atom!("."),2).cmp(&(name,arity)));
+                        if iter2.focus.order_category() != compound {
+                            Some(compound.cmp(&iter2.focus.order_category()))
+                        } else {
+                            let c1 = match iteratee {
+                                PStrIteratee::Char(_, c) => c,
+                                PStrIteratee::PStrSegment(focus, pstr_atom, n) => {
+                                    let pstr = PartialString::from(pstr_atom);
+
+                                    match pstr.as_str_from(n).chars().next() {
+                                        Some(c) => c,
+                                        None => {
+                                            pdl.push(iter2.focus);
+                                            // iter2 is continuable, so it
+                                            // has a tail in the heap at
+                                            // focus+1.
+                                            pdl.push(iter2.heap[focus+1]);
+
+                                            return None;
+                                        }
+                                    }
                                 }
+                            };
 
-                                s+1
-                            }
-                            (HeapCellValueTag::Lis, l) => {
-                                l
-                            }
-                            _ => {
-                                unreachable!()
-                            }
-                        );
+                            read_heap_cell!(iter2.focus,
+                                (HeapCellValueTag::Lis, l) => {
+                                    pdl.push(iter2.heap[l]);
+                                    pdl.push(char_as_cell!(c1));
 
-                        let c2 = stalled_iter.heap[l];
-                        let c1 = match string_iter.chars().next() {
-                            Some(c) => char_as_cell!(c),
-                            None => string_iter.focus,
-                        };
+                                    None
+                                }
+                                (HeapCellValueTag::Str, s) => {
+                                    let (name, arity) = cell_as_atom_cell!(iter2.heap[s])
+                                        .get_name_and_arity();
 
-                        pdl.push(c2);
-                        pdl.push(c1);
+                                    if name == atom!(".") && arity == 2 {
+                                        pdl.push(iter2.heap[s+1]);
+                                        pdl.push(char_as_cell!(c1));
 
-                        None
+                                        None
+                                    } else {
+                                        Some((2, atom!(".")).cmp(&(arity, name)))
+                                    }
+                                }
+                                _ => {
+                                    unreachable!()
+                                }
+                            )
+                        }
                     }
 
                     fn pstr_comparator(
@@ -1631,33 +1651,21 @@ impl MachineState {
 
                         match compare_pstr_prefixes(&mut iter1, &mut iter2) {
                             PStrCmpResult::Ordered(ordering) => Some(ordering),
-                            _ => {
-                                if iter1.num_steps() == 0 && iter2.num_steps() == 0 {
-                                    return read_heap_cell!(iter2.focus,
-                                        (HeapCellValueTag::CStr | HeapCellValueTag::PStrLoc) => {
-                                            let result = stalled_pstr_iter_handler(iter2, iter1, pdl);
+                            PStrCmpResult::FirstIterContinuable(iteratee) => {
+                                stalled_pstr_iter_comparator(iteratee, iter2, pdl)
+                            }
+                            PStrCmpResult::SecondIterContinuable(iteratee) => {
+                                let result = stalled_pstr_iter_comparator(iteratee, iter1, pdl);
 
-                                            if let Some(ordering) = result {
-                                                Some(ordering.reverse())
-                                            } else {
-                                                let pdl_len = pdl.len();
-                                                pdl.swap(pdl_len - 2, pdl_len - 1);
-                                                result
-                                            }
-                                        }
-                                        (HeapCellValueTag::Atom, (name, arity)) => {
-                                            if name == atom!("[]") && arity == 0 {
-                                                return Some(Ordering::Greater);
-                                            } else {
-                                                stalled_pstr_iter_handler(iter1, iter2, pdl)
-                                            }
-                                        }
-                                        _ => {
-                                            stalled_pstr_iter_handler(iter1, iter2, pdl)
-                                        }
-                                    );
+                                if let Some(ordering) = result {
+                                    Some(ordering.reverse())
+                                } else {
+                                    let pdl_len = pdl.len();
+                                    pdl.swap(pdl_len - 2, pdl_len - 1);
+                                    result
                                 }
-
+                            }
+                            PStrCmpResult::Unordered => {
                                 pdl.push(iter2.focus);
                                 pdl.push(iter1.focus);
 

@@ -542,7 +542,6 @@ pub fn compare_pstr_prefixes<'a>(
     #[inline(always)]
     fn step(iter: &mut HeapPStrIter, hare: usize) -> Option<PStrIterStep> {
         let result = iter.step(hare);
-
         iter.focus = iter.heap[hare];
 
         if iter.focus.is_string_terminator(iter.heap) {
