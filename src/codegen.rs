@@ -1076,7 +1076,11 @@ impl<'b, TermMarker: Allocator> CodeGenerator<'b, TermMarker> {
                 code_offsets.index_term(arg, index, &mut clause_index_info, self.atom_tbl);
             }
 
-            if !(clauses.len() == 1 && self.settings.is_extensible) {
+            if !(code_offsets.no_indices() && clauses.len() == 1 && self.settings.is_extensible) {
+                // the peculiar condition of this block, when false,
+                // anticipates code.pop_front() being called about a
+                // dozen lines below.
+                debug_assert_eq!(code.len(), 1);
                 self.increment_jmp_by_locs_by(code.len());
             }
 
