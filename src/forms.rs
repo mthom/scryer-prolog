@@ -58,7 +58,7 @@ impl AppendOrPrepend {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Level {
     Deep,
     Root,

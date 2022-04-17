@@ -234,10 +234,20 @@ pub enum GenContext {
 }
 
 impl GenContext {
+    #[inline]
     pub fn chunk_num(self) -> usize {
         match self {
             GenContext::Head => 0,
             GenContext::Mid(cn) | GenContext::Last(cn) => cn,
+        }
+    }
+
+    #[inline]
+    pub fn is_last(self) -> bool {
+        if let GenContext::Last(_) = self {
+            true
+        } else {
+            false
         }
     }
 }

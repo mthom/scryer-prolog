@@ -407,16 +407,7 @@ impl<'a> ChunkedIterator<'a> {
             }
         }))
     }
-    /*
-        pub(crate) fn from_term_sequence(terms: &'a [QueryTerm]) -> Self {
-            ChunkedIterator {
-                chunk_num: 0,
-                iter: Box::new(terms.iter().map(|t| ChunkedTerm::BodyTerm(t))),
-                deep_cut_encountered: false,
-                cut_var_in_head: false,
-            }
-        }
-    */
+
     pub(crate) fn from_rule_body(p1: &'a QueryTerm, clauses: &'a Vec<QueryTerm>) -> Self {
         let inner_iter = Box::new(once(ChunkedTerm::BodyTerm(p1)));
         let iter = inner_iter.chain(clauses.iter().map(|t| ChunkedTerm::BodyTerm(t)));

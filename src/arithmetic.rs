@@ -5,6 +5,7 @@ use crate::fixtures::*;
 use crate::forms::*;
 use crate::instructions::*;
 use crate::iterators::*;
+use crate::targets::QueryInstruction;
 use crate::types::*;
 
 use crate::parser::ast::*;
@@ -121,15 +122,12 @@ impl<'a> Iterator for ArithInstructionIterator<'a> {
                             subterms,
                         ));
 
-                        self.push_subterm(lvl, &subterms[child_num]);
+                        self.push_subterm(lvl.child_level(), &subterms[child_num]);
                     }
                 }
                 TermIterState::Literal(_, _, c) => return Some(Ok(ArithTermRef::Literal(c))),
                 TermIterState::Var(lvl, cell, var) => {
-                    // the expression is the second argument of an
-                    // is/2 but the iterator can't see that, so the
-                    // level needs to be demoted manually.
-                    return Some(Ok(ArithTermRef::Var(lvl.child_level(), cell, var.clone())));
+                    return Some(Ok(ArithTermRef::Var(lvl, cell, var.clone())));
                 }
                 _ => {
                     return Some(Err(ArithmeticError::NonEvaluableFunctor(
@@ -315,7 +313,7 @@ impl<'a, TermMarker: Allocator> ArithmeticEvaluator<'a, TermMarker> {
         }
     }
 
-    pub(crate) fn eval(
+    pub(crate) fn compile_is(
         &mut self,
         src: &'a Term,
         term_loc: GenContext,
@@ -328,33 +326,35 @@ impl<'a, TermMarker: Allocator> ArithmeticEvaluator<'a, TermMarker> {
             match term_ref? {
                 ArithTermRef::Literal(c) => push_literal(&mut self.interm, c)?,
                 ArithTermRef::Var(lvl, cell, name) => {
-                    let r = if cell.get().norm().reg_num() == 0 {
-                        let mut getter = || {
-                            use crate::targets::QueryInstruction;
+                    let r = if lvl == Level::Shallow && term_loc.is_last() {
+                        self.marker.mark_var::<QueryInstruction>(
+                            name.clone(),
+                            lvl,
+                            cell,
+                            term_loc,
+                            &mut code,
+                        );
 
-                            loop {
-                                match self.marker.bindings().get(&name) {
-                                    Some(&VarData::Temp(_, t, _)) if t != 0 =>
-                                        return RegType::Temp(t),
-                                    Some(&VarData::Perm(p)) if p != 0 =>
-                                        return RegType::Perm(p),
-                                    _ => {
-                                        self.marker.mark_var::<QueryInstruction>(
-                                            name.clone(),
-                                            lvl,
-                                            cell,
-                                            term_loc,
-                                            &mut code,
-                                        );
-                                    }
-                                }
+                        self.interm.push(ArithmeticTerm::Reg(temp_v!(2)));
+                        continue;
+                    } else if cell.get().norm().reg_num() == 0 {
+                        self.marker.mark_var::<QueryInstruction>(
+                            name.clone(),
+                            lvl,
+                            cell,
+                            term_loc,
+                            &mut code,
+                        );
+
+                        match self.marker.bindings().get(&name) {
+                            Some(&VarData::Temp(_, t, _)) if t != 0 =>
+                                RegType::Temp(t),
+                            Some(&VarData::Perm(p)) if p != 0 =>
+                                RegType::Perm(p),
+                            _ => {
+                                unreachable!()
                             }
-                        };
-
-                        getter()
-                        /*
-                         _ => return Err(ArithmeticError::UninstantiatedVar),
-                         */
+                        }
                     } else {
                         cell.get().norm()
                     };

@@ -397,6 +397,7 @@ impl<'b, TermMarker: Allocator> CodeGenerator<'b, TermMarker> {
                                 perm_v!(1),
                                 false,
                             );
+
                             continue;
                         }
                     }
@@ -430,7 +431,6 @@ impl<'b, TermMarker: Allocator> CodeGenerator<'b, TermMarker> {
                 };
 
                 self.update_var_count(chunked_term.post_order_iter());
-
                 vs.mark_vars_in_chunk(chunked_term.post_order_iter(), lt_arity, term_loc);
             }
         }
@@ -663,7 +663,7 @@ impl<'b, TermMarker: Allocator> CodeGenerator<'b, TermMarker> {
         term_loc: GenContext,
     ) -> Result<ArithCont, ArithmeticError> {
         let mut evaluator = ArithmeticEvaluator::new(&mut self.marker, target_int);
-        evaluator.eval(term, term_loc)
+        evaluator.compile_is(term, term_loc)
     }
 
     fn compile_is_call(
@@ -1080,7 +1080,6 @@ impl<'b, TermMarker: Allocator> CodeGenerator<'b, TermMarker> {
                 // the peculiar condition of this block, when false,
                 // anticipates code.pop_front() being called about a
                 // dozen lines below.
-                debug_assert_eq!(code.len(), 1);
                 self.increment_jmp_by_locs_by(code.len());
             }
 
