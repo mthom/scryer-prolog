@@ -703,7 +703,7 @@ impl MachineState {
 
     pub(crate) fn parse_number_from_string(
         &mut self,
-        mut string: String,
+        string: &str,
         indices: &IndexStore,
         stub_gen: impl Fn() -> FunctorStub,
     ) -> CallResult {
@@ -725,10 +725,13 @@ impl MachineState {
             }
         }
 
-        string.push('.');
+        let mut dot_buf: [u8; '.'.len_utf8()] = [0u8];
+        '.'.encode_utf8(&mut dot_buf);
 
-        let stream = CharReader::new(std::io::Cursor::new(string));
-        let mut parser = Parser::new(stream, self);
+        let cursor = std::io::Cursor::new(string);
+        let iter = std::io::Read::chain(cursor, std::io::Cursor::new(dot_buf));
+
+        let mut parser = Parser::new(CharReader::new(iter), self);
 
         match parser.read_term(&CompositeOpDir::new(&indices.op_dir, None)) {
             Err(err) => {
@@ -816,7 +819,7 @@ impl MachineState {
                 }
             }
             (HeapCellValueTag::Char, c) => {
-                Some(AtomOrString::Atom(self.atom_tbl.build_with(&c.to_string())))
+                Some(AtomOrString::String(c.to_string()))
             }
             _ => {
                 if value.is_constant() {
@@ -1292,20 +1295,20 @@ impl Machine {
                 let a2 = self.machine_st.store(self.machine_st.deref(self.machine_st.registers[2]));
 
                 if let Some(str_like) = self.machine_st.value_to_str_like(a2) {
-                    let atom = match str_like {
+                    let atom_cell = match str_like {
                         AtomOrString::Atom(atom) => {
-                            if atom == atom!("[]") {
+                            atom_as_cell!(if atom == atom!("[]") {
                                 self.machine_st.atom_tbl.build_with("")
                             } else {
                                 atom
-                            }
+                            })
                         }
                         AtomOrString::String(string) => {
-                            self.machine_st.atom_tbl.build_with(&string)
+                            atom_as_cell!(self.machine_st.atom_tbl.build_with(&string))
                         }
                     };
 
-                    self.machine_st.bind(a1.as_var().unwrap(), atom_as_cell!(atom));
+                    self.machine_st.bind(a1.as_var().unwrap(), atom_cell);
                     return;
                 }
 
@@ -1423,7 +1426,7 @@ impl Machine {
 
         if let Some(atom_or_string) = self.machine_st.value_to_str_like(a1) {
             self.machine_st.parse_number_from_string(
-                atom_or_string.to_string(),
+                atom_or_string.as_str(),
                 &self.indices,
                 stub_gen,
             )?;
@@ -1887,7 +1890,7 @@ impl Machine {
             }
             Ok(addrs) => {
                 let string = self.machine_st.codes_to_string(addrs.into_iter(), stub_gen)?;
-                self.machine_st.parse_number_from_string(string, &self.indices, stub_gen)?;
+                self.machine_st.parse_number_from_string(string.as_str(), &self.indices, stub_gen)?;
             }
         }
 
@@ -3317,14 +3320,7 @@ impl Machine {
             Err(e) => return Err(e)
         };
         if let Some(address_sink) = self.machine_st.value_to_str_like(address_sink) {
-            let address_string = match address_sink {
-                AtomOrString::Atom(atom) => {
-                    String::from(atom.as_str())
-                }
-                AtomOrString::String(string) => {
-                    String::from(string.as_str())
-                }
-            };
+            let address_string = address_sink.as_str(); //to_string();
             let address: Uri = address_string.parse().unwrap();
 
             let stream = self.runtime.block_on(async {
@@ -3408,15 +3404,8 @@ impl Machine {
         let options  = self.machine_st.to_stream_options(alias, eof_action, reposition, stream_type);
         let src_sink = self.machine_st.store(self.machine_st.deref(self.machine_st.registers[1]));
 
-        if let Some(str_like) = self.machine_st.value_to_str_like(src_sink) {
-            let file_spec = match str_like {
-                AtomOrString::Atom(atom) => {
-                    atom
-                }
-                AtomOrString::String(string) => {
-                    self.machine_st.atom_tbl.build_with(&string)
-                }
-            };
+        if let Some(file_spec) = self.machine_st.value_to_str_like(src_sink) {
+            let file_spec = file_spec.as_atom(&mut self.machine_st.atom_tbl);
 
             let mut stream = self.machine_st.stream_from_file_spec(
                 file_spec,

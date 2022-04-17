@@ -737,8 +737,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         }
 
         self.state_stack.push(TokenOrRedirect::RightCurly);
-        self.state_stack
-            .push(TokenOrRedirect::FunctorRedirect(max_depth));
+        self.state_stack.push(TokenOrRedirect::FunctorRedirect(max_depth));
         self.state_stack.push(TokenOrRedirect::LeftCurly);
 
         true

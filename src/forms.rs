@@ -365,6 +365,18 @@ pub enum AtomOrString {
 
 impl AtomOrString {
     #[inline]
+    pub fn as_atom(&self, atom_tbl: &mut AtomTable) -> Atom {
+        match self {
+            &AtomOrString::Atom(atom) => {
+                atom
+            }
+            AtomOrString::String(string) => {
+                atom_tbl.build_with(&string)
+            }
+        }
+    }
+
+    #[inline]
     pub fn as_str(&self) -> &str {
         match self {
             AtomOrString::Atom(atom) if atom == &atom!("[]") => "",
