@@ -707,7 +707,7 @@ impl MachineState {
         indices: &IndexStore,
         stub_gen: impl Fn() -> FunctorStub,
     ) -> CallResult {
-        let nx = self.registers[2];
+        let nx = self.store(self.deref(self.registers[2]));
 
         if let Some(c) = string.chars().last() {
             if layout_char!(c) {

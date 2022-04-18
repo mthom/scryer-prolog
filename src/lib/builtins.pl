@@ -587,8 +587,6 @@ read(Term) :-
     current_input(Stream),
     read(Stream, Term).
 
-% term_variables.
-
 % ensures List is either a variable or a list.
 can_be_list(List, _)  :-
     var(List),
@@ -602,6 +600,8 @@ can_be_list(List, _)  :-
     !.
 can_be_list(List, PI) :-
     throw(error(type_error(list, List), PI)).
+
+% term_variables.
 
 term_variables(Term, Vars) :-
     can_be_list(Vars, term_variables/2),
@@ -1375,13 +1375,14 @@ must_be_number(N, PI) :-
     ;  throw(error(instantiation_error, PI))
     ).
 
-can_be_chars_or_vars(Cs, _) :- var(Cs), !.
+can_be_chars_or_vars(Cs, _)  :- var(Cs), !.
 can_be_chars_or_vars(Cs, PI) :- chars_or_vars(Cs, PI).
 
 chars_or_vars([], _).
 chars_or_vars([C|Cs], PI) :-
     (  nonvar(C) ->
-       (  catch(builtins:atom_length(C, 1), _, false) ->
+       (  atom(C),
+          atom_length(C, 1) ->
           (  nonvar(Cs) ->
              chars_or_vars(Cs, PI)
           ;  false
