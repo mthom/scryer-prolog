@@ -6,7 +6,6 @@ fn main() {
     unsafe { signal::signal(signal::Signal::SIGINT, handler) }.unwrap();
 
     let mut wam = machine::Machine::new();
-
     wam.run_top_level();
 }
 

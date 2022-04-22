@@ -32,7 +32,7 @@ walkdir = "2"
 
 [dependencies]
 cpu-time = "1.0.0"
-crossterm = "0.16.0"
+crossterm = "0.20.0"
 dirs-next = "2.0.0"
 divrem = "0.1.0"
 fxhash = "0.2.1"
