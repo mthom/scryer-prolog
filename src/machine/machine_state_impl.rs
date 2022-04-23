@@ -253,7 +253,7 @@ impl MachineState {
                     .get_name_and_arity();
 
                 if n1 == n2 && a1 == a2 {
-                    for idx in 0..a1 {
+                    for idx in (0..a1).rev() {
                         self.pdl.push(heap_loc_as_cell!(s2+1+idx));
                         self.pdl.push(heap_loc_as_cell!(s1+1+idx));
                     }
@@ -263,7 +263,7 @@ impl MachineState {
             }
             (HeapCellValueTag::Lis, l2) => {
                 if a1 == 2 && n1 == atom!(".") {
-                    for idx in 0..2 {
+                    for idx in (0..2).rev() {
                         self.pdl.push(heap_loc_as_cell!(l2+1+idx));
                         self.pdl.push(heap_loc_as_cell!(s1+1+idx));
                     }
@@ -294,7 +294,7 @@ impl MachineState {
     fn unify_list(&mut self, l1: usize, d2: HeapCellValue) {
         read_heap_cell!(d2,
             (HeapCellValueTag::Lis, l2) => {
-                for idx in 0..2 {
+                for idx in (0..2).rev() {
                     self.pdl.push(heap_loc_as_cell!(l2 + idx));
                     self.pdl.push(heap_loc_as_cell!(l1 + idx));
                 }
@@ -304,7 +304,7 @@ impl MachineState {
                     .get_name_and_arity();
 
                 if a2 == 2 && n2 == atom!(".") {
-                    for idx in 0..2 {
+                    for idx in (0..2).rev() {
                         self.pdl.push(heap_loc_as_cell!(s2+1+idx));
                         self.pdl.push(heap_loc_as_cell!(l1+idx));
                     }
@@ -949,7 +949,7 @@ impl MachineState {
                     .get_name_and_arity();
 
                 if n1 == n2 && a1 == a2 {
-                    for idx in 0..a1 {
+                    for idx in (0..a1).rev() {
                         self.pdl.push(heap_loc_as_cell!(s2+1+idx));
                         self.pdl.push(heap_loc_as_cell!(s1+1+idx));
                     }
@@ -959,7 +959,7 @@ impl MachineState {
             }
             (HeapCellValueTag::Lis, l2) => {
                 if a1 == 2 && n1 == atom!(".") {
-                    for idx in 0..2 {
+                    for idx in (0..2).rev() {
                         self.pdl.push(heap_loc_as_cell!(l2+idx));
                         self.pdl.push(heap_loc_as_cell!(s1+1+idx));
                     }
@@ -1201,7 +1201,7 @@ impl MachineState {
     ) {
         read_heap_cell!(d2,
             (HeapCellValueTag::Lis, l2) => {
-                for idx in 0..2 {
+                for idx in (0..2).rev() {
                     self.pdl.push(heap_loc_as_cell!(l2+idx));
                     self.pdl.push(heap_loc_as_cell!(l1+idx));
                 }
@@ -1211,7 +1211,7 @@ impl MachineState {
                     .get_name_and_arity();
 
                 if a2 == 2 && n2 == atom!(".") {
-                    for idx in 0..2 {
+                    for idx in (0..2).rev() {
                         self.pdl.push(heap_loc_as_cell!(s2+1+idx));
                         self.pdl.push(heap_loc_as_cell!(l1+idx));
                     }
