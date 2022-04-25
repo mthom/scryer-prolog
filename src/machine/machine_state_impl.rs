@@ -1885,14 +1885,7 @@ impl MachineState {
                     }
                     (HeapCellValueTag::PStrLoc | HeapCellValueTag::PStrOffset, h) => {
                         let (focus, _) = pstr_loc_and_offset(&self.heap, h);
-                        let pstr_atom = read_heap_cell!(self.heap[focus],
-                            (HeapCellValueTag::CStr | HeapCellValueTag::PStr, pstr_atom) => {
-                                pstr_atom
-                            }
-                            _ => {
-                                unreachable!()
-                            }
-                        );
+                        let pstr_atom = cell_as_atom!(self.heap[focus]);
 
                         if has_tail {
                             self.s = HeapPtr::PStrLocation(focus, offset);

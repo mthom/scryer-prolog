@@ -32,6 +32,7 @@ call_attribute_goals([Module|Modules], GoalCaller, AttrVars) :-
 
 '$print_attribute_goals_exception'(Module, E) :-
     (  E = error(evaluation_error((Module:attribute_goals)/3), attribute_goals/3)
+    ;  E = error(existence_error(procedure, attribute_goals/3), attribute_goals/3)
     -> true
     ;  loader:write_error(E),
        nl
