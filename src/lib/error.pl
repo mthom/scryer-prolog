@@ -30,6 +30,7 @@
        - chars
        - integer
        - list
+       - term
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 must_be(Type, Term) :-
@@ -58,6 +59,13 @@ must_be_(chars, Ls) :-
 must_be_(list, Term)    :- check_(error:ilist, list, Term).
 must_be_(type, Term)    :- check_(error:type, type, Term).
 must_be_(boolean, Term) :- check_(error:boolean, boolean, Term).
+must_be_(term, Term)    :-
+        (   \+ ground(Term) ->
+            instantiation_error(must_be/2)
+        ;   \+ acyclic_term(Term) ->
+            type_error(term, Term, must_be/2)
+        ;   true
+        ).
 
 % We cannot use maplist(must_be(character), Cs), because library(lists)
 % uses library(error), so importing it would create a cyclic dependency.
@@ -94,6 +102,7 @@ type(chars).
 type(list).
 type(var).
 type(boolean).
+type(term).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    can_be(Type, Term)
@@ -122,6 +131,11 @@ can_(character, T)  :- character(T).
 can_(chars, Ls)     :- '$is_partial_string'(Ls).
 can_(list, Term)    :- list_or_partial_list(Term).
 can_(boolean, Term) :- boolean(Term).
+can_(term, Term)    :-
+        (   acyclic_term(Term) ->
+            true
+        ;   type_error(term, Term, can_be/2)
+        ).
 
 list_or_partial_list(Ls) :-
         '$skip_max_list'(_, _, Ls, Rs),
