@@ -807,7 +807,6 @@ fn generate_instruction_preface() -> TokenStream {
         use crate::types::*;
 
         use indexmap::IndexMap;
-        use slice_deque::SliceDeque;
 
         use std::collections::VecDeque;
 
@@ -1030,8 +1029,8 @@ fn generate_instruction_preface() -> TokenStream {
         #[derive(Clone, Debug)]
         pub enum IndexingLine {
             Indexing(IndexingInstruction),
-            IndexedChoice(SliceDeque<IndexedChoiceInstruction>),
-            DynamicIndexedChoice(SliceDeque<usize>),
+            IndexedChoice(VecDeque<IndexedChoiceInstruction>),
+            DynamicIndexedChoice(VecDeque<usize>),
         }
 
         impl From<IndexingInstruction> for IndexingLine {

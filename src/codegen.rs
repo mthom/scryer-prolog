@@ -1151,7 +1151,10 @@ impl<'b, TermMarker: Allocator> CodeGenerator<'b, TermMarker> {
             if self.settings.is_extensible {
                 let segment_is_indexed = code_segment[0].to_indexing_line().is_some();
 
-                for clause_index_info in self.skeleton.clauses[skel_lower_bound..].iter_mut() {
+                for clause_index_info in self.skeleton.clauses
+                                             .make_contiguous()[skel_lower_bound..]
+                                             .iter_mut()
+                {
                     clause_index_info.clause_start +=
                         clause_start_offset + 2 * (segment_is_indexed as usize);
                     clause_index_info.opt_arg_index_key += clause_start_offset + 1;

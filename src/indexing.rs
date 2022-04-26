@@ -5,7 +5,6 @@ use crate::forms::*;
 use crate::instructions::*;
 
 use indexmap::IndexMap;
-use slice_deque::{sdeq, SliceDeque};
 
 use std::collections::VecDeque;
 use std::hash::Hash;
@@ -148,15 +147,15 @@ impl<'a> IndexingCodeMergingPtr<'a> {
         index: usize,
     ) {
         let third_level_index = if self.append_or_prepend.is_append() {
-            sdeq![
+            vec![
                 IndexedChoiceInstruction::Try(external),
                 IndexedChoiceInstruction::Trust(index)
-            ]
+            ].into()
         } else {
-            sdeq![
+            vec![
                 IndexedChoiceInstruction::Try(index),
                 IndexedChoiceInstruction::Trust(external)
-            ]
+            ].into()
         };
 
         let indexing_code_len = self.indexing_code.len();
@@ -182,9 +181,9 @@ impl<'a> IndexingCodeMergingPtr<'a> {
         index: usize,
     ) {
         let third_level_index = if self.append_or_prepend.is_append() {
-            sdeq![external, index]
+            vec![external, index].into()
         } else {
-            sdeq![index, external]
+            vec![index, external].into()
         };
 
         let indexing_code_len = self.indexing_code.len();
@@ -208,11 +207,11 @@ impl<'a> IndexingCodeMergingPtr<'a> {
             IndexingLine::IndexedChoice(ref mut indexed_choice_instrs)
                 if self.append_or_prepend.is_append() =>
             {
-                uncap_choice_seq_with_trust(indexed_choice_instrs);
+                uncap_choice_seq_with_trust(indexed_choice_instrs.make_contiguous());
                 indexed_choice_instrs.push_back(IndexedChoiceInstruction::Trust(index));
             }
             IndexingLine::IndexedChoice(ref mut indexed_choice_instrs) => {
-                uncap_choice_seq_with_try(indexed_choice_instrs);
+                uncap_choice_seq_with_try(indexed_choice_instrs.make_contiguous());
                 indexed_choice_instrs.push_front(IndexedChoiceInstruction::Try(index));
             }
             IndexingLine::DynamicIndexedChoice(ref mut indexed_choice_instrs)
@@ -430,15 +429,15 @@ impl<'a> IndexingCodeMergingPtr<'a> {
         index: usize,
     ) {
         let third_level_index = if self.append_or_prepend.is_append() {
-            sdeq![
+            vec![
                 IndexedChoiceInstruction::Try(external),
                 IndexedChoiceInstruction::Trust(index)
-            ]
+            ].into()
         } else {
-            sdeq![
+            vec![
                 IndexedChoiceInstruction::Try(index),
                 IndexedChoiceInstruction::Trust(external)
-            ]
+            ].into()
         };
 
         let indexing_code_len = self.indexing_code.len();
@@ -464,9 +463,9 @@ impl<'a> IndexingCodeMergingPtr<'a> {
         index: usize,
     ) {
         let third_level_index = if self.append_or_prepend.is_append() {
-            sdeq![external, index]
+            vec![external, index].into()
         } else {
-            sdeq![index, external]
+            vec![index, external].into()
         };
 
         let indexing_code_len = self.indexing_code.len();
@@ -570,9 +569,9 @@ impl<'a> IndexingCodeMergingPtr<'a> {
                         *l = IndexingCodePtr::Internal(indexing_code_len - self.offset);
 
                         let third_level_index = if self.append_or_prepend.is_append() {
-                            sdeq![o, index]
+                            vec![o, index].into()
                         } else {
-                            sdeq![index, o]
+                            vec![index, o].into()
                         };
 
                         self.indexing_code
@@ -582,15 +581,15 @@ impl<'a> IndexingCodeMergingPtr<'a> {
                         *l = IndexingCodePtr::Internal(indexing_code_len - self.offset);
 
                         let third_level_index = if self.append_or_prepend.is_append() {
-                            sdeq![
+                            vec![
                                 IndexedChoiceInstruction::Try(o),
                                 IndexedChoiceInstruction::Trust(index)
-                            ]
+                            ].into()
                         } else {
-                            sdeq![
+                            vec![
                                 IndexedChoiceInstruction::Try(index),
                                 IndexedChoiceInstruction::Trust(o)
-                            ]
+                            ].into()
                         };
 
                         self.indexing_code
@@ -1178,7 +1177,7 @@ pub(crate) trait Indexer {
         prelude: &mut VecDeque<IndexingLine>,
     ) -> IndexingCodePtr;
 
-    fn remove_instruction_with_offset(code: &mut SliceDeque<Self::ThirdLevelIndex>, offset: usize);
+    fn remove_instruction_with_offset(code: &mut VecDeque<Self::ThirdLevelIndex>, offset: usize);
 
     fn var_offset_wrapper(var_offset: usize) -> IndexingCodePtr;
 }
@@ -1281,13 +1280,13 @@ impl Indexer for StaticCodeIndices {
 
     #[inline]
     fn remove_instruction_with_offset(
-        code: &mut SliceDeque<IndexedChoiceInstruction>,
+        code: &mut VecDeque<IndexedChoiceInstruction>,
         offset: usize,
     ) {
         for (index, line) in code.iter().enumerate() {
             if offset == line.offset() {
                 code.remove(index);
-                cap_choice_seq(code);
+                cap_choice_seq(code.make_contiguous());
                 return;
             }
         }
@@ -1390,7 +1389,7 @@ impl Indexer for DynamicCodeIndices {
     }
 
     #[inline]
-    fn remove_instruction_with_offset(code: &mut SliceDeque<usize>, offset: usize) {
+    fn remove_instruction_with_offset(code: &mut VecDeque<usize>, offset: usize) {
         for (index, line) in code.iter().enumerate() {
             if offset == *line {
                 code.remove(index);

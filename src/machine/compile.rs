@@ -12,8 +12,6 @@ use crate::machine::term_stream::*;
 use crate::machine::*;
 use crate::parser::ast::*;
 
-use slice_deque::{sdeq, SliceDeque};
-
 use std::cell::Cell;
 use std::collections::VecDeque;
 use std::mem;
@@ -425,8 +423,8 @@ fn delete_from_skeleton(
     target_pos: usize,
     retraction_info: &mut RetractionInfo,
 ) -> usize {
-    let clause_index_info = skeleton.clauses.remove(target_pos);
-    let clause_clause_loc = skeleton.core.clause_clause_locs.remove(target_pos);
+    let clause_index_info = skeleton.clauses.remove(target_pos).unwrap();
+    let clause_clause_loc = skeleton.core.clause_clause_locs.remove(target_pos).unwrap();
 
     if target_pos < skeleton.core.clause_assert_margin {
         skeleton.core.clause_assert_margin -= 1;
@@ -887,7 +885,7 @@ fn prepend_compiled_clause(
     global_clock_tick: usize,
 ) -> IndexPtr {
     let clause_loc = code.len();
-    let mut prepend_queue = sdeq![];
+    let mut prepend_queue = VecDeque::new();
 
     let target_arg_num = skeleton.clauses[0].opt_arg_index_key.arg_num();
     let head_arg_num = skeleton.clauses[1].opt_arg_index_key.arg_num();
@@ -995,7 +993,7 @@ fn prepend_compiled_clause(
 
                 merge_clause_index(
                     target_indexing_line,
-                    &mut skeleton.clauses,
+                    skeleton.clauses.make_contiguous(),
                     &skeleton.core.retracted_dynamic_clauses,
                     clause_loc + 2, // == skeleton.clauses[0].clause_start
                     AppendOrPrepend::Prepend,
@@ -1189,7 +1187,7 @@ fn append_compiled_clause(
 
             merge_clause_index(
                 target_indexing_line,
-                &mut skeleton.clauses[lower_bound..],
+                &mut skeleton.clauses.make_contiguous()[lower_bound..],
                 &skeleton.core.retracted_dynamic_clauses,
                 clause_loc,
                 AppendOrPrepend::Append,
@@ -1406,7 +1404,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         )?;
 
         if settings.is_extensible {
-            let mut clause_clause_locs = sdeq![];
+            let mut clause_clause_locs = VecDeque::new();
 
             for clause_index_info in cg.skeleton.clauses.iter_mut() {
                 clause_index_info.clause_start += code_len;
@@ -1434,7 +1432,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     skeleton
                         .core
                         .clause_clause_locs
-                        .extend_from_slice(&clause_clause_locs[0..]);
+                        .extend(&clause_clause_locs.make_contiguous()[0..]);
 
                     self.payload.retraction_info
                         .push_record(RetractionRecord::SkeletonClauseTruncateBack(
@@ -1447,7 +1445,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     cg.skeleton
                       .core
                       .clause_clause_locs
-                      .extend_from_slice(&clause_clause_locs[0..]);
+                      .extend(&clause_clause_locs.make_contiguous()[0..]);
 
                     let skeleton = cg.skeleton;
 
@@ -1495,7 +1493,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         &mut self,
         compilation_target: &CompilationTarget,
         key: &PredicateKey,
-        clause_clause_locs: SliceDeque<usize>,
+        mut clause_clause_locs: VecDeque<usize>,
     ) {
         let listing_src_file_name = self.listing_src_file_name();
 
@@ -1519,7 +1517,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
 
                 skeleton
                     .clause_clause_locs
-                    .extend_from_slice(&clause_clause_locs[0..]);
+                    .extend(&clause_clause_locs.make_contiguous()[0..]);
             }
             None => {
                 let mut skeleton = LocalPredicateSkeleton::new();
@@ -1972,7 +1970,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                             code,
                             later_indexing_loc,
                             0..target_pos - lower_bound,
-                            &mut skeleton.clauses[lower_bound..],
+                            &mut skeleton.clauses.make_contiguous()[lower_bound..],
                             &skeleton.core.retracted_dynamic_clauses,
                             &mut self.payload.retraction_info,
                         );
@@ -1997,7 +1995,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                             code,
                             target_indexing_loc,
                             target_pos + 1 - lower_bound..skeleton.clauses.len() - lower_bound,
-                            &mut skeleton.clauses[lower_bound..],
+                            &mut skeleton.clauses.make_contiguous()[lower_bound..],
                             &skeleton.core.retracted_dynamic_clauses,
                             &mut self.payload.retraction_info,
                         );
@@ -2196,15 +2194,17 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         {
             Some(skeleton) if append_or_prepend.is_append() => {
                 let tail_num = skeleton.core.clause_clause_locs.len() - num_clause_predicates;
-                skeleton.core.clause_clause_locs[tail_num..]
+                skeleton.core.clause_clause_locs.make_contiguous()[tail_num..]
                     .iter()
                     .cloned()
                     .collect()
             }
-            Some(skeleton) => skeleton.core.clause_clause_locs[0..num_clause_predicates]
-                .iter()
-                .cloned()
-                .collect(),
+            Some(skeleton) => {
+                skeleton.core.clause_clause_locs.make_contiguous()[0..num_clause_predicates]
+                    .iter()
+                    .cloned()
+                    .collect()
+            }
             None => {
                 unreachable!()
             }

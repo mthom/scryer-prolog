@@ -10,8 +10,8 @@ use crate::parser::ast::*;
 use fxhash::FxBuildHasher;
 use indexmap::IndexSet;
 use ref_thread_local::RefThreadLocal;
-use slice_deque::{sdeq, SliceDeque};
 
+use std::collections::VecDeque;
 use std::fs::File;
 use std::mem;
 
@@ -334,12 +334,12 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         &mut self,
         compilation_target: CompilationTarget,
         key: PredicateKey,
-        clause_locs: &SliceDeque<usize>,
+        clause_locs: &VecDeque<usize>,
     ) {
         let result_opt = self
             .wam_prelude
             .indices
-            .get_predicate_skeleton(&compilation_target, &key)
+            .get_predicate_skeleton_mut(&compilation_target, &key)
             .map(|skeleton| {
                 (
                     clause_locs
@@ -396,7 +396,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
     pub(super) fn retract_local_clause_clauses(
         &mut self,
         clause_clause_compilation_target: CompilationTarget,
-        clause_locs: &SliceDeque<usize>,
+        clause_locs: &VecDeque<usize>,
     ) {
         let key = (atom!("$clause"), 2);
         let listing_src_file_name = self.listing_src_file_name();
@@ -415,7 +415,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                         payload_compilation_target,
                         clause_clause_compilation_target,
                         key,
-                        mem::replace(&mut skeleton.clause_clause_locs, sdeq![]),
+                        mem::replace(&mut skeleton.clause_clause_locs, VecDeque::new()),
                     ),
                 );
 

@@ -15,9 +15,8 @@ use fxhash::FxBuildHasher;
 use indexmap::{IndexMap, IndexSet};
 use ordered_float::OrderedFloat;
 
-use slice_deque::*;
-
 use std::cell::Cell;
+use std::collections::VecDeque;
 use std::convert::TryFrom;
 use std::fmt;
 use std::ops::AddAssign;
@@ -820,7 +819,7 @@ pub(crate) struct LocalPredicateSkeleton {
     pub(crate) is_discontiguous: bool,
     pub(crate) is_dynamic: bool,
     pub(crate) is_multifile: bool,
-    pub(crate) clause_clause_locs: SliceDeque<usize>,
+    pub(crate) clause_clause_locs: VecDeque<usize>,
     pub(crate) clause_assert_margin: usize,
     pub(crate) retracted_dynamic_clauses: Option<Vec<ClauseIndexInfo>>, // always None if non-dynamic.
 }
@@ -832,7 +831,7 @@ impl LocalPredicateSkeleton {
             is_discontiguous: false,
             is_dynamic: false,
             is_multifile: false,
-            clause_clause_locs: sdeq![],
+            clause_clause_locs: VecDeque::new(),
             clause_assert_margin: 0,
             retracted_dynamic_clauses: Some(vec![]),
         }
@@ -873,7 +872,7 @@ impl LocalPredicateSkeleton {
 #[derive(Clone, Debug)]
 pub(crate) struct PredicateSkeleton {
     pub(crate) core: LocalPredicateSkeleton,
-    pub(crate) clauses: SliceDeque<ClauseIndexInfo>,
+    pub(crate) clauses: VecDeque<ClauseIndexInfo>,
 }
 
 impl PredicateSkeleton {
@@ -881,7 +880,7 @@ impl PredicateSkeleton {
     pub(crate) fn new() -> Self {
         PredicateSkeleton {
             core: LocalPredicateSkeleton::new(),
-            clauses: sdeq![],
+            clauses: VecDeque::new(),
         }
     }
 
@@ -897,18 +896,22 @@ impl PredicateSkeleton {
     }
 
     pub(crate) fn target_pos_of_clause_clause_loc(
-        &self,
+        &mut self,
         clause_clause_loc: usize,
     ) -> Option<usize> {
-        let search_result = self.core.clause_clause_locs[0..self.core.clause_assert_margin]
+        let search_result = self.core.clause_clause_locs
+            .make_contiguous()[0..self.core.clause_assert_margin]
             .binary_search_by(|loc| clause_clause_loc.cmp(&loc));
 
         match search_result {
             Ok(loc) => Some(loc),
-            Err(_) => self.core.clause_clause_locs[self.core.clause_assert_margin..]
-                .binary_search_by(|loc| loc.cmp(&clause_clause_loc))
-                .map(|loc| loc + self.core.clause_assert_margin)
-                .ok(),
+            Err(_) => {
+                self.core.clause_clause_locs
+                    .make_contiguous()[self.core.clause_assert_margin..]
+                    .binary_search_by(|loc| loc.cmp(&clause_clause_loc))
+                    .map(|loc| loc + self.core.clause_assert_margin)
+                    .ok()
+            }
         }
     }
 }

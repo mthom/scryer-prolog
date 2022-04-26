@@ -14,9 +14,9 @@ use crate::parser::ast::*;
 use crate::types::*;
 
 use indexmap::IndexSet;
-use slice_deque::{sdeq, SliceDeque};
 
 use std::cell::Cell;
+use std::collections::VecDeque;
 use std::convert::TryFrom;
 use std::fmt;
 use std::mem;
@@ -96,7 +96,7 @@ pub(crate) enum RetractionRecord {
         CompilationTarget,
         CompilationTarget,
         PredicateKey,
-        SliceDeque<usize>,
+        VecDeque<usize>,
     ),
     RemovedSkeleton(CompilationTarget, PredicateKey, PredicateSkeleton),
     ReplacedDynamicElseOffset(usize, usize),
@@ -900,7 +900,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                         key,
                     ) {
                         Some(skeleton) => {
-                            skeleton.clause_clause_locs.truncate_back(len);
+                            skeleton.clause_clause_locs.truncate(len);
                         }
                         None => {}
                     }
@@ -912,8 +912,8 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                         .get_predicate_skeleton_mut(&compilation_target, &key)
                     {
                         Some(skeleton) => {
-                            skeleton.clauses.truncate_back(len);
-                            skeleton.core.clause_clause_locs.truncate_back(len);
+                            skeleton.clauses.truncate(len);
+                            skeleton.core.clause_clause_locs.truncate(len);
                         }
                         None => {}
                     }
@@ -1358,7 +1358,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                 *key,
             ) {
             Some(skeleton) if !skeleton.clause_clause_locs.is_empty() => {
-                mem::replace(&mut skeleton.clause_clause_locs, sdeq![])
+                mem::replace(&mut skeleton.clause_clause_locs, VecDeque::new())
             }
             _ => return,
         };
@@ -1973,33 +1973,42 @@ impl Machine {
             let mut clause_clause_target_poses: Vec<_> = loader
                 .wam_prelude
                 .indices
-                .get_predicate_skeleton(&compilation_target, &key)
+                .remove_predicate_skeleton(&compilation_target, &key)
                 .map(|skeleton| {
-                    loader
+                    let mut clause_clause_skeleton = loader
                         .wam_prelude
                         .indices
-                        .get_predicate_skeleton(
+                        .remove_predicate_skeleton(
                             &clause_clause_compilation_target,
                             &(atom!("$clause"), 2),
-                        )
-                        .map(|clause_clause_skeleton| {
-                            skeleton
-                                .core
-                                .clause_clause_locs
-                                .iter()
-                                .map(|clause_clause_loc| {
-                                    clause_clause_skeleton
-                                        .target_pos_of_clause_clause_loc(*clause_clause_loc)
-                                        .unwrap()
-                                })
-                                .collect()
-                        })
-                        .unwrap()
-                })
-                .unwrap();
+                        ).unwrap();
 
-            loader
-                .wam_prelude
+                    let result = skeleton.core
+                        .clause_clause_locs
+                        .iter()
+                        .map(|clause_clause_loc| {
+                            clause_clause_skeleton
+                                .target_pos_of_clause_clause_loc(*clause_clause_loc)
+                                .unwrap()
+                        })
+                        .collect();
+
+                    loader.add_extensible_predicate(
+                        key,
+                        skeleton,
+                        compilation_target,
+                    );
+
+                    loader.add_extensible_predicate(
+                        (atom!("$clause"), 2),
+                        clause_clause_skeleton,
+                        clause_clause_compilation_target,
+                    );
+
+                    result
+                }).unwrap();
+
+            loader.wam_prelude
                 .indices
                 .remove_predicate_skeleton(&compilation_target, &key);
 
@@ -2007,15 +2016,6 @@ impl Machine {
                 .get_or_insert_code_index(key, compilation_target);
 
             code_index.set(IndexPtr::Undefined);
-
-            /*
-            loader
-                .wam_prelude
-                .indices
-                .get_predicate_skeleton_mut(&compilation_target, &key)
-                .map(|skeleton| skeleton.reset());
-
-            */
 
             loader.payload.compilation_target = clause_clause_compilation_target;
 
@@ -2076,7 +2076,7 @@ impl Machine {
             // the global clock is incremented after each retraction.
             LiveLoadAndMachineState::machine_st(&mut loader.payload).global_clock += 1;
 
-            let target_pos = match loader.wam_prelude.indices.get_predicate_skeleton(
+            let target_pos = match loader.wam_prelude.indices.get_predicate_skeleton_mut(
                 &clause_clause_compilation_target,
                 &(atom!("$clause"), 2),
             ) {
