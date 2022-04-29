@@ -489,7 +489,7 @@ impl Fixnum {
             .with_num(u64::from_ne_bytes(num.to_ne_bytes()) & ((1 << 56) - 1))
             .with_tag(HeapCellValueTag::Fixnum as u8)
             .with_m(false)
-        //num as u64).with__m(false)
+            .with_f(false)
     }
 
     #[inline]
@@ -500,6 +500,7 @@ impl Fixnum {
         if LOWER_BOUND <= num && num <= UPPER_BOUND {
             Ok(Fixnum::new()
                 .with_m(false)
+                .with_f(false)
                 .with_tag(HeapCellValueTag::Fixnum as u8)
                 .with_num(u64::from_ne_bytes(num.to_ne_bytes()) & ((1 << 56) - 1)))
         } else {

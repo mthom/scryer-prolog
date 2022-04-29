@@ -1,7 +1,7 @@
 use crate::allocator::*;
 use crate::arena::*;
 use crate::atom_table::*;
-use crate::fixtures::*;
+use crate::debray_allocator::*;
 use crate::forms::*;
 use crate::instructions::*;
 use crate::iterators::*;
@@ -143,8 +143,8 @@ impl<'a> Iterator for ArithInstructionIterator<'a> {
 }
 
 #[derive(Debug)]
-pub(crate) struct ArithmeticEvaluator<'a, TermMarker> {
-    marker: &'a mut TermMarker,
+pub(crate) struct ArithmeticEvaluator<'a> {
+    marker: &'a mut DebrayAllocator,
     interm: Vec<ArithmeticTerm>,
     interm_c: usize,
 }
@@ -184,8 +184,8 @@ fn push_literal(interm: &mut Vec<ArithmeticTerm>, c: &Literal) -> Result<(), Ari
     Ok(())
 }
 
-impl<'a, TermMarker: Allocator> ArithmeticEvaluator<'a, TermMarker> {
-    pub(crate) fn new(marker: &'a mut TermMarker, target_int: usize) -> Self {
+impl<'a> ArithmeticEvaluator<'a> {
+    pub(crate) fn new(marker: &'a mut DebrayAllocator, target_int: usize) -> Self {
         ArithmeticEvaluator {
             marker,
             interm: Vec::new(),
@@ -317,6 +317,7 @@ impl<'a, TermMarker: Allocator> ArithmeticEvaluator<'a, TermMarker> {
         &mut self,
         src: &'a Term,
         term_loc: GenContext,
+        arg: usize,
     ) -> Result<ArithCont, ArithmeticError>
     {
         let mut code = vec![];
@@ -326,7 +327,15 @@ impl<'a, TermMarker: Allocator> ArithmeticEvaluator<'a, TermMarker> {
             match term_ref? {
                 ArithTermRef::Literal(c) => push_literal(&mut self.interm, c)?,
                 ArithTermRef::Var(lvl, cell, name) => {
-                    let r = if lvl == Level::Shallow && term_loc.is_last() {
+                    let r = if lvl == Level::Shallow {
+                        self.marker.mark_non_callable(
+                            name.clone(),
+                            arg,
+                            term_loc,
+                            cell,
+                            &mut code,
+                        )
+                    } else if term_loc.is_last() || cell.get().norm().reg_num() == 0 {
                         self.marker.mark_var::<QueryInstruction>(
                             name.clone(),
                             lvl,
@@ -335,26 +344,7 @@ impl<'a, TermMarker: Allocator> ArithmeticEvaluator<'a, TermMarker> {
                             &mut code,
                         );
 
-                        self.interm.push(ArithmeticTerm::Reg(temp_v!(2)));
-                        continue;
-                    } else if cell.get().norm().reg_num() == 0 {
-                        self.marker.mark_var::<QueryInstruction>(
-                            name.clone(),
-                            lvl,
-                            cell,
-                            term_loc,
-                            &mut code,
-                        );
-
-                        match self.marker.bindings().get(&name) {
-                            Some(&VarData::Temp(_, t, _)) if t != 0 =>
-                                RegType::Temp(t),
-                            Some(&VarData::Perm(p)) if p != 0 =>
-                                RegType::Perm(p),
-                            _ => {
-                                unreachable!()
-                            }
-                        }
+                        self.marker.get_binding(&name).unwrap()
                     } else {
                         cell.get().norm()
                     };

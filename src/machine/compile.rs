@@ -1,6 +1,5 @@
 use crate::atom_table::*;
 use crate::codegen::*;
-use crate::debray_allocator::*;
 use crate::forms::*;
 use crate::indexing::{merge_clause_index, remove_index};
 use crate::instructions::*;
@@ -47,7 +46,7 @@ pub(super) fn bootstrapping_compile(
 
 // throw errors if declaration or query found.
 pub(super) fn compile_relation(
-    cg: &mut CodeGenerator<DebrayAllocator>,
+    cg: &mut CodeGenerator,
     tl: &TopLevel,
 ) -> Result<Code, CompilationError> {
     match tl {
@@ -87,7 +86,7 @@ pub(super) fn compile_appendix(
             non_counted_bt,
         };
 
-        let mut cg = CodeGenerator::<DebrayAllocator>::new(atom_tbl, settings);
+        let mut cg = CodeGenerator::new(atom_tbl, settings);
 
         let tl = queue.pop_front().unwrap();
         let decl_code = compile_relation(&mut cg, &tl)?;
@@ -1345,7 +1344,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         let clause = self.try_term_to_tl(term, &mut preprocessor)?;
         let queue = preprocessor.parse_queue(self)?;
 
-        let mut cg = CodeGenerator::<DebrayAllocator>::new(
+        let mut cg = CodeGenerator::new(
             &mut LS::machine_st(&mut self.payload).atom_tbl,
             settings,
         );
@@ -1388,7 +1387,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
 
         let queue = preprocessor.parse_queue(self)?;
 
-        let mut cg = CodeGenerator::<DebrayAllocator>::new(
+        let mut cg = CodeGenerator::new(
             &mut LS::machine_st(&mut self.payload).atom_tbl,
             settings,
         );
