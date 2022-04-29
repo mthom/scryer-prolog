@@ -1080,7 +1080,13 @@ impl<'b, TermMarker: Allocator> CodeGenerator<'b, TermMarker> {
                 // the peculiar condition of this block, when false,
                 // anticipates code.pop_front() being called about a
                 // dozen lines below.
-                self.increment_jmp_by_locs_by(code.len());
+
+                if !skip_stub_try_me_else {
+                    // if the condition is false, code_offsets.no_indices() is false,
+                    // so don't repeat the work of the condition on skip_stub_try_me_else
+                    // below.
+                    self.increment_jmp_by_locs_by(code.len());
+                }
             }
 
             self.skeleton.clauses.push_back(clause_index_info);
