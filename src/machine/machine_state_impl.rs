@@ -1863,7 +1863,9 @@ impl MachineState {
         let h = self.heap.len();
         self.heap.push(value);
 
+        let prefix_len;
         let mut heap_pstr_iter = HeapPStrIter::new(&self.heap, h);
+
         let s = string.as_str();
 
         match heap_pstr_iter.compare_pstr_to_string(s) {
@@ -1911,36 +1913,64 @@ impl MachineState {
                         }
                     }
                 );
+
+                return;
             }
-            Some(PStrPrefixCmpResult { prefix_len, .. }) => {
-                let focus = heap_pstr_iter.focus();
-                let tail_addr = self.heap[focus];
-
-                let h = self.heap.len();
-
-                let target_cell = if has_tail {
-                    self.s = HeapPtr::HeapCell(h + 1);
-                    self.s_offset = 0;
-                    self.mode = MachineMode::Read;
-
-                    put_partial_string(
-                        &mut self.heap,
-                        &string.as_str()[prefix_len ..],
-                        &mut self.atom_tbl,
-                    )
-                } else {
-                    put_complete_string(
-                        &mut self.heap,
-                        &string.as_str()[prefix_len ..],
-                        &mut self.atom_tbl,
-                    )
-                };
-
-                unify!(self, tail_addr, target_cell);
+            Some(PStrPrefixCmpResult { prefix_len: inner_prefix_len, .. }) => {
+                prefix_len = inner_prefix_len;
             }
             None => {
-                self.fail = true;
+                read_heap_cell!(value,
+                    (HeapCellValueTag::Str, s) => {
+                        let cell = heap_loc_as_cell!(s + 1);
+                        let is_list = self.heap[s] == atom_as_cell!(atom!("."), 2);
+
+                        if !(is_list && self.store(self.deref(cell)).is_var()) {
+                            self.fail = true;
+                            return;
+                        }
+                    }
+                    (HeapCellValueTag::Lis, l) => {
+                        let cell = heap_loc_as_cell!(l);
+
+                        if !self.store(self.deref(cell)).is_var() {
+                            self.fail = true;
+                            return;
+                        }
+                    }
+                    (HeapCellValueTag::AttrVar |
+                     HeapCellValueTag::StackVar |
+                     HeapCellValueTag::Var) => {
+                    }
+                    _ => {
+                        self.fail = true;
+                        return;
+                    }
+                );
+
+                prefix_len = 0;
             }
+        }
+
+        let focus = heap_pstr_iter.focus();
+        let tail_addr = self.heap[focus];
+        let target_cell = self.push_str_to_heap(&string.as_str()[prefix_len..], has_tail);
+
+        unify!(self, tail_addr, target_cell);
+    }
+
+    #[inline(always)]
+    pub(super) fn push_str_to_heap(&mut self, pstr: &str, has_tail: bool) -> HeapCellValue {
+        let h = self.heap.len();
+
+        if has_tail {
+            self.s = HeapPtr::HeapCell(h + 1);
+            self.s_offset = 0;
+            self.mode = MachineMode::Read;
+
+            put_partial_string(&mut self.heap, pstr, &mut self.atom_tbl)
+        } else {
+            put_complete_string(&mut self.heap, pstr, &mut self.atom_tbl)
         }
     }
 
@@ -1979,9 +2009,9 @@ impl MachineState {
             }
             (HeapCellValueTag::CStr, cstr_atom) => {
                 read_heap_cell!(store_v,
-                    (HeapCellValueTag::PStrLoc
-                     | HeapCellValueTag::Lis
-                     | HeapCellValueTag::Str) => {
+                    (HeapCellValueTag::PStrLoc |
+                     HeapCellValueTag::Lis |
+                     HeapCellValueTag::Str) => {
                         self.match_partial_string(store_v, cstr_atom, false);
                     }
                     (HeapCellValueTag::AttrVar | HeapCellValueTag::Var) => {

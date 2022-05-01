@@ -2790,11 +2790,24 @@ impl Machine {
                     let store_v = self.machine_st.store(deref_v);
 
                     read_heap_cell!(store_v,
-                        (HeapCellValueTag::Str | HeapCellValueTag::Lis |
-                         HeapCellValueTag::PStrLoc | HeapCellValueTag::AttrVar |
-                         HeapCellValueTag::StackVar | HeapCellValueTag::Var |
+                        (HeapCellValueTag::Str |
+                         HeapCellValueTag::Lis |
+                         HeapCellValueTag::PStrLoc |
                          HeapCellValueTag::CStr) => {
                             self.machine_st.match_partial_string(store_v, string, has_tail);
+                        }
+                        (HeapCellValueTag::AttrVar |
+                         HeapCellValueTag::StackVar |
+                         HeapCellValueTag::Var) => {
+                            let target_cell = self.machine_st.push_str_to_heap(
+                                string.as_str(),
+                                has_tail,
+                            );
+
+                            self.machine_st.bind(
+                                store_v.as_var().unwrap(),
+                                target_cell,
+                            );
                         }
                         _ => {
                             self.machine_st.backtrack();

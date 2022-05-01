@@ -109,7 +109,7 @@ impl<'a> HeapPStrIter<'a> {
         self.brent_st.num_steps()
     }
 
-    #[inline]
+    #[inline(always)]
     pub fn chars(mut self) -> PStrCharsIter<'a> {
         let item = self.next();
         PStrCharsIter { iter: self, item }
@@ -122,9 +122,11 @@ impl<'a> HeapPStrIter<'a> {
             prefix_len: 0,
         };
 
+        let mut final_result = None;
+
         while let Some(PStrIterStep { iteratee, next_hare }) = self.step(self.brent_st.hare) {
             self.brent_st.hare = next_hare;
-            self.focus = self.heap[next_hare];
+            self.focus = self.heap[iteratee.focus()];
 
             result.focus  = iteratee.focus();
             result.offset = iteratee.offset();
@@ -139,7 +141,8 @@ impl<'a> HeapPStrIter<'a> {
                             result.offset += c1.len_utf8();
                         }
                     } else {
-                        return Some(result);
+                        final_result = Some(result);
+                        break;
                     }
                 }
                 PStrIteratee::PStrSegment(_, pstr_atom, n) => {
@@ -158,7 +161,8 @@ impl<'a> HeapPStrIter<'a> {
                         result.prefix_len += s.len();
                         result.offset += s.len();
 
-                        return Some(result);
+                        final_result = Some(result);
+                        break;
                     } else {
                         return None;
                     }
@@ -166,11 +170,19 @@ impl<'a> HeapPStrIter<'a> {
             }
 
             if s.len() == result.prefix_len {
-                return Some(result);
+                final_result = Some(result);
+                break;
             }
         }
 
-        Some(result)
+        if let Some(result) = &final_result {
+            if self.at_string_terminator() {
+                self.focus = empty_list_as_cell!();
+                self.brent_st.hare = result.focus;
+            }
+        }
+
+        final_result
     }
 
     fn walk_hare_to_cycle_end(&mut self) {
@@ -371,7 +383,7 @@ impl<'a> HeapPStrIter<'a> {
 
         self.focus = self.heap[iteratee.focus()];
 
-        if self.focus.is_string_terminator(self.heap) {
+        if self.at_string_terminator() {
             self.focus = empty_list_as_cell!();
             self.brent_st.hare = iteratee.focus();
 
