@@ -49,11 +49,10 @@ struct TokenDesc {
     spec: u32,
 }
 
-fn is_partial_string(
+pub(crate) fn as_partial_string(
     head: Term,
     mut tail: Term,
-    atom_tbl: &mut AtomTable,
-) -> Result<(Atom, Option<Box<Term>>), Term> {
+) -> Result<(String, Option<Box<Term>>), Term> {
     let mut string = match &head {
         Term::Literal(_, Literal::Atom(atom)) => {
             if let Some(c) = atom.as_char() {
@@ -92,6 +91,15 @@ fn is_partial_string(
 
                 tail_ref = succ;
             }
+            Term::PartialString(_, pstr, tail) => {
+                string += &pstr;
+                tail_ref = tail;
+            }
+            Term::CompleteString(_, cstr) => {
+                string += cstr.as_str();
+                tail = Term::Literal(Cell::default(), Literal::Atom(atom!("[]")));
+                break;
+            }
             tail_ref => {
                 tail = mem::replace(tail_ref, Term::AnonVar);
                 break;
@@ -101,21 +109,17 @@ fn is_partial_string(
 
     match &tail {
         Term::AnonVar | Term::Var(..) => {
-            let pstr_atom = atom_tbl.build_with(&string);
-            Ok((pstr_atom, Some(Box::new(tail))))
+            Ok((string, Some(Box::new(tail))))
         }
         Term::Literal(_, Literal::Atom(atom!("[]"))) => {
-            let pstr_atom = atom_tbl.build_with(&string);
-            Ok((pstr_atom, None))
+            Ok((string, None))
         }
         Term::Literal(_, Literal::String(tail)) => {
             string += tail.as_str();
-            let pstr_atom = atom_tbl.build_with(&string);
-            Ok((pstr_atom, None))
+            Ok((string, None))
         }
         _ => {
-            let pstr_atom = atom_tbl.build_with(&string);
-            Ok((pstr_atom, Some(Box::new(tail))))
+            Ok((string, Some(Box::new(tail))))
         }
     }
 }
@@ -412,7 +416,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
                 TokenType::Term
             }
             Token::Literal(Literal::String(s)) if self.lexer.machine_st.flags.double_quotes.is_chars() => {
-                self.terms.push(Term::PartialString(Cell::default(), s, None));
+                self.terms.push(Term::CompleteString(Cell::default(), s));
                 TokenType::Term
             }
             Token::Literal(c) => {
@@ -564,24 +568,19 @@ impl<'a, R: CharRead> Parser<'a, R> {
                         let head = subterms.pop().unwrap();
 
                         self.terms.push(
-                            match is_partial_string(head, tail, &mut self.lexer.machine_st.atom_tbl) {
-                                Ok((string_buf, tail_opt)) => {
-                                    Term::PartialString(Cell::default(), string_buf, tail_opt)
+                            match as_partial_string(head, tail) {
+                                Ok((string_buf, Some(tail))) => {
+                                    Term::PartialString(Cell::default(), string_buf, tail)
+                                }
+                                Ok((string_buf, None)) => {
+                                    let atom = self.lexer.machine_st.atom_tbl.build_with(&string_buf);
+                                    Term::CompleteString(Cell::default(), atom)
                                 }
                                 Err(term) => term,
                             },
                         );
-
-                        /*
-                        self.terms.push(Term::Cons(
-                            Cell::default(),
-                            Box::new(head),
-                            Box::new(tail),
-                        ));
-                        */
                     } else {
-                        self.terms
-                            .push(Term::Clause(Cell::default(), name, subterms));
+                        self.terms.push(Term::Clause(Cell::default(), name, subterms));
                     }
 
                     if let Some(&mut TokenDesc {
@@ -741,9 +740,13 @@ impl<'a, R: CharRead> Parser<'a, R> {
 
         self.terms.push(match list {
             Term::Cons(_, head, tail) => {
-                match is_partial_string(*head, *tail, &mut self.lexer.machine_st.atom_tbl) {
-                    Ok((string_buf, tail_opt)) => {
-                        Term::PartialString(Cell::default(), string_buf, tail_opt)
+                match as_partial_string(*head, *tail) {
+                    Ok((string_buf, Some(tail))) => {
+                        Term::PartialString(Cell::default(), string_buf, tail)
+                    }
+                    Ok((string_buf, None)) => {
+                        let atom = self.lexer.machine_st.atom_tbl.build_with(&string_buf);
+                        Term::CompleteString(Cell::default(), atom)
                     }
                     Err(term) => term,
                 }

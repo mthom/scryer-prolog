@@ -541,11 +541,7 @@ impl fmt::Display for Literal {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Literal::Atom(ref atom) => {
-                //                if atom.as_str().chars().any(|c| "`.$'\" ".contains(c)) {
-                //                    write!(f, "'{}'", atom)
-                //                } else {
                 write!(f, "{}", atom.flat_index())
-                //                }
             }
             Literal::Char(c) => write!(f, "'{}'", *c as u32),
             Literal::Fixnum(n) => write!(f, "{}", n.get_num()),
@@ -553,7 +549,6 @@ impl fmt::Display for Literal {
             Literal::Rational(ref n) => write!(f, "{}", n),
             Literal::Float(ref n) => write!(f, "{}", *n),
             Literal::String(ref s) => write!(f, "\"{}\"", s.as_str()),
-            //          Literal::Usize(integer) => write!(f, "u{}", integer),
         }
     }
 }
@@ -573,7 +568,10 @@ pub enum Term {
     Clause(Cell<RegType>, Atom, Vec<Term>),
     Cons(Cell<RegType>, Box<Term>, Box<Term>),
     Literal(Cell<RegType>, Literal),
-    PartialString(Cell<RegType>, Atom, Option<Box<Term>>),
+    // PartialString wraps a String in anticipation of it absorbing
+    // other PartialString variants in as_partial_string.
+    PartialString(Cell<RegType>, String, Box<Term>),
+    CompleteString(Cell<RegType>, Atom),
     Var(Cell<VarReg>, Rc<String>),
 }
 

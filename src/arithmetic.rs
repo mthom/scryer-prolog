@@ -79,7 +79,7 @@ impl<'a> ArithInstructionIterator<'a> {
                 )),
             }?,
             Term::Literal(cell, cons) => TermIterState::Literal(Level::Shallow, cell, cons),
-            Term::Cons(..) | Term::PartialString(..) => {
+            Term::Cons(..) | Term::PartialString(..) | Term::CompleteString(..) => {
                 return Err(ArithmeticError::NonEvaluableFunctor(
                     Literal::Atom(atom!(".")),
                     2,

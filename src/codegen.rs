@@ -324,7 +324,8 @@ impl<'b> CodeGenerator<'b> {
             }
             &Term::Cons(ref cell, ..) |
             &Term::Clause(ref cell, ..) |
-            Term::PartialString(ref cell, ..) => {
+            Term::PartialString(ref cell, ..) |
+            Term::CompleteString(ref cell, ..) => {
                 self.marker.mark_non_var::<Target>(Level::Deep, term_loc, cell, target);
                 target.push(Target::clause_arg_to_instr(cell.get()));
             }
@@ -383,13 +384,14 @@ impl<'b> CodeGenerator<'b> {
                 }
                 TermRef::PartialString(lvl, cell, string, tail) => {
                     self.marker.mark_non_var::<Target>(lvl, term_loc, cell, &mut target);
+                    let atom = self.atom_tbl.build_with(&string);
 
-                    if let Some(tail) = tail {
-                        target.push(Target::to_pstr(lvl, string, cell.get(), true));
-                        self.subterm_to_instr::<Target>(tail, term_loc, is_exposed, &mut target);
-                    } else {
-                        target.push(Target::to_pstr(lvl, string, cell.get(), false));
-                    }
+                    target.push(Target::to_pstr(lvl, atom, cell.get(), true));
+                    self.subterm_to_instr::<Target>(tail, term_loc, is_exposed, &mut target);
+                }
+                TermRef::CompleteString(lvl, cell, atom) => {
+                    self.marker.mark_non_var::<Target>(lvl, term_loc, cell, &mut target);
+                    target.push(Target::to_pstr(lvl, atom, cell.get(), false));
                 }
                 TermRef::Var(lvl @ Level::Shallow, cell, ref var) if var.as_str() == "!" => {
                     if self.marker.is_unbound(var.clone()) {
@@ -550,7 +552,8 @@ impl<'b> CodeGenerator<'b> {
                 &Term::AnonVar |
                 &Term::Clause(..) |
                 &Term::Cons(..) |
-                &Term::PartialString(..) => {
+                &Term::PartialString(..) |
+                &Term::CompleteString(..) => {
                     code.push(instr!("$fail", 0));
                 }
                 &Term::Literal(_, Literal::String(_)) => {
@@ -577,6 +580,7 @@ impl<'b> CodeGenerator<'b> {
                 &Term::Clause(..) |
                 &Term::Cons(..) |
                 &Term::PartialString(..) |
+                &Term::CompleteString(..) |
                 &Term::Literal(_, Literal::String(..)) => {
                     code.push(instr!("$succeed", 0));
                 }
@@ -702,7 +706,8 @@ impl<'b> CodeGenerator<'b> {
                 &Term::Literal(..) |
                 &Term::Clause(..) |
                 &Term::Cons(..) |
-                &Term::PartialString(..) => {
+                &Term::PartialString(..) |
+                &Term::CompleteString(..) => {
                     code.push(instr!("$fail", 0));
                 }
                 &Term::AnonVar => {

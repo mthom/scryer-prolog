@@ -286,7 +286,7 @@ impl<'a, 'b> TermWriter<'a, 'b> {
         match term {
             &TermRef::Cons(..) => list_loc_as_cell!(h),
             &TermRef::AnonVar(_) | &TermRef::Var(..) => heap_loc_as_cell!(h),
-            &TermRef::PartialString(_, _, ref src, None) =>
+            &TermRef::CompleteString(_, _, ref src) =>
                 if src.as_str().is_empty() {
                     empty_list_as_cell!()
                 } else if self.heap[h].get_tag() == HeapCellValueTag::CStr {
@@ -369,20 +369,17 @@ impl<'a, 'b> TermWriter<'a, 'b> {
 
                     continue;
                 }
-                &TermRef::PartialString(lvl, _, ref src, tail) => {
-                    if tail.is_some() {
-                        allocate_pstr(self.heap, src.as_str(), self.atom_tbl);
-                    } else {
-                        put_complete_string(self.heap, src.as_str(), self.atom_tbl);
-                    }
+                &TermRef::CompleteString(_, _, ref src) => {
+                    put_complete_string(self.heap, src.as_str(), self.atom_tbl);
+                }
+                &TermRef::PartialString(lvl, _, ref src, _) => {
+                    allocate_pstr(self.heap, src.as_str(), self.atom_tbl);
 
-                    if tail.is_some() {
-                        let h = self.heap.len();
-                        self.queue.push_back((1, h - 1));
+                    let h = self.heap.len();
+                    self.queue.push_back((1, h - 1));
 
-                        if let Level::Root = lvl {
-                            continue;
-                        }
+                    if let Level::Root = lvl {
+                        continue;
                     }
                 }
                 &TermRef::Var(_, _, ref var) => {

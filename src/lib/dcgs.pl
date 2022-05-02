@@ -8,6 +8,7 @@
           ]).
 
 :- use_module(library(error)).
+:- use_module(library(iso_ext)).
 :- use_module(library(lists), [append/3, member/2]).
 :- use_module(library(loader), [strip_module/3]).
 

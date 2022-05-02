@@ -17,7 +17,8 @@ pub(crate) enum TermRef<'a> {
     Cons(Level, &'a Cell<RegType>, &'a Term, &'a Term),
     Literal(Level, &'a Cell<RegType>, &'a Literal),
     Clause(Level, &'a Cell<RegType>, ClauseType, &'a Vec<Term>),
-    PartialString(Level, &'a Cell<RegType>, Atom, &'a Option<Box<Term>>),
+    PartialString(Level, &'a Cell<RegType>, &'a String, &'a Box<Term>),
+    CompleteString(Level, &'a Cell<RegType>, Atom),
     Var(Level, &'a Cell<VarReg>, Rc<String>),
 }
 
@@ -28,8 +29,9 @@ impl<'a> TermRef<'a> {
             | TermRef::Cons(lvl, ..)
             | TermRef::Literal(lvl, ..)
             | TermRef::Var(lvl, ..)
-            | TermRef::Clause(lvl, ..) => lvl,
-            TermRef::PartialString(lvl, ..) => lvl,
+            | TermRef::Clause(lvl, ..)
+            | TermRef::CompleteString(lvl, ..)
+            | TermRef::PartialString(lvl, ..) => lvl,
         }
     }
 }
@@ -41,8 +43,9 @@ pub(crate) enum TermIterState<'a> {
     Clause(Level, usize, &'a Cell<RegType>, ClauseType, &'a Vec<Term>),
     InitialCons(Level, &'a Cell<RegType>, &'a Term, &'a Term),
     FinalCons(Level, &'a Cell<RegType>, &'a Term, &'a Term),
-    InitialPartialString(Level, &'a Cell<RegType>, Atom, &'a Option<Box<Term>>),
-    FinalPartialString(Level, &'a Cell<RegType>, Atom, &'a Option<Box<Term>>),
+    InitialPartialString(Level, &'a Cell<RegType>, &'a String, &'a Box<Term>),
+    FinalPartialString(Level, &'a Cell<RegType>, &'a String, &'a Box<Term>),
+    CompleteString(Level, &'a Cell<RegType>, Atom),
     Var(Level, &'a Cell<VarReg>, Rc<String>),
 }
 
@@ -59,7 +62,10 @@ impl<'a> TermIterState<'a> {
             }
             Term::Literal(cell, constant) => TermIterState::Literal(lvl, cell, constant),
             Term::PartialString(cell, string_buf, tail) => {
-                TermIterState::InitialPartialString(lvl, cell, *string_buf, tail)
+                TermIterState::InitialPartialString(lvl, cell, string_buf, tail)
+            }
+            Term::CompleteString(cell, atom) => {
+                TermIterState::CompleteString(lvl, cell, *atom)
             }
             Term::Var(cell, var) => TermIterState::Var(lvl, cell, var.clone()),
         }
@@ -89,7 +95,8 @@ impl<'a> QueryIterator<'a> {
 
     fn from_term(term: &'a Term) -> Self {
         let state = match term {
-            Term::AnonVar | Term::Cons(..) | Term::Literal(..) | Term::PartialString(..) => {
+            Term::AnonVar | Term::Cons(..) | Term::Literal(..) |
+            Term::PartialString(..) | Term::CompleteString(..) => {
                 return QueryIterator {
                     state_stack: vec![],
                 }
@@ -196,13 +203,13 @@ impl<'a> Iterator for QueryIterator<'a> {
                 }
                 TermIterState::InitialPartialString(lvl, cell, string, tail) => {
                     self.state_stack.push(TermIterState::FinalPartialString(lvl, cell, string, tail));
-
-                    if let Some(tail) = tail {
-                        self.push_subterm(lvl.child_level(), tail);
-                    }
+                    self.push_subterm(lvl.child_level(), tail);
                 }
-                TermIterState::FinalPartialString(lvl, cell, string, tail) => {
-                    return Some(TermRef::PartialString(lvl, cell, string, tail));
+                TermIterState::FinalPartialString(lvl, cell, atom, tail) => {
+                    return Some(TermRef::PartialString(lvl, cell, atom, tail));
+                }
+                TermIterState::CompleteString(lvl, cell, atom) => {
+                    return Some(TermRef::CompleteString(lvl, cell, atom));
                 }
                 TermIterState::FinalCons(lvl, cell, head, tail) => {
                     return Some(TermRef::Cons(lvl, cell, head, tail));
@@ -259,12 +266,19 @@ impl<'a> FactIterator<'a> {
                 head.as_ref(),
                 tail.as_ref(),
             )],
-            Term::PartialString(cell, string_buf, tail_opt) => {
+            Term::PartialString(cell, string_buf, tail) => {
                 vec![TermIterState::InitialPartialString(
                     Level::Root,
                     cell,
-                    *string_buf,
-                    tail_opt,
+                    string_buf,
+                    tail,
+                )]
+            }
+            Term::CompleteString(cell, atom) => {
+                vec![TermIterState::CompleteString(
+                    Level::Root,
+                    cell,
+                    *atom,
                 )]
             }
             Term::Literal(cell, constant) => {
@@ -307,12 +321,12 @@ impl<'a> Iterator for FactIterator<'a> {
 
                     return Some(TermRef::Cons(lvl, cell, head, tail));
                 }
-                TermIterState::InitialPartialString(lvl, cell, string_buf, tail_opt) => {
-                    if let Some(tail) = tail_opt {
-                        self.push_subterm(Level::Deep, tail);
-                    }
-
-                    return Some(TermRef::PartialString(lvl, cell, string_buf, tail_opt));
+                TermIterState::InitialPartialString(lvl, cell, string_buf, tail) => {
+                    self.push_subterm(Level::Deep, tail);
+                    return Some(TermRef::PartialString(lvl, cell, string_buf, tail));
+                }
+                TermIterState::CompleteString(lvl, cell, atom) => {
+                    return Some(TermRef::CompleteString(lvl, cell, atom));
                 }
                 TermIterState::Literal(lvl, cell, constant) => {
                     return Some(TermRef::Literal(lvl, cell, constant))

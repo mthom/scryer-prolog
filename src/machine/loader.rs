@@ -485,10 +485,21 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
 
             read_heap_cell!(addr,
                 (HeapCellValueTag::Lis) => {
+                    use crate::parser::parser::as_partial_string;
+
                     let tail = term_stack.pop().unwrap();
                     let head = term_stack.pop().unwrap();
 
-                    term_stack.push(Term::Cons(Cell::default(), Box::new(head), Box::new(tail)));
+                    match as_partial_string(head, tail) {
+                        Ok((string, Some(tail))) => {
+                            term_stack.push(Term::PartialString(Cell::default(), string, tail));
+                        }
+                        Ok((string, None)) => {
+                            let atom = machine_st.atom_tbl.build_with(&string);
+                            term_stack.push(Term::CompleteString(Cell::default(), atom));
+                        }
+                        Err(cons_term) => term_stack.push(cons_term),
+                    }
                 }
                 (HeapCellValueTag::Var | HeapCellValueTag::AttrVar | HeapCellValueTag::StackVar, h) => {
                     let offset_string = format!("_{}", h);
@@ -509,31 +520,27 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                         term_stack.push(Term::Clause(Cell::default(), name, subterms));
                     }
                 }
-                (HeapCellValueTag::PStr, string) => {
+                (HeapCellValueTag::PStr, atom) => {
                     let tail = term_stack.pop().unwrap();
 
                     if let Term::Literal(_, Literal::Atom(atom!("[]"))) = &tail {
-                        term_stack.push(Term::PartialString(
-                            Cell::default(),
-                            string,
-                            None,
-                        ));
+                        term_stack.push(Term::CompleteString(Cell::default(), atom));
                     } else {
                         term_stack.push(Term::PartialString(
                             Cell::default(),
-                            string,
-                            Some(Box::new(tail)),
+                            atom.as_str().to_owned(),
+                            Box::new(tail),
                         ));
                     }
                 }
                 (HeapCellValueTag::PStrLoc, h) => {
-                    let string = cell_as_atom_cell!(iter.heap[h]).get_name();
+                    let atom = cell_as_atom_cell!(iter.heap[h]).get_name();
                     let tail = term_stack.pop().unwrap();
 
                     term_stack.push(Term::PartialString(
                         Cell::default(),
-                        string,
-                        Some(Box::new(tail)),
+                        atom.as_str().to_owned(),
+                        Box::new(tail),
                     ));
                 }
                 _ => {
