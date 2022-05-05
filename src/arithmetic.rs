@@ -364,12 +364,19 @@ impl<'a> ArithmeticEvaluator<'a> {
 // integer division rounding function -- 9.1.3.1.
 pub(crate) fn rnd_i<'a>(n: &'a Number, arena: &mut Arena) -> Number {
     match n {
-        &Number::Integer(_) | &Number::Fixnum(_) => *n,
+        &Number::Integer(i) => {
+            if let Some(n) = i.to_i64() {
+                fixnum!(Number, n, arena)
+            } else {
+                *n
+            }
+        }
+        &Number::Fixnum(_) => *n,
         &Number::Float(f) => {
             let f = f.floor();
 
             const I64_MIN_TO_F: OrderedFloat<f64> = OrderedFloat(i64::MIN as f64);
-            const I64_MAX_TO_F: OrderedFloat<f64> = OrderedFloat(i64::MIN as f64);
+            const I64_MAX_TO_F: OrderedFloat<f64> = OrderedFloat(i64::MAX as f64);
 
             if I64_MIN_TO_F <= f && f <= I64_MAX_TO_F {
                 fixnum!(Number, f.into_inner() as i64, arena)
@@ -382,7 +389,11 @@ pub(crate) fn rnd_i<'a>(n: &'a Number, arena: &mut Arena) -> Number {
             let (mut fract, mut floor) = (Rational::new(), Integer::new());
             (&mut fract, &mut floor).assign(r_ref);
 
-            Number::Integer(arena_alloc!(floor, arena))
+            if let Some(floor) = floor.to_i64() {
+                fixnum!(Number, floor, arena)
+            } else {
+                Number::Integer(arena_alloc!(floor, arena))
+            }
         }
     }
 }
