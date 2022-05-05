@@ -415,7 +415,7 @@ impl Machine {
                             Literal::Fixnum(n)
                         }
                         (HeapCellValueTag::F64, f) => {
-                            Literal::Float(f)
+                            Literal::Float(f.as_offset())
                         }
                         (HeapCellValueTag::Atom, (atom, arity)) => {
                             debug_assert_eq!(arity, 0);

@@ -742,7 +742,7 @@ impl MachineState {
                 self.unify_rational(n, nx);
             }
             Ok(Term::Literal(_, Literal::Float(n))) => {
-                self.unify_f64(n, nx);
+                self.unify_f64(n.as_ptr(), nx);
             }
             Ok(Term::Literal(_, Literal::Integer(n))) => {
                 self.unify_big_int(n, nx);

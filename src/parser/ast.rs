@@ -533,8 +533,15 @@ pub enum Literal {
     Fixnum(Fixnum),
     Integer(TypedArenaPtr<Integer>),
     Rational(TypedArenaPtr<Rational>),
-    Float(F64Ptr),
+    Float(F64Offset),
     String(Atom),
+}
+
+impl From<F64Ptr> for Literal {
+    #[inline(always)]
+    fn from(ptr: F64Ptr) -> Literal {
+        Literal::Float(ptr.as_offset())
+    }
 }
 
 impl fmt::Display for Literal {

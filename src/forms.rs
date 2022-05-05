@@ -619,7 +619,7 @@ impl ArenaFrom<Number> for Literal {
         match value {
             Number::Fixnum(n) => Literal::Fixnum(n),
             Number::Integer(n) => Literal::Integer(n),
-            Number::Float(OrderedFloat(f)) => Literal::Float(float_alloc!(f, arena)),
+            Number::Float(OrderedFloat(f)) => Literal::from(float_alloc!(f, arena)),
             Number::Rational(r) => Literal::Rational(r),
         }
     }

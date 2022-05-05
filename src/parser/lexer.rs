@@ -633,7 +633,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
     fn vacate_with_float(&mut self, mut token: String) -> Result<Token, ParserError> {
         self.return_char(token.pop().unwrap());
         let n = parse_lossy::<f64, _>(token.as_bytes())?;
-        Ok(Token::Literal(Literal::Float(float_alloc!(n, self.machine_st.arena))))
+        Ok(Token::Literal(Literal::from(float_alloc!(n, self.machine_st.arena))))
     }
 
     fn skip_underscore_in_number(&mut self) -> Result<char, ParserError> {
@@ -744,7 +744,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                         }
 
                         let n = parse_lossy::<f64, _>(token.as_bytes())?;
-                        Ok(Token::Literal(Literal::Float(
+                        Ok(Token::Literal(Literal::from(
                             float_alloc!(n, self.machine_st.arena)
                         )))
                     } else {
@@ -752,7 +752,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                     }
                 } else {
                     let n = parse_lossy::<f64, _>(token.as_bytes())?;
-                    Ok(Token::Literal(Literal::Float(
+                    Ok(Token::Literal(Literal::from(
                         float_alloc!(n, self.machine_st.arena)
                     )))
                 }

@@ -949,9 +949,9 @@ impl<'a, R: CharRead> Parser<'a, R> {
                 self.negate_number(n, negate_rc, |r, _| Literal::Rational(r))
             }
             Token::Literal(Literal::Float(n)) => self.negate_number(
-                **n,
+                **n.as_ptr(),
                 |n| -n,
-                |n, arena| Literal::Float(float_alloc!(n, arena))
+                |n, arena| Literal::from(float_alloc!(n, arena)),
             ),
             Token::Literal(c) => {
                 if let Some(name) = atomize_constant(&mut self.lexer.machine_st.atom_tbl, c) {

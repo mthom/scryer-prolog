@@ -24,7 +24,7 @@ impl From<Literal> for HeapCellValue {
             Literal::Rational(bigint_ptr) => {
                 typed_arena_ptr_as_cell!(bigint_ptr)
             }
-            Literal::Float(f) => HeapCellValue::from(f),
+            Literal::Float(f) => HeapCellValue::from(f.as_ptr()),
             Literal::String(s) => {
                 if s == atom!("") {
                     empty_list_as_cell!()
@@ -55,7 +55,7 @@ impl TryFrom<HeapCellValue> for Literal {
                 Ok(Literal::Fixnum(n))
             }
             (HeapCellValueTag::F64, f) => {
-                Ok(Literal::Float(f))
+                Ok(Literal::Float(f.as_offset()))
             }
             (HeapCellValueTag::Cons, cons_ptr) => {
                 match_untyped_arena_ptr!(cons_ptr,

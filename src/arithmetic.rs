@@ -167,7 +167,7 @@ fn push_literal(interm: &mut Vec<ArithmeticTerm>, c: &Literal) -> Result<(), Ari
     match c {
         Literal::Fixnum(n) => interm.push(ArithmeticTerm::Number(Number::Fixnum(*n))),
         Literal::Integer(n) => interm.push(ArithmeticTerm::Number(Number::Integer(*n))),
-        Literal::Float(n) => interm.push(ArithmeticTerm::Number(Number::Float(**n))),
+        Literal::Float(n) => interm.push(ArithmeticTerm::Number(Number::Float(*n.as_ptr()))),
         Literal::Rational(n) => interm.push(ArithmeticTerm::Number(Number::Rational(*n))),
         Literal::Atom(name) if name == &atom!("e") => interm.push(ArithmeticTerm::Number(
             Number::Float(OrderedFloat(std::f64::consts::E))

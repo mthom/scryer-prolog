@@ -104,7 +104,9 @@ pub fn lookup_float(offset: usize) -> *mut OrderedFloat<f64> {
 impl F64Table {
     #[inline]
     pub fn new() -> Self {
-        F64Table { block: RawBlock::new() }
+        let table = Self { block: RawBlock::new() };
+        set_f64_tbl_buf_base(table.block.base);
+        table
     }
 
     pub unsafe fn build_with(&mut self, value: f64) -> F64Ptr {
@@ -121,7 +123,7 @@ impl F64Table {
             }
         }
 
-        ptr::write(ptr as *mut f64, value);
+        ptr::write(ptr as *mut OrderedFloat<f64>, OrderedFloat(value));
         F64Ptr(ptr::NonNull::new_unchecked(ptr as *mut _))
     }
 }
@@ -297,8 +299,35 @@ pub trait ArenaAllocated {
         Self: Sized;
 }
 
-#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Copy, Clone, Debug)]
 pub struct F64Ptr(pub ptr::NonNull<OrderedFloat<f64>>);
+
+impl PartialEq for F64Ptr {
+    fn eq(&self, other: &F64Ptr) -> bool {
+        self.0 == other.0 || &**self == &**other
+    }
+}
+
+impl Eq for F64Ptr {}
+
+impl PartialOrd for F64Ptr {
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        (**self).partial_cmp(&**other)
+    }
+}
+
+impl Ord for F64Ptr {
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        (**self).cmp(&**other)
+    }
+}
+
+impl Hash for F64Ptr {
+    #[inline(always)]
+    fn hash<H: Hasher>(&self, hasher: &mut H) {
+        (&*self as &OrderedFloat<f64>).hash(hasher)
+    }
+}
 
 impl fmt::Display for F64Ptr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -331,8 +360,69 @@ impl F64Ptr {
     }
 
     #[inline(always)]
-    pub fn as_offset(&self) -> usize {
-        self.0.as_ptr() as usize - get_f64_tbl_buf_base() as usize
+    pub fn as_offset(&self) -> F64Offset {
+        F64Offset(self.0.as_ptr() as usize - get_f64_tbl_buf_base() as usize)
+    }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct F64Offset(usize);
+
+impl F64Offset {
+    #[inline(always)]
+    pub fn new(offset: usize) -> Self {
+        Self(offset)
+    }
+
+    #[inline(always)]
+    pub fn from_ptr(ptr: F64Ptr) -> Self {
+        ptr.as_offset()
+    }
+
+    #[inline(always)]
+    pub fn as_ptr(self) -> F64Ptr {
+        F64Ptr::from_offset(self.0)
+    }
+
+    #[inline(always)]
+    pub fn to_u64(self) -> u64 {
+        self.0 as u64
+    }
+}
+
+impl PartialEq for F64Offset {
+    #[inline(always)]
+    fn eq(&self, other: &F64Offset) -> bool {
+        self.as_ptr() == other.as_ptr()
+    }
+}
+
+impl Eq for F64Offset {}
+
+impl PartialOrd for F64Offset {
+    #[inline(always)]
+    fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
+        self.as_ptr().partial_cmp(&other.as_ptr())
+    }
+}
+
+impl Ord for F64Offset {
+    #[inline(always)]
+    fn cmp(&self, other: &Self) -> std::cmp::Ordering {
+        self.as_ptr().cmp(&other.as_ptr())
+    }
+}
+
+impl Hash for F64Offset {
+    #[inline(always)]
+    fn hash<H: Hasher>(&self, hasher: &mut H) {
+        self.as_ptr().hash(hasher)
+    }
+}
+
+impl fmt::Display for F64Offset {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "F64Offset({})", self.0)
     }
 }
 

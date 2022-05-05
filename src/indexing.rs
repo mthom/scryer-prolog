@@ -4,6 +4,7 @@ use crate::parser::ast::*;
 use crate::forms::*;
 use crate::instructions::*;
 
+use fxhash::FxBuildHasher;
 use indexmap::IndexMap;
 
 use std::collections::VecDeque;
@@ -107,7 +108,7 @@ impl<'a> IndexingCodeMergingPtr<'a> {
             self.append_or_prepend,
         );
 
-        let mut constants = IndexMap::new();
+        let mut constants = IndexMap::with_hasher(FxBuildHasher::default());
 
         match constant_key {
             Some(OptArgIndexKey::Literal(_, _, constant, _)) => {
@@ -249,7 +250,7 @@ impl<'a> IndexingCodeMergingPtr<'a> {
                             break;
                         }
                         IndexingCodePtr::DynamicExternal(_) | IndexingCodePtr::External(_) => {
-                            let mut constants = IndexMap::new();
+                            let mut constants = IndexMap::with_hasher(FxBuildHasher::default());
                             constants.insert(orig_constant, *c);
 
                             *c = IndexingCodePtr::Internal(indexing_code_len);
@@ -389,7 +390,7 @@ impl<'a> IndexingCodeMergingPtr<'a> {
             self.append_or_prepend,
         );
 
-        let mut structures = IndexMap::new();
+        let mut structures = IndexMap::with_hasher(FxBuildHasher::default());
 
         match structure_key {
             Some(OptArgIndexKey::Structure(_, _, name, arity)) => {
@@ -1121,15 +1122,6 @@ pub(crate) fn constant_key_alternatives(
                 }).unwrap();
             }
         }
-        /*
-        Literal::Usize(n) => {
-            constants.push(Literal::Integer(Rc::new(Integer::from(*n))));
-
-            if let Ok(n) = isize::try_from(*n) {
-                constants.push(Literal::Fixnum(n));
-            }
-        }
-        */
         _ => {}
     }
 
@@ -1138,16 +1130,16 @@ pub(crate) fn constant_key_alternatives(
 
 #[derive(Debug)]
 pub(crate) struct StaticCodeIndices {
-    constants: IndexMap<Literal, VecDeque<IndexedChoiceInstruction>>,
+    constants: IndexMap<Literal, VecDeque<IndexedChoiceInstruction>, FxBuildHasher>,
     lists: VecDeque<IndexedChoiceInstruction>,
-    structures: IndexMap<(Atom, usize), VecDeque<IndexedChoiceInstruction>>,
+    structures: IndexMap<(Atom, usize), VecDeque<IndexedChoiceInstruction>, FxBuildHasher>,
 }
 
 #[derive(Debug)]
 pub(crate) struct DynamicCodeIndices {
-    constants: IndexMap<Literal, VecDeque<usize>>,
+    constants: IndexMap<Literal, VecDeque<usize>, FxBuildHasher>,
     lists: VecDeque<usize>,
-    structures: IndexMap<(Atom, usize), VecDeque<usize>>,
+    structures: IndexMap<(Atom, usize), VecDeque<usize>, FxBuildHasher>,
 }
 
 pub(crate) trait Indexer {
@@ -1155,20 +1147,20 @@ pub(crate) trait Indexer {
 
     fn new() -> Self;
 
-    fn constants(&mut self) -> &mut IndexMap<Literal, VecDeque<Self::ThirdLevelIndex>>;
+    fn constants(&mut self) -> &mut IndexMap<Literal, VecDeque<Self::ThirdLevelIndex>, FxBuildHasher>;
     fn lists(&mut self) -> &mut VecDeque<Self::ThirdLevelIndex>;
-    fn structures(&mut self) -> &mut IndexMap<(Atom, usize), VecDeque<Self::ThirdLevelIndex>>;
+    fn structures(&mut self) -> &mut IndexMap<(Atom, usize), VecDeque<Self::ThirdLevelIndex>, FxBuildHasher>;
 
     fn compute_index(is_initial_index: bool, index: usize) -> Self::ThirdLevelIndex;
 
     fn second_level_index<IndexKey: Eq + Hash>(
-        indices: IndexMap<IndexKey, VecDeque<Self::ThirdLevelIndex>>,
+        indices: IndexMap<IndexKey, VecDeque<Self::ThirdLevelIndex>, FxBuildHasher>,
         prelude: &mut VecDeque<IndexingLine>,
-    ) -> IndexMap<IndexKey, IndexingCodePtr>;
+    ) -> IndexMap<IndexKey, IndexingCodePtr, FxBuildHasher>;
 
     fn switch_on<IndexKey: Eq + Hash>(
-        instr_fn: impl FnMut(IndexMap<IndexKey, IndexingCodePtr>) -> IndexingInstruction,
-        index: &mut IndexMap<IndexKey, VecDeque<Self::ThirdLevelIndex>>,
+        instr_fn: impl FnMut(IndexMap<IndexKey, IndexingCodePtr, FxBuildHasher>) -> IndexingInstruction,
+        index: &mut IndexMap<IndexKey, VecDeque<Self::ThirdLevelIndex>, FxBuildHasher>,
         prelude: &mut VecDeque<IndexingLine>,
     ) -> IndexingCodePtr;
 
@@ -1188,14 +1180,14 @@ impl Indexer for StaticCodeIndices {
     #[inline]
     fn new() -> Self {
         Self {
-            constants: IndexMap::new(),
+            constants: IndexMap::with_hasher(FxBuildHasher::default()),
             lists: VecDeque::new(),
-            structures: IndexMap::new(),
+            structures: IndexMap::with_hasher(FxBuildHasher::default()),
         }
     }
 
     #[inline]
-    fn constants(&mut self) -> &mut IndexMap<Literal, VecDeque<IndexedChoiceInstruction>> {
+    fn constants(&mut self) -> &mut IndexMap<Literal, VecDeque<IndexedChoiceInstruction>, FxBuildHasher> {
         &mut self.constants
     }
 
@@ -1205,7 +1197,7 @@ impl Indexer for StaticCodeIndices {
     }
 
     #[inline]
-    fn structures(&mut self) -> &mut IndexMap<(Atom, usize), VecDeque<IndexedChoiceInstruction>> {
+    fn structures(&mut self) -> &mut IndexMap<(Atom, usize), VecDeque<IndexedChoiceInstruction>, FxBuildHasher> {
         &mut self.structures
     }
 
@@ -1218,10 +1210,10 @@ impl Indexer for StaticCodeIndices {
     }
 
     fn second_level_index<IndexKey: Eq + Hash>(
-        indices: IndexMap<IndexKey, VecDeque<IndexedChoiceInstruction>>,
+        indices: IndexMap<IndexKey, VecDeque<IndexedChoiceInstruction>, FxBuildHasher>,
         prelude: &mut VecDeque<IndexingLine>,
-    ) -> IndexMap<IndexKey, IndexingCodePtr> {
-        let mut index_locs = IndexMap::new();
+    ) -> IndexMap<IndexKey, IndexingCodePtr, FxBuildHasher> {
+        let mut index_locs = IndexMap::with_hasher(FxBuildHasher::default());
 
         for (key, mut code) in indices.into_iter() {
             if code.len() > 1 {
@@ -1239,11 +1231,11 @@ impl Indexer for StaticCodeIndices {
     }
 
     fn switch_on<IndexKey: Eq + Hash>(
-        mut instr_fn: impl FnMut(IndexMap<IndexKey, IndexingCodePtr>) -> IndexingInstruction,
-        index: &mut IndexMap<IndexKey, VecDeque<IndexedChoiceInstruction>>,
+        mut instr_fn: impl FnMut(IndexMap<IndexKey, IndexingCodePtr, FxBuildHasher>) -> IndexingInstruction,
+        index: &mut IndexMap<IndexKey, VecDeque<IndexedChoiceInstruction>, FxBuildHasher>,
         prelude: &mut VecDeque<IndexingLine>,
     ) -> IndexingCodePtr {
-        let index = mem::replace(index, IndexMap::new());
+        let index = mem::replace(index, IndexMap::with_hasher(FxBuildHasher::default()));
         let index = Self::second_level_index(index, prelude);
 
         if index.len() > 1 {
@@ -1304,14 +1296,14 @@ impl Indexer for DynamicCodeIndices {
     #[inline]
     fn new() -> Self {
         Self {
-            constants: IndexMap::new(),
+            constants: IndexMap::with_hasher(FxBuildHasher::default()),
             lists: VecDeque::new(),
-            structures: IndexMap::new(),
+            structures: IndexMap::with_hasher(FxBuildHasher::default()),
         }
     }
 
     #[inline]
-    fn constants(&mut self) -> &mut IndexMap<Literal, VecDeque<usize>> {
+    fn constants(&mut self) -> &mut IndexMap<Literal, VecDeque<usize>, FxBuildHasher> {
         &mut self.constants
     }
 
@@ -1321,7 +1313,7 @@ impl Indexer for DynamicCodeIndices {
     }
 
     #[inline]
-    fn structures(&mut self) -> &mut IndexMap<(Atom, usize), VecDeque<usize>> {
+    fn structures(&mut self) -> &mut IndexMap<(Atom, usize), VecDeque<usize>, FxBuildHasher> {
         &mut self.structures
     }
 
@@ -1331,10 +1323,10 @@ impl Indexer for DynamicCodeIndices {
     }
 
     fn second_level_index<IndexKey: Eq + Hash>(
-        indices: IndexMap<IndexKey, VecDeque<usize>>,
+        indices: IndexMap<IndexKey, VecDeque<usize>, FxBuildHasher>,
         prelude: &mut VecDeque<IndexingLine>,
-    ) -> IndexMap<IndexKey, IndexingCodePtr> {
-        let mut index_locs = IndexMap::new();
+    ) -> IndexMap<IndexKey, IndexingCodePtr, FxBuildHasher> {
+        let mut index_locs = IndexMap::with_hasher(FxBuildHasher::default());
 
         for (key, code) in indices.into_iter() {
             if code.len() > 1 {
@@ -1351,11 +1343,11 @@ impl Indexer for DynamicCodeIndices {
     }
 
     fn switch_on<IndexKey: Eq + Hash>(
-        mut instr_fn: impl FnMut(IndexMap<IndexKey, IndexingCodePtr>) -> IndexingInstruction,
-        index: &mut IndexMap<IndexKey, VecDeque<usize>>,
+        mut instr_fn: impl FnMut(IndexMap<IndexKey, IndexingCodePtr, FxBuildHasher>) -> IndexingInstruction,
+        index: &mut IndexMap<IndexKey, VecDeque<usize>, FxBuildHasher>,
         prelude: &mut VecDeque<IndexingLine>,
     ) -> IndexingCodePtr {
-        let index = mem::replace(index, IndexMap::new());
+        let index = mem::replace(index, IndexMap::with_hasher(FxBuildHasher::default()));
         let index = Self::second_level_index(index, prelude);
 
         if index.len() > 1 {

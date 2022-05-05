@@ -248,13 +248,22 @@ pub struct HeapCellValue {
 impl fmt::Debug for HeapCellValue {
     fn fmt(&self, f: &mut std::fmt::Formatter) -> fmt::Result {
         match self.get_tag() {
-            tag @ (HeapCellValueTag::Cons | HeapCellValueTag::F64) => {
+            HeapCellValueTag::F64 => {
+                f.debug_struct("HeapCellValue")
+                    .field("tag", &HeapCellValueTag::F64)
+                    .field("offset", &self.get_value())
+                    .field("m", &self.m())
+                    .field("f", &self.f())
+                    .finish()
+            }
+            HeapCellValueTag::Cons => {
                 let cons_ptr = ConsPtr::from_bytes(self.into_bytes());
 
                 f.debug_struct("HeapCellValue")
-                    .field("tag", &tag)
+                    .field("tag", &HeapCellValueTag::Cons)
                     .field("ptr", &cons_ptr.ptr())
                     .field("m", &cons_ptr.m())
+                    .field("f", &cons_ptr.f())
                     .finish()
             }
             HeapCellValueTag::Atom => {
@@ -304,7 +313,7 @@ impl From<F64Ptr> for HeapCellValue {
     fn from(f64_ptr: F64Ptr) -> HeapCellValue {
         HeapCellValue::build_with(
             HeapCellValueTag::F64,
-            f64_ptr.as_offset() as u64,
+            f64_ptr.as_offset().to_u64(),
         )
     }
 }

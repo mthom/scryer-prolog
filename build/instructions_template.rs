@@ -806,6 +806,7 @@ fn generate_instruction_preface() -> TokenStream {
         use crate::parser::ast::*;
         use crate::types::*;
 
+        use fxhash::FxBuildHasher;
         use indexmap::IndexMap;
 
         use std::collections::VecDeque;
@@ -918,8 +919,8 @@ fn generate_instruction_preface() -> TokenStream {
                 IndexingCodePtr,
                 IndexingCodePtr,
             ),
-            SwitchOnConstant(IndexMap<Literal, IndexingCodePtr>),
-            SwitchOnStructure(IndexMap<(Atom, usize), IndexingCodePtr>),
+            SwitchOnConstant(IndexMap<Literal, IndexingCodePtr, FxBuildHasher>),
+            SwitchOnStructure(IndexMap<(Atom, usize), IndexingCodePtr, FxBuildHasher>),
         }
 
         #[derive(Debug, Clone, Copy)]
