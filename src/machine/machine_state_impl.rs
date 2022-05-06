@@ -14,6 +14,7 @@ use crate::machine::stack::*;
 use crate::parser::ast::*;
 use crate::parser::rug::{Integer, Rational};
 
+use fxhash::FxBuildHasher;
 use indexmap::IndexSet;
 
 use std::cmp::Ordering;
@@ -710,7 +711,7 @@ impl MachineState {
     }
 
     pub fn unify(&mut self) {
-        let mut tabu_list: IndexSet<(usize, usize)> = IndexSet::new();
+        let mut tabu_list = IndexSet::with_hasher(FxBuildHasher::default());
 
         while !(self.pdl.is_empty() || self.fail) {
             let s1 = self.pdl.pop().unwrap();
@@ -743,38 +744,37 @@ impl MachineState {
                             break;
                         }
 
-                        let s2 = s2.get_value() as usize;
-
-                        if tabu_list.contains(&(s1, s2)) {
+                        if tabu_list.contains(&(d1, d2)) {
                             continue;
                         }
 
                         self.unify_structure(s1, d2);
 
                         if !self.fail {
-                            tabu_list.insert((s1, s2));
+                            let d2 = self.store(d2);
+                            tabu_list.insert((d1, d2));
                         }
                     }
                     (HeapCellValueTag::Lis, l1) => {
                         if d2.is_ref() {
-                            let l2 = s2.get_value();
-
-                            if tabu_list.contains(&(l1, l2)) {
+                            if tabu_list.contains(&(d1, d2)) {
                                 continue;
                             }
-
-                            tabu_list.insert((l1, l2));
                         }
 
                         self.unify_list(l1, d2);
+
+                        if !self.fail {
+                            let d2 = self.store(d2);
+                            tabu_list.insert((d1, d2));
+                        }
                     }
-                    (HeapCellValueTag::PStrLoc, pstr1_loc) => {
+                    (HeapCellValueTag::PStrLoc) => {
                         read_heap_cell!(d2,
                             (HeapCellValueTag::PStrLoc |
                              HeapCellValueTag::Lis |
-                             HeapCellValueTag::Str,
-                             pstr2_loc) => {
-                                if tabu_list.contains(&(pstr1_loc, pstr2_loc)) {
+                             HeapCellValueTag::Str) => {
+                                if tabu_list.contains(&(d1, d2)) {
                                     continue;
                                 }
                             }
@@ -792,7 +792,8 @@ impl MachineState {
                         self.unify_partial_string(d1, d2);
 
                         if !self.fail && !d2.is_constant() {
-                            tabu_list.insert((pstr1_loc, d2.get_value()));
+                            let d2 = self.store(d2);
+                            tabu_list.insert((d1, d2));
                         }
                     }
                     (HeapCellValueTag::CStr) => {
@@ -1248,7 +1249,7 @@ impl MachineState {
     }
 
     pub(super) fn unify_with_occurs_check_loop(&mut self, mut occurs_trigger: impl FnMut()) {
-        let mut tabu_list: IndexSet<(usize, usize)> = IndexSet::new();
+        let mut tabu_list = IndexSet::with_hasher(FxBuildHasher::default());
 
         // self.fail = false;
 
@@ -1289,38 +1290,37 @@ impl MachineState {
                             break;
                         }
 
-                        let s2 = s2.get_value() as usize;
-
-                        if tabu_list.contains(&(s1, s2)) {
+                        if tabu_list.contains(&(d1, d2)) {
                             continue;
                         }
 
                         self.unify_structure_with_occurs_check(s1, d2, &mut occurs_trigger);
 
                         if !self.fail {
-                            tabu_list.insert((s1, s2));
+                            let d2 = self.store(d2);
+                            tabu_list.insert((d1, d2));
                         }
                     }
                     (HeapCellValueTag::Lis, l1) => {
                         if d2.is_ref() {
-                            let l2 = s2.get_value() as usize;
-
-                            if tabu_list.contains(&(l1, l2)) {
+                            if tabu_list.contains(&(d1, d2)) {
                                 continue;
                             }
-
-                            tabu_list.insert((l1, l2));
                         }
 
                         self.unify_list_with_occurs_trigger(l1, d2, &mut occurs_trigger);
+
+                        if !self.fail {
+                            let d2 = self.store(d2);
+                            tabu_list.insert((d1, d2));
+                        }
                     }
-                    (HeapCellValueTag::PStrLoc, pstr1_loc) => {
+                    (HeapCellValueTag::PStrLoc) => {
                         read_heap_cell!(d2,
                             (HeapCellValueTag::PStrLoc |
                              HeapCellValueTag::Lis |
-                             HeapCellValueTag::Str,
-                             pstr2_loc) => {
-                                if tabu_list.contains(&(pstr1_loc, pstr2_loc)) {
+                             HeapCellValueTag::Str) => {
+                                if tabu_list.contains(&(d1, d2)) {
                                     continue;
                                 }
                             }
@@ -1342,7 +1342,8 @@ impl MachineState {
                         );
 
                         if !self.fail && !d2.is_constant() {
-                            tabu_list.insert((pstr1_loc, d2.get_value()));
+                            let d2 = self.store(d2);
+                            tabu_list.insert((d1, d2));
                         }
                     }
                     (HeapCellValueTag::CStr) => {
