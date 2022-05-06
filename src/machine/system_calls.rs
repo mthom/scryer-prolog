@@ -4709,7 +4709,7 @@ impl Machine {
             let err = self.machine_st.permission_error(
                 Permission::Reposition,
                 atom!("stream"),
-                vec![stream_as_cell!(stream)],
+                stream_as_cell!(stream),
             );
 
             return Err(self.machine_st.error_form(err, stub));
