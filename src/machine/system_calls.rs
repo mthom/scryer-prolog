@@ -1460,7 +1460,8 @@ impl Machine {
         unify!(self.machine_st, self.machine_st.registers[2], pstr_loc_as_cell!(pstr_h));
 
         if !self.machine_st.fail {
-            self.machine_st.bind(Ref::heap_cell(pstr_h+1), self.machine_st.registers[3]);
+            let tail = self.machine_st.registers[3];
+            unify!(self.machine_st, tail, heap_loc_as_cell!(pstr_h+1));
         }
     }
 

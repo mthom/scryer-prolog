@@ -532,8 +532,8 @@ impl MachineState {
 
                     chars_iter.iter.next();
 
-                    self.pdl.push(chars_iter.iter.focus);
                     self.pdl.push(focus);
+                    self.pdl.push(chars_iter.iter.focus);
 
                     break;
                 }
