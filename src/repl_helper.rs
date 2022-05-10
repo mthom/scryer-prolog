@@ -1,75 +1,25 @@
-use rustyline::completion::Completer;
+use indexmap::IndexSet;
+use rustyline::completion::{Completer, Candidate};
 use rustyline::hint::Hinter;
 use rustyline::validate::Validator;
 use rustyline::highlight::{MatchingBracketHighlighter, Highlighter};
 use rustyline::{Helper as RlHelper, Result, Context};
 
-// pub struct Atoms {
-//     atoms: *const *const str,
-//     len: usize,
-// }
-
-// impl Atoms {
-//     pub fn new() -> Self {
-//         Self {
-//             atoms: std::ptr::null(),
-//             len: 0,
-//         }
-//     }
-// }
-
-// pub struct AtomsIterator<'a> {
-//     atoms: &'a Atoms,
-//     idx: usize,
-// }
-
-// impl<'a> Iterator for AtomsIterator<'a> {
-//     type Item = &'a str;
-
-//     fn next(&mut self) -> Option<Self::Item> {
-//         self.idx += 1;
-
-//         if self.idx == self.atoms.len {
-//             None
-//         } else {
-//             unsafe {
-//                 let next = self.atoms.atoms.offset(self.idx as isize);
-//                 (*next).as_ref()
-//             }
-//         }
-//     }
-// }
-
-// impl<'a> IntoIterator for &'a Atoms {
-//     type Item = &'a str;
-//     type IntoIter = AtomsIterator<'a>;
-
-//     fn into_iter(self) -> Self::IntoIter {
-//         Self::IntoIter {
-//             atoms: self,
-//             idx: 0,
-//         }
-//     }
-// }
+use crate::machine::mock_wam::Atom;
 
 // TODO: Maybe add validation to the helper
 pub struct Helper {
     highligher: MatchingBracketHighlighter,
-    pub atoms: Vec<String>,
+    pub atoms: *const IndexSet<Atom>,
 }
 
 impl Helper {
     pub fn new() -> Self {
         Self {
             highligher: MatchingBracketHighlighter::new(),
-            atoms: vec![],
+            atoms: std::ptr::null(),
         }
     }
-
-    // pub fn set_atoms(&mut self, atoms_ptr: *const *const str, len: usize) {
-    //     self.atoms.atoms = atoms_ptr;
-    //     self.atoms.len = len;
-    // }
 }
 
 impl RlHelper for Helper {}
@@ -104,14 +54,32 @@ fn get_prefix(line: &str, pos: usize) -> Option<usize> {
     start_of_atom
 }
 
+pub struct StrPtr(*const str);
+
+impl Candidate for StrPtr {
+    fn display(&self) -> &str {
+        unsafe {
+            self.0.as_ref().unwrap()
+        }
+    }
+
+    fn replacement(&self) -> &str {
+        unsafe {
+            self.0.as_ref().unwrap()
+        }
+    }
+}
+
 impl Completer for Helper {
-    type Candidate = String;
+    type Candidate = StrPtr;
 
     fn complete(&self, line: &str, pos: usize, _ctx: &Context<'_>) -> Result<(usize, Vec<Self::Candidate>)> {
         let start_of_prefix = get_prefix(line, pos);
         if let Some(idx) = start_of_prefix {
             let sub_str = line.get(idx..pos).unwrap();
-            let matching = self.atoms.iter().filter(|a| a.starts_with(sub_str)).map(|s| s.to_string()).collect();
+            let matching = unsafe {
+                (*self.atoms).iter().filter(|a| a.as_str().starts_with(sub_str)).map(|s| StrPtr(s.as_str())).collect()
+            };
             Ok((idx, matching))
         } else {
             Ok((0, vec![]))

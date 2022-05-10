@@ -14,6 +14,7 @@ use crate::types::*;
 
 use fxhash::FxBuildHasher;
 
+use indexmap::IndexSet;
 use rustyline::error::ReadlineError;
 use rustyline::{Config, Editor};
 
@@ -108,7 +109,7 @@ impl ReadlineStream {
         }
     }
 
-    pub fn set_atoms_for_completion(&mut self, atoms: Vec<String>) {
+    pub fn set_atoms_for_completion(&mut self, atoms: *const IndexSet<Atom>) {
         let helper = self.rl.helper_mut().unwrap();
         helper.atoms = atoms;
     }

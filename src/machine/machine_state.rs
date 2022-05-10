@@ -454,13 +454,15 @@ impl MachineState {
         self.b0 = self.b;
     }
 
+    // Safety: the atom_tbl lives for the lifetime of the machine, as does the helper, so the ptr
+    // will always be valid.
     pub fn read_term_from_user_input(&mut self, stream: Stream, indices: &mut IndexStore) -> CallResult {
-        let atoms: Vec<_> = self.atom_tbl.table.iter().map(|a| a.as_str().to_string()).collect();
+        let atoms_ptr = (&self.atom_tbl.table) as *const indexmap::IndexSet<Atom>;
 
         if let Stream::Readline(ptr) = stream {
             unsafe {
                 let readline = ptr.as_ptr().as_mut().unwrap();
-                readline.set_atoms_for_completion(atoms);
+                readline.set_atoms_for_completion(atoms_ptr);
                 let ret = self.read_term(stream, indices);
                 return ret
             }
