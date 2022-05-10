@@ -9,12 +9,13 @@ use crate::machine::machine_indices::*;
 use crate::machine::machine_state::MachineState;
 use crate::machine::streams::*;
 use crate::parser::char_reader::*;
+use crate::repl_helper::Helper;
 use crate::types::*;
 
 use fxhash::FxBuildHasher;
 
 use rustyline::error::ReadlineError;
-use rustyline::{Cmd, Config, Editor, KeyEvent};
+use rustyline::{Config, Editor};
 
 use std::collections::VecDeque;
 use std::io::{Cursor, Error, ErrorKind, Read};
@@ -77,7 +78,7 @@ fn get_prompt() -> &'static str {
 
 #[derive(Debug)]
 pub struct ReadlineStream {
-    rl: Editor<()>,
+    rl: Editor<Helper>,
     pending_input: Cursor<String>,
     add_history: bool,
 }
@@ -86,7 +87,10 @@ impl ReadlineStream {
     #[inline]
     pub fn new(pending_input: &str, add_history: bool) -> Self {
         let config = Config::builder().check_cursor_position(true).build();
-        let mut rl = Editor::<()>::with_config(config);
+        let helper = Helper::new();
+
+        let mut rl = Editor::with_config(config);
+        rl.set_helper(Some(helper));
 
         if let Some(mut path) = dirs_next::home_dir() {
             path.push(HISTORY_FILE);
@@ -95,13 +99,18 @@ impl ReadlineStream {
             }
         }
 
-        rl.bind_sequence(KeyEvent::from('\t'), Cmd::Insert(1, "\t".to_string()));
+        // rl.bind_sequence(KeyEvent::from('\t'), Cmd::Insert(1, "\t".to_string()));
 
         ReadlineStream {
             rl,
             pending_input: Cursor::new(pending_input.to_owned()),
             add_history: add_history,
         }
+    }
+
+    pub fn set_atoms_for_completion(&mut self, atoms: Vec<String>) {
+        let helper = self.rl.helper_mut().unwrap();
+        helper.atoms = atoms;
     }
 
     #[inline]
