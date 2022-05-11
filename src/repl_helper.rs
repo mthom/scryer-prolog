@@ -5,7 +5,7 @@ use rustyline::validate::Validator;
 use rustyline::highlight::{MatchingBracketHighlighter, Highlighter};
 use rustyline::{Helper as RlHelper, Result, Context};
 
-use crate::machine::mock_wam::Atom;
+use crate::atom_table::{Atom, STATIC_ATOMS_MAP};
 
 // TODO: Maybe add validation to the helper
 pub struct Helper {
@@ -77,10 +77,16 @@ impl Completer for Helper {
         let start_of_prefix = get_prefix(line, pos);
         if let Some(idx) = start_of_prefix {
             let sub_str = line.get(idx..pos).unwrap();
-            let matching = unsafe {
-                (*self.atoms).iter().filter(|a| a.as_str().starts_with(sub_str)).map(|s| StrPtr(s.as_str())).collect()
-            };
-            Ok((idx, matching))
+            Ok((idx, unsafe {
+                let mut matching = (*self.atoms).iter()
+                    .chain(STATIC_ATOMS_MAP.values())
+                    .filter(|a| a.as_str().starts_with(sub_str))
+                    .map(|s| StrPtr(s.as_str()))
+                    .collect::<Vec<_>>();
+
+                matching.sort_unstable_by(|a, b| Ord::cmp(&(*a.0).len(), &(*b.0).len()));
+                matching
+            }))
         } else {
             Ok((0, vec![]))
         }
