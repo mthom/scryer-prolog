@@ -1423,22 +1423,13 @@ impl Machine {
     pub(crate) fn chars_to_number(&mut self) -> CallResult {
         let stub_gen = || functor_stub(atom!("number_chars"), 2);
         let a1 = self.machine_st.store(self.machine_st.deref(self.machine_st.registers[1]));
+        let atom_or_string = self.machine_st.value_to_str_like(a1).unwrap();
 
-        if let Some(atom_or_string) = self.machine_st.value_to_str_like(a1) {
-            self.machine_st.parse_number_from_string(
-                atom_or_string.as_str(),
-                &self.indices,
-                stub_gen,
-            )?;
-        } else {
-            // a1 is a ground list at the call site within
-            // number_chars/2, so failure of value_to_str_like
-            // means the list contains a non-character.
-            let err = self.machine_st.type_error(ValidType::Character, a1);
-            return Err(self.machine_st.error_form(err, stub_gen()));
-        }
-
-        Ok(())
+        self.machine_st.parse_number_from_string(
+            atom_or_string.as_str(),
+            &self.indices,
+            stub_gen,
+        )
     }
 
     #[inline(always)]

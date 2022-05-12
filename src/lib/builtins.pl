@@ -1410,24 +1410,34 @@ codes_or_vars([C|Cs], PI) :-
     ).
 
 number_chars(N, Chs) :-
-   (  ground(Chs)
-   -> can_be_number(N, number_chars/2),
-      can_be_list(Chs, number_chars/2),
-      '$chars_to_number'(Chs, Nx),
-      Nx = N
-   ;  must_be_number(N, number_chars/2),
-      (  var(Chs) -> true
-      ;  can_be_list(Chs, number_chars/2)
-      ,  chars_or_vars(Chs, number_chars/2)
-      ),
-      '$number_to_chars'(N, Chsx),
-      Chsx = Chs
+    (  ground(Chs) ->
+       can_be_number(N, number_chars/2),
+       catch(error:must_be(chars, Chs),
+             error(E, _),
+             builtins:throw(error(E, number_chars/2))
+            ),
+       '$chars_to_number'(Chs, Nx),
+       Nx = N
+    ;  must_be_number(N, number_chars/2),
+       (  var(Chs) -> true
+       ;  can_be_list(Chs, number_chars/2),
+          chars_or_vars(Chs, number_chars/2)
+       ),
+       '$number_to_chars'(N, Chsx),
+       Chsx = Chs
     ).
 
+list_of_ints(Ns) :-
+    error:must_be(list, Ns),
+    lists:maplist(error:must_be(integer), Ns).
+
 number_codes(N, Chs) :-
-   (  ground(Chs)
-   -> can_be_number(N, number_codes/2),
-      can_be_list(Chs, number_codes/2),
+   (  ground(Chs) ->
+      can_be_number(N, number_codes/2),
+      catch(builtins:list_of_ints(Chs),
+            error(E, _),
+            builtins:throw(error(E, number_codes/2))
+           ),
       '$codes_to_number'(Chs, Nx),
       Nx = N
    ;  must_be_number(N, number_codes/2),
@@ -1437,7 +1447,7 @@ number_codes(N, Chs) :-
       ),
       '$number_to_codes'(N, Chsx),
       Chsx = Chs
-    ).
+   ).
 
 subsumes_term(General, Specific) :-
    \+ \+ (
