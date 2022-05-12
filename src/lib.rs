@@ -28,6 +28,7 @@ mod iterators;
 pub mod machine;
 mod raw_block;
 pub mod read;
+mod repl_helper;
 mod targets;
 pub mod types;
 

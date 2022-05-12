@@ -4239,7 +4239,8 @@ impl Machine {
         self.user_input.reset();
 
         set_prompt(true);
-        let result = self.machine_st.read_term(self.user_input, &mut self.indices);
+        // let result = self.machine_st.read_term(self.user_input, &mut self.indices);
+        let result = self.machine_st.read_term_from_user_input(self.user_input, &mut self.indices);
         set_prompt(false);
 
         match result {
