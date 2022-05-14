@@ -1839,7 +1839,10 @@ impl Machine {
         };
 
         let chars_atom = self.machine_st.atom_tbl.build_with(&string.trim());
-        self.machine_st.unify_complete_string(chars_atom, self.machine_st.store(self.machine_st.deref(chs)));
+        self.machine_st.unify_complete_string(
+            chars_atom,
+            self.machine_st.store(self.machine_st.deref(chs)),
+        );
     }
 
     #[inline(always)]

@@ -1375,33 +1375,32 @@ must_be_number(N, PI) :-
     ;  throw(error(instantiation_error, PI))
     ).
 
-can_be_chars_or_vars(Cs, _)  :- var(Cs), !.
-can_be_chars_or_vars(Cs, PI) :- chars_or_vars(Cs, PI).
-
-chars_or_vars([], _).
+chars_or_vars(Cs, _) :-
+    (  var(Cs) ->
+       !
+    ;  Cs == [] ->
+       !
+    ).
 chars_or_vars([C|Cs], PI) :-
     (  nonvar(C) ->
        (  atom(C),
           atom_length(C, 1) ->
-          (  nonvar(Cs) ->
-             chars_or_vars(Cs, PI)
-          ;  false
-          )
+          chars_or_vars(Cs, PI)
        ;  throw(error(type_error(character, C), PI))
        )
     ;  chars_or_vars(Cs, PI)
     ).
 
-can_be_codes_or_vars(Cs, _) :- var(Cs), !.
-can_be_codes_or_vars(Cs, PI) :- codes_or_vars(Cs, PI).
-
-codes_or_vars([], _).
+codes_or_vars(Cs, _) :-
+    (  var(Cs) ->
+       !
+    ;  Cs == [] ->
+       !
+    ).
 codes_or_vars([C|Cs], PI) :-
     (  nonvar(C) ->
        (  catch(builtins:char_code(_, C), _, false) ->
-          (  nonvar(Cs) -> codes_or_vars(Cs, PI)
-          ;  false
-          )
+          codes_or_vars(Cs, PI)
        ;  integer(C) ->
           throw(error(representation_error(character_code), PI))
        ;  throw(error(type_error(integer, C), PI))
@@ -1416,15 +1415,13 @@ number_chars(N, Chs) :-
              error(E, _),
              builtins:throw(error(E, number_chars/2))
             ),
-       '$chars_to_number'(Chs, Nx),
-       Nx = N
+       '$chars_to_number'(Chs, N)
     ;  must_be_number(N, number_chars/2),
        (  var(Chs) -> true
        ;  can_be_list(Chs, number_chars/2),
           chars_or_vars(Chs, number_chars/2)
        ),
-       '$number_to_chars'(N, Chsx),
-       Chsx = Chs
+       '$number_to_chars'(N, Chs)
     ).
 
 list_of_ints(Ns) :-
@@ -1438,15 +1435,13 @@ number_codes(N, Chs) :-
             error(E, _),
             builtins:throw(error(E, number_codes/2))
            ),
-      '$codes_to_number'(Chs, Nx),
-      Nx = N
+      '$codes_to_number'(Chs, N)
    ;  must_be_number(N, number_codes/2),
       (  var(Chs) -> true
-      ;  can_be_list(Chs, number_codes/2)
-      ,  codes_or_vars(Chs, number_codes/2)
+      ;  can_be_list(Chs, number_codes/2),
+         codes_or_vars(Chs, number_codes/2)
       ),
-      '$number_to_codes'(N, Chsx),
-      Chsx = Chs
+      '$number_to_codes'(N, Chs)
    ).
 
 subsumes_term(General, Specific) :-
