@@ -1099,6 +1099,7 @@ fn generate_instruction_preface() -> TokenStream {
             #[inline]
             pub fn is_head_instr(&self) -> bool {
                 match self {
+                    Instruction::Deallocate |
                     Instruction::GetConstant(..) |
                     Instruction::GetList(..) |
                     Instruction::GetPartialString(..) |
