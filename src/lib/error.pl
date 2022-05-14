@@ -1,5 +1,5 @@
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   Written September 2018 by Markus Triska (triska@metalevel.at)
+   Written 2018-2022 by Markus Triska (triska@metalevel.at)
    I place this code in the public domain. Use it in any way you want.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
@@ -48,6 +48,7 @@ must_be_(integer, Term) :- check_(integer, integer, Term).
 must_be_(atom, Term)    :- check_(atom, atom, Term).
 must_be_(character, T)  :- check_(error:character, character, T).
 must_be_(chars, Ls) :-
+        can_be(chars, Ls), % prioritize type errors over instantiation errors
         must_be(list, Ls),
         (   '$is_partial_string'(Ls) ->
             % The expected case (success) uses a very fast test.
