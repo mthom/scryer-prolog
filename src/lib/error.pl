@@ -128,7 +128,11 @@ can_be(Type, Term) :-
 can_(integer, Term) :- integer(Term).
 can_(atom, Term)    :- atom(Term).
 can_(character, T)  :- character(T).
-can_(chars, Ls)     :- '$is_partial_string'(Ls).
+can_(chars, Ls)     :-
+        (   '$is_partial_string'(Ls) -> true
+        ;   can_be(list, Ls),
+            can_be_chars(Ls)
+        ).
 can_(list, Term)    :- list_or_partial_list(Term).
 can_(boolean, Term) :- boolean(Term).
 can_(term, Term)    :-
@@ -136,6 +140,12 @@ can_(term, Term)    :-
             true
         ;   type_error(term, Term, can_be/2)
         ).
+
+can_be_chars(Var) :- var(Var), !.
+can_be_chars([]).
+can_be_chars([X|Xs]) :-
+        can_be(character, X),
+        can_be_chars(Xs).
 
 list_or_partial_list(Ls) :-
         '$skip_max_list'(_, _, Ls, Rs),
