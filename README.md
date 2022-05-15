@@ -205,6 +205,11 @@ or&nbsp;`.` to abort the search and return to the
 toplevel&nbsp;prompt. Press&nbsp;`f` to see the next 5 answers, and
 `a` to see all answers. Press&nbsp;`h` to show a help message.
 
+Use `TAB` to complete atoms and predicate names in queries. For
+instance, after consulting the program above, typing `decl` followed
+by&nbsp;`TAB` yields `declarative_world`. Press&nbsp;`TAB` repeatedly
+to cycle through alternative completions.
+
 To quit Scryer Prolog, use the standard predicate `halt/0`:
 
 ```
