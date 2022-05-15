@@ -5,26 +5,26 @@
 
    Currently, two predicates are provided:
 
-   -  load_html(+Source, -Es, +Options)
-   -  load_xml(+Source, -Es, +Options)
+     -  load_html(+Source, -Es, +Options)
+     -  load_xml(+Source, -Es, +Options)
 
    These predicates parse HTML and XML documents, respectively.
 
    Source must be one of:
 
-   - a list of characters with the document contents
-   - stream(S), specifying a stream S from which to read the content
-   - file(Name), where Name is a list of characters specifying a file name.
+     - a list of characters with the document contents
+     - stream(S), specifying a stream S from which to read the content
+     - file(Name), where Name is a list of characters specifying a file name.
 
    Es is unified with the abstract syntax tree of the parsed document,
    represented as a list of elements where each is of the form:
 
-   * a list of characters, representing text
-   * element(Name, Attrs, Children)
-     - Name, an atom, is the name of the tag
-     - Attrs is a list of Key=Value pairs:
-       Key is an atom, and Value is a list of characters
-     - Children is a list of elements as specified here.
+     * a list of characters, representing text
+     * element(Name, Attrs, Children)
+       - Name, an atom, is the name of the tag
+       - Attrs is a list of Key=Value pairs:
+         Key is an atom, and Value is a list of characters
+       - Children is a list of elements as specified here.
 
    Currently, Options are ignored. In the future, more options may be
    provided to control parsing.
