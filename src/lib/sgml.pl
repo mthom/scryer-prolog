@@ -1,6 +1,6 @@
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    Predicates for parsing HTML and XML documents.
-   Written June 2020 by Markus Triska (triska@metalevel.at)
+   Written 2020-2022 by Markus Triska (triska@metalevel.at)
    Part of Scryer Prolog.
 
    Currently, two predicates are provided:
@@ -63,20 +63,32 @@
 :- use_module(library(charsio)).
 
 load_html(Source, Es, Options) :-
+        must_be_source(Source, load_html/3),
+        must_be(list, Options),
         load_structure_(Source, Es, Options, html).
 load_xml(Source, Es, Options) :-
+        must_be_source(Source, load_xml/3),
+        must_be(list, Options),
         load_structure_(Source, Es, Options, xml).
+
+must_be_source(Source, Context) :-
+        (   var(Source) -> instantiation_error(Context)
+        ;   is_sgml_source(Source) -> true
+        ;   domain_error(sgml_source, Source, Context)
+        ).
+
+is_sgml_source(file(Fs)) :- must_be(chars, Fs).
+is_sgml_source(stream(_)).
+is_sgml_source([]).
+is_sgml_source([C|Cs]) :- must_be(chars, [C|Cs]).
 
 load_structure_([], [], _, _).
 load_structure_([C|Cs], [E], Options, What) :-
         load_(What, [C|Cs], E, Options).
 load_structure_(file(Fs), [E], Options, What) :-
-        must_be(list, Options),
-        must_be(chars, Fs),
         once(phrase_from_file(seq(Cs), Fs)),
         load_(What, Cs, E, Options).
 load_structure_(stream(Stream), [E], Options, What) :-
-        must_be(list, Options),
         get_n_chars(Stream, _, Cs),
         load_(What, Cs, E, Options).
 
