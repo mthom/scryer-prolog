@@ -21,7 +21,7 @@
 
    * a list of characters, representing text
    * element(Name, Attrs, Children)
-     - Name is the name of the tag
+     - Name, an atom, is the name of the tag
      - Attrs is a list of Key=Value pairs:
        Key is an atom, and Value is a list of characters
      - Children is a list of elements as specified here.
