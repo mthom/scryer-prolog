@@ -10,9 +10,11 @@
 
    These predicates parse HTML and XML documents, respectively.
 
-   Source must be a stream, specified as stream(S), or a file,
-   specified as file(Name), where Name is a list of characters, or a
-   list of characters with the document contents.
+   Source must be one of:
+
+   - a list of characters with the document contents
+   - stream(S), specifying a stream S from which to read the content
+   - file(Name), where Name is a list of characters specifying a file name.
 
    Es is unified with the abstract syntax tree of the parsed document,
    represented as a list of elements where each is of the form:
