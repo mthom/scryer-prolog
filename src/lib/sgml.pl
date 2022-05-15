@@ -70,9 +70,8 @@ load_structure_([C|Cs], [E], Options, What) :-
         load_(What, [C|Cs], E, Options).
 load_structure_(file(Fs), [E], Options, What) :-
         must_be(list, Options),
-        must_be(list, Fs),
-        atom_chars(File, Fs),
-        once(phrase_from_file(seq(Cs), File)),
+        must_be(chars, Fs),
+        once(phrase_from_file(seq(Cs), Fs)),
         load_(What, Cs, E, Options).
 load_structure_(stream(Stream), [E], Options, What) :-
         must_be(list, Options),
