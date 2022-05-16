@@ -1258,10 +1258,12 @@ atom_chars(Atom, List) :-
        (  var(Tail) ->
           throw(error(instantiation_error, atom_chars/2))
        ;  ground(List) ->
+          chars_or_vars(List, atom_chars/2),
           '$atom_chars'(Atom, List)
        ;  throw(error(instantiation_error, atom_chars/2))
        )
     ;  atom(Atom) ->
+       chars_or_vars(List, atom_chars/2),
        '$atom_chars'(Atom, List)
     ;  throw(error(type_error(atom, Atom), atom_chars/2))
     ).
@@ -1275,11 +1277,13 @@ atom_codes(Atom, List) :-
     (  var(Atom) ->
        (  var(Tail) ->
           throw(error(instantiation_error, atom_codes/2))
-       ;  ground(List), Tail == [] ->
+       ;  ground(List) ->
+          codes_or_vars(List, atom_codes/2),
           '$atom_codes'(Atom, List)
        ;  throw(error(instantiation_error, atom_codes/2))
        )
     ;  atom(Atom) ->
+       codes_or_vars(List, atom_codes/2),
        '$atom_codes'(Atom, List)
     ;  throw(error(type_error(atom, Atom), atom_codes/2))
     ).
