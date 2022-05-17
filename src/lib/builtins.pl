@@ -860,7 +860,8 @@ module_asserta_clause(Head, Body, Module) :-
     ).
 
 asserta_clause(Head, Body) :-
-    (  var(Head) -> throw(error(instantiation_error, asserta/1))
+    (  var(Head) ->
+       throw(error(instantiation_error, asserta/1))
     ;  callable(Head), functor(Head, Name, Arity) ->
        ( Name == (:),
          Arity =:= 2 ->
@@ -876,7 +877,8 @@ asserta_clause(Head, Body) :-
           call_asserta(Head, Body, Name, Arity, user)
        ; '$no_such_predicate'(user, Head) ->
           call_asserta(Head, Body, Name, Arity, user)
-       ;  throw(error(permission_error(modify, static_procedure, Name/Arity), asserta/1))
+       ;  throw(error(permission_error(modify, static_procedure, Name/Arity),
+                      asserta/1))
        )
     ;  throw(error(type_error(callable, Head), asserta/1))
     ).
@@ -885,6 +887,9 @@ asserta_clause(Head, Body) :-
 
 asserta(Clause0) :-
     loader:strip_module(Clause0, Module, Clause),
+    (  var(Module) -> Module = user
+    ;  true
+    ),
     (  Clause \= (_ :- _) ->
        Head = Clause,
        Body = true,
@@ -941,6 +946,9 @@ assertz_clause(Head, Body) :-
 
 assertz(Clause0) :-
     loader:strip_module(Clause0, Module, Clause),
+    (  var(Module) -> Module = user
+    ;  true
+    ),
     (  Clause \= (_ :- _) ->
        Head = Clause,
        Body = true,
@@ -1088,6 +1096,9 @@ abolish(Pred) :-
     (  var(Pred) ->
        throw(error(instantiation_error, abolish/1))
     ;  Pred = Module:InnerPred ->
+       (  var(Module) -> Module = user
+       ;  true
+       ),
        module_abolish(InnerPred, Module)
     ;  Pred = Name/Arity ->
        (  var(Name)  ->
