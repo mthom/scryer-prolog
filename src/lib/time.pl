@@ -119,7 +119,7 @@ report_time(ID) :-
         time_state(ID, T0),
         '$cpu_now'(T),
         Time is T - T0,
-        (   bb_get('$first_answer', true) ->
+        (   bb_get('$answer_count', 0) ->
             Pre = "   ", Post = ""
         ;   Pre = "", Post = "   "
         ),
