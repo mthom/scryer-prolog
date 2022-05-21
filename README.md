@@ -202,8 +202,9 @@ predicates it defines. For example, with the program shown above:
 
 Press `SPACE` to show further answers, if any exist. Press `RETURN`
 or&nbsp;`.` to abort the search and return to the
-toplevel&nbsp;prompt. Press&nbsp;`f` to see the next 5 answers, and
-`a` to see all answers. Press&nbsp;`h` to show a help message.
+toplevel&nbsp;prompt. Press&nbsp;`f` to see up to the next multiple of
+5 answers, and `a` to see all answers. Press&nbsp;`h` to show a help
+message.
 
 Use `TAB` to complete atoms and predicate names in queries. For
 instance, after consulting the program above, typing `decl` followed

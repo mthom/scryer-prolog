@@ -134,7 +134,6 @@ run_goals([Goal|_]) :-
     halt.
 
 repl :-
-    bb_put('$first_answer', true),
     catch(read_and_match, E, print_exception(E)),
     false. %% this is for GC, until we get actual GC.
 repl :-
@@ -185,7 +184,7 @@ submit_query_and_print_results_(Term, VarList) :-
     write_eqs_and_read_input(B, VarList),
     !.
 submit_query_and_print_results_(_, _) :-
-    (   bb_get('$first_answer', true) ->
+    (   bb_get('$answer_count', 0) ->
         write('   ')
     ;   true
     ),
@@ -199,7 +198,7 @@ submit_query_and_print_results(Term0, VarList) :-
                     % in the first argument, which is done by call/N
     ;  expand_goal(Term0, user, Term)
     ),
-    bb_put('$first_answer', true),
+    bb_put('$answer_count', 0),
     submit_query_and_print_results_(Term, VarList).
 
 
@@ -305,11 +304,13 @@ write_eqs_and_read_input(B, VarList) :-
     append([AttrGoalVars | EquationVars], Vars1),
     term_variables(Vars1, Vars2), % deduplicate vars of Vars1 but preserve their order.
     charsio:extend_var_list(Vars2, VarList, NewVarList0, fabricated),
-    (   bb_get('$first_answer', true) ->
-        write('   '),
-        bb_put('$first_answer', false)
+    bb_get('$answer_count', Count),
+    (   Count =:= 0 ->
+        write('   ')
     ;   true
     ),
+    Count1 is Count + 1,
+    bb_put('$answer_count', Count1),
     (  B0 == B ->
        (  Goals == [] ->
           write('true.'), nl
@@ -353,7 +354,9 @@ read_input(ThreadedGoals, NewVarList) :-
        bb_put('$report_all', true),
        nl, write(';  '), false
     ;  C = f ->
-       bb_put('$report_n_more', 5),
+       bb_get('$answer_count', Count),
+       More is 5 - Count mod 5,
+       bb_put('$report_n_more', More),
        nl, write(';  '), false
     ;  read_input(ThreadedGoals, NewVarList)
     ).
