@@ -112,30 +112,6 @@ fn setup_predicate_indicator(term: &mut Term) -> Result<PredicateKey, Compilatio
     }
 }
 
-/*
-fn setup_scoped_predicate_indicator(term: &mut Term) -> Result<ScopedPredicateKey, CompilationError>
-{
-    match term {
-        Term::Clause(_, ref name, ref mut terms, Some(_))
-            if name.as_str() == ":" && terms.len() == 2 =>
-        {
-            let mut predicate_indicator = *terms.pop().unwrap();
-            let module_name = *terms.pop().unwrap();
-
-            let module_name = module_name
-                .to_constant()
-                .and_then(|c| c.to_atom())
-                .ok_or(CompilationError::InvalidModuleExport)?;
-
-            let key = setup_predicate_indicator(&mut predicate_indicator)?;
-
-            Ok((module_name, key))
-        }
-        _ => Err(CompilationError::InvalidModuleExport),
-    }
-}
-*/
-
 fn setup_module_export(
     mut term: Term,
     atom_tbl: &mut AtomTable,
@@ -279,6 +255,7 @@ fn setup_qualified_import(
  * -
  * ?
  */
+
 fn setup_meta_predicate<'a, LS: LoadState<'a>>(
     mut terms: Vec<Term>,
     loader: &mut Loader<'a, LS>,

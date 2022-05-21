@@ -585,16 +585,11 @@ impl MachineError {
 pub enum CompilationError {
     Arithmetic(ArithmeticError),
     ParserError(ParserError),
-    // BadPendingByte,
     CannotParseCyclicTerm,
-    // ExpandedTermsListNotAList,
     ExpectedRel,
-    // ExpectedTopLevelTerm,
     InadmissibleFact,
     InadmissibleQueryTerm,
     InconsistentEntry,
-    // InvalidDoubleQuotesDecl,
-    // InvalidHook,
     InvalidMetaPredicateDecl,
     InvalidModuleDecl,
     InvalidModuleExport,
@@ -631,18 +626,12 @@ impl CompilationError {
             &CompilationError::Arithmetic(..) => {
                 functor!(atom!("arithmetic_error"))
             }
-            // &CompilationError::BadPendingByte =>
-            //     functor!(atom_from_ss!("bad_pending_byte"), atom_tbl),
             &CompilationError::CannotParseCyclicTerm => {
                 functor!(atom!("cannot_parse_cyclic_term"))
             }
-            // &CompilationError::ExpandedTermsListNotAList =>
-            //     functor!(atom_tbl.build_with_static_str("expanded_terms_list_is_not_a_list")),
             &CompilationError::ExpectedRel => {
                 functor!(atom!("expected_relation"))
             }
-            // &CompilationError::ExpectedTopLevelTerm =>
-            //     functor!(atom_from_ss!("expected_atom_or_cons_or_clause"), atom_tbl),
             &CompilationError::InadmissibleFact => {
                 functor!(atom!("inadmissible_fact"))
             }
@@ -652,10 +641,6 @@ impl CompilationError {
             &CompilationError::InconsistentEntry => {
                 functor!(atom!("inconsistent_entry"))
             }
-            // &CompilationError::InvalidDoubleQuotesDecl =>
-            //     functor!(atom_from_ss!("invalid_double_quotes_declaration"), atom_tbl),
-            // &CompilationError::InvalidHook =>
-            //     functor!(atom_from_ss!("invalid_hook"), atom_tbl),
             &CompilationError::InvalidMetaPredicateDecl => {
                 functor!(atom!("invalid_meta_predicate_decl"))
             }

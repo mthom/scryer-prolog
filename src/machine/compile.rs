@@ -52,7 +52,7 @@ pub(super) fn compile_relation(
     match tl {
         &TopLevel::Query(_) => Err(CompilationError::ExpectedRel),
         &TopLevel::Predicate(ref clauses) => cg.compile_predicate(&clauses),
-        &TopLevel::Fact(ref fact, ..) => Ok(cg.compile_fact(fact)),
+        &TopLevel::Fact(ref fact, ..) => cg.compile_fact(fact),
         &TopLevel::Rule(ref rule, ..) => cg.compile_rule(rule),
     }
 }

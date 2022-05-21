@@ -52,7 +52,7 @@ impl MachineState {
         };
 
         inner.add_lines_read(num_lines_read);
-        Ok(write_term_to_heap(&term, &mut self.heap, &mut self.atom_tbl))
+        write_term_to_heap(&term, &mut self.heap, &mut self.atom_tbl)
     }
 }
 
@@ -245,7 +245,7 @@ pub(crate) fn write_term_to_heap(
     term: &Term,
     heap: &mut Heap,
     atom_tbl: &mut AtomTable,
-) -> TermWriteResult {
+) -> Result<TermWriteResult, ParserError> {
     let term_writer = TermWriter::new(heap, atom_tbl);
     term_writer.write_term_to_heap(term)
 }
@@ -311,7 +311,7 @@ impl<'a, 'b> TermWriter<'a, 'b> {
         }
     }
 
-    fn write_term_to_heap(mut self, term: &'a Term) -> TermWriteResult {
+    fn write_term_to_heap(mut self, term: &'a Term) -> Result<TermWriteResult, ParserError> {
         let heap_loc = self.heap.len();
 
         for term in breadth_first_iter(term, true) {
@@ -334,6 +334,10 @@ impl<'a, 'b> TermWriter<'a, 'b> {
                     self.push_stub_addr();
                 }
                 &TermRef::Clause(Level::Root, _, ref ct, subterms) => {
+                    if subterms.len() > MAX_ARITY {
+                        return Err(ParserError::ExceededMaxArity);
+                    }
+
                     self.heap.push(if subterms.len() == 0 {
                         heap_loc_as_cell!(heap_loc + 1)
                     } else {
@@ -413,9 +417,9 @@ impl<'a, 'b> TermWriter<'a, 'b> {
             self.modify_head_of_queue(&term, h);
         }
 
-        TermWriteResult {
+        Ok(TermWriteResult {
             heap_loc,
             var_dict: self.var_dict,
-        }
+        })
     }
 }

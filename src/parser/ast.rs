@@ -371,28 +371,29 @@ pub enum ArithmeticError {
 #[derive(Debug)]
 pub enum ParserError {
     BackQuotedString(usize, usize),
-    UnexpectedChar(char, usize, usize),
-    UnexpectedEOF,
+    ExceededMaxArity,
     IO(IOError),
     IncompleteReduction(usize, usize),
     InvalidSingleQuotedCharacter(char),
+    LexicalError(lexical::Error),
     MissingQuote(usize, usize),
     NonPrologChar(usize, usize),
     ParseBigInt(usize, usize),
-    LexicalError(lexical::Error),
+    UnexpectedChar(char, usize, usize),
+    UnexpectedEOF,
     Utf8Error(usize, usize),
 }
 
 impl ParserError {
     pub fn line_and_col_num(&self) -> Option<(usize, usize)> {
         match self {
-            &ParserError::BackQuotedString(line_num, col_num)
-            | &ParserError::UnexpectedChar(_, line_num, col_num)
-            | &ParserError::IncompleteReduction(line_num, col_num)
-            | &ParserError::MissingQuote(line_num, col_num)
-            | &ParserError::NonPrologChar(line_num, col_num)
-            | &ParserError::ParseBigInt(line_num, col_num)
-            | &ParserError::Utf8Error(line_num, col_num) => Some((line_num, col_num)),
+            &ParserError::BackQuotedString(line_num, col_num) |
+            &ParserError::IncompleteReduction(line_num, col_num) |
+            &ParserError::MissingQuote(line_num, col_num) |
+            &ParserError::NonPrologChar(line_num, col_num) |
+            &ParserError::ParseBigInt(line_num, col_num) |
+            &ParserError::UnexpectedChar(_, line_num, col_num) |
+            &ParserError::Utf8Error(line_num, col_num) => Some((line_num, col_num)),
             _ => None,
         }
     }
@@ -400,8 +401,7 @@ impl ParserError {
     pub fn as_atom(&self) -> Atom {
         match self {
             ParserError::BackQuotedString(..) => atom!("back_quoted_string"),
-            ParserError::UnexpectedChar(..) => atom!("unexpected_char"),
-            ParserError::UnexpectedEOF => atom!("unexpected_end_of_file"),
+            ParserError::ExceededMaxArity => atom!("exceeded_max_arity"),
             ParserError::IncompleteReduction(..) => atom!("incomplete_reduction"),
             ParserError::InvalidSingleQuotedCharacter(..) => atom!("invalid_single_quoted_character"),
             ParserError::IO(_) => atom!("input_output_error"),
@@ -409,6 +409,8 @@ impl ParserError {
             ParserError::MissingQuote(..) => atom!("missing_quote"),
             ParserError::NonPrologChar(..) => atom!("non_prolog_character"),
             ParserError::ParseBigInt(..) => atom!("cannot_parse_big_int"),
+            ParserError::UnexpectedChar(..) => atom!("unexpected_char"),
+            ParserError::UnexpectedEOF => atom!("unexpected_end_of_file"),
             ParserError::Utf8Error(..) => atom!("utf8_conversion_error"),
         }
     }

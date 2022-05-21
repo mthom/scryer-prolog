@@ -865,6 +865,10 @@ impl<'b> CodeGenerator<'b> {
                         };
 
                         self.compile_query_line(term, term_loc, code, num_perm_vars, is_exposed);
+
+                        if self.marker.max_reg_allocated() > MAX_ARITY {
+                            return Err(CompilationError::from(ParserError::ExceededMaxArity));
+                        }
                     }
                 }
             }
@@ -934,6 +938,10 @@ impl<'b> CodeGenerator<'b> {
         let iter = FactIterator::from_rule_head_clause(args);
         let mut fact = self.compile_target::<FactInstruction, _>(iter, GenContext::Head, false);
 
+        if self.marker.max_reg_allocated() > MAX_ARITY {
+            return Err(CompilationError::from(ParserError::ExceededMaxArity));
+        }
+
         let mut unsafe_var_marker = UnsafeVarMarker::new();
 
         if !fact.is_empty() {
@@ -971,7 +979,7 @@ impl<'b> CodeGenerator<'b> {
         UnsafeVarMarker::from_safe_vars(safe_vars)
     }
 
-    pub(crate) fn compile_fact(&mut self, term: &Term) -> Code {
+    pub(crate) fn compile_fact(&mut self, term: &Term) -> Result<Code, CompilationError> {
         self.update_var_count(post_order_iter(term));
 
         let mut vs = VariableFixtures::new();
@@ -993,6 +1001,10 @@ impl<'b> CodeGenerator<'b> {
                 false,
             );
 
+            if self.marker.max_reg_allocated() > MAX_ARITY {
+                return Err(CompilationError::from(ParserError::ExceededMaxArity));
+            }
+
             self.mark_unsafe_fact_vars(&mut compiled_fact);
 
             if !compiled_fact.is_empty() {
@@ -1001,7 +1013,7 @@ impl<'b> CodeGenerator<'b> {
         }
 
         code.push(instr!("proceed"));
-        code
+        Ok(code)
     }
 
     fn compile_query_line(
@@ -1111,7 +1123,7 @@ impl<'b> CodeGenerator<'b> {
             self.global_jmp_by_locs_offset = self.jmp_by_locs.len();
 
             let clause_code = match clause {
-                &PredicateClause::Fact(ref fact, ..) => self.compile_fact(fact),
+                &PredicateClause::Fact(ref fact, ..) => self.compile_fact(fact)?,
                 &PredicateClause::Rule(ref rule, ..) => self.compile_rule(rule)?,
             };
 
