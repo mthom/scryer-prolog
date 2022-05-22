@@ -129,6 +129,13 @@ On Windows, Scryer Prolog is easier to build inside a [MSYS2](https://www.msys2.
 environment as some crates may require native C compilation. However, 
 the resulting binary does not need MSYS2 to run. When executing Scryer in a shell, it is recommended to use a more advanced shell than mintty (the default MSYS2 shell). The [Windows Terminal](https://github.com/microsoft/terminal) works correctly.
 
+To build a Windows Installer, you'll need first Scryer Prolog compiled in release mode, then, with WiX Toolset installed, execute:
+```
+candle.exe scryer-prolog.wxs
+light.exe scryer-prolog.wixobj
+```
+It will generate a very basic MSI file which installs the main executable and a shortcut in the Start Menu. It can be installed with a double-click. To uninstall, go to the Control Panel and uninstall as usual.
+
 Scryer Prolog must be built with **Rust 1.57 and up**.
 
 ### Docker Install
