@@ -5,6 +5,7 @@ use crate::atom_table::*;
 use crate::forms::*;
 use crate::iterators::*;
 use crate::machine::heap::*;
+use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
 use crate::machine::machine_state::MachineState;
 use crate::machine::streams::*;
@@ -40,14 +41,16 @@ impl MachineState {
         &mut self,
         mut inner: Stream,
         op_dir: &OpDir,
-    ) -> Result<TermWriteResult, ParserError> {
+    ) -> Result<TermWriteResult, CompilationError> {
         let (term, num_lines_read) = {
             let prior_num_lines_read = inner.lines_read();
             let mut parser = Parser::new(inner, self);
 
             parser.add_lines_read(prior_num_lines_read);
 
-            let term = parser.read_term(&CompositeOpDir::new(op_dir, None))?;
+            let term = parser.read_term(&CompositeOpDir::new(op_dir, None))
+                .map_err(CompilationError::from)?;
+
             (term, parser.lines_read() - prior_num_lines_read)
         };
 
@@ -245,7 +248,7 @@ pub(crate) fn write_term_to_heap(
     term: &Term,
     heap: &mut Heap,
     atom_tbl: &mut AtomTable,
-) -> Result<TermWriteResult, ParserError> {
+) -> Result<TermWriteResult, CompilationError> {
     let term_writer = TermWriter::new(heap, atom_tbl);
     term_writer.write_term_to_heap(term)
 }
@@ -311,7 +314,7 @@ impl<'a, 'b> TermWriter<'a, 'b> {
         }
     }
 
-    fn write_term_to_heap(mut self, term: &'a Term) -> Result<TermWriteResult, ParserError> {
+    fn write_term_to_heap(mut self, term: &'a Term) -> Result<TermWriteResult, CompilationError> {
         let heap_loc = self.heap.len();
 
         for term in breadth_first_iter(term, true) {
@@ -335,7 +338,7 @@ impl<'a, 'b> TermWriter<'a, 'b> {
                 }
                 &TermRef::Clause(Level::Root, _, ref ct, subterms) => {
                     if subterms.len() > MAX_ARITY {
-                        return Err(ParserError::ExceededMaxArity);
+                        return Err(CompilationError::ExceededMaxArity);
                     }
 
                     self.heap.push(if subterms.len() == 0 {

@@ -452,6 +452,9 @@ impl MachineState {
             SessionError::OpIsInfixAndPostFix(op) => {
                 self.permission_error(Permission::Create, atom!("operator"), functor!(op))
             }
+            SessionError::CompilationError(CompilationError::ExceededMaxArity) => {
+                self.representation_error(RepFlag::MaxArity)
+            }
             SessionError::CompilationError(err) => self.syntax_error(err),
             SessionError::PredicateNotMultifileOrDiscontiguous(compilation_target, key) => {
                 let functor_stub = functor_stub(key.0, key.1);
@@ -586,6 +589,7 @@ pub enum CompilationError {
     Arithmetic(ArithmeticError),
     ParserError(ParserError),
     CannotParseCyclicTerm,
+    ExceededMaxArity,
     ExpectedRel,
     InadmissibleFact,
     InadmissibleQueryTerm,
@@ -628,6 +632,9 @@ impl CompilationError {
             }
             &CompilationError::CannotParseCyclicTerm => {
                 functor!(atom!("cannot_parse_cyclic_term"))
+            }
+            &CompilationError::ExceededMaxArity => {
+                functor!(atom!("exceeded_max_arity"))
             }
             &CompilationError::ExpectedRel => {
                 functor!(atom!("expected_relation"))
@@ -900,9 +907,7 @@ pub enum ExistenceError {
 pub enum SessionError {
     CompilationError(CompilationError),
     CannotOverwriteBuiltIn(PredicateKey),
-    // CannotOverwriteImport(Atom),
     ExistenceError(ExistenceError),
-    // InvalidFileName(Atom),
     ModuleDoesNotContainExport(Atom, PredicateKey),
     ModuleCannotImportSelf(Atom),
     NamelessEntry,

@@ -867,7 +867,7 @@ impl<'b> CodeGenerator<'b> {
                         self.compile_query_line(term, term_loc, code, num_perm_vars, is_exposed);
 
                         if self.marker.max_reg_allocated() > MAX_ARITY {
-                            return Err(CompilationError::from(ParserError::ExceededMaxArity));
+                            return Err(CompilationError::ExceededMaxArity);
                         }
                     }
                 }
@@ -939,7 +939,7 @@ impl<'b> CodeGenerator<'b> {
         let mut fact = self.compile_target::<FactInstruction, _>(iter, GenContext::Head, false);
 
         if self.marker.max_reg_allocated() > MAX_ARITY {
-            return Err(CompilationError::from(ParserError::ExceededMaxArity));
+            return Err(CompilationError::ExceededMaxArity);
         }
 
         let mut unsafe_var_marker = UnsafeVarMarker::new();
@@ -1002,7 +1002,7 @@ impl<'b> CodeGenerator<'b> {
             );
 
             if self.marker.max_reg_allocated() > MAX_ARITY {
-                return Err(CompilationError::from(ParserError::ExceededMaxArity));
+                return Err(CompilationError::ExceededMaxArity);
             }
 
             self.mark_unsafe_fact_vars(&mut compiled_fact);

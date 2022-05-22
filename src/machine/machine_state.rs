@@ -602,7 +602,7 @@ impl MachineState {
                     return Ok(unify_fn!(*self, var_names_offset, var_names_addr));
                 }
                 Err(err) => {
-                    if let ParserError::UnexpectedEOF = err {
+                    if let CompilationError::ParserError(ParserError::UnexpectedEOF) = err {
                         self.eof_action(
                             self.registers[2],
                             stream,

@@ -371,7 +371,6 @@ pub enum ArithmeticError {
 #[derive(Debug)]
 pub enum ParserError {
     BackQuotedString(usize, usize),
-    ExceededMaxArity,
     IO(IOError),
     IncompleteReduction(usize, usize),
     InvalidSingleQuotedCharacter(char),
@@ -401,7 +400,6 @@ impl ParserError {
     pub fn as_atom(&self) -> Atom {
         match self {
             ParserError::BackQuotedString(..) => atom!("back_quoted_string"),
-            ParserError::ExceededMaxArity => atom!("exceeded_max_arity"),
             ParserError::IncompleteReduction(..) => atom!("incomplete_reduction"),
             ParserError::InvalidSingleQuotedCharacter(..) => atom!("invalid_single_quoted_character"),
             ParserError::IO(_) => atom!("input_output_error"),

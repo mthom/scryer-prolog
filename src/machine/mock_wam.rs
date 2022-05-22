@@ -39,14 +39,14 @@ impl MockWAM {
     pub fn write_parsed_term_to_heap(
         &mut self,
         input_stream: Stream,
-    ) -> Result<TermWriteResult, ParserError> {
+    ) -> Result<TermWriteResult, CompilationError> {
         self.machine_st.read(input_stream, &self.op_dir)
     }
 
     pub fn parse_and_write_parsed_term_to_heap(
         &mut self,
         term_string: &'static str,
-    ) -> Result<TermWriteResult, ParserError> {
+    ) -> Result<TermWriteResult, CompilationError> {
         let stream = Stream::from_static_string(term_string, &mut self.machine_st.arena);
         self.write_parsed_term_to_heap(stream)
     }
@@ -54,7 +54,7 @@ impl MockWAM {
     pub fn parse_and_print_term(
         &mut self,
         term_string: &'static str,
-    ) -> Result<String, ParserError> {
+    ) -> Result<String, CompilationError> {
         let term_write_result = self.parse_and_write_parsed_term_to_heap(term_string)?;
 
         print_heap_terms(self.machine_st.heap.iter(), term_write_result.heap_loc);
@@ -200,7 +200,7 @@ pub(crate) fn write_parsed_term_to_heap(
     machine_st: &mut MachineState,
     input_stream: Stream,
     op_dir: &OpDir,
-) -> Result<TermWriteResult, ParserError> {
+) -> Result<TermWriteResult, CompilationError> {
     machine_st.read(input_stream, op_dir)
 }
 
@@ -209,7 +209,7 @@ pub(crate) fn parse_and_write_parsed_term_to_heap(
     machine_st: &mut MachineState,
     term_string: &'static str,
     op_dir: &OpDir,
-) -> Result<TermWriteResult, ParserError> {
+) -> Result<TermWriteResult, CompilationError> {
     let stream = Stream::from_static_string(term_string, &mut machine_st.arena);
     write_parsed_term_to_heap(machine_st, stream, op_dir)
 }

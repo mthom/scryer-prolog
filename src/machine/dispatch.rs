@@ -188,7 +188,7 @@ impl Machine {
                 let value = self.machine_st.registers[2];
                 unify_fn!(&mut self.machine_st, value, heap_loc_as_cell!(offset.heap_loc));
             }
-            Err(ParserError::UnexpectedEOF) => {
+            Err(CompilationError::ParserError(ParserError::UnexpectedEOF)) => {
                 let value = self.machine_st.registers[2];
                 self.machine_st.unify_atom(atom!("end_of_file"), value);
             }
