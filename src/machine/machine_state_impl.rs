@@ -1546,7 +1546,10 @@ impl MachineState {
                                         }
                                     } else {
                                         self.pdl.clear();
-                                        return Some(n1.chars().next().cmp(&Some(c2)));
+                                        return Some(
+                                            n1.chars().next().cmp(&Some(c2))
+                                              .then(Ordering::Greater)
+                                        );
                                     }
                                 }
                                 _ => {
@@ -1564,7 +1567,10 @@ impl MachineState {
                                         }
                                     } else {
                                         self.pdl.clear();
-                                        return Some(Some(c1).cmp(&n2.chars().next()));
+                                        return Some(
+                                            Some(c1).cmp(&n2.chars().next())
+                                                    .then(Ordering::Less)
+                                        );
                                     }
                                 }
                                 (HeapCellValueTag::Char, c2) => {

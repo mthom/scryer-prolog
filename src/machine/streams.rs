@@ -139,6 +139,17 @@ impl Read for InputFileStream {
     }
 }
 
+impl StreamLayout<CharReader<InputFileStream>> {
+    #[inline]
+    fn position(&mut self) -> Option<u64> {
+        // stream is the internal CharReader. subtract
+        // its pending buffer length from position.
+        self.get_mut().file.seek(SeekFrom::Current(0))
+            .map(|pos| pos  - self.stream.rem_buf_len() as u64)
+            .ok()
+    }
+}
+
 #[derive(Debug)]
 pub struct OutputFileStream {
     file_name: Atom,
@@ -813,8 +824,8 @@ impl Stream {
     pub(crate) fn position(&mut self) -> Option<(u64, usize)> {
         // returns lines_read, position.
         let result = match self {
-            Stream::InputFile(ref mut file_stream) => {
-                file_stream.get_mut().file.seek(SeekFrom::Current(0)).ok()
+            Stream::InputFile(file_stream) => {
+                file_stream.position()
             }
             Stream::NamedTcp(..)
             | Stream::NamedTls(..)
@@ -838,6 +849,7 @@ impl Stream {
                 } = &mut **stream_layout;
 
                 stream.get_mut().file.seek(SeekFrom::Start(position)).unwrap();
+                stream.reset_buffer(); // flush the internal buffer.
 
                 if let Ok(metadata) = stream.get_ref().file.metadata() {
                     *past_end_of_stream = position > metadata.len();
@@ -853,7 +865,6 @@ impl Stream {
             Stream::Byte(stream) => stream.past_end_of_stream,
             Stream::InputFile(stream) => stream.past_end_of_stream,
             Stream::OutputFile(stream) => stream.past_end_of_stream,
-            // Stream::PausedProlog(stream) => stream.paused_stream.past_end_of_stream(),
             Stream::StaticString(stream) => stream.past_end_of_stream,
             Stream::NamedTcp(stream) => stream.past_end_of_stream,
             Stream::NamedTls(stream) => stream.past_end_of_stream,
@@ -894,6 +905,8 @@ impl Stream {
         }
 
         if let Stream::InputFile(stream_layout) = self {
+            let position = stream_layout.position();
+
             let StreamLayout {
                 past_end_of_stream,
                 stream,
@@ -902,7 +915,7 @@ impl Stream {
 
             match stream.get_ref().file.metadata() {
                 Ok(metadata) => {
-                    if let Ok(position) = stream.get_mut().file.seek(SeekFrom::Current(0)) {
+                    if let Some(position) = position {
                         return match position.cmp(&metadata.len()) {
                             Ordering::Equal => AtEndOfStream::At,
                             Ordering::Less => AtEndOfStream::Not,
@@ -1057,7 +1070,7 @@ impl Stream {
                     http_stream.set_tag(ArenaHeaderTag::Dropped);
                     std::ptr::drop_in_place(&mut http_stream.inner_mut().body_reader as *mut _);
                 }
-                
+
                 Ok(())
             }
             Stream::InputFile(mut file_stream) => {

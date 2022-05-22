@@ -61,6 +61,14 @@ impl<R> CharReader<R> {
     pub fn inner_mut(&mut self) -> &mut R {
         &mut self.inner
     }
+
+    // Return the number of bytes remaining to be read.  Useful for,
+    // e.g., determining the position relative to the end of the
+    // owning stream.
+    #[inline]
+    pub fn rem_buf_len(&self) -> usize {
+        self.buf.len() - self.pos
+    }
 }
 
 pub trait CharRead {
@@ -96,7 +104,7 @@ impl<R> CharReader<R> {
         self.inner
     }
 
-    fn reset_buffer(&mut self) {
+    pub fn reset_buffer(&mut self) {
         self.buf.clear();
         self.pos = 0;
     }
