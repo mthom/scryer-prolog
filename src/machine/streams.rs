@@ -1343,6 +1343,12 @@ impl MachineState {
                              Ok(stream)
                          };
                      }
+                     (ArenaHeaderTag::Dropped, _value) => {
+                         let stub = functor_stub(caller, arity);
+                         let err = self.existence_error(ExistenceError::Stream(addr));
+
+                         return Err(self.error_form(err, stub));
+                     }
                      _ => {
                      }
                 );
