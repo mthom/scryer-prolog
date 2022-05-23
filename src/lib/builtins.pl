@@ -1366,12 +1366,12 @@ char_code(Char, Code) :-
     ).
 
 get_char(C) :-
-    error:can_be(character, C),
+    error:can_be(in_character, C),
     current_input(S),
     '$get_char'(S, C).
 
 get_char(S, C) :-
-    error:can_be(character, C),
+    error:can_be(in_character, C),
     '$get_char'(S, C).
 
 can_be_number(N, PI) :-

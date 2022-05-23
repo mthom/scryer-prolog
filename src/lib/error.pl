@@ -28,6 +28,7 @@
        - boolean
        - character
        - chars
+       - in_character
        - integer
        - list
        - term
@@ -47,6 +48,7 @@ must_be_(var, Term) :-
 must_be_(integer, Term) :- check_(integer, integer, Term).
 must_be_(atom, Term)    :- check_(atom, atom, Term).
 must_be_(character, T)  :- check_(error:character, character, T).
+must_be_(in_character, T) :- check_(error:in_character, in_character, T).
 must_be_(chars, Ls) :-
         can_be(chars, Ls), % prioritize type errors over instantiation errors
         must_be(list, Ls),
@@ -88,6 +90,11 @@ character(C) :-
         atom(C),
         atom_length(C, 1).
 
+in_character(C) :-
+        (   character(C)
+        ;   C == end_of_file
+        ).
+
 ilist(Ls) :-
         '$skip_max_list'(_, _, Ls, Rs),
         (   var(Rs) ->
@@ -99,6 +106,7 @@ type(type).
 type(integer).
 type(atom).
 type(character).
+type(in_character).
 type(chars).
 type(list).
 type(var).
@@ -129,6 +137,7 @@ can_be(Type, Term) :-
 can_(integer, Term) :- integer(Term).
 can_(atom, Term)    :- atom(Term).
 can_(character, T)  :- character(T).
+can_(in_character, T) :- in_character(T).
 can_(chars, Ls)     :-
         (   '$is_partial_string'(Ls) -> true
         ;   can_be(list, Ls),
