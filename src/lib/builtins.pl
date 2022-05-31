@@ -471,30 +471,37 @@ parse_write_options(Options, OptionValues, Stub) :-
 
 parse_write_options_(ignore_ops(IgnoreOps), ignore_ops-IgnoreOps) :-
     (  nonvar(IgnoreOps),
-       lists:member(IgnoreOps, [true, false])
+       lists:member(IgnoreOps, [true, false]),
+       !
     ;
        throw(error(domain_error(write_option, ignore_ops(IgnoreOps)), _))
     ).
 parse_write_options_(quoted(Quoted), quoted-Quoted) :-
     (  nonvar(Quoted),
-       lists:member(Quoted, [true, false])
+       lists:member(Quoted, [true, false]),
+       !
     ;
        throw(error(domain_error(write_option, quoted(Quoted)), _))
     ).
 parse_write_options_(numbervars(NumberVars), numbervars-NumberVars) :-
     (  nonvar(NumberVars),
-       lists:member(NumberVars, [true, false])
+       lists:member(NumberVars, [true, false]),
+       !
     ;
        throw(error(domain_error(write_option, numbervars(NumberVars)), _))
     ).
 parse_write_options_(variable_names(VNNames), variable_names-VNNames) :-
-    must_be_var_names_list(VNNames).
+    must_be_var_names_list(VNNames),
+    !.
 parse_write_options_(max_depth(MaxDepth), max_depth-MaxDepth) :-
     (  integer(MaxDepth),
-       MaxDepth >= 0
+       MaxDepth >= 0,
+       !
     ;
        throw(error(domain_error(write_option, max_depth(MaxDepth)), _))
     ).
+parse_write_options_(E, _) :-
+    throw(error(domain_error(write_option, E), _)).
 
 must_be_var_names_list(VarNames) :-
     '$skip_max_list'(_, _, VarNames, Tail),
@@ -567,9 +574,9 @@ parse_read_term_options(Options, OptionValues, Stub) :-
     parse_options_list(Options, builtins:parse_read_term_options_, DefaultOptions, OptionValues, Stub).
 
 
-parse_read_term_options_(singletons(Vars), singletons-Vars).
-parse_read_term_options_(variables(Vars), variables-Vars).
-parse_read_term_options_(variable_names(Vars), variable_names-Vars).
+parse_read_term_options_(singletons(Vars), singletons-Vars) :- !.
+parse_read_term_options_(variables(Vars), variables-Vars) :- !.
+parse_read_term_options_(variable_names(Vars), variable_names-Vars) :- !.
 parse_read_term_options_(E,_) :-
     throw(error(domain_error(read_option, E), _)).
 
@@ -1495,12 +1502,12 @@ parse_stream_options_(type(Type), type-Type) :-
     (  var(Type) ->
        throw(error(instantiation_error, open/4)) % 8.1.3 7)
     ;
-       lists:member(Type, [text, binary]) -> true
+       lists:member(Type, [text, binary]), !
     ;
        throw(error(domain_error(stream_option, type(Type)), _))
     ).
 parse_stream_options_(reposition(Bool), reposition-Bool) :-
-    (  nonvar(Bool), lists:member(Bool, [true, false]), !, true
+    (  nonvar(Bool), lists:member(Bool, [true, false]), !
     ;
        throw(error(domain_error(stream_option, reposition(Bool)), _))
     ).
@@ -1513,7 +1520,7 @@ parse_stream_options_(alias(A), alias-A) :-
        throw(error(domain_error(stream_option, alias(A)), _))
     ).
 parse_stream_options_(eof_action(Action), eof_action-Action) :-
-    (  nonvar(Action), lists:member(Action, [eof_code, error, reset]), !, true
+    (  nonvar(Action), lists:member(Action, [eof_code, error, reset]), !
     ;
        throw(error(domain_error(stream_option, eof_action(Action)), _))
     ).
