@@ -169,7 +169,6 @@ fn char_to_string(is_quoted: bool, c: char) -> String {
         '\u{0c}' if is_quoted => "\\f".to_string(), // UTF-8 form feed
         '\u{08}' if is_quoted => "\\b".to_string(), // UTF-8 backspace
         '\u{07}' if is_quoted => "\\a".to_string(), // UTF-8 alert
-        '"' if is_quoted => "\\\"".to_string(),
         '\\' if is_quoted => "\\\\".to_string(),
         '\'' | '\n' | '\r' | '\t' | '\u{0b}' | '\u{0c}' | '\u{08}' | '\u{07}' | '"' | '\\' => {
             c.to_string()
@@ -1102,10 +1101,18 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         push_char!(self, '"');
 
         let iter = HeapPStrIter::new(self.iter.heap, focus);
+        let char_to_string = |c: char| {
+            // refrain from quoting characters other than '"' and '\'.
+            match c {
+                '\\' => "\\\\".to_string(),
+                '"' => "\\\"".to_string(),
+                _ => char_to_string(false, c)
+            }
+        };
 
         if max_depth == 0 {
             for c in iter.chars() {
-                for c in char_to_string(self.quoted, c).chars() {
+                for c in char_to_string(c).chars() {
                     push_char!(self, c);
                 }
             }
@@ -1115,7 +1122,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             for c in iter.chars().take(max_depth) {
                 char_count += 1;
 
-                for c in char_to_string(self.quoted, c).chars() {
+                for c in char_to_string(c).chars() {
                     push_char!(self, c);
                 }
             }
