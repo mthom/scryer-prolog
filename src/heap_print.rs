@@ -1102,11 +1102,12 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
         let iter = HeapPStrIter::new(self.iter.heap, focus);
         let char_to_string = |c: char| {
-            // refrain from quoting characters other than '"' and '\'.
+            // refrain from quoting characters other than '"' and '\'
+            // unless self.quoted is true.
             match c {
                 '\\' => "\\\\".to_string(),
                 '"' => "\\\"".to_string(),
-                _ => char_to_string(false, c)
+                _ => char_to_string(self.quoted, c),
             }
         };
 
