@@ -1128,6 +1128,8 @@ impl MachineState {
                 return Err(self.error_form(evaluable_error, stub_gen()));
             }
 
+            let value = unmark_cell_bits!(value);
+
             read_heap_cell!(value,
                 (HeapCellValueTag::Atom, (name, arity)) => {
                     if arity == 2 {
