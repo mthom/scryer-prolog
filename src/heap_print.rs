@@ -202,6 +202,7 @@ enum TokenOrRedirect {
     Op(Atom, OpDesc),
     NumberedVar(String),
     CompositeRedirect(usize, DirectedOp),
+    CurlyBracketRedirect(usize),
     FunctorRedirect(usize),
     #[allow(unused)] IpAddr(IpAddr),
     NumberFocus(usize, NumberFocus, Option<DirectedOp>),
@@ -735,8 +736,9 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             return false;
         }
 
+
         self.state_stack.push(TokenOrRedirect::RightCurly);
-        self.state_stack.push(TokenOrRedirect::FunctorRedirect(max_depth));
+        self.state_stack.push(TokenOrRedirect::CurlyBracketRedirect(max_depth));
         self.state_stack.push(TokenOrRedirect::LeftCurly);
 
         true
@@ -791,8 +793,8 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             }
         }
 
-        return match (name.as_str(), arity) {
-            ("{}", 1) if !self.ignore_ops => self.format_curly_braces(max_depth),
+        return match (name, arity) {
+            (atom!("{}"), 1) if !self.ignore_ops => self.format_curly_braces(max_depth),
             _ => self.format_struct(max_depth, arity, name),
         };
     }
@@ -1305,8 +1307,8 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         max_depth: usize,
     ) {
         let add_brackets = if !self.ignore_ops {
-            negated_operand
-                || if let Some(ref op) = op {
+            negated_operand ||
+                if let Some(ref op) = op {
                     if self.numbervars && arity == 1 && name == atom!("$VAR") {
                         !self.iter.immediate_leaf_has_property(|addr| {
                             match Number::try_from(addr) {
@@ -1570,6 +1572,9 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 TokenOrRedirect::NumberedVar(num_var) => append_str!(self, &num_var),
                 TokenOrRedirect::CompositeRedirect(max_depth, op) => {
                     self.handle_heap_term(Some(op), false, max_depth)
+                }
+                TokenOrRedirect::CurlyBracketRedirect(max_depth) => {
+                    self.handle_heap_term(None, false, max_depth)
                 }
                 TokenOrRedirect::FunctorRedirect(max_depth) => {
                     self.handle_heap_term(None, true, max_depth)
