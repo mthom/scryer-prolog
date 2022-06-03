@@ -9,7 +9,7 @@ use std::fs;
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
-use std::process::{self, Command, Stdio};
+use std::process::{Command, Stdio};
 
 fn find_prolog_files(libraries: &mut File, prefix: &str, current_dir: &Path) {
     let entries = match current_dir.read_dir() {
@@ -103,13 +103,11 @@ fn format_generated_file(path: &Path) {
         .arg(path.as_os_str())
         .spawn()
         .unwrap_or_else(|err| {
-            eprintln!(
-                "{}: rustfmt (https://github.com/rust-lang/rustfmt) \
-                is required build time dependency and must be available \
-                in the environment's PATH variable.",
-                err
+            panic!(
+                "{}: rustfmt was detected as available, but failed to format generated file '{}'",
+                err,
+                path.display()
             );
-            process::exit(1);
         })
         .wait()
         .unwrap();
