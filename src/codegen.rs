@@ -1130,7 +1130,6 @@ impl<'b> CodeGenerator<'b> {
             if clauses.len() > 1 {
                 let choice = match i {
                     0 => self.settings.internal_try_me_else(clause_code.len() + 1),
-                    //Instruction::TryMeElse(clause_code.len() + 1),
                     _ if i == clauses.len() - 1 => self.settings.internal_trust_me(),
                     _ => self.settings.internal_retry_me_else(clause_code.len() + 1),
                 };
@@ -1152,17 +1151,14 @@ impl<'b> CodeGenerator<'b> {
                 skip_stub_try_me_else = !self.settings.is_dynamic();
             }
 
-            let arg = match clause.args() {
-                Some(args) => match args.iter().nth(optimal_index) {
-                    Some(term) => Some(term),
-                    None => None,
-                },
-                None => None,
-            };
+            let arg = clause.args().and_then(|args| args.iter().nth(optimal_index));
 
             if let Some(arg) = arg {
                 let index = code.len();
-                code_offsets.index_term(arg, index, &mut clause_index_info, self.atom_tbl);
+
+                if clauses.len() > 1 {
+                    code_offsets.index_term(arg, index, &mut clause_index_info, self.atom_tbl);
+                }
             }
 
             if !(code_offsets.no_indices() && clauses.len() == 1 && self.settings.is_extensible) {
@@ -1182,7 +1178,12 @@ impl<'b> CodeGenerator<'b> {
             code.extend(clause_code.into_iter());
         }
 
-        let index_code = code_offsets.compute_indices(skip_stub_try_me_else);
+        let index_code = if clauses.len() > 1 {
+            code_offsets.compute_indices(skip_stub_try_me_else)
+        } else {
+            vec![]
+        };
+
         self.global_jmp_by_locs_offset = jmp_by_locs_len;
 
         if !index_code.is_empty() {
