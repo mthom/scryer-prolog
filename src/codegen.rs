@@ -1156,7 +1156,7 @@ impl<'b> CodeGenerator<'b> {
             if let Some(arg) = arg {
                 let index = code.len();
 
-                if clauses.len() > 1 {
+                if clauses.len() > 1 || self.settings.is_dynamic() {
                     code_offsets.index_term(arg, index, &mut clause_index_info, self.atom_tbl);
                 }
             }
@@ -1178,7 +1178,7 @@ impl<'b> CodeGenerator<'b> {
             code.extend(clause_code.into_iter());
         }
 
-        let index_code = if clauses.len() > 1 {
+        let index_code = if clauses.len() > 1 || self.settings.is_dynamic() {
             code_offsets.compute_indices(skip_stub_try_me_else)
         } else {
             vec![]

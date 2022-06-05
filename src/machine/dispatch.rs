@@ -998,29 +998,19 @@ impl Machine {
                                         match self.find_living_dynamic_else(p + next_i) {
                                             Some(_) => {
                                                 self.retry_me_else(next_i);
-
-                                                try_or_throw!(
-                                                    self.machine_st,
-                                                    (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                                                );
                                             }
                                             None => {
                                                 self.trust_me();
-
-                                                try_or_throw!(
-                                                    self.machine_st,
-                                                    (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                                                );
                                             }
                                         }
                                     } else {
                                         self.trust_me();
-
-                                        try_or_throw!(
-                                            self.machine_st,
-                                            (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                                        );
                                     }
+
+                                    try_or_throw!(
+                                        self.machine_st,
+                                        (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
+                                    );
                                 }
                             }
                         }
@@ -1079,29 +1069,19 @@ impl Machine {
                                         match self.find_living_dynamic_else(p + next_i) {
                                             Some(_) => {
                                                 self.retry_me_else(next_i);
-
-                                                try_or_throw!(
-                                                    self.machine_st,
-                                                    (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                                                );
                                             }
                                             None => {
                                                 self.trust_me();
-
-                                                try_or_throw!(
-                                                    self.machine_st,
-                                                    (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                                                );
                                             }
                                         }
                                     } else {
                                         self.trust_me();
-
-                                        try_or_throw!(
-                                            self.machine_st,
-                                            (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                                        );
                                     }
+
+                                    try_or_throw!(
+                                        self.machine_st,
+                                        (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
+                                    );
                                 }
                             }
                         }
