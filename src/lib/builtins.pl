@@ -185,7 +185,7 @@ fail :- '$fail'.
 
 :- meta_predicate \+(0).
 
-\+ G :- call(G), !, false.
+\+ G :- '$call'(G), !, false.
 \+ _.
 
 
@@ -195,7 +195,7 @@ _ \= _.
 
 :- meta_predicate once(0).
 
-once(G) :- call(G), !.
+once(G) :- '$call'(G), !.
 
 
 repeat.
@@ -216,17 +216,17 @@ G1 -> G2 :- control_entry_point((G1 -> G2)).
 
 staggered_if_then(G1, G2) :-
     '$get_staggered_cp'(B),
-    call('$call'(G1)),
+    '$call'(G1),
     '$set_cp'(B),
-    call('$call'(G2)).
+    '$call'(G2).
 
 G1 ; G2 :- control_entry_point((G1 ; G2)).
 
 
 :- non_counted_backtracking staggered_sc/2.
 
-staggered_sc(G, _) :- call('$call'(G)).
-staggered_sc(_, G) :- call('$call'(G)).
+staggered_sc(G, _) :- '$call'(G).
+staggered_sc(_, G) :- '$call'(G).
 
 
 !.
@@ -622,10 +622,13 @@ catch(G,C,R) :-
     '$get_current_block'(Bb),
     '$call_with_default_policy'(catch(G,C,R,Bb)).
 
+:- meta_predicate catch(0, ?, 0, ?).
+
 :- non_counted_backtracking catch/4.
+
 catch(G,C,R,Bb) :-
     '$install_new_block'(NBb),
-    call(G),
+    '$call'(G),
     '$call_with_default_policy'(end_block(Bb, NBb)).
 catch(G,C,R,Bb) :-
     '$reset_block'(Bb),
@@ -634,6 +637,7 @@ catch(G,C,R,Bb) :-
 
 
 :- non_counted_backtracking end_block/2.
+
 end_block(Bb, NBb) :-
     '$clean_up_block'(NBb),
     '$reset_block'(Bb).
@@ -642,10 +646,11 @@ end_block(Bb, NBb) :-
     '$fail'.
 
 :- non_counted_backtracking handle_ball/3.
+
 handle_ball(C, C, R) :-
     !,
     '$erase_ball',
-    call(R).
+    '$call'(R).
 handle_ball(_, _, _) :-
     '$unwind_stack'.
 
@@ -685,7 +690,7 @@ findall(Template, Goal, Solutions) :-
 :- non_counted_backtracking '$iterate_find_all_diff'/5.
 
 '$iterate_find_all_diff'(Template, Goal, _, _, LhOffset) :-
-    call(Goal),
+    '$call'(Goal),
     '$copy_to_lh'(LhOffset, Template),
     '$fail'.
 '$iterate_find_all_diff'(_, _, Solutions0, Solutions1, LhOffset) :-

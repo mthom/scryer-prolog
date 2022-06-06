@@ -627,6 +627,8 @@ impl MachineState {
 
     #[inline]
     pub(crate) fn install_new_block(&mut self, value: HeapCellValue) -> usize {
+        let value = self.store(self.deref(value));
+
         self.block = self.b;
         self.unify_fixnum(Fixnum::build_with(self.block as i64), value);
 
@@ -4004,7 +4006,7 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn inference_level(&mut self) {
-        let a1 = self.machine_st.registers[1];
+        let a1 = self.machine_st.store(self.machine_st.deref(self.machine_st.registers[1]));
         let a2 = self.machine_st.store(self.machine_st.deref(self.machine_st.registers[2]));
 
         let bp = cell_as_fixnum!(a2).get_num() as usize;
