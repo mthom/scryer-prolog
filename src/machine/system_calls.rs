@@ -3771,6 +3771,39 @@ impl Machine {
         self.machine_st.fail = !self.indices.modules.contains_key(&module_name);
     }
 
+    pub(crate) fn predicate_defined(&self) -> bool {
+        let module_name = cell_as_atom!(self.machine_st.store(self.machine_st.deref(
+            self.machine_st.registers[1]
+        )));
+
+        let name = cell_as_atom!(self.machine_st.store(self.machine_st.deref(
+            self.machine_st.registers[2]
+        )));
+
+        let arity = match Number::try_from(self.machine_st.store(self.machine_st.deref(
+            self.machine_st.registers[3]
+        ))) {
+            Ok(Number::Fixnum(n))  => n.get_num() as usize,
+            Ok(Number::Integer(n)) => {
+                if let Some(n) = n.to_usize() {
+                    n
+                } else {
+                    return false;
+                }
+            }
+            _ => {
+                unreachable!()
+            }
+        };
+
+        self.indices.get_predicate_code_index(
+            name,
+            arity,
+            module_name,
+        ).map(|index| index.local().is_some())
+         .unwrap_or(false)
+    }
+
     #[inline(always)]
     pub(crate) fn no_such_predicate(&mut self) -> CallResult {
         let module_name = cell_as_atom!(self.machine_st.store(self.machine_st.deref(

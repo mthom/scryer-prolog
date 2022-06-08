@@ -34,23 +34,13 @@ write_error(Error) :-
     write('.').
 
 '$print_message_and_fail'(Error) :-
-    (  (  Error = error(existence_error(procedure, Expansion), Expansion)
-       ;  Error = error(evaluation_error((_:_)/_),Expansion)
-       )  ->
-       (  (  Expansion = goal_expansion/2
-          ;  Expansion = term_expansion/2
-          )  ->
-          true
-       ;  write_error(Error),
-          nl
-       )
-    ;  write_error(Error),
-       nl
-    ),
+    write_error(Error),
+    nl,
     '$fail'.
 
 expand_term(Term, ExpandedTerm) :-
-    (  catch('$call'(user:term_expansion(Term, ExpandedTerm0)),
+    (  '$predicate_defined'(user, term_expansion, 2),
+       catch('$call'(user:term_expansion(Term, ExpandedTerm0)),
              E,
              '$call'(loader:'$print_message_and_fail'(E))) ->
        (  var(ExpandedTerm0) ->
@@ -77,6 +67,7 @@ term_expansion_list([Term|Terms], ExpandedTermsHead, ExpandedTermsTail) :-
 
 goal_expansion(Goal, Module, ExpandedGoal) :-
     (  atom(Module),
+       '$predicate_defined'(Module, goal_expansion, 2),
        catch('$call'(Module:goal_expansion(Goal, ExpandedGoal0)),
              E,
              '$call'(loader:'$print_message_and_fail'(E))) ->

@@ -4851,6 +4851,14 @@ impl Machine {
                     try_or_throw!(self.machine_st, self.add_non_counted_backtracking());
                     self.machine_st.p = self.machine_st.cp;
                 }
+                &Instruction::CallPredicateDefined(_) => {
+                    self.machine_st.fail = !self.predicate_defined();
+                    self.machine_st.p += 1;
+                }
+                &Instruction::ExecutePredicateDefined(_) => {
+                    self.machine_st.fail = !self.predicate_defined();
+                    self.machine_st.p = self.machine_st.cp;
+                }
             }
         }
 

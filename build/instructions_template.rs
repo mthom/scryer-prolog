@@ -542,6 +542,8 @@ enum SystemClauseType {
     DeterministicLengthRundown,
     #[strum_discriminants(strum(props(Arity = "7", Name = "$http_open")))]
     HttpOpen,
+    #[strum_discriminants(strum(props(Arity = "3", Name = "$predicate_defined")))]
+    PredicateDefined,
     REPL(REPLCodePtr),
 }
 
@@ -1665,6 +1667,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallCpuNow(_) |
                     &Instruction::CallDeterministicLengthRundown(_) |
                     &Instruction::CallHttpOpen(_) |
+                    &Instruction::CallPredicateDefined(_) |
                     &Instruction::CallCurrentTime(_) |
                     &Instruction::CallQuotedToken(_) |
                     &Instruction::CallReadTermFromChars(_) |
@@ -1869,6 +1872,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteCpuNow(_) |
                     &Instruction::ExecuteDeterministicLengthRundown(_) |
                     &Instruction::ExecuteHttpOpen(_) |
+                    &Instruction::ExecutePredicateDefined(_) |
                     &Instruction::ExecuteCurrentTime(_) |
                     &Instruction::ExecuteQuotedToken(_) |
                     &Instruction::ExecuteReadTermFromChars(_) |
