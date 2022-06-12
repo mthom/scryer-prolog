@@ -1,0 +1,4 @@
+*.png binary
+*.pl text eol=lf
+*.rs text eol=lf diff=rust
+*.md text eol=lf diff=markdown
