@@ -276,6 +276,8 @@ enum SystemClauseType {
     DeleteHeadAttribute,
     #[strum_discriminants(strum(props(Arity = "arity", Name = "$module_call")))]
     DynamicModuleResolution(usize),
+    #[strum_discriminants(strum(props(Arity = "arity", Name = "$prepare_call_clause")))]
+    PrepareCallClause(usize),
     #[strum_discriminants(strum(props(Arity = "1", Name = "$enqueue_attr_var")))]
     EnqueueAttributedVar,
     #[strum_discriminants(strum(props(Arity = "2", Name = "$fetch_global_var")))]
@@ -544,6 +546,8 @@ enum SystemClauseType {
     HttpOpen,
     #[strum_discriminants(strum(props(Arity = "3", Name = "$predicate_defined")))]
     PredicateDefined,
+    #[strum_discriminants(strum(props(Arity = "3", Name = "$strip_module")))]
+    StripModule,
     REPL(REPLCodePtr),
 }
 
@@ -1592,6 +1596,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallDeleteAttribute(_) |
                     &Instruction::CallDeleteHeadAttribute(_) |
                     &Instruction::CallDynamicModuleResolution(..) |
+                    &Instruction::CallPrepareCallClause(..) |
                     &Instruction::CallEnqueueAttributedVar(_) |
                     &Instruction::CallFetchGlobalVar(_) |
                     &Instruction::CallFirstStream(_) |
@@ -1668,6 +1673,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallDeterministicLengthRundown(_) |
                     &Instruction::CallHttpOpen(_) |
                     &Instruction::CallPredicateDefined(_) |
+                    &Instruction::CallStripModule(_) |
                     &Instruction::CallCurrentTime(_) |
                     &Instruction::CallQuotedToken(_) |
                     &Instruction::CallReadTermFromChars(_) |
@@ -1796,7 +1802,8 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteFileTime(_) |
                     &Instruction::ExecuteDeleteAttribute(_) |
                     &Instruction::ExecuteDeleteHeadAttribute(_) |
-                    &Instruction::ExecuteDynamicModuleResolution(_, _) |
+                    &Instruction::ExecuteDynamicModuleResolution(..) |
+                    &Instruction::ExecutePrepareCallClause(..) |
                     &Instruction::ExecuteEnqueueAttributedVar(_) |
                     &Instruction::ExecuteFetchGlobalVar(_) |
                     &Instruction::ExecuteFirstStream(_) |
@@ -1873,6 +1880,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteDeterministicLengthRundown(_) |
                     &Instruction::ExecuteHttpOpen(_) |
                     &Instruction::ExecutePredicateDefined(_) |
+                    &Instruction::ExecuteStripModule(_) |
                     &Instruction::ExecuteCurrentTime(_) |
                     &Instruction::ExecuteQuotedToken(_) |
                     &Instruction::ExecuteReadTermFromChars(_) |

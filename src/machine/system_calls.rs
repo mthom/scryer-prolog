@@ -887,9 +887,117 @@ impl MachineState {
 
         Ok(string)
     }
+
+    pub(crate) fn strip_module(
+        &self,
+        mut qualified_goal: HeapCellValue,
+        mut module_loc: HeapCellValue,
+    ) -> (HeapCellValue, HeapCellValue) {
+        loop {
+            read_heap_cell!(qualified_goal,
+                (HeapCellValueTag::Str, s) => {
+                    let (name, arity) = cell_as_atom_cell!(self.heap[s])
+                        .get_name_and_arity();
+
+                    if name == atom!(":") && arity == 2 {
+                        module_loc = self.heap[s+1];
+                        qualified_goal = self.heap[s+2];
+                    } else {
+                        break;
+                    }
+                }
+                (HeapCellValueTag::AttrVar | HeapCellValueTag::Var, h) => {
+                    if qualified_goal != self.heap[h] {
+                        qualified_goal = self.heap[h];
+                    } else {
+                        break;
+                    }
+                }
+                _ => {
+                    break;
+                }
+            );
+        }
+
+        (module_loc, qualified_goal)
+    }
 }
 
 impl Machine {
+    #[inline(always)]
+    pub(crate) fn prepare_call_clause(&mut self, arity: usize) -> CallResult {
+        let (module_loc, qualified_goal) = self.machine_st.strip_module(
+            self.machine_st.registers[3],
+            self.machine_st.registers[2],
+        );
+
+        // the first three arguments don't belong to the containing call/N.
+        let arity = arity - 3;
+
+        let (name, narity, s) = self.machine_st.setup_call_n_init_goal_info(
+            qualified_goal,
+            arity,
+        )?;
+
+        let module_loc = self.machine_st.store(self.machine_st.deref(module_loc));
+
+        if module_loc.is_var() {
+            self.load_context_module(module_loc);
+
+            if self.machine_st.fail {
+                self.machine_st.fail = false;
+                self.machine_st.unify_atom(atom!("user"), module_loc);
+
+                if self.machine_st.fail {
+                    return Ok(());
+                }
+            }
+        }
+
+        let target_module_loc = self.machine_st.registers[2];
+
+        unify_fn!(
+            &mut self.machine_st,
+            module_loc,
+            target_module_loc
+        );
+
+        if self.machine_st.fail {
+            return Ok(());
+        }
+
+        // assemble goal from pre-loaded (narity) and supplementary
+        // (arity) arguments.
+
+        let h = self.machine_st.heap.len();
+
+        self.machine_st.heap.push(atom_as_cell!(name, narity + arity));
+
+        let target_goal = if narity + arity > 0 {
+            for idx in 1 .. narity + 1 {
+                self.machine_st.heap.push(self.machine_st.heap[s + idx]);
+            }
+
+            for idx in 1 .. arity + 1 {
+                self.machine_st.heap.push(self.machine_st.registers[3 + idx]);
+            }
+
+            str_loc_as_cell!(h)
+        } else {
+            heap_loc_as_cell!(h)
+        };
+
+        let target_qualified_goal = self.machine_st.registers[1];
+
+        unify_fn!(
+            &mut self.machine_st,
+            target_goal,
+            target_qualified_goal
+        );
+
+        Ok(())
+    }
+
     #[inline(always)]
     pub(crate) fn is_reset_cont_marker(&self, p: usize) -> bool {
         match &self.code[p] {

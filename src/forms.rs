@@ -73,10 +73,16 @@ impl Level {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum CallPolicy {
+    Default,
+    Counted,
+}
+
 #[derive(Debug, Clone)]
 pub enum QueryTerm {
-    // register, clause type, subterms, use default call policy.
-    Clause(Cell<RegType>, ClauseType, Vec<Term>, bool),
+    // register, clause type, subterms, clause call policy.
+    Clause(Cell<RegType>, ClauseType, Vec<Term>, CallPolicy),
     BlockedCut, // a cut which is 'blocked by letters', like the P term in P -> Q.
     UnblockedCut(Cell<VarReg>),
     GetLevelAndUnify(Cell<VarReg>, Rc<String>),
@@ -84,9 +90,9 @@ pub enum QueryTerm {
 }
 
 impl QueryTerm {
-    pub(crate) fn set_default_caller(&mut self) {
+    pub(crate) fn set_call_policy(&mut self, cp: CallPolicy) {
         match self {
-            &mut QueryTerm::Clause(_, _, _, ref mut use_default_cp) => *use_default_cp = true,
+            &mut QueryTerm::Clause(_, _, _, ref mut clause_cp) => *clause_cp = cp,
             _ => {}
         }
     }

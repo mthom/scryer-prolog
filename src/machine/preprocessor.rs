@@ -1,4 +1,5 @@
 use crate::atom_table::*;
+use crate::codegen::CodeGenSettings;
 use crate::forms::*;
 use crate::instructions::*;
 use crate::iterators::*;
@@ -474,9 +475,10 @@ fn clause_to_query_term<'a, LS: LoadState<'a>>(
     loader: &mut Loader<'a, LS>,
     name: Atom,
     terms: Vec<Term>,
+    call_policy: CallPolicy,
 ) -> QueryTerm {
     let ct = loader.get_clause_type(name, terms.len());
-    QueryTerm::Clause(Cell::default(), ct, terms, false)
+    QueryTerm::Clause(Cell::default(), ct, terms, call_policy)
 }
 
 #[inline]
@@ -485,20 +487,23 @@ fn qualified_clause_to_query_term<'a, LS: LoadState<'a>>(
     module_name: Atom,
     name: Atom,
     terms: Vec<Term>,
+    call_policy: CallPolicy,
 ) -> QueryTerm {
     let ct = loader.get_qualified_clause_type(module_name, name, terms.len());
-    QueryTerm::Clause(Cell::default(), ct, terms, false)
+    QueryTerm::Clause(Cell::default(), ct, terms, call_policy)
 }
 
 #[derive(Debug)]
 pub(crate) struct Preprocessor {
     queue: VecDeque<VecDeque<Term>>,
+    settings: CodeGenSettings,
 }
 
 impl Preprocessor {
-    pub(super) fn new() -> Self {
+    pub(super) fn new(settings: CodeGenSettings) -> Self {
         Preprocessor {
             queue: VecDeque::new(),
+            settings,
         }
     }
 
@@ -599,7 +604,10 @@ impl Preprocessor {
                 if name == atom!("!") || name == atom!("blocked_!") {
                     Ok(QueryTerm::BlockedCut)
                 } else {
-                    Ok(clause_to_query_term(loader, name, vec![]))
+                    Ok(clause_to_query_term(
+                        loader, name, vec![],
+                        self.settings.default_call_policy(),
+                    ))
                 }
             }
             Term::Literal(_, Literal::Char('!')) => Ok(QueryTerm::BlockedCut),
@@ -663,6 +671,7 @@ impl Preprocessor {
                             module_name,
                             predicate_name,
                             vec![],
+                            self.settings.default_call_policy(),
                         )),
                         (
                             Term::Literal(_, Literal::Atom(module_name)),
@@ -672,22 +681,29 @@ impl Preprocessor {
                             module_name,
                             name,
                             terms,
+                            self.settings.default_call_policy()
                         )),
                         (module_name, predicate_name) => {
                             terms.push(module_name);
                             terms.push(predicate_name);
 
-                            Ok(clause_to_query_term(loader, name, terms))
+                            Ok(clause_to_query_term(
+                                loader,
+                                name,
+                                terms,
+                                self.settings.default_call_policy(),
+                            ))
                         }
                     }
                 }
-                _ => Ok(clause_to_query_term(loader, name, terms)),
+                _ => Ok(clause_to_query_term(loader, name, terms,
+                                             self.settings.default_call_policy())),
             },
             Term::Var(..) => Ok(QueryTerm::Clause(
                 Cell::default(),
                 ClauseType::CallN(1),
                 vec![term],
-                false,
+                self.settings.default_call_policy(),
             )),
             _ => Err(CompilationError::InadmissibleQueryTerm),
         }
@@ -700,10 +716,10 @@ impl Preprocessor {
     ) -> Result<QueryTerm, CompilationError> {
         match term {
             Term::Clause(r, name, mut subterms) => {
-                if subterms.len() == 1 && name == atom!("$call_with_default_policy") {
+                if subterms.len() == 1 && name == atom!("$call_with_inference_counting") {
                     self.to_query_term(loader, subterms.pop().unwrap())
                         .map(|mut query_term| {
-                            query_term.set_default_caller();
+                            query_term.set_call_policy(CallPolicy::Counted);
                             query_term
                         })
                 } else {

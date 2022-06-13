@@ -1844,7 +1844,7 @@ impl Machine {
                     return;
                 }
                 _ => {
-                    return self.load_context_module();
+                    return self.load_context_module(self.machine_st.registers[1]);
                 }
             }
         }
@@ -1866,9 +1866,9 @@ impl Machine {
         self.machine_st.fail = true;
     }
 
-    pub(crate) fn load_context_module(&mut self) {
+    pub(crate) fn load_context_module(&mut self, target: HeapCellValue) {
         if let Some(load_context) = self.load_contexts.last() {
-            self.machine_st.unify_atom(load_context.module, self.machine_st.registers[1]);
+            self.machine_st.unify_atom(load_context.module, target);
         } else {
             self.machine_st.fail = true;
         }

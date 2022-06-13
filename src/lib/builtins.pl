@@ -318,61 +318,62 @@ dispatch_prep(Gs, B, [Cont|Conts]) :-
 dispatch_call_list([]).
 dispatch_call_list([G1,G2,G3,G4,G5,G6,G7,G8|Gs]) :-
     !,
-    '$call'(G1),
-    '$call'(G2),
-    '$call'(G3),
-    '$call'(G4),
-    '$call'(G5),
-    '$call'(G6),
-    '$call'(G7),
-    '$call'(G8),
-    '$call_with_default_policy'(dispatch_call_list(Gs)).
+    '$call_with_inference_counting'('$call'(G1)),
+    '$call_with_inference_counting'('$call'(G2)),
+    '$call_with_inference_counting'('$call'(G3)),
+    '$call_with_inference_counting'('$call'(G4)),
+    '$call_with_inference_counting'('$call'(G5)),
+    '$call_with_inference_counting'('$call'(G6)),
+    '$call_with_inference_counting'('$call'(G7)),
+    '$call_with_inference_counting'('$call'(G8)),
+    dispatch_call_list(Gs).
 dispatch_call_list([G1,G2,G3,G4,G5,G6,G7]) :-
     !,
-    '$call'(G1),
-    '$call'(G2),
-    '$call'(G3),
-    '$call'(G4),
-    '$call'(G5),
-    '$call'(G6),
-    '$call'(G7).
+    '$call_with_inference_counting'('$call'(G1)),
+    '$call_with_inference_counting'('$call'(G2)),
+    '$call_with_inference_counting'('$call'(G3)),
+    '$call_with_inference_counting'('$call'(G4)),
+    '$call_with_inference_counting'('$call'(G5)),
+    '$call_with_inference_counting'('$call'(G6)),
+    '$call_with_inference_counting'('$call'(G7)).
 dispatch_call_list([G1,G2,G3,G4,G5,G6]) :-
     !,
-    '$call'(G1),
-    '$call'(G2),
-    '$call'(G3),
-    '$call'(G4),
-    '$call'(G5),
-    '$call'(G6).
+    '$call_with_inference_counting'('$call'(G1)),
+    '$call_with_inference_counting'('$call'(G2)),
+    '$call_with_inference_counting'('$call'(G3)),
+    '$call_with_inference_counting'('$call'(G4)),
+    '$call_with_inference_counting'('$call'(G5)),
+    '$call_with_inference_counting'('$call'(G6)).
 dispatch_call_list([G1,G2,G3,G4,G5]) :-
     !,
-    '$call'(G1),
-    '$call'(G2),
-    '$call'(G3),
-    '$call'(G4),
-    '$call'(G5).
+    '$call_with_inference_counting'('$call'(G1)),
+    '$call_with_inference_counting'('$call'(G2)),
+    '$call_with_inference_counting'('$call'(G3)),
+    '$call_with_inference_counting'('$call'(G4)),
+    '$call_with_inference_counting'('$call'(G5)).
 dispatch_call_list([G1,G2,G3,G4]) :-
     !,
-    '$call'(G1),
-    '$call'(G2),
-    '$call'(G3),
-    '$call'(G4).
+    '$call_with_inference_counting'('$call'(G1)),
+    '$call_with_inference_counting'('$call'(G2)),
+    '$call_with_inference_counting'('$call'(G3)),
+    '$call_with_inference_counting'('$call'(G4)).
 dispatch_call_list([G1,G2,G3]) :-
     !,
-    '$call'(G1),
-    '$call'(G2),
-    '$call'(G3).
+    '$call_with_inference_counting'('$call'(G1)),
+    '$call_with_inference_counting'('$call'(G2)),
+    '$call_with_inference_counting'('$call'(G3)).
 dispatch_call_list([G1,G2]) :-
     !,
-    '$call'(G1),
-    '$call'(G2).
+    '$call_with_inference_counting'('$call'(G1)),
+    '$call_with_inference_counting'('$call'(G2)).
 dispatch_call_list([G1]) :-
-    '$call'(G1).
+    '$call_with_inference_counting'('$call'(G1)).
 
 
 % univ.
 
 :- non_counted_backtracking univ_errors/3.
+
 univ_errors(Term, List, N) :-
     '$skip_max_list'(N, _, List, R),
     (  var(R)        ->
@@ -404,9 +405,11 @@ univ_errors(Term, List, N) :-
     ;  true
     ).
 
+:- non_counted_backtracking (=..)/2.
+
 Term =.. List :-
-    '$call_with_default_policy'(univ_errors(Term, List, N)),
-    '$call_with_default_policy'(univ_worker(Term, List, N)).
+    univ_errors(Term, List, N),
+    univ_worker(Term, List, N).
 
 
 :- non_counted_backtracking univ_worker/3.
@@ -414,31 +417,31 @@ Term =.. List :-
 univ_worker(Term, List, _) :-
     atomic(Term),
     !,
-    '$call_with_default_policy'(List = [Term]).
+    List = [Term].
 univ_worker(Term, [Name|Args], N) :-
     var(Term),
     !,
-    '$call_with_default_policy'(Arity is N-1),
-    '$call_with_default_policy'(functor(Term, Name, Arity)), % Term = {var}, Name = nonvar, Arity = 0.
-    '$call_with_default_policy'(get_args(Args, Term, 1, Arity)).
+    Arity is N-1,
+    functor(Term, Name, Arity), % Term = {var}, Name = nonvar, Arity = 0.
+    get_args(Args, Term, 1, Arity).
 univ_worker(Term, List, _) :-
-    '$call_with_default_policy'(functor(Term, Name, Arity)),
-    '$call_with_default_policy'(get_args(Args, Term, 1, Arity)),
-    '$call_with_default_policy'(List = [Name|Args]).
+    functor(Term, Name, Arity),
+    get_args(Args, Term, 1, Arity),
+    List = [Name|Args].
 
 
 :- non_counted_backtracking get_args/4.
 
 get_args(Args, _, _, 0) :-
     !,
-    '$call_with_default_policy'(Args = []).
+    Args = [].
 get_args([Arg], Func, N, N) :-
     !,
-    '$call_with_default_policy'(arg(N, Func, Arg)).
+    arg(N, Func, Arg).
 get_args([Arg|Args], Func, I0, N) :-
-    '$call_with_default_policy'(arg(I0, Func, Arg)),
-    '$call_with_default_policy'(I1 is I0 + 1),
-    '$call_with_default_policy'(get_args(Args, Func, I1, N)).
+    arg(I0, Func, Arg),
+    I1 is I0 + 1,
+    get_args(Args, Func, I1, N).
 
 
 :- meta_predicate parse_options_list(?, 0, ?, ?, ?).
@@ -618,9 +621,11 @@ term_variables(Term, Vars) :-
 
 :- meta_predicate catch(0, ?, 0).
 
+:- non_counted_backtracking catch/3.
+
 catch(G,C,R) :-
     '$get_current_block'(Bb),
-    '$call_with_default_policy'(catch(G,C,R,Bb)).
+    catch(G,C,R,Bb).
 
 :- meta_predicate catch(0, ?, 0, ?).
 
@@ -628,12 +633,12 @@ catch(G,C,R) :-
 
 catch(G,C,R,Bb) :-
     '$install_new_block'(NBb),
-    '$call'(G),
-    '$call_with_default_policy'(end_block(Bb, NBb)).
+    '$call_with_inference_counting'('$call'(G)),
+    end_block(Bb, NBb).
 catch(G,C,R,Bb) :-
     '$reset_block'(Bb),
     '$get_ball'(Ball),
-    '$call_with_default_policy'(handle_ball(Ball, C, R)).
+    handle_ball(Ball, C, R).
 
 
 :- non_counted_backtracking end_block/2.
@@ -654,6 +659,8 @@ handle_ball(C, C, R) :-
 handle_ball(_, _, _) :-
     '$unwind_stack'.
 
+:- non_counted_backtracking throw/1.
+
 throw(Ball) :-
     (   var(Ball) ->
         '$set_ball'(error(instantiation_error,throw/1))
@@ -661,11 +668,10 @@ throw(Ball) :-
     ),
     '$unwind_stack'.
 
-
 :- non_counted_backtracking '$iterate_find_all'/4.
 
 '$iterate_find_all'(Template, Goal, _, LhOffset) :-
-    '$call'(Goal),
+    '$call_with_inference_counting'('$call'(Goal)),
     '$copy_to_lh'(LhOffset, Template),
     '$fail'.
 '$iterate_find_all'(_, _, Solutions, LhOffset) :-
@@ -678,19 +684,20 @@ truncate_lh_to(LhLength) :- '$truncate_lh_to'(LhLength).
 
 :- meta_predicate findall(?, 0, ?).
 
+:- non_counted_backtracking findall/3.
+
 findall(Template, Goal, Solutions) :-
-    '$call_with_default_policy'(error:can_be(list, Solutions)),
+    error:can_be(list, Solutions),
     '$lh_length'(LhLength),
-    '$call_with_default_policy'(
-        catch(builtins:'$iterate_find_all'(Template, Goal, Solutions, LhLength),
-              Error,
-              ( builtins:truncate_lh_to(LhLength), builtins:throw(Error) ))
-    ).
+    catch(builtins:'$iterate_find_all'(Template, Goal, Solutions, LhLength),
+          Error,
+          ( builtins:truncate_lh_to(LhLength), builtins:throw(Error) )
+         ).
 
 :- non_counted_backtracking '$iterate_find_all_diff'/5.
 
 '$iterate_find_all_diff'(Template, Goal, _, _, LhOffset) :-
-    '$call'(Goal),
+    '$call_with_inference_counting'('$call'(Goal)),
     '$copy_to_lh'(LhOffset, Template),
     '$fail'.
 '$iterate_find_all_diff'(_, _, Solutions0, Solutions1, LhOffset) :-
@@ -700,16 +707,19 @@ findall(Template, Goal, Solutions) :-
 
 :- meta_predicate findall(?, 0, ?, ?).
 
+:- non_counted_backtracking findall/4.
+
 findall(Template, Goal, Solutions0, Solutions1) :-
-    '$call_with_default_policy'(error:can_be(list, Solutions0)),
-    '$call_with_default_policy'(error:can_be(list, Solutions1)),
+    error:can_be(list, Solutions0),
+    error:can_be(list, Solutions1),
     '$lh_length'(LhLength),
-    '$call_with_default_policy'(
-        catch(builtins:'$iterate_find_all_diff'(Template, Goal, Solutions0,
-                                                Solutions1, LhLength),
-              Error,
-              ( builtins:truncate_lh_to(LhLength), builtins:throw(Error) ))
-    ).
+    catch(builtins:'$iterate_find_all_diff'(Template, Goal, Solutions0,
+                                            Solutions1, LhLength),
+          Error,
+          ( builtins:truncate_lh_to(LhLength), builtins:throw(Error) )
+         ).
+
+:- non_counted_backtracking set_difference/3.
 
 set_difference([X|Xs], [Y|Ys], Zs) :-
     X == Y, !, set_difference(Xs, [Y|Ys], Zs).
@@ -720,6 +730,8 @@ set_difference([X|Xs], [Y|Ys], Zs) :-
 set_difference([], _, []) :- !.
 set_difference(Xs, [], Xs).
 
+:- non_counted_backtracking group_by_variant/4.
+
 group_by_variant([V2-S2 | Pairs], V1-S1, [S2 | Solutions], Pairs0) :-
     V1 = V2, % \+ \+ (V1 = V2), % (2) % iso_ext:variant(V1, V2), % (1)
     !,
@@ -727,10 +739,14 @@ group_by_variant([V2-S2 | Pairs], V1-S1, [S2 | Solutions], Pairs0) :-
     group_by_variant(Pairs, V2-S2, Solutions, Pairs0).
 group_by_variant(Pairs, _, [], Pairs).
 
+:- non_counted_backtracking group_by_variants/2.
+
 group_by_variants([V-S|Pairs], [V-Solution|Solutions]) :-
     group_by_variant([V-S|Pairs], V-S, Solution, Pairs0),
     group_by_variants(Pairs0, Solutions).
 group_by_variants([], []).
+
+:- non_counted_backtracking iterate_variants/3.
 
 iterate_variants([V-Solution|GroupSolutions], V, Solution) :-
     (  GroupSolutions == [] -> !
@@ -739,6 +755,7 @@ iterate_variants([V-Solution|GroupSolutions], V, Solution) :-
 iterate_variants([_|GroupSolutions], Ws, Solution) :-
     iterate_variants(GroupSolutions, Ws, Solution).
 
+:- non_counted_backtracking rightmost_power/3.
 
 rightmost_power(Term, FinalTerm, Xs) :-
     (  Term = X ^ Y
@@ -752,6 +769,7 @@ rightmost_power(Term, FinalTerm, Xs) :-
     ;  Xs = [], FinalTerm = Term
     ).
 
+:- non_counted_backtracking findall_with_existential/5.
 
 findall_with_existential(Template, Goal, PairedSolutions, Witnesses0, Witnesses) :-
     (  nonvar(Goal),
@@ -771,6 +789,8 @@ findall_with_existential(Template, Goal, PairedSolutions, Witnesses0, Witnesses)
 
 :- meta_predicate bagof(?, 0, ?).
 
+:- non_counted_backtracking bagof/3.
+
 bagof(Template, Goal, Solution) :-
     error:can_be(list, Solution),
     term_variables(Template, TemplateVars0),
@@ -783,6 +803,8 @@ bagof(Template, Goal, Solution) :-
     group_by_variants(PairedSolutions, GroupedSolutions),
     iterate_variants(GroupedSolutions, Witnesses, Solution).
 
+:- non_counted_backtracking iterate_variants_and_sort/3.
+
 iterate_variants_and_sort([V-Solution0|GroupSolutions], V, Solution) :-
     sort(Solution0, Solution),
     (  GroupSolutions == [] -> !
@@ -793,6 +815,8 @@ iterate_variants_and_sort([_|GroupSolutions], Ws, Solution) :-
 
 
 :- meta_predicate setof(?, 0, ?).
+
+:- non_counted_backtracking setof/3.
 
 setof(Template, Goal, Solution) :-
     error:can_be(list, Solution),
@@ -807,6 +831,7 @@ setof(Template, Goal, Solution) :-
     iterate_variants_and_sort(GroupedSolutions, Witnesses, Solution).
 
 % Clause retrieval and information.
+
 
 '$clause_body_is_valid'(B) :-
     (  var(B) -> true
@@ -832,7 +857,6 @@ setof(Template, Goal, Solution) :-
     ;  throw(error(type_error(callable, H), clause/2))
     ).
 
-
 clause(H, B) :-
     (  var(H) ->
        throw(error(instantiation_error, clause/2))
@@ -853,10 +877,12 @@ clause(H, B) :-
     ;  throw(error(type_error(callable, H), clause/2))
     ).
 
+
 call_asserta(Head, Body, Name, Arity, Module) :-
     '$clause_body_is_valid'(Body),
     functor(_, Name, Arity),
     '$asserta'(Head, Body, Name, Arity, Module).
+
 
 module_asserta_clause(Head, Body, Module) :-
     (  var(Head) ->
@@ -870,6 +896,7 @@ module_asserta_clause(Head, Body, Module) :-
        )
     ;  throw(error(type_error(callable, Head), asserta/1))
     ).
+
 
 asserta_clause(Head, Body) :-
     (  var(Head) ->
@@ -895,6 +922,7 @@ asserta_clause(Head, Body) :-
     ;  throw(error(type_error(callable, Head), asserta/1))
     ).
 
+
 :- meta_predicate asserta(0).
 
 asserta(Clause0) :-
@@ -909,6 +937,7 @@ asserta(Clause0) :-
     ;  Clause = (Head :- Body) ->
        module_asserta_clause(Head, Body, Module)
     ).
+
 
 module_assertz_clause(Head, Body, Module) :-
     (  var(Head) ->
@@ -929,6 +958,7 @@ call_assertz(Head, Body, Name, Arity, Module) :-
     '$clause_body_is_valid'(Body),
     functor(_, Name, Arity),
     '$assertz'(Head, Body, Name, Arity, Module).
+
 
 assertz_clause(Head, Body) :-
     (  var(Head) ->
@@ -953,6 +983,7 @@ assertz_clause(Head, Body) :-
        )
     ;  throw(error(type_error(callable, Head), assertz/1))
     ).
+
 
 :- meta_predicate assertz(0).
 
@@ -981,12 +1012,15 @@ module_retract_clauses([Clause|Clauses0], Head, Body, Name, Arity, Module) :-
     ;  true
     ).
 
+
 module_retract_clauses([_|Clauses0], Head, Body, Name, Arity, Module) :-
     module_retract_clauses(Clauses0, Head, Body, Name, Arity, Module).
+
 
 call_module_retract(Head, Body, Name, Arity, Module) :-
     findall((Head :- Body), Module:'$clause'(Head, Body), Clauses),
     module_retract_clauses(Clauses, Head, Body, Name, Arity, Module).
+
 
 retract_module_clause(Head, Body, Module) :-
     (  var(Head) ->
@@ -1012,6 +1046,7 @@ first_match_index([_ | Clauses], Clause, N0, N) :-
     N1 is N0 + 1,
     first_match_index(Clauses, Clause, N1, N).
 
+
 retract_clauses([Clause | Clauses0], Head, Body, Name, Arity) :-
     functor(VarHead, Name, Arity),
     findall((VarHead :- VarBody), builtins:'$clause'(VarHead, VarBody), Clauses1),
@@ -1022,13 +1057,14 @@ retract_clauses([Clause | Clauses0], Head, Body, Name, Arity) :-
     (  Clauses0 == [] -> !
     ;  true
     ).
-
 retract_clauses([_ | Clauses0], Head, Body, Name, Arity) :-
     retract_clauses(Clauses0, Head, Body, Name, Arity).
+
 
 call_retract(Head, Body, Name, Arity) :-
     findall((Head :- Body), builtins:'$clause'(Head, Body), Clauses),
     retract_clauses(Clauses, Head, Body, Name, Arity).
+
 
 retract_clause(Head, Body) :-
     (  var(Head) ->
@@ -1048,6 +1084,7 @@ retract_clause(Head, Body) :-
        )
     ;  throw(error(type_error(callable, Head), retract/1))
     ).
+
 
 :- meta_predicate retract(0).
 
@@ -1137,11 +1174,13 @@ abolish(Pred) :-
     ;  throw(error(type_error(predicate_indicator, Pred), abolish/1))
     ).
 
+
 '$iterate_db_refs'(Name, Arity, Name/Arity). % :-
 %   '$lookup_db_ref'(Ref, Name, Arity).
 '$iterate_db_refs'(RName, RArity, Name/Arity) :-
     '$get_next_db_ref'(RName, RArity, RRName, RRArity),
     '$iterate_db_refs'(RRName, RRArity, Name/Arity).
+
 
 current_predicate(Pred) :-
     (  var(Pred) ->
@@ -1159,16 +1198,20 @@ current_predicate(Pred) :-
        '$iterate_db_refs'(RN, RA, Pred)
     ).
 
+
 '$iterate_op_db_refs'(RPriority, RSpec, ROp, _, RPriority, RSpec, ROp).
 '$iterate_op_db_refs'(RPriority, RSpec, ROp, OssifiedOpDir, Priority, Spec, Op) :-
     '$get_next_op_db_ref'(RPriority, RSpec, ROp, OssifiedOpDir, RRPriority, RRSpec, RROp),
     '$iterate_op_db_refs'(RRPriority, RRSpec, RROp, OssifiedOpDir, Priority, Spec, Op).
 
+
 can_be_op_priority(Priority) :- var(Priority).
 can_be_op_priority(Priority) :- op_priority(Priority).
 
+
 can_be_op_specifier(Spec) :- var(Spec).
 can_be_op_specifier(Spec) :- op_specifier(Spec).
+
 
 current_op(Priority, Spec, Op) :-
     (  can_be_op_priority(Priority),
@@ -1187,24 +1230,25 @@ list_of_op_atoms([Atom|Atoms]) :-
     ).
 list_of_op_atoms([]).
 
+
 op_priority(Priority) :-
     integer(Priority), !,
     (  ( Priority < 0 ; Priority > 1200 ) ->
        throw(error(domain_error(operator_priority, Priority), op/3)) % 8.14.3.3 h)
     ;  true
     ).
-
 op_priority(Priority) :-
     throw(error(type_error(integer, Priority), op/3)). % 8.14.3.3 d)
+
 
 op_specifier(OpSpec) :-
     atom(OpSpec),
     (  lists:member(OpSpec, [yfx, xfy, xfx, yf, fy, xf, fx]), !
     ;  throw(error(domain_error(operator_specifier, OpSpec), op/3)) % 8.14.3.3 i)
     ).
-
 op_specifier(OpSpec) :-
     throw(error(type_error(atom, OpSpec), op/3)).
+
 
 valid_op(Op) :-
     atom(Op),
@@ -1217,8 +1261,10 @@ valid_op(Op) :-
     ;  true
     ).
 
+
 op_(Priority, OpSpec, Op) :-
     '$op'(Priority, OpSpec, Op).
+
 
 op(Priority, OpSpec, Op) :-
     (  var(Priority) ->
@@ -1242,7 +1288,6 @@ op(Priority, OpSpec, Op) :-
     ;  throw(error(type_error(list, Op), op/3)) % 8.14.3.3 f)
     ).
 
-
 halt :- halt(0).
 
 halt(N) :-
@@ -1254,6 +1299,7 @@ halt(N) :-
         '$halt'(N)
     ;   throw(error(domain_error(exit_code, N), halt/1))
     ).
+
 
 atom_length(Atom, Length) :-
     (  var(Atom)  ->
@@ -1270,6 +1316,7 @@ atom_length(Atom, Length) :-
        )
     ;  throw(error(type_error(atom, Atom), atom_length/2)) % 8.16.1.3 b)
     ).
+
 
 atom_chars(Atom, List) :-
     '$skip_max_list'(_, _, List, Tail),
@@ -1311,6 +1358,7 @@ atom_codes(Atom, List) :-
     ;  throw(error(type_error(atom, Atom), atom_codes/2))
     ).
 
+
 atom_concat(Atom_1, Atom_2, Atom_12) :-
     error:can_be(atom, Atom_1),
     error:can_be(atom, Atom_2),
@@ -1336,6 +1384,7 @@ atom_concat(Atom_1, Atom_2, Atom_12) :-
        atom_chars(Atom_12, Atom_12_Chars)
     ).
 
+
 sub_atom(Atom, Before, Length, After, Sub_atom) :-
     error:must_be(atom, Atom),
     error:can_be(atom, Sub_atom),
@@ -1356,6 +1405,7 @@ sub_atom(Atom, Before, Length, After, Sub_atom) :-
        '$skip_max_list'(After, _, AfterChars, []),
        atom_chars(Sub_atom, LengthChars)
     ).
+
 
 char_code(Char, Code) :-
     (  var(Char) ->
@@ -1391,6 +1441,7 @@ can_be_number(N, PI) :-
     ;  must_be_number(N, PI)
     ).
 
+
 must_be_number(N, _) :-
     (  integer(N)
     ;  float(N)
@@ -1401,6 +1452,7 @@ must_be_number(N, PI) :-
        throw(error(type_error(number, N), PI))
     ;  throw(error(instantiation_error, PI))
     ).
+
 
 chars_or_vars(Cs, _) :-
     (  var(Cs) ->
@@ -1417,6 +1469,7 @@ chars_or_vars([C|Cs], PI) :-
        )
     ;  chars_or_vars(Cs, PI)
     ).
+
 
 codes_or_vars(Cs, _) :-
     (  var(Cs) ->
@@ -1435,6 +1488,7 @@ codes_or_vars([C|Cs], PI) :-
     ;  codes_or_vars(Cs, PI)
     ).
 
+
 number_chars(N, Chs) :-
     (  ground(Chs) ->
        can_be_number(N, number_chars/2),
@@ -1451,9 +1505,11 @@ number_chars(N, Chs) :-
        '$number_to_chars'(N, Chs)
     ).
 
+
 list_of_ints(Ns) :-
     error:must_be(list, Ns),
     lists:maplist(error:must_be(integer), Ns).
+
 
 number_codes(N, Chs) :-
    (  ground(Chs) ->
@@ -1471,6 +1527,7 @@ number_codes(N, Chs) :-
       '$number_to_codes'(N, Chs)
    ).
 
+
 subsumes_term(General, Specific) :-
    \+ \+ (
       term_variables(Specific, SVs1),
@@ -1479,11 +1536,14 @@ subsumes_term(General, Specific) :-
       SVs1 == SVs2
    ).
 
+
 unify_with_occurs_check(X, Y) :- '$unify_with_occurs_check'(X, Y).
+
 
 current_input(S) :- '$current_input'(S).
 
 current_output(S) :- '$current_output'(S).
+
 
 set_input(S) :-
     (  var(S) ->
@@ -1536,6 +1596,7 @@ parse_stream_options_(E, _) :-
 open(SourceSink, Mode, Stream) :-
     open(SourceSink, Mode, Stream, []).
 
+
 open(SourceSink, Mode, Stream, StreamOptions) :-
     (  var(SourceSink) ->
        throw(error(instantiation_error, open/4)) % 8.11.5.3a)
@@ -1564,6 +1625,7 @@ parse_close_options(Options, OptionValues, Stub) :-
     DefaultOptions = [force-false],
     parse_options_list(Options, builtins:parse_close_options_, DefaultOptions, OptionValues, Stub).
 
+
 parse_close_options_(force(Force), force-Force) :-
     (  nonvar(Force), lists:member(Force, [true, false]), !
     ;
@@ -1579,6 +1641,7 @@ close(Stream, CloseOptions) :-
 
 close(Stream) :-
     '$close'(Stream, []).
+
 
 
 flush_output(S) :-

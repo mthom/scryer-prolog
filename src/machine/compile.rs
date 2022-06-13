@@ -1339,7 +1339,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         term: Term,
         settings: CodeGenSettings,
     ) -> Result<StandaloneCompileResult, SessionError> {
-        let mut preprocessor = Preprocessor::new();
+        let mut preprocessor = Preprocessor::new(settings);
 
         let clause = self.try_term_to_tl(term, &mut preprocessor)?;
         let queue = preprocessor.parse_queue(self)?;
@@ -1379,7 +1379,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         let mut code_ptr = code_len;
 
         let mut clauses = vec![];
-        let mut preprocessor = Preprocessor::new();
+        let mut preprocessor = Preprocessor::new(settings);
 
         for term in predicates.predicates.drain(0..) {
             clauses.push(self.try_term_to_tl(term, &mut preprocessor)?);

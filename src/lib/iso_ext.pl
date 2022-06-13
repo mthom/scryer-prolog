@@ -60,28 +60,31 @@ call_cleanup(G, C) :- setup_call_cleanup(true, G, C).
 
 :- meta_predicate(setup_call_cleanup(0, 0, 0)).
 
+:- non_counted_backtracking setup_call_cleanup/3.
+
 setup_call_cleanup(S, G, C) :-
     '$get_b_value'(B),
-    '$call'(S),
+    '$call_with_inference_counting'('$call'(S)),
     '$set_cp_by_default'(B),
     '$get_current_block'(Bb),
     (  C = _:CC,
-       '$call_with_default_policy'(var(CC)) ->
+       var(CC) ->
        instantiation_error(setup_call_cleanup/3)
-    ;  '$call_with_default_policy'(scc_helper(C, G, Bb))
+    ;  scc_helper(C, G, Bb)
     ).
 
 :- meta_predicate(scc_helper(?,0,?)).
 
 :- non_counted_backtracking scc_helper/3.
+
 scc_helper(C, G, Bb) :-
     '$get_cp'(Cp),
     '$install_scc_cleaner'(C, NBb),
-    '$call'(G),
+    '$call_with_inference_counting'('$call'(G)),
     ( '$check_cp'(Cp) ->
       '$reset_block'(Bb),
-      '$call_with_default_policy'(run_cleaners_without_handling(Cp))
-    ; '$call_with_default_policy'(true)
+      run_cleaners_without_handling(Cp)
+    ; true
     ; '$reset_block'(NBb),
       '$fail'
     ).
@@ -89,30 +92,32 @@ scc_helper(_, _, Bb) :-
     '$reset_block'(Bb),
     '$get_ball'(Ball),
     '$erase_ball',
-    '$call_with_default_policy'(run_cleaners_with_handling),
-    '$call_with_default_policy'(throw(Ball)).
+    run_cleaners_with_handling,
+    throw(Ball).
 scc_helper(_, _, _) :-
     '$get_cp'(Cp),
-    '$call_with_default_policy'(run_cleaners_without_handling(Cp)),
+    run_cleaners_without_handling(Cp),
     '$fail'.
 
 :- non_counted_backtracking run_cleaners_with_handling/0.
+
 run_cleaners_with_handling :-
     '$get_scc_cleaner'(C),
     '$get_level'(B),
-    '$call_with_default_policy'(catch(C, _, true)),
+    catch(C, _, true),
     '$set_cp_by_default'(B),
-    '$call_with_default_policy'(run_cleaners_with_handling).
+    run_cleaners_with_handling.
 run_cleaners_with_handling :-
     '$restore_cut_policy'.
 
 :- non_counted_backtracking run_cleaners_without_handling/1.
+
 run_cleaners_without_handling(Cp) :-
     '$get_scc_cleaner'(C),
     '$get_level'(B),
     '$call'(C),
     '$set_cp_by_default'(B),
-    '$call_with_default_policy'(run_cleaners_without_handling(Cp)).
+    run_cleaners_without_handling(Cp).
 run_cleaners_without_handling(Cp) :-
     '$set_cp_by_default'(Cp),
     '$restore_cut_policy'.
@@ -120,6 +125,7 @@ run_cleaners_without_handling(Cp) :-
 % call_with_inference_limit
 
 :- non_counted_backtracking end_block/4.
+
 end_block(_, Bb, NBb, _L) :-
     '$clean_up_block'(NBb),
     '$reset_block'(Bb).
@@ -129,12 +135,15 @@ end_block(B, _Bb, NBb, L) :-
     '$fail'.
 
 :- non_counted_backtracking handle_ile/3.
+
 handle_ile(B, inference_limit_exceeded(B), inference_limit_exceeded) :- !.
 handle_ile(B, E, _) :-
     '$remove_call_policy_check'(B),
-    '$call_with_default_policy'(throw(E)).
+    throw(E).
 
 :- meta_predicate(call_with_inference_limit(0, ?, ?)).
+
+:- non_counted_backtracking call_with_inference_limit/3.
 
 call_with_inference_limit(G, L, R) :-
     (  integer(L) ->
@@ -148,7 +157,7 @@ call_with_inference_limit(G, L, R) :-
     ),
     '$get_current_block'(Bb),
     '$get_b_value'(B),
-    '$call_with_default_policy'(call_with_inference_limit(G, L, R, Bb, B)),
+    call_with_inference_limit(G, L, R, Bb, B),
     '$remove_call_policy_check'(B).
 
 install_inference_counter(B, L, Count0) :-
@@ -161,11 +170,11 @@ install_inference_counter(B, L, Count0) :-
 call_with_inference_limit(G, L, R, Bb, B) :-
     '$install_new_block'(NBb),
     '$install_inference_counter'(B, L, Count0),
-    '$call'(G),
+    '$call_with_inference_counting'('$call'(G)),
     '$inference_level'(R, B),
     '$remove_inference_counter'(B, Count1),
-    '$call_with_default_policy'(is(Diff, L - (Count1 - Count0))),
-    '$call_with_default_policy'(end_block(B, Bb, NBb, Diff)).
+    is(Diff, L - (Count1 - Count0)),
+    end_block(B, Bb, NBb, Diff).
 call_with_inference_limit(_, _, R, Bb, B) :-
     '$reset_block'(Bb),
     '$remove_inference_counter'(B, _),
@@ -176,7 +185,7 @@ call_with_inference_limit(_, _, R, Bb, B) :-
        '$fail'
     ),
     '$erase_ball',
-    '$call_with_default_policy'(handle_ile(B, Ball, R)).
+    handle_ile(B, Ball, R).
 
 partial_string(String, L, L0) :-
     (  String == [] ->

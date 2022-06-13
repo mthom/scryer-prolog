@@ -196,6 +196,16 @@ impl CodeGenSettings {
             Instruction::TrustMe(0)
         }
     }
+
+    pub(crate) fn default_call_policy(&self) -> CallPolicy {
+        // calls are inference counted by default if and only if
+        // backtracking is counted too.
+        if self.non_counted_bt {
+            CallPolicy::Default
+        } else {
+            CallPolicy::Counted
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -459,10 +469,10 @@ impl<'b> CodeGenerator<'b> {
                 self.jmp_by_locs.push(code.len());
                 code.push(instr!("jmp_by_call", vars.len(), 0, pvs));
             }
-            &QueryTerm::Clause(_, ref ct, _, true) => {
+            &QueryTerm::Clause(_, ref ct, _, CallPolicy::Default) => {
                 code.push(call_clause_by_default!(ct.clone(), pvs));
             }
-            &QueryTerm::Clause(_, ref ct, _, false) => {
+            &QueryTerm::Clause(_, ref ct, _, CallPolicy::Counted) => {
                 code.push(call_clause!(ct.clone(), pvs));
             }
             _ => {}
@@ -748,7 +758,7 @@ impl<'b> CodeGenerator<'b> {
         terms: &Vec<Term>,
         code: &mut Code,
         term_loc: GenContext,
-        use_default_call_policy: bool,
+        call_policy: CallPolicy,
     ) -> Result<(), CompilationError> {
         macro_rules! compile_expr {
             ($self:expr, $terms:expr, $term_loc:expr, $code:expr) => ({
@@ -790,7 +800,7 @@ impl<'b> CodeGenerator<'b> {
 
         let at = at.unwrap_or(interm!(1));
 
-        Ok(if use_default_call_policy {
+        Ok(if let CallPolicy::Default = call_policy {
             code.push(instr!("is", default, temp_v!(1), at, 0));
         } else {
             code.push(instr!("is", temp_v!(1), at, 0));
@@ -852,8 +862,8 @@ impl<'b> CodeGenerator<'b> {
                         _,
                         ClauseType::BuiltIn(BuiltInClauseType::Is(..)),
                         ref terms,
-                        use_default_call_policy,
-                    ) => self.compile_is_call(terms, code, term_loc, use_default_call_policy)?,
+                        call_policy,
+                    ) => self.compile_is_call(terms, code, term_loc, call_policy)?,
                     &QueryTerm::Clause(_, ClauseType::Inlined(ref ct), ref terms, _) => {
                         self.compile_inlined(ct, terms, term_loc, code)?
                     }

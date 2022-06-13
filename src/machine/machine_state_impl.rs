@@ -2039,12 +2039,15 @@ impl MachineState {
         )
     }
 
-    pub(super) fn setup_call_n(&mut self, arity: usize) -> Result<PredicateKey, MachineStub> {
-        let addr = self.store(self.deref(self.registers[arity]));
-
-        let (name, narity) = read_heap_cell!(addr,
+    pub(crate) fn setup_call_n_init_goal_info(
+        &mut self,
+        goal: HeapCellValue,
+        arity: usize,
+    ) -> Result<(Atom, usize, usize), MachineStub> {
+        Ok(read_heap_cell!(goal,
             (HeapCellValueTag::Str, s) => {
-                let (name, narity) = cell_as_atom_cell!(self.heap[s]).get_name_and_arity();
+                let (name, narity) = cell_as_atom_cell!(self.heap[s])
+                    .get_name_and_arity();
 
                 if narity + arity > MAX_ARITY {
                     let stub = functor_stub(atom!("call"), arity + 1);
@@ -2052,34 +2055,48 @@ impl MachineState {
                     return Err(self.error_form(err, stub));
                 }
 
-                for i in (1..arity).rev() {
-                    self.registers[i + narity] = self.registers[i];
-                }
-
-                for i in 1..narity + 1 {
-                    self.registers[i] = self.heap[s + i];
-                }
-
-                (name, narity)
+                (name, narity, s)
             }
             (HeapCellValueTag::Atom, (name, arity)) => {
                 debug_assert_eq!(arity, 0);
-                (name, 0)
+
+                if name == atom!("[]") {
+                    let stub = functor_stub(atom!("call"), arity + 1);
+                    let err = self.type_error(ValidType::Callable, goal);
+                    return Err(self.error_form(err, stub));
+                }
+
+                (name, 0, 0)
             }
             (HeapCellValueTag::Char, c) => {
-                (self.atom_tbl.build_with(&c.to_string()), 0)
+                (self.atom_tbl.build_with(&c.to_string()), 0, 0)
             }
-            (HeapCellValueTag::Var | HeapCellValueTag::AttrVar | HeapCellValueTag::StackVar, _h) => {
+            (HeapCellValueTag::Var | HeapCellValueTag::AttrVar | HeapCellValueTag::StackVar) => {
                 let stub = functor_stub(atom!("call"), arity + 1);
                 let err = self.instantiation_error();
                 return Err(self.error_form(err, stub));
             }
             _ => {
                 let stub = functor_stub(atom!("call"), arity + 1);
-                let err = self.type_error(ValidType::Callable, addr);
+                let err = self.type_error(ValidType::Callable, goal);
                 return Err(self.error_form(err, stub));
             }
-        );
+        ))
+    }
+
+    pub(crate) fn setup_call_n(&mut self, arity: usize) -> Result<PredicateKey, MachineStub> {
+        let addr = self.store(self.deref(self.registers[arity]));
+        let (name, narity, s) = self.setup_call_n_init_goal_info(addr, arity)?;
+
+        if narity > 0 {
+            for i in (1..arity).rev() {
+                self.registers[i + narity] = self.registers[i];
+            }
+
+            for i in 1..narity + 1 {
+                self.registers[i] = self.heap[s + i];
+            }
+        }
 
         Ok((name, arity + narity - 1))
     }
