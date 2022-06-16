@@ -3014,46 +3014,21 @@ impl Machine {
             self.machine_st.registers[1 + narity]
         )));
 
-        let addr = self.machine_st.store(self.machine_st.deref(
+        let goal = self.machine_st.store(self.machine_st.deref(
             self.machine_st.registers[2 + narity]
         ));
 
-        read_heap_cell!(addr,
-            (HeapCellValueTag::Str, a) => {
-                let (name, arity) = cell_as_atom_cell!(self.machine_st.heap[a])
-                    .get_name_and_arity();
+        let (name, arity, s) = self.machine_st.setup_call_n_init_goal_info(goal, narity)?;
 
+        for i in (arity + 1..arity + narity + 1).rev() {
+            self.machine_st.registers[i] = self.machine_st.registers[i - arity];
+        }
 
-                for i in (arity + 1..arity + narity + 1).rev() {
-                    self.machine_st.registers[i] = self.machine_st.registers[i - arity];
-                }
+        for i in 1..arity + 1 {
+            self.machine_st.registers[i] = self.machine_st.heap[s + i];
+        }
 
-                for i in 1..arity + 1 {
-                    self.machine_st.registers[i] = self.machine_st.heap[a + i];
-                }
-
-                Ok((module_name, (name, arity + narity)))
-            }
-            (HeapCellValueTag::Atom, (name, _arity)) => {
-                Ok((module_name, (name, narity)))
-            }
-            (HeapCellValueTag::Char, c) => {
-                let key = (self.machine_st.atom_tbl.build_with(&c.to_string()), narity);
-                Ok((module_name, key))
-            }
-            (HeapCellValueTag::AttrVar | HeapCellValueTag::StackVar | HeapCellValueTag::Var) => {
-                let stub = functor_stub(atom!("call"), 1);
-                let err = self.machine_st.instantiation_error();
-
-                Err(self.machine_st.error_form(err, stub))
-            }
-            _ => {
-                let stub = functor_stub(atom!("call"), narity);
-                let err = self.machine_st.type_error(ValidType::Callable, addr);
-
-                Err(self.machine_st.error_form(err, stub))
-            }
-        )
+        Ok((module_name, (name, arity + narity)))
     }
 
     #[inline(always)]

@@ -690,6 +690,26 @@ expand_goal(UnexpandedGoals, Module, ExpandedGoals) :-
           '$call'(UnexpandedGoals = ExpandedGoals)),
     !.
 
+:- non_counted_backtracking expand_goal/4.
+
+expand_goal(UnexpandedGoals, Module, ExpandedGoals, HeadVars) :-
+    (  var(UnexpandedGoals) ->
+       expand_module_names(call(UnexpandedGoals), [0], Module, ExpandedGoals, HeadVars)
+    ;  goal_expansion(UnexpandedGoals, Module, UnexpandedGoals1),
+       (  Module \== user ->
+          goal_expansion(UnexpandedGoals1, user, Goals)
+       ;  Goals = UnexpandedGoals1
+       ),
+       (  expand_goal_cases(Goals, Module, ExpandedGoals, HeadVars) ->
+          true
+       ;  predicate_property(Module:Goals, meta_predicate(MetaSpecs0)),
+          MetaSpecs0 =.. [_ | MetaSpecs] ->
+          expand_module_names(Goals, MetaSpecs, Module, ExpandedGoals, HeadVars)
+       ;  thread_goals(Goals, ExpandedGoals, (','))
+       ;  Goals = ExpandedGoals
+       )
+    ).
+
 :- non_counted_backtracking expand_goal_cases/4.
 
 expand_goal_cases((Goal0, Goals0), Module, ExpandedGoals, HeadVars) :-
@@ -714,24 +734,19 @@ expand_goal_cases((Module:Goals0), _, ExpandedGoals, HeadVars) :-
     expand_goal(Goals0, Module, Goals1, HeadVars),
     ExpandedGoals = (Module:Goals1).
 
-:- non_counted_backtracking expand_goal/4.
 
-expand_goal(UnexpandedGoals, Module, ExpandedGoals, HeadVars) :-
-    (  var(UnexpandedGoals) ->
-       expand_module_names(call(UnexpandedGoals), [0], Module, ExpandedGoals, HeadVars)
-    ;  goal_expansion(UnexpandedGoals, Module, UnexpandedGoals1),
-       (  Module \== user ->
-          goal_expansion(UnexpandedGoals1, user, Goals)
-       ;  Goals = UnexpandedGoals1
-       ),
-       (  expand_goal_cases(Goals, Module, ExpandedGoals, HeadVars) ->
-          true
-       ;  predicate_property(Module:Goals, meta_predicate(MetaSpecs0)),
-          MetaSpecs0 =.. [_ | MetaSpecs] ->
-          expand_module_names(Goals, MetaSpecs, Module, ExpandedGoals, HeadVars)
-       ;  thread_goals(Goals, ExpandedGoals, (','))
-       ;  Goals = ExpandedGoals
+:- non_counted_backtracking thread_goals/3.
+
+thread_goals(Goals0, Goals1, Functor) :-
+    (  var(Goals0) ->
+       Goals0 = Goals1
+    ;  Goals0 = [G | Gs] ->
+       (  Gs = [] ->
+          Goals1 = G
+       ;  Goals1 =.. [Functor, G, Goals2],
+          thread_goals(Gs, Goals2, Functor)
        )
+    ;  Goals1 = Goals0
     ).
 
 :- non_counted_backtracking thread_goals/4.
@@ -746,20 +761,6 @@ thread_goals(Goals0, Goals1, Hole, Functor) :-
           thread_goals(Gs, Goals2, Hole, Functor)
        )
     ;  Goals1 =.. [Functor, Goals0, Hole]
-    ).
-
-:- non_counted_backtracking thread_goals/3.
-
-thread_goals(Goals0, Goals1, Functor) :-
-    (  var(Goals0) ->
-       Goals0 = Goals1
-    ;  Goals0 = [G | Gs] ->
-       (  Gs = [] ->
-          Goals1 = G
-       ;  Goals1 =.. [Functor, G, Goals2],
-          thread_goals(Gs, Goals2, Functor)
-       )
-    ;  Goals1 = Goals0
     ).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
