@@ -33,6 +33,9 @@ write_error(Error) :-
     ),
     write('.').
 
+'$print_message_and_fail'(inference_limit_exceeded(B)) :-
+    integer(B),
+    throw(inference_limit_exceeded(B)).
 '$print_message_and_fail'(Error) :-
     write_error(Error),
     nl,
