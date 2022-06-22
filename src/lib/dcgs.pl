@@ -154,12 +154,17 @@ seqq([Es|Ess]) --> seq(Es), seqq(Ess).
 % Describes an arbitrary number of elements
 ... --> [] | [_], ... .
 
+
+error_goal(error(E, must_be/2), error(E, must_be/2)).
+error_goal(error(E, (=..)/2), error(E, (=..)/2)).
+error_goal(E, _) :- throw(E).
+
 user:goal_expansion(phrase(GRBody, S, S0), GRBody1) :-
     load_context(GRBody, M, GRBody0),
     nonvar(GRBody0),
     catch(dcgs:dcg_body(GRBody0, S, S0, GRBody1, M),
-          error(E, must_be/2),
-          (  GRBody1 = throw(error(E, must_be/2))  )
+          E,
+          dcgs:error_goal(E, GRBody1)
          ).
 
 user:goal_expansion(phrase(GRBody, S), phrase(GRBody, S, [])).
