@@ -301,7 +301,7 @@ impl fmt::Debug for HeapCellValue {
     }
 }
 
-impl<T> From<TypedArenaPtr<T>> for HeapCellValue {
+impl<T: ArenaAllocated> From<TypedArenaPtr<T>> for HeapCellValue {
     #[inline]
     fn from(arena_ptr: TypedArenaPtr<T>) -> HeapCellValue {
         HeapCellValue::from(arena_ptr.header_ptr() as u64)
@@ -441,20 +441,22 @@ impl HeapCellValue {
     }
 
     #[inline]
-    pub fn is_compound(self) -> bool {
+    pub fn is_compound(self, heap: &[HeapCellValue]) -> bool {
         match self.get_tag() {
-           HeapCellValueTag::Str
-            | HeapCellValueTag::Lis
-            | HeapCellValueTag::CStr
-            | HeapCellValueTag::PStr
-            | HeapCellValueTag::PStrLoc
-            | HeapCellValueTag::PStrOffset => {
+            HeapCellValueTag::Str => {
+                cell_as_atom_cell!(heap[self.get_value()]).get_arity() > 0
+            }
+            HeapCellValueTag::Lis |
+            HeapCellValueTag::CStr |
+            HeapCellValueTag::PStr |
+            HeapCellValueTag::PStrLoc |
+            HeapCellValueTag::PStrOffset => {
                true
-           }
-           HeapCellValueTag::Atom => {
-               cell_as_atom_cell!(self).get_arity() > 0
-           }
-           _ => { false }
+            }
+            HeapCellValueTag::Atom => {
+                cell_as_atom_cell!(self).get_arity() > 0
+            }
+            _ => { false }
         }
     }
 
@@ -582,7 +584,7 @@ impl HeapCellValue {
         }
     }
 
-    pub fn order_category(self) -> Option<TermOrderCategory> {
+    pub fn order_category(self, heap: &[HeapCellValue]) -> Option<TermOrderCategory> {
         match Number::try_from(self).ok() {
             Some(Number::Integer(_)) | Some(Number::Fixnum(_)) | Some(Number::Rational(_)) => {
                 Some(TermOrderCategory::Integer)
@@ -601,8 +603,18 @@ impl HeapCellValue {
                     })
                 }
                 HeapCellValueTag::Lis | HeapCellValueTag::PStrLoc |
-                HeapCellValueTag::CStr | HeapCellValueTag::Str => {
+                HeapCellValueTag::CStr => {
                     Some(TermOrderCategory::Compound)
+                }
+                HeapCellValueTag::Str => {
+                    let value = heap[self.get_value()];
+                    let arity = cell_as_atom_cell!(value).get_arity();
+
+                    if arity == 0 {
+                        Some(TermOrderCategory::Atom)
+                    } else {
+                        Some(TermOrderCategory::Compound)
+                    }
                 }
                 _ => {
                     None
@@ -628,7 +640,7 @@ const_assert!(mem::size_of::<HeapCellValue>() == 8);
 
 #[bitfield]
 #[repr(u64)]
-#[derive(Copy, Clone, Debug)]
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 pub struct UntypedArenaPtr {
     ptr: B61,
     m: bool,
@@ -640,6 +652,13 @@ const_assert!(mem::size_of::<UntypedArenaPtr>() == 8);
 impl From<*const ArenaHeader> for UntypedArenaPtr {
     #[inline]
     fn from(ptr: *const ArenaHeader) -> UntypedArenaPtr {
+        unsafe { mem::transmute(ptr) }
+    }
+}
+
+impl From<*const IndexPtr> for UntypedArenaPtr {
+    #[inline]
+    fn from(ptr: *const IndexPtr) -> UntypedArenaPtr {
         unsafe { mem::transmute(ptr) }
     }
 }

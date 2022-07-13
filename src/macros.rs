@@ -272,6 +272,12 @@ macro_rules! match_untyped_arena_ptr_pat_body {
         #[allow(unused_braces)]
         $code
     }};
+    ($ptr:ident, IndexPtr, $ip:ident, $code:expr) => {{
+        #[allow(unused_mut)]
+        let mut $ip = TypedArenaPtr::new(unsafe { std::mem::transmute::<_, *mut IndexPtr>($ptr.get_ptr()) });
+        #[allow(unused_braces)]
+        $code
+    }};
     ($ptr:ident, $($tags:tt)|+, $s:ident, $code:expr) => {{
         let $s = Stream::from_tag($ptr.get_tag(), $ptr.payload_offset());
         #[allow(unused_braces)]
@@ -291,6 +297,12 @@ macro_rules! match_untyped_arena_ptr_pat {
             | ArenaHeaderTag::ByteStream
             | ArenaHeaderTag::StandardOutputStream
             | ArenaHeaderTag::StandardErrorStream
+    };
+    (IndexPtr) => {
+        ArenaHeaderTag::IndexPtrUndefined |
+        ArenaHeaderTag::IndexPtrDynamicUndefined |
+        ArenaHeaderTag::IndexPtrDynamicIndex |
+        ArenaHeaderTag::IndexPtrIndex
     };
     ($tag:ident) => {
         ArenaHeaderTag::$tag

@@ -2,6 +2,9 @@ use crate::atom_table::*;
 use crate::machine::heap::*;
 use crate::types::*;
 
+#[cfg(test)]
+use crate::heap_iter::FocusedHeapIter;
+
 use core::marker::PhantomData;
 
 pub(crate) trait UnmarkPolicy {
@@ -67,6 +70,14 @@ pub(crate) struct StacklessPreOrderHeapIter<'a, UMP: UnmarkPolicy> {
     current: usize,
     next: usize,
     _marker: PhantomData<UMP>,
+}
+
+#[cfg(test)]
+impl<'a> FocusedHeapIter for StacklessPreOrderHeapIter<'a, IteratorUMP> {
+    #[inline]
+    fn focus(&self) -> usize {
+        self.current
+    }
 }
 
 impl<'a, UMP: UnmarkPolicy> Drop for StacklessPreOrderHeapIter<'a, UMP> {

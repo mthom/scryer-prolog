@@ -89,6 +89,17 @@ impl<'a> Drop for StackfulPreOrderHeapIter<'a> {
     }
 }
 
+pub trait FocusedHeapIter: Iterator<Item = HeapCellValue> {
+    fn focus(&self) -> usize;
+}
+
+impl<'a> FocusedHeapIter for StackfulPreOrderHeapIter<'a> {
+    #[inline]
+    fn focus(&self) -> usize {
+        self.h
+    }
+}
+
 impl<'a> StackfulPreOrderHeapIter<'a> {
     #[inline]
     fn new(heap: &'a mut Vec<HeapCellValue>, cell: HeapCellValue) -> Self {
@@ -124,11 +135,6 @@ impl<'a> StackfulPreOrderHeapIter<'a> {
         }
 
         None
-    }
-
-    #[inline]
-    pub fn focus(&self) -> usize {
-        self.h
     }
 
     #[inline]
@@ -271,13 +277,14 @@ pub(crate) fn stackful_preorder_iter(
 }
 
 #[derive(Debug)]
-pub(crate) struct PostOrderIterator<Iter: Iterator<Item = HeapCellValue>> {
+pub(crate) struct PostOrderIterator<Iter: FocusedHeapIter> {
+    focus: usize,
     base_iter: Iter,
     base_iter_valid: bool,
-    parent_stack: Vec<(usize, HeapCellValue)>, // number of children, parent node.
+    parent_stack: Vec<(usize, HeapCellValue, usize)>, // number of children, parent node, focus.
 }
 
-impl<Iter: Iterator<Item = HeapCellValue>> Deref for PostOrderIterator<Iter> {
+impl<Iter: FocusedHeapIter> Deref for PostOrderIterator<Iter> {
     type Target = Iter;
 
     fn deref(&self) -> &Self::Target {
@@ -285,9 +292,10 @@ impl<Iter: Iterator<Item = HeapCellValue>> Deref for PostOrderIterator<Iter> {
     }
 }
 
-impl<Iter: Iterator<Item = HeapCellValue>> PostOrderIterator<Iter> {
+impl<Iter: FocusedHeapIter> PostOrderIterator<Iter> {
     pub(crate) fn new(base_iter: Iter) -> Self {
         PostOrderIterator {
+            focus: 0,
             base_iter,
             base_iter_valid: true,
             parent_stack: vec![],
@@ -295,32 +303,36 @@ impl<Iter: Iterator<Item = HeapCellValue>> PostOrderIterator<Iter> {
     }
 }
 
-impl<Iter: Iterator<Item = HeapCellValue>> Iterator for PostOrderIterator<Iter> {
+impl<Iter: FocusedHeapIter> Iterator for PostOrderIterator<Iter> {
     type Item = HeapCellValue;
 
     fn next(&mut self) -> Option<Self::Item> {
         loop {
-            if let Some((child_count, node)) = self.parent_stack.pop() {
+            if let Some((child_count, node, focus)) = self.parent_stack.pop() {
                 if child_count == 0 {
+                    self.focus = focus;
                     return Some(node);
                 }
 
-                self.parent_stack.push((child_count - 1, node));
+                self.parent_stack.push((child_count - 1, node, focus));
             }
 
             if self.base_iter_valid {
                 if let Some(item) = self.base_iter.next() {
+                    let focus = self.base_iter.focus();
+
                     read_heap_cell!(item,
                         (HeapCellValueTag::Atom, (_name, arity)) => {
-                            self.parent_stack.push((arity, item));
+                            self.parent_stack.push((arity, item, focus));
                         }
                         (HeapCellValueTag::Lis) => {
-                            self.parent_stack.push((2, item));
+                            self.parent_stack.push((2, item, focus));
                         }
                         (HeapCellValueTag::PStr | HeapCellValueTag::PStrOffset) => {
-                            self.parent_stack.push((1, item));
+                            self.parent_stack.push((1, item, focus));
                         }
                         _ => {
+                            self.focus = focus;
                             return Some(item);
                         }
                     );
@@ -338,12 +350,19 @@ impl<Iter: Iterator<Item = HeapCellValue>> Iterator for PostOrderIterator<Iter> 
     }
 }
 
+impl<Iter: FocusedHeapIter> FocusedHeapIter for PostOrderIterator<Iter> {
+    #[inline]
+    fn focus(&self) -> usize {
+        self.focus
+    }
+}
+
 pub(crate) type LeftistPostOrderHeapIter<'a> = PostOrderIterator<StackfulPreOrderHeapIter<'a>>;
 
 impl<'a> LeftistPostOrderHeapIter<'a> {
     #[inline]
     pub fn pop_stack(&mut self) {
-        if let Some((child_count, _)) = self.parent_stack.last() {
+        if let Some((child_count, ..)) = self.parent_stack.last() {
             for _ in 0 .. *child_count {
                 self.base_iter.pop_stack();
             }

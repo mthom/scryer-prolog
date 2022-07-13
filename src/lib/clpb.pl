@@ -1122,6 +1122,8 @@ indomain(1).
 % CountAnd = 1.
 % ==
 
+
+
 sat_count(Sat0, N) :-
         catch((parse_sat(Sat0, Sat),
                sat_bdd(Sat, BDD),

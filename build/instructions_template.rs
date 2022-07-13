@@ -548,6 +548,12 @@ enum SystemClauseType {
     PredicateDefined,
     #[strum_discriminants(strum(props(Arity = "3", Name = "$strip_module")))]
     StripModule,
+    #[strum_discriminants(strum(props(Arity = "4", Name = "$compile_inline_or_expanded_goal")))]
+    CompileInlineOrExpandedGoal,
+    #[strum_discriminants(strum(props(Arity = "arity", Name = "$call_inline")))]
+    InlineCallN(usize),
+    #[strum_discriminants(strum(props(Arity = "1", Name = "$is_expanded_or_inlined")))]
+    IsExpandedOrInlined,
     REPL(REPLCodePtr),
 }
 
@@ -1435,6 +1441,12 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::DefaultExecuteN(arity, _) => {
                         functor!(atom!("execute_default_n"), [fixnum(arity)])
                     }
+                    &Instruction::CallInlineCallN(arity, _) => {
+                        functor!(atom!("call_n_inline"), [fixnum(arity)])
+                    }
+                    &Instruction::ExecuteInlineCallN(arity, _) => {
+                        functor!(atom!("call_n_inline"), [fixnum(arity)])
+                    }
                     &Instruction::CallTermGreaterThan(_) |
                     &Instruction::CallTermLessThan(_) |
                     &Instruction::CallTermGreaterThanOrEqual(_) |
@@ -1597,6 +1609,8 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallDeleteHeadAttribute(_) |
                     &Instruction::CallDynamicModuleResolution(..) |
                     &Instruction::CallPrepareCallClause(..) |
+                    &Instruction::CallCompileInlineOrExpandedGoal(..) |
+                    &Instruction::CallIsExpandedOrInlined(_) |
                     &Instruction::CallEnqueueAttributedVar(_) |
                     &Instruction::CallFetchGlobalVar(_) |
                     &Instruction::CallFirstStream(_) |
@@ -1804,6 +1818,8 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteDeleteHeadAttribute(_) |
                     &Instruction::ExecuteDynamicModuleResolution(..) |
                     &Instruction::ExecutePrepareCallClause(..) |
+                    &Instruction::ExecuteCompileInlineOrExpandedGoal(..) |
+                    &Instruction::ExecuteIsExpandedOrInlined(_) |
                     &Instruction::ExecuteEnqueueAttributedVar(_) |
                     &Instruction::ExecuteFetchGlobalVar(_) |
                     &Instruction::ExecuteFirstStream(_) |
@@ -2412,6 +2428,12 @@ pub fn generate_instructions_rs() -> TokenStream {
                         SystemClauseType::#ident(temp_v!(1))
                     )
                 }
+            } else if ident.to_string() == "InlineCallN" {
+                quote! {
+                    (atom!(#name), arity) => ClauseType::System(
+                        SystemClauseType::#ident(arity)
+                    )
+                }
             } else {
                 quote! {
                     (atom!(#name), #arity) => ClauseType::System(
@@ -2442,6 +2464,7 @@ pub fn generate_instructions_rs() -> TokenStream {
         });
 
         let ident = variant.ident;
+
         let instr_ident = if ident != "CallContinuation" {
             format_ident!("Call{}", ident)
         } else {
@@ -2537,7 +2560,7 @@ pub fn generate_instructions_rs() -> TokenStream {
 
         if ident == "Named" {
             clause_type_from_name_and_arity_arms.push(quote! {
-                (name, arity) => ClauseType::Named(arity, name, CodeIndex::default())
+                (name, arity) => ClauseType::Named(arity, name, CodeIndex::default(arena))
             });
 
             clause_type_to_instr_arms.push(quote! {
@@ -2933,7 +2956,7 @@ pub fn generate_instructions_rs() -> TokenStream {
         }
 
         impl ClauseType {
-            pub fn from(name: Atom, arity: usize) -> ClauseType {
+            pub fn from(name: Atom, arity: usize, arena: &mut Arena) -> ClauseType {
                 match (name, arity) {
                     #(
                         #clause_type_from_name_and_arity_arms,

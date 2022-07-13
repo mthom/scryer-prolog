@@ -1,7 +1,6 @@
 use crate::atom_table::*;
 use crate::forms::*;
 use crate::instructions::*;
-use crate::machine::machine_indices::*;
 use crate::parser::ast::*;
 
 use std::cell::Cell;
@@ -16,7 +15,7 @@ pub(crate) enum TermRef<'a> {
     AnonVar(Level),
     Cons(Level, &'a Cell<RegType>, &'a Term, &'a Term),
     Literal(Level, &'a Cell<RegType>, &'a Literal),
-    Clause(Level, &'a Cell<RegType>, ClauseType, &'a Vec<Term>),
+    Clause(Level, &'a Cell<RegType>, Atom, &'a Vec<Term>),
     PartialString(Level, &'a Cell<RegType>, &'a String, &'a Box<Term>),
     CompleteString(Level, &'a Cell<RegType>, Atom),
     Var(Level, &'a Cell<VarReg>, Rc<String>),
@@ -40,7 +39,7 @@ impl<'a> TermRef<'a> {
 pub(crate) enum TermIterState<'a> {
     AnonVar(Level),
     Literal(Level, &'a Cell<RegType>, &'a Literal),
-    Clause(Level, usize, &'a Cell<RegType>, ClauseType, &'a Vec<Term>),
+    Clause(Level, usize, &'a Cell<RegType>, Atom, &'a Vec<Term>),
     InitialCons(Level, &'a Cell<RegType>, &'a Term, &'a Term),
     FinalCons(Level, &'a Cell<RegType>, &'a Term, &'a Term),
     InitialPartialString(Level, &'a Cell<RegType>, &'a String, &'a Box<Term>),
@@ -54,8 +53,7 @@ impl<'a> TermIterState<'a> {
         match term {
             Term::AnonVar => TermIterState::AnonVar(lvl),
             Term::Clause(cell, name, subterms) => {
-                let ct = ClauseType::Named(subterms.len(), *name, CodeIndex::default());
-                TermIterState::Clause(lvl, 0, cell, ct, subterms)
+                TermIterState::Clause(lvl, 0, cell, *name, subterms)
             }
             Term::Cons(cell, head, tail) => {
                 TermIterState::InitialCons(lvl, cell, head.as_ref(), tail.as_ref())
@@ -105,7 +103,7 @@ impl<'a> QueryIterator<'a> {
                 Level::Root,
                 0,
                 r,
-                ClauseType::from(*name, terms.len()),
+                *name,
                 terms,
             ),
             Term::Var(cell, var) => TermIterState::Var(Level::Root, cell, var.clone()),
@@ -118,14 +116,14 @@ impl<'a> QueryIterator<'a> {
 
     fn new(term: &'a QueryTerm) -> Self {
         match term {
-            &QueryTerm::Clause(ref cell, ClauseType::CallN(arity), ref terms, _) => {
-                let state = TermIterState::Clause(Level::Root, 1, cell, ClauseType::CallN(arity), terms);
+            &QueryTerm::Clause(ref cell, ClauseType::CallN(_), ref terms, _) => {
+                let state = TermIterState::Clause(Level::Root, 1, cell, atom!("$call"), terms);
                 QueryIterator {
                     state_stack: vec![state],
                 }
             }
             &QueryTerm::Clause(ref cell, ref ct, ref terms, _) => {
-                let state = TermIterState::Clause(Level::Root, 0, cell, ct.clone(), terms);
+                let state = TermIterState::Clause(Level::Root, 0, cell, ct.name(), terms);
                 QueryIterator {
                     state_stack: vec![state],
                 }
@@ -167,20 +165,17 @@ impl<'a> Iterator for QueryIterator<'a> {
                 TermIterState::AnonVar(lvl) => {
                     return Some(TermRef::AnonVar(lvl));
                 }
-                TermIterState::Clause(lvl, child_num, cell, ct, child_terms) => {
+                TermIterState::Clause(lvl, child_num, cell, name, child_terms) => {
                     if child_num == child_terms.len() {
-                        match ct {
-                            ClauseType::CallN(_) => {
+                        match name {
+                            atom!("$call") if lvl == Level::Root => {
                                 self.push_subterm(Level::Shallow, &child_terms[0]);
                             }
-                            ClauseType::Named(..) => {
+                            _ => {
                                 return match lvl {
                                     Level::Root => None,
-                                    lvl => Some(TermRef::Clause(lvl, cell, ct, child_terms)),
+                                    lvl => Some(TermRef::Clause(lvl, cell, name, child_terms)),
                                 }
-                            }
-                            _ => {
-                                return None;
                             }
                         };
                     } else {
@@ -188,7 +183,7 @@ impl<'a> Iterator for QueryIterator<'a> {
                             lvl,
                             child_num + 1,
                             cell,
-                            ct,
+                            name,
                             child_terms,
                         ));
 
@@ -257,8 +252,7 @@ impl<'a> FactIterator<'a> {
                 vec![TermIterState::AnonVar(Level::Root)]
             }
             Term::Clause(cell, name, terms) => {
-                let ct = ClauseType::from(*name, terms.len());
-                vec![TermIterState::Clause(Level::Root, 0, cell, ct, terms)]
+                vec![TermIterState::Clause(Level::Root, 0, cell, *name, terms)]
             }
             Term::Cons(cell, head, tail) => vec![TermIterState::InitialCons(
                 Level::Root,
@@ -305,14 +299,14 @@ impl<'a> Iterator for FactIterator<'a> {
                 TermIterState::AnonVar(lvl) => {
                     return Some(TermRef::AnonVar(lvl));
                 }
-                TermIterState::Clause(lvl, _, cell, ct, child_terms) => {
+                TermIterState::Clause(lvl, _, cell, name, child_terms) => {
                     for child_term in child_terms {
                         self.push_subterm(lvl.child_level(), child_term);
                     }
 
                     match lvl {
                         Level::Root if !self.iterable_root => continue,
-                        _ => return Some(TermRef::Clause(lvl, cell, ct, child_terms)),
+                        _ => return Some(TermRef::Clause(lvl, cell, name, child_terms)),
                     };
                 }
                 TermIterState::InitialCons(lvl, cell, head, tail) => {

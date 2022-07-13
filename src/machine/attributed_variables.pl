@@ -28,11 +28,13 @@ call_verify_attributes([Attr|Attrs], Var, Value, ListOfGoalLists) :-
     sort(Modules0, Modules),
     verify_attrs(Modules, Var, Value, ListOfGoalLists).
 
+error_handler(M, evaluation_error((M:verify_attributes)/3), []).
+% error_handler(_, existence_error(procedure, verify_attributes/3), []).
 
 verify_attrs([Module|Modules], Var, Value, [Module-Goals|ListOfGoalLists]) :-
     catch(Module:verify_attributes(Var, Value, Goals),
-          error(evaluation_error((Module:verify_attributes)/3), verify_attributes/3),
-          Goals = []),
+          error(E, verify_attributes/3),
+          error_handler(Module, E, Goals)),
     verify_attrs(Modules, Var, Value, ListOfGoalLists).
 verify_attrs([], _, _, []).
 

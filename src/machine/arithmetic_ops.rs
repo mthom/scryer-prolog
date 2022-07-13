@@ -390,7 +390,6 @@ pub(crate) fn int_pow(n1: Number, n2: Number, arena: &mut Arena) -> Result<Numbe
 pub(crate) fn pow(n1: Number, n2: Number, culprit: Atom) -> Result<Number, MachineStubGen> {
     if n2.is_negative() && n1.is_zero() {
         let stub_gen = move || functor_stub(culprit, 2);
-
         return Err(undefined_eval_error(stub_gen));
     }
 
@@ -1183,7 +1182,7 @@ impl MachineState {
 
                                 let result = arena_alloc!(
                                     drop_iter_on_err!(self, iter, rdiv(r1, r2)),
-                                    self.arena
+                                    &mut self.arena
                                 );
 
                                 self.interms.push(Number::Rational(result));

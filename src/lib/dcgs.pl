@@ -18,7 +18,7 @@ load_context(GRBody, Module, GRBody0) :-
        true
     ;  prolog_load_context(module, Module) ->
        true
-    ;  true
+    ;  Module = user
     ).
 
 
@@ -34,7 +34,7 @@ phrase(GRBody, S0, S) :-
     (  var(GRBody0) ->
        instantiation_error(phrase/3)
     ;  dcg_body(GRBody0, S0, S, GRBody1, Module) ->
-       call(GRBody1)
+       call(Module:GRBody1)
     ;  type_error(callable, GRBody0, phrase/3)
     ).
 

@@ -1,6 +1,7 @@
 use crate::arena::*;
 use crate::atom_table::*;
 use crate::forms::*;
+use crate::machine::machine_indices::*;
 use crate::machine::partial_string::*;
 use crate::parser::ast::*;
 use crate::types::*;
@@ -17,6 +18,9 @@ impl From<Literal> for HeapCellValue {
         match literal {
             Literal::Atom(name) => atom_as_cell!(name),
             Literal::Char(c) => char_as_cell!(c),
+            Literal::CodeIndex(ptr) => {
+                untyped_arena_ptr_as_cell!(UntypedArenaPtr::from(ptr))
+            }
             Literal::Fixnum(n) => fixnum_as_cell!(n),
             Literal::Integer(bigint_ptr) => {
                 typed_arena_ptr_as_cell!(bigint_ptr)
@@ -64,6 +68,9 @@ impl TryFrom<HeapCellValue> for Literal {
                      }
                      (ArenaHeaderTag::Rational, n) => {
                          Ok(Literal::Rational(n))
+                     }
+                     (ArenaHeaderTag::IndexPtr, _ip) => {
+                         Ok(Literal::CodeIndex(CodeIndex::from(cons_ptr)))
                      }
                      _ => {
                          Err(())

@@ -13,7 +13,6 @@ use crate::parser::rug::ops::PowAssign;
 use crate::parser::rug::{Assign, Integer, Rational};
 
 use crate::machine::machine_errors::*;
-use crate::machine::machine_indices::*;
 
 use ordered_float::*;
 
@@ -65,19 +64,22 @@ impl<'a> ArithInstructionIterator<'a> {
     fn from(term: &'a Term) -> Result<Self, ArithmeticError> {
         let state = match term {
             Term::AnonVar => return Err(ArithmeticError::UninstantiatedVar),
-            Term::Clause(cell, name, terms) => match ClauseType::from(*name, terms.len()) {
+            Term::Clause(cell, name, terms) => {
+                TermIterState::Clause(Level::Shallow, 0, cell, *name, terms)
+            }
+            /* match ClauseType::from(*name, terms.len()) {
                 ct @ ClauseType::Named(..) => {
                     Ok(TermIterState::Clause(Level::Shallow, 0, cell, ct, terms))
                 }
-                ClauseType::Inlined(InlinedClauseType::IsFloat(_)) => {
-                    let ct = ClauseType::Named(1, atom!("float"), CodeIndex::default());
+                ct @ ClauseType::Inlined(InlinedClauseType::IsFloat(_)) => {
+                    // let ct = ClauseType::Named(1, atom!("float"), CodeIndex::default());
                     Ok(TermIterState::Clause(Level::Shallow, 0, cell, ct, terms))
                 }
                 _ => Err(ArithmeticError::NonEvaluableFunctor(
                     Literal::Atom(*name),
                     terms.len(),
                 )),
-            }?,
+            }?,*/
             Term::Literal(cell, cons) => TermIterState::Literal(Level::Shallow, cell, cons),
             Term::Cons(..) | Term::PartialString(..) | Term::CompleteString(..) => {
                 return Err(ArithmeticError::NonEvaluableFunctor(
@@ -108,17 +110,17 @@ impl<'a> Iterator for ArithInstructionIterator<'a> {
         while let Some(iter_state) = self.state_stack.pop() {
             match iter_state {
                 TermIterState::AnonVar(_) => return Some(Err(ArithmeticError::UninstantiatedVar)),
-                TermIterState::Clause(lvl, child_num, cell, ct, subterms) => {
+                TermIterState::Clause(lvl, child_num, cell, name, subterms) => {
                     let arity = subterms.len();
 
                     if child_num == arity {
-                        return Some(Ok(ArithTermRef::Op(ct.name(), arity)));
+                        return Some(Ok(ArithTermRef::Op(name, arity)));
                     } else {
                         self.state_stack.push(TermIterState::Clause(
                             lvl,
                             child_num + 1,
                             cell,
-                            ct,
+                            name,
                             subterms,
                         ));
 
