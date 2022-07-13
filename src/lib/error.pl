@@ -10,6 +10,10 @@
                   type_error/3
                   ]).
 
+
+:- meta_predicate check_(1, ?, ?).
+
+
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    must_be(Type, Term)
 

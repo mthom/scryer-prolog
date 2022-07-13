@@ -406,7 +406,7 @@ fn merge_indexed_subsequences(
 
                 *o = 0;
 
-                return Some(IndexPtr::Index(outer_threaded_choice_instr_loc + 1));
+                return Some(IndexPtr::index(outer_threaded_choice_instr_loc + 1));
             }
             _ => {}
         },
@@ -785,7 +785,7 @@ fn remove_non_leading_clause(
 
                     *o = 0;
 
-                    Some(IndexPtr::Index(preceding_choice_instr_loc + 1))
+                    Some(IndexPtr::index(preceding_choice_instr_loc + 1))
                 }
                 _ => {
                     unreachable!();
@@ -820,7 +820,7 @@ fn finalize_retract(
             retraction_info,
             &compilation_target,
             key,
-            &code_index,
+            code_index,
             index_ptr,
         );
     }
@@ -849,9 +849,9 @@ fn remove_leading_unindexed_clause(
                     retraction_info,
                 );
 
-                Some(IndexPtr::Index(index_ptr))
+                Some(IndexPtr::index(index_ptr))
             } else {
-                Some(IndexPtr::DynamicUndefined)
+                Some(IndexPtr::dynamic_undefined())
             }
         }
         _ => {
@@ -1131,9 +1131,9 @@ fn prepend_compiled_clause(
     };
 
     if skeleton.core.is_dynamic {
-        IndexPtr::DynamicIndex(clause_loc)
+        IndexPtr::dynamic_index(clause_loc)
     } else {
-        IndexPtr::Index(clause_loc)
+        IndexPtr::index(clause_loc)
     }
 }
 
@@ -1268,9 +1268,9 @@ fn append_compiled_clause(
 
     code_ptr_opt.map(|p| {
         if skeleton.core.is_dynamic {
-            IndexPtr::DynamicIndex(p)
+            IndexPtr::dynamic_index(p)
         } else {
-            IndexPtr::Index(p)
+            IndexPtr::index(p)
         }
     })
 }
@@ -1306,8 +1306,8 @@ fn print_overwrite_warning(
         }
     }
 
-    match code_ptr {
-        IndexPtr::DynamicUndefined | IndexPtr::Undefined => return,
+    match code_ptr.tag() {
+        IndexPtrTag::DynamicUndefined | IndexPtrTag::Undefined => return,
         _ if is_dynamic => return,
         _ => {}
     }
@@ -1471,16 +1471,16 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         );
 
         let index_ptr = if settings.is_dynamic() {
-            IndexPtr::DynamicIndex(code_ptr)
+            IndexPtr::dynamic_index(code_ptr)
         } else {
-            IndexPtr::Index(code_ptr)
+            IndexPtr::index(code_ptr)
         };
 
         set_code_index(
             &mut self.payload.retraction_info,
             &predicates.compilation_target,
             key,
-            &code_index,
+            code_index,
             index_ptr,
         );
 
@@ -1704,7 +1704,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                         &mut self.payload.retraction_info,
                         &compilation_target,
                         key,
-                        &code_index,
+                        code_index,
                         new_code_ptr,
                     );
                 }
@@ -1745,7 +1745,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     &mut self.payload.retraction_info,
                     &compilation_target,
                     key,
-                    &code_index,
+                    code_index,
                     new_code_ptr,
                 );
 
@@ -1870,7 +1870,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                                 skeleton.clauses[target_pos].clause_start;
 
                             let index_ptr_opt = if target_pos == 0 {
-                                Some(IndexPtr::Index(clause_loc))
+                                Some(IndexPtr::index(clause_loc))
                             } else {
                                 None
                             };
@@ -2384,13 +2384,15 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                 match self.wam_prelude.indices.modules.get_mut(&filename) {
                     Some(ref mut module) => {
                         let index_ptr = code_index.get();
-                        let code_index = module.code_dir.entry(key).or_insert(code_index);
+                        let code_index = module.code_dir.entry(key)
+                            .or_insert(code_index)
+                            .clone();
 
                         set_code_index(
                             &mut self.payload.retraction_info,
                             &CompilationTarget::Module(filename),
                             key,
-                            &code_index,
+                            code_index,
                             index_ptr,
                         );
                     }
@@ -2414,6 +2416,57 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                 AppendOrPrepend::Append,
             )?;
         }
+
+        Ok(())
+    }
+}
+
+// standalone functions for compiling auxiliary goals used by expand_goal.
+impl Machine {
+    pub(crate) fn get_or_insert_qualified_code_index(
+        &mut self,
+        module_name: HeapCellValue,
+        key: PredicateKey,
+    ) -> CodeIndex {
+        let mut loader: Loader<'_, LiveLoadAndMachineState<'_>> = Loader::new(
+            self,
+            LiveTermStream::new(ListingSource::User),
+        );
+
+        let module_name = if module_name.get_tag() == HeapCellValueTag::Atom {
+            cell_as_atom!(module_name)
+        } else {
+            atom!("user")
+        };
+
+        loader.get_or_insert_qualified_code_index(module_name, key)
+    }
+
+    pub(crate) fn compile_standalone_clause(
+        &mut self,
+        term_loc: RegType,
+        vars: &[Term],
+    ) -> Result<(), SessionError> {
+        let mut compile = || {
+            let mut loader: Loader<'_, LiveLoadAndMachineState<'_>> = Loader::new(
+                self,
+                LiveTermStream::new(ListingSource::User),
+            );
+
+            let term = loader.read_term_from_heap(term_loc)?;
+            let clause = build_rule_body(vars, term);
+
+            let settings = CodeGenSettings {
+                global_clock_tick: None,
+                is_extensible: false,
+                non_counted_bt: true,
+            };
+
+            loader.compile_standalone_clause(clause, settings)
+        };
+
+        let StandaloneCompileResult { clause_code, .. } = compile()?;
+        self.code.extend(clause_code.into_iter());
 
         Ok(())
     }

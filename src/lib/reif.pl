@@ -1,6 +1,6 @@
 :- module(reif, [if_/3, (=)/3, (',')/3, (;)/3, cond_t/3, dif/3,
-		 memberd_t/3, tfilter/3, tmember/2, tmember_t/3,
-		 tpartition/4]).
+		         memberd_t/3, tfilter/3, tmember/2, tmember_t/3,
+		         tpartition/4]).
 
 :- use_module(library(dif)).
 
@@ -30,13 +30,10 @@ non(false, true).
 
 :- meta_predicate(tfilter(2, ?, ?)).
 
-tfilter(C_2, Es, Fs) :-
-   i_tfilter(Es, C_2, Fs).
-
-i_tfilter([], _, []).
-i_tfilter([E|Es], C_2, Fs0) :-
+tfilter(_, [], []).
+tfilter(C_2, [E|Es], Fs0) :-
    if_(call(C_2, E), Fs0 = [E|Fs], Fs0 = Fs),
-   i_tfilter(Es, C_2, Fs).
+   tfilter(C_2, Es, Fs).
 
 :- meta_predicate(tpartition(2, ?, ?, ?)).
 

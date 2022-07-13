@@ -510,6 +510,21 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     term_stack.push(Term::Literal(Cell::default(), Literal::try_from(addr).unwrap()));
                 }
                 (HeapCellValueTag::Atom, (name, arity)) => {
+                    let h = iter.focus();
+                    let mut arity = arity;
+
+                    if iter.heap.len() > h + arity + 1 {
+                        let value = iter.heap[h + arity + 1];
+
+                        if let Some(idx) = get_structure_index(value) {
+                            term_stack.push(
+                                Term::Literal(Cell::default(), Literal::CodeIndex(idx))
+                            );
+
+                            arity += 1;
+                        }
+                    }
+
                     if arity == 0 {
                         term_stack.push(Term::Literal(Cell::default(), Literal::Atom(name)));
                     } else {
@@ -708,7 +723,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                             module
                                 .code_dir
                                 .get_mut(&key)
-                                .map(|code_idx| code_idx.replace(old_code_idx));
+                                .map(|code_idx| code_idx.set(old_code_idx));
                         }
                         None => {}
                     }
@@ -733,7 +748,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                         .indices
                         .code_dir
                         .get_mut(&key)
-                        .map(|code_idx| code_idx.replace(old_code_idx));
+                        .map(|code_idx| code_idx.set(old_code_idx));
                 }
                 RetractionRecord::AddedIndex(index_key, clause_loc) => {
                     // WAS: inner_index_locs) => {
@@ -1271,13 +1286,13 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
 
         let code_index = self.get_or_insert_code_index(key, compilation_target);
 
-        if let IndexPtr::Undefined = code_index.get() {
+        if code_index.is_undefined() {
             set_code_index(
                 &mut self.payload.retraction_info,
                 &compilation_target,
                 key,
-                &code_index,
-                IndexPtr::DynamicUndefined,
+                code_index,
+                IndexPtr::dynamic_undefined(),
             );
         }
     }
@@ -1491,7 +1506,6 @@ impl Machine {
         let mut loader = self.loader_from_heap_evacuable(temp_v!(3));
 
         let declare_module = || {
-            // let export_list = export_list?;
             let exports = loader.extract_module_export_list_from_heap(temp_v!(2))?;
 
             let module_decl = ModuleDecl {
@@ -2019,10 +2033,10 @@ impl Machine {
                 .indices
                 .remove_predicate_skeleton(&compilation_target, &key);
 
-            let code_index = loader
+            let mut code_index = loader
                 .get_or_insert_code_index(key, compilation_target);
 
-            code_index.set(IndexPtr::Undefined);
+            code_index.set(IndexPtr::undefined());
 
             loader.payload.compilation_target = clause_clause_compilation_target;
 
@@ -2187,7 +2201,7 @@ impl Machine {
 
         let (predicate_name, arity) = self
             .machine_st
-            .read_predicate_key(self.machine_st[temp_v!(2)], self.machine_st[temp_v!(3)]);
+            .read_predicate_key(self.machine_st.registers[2], self.machine_st.registers[3]);
 
         let compilation_target = match module_name {
             atom!("user") => CompilationTarget::User,
@@ -2313,7 +2327,7 @@ impl Machine {
             .machine_st
             .read_predicate_key(self.machine_st.registers[1], self.machine_st.registers[2]);
 
-        match ClauseType::from(key.0, key.1) {
+        match ClauseType::from(key.0, key.1, &mut self.machine_st.arena) {
             ClauseType::BuiltIn(_) | ClauseType::Inlined(..) | ClauseType::CallN(_) => {
                 return;
             }
@@ -2355,14 +2369,19 @@ impl<'a> Loader<'a, LiveLoadAndMachineState<'a>> {
 
 #[inline]
 pub(super) fn load_module(
+    machine_st: &mut MachineState,
     code_dir: &mut CodeDir,
     op_dir: &mut OpDir,
     meta_predicate_dir: &mut MetaPredicateDir,
     compilation_target: &CompilationTarget,
     module: &Module,
 ) {
-    import_module_exports(
-        &mut RetractionInfo::new(0),
+    let ts = LiveTermStream::new(ListingSource::User);
+    let payload = LoadStatePayload::new(0, ts);
+    let mut payload = LiveLoadAndMachineState::new(machine_st, payload);
+
+    import_module_exports::<LiveLoadAndMachineState>(
+        &mut payload,
         &compilation_target,
         module,
         code_dir,

@@ -1,8 +1,3 @@
-%% for builtins that are not part of the ISO standard.
-%% must be loaded at the REPL with
-
-%% ?- use_module(library(iso_ext)).
-
 :- module(iso_ext, [bb_b_put/2,
                     bb_get/2,
                     bb_put/2,
@@ -14,7 +9,6 @@
                     partial_string_tail/2,
                     setup_call_cleanup/3,
                     call_nth/2,
-%                   variant/2,
                     copy_term_nat/2]).
 
 :- use_module(library(error), [can_be/2,
@@ -64,7 +58,7 @@ call_cleanup(G, C) :- setup_call_cleanup(true, G, C).
 
 setup_call_cleanup(S, G, C) :-
     '$get_b_value'(B),
-    '$call_with_inference_counting'('$call'(S)),
+    '$call_with_inference_counting'(call(S)),
     '$set_cp_by_default'(B),
     '$get_current_block'(Bb),
     (  C = _:CC,
@@ -80,7 +74,7 @@ setup_call_cleanup(S, G, C) :-
 scc_helper(C, G, Bb) :-
     '$get_cp'(Cp),
     '$install_scc_cleaner'(C, NBb),
-    '$call_with_inference_counting'('$call'(G)),
+    '$call_with_inference_counting'(call(G)),
     ( '$check_cp'(Cp) ->
       '$reset_block'(Bb),
       run_cleaners_without_handling(Cp)
@@ -115,7 +109,7 @@ run_cleaners_with_handling :-
 run_cleaners_without_handling(Cp) :-
     '$get_scc_cleaner'(C),
     '$get_level'(B),
-    '$call'(C),
+    call(C),
     '$set_cp_by_default'(B),
     run_cleaners_without_handling(Cp).
 run_cleaners_without_handling(Cp) :-
@@ -170,7 +164,7 @@ install_inference_counter(B, L, Count0) :-
 call_with_inference_limit(G, L, R, Bb, B) :-
     '$install_new_block'(NBb),
     '$install_inference_counter'(B, L, Count0),
-    '$call_with_inference_counting'('$call'(G)),
+    '$call_with_inference_counting'(call(G)),
     '$inference_level'(R, B),
     '$remove_inference_counter'(B, Count1),
     is(Diff, L - (Count1 - Count0)),

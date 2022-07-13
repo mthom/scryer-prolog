@@ -36,6 +36,8 @@ pub(crate) trait CompilationTarget<'a> {
     fn subterm_to_value(r: RegType) -> Instruction;
 
     fn clause_arg_to_instr(r: RegType) -> Instruction;
+
+    fn trim_structure_by_last_arg(instr: &mut Instruction, last_arg: &Term);
 }
 
 impl<'a> CompilationTarget<'a> for FactInstruction {
@@ -106,6 +108,10 @@ impl<'a> CompilationTarget<'a> for FactInstruction {
     fn clause_arg_to_instr(val: RegType) -> Instruction {
         Instruction::UnifyVariable(val)
     }
+
+    fn trim_structure_by_last_arg(_instr: &mut Instruction, _last_arg: &Term) {
+        // a no-op for facts.
+    }
 }
 
 impl<'a> CompilationTarget<'a> for QueryInstruction {
@@ -175,5 +181,22 @@ impl<'a> CompilationTarget<'a> for QueryInstruction {
 
     fn clause_arg_to_instr(val: RegType) -> Instruction {
         Instruction::SetValue(val)
+    }
+
+    // if the final argument of the structure is a Literal::Index,
+    // decrement the arity of the PutStructure instruction by 1.
+    fn trim_structure_by_last_arg(instr: &mut Instruction, last_arg: &Term) {
+        if let Instruction::PutStructure(_, ref mut arity, _) = instr {
+            if let Term::Literal(_, Literal::CodeIndex(_)) = last_arg {
+                // it is acceptable if arity == 0 is the result of
+                // this decrement. call/N will have to read the index
+                // constant for '$call_inline' to succeed. to find it,
+                // it must know the heap location of the index.
+                // self.store must stop before reading the atom into a
+                // register.
+
+                *arity -= 1;
+            }
+        }
     }
 }

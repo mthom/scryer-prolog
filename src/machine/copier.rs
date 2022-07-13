@@ -1,4 +1,5 @@
 use crate::atom_table::*;
+use crate::machine::get_structure_index;
 use crate::machine::stack::*;
 use crate::types::*;
 
@@ -247,6 +248,14 @@ impl<T: CopierTarget> CopyTermState<T> {
                 for i in 0..arity {
                     let hcv = self.target[addr + 1 + i];
                     self.target.push(hcv);
+                }
+
+                let index_cell = self.target[addr + 1 + arity];
+
+                if get_structure_index(index_cell).is_some() {
+                    // copy the index pointer trailing this
+                    // inlined or expanded goal.
+                    self.target.push(index_cell);
                 }
             }
             (HeapCellValueTag::Str, h) => {

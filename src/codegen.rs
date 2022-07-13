@@ -369,9 +369,15 @@ impl<'b> CodeGenerator<'b> {
                         self.marker.mark_anon_var::<Target>(lvl, term_loc, &mut target);
                     }
                 }
-                TermRef::Clause(lvl, cell, ct, terms) => {
+                TermRef::Clause(lvl, cell, name, terms) => {
                     self.marker.mark_non_var::<Target>(lvl, term_loc, cell, &mut target);
-                    target.push(Target::to_structure(ct.name(), terms.len(), cell.get()));
+                    target.push(Target::to_structure(name, terms.len(), cell.get()));
+
+                    if let Some(instr) = target.last_mut() {
+                        if let Some(term) = terms.last() {
+                            Target::trim_structure_by_last_arg(instr, term);
+                        }
+                    }
 
                     for subterm in terms {
                         self.subterm_to_instr::<Target>(subterm, term_loc, is_exposed, &mut target);
@@ -1039,10 +1045,7 @@ impl<'b> CodeGenerator<'b> {
         let iter = query_term_post_order_iter(term);
         let query = self.compile_target::<QueryInstruction, _>(iter, term_loc, is_exposed);
 
-        if !query.is_empty() {
-            code.extend(query.into_iter());
-        }
-
+        code.extend(query.into_iter());
         self.add_conditional_call(code, term, num_perm_vars_left);
     }
 

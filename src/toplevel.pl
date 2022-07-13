@@ -172,7 +172,7 @@ instruction_match(Term, VarList) :-
     ;  Term = end_of_file ->
        halt
     ;
-    submit_query_and_print_results(Term, VarList)
+       submit_query_and_print_results(Term, VarList)
     ).
 
 
@@ -180,7 +180,7 @@ submit_query_and_print_results_(Term, VarList) :-
     '$get_b_value'(B),
     bb_put('$report_all', false),
     bb_put('$report_n_more', 0),
-    '$call'(Term),
+    call(user:Term),
     write_eqs_and_read_input(B, VarList),
     !.
 submit_query_and_print_results_(_, _) :-
@@ -192,12 +192,12 @@ submit_query_and_print_results_(_, _) :-
     nl.
 
 
-submit_query_and_print_results(Term0, VarList) :-
-    (  functor(Term0, call, _) ->
-       Term = Term0 % prevent pre-mature expansion of incomplete goal
-                    % in the first argument, which is done by call/N
-    ;  expand_goal(Term0, user, Term)
-    ),
+submit_query_and_print_results(Term, VarList) :-
+    % (  functor(Term0, call, _) ->
+    %    Term = Term0 % prevent pre-mature expansion of incomplete goal
+    %                 % in the first argument, which is done by call/N
+    % ;  expand_goal(Term0, user, Term)
+    % ),
     bb_put('$answer_count', 0),
     submit_query_and_print_results_(Term, VarList).
 
@@ -301,6 +301,7 @@ write_eqs_and_read_input(B, VarList) :-
     append(Equations, AttrGoals, Goals),
     % one layer of depth added for (=/2) functor
     maplist(\Term^Vs^term_variables_under_max_depth(Term, 22, Vs), Equations, EquationVars),
+    % maplist(term_variables_under_max_depth(22), Equations, EquationVars),
     append([AttrGoalVars | EquationVars], Vars1),
     term_variables(Vars1, Vars2), % deduplicate vars of Vars1 but preserve their order.
     charsio:extend_var_list(Vars2, VarList, NewVarList0, fabricated),

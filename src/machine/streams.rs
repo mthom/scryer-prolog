@@ -1254,6 +1254,18 @@ impl MachineState {
                     None
                 }
             }
+            (HeapCellValueTag::Str, s) => {
+                let (name, arity) = cell_as_atom_cell!(self.heap[s])
+                    .get_name_and_arity();
+
+                debug_assert_eq!(arity, 0);
+
+                if name != atom!("[]") {
+                    Some(name)
+                } else {
+                    None
+                }
+            }
             _ => {
                 None
             }
@@ -1261,6 +1273,19 @@ impl MachineState {
 
         let eof_action = read_heap_cell!(self.store(MachineState::deref(self, eof_action)),
             (HeapCellValueTag::Atom, (name, arity)) => {
+                debug_assert_eq!(arity, 0);
+
+                match name  {
+                    atom!("eof_code") => EOFAction::EOFCode,
+                    atom!("error") => EOFAction::Error,
+                    atom!("reset") => EOFAction::Reset,
+                    _ => unreachable!(),
+                }
+            }
+            (HeapCellValueTag::Str, s) => {
+                let (name, arity) = cell_as_atom_cell!(self.heap[s])
+                    .get_name_and_arity();
+
                 debug_assert_eq!(arity, 0);
 
                 match name  {
@@ -1280,6 +1305,13 @@ impl MachineState {
                 debug_assert_eq!(arity, 0);
                 name == atom!("true")
             }
+            (HeapCellValueTag::Str, s) => {
+                let (name, arity) = cell_as_atom_cell!(self.heap[s])
+                    .get_name_and_arity();
+
+                debug_assert_eq!(arity, 0);
+                name == atom!("true")
+            }
             _ => {
                 unreachable!()
             }
@@ -1287,6 +1319,17 @@ impl MachineState {
 
         let stream_type = read_heap_cell!(self.store(MachineState::deref(self, stream_type)),
             (HeapCellValueTag::Atom, (name, arity)) => {
+                debug_assert_eq!(arity, 0);
+                match name {
+                    atom!("text") => StreamType::Text,
+                    atom!("binary") => StreamType::Binary,
+                    _ => unreachable!(),
+                }
+            }
+            (HeapCellValueTag::Str, s) => {
+                let (name, arity) = cell_as_atom_cell!(self.heap[s])
+                    .get_name_and_arity();
+
                 debug_assert_eq!(arity, 0);
                 match name {
                     atom!("text") => StreamType::Text,
@@ -1320,6 +1363,24 @@ impl MachineState {
 
         read_heap_cell!(addr,
             (HeapCellValueTag::Atom, (name, arity)) => {
+                debug_assert_eq!(arity, 0);
+
+                return match stream_aliases.get(&name) {
+                    Some(stream) if !stream.is_null_stream() => Ok(*stream),
+                    _ => {
+                        let stub = functor_stub(caller, arity);
+                        let addr = atom_as_cell!(name);
+
+                        let existence_error = self.existence_error(ExistenceError::Stream(addr));
+
+                        Err(self.error_form(existence_error, stub))
+                    }
+                };
+            }
+            (HeapCellValueTag::Str, s) => {
+                let (name, arity) = cell_as_atom_cell!(self.heap[s])
+                    .get_name_and_arity();
+
                 debug_assert_eq!(arity, 0);
 
                 return match stream_aliases.get(&name) {
@@ -1402,9 +1463,9 @@ impl MachineState {
         arity: usize,
     ) -> MachineStub {
         let stub = functor_stub(caller, arity);
-        let err = self.permission_error(perm, err_atom, stream_as_cell!(stream));
+        let err  = self.permission_error(perm, err_atom, stream_as_cell!(stream));
 
-        return self.error_form(err, stub);
+        self.error_form(err, stub)
     }
 
     #[inline]
@@ -1430,9 +1491,9 @@ impl MachineState {
         stub_arity: usize,
     ) -> MachineStub {
         let stub = functor_stub(stub_name, stub_arity);
-        let err = self.permission_error(Permission::Open, atom!("source_sink"), culprit);
+        let err  = self.permission_error(Permission::Open, atom!("source_sink"), culprit);
 
-        return self.error_form(err, stub);
+        self.error_form(err, stub)
     }
 
     pub(crate) fn occupied_alias_permission_error(
@@ -1442,24 +1503,22 @@ impl MachineState {
         stub_arity: usize,
     ) -> MachineStub {
         let stub = functor_stub(stub_name, stub_arity);
-        let alias_name = atom!("alias");
 
         let err = self.permission_error(
             Permission::Open,
             atom!("source_sink"),
-            functor!(alias_name, [atom(alias)]),
+            functor!(atom!("alias"), [atom(alias)]),
         );
 
-        return self.error_form(err, stub);
+        self.error_form(err, stub)
     }
 
     pub(crate) fn reposition_error(&mut self, stub_name: Atom, stub_arity: usize) -> MachineStub {
         let stub = functor_stub(stub_name, stub_arity);
-
         let rep_stub = functor!(atom!("reposition"), [atom(atom!("true"))]);
         let err = self.permission_error(Permission::Open, atom!("source_sink"), rep_stub);
 
-        return self.error_form(err, stub);
+        self.error_form(err, stub)
     }
 
     pub(crate) fn check_stream_properties(
