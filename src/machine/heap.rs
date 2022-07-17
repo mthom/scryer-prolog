@@ -5,7 +5,7 @@ use crate::machine::partial_string::*;
 use crate::parser::ast::*;
 use crate::types::*;
 
-use rug::{Integer, Rational};
+use crate::parser::rug::{Integer, Rational};
 
 use std::convert::TryFrom;
 

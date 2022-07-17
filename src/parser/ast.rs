@@ -11,7 +11,7 @@ use std::ops::Neg;
 use std::rc::Rc;
 use std::vec::Vec;
 
-use rug::{Integer, Rational};
+use crate::parser::rug::{Integer, Rational};
 
 use fxhash::FxBuildHasher;
 use indexmap::IndexMap;
