@@ -6,7 +6,7 @@ use crate::read::*;
 
 use modular_bitfield::prelude::*;
 use ordered_float::OrderedFloat;
-use rug::{Integer, Rational};
+use crate::parser::rug::{Integer, Rational};
 
 use std::alloc;
 use std::fmt;
@@ -681,7 +681,7 @@ mod tests {
     use crate::machine::partial_string::*;
 
     use ordered_float::OrderedFloat;
-    use rug::{Integer, Rational};
+    use crate::parser::rug::{Integer, Rational};
 
     #[test]
     fn float_ptr_cast() {

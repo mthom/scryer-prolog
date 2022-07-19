@@ -4,7 +4,7 @@ use crate::parser::ast::*;
 use crate::parser::char_reader::*;
 use crate::parser::lexer::*;
 
-use rug::ops::NegAssign;
+use crate::parser::rug::ops::NegAssign;
 
 use std::cell::Cell;
 use std::mem;
