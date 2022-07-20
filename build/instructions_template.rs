@@ -190,9 +190,9 @@ enum REPLCodePtr {
     DynamicProperty,
     #[strum_discriminants(strum(props(Arity = "3", Name = "$abolish_clause")))]
     AbolishClause,
-    #[strum_discriminants(strum(props(Arity = "5", Name = "$asserta")))]
+    #[strum_discriminants(strum(props(Arity = "3", Name = "$asserta")))]
     Asserta,
-    #[strum_discriminants(strum(props(Arity = "5", Name = "$assertz")))]
+    #[strum_discriminants(strum(props(Arity = "3", Name = "$assertz")))]
     Assertz,
     #[strum_discriminants(strum(props(Arity = "4", Name = "$retract_clause")))]
     Retract,
@@ -2195,6 +2195,7 @@ pub fn generate_instructions_rs() -> TokenStream {
     let mut clause_type_from_name_and_arity_arms = vec![];
     let mut clause_type_to_instr_arms = vec![];
     let mut clause_type_name_arms = vec![];
+    let mut is_inbuilt_arms = vec![];
 
     for (name, arity, variant) in instr_data.compare_number_variants {
         let ident = variant.ident.clone();
@@ -2249,6 +2250,12 @@ pub fn generate_instructions_rs() -> TokenStream {
                 ) => Instruction::#instr_ident(#(#placeholder_ids),*, 0)
             }
         );
+
+        is_inbuilt_arms.push(
+            quote! {
+                (atom!(#name), #arity) => true
+            }
+        );
     }
 
     for (name, arity, variant) in instr_data.compare_term_variants {
@@ -2276,6 +2283,12 @@ pub fn generate_instructions_rs() -> TokenStream {
                 ClauseType::BuiltIn(
                     BuiltInClauseType::CompareTerm(CompareTerm::#ident)
                 ) => Instruction::#instr_ident(0)
+            }
+        );
+
+        is_inbuilt_arms.push(
+            quote! {
+                (atom!(#name), #arity) => true
             }
         );
     }
@@ -2339,6 +2352,12 @@ pub fn generate_instructions_rs() -> TokenStream {
                 ) => Instruction::#instr_ident(0)
             }
         });
+
+        is_inbuilt_arms.push(
+            quote! {
+                (atom!(#name), #arity) => true
+            }
+        );
     }
 
     for (name, arity, variant) in instr_data.inlined_type_variants {
@@ -2396,6 +2415,12 @@ pub fn generate_instructions_rs() -> TokenStream {
                 ClauseType::Inlined(
                     InlinedClauseType::#ident(#(#placeholder_ids),*)
                 ) => Instruction::#instr_ident(#(#placeholder_ids),*,0)
+            }
+        );
+
+        is_inbuilt_arms.push(
+            quote! {
+                (atom!(#name), #arity) => true
             }
         );
     }
@@ -2488,6 +2513,18 @@ pub fn generate_instructions_rs() -> TokenStream {
                 ) => Instruction::#instr_ident(0)
             }
         });
+
+        is_inbuilt_arms.push(
+            if let Arity::Ident("arity") = &arity {
+                quote! {
+                    (atom!(#name), _arity) => true
+                }
+            } else {
+                quote! {
+                    (atom!(#name), #arity) => true
+                }
+            }
+        );
     }
 
     for (name, arity, variant) in instr_data.repl_code_ptr_variants {
@@ -2553,6 +2590,12 @@ pub fn generate_instructions_rs() -> TokenStream {
                 )) => Instruction::#instr_ident(0)
             }
         });
+
+        is_inbuilt_arms.push(
+            quote! {
+                (atom!(#name), #arity) => true
+            }
+        );
     }
 
     for (name, arity, variant) in instr_data.clause_type_variants {
@@ -2622,6 +2665,12 @@ pub fn generate_instructions_rs() -> TokenStream {
                 ClauseType::#ident => Instruction::#ident(0)
             }
         });
+
+        is_inbuilt_arms.push(
+            quote! {
+                (atom!(#name), _arity) => true
+            }
+        );
     }
 
     let to_execute_arms: Vec<_> = instr_data.instr_variants
@@ -2972,19 +3021,12 @@ pub fn generate_instructions_rs() -> TokenStream {
                 }
             }
 
-            pub fn is_builtin(&self) -> bool {
-                if let ClauseType::BuiltIn(_) = self {
-                    true
-                } else {
-                    false
-                }
-            }
-
-            pub fn is_inlined(&self) -> bool {
-                if let ClauseType::Inlined(_) = self {
-                    true
-                } else {
-                    false
+            pub fn is_inbuilt(name: Atom, arity: usize) -> bool {
+                match (name, arity) {
+                    #(
+                        #is_inbuilt_arms,
+                    )*
+                    _ => false,
                 }
             }
 
@@ -3179,7 +3221,7 @@ enum Arity {
 impl From<&'static str> for Arity {
     fn from(arity: &'static str) -> Self {
         usize::from_str_radix(&arity, 10)
-            .map(|n| Arity::Static(n))
+            .map(Arity::Static)
             .unwrap_or_else(|_| Arity::Ident(arity))
     }
 }

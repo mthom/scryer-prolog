@@ -4326,9 +4326,7 @@ impl Machine {
                 let (name, arity) = cell_as_atom_cell!(self.machine_st.heap[s])
                     .get_name_and_arity();
 
-                let ct = ClauseType::from(name, arity, &mut self.machine_st.arena);
-
-                if ct.is_inlined() || ct.is_builtin() {
+                if ClauseType::is_inbuilt(name, arity) {
                     true
                 } else {
                     let index = self.indices.get_predicate_code_index(
@@ -4348,9 +4346,7 @@ impl Machine {
             (HeapCellValueTag::Atom, (name, arity)) => {
                 debug_assert_eq!(arity, 0);
 
-                let ct = ClauseType::from(name, 0, &mut self.machine_st.arena);
-
-                if ct.is_inlined() || ct.is_builtin() {
+                if ClauseType::is_inbuilt(name, 0) {
                     true
                 } else {
                     let index = self.indices.get_predicate_code_index(

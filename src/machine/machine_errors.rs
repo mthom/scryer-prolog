@@ -639,10 +639,10 @@ impl CompilationError {
             &CompilationError::ExpectedRel => {
                 functor!(atom!("expected_relation"))
             }
-            &CompilationError::InadmissibleFact => {
+            &CompilationError::InadmissibleFact => { // TODO: type_error(callable, _).
                 functor!(atom!("inadmissible_fact"))
             }
-            &CompilationError::InadmissibleQueryTerm => {
+            &CompilationError::InadmissibleQueryTerm => { // TODO: type_error(callable, _).
                 functor!(atom!("inadmissible_query_term"))
             }
             &CompilationError::InconsistentEntry => {
@@ -661,7 +661,8 @@ impl CompilationError {
                 functor!(atom!("no_such_module"), [atom(module_name)])
             }
             &CompilationError::InvalidRuleHead => {
-                functor!(atom!("invalid_head_of_rule"))
+                
+                functor!(atom!("invalid_head_of_rule")) // TODO: type_error(callable, _).
             }
             &CompilationError::InvalidUseModuleDecl => {
                 functor!(atom!("invalid_use_module_declaration"))

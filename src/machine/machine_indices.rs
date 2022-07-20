@@ -194,6 +194,11 @@ impl CodeIndex {
     }
 
     #[inline(always)]
+    pub(crate) fn get_tag(self) -> IndexPtrTag {
+        self.0.tag()
+    }
+
+    #[inline(always)]
     pub(crate) fn replace(&mut self, value: IndexPtr) -> IndexPtr {
         std::mem::replace(self.0.deref_mut(), value)
     }

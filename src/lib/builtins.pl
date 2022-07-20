@@ -884,76 +884,45 @@ clause(H, B) :-
     ).
 
 
-call_asserta(Head, Body, Name, Arity, Module) :-
-    '$clause_body_is_valid'(Body),
-    functor(_, Name, Arity),
-    '$asserta'(Head, Body, Name, Arity, Module).
-
-
-module_asserta_clause(Head, Body, Module) :-
-    (  var(Head) ->
-       throw(error(instantiation_error, asserta/1))
-    ;  callable(Head), functor(Head, Name, Arity) ->
-       (  '$head_is_dynamic'(Module, Head) ->
-          call_asserta(Head, Body, Name, Arity, Module)
-       ;  '$no_such_predicate'(Module, Head) ->
-          call_asserta(Head, Body, Name, Arity, Module)
-       ;  throw(error(permission_error(modify, static_procedure, Name/Arity), asserta/1))
-       )
-    ;  throw(error(type_error(callable, Head), asserta/1))
-    ).
-
 :- meta_predicate asserta(:).
 
 asserta(Clause0) :-
-    loader:strip_module(Clause0, Module, Clause),
-    (  var(Module) -> Module = user
-    ;  true
-    ),
-    (  Clause \= (_ :- _) ->
-       Head = Clause,
-       Body = true,
-       module_asserta_clause(Head, Body, Module)
-    ;  Clause = (Head :- Body) ->
-       module_asserta_clause(Head, Body, Module)
-    ).
+    loader:strip_subst_module(Clause0, user, Module, Clause),
+    asserta(Module, Clause).
 
-
-module_assertz_clause(Head, Body, Module) :-
-    (  var(Head) ->
-       throw(error(instantiation_error, assertz/1))
-    ;  callable(Head), functor(Head, Name, Arity) ->
-       (  '$head_is_dynamic'(Module, Head) ->
-          call_assertz(Head, Body, Name, Arity, Module)
-       ;  '$no_such_predicate'(Module, Head) ->
-          call_assertz(Head, Body, Name, Arity, Module)
-       ;  throw(error(permission_error(modify, static_procedure, Name/Arity),
-                      assertz/1))
-       )
-    ;  throw(error(type_error(callable, Head), assertz/1))
-    ).
-
-
-call_assertz(Head, Body, Name, Arity, Module) :-
-    '$clause_body_is_valid'(Body),
-    functor(_, Name, Arity),
-    '$assertz'(Head, Body, Name, Arity, Module).
+asserta(Module, (Head :- Body)) :-
+    !,
+    '$asserta'(Module, Head, Body).
+asserta(Module, Fact) :-
+    '$asserta'(Module, Fact, true).
 
 :- meta_predicate assertz(:).
 
 assertz(Clause0) :-
-    loader:strip_module(Clause0, Module, Clause),
-    (  var(Module) -> Module = user
-    ;  true
-    ),
-    (  Clause \= (_ :- _) ->
-       Head = Clause,
-       Body = true,
-       module_assertz_clause(Head, Body, Module)
-    ;  Clause = (Head :- Body) ->
-       module_assertz_clause(Head, Body, Module)
-    ).
+    loader:strip_subst_module(Clause0, user, Module, Clause),
+    assertz(Module, Clause).
 
+assertz(Module, (Head :- Body)) :-
+    !,
+    '$assertz'(Module, Head, Body).
+assertz(Module, Fact) :-
+    '$assertz'(Module, Fact, true).
+
+
+:- meta_predicate retract(:).
+
+retract(Clause0) :-
+    loader:strip_module(Clause0, Module, Clause),
+    (  Clause \= (_ :- _) ->
+       loader:strip_module(Clause, Module, Head),
+       (  var(Module) -> Module = user
+       ;  true
+       ),
+       Body = true,
+       retract_module_clause(Head, Body, Module)
+    ;  Clause = (Head :- Body) ->
+       retract_module_clause(Head, Body, Module)
+    ).
 
 module_retract_clauses([Clause|Clauses0], Head, Body, Name, Arity, Module) :-
     functor(VarHead, Name, Arity),
@@ -1037,22 +1006,6 @@ retract_clause(Head, Body) :-
        ;  throw(error(permission_error(modify, static_procedure, Name/Arity), retract/1))
        )
     ;  throw(error(type_error(callable, Head), retract/1))
-    ).
-
-
-:- meta_predicate retract(:).
-
-retract(Clause0) :-
-    loader:strip_module(Clause0, Module, Clause),
-    (  Clause \= (_ :- _) ->
-       loader:strip_module(Clause, Module, Head),
-       (  var(Module) -> Module = user
-       ;  true
-       ),
-       Body = true,
-       retract_module_clause(Head, Body, Module)
-    ;  Clause = (Head :- Body) ->
-       retract_module_clause(Head, Body, Module)
     ).
 
 
