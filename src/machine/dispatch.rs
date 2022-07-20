@@ -5014,6 +5014,11 @@ impl Machine {
 
                     if self.machine_st.fail {
                         self.machine_st.backtrack();
+                    } else {
+                        try_or_throw!(
+                            self.machine_st,
+                            (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
+                        );
                     }
                 }
                 &Instruction::ExecuteInlineCallN(arity, _) => {
@@ -5025,6 +5030,11 @@ impl Machine {
 
                     if self.machine_st.fail {
                         self.machine_st.backtrack();
+                    } else {
+                        try_or_throw!(
+                            self.machine_st,
+                            (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
+                        );
                     }
                 }
             }

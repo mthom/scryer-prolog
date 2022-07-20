@@ -1018,7 +1018,7 @@ impl Machine {
                     let index_cell = self.machine_st.heap[s+goal_arity+1];
 
                     if let Some(code_index) = get_structure_index(index_cell) {
-                        if code_index.is_undefined() || code_index.is_dynamic_undefined() {
+                        if code_index.is_undefined() {
                             self.machine_st.fail = true;
                             return Ok(());
                         }
