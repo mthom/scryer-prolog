@@ -1899,18 +1899,22 @@ impl Machine {
         }
     }
 
-    pub(crate) fn compile_assert<'a>(&'a mut self, append_or_prepend: AppendOrPrepend) -> CallResult {
-        let key = self
-            .machine_st
-            .read_predicate_key(self.machine_st[temp_v!(3)], self.machine_st[temp_v!(4)]);
-
+    pub(crate) fn compile_assert(&mut self, append_or_prepend: AppendOrPrepend) -> CallResult
+    {
         let module_name = cell_as_atom!(
-            self.machine_st.store(self.machine_st.deref(self.machine_st.registers[5]))
+            self.machine_st.store(self.machine_st.deref(self.machine_st.registers[1]))
         );
 
         let compilation_target = match module_name {
             atom!("user") => CompilationTarget::User,
             _ => CompilationTarget::Module(module_name),
+        };
+
+        let stub_gen = || {
+            match append_or_prepend {
+                AppendOrPrepend::Append  => functor_stub(atom!("assertz"), 1),
+                AppendOrPrepend::Prepend => functor_stub(atom!("asserta"), 1),
+            }
         };
 
         let mut compile_assert = || {
@@ -1919,8 +1923,49 @@ impl Machine {
 
             loader.payload.compilation_target = compilation_target;
 
-            let head = loader.read_term_from_heap(temp_v!(1))?;
-            let body = loader.read_term_from_heap(temp_v!(2))?;
+            let head = loader.read_term_from_heap(temp_v!(2))?;
+
+            let name = if let Some(name) = head.name() {
+                name
+            } else {
+                return Err(SessionError::from(CompilationError::InvalidRuleHead));
+            };
+
+            let arity = head.arity();
+
+            let is_dynamic_predicate = loader
+                  .wam_prelude
+                  .indices
+                  .is_dynamic_predicate(
+                      module_name,
+                      (name, arity),
+                  );
+
+            let no_such_predicate =
+                if !is_dynamic_predicate && !ClauseType::is_inbuilt(name, arity) {
+                    let idx_tag = loader
+                        .wam_prelude
+                        .indices
+                        .get_predicate_code_index(
+                            name,
+                            arity,
+                            module_name,
+                        )
+                        .map(|code_idx| code_idx.get_tag())
+                        .unwrap_or(IndexPtrTag::DynamicUndefined);
+
+                    idx_tag == IndexPtrTag::DynamicUndefined ||
+                    idx_tag == IndexPtrTag::Undefined
+                } else {
+                    is_dynamic_predicate
+                };
+
+            if !no_such_predicate {
+                LiveLoadAndMachineState::machine_st(&mut loader.payload).fail = true;
+                return LiveLoadAndMachineState::evacuate(loader);
+            }
+
+            let body = loader.read_term_from_heap(temp_v!(3))?;
 
             let asserted_clause = Term::Clause(
                 Cell::default(),
@@ -1929,10 +1974,10 @@ impl Machine {
             );
 
             // if a new predicate was just created, make it dynamic.
-            loader.add_dynamic_predicate(compilation_target, key.0, key.1)?;
+            loader.add_dynamic_predicate(compilation_target, name, arity)?;
 
             loader.incremental_compile_clause(
-                key,
+                (name, arity),
                 asserted_clause,
                 compilation_target,
                 false,
@@ -1943,7 +1988,7 @@ impl Machine {
             LiveLoadAndMachineState::machine_st(&mut loader.payload).global_clock += 1;
 
             loader.compile_clause_clauses(
-                key,
+                (name, arity),
                 compilation_target,
                 std::iter::once((head, body)),
                 append_or_prepend,
@@ -1954,14 +1999,30 @@ impl Machine {
 
         match compile_assert() {
             Ok(_) => Ok(()),
-            Err(e) => {
-                let stub = match append_or_prepend {
-                    AppendOrPrepend::Append  => functor_stub(atom!("assertz"), 1),
-                    AppendOrPrepend::Prepend => functor_stub(atom!("asserta"), 1),
-                };
-                let err = self.machine_st.session_error(e);
+            Err(SessionError::CompilationError(
+                CompilationError::InvalidRuleHead |
+                CompilationError::InadmissibleFact
+            )) => {
+                let err = self.machine_st.type_error(
+                    ValidType::Callable,
+                    self.machine_st.registers[2],
+                );
 
-                Err(self.machine_st.error_form(err, stub))
+                Err(self.machine_st.error_form(err, stub_gen()))
+            }
+            Err(SessionError::CompilationError(
+                CompilationError::InadmissibleQueryTerm
+            )) => {
+                let err = self.machine_st.type_error(
+                    ValidType::Callable,
+                    self.machine_st.registers[3],
+                );
+
+                Err(self.machine_st.error_form(err, stub_gen()))
+            }
+            Err(e) => {
+                let err = self.machine_st.session_error(e);
+                Err(self.machine_st.error_form(err, stub_gen()))
             }
         }
     }
