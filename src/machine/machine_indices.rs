@@ -166,15 +166,6 @@ impl CodeIndex {
         }
     }
 
-
-    #[inline(always)]
-    pub(crate) fn is_dynamic_undefined(&self) -> bool {
-        match self.0.tag() {
-            IndexPtrTag::DynamicUndefined => true,
-            _ => false,
-        }
-    }
-
     pub(crate) fn local(&self) -> Option<usize> {
         match self.0.tag() {
             IndexPtrTag::Index => Some(self.0.p() as usize),
