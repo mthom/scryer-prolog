@@ -690,6 +690,12 @@ truncate_lh_to(LhLength) :- '$truncate_lh_to'(LhLength).
 
 :- meta_predicate findall(?, 0, ?).
 
+:- non_counted_backtracking findall_cleanup/2.
+
+findall_cleanup(LhLength, Error) :-
+    truncate_lh_to(LhLength),
+    throw(Error).
+
 :- non_counted_backtracking findall/3.
 
 findall(Template, Goal, Solutions) :-
@@ -697,7 +703,7 @@ findall(Template, Goal, Solutions) :-
     '$lh_length'(LhLength),
     catch(builtins:'$iterate_find_all'(Template, Goal, Solutions, LhLength),
           Error,
-          ( builtins:truncate_lh_to(LhLength), builtins:throw(Error) )
+          builtins:findall_cleanup(LhLength, Error)
          ).
 
 :- non_counted_backtracking '$iterate_find_all_diff'/5.
@@ -722,7 +728,7 @@ findall(Template, Goal, Solutions0, Solutions1) :-
     catch(builtins:'$iterate_find_all_diff'(Template, Goal, Solutions0,
                                             Solutions1, LhLength),
           Error,
-          ( builtins:truncate_lh_to(LhLength), builtins:throw(Error) )
+          builtins:findall_cleanup(LhLength, Error)
          ).
 
 :- non_counted_backtracking set_difference/3.
