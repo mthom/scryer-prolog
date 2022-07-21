@@ -14,9 +14,9 @@ use crate::parser::ast::*;
 use crate::types::*;
 
 use indexmap::IndexSet;
-use slice_deque::{sdeq, SliceDeque};
 
 use std::cell::Cell;
+use std::collections::VecDeque;
 use std::convert::TryFrom;
 use std::fmt;
 use std::mem;
@@ -96,7 +96,7 @@ pub(crate) enum RetractionRecord {
         CompilationTarget,
         CompilationTarget,
         PredicateKey,
-        SliceDeque<usize>,
+        VecDeque<usize>,
     ),
     RemovedSkeleton(CompilationTarget, PredicateKey, PredicateSkeleton),
     ReplacedDynamicElseOffset(usize, usize),
@@ -485,10 +485,21 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
 
             read_heap_cell!(addr,
                 (HeapCellValueTag::Lis) => {
+                    use crate::parser::parser::as_partial_string;
+
                     let tail = term_stack.pop().unwrap();
                     let head = term_stack.pop().unwrap();
 
-                    term_stack.push(Term::Cons(Cell::default(), Box::new(head), Box::new(tail)));
+                    match as_partial_string(head, tail) {
+                        Ok((string, Some(tail))) => {
+                            term_stack.push(Term::PartialString(Cell::default(), string, tail));
+                        }
+                        Ok((string, None)) => {
+                            let atom = machine_st.atom_tbl.build_with(&string);
+                            term_stack.push(Term::CompleteString(Cell::default(), atom));
+                        }
+                        Err(cons_term) => term_stack.push(cons_term),
+                    }
                 }
                 (HeapCellValueTag::Var | HeapCellValueTag::AttrVar | HeapCellValueTag::StackVar, h) => {
                     let offset_string = format!("_{}", h);
@@ -499,6 +510,21 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     term_stack.push(Term::Literal(Cell::default(), Literal::try_from(addr).unwrap()));
                 }
                 (HeapCellValueTag::Atom, (name, arity)) => {
+                    let h = iter.focus();
+                    let mut arity = arity;
+
+                    if iter.heap.len() > h + arity + 1 {
+                        let value = iter.heap[h + arity + 1];
+
+                        if let Some(idx) = get_structure_index(value) {
+                            term_stack.push(
+                                Term::Literal(Cell::default(), Literal::CodeIndex(idx))
+                            );
+
+                            arity += 1;
+                        }
+                    }
+
                     if arity == 0 {
                         term_stack.push(Term::Literal(Cell::default(), Literal::Atom(name)));
                     } else {
@@ -509,31 +535,27 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                         term_stack.push(Term::Clause(Cell::default(), name, subterms));
                     }
                 }
-                (HeapCellValueTag::PStr, string) => {
+                (HeapCellValueTag::PStr, atom) => {
                     let tail = term_stack.pop().unwrap();
 
                     if let Term::Literal(_, Literal::Atom(atom!("[]"))) = &tail {
-                        term_stack.push(Term::PartialString(
-                            Cell::default(),
-                            string,
-                            None,
-                        ));
+                        term_stack.push(Term::CompleteString(Cell::default(), atom));
                     } else {
                         term_stack.push(Term::PartialString(
                             Cell::default(),
-                            string,
-                            Some(Box::new(tail)),
+                            atom.as_str().to_owned(),
+                            Box::new(tail),
                         ));
                     }
                 }
                 (HeapCellValueTag::PStrLoc, h) => {
-                    let string = cell_as_atom_cell!(iter.heap[h]).get_name();
+                    let atom = cell_as_atom_cell!(iter.heap[h]).get_name();
                     let tail = term_stack.pop().unwrap();
 
                     term_stack.push(Term::PartialString(
                         Cell::default(),
-                        string,
-                        Some(Box::new(tail)),
+                        atom.as_str().to_owned(),
+                        Box::new(tail),
                     ));
                 }
                 _ => {
@@ -701,7 +723,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                             module
                                 .code_dir
                                 .get_mut(&key)
-                                .map(|code_idx| code_idx.replace(old_code_idx));
+                                .map(|code_idx| code_idx.set(old_code_idx));
                         }
                         None => {}
                     }
@@ -726,7 +748,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                         .indices
                         .code_dir
                         .get_mut(&key)
-                        .map(|code_idx| code_idx.replace(old_code_idx));
+                        .map(|code_idx| code_idx.set(old_code_idx));
                 }
                 RetractionRecord::AddedIndex(index_key, clause_loc) => {
                     // WAS: inner_index_locs) => {
@@ -900,7 +922,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                         key,
                     ) {
                         Some(skeleton) => {
-                            skeleton.clause_clause_locs.truncate_back(len);
+                            skeleton.clause_clause_locs.truncate(len);
                         }
                         None => {}
                     }
@@ -912,8 +934,8 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                         .get_predicate_skeleton_mut(&compilation_target, &key)
                     {
                         Some(skeleton) => {
-                            skeleton.clauses.truncate_back(len);
-                            skeleton.core.clause_clause_locs.truncate_back(len);
+                            skeleton.clauses.truncate(len);
+                            skeleton.core.clause_clause_locs.truncate(len);
                         }
                         None => {}
                     }
@@ -1264,13 +1286,13 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
 
         let code_index = self.get_or_insert_code_index(key, compilation_target);
 
-        if let IndexPtr::Undefined = code_index.get() {
+        if code_index.is_undefined() {
             set_code_index(
                 &mut self.payload.retraction_info,
                 &compilation_target,
                 key,
-                &code_index,
-                IndexPtr::DynamicUndefined,
+                code_index,
+                IndexPtr::dynamic_undefined(),
             );
         }
     }
@@ -1358,7 +1380,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                 *key,
             ) {
             Some(skeleton) if !skeleton.clause_clause_locs.is_empty() => {
-                mem::replace(&mut skeleton.clause_clause_locs, sdeq![])
+                mem::replace(&mut skeleton.clause_clause_locs, VecDeque::new())
             }
             _ => return,
         };
@@ -1484,7 +1506,6 @@ impl Machine {
         let mut loader = self.loader_from_heap_evacuable(temp_v!(3));
 
         let declare_module = || {
-            // let export_list = export_list?;
             let exports = loader.extract_module_export_list_from_heap(temp_v!(2))?;
 
             let module_decl = ModuleDecl {
@@ -1837,7 +1858,7 @@ impl Machine {
                     return;
                 }
                 _ => {
-                    return self.load_context_module();
+                    return self.load_context_module(self.machine_st.registers[1]);
                 }
             }
         }
@@ -1859,9 +1880,9 @@ impl Machine {
         self.machine_st.fail = true;
     }
 
-    pub(crate) fn load_context_module(&mut self) {
+    pub(crate) fn load_context_module(&mut self, target: HeapCellValue) {
         if let Some(load_context) = self.load_contexts.last() {
-            self.machine_st.unify_atom(load_context.module, self.machine_st.registers[1]);
+            self.machine_st.unify_atom(load_context.module, target);
         } else {
             self.machine_st.fail = true;
         }
@@ -1878,18 +1899,22 @@ impl Machine {
         }
     }
 
-    pub(crate) fn compile_assert<'a>(&'a mut self, append_or_prepend: AppendOrPrepend) -> CallResult {
-        let key = self
-            .machine_st
-            .read_predicate_key(self.machine_st[temp_v!(3)], self.machine_st[temp_v!(4)]);
-
+    pub(crate) fn compile_assert(&mut self, append_or_prepend: AppendOrPrepend) -> CallResult
+    {
         let module_name = cell_as_atom!(
-            self.machine_st.store(self.machine_st.deref(self.machine_st.registers[5]))
+            self.machine_st.store(self.machine_st.deref(self.machine_st.registers[1]))
         );
 
         let compilation_target = match module_name {
             atom!("user") => CompilationTarget::User,
             _ => CompilationTarget::Module(module_name),
+        };
+
+        let stub_gen = || {
+            match append_or_prepend {
+                AppendOrPrepend::Append  => functor_stub(atom!("assertz"), 1),
+                AppendOrPrepend::Prepend => functor_stub(atom!("asserta"), 1),
+            }
         };
 
         let mut compile_assert = || {
@@ -1898,8 +1923,49 @@ impl Machine {
 
             loader.payload.compilation_target = compilation_target;
 
-            let head = loader.read_term_from_heap(temp_v!(1))?;
-            let body = loader.read_term_from_heap(temp_v!(2))?;
+            let head = loader.read_term_from_heap(temp_v!(2))?;
+
+            let name = if let Some(name) = head.name() {
+                name
+            } else {
+                return Err(SessionError::from(CompilationError::InvalidRuleHead));
+            };
+
+            let arity = head.arity();
+
+            let is_dynamic_predicate = loader
+                  .wam_prelude
+                  .indices
+                  .is_dynamic_predicate(
+                      module_name,
+                      (name, arity),
+                  );
+
+            let no_such_predicate =
+                if !is_dynamic_predicate && !ClauseType::is_inbuilt(name, arity) {
+                    let idx_tag = loader
+                        .wam_prelude
+                        .indices
+                        .get_predicate_code_index(
+                            name,
+                            arity,
+                            module_name,
+                        )
+                        .map(|code_idx| code_idx.get_tag())
+                        .unwrap_or(IndexPtrTag::DynamicUndefined);
+
+                    idx_tag == IndexPtrTag::DynamicUndefined ||
+                    idx_tag == IndexPtrTag::Undefined
+                } else {
+                    is_dynamic_predicate
+                };
+
+            if !no_such_predicate {
+                LiveLoadAndMachineState::machine_st(&mut loader.payload).fail = true;
+                return LiveLoadAndMachineState::evacuate(loader);
+            }
+
+            let body = loader.read_term_from_heap(temp_v!(3))?;
 
             let asserted_clause = Term::Clause(
                 Cell::default(),
@@ -1908,10 +1974,10 @@ impl Machine {
             );
 
             // if a new predicate was just created, make it dynamic.
-            loader.add_dynamic_predicate(compilation_target, key.0, key.1)?;
+            loader.add_dynamic_predicate(compilation_target, name, arity)?;
 
             loader.incremental_compile_clause(
-                key,
+                (name, arity),
                 asserted_clause,
                 compilation_target,
                 false,
@@ -1922,7 +1988,7 @@ impl Machine {
             LiveLoadAndMachineState::machine_st(&mut loader.payload).global_clock += 1;
 
             loader.compile_clause_clauses(
-                key,
+                (name, arity),
                 compilation_target,
                 std::iter::once((head, body)),
                 append_or_prepend,
@@ -1933,14 +1999,30 @@ impl Machine {
 
         match compile_assert() {
             Ok(_) => Ok(()),
-            Err(e) => {
-                let stub = match append_or_prepend {
-                    AppendOrPrepend::Append  => functor_stub(atom!("assertz"), 1),
-                    AppendOrPrepend::Prepend => functor_stub(atom!("asserta"), 1),
-                };
-                let err = self.machine_st.session_error(e);
+            Err(SessionError::CompilationError(
+                CompilationError::InvalidRuleHead |
+                CompilationError::InadmissibleFact
+            )) => {
+                let err = self.machine_st.type_error(
+                    ValidType::Callable,
+                    self.machine_st.registers[2],
+                );
 
-                Err(self.machine_st.error_form(err, stub))
+                Err(self.machine_st.error_form(err, stub_gen()))
+            }
+            Err(SessionError::CompilationError(
+                CompilationError::InadmissibleQueryTerm
+            )) => {
+                let err = self.machine_st.type_error(
+                    ValidType::Callable,
+                    self.machine_st.registers[3],
+                );
+
+                Err(self.machine_st.error_form(err, stub_gen()))
+            }
+            Err(e) => {
+                let err = self.machine_st.session_error(e);
+                Err(self.machine_st.error_form(err, stub_gen()))
             }
         }
     }
@@ -1973,49 +2055,49 @@ impl Machine {
             let mut clause_clause_target_poses: Vec<_> = loader
                 .wam_prelude
                 .indices
-                .get_predicate_skeleton(&compilation_target, &key)
+                .remove_predicate_skeleton(&compilation_target, &key)
                 .map(|skeleton| {
-                    loader
+                    let mut clause_clause_skeleton = loader
                         .wam_prelude
                         .indices
-                        .get_predicate_skeleton(
+                        .remove_predicate_skeleton(
                             &clause_clause_compilation_target,
                             &(atom!("$clause"), 2),
-                        )
-                        .map(|clause_clause_skeleton| {
-                            skeleton
-                                .core
-                                .clause_clause_locs
-                                .iter()
-                                .map(|clause_clause_loc| {
-                                    clause_clause_skeleton
-                                        .target_pos_of_clause_clause_loc(*clause_clause_loc)
-                                        .unwrap()
-                                })
-                                .collect()
-                        })
-                        .unwrap()
-                })
-                .unwrap();
+                        ).unwrap();
 
-            loader
-                .wam_prelude
+                    let result = skeleton.core
+                        .clause_clause_locs
+                        .iter()
+                        .map(|clause_clause_loc| {
+                            clause_clause_skeleton
+                                .target_pos_of_clause_clause_loc(*clause_clause_loc)
+                                .unwrap()
+                        })
+                        .collect();
+
+                    loader.add_extensible_predicate(
+                        key,
+                        skeleton,
+                        compilation_target,
+                    );
+
+                    loader.add_extensible_predicate(
+                        (atom!("$clause"), 2),
+                        clause_clause_skeleton,
+                        clause_clause_compilation_target,
+                    );
+
+                    result
+                }).unwrap();
+
+            loader.wam_prelude
                 .indices
                 .remove_predicate_skeleton(&compilation_target, &key);
 
-            let code_index = loader
+            let mut code_index = loader
                 .get_or_insert_code_index(key, compilation_target);
 
-            code_index.set(IndexPtr::Undefined);
-
-            /*
-            loader
-                .wam_prelude
-                .indices
-                .get_predicate_skeleton_mut(&compilation_target, &key)
-                .map(|skeleton| skeleton.reset());
-
-            */
+            code_index.set(IndexPtr::undefined());
 
             loader.payload.compilation_target = clause_clause_compilation_target;
 
@@ -2076,7 +2158,7 @@ impl Machine {
             // the global clock is incremented after each retraction.
             LiveLoadAndMachineState::machine_st(&mut loader.payload).global_clock += 1;
 
-            let target_pos = match loader.wam_prelude.indices.get_predicate_skeleton(
+            let target_pos = match loader.wam_prelude.indices.get_predicate_skeleton_mut(
                 &clause_clause_compilation_target,
                 &(atom!("$clause"), 2),
             ) {
@@ -2180,7 +2262,7 @@ impl Machine {
 
         let (predicate_name, arity) = self
             .machine_st
-            .read_predicate_key(self.machine_st[temp_v!(2)], self.machine_st[temp_v!(3)]);
+            .read_predicate_key(self.machine_st.registers[2], self.machine_st.registers[3]);
 
         let compilation_target = match module_name {
             atom!("user") => CompilationTarget::User,
@@ -2192,21 +2274,25 @@ impl Machine {
             .get_meta_predicate_spec(predicate_name, arity, &compilation_target)
         {
             Some(meta_specs) => {
-                let list_loc = iter_to_heap_list(
-                    &mut self.machine_st.heap,
+                let term_loc = self.machine_st.heap.len();
+
+                self.machine_st.heap.push(atom_as_cell!(predicate_name, arity));
+                self.machine_st.heap.extend(
                     meta_specs.iter().map(|meta_spec| match meta_spec {
                         MetaSpec::Minus => atom_as_cell!(atom!("+")),
                         MetaSpec::Plus => atom_as_cell!(atom!("-")),
                         MetaSpec::Either => atom_as_cell!(atom!("?")),
+                        MetaSpec::Colon => atom_as_cell!(atom!(":")),
                         MetaSpec::RequiresExpansionWithArgument(ref arg_num) => {
                             fixnum_as_cell!(Fixnum::build_with(*arg_num as i64))
                         }
-                    }));
+                    })
+                );
 
                 let heap_loc = self.machine_st.heap.len();
 
                 self.machine_st.heap.push(atom_as_cell!(atom!("meta_predicate"), 1));
-                self.machine_st.heap.push(heap_loc_as_cell!(list_loc));
+                self.machine_st.heap.push(str_loc_as_cell!(term_loc));
 
                 unify!(self.machine_st, str_loc_as_cell!(heap_loc), self.machine_st.registers[4]);
             }
@@ -2302,7 +2388,7 @@ impl Machine {
             .machine_st
             .read_predicate_key(self.machine_st.registers[1], self.machine_st.registers[2]);
 
-        match ClauseType::from(key.0, key.1) {
+        match ClauseType::from(key.0, key.1, &mut self.machine_st.arena) {
             ClauseType::BuiltIn(_) | ClauseType::Inlined(..) | ClauseType::CallN(_) => {
                 return;
             }
@@ -2344,14 +2430,19 @@ impl<'a> Loader<'a, LiveLoadAndMachineState<'a>> {
 
 #[inline]
 pub(super) fn load_module(
+    machine_st: &mut MachineState,
     code_dir: &mut CodeDir,
     op_dir: &mut OpDir,
     meta_predicate_dir: &mut MetaPredicateDir,
     compilation_target: &CompilationTarget,
     module: &Module,
 ) {
-    import_module_exports(
-        &mut RetractionInfo::new(0),
+    let ts = LiveTermStream::new(ListingSource::User);
+    let payload = LoadStatePayload::new(0, ts);
+    let mut payload = LiveLoadAndMachineState::new(machine_st, payload);
+
+    import_module_exports::<LiveLoadAndMachineState>(
+        &mut payload,
         &compilation_target,
         module,
         code_dir,

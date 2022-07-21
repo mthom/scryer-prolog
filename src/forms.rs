@@ -15,9 +15,8 @@ use fxhash::FxBuildHasher;
 use indexmap::{IndexMap, IndexSet};
 use ordered_float::OrderedFloat;
 
-use slice_deque::*;
-
 use std::cell::Cell;
+use std::collections::VecDeque;
 use std::convert::TryFrom;
 use std::fmt;
 use std::ops::AddAssign;
@@ -58,7 +57,7 @@ impl AppendOrPrepend {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Level {
     Deep,
     Root,
@@ -74,10 +73,16 @@ impl Level {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub enum CallPolicy {
+    Default,
+    Counted,
+}
+
 #[derive(Debug, Clone)]
 pub enum QueryTerm {
-    // register, clause type, subterms, use default call policy.
-    Clause(Cell<RegType>, ClauseType, Vec<Term>, bool),
+    // register, clause type, subterms, clause call policy.
+    Clause(Cell<RegType>, ClauseType, Vec<Term>, CallPolicy),
     BlockedCut, // a cut which is 'blocked by letters', like the P term in P -> Q.
     UnblockedCut(Cell<VarReg>),
     GetLevelAndUnify(Cell<VarReg>, Rc<String>),
@@ -85,9 +90,9 @@ pub enum QueryTerm {
 }
 
 impl QueryTerm {
-    pub(crate) fn set_default_caller(&mut self) {
+    pub(crate) fn set_call_policy(&mut self, cp: CallPolicy) {
         match self {
-            &mut QueryTerm::Clause(_, _, _, ref mut use_default_cp) => *use_default_cp = true,
+            &mut QueryTerm::Clause(_, _, _, ref mut clause_cp) => *clause_cp = cp,
             _ => {}
         }
     }
@@ -149,24 +154,21 @@ impl ClauseInfo for PredicateKey {
 
 impl ClauseInfo for Term {
     fn name(&self) -> Option<Atom> {
-        //, atom_tbl: &AtomTable) -> Option<StringBuffer> {
         match self {
             Term::Clause(_, name, terms) => {
-                // let str_buf = StringBuffer::from(*name, atom_tbl);
 
-                match name.as_str() {
-                    // str_buf.as_str() {
-                    ":-" => {
+                match name {
+                    atom!(":-") => {
                         match terms.len() {
                             1 => None,            // a declaration.
-                            2 => terms[0].name(), //.map(|name| StringBuffer::from(name, atom_tbl)),
+                            2 => terms[0].name(),
                             _ => Some(*name),
                         }
                     }
                     _ => Some(*name), //str_buf),
                 }
             }
-            Term::Literal(_, Literal::Atom(name)) => Some(*name), //Some(StringBuffer::from(*name, atom_tbl)),
+            Term::Literal(_, Literal::Atom(name)) => Some(*name),
             _ => None,
         }
     }
@@ -267,6 +269,7 @@ pub enum MetaSpec {
     Minus,
     Plus,
     Either,
+    Colon,
     RequiresExpansionWithArgument(usize),
 }
 
@@ -363,6 +366,18 @@ pub enum AtomOrString {
 }
 
 impl AtomOrString {
+    #[inline]
+    pub fn as_atom(&self, atom_tbl: &mut AtomTable) -> Atom {
+        match self {
+            &AtomOrString::Atom(atom) => {
+                atom
+            }
+            AtomOrString::String(string) => {
+                atom_tbl.build_with(&string)
+            }
+        }
+    }
+
     #[inline]
     pub fn as_str(&self) -> &str {
         match self {
@@ -607,7 +622,7 @@ impl ArenaFrom<Number> for Literal {
         match value {
             Number::Fixnum(n) => Literal::Fixnum(n),
             Number::Integer(n) => Literal::Integer(n),
-            Number::Float(f) => Literal::Float(arena_alloc!(f, arena)),
+            Number::Float(OrderedFloat(f)) => Literal::from(float_alloc!(f, arena)),
             Number::Rational(r) => Literal::Rational(r),
         }
     }
@@ -619,13 +634,29 @@ impl ArenaFrom<Number> for HeapCellValue {
         match value {
             Number::Fixnum(n) => fixnum_as_cell!(n),
             Number::Integer(n) => typed_arena_ptr_as_cell!(n),
-            Number::Float(n) => typed_arena_ptr_as_cell!(arena_alloc!(n, arena)),
+            Number::Float(OrderedFloat(n)) => HeapCellValue::from(float_alloc!(n, arena)),
             Number::Rational(n) => typed_arena_ptr_as_cell!(n),
         }
     }
 }
 
 impl Number {
+    pub(crate) fn sign(&self) -> Number {
+        match self {
+            &Number::Float(f) if f == 0.0 => Number::Float(OrderedFloat(0f64)),
+            &Number::Float(f) => Number::Float(OrderedFloat(f.signum())),
+            _ => {
+                if self.is_positive() {
+                    Number::Fixnum(Fixnum::build_with(1))
+                } else if self.is_negative() {
+                    Number::Fixnum(Fixnum::build_with(-1))
+                } else {
+                    Number::Fixnum(Fixnum::build_with(0))
+                }
+            }
+        }
+    }
+
     #[inline]
     pub(crate) fn is_positive(&self) -> bool {
         match self {
@@ -791,7 +822,7 @@ pub(crate) struct LocalPredicateSkeleton {
     pub(crate) is_discontiguous: bool,
     pub(crate) is_dynamic: bool,
     pub(crate) is_multifile: bool,
-    pub(crate) clause_clause_locs: SliceDeque<usize>,
+    pub(crate) clause_clause_locs: VecDeque<usize>,
     pub(crate) clause_assert_margin: usize,
     pub(crate) retracted_dynamic_clauses: Option<Vec<ClauseIndexInfo>>, // always None if non-dynamic.
 }
@@ -803,7 +834,7 @@ impl LocalPredicateSkeleton {
             is_discontiguous: false,
             is_dynamic: false,
             is_multifile: false,
-            clause_clause_locs: sdeq![],
+            clause_clause_locs: VecDeque::new(),
             clause_assert_margin: 0,
             retracted_dynamic_clauses: Some(vec![]),
         }
@@ -844,7 +875,7 @@ impl LocalPredicateSkeleton {
 #[derive(Clone, Debug)]
 pub(crate) struct PredicateSkeleton {
     pub(crate) core: LocalPredicateSkeleton,
-    pub(crate) clauses: SliceDeque<ClauseIndexInfo>,
+    pub(crate) clauses: VecDeque<ClauseIndexInfo>,
 }
 
 impl PredicateSkeleton {
@@ -852,7 +883,7 @@ impl PredicateSkeleton {
     pub(crate) fn new() -> Self {
         PredicateSkeleton {
             core: LocalPredicateSkeleton::new(),
-            clauses: sdeq![],
+            clauses: VecDeque::new(),
         }
     }
 
@@ -868,18 +899,22 @@ impl PredicateSkeleton {
     }
 
     pub(crate) fn target_pos_of_clause_clause_loc(
-        &self,
+        &mut self,
         clause_clause_loc: usize,
     ) -> Option<usize> {
-        let search_result = self.core.clause_clause_locs[0..self.core.clause_assert_margin]
+        let search_result = self.core.clause_clause_locs
+            .make_contiguous()[0..self.core.clause_assert_margin]
             .binary_search_by(|loc| clause_clause_loc.cmp(&loc));
 
         match search_result {
             Ok(loc) => Some(loc),
-            Err(_) => self.core.clause_clause_locs[self.core.clause_assert_margin..]
-                .binary_search_by(|loc| loc.cmp(&clause_clause_loc))
-                .map(|loc| loc + self.core.clause_assert_margin)
-                .ok(),
+            Err(_) => {
+                self.core.clause_clause_locs
+                    .make_contiguous()[self.core.clause_assert_margin..]
+                    .binary_search_by(|loc| loc.cmp(&clause_clause_loc))
+                    .map(|loc| loc + self.core.clause_assert_margin)
+                    .ok()
+            }
         }
     }
 }

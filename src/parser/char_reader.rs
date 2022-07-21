@@ -61,6 +61,14 @@ impl<R> CharReader<R> {
     pub fn inner_mut(&mut self) -> &mut R {
         &mut self.inner
     }
+
+    // Return the number of bytes remaining to be read.  Useful for,
+    // e.g., determining the position relative to the end of the
+    // owning stream.
+    #[inline]
+    pub fn rem_buf_len(&self) -> usize {
+        self.buf.len() - self.pos
+    }
 }
 
 pub trait CharRead {
@@ -96,7 +104,7 @@ impl<R> CharReader<R> {
         self.inner
     }
 
-    fn reset_buffer(&mut self) {
+    pub fn reset_buffer(&mut self) {
         self.buf.clear();
         self.pos = 0;
     }
@@ -246,33 +254,6 @@ impl<R: Read> CharRead for CharReader<R> {
     }
 }
 
-/*
-impl<R: Seek> BufReader<R> {
-    /// Seeks relative to the current position. If the new position lies within the buffer,
-    /// the buffer will not be flushed, allowing for more efficient seeks.
-    /// This method does not return the location of the underlying reader, so the caller
-    /// must track this information themselves if it is required.
-    #[stable(feature = "bufreader_seek_relative", since = "1.53.0")]
-    pub fn seek_relative(&mut self, offset: i64) -> io::Result<()> {
-        let pos = self.pos as u64;
-        if offset < 0 {
-            if let Some(new_pos) = pos.checked_sub((-offset) as u64) {
-                self.pos = new_pos as usize;
-                return Ok(());
-            }
-        } else {
-            if let Some(new_pos) = pos.checked_add(offset as u64) {
-                if new_pos <= self.cap as u64 {
-                    self.pos = new_pos as usize;
-                    return Ok(());
-                }
-            }
-        }
-        self.seek(SeekFrom::Current(offset)).map(drop)
-    }
-}
-*/
-
 impl<R: Read> Read for CharReader<R> {
     fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
         // // If we don't have any buffered data and we're doing a massive read
@@ -377,108 +358,6 @@ where
     }
 }
 
-/*
-#[stable(feature = "rust1", since = "1.0.0")]
-impl<R: Seek> Seek for BufReader<R> {
-    /// Seek to an offset, in bytes, in the underlying reader.
-    ///
-    /// The position used for seeking with [`SeekFrom::Current`]`(_)` is the
-    /// position the underlying reader would be at if the `BufReader<R>` had no
-    /// internal buffer.
-    ///
-    /// Seeking always discards the internal buffer, even if the seek position
-    /// would otherwise fall within it. This guarantees that calling
-    /// [`BufReader::into_inner()`] immediately after a seek yields the underlying reader
-    /// at the same position.
-    ///
-    /// To seek without discarding the internal buffer, use [`BufReader::seek_relative`].
-    ///
-    /// See [`std::io::Seek`] for more details.
-    ///
-    /// Note: In the edge case where you're seeking with [`SeekFrom::Current`]`(n)`
-    /// where `n` minus the internal buffer length overflows an `i64`, two
-    /// seeks will be performed instead of one. If the second seek returns
-    /// [`Err`], the underlying reader will be left at the same position it would
-    /// have if you called `seek` with [`SeekFrom::Current`]`(0)`.
-    ///
-    /// [`std::io::Seek`]: Seek
-    fn seek(&mut self, pos: SeekFrom) -> io::Result<u64> {
-        let result: u64;
-        if let SeekFrom::Current(n) = pos {
-            let remainder = (self.cap - self.pos) as i64;
-            // it should be safe to assume that remainder fits within an i64 as the alternative
-            // means we managed to allocate 8 exbibytes and that's absurd.
-            // But it's not out of the realm of possibility for some weird underlying reader to
-            // support seeking by i64::MIN so we need to handle underflow when subtracting
-            // remainder.
-            if let Some(offset) = n.checked_sub(remainder) {
-                result = self.inner.seek(SeekFrom::Current(offset))?;
-            } else {
-                // seek backwards by our remainder, and then by the offset
-                self.inner.seek(SeekFrom::Current(-remainder))?;
-                self.discard_buffer();
-                result = self.inner.seek(SeekFrom::Current(n))?;
-            }
-        } else {
-            // Seeking with Start/End doesn't care about our buffer length.
-            result = self.inner.seek(pos)?;
-        }
-        self.discard_buffer();
-        Ok(result)
-    }
-
-    /// Returns the current seek position from the start of the stream.
-    ///
-    /// The value returned is equivalent to `self.seek(SeekFrom::Current(0))`
-    /// but does not flush the internal buffer. Due to this optimization the
-    /// function does not guarantee that calling `.into_inner()` immediately
-    /// afterwards will yield the underlying reader at the same position. Use
-    /// [`BufReader::seek`] instead if you require that guarantee.
-    ///
-    /// # Panics
-    ///
-    /// This function will panic if the position of the inner reader is smaller
-    /// than the amount of buffered data. That can happen if the inner reader
-    /// has an incorrect implementation of [`Seek::stream_position`], or if the
-    /// position has gone out of sync due to calling [`Seek::seek`] directly on
-    /// the underlying reader.
-    ///
-    /// # Example
-    ///
-    /// ```no_run
-    /// use std::{
-    ///     io::{self, BufRead, BufReader, Seek},
-    ///     fs::File,
-    /// };
-    ///
-    /// fn main() -> io::Result<()> {
-    ///     let mut f = BufReader::new(File::open("foo.txt")?);
-    ///
-    ///     let before = f.stream_position()?;
-    ///     f.read_line(&mut String::new())?;
-    ///     let after = f.stream_position()?;
-    ///
-    ///     println!("The first line was {} bytes long", after - before);
-    ///     Ok(())
-    /// }
-    /// ```
-    fn stream_position(&mut self) -> io::Result<u64> {
-        let remainder = (self.cap - self.pos) as u64;
-        self.inner.stream_position().map(|pos| {
-            pos.checked_sub(remainder).expect(
-                "overflow when subtracting remaining buffer size from inner stream position",
-            )
-        })
-    }
-}
-*/
-/*
-impl<T> SizeHint for CharReader<T> {
-    fn lower_bound(&self) -> usize {
-        self.buffer().len()
-    }
-}
-*/
 
 #[cfg(test)]
 mod tests {

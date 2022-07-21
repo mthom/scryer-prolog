@@ -82,16 +82,6 @@ fn numerical_type_error(
     })
 }
 
-pub(crate) fn sign(n: Number) -> Number {
-    if n.is_positive() {
-        Number::Fixnum(Fixnum::build_with(1))
-    } else if n.is_negative() {
-        Number::Fixnum(Fixnum::build_with(-1))
-    } else {
-        Number::Fixnum(Fixnum::build_with(0))
-    }
-}
-
 fn isize_gcd(n1: isize, n2: isize) -> Option<isize> {
     if n1 == 0 {
         return n2.checked_abs().map(|n| n as isize);
@@ -291,8 +281,8 @@ pub(crate) fn div(n1: Number, n2: Number) -> Result<Number, MachineStubGen> {
 }
 
 pub(crate) fn float_pow(n1: Number, n2: Number) -> Result<Number, MachineStubGen> {
-    let f1 = result_f(&n1, rnd_f);
-    let f2 = result_f(&n2, rnd_f);
+    let f1 = result_f(&n1);
+    let f2 = result_f(&n2);
 
     let stub_gen = || {
         let pow_atom = atom!("**");
@@ -302,7 +292,7 @@ pub(crate) fn float_pow(n1: Number, n2: Number) -> Result<Number, MachineStubGen
     let f1 = try_numeric_result!(f1, stub_gen)?;
     let f2 = try_numeric_result!(f2, stub_gen)?;
 
-    let result = result_f(&Number::Float(OrderedFloat(f1.powf(f2))), rnd_f);
+    let result = result_f(&Number::Float(OrderedFloat(f1.powf(f2))));
 
     Ok(Number::Float(OrderedFloat(try_numeric_result!(
         result, stub_gen
@@ -400,7 +390,6 @@ pub(crate) fn int_pow(n1: Number, n2: Number, arena: &mut Arena) -> Result<Numbe
 pub(crate) fn pow(n1: Number, n2: Number, culprit: Atom) -> Result<Number, MachineStubGen> {
     if n2.is_negative() && n1.is_zero() {
         let stub_gen = move || functor_stub(culprit, 2);
-
         return Err(undefined_eval_error(stub_gen));
     }
 
@@ -414,7 +403,7 @@ pub(crate) fn float(n: Number) -> Result<f64, MachineStubGen> {
         functor_stub(is_atom, 2)
     };
 
-    try_numeric_result!(result_f(&n, rnd_f), stub_gen)
+    try_numeric_result!(result_f(&n), stub_gen)
 }
 
 #[inline]
@@ -430,8 +419,8 @@ where
         functor_stub(is_atom, 2)
     };
 
-    let f1 = try_numeric_result!(result_f(&n1, rnd_f), stub_gen)?;
-    let f1 = result_f(&Number::Float(OrderedFloat(f(f1))), rnd_f);
+    let f1 = try_numeric_result!(result_f(&n1), stub_gen)?;
+    let f1 = result_f(&Number::Float(OrderedFloat(f(f1))));
 
     try_numeric_result!(f1, stub_gen)
 }
@@ -472,8 +461,8 @@ pub(crate) fn max(n1: Number, n2: Number) -> Result<Number, MachineStubGen> {
                 functor_stub(max_atom, 2)
             };
 
-            let f1 = try_numeric_result!(result_f(&n1, rnd_f), stub_gen)?;
-            let f2 = try_numeric_result!(result_f(&n2, rnd_f), stub_gen)?;
+            let f1 = try_numeric_result!(result_f(&n1), stub_gen)?;
+            let f2 = try_numeric_result!(result_f(&n2), stub_gen)?;
 
             Ok(Number::Float(cmp::max(OrderedFloat(f1), OrderedFloat(f2))))
         }
@@ -516,8 +505,8 @@ pub(crate) fn min(n1: Number, n2: Number) -> Result<Number, MachineStubGen> {
                 functor_stub(min_atom, 2)
             };
 
-            let f1 = try_numeric_result!(result_f(&n1, rnd_f), stub_gen)?;
-            let f2 = try_numeric_result!(result_f(&n2, rnd_f), stub_gen)?;
+            let f1 = try_numeric_result!(result_f(&n1), stub_gen)?;
+            let f2 = try_numeric_result!(result_f(&n2), stub_gen)?;
 
             Ok(Number::Float(cmp::min(OrderedFloat(f1), OrderedFloat(f2))))
         }
@@ -1108,35 +1097,43 @@ impl MachineState {
 
     pub(crate) fn arith_eval_by_metacall(&mut self, value: HeapCellValue) -> Result<Number, MachineStub> {
         let stub_gen = || functor_stub(atom!("is"), 2);
-        let mut iter = stackless_post_order_iter(&mut self.heap, value);
+        let mut iter = stackful_post_order_iter(&mut self.heap, value);
 
         while let Some(value) = iter.next() {
-            if value.is_forwarded() {
+            if value.get_forwarding_bit() {
+                std::mem::drop(iter);
+
                 let (name, arity) = read_heap_cell!(value,
                      (HeapCellValueTag::Atom, (name, arity)) => {
                          (name, arity)
                      }
-                     (HeapCellValueTag::Lis | HeapCellValueTag::PStr) => {
+                     (HeapCellValueTag::Str, s) => {
+                         cell_as_atom_cell!(self.heap[s]).get_name_and_arity()
+                     }
+                     (HeapCellValueTag::Lis | HeapCellValueTag::PStr | HeapCellValueTag::PStrOffset |
+                      HeapCellValueTag::PStrLoc) => {
                          (atom!("."), 2)
+                     }
+                     (HeapCellValueTag::AttrVar | HeapCellValueTag::Var) => {
+                         let err = self.instantiation_error();
+                         return Err(self.error_form(err, stub_gen()));
                      }
                      _ => {
                          unreachable!()
                      }
                 );
 
-                std::mem::drop(iter);
-
                 let evaluable_error = self.evaluable_error(name, arity);
-                let stub = stub_gen();
-
-                return Err(self.error_form(evaluable_error, stub));
+                return Err(self.error_form(evaluable_error, stub_gen()));
             }
+
+            let value = unmark_cell_bits!(value);
 
             read_heap_cell!(value,
                 (HeapCellValueTag::Atom, (name, arity)) => {
                     if arity == 2 {
-                        let a1 = self.interms.pop().unwrap();
                         let a2 = self.interms.pop().unwrap();
+                        let a1 = self.interms.pop().unwrap();
 
                         match name {
                             atom!("+") => self.interms.push(drop_iter_on_err!(
@@ -1184,7 +1181,7 @@ impl MachineState {
 
                                 let result = arena_alloc!(
                                     drop_iter_on_err!(self, iter, rdiv(r1, r2)),
-                                    self.arena
+                                    &mut self.arena
                                 );
 
                                 self.interms.push(Number::Rational(result));
@@ -1278,7 +1275,7 @@ impl MachineState {
                             atom!("\\") => self.interms.push(
                                 drop_iter_on_err!(self, iter, bitwise_complement(a1, &mut self.arena))
                             ),
-                            atom!("sign") => self.interms.push(sign(a1)),
+                            atom!("sign") => self.interms.push(a1.sign()),
                             _ => {
                                 let evaluable_stub = functor_stub(name, 1);
                                 std::mem::drop(iter);
@@ -1324,7 +1321,7 @@ impl MachineState {
                     self.interms.push(Number::Fixnum(n));
                 }
                 (HeapCellValueTag::F64, fl) => {
-                    self.interms.push(Number::Float(**fl));
+                    self.interms.push(Number::Float(*fl));
                 }
                 (HeapCellValueTag::Cons, ptr) => {
                     match_untyped_arena_ptr!(ptr,
@@ -1333,9 +1330,6 @@ impl MachineState {
                          }
                          (ArenaHeaderTag::Rational, r) => {
                              self.interms.push(Number::Rational(r));
-                         }
-                         (ArenaHeaderTag::F64, fl) => {
-                             self.interms.push(Number::Float(*fl));
                          }
                          _ => {
                              std::mem::drop(iter);

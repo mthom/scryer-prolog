@@ -109,6 +109,12 @@ impl<'a> HeapPStrIter<'a> {
         self.brent_st.num_steps()
     }
 
+    #[inline(always)]
+    pub fn chars(mut self) -> PStrCharsIter<'a> {
+        let item = self.next();
+        PStrCharsIter { iter: self, item }
+    }
+
     pub fn compare_pstr_to_string(&mut self, s: &str) -> Option<PStrPrefixCmpResult> {
         let mut result = PStrPrefixCmpResult {
             focus: self.brent_st.hare,
@@ -116,7 +122,12 @@ impl<'a> HeapPStrIter<'a> {
             prefix_len: 0,
         };
 
-        while let Some(iteratee) = self.next() {
+        let mut final_result = None;
+
+        while let Some(PStrIterStep { iteratee, next_hare }) = self.step(self.brent_st.hare) {
+            self.brent_st.hare = next_hare;
+            self.focus = self.heap[iteratee.focus()];
+
             result.focus  = iteratee.focus();
             result.offset = iteratee.offset();
 
@@ -130,7 +141,8 @@ impl<'a> HeapPStrIter<'a> {
                             result.offset += c1.len_utf8();
                         }
                     } else {
-                        return Some(result);
+                        final_result = Some(result);
+                        break;
                     }
                 }
                 PStrIteratee::PStrSegment(_, pstr_atom, n) => {
@@ -149,7 +161,8 @@ impl<'a> HeapPStrIter<'a> {
                         result.prefix_len += s.len();
                         result.offset += s.len();
 
-                        return Some(result);
+                        final_result = Some(result);
+                        break;
                     } else {
                         return None;
                     }
@@ -157,17 +170,19 @@ impl<'a> HeapPStrIter<'a> {
             }
 
             if s.len() == result.prefix_len {
-                return Some(result);
+                final_result = Some(result);
+                break;
             }
         }
 
-        Some(result)
-    }
+        if let Some(result) = &final_result {
+            if self.at_string_terminator() {
+                self.focus = empty_list_as_cell!();
+                self.brent_st.hare = result.focus;
+            }
+        }
 
-    #[inline]
-    pub fn chars(mut self) -> PStrCharsIter<'a> {
-        let item = self.next();
-        PStrCharsIter { iter: self, item }
+        final_result
     }
 
     fn walk_hare_to_cycle_end(&mut self) {
@@ -223,7 +238,13 @@ impl<'a> HeapPStrIter<'a> {
                    return name == atom!(".") && arity == 2;
                }
                (HeapCellValueTag::Lis, h) => {
-                   return read_heap_cell!(self.heap[h],
+                   let value = self.heap[h];
+                   let value = heap_bound_store(
+                       self.heap,
+                       heap_bound_deref(self.heap, value),
+                   );
+
+                   return read_heap_cell!(value,
                        (HeapCellValueTag::Atom, (name, arity)) => {
                            arity == 0 && name.as_char().is_some()
                        }
@@ -362,7 +383,7 @@ impl<'a> HeapPStrIter<'a> {
 
         self.focus = self.heap[iteratee.focus()];
 
-        if self.focus.is_string_terminator(self.heap) {
+        if self.at_string_terminator() {
             self.focus = empty_list_as_cell!();
             self.brent_st.hare = iteratee.focus();
 
@@ -533,7 +554,6 @@ pub fn compare_pstr_prefixes<'a>(
     #[inline(always)]
     fn step(iter: &mut HeapPStrIter, hare: usize) -> Option<PStrIterStep> {
         let result = iter.step(hare);
-
         iter.focus = iter.heap[hare];
 
         if iter.focus.is_string_terminator(iter.heap) {
@@ -622,7 +642,7 @@ pub fn compare_pstr_prefixes<'a>(
 
                         if let Some(c1) = pstr.as_str_from(n).chars().next() {
                             if c1 != c2 {
-                                return PStrCmpResult::Ordered(c2.cmp(&c1));
+                                return PStrCmpResult::Ordered(c1.cmp(&c2));
                             }
 
                             let n1 = n + c1.len_utf8();

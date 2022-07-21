@@ -1,5 +1,6 @@
 use crate::arena::*;
 use crate::atom_table::*;
+use crate::machine::machine_indices::*;
 use crate::parser::char_reader::*;
 use crate::types::HeapCellValueTag;
 
@@ -11,7 +12,7 @@ use std::ops::Neg;
 use std::rc::Rc;
 use std::vec::Vec;
 
-use rug::{Integer, Rational};
+use crate::parser::rug::{Integer, Rational};
 
 use fxhash::FxBuildHasher;
 use indexmap::IndexMap;
@@ -234,10 +235,20 @@ pub enum GenContext {
 }
 
 impl GenContext {
+    #[inline]
     pub fn chunk_num(self) -> usize {
         match self {
             GenContext::Head => 0,
             GenContext::Mid(cn) | GenContext::Last(cn) => cn,
+        }
+    }
+
+    #[inline]
+    pub fn is_last(self) -> bool {
+        if let GenContext::Last(_) = self {
+            true
+        } else {
+            false
         }
     }
 }
@@ -361,28 +372,28 @@ pub enum ArithmeticError {
 #[derive(Debug)]
 pub enum ParserError {
     BackQuotedString(usize, usize),
-    UnexpectedChar(char, usize, usize),
-    UnexpectedEOF,
     IO(IOError),
     IncompleteReduction(usize, usize),
     InvalidSingleQuotedCharacter(char),
+    LexicalError(lexical::Error),
     MissingQuote(usize, usize),
     NonPrologChar(usize, usize),
     ParseBigInt(usize, usize),
-    LexicalError(lexical::Error),
+    UnexpectedChar(char, usize, usize),
+    UnexpectedEOF,
     Utf8Error(usize, usize),
 }
 
 impl ParserError {
     pub fn line_and_col_num(&self) -> Option<(usize, usize)> {
         match self {
-            &ParserError::BackQuotedString(line_num, col_num)
-            | &ParserError::UnexpectedChar(_, line_num, col_num)
-            | &ParserError::IncompleteReduction(line_num, col_num)
-            | &ParserError::MissingQuote(line_num, col_num)
-            | &ParserError::NonPrologChar(line_num, col_num)
-            | &ParserError::ParseBigInt(line_num, col_num)
-            | &ParserError::Utf8Error(line_num, col_num) => Some((line_num, col_num)),
+            &ParserError::BackQuotedString(line_num, col_num) |
+            &ParserError::IncompleteReduction(line_num, col_num) |
+            &ParserError::MissingQuote(line_num, col_num) |
+            &ParserError::NonPrologChar(line_num, col_num) |
+            &ParserError::ParseBigInt(line_num, col_num) |
+            &ParserError::UnexpectedChar(_, line_num, col_num) |
+            &ParserError::Utf8Error(line_num, col_num) => Some((line_num, col_num)),
             _ => None,
         }
     }
@@ -390,8 +401,6 @@ impl ParserError {
     pub fn as_atom(&self) -> Atom {
         match self {
             ParserError::BackQuotedString(..) => atom!("back_quoted_string"),
-            ParserError::UnexpectedChar(..) => atom!("unexpected_char"),
-            ParserError::UnexpectedEOF => atom!("unexpected_end_of_file"),
             ParserError::IncompleteReduction(..) => atom!("incomplete_reduction"),
             ParserError::InvalidSingleQuotedCharacter(..) => atom!("invalid_single_quoted_character"),
             ParserError::IO(_) => atom!("input_output_error"),
@@ -399,6 +408,8 @@ impl ParserError {
             ParserError::MissingQuote(..) => atom!("missing_quote"),
             ParserError::NonPrologChar(..) => atom!("non_prolog_character"),
             ParserError::ParseBigInt(..) => atom!("cannot_parse_big_int"),
+            ParserError::UnexpectedChar(..) => atom!("unexpected_char"),
+            ParserError::UnexpectedEOF => atom!("unexpected_end_of_file"),
             ParserError::Utf8Error(..) => atom!("utf8_conversion_error"),
         }
     }
@@ -466,7 +477,8 @@ pub enum Fixity {
 #[repr(u64)]
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 pub struct Fixnum {
-    num: B57,
+    num: B56,
+    #[allow(unused)] f: bool,
     #[allow(unused)] m: bool,
     #[allow(unused)] tag: B6,
 }
@@ -475,22 +487,23 @@ impl Fixnum {
     #[inline]
     pub fn build_with(num: i64) -> Self {
         Fixnum::new()
-            .with_num(u64::from_ne_bytes(num.to_ne_bytes()) & ((1 << 57) - 1))
+            .with_num(u64::from_ne_bytes(num.to_ne_bytes()) & ((1 << 56) - 1))
             .with_tag(HeapCellValueTag::Fixnum as u8)
             .with_m(false)
-        //num as u64).with__m(false)
+            .with_f(false)
     }
 
     #[inline]
     pub fn build_with_checked(num: i64) -> Result<Self, OutOfBounds> {
-        const UPPER_BOUND: i64 = (1 << 56) - 1;
-        const LOWER_BOUND: i64 = -(1 << 56);
+        const UPPER_BOUND: i64 = (1 << 55) - 1;
+        const LOWER_BOUND: i64 = -(1 << 55);
 
         if LOWER_BOUND <= num && num <= UPPER_BOUND {
             Ok(Fixnum::new()
                 .with_m(false)
+                .with_f(false)
                 .with_tag(HeapCellValueTag::Fixnum as u8)
-                .with_num(u64::from_ne_bytes(num.to_ne_bytes()) & ((1 << 57) - 1))) //num as u64 & ((1 << 57) - 1)))
+                .with_num(u64::from_ne_bytes(num.to_ne_bytes()) & ((1 << 56) - 1)))
         } else {
             Err(OutOfBounds {})
         }
@@ -499,7 +512,7 @@ impl Fixnum {
     #[inline]
     pub fn get_num(self) -> i64 {
         let n = self.num() as i64;
-        let (n, overflowed) = (n << 7).overflowing_shr(7); // sign-extend the 57-bit signed fixnum.
+        let (n, overflowed) = (n << 8).overflowing_shr(8);
         debug_assert_eq!(overflowed, false);
         n
     }
@@ -518,30 +531,34 @@ impl Neg for Fixnum {
 pub enum Literal {
     Atom(Atom),
     Char(char),
+    CodeIndex(CodeIndex),
     Fixnum(Fixnum),
     Integer(TypedArenaPtr<Integer>),
     Rational(TypedArenaPtr<Rational>),
-    Float(F64Ptr),
+    Float(F64Offset),
     String(Atom),
+}
+
+impl From<F64Ptr> for Literal {
+    #[inline(always)]
+    fn from(ptr: F64Ptr) -> Literal {
+        Literal::Float(ptr.as_offset())
+    }
 }
 
 impl fmt::Display for Literal {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
             Literal::Atom(ref atom) => {
-                //                if atom.as_str().chars().any(|c| "`.$'\" ".contains(c)) {
-                //                    write!(f, "'{}'", atom)
-                //                } else {
                 write!(f, "{}", atom.flat_index())
-                //                }
             }
             Literal::Char(c) => write!(f, "'{}'", *c as u32),
+            Literal::CodeIndex(i) => write!(f, "{:x}", i.as_ptr() as u64),
             Literal::Fixnum(n) => write!(f, "{}", n.get_num()),
             Literal::Integer(ref n) => write!(f, "{}", n),
             Literal::Rational(ref n) => write!(f, "{}", n),
             Literal::Float(ref n) => write!(f, "{}", *n),
             Literal::String(ref s) => write!(f, "\"{}\"", s.as_str()),
-            //          Literal::Usize(integer) => write!(f, "u{}", integer),
         }
     }
 }
@@ -561,7 +578,10 @@ pub enum Term {
     Clause(Cell<RegType>, Atom, Vec<Term>),
     Cons(Cell<RegType>, Box<Term>, Box<Term>),
     Literal(Cell<RegType>, Literal),
-    PartialString(Cell<RegType>, Atom, Option<Box<Term>>),
+    // PartialString wraps a String in anticipation of it absorbing
+    // other PartialString variants in as_partial_string.
+    PartialString(Cell<RegType>, String, Box<Term>),
+    CompleteString(Cell<RegType>, Atom),
     Var(Cell<VarReg>, Rc<String>),
 }
 

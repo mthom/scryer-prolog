@@ -151,16 +151,13 @@ impl DebrayAllocator {
         };
     }
 
-    fn alloc_reg_to_var<'a, Target>(
+    fn alloc_reg_to_var<'a, Target: CompilationTarget<'a>>(
         &mut self,
         var: &String,
         lvl: Level,
         term_loc: GenContext,
         target: &mut Vec<Instruction>,
-    ) -> usize
-    where
-        Target: CompilationTarget<'a>,
-    {
+    ) -> usize {
         match term_loc {
             GenContext::Head => {
                 if let Level::Shallow = lvl {
@@ -403,5 +400,10 @@ impl Allocator for DebrayAllocator {
         self.arity = 0;
         self.arg_c = 1;
         self.temp_lb = arity + 1;
+    }
+
+    #[inline(always)]
+    fn max_reg_allocated(&self) -> usize {
+        std::cmp::max(self.temp_lb, self.arg_c)
     }
 }

@@ -1,3 +1,4 @@
+pub mod args;
 pub mod arithmetic_ops;
 pub mod attributed_variables;
 pub mod code_walker;
@@ -21,10 +22,12 @@ pub mod streams;
 pub mod system_calls;
 pub mod term_stream;
 
+use crate::arena::*;
 use crate::arithmetic::*;
 use crate::atom_table::*;
 use crate::forms::*;
 use crate::instructions::*;
+use crate::machine::args::*;
 use crate::machine::compile::*;
 use crate::machine::copier::*;
 use crate::machine::heap::*;
@@ -46,6 +49,7 @@ use std::cmp::Ordering;
 use std::env;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
+use tokio::runtime::Runtime;
 
 lazy_static! {
     pub static ref INTERRUPT: AtomicBool = AtomicBool::new(false);
@@ -60,6 +64,7 @@ pub struct Machine {
     pub(super) user_output: Stream,
     pub(super) user_error: Stream,
     pub(super) load_contexts: Vec<LoadContext>,
+    pub(super) runtime: Runtime,
 }
 
 #[derive(Debug)]
@@ -156,6 +161,24 @@ pub(crate) fn import_builtin_impls(code_dir: &CodeDir, builtins: &mut Module) {
     }
 }
 
+#[inline]
+pub(crate) fn get_structure_index(value: HeapCellValue) -> Option<CodeIndex> {
+    read_heap_cell!(value,
+        (HeapCellValueTag::Cons, cons_ptr) => {
+             match_untyped_arena_ptr!(cons_ptr,
+                 (ArenaHeaderTag::IndexPtr, ip) => {
+                     return Some(CodeIndex::from(ip));
+                 }
+                 _ => {}
+             );
+        }
+        _ => {
+        }
+    );
+
+    None
+}
+
 impl Machine {
     #[inline]
     pub fn prelude_view_and_machine_st(&mut self) -> (MachinePreludeView, &mut MachineState) {
@@ -216,6 +239,7 @@ impl Machine {
 
         if let Some(toplevel) = self.indices.modules.get(&atom!("$toplevel")) {
             load_module(
+                &mut self.machine_st,
                 &mut self.indices.code_dir,
                 &mut self.indices.op_dir,
                 &mut self.indices.meta_predicates,
@@ -283,7 +307,7 @@ impl Machine {
     }
 
     pub(crate) fn configure_modules(&mut self) {
-        fn update_call_n_indices(loader: &Module, target_code_dir: &mut CodeDir) {
+        fn update_call_n_indices(loader: &Module, target_code_dir: &mut CodeDir, arena: &mut Arena) {
             for arity in 1..66 {
                 let key = (atom!("call"), arity);
 
@@ -291,7 +315,7 @@ impl Machine {
                     Some(src_code_index) => {
                         let target_code_index = target_code_dir
                             .entry(key)
-                            .or_insert_with(|| CodeIndex::new(IndexPtr::Undefined));
+                            .or_insert_with(|| CodeIndex::new(IndexPtr::undefined(), arena));
 
                         target_code_index.set(src_code_index.get());
                     }
@@ -307,6 +331,7 @@ impl Machine {
                 // Import loader's exports into the builtins module so they will be
                 // implicitly included in every further module.
                 load_module(
+                    &mut self.machine_st,
                     &mut builtins.code_dir,
                     &mut builtins.op_dir,
                     &mut builtins.meta_predicates,
@@ -327,10 +352,10 @@ impl Machine {
             }
 
             for (_, target_module) in self.indices.modules.iter_mut() {
-                update_call_n_indices(&loader, &mut target_module.code_dir);
+                update_call_n_indices(&loader, &mut target_module.code_dir, &mut self.machine_st.arena);
             }
 
-            update_call_n_indices(&loader, &mut self.indices.code_dir);
+            update_call_n_indices(&loader, &mut self.indices.code_dir, &mut self.machine_st.arena);
 
             self.indices.modules.insert(atom!("loader"), loader);
         } else {
@@ -389,18 +414,27 @@ impl Machine {
 
         for (p, instr) in self.code[impls_offset ..].iter().enumerate() {
             let key = instr.to_name_and_arity();
-            self.indices.code_dir.insert(key, CodeIndex::new(IndexPtr::Index(p + impls_offset)));
+            self.indices.code_dir.insert(
+                key,
+                CodeIndex::new(IndexPtr::index(p + impls_offset), &mut self.machine_st.arena),
+            );
         }
     }
 
     pub fn new() -> Self {
         use ref_thread_local::RefThreadLocal;
 
+        let args = MachineArgs::new();
         let mut machine_st = MachineState::new();
 
-        let user_input = Stream::stdin(&mut machine_st.arena);
+        let user_input = Stream::stdin(&mut machine_st.arena, args.add_history);
         let user_output = Stream::stdout(&mut machine_st.arena);
         let user_error = Stream::stderr(&mut machine_st.arena);
+
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
 
         let mut wam = Machine {
             machine_st,
@@ -410,6 +444,7 @@ impl Machine {
             user_output,
             user_error,
             load_contexts: vec![],
+            runtime,
         };
 
         let mut lib_path = current_dir();
@@ -444,6 +479,7 @@ impl Machine {
 
         if let Some(builtins) = wam.indices.modules.get_mut(&atom!("builtins")) {
             load_module(
+                &mut wam.machine_st,
                 &mut wam.indices.code_dir,
                 &mut wam.indices.op_dir,
                 &mut wam.indices.meta_predicates,
@@ -469,6 +505,7 @@ impl Machine {
 
         if let Some(loader) = wam.indices.modules.get(&atom!("loader")) {
             load_module(
+                &mut wam.machine_st,
                 &mut wam.indices.code_dir,
                 &mut wam.indices.op_dir,
                 &mut wam.indices.meta_predicates,
@@ -655,18 +692,20 @@ impl Machine {
 
     #[inline(always)]
     fn try_call(&mut self, name: Atom, arity: usize, idx: IndexPtr) -> CallResult {
-        match idx {
-            IndexPtr::DynamicUndefined => {
+        let compiled_tl_index = idx.p() as usize;
+
+        match idx.tag() {
+            IndexPtrTag::DynamicUndefined => {
                 self.machine_st.fail = true;
             }
-            IndexPtr::Undefined => {
+            IndexPtrTag::Undefined => {
                 return Err(self.machine_st.throw_undefined_error(name, arity));
             }
-            IndexPtr::DynamicIndex(compiled_tl_index) => {
+            IndexPtrTag::DynamicIndex => {
                 self.machine_st.dynamic_mode = FirstOrNext::First;
                 self.machine_st.call_at_index(arity, compiled_tl_index);
             }
-            IndexPtr::Index(compiled_tl_index) => {
+            IndexPtrTag::Index => {
                 self.machine_st.call_at_index(arity, compiled_tl_index);
             }
         }
@@ -676,18 +715,20 @@ impl Machine {
 
     #[inline(always)]
     fn try_execute(&mut self, name: Atom, arity: usize, idx: IndexPtr) -> CallResult {
-        match idx {
-            IndexPtr::DynamicUndefined => {
+        let compiled_tl_index = idx.p() as usize;
+
+        match idx.tag() {
+            IndexPtrTag::DynamicUndefined => {
                 self.machine_st.fail = true;
             }
-            IndexPtr::Undefined => {
+            IndexPtrTag::Undefined => {
                 return Err(self.machine_st.throw_undefined_error(name, arity));
             }
-            IndexPtr::DynamicIndex(compiled_tl_index) => {
+            IndexPtrTag::DynamicIndex => {
                 self.machine_st.dynamic_mode = FirstOrNext::First;
                 self.machine_st.execute_at_index(arity, compiled_tl_index);
             }
-            IndexPtr::Index(compiled_tl_index) => {
+            IndexPtrTag::Index => {
                 self.machine_st.execute_at_index(arity, compiled_tl_index)
             }
         }
@@ -826,12 +867,12 @@ impl Machine {
                     self.machine_st.heap[h] = heap_loc_as_cell!(h);
                 }
                 TrailEntryTag::TrailedAttrVarListLink => {
-                    let value = HeapCellValue::from_bytes(
-                        self.machine_st.trail[i + 1].into_bytes()
-                    );
+                    let l = self.machine_st.trail[i + 1].get_value() as usize;
 
-                    if value.get_value() < self.machine_st.hb {
-                        self.machine_st.heap[h] = value;
+                    if l < self.machine_st.hb {
+                        self.machine_st.heap[h] = list_loc_as_cell!(l);
+                    } else {
+                        self.machine_st.heap[h] = heap_loc_as_cell!(h);
                     }
                 }
                 TrailEntryTag::TrailedBlackboardEntry => {

@@ -50,13 +50,20 @@
 :- meta_predicate foldl(3, ?, ?, ?).
 :- meta_predicate foldl(4, ?, ?, ?, ?).
 
+:- use_module(library(error)).
+
+:- meta_predicate(resource_error(+,:)).
+
+resource_error(Resource, Context) :-
+   throw(error(resource_error(Resource), Context)).
+
 length(Xs0, N) :-
    '$skip_max_list'(M, N, Xs0,Xs),
    !,
    (  Xs == [] -> N = M
-   ;  nonvar(Xs) -> var(N), Xs = [_|_], throw(error(resource_error(finite_memory),length/2))
+   ;  nonvar(Xs) -> var(N), Xs = [_|_], resource_error(finite_memory,length/2)
    ;  nonvar(N) -> R is N-M, length_rundown(Xs, R)
-   ;  N == Xs -> throw(error(resource_error(finite_memory),length/2))
+   ;  N == Xs -> failingvarskip(Xs), resource_error(finite_memory,length/2)
    ;  length_addendum(Xs, N, M)
    ).
 length(_, N) :-
@@ -65,15 +72,28 @@ length(_, N) :-
 length(_, N) :-
    type_error(integer, N, length/2).
 
+length_rundown(Xs, 0) :- !, Xs = [].
+length_rundown(Vs, N) :-
+    \+ \+ '$project_atts':copy_term(Vs,Vs,[]), % unconstrained
+    !,
+    '$det_length_rundown'(Vs, N).
+length_rundown([_|Xs], N) :- % force unification
+    N1 is N-1,
+    length(Xs, N1). % maybe some new info on Xs
+
+failingvarskip(Xs) :-
+    \+ \+ '$project_atts':copy_term(Xs,Xs,[]), % unconstrained
+    !.
+failingvarskip([_|Xs0]) :- % force unification
+    '$skip_max_list'(_, _, Xs0,Xs),
+    (  nonvar(Xs) -> Xs = [_|_]
+	 ;  failingvarskip(Xs)
+    ).
+
 length_addendum([], N, N).
 length_addendum([_|Xs], N, M) :-
     M1 is M + 1,
     length_addendum(Xs, N, M1).
-
-length_rundown(Xs, 0) :- !, Xs = [].
-length_rundown([_|Xs], N) :-
-    N1 is N-1,
-    length_rundown(Xs, N1).
 
 
 member(X, [X|_]).

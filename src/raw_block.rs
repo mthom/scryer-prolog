@@ -58,13 +58,6 @@ impl<T: RawBlockTraits> RawBlock<T> {
         }
     }
 
-    /*
-    #[inline]
-    pub fn take(&mut self) -> Self {
-        mem::replace(self, Self::empty_block())
-    }
-    */
-
     #[inline]
     pub fn size(&self) -> usize {
         self.top as usize - self.base as usize

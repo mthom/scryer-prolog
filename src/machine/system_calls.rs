@@ -10,7 +10,7 @@ use crate::heap_iter::*;
 use crate::heap_print::*;
 use crate::instructions::*;
 use crate::machine;
-use crate::machine::{Machine, VERIFY_ATTR_INTERRUPT_LOC};
+use crate::machine::{Machine, VERIFY_ATTR_INTERRUPT_LOC, get_structure_index};
 use crate::machine::code_walker::*;
 use crate::machine::copier::*;
 use crate::machine::heap::*;
@@ -29,14 +29,18 @@ use crate::types::*;
 
 use ordered_float::OrderedFloat;
 
+use fxhash::{FxBuildHasher, FxHasher};
 use indexmap::IndexSet;
 
 use ref_thread_local::{RefThreadLocal, ref_thread_local};
 
+use std::cell::Cell;
+use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::convert::TryFrom;
 use std::env;
 use std::fs;
+use std::hash::{BuildHasher, BuildHasherDefault};
 use std::io::{ErrorKind, Read, Write};
 use std::iter::{once, FromIterator};
 use std::mem;
@@ -44,6 +48,8 @@ use std::net::{TcpListener, TcpStream};
 use std::num::NonZeroU32;
 use std::ops::Sub;
 use std::process;
+use std::rc::Rc;
+use std::str::FromStr;
 
 use chrono::{offset::Local, DateTime};
 use cpu_time::ProcessTime;
@@ -72,6 +78,11 @@ use native_tls::{TlsConnector,TlsAcceptor,Identity};
 use base64;
 use roxmltree;
 use select;
+
+use hyper::{Body, Client, HeaderMap, Method, Request, Uri};
+use hyper::header::{HeaderName, HeaderValue};
+use hyper::body::Buf;
+use hyper_tls::HttpsConnector;
 
 ref_thread_local! {
     pub(crate) static managed RANDOM_STATE: RandState<'static> = RandState::new();
@@ -161,6 +172,16 @@ impl BrentAlgState {
                 return CycleSearchResult::PStrLocation(self.num_steps(), n);
             }
             (HeapCellValueTag::Atom, (name, arity)) => {
+                return if name == atom!("[]") && arity == 0 {
+                    CycleSearchResult::ProperList(self.num_steps())
+                } else {
+                    CycleSearchResult::NotList(self.num_steps(), heap[self.hare])
+                };
+            }
+            (HeapCellValueTag::Str, s) => {
+                let (name, arity) = cell_as_atom_cell!(heap[s])
+                    .get_name_and_arity();
+
                 return if name == atom!("[]") && arity == 0 {
                     CycleSearchResult::ProperList(self.num_steps())
                 } else {
@@ -433,6 +454,30 @@ impl BrentAlgState {
 }
 
 impl MachineState {
+    #[inline]
+    pub(crate) fn variable_set<S: BuildHasher>(
+        &mut self,
+        seen_set: &mut IndexSet<HeapCellValue, S>,
+        value: HeapCellValue,
+    ) {
+        let mut iter = stackful_preorder_iter(&mut self.heap, value);
+
+        while let Some(value) = iter.next() {
+            let value = unmark_cell_bits!(value);
+
+            if value.is_var() {
+                let value = unmark_cell_bits!(heap_bound_store(
+                    iter.heap,
+                    heap_bound_deref(iter.heap, value)
+                ));
+
+                if value.is_var() {
+                    seen_set.insert(value);
+                }
+            }
+        }
+    }
+
     fn skip_max_list_cycle(&mut self, lam: usize) {
         fn step(heap: &[HeapCellValue], mut value: HeapCellValue) -> usize {
             loop {
@@ -603,7 +648,7 @@ impl MachineState {
 
                 let value = unmark_cell_bits!(value);
 
-                if value.is_var() && !seen_set.contains(&value) {
+                if value.is_var() {
                     seen_set.insert(value);
                 }
             }
@@ -621,6 +666,8 @@ impl MachineState {
 
     #[inline]
     pub(crate) fn install_new_block(&mut self, value: HeapCellValue) -> usize {
+        let value = self.store(self.deref(value));
+
         self.block = self.b;
         self.unify_fixnum(Fixnum::build_with(self.block as i64), value);
 
@@ -697,11 +744,11 @@ impl MachineState {
 
     pub(crate) fn parse_number_from_string(
         &mut self,
-        mut string: String,
+        string: &str,
         indices: &IndexStore,
         stub_gen: impl Fn() -> FunctorStub,
     ) -> CallResult {
-        let nx = self.registers[2];
+        let nx = self.store(self.deref(self.registers[2]));
 
         if let Some(c) = string.chars().last() {
             if layout_char!(c) {
@@ -719,10 +766,13 @@ impl MachineState {
             }
         }
 
-        string.push('.');
+        let mut dot_buf: [u8; '.'.len_utf8()] = [0u8];
+        '.'.encode_utf8(&mut dot_buf);
 
-        let stream = CharReader::new(std::io::Cursor::new(string));
-        let mut parser = Parser::new(stream, self);
+        let cursor = std::io::Cursor::new(string);
+        let iter = std::io::Read::chain(cursor, std::io::Cursor::new(dot_buf));
+
+        let mut parser = Parser::new(CharReader::new(iter), self);
 
         match parser.read_term(&CompositeOpDir::new(&indices.op_dir, None)) {
             Err(err) => {
@@ -733,7 +783,7 @@ impl MachineState {
                 self.unify_rational(n, nx);
             }
             Ok(Term::Literal(_, Literal::Float(n))) => {
-                self.unify_f64(n, nx);
+                self.unify_f64(n.as_ptr(), nx);
             }
             Ok(Term::Literal(_, Literal::Integer(n))) => {
                 self.unify_big_int(n, nx);
@@ -809,8 +859,18 @@ impl MachineState {
                     None
                 }
             }
+            (HeapCellValueTag::Str, s) => {
+                let (name, arity) = cell_as_atom_cell!(self.heap[s])
+                    .get_name_and_arity();
+
+                if arity == 0 {
+                    Some(AtomOrString::Atom(name))
+                } else {
+                    None
+                }
+            }
             (HeapCellValueTag::Char, c) => {
-                Some(AtomOrString::Atom(self.atom_tbl.build_with(&c.to_string())))
+                Some(AtomOrString::String(c.to_string()))
             }
             _ => {
                 if value.is_constant() {
@@ -876,9 +936,400 @@ impl MachineState {
 
         Ok(string)
     }
+
+    pub(crate) fn strip_module(
+        &self,
+        mut qualified_goal: HeapCellValue,
+        mut module_loc: HeapCellValue,
+    ) -> (HeapCellValue, HeapCellValue) {
+        loop {
+            read_heap_cell!(qualified_goal,
+                (HeapCellValueTag::Str, s) => {
+                    let (name, arity) = cell_as_atom_cell!(self.heap[s])
+                        .get_name_and_arity();
+
+                    if name == atom!(":") && arity == 2 {
+                        module_loc = self.heap[s+1];
+                        qualified_goal = self.heap[s+2];
+                    } else {
+                        break;
+                    }
+                }
+                (HeapCellValueTag::AttrVar | HeapCellValueTag::Var, h) => {
+                    if qualified_goal != self.heap[h] {
+                        qualified_goal = self.heap[h];
+                    } else {
+                        break;
+                    }
+                }
+                _ => {
+                    break;
+                }
+            );
+        }
+
+        (module_loc, qualified_goal)
+    }
 }
 
 impl Machine {
+    #[inline(always)]
+    pub(crate) fn call_inline(
+        &mut self,
+        arity: usize,
+        call_at_index: impl Fn(&mut Machine, Atom, usize, IndexPtr) -> CallResult,
+    ) -> CallResult {
+        let arity = arity - 1;
+        let goal = self.machine_st.store(self.machine_st.deref(self.machine_st.registers[1]));
+
+        let load_registers = |machine_st: &mut MachineState, goal: HeapCellValue| -> Option<PredicateKey> {
+            read_heap_cell!(goal,
+                (HeapCellValueTag::Str, s) => {
+                    let (name, goal_arity) = cell_as_atom_cell!(machine_st.heap[s])
+                        .get_name_and_arity();
+
+                    if goal_arity > 0 {
+                        for idx in (1 .. arity + 1).rev() {
+                            machine_st.registers[idx + goal_arity] = machine_st.registers[idx + 1];
+                        }
+                    } else {
+                        for idx in 1 .. arity + 1 {
+                            machine_st.registers[idx] = machine_st.registers[idx + 1];
+                        }
+                    }
+
+                    for idx in 1 .. goal_arity + 1 {
+                        machine_st.registers[idx] = machine_st.heap[s+idx];
+                    }
+
+                    Some((name, goal_arity))
+                }
+                _ => {
+                    unreachable!()
+                }
+            )
+        };
+
+        read_heap_cell!(goal,
+            (HeapCellValueTag::Str, s) => {
+                let goal_arity = cell_as_atom_cell!(self.machine_st.heap[s]).get_arity();
+
+                if self.machine_st.heap.len() > s + goal_arity + 1 {
+                    let index_cell = self.machine_st.heap[s+goal_arity+1];
+
+                    if let Some(code_index) = get_structure_index(index_cell) {
+                        if code_index.is_undefined() {
+                            self.machine_st.fail = true;
+                            return Ok(());
+                        }
+
+                        match load_registers(&mut self.machine_st, goal) {
+                            Some((name, goal_arity)) => {
+                                let arity = goal_arity + arity;
+                                self.machine_st.neck_cut();
+                                return call_at_index(self, name, arity, code_index.get());
+                            }
+                            None => {
+                            }
+                        }
+                    }
+                }
+            }
+            _ => {
+            }
+        );
+
+        self.machine_st.fail = true;
+        Ok(())
+    }
+
+    #[inline(always)]
+    pub(crate) fn compile_inline_or_expanded_goal(&mut self) -> CallResult {
+        let goal = self.machine_st.store(self.machine_st.deref(self.machine_st.registers[1]));
+        let module_name = self.machine_st.store(self.machine_st.deref(self.machine_st.registers[4]));
+
+        // supp_vars are the supplementary variables generated by
+        // complete_partial_goal prior to goal_expansion.
+        let mut supp_vars = IndexSet::with_hasher(FxBuildHasher::default());
+
+        self.machine_st.variable_set(&mut supp_vars, self.machine_st.registers[2]);
+
+        struct GoalAnalysisResult {
+            is_simple_goal: bool,
+            goal: HeapCellValue,
+            key: PredicateKey,
+            expanded_vars: IndexSet<HeapCellValue, BuildHasherDefault<FxHasher>>,
+            supp_vars: IndexSet<HeapCellValue, BuildHasherDefault<FxHasher>>,
+        }
+
+        let result = read_heap_cell!(goal,
+            (HeapCellValueTag::Str, s) => {
+                let (name, arity) = cell_as_atom_cell!(self.machine_st.heap[s])
+                    .get_name_and_arity();
+
+                let mut expanded_vars = IndexSet::with_hasher(FxBuildHasher::default());
+
+                // fill expanded_vars with variables of the partial
+                // goal pre-completion by complete_partial_goal.
+                for idx in s + 1 .. s + arity - supp_vars.len() + 1 {
+                    self.machine_st.variable_set(&mut expanded_vars, self.machine_st.heap[idx]);
+                }
+
+                let is_simple_goal = if arity >= supp_vars.len() {
+                    // post_supp_args are the arguments to the
+                    // post-expansion complete goal gathered from the
+                    // final supp_vars.len() arguments. they must
+                    // agree in supp_vars in order of entry of
+                    // insertion as well as the previous
+                    // supp_vars.len() argument's variables being
+                    // disjoint from them. if they are not, the
+                    // expanded goal are not simple.
+
+                    let post_supp_args = self.machine_st.heap[s+arity-supp_vars.len()+1 .. s+arity+1]
+                        .iter()
+                        .cloned();
+
+                    post_supp_args
+                        .zip(supp_vars.iter())
+                        .all(|(arg_term, supp_var)| {
+                            let arg_term = self.machine_st.store(self.machine_st.deref(arg_term));
+
+                            if arg_term.is_var() && supp_var.is_var() {
+                                return arg_term == *supp_var;
+                            }
+
+                            false
+                        }) && expanded_vars.intersection(&supp_vars).next().is_none()
+                } else {
+                    false
+                };
+
+                let goal = if is_simple_goal {
+                    let h = self.machine_st.heap.len();
+                    let arity = arity - supp_vars.len();
+
+                    for idx in 0 .. arity + 1 {
+                        let value = self.machine_st.heap[s + idx];
+                        self.machine_st.heap.push(value);
+                    }
+
+                    self.machine_st.heap[h] = atom_as_cell!(name, arity);
+
+                    str_loc_as_cell!(h)
+                } else {
+                    goal
+                };
+
+                GoalAnalysisResult {
+                    is_simple_goal,
+                    goal,
+                    key: (name, arity),
+                    expanded_vars,
+                    supp_vars
+                }
+            }
+            (HeapCellValueTag::Atom, (name, arity)) => {
+                debug_assert_eq!(arity, 0);
+
+                let h = self.machine_st.heap.len();
+                self.machine_st.heap.push(goal);
+
+                GoalAnalysisResult {
+                    is_simple_goal: true,
+                    goal: str_loc_as_cell!(h),
+                    key: (name, 0),
+                    expanded_vars: IndexSet::with_hasher(FxBuildHasher::default()),
+                    supp_vars,
+                }
+            }
+            (HeapCellValueTag::Char, c) => {
+                let name = self.machine_st.atom_tbl.build_with(&c.to_string());
+
+                let h = self.machine_st.heap.len();
+                self.machine_st.heap.push(atom_as_cell!(name));
+
+                GoalAnalysisResult {
+                    is_simple_goal: true,
+                    goal: str_loc_as_cell!(h),
+                    key: (name, 0),
+                    expanded_vars: IndexSet::with_hasher(FxBuildHasher::default()),
+                    supp_vars,
+                }
+            }
+            _ => {
+                self.machine_st.fail = true;
+                return Ok(());
+            }
+        );
+
+        if result.key.0 == atom!(":") {
+            self.machine_st.fail = true;
+            return Ok(());
+        }
+
+        let expanded_term = if result.is_simple_goal {
+            let idx = self.get_or_insert_qualified_code_index(module_name, result.key);
+            self.machine_st.heap.push(untyped_arena_ptr_as_cell!(UntypedArenaPtr::from(idx)));
+            result.goal
+        } else {
+            // all supp_vars must appear later!
+            let vars = IndexSet::<HeapCellValue, BuildHasherDefault<FxHasher>>::from_iter(
+                result.expanded_vars.difference(&result.supp_vars).cloned()
+            );
+
+            let vars: Vec<_> = vars
+                .union(&result.supp_vars) // difference + union does not cancel.
+                .map(|v| Term::Var(Cell::default(), Rc::new(format!("_{}", v.get_value()))))
+                .collect();
+
+            let helper_clause_loc = self.code.len();
+
+            match self.compile_standalone_clause(temp_v!(1), &vars) {
+                Err(e) => {
+                    let err = self.machine_st.session_error(e);
+                    let stub = functor_stub(atom!("call"), result.key.1);
+
+                    return Err(self.machine_st.error_form(err, stub));
+                }
+                Ok(()) => {
+                    let h = self.machine_st.heap.len();
+
+                    self.machine_st.heap.push(atom_as_cell!(atom!("$aux"), 0));
+
+                    for value in result.expanded_vars.difference(&result.supp_vars).cloned() {
+                        self.machine_st.heap.push(value);
+                    }
+
+                    let anon_str_arity = self.machine_st.heap.len() - h - 1;
+
+                    self.machine_st.heap[h] = atom_as_cell!(atom!("$aux"), anon_str_arity);
+
+                    let idx = CodeIndex::new(
+                        IndexPtr::index(helper_clause_loc),
+                        &mut self.machine_st.arena,
+                    );
+
+                    self.machine_st.heap.push(untyped_arena_ptr_as_cell!(UntypedArenaPtr::from(idx)));
+
+                    str_loc_as_cell!(h)
+                }
+            }
+        };
+
+        let truncated_goal = self.machine_st.registers[3];
+        unify!(&mut self.machine_st, expanded_term, truncated_goal);
+
+        Ok(())
+    }
+
+    #[inline(always)]
+    pub(crate) fn is_expanded_or_inlined(&mut self) {
+        let (_module_loc, qualified_goal) = self.machine_st.strip_module(
+            self.machine_st.registers[1],
+            empty_list_as_cell!(),
+        );
+
+        if HeapCellValueTag::Str == qualified_goal.get_tag() {
+            let s = qualified_goal.get_value();
+            let (name, arity) = cell_as_atom_cell!(self.machine_st.heap[s])
+                .get_name_and_arity();
+
+            if name == atom!("$call") {
+                return;
+            }
+
+            if self.machine_st.heap.len() > s + 1 + arity {
+                let idx_cell = self.machine_st.heap[s + 1 + arity];
+
+                if HeapCellValueTag::Cons == idx_cell.get_tag() {
+                    match_untyped_arena_ptr!(cell_as_untyped_arena_ptr!(idx_cell),
+                        (ArenaHeaderTag::IndexPtr, _ip) => {
+                            return;
+                        }
+                        _ => {
+                        }
+                    );
+                }
+            }
+        }
+
+        self.machine_st.fail = true;
+    }
+
+    #[inline(always)]
+    pub(crate) fn prepare_call_clause(&mut self, arity: usize) -> CallResult {
+        let (module_loc, qualified_goal) = self.machine_st.strip_module(
+            self.machine_st.registers[3],
+            self.machine_st.registers[2],
+        );
+
+        // the first three arguments don't belong to the containing call/N.
+        let arity = arity - 3;
+
+        let (name, narity, s) = self.machine_st.setup_call_n_init_goal_info(
+            qualified_goal,
+            arity,
+        )?;
+
+        let module_loc = self.machine_st.store(self.machine_st.deref(module_loc));
+
+        if module_loc.is_var() {
+            self.load_context_module(module_loc);
+
+            if self.machine_st.fail {
+                self.machine_st.fail = false;
+                self.machine_st.unify_atom(atom!("user"), module_loc);
+
+                if self.machine_st.fail {
+                    return Ok(());
+                }
+            }
+        }
+
+        let target_module_loc = self.machine_st.registers[2];
+
+        unify_fn!(
+            &mut self.machine_st,
+            module_loc,
+            target_module_loc
+        );
+
+        if self.machine_st.fail {
+            return Ok(());
+        }
+
+        // assemble goal from pre-loaded (narity) and supplementary
+        // (arity) arguments.
+
+        let h = self.machine_st.heap.len();
+
+        self.machine_st.heap.push(atom_as_cell!(name, narity + arity));
+
+        let target_goal = if narity + arity > 0 {
+            for idx in 1 .. narity + 1 {
+                self.machine_st.heap.push(self.machine_st.heap[s + idx]);
+            }
+
+            for idx in 1 .. arity + 1 {
+                self.machine_st.heap.push(self.machine_st.registers[3 + idx]);
+            }
+
+            str_loc_as_cell!(h)
+        } else {
+            heap_loc_as_cell!(h)
+        };
+
+        let target_qualified_goal = self.machine_st.registers[1];
+
+        unify_fn!(
+            &mut self.machine_st,
+            target_goal,
+            target_qualified_goal
+        );
+
+        Ok(())
+    }
+
     #[inline(always)]
     pub(crate) fn is_reset_cont_marker(&self, p: usize) -> bool {
         match &self.code[p] {
@@ -1272,6 +1723,19 @@ impl Machine {
 
                 unify!(self.machine_st, self.machine_st.registers[2], list_loc_as_cell!(h));
             }
+            (HeapCellValueTag::Str, s) => {
+                let (name, arity) = cell_as_atom_cell!(self.machine_st.heap[s])
+                    .get_name_and_arity();
+
+                if arity == 0 {
+                    self.machine_st.unify_complete_string(
+                        name,
+                        self.machine_st.store(self.machine_st.deref(self.machine_st.registers[2])),
+                    );
+                } else {
+                    self.machine_st.fail = true;
+                }
+            }
             (HeapCellValueTag::Atom, (name, arity)) => {
                 if arity == 0 {
                     self.machine_st.unify_complete_string(
@@ -1286,16 +1750,20 @@ impl Machine {
                 let a2 = self.machine_st.store(self.machine_st.deref(self.machine_st.registers[2]));
 
                 if let Some(str_like) = self.machine_st.value_to_str_like(a2) {
-                    let atom = match str_like {
+                    let atom_cell = match str_like {
                         AtomOrString::Atom(atom) => {
-                            atom
+                            atom_as_cell!(if atom == atom!("[]") {
+                                self.machine_st.atom_tbl.build_with("")
+                            } else {
+                                atom
+                            })
                         }
                         AtomOrString::String(string) => {
-                            self.machine_st.atom_tbl.build_with(&string)
+                            atom_as_cell!(self.machine_st.atom_tbl.build_with(&string))
                         }
                     };
 
-                    self.machine_st.bind(a1.as_var().unwrap(), atom_as_cell!(atom));
+                    self.machine_st.bind(a1.as_var().unwrap(), atom_cell);
                     return;
                 }
 
@@ -1321,6 +1789,20 @@ impl Machine {
                 unify!(self.machine_st, list_loc_as_cell!(h), self.machine_st.registers[2]);
             }
             (HeapCellValueTag::Atom, (name, arity)) => {
+                if arity == 0 {
+                    let iter = name.chars()
+                        .map(|c| fixnum_as_cell!(Fixnum::build_with(c as i64)));
+
+                    let h = iter_to_heap_list(&mut self.machine_st.heap, iter);
+                    unify!(self.machine_st, heap_loc_as_cell!(h), self.machine_st.registers[2]);
+                } else {
+                    self.machine_st.fail = true;
+                }
+            }
+            (HeapCellValueTag::Str, s) => {
+                let (name, arity) = cell_as_atom_cell!(self.machine_st.heap[s])
+                    .get_name_and_arity();
+
                 if arity == 0 {
                     let iter = name.chars()
                         .map(|c| fixnum_as_cell!(Fixnum::build_with(c as i64)));
@@ -1359,6 +1841,17 @@ impl Machine {
         let a1 = self.machine_st.store(self.machine_st.deref(self.machine_st.registers[1]));
 
         let len: i64 = read_heap_cell!(a1,
+            (HeapCellValueTag::Str, s) => {
+                let (name, arity) = cell_as_atom_cell!(self.machine_st.heap[s])
+                    .get_name_and_arity();
+
+                if arity == 0 {
+                    name.chars().count() as i64
+                } else {
+                    self.machine_st.fail = true;
+                    return;
+                }
+            }
             (HeapCellValueTag::Atom, (name, arity)) => {
                 if arity == 0 {
                     name.chars().count() as i64
@@ -1410,22 +1903,13 @@ impl Machine {
     pub(crate) fn chars_to_number(&mut self) -> CallResult {
         let stub_gen = || functor_stub(atom!("number_chars"), 2);
         let a1 = self.machine_st.store(self.machine_st.deref(self.machine_st.registers[1]));
+        let atom_or_string = self.machine_st.value_to_str_like(a1).unwrap();
 
-        if let Some(atom_or_string) = self.machine_st.value_to_str_like(a1) {
-            self.machine_st.parse_number_from_string(
-                atom_or_string.to_string(),
-                &self.indices,
-                stub_gen,
-            )?;
-        } else {
-            // a1 is a ground list at the call site within
-            // number_chars/2, so failure of value_to_str_like
-            // means the list contains a non-character.
-            let err = self.machine_st.type_error(ValidType::Character, a1);
-            return Err(self.machine_st.error_form(err, stub_gen()));
-        }
-
-        Ok(())
+        self.machine_st.parse_number_from_string(
+            atom_or_string.as_str(),
+            &self.indices,
+            stub_gen,
+        )
     }
 
     #[inline(always)]
@@ -1447,7 +1931,8 @@ impl Machine {
         unify!(self.machine_st, self.machine_st.registers[2], pstr_loc_as_cell!(pstr_h));
 
         if !self.machine_st.fail {
-            self.machine_st.bind(Ref::heap_cell(pstr_h+1), self.machine_st.registers[3]);
+            let tail = self.machine_st.registers[3];
+            unify!(self.machine_st, tail, heap_loc_as_cell!(pstr_h+1));
         }
     }
 
@@ -1818,7 +2303,7 @@ impl Machine {
 
         let string = match Number::try_from(n) {
             Ok(Number::Float(OrderedFloat(n))) => {
-                format!("{0:<20?}", n)
+                fmt_float(n)
             }
             Ok(Number::Fixnum(n)) => n.get_num().to_string(),
             Ok(Number::Integer(n)) => n.to_string(),
@@ -1834,7 +2319,10 @@ impl Machine {
         };
 
         let chars_atom = self.machine_st.atom_tbl.build_with(&string.trim());
-        self.machine_st.unify_complete_string(chars_atom, self.machine_st.store(self.machine_st.deref(chs)));
+        self.machine_st.unify_complete_string(
+            chars_atom,
+            self.machine_st.store(self.machine_st.deref(chs)),
+        );
     }
 
     #[inline(always)]
@@ -1877,7 +2365,7 @@ impl Machine {
             }
             Ok(addrs) => {
                 let string = self.machine_st.codes_to_string(addrs.into_iter(), stub_gen)?;
-                self.machine_st.parse_number_from_string(string, &self.indices, stub_gen)?;
+                self.machine_st.parse_number_from_string(string.as_str(), &self.indices, stub_gen)?;
             }
         }
 
@@ -1899,6 +2387,13 @@ impl Machine {
 
         let c = read_heap_cell!(a1,
             (HeapCellValueTag::Atom, (name, _arity)) => {
+                name.as_char().unwrap()
+            }
+            (HeapCellValueTag::Str, s) => {
+                let (name, arity) = cell_as_atom_cell!(self.machine_st.heap[s])
+                    .get_name_and_arity();
+
+                debug_assert_eq!(arity, 0);
                 name.as_char().unwrap()
             }
             (HeapCellValueTag::Char, c) => {
@@ -1960,6 +2455,13 @@ impl Machine {
                 c
             }
             (HeapCellValueTag::Atom, (name, _arity)) => {
+                name.as_char().unwrap()
+            }
+            (HeapCellValueTag::Str, s) => {
+                let (name, arity) = cell_as_atom_cell!(self.machine_st.heap[s])
+                    .get_name_and_arity();
+
+                debug_assert_eq!(arity, 0);
                 name.as_char().unwrap()
             }
             _ => {
@@ -2861,7 +3363,7 @@ impl Machine {
     }
 
     #[inline(always)]
-    pub(crate) fn delete_head_attribute(&mut self) {
+     pub(crate) fn delete_head_attribute(&mut self) {
         let addr = self.machine_st.store(self.machine_st.deref(self.machine_st.registers[1]));
 
         debug_assert_eq!(addr.get_tag(), HeapCellValueTag::AttrVar);
@@ -2872,7 +3374,7 @@ impl Machine {
         debug_assert_eq!(addr.get_tag(), HeapCellValueTag::Lis);
 
         let l = addr.get_value();
-        let tail = self.machine_st.store(self.machine_st.deref(heap_loc_as_cell!(l + 1)));
+        let tail = self.machine_st.store(self.machine_st.deref(self.machine_st.heap[l + 1]));
 
         let tail = if tail.is_var() {
             self.machine_st.heap[h] = heap_loc_as_cell!(h);
@@ -2892,50 +3394,55 @@ impl Machine {
         &mut self,
         narity: usize,
     ) -> Result<(Atom, PredicateKey), MachineStub> {
-        let module_name = cell_as_atom!(self.machine_st.store(self.machine_st.deref(
-            self.machine_st.registers[1 + narity]
-        )));
-
-        let addr = self.machine_st.store(self.machine_st.deref(
-            self.machine_st.registers[2 + narity]
+        let module_name = self.machine_st.store(self.machine_st.deref(
+            self.machine_st.registers[1]
         ));
 
-        read_heap_cell!(addr,
-            (HeapCellValueTag::Str, a) => {
-                let (name, arity) = cell_as_atom_cell!(self.machine_st.heap[a])
+        let module_name = read_heap_cell!(module_name,
+            (HeapCellValueTag::Atom, (name, _arity)) => {
+                debug_assert_eq!(_arity, 0);
+                name
+            }
+            (HeapCellValueTag::Str, s) => {
+                let (module_name, _arity) = cell_as_atom_cell!(self.machine_st.heap[s])
                     .get_name_and_arity();
 
-
-                for i in (arity + 1..arity + narity + 1).rev() {
-                    self.machine_st.registers[i] = self.machine_st.registers[i - arity];
-                }
-
-                for i in 1..arity + 1 {
-                    self.machine_st.registers[i] = self.machine_st.heap[a + i];
-                }
-
-                Ok((module_name, (name, arity + narity)))
+                debug_assert_eq!(_arity, 0);
+                module_name
             }
-            (HeapCellValueTag::Atom, (name, _arity)) => {
-                Ok((module_name, (name, narity)))
-            }
-            (HeapCellValueTag::Char, c) => {
-                let key = (self.machine_st.atom_tbl.build_with(&c.to_string()), narity);
-                Ok((module_name, key))
-            }
-            (HeapCellValueTag::AttrVar | HeapCellValueTag::StackVar | HeapCellValueTag::Var) => {
-                let stub = functor_stub(atom!("call"), 1);
-                let err = self.machine_st.instantiation_error();
-
-                Err(self.machine_st.error_form(err, stub))
+            _ if module_name.is_var() => {
+                atom!("user")
             }
             _ => {
-                let stub = functor_stub(atom!("call"), narity);
-                let err = self.machine_st.type_error(ValidType::Callable, addr);
-
-                Err(self.machine_st.error_form(err, stub))
+                unreachable!()
             }
-        )
+        );
+
+        let goal = self.machine_st.store(self.machine_st.deref(
+            self.machine_st.registers[2]
+        ));
+
+        let (name, arity, s) = self.machine_st.setup_call_n_init_goal_info(goal, narity)?;
+
+        match arity.cmp(&2) {
+            Ordering::Less => {
+                for i in arity + 1..arity + narity + 1 {
+                    self.machine_st.registers[i] = self.machine_st.registers[i + 2 - arity];
+                }
+            }
+            Ordering::Greater => {
+                for i in (arity + 1..arity + narity + 1).rev() {
+                    self.machine_st.registers[i] = self.machine_st.registers[i + 2 - arity];
+                }
+            }
+            Ordering::Equal => {}
+        }
+
+        for i in 1..arity + 1 {
+            self.machine_st.registers[i] = self.machine_st.heap[s + i];
+        }
+
+        Ok((module_name, (name, arity + narity)))
     }
 
     #[inline(always)]
@@ -3022,6 +3529,9 @@ impl Machine {
                 let orig_op = read_heap_cell!(orig_op,
                     (HeapCellValueTag::Atom, (name, _arity)) => {
                         name
+                    }
+                    (HeapCellValueTag::Str, s) => {
+                        cell_as_atom!(self.machine_st.heap[s])
                     }
                     (HeapCellValueTag::Char, c) => {
                         self.machine_st.atom_tbl.build_with(&c.to_string())
@@ -3222,9 +3732,157 @@ impl Machine {
     #[inline(always)]
     pub(crate) fn cpu_now(&mut self) {
         let secs = ProcessTime::now().as_duration().as_secs_f64();
-        let secs = arena_alloc!(OrderedFloat(secs), &mut self.machine_st.arena);
+        let secs = float_alloc!(secs, self.machine_st.arena);
 
         self.machine_st.unify_f64(secs, self.machine_st.registers[1]);
+    }
+
+    #[inline(always)]
+    pub(crate) fn det_length_rundown(&mut self) -> CallResult {
+        let stub_gen = || functor_stub(atom!("length"), 2);
+        let len = self.machine_st.store(self.machine_st.deref(self.machine_st.registers[2]));
+
+        let n = match Number::try_from(len) {
+            Ok(Number::Fixnum(n)) => n.get_num() as usize,
+            Ok(Number::Integer(n)) => match n.to_usize() {
+                Some(n) => n,
+                None => {
+                    let err = self.machine_st.resource_error(len);
+                    return Err(self.machine_st.error_form(err, stub_gen()));
+                }
+            }
+            _ => {
+                unreachable!()
+            }
+        };
+
+        let h = self.machine_st.heap.len();
+
+        iter_to_heap_list(
+            &mut self.machine_st.heap,
+            (0 .. n).map(|i| heap_loc_as_cell!(h + 2 * i + 1)),
+        );
+
+        let tail = self.machine_st.store(self.machine_st.deref(self.machine_st.registers[1]));
+        self.machine_st.bind(tail.as_var().unwrap(), heap_loc_as_cell!(h));
+
+        Ok(())
+    }
+
+    #[inline(always)]
+    pub(crate) fn http_open(&mut self) -> CallResult {
+        let address_sink = self.machine_st.store(self.machine_st.deref(self.machine_st.registers[1]));
+        let method =  read_heap_cell!(self.machine_st.store(self.machine_st.deref(self.machine_st.registers[3])),
+            (HeapCellValueTag::Atom, (name, arity)) => {
+                debug_assert_eq!(arity, 0);
+                match name {
+                    atom!("get") => Method::GET,
+                    atom!("post") => Method::POST,
+                    atom!("put") => Method::PUT,
+                    atom!("delete") => Method::DELETE,
+                    atom!("patch") => Method::PATCH,
+                    atom!("head") => Method::HEAD,
+                    _ => unreachable!(),
+                }
+            }
+            _ => {
+                unreachable!()
+            }
+        );
+        let address_status = self.machine_st.store(self.machine_st.deref(self.machine_st.registers[4]));
+        let address_data = self.machine_st.store(self.machine_st.deref(self.machine_st.registers[5]));
+        let mut bytes: Vec<u8> = Vec::new();
+        if let Some(string) = self.machine_st.value_to_str_like(address_data) {
+            bytes = string.as_str().bytes().collect();
+        }
+        let stub_gen = || functor_stub(atom!("http_open"), 3);
+
+        let headers = match self.machine_st.try_from_list(self.machine_st.registers[7], stub_gen) {
+            Ok(addrs) => {
+                let mut header_map = HeaderMap::new();
+                for heap_cell in addrs{
+                   read_heap_cell!(heap_cell,
+                       (HeapCellValueTag::Str, s) => {
+                           let name = cell_as_atom_cell!(self.machine_st.heap[s]).get_name();
+                           let value = self.machine_st.value_to_str_like(self.machine_st.heap[s + 1]).unwrap();
+                           header_map.insert(HeaderName::from_str(name.as_str()).unwrap(), HeaderValue::from_str(value.as_str()).unwrap());
+                       }
+                       _ => {
+                           unreachable!()
+                       }
+                   )
+                }
+                header_map
+            },
+            Err(e) => return Err(e)
+        };
+        if let Some(address_sink) = self.machine_st.value_to_str_like(address_sink) {
+            let address_string = address_sink.as_str(); //to_string();
+            let address: Uri = address_string.parse().unwrap();
+
+            let stream = self.runtime.block_on(async {
+                let https = HttpsConnector::new();
+                let client = Client::builder()
+                    .build::<_, hyper::Body>(https);
+
+                // request
+                let mut req = Request::builder()
+                    .method(method)
+                    .uri(address)
+                    .body(Body::from(bytes))
+                    .unwrap();
+                // request headers
+                *req.headers_mut() = headers;
+                // do it!
+                let resp = client.request(req).await.unwrap();
+                // status code
+                let status = resp.status().as_u16();
+                self.machine_st.unify_fixnum(Fixnum::build_with(status as i64), address_status);
+                // headers
+                let headers: Vec<HeapCellValue> = resp.headers().iter().map(|(header_name, header_value)| {
+                    let h = self.machine_st.heap.len();
+
+                    let header_term = functor!(
+                        self.machine_st.atom_tbl.build_with(header_name.as_str()),
+                        [cell(string_as_cstr_cell!(self.machine_st.atom_tbl.build_with(header_value.to_str().unwrap())))]
+                    );
+
+                    self.machine_st.heap.extend(header_term.into_iter());
+                    str_loc_as_cell!(h)
+                }).collect();
+
+                let headers_list = iter_to_heap_list(&mut self.machine_st.heap, headers.into_iter());
+                unify!(self.machine_st, heap_loc_as_cell!(headers_list), self.machine_st.registers[6]);
+                // body
+                let buf = hyper::body::aggregate(resp).await.unwrap();
+                let reader = buf.reader();
+
+                let mut stream = Stream::from_http_stream(
+                    self.machine_st.atom_tbl.build_with(&address_string),
+                    Box::new(reader),
+                    &mut self.machine_st.arena
+                );
+                *stream.options_mut() = StreamOptions::default();
+                if let Some(alias) = stream.options().get_alias() {
+                    self.indices.stream_aliases.insert(alias, stream);
+                }
+
+                self.indices.streams.insert(stream);
+
+                stream_as_cell!(stream)
+            });
+
+            let stream_addr = self.machine_st.store(self.machine_st.deref(self.machine_st.registers[2]));
+            self.machine_st.bind(stream_addr.as_var().unwrap(), stream);
+
+        } else {
+            let err = self.machine_st.domain_error(DomainErrorType::SourceSink, address_sink);
+            let stub = functor_stub(atom!("http_open"), 3);
+
+            return Err(self.machine_st.error_form(err, stub));
+        }
+
+        Ok(())
     }
 
     #[inline(always)]
@@ -3243,15 +3901,8 @@ impl Machine {
         let options  = self.machine_st.to_stream_options(alias, eof_action, reposition, stream_type);
         let src_sink = self.machine_st.store(self.machine_st.deref(self.machine_st.registers[1]));
 
-        if let Some(str_like) = self.machine_st.value_to_str_like(src_sink) {
-            let file_spec = match str_like {
-                AtomOrString::Atom(atom) => {
-                    atom
-                }
-                AtomOrString::String(string) => {
-                    self.machine_st.atom_tbl.build_with(&string)
-                }
-            };
+        if let Some(file_spec) = self.machine_st.value_to_str_like(src_sink) {
+            let file_spec = file_spec.as_atom(&mut self.machine_st.atom_tbl);
 
             let mut stream = self.machine_st.stream_from_file_spec(
                 file_spec,
@@ -3298,11 +3949,14 @@ impl Machine {
             .get_name();
 
         let op = read_heap_cell!(self.machine_st.store(self.machine_st.deref(op)),
-            (HeapCellValueTag::Char) => {
-                self.machine_st.atom_tbl.build_with(&op.to_string())
+            (HeapCellValueTag::Char, c) => {
+                self.machine_st.atom_tbl.build_with(&c.to_string())
             }
             (HeapCellValueTag::Atom, (name, _arity)) => {
                 name
+            }
+            (HeapCellValueTag::Str, s) => {
+                cell_as_atom!(self.machine_st.heap[s])
             }
             _ => {
                 unreachable!()
@@ -3620,6 +4274,39 @@ impl Machine {
         self.machine_st.fail = !self.indices.modules.contains_key(&module_name);
     }
 
+    pub(crate) fn predicate_defined(&self) -> bool {
+        let module_name = cell_as_atom!(self.machine_st.store(self.machine_st.deref(
+            self.machine_st.registers[1]
+        )));
+
+        let name = cell_as_atom!(self.machine_st.store(self.machine_st.deref(
+            self.machine_st.registers[2]
+        )));
+
+        let arity = match Number::try_from(self.machine_st.store(self.machine_st.deref(
+            self.machine_st.registers[3]
+        ))) {
+            Ok(Number::Fixnum(n))  => n.get_num() as usize,
+            Ok(Number::Integer(n)) => {
+                if let Some(n) = n.to_usize() {
+                    n
+                } else {
+                    return false;
+                }
+            }
+            _ => {
+                unreachable!()
+            }
+        };
+
+        self.indices.get_predicate_code_index(
+            name,
+            arity,
+            module_name,
+        ).map(|index| index.local().is_some())
+         .unwrap_or(false)
+    }
+
     #[inline(always)]
     pub(crate) fn no_such_predicate(&mut self) -> CallResult {
         let module_name = cell_as_atom!(self.machine_st.store(self.machine_st.deref(
@@ -3633,9 +4320,7 @@ impl Machine {
                 let (name, arity) = cell_as_atom_cell!(self.machine_st.heap[s])
                     .get_name_and_arity();
 
-                let ct = ClauseType::from(name, arity);
-
-                if ct.is_inlined() || ct.is_builtin() {
+                if ClauseType::is_inbuilt(name, arity) {
                     true
                 } else {
                     let index = self.indices.get_predicate_code_index(
@@ -3644,10 +4329,10 @@ impl Machine {
                         module_name,
                     )
                         .map(|index| index.get())
-                        .unwrap_or(IndexPtr::DynamicUndefined);
+                        .unwrap_or(IndexPtr::dynamic_undefined());
 
-                    match index {
-                        IndexPtr::DynamicUndefined | IndexPtr::Undefined => false,
+                    match index.tag() {
+                        IndexPtrTag::DynamicUndefined | IndexPtrTag::Undefined => false,
                         _ => true,
                     }
                 }
@@ -3655,9 +4340,7 @@ impl Machine {
             (HeapCellValueTag::Atom, (name, arity)) => {
                 debug_assert_eq!(arity, 0);
 
-                let ct = ClauseType::from(name, 0);
-
-                if ct.is_inlined() || ct.is_builtin() {
+                if ClauseType::is_inbuilt(name, 0) {
                     true
                 } else {
                     let index = self.indices.get_predicate_code_index(
@@ -3666,10 +4349,10 @@ impl Machine {
                         module_name,
                     )
                         .map(|index| index.get())
-                        .unwrap_or(IndexPtr::DynamicUndefined);
+                        .unwrap_or(IndexPtr::dynamic_undefined());
 
-                    match index {
-                        IndexPtr::DynamicUndefined => false,
+                    match index.tag() {
+                        IndexPtrTag::DynamicUndefined => false,
                         _ => true,
                     }
                 }
@@ -3822,7 +4505,7 @@ impl Machine {
         )?;
 
         if !stream.is_output_stream() {
-            let stub = functor_stub(atom!("set_input"), 1);
+            let stub = functor_stub(atom!("set_output"), 1);
 
             let user_alias = atom_as_cell!(atom!("user"));
             let err = self.machine_st.permission_error(
@@ -3855,7 +4538,7 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn inference_level(&mut self) {
-        let a1 = self.machine_st.registers[1];
+        let a1 = self.machine_st.store(self.machine_st.deref(self.machine_st.registers[1]));
         let a2 = self.machine_st.store(self.machine_st.deref(self.machine_st.registers[2]));
 
         let bp = cell_as_fixnum!(a2).get_num() as usize;
@@ -3935,7 +4618,9 @@ impl Machine {
             LOC_INIT.call_once(|| {
                 if let Some(builtins) = self.indices.modules.get(&atom!("builtins")) {
                     match builtins.code_dir.get(&(atom!("staggered_sc"), 2)).map(|cell| cell.get()) {
-                        Some(IndexPtr::Index(p)) => {
+                        Some(ip) if ip.tag() == IndexPtrTag::Index => {
+                            let p = ip.p() as usize;
+
                             match &self.code[p] {
                                 &Instruction::TryMeElse(o) => {
                                     SEMICOLON_SECOND_BRANCH_LOC = p + o;
@@ -3980,30 +4665,40 @@ impl Machine {
     pub(crate) fn next_ep(&mut self) {
         let first_arg = self.machine_st.store(self.machine_st.deref(self.machine_st.registers[1]));
 
+        let next_ep_atom = |machine_st: &mut MachineState, name, arity| {
+            debug_assert_eq!(name, atom!("first"));
+            debug_assert_eq!(arity, 0);
+
+            if machine_st.e == 0 {
+                machine_st.fail = true;
+                return;
+            }
+
+            let and_frame = machine_st.stack.index_and_frame(machine_st.e);
+            let cp = and_frame.prelude.cp - 1;
+
+            let e = and_frame.prelude.e;
+            let e = Fixnum::build_with(i64::try_from(e).unwrap());
+
+            let p = str_loc_as_cell!(machine_st.heap.len());
+
+            machine_st.heap.extend(functor!(atom!("dir_entry"), [fixnum(cp)]));
+            machine_st.unify_fixnum(e, machine_st.registers[2]);
+
+            if !machine_st.fail {
+                unify!(machine_st, p, machine_st.registers[3]);
+            }
+        };
+
         read_heap_cell!(first_arg,
             (HeapCellValueTag::Atom, (name, arity)) => {
-                debug_assert_eq!(name, atom!("first"));
-                debug_assert_eq!(arity, 0);
+                next_ep_atom(&mut self.machine_st, name, arity);
+            }
+            (HeapCellValueTag::Str, s) => {
+                let (name, arity) = cell_as_atom_cell!(self.machine_st.heap[s])
+                    .get_name_and_arity();
 
-                if self.machine_st.e == 0 {
-                    self.machine_st.fail = true;
-                    return;
-                }
-
-                let and_frame = self.machine_st.stack.index_and_frame(self.machine_st.e);
-                let cp = and_frame.prelude.cp - 1;
-
-                let e = and_frame.prelude.e;
-                let e = Fixnum::build_with(i64::try_from(e).unwrap());
-
-                let p = str_loc_as_cell!(self.machine_st.heap.len());
-
-                self.machine_st.heap.extend(functor!(atom!("dir_entry"), [fixnum(cp)]));
-                self.machine_st.unify_fixnum(e, self.machine_st.registers[2]);
-
-                if !self.machine_st.fail {
-                    unify!(self.machine_st, p, self.machine_st.registers[3]);
-                }
+                next_ep_atom(&mut self.machine_st, name, arity);
             }
             (HeapCellValueTag::Fixnum, n) => {
                 let e = n.get_num() as usize;
@@ -4073,6 +4768,13 @@ impl Machine {
                 debug_assert_eq!(arity, 0);
                 self.machine_st.fail = non_quoted_token(name.as_str().chars());
             }
+            (HeapCellValueTag::Str, s) => {
+                let (name, arity) = cell_as_atom_cell!(self.machine_st.heap[s])
+                    .get_name_and_arity();
+
+                debug_assert_eq!(arity, 0);
+                self.machine_st.fail = non_quoted_token(name.as_str().chars());
+            }
             _ => {
                 self.machine_st.fail = true;
             }
@@ -4084,13 +4786,14 @@ impl Machine {
         self.user_input.reset();
 
         set_prompt(true);
-        let result = self.machine_st.read_term(self.user_input, &mut self.indices);
+        // let result = self.machine_st.read_term(self.user_input, &mut self.indices);
+        let result = self.machine_st.read_term_from_user_input(self.user_input, &mut self.indices);
         set_prompt(false);
 
         match result {
             Ok(()) => Ok(()),
             Err(e) => {
-                self.user_input = input_stream(&mut self.machine_st.arena);
+                self.user_input.reset();
                 return Err(e);
             }
         }
@@ -4203,6 +4906,13 @@ impl Machine {
 
         let port = read_heap_cell!(port,
             (HeapCellValueTag::Atom, (name, arity)) => {
+                debug_assert_eq!(arity, 0);
+                name
+            }
+            (HeapCellValueTag::Str, s) => {
+                let (name, arity) = cell_as_atom_cell!(self.machine_st.heap[s])
+                    .get_name_and_arity();
+
                 debug_assert_eq!(arity, 0);
                 name
             }
@@ -4555,7 +5265,7 @@ impl Machine {
             let err = self.machine_st.permission_error(
                 Permission::Reposition,
                 atom!("stream"),
-                vec![stream_as_cell!(stream)],
+                stream_as_cell!(stream),
             );
 
             return Err(self.machine_st.error_form(err, stub));
@@ -4737,31 +5447,12 @@ impl Machine {
             return;
         }
 
-        let mut seen_set = IndexSet::new();
+        let mut seen_set = IndexSet::with_hasher(FxBuildHasher::default());
 
-        {
-            let mut iter = stackless_preorder_iter(&mut self.machine_st.heap, stored_v);
-
-            while let Some(addr) = iter.next() {
-                let addr = unmark_cell_bits!(addr);
-
-                if addr.is_var() {
-                    seen_set.insert(addr);
-                }
-            }
-        }
+        self.machine_st.variable_set(&mut seen_set, stored_v);
 
         let outcome = heap_loc_as_cell!(
-            filtered_iter_to_heap_list(
-                &mut self.machine_st.heap,
-                seen_set.into_iter().rev(),
-                |heap, value| {
-                    heap_bound_store(
-                        heap,
-                        heap_bound_deref(heap, value),
-                    ).is_var()
-                },
-            )
+            iter_to_heap_list(&mut self.machine_st.heap, seen_set.into_iter())
         );
 
         unify_fn!(self.machine_st, a2, outcome);
@@ -4999,9 +5690,15 @@ impl Machine {
         };
 
         let result = printer.print().result();
-        let chars = put_complete_string(&mut self.machine_st.heap, &result, &mut self.machine_st.atom_tbl);
+        let chars = put_complete_string(
+            &mut self.machine_st.heap,
+            &result,
+            &mut self.machine_st.atom_tbl,
+        );
 
-        let result_addr = self.machine_st.store(self.machine_st.deref(self.machine_st.registers[1]));
+        let result_addr = self.machine_st.store(self.machine_st.deref(
+            self.machine_st.registers[1]
+        ));
 
         if let Some(var) = result_addr.as_var() {
             self.machine_st.bind(var, chars);

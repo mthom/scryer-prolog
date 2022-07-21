@@ -8,6 +8,7 @@
           ]).
 
 :- use_module(library(error)).
+:- use_module(library(iso_ext)).
 :- use_module(library(lists), [append/3, member/2]).
 :- use_module(library(loader), [strip_module/3]).
 
@@ -17,7 +18,7 @@ load_context(GRBody, Module, GRBody0) :-
        true
     ;  prolog_load_context(module, Module) ->
        true
-    ;  true
+    ;  Module = user
     ).
 
 
@@ -33,7 +34,7 @@ phrase(GRBody, S0, S) :-
     (  var(GRBody0) ->
        instantiation_error(phrase/3)
     ;  dcg_body(GRBody0, S0, S, GRBody1, Module) ->
-       call(GRBody1)
+       call(Module:GRBody1)
     ;  type_error(callable, GRBody0, phrase/3)
     ).
 
@@ -153,12 +154,17 @@ seqq([Es|Ess]) --> seq(Es), seqq(Ess).
 % Describes an arbitrary number of elements
 ... --> [] | [_], ... .
 
+
+error_goal(error(E, must_be/2), error(E, must_be/2)).
+error_goal(error(E, (=..)/2), error(E, (=..)/2)).
+error_goal(E, _) :- throw(E).
+
 user:goal_expansion(phrase(GRBody, S, S0), GRBody1) :-
     load_context(GRBody, M, GRBody0),
     nonvar(GRBody0),
     catch(dcgs:dcg_body(GRBody0, S, S0, GRBody1, M),
-          error(E, must_be/2),
-          (  GRBody1 = throw(error(E, must_be/2))  )
+          E,
+          dcgs:error_goal(E, GRBody1)
          ).
 
 user:goal_expansion(phrase(GRBody, S), phrase(GRBody, S, [])).

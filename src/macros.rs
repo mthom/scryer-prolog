@@ -87,10 +87,8 @@ macro_rules! cell_as_atom_cell {
 
 macro_rules! cell_as_f64_ptr {
     ($cell:expr) => {{
-        let ptr_u64 = ConsPtr::from_bytes($cell.into_bytes());
-        F64Ptr(TypedArenaPtr::new(
-            ptr_u64.as_ptr() as *mut OrderedFloat<f64>
-        ))
+        let offset = $cell.get_value();
+        F64Ptr::from_offset(offset)
     }};
 }
 
@@ -246,13 +244,6 @@ macro_rules! match_untyped_arena_ptr_pat_body {
         #[allow(unused_braces)]
         $code
     }};
-    ($ptr:ident, F64, $n:ident, $code:expr) => {{
-        let payload_ptr =
-            unsafe { std::mem::transmute::<_, *mut OrderedFloat<f64>>($ptr.payload_offset()) };
-        let $n = TypedArenaPtr::new(payload_ptr);
-        #[allow(unused_braces)]
-        $code
-    }};
     ($ptr:ident, Rational, $n:ident, $code:expr) => {{
         let payload_ptr = unsafe { std::mem::transmute::<_, *mut Rational>($ptr.payload_offset()) };
         let $n = TypedArenaPtr::new(payload_ptr);
@@ -281,6 +272,12 @@ macro_rules! match_untyped_arena_ptr_pat_body {
         #[allow(unused_braces)]
         $code
     }};
+    ($ptr:ident, IndexPtr, $ip:ident, $code:expr) => {{
+        #[allow(unused_mut)]
+        let mut $ip = TypedArenaPtr::new(unsafe { std::mem::transmute::<_, *mut IndexPtr>($ptr.get_ptr()) });
+        #[allow(unused_braces)]
+        $code
+    }};
     ($ptr:ident, $($tags:tt)|+, $s:ident, $code:expr) => {{
         let $s = Stream::from_tag($ptr.get_tag(), $ptr.payload_offset());
         #[allow(unused_braces)]
@@ -294,11 +291,18 @@ macro_rules! match_untyped_arena_ptr_pat {
             | ArenaHeaderTag::OutputFileStream
             | ArenaHeaderTag::NamedTcpStream
             | ArenaHeaderTag::NamedTlsStream
+            | ArenaHeaderTag::NamedHttpClientStream
             | ArenaHeaderTag::ReadlineStream
             | ArenaHeaderTag::StaticStringStream
             | ArenaHeaderTag::ByteStream
             | ArenaHeaderTag::StandardOutputStream
             | ArenaHeaderTag::StandardErrorStream
+    };
+    (IndexPtr) => {
+        ArenaHeaderTag::IndexPtrUndefined |
+        ArenaHeaderTag::IndexPtrDynamicUndefined |
+        ArenaHeaderTag::IndexPtrDynamicIndex |
+        ArenaHeaderTag::IndexPtrIndex
     };
     ($tag:ident) => {
         ArenaHeaderTag::$tag

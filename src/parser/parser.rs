@@ -4,9 +4,7 @@ use crate::parser::ast::*;
 use crate::parser::char_reader::*;
 use crate::parser::lexer::*;
 
-use ordered_float::OrderedFloat;
-
-use rug::ops::NegAssign;
+use crate::parser::rug::ops::NegAssign;
 
 use std::cell::Cell;
 use std::mem;
@@ -51,11 +49,10 @@ struct TokenDesc {
     spec: u32,
 }
 
-fn is_partial_string(
+pub(crate) fn as_partial_string(
     head: Term,
     mut tail: Term,
-    atom_tbl: &mut AtomTable,
-) -> Result<(Atom, Option<Box<Term>>), Term> {
+) -> Result<(String, Option<Box<Term>>), Term> {
     let mut string = match &head {
         Term::Literal(_, Literal::Atom(atom)) => {
             if let Some(c) = atom.as_char() {
@@ -94,6 +91,15 @@ fn is_partial_string(
 
                 tail_ref = succ;
             }
+            Term::PartialString(_, pstr, tail) => {
+                string += &pstr;
+                tail_ref = tail;
+            }
+            Term::CompleteString(_, cstr) => {
+                string += cstr.as_str();
+                tail = Term::Literal(Cell::default(), Literal::Atom(atom!("[]")));
+                break;
+            }
             tail_ref => {
                 tail = mem::replace(tail_ref, Term::AnonVar);
                 break;
@@ -103,21 +109,17 @@ fn is_partial_string(
 
     match &tail {
         Term::AnonVar | Term::Var(..) => {
-            let pstr_atom = atom_tbl.build_with(&string);
-            Ok((pstr_atom, Some(Box::new(tail))))
+            Ok((string, Some(Box::new(tail))))
         }
         Term::Literal(_, Literal::Atom(atom!("[]"))) => {
-            let pstr_atom = atom_tbl.build_with(&string);
-            Ok((pstr_atom, None))
+            Ok((string, None))
         }
         Term::Literal(_, Literal::String(tail)) => {
             string += tail.as_str();
-            let pstr_atom = atom_tbl.build_with(&string);
-            Ok((pstr_atom, None))
+            Ok((string, None))
         }
         _ => {
-            let pstr_atom = atom_tbl.build_with(&string);
-            Ok((pstr_atom, Some(Box::new(tail))))
+            Ok((string, Some(Box::new(tail))))
         }
     }
 }
@@ -414,7 +416,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
                 TokenType::Term
             }
             Token::Literal(Literal::String(s)) if self.lexer.machine_st.flags.double_quotes.is_chars() => {
-                self.terms.push(Term::PartialString(Cell::default(), s, None));
+                self.terms.push(Term::CompleteString(Cell::default(), s));
                 TokenType::Term
             }
             Token::Literal(c) => {
@@ -566,24 +568,19 @@ impl<'a, R: CharRead> Parser<'a, R> {
                         let head = subterms.pop().unwrap();
 
                         self.terms.push(
-                            match is_partial_string(head, tail, &mut self.lexer.machine_st.atom_tbl) {
-                                Ok((string_buf, tail_opt)) => {
-                                    Term::PartialString(Cell::default(), string_buf, tail_opt)
+                            match as_partial_string(head, tail) {
+                                Ok((string_buf, Some(tail))) => {
+                                    Term::PartialString(Cell::default(), string_buf, tail)
+                                }
+                                Ok((string_buf, None)) => {
+                                    let atom = self.lexer.machine_st.atom_tbl.build_with(&string_buf);
+                                    Term::CompleteString(Cell::default(), atom)
                                 }
                                 Err(term) => term,
                             },
                         );
-
-                        /*
-                        self.terms.push(Term::Cons(
-                            Cell::default(),
-                            Box::new(head),
-                            Box::new(tail),
-                        ));
-                        */
                     } else {
-                        self.terms
-                            .push(Term::Clause(Cell::default(), name, subterms));
+                        self.terms.push(Term::Clause(Cell::default(), name, subterms));
                     }
 
                     if let Some(&mut TokenDesc {
@@ -743,9 +740,13 @@ impl<'a, R: CharRead> Parser<'a, R> {
 
         self.terms.push(match list {
             Term::Cons(_, head, tail) => {
-                match is_partial_string(*head, *tail, &mut self.lexer.machine_st.atom_tbl) {
-                    Ok((string_buf, tail_opt)) => {
-                        Term::PartialString(Cell::default(), string_buf, tail_opt)
+                match as_partial_string(*head, *tail) {
+                    Ok((string_buf, Some(tail))) => {
+                        Term::PartialString(Cell::default(), string_buf, tail)
+                    }
+                    Ok((string_buf, None)) => {
+                        let atom = self.lexer.machine_st.atom_tbl.build_with(&string_buf);
+                        Term::CompleteString(Cell::default(), atom)
                     }
                     Err(term) => term,
                 }
@@ -823,13 +824,13 @@ impl<'a, R: CharRead> Parser<'a, R> {
 
         self.reduce_op(1400);
 
-        if self.stack.len() == 1 {
+        if self.stack.len() <= 1 {
             return false;
         }
 
         let idx = self.stack.len() - 2;
-
         let td = self.stack.remove(idx);
+
         match td.tt {
             TokenType::Open | TokenType::OpenCT => {
                 if self.stack[idx].tt == TokenType::Comma {
@@ -948,9 +949,9 @@ impl<'a, R: CharRead> Parser<'a, R> {
                 self.negate_number(n, negate_rc, |r, _| Literal::Rational(r))
             }
             Token::Literal(Literal::Float(n)) => self.negate_number(
-                **n,
-                |n| OrderedFloat(-n.into_inner()),
-                |n, arena| Literal::Float(arena_alloc!(n, arena)),
+                **n.as_ptr(),
+                |n| -n,
+                |n, arena| Literal::from(float_alloc!(n, arena)),
             ),
             Token::Literal(c) => {
                 if let Some(name) = atomize_constant(&mut self.lexer.machine_st.atom_tbl, c) {

@@ -3,7 +3,7 @@
     Author:        Markus Triska
     E-mail:        triska@metalevel.at
     WWW:           https://www.metalevel.at
-    Copyright (C): 2016-2021 Markus Triska
+    Copyright (C): 2016-2022 Markus Triska
 
     This library provides CLP(ℤ):
 
@@ -315,7 +315,7 @@ possible.
 Almost all Prolog programs also reason about integers. Therefore, it
 is highly advisable that you make CLP(ℤ) constraints available in all
 your programs. One way to do this is to put the following directive in
-your =|~/.swiplrc|= initialisation file:
+your =|~/.scryerrc|= initialisation file:
 
 ==
 :- use_module(library(clpz)).
@@ -390,6 +390,7 @@ In total, the arithmetic constraints are:
     | Expr `mod` Expr    | Modulo induced by floored division   |
     | Expr `rem` Expr    | Modulo induced by truncated division |
     | abs(Expr)          | Absolute value                       |
+    | sign(Expr)         | Sign (-1, 0, 1) of Expr              |
     | Expr // Expr       | Truncated integer division           |
     | Expr div Expr      | Floored integer division             |
 
@@ -405,7 +406,7 @@ The [_arithmetic constraints_](<#clpz-arith-constraints>) #=/2, #>/2
 etc. are meant to be used _instead_ of the primitives `(is)/2`,
 `(=:=)/2`, `(>)/2` etc. over integers. Almost all Prolog programs also
 reason about integers. Therefore, it is recommended that you put the
-following directive in your =|~/.swiplrc|= initialisation file to make
+following directive in your =|~/.scryerrc|= initialisation file to make
 CLP(ℤ) constraints available in all your programs:
 
 ==
@@ -2564,6 +2565,7 @@ parse_clpz(E, R,
              m(A//B)           => [g(B #\= 0), p(ptzdiv(A, B, R))],
              m(A div B)        => [g(?(R) #= (A - (A mod B)) // B)],
              m(A^B)            => [p(pexp(A, B, R))],
+             m(sign(A))        => [g(R in -1..1), p(psign(A, R))],
              % bitwise operations
              m(\A)             => [p(pfunction(\, A, R))],
              m(msb(A))         => [p(pfunction(msb, A, R))],
@@ -5134,7 +5136,6 @@ run_propagator(pmodz(X,Y,Z), MState) -->
                       domain_remove_smaller_than(ZD3, ZMin, ZD5) },
                       fd_put(Z, ZD5, ZPs)
                     % queue_goal(Z in ZMin..ZMax)
-                %/* This doesn't work very well.
                 ;   { fd_get(Y, _, _, n(YU), _), YU > 0 } ->
                     { fd_get(Z, ZD1, ZPs),
                       ZMax is YU - 1,
@@ -5147,7 +5148,6 @@ run_propagator(pmodz(X,Y,Z), MState) -->
                       domain_remove_smaller_than(ZD1, ZMin, ZD3) },
                       fd_put(Z, ZD3, ZPs)
                     % queue_goal(Z #> YL)
-                % * /
                 ;   true
                 )
             )
@@ -5482,6 +5482,21 @@ run_propagator(pexp(X,Y,Z), MState) -->
               domain_remove_smaller_than(ZD, NZL, ZD1) },
             fd_put(Z, ZD1, ZPs)
         ;   true
+        ).
+
+%% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% % Y = sign(X)
+
+run_propagator(psign(X,Y), MState) -->
+        (   nonvar(X) -> kill(MState), queue_goal(Y is sign(X))
+        ;   Y == -1 -> kill(MState), queue_goal(X #< 0)
+        ;   Y == 0 -> kill(MState), queue_goal(X = 0)
+        ;   Y == 1 -> kill(MState), queue_goal(X #> 0)
+        ;   { fd_get(X, _, XL, XU, _) },
+            (   { XL = n(L), L > 0 } -> kill(MState), queue_goal(Y = 1)
+            ;   { XU = n(U), U < 0 } -> kill(MState), queue_goal(Y = -1)
+            ;   true
+            )
         ).
 
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -7596,7 +7611,7 @@ verify_attributes(Var, Other, Gs) :-
                 ),
                 domain_contains(Dom, Other),
                 phrase(trigger_props(Ps), [Q], [_]),
-                Gs = [phrase(do_queue, [Q], _)]
+                Gs = [phrase(clpz:do_queue, [Q], _)]
             ;   (   get_atts(Other, clpz(clpz_attr(_,_,_,OD,OPs,_))) ->
                     domains_intersection(OD, Dom, Dom1),
                     append_propagators(Ps, OPs, Ps1),
@@ -7604,7 +7619,7 @@ verify_attributes(Var, Other, Gs) :-
                     variables_same_queue([Var,Other]),
                     phrase((fd_put(Other,Dom1,Ps1),
                             trigger_props(Ps1)), [Q0], _),
-                    Gs = [phrase(do_queue, [Q0], _)]
+                    Gs = [phrase(clpz:do_queue, [Q0], _)]
                 ;   put_atts(Other, clpz(CLPZ)),
                     Gs = []
                 )
@@ -7696,6 +7711,7 @@ attribute_goal_(ptzdiv(X,Y,Z))         --> [?(X) // ?(Y) #= ?(Z)].
 attribute_goal_(pdiv(X,Y,Z))           --> [?(X) div ?(Y) #= ?(Z)].
 attribute_goal_(prdiv(X,Y,Z))          --> [?(X) / ?(Y) #= ?(Z)].
 attribute_goal_(pexp(X,Y,Z))           --> [?(X) ^ ?(Y) #= ?(Z)].
+attribute_goal_(psign(X,Y))            --> [?(Y) #= sign(?(X))].
 attribute_goal_(pabs(X,Y))             --> [?(Y) #= abs(?(X))].
 attribute_goal_(pmod(X,M,K))           --> [?(X) mod ?(M) #= ?(K)].
 attribute_goal_(prem(X,Y,Z))           --> [?(X) rem ?(Y) #= ?(Z)].

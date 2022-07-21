@@ -59,6 +59,7 @@ pub(crate) trait Allocator {
     fn bindings_mut(&mut self) -> &mut AllocVarDict;
 
     fn take_bindings(self) -> AllocVarDict;
+    fn max_reg_allocated(&self) -> usize;
 
     fn drain_var_data<'a>(
         &mut self,

@@ -39,14 +39,14 @@ impl MockWAM {
     pub fn write_parsed_term_to_heap(
         &mut self,
         input_stream: Stream,
-    ) -> Result<TermWriteResult, ParserError> {
+    ) -> Result<TermWriteResult, CompilationError> {
         self.machine_st.read(input_stream, &self.op_dir)
     }
 
     pub fn parse_and_write_parsed_term_to_heap(
         &mut self,
         term_string: &'static str,
-    ) -> Result<TermWriteResult, ParserError> {
+    ) -> Result<TermWriteResult, CompilationError> {
         let stream = Stream::from_static_string(term_string, &mut self.machine_st.arena);
         self.write_parsed_term_to_heap(stream)
     }
@@ -54,14 +54,13 @@ impl MockWAM {
     pub fn parse_and_print_term(
         &mut self,
         term_string: &'static str,
-    ) -> Result<String, ParserError> {
+    ) -> Result<String, CompilationError> {
         let term_write_result = self.parse_and_write_parsed_term_to_heap(term_string)?;
 
         print_heap_terms(self.machine_st.heap.iter(), term_write_result.heap_loc);
 
         let mut printer = HCPrinter::new(
             &mut self.machine_st.heap,
-            &mut self.machine_st.arena,
             &self.op_dir,
             PrinterOutputter::new(),
             heap_loc_as_cell!(term_write_result.heap_loc),
@@ -168,7 +167,7 @@ pub fn all_cells_marked_and_unforwarded(heap: &[HeapCellValue]) {
             idx
         );
         assert!(
-            cell.get_forwarding_bit() != Some(true),
+            !cell.get_forwarding_bit(),
             "cell {:?} at index {} is forwarded",
             cell,
             idx
@@ -187,7 +186,7 @@ pub fn all_cells_unmarked(heap: &Heap) {
         );
 
         assert!(
-            cell.get_forwarding_bit() != Some(true),
+            !cell.get_forwarding_bit(),
             "cell {:?} at index {} is still forwarded",
             cell,
             idx
@@ -200,7 +199,7 @@ pub(crate) fn write_parsed_term_to_heap(
     machine_st: &mut MachineState,
     input_stream: Stream,
     op_dir: &OpDir,
-) -> Result<TermWriteResult, ParserError> {
+) -> Result<TermWriteResult, CompilationError> {
     machine_st.read(input_stream, op_dir)
 }
 
@@ -209,7 +208,7 @@ pub(crate) fn parse_and_write_parsed_term_to_heap(
     machine_st: &mut MachineState,
     term_string: &'static str,
     op_dir: &OpDir,
-) -> Result<TermWriteResult, ParserError> {
+) -> Result<TermWriteResult, CompilationError> {
     let stream = Stream::from_static_string(term_string, &mut machine_st.arena);
     write_parsed_term_to_heap(machine_st, stream, op_dir)
 }
@@ -224,6 +223,11 @@ impl Machine {
         let user_output = Stream::from_owned_string("".to_owned(), &mut machine_st.arena);
         let user_error = Stream::stderr(&mut machine_st.arena);
 
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap();
+
         let mut wam = Machine {
             machine_st,
             indices: IndexStore::new(),
@@ -232,6 +236,7 @@ impl Machine {
             user_output,
             user_error,
             load_contexts: vec![],
+            runtime
         };
 
         let mut lib_path = current_dir();
@@ -266,6 +271,7 @@ impl Machine {
 
         if let Some(ref mut builtins) = wam.indices.modules.get_mut(&atom!("builtins")) {
             load_module(
+                &mut wam.machine_st,
                 &mut wam.indices.code_dir,
                 &mut wam.indices.op_dir,
                 &mut wam.indices.meta_predicates,
@@ -291,6 +297,7 @@ impl Machine {
 
         if let Some(loader) = wam.indices.modules.get(&atom!("loader")) {
             load_module(
+                &mut wam.machine_st,
                 &mut wam.indices.code_dir,
                 &mut wam.indices.op_dir,
                 &mut wam.indices.meta_predicates,
@@ -603,7 +610,6 @@ mod tests {
 
     #[test]
     fn test_term_compare() {
-        use ordered_float::OrderedFloat;
         use std::cmp::Ordering;
 
         let mut wam = MachineState::new();
@@ -771,9 +777,7 @@ mod tests {
             Some(Ordering::Greater)
         );
 
-        let one_p_one = typed_arena_ptr_as_cell!(
-            arena_alloc!(OrderedFloat(1.1), &mut wam.arena)
-        );
+        let one_p_one = HeapCellValue::from(float_alloc!(1.1, &mut wam.arena));
 
         assert_eq!(
             compare_term_test!(

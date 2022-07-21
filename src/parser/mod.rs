@@ -1,5 +1,6 @@
 #[cfg(feature = "num-rug-adapter")]
-use num_rug_adapter as rug;
+pub use num_rug_adapter as rug;
+
 #[cfg(feature = "rug")]
 pub use rug;
 

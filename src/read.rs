@@ -1,28 +1,28 @@
 use crate::parser::ast::*;
 use crate::parser::parser::*;
 
-use crate::arena::*;
 use crate::atom_table::*;
 use crate::forms::*;
 use crate::iterators::*;
 use crate::machine::heap::*;
+use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
 use crate::machine::machine_state::MachineState;
 use crate::machine::streams::*;
 use crate::parser::char_reader::*;
+use crate::repl_helper::Helper;
 use crate::types::*;
 
 use fxhash::FxBuildHasher;
 
+use indexmap::IndexSet;
 use rustyline::error::ReadlineError;
-use rustyline::{Cmd, Config, Editor, KeyEvent};
+use rustyline::{Config, Editor};
 
 use std::collections::VecDeque;
 use std::io::{Cursor, Error, ErrorKind, Read};
 
 type SubtermDeque = VecDeque<(usize, usize)>;
-
-// pub(crate) type PrologStream = ParsingStream<Stream>;
 
 impl MachineState {
     pub(crate) fn devour_whitespace(
@@ -41,19 +41,21 @@ impl MachineState {
         &mut self,
         mut inner: Stream,
         op_dir: &OpDir,
-    ) -> Result<TermWriteResult, ParserError> {
+    ) -> Result<TermWriteResult, CompilationError> {
         let (term, num_lines_read) = {
             let prior_num_lines_read = inner.lines_read();
             let mut parser = Parser::new(inner, self);
 
             parser.add_lines_read(prior_num_lines_read);
 
-            let term = parser.read_term(&CompositeOpDir::new(op_dir, None))?;
+            let term = parser.read_term(&CompositeOpDir::new(op_dir, None))
+                .map_err(CompilationError::from)?;
+
             (term, parser.lines_read() - prior_num_lines_read)
         };
 
         inner.add_lines_read(num_lines_read);
-        Ok(write_term_to_heap(&term, &mut self.heap, &mut self.atom_tbl))
+        write_term_to_heap(&term, &mut self.heap, &mut self.atom_tbl)
     }
 }
 
@@ -78,23 +80,21 @@ fn get_prompt() -> &'static str {
     }
 }
 
-#[inline]
-pub fn input_stream(arena: &mut Arena) -> Stream {
-    let input_stream = ReadlineStream::new("");
-    Stream::from_readline_stream(input_stream, arena)
-}
-
 #[derive(Debug)]
 pub struct ReadlineStream {
-    rl: Editor<()>,
+    rl: Editor<Helper>,
     pending_input: Cursor<String>,
+    add_history: bool,
 }
 
 impl ReadlineStream {
     #[inline]
-    pub fn new(pending_input: &str) -> Self {
+    pub fn new(pending_input: &str, add_history: bool) -> Self {
         let config = Config::builder().check_cursor_position(true).build();
-        let mut rl = Editor::<()>::with_config(config);
+        let helper = Helper::new();
+
+        let mut rl = Editor::with_config(config);
+        rl.set_helper(Some(helper));
 
         if let Some(mut path) = dirs_next::home_dir() {
             path.push(HISTORY_FILE);
@@ -103,12 +103,18 @@ impl ReadlineStream {
             }
         }
 
-        rl.bind_sequence(KeyEvent::from('\t'), Cmd::Insert(1, "\t".to_string()));
+        // rl.bind_sequence(KeyEvent::from('\t'), Cmd::Insert(1, "\t".to_string()));
 
         ReadlineStream {
             rl,
             pending_input: Cursor::new(pending_input.to_owned()),
+            add_history: add_history,
         }
+    }
+
+    pub fn set_atoms_for_completion(&mut self, atoms: *const IndexSet<Atom>) {
+        let helper = self.rl.helper_mut().unwrap();
+        helper.atoms = atoms;
     }
 
     #[inline]
@@ -143,6 +149,9 @@ impl ReadlineStream {
     }
 
     fn save_history(&mut self) {
+        if !self.add_history {
+            return;
+        };
         if let Some(mut path) = dirs_next::home_dir() {
             path.push(HISTORY_FILE);
             if path.exists() {
@@ -239,7 +248,7 @@ pub(crate) fn write_term_to_heap(
     term: &Term,
     heap: &mut Heap,
     atom_tbl: &mut AtomTable,
-) -> TermWriteResult {
+) -> Result<TermWriteResult, CompilationError> {
     let term_writer = TermWriter::new(heap, atom_tbl);
     term_writer.write_term_to_heap(term)
 }
@@ -290,7 +299,7 @@ impl<'a, 'b> TermWriter<'a, 'b> {
         match term {
             &TermRef::Cons(..) => list_loc_as_cell!(h),
             &TermRef::AnonVar(_) | &TermRef::Var(..) => heap_loc_as_cell!(h),
-            &TermRef::PartialString(_, _, ref src, None) =>
+            &TermRef::CompleteString(_, _, ref src) =>
                 if src.as_str().is_empty() {
                     empty_list_as_cell!()
                 } else if self.heap[h].get_tag() == HeapCellValueTag::CStr {
@@ -305,7 +314,7 @@ impl<'a, 'b> TermWriter<'a, 'b> {
         }
     }
 
-    fn write_term_to_heap(mut self, term: &'a Term) -> TermWriteResult {
+    fn write_term_to_heap(mut self, term: &'a Term) -> Result<TermWriteResult, CompilationError> {
         let heap_loc = self.heap.len();
 
         for term in breadth_first_iter(term, true) {
@@ -327,7 +336,11 @@ impl<'a, 'b> TermWriter<'a, 'b> {
                     self.push_stub_addr();
                     self.push_stub_addr();
                 }
-                &TermRef::Clause(Level::Root, _, ref ct, subterms) => {
+                &TermRef::Clause(Level::Root, _, name, subterms) => {
+                    if subterms.len() > MAX_ARITY {
+                        return Err(CompilationError::ExceededMaxArity);
+                    }
+
                     self.heap.push(if subterms.len() == 0 {
                         heap_loc_as_cell!(heap_loc + 1)
                     } else {
@@ -335,7 +348,7 @@ impl<'a, 'b> TermWriter<'a, 'b> {
                     });
 
                     self.queue.push_back((subterms.len(), h + 2));
-                    let named = atom_as_cell!(ct.name(), subterms.len());
+                    let named = atom_as_cell!(name, subterms.len());
 
                     self.heap.push(named);
 
@@ -345,9 +358,9 @@ impl<'a, 'b> TermWriter<'a, 'b> {
 
                     continue;
                 }
-                &TermRef::Clause(_, _, ref ct, subterms) => {
+                &TermRef::Clause(_, _, name, subterms) => {
                     self.queue.push_back((subterms.len(), h + 1));
-                    let named = atom_as_cell!(ct.name(), subterms.len());
+                    let named = atom_as_cell!(name, subterms.len());
 
                     self.heap.push(named);
 
@@ -373,20 +386,17 @@ impl<'a, 'b> TermWriter<'a, 'b> {
 
                     continue;
                 }
-                &TermRef::PartialString(lvl, _, ref src, tail) => {
-                    if tail.is_some() {
-                        allocate_pstr(self.heap, src.as_str(), self.atom_tbl);
-                    } else {
-                        put_complete_string(self.heap, src.as_str(), self.atom_tbl);
-                    }
+                &TermRef::CompleteString(_, _, ref src) => {
+                    put_complete_string(self.heap, src.as_str(), self.atom_tbl);
+                }
+                &TermRef::PartialString(lvl, _, ref src, _) => {
+                    allocate_pstr(self.heap, src.as_str(), self.atom_tbl);
 
-                    if tail.is_some() {
-                        let h = self.heap.len();
-                        self.queue.push_back((1, h - 1));
+                    let h = self.heap.len();
+                    self.queue.push_back((1, h - 1));
 
-                        if let Level::Root = lvl {
-                            continue;
-                        }
+                    if let Level::Root = lvl {
+                        continue;
                     }
                 }
                 &TermRef::Var(_, _, ref var) => {
@@ -410,9 +420,9 @@ impl<'a, 'b> TermWriter<'a, 'b> {
             self.modify_head_of_queue(&term, h);
         }
 
-        TermWriteResult {
+        Ok(TermWriteResult {
             heap_loc,
             var_dict: self.var_dict,
-        }
+        })
     }
 }

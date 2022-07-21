@@ -2,10 +2,13 @@ use crate::atom_table::*;
 use crate::machine::heap::*;
 use crate::types::*;
 
+#[cfg(test)]
+use crate::heap_iter::FocusedHeapIter;
+
 use core::marker::PhantomData;
 
 pub(crate) trait UnmarkPolicy {
-    fn unmark(heap: &mut [HeapCellValue], current: usize) -> bool;
+    fn unmark(heap: &mut [HeapCellValue], current: usize);
     fn mark(heap: &mut [HeapCellValue], current: usize);
     fn forward_attr_var(iter: &mut StacklessPreOrderHeapIter<Self>) -> Option<HeapCellValue>
     where
@@ -16,9 +19,8 @@ pub(crate) struct IteratorUMP;
 
 impl UnmarkPolicy for IteratorUMP {
     #[inline(always)]
-    fn unmark(heap: &mut [HeapCellValue], current: usize) -> bool {
+    fn unmark(heap: &mut [HeapCellValue], current: usize) {
         heap[current].set_mark_bit(false);
-        false
     }
 
     #[inline(always)]
@@ -34,7 +36,7 @@ struct MarkerUMP {}
 
 impl UnmarkPolicy for MarkerUMP {
     #[inline(always)]
-    fn unmark(_heap: &mut [HeapCellValue], _current: usize) -> bool { true }
+    fn unmark(_heap: &mut [HeapCellValue], _current: usize) {}
 
     #[inline(always)]
     fn mark(heap: &mut [HeapCellValue], current: usize) {
@@ -43,7 +45,7 @@ impl UnmarkPolicy for MarkerUMP {
 
     #[inline(always)]
     fn forward_attr_var(iter: &mut StacklessPreOrderHeapIter<Self>) -> Option<HeapCellValue> {
-        if iter.heap[iter.current + 1].get_mark_bit() {
+        if iter.heap[iter.current + 1].get_forwarding_bit() {
             return iter.forward_var();
         }
 
@@ -53,10 +55,9 @@ impl UnmarkPolicy for MarkerUMP {
         iter.current += 1;
 
         iter.next = iter.heap[iter.current].get_value();
-
         iter.heap[iter.current].set_value(temp);
-        iter.heap[iter.current].set_mark_bit(true);
 
+        iter.heap[iter.current].set_forwarding_bit(true); // forward the attr vars list.
         None
     }
 }
@@ -69,6 +70,14 @@ pub(crate) struct StacklessPreOrderHeapIter<'a, UMP: UnmarkPolicy> {
     current: usize,
     next: usize,
     _marker: PhantomData<UMP>,
+}
+
+#[cfg(test)]
+impl<'a> FocusedHeapIter for StacklessPreOrderHeapIter<'a, IteratorUMP> {
+    #[inline]
+    fn focus(&self) -> usize {
+        self.current
+    }
 }
 
 impl<'a, UMP: UnmarkPolicy> Drop for StacklessPreOrderHeapIter<'a, UMP> {
@@ -84,15 +93,14 @@ impl<'a, UMP: UnmarkPolicy> Drop for StacklessPreOrderHeapIter<'a, UMP> {
     }
 }
 
-impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
+impl<'a> StacklessPreOrderHeapIter<'a, MarkerUMP> {
     pub(crate) fn new(heap: &'a mut Vec<HeapCellValue>, cell: HeapCellValue) -> Self {
         let orig_heap_len = heap.len();
-        let start = orig_heap_len + 1;
+        let start = orig_heap_len;
 
         heap.push(cell);
-        heap.push(heap_loc_as_cell!(orig_heap_len));
 
-        heap[start].set_mark_bit(true);
+        heap[start].set_forwarding_bit(true);
         let next = heap[start].get_value();
 
         Self {
@@ -104,11 +112,39 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
             _marker: PhantomData,
         }
     }
+}
 
+impl<'a> StacklessPreOrderHeapIter<'a, IteratorUMP> {
+    #[cfg(test)]
+    pub(crate) fn new(heap: &'a mut Vec<HeapCellValue>, cell: HeapCellValue) -> Self {
+        let orig_heap_len = heap.len();
+        let start = orig_heap_len + 1;
+
+        heap.push(cell);
+        heap.push(heap_loc_as_cell!(orig_heap_len));
+
+        heap[start].set_forwarding_bit(true);
+        let next = heap[start].get_value();
+
+        Self {
+            heap,
+            orig_heap_len,
+            start,
+            current: start,
+            next,
+            _marker: PhantomData,
+        }
+    }
+}
+
+impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
     fn backward_and_return(&mut self) -> Option<HeapCellValue> {
         let current = self.current;
 
         if self.backward() {
+            // set the f and m bits on the heap cell at start
+            // so we invoke backward() and return None next call.
+
             self.heap[self.current].set_forwarding_bit(true);
             self.heap[self.current].set_mark_bit(true);
         }
@@ -117,13 +153,7 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
     }
 
     fn forward_var(&mut self) -> Option<HeapCellValue> {
-        if self.heap[self.next].get_mark_bit() {
-            return self.backward_and_return();
-        }
-
-        self.heap[self.current].set_forwarding_bit(true);
-
-        if self.heap[self.next].get_forwarding_bit() == Some(true) {
+        if self.heap[self.next].get_forwarding_bit() {
             return self.backward_and_return();
         }
 
@@ -138,29 +168,36 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
 
     fn forward(&mut self) -> Option<HeapCellValue> {
         loop {
-            if self.heap[self.current].get_forwarding_bit() != Some(true) {
+            if !self.heap[self.current].get_mark_bit() {
+                self.heap[self.current].set_mark_bit(true);
+
                 match self.heap[self.current].get_tag() {
                     HeapCellValueTag::AttrVar => {
                         if let Some(cell) = UMP::forward_attr_var(self) { return Some(cell); }
+
+                        if self.heap[self.next].get_mark_bit() {
+                            return Some(attr_var_as_cell!(self.current));
+                        }
                     }
                     HeapCellValueTag::Var => {
                         if let Some(cell) = self.forward_var() { return Some(cell); }
+
+                        if self.heap[self.next].get_mark_bit() {
+                            return Some(heap_loc_as_cell!(self.current));
+                        }
                     }
                     HeapCellValueTag::Str => {
-                        if self.heap[self.next + 1].get_mark_bit() {
+                        if self.heap[self.next + 1].get_forwarding_bit() {
                             return self.backward_and_return();
                         }
 
                         let h = self.next;
                         let cell = self.heap[h];
 
-                        self.heap[h].set_forwarding_bit(true);
-                        self.heap[self.current].set_forwarding_bit(true);
-
                         let arity = cell_as_atom_cell!(self.heap[h]).get_arity();
 
                         for cell in &mut self.heap[h + 1 .. h + arity + 1] {
-                            cell.set_mark_bit(true);
+                            cell.set_forwarding_bit(true);
                         }
 
                         let last_cell_loc = h + arity;
@@ -172,14 +209,13 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
                         return Some(cell);
                     }
                     HeapCellValueTag::Lis => {
-                        if self.heap[self.next + 1].get_mark_bit() {
+                        let last_cell_loc = self.next + 1;
+
+                        if self.heap[last_cell_loc].get_forwarding_bit() {
                             return self.backward_and_return();
                         }
 
-                        self.heap[self.current].set_forwarding_bit(true);
-                        self.heap[self.next+1].set_mark_bit(true);
-
-                        let last_cell_loc = self.next + 1;
+                        self.heap[last_cell_loc].set_forwarding_bit(true);
 
                         self.next = self.heap[last_cell_loc].get_value();
                         self.heap[last_cell_loc].set_value(self.current);
@@ -191,20 +227,17 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
                         let h = self.next;
                         let cell = self.heap[h];
 
-                        self.heap[self.current].set_forwarding_bit(true);
-
-                        if self.heap[h+1].get_mark_bit() {
+                        if self.heap[h+1].get_forwarding_bit() {
                             return self.backward_and_return();
                         }
 
                         if self.heap[h].get_tag() == HeapCellValueTag::PStr {
-                            self.heap[h+1].set_mark_bit(true);
+                            let last_cell_loc = h+1;
+                            self.heap[last_cell_loc].set_forwarding_bit(true);
 
-                            self.next = self.heap[h+1].get_value();
-                            self.heap[h+1].set_value(self.current);
-                            self.heap[h].set_forwarding_bit(true);
-
-                            self.current = h+1;
+                            self.next = self.heap[last_cell_loc].get_value();
+                            self.heap[last_cell_loc].set_value(self.current);
+                            self.current = last_cell_loc;
                         } else {
                             debug_assert!(self.heap[h].get_tag() == HeapCellValueTag::PStrOffset);
 
@@ -212,7 +245,7 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
                             self.heap[h].set_value(self.current);
                             self.current = h;
 
-                            if self.heap[h].get_forwarding_bit() == Some(true) {
+                            if self.heap[h].get_mark_bit() {
                                 continue;
                             }
                         }
@@ -221,20 +254,23 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
                     }
                     HeapCellValueTag::PStrOffset => {
                         let h = self.next;
+                        let cell = self.heap[h];
 
+                        // mark the Fixnum offset.
                         UMP::mark(self.heap, self.current+1);
 
+                        let last_cell_loc = h+1;
+
+                        if self.heap[last_cell_loc].get_forwarding_bit() {
+                            return self.backward_and_return();
+                        }
+
                         if self.heap[h].get_tag() == HeapCellValueTag::PStr {
-                            if self.heap[h+1].get_mark_bit() {
-                                return self.backward_and_return();
-                            }
+                            self.heap[last_cell_loc].set_forwarding_bit(true);
 
-                            self.heap[h+1].set_mark_bit(true);
-                            self.heap[self.current].set_forwarding_bit(true);
-
-                            self.next = self.heap[h+1].get_value();
-                            self.heap[h+1].set_value(self.current);
-                            self.current = h+1;
+                            self.next = self.heap[last_cell_loc].get_value();
+                            self.heap[last_cell_loc].set_value(self.current);
+                            self.current = last_cell_loc;
                         } else {
                             debug_assert!(self.heap[h].get_tag() == HeapCellValueTag::CStr);
 
@@ -242,23 +278,25 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
                             self.heap[h].set_value(self.current);
                             self.current = h;
                         }
-                    }
-                    HeapCellValueTag::StackVar => {
-                        let cell = self.heap[self.current];
-                        self.heap[self.current].set_forwarding_bit(true);
+
                         return Some(cell);
                     }
-                    _ => {
-                        if self.heap[self.current].get_mark_bit() {
-                            let current = self.current;
+                    tag @ HeapCellValueTag::Atom => {
+                        let cell = HeapCellValue::build_with(tag, self.next as u64);
+                        let arity = AtomCell::from_bytes(cell.into_bytes()).get_arity();
 
-                            if self.backward() {
-                                return None;
-                            }
-
-                            return Some(self.heap[current]);
+                        if arity == 0 {
+                            return self.backward_and_return();
+                        } else if self.backward() {
+                            return None;
                         }
-
+                    }
+                    HeapCellValueTag::PStr => {
+                        if self.backward() {
+                            return None;
+                        }
+                    }
+                    _ => {
                         return self.backward_and_return();
                     }
                 }
@@ -271,40 +309,21 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
     }
 
     fn backward(&mut self) -> bool {
-        while !self.heap[self.current].get_mark_bit() {
+        while !self.heap[self.current].get_forwarding_bit() {
             let temp = self.heap[self.current].get_value();
 
-            UMP::mark(self.heap, self.current);
+            UMP::unmark(self.heap, self.current);
 
-            self.heap[self.current].set_forwarding_bit(false);
             self.heap[self.current].set_value(self.next);
-
             self.next = self.current;
             self.current = temp;
         }
 
         self.heap[self.current].set_forwarding_bit(false);
-
-        let unmark_is_no_op = UMP::unmark(self.heap, self.current);
+        UMP::unmark(self.heap, self.current);
 
         if self.current == self.start {
             return true;
-        }
-
-        if unmark_is_no_op { // if true, the marker is running.
-            let cell = self.heap[self.current];
-
-            // a cyclic root must be handled specially when marking.
-            if self.next >= self.orig_heap_len && cell.is_ref() {
-                debug_assert!(cell.get_tag() != HeapCellValueTag::PStrOffset);
-
-                self.heap[self.current].set_mark_bit(false);
-                let prev_current = self.heap[self.current].get_value();
-
-                if !self.heap[prev_current].is_forwarded() {
-                    return self.backward();
-                }
-            }
         }
 
         self.current -= 1;
@@ -713,7 +732,7 @@ mod tests {
         assert!(wam.machine_st.heap[8].get_mark_bit());
 
         for cell in &wam.machine_st.heap {
-            assert!(cell.get_forwarding_bit() != Some(true));
+            assert!(!cell.get_forwarding_bit());
         }
 
         assert_eq!(unmark_cell_bits!(wam.machine_st.heap[0]), atom_as_cell!(atom!("irrelevant stuff")));
@@ -743,7 +762,7 @@ mod tests {
         assert!(wam.machine_st.heap[8].get_mark_bit());
 
         for cell in &wam.machine_st.heap {
-            assert!(cell.get_forwarding_bit() != Some(true));
+            assert!(!cell.get_forwarding_bit());
         }
 
         assert_eq!(unmark_cell_bits!(wam.machine_st.heap[0]), atom_as_cell!(atom!("irrelevant stuff")));
@@ -773,7 +792,7 @@ mod tests {
         assert!(wam.machine_st.heap[8].get_mark_bit());
 
         for cell in &wam.machine_st.heap {
-            assert!(cell.get_forwarding_bit() != Some(true));
+            assert!(!cell.get_forwarding_bit());
         }
 
         assert_eq!(unmark_cell_bits!(wam.machine_st.heap[0]), atom_as_cell!(atom!("irrelevant stuff")));
@@ -803,7 +822,7 @@ mod tests {
         assert!(wam.machine_st.heap[8].get_mark_bit());
 
         for cell in &wam.machine_st.heap {
-            assert!(cell.get_forwarding_bit() != Some(true));
+            assert!(!cell.get_forwarding_bit());
         }
 
         assert_eq!(unmark_cell_bits!(wam.machine_st.heap[0]), atom_as_cell!(atom!("irrelevant stuff")));
@@ -922,7 +941,6 @@ mod tests {
         wam.machine_st.heap.push(list_loc_as_cell!(9));
         wam.machine_st.heap.push(heap_loc_as_cell!(9));
         wam.machine_st.heap.push(empty_list_as_cell!());
-
         wam.machine_st.heap.push(attr_var_as_cell!(11)); // linked from 7.
         wam.machine_st.heap.push(heap_loc_as_cell!(12));
 
@@ -1096,5 +1114,88 @@ mod tests {
         assert_eq!(unmark_cell_bits!(wam.machine_st.heap[0]), atom_as_cell!(atom!("f"), 2));
         assert_eq!(unmark_cell_bits!(wam.machine_st.heap[1]), heap_loc_as_cell!(1));
         assert_eq!(unmark_cell_bits!(wam.machine_st.heap[2]), heap_loc_as_cell!(1));
+
+        wam.machine_st.heap.clear();
+
+        // representation of one of the heap terms as in issue #1384.
+
+        wam.machine_st.heap.push(list_loc_as_cell!(1));
+        wam.machine_st.heap.push(empty_list_as_cell!());
+        wam.machine_st.heap.push(list_loc_as_cell!(3));
+        wam.machine_st.heap.push(heap_loc_as_cell!(0));
+        wam.machine_st.heap.push(heap_loc_as_cell!(0));
+        wam.machine_st.heap.push(empty_list_as_cell!());
+        wam.machine_st.heap.push(heap_loc_as_cell!(2));
+
+        mark_cells(&mut wam.machine_st.heap, list_loc_as_cell!(5));
+
+        all_cells_marked_and_unforwarded(&wam.machine_st.heap);
+
+        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[0]), list_loc_as_cell!(1));
+        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[1]), empty_list_as_cell!());
+        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[2]), list_loc_as_cell!(3));
+        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[3]), heap_loc_as_cell!(0));
+        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[4]), heap_loc_as_cell!(0));
+        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[5]), empty_list_as_cell!());
+        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[6]), heap_loc_as_cell!(2));
+
+        wam.machine_st.heap.clear();
+
+        // representation of one of the heap terms as in issue #1384.
+
+        wam.machine_st.heap.push(list_loc_as_cell!(7));
+        wam.machine_st.heap.push(heap_loc_as_cell!(0));
+        wam.machine_st.heap.push(list_loc_as_cell!(3));  // A = [B|[]].
+        wam.machine_st.heap.push(list_loc_as_cell!(5));  // B = [A|A].
+        wam.machine_st.heap.push(empty_list_as_cell!());
+        wam.machine_st.heap.push(heap_loc_as_cell!(2));
+        wam.machine_st.heap.push(heap_loc_as_cell!(2));
+        wam.machine_st.heap.push(empty_list_as_cell!()); // C = [[]|B].
+        wam.machine_st.heap.push(heap_loc_as_cell!(3));
+
+        mark_cells(&mut wam.machine_st.heap, heap_loc_as_cell!(0));
+
+        assert!(wam.machine_st.heap[0].get_mark_bit());
+        assert!(!wam.machine_st.heap[1].get_mark_bit());
+
+        all_cells_marked_and_unforwarded(&wam.machine_st.heap[2 ..]);
+
+        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[0]), list_loc_as_cell!(7));
+        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[1]), heap_loc_as_cell!(0));
+        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[2]), list_loc_as_cell!(3));
+        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[3]), list_loc_as_cell!(5));
+        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[4]), empty_list_as_cell!());
+        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[5]), heap_loc_as_cell!(2));
+        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[6]), heap_loc_as_cell!(2));
+        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[7]), empty_list_as_cell!());
+        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[8]), heap_loc_as_cell!(3));
+
+        wam.machine_st.heap.clear();
+
+        wam.machine_st.heap.push(str_loc_as_cell!(1));
+        wam.machine_st.heap.push(atom_as_cell!(atom!("+"), 2));
+        wam.machine_st.heap.push(str_loc_as_cell!(4));
+        wam.machine_st.heap.push(fixnum_as_cell!(Fixnum::build_with(2)));
+        wam.machine_st.heap.push(atom_as_cell!(atom!("-"), 2));
+        wam.machine_st.heap.push(str_loc_as_cell!(7));
+        wam.machine_st.heap.push(fixnum_as_cell!(Fixnum::build_with(1)));
+        wam.machine_st.heap.push(atom_as_cell!(atom!("+"), 2));
+        wam.machine_st.heap.push(fixnum_as_cell!(Fixnum::build_with(3)));
+        wam.machine_st.heap.push(fixnum_as_cell!(Fixnum::build_with(4)));
+
+        mark_cells(&mut wam.machine_st.heap, heap_loc_as_cell!(0));
+
+        all_cells_marked_and_unforwarded(&wam.machine_st.heap);
+
+        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[0]), str_loc_as_cell!(1));
+        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[1]), atom_as_cell!(atom!("+"), 2));
+        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[2]), str_loc_as_cell!(4));
+        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[3]), fixnum_as_cell!(Fixnum::build_with(2)));
+        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[4]), atom_as_cell!(atom!("-"), 2));
+        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[5]), str_loc_as_cell!(7));
+        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[6]), fixnum_as_cell!(Fixnum::build_with(1)));
+        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[7]), atom_as_cell!(atom!("+"), 2));
+        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[8]), fixnum_as_cell!(Fixnum::build_with(3)));
+        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[9]), fixnum_as_cell!(Fixnum::build_with(4)));
     }
 }

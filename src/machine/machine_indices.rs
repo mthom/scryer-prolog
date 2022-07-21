@@ -4,18 +4,18 @@ use crate::arena::*;
 use crate::atom_table::*;
 use crate::fixtures::*;
 use crate::forms::*;
-use crate::instructions::*;
 use crate::machine::loader::*;
 use crate::machine::machine_state::*;
 use crate::machine::streams::Stream;
 
 use fxhash::FxBuildHasher;
 use indexmap::IndexMap;
+use modular_bitfield::{BitfieldSpecifier, bitfield};
+use modular_bitfield::specifiers::*;
 
-use std::cell::Cell;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
-use std::ops::Deref;
+use std::ops::{Deref, DerefMut};
 use std::rc::Rc;
 
 use crate::types::*;
@@ -59,9 +59,6 @@ impl PartialOrd<Ref> for HeapCellValue {
                 }
             }
             (HeapCellValueTag::AttrVar | HeapCellValueTag::Var, h1) => {
-            // _ if self.is_ref() => {
-            //     let h1 = self.get_value();
-
                 match r.get_tag() {
                     RefTag::StackCell => Some(Ordering::Less),
                     _ => {
@@ -77,52 +74,129 @@ impl PartialOrd<Ref> for HeapCellValue {
     }
 }
 
-#[derive(Debug, Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
-pub enum IndexPtr {
-    DynamicUndefined, // a predicate, declared as dynamic, whose location in code is as yet undefined.
-    DynamicIndex(usize),
-    Index(usize),
-    Undefined,
+#[derive(BitfieldSpecifier, Copy, Clone, Debug, PartialEq)]
+#[bits = 7]
+pub enum IndexPtrTag {
+    DynamicUndefined = 0b1000101, // a predicate, declared as dynamic, whose location in code is as yet undefined.
+    DynamicIndex = 0b1000110,
+    Index = 0b1000111,
+    Undefined = 0b1001000,
 }
 
-#[derive(Debug, Clone, Ord, PartialOrd, Eq, PartialEq)]
-pub struct CodeIndex(pub(crate) Rc<Cell<IndexPtr>>);
+#[bitfield]
+#[derive(Debug, Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub struct IndexPtr {
+    pub p: B56,
+    #[allow(unused)] m: bool,
+    pub tag: IndexPtrTag,
+}
 
-impl Deref for CodeIndex {
-    type Target = Cell<IndexPtr>;
+impl IndexPtr {
+    pub(crate) fn dynamic_undefined() -> Self {
+        IndexPtr::new()
+            .with_p(0)
+            .with_m(false)
+            .with_tag(IndexPtrTag::DynamicUndefined)
+    }
 
-    #[inline]
-    fn deref(&self) -> &Self::Target {
-        self.0.deref()
+    pub(crate) fn undefined() -> Self {
+        IndexPtr::new()
+            .with_p(0)
+            .with_m(false)
+            .with_tag(IndexPtrTag::Undefined)
+    }
+
+    pub(crate) fn dynamic_index(p: usize) -> Self {
+        IndexPtr::new()
+            .with_p(p as u64)
+            .with_m(false)
+            .with_tag(IndexPtrTag::DynamicIndex)
+    }
+
+    pub(crate) fn index(p: usize) -> Self {
+        IndexPtr::new()
+            .with_p(p as u64)
+            .with_m(false)
+            .with_tag(IndexPtrTag::Index)
+    }
+}
+
+#[derive(Debug, Clone, Copy, Ord, Hash, PartialOrd, Eq, PartialEq)]
+pub struct CodeIndex(TypedArenaPtr<IndexPtr>);
+
+const_assert!(std::mem::align_of::<CodeIndex>() == 8);
+
+impl From<CodeIndex> for UntypedArenaPtr {
+    #[inline(always)]
+    fn from(ptr: CodeIndex) -> UntypedArenaPtr {
+        unsafe { std::mem::transmute(ptr.0.as_ptr()) }
+    }
+}
+
+impl From<UntypedArenaPtr> for CodeIndex {
+    #[inline(always)]
+    fn from(ptr: UntypedArenaPtr) -> CodeIndex {
+        CodeIndex(TypedArenaPtr::new(ptr.get_ptr() as *mut IndexPtr))
+    }
+}
+
+impl From<TypedArenaPtr<IndexPtr>> for CodeIndex {
+    #[inline(always)]
+    fn from(ptr: TypedArenaPtr<IndexPtr>) -> CodeIndex {
+        CodeIndex(ptr)
     }
 }
 
 impl CodeIndex {
     #[inline]
-    pub(super) fn new(ptr: IndexPtr) -> Self {
-        CodeIndex(Rc::new(Cell::new(ptr)))
+    pub(crate) fn new(ptr: IndexPtr, arena: &mut Arena) -> Self {
+        CodeIndex(arena_alloc!(ptr, arena))
     }
 
-    #[inline]
+    #[inline(always)]
+    pub(crate) fn default(arena: &mut Arena) -> Self {
+        CodeIndex::new(IndexPtr::undefined(), arena)
+    }
+
+    #[inline(always)]
     pub(crate) fn is_undefined(&self) -> bool {
-        match self.0.get() {
-            IndexPtr::Undefined => true, // | &IndexPtr::DynamicUndefined => true,
+        match self.0.tag() {
+            IndexPtrTag::Undefined => true, // | &IndexPtr::DynamicUndefined => true,
             _ => false,
         }
     }
 
     pub(crate) fn local(&self) -> Option<usize> {
-        match self.0.get() {
-            IndexPtr::Index(i) => Some(i),
-            IndexPtr::DynamicIndex(i) => Some(i),
+        match self.0.tag() {
+            IndexPtrTag::Index => Some(self.0.p() as usize),
+            IndexPtrTag::DynamicIndex => Some(self.0.p() as usize),
             _ => None,
         }
     }
-}
 
-impl Default for CodeIndex {
-    fn default() -> Self {
-        CodeIndex(Rc::new(Cell::new(IndexPtr::Undefined)))
+    #[inline(always)]
+    pub(crate) fn get(&self) -> IndexPtr {
+        *self.0.deref()
+    }
+
+    #[inline(always)]
+    pub(crate) fn set(&mut self, value: IndexPtr) {
+        *self.0.deref_mut() = value;
+    }
+
+    #[inline(always)]
+    pub(crate) fn get_tag(self) -> IndexPtrTag {
+        self.0.tag()
+    }
+
+    #[inline(always)]
+    pub(crate) fn replace(&mut self, value: IndexPtr) -> IndexPtr {
+        std::mem::replace(self.0.deref_mut(), value)
+    }
+
+    #[inline(always)]
+    pub(crate) fn as_ptr(&self) -> *const IndexPtr {
+        self.0.as_ptr()
     }
 }
 
@@ -269,19 +343,22 @@ impl IndexStore {
         module: Atom,
     ) -> Option<CodeIndex> {
         if module == atom!("user") {
-            match ClauseType::from(name, arity) {
-                ClauseType::Named(arity, name, _) => self.code_dir.get(&(name, arity)).cloned(),
-                _ => None,
-            }
+            /*match ClauseType::from(name, arity) {
+                ClauseType::Named(arity, name, _) => */
+            self.code_dir.get(&(name, arity)).cloned()
+            /*    _ => None,
+            }*/
         } else {
             self.modules
                 .get(&module)
-                .and_then(|module| match ClauseType::from(name, arity) {
-                    ClauseType::Named(arity, name, _) => {
+                .and_then(|module|/* |module| match ClauseType::from(name, arity) {
+                    ClauseType::Named(arity, name, _) => { */
                         module.code_dir.get(&(name, arity)).cloned()
+                    /*
                     }
                     _ => None,
-                })
+                } */
+                )
         }
     }
 

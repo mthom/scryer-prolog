@@ -1,6 +1,5 @@
 use crate::atom_table::*;
 use crate::codegen::*;
-use crate::debray_allocator::*;
 use crate::forms::*;
 use crate::indexing::{merge_clause_index, remove_index};
 use crate::instructions::*;
@@ -11,8 +10,6 @@ use crate::machine::preprocessor::*;
 use crate::machine::term_stream::*;
 use crate::machine::*;
 use crate::parser::ast::*;
-
-use slice_deque::{sdeq, SliceDeque};
 
 use std::cell::Cell;
 use std::collections::VecDeque;
@@ -49,13 +46,13 @@ pub(super) fn bootstrapping_compile(
 
 // throw errors if declaration or query found.
 pub(super) fn compile_relation(
-    cg: &mut CodeGenerator<DebrayAllocator>,
+    cg: &mut CodeGenerator,
     tl: &TopLevel,
 ) -> Result<Code, CompilationError> {
     match tl {
         &TopLevel::Query(_) => Err(CompilationError::ExpectedRel),
         &TopLevel::Predicate(ref clauses) => cg.compile_predicate(&clauses),
-        &TopLevel::Fact(ref fact, ..) => Ok(cg.compile_fact(fact)),
+        &TopLevel::Fact(ref fact, ..) => cg.compile_fact(fact),
         &TopLevel::Rule(ref rule, ..) => cg.compile_rule(rule),
     }
 }
@@ -89,7 +86,7 @@ pub(super) fn compile_appendix(
             non_counted_bt,
         };
 
-        let mut cg = CodeGenerator::<DebrayAllocator>::new(atom_tbl, settings);
+        let mut cg = CodeGenerator::new(atom_tbl, settings);
 
         let tl = queue.pop_front().unwrap();
         let decl_code = compile_relation(&mut cg, &tl)?;
@@ -409,7 +406,7 @@ fn merge_indexed_subsequences(
 
                 *o = 0;
 
-                return Some(IndexPtr::Index(outer_threaded_choice_instr_loc + 1));
+                return Some(IndexPtr::index(outer_threaded_choice_instr_loc + 1));
             }
             _ => {}
         },
@@ -425,8 +422,8 @@ fn delete_from_skeleton(
     target_pos: usize,
     retraction_info: &mut RetractionInfo,
 ) -> usize {
-    let clause_index_info = skeleton.clauses.remove(target_pos);
-    let clause_clause_loc = skeleton.core.clause_clause_locs.remove(target_pos);
+    let clause_index_info = skeleton.clauses.remove(target_pos).unwrap();
+    let clause_clause_loc = skeleton.core.clause_clause_locs.remove(target_pos).unwrap();
 
     if target_pos < skeleton.core.clause_assert_margin {
         skeleton.core.clause_assert_margin -= 1;
@@ -788,7 +785,7 @@ fn remove_non_leading_clause(
 
                     *o = 0;
 
-                    Some(IndexPtr::Index(preceding_choice_instr_loc + 1))
+                    Some(IndexPtr::index(preceding_choice_instr_loc + 1))
                 }
                 _ => {
                     unreachable!();
@@ -823,7 +820,7 @@ fn finalize_retract(
             retraction_info,
             &compilation_target,
             key,
-            &code_index,
+            code_index,
             index_ptr,
         );
     }
@@ -852,9 +849,9 @@ fn remove_leading_unindexed_clause(
                     retraction_info,
                 );
 
-                Some(IndexPtr::Index(index_ptr))
+                Some(IndexPtr::index(index_ptr))
             } else {
-                Some(IndexPtr::DynamicUndefined)
+                Some(IndexPtr::dynamic_undefined())
             }
         }
         _ => {
@@ -887,7 +884,7 @@ fn prepend_compiled_clause(
     global_clock_tick: usize,
 ) -> IndexPtr {
     let clause_loc = code.len();
-    let mut prepend_queue = sdeq![];
+    let mut prepend_queue = VecDeque::new();
 
     let target_arg_num = skeleton.clauses[0].opt_arg_index_key.arg_num();
     let head_arg_num = skeleton.clauses[1].opt_arg_index_key.arg_num();
@@ -995,7 +992,7 @@ fn prepend_compiled_clause(
 
                 merge_clause_index(
                     target_indexing_line,
-                    &mut skeleton.clauses,
+                    skeleton.clauses.make_contiguous(),
                     &skeleton.core.retracted_dynamic_clauses,
                     clause_loc + 2, // == skeleton.clauses[0].clause_start
                     AppendOrPrepend::Prepend,
@@ -1134,9 +1131,9 @@ fn prepend_compiled_clause(
     };
 
     if skeleton.core.is_dynamic {
-        IndexPtr::DynamicIndex(clause_loc)
+        IndexPtr::dynamic_index(clause_loc)
     } else {
-        IndexPtr::Index(clause_loc)
+        IndexPtr::index(clause_loc)
     }
 }
 
@@ -1189,7 +1186,7 @@ fn append_compiled_clause(
 
             merge_clause_index(
                 target_indexing_line,
-                &mut skeleton.clauses[lower_bound..],
+                &mut skeleton.clauses.make_contiguous()[lower_bound..],
                 &skeleton.core.retracted_dynamic_clauses,
                 clause_loc,
                 AppendOrPrepend::Append,
@@ -1212,7 +1209,11 @@ fn append_compiled_clause(
                 );
 
                 if lower_bound == 0 && !skeleton.core.is_dynamic {
-                    code_ptr_opt = Some(target_pos_clause_start);
+                    code_ptr_opt = Some(if index_loc < target_pos_clause_start {
+                        index_loc
+                    } else {
+                        target_pos_clause_start
+                    });
                 }
             }
 
@@ -1267,9 +1268,9 @@ fn append_compiled_clause(
 
     code_ptr_opt.map(|p| {
         if skeleton.core.is_dynamic {
-            IndexPtr::DynamicIndex(p)
+            IndexPtr::dynamic_index(p)
         } else {
-            IndexPtr::Index(p)
+            IndexPtr::index(p)
         }
     })
 }
@@ -1305,8 +1306,8 @@ fn print_overwrite_warning(
         }
     }
 
-    match code_ptr {
-        IndexPtr::DynamicUndefined | IndexPtr::Undefined => return,
+    match code_ptr.tag() {
+        IndexPtrTag::DynamicUndefined | IndexPtrTag::Undefined => return,
         _ if is_dynamic => return,
         _ => {}
     }
@@ -1338,12 +1339,12 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         term: Term,
         settings: CodeGenSettings,
     ) -> Result<StandaloneCompileResult, SessionError> {
-        let mut preprocessor = Preprocessor::new();
+        let mut preprocessor = Preprocessor::new(settings);
 
         let clause = self.try_term_to_tl(term, &mut preprocessor)?;
         let queue = preprocessor.parse_queue(self)?;
 
-        let mut cg = CodeGenerator::<DebrayAllocator>::new(
+        let mut cg = CodeGenerator::new(
             &mut LS::machine_st(&mut self.payload).atom_tbl,
             settings,
         );
@@ -1378,7 +1379,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         let mut code_ptr = code_len;
 
         let mut clauses = vec![];
-        let mut preprocessor = Preprocessor::new();
+        let mut preprocessor = Preprocessor::new(settings);
 
         for term in predicates.predicates.drain(0..) {
             clauses.push(self.try_term_to_tl(term, &mut preprocessor)?);
@@ -1386,7 +1387,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
 
         let queue = preprocessor.parse_queue(self)?;
 
-        let mut cg = CodeGenerator::<DebrayAllocator>::new(
+        let mut cg = CodeGenerator::new(
             &mut LS::machine_st(&mut self.payload).atom_tbl,
             settings,
         );
@@ -1402,7 +1403,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         )?;
 
         if settings.is_extensible {
-            let mut clause_clause_locs = sdeq![];
+            let mut clause_clause_locs = VecDeque::new();
 
             for clause_index_info in cg.skeleton.clauses.iter_mut() {
                 clause_index_info.clause_start += code_len;
@@ -1430,7 +1431,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     skeleton
                         .core
                         .clause_clause_locs
-                        .extend_from_slice(&clause_clause_locs[0..]);
+                        .extend(&clause_clause_locs.make_contiguous()[0..]);
 
                     self.payload.retraction_info
                         .push_record(RetractionRecord::SkeletonClauseTruncateBack(
@@ -1443,7 +1444,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     cg.skeleton
                       .core
                       .clause_clause_locs
-                      .extend_from_slice(&clause_clause_locs[0..]);
+                      .extend(&clause_clause_locs.make_contiguous()[0..]);
 
                     let skeleton = cg.skeleton;
 
@@ -1470,16 +1471,16 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         );
 
         let index_ptr = if settings.is_dynamic() {
-            IndexPtr::DynamicIndex(code_ptr)
+            IndexPtr::dynamic_index(code_ptr)
         } else {
-            IndexPtr::Index(code_ptr)
+            IndexPtr::index(code_ptr)
         };
 
         set_code_index(
             &mut self.payload.retraction_info,
             &predicates.compilation_target,
             key,
-            &code_index,
+            code_index,
             index_ptr,
         );
 
@@ -1491,7 +1492,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         &mut self,
         compilation_target: &CompilationTarget,
         key: &PredicateKey,
-        clause_clause_locs: SliceDeque<usize>,
+        mut clause_clause_locs: VecDeque<usize>,
     ) {
         let listing_src_file_name = self.listing_src_file_name();
 
@@ -1515,7 +1516,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
 
                 skeleton
                     .clause_clause_locs
-                    .extend_from_slice(&clause_clause_locs[0..]);
+                    .extend(&clause_clause_locs.make_contiguous()[0..]);
             }
             None => {
                 let mut skeleton = LocalPredicateSkeleton::new();
@@ -1703,7 +1704,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                         &mut self.payload.retraction_info,
                         &compilation_target,
                         key,
-                        &code_index,
+                        code_index,
                         new_code_ptr,
                     );
                 }
@@ -1744,7 +1745,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     &mut self.payload.retraction_info,
                     &compilation_target,
                     key,
-                    &code_index,
+                    code_index,
                     new_code_ptr,
                 );
 
@@ -1869,7 +1870,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                                 skeleton.clauses[target_pos].clause_start;
 
                             let index_ptr_opt = if target_pos == 0 {
-                                Some(IndexPtr::Index(clause_loc))
+                                Some(IndexPtr::index(clause_loc))
                             } else {
                                 None
                             };
@@ -1968,7 +1969,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                             code,
                             later_indexing_loc,
                             0..target_pos - lower_bound,
-                            &mut skeleton.clauses[lower_bound..],
+                            &mut skeleton.clauses.make_contiguous()[lower_bound..],
                             &skeleton.core.retracted_dynamic_clauses,
                             &mut self.payload.retraction_info,
                         );
@@ -1993,7 +1994,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                             code,
                             target_indexing_loc,
                             target_pos + 1 - lower_bound..skeleton.clauses.len() - lower_bound,
-                            &mut skeleton.clauses[lower_bound..],
+                            &mut skeleton.clauses.make_contiguous()[lower_bound..],
                             &skeleton.core.retracted_dynamic_clauses,
                             &mut self.payload.retraction_info,
                         );
@@ -2192,15 +2193,17 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         {
             Some(skeleton) if append_or_prepend.is_append() => {
                 let tail_num = skeleton.core.clause_clause_locs.len() - num_clause_predicates;
-                skeleton.core.clause_clause_locs[tail_num..]
+                skeleton.core.clause_clause_locs.make_contiguous()[tail_num..]
                     .iter()
                     .cloned()
                     .collect()
             }
-            Some(skeleton) => skeleton.core.clause_clause_locs[0..num_clause_predicates]
-                .iter()
-                .cloned()
-                .collect(),
+            Some(skeleton) => {
+                skeleton.core.clause_clause_locs.make_contiguous()[0..num_clause_predicates]
+                    .iter()
+                    .cloned()
+                    .collect()
+            }
             None => {
                 unreachable!()
             }
@@ -2381,13 +2384,15 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                 match self.wam_prelude.indices.modules.get_mut(&filename) {
                     Some(ref mut module) => {
                         let index_ptr = code_index.get();
-                        let code_index = module.code_dir.entry(key).or_insert(code_index);
+                        let code_index = module.code_dir.entry(key)
+                            .or_insert(code_index)
+                            .clone();
 
                         set_code_index(
                             &mut self.payload.retraction_info,
                             &CompilationTarget::Module(filename),
                             key,
-                            &code_index,
+                            code_index,
                             index_ptr,
                         );
                     }
@@ -2411,6 +2416,57 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                 AppendOrPrepend::Append,
             )?;
         }
+
+        Ok(())
+    }
+}
+
+// standalone functions for compiling auxiliary goals used by expand_goal.
+impl Machine {
+    pub(crate) fn get_or_insert_qualified_code_index(
+        &mut self,
+        module_name: HeapCellValue,
+        key: PredicateKey,
+    ) -> CodeIndex {
+        let mut loader: Loader<'_, LiveLoadAndMachineState<'_>> = Loader::new(
+            self,
+            LiveTermStream::new(ListingSource::User),
+        );
+
+        let module_name = if module_name.get_tag() == HeapCellValueTag::Atom {
+            cell_as_atom!(module_name)
+        } else {
+            atom!("user")
+        };
+
+        loader.get_or_insert_qualified_code_index(module_name, key)
+    }
+
+    pub(crate) fn compile_standalone_clause(
+        &mut self,
+        term_loc: RegType,
+        vars: &[Term],
+    ) -> Result<(), SessionError> {
+        let mut compile = || {
+            let mut loader: Loader<'_, LiveLoadAndMachineState<'_>> = Loader::new(
+                self,
+                LiveTermStream::new(ListingSource::User),
+            );
+
+            let term = loader.read_term_from_heap(term_loc)?;
+            let clause = build_rule_body(vars, term);
+
+            let settings = CodeGenSettings {
+                global_clock_tick: None,
+                is_extensible: false,
+                non_counted_bt: true,
+            };
+
+            loader.compile_standalone_clause(clause, settings)
+        };
+
+        let StandaloneCompileResult { clause_code, .. } = compile()?;
+        self.code.extend(clause_code.into_iter());
 
         Ok(())
     }

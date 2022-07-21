@@ -1,3 +1,4 @@
+
 # Scryer Prolog
 
 Scryer Prolog aims to become to ISO Prolog what GHC is to Haskell: an open
@@ -6,27 +7,6 @@ testbed for bleeding edge research in logic and constraint
 programming, which is itself written in a high-level language.
 
 ![Scryer Logo: Cryer](logo/scryer.png)
-
-# Rebis Development Branch
-
-![Art Card](logo/art_card.jpg)
-
-This is the Rebis Development Branch (rebis-dev). This iteration of
-Rebis contains sweeping changes to the instruction dispatch loop
-alongside a compacted heap representation. These changes are to
-enhance the performance and robustness of Scryer Prolog and to prepare
-for the introduction of a mark-compacting garbage collector.
-
-Several performance enhancing changes are due before rebis-dev will be
-considered ready for merging into master, among them:
-
-* Replacing choice points pivoting on inlined semi-deterministic predicates
-  (`atom`, `var`, etc) with if/else ladders
-* Inlining all built-ins and system call instructions
-* Greatly reducing the number of instructions used to compile disjunctives
-* Storing short atoms to heap cells without writing them to the atom table
-
-The rebis-dev branch should be built with **Rust 1.57 and up**.
 
 ## Phase 1
 
@@ -82,6 +62,12 @@ Extend Scryer Prolog to include the following, among other features:
   - [x] A simple sockets library representing TCP connections as streams.  
 - [x] Incremental compilation and loading process, newly written,
       primarily in Prolog.
+- [ ] Improvements to the WAM compiler and heap representation:
+  - [ ] Replacing choice points pivoting on inlined semi-deterministic predicates
+        (`atom`, `var`, etc) with if/else ladders. (_in progress_)
+  - [ ] Inlining all built-ins and system call instructions.
+  - [ ] Greatly reducing the number of instructions used to compile disjunctives.
+  - [ ] Storing short atoms to heap cells without writing them to the atom table.
 - [ ] A compacting garbage collector satisfying the five properties of
       "Precise Garbage Collection in Prolog." (_in progress_)
 - [ ] Mode declarations.
@@ -116,7 +102,7 @@ strings.
 
 ## Installing Scryer Prolog
 
-### Native Install (Unix Only)
+### Native Install
 
 First, install the latest stable version of
 [Rust](https://www.rust-lang.org/en-US/install.html) using your
@@ -127,20 +113,8 @@ Rust updated to the latest stable release; any existing Rust
 distribution should be uninstalled from your system before rustup is
 used.
 
-Scryer Prolog can be installed with cargo, like so:
-
-```
-$> cargo install scryer-prolog
-```
-
-cargo will download and install the libraries Scryer Prolog uses
-automatically from crates.io. You can find the `scryer-prolog`
-executable in `~/.cargo/bin`.
-
-Publishing Rust crates to crates.io and pushing to git are entirely
-distinct, independent processes, so to be sure you have the latest
-commit, it is recommended to clone directly from this git repository,
-which can be done as follows:
+Currently the only way to install the latest version of Scryer is to
+clone directly from this git repository, which can be done as follows:
 
 ```
 $> git clone https://github.com/mthom/scryer-prolog
@@ -151,7 +125,20 @@ $> cargo run [--release]
 The optional `--release` flag will perform various optimizations,
 producing a faster executable.
 
-### Docker Install (All Platforms)
+On Windows, Scryer Prolog is easier to build inside a [MSYS2](https://www.msys2.org/)
+environment as some crates may require native C compilation. However, 
+the resulting binary does not need MSYS2 to run. When executing Scryer in a shell, it is recommended to use a more advanced shell than mintty (the default MSYS2 shell). The [Windows Terminal](https://github.com/microsoft/terminal) works correctly.
+
+To build a Windows Installer, you'll need first Scryer Prolog compiled in release mode, then, with WiX Toolset installed, execute:
+```
+candle.exe scryer-prolog.wxs
+light.exe scryer-prolog.wixobj
+```
+It will generate a very basic MSI file which installs the main executable and a shortcut in the Start Menu. It can be installed with a double-click. To uninstall, go to the Control Panel and uninstall as usual.
+
+Scryer Prolog must be built with **Rust 1.57 and up**.
+
+### Docker Install
 
 First, install [Docker](https://docs.docker.com/get-docker/) on Linux,
 Windows, or Mac.
@@ -226,8 +213,14 @@ predicates it defines. For example, with the program shown above:
 
 Press `SPACE` to show further answers, if any exist. Press `RETURN`
 or&nbsp;`.` to abort the search and return to the
-toplevel&nbsp;prompt. Press&nbsp;`f` to see the next 5 answers, and
-`a` to see all answers. Press&nbsp;`h` to show a help message.
+toplevel&nbsp;prompt. Press&nbsp;`f` to see up to the next multiple of
+5 answers, and `a` to see all answers. Press&nbsp;`h` to show a help
+message.
+
+Use `TAB` to complete atoms and predicate names in queries. For
+instance, after consulting the program above, typing `decl` followed
+by&nbsp;`TAB` yields `declarative_world`. Press&nbsp;`TAB` repeatedly
+to cycle through alternative completions.
 
 To quit Scryer Prolog, use the standard predicate `halt/0`:
 
@@ -588,6 +581,9 @@ The modules that ship with Scryer&nbsp;Prolog are also called
 * [`tls`](src/lib/tls.pl)
   Predicates for negotiating TLS connections explicitly.
 * [`ugraphs`](src/lib/ugraphs.pl) Graph manipulation library
+* [`simplex`](src/lib/simplex.pl) Providing `assignment/2`,
+  `transportation/4` and other predicates for solving linear
+  programming problems.
 
 To use predicates provided by the `lists` library, write:
 

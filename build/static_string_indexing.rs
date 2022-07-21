@@ -170,7 +170,7 @@ pub fn index_static_strings(instruction_rs_path: &std::path::Path) -> TokenStrea
             #((#static_strs) => { Atom { index: #indices_iter } };)*
         }
 
-        static STATIC_ATOMS_MAP: phf::Map<&'static str, Atom> = phf::phf_map! {
+        pub static STATIC_ATOMS_MAP: phf::Map<&'static str, Atom> = phf::phf_map! {
             #(#static_strs => { Atom { index: #indices } },)*
         };
     }

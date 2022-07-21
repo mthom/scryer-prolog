@@ -1,10 +1,11 @@
 use crate::allocator::*;
 use crate::arena::*;
 use crate::atom_table::*;
-use crate::fixtures::*;
+use crate::debray_allocator::*;
 use crate::forms::*;
 use crate::instructions::*;
 use crate::iterators::*;
+use crate::targets::QueryInstruction;
 use crate::types::*;
 
 use crate::parser::ast::*;
@@ -12,7 +13,6 @@ use crate::parser::rug::ops::PowAssign;
 use crate::parser::rug::{Assign, Integer, Rational};
 
 use crate::machine::machine_errors::*;
-use crate::machine::machine_indices::*;
 
 use ordered_float::*;
 
@@ -64,21 +64,24 @@ impl<'a> ArithInstructionIterator<'a> {
     fn from(term: &'a Term) -> Result<Self, ArithmeticError> {
         let state = match term {
             Term::AnonVar => return Err(ArithmeticError::UninstantiatedVar),
-            Term::Clause(cell, name, terms) => match ClauseType::from(*name, terms.len()) {
+            Term::Clause(cell, name, terms) => {
+                TermIterState::Clause(Level::Shallow, 0, cell, *name, terms)
+            }
+            /* match ClauseType::from(*name, terms.len()) {
                 ct @ ClauseType::Named(..) => {
                     Ok(TermIterState::Clause(Level::Shallow, 0, cell, ct, terms))
                 }
-                ClauseType::Inlined(InlinedClauseType::IsFloat(_)) => {
-                    let ct = ClauseType::Named(1, atom!("float"), CodeIndex::default());
+                ct @ ClauseType::Inlined(InlinedClauseType::IsFloat(_)) => {
+                    // let ct = ClauseType::Named(1, atom!("float"), CodeIndex::default());
                     Ok(TermIterState::Clause(Level::Shallow, 0, cell, ct, terms))
                 }
                 _ => Err(ArithmeticError::NonEvaluableFunctor(
                     Literal::Atom(*name),
                     terms.len(),
                 )),
-            }?,
+            }?,*/
             Term::Literal(cell, cons) => TermIterState::Literal(Level::Shallow, cell, cons),
-            Term::Cons(..) | Term::PartialString(..) => {
+            Term::Cons(..) | Term::PartialString(..) | Term::CompleteString(..) => {
                 return Err(ArithmeticError::NonEvaluableFunctor(
                     Literal::Atom(atom!(".")),
                     2,
@@ -107,29 +110,26 @@ impl<'a> Iterator for ArithInstructionIterator<'a> {
         while let Some(iter_state) = self.state_stack.pop() {
             match iter_state {
                 TermIterState::AnonVar(_) => return Some(Err(ArithmeticError::UninstantiatedVar)),
-                TermIterState::Clause(lvl, child_num, cell, ct, subterms) => {
+                TermIterState::Clause(lvl, child_num, cell, name, subterms) => {
                     let arity = subterms.len();
 
                     if child_num == arity {
-                        return Some(Ok(ArithTermRef::Op(ct.name(), arity)));
+                        return Some(Ok(ArithTermRef::Op(name, arity)));
                     } else {
                         self.state_stack.push(TermIterState::Clause(
                             lvl,
                             child_num + 1,
                             cell,
-                            ct,
+                            name,
                             subterms,
                         ));
 
-                        self.push_subterm(lvl, &subterms[child_num]);
+                        self.push_subterm(lvl.child_level(), &subterms[child_num]);
                     }
                 }
                 TermIterState::Literal(_, _, c) => return Some(Ok(ArithTermRef::Literal(c))),
                 TermIterState::Var(lvl, cell, var) => {
-                    // the expression is the second argument of an
-                    // is/2 but the iterator can't see that, so the
-                    // level needs to be demoted manually.
-                    return Some(Ok(ArithTermRef::Var(lvl.child_level(), cell, var.clone())));
+                    return Some(Ok(ArithTermRef::Var(lvl, cell, var.clone())));
                 }
                 _ => {
                     return Some(Err(ArithmeticError::NonEvaluableFunctor(
@@ -145,8 +145,8 @@ impl<'a> Iterator for ArithInstructionIterator<'a> {
 }
 
 #[derive(Debug)]
-pub(crate) struct ArithmeticEvaluator<'a, TermMarker> {
-    marker: &'a mut TermMarker,
+pub(crate) struct ArithmeticEvaluator<'a> {
+    marker: &'a mut DebrayAllocator,
     interm: Vec<ArithmeticTerm>,
     interm_c: usize,
 }
@@ -169,16 +169,16 @@ fn push_literal(interm: &mut Vec<ArithmeticTerm>, c: &Literal) -> Result<(), Ari
     match c {
         Literal::Fixnum(n) => interm.push(ArithmeticTerm::Number(Number::Fixnum(*n))),
         Literal::Integer(n) => interm.push(ArithmeticTerm::Number(Number::Integer(*n))),
-        Literal::Float(n) => interm.push(ArithmeticTerm::Number(Number::Float(***n))),
+        Literal::Float(n) => interm.push(ArithmeticTerm::Number(Number::Float(*n.as_ptr()))),
         Literal::Rational(n) => interm.push(ArithmeticTerm::Number(Number::Rational(*n))),
         Literal::Atom(name) if name == &atom!("e") => interm.push(ArithmeticTerm::Number(
-            Number::Float(OrderedFloat(f64::consts::E)),
+            Number::Float(OrderedFloat(std::f64::consts::E))
         )),
         Literal::Atom(name) if name == &atom!("pi") => interm.push(ArithmeticTerm::Number(
-            Number::Float(OrderedFloat(f64::consts::PI)),
+            Number::Float(OrderedFloat(std::f64::consts::PI))
         )),
         Literal::Atom(name) if name == &atom!("epsilon") => interm.push(ArithmeticTerm::Number(
-            Number::Float(OrderedFloat(f64::EPSILON)),
+            Number::Float(OrderedFloat(std::f64::EPSILON))
         )),
         _ => return Err(ArithmeticError::NonEvaluableFunctor(*c, 0)),
     }
@@ -186,8 +186,8 @@ fn push_literal(interm: &mut Vec<ArithmeticTerm>, c: &Literal) -> Result<(), Ari
     Ok(())
 }
 
-impl<'a, TermMarker: Allocator> ArithmeticEvaluator<'a, TermMarker> {
-    pub(crate) fn new(marker: &'a mut TermMarker, target_int: usize) -> Self {
+impl<'a> ArithmeticEvaluator<'a> {
+    pub(crate) fn new(marker: &'a mut DebrayAllocator, target_int: usize) -> Self {
         ArithmeticEvaluator {
             marker,
             interm: Vec::new(),
@@ -315,10 +315,11 @@ impl<'a, TermMarker: Allocator> ArithmeticEvaluator<'a, TermMarker> {
         }
     }
 
-    pub(crate) fn eval(
+    pub(crate) fn compile_is(
         &mut self,
         src: &'a Term,
         term_loc: GenContext,
+        arg: usize,
     ) -> Result<ArithCont, ArithmeticError>
     {
         let mut code = vec![];
@@ -328,33 +329,24 @@ impl<'a, TermMarker: Allocator> ArithmeticEvaluator<'a, TermMarker> {
             match term_ref? {
                 ArithTermRef::Literal(c) => push_literal(&mut self.interm, c)?,
                 ArithTermRef::Var(lvl, cell, name) => {
-                    let r = if cell.get().norm().reg_num() == 0 {
-                        let mut getter = || {
-                            use crate::targets::QueryInstruction;
+                    let r = if lvl == Level::Shallow {
+                        self.marker.mark_non_callable(
+                            name.clone(),
+                            arg,
+                            term_loc,
+                            cell,
+                            &mut code,
+                        )
+                    } else if term_loc.is_last() || cell.get().norm().reg_num() == 0 {
+                        self.marker.mark_var::<QueryInstruction>(
+                            name.clone(),
+                            lvl,
+                            cell,
+                            term_loc,
+                            &mut code,
+                        );
 
-                            loop {
-                                match self.marker.bindings().get(&name) {
-                                    Some(&VarData::Temp(_, t, _)) if t != 0 =>
-                                        return RegType::Temp(t),
-                                    Some(&VarData::Perm(p)) if p != 0 =>
-                                        return RegType::Perm(p),
-                                    _ => {
-                                        self.marker.mark_var::<QueryInstruction>(
-                                            name.clone(),
-                                            lvl,
-                                            cell,
-                                            term_loc,
-                                            &mut code,
-                                        );
-                                    }
-                                }
-                            }
-                        };
-
-                        getter()
-                        /*
-                         _ => return Err(ArithmeticError::UninstantiatedVar),
-                         */
+                        self.marker.get_binding(&name).unwrap()
                     } else {
                         cell.get().norm()
                     };
@@ -374,14 +366,36 @@ impl<'a, TermMarker: Allocator> ArithmeticEvaluator<'a, TermMarker> {
 // integer division rounding function -- 9.1.3.1.
 pub(crate) fn rnd_i<'a>(n: &'a Number, arena: &mut Arena) -> Number {
     match n {
-        &Number::Integer(_) | &Number::Fixnum(_) => *n,
-        &Number::Float(OrderedFloat(f)) => fixnum!(Number, f.floor() as i64, arena),
+        &Number::Integer(i) => {
+            if let Some(n) = i.to_i64() {
+                fixnum!(Number, n, arena)
+            } else {
+                *n
+            }
+        }
+        &Number::Fixnum(_) => *n,
+        &Number::Float(f) => {
+            let f = f.floor();
+
+            const I64_MIN_TO_F: OrderedFloat<f64> = OrderedFloat(i64::MIN as f64);
+            const I64_MAX_TO_F: OrderedFloat<f64> = OrderedFloat(i64::MAX as f64);
+
+            if I64_MIN_TO_F <= f && f <= I64_MAX_TO_F {
+                fixnum!(Number, f.into_inner() as i64, arena)
+            } else {
+                Number::Integer(arena_alloc!(Integer::from_f64(f.into_inner()).unwrap(), arena))
+            }
+        }
         &Number::Rational(ref r) => {
             let r_ref = r.fract_floor_ref();
             let (mut fract, mut floor) = (Rational::new(), Integer::new());
             (&mut fract, &mut floor).assign(r_ref);
 
-            Number::Integer(arena_alloc!(floor, arena))
+            if let Some(floor) = floor.to_i64() {
+                fixnum!(Number, floor, arena)
+            } else {
+                Number::Integer(arena_alloc!(floor, arena))
+            }
         }
     }
 }
@@ -404,23 +418,14 @@ pub(crate) fn rnd_f(n: &Number) -> f64 {
 }
 
 // floating point result function -- 9.1.4.2.
-pub(crate) fn result_f<Round>(n: &Number, round: Round) -> Result<f64, EvalError>
-where
-    Round: Fn(&Number) -> f64,
-{
-    let f = rnd_f(n);
-    classify_float(f, round)
+pub(crate) fn result_f(n: &Number) -> Result<f64, EvalError> {
+    classify_float(rnd_f(n))
 }
 
-fn classify_float<Round>(f: f64, round: Round) -> Result<f64, EvalError>
-where
-    Round: Fn(&Number) -> f64,
-{
+fn classify_float(f: f64) -> Result<f64, EvalError> {
     match f.classify() {
-        FpCategory::Normal | FpCategory::Zero => Ok(round(&Number::Float(OrderedFloat(f)))),
+        FpCategory::Normal | FpCategory::Zero => Ok(f),
         FpCategory::Infinite => {
-            let f = round(&Number::Float(OrderedFloat(f)));
-
             if OrderedFloat(f) == OrderedFloat(f64::MAX) {
                 Ok(f)
             } else {
@@ -428,33 +433,33 @@ where
             }
         }
         FpCategory::Nan => Err(EvalError::Undefined),
-        _ => Ok(round(&Number::Float(OrderedFloat(f)))),
+        _ => Ok(f)
     }
 }
 
 #[inline]
 pub(crate) fn float_fn_to_f(n: i64) -> Result<f64, EvalError> {
-    classify_float(n as f64, rnd_f)
+    classify_float(n as f64)
 }
 
 #[inline]
 pub(crate) fn float_i_to_f(n: &Integer) -> Result<f64, EvalError> {
-    classify_float(n.to_f64(), rnd_f)
+    classify_float(n.to_f64())
 }
 
 #[inline]
 pub(crate) fn float_r_to_f(r: &Rational) -> Result<f64, EvalError> {
-    classify_float(r.to_f64(), rnd_f)
+    classify_float(r.to_f64())
 }
 
 #[inline]
 pub(crate) fn add_f(f1: f64, f2: f64) -> Result<OrderedFloat<f64>, EvalError> {
-    Ok(OrderedFloat(classify_float(f1 + f2, rnd_f)?))
+    Ok(OrderedFloat(classify_float(f1 + f2)?))
 }
 
 #[inline]
 pub(crate) fn mul_f(f1: f64, f2: f64) -> Result<OrderedFloat<f64>, EvalError> {
-    Ok(OrderedFloat(classify_float(f1 * f2, rnd_f)?))
+    Ok(OrderedFloat(classify_float(f1 * f2)?))
 }
 
 #[inline]
@@ -462,7 +467,7 @@ fn div_f(f1: f64, f2: f64) -> Result<OrderedFloat<f64>, EvalError> {
     if FpCategory::Zero == f2.classify() {
         Err(EvalError::ZeroDivisor)
     } else {
-        Ok(OrderedFloat(classify_float(f1 / f2, rnd_f)?))
+        Ok(OrderedFloat(classify_float(f1 / f2)?))
     }
 }
 
@@ -672,9 +677,6 @@ impl TryFrom<HeapCellValue> for Number {
         read_heap_cell!(value,
            (HeapCellValueTag::Cons, c) => {
                match_untyped_arena_ptr!(c,
-                  (ArenaHeaderTag::F64, n) => {
-                      Ok(Number::Float(*n))
-                  }
                   (ArenaHeaderTag::Integer, n) => {
                       Ok(Number::Integer(n))
                   }
@@ -687,7 +689,7 @@ impl TryFrom<HeapCellValue> for Number {
                )
            }
            (HeapCellValueTag::F64, n) => {
-               Ok(Number::Float(**n))
+               Ok(Number::Float(*n))
            }
            (HeapCellValueTag::Fixnum, n) => {
                Ok(Number::Fixnum(n))

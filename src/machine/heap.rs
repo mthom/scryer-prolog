@@ -1,12 +1,12 @@
 use crate::arena::*;
 use crate::atom_table::*;
 use crate::forms::*;
+use crate::machine::machine_indices::*;
 use crate::machine::partial_string::*;
 use crate::parser::ast::*;
 use crate::types::*;
 
-use ordered_float::OrderedFloat;
-use rug::{Integer, Rational};
+use crate::parser::rug::{Integer, Rational};
 
 use std::convert::TryFrom;
 
@@ -18,6 +18,9 @@ impl From<Literal> for HeapCellValue {
         match literal {
             Literal::Atom(name) => atom_as_cell!(name),
             Literal::Char(c) => char_as_cell!(c),
+            Literal::CodeIndex(ptr) => {
+                untyped_arena_ptr_as_cell!(UntypedArenaPtr::from(ptr))
+            }
             Literal::Fixnum(n) => fixnum_as_cell!(n),
             Literal::Integer(bigint_ptr) => {
                 typed_arena_ptr_as_cell!(bigint_ptr)
@@ -25,7 +28,7 @@ impl From<Literal> for HeapCellValue {
             Literal::Rational(bigint_ptr) => {
                 typed_arena_ptr_as_cell!(bigint_ptr)
             }
-            Literal::Float(f) => HeapCellValue::from(f),
+            Literal::Float(f) => HeapCellValue::from(f.as_ptr()),
             Literal::String(s) => {
                 if s == atom!("") {
                     empty_list_as_cell!()
@@ -56,7 +59,7 @@ impl TryFrom<HeapCellValue> for Literal {
                 Ok(Literal::Fixnum(n))
             }
             (HeapCellValueTag::F64, f) => {
-                Ok(Literal::Float(f))
+                Ok(Literal::Float(f.as_offset()))
             }
             (HeapCellValueTag::Cons, cons_ptr) => {
                 match_untyped_arena_ptr!(cons_ptr,
@@ -66,9 +69,8 @@ impl TryFrom<HeapCellValue> for Literal {
                      (ArenaHeaderTag::Rational, n) => {
                          Ok(Literal::Rational(n))
                      }
-                     (ArenaHeaderTag::F64, f) => {
-                         // remove this redundancy.
-                         Ok(Literal::Float(F64Ptr(f)))
+                     (ArenaHeaderTag::IndexPtr, _ip) => {
+                         Ok(Literal::CodeIndex(CodeIndex::from(cons_ptr)))
                      }
                      _ => {
                          Err(())

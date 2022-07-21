@@ -1,20 +1,11 @@
 fn main() {
-    use nix::sys::signal;
+    use std::sync::atomic::Ordering;
     use scryer_prolog::*;
 
-    let handler = signal::SigHandler::Handler(handle_sigint);
-    unsafe { signal::signal(signal::Signal::SIGINT, handler) }.unwrap();
+    ctrlc::set_handler(move || {
+        scryer_prolog::machine::INTERRUPT.store(true, Ordering::Relaxed);
+    }).unwrap();
 
     let mut wam = machine::Machine::new();
-
     wam.run_top_level();
-}
-
-pub extern "C" fn handle_sigint(signal: libc::c_int) {
-    use nix::sys::signal;
-    use std::sync::atomic::Ordering;
-    let signal = signal::Signal::from_c_int(signal).unwrap();
-    if signal == signal::Signal::SIGINT {
-        scryer_prolog::machine::INTERRUPT.store(true, Ordering::Relaxed);
-    }
 }

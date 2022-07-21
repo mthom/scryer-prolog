@@ -57,6 +57,7 @@ delegate_task([Arg0|Args], Goals0) :-
     ;   member(Arg0, ["-v", "--version"]) -> print_version
     ;   member(Arg0, ["-g", "--goal"]) -> gather_goal(g, Args, Goals0)
     ;   member(Arg0, ["-f"]) -> disable_init_file
+    ;   member(Arg0, ["--no-add-history"]) -> ignore_machine_arg
     ;   atom_chars(Mod, Arg0),
         catch(consult(Mod), E, print_exception(E))
     ),
@@ -73,7 +74,9 @@ print_help :-
     write('   -g, --goal GOAL        '),
     write('Run the query GOAL'), nl,
     write('   -f                     '),
-    write('Fast startup. Do not load initialization file (~/.scryerrc)'),nl,
+    write('Fast startup. Do not load initialization file (~/.scryerrc)'), nl,
+    write('   --no-add-history       '),
+    write('Prevent adding input to history file (~/.scryer_history)'), nl,
     % write('                        '),
     halt.
 
@@ -93,6 +96,8 @@ gather_goal(Type, Args0, Goals) :-
 
 disable_init_file :-
     asserta('disabled_init_file').
+
+ignore_machine_arg.
 
 arg_type(g).
 arg_type(t).
@@ -124,8 +129,8 @@ run_goals([g(Gs0)|Goals]) :-
     ),
     run_goals(Goals).
 run_goals([Goal|_]) :-
-    write('caught: '),
-    write(error(domain_error(arg_type, Goal), run_goals/1)), nl,
+    loader:write_error(error(domain_error(arg_type, Goal), run_goals/1)),
+    nl,
     halt.
 
 repl :-
@@ -167,7 +172,7 @@ instruction_match(Term, VarList) :-
     ;  Term = end_of_file ->
        halt
     ;
-    submit_query_and_print_results(Term, VarList)
+       submit_query_and_print_results(Term, VarList)
     ).
 
 
@@ -175,23 +180,26 @@ submit_query_and_print_results_(Term, VarList) :-
     '$get_b_value'(B),
     bb_put('$report_all', false),
     bb_put('$report_n_more', 0),
-    '$call'(Term),
+    call(user:Term),
     write_eqs_and_read_input(B, VarList),
     !.
 submit_query_and_print_results_(_, _) :-
+    (   bb_get('$answer_count', 0) ->
+        write('   ')
+    ;   true
+    ),
     write('false.'),
     nl.
 
 
-submit_query_and_print_results(Term0, VarList) :-
-    (  functor(Term0, call, _) ->
-       Term = Term0 % prevent pre-mature expansion of incomplete goal
-                    % in the first argument, which is done by call/N
-    ;  expand_goal(Term0, user, Term)
-    ),
-    setup_call_cleanup(bb_put('$first_answer', true),
-                       submit_query_and_print_results_(Term, VarList),
-                       bb_put('$first_answer', false)).
+submit_query_and_print_results(Term, VarList) :-
+    % (  functor(Term0, call, _) ->
+    %    Term = Term0 % prevent pre-mature expansion of incomplete goal
+    %                 % in the first argument, which is done by call/N
+    % ;  expand_goal(Term0, user, Term)
+    % ),
+    bb_put('$answer_count', 0),
+    submit_query_and_print_results_(Term, VarList).
 
 
 needs_bracketing(Value, Op) :-
@@ -293,14 +301,17 @@ write_eqs_and_read_input(B, VarList) :-
     append(Equations, AttrGoals, Goals),
     % one layer of depth added for (=/2) functor
     maplist(\Term^Vs^term_variables_under_max_depth(Term, 22, Vs), Equations, EquationVars),
+    % maplist(term_variables_under_max_depth(22), Equations, EquationVars),
     append([AttrGoalVars | EquationVars], Vars1),
     term_variables(Vars1, Vars2), % deduplicate vars of Vars1 but preserve their order.
     charsio:extend_var_list(Vars2, VarList, NewVarList0, fabricated),
-    (   bb_get('$first_answer', true) ->
-        write('   '),
-        bb_put('$first_answer', false)
+    bb_get('$answer_count', Count),
+    (   Count =:= 0 ->
+        write('   ')
     ;   true
     ),
+    Count1 is Count + 1,
+    bb_put('$answer_count', Count1),
     (  B0 == B ->
        (  Goals == [] ->
           write('true.'), nl
@@ -344,7 +355,9 @@ read_input(ThreadedGoals, NewVarList) :-
        bb_put('$report_all', true),
        nl, write(';  '), false
     ;  C = f ->
-       bb_put('$report_n_more', 5),
+       bb_get('$answer_count', Count),
+       More is 5 - Count mod 5,
+       bb_put('$report_n_more', More),
        nl, write(';  '), false
     ;  read_input(ThreadedGoals, NewVarList)
     ).
@@ -403,13 +416,12 @@ gather_equations([Var = Value | Pairs], OrigVarList, Goals) :-
 
 print_exception(E) :-
     (  E == error('$interrupt_thrown', repl) -> nl % print the
-    % exception on a
-    % newline to evade
-    % "^C".
+                                                   % exception on a
+                                                   % newline to evade
+                                                   % "^C".
     ;  true
     ),
-    write_term('caught: ', [quoted(false), max_depth(20)]),
-    writeq(E),
+    loader:write_error(E),
     nl.
 
 print_exception_with_check(E) :-

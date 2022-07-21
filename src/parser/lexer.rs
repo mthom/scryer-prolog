@@ -1,6 +1,6 @@
 use lexical::parse_lossy;
-use ordered_float::*;
 
+use crate::arena::ArenaAllocated;
 use crate::atom_table::*;
 pub use crate::machine::machine_state::*;
 use crate::parser::ast::*;
@@ -367,7 +367,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
         if hexadecimal_digit_char!(c) {
             self.escape_sequence_to_char(|c| hexadecimal_digit_char!(c), 16)
         } else {
-            Err(ParserError::UnexpectedChar(c, self.line_num, self.col_num))
+            Err(ParserError::IncompleteReduction(self.line_num, self.col_num))
         }
     }
 
@@ -400,11 +400,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                 },
             )
         } else {
-            // on failure, restore the token characters and backslash.
-            // self.reader.put_back_all(token.chars().map(Ok));
-            // self.reader.put_back(Ok('\\'));
-
-            Err(ParserError::UnexpectedChar(c, self.line_num, self.col_num))
+            Err(ParserError::IncompleteReduction(self.line_num, self.col_num))
         }
     }
 
@@ -637,12 +633,8 @@ impl<'a, R: CharRead> Lexer<'a, R> {
 
     fn vacate_with_float(&mut self, mut token: String) -> Result<Token, ParserError> {
         self.return_char(token.pop().unwrap());
-
-        let result = OrderedFloat(parse_lossy::<f64, _>(token.as_bytes())?);
-        Ok(Token::Literal(Literal::Float(arena_alloc!(
-            result,
-            &mut self.machine_st.arena
-        ))))
+        let n = parse_lossy::<f64, _>(token.as_bytes())?;
+        Ok(Token::Literal(Literal::from(float_alloc!(n, self.machine_st.arena))))
     }
 
     fn skip_underscore_in_number(&mut self) -> Result<char, ParserError> {
@@ -752,20 +744,18 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                             }
                         }
 
-                        let n = OrderedFloat(parse_lossy::<f64, _>(token.as_bytes())?);
-                        Ok(Token::Literal(Literal::Float(arena_alloc!(
-                            n,
-                            &mut self.machine_st.arena
-                        ))))
+                        let n = parse_lossy::<f64, _>(token.as_bytes())?;
+                        Ok(Token::Literal(Literal::from(
+                            float_alloc!(n, self.machine_st.arena)
+                        )))
                     } else {
                         return Ok(self.vacate_with_float(token)?);
                     }
                 } else {
-                    let n = OrderedFloat(parse_lossy::<f64, _>(token.as_bytes())?);
-                    Ok(Token::Literal(Literal::Float(arena_alloc!(
-                        n,
-                        &mut self.machine_st.arena
-                    ))))
+                    let n = parse_lossy::<f64, _>(token.as_bytes())?;
+                    Ok(Token::Literal(Literal::from(
+                        float_alloc!(n, self.machine_st.arena)
+                    )))
                 }
             } else {
                 self.return_char('.');

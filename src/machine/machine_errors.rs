@@ -257,6 +257,19 @@ impl MachineState {
         }
     }
 
+    pub(super) fn resource_error(&mut self, value: HeapCellValue) -> MachineError {
+        let stub = functor!(
+            atom!("resource_error"),
+            [atom(atom!("finite_memory")), cell(value)]
+        );
+
+        MachineError {
+            stub,
+            location: None,
+            from: ErrorProvenance::Received,
+        }
+    }
+
     pub(super) fn type_error<T: TypeError>(
         &mut self,
         valid_type: ValidType,
@@ -439,6 +452,9 @@ impl MachineState {
             SessionError::OpIsInfixAndPostFix(op) => {
                 self.permission_error(Permission::Create, atom!("operator"), functor!(op))
             }
+            SessionError::CompilationError(CompilationError::ExceededMaxArity) => {
+                self.representation_error(RepFlag::MaxArity)
+            }
             SessionError::CompilationError(err) => self.syntax_error(err),
             SessionError::PredicateNotMultifileOrDiscontiguous(compilation_target, key) => {
                 let functor_stub = functor_stub(key.0, key.1);
@@ -572,16 +588,12 @@ impl MachineError {
 pub enum CompilationError {
     Arithmetic(ArithmeticError),
     ParserError(ParserError),
-    // BadPendingByte,
     CannotParseCyclicTerm,
-    // ExpandedTermsListNotAList,
+    ExceededMaxArity,
     ExpectedRel,
-    // ExpectedTopLevelTerm,
     InadmissibleFact,
     InadmissibleQueryTerm,
     InconsistentEntry,
-    // InvalidDoubleQuotesDecl,
-    // InvalidHook,
     InvalidMetaPredicateDecl,
     InvalidModuleDecl,
     InvalidModuleExport,
@@ -618,31 +630,24 @@ impl CompilationError {
             &CompilationError::Arithmetic(..) => {
                 functor!(atom!("arithmetic_error"))
             }
-            // &CompilationError::BadPendingByte =>
-            //     functor!(atom_from_ss!("bad_pending_byte"), atom_tbl),
             &CompilationError::CannotParseCyclicTerm => {
                 functor!(atom!("cannot_parse_cyclic_term"))
             }
-            // &CompilationError::ExpandedTermsListNotAList =>
-            //     functor!(atom_tbl.build_with_static_str("expanded_terms_list_is_not_a_list")),
+            &CompilationError::ExceededMaxArity => {
+                functor!(atom!("exceeded_max_arity"))
+            }
             &CompilationError::ExpectedRel => {
                 functor!(atom!("expected_relation"))
             }
-            // &CompilationError::ExpectedTopLevelTerm =>
-            //     functor!(atom_from_ss!("expected_atom_or_cons_or_clause"), atom_tbl),
-            &CompilationError::InadmissibleFact => {
+            &CompilationError::InadmissibleFact => { // TODO: type_error(callable, _).
                 functor!(atom!("inadmissible_fact"))
             }
-            &CompilationError::InadmissibleQueryTerm => {
+            &CompilationError::InadmissibleQueryTerm => { // TODO: type_error(callable, _).
                 functor!(atom!("inadmissible_query_term"))
             }
             &CompilationError::InconsistentEntry => {
                 functor!(atom!("inconsistent_entry"))
             }
-            // &CompilationError::InvalidDoubleQuotesDecl =>
-            //     functor!(atom_from_ss!("invalid_double_quotes_declaration"), atom_tbl),
-            // &CompilationError::InvalidHook =>
-            //     functor!(atom_from_ss!("invalid_hook"), atom_tbl),
             &CompilationError::InvalidMetaPredicateDecl => {
                 functor!(atom!("invalid_meta_predicate_decl"))
             }
@@ -656,7 +661,8 @@ impl CompilationError {
                 functor!(atom!("no_such_module"), [atom(module_name)])
             }
             &CompilationError::InvalidRuleHead => {
-                functor!(atom!("invalid_head_of_rule"))
+                
+                functor!(atom!("invalid_head_of_rule")) // TODO: type_error(callable, _).
             }
             &CompilationError::InvalidUseModuleDecl => {
                 functor!(atom!("invalid_use_module_declaration"))
@@ -785,14 +791,14 @@ impl MachineState {
         let stub_gen = || functor_stub(atom!("sort"), 2);
 
         let list = self.store(self.deref(self.registers[1]));
-        let sorted = self.registers[2];
+        let sorted = self.store(self.deref(self.registers[2]));
 
         match BrentAlgState::detect_cycles(&self.heap, list) {
             CycleSearchResult::PartialList(..) => {
                 let err = self.instantiation_error();
                 return Err(self.error_form(err, stub_gen()))
             }
-            CycleSearchResult::NotList(..) => {
+            CycleSearchResult::NotList(..) | CycleSearchResult::Cyclic(_) => {
                 let err = self.type_error(ValidType::List, list);
                 return Err(self.error_form(err, stub_gen()));
             }
@@ -800,7 +806,7 @@ impl MachineState {
         };
 
         match BrentAlgState::detect_cycles(&self.heap, sorted) {
-            CycleSearchResult::NotList(..) if !sorted.is_var() => {
+            CycleSearchResult::NotList(..) | CycleSearchResult::Cyclic(_) if !sorted.is_var() => {
                 let err = self.type_error(ValidType::List, sorted);
                 Err(self.error_form(err, stub_gen()))
             }
@@ -812,7 +818,7 @@ impl MachineState {
         let stub_gen = || functor_stub(atom!("keysort"), 2);
 
         match BrentAlgState::detect_cycles(&self.heap, list) {
-            CycleSearchResult::NotList(..) if !list.is_var() => {
+            CycleSearchResult::NotList(..) | CycleSearchResult::Cyclic(_) if !list.is_var() => {
                 let err = self.type_error(ValidType::List, list);
                 Err(self.error_form(err, stub_gen()))
             }
@@ -878,7 +884,7 @@ impl MachineState {
                 let err = self.instantiation_error();
                 Err(self.error_form(err, stub_gen()))
             }
-            CycleSearchResult::NotList(..) => {
+            CycleSearchResult::NotList(..) | CycleSearchResult::Cyclic(_) => {
                 let err = self.type_error(ValidType::List, pairs);
                 Err(self.error_form(err, stub_gen()))
             }
@@ -902,9 +908,7 @@ pub enum ExistenceError {
 pub enum SessionError {
     CompilationError(CompilationError),
     CannotOverwriteBuiltIn(PredicateKey),
-    // CannotOverwriteImport(Atom),
     ExistenceError(ExistenceError),
-    // InvalidFileName(Atom),
     ModuleDoesNotContainExport(Atom, PredicateKey),
     ModuleCannotImportSelf(Atom),
     NamelessEntry,
