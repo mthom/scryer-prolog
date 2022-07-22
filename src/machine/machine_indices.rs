@@ -92,6 +92,7 @@ pub struct IndexPtr {
 }
 
 impl IndexPtr {
+    #[inline(always)]
     pub(crate) fn dynamic_undefined() -> Self {
         IndexPtr::new()
             .with_p(0)
@@ -99,6 +100,7 @@ impl IndexPtr {
             .with_tag(IndexPtrTag::DynamicUndefined)
     }
 
+    #[inline(always)]
     pub(crate) fn undefined() -> Self {
         IndexPtr::new()
             .with_p(0)
@@ -106,6 +108,7 @@ impl IndexPtr {
             .with_tag(IndexPtrTag::Undefined)
     }
 
+    #[inline(always)]
     pub(crate) fn dynamic_index(p: usize) -> Self {
         IndexPtr::new()
             .with_p(p as u64)
@@ -113,11 +116,28 @@ impl IndexPtr {
             .with_tag(IndexPtrTag::DynamicIndex)
     }
 
+    #[inline(always)]
     pub(crate) fn index(p: usize) -> Self {
         IndexPtr::new()
             .with_p(p as u64)
             .with_m(false)
             .with_tag(IndexPtrTag::Index)
+    }
+
+    #[inline(always)]
+    pub(crate) fn is_undefined(&self) -> bool {
+        match self.tag() {
+            IndexPtrTag::Undefined => true,
+            _ => false,
+        }
+    }
+
+    #[inline(always)]
+    pub(crate) fn is_dynamic_undefined(&self) -> bool {
+        match self.tag() {
+            IndexPtrTag::DynamicUndefined => true,
+            _ => false,
+        }
     }
 }
 
@@ -125,6 +145,22 @@ impl IndexPtr {
 pub struct CodeIndex(TypedArenaPtr<IndexPtr>);
 
 const_assert!(std::mem::align_of::<CodeIndex>() == 8);
+
+impl Deref for CodeIndex {
+    type Target = TypedArenaPtr<IndexPtr>;
+
+    #[inline(always)]
+    fn deref(&self) -> &TypedArenaPtr<IndexPtr> {
+        &self.0
+    }
+}
+
+impl DerefMut for CodeIndex {
+    #[inline(always)]
+    fn deref_mut(&mut self) -> &mut TypedArenaPtr<IndexPtr> {
+        &mut self.0
+    }
+}
 
 impl From<CodeIndex> for UntypedArenaPtr {
     #[inline(always)]
@@ -156,14 +192,6 @@ impl CodeIndex {
     #[inline(always)]
     pub(crate) fn default(arena: &mut Arena) -> Self {
         CodeIndex::new(IndexPtr::undefined(), arena)
-    }
-
-    #[inline(always)]
-    pub(crate) fn is_undefined(&self) -> bool {
-        match self.0.tag() {
-            IndexPtrTag::Undefined => true, // | &IndexPtr::DynamicUndefined => true,
-            _ => false,
-        }
     }
 
     pub(crate) fn local(&self) -> Option<usize> {
