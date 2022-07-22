@@ -66,7 +66,7 @@ impl<'ast> Visit<'ast> for StaticStrVisitor {
             if let Some(Lit::Str(string)) = m.parse_body::<Lit>().ok() {
                 self.static_strs.insert(string.value());
             }
-        } else if path.is_ident("read_heap_cell") {
+        } else if path.is_ident("read_heap_cell") || path.is_ident("match_untyped_arena_ptr") {
             if let Some(m) = m.parse_body::<ReadHeapCellExprAndArms>().ok() {
                 self.visit_expr(&m.expr);
 

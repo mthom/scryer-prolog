@@ -762,7 +762,6 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         false
     }
 
-    // TODO: remove ClauseType here?
     fn format_clause(
         &mut self,
         max_depth: usize,
@@ -1376,6 +1375,31 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         }
     }
 
+    fn print_index_ptr(&mut self, index_ptr: IndexPtr, max_depth: usize) {
+        if self.format_struct(max_depth, 1, atom!("$index_ptr")) {
+            let atom = self.state_stack.pop().unwrap();
+
+            self.state_stack.pop();
+            self.state_stack.pop();
+
+            let offset = if index_ptr.is_undefined() || index_ptr.is_dynamic_undefined() {
+                TokenOrRedirect::Atom(atom!("undefined"))
+            } else {
+                let idx = index_ptr.p() as i64;
+
+                TokenOrRedirect::NumberFocus(
+                    max_depth,
+                    NumberFocus::Unfocused(Number::Fixnum(Fixnum::build_with(idx))),
+                    None,
+                )
+            };
+
+            self.state_stack.push(offset);
+            self.state_stack.push(TokenOrRedirect::Open);
+            self.state_stack.push(atom);
+        }
+    }
+
     fn print_stream(&mut self, stream: Stream, max_depth: usize) {
         if let Some(alias) = stream.options().get_alias() {
             self.print_atom(alias);
@@ -1523,13 +1547,13 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                         self.print_stream(stream, max_depth);
                     }
                     (ArenaHeaderTag::OssifiedOpDir, _op_dir) => {
-                        append_str!(self, "'$ossified_op_dir'");
+                        self.print_atom(atom!("$ossified_op_dir"));
                     }
                     (ArenaHeaderTag::Dropped, _value) => {
-                        append_str!(self, "'$dropped_value'");
+                        self.print_atom(atom!("$dropped_value"));
                     }
-                    (ArenaHeaderTag::IndexPtr, _index_ptr) => {
-                        append_str!(self, "'$index_ptr'");
+                    (ArenaHeaderTag::IndexPtr, index_ptr) => {
+                        self.print_index_ptr(*index_ptr, max_depth);
                     }
                     _ => {
                     }
