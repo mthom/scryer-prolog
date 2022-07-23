@@ -263,6 +263,27 @@ impl DebrayAllocator {
     }
 }
 
+// if the final argument of the structure is a Literal::Index,
+// decrement the arity of the PutStructure instruction by 1.
+fn trim_structure_by_last_arg(instr: &mut Instruction, last_arg: &Term) {
+    match instr {
+        Instruction::PutStructure(_, ref mut arity, _) |
+        Instruction::GetStructure(_, ref mut arity, _) => {
+            if let Term::Literal(_, Literal::CodeIndex(_)) = last_arg {
+                // it is acceptable if arity == 0 is the result of
+                // this decrement. call/N will have to read the index
+                // constant for '$call_inline' to succeed. to find it,
+                // it must know the heap location of the index.
+                // self.store must stop before reading the atom into a
+                // register.
+
+                *arity -= 1;
+            }
+        }
+        _ => {}
+    }
+}
+
 impl<'b> CodeGenerator<'b> {
     pub(crate) fn new(atom_tbl: &'b mut AtomTable, settings: CodeGenSettings) -> Self {
         CodeGenerator {
@@ -375,7 +396,7 @@ impl<'b> CodeGenerator<'b> {
 
                     if let Some(instr) = target.last_mut() {
                         if let Some(term) = terms.last() {
-                            Target::trim_structure_by_last_arg(instr, term);
+                            trim_structure_by_last_arg(instr, term);
                         }
                     }
 
