@@ -351,9 +351,30 @@ impl<Iter: FocusedHeapIter> Iterator for PostOrderIterator<Iter> {
 }
 
 impl<Iter: FocusedHeapIter> FocusedHeapIter for PostOrderIterator<Iter> {
-    #[inline]
+    #[inline(always)]
     fn focus(&self) -> usize {
         self.focus
+    }
+}
+
+impl<Iter: FocusedHeapIter> PostOrderIterator<Iter> {
+    /* return true if the term at heap offset idx_loc is a
+     * direct/inlined subterm of a structure at the focus of
+     * self.stack.last(). this function is used to determine, e.g.,
+     * ownership of inlined code indices.
+     */
+    #[inline]
+    pub(crate) fn direct_subterm_of_str(&self, idx_loc: usize) -> bool {
+        if let Some((_child_count, item, focus)) = self.parent_stack.last() {
+            read_heap_cell!(item,
+                (HeapCellValueTag::Atom, (_name, arity)) => {
+                    return focus + arity >= idx_loc && *focus < idx_loc;
+                }
+                _ => {}
+            );
+        }
+
+        false
     }
 }
 

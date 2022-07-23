@@ -517,11 +517,17 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                         let value = iter.heap[h + arity + 1];
 
                         if let Some(idx) = get_structure_index(value) {
-                            term_stack.push(
-                                Term::Literal(Cell::default(), Literal::CodeIndex(idx))
-                            );
+                            // in the second condition, arity == 0,
+                            // meaning idx cannot pertain to this atom
+                            // if it is the direct subterm of a larger
+                            // structure.
+                            if arity > 0 || !iter.direct_subterm_of_str(h) {
+                                term_stack.push(
+                                    Term::Literal(Cell::default(), Literal::CodeIndex(idx))
+                                );
 
-                            arity += 1;
+                                arity += 1;
+                            }
                         }
                     }
 
