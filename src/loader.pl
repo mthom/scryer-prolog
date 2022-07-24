@@ -625,15 +625,45 @@ strip_subst_module(Goal, M1, M2, G) :-
     ;  true
     ).
 
+:- non_counted_backtracking subgoal_expansion/3.
+
+/*
+ * subgoal_expansion differs from goal_expansion only in that it fails
+ * unconditionally after catching an(y) exception, aborting the
+ * inlining process. It is expected that goal expansion will succeed
+ * when expand_goal is later invoked at runtime.
+ */
+
+subgoal_expansion_fail(B) :-
+    builtins:set_cp(B),
+    fail.
+
+subgoal_expansion(Goal, Module, ExpandedGoal) :-
+    '$get_cp'(B),
+    (  atom(Module),
+       '$predicate_defined'(Module, goal_expansion, 2),
+       catch('$call'(Module:goal_expansion(Goal, ExpandedGoal0)),
+             _E,
+             '$call'(loader:subgoal_expansion_fail(B))
+            ),
+       (  var(ExpandedGoal0) ->
+          error:instantiation_error(goal_expansion/2)
+       ;  '$set_cp'(B),
+          subgoal_expansion(ExpandedGoal0, Module, ExpandedGoal)
+       )
+    ;  Goal = ExpandedGoal
+    ).
+
+
 :- non_counted_backtracking expand_subgoal/5.
 
 expand_subgoal(UnexpandedGoals, MS, M, ExpandedGoals, HeadVars) :-
     strip_subst_module(UnexpandedGoals, M, Module, UnexpandedGoals0),
     nonvar(UnexpandedGoals0),
     complete_partial_goal(MS, UnexpandedGoals0, _, SuppArgs, UnexpandedGoals1),
-    (  goal_expansion(UnexpandedGoals1, Module, UnexpandedGoals2),
+    (  subgoal_expansion(UnexpandedGoals1, Module, UnexpandedGoals2),
        (  Module \== user ->
-          goal_expansion(UnexpandedGoals2, user, UnexpandedGoals3)
+          subgoal_expansion(UnexpandedGoals2, user, UnexpandedGoals3)
        ;  UnexpandedGoals3 = UnexpandedGoals2
        )
     ),
