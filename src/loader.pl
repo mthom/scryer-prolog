@@ -825,7 +825,7 @@ thread_goals(Goals0, Goals1, Hole, Functor) :-
 %                     CallClause,
 %                     '$call_with_inference_counting'(ModuleCallClause0)),
 %                (Head :- CallClause,
-%                         expand_goal(call(G1), M1, call(G2)),
+%                         expand_goal(G1, M1, G2),
 %                         strip_subst_module(G2, M1, M2, G3),
 %                         '$call_with_inference_counting'(ModuleCallClause1))].
 %
@@ -855,7 +855,7 @@ call('$call'(G0)) :-
    '$call_with_inference_counting'('$module_call'(M, G)).
 call(G) :-
    '$prepare_call_clause'(G0,M1,G),
-   expand_goal(call(G0), M1, call(G1)),
+   expand_goal(G0, M1, G1),
    strip_subst_module(G1, M1, M2, G2),
    '$call_with_inference_counting'('$module_call'(M2, G2)).
 
@@ -871,7 +871,7 @@ call('$call'(A),B) :-
    '$call_with_inference_counting'('$module_call'(D,C)).
 call(A,B) :-
    '$prepare_call_clause'(C,D,A,B),
-   expand_goal(call(C),D,call(E)),
+   expand_goal(C,D,E),
    strip_subst_module(E,D,F,G),
    '$call_with_inference_counting'('$module_call'(F,G)).
 
@@ -887,7 +887,7 @@ call('$call'(A),B,C) :-
    '$call_with_inference_counting'('$module_call'(E,D)).
 call(A,B,C) :-
    '$prepare_call_clause'(D,E,A,B,C),
-   expand_goal(call(D),E,call(F)),
+   expand_goal(D,E,F),
    strip_subst_module(F,E,G,H),
    '$call_with_inference_counting'('$module_call'(G,H)).
 
@@ -903,7 +903,7 @@ call('$call'(A),B,C,D) :-
    '$call_with_inference_counting'('$module_call'(F,E)).
 call(A,B,C,D) :-
    '$prepare_call_clause'(E,F,A,B,C,D),
-   expand_goal(call(E),F,call(G)),
+   expand_goal(E,F,G),
    strip_subst_module(G,F,H,I),
    '$call_with_inference_counting'('$module_call'(H,I)).
 
@@ -919,7 +919,7 @@ call('$call'(A),B,C,D,E) :-
    '$call_with_inference_counting'('$module_call'(G,F)).
 call(A,B,C,D,E) :-
    '$prepare_call_clause'(F,G,A,B,C,D,E),
-   expand_goal(call(F),G,call(H)),
+   expand_goal(F,G,H),
    strip_subst_module(H,G,I,J),
    '$call_with_inference_counting'('$module_call'(I,J)).
 
@@ -935,7 +935,7 @@ call('$call'(A),B,C,D,E,F) :-
    '$call_with_inference_counting'('$module_call'(H,G)).
 call(A,B,C,D,E,F) :-
    '$prepare_call_clause'(G,H,A,B,C,D,E,F),
-   expand_goal(call(G),H,call(I)),
+   expand_goal(G,H,I),
    strip_subst_module(I,H,J,K),
    '$call_with_inference_counting'('$module_call'(J,K)).
 
@@ -951,7 +951,7 @@ call('$call'(A),B,C,D,E,F,G) :-
    '$call_with_inference_counting'('$module_call'(I,H)).
 call(A,B,C,D,E,F,G) :-
    '$prepare_call_clause'(H,I,A,B,C,D,E,F,G),
-   expand_goal(call(H),I,call(J)),
+   expand_goal(H,I,J),
    strip_subst_module(J,I,K,L),
    '$call_with_inference_counting'('$module_call'(K,L)).
 
@@ -967,7 +967,7 @@ call('$call'(A),B,C,D,E,F,G,H) :-
    '$call_with_inference_counting'('$module_call'(J,I)).
 call(A,B,C,D,E,F,G,H) :-
    '$prepare_call_clause'(I,J,A,B,C,D,E,F,G,H),
-   expand_goal(call(I),J,call(K)),
+   expand_goal(I,J,K),
    strip_subst_module(K,J,L,M),
    '$call_with_inference_counting'('$module_call'(L,M)).
 
@@ -983,7 +983,7 @@ call('$call'(A),B,C,D,E,F,G,H,I) :-
    '$call_with_inference_counting'('$module_call'(K,J)).
 call(A,B,C,D,E,F,G,H,I) :-
    '$prepare_call_clause'(J,K,A,B,C,D,E,F,G,H,I),
-   expand_goal(call(J),K,call(L)),
+   expand_goal(J,K,L),
    strip_subst_module(L,K,M,N),
    '$call_with_inference_counting'('$module_call'(M,N)).
 
@@ -999,7 +999,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J) :-
    '$call_with_inference_counting'('$module_call'(L,K)).
 call(A,B,C,D,E,F,G,H,I,J) :-
    '$prepare_call_clause'(K,L,A,B,C,D,E,F,G,H,I,J),
-   expand_goal(call(K),L,call(M)),
+   expand_goal(K,L,M),
    strip_subst_module(M,L,N,O),
    '$call_with_inference_counting'('$module_call'(N,O)).
 
@@ -1015,7 +1015,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K) :-
    '$call_with_inference_counting'('$module_call'(M,L)).
 call(A,B,C,D,E,F,G,H,I,J,K) :-
    '$prepare_call_clause'(L,M,A,B,C,D,E,F,G,H,I,J,K),
-   expand_goal(call(L),M,call(N)),
+   expand_goal(L,M,N),
    strip_subst_module(N,M,O,P),
    '$call_with_inference_counting'('$module_call'(O,P)).
 
@@ -1031,7 +1031,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L) :-
    '$call_with_inference_counting'('$module_call'(N,M)).
 call(A,B,C,D,E,F,G,H,I,J,K,L) :-
    '$prepare_call_clause'(M,N,A,B,C,D,E,F,G,H,I,J,K,L),
-   expand_goal(call(M),N,call(O)),
+   expand_goal(M,N,O),
    strip_subst_module(O,N,P,Q),
    '$call_with_inference_counting'('$module_call'(P,Q)).
 
@@ -1047,7 +1047,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M) :-
    '$call_with_inference_counting'('$module_call'(O,N)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M) :-
    '$prepare_call_clause'(N,O,A,B,C,D,E,F,G,H,I,J,K,L,M),
-   expand_goal(call(N),O,call(P)),
+   expand_goal(N,O,P),
    strip_subst_module(P,O,Q,R),
    '$call_with_inference_counting'('$module_call'(Q,R)).
 
@@ -1063,7 +1063,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N) :-
    '$call_with_inference_counting'('$module_call'(P,O)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N) :-
    '$prepare_call_clause'(O,P,A,B,C,D,E,F,G,H,I,J,K,L,M,N),
-   expand_goal(call(O),P,call(Q)),
+   expand_goal(O,P,Q),
    strip_subst_module(Q,P,R,S),
    '$call_with_inference_counting'('$module_call'(R,S)).
 
@@ -1079,7 +1079,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N,O) :-
    '$call_with_inference_counting'('$module_call'(Q,P)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O) :-
    '$prepare_call_clause'(P,Q,A,B,C,D,E,F,G,H,I,J,K,L,M,N,O),
-   expand_goal(call(P),Q,call(R)),
+   expand_goal(P,Q,R),
    strip_subst_module(R,Q,S,T),
    '$call_with_inference_counting'('$module_call'(S,T)).
 
@@ -1095,7 +1095,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N,O,P) :-
    '$call_with_inference_counting'('$module_call'(R,Q)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P) :-
    '$prepare_call_clause'(Q,R,A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P),
-   expand_goal(call(Q),R,call(S)),
+   expand_goal(Q,R,S),
    strip_subst_module(S,R,T,U),
    '$call_with_inference_counting'('$module_call'(T,U)).
 
@@ -1111,7 +1111,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q) :-
    '$call_with_inference_counting'('$module_call'(S,R)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q) :-
    '$prepare_call_clause'(R,S,A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q),
-   expand_goal(call(R),S,call(T)),
+   expand_goal(R,S,T),
    strip_subst_module(T,S,U,V),
    '$call_with_inference_counting'('$module_call'(U,V)).
 
@@ -1127,7 +1127,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R) :-
    '$call_with_inference_counting'('$module_call'(T,S)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R) :-
    '$prepare_call_clause'(S,T,A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R),
-   expand_goal(call(S),T,call(U)),
+   expand_goal(S,T,U),
    strip_subst_module(U,T,V,W),
    '$call_with_inference_counting'('$module_call'(V,W)).
 
@@ -1143,7 +1143,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S) :-
    '$call_with_inference_counting'('$module_call'(U,T)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S) :-
    '$prepare_call_clause'(T,U,A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S),
-   expand_goal(call(T),U,call(V)),
+   expand_goal(T,U,V),
    strip_subst_module(V,U,W,X),
    '$call_with_inference_counting'('$module_call'(W,X)).
 
@@ -1159,7 +1159,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T) :-
    '$call_with_inference_counting'('$module_call'(V,U)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T) :-
    '$prepare_call_clause'(U,V,A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T),
-   expand_goal(call(U),V,call(W)),
+   expand_goal(U,V,W),
    strip_subst_module(W,V,X,Y),
    '$call_with_inference_counting'('$module_call'(X,Y)).
 
@@ -1175,7 +1175,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U) :-
    '$call_with_inference_counting'('$module_call'(W,V)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U) :-
    '$prepare_call_clause'(V,W,A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U),
-   expand_goal(call(V),W,call(X)),
+   expand_goal(V,W,X),
    strip_subst_module(X,W,Y,Z),
    '$call_with_inference_counting'('$module_call'(Y,Z)).
 
@@ -1191,7 +1191,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V) :-
    '$call_with_inference_counting'('$module_call'(X,W)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V) :-
    '$prepare_call_clause'(W,X,A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V),
-   expand_goal(call(W),X,call(Y)),
+   expand_goal(W,X,Y),
    strip_subst_module(Y,X,Z,A1),
    '$call_with_inference_counting'('$module_call'(Z,A1)).
 
@@ -1207,7 +1207,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W) :-
    '$call_with_inference_counting'('$module_call'(Y,X)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W) :-
    '$prepare_call_clause'(X,Y,A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W),
-   expand_goal(call(X),Y,call(Z)),
+   expand_goal(X,Y,Z),
    strip_subst_module(Z,Y,A1,B1),
    '$call_with_inference_counting'('$module_call'(A1,B1)).
 
@@ -1223,7 +1223,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X) :-
    '$call_with_inference_counting'('$module_call'(Z,Y)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X) :-
    '$prepare_call_clause'(Y,Z,A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X),
-   expand_goal(call(Y),Z,call(A1)),
+   expand_goal(Y,Z,A1),
    strip_subst_module(A1,Z,B1,C1),
    '$call_with_inference_counting'('$module_call'(B1,C1)).
 
@@ -1239,7 +1239,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y) :-
    '$call_with_inference_counting'('$module_call'(A1,Z)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y) :-
    '$prepare_call_clause'(Z,A1,A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y),
-   expand_goal(call(Z),A1,call(B1)),
+   expand_goal(Z,A1,B1),
    strip_subst_module(B1,A1,C1,D1),
    '$call_with_inference_counting'('$module_call'(C1,D1)).
 
@@ -1255,7 +1255,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z) :-
    '$call_with_inference_counting'('$module_call'(B1,A1)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z) :-
    '$prepare_call_clause'(A1,B1,A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z),
-   expand_goal(call(A1),B1,call(C1)),
+   expand_goal(A1,B1,C1),
    strip_subst_module(C1,B1,D1,E1),
    '$call_with_inference_counting'('$module_call'(D1,E1)).
 
@@ -1271,7 +1271,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1) :-
    '$call_with_inference_counting'('$module_call'(C1,B1)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1) :-
    '$prepare_call_clause'(B1,C1,A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1),
-   expand_goal(call(B1),C1,call(D1)),
+   expand_goal(B1,C1,D1),
    strip_subst_module(D1,C1,E1,F1),
    '$call_with_inference_counting'('$module_call'(E1,F1)).
 
@@ -1287,7 +1287,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1) :-
    '$call_with_inference_counting'('$module_call'(D1,C1)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1) :-
    '$prepare_call_clause'(C1,D1,A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1),
-   expand_goal(call(C1),D1,call(E1)),
+   expand_goal(C1,D1,E1),
    strip_subst_module(E1,D1,F1,G1),
    '$call_with_inference_counting'('$module_call'(F1,G1)).
 
@@ -1303,7 +1303,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1) :-
    '$call_with_inference_counting'('$module_call'(E1,D1)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1) :-
    '$prepare_call_clause'(D1,E1,A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1),
-   expand_goal(call(D1),E1,call(F1)),
+   expand_goal(D1,E1,F1),
    strip_subst_module(F1,E1,G1,H1),
    '$call_with_inference_counting'('$module_call'(G1,H1)).
 
@@ -1319,7 +1319,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1) :
    '$call_with_inference_counting'('$module_call'(F1,E1)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1) :-
    '$prepare_call_clause'(E1,F1,A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1),
-   expand_goal(call(E1),F1,call(G1)),
+   expand_goal(E1,F1,G1),
    strip_subst_module(G1,F1,H1,I1),
    '$call_with_inference_counting'('$module_call'(H1,I1)).
 
@@ -1335,7 +1335,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1
    '$call_with_inference_counting'('$module_call'(G1,F1)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1) :-
    '$prepare_call_clause'(F1,G1,A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1),
-   expand_goal(call(F1),G1,call(H1)),
+   expand_goal(F1,G1,H1),
    strip_subst_module(H1,G1,I1,J1),
    '$call_with_inference_counting'('$module_call'(I1,J1)).
 
@@ -1351,7 +1351,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1
    '$call_with_inference_counting'('$module_call'(H1,G1)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1) :-
    '$prepare_call_clause'(G1,H1,A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1),
-   expand_goal(call(G1),H1,call(I1)),
+   expand_goal(G1,H1,I1),
    strip_subst_module(I1,H1,J1,K1),
    '$call_with_inference_counting'('$module_call'(J1,K1)).
 
@@ -1367,7 +1367,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1
    '$call_with_inference_counting'('$module_call'(I1,H1)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1) :-
    '$prepare_call_clause'(H1,I1,A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1),
-   expand_goal(call(H1),I1,call(J1)),
+   expand_goal(H1,I1,J1),
    strip_subst_module(J1,I1,K1,L1),
    '$call_with_inference_counting'('$module_call'(K1,L1)).
 
@@ -1383,7 +1383,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1
    '$call_with_inference_counting'('$module_call'(J1,I1)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1) :-
    '$prepare_call_clause'(I1,J1,A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1),
-   expand_goal(call(I1),J1,call(K1)),
+   expand_goal(I1,J1,K1),
    strip_subst_module(K1,J1,L1,M1),
    '$call_with_inference_counting'('$module_call'(L1,M1)).
 
@@ -1399,7 +1399,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1
    '$call_with_inference_counting'('$module_call'(K1,J1)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1) :-
    '$prepare_call_clause'(J1,K1,A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1),
-   expand_goal(call(J1),K1,call(L1)),
+   expand_goal(J1,K1,L1),
    strip_subst_module(L1,K1,M1,N1),
    '$call_with_inference_counting'('$module_call'(M1,N1)).
 
@@ -1415,7 +1415,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1
    '$call_with_inference_counting'('$module_call'(L1,K1)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1) :-
    '$prepare_call_clause'(K1,L1,A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1),
-   expand_goal(call(K1),L1,call(M1)),
+   expand_goal(K1,L1,M1),
    strip_subst_module(M1,L1,N1,O1),
    '$call_with_inference_counting'('$module_call'(N1,O1)).
 
@@ -1431,7 +1431,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1
    '$call_with_inference_counting'('$module_call'(M1,L1)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1) :-
    '$prepare_call_clause'(L1,M1,A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1),
-   expand_goal(call(L1),M1,call(N1)),
+   expand_goal(L1,M1,N1),
    strip_subst_module(N1,M1,O1,P1),
    '$call_with_inference_counting'('$module_call'(O1,P1)).
 
@@ -1447,7 +1447,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1
    '$call_with_inference_counting'('$module_call'(N1,M1)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1) :-
    '$prepare_call_clause'(M1,N1,A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1),
-   expand_goal(call(M1),N1,call(O1)),
+   expand_goal(M1,N1,O1),
    strip_subst_module(O1,N1,P1,Q1),
    '$call_with_inference_counting'('$module_call'(P1,Q1)).
 
@@ -1463,7 +1463,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1
    '$call_with_inference_counting'('$module_call'(O1,N1)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1) :-
    '$prepare_call_clause'(N1,O1,A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1),
-   expand_goal(call(N1),O1,call(P1)),
+   expand_goal(N1,O1,P1),
    strip_subst_module(P1,O1,Q1,R1),
    '$call_with_inference_counting'('$module_call'(Q1,R1)).
 
@@ -1479,7 +1479,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1
    '$call_with_inference_counting'('$module_call'(P1,O1)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1) :-
    '$prepare_call_clause'(O1,P1,A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1),
-   expand_goal(call(O1),P1,call(Q1)),
+   expand_goal(O1,P1,Q1),
    strip_subst_module(Q1,P1,R1,S1),
    '$call_with_inference_counting'('$module_call'(R1,S1)).
 
@@ -1495,7 +1495,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1
    '$call_with_inference_counting'('$module_call'(Q1,P1)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1) :-
    '$prepare_call_clause'(P1,Q1,A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1),
-   expand_goal(call(P1),Q1,call(R1)),
+   expand_goal(P1,Q1,R1),
    strip_subst_module(R1,Q1,S1,T1),
    '$call_with_inference_counting'('$module_call'(S1,T1)).
 
@@ -1511,7 +1511,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1
    '$call_with_inference_counting'('$module_call'(R1,Q1)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1) :-
    '$prepare_call_clause'(Q1,R1,A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1),
-   expand_goal(call(Q1),R1,call(S1)),
+   expand_goal(Q1,R1,S1),
    strip_subst_module(S1,R1,T1,U1),
    '$call_with_inference_counting'('$module_call'(T1,U1)).
 
@@ -1527,7 +1527,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1
    '$call_with_inference_counting'('$module_call'(S1,R1)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1) :-
    '$prepare_call_clause'(R1,S1,A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1),
-   expand_goal(call(R1),S1,call(T1)),
+   expand_goal(R1,S1,T1),
    strip_subst_module(T1,S1,U1,V1),
    '$call_with_inference_counting'('$module_call'(U1,V1)).
 
@@ -1543,7 +1543,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1
    '$call_with_inference_counting'('$module_call'(T1,S1)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1) :-
    '$prepare_call_clause'(S1,T1,A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1),
-   expand_goal(call(S1),T1,call(U1)),
+   expand_goal(S1,T1,U1),
    strip_subst_module(U1,T1,V1,W1),
    '$call_with_inference_counting'('$module_call'(V1,W1)).
 
@@ -1559,7 +1559,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1
    '$call_with_inference_counting'('$module_call'(U1,T1)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1) :-
    '$prepare_call_clause'(T1,U1,A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1),
-   expand_goal(call(T1),U1,call(V1)),
+   expand_goal(T1,U1,V1),
    strip_subst_module(V1,U1,W1,X1),
    '$call_with_inference_counting'('$module_call'(W1,X1)).
 
@@ -1575,7 +1575,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1
    '$call_with_inference_counting'('$module_call'(V1,U1)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1) :-
    '$prepare_call_clause'(U1,V1,A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1),
-   expand_goal(call(U1),V1,call(W1)),
+   expand_goal(U1,V1,W1),
    strip_subst_module(W1,V1,X1,Y1),
    '$call_with_inference_counting'('$module_call'(X1,Y1)).
 
@@ -1591,7 +1591,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1
    '$call_with_inference_counting'('$module_call'(W1,V1)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1) :-
    '$prepare_call_clause'(V1,W1,A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1),
-   expand_goal(call(V1),W1,call(X1)),
+   expand_goal(V1,W1,X1),
    strip_subst_module(X1,W1,Y1,Z1),
    '$call_with_inference_counting'('$module_call'(Y1,Z1)).
 
@@ -1607,7 +1607,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1
    '$call_with_inference_counting'('$module_call'(X1,W1)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1) :-
    '$prepare_call_clause'(W1,X1,A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1),
-   expand_goal(call(W1),X1,call(Y1)),
+   expand_goal(W1,X1,Y1),
    strip_subst_module(Y1,X1,Z1,A2),
    '$call_with_inference_counting'('$module_call'(Z1,A2)).
 
@@ -1623,7 +1623,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1
    '$call_with_inference_counting'('$module_call'(Y1,X1)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1) :-
    '$prepare_call_clause'(X1,Y1,A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1),
-   expand_goal(call(X1),Y1,call(Z1)),
+   expand_goal(X1,Y1,Z1),
    strip_subst_module(Z1,Y1,A2,B2),
    '$call_with_inference_counting'('$module_call'(A2,B2)).
 
@@ -1639,7 +1639,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1
    '$call_with_inference_counting'('$module_call'(Z1,Y1)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1) :-
    '$prepare_call_clause'(Y1,Z1,A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1),
-   expand_goal(call(Y1),Z1,call(A2)),
+   expand_goal(Y1,Z1,A2),
    strip_subst_module(A2,Z1,B2,C2),
    '$call_with_inference_counting'('$module_call'(B2,C2)).
 
@@ -1655,7 +1655,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1
    '$call_with_inference_counting'('$module_call'(A2,Z1)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1) :-
    '$prepare_call_clause'(Z1,A2,A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1),
-   expand_goal(call(Z1),A2,call(B2)),
+   expand_goal(Z1,A2,B2),
    strip_subst_module(B2,A2,C2,D2),
    '$call_with_inference_counting'('$module_call'(C2,D2)).
 
@@ -1671,7 +1671,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1
    '$call_with_inference_counting'('$module_call'(B2,A2)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1) :-
    '$prepare_call_clause'(A2,B2,A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1),
-   expand_goal(call(A2),B2,call(C2)),
+   expand_goal(A2,B2,C2),
    strip_subst_module(C2,B2,D2,E2),
    '$call_with_inference_counting'('$module_call'(D2,E2)).
 
@@ -1687,7 +1687,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1
    '$call_with_inference_counting'('$module_call'(C2,B2)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2) :-
    '$prepare_call_clause'(B2,C2,A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2),
-   expand_goal(call(B2),C2,call(D2)),
+   expand_goal(B2,C2,D2),
    strip_subst_module(D2,C2,E2,F2),
    '$call_with_inference_counting'('$module_call'(E2,F2)).
 
@@ -1703,7 +1703,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1
    '$call_with_inference_counting'('$module_call'(D2,C2)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2) :-
    '$prepare_call_clause'(C2,D2,A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2),
-   expand_goal(call(C2),D2,call(E2)),
+   expand_goal(C2,D2,E2),
    strip_subst_module(E2,D2,F2,G2),
    '$call_with_inference_counting'('$module_call'(F2,G2)).
 
@@ -1719,7 +1719,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1
    '$call_with_inference_counting'('$module_call'(E2,D2)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2) :-
    '$prepare_call_clause'(D2,E2,A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2),
-   expand_goal(call(D2),E2,call(F2)),
+   expand_goal(D2,E2,F2),
    strip_subst_module(F2,E2,G2,H2),
    '$call_with_inference_counting'('$module_call'(G2,H2)).
 
@@ -1735,7 +1735,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1
    '$call_with_inference_counting'('$module_call'(F2,E2)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2) :-
    '$prepare_call_clause'(E2,F2,A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2),
-   expand_goal(call(E2),F2,call(G2)),
+   expand_goal(E2,F2,G2),
    strip_subst_module(G2,F2,H2,I2),
    '$call_with_inference_counting'('$module_call'(H2,I2)).
 
@@ -1751,7 +1751,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1
    '$call_with_inference_counting'('$module_call'(G2,F2)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2) :-
    '$prepare_call_clause'(F2,G2,A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2),
-   expand_goal(call(F2),G2,call(H2)),
+   expand_goal(F2,G2,H2),
    strip_subst_module(H2,G2,I2,J2),
    '$call_with_inference_counting'('$module_call'(I2,J2)).
 
@@ -1767,7 +1767,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1
    '$call_with_inference_counting'('$module_call'(H2,G2)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2) :-
    '$prepare_call_clause'(G2,H2,A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2),
-   expand_goal(call(G2),H2,call(I2)),
+   expand_goal(G2,H2,I2),
    strip_subst_module(I2,H2,J2,K2),
    '$call_with_inference_counting'('$module_call'(J2,K2)).
 
@@ -1783,7 +1783,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1
    '$call_with_inference_counting'('$module_call'(I2,H2)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2) :-
    '$prepare_call_clause'(H2,I2,A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2),
-   expand_goal(call(H2),I2,call(J2)),
+   expand_goal(H2,I2,J2),
    strip_subst_module(J2,I2,K2,L2),
    '$call_with_inference_counting'('$module_call'(K2,L2)).
 
@@ -1799,7 +1799,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1
    '$call_with_inference_counting'('$module_call'(J2,I2)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2) :-
    '$prepare_call_clause'(I2,J2,A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2),
-   expand_goal(call(I2),J2,call(K2)),
+   expand_goal(I2,J2,K2),
    strip_subst_module(K2,J2,L2,M2),
    '$call_with_inference_counting'('$module_call'(L2,M2)).
 
@@ -1815,7 +1815,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1
    '$call_with_inference_counting'('$module_call'(K2,J2)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2) :-
    '$prepare_call_clause'(J2,K2,A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2),
-   expand_goal(call(J2),K2,call(L2)),
+   expand_goal(J2,K2,L2),
    strip_subst_module(L2,K2,M2,N2),
    '$call_with_inference_counting'('$module_call'(M2,N2)).
 
@@ -1831,7 +1831,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1
    '$call_with_inference_counting'('$module_call'(L2,K2)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2,J2) :-
    '$prepare_call_clause'(K2,L2,A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2,J2),
-   expand_goal(call(K2),L2,call(M2)),
+   expand_goal(K2,L2,M2),
    strip_subst_module(M2,L2,N2,O2),
    '$call_with_inference_counting'('$module_call'(N2,O2)).
 
@@ -1847,7 +1847,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1
    '$call_with_inference_counting'('$module_call'(M2,L2)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2,J2,K2) :-
    '$prepare_call_clause'(L2,M2,A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2,J2,K2),
-   expand_goal(call(L2),M2,call(N2)),
+   expand_goal(L2,M2,N2),
    strip_subst_module(N2,M2,O2,P2),
    '$call_with_inference_counting'('$module_call'(O2,P2)).
 
@@ -1863,7 +1863,7 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1
    '$call_with_inference_counting'('$module_call'(N2,M2)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2,J2,K2,L2) :-
    '$prepare_call_clause'(M2,N2,A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2,J2,K2,L2),
-   expand_goal(call(M2),N2,call(O2)),
+   expand_goal(M2,N2,O2),
    strip_subst_module(O2,N2,P2,Q2),
    '$call_with_inference_counting'('$module_call'(P2,Q2)).
 
@@ -1879,6 +1879,6 @@ call('$call'(A),B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1
    '$call_with_inference_counting'('$module_call'(O2,N2)).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2,J2,K2,L2,M2) :-
    '$prepare_call_clause'(N2,O2,A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2,J2,K2,L2,M2),
-   expand_goal(call(N2),O2,call(P2)),
+   expand_goal(N2,O2,P2),
    strip_subst_module(P2,O2,Q2,R2),
    '$call_with_inference_counting'('$module_call'(Q2,R2)).
