@@ -1223,7 +1223,7 @@ impl Machine {
     }
 
     #[inline(always)]
-    pub(crate) fn is_expanded_or_inlined(&mut self) {
+    pub(crate) fn is_expanded_or_inlined(&self) -> bool {
         let (_module_loc, qualified_goal) = self.machine_st.strip_module(
             self.machine_st.registers[1],
             empty_list_as_cell!(),
@@ -1235,7 +1235,7 @@ impl Machine {
                 .get_name_and_arity();
 
             if name == atom!("$call") {
-                return;
+                return false;
             }
 
             if self.machine_st.heap.len() > s + 1 + arity {
@@ -1244,7 +1244,7 @@ impl Machine {
                 if HeapCellValueTag::Cons == idx_cell.get_tag() {
                     match_untyped_arena_ptr!(cell_as_untyped_arena_ptr!(idx_cell),
                         (ArenaHeaderTag::IndexPtr, _ip) => {
-                            return;
+                            return true;
                         }
                         _ => {
                         }
@@ -1253,7 +1253,7 @@ impl Machine {
             }
         }
 
-        self.machine_st.fail = true;
+        false
     }
 
     #[inline(always)]
@@ -1301,11 +1301,12 @@ impl Machine {
         // assemble goal from pre-loaded (narity) and supplementary
         // (arity) arguments.
 
-        let h = self.machine_st.heap.len();
+        let target_goal = if arity == 0 {
+            qualified_goal
+        } else { // if narity + arity > 0 {
+            let h = self.machine_st.heap.len();
+            self.machine_st.heap.push(atom_as_cell!(name, narity + arity));
 
-        self.machine_st.heap.push(atom_as_cell!(name, narity + arity));
-
-        let target_goal = if narity + arity > 0 {
             for idx in 1 .. narity + 1 {
                 self.machine_st.heap.push(self.machine_st.heap[s + idx]);
             }
@@ -1314,9 +1315,16 @@ impl Machine {
                 self.machine_st.heap.push(self.machine_st.registers[3 + idx]);
             }
 
-            str_loc_as_cell!(h)
-        } else {
-            heap_loc_as_cell!(h)
+            let index_cell = self.machine_st.heap[s + narity + 1];
+
+            if get_structure_index(index_cell).is_some() {
+                self.machine_st.heap.push(index_cell);
+                str_loc_as_cell!(h)
+            } else if narity + arity > 0 {
+                str_loc_as_cell!(h)
+            } else {
+                heap_loc_as_cell!(h)
+            }
         };
 
         let target_qualified_goal = self.machine_st.registers[1];
@@ -3444,11 +3452,13 @@ impl Machine {
             Ordering::Equal => {}
         }
 
+        let key = (name, arity + narity);
+
         for i in 1..arity + 1 {
             self.machine_st.registers[i] = self.machine_st.heap[s + i];
         }
 
-        Ok((module_name, (name, arity + narity)))
+        Ok((module_name, key))
     }
 
     #[inline(always)]

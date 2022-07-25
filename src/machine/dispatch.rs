@@ -4998,11 +4998,11 @@ impl Machine {
                     step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                 }
                 &Instruction::CallIsExpandedOrInlined(_) => {
-                    self.is_expanded_or_inlined();
+                    self.machine_st.fail = !self.is_expanded_or_inlined();
                     step_or_fail!(self, self.machine_st.p += 1);
                 }
                 &Instruction::ExecuteIsExpandedOrInlined(_) => {
-                    self.is_expanded_or_inlined();
+                    self.machine_st.fail = !self.is_expanded_or_inlined();
                     step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                 }
                 &Instruction::CallInlineCallN(arity, _) => {
