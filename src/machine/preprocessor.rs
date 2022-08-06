@@ -488,13 +488,6 @@ fn build_meta_predicate_clause<'a, LS: LoadState<'a>>(
 
                 let arity = term.arity();
 
-                if let Term::Clause(_, _, ref terms) = &term {
-                    if let Some(Term::Literal(_, Literal::CodeIndex(_))) = terms.last() {
-                        arg_terms.push(term);
-                        continue;
-                    }
-                }
-
                 fn get_qualified_name(
                     module_term: &Term,
                     qualified_term: &Term,
@@ -508,44 +501,59 @@ fn build_meta_predicate_clause<'a, LS: LoadState<'a>>(
                     None
                 }
 
-                let (idx, term) = match term {
+                fn identity_fn(_module_name: Atom, term: Term) -> Term {
+                    term
+                }
+
+                fn tag_with_module_name(module_name: Atom, term: Term) -> Term {
+                    Term::Clause(Cell::default(), atom!(":"), vec![
+                        Term::Literal(Cell::default(), Literal::Atom(module_name)),
+                        term
+                    ])
+                }
+
+                let process_term: fn(Atom, Term) -> Term;
+
+                let (module_name, key, term) = match term {
                     Term::Clause(cell, atom!(":"), mut terms) if terms.len() == 2 => {
-                        if let Some((module_name, name)) = get_qualified_name(&terms[0], &terms[1])
-                        {
-                            (
-                                loader.get_or_insert_qualified_code_index(
-                                    module_name,
-                                    (name, terms[1].arity() + supp_args),
-                                ),
-                                terms.pop().unwrap(),
-                            )
+                        if let Some((module_name, name)) = get_qualified_name(&terms[0], &terms[1]) {
+                            process_term = tag_with_module_name;
+                            (module_name, (name, terms[1].arity() + supp_args), terms.pop().unwrap())
                         } else {
                             arg_terms.push(Term::Clause(cell, atom!(":"), terms));
                             continue;
                         }
                     }
                     term => {
-                        (
-                            loader.get_or_insert_qualified_code_index(
-                                module_name,
-                                (name, arity + supp_args),
-                            ),
-                            term,
-                        )
+                        process_term = identity_fn;
+                        (module_name, (name, arity + supp_args), term)
                     }
                 };
 
                 let term = match term {
                     Term::Clause(cell, name, mut terms) => {
+                        if let Some(Term::Literal(_, Literal::CodeIndex(_))) = terms.last() {
+                            arg_terms.push(process_term(
+                                module_name,
+                                Term::Clause(cell, name, terms),
+                            ));
+
+                            continue;
+                        }
+
+                        let idx = loader.get_or_insert_qualified_code_index(module_name, key);
+
                         terms.push(Term::Literal(Cell::default(), Literal::CodeIndex(idx)));
-                        Term::Clause(cell, name, terms)
+                        process_term(module_name, Term::Clause(cell, name, terms))
                     }
                     Term::Literal(cell, Literal::Atom(name)) => {
-                        Term::Clause(
+                        let idx = loader.get_or_insert_qualified_code_index(module_name, key);
+
+                        process_term(module_name, Term::Clause(
                             cell,
                             name,
                             vec![Term::Literal(Cell::default(), Literal::CodeIndex(idx))],
-                        )
+                        ))
                     }
                     term => term,
                 };
