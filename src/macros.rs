@@ -272,6 +272,20 @@ macro_rules! match_untyped_arena_ptr_pat_body {
         #[allow(unused_braces)]
         $code
     }};
+    ($ptr:ident, HttpListener, $listener:ident, $code:expr) => {{
+        let payload_ptr = unsafe { std::mem::transmute::<_, *mut HttpListener>($ptr.payload_offset()) };
+        #[allow(unused_mut)]
+        let mut $listener = TypedArenaPtr::new(payload_ptr);
+        #[allow(unused_braces)]
+        $code
+    }};
+    ($ptr:ident, HttpResponse, $listener:ident, $code:expr) => {{
+        let payload_ptr = unsafe { std::mem::transmute::<_, *mut HttpResponse>($ptr.payload_offset()) };
+        #[allow(unused_mut)]
+        let mut $listener = TypedArenaPtr::new(payload_ptr);
+        #[allow(unused_braces)]
+        $code
+    }};
     ($ptr:ident, IndexPtr, $ip:ident, $code:expr) => {{
         #[allow(unused_mut)]
         let mut $ip = TypedArenaPtr::new(unsafe { std::mem::transmute::<_, *mut IndexPtr>($ptr.get_ptr()) });
@@ -291,7 +305,8 @@ macro_rules! match_untyped_arena_ptr_pat {
             | ArenaHeaderTag::OutputFileStream
             | ArenaHeaderTag::NamedTcpStream
             | ArenaHeaderTag::NamedTlsStream
-            | ArenaHeaderTag::NamedHttpClientStream
+            | ArenaHeaderTag::HttpReadStream
+	    | ArenaHeaderTag::HttpWriteStream
             | ArenaHeaderTag::ReadlineStream
             | ArenaHeaderTag::StaticStringStream
             | ArenaHeaderTag::ByteStream

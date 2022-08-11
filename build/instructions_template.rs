@@ -544,6 +544,12 @@ enum SystemClauseType {
     DeterministicLengthRundown,
     #[strum_discriminants(strum(props(Arity = "7", Name = "$http_open")))]
     HttpOpen,
+    #[strum_discriminants(strum(props(Arity = "2", Name = "$http_listen")))]
+    HttpListen,
+    #[strum_discriminants(strum(props(Arity = "7", Name = "$http_accept")))]
+    HttpAccept,
+    #[strum_discriminants(strum(props(Arity = "4", Name = "$http_answer")))]
+    HttpAnswer,
     #[strum_discriminants(strum(props(Arity = "3", Name = "$predicate_defined")))]
     PredicateDefined,
     #[strum_discriminants(strum(props(Arity = "3", Name = "$strip_module")))]
@@ -1686,6 +1692,9 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallCpuNow(_) |
                     &Instruction::CallDeterministicLengthRundown(_) |
                     &Instruction::CallHttpOpen(_) |
+                    &Instruction::CallHttpListen(_) |
+                    &Instruction::CallHttpAccept(_) |
+                    &Instruction::CallHttpAnswer(_) |
                     &Instruction::CallPredicateDefined(_) |
                     &Instruction::CallStripModule(_) |
                     &Instruction::CallCurrentTime(_) |
@@ -1895,6 +1904,9 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteCpuNow(_) |
                     &Instruction::ExecuteDeterministicLengthRundown(_) |
                     &Instruction::ExecuteHttpOpen(_) |
+                    &Instruction::ExecuteHttpListen(_) |
+                    &Instruction::ExecuteHttpAccept(_) |
+                    &Instruction::ExecuteHttpAnswer(_) |
                     &Instruction::ExecutePredicateDefined(_) |
                     &Instruction::ExecuteStripModule(_) |
                     &Instruction::ExecuteCurrentTime(_) |

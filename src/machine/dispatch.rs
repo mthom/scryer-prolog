@@ -4197,6 +4197,30 @@ impl Machine {
                     try_or_throw!(self.machine_st, self.http_open());
                     step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                 }
+		&Instruction::CallHttpListen(_) => {
+		    try_or_throw!(self.machine_st, self.http_listen());
+		    step_or_fail!(self, self.machine_st.p += 1);
+		}
+		&Instruction::ExecuteHttpListen(_) => {
+		    try_or_throw!(self.machine_st, self.http_listen());
+		    step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+		}
+		&Instruction::CallHttpAccept(_) => {
+		    try_or_throw!(self.machine_st, self.http_accept());
+		    step_or_fail!(self, self.machine_st.p += 1);
+		}
+		&Instruction::ExecuteHttpAccept(_) => {
+		    try_or_throw!(self.machine_st, self.http_accept());
+		    step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+		}
+		&Instruction::CallHttpAnswer(_) => {
+		    try_or_throw!(self.machine_st, self.http_answer());
+		    step_or_fail!(self, self.machine_st.p += 1);
+		}
+		&Instruction::ExecuteHttpAnswer(_) => {
+		    try_or_throw!(self.machine_st, self.http_answer());
+		    step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+		}
                 &Instruction::CallCurrentTime(_) => {
                     self.current_time();
                     step_or_fail!(self, self.machine_st.p += 1);
