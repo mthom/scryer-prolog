@@ -1,11 +1,11 @@
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    Written in December 2020 by Adrián Arroyo (adrian.arroyocalle@gmail.com)
+   Updated in March 2022 by Adrián Arroyo to use the Hyper backend
    Part of Scryer Prolog
 
    This library provides an starting point to build HTTP server based applications.
-   It currently implements a subset of HTTP/1.0. It is recommended to put a reverse
-   proxy like nginx in front of this server to have access to more advanced features
-   (gzip compression, HTTPS, ...)
+   It is based on Hyper, which allows for HTTP/1.0, HTTP/1.1 and HTTP/2. However,
+   some advanced features that Hyper provides are still not accesible.
 
    Usage
    ==========
@@ -41,37 +41,36 @@
    Some things that are still missing:
    - Read forms in multipart format
    - HTTP Basic Auth
-   - Keep-Alive support
    - Session handling via cookies
    - HTML Templating
 
    I place this code in the public domain. Use it in any way you want.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
+
 :- module(http_server, [
-    http_listen/2,
-    http_headers/2,
-    http_status_code/2,
-    http_body/2,
-    http_redirect/2,
-    http_query/3,
-    url_decode//1
+	      http_listen/2,
+	      http_headers/2,
+	      http_status_code/2,
+	      http_body/2,
+	      http_redirect/2,
+	      http_query/3
 ]).
 
-:- meta_predicate http_listen(?, 2).
+:- meta_predicate http_listen(?, :).
 
-:- use_module(library(sockets)).
-:- use_module(library(dcgs)).
-:- use_module(library(format)).
-:- use_module(library(error)).
 :- use_module(library(charsio)).
-:- use_module(library(lists)).
-:- use_module(library(iso_ext)).
-:- use_module(library(time)).
 :- use_module(library(crypto)).
+:- use_module(library(error)).
+:- use_module(library(format)).
+:- use_module(library(iso_ext)).
+:- use_module(library(lists)).
+:- use_module(library(pio)).
+:- use_module(library(time)).
 
-% Module prefix workaround with meta_predicate
 http_listen(Port, Module:Handlers0) :-
+    must_be(integer, Port),
+    must_be(list, Handlers0),
     maplist(module_qualification(Module), Handlers0, Handlers),
     http_listen_(Port, Handlers).
 
@@ -79,49 +78,75 @@ module_qualification(M, H0, H) :-
     H0 =.. [Method, Path, Goal],
     H =.. [Method, Path, M:Goal].
 
-% Server initialization
 http_listen_(Port, Handlers) :-
-    must_be(integer, Port),
-    must_be(list, Handlers),
-    once(socket_server_open(Port, Socket)),
-    format("Listening at port ~d\n", [Port]),
-    accept_loop(Socket, Handlers).
+    number_chars(Port, CPort),
+    append("0.0.0.0:", CPort, Addr),
+    '$http_listen'(Addr, HttpListener),!,
+    format("Listening at ~s\n", [Addr]),
+    http_loop(HttpListener, Handlers).
 
-% Server loop
-accept_loop(Socket, Handlers) :-
-    setup_call_cleanup(socket_server_accept(Socket, _Client, Stream, [type(binary)]),
-        (
-            read_header_lines(Stream, Lines),
-            [Request|Headers] = Lines,
-            (
-                (phrase(parse_request(_Version, Method, Path, Queries), Request), maplist(map_parse_header, Headers, HeadersKV)) -> (
-                        (
-                            member("content-length"-ContentLength, HeadersKV) ->
-                                (number_chars(ContentLengthN, ContentLength), get_bytes(Stream, ContentLengthN, Body))
-                                ;true
-                        ),
-                        current_time(Time),
-                        phrase(format_time("%Y-%m-%d (%H:%M:%S)", Time), TimeString),
-                        format("~s ~w ~s\n", [TimeString, Method, Path]),
-                        (
-                            match_handler(Handlers, Method, Path, Handler) ->
-                            (
-                                HttpRequest = http_request(HeadersKV, binary(Body), Queries),
-                                HttpResponse = http_response(_, _, _),
-                                (call(Handler, HttpRequest, HttpResponse) ->
-                                    send_response(Stream, HttpResponse)
-                                ;   format(Stream, "HTTP/1.0 500 Internal Server Error\r\n\r\n", [])
-                                )
-                            )
-                        ;   format(Stream, "HTTP/1.0 404 Not Found\r\n\r\n", [])
-                        )
-                    );(
-                        format(Stream, "HTTP/1.0 400 Bad Request\r\n\r\n", []) % bad format
-                    )
-            ),
-            ! % Remove
-        ), close(Stream)),
-    accept_loop(Socket, Handlers).
+http_loop(HttpListener, Handlers) :-
+    '$http_accept'(HttpListener, RequestMethod, RequestPath, RequestHeaders, RequestQuery, RequestStream, ResponseHandle),
+    current_time(Time),
+    phrase(format_time("%Y-%m-%d (%H:%M:%S)", Time), TimeString),
+    format("~s ~w ~s\n", [TimeString, RequestMethod, RequestPath]),
+    maplist(map_header_kv, RequestHeaders, RequestHeadersKV),
+    phrase(parse_queries(RequestQueries), RequestQuery),
+    (
+	match_handler(Handlers, RequestMethod, RequestPath, Handler) ->
+	(
+	    HttpRequest = http_request(RequestHeadersKV, stream(RequestStream), RequestQueries),
+	    HttpResponse = http_response(_, _, _),
+	    (call(Handler, HttpRequest, HttpResponse) ->
+		 send_response(ResponseHandle, HttpResponse)
+	    ;    '$http_answer'(ResponseHandle, 500, [], "Internal Server Error")
+	    )
+	)
+    ; '$http_answer'(ResponseHandle, 404, [], "Not Found")
+    ),
+    http_loop(HttpListener, Handlers).
+
+send_response(ResponseHandle, http_response(StatusCode0, text(ResponseText), ResponseHeaders0)) :-
+    default(StatusCode0, 200, StatusCode),
+    maplist(map_header_kv_2, ResponseHeaders, ResponseHeaders0),
+    '$http_answer'(ResponseHandle, StatusCode, ResponseHeaders, ResponseStream),
+    format(ResponseStream, "~s", [ResponseText]),
+    close(ResponseStream).
+
+send_response(ResponseHandle, http_response(StatusCode0, bytes(ResponseBytes), ResponseHeaders0)) :-
+    default(StatusCode0, 200, StatusCode),
+    maplist(map_header_kv_2, ResponseHeaders, ResponseHeaders0),
+    '$http_answer'(ResponseHandle, StatusCode, ResponseHeaders, ResponseStream),
+    format(ResponseStream, "~s", [ResponseBytes]),
+    close(ResponseStream).
+
+send_response(ResponseHandle, http_response(StatusCode0, file(Filename), ResponseHeaders0)) :-
+    default(StatusCode0, 200, StatusCode),
+    maplist(map_header_kv_2, ResponseHeaders, ResponseHeaders0),
+    '$http_answer'(ResponseHandle, StatusCode, ResponseHeaders, ResponseStream),
+    setup_call_cleanup(
+	open(Filename, read, FileStream, [type(binary)]),
+	(
+	    get_n_chars(FileStream, _, FileCs),
+	    format(ResponseStream, "~s", [FileCs])
+	),
+	close(FileStream)
+    ),
+    close(ResponseStream).
+    
+
+default(Var, Default, Out) :-
+    (var(Var) -> Out = Default
+    ;   Var = Out  
+    ).
+
+map_header_kv(T, K-V) :-
+    T =.. [K0, V],
+    atom_chars(K0, K).
+
+map_header_kv_2(T, K-V) :-
+    atom_chars(K0, K),
+    T =.. [K0, V].
 
 match_handler(Handlers, Method, "/", Handler) :-
     member(H, Handlers),
@@ -139,27 +164,6 @@ match_handler(Handlers, Method, Path, Handler) :-
     var(Var),
     Var = Path.
 
-
-% Helper and recommended predicates
-
-http_headers(http_request(Headers, _, _), Headers).
-http_headers(http_response(_, _, Headers), Headers).
-
-http_body(http_request(_, binary(ByteBody), _), text(TextBody)) :- chars_utf8bytes(TextBody, ByteBody).
-http_body(http_request(Headers, binary(ByteBody), _), form(FormBody)) :- 
-    member("content-type"-"application/x-www-form-urlencoded", Headers),
-    chars_utf8bytes(TextBody, ByteBody),
-    phrase(parse_queries(FormBody), TextBody).
-http_body(http_request(_, Body, _), Body).
-http_body(http_response(_, Body, _), Body).
-
-http_status_code(http_response(StatusCode, _, _), StatusCode).
-
-http_redirect(http_response(307, text("Moved Temporarily"), ["Location"-Uri]), Uri).
-
-http_query(http_request(_, _, Queries), Key, Value) :- member(Key-Value, Queries).
-
-% Route matching
 path(Pattern) -->
     {
         Pattern =.. Parts,
@@ -183,76 +187,31 @@ path(Pattern) -->
 
 path([]) --> [].
 
-% Send responses
-send_response(Stream, http_response(StatusCode0, file(Filename), Headers)) :-
-    default(StatusCode0, 200, StatusCode),
-    format(Stream, "HTTP/1.0 ~d\r\n", [StatusCode]),
-    overwrite_header("connection"-"Close", Headers, Headers0),
-    write_headers(Stream, Headers0),
-    format(Stream, "\r\n", []),
-    setup_call_cleanup(
-        open(Filename, read, FileStream, [type(binary)]),
-        pipe_bytes(FileStream, Stream),
-        close(FileStream)
-    ).
+string_without(Not, [Char|String]) -->
+    [Char],
+    {
+        \+ member(Char, Not)
+    },
+    string_without(Not, String).
 
-send_response(Stream, http_response(StatusCode0, text(TextResponse), Headers)) :-
-    default(StatusCode0, 200, StatusCode),
-    format(Stream, "HTTP/1.0 ~d\r\n", [StatusCode]),
-    overwrite_header("content-type"-"text/plain", Headers, Headers0),
-    overwrite_header("connection"-"Close", Headers0, Headers1),
-    write_headers(Stream, Headers1),
-    format(Stream, "\r\n~s", [TextResponse]).
+string_without(_, []) -->
+    [].
 
-send_response(Stream, http_response(StatusCode0, binary(BinaryResponse), Headers)) :-
-    default(StatusCode0, 200, StatusCode),
-    format(Stream, "HTTP/1.0 ~d\r\n", [StatusCode]),
-    overwrite_header("connection"-"Close", Headers, Headers0),
-    write_headers(Stream, Headers0),
-    format(Stream, "\r\n", []),
-    put_bytes(Stream, BinaryResponse).
+http_headers(http_request(Headers, _, _), Headers).
+http_headers(http_response(_, _, Headers), Headers).
 
-default(Var, Default, Out) :-
-    (var(Var) -> Out = Default
-    ;   Var = Out  
-    ).
+http_body(http_request(_, stream(StreamBody), _), bytes(BytesBody)) :- get_n_chars(StreamBody, _, BytesBody).
+http_body(http_request(_, stream(StreamBody), _), text(TextBody)) :- get_n_chars(StreamBody, _, TextBody).
+http_body(http_request(Headers, stream(StreamBody), _), form(FormBody)) :- 
+    member("content-type"-"application/x-www-form-urlencoded", Headers),
+    get_n_chars(StreamBody, _, TextBody),
+    phrase(parse_queries(FormBody), TextBody).
+http_body(http_request(_, Body, _), Body).
+http_body(http_response(_, Body, _), Body).
 
-header([]) --> [].
-header([Key-Value|Headers]) -->
-    format_("~s: ~s\r\n", [Key, Value]),
-    header(Headers).
-
-write_headers(Stream, Headers) :-
-    phrase(header(Headers), Cs),
-    format(Stream, "~s", [Cs]).
-
-overwrite_header(Key-Value, [], [Key-Value]).
-overwrite_header(Key-Value, [Header|Headers], [Header|HeadersOut]) :-
-    Header = Key0-_,
-    Key0 \= Key,
-    overwrite_header(Key-Value, Headers, HeadersOut).
-overwrite_header(Key-Value, [Header|Headers], [NewHeader|Headers]) :-
-    Header = Key-_,
-    NewHeader = Key-Value.
-
-parse_request(http_version(Major, Minor), Method, Path, Queries) -->
-    method(Method),
-    " ",
-    parse_path(Path, Queries),
-    " ",
-    "HTTP/",
-    natural(Major),
-    ".",
-    natural(Minor),
-    "\r\n".
-
-parse_path(Path, Queries) -->
-    string_without("?", Path),
-    "?",
-    parse_queries(Queries).
-
-parse_path(Path, []) -->
-    string_without(" ", Path).
+http_status_code(http_response(StatusCode, _, _), StatusCode).
+http_redirect(http_response(307, text("Moved Temporarily"), ["Location"-Uri]), Uri).
+http_query(http_request(_, _, Queries), Key, Value) :- member(Key-Value, Queries).
 
 parse_queries([Key-Value|Queries]) -->
     string_without("=", Key0),
@@ -278,93 +237,8 @@ parse_queries([Key-Value]) -->
         phrase(url_decode(Value), Value0)  
     }.
 
-map_parse_header(Header, HeaderKV) :-
-    phrase(parse_header(HeaderKV), Header).
-
-parse_header(Key-Value) -->
-    string_without(":", Key0),
-    {
-        chars_lower(Key0, Key)
-    },
-    ": ",
-    string_without("\r", Value),
-    "\r\n".
-
-method(options) --> "OPTIONS".
-method(get) --> "GET".
-method(head) --> "HEAD".
-method(post) --> "POST".
-method(put) --> "PUT".
-method(delete) --> "DELETE".
-
-string_without(Not, [Char|String]) -->
-    [Char],
-    {
-        \+ member(Char, Not)
-    },
-    string_without(Not, String).
-
-string_without(_, []) -->
+parse_queries([]) -->
     [].
-
-natural(Nat) -->
-    natural_(NatChars),
-    {
-        number_chars(Nat, NatChars)
-    }.
-
-natural_([Nat|Nats]) -->
-    [Nat],
-    {
-        char_type(Nat, decimal_digit)
-    },
-    natural_(Nats).
-
-natural_([]) -->
-    [].
-
-read_header_lines(Stream, Hs) :-
-        read_line_to_chars(Stream, Cs, []),
-        (   Cs == "" -> Hs = []
-        ;   Cs == "\r\n" -> Hs = []
-        ;   Hs = [Cs|Rest],
-            read_header_lines(Stream, Rest)
-        ).
-
-get_bytes(Stream, Length, Res) :- get_bytes(Stream, Length, [], Res).
-get_bytes(Stream, Length, Acc, Res) :-
-  (Length > 0 -> (
-    get_byte(Stream, B),
-    B =\= -1,
-    get_bytes(Stream, Length - 1, [B|Acc], Res)
-  ); reverse(Acc, Res)).
-
-put_bytes(_, []).
-put_bytes(Stream, [Byte|Bytes]) :-
-    put_byte(Stream, Byte),
-    put_bytes(Stream, Bytes).
-
-pipe_bytes(StreamIn, StreamOut) :-
-    get_byte(StreamIn, Byte),
-    (
-        Byte =\= -1 ->
-        (
-            put_byte(StreamOut, Byte),
-            pipe_bytes(StreamIn, StreamOut)
-        )
-    ;   true).
-
-% WARNING: This only works for ASCII chars. This code can be modified to support
-% Latin1 characters also but a completely different approach is needed for other
-% languages. Since HTTP internals are ASCII, this is fine for this usecase.
-chars_lower(Chars, Lower) :-
-    maplist(char_lower, Chars, Lower).
-char_lower(Char, Lower) :-
-    char_code(Char, Code),
-    ((Code >= 65,Code =< 90) ->
-        LowerCode is Code + 32,
-        char_code(Lower, LowerCode)
-    ;   Char = Lower).
 
 % Decodes a UTF-8 URL Encoded string: RFC-1738
 url_decode([Char|Chars]) -->

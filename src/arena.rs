@@ -1,3 +1,4 @@
+use crate::http::{HttpListener, HttpResponse};
 use crate::machine::loader::LiveLoadState;
 use crate::machine::machine_indices::*;
 use crate::machine::streams::*;
@@ -139,7 +140,8 @@ pub enum ArenaHeaderTag {
     OutputFileStream = 0b10100,
     NamedTcpStream = 0b011100,
     NamedTlsStream = 0b100000,
-    NamedHttpClientStream =  0b100001,
+    HttpReadStream =  0b100001,
+    HttpWriteStream = 0b100010,
     ReadlineStream = 0b110000,
     StaticStringStream = 0b110100,
     ByteStream = 0b111000,
@@ -147,6 +149,8 @@ pub enum ArenaHeaderTag {
     StandardErrorStream = 0b11000,
     NullStream = 0b111100,
     TcpListener = 0b1000000,
+    HttpListener = 0b1000001,
+    HttpResponse = 0b1000010,
     Dropped = 0b1000100,
     IndexPtrDynamicUndefined = 0b1000101,
     IndexPtrDynamicIndex = 0b1000110,
@@ -560,6 +564,50 @@ impl ArenaAllocated for TcpListener {
     }
 }
 
+impl ArenaAllocated for HttpListener {
+    type PtrToAllocated = TypedArenaPtr<HttpListener>;
+
+    #[inline]
+    fn tag() -> ArenaHeaderTag {
+	ArenaHeaderTag::HttpListener
+    }
+
+    #[inline]
+    fn size(&self) -> usize {
+	mem::size_of::<Self>()
+    }
+
+    #[inline]
+    fn copy_to_arena(self, dst: *mut Self) -> Self::PtrToAllocated {
+	unsafe {
+	    ptr::write(dst, self);
+	    TypedArenaPtr::new(dst as *mut Self)
+	}
+    }
+}
+
+impl ArenaAllocated for HttpResponse {
+    type PtrToAllocated = TypedArenaPtr<HttpResponse>;
+
+    #[inline]
+    fn tag() -> ArenaHeaderTag {
+	ArenaHeaderTag::HttpResponse
+    }
+
+    #[inline]
+    fn size(&self) -> usize {
+	mem::size_of::<Self>()
+    }
+
+    #[inline]
+    fn copy_to_arena(self, dst: *mut Self) -> Self::PtrToAllocated {
+	unsafe {
+	    ptr::write(dst, self);
+	    TypedArenaPtr::new(dst as *mut Self)
+	}
+    }
+}
+
 impl ArenaAllocated for IndexPtr {
     type PtrToAllocated = TypedArenaPtr<IndexPtr>;
 
@@ -647,9 +695,12 @@ unsafe fn drop_slab_in_place(value: &mut AllocSlab) {
         ArenaHeaderTag::NamedTlsStream => {
             ptr::drop_in_place(value.payload_offset::<StreamLayout<CharReader<NamedTlsStream>>>());
         }
-        ArenaHeaderTag::NamedHttpClientStream => {
-            ptr::drop_in_place(value.payload_offset::<StreamLayout<CharReader<NamedHttpClientStream>>>());
+        ArenaHeaderTag::HttpReadStream => {
+            ptr::drop_in_place(value.payload_offset::<StreamLayout<CharReader<HttpReadStream>>>());
         }
+	ArenaHeaderTag::HttpWriteStream => {
+	    ptr::drop_in_place(value.payload_offset::<StreamLayout<CharReader<HttpWriteStream>>>());
+	}
         ArenaHeaderTag::ReadlineStream => {
             ptr::drop_in_place(value.payload_offset::<StreamLayout<ReadlineStream>>());
         }
@@ -670,6 +721,12 @@ unsafe fn drop_slab_in_place(value: &mut AllocSlab) {
         ArenaHeaderTag::TcpListener => {
             ptr::drop_in_place(value.payload_offset::<TcpListener>());
         }
+	ArenaHeaderTag::HttpListener => {
+	    ptr::drop_in_place(value.payload_offset::<HttpListener>());
+	}
+	ArenaHeaderTag::HttpResponse => {
+	    ptr::drop_in_place(value.payload_offset::<HttpResponse>());
+	}
         ArenaHeaderTag::StandardOutputStream => {
             ptr::drop_in_place(value.payload_offset::<StreamLayout<StandardOutputStream>>());
         }
