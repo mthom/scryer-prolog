@@ -431,9 +431,7 @@ impl Machine {
         let user_output = Stream::stdout(&mut machine_st.arena);
         let user_error = Stream::stderr(&mut machine_st.arena);
 
-        let runtime = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
+        let runtime = tokio::runtime::Runtime::new()
             .unwrap();
 
         let mut wam = Machine {

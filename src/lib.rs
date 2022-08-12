@@ -19,6 +19,7 @@ mod fixtures;
 mod forms;
 mod heap_iter;
 pub mod heap_print;
+mod http;
 mod indexing;
 #[macro_use]
 pub mod instructions {

@@ -8,6 +8,7 @@ use crate::atom_table::*;
 use crate::forms::*;
 use crate::heap_iter::*;
 use crate::heap_print::*;
+use crate::http::{self, HttpListener, HttpResponse};
 use crate::instructions::*;
 use crate::machine;
 use crate::machine::{Machine, VERIFY_ATTR_INTERRUPT_LOC, get_structure_index};
@@ -37,19 +38,20 @@ use ref_thread_local::{RefThreadLocal, ref_thread_local};
 use std::cell::Cell;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
-use std::convert::TryFrom;
+use std::convert::{TryFrom, Infallible};
 use std::env;
 use std::fs;
 use std::hash::{BuildHasher, BuildHasherDefault};
 use std::io::{ErrorKind, Read, Write};
 use std::iter::{once, FromIterator};
 use std::mem;
-use std::net::{TcpListener, TcpStream};
+use std::net::{TcpListener, TcpStream, SocketAddr, ToSocketAddrs};
 use std::num::NonZeroU32;
 use std::ops::Sub;
 use std::process;
 use std::rc::Rc;
 use std::str::FromStr;
+use std::sync::Arc;
 
 use chrono::{offset::Local, DateTime};
 use cpu_time::ProcessTime;
@@ -79,10 +81,13 @@ use base64;
 use roxmltree;
 use select;
 
-use hyper::{Body, Client, HeaderMap, Method, Request, Uri};
+use hyper::{Body, Server, Client, HeaderMap, Method, Request, Response, Uri};
 use hyper::header::{HeaderName, HeaderValue};
 use hyper::body::Buf;
+use hyper::service::{make_service_fn, service_fn};
 use hyper_tls::HttpsConnector;
+use tokio::sync::Mutex;
+use tokio::sync::mpsc::channel;
 
 ref_thread_local! {
     pub(crate) static managed RANDOM_STATE: RandState<'static> = RandState::new();
@@ -3893,6 +3898,203 @@ impl Machine {
         }
 
         Ok(())
+    }
+
+    #[inline(always)]
+    pub(crate) fn http_listen(&mut self) -> CallResult {
+	let address_sink = self.machine_st.store(self.machine_st.deref(self.machine_st.registers[1]));
+	if let Some(address_str) = self.machine_st.value_to_str_like(address_sink) {
+	    let address_string = address_str.as_str();
+	    let addr: SocketAddr = match address_string.to_socket_addrs().ok().and_then(|mut s| s.next()) {
+		Some(addr) => addr,
+                _ => {
+                    self.machine_st.fail = true;
+                    return Ok(());
+                }
+	    };
+
+	    let (tx, rx) = channel(1);
+	    let tx = Arc::new(Mutex::new(tx));
+
+	    let _guard = self.runtime.enter();
+	    let server = match Server::try_bind(&addr) {
+		Ok(server) => server,
+		Err(_) => {
+		    return Err(self.machine_st.open_permission_error(address_sink, atom!("http_listen"), 2));
+		}
+	    };
+
+	    self.runtime.spawn(async move {
+		let make_svc = make_service_fn(move |_conn| {
+		    let tx = tx.clone();
+		    async move { Ok::<_, Infallible>(service_fn(move |req| http::serve_req(req, tx.clone()))) }
+		});
+		let server = server.serve(make_svc);
+
+		if let Err(_) = server.await {
+		    eprintln!("server error");
+		}
+	    });
+	    let http_listener = HttpListener { incoming: rx };
+	    let http_listener = arena_alloc!(http_listener, &mut self.machine_st.arena);
+	    let addr = self.machine_st.store(self.machine_st.deref(self.machine_st.registers[2]));
+	    self.machine_st.bind(addr.as_var().unwrap(), typed_arena_ptr_as_cell!(http_listener));
+	}
+	Ok(())
+    }
+
+    #[inline(always)]
+    pub(crate) fn http_accept(&mut self) -> CallResult {
+	let culprit = self.machine_st.store(self.machine_st.deref(self.machine_st.registers[1]));
+	let method = self.machine_st.store(self.machine_st.deref(self.machine_st.registers[2]));
+	let path = self.machine_st.store(self.machine_st.deref(self.machine_st.registers[3]));
+	let query = self.machine_st.store(self.machine_st.deref(self.machine_st.registers[5]));
+	let stream_addr = self.machine_st.store(self.machine_st.deref(self.machine_st.registers[6]));
+	let handle_addr = self.machine_st.store(self.machine_st.deref(self.machine_st.registers[7]));
+	read_heap_cell!(culprit,
+	    (HeapCellValueTag::Cons, cons_ptr) => {
+		match_untyped_arena_ptr!(cons_ptr,
+		    (ArenaHeaderTag::HttpListener, http_listener) => {
+		        match http_listener.incoming.blocking_recv() {
+			    Some(request) => {
+			        let method_atom = match *request.request.method() {
+				    Method::GET => atom!("get"),
+				    Method::POST => atom!("post"),
+				    Method::PUT => atom!("put"),
+				    Method::DELETE => atom!("delete"),
+				    Method::PATCH => atom!("patch"),
+				    Method::HEAD => atom!("head"),
+				    _ => unreachable!(),
+				};
+				let path_atom = self.machine_st.atom_tbl.build_with(request.request.uri().path());
+				let path_cell = atom_as_cstr_cell!(path_atom);
+				let headers: Vec<HeapCellValue> = request.request.headers().iter().map(|(header_name, header_value)| {
+				    let h = self.machine_st.heap.len();
+
+				    let header_term = functor!(
+				        self.machine_st.atom_tbl.build_with(header_name.as_str()),
+					[cell(string_as_cstr_cell!(self.machine_st.atom_tbl.build_with(header_value.to_str().unwrap())))]
+				    );
+
+				    self.machine_st.heap.extend(header_term.into_iter());
+				    str_loc_as_cell!(h)
+				}).collect();
+
+				let headers_list = iter_to_heap_list(&mut self.machine_st.heap, headers.into_iter());
+
+				let query_str = request.request.uri().query().unwrap_or("");
+				let query_atom = self.machine_st.atom_tbl.build_with(query_str);
+				let query_cell = string_as_cstr_cell!(query_atom);
+				
+				let hyper_req = request.request;
+				let buf = self.runtime.block_on(async {hyper::body::aggregate(hyper_req).await.unwrap()});
+				let reader = buf.reader();
+
+				let mut stream = Stream::from_http_stream(
+				    path_atom,
+				    Box::new(reader),
+				    &mut self.machine_st.arena
+				);
+				*stream.options_mut() = StreamOptions::default();
+				stream.options_mut().set_stream_type(StreamType::Binary);
+				self.indices.streams.insert(stream);
+				let stream = stream_as_cell!(stream);
+
+				let handle = arena_alloc!(request.response, &mut self.machine_st.arena);
+
+				self.machine_st.bind(method.as_var().unwrap(), atom_as_cell!(method_atom));
+				self.machine_st.bind(path.as_var().unwrap(), path_cell);
+				unify!(self.machine_st, heap_loc_as_cell!(headers_list), self.machine_st.registers[4]);
+				self.machine_st.bind(query.as_var().unwrap(), query_cell);
+				self.machine_st.bind(stream_addr.as_var().unwrap(), stream);
+				self.machine_st.bind(handle_addr.as_var().unwrap(), typed_arena_ptr_as_cell!(handle));
+				}
+			    None => {
+			        self.machine_st.fail = true;
+			    }
+			}
+		    }
+		    _ => {
+		        unreachable!();
+		    }
+		);
+	    }
+	    _ => {
+	        unreachable!();
+	    }
+	);
+	Ok(())
+    }
+
+    #[inline(always)]
+    pub(crate) fn http_answer(&mut self) -> CallResult {
+	let culprit = self.machine_st.store(self.machine_st.deref(self.machine_st.registers[1]));
+	let status_code = self.machine_st.store(self.machine_st.deref(self.machine_st.registers[2]));
+	let status_code: u16 = match Number::try_from(status_code) {
+	    Ok(Number::Fixnum(n)) => n.get_num() as u16,
+	    Ok(Number::Integer(n)) => match n.to_u16() {
+		Some(u) => u,
+		_ => {
+		    self.machine_st.fail = true;
+		    return Ok(());
+		}
+	    }
+	    _ => unreachable!()
+	};
+	let stub_gen = || functor_stub(atom!("http_listen"), 2);
+	let headers = match self.machine_st.try_from_list(self.machine_st.registers[3], stub_gen) {
+            Ok(addrs) => {
+                let mut header_map = HeaderMap::new();
+                for heap_cell in addrs{
+                   read_heap_cell!(heap_cell,
+                       (HeapCellValueTag::Str, s) => {
+                           let name = cell_as_atom_cell!(self.machine_st.heap[s]).get_name();
+                           let value = self.machine_st.value_to_str_like(self.machine_st.heap[s + 1]).unwrap();
+                           header_map.insert(HeaderName::from_str(name.as_str()).unwrap(), HeaderValue::from_str(value.as_str()).unwrap());
+                       }
+                       _ => {
+                           unreachable!()
+                       }
+                   )
+                }
+                header_map
+            },
+            Err(e) => return Err(e)
+        };
+	let stream_addr = self.machine_st.store(self.machine_st.deref(self.machine_st.registers[4]));
+
+	read_heap_cell!(culprit,
+	    (HeapCellValueTag::Cons, cons_ptr) => {
+		match_untyped_arena_ptr!(cons_ptr,
+		    (ArenaHeaderTag::HttpResponse, http_response) => {
+			let mut response = Response::builder()
+			    .status(status_code);
+			*response.headers_mut().unwrap() = headers;
+			let (sender, body) = Body::channel();
+			let response = response.body(body).unwrap();
+			http_response.blocking_send(response).unwrap();
+
+			let mut stream = Stream::from_http_sender(
+			    sender,
+			    &mut self.machine_st.arena
+			);
+			*stream.options_mut() = StreamOptions::default();
+			stream.options_mut().set_stream_type(StreamType::Binary);
+			self.indices.streams.insert(stream);
+			let stream = stream_as_cell!(stream);
+			self.machine_st.bind(stream_addr.as_var().unwrap(), stream);
+		    }
+		    _ => {
+			unreachable!();
+		    }
+		);
+	    }
+	    _ => {
+		unreachable!();
+	    }
+	);
+
+	Ok(())
     }
 
     #[inline(always)]
