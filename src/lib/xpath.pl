@@ -26,22 +26,22 @@
 
       :- use_module(library(http/http_open)).
       :- use_module(library(sgml)).
-      :- use_module(library(lists)).
       :- use_module(library(xpath)).
+      :- use_module(library(dcgs)).
 
       link_to_pl_file(File) :-
           http_open("https://github.com/mthom/scryer-prolog", S, []),
           load_html(stream(S), DOM, []),
           xpath(DOM, //a(@href), File),
-          append(_, ".pl", File).
+          phrase((...,".pl"), File).
 
    Yielding:
 
       ?- link_to_pl_file(File).
-      %@    File = "/mthom/scryer-prolog/blob/master/src/lib/tabling.pl"
-      %@ ;  File = "/mthom/scryer-prolog/blob/master/src/lib/dif.pl"
-      %@ ;  File = "/mthom/scryer-prolog/blob/master/src/lib/freeze.pl"
-      %@ ;  ...
+      %@    File = "/mthom/scryer-prolog/blob/master/src/lib/dcgs.pl"
+      %@ ;  File = "/mthom/scryer-prolog/blob/master/src/lib/pio.pl"
+      %@ ;  File = "/mthom/scryer-prolog/blob/master/src/lib/tabling.pl"
+      %@ ;  ... .
 
    Parts of the original functionality may not yet work. Please
    consider such parts opportunities for improvements, and file
