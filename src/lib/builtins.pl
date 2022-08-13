@@ -818,7 +818,8 @@ bagof(Template, Goal, Solution) :-
 :- non_counted_backtracking iterate_variants_and_sort/3.
 
 iterate_variants_and_sort([V-Solution0|GroupSolutions], V, Solution) :-
-    sort(Solution0, Solution),
+    sort(Solution0, Solution1),
+    Solution1 = Solution,
     (  GroupSolutions == [] -> !
     ;  true
     ).

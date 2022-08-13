@@ -155,7 +155,7 @@ fn ignored_constraint() {
     run_top_level_test_no_args(
         "use_module(library(freeze)), freeze(X,false), X \\=a.\n\
          halt.",
-        "   freeze:freeze(X,user:false).\n",
+        "   freeze:freeze(X,false).\n",
     );
 }
 
