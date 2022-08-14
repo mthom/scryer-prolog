@@ -26,7 +26,7 @@ phrase(GRBody, S0, S) :-
     ;  nonvar(GRBody1),
        dcg_constr(GRBody1),
        dcg_body(GRBody1, S0, S, GRBody2) ->
-       call(GRBody2)
+       call(M:GRBody2)
     ;  call(M:GRBody1, S0, S)
     ).
 
