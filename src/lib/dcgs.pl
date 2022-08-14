@@ -20,12 +20,14 @@ phrase(GRBody, S0) :-
     phrase(GRBody, S0, []).
 
 phrase(GRBody, S0, S) :-
+    strip_module(GRBody, M, GRBody1),
     (  var(GRBody) ->
        instantiation_error(phrase/3)
-    ;  dcg_constr(GRBody),
-       dcg_body(GRBody, S0, S, GRBody1) ->
-       call(GRBody1)
-    ;  call(GRBody, S0, S)
+    ;  nonvar(GRBody1),
+       dcg_constr(GRBody1),
+       dcg_body(GRBody1, S0, S, GRBody2) ->
+       call(GRBody2)
+    ;  call(M:GRBody1, S0, S)
     ).
 
 
