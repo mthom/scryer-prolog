@@ -73,7 +73,6 @@ directory_files(Directory, Files) :-
 
 file_size(File, Size) :-
         file_must_exist(File, file_size/2),
-        must_be(chars, File),
         can_be(integer, Size),
         '$file_size'(File, Size).
 
@@ -95,12 +94,10 @@ make_directory_path(Directory) :-
 
 delete_file(File) :-
         file_must_exist(File, delete_file/1),
-        must_be(chars, File),
         '$delete_file'(File).
 
 rename_file(File, Renamed) :-
         file_must_exist(File, rename_file/2),
-        must_be(chars, File),
         must_be(chars, Renamed),
         '$rename_file'(File, Renamed).
 
