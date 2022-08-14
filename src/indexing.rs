@@ -1466,16 +1466,19 @@ impl<I: Indexer> CodeOffsets<I> {
         atom_tbl: &mut AtomTable,
     ) {
         match optimal_arg {
+            &Term::Clause(_, atom!("."), ref terms) if terms.len() == 2 => {
+                clause_index_info.opt_arg_index_key = OptArgIndexKey::List(self.optimal_index, 0);
+                self.index_list(index);
+            }
+            &Term::Cons(..) | &Term::Literal(_, Literal::String(_)) | &Term::PartialString(..) => {
+                clause_index_info.opt_arg_index_key = OptArgIndexKey::List(self.optimal_index, 0);
+                self.index_list(index);
+            }
             &Term::Clause(_, name, ref terms) => {
                 clause_index_info.opt_arg_index_key =
                     OptArgIndexKey::Structure(self.optimal_index, 0, name.clone(), terms.len());
 
                 self.index_structure(name, terms.len(), index);
-            }
-            &Term::Cons(..) | &Term::Literal(_, Literal::String(_)) | &Term::PartialString(..) => {
-                clause_index_info.opt_arg_index_key = OptArgIndexKey::List(self.optimal_index, 0);
-
-                self.index_list(index);
             }
             &Term::Literal(_, constant) => {
                 let overlapping_constants = self.index_constant(atom_tbl, constant, index);

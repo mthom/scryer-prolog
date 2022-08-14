@@ -371,8 +371,14 @@ impl Machine {
                             c
                         }
                         (HeapCellValueTag::Str, st) => {
-                            let arity = cell_as_atom_cell!(self.machine_st.heap[st]).get_arity();
-                            if arity == 0 { c } else { s }
+                            let (name, arity) = cell_as_atom_cell!(self.machine_st.heap[st])
+                                .get_name_and_arity();
+
+                            match (name, arity) {
+                                (atom!("."), 2) => l,
+                                (_, 0) => c,
+                                _ => s,
+                            }
                         }
                         (HeapCellValueTag::Cons, ptr) => {
                             match ptr.get_tag() {
@@ -2811,6 +2817,19 @@ impl Machine {
                             self.machine_st.s = HeapPtr::PStrChar(h, 0);
                             self.machine_st.s_offset = 0;
                             self.machine_st.mode = MachineMode::Read;
+                        }
+                        (HeapCellValueTag::Str, s) => {
+                            let (name, arity) = cell_as_atom_cell!(self.machine_st.heap[s])
+                                .get_name_and_arity();
+
+                            if name == atom!(".") && arity == 2 {
+                                self.machine_st.s = HeapPtr::HeapCell(s+1);
+                                self.machine_st.s_offset = 0;
+                                self.machine_st.mode = MachineMode::Read;
+                            } else {
+                                self.machine_st.backtrack();
+                                continue;
+                            }
                         }
                         (HeapCellValueTag::Lis, l) => {
                             self.machine_st.s = HeapPtr::HeapCell(l);
