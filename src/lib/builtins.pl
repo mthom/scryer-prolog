@@ -1122,7 +1122,6 @@ current_predicate(Pred) :-
 can_be_op_priority(Priority) :- var(Priority).
 can_be_op_priority(Priority) :- op_priority(Priority).
 
-
 can_be_op_specifier(Spec) :- var(Spec).
 can_be_op_specifier(Spec) :- op_specifier(Spec).
 

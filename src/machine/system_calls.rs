@@ -3583,6 +3583,12 @@ impl Machine {
                                 let (op_prec, op_spec) =
                                     (op_desc.get_prec(), op_desc.get_spec());
 
+                                if op_prec == 0 {
+                                    // 8.14.4, note 2
+                                    self.machine_st.fail = true;
+                                    return;
+                                }
+
                                 let op_spec = match op_spec as u32 {
                                     XFX => atom!("xfx"),
                                     XFY => atom!("xfy"),
@@ -3609,6 +3615,12 @@ impl Machine {
                         for op_desc in op_descs {
                             if let Some((key, op_desc)) = op_desc {
                                 let (prec, spec) = (op_desc.get_prec(), op_desc.get_spec());
+
+                                if prec == 0 {
+                                    // 8.14.4, note 2
+                                    continue;
+                                }
+
                                 unossified_op_dir.insert(*key, (prec as usize, spec as Specifier));
                             }
                         }
@@ -3625,6 +3637,7 @@ impl Machine {
                         let name = key.0;
 
                         if other_prec == 0 {
+                            // 8.14.4, note 2
                             return None;
                         }
 

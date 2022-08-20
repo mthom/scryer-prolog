@@ -757,7 +757,6 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                         .map(|code_idx| code_idx.set(old_code_idx));
                 }
                 RetractionRecord::AddedIndex(index_key, clause_loc) => {
-                    // WAS: inner_index_locs) => {
                     if let Some(index_loc) = index_key.switch_on_term_loc() {
                         let indexing_code = match &mut self.wam_prelude.code[index_loc] {
                             Instruction::IndexingCode(indexing_code) => indexing_code,
