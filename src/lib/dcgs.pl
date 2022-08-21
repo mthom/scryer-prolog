@@ -132,29 +132,25 @@ user:term_expansion(Term0, Term) :-
     dcg_rule(Term0, Term).
 
 % Describes a sequence
-seq(Xs) -->
-   call(det_end_(Xs)),
-   !.
-seq([]) --> [].
-seq([E|Es]) --> [E], seq(Es).
-
-det_end_(Xs, Cs0,Cs) :-
+seq(Xs, Cs0,Cs) :-
    var(Xs),
    Cs0 == [],
+   !,
    Xs = [],
    Cs0 = Cs.
+seq([]) --> [].
+seq([E|Es]) --> [E], seq(Es).
 
 % Describes a sequence of sequences
 seqq([]) --> [].
 seqq([Es|Ess]) --> seq(Es), seqq(Ess).
 
 % Describes an arbitrary number of elements
-... --> call(det_end), !.
-... --> [] | [_], ... .
-
-det_end(Cs0,Cs) :-
+...(Cs0,Cs) :-
    Cs0 == [],
+   !,
    Cs0 = Cs.
+... --> [] | [_], ... .
 
 error_goal(error(E, must_be/2), error(E, must_be/2)).
 error_goal(error(E, (=..)/2), error(E, (=..)/2)).
