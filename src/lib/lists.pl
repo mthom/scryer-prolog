@@ -247,15 +247,9 @@ nth0(N, Es, E) :-
         can_be(integer, N),
         can_be(list, Es),
         (   integer(N) ->
-            nth0_index(N, Es, E)
+            '$skip_max_list'(N, N, Es, [E|_])
         ;   nth0_search(N, Es, E)
         ).
-
-nth0_index(0, [E|_], E) :- !.
-nth0_index(N, [_|Es], E) :-
-        N > 0,
-        N1 is N - 1,
-        nth0_index(N1, Es, E).
 
 nth0_search(N, Es, E) :-
         nth0_search(0, N, Es, E).
