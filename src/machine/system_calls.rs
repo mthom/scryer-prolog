@@ -579,7 +579,19 @@ impl MachineState {
                 self.finalize_skip_max_list(n as i64, list_loc_as_cell!(l));
             }
             CycleSearchResult::UntouchedCStr(cstr_atom, n) => {
-                self.finalize_skip_max_list(n as i64, string_as_cstr_cell!(cstr_atom));
+                let cell = if n > 0 {
+                    let h = self.heap.len();
+
+                    self.heap.push(string_as_cstr_cell!(cstr_atom));
+                    self.heap.push(pstr_offset_as_cell!(h));
+                    self.heap.push(fixnum_as_cell!(Fixnum::build_with(n as i64)));
+
+                    pstr_loc_as_cell!(h+1)
+                } else {
+                    string_as_cstr_cell!(cstr_atom)
+                };
+
+                self.finalize_skip_max_list(n as i64, cell);
             }
             CycleSearchResult::EmptyList => {
                 self.finalize_skip_max_list(0, empty_list_as_cell!());
