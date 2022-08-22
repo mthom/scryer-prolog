@@ -104,10 +104,10 @@ must_be_bytes(Bytes, Context) :-
         ).
 
 
-must_be_byte_chars(Chars, Context) :-
+must_be_octet_chars(Chars, Context) :-
         must_be(chars, Chars),
         (   '$first_non_octet'(Chars, F) ->
-            domain_error(byte_char, F, Context)
+            domain_error(octet_character, F, Context)
         ;   true
         ).
 
@@ -611,7 +611,7 @@ encoding_chars(octet, Bs, Cs) :-
             maplist(char_code, Cs, Bs)
         ;   Bs = Cs
         ),
-        must_be_byte_chars(Cs, crypto_encoding).
+        must_be_octet_chars(Cs, crypto_encoding).
 encoding_chars(utf8, Cs, Cs) :-
         must_be(chars, Cs).
 
@@ -652,17 +652,17 @@ ed25519_new_keypair(Pair) :-
         '$ed25519_new_keypair'(Pair).
 
 ed25519_keypair_public_key(Pair, PublicKey) :-
-        must_be_byte_chars(Pair, ed25519_keypair_public_key),
+        must_be_octet_chars(Pair, ed25519_keypair_public_key),
         '$ed25519_keypair_public_key'(Pair, PublicKey).
 
 ed25519_sign(Key, Data0, Signature, Options) :-
-        must_be_byte_chars(Key, ed25519_sign),
+        must_be_octet_chars(Key, ed25519_sign),
         options_data_chars(Options, Data0, Data, Encoding),
         '$ed25519_sign'(Key, Data, Encoding, Signature0),
         hex_bytes(Signature, Signature0).
 
 ed25519_verify(Key, Data0, Signature0, Options) :-
-        must_be_byte_chars(Key, ed25519_verify),
+        must_be_octet_chars(Key, ed25519_verify),
         options_data_chars(Options, Data0, Data, Encoding),
         hex_bytes(Signature0, Signature),
         '$ed25519_verify'(Key, Data, Encoding, Signature).
