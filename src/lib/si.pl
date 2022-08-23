@@ -27,7 +27,8 @@
 :- module(si, [atom_si/1,
                integer_si/1,
                atomic_si/1,
-               list_si/1]).
+               list_si/1,
+               chars_si/1]).
 
 :- use_module(library(lists)).
 
@@ -45,3 +46,7 @@ atomic_si(AC) :-
 list_si(L) :-
    \+ \+ length(L, _),
    sort(L, _).
+
+chars_si(Cs) :-
+   list_si(Cs),
+   '$is_partial_string'(Cs).
