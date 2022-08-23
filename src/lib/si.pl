@@ -43,9 +43,15 @@ integer_si(I) :-
 atomic_si(AC) :-
    functor(AC,_,0).
 
-list_si(L) :-
-   \+ \+ length(L, _),
-   sort(L, _).
+% list_si(L) :-
+%    \+ \+ length(L, _),
+%    sort(L, _).
+
+list_si(L0) :-
+   '$skip_max_list'(_,_, L0,L),
+   (  nonvar(L) -> L = []
+   ;  throw(error(instantiation_error, list_si/1))
+   ).
 
 chars_si(Cs) :-
    list_si(Cs),
