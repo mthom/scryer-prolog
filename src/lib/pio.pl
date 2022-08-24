@@ -91,7 +91,7 @@ phrase_to_stream(GRBody, Stream) :-
         must_be(chars, Cs),
         (   stream_property(Stream, type(binary)) ->
             (   '$first_non_octet'(Cs, N) ->
-                domain_error(byte_char, N, phrase_to_stream/2)
+                domain_error(octet_character, N, phrase_to_stream/2)
             ;   true
             )
         ;   true
