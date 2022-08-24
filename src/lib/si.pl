@@ -27,7 +27,8 @@
 :- module(si, [atom_si/1,
                integer_si/1,
                atomic_si/1,
-               list_si/1]).
+               list_si/1,
+               chars_si/1]).
 
 :- use_module(library(lists)).
 
@@ -42,6 +43,16 @@ integer_si(I) :-
 atomic_si(AC) :-
    functor(AC,_,0).
 
-list_si(L) :-
-   \+ \+ length(L, _),
-   sort(L, _).
+% list_si(L) :-
+%    \+ \+ length(L, _),
+%    sort(L, _).
+
+list_si(L0) :-
+   '$skip_max_list'(_,_, L0,L),
+   (  nonvar(L) -> L = []
+   ;  throw(error(instantiation_error, list_si/1))
+   ).
+
+chars_si(Cs) :-
+   list_si(Cs),
+   '$is_partial_string'(Cs).
