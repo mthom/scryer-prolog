@@ -1344,10 +1344,6 @@ print_row(R) :- maplist(print_row_, R), nl.
 
 print_row_(N) :- format("~w ", [N]).
 
-nth1(N, Es, E) :-
-        N1 is N - 1,
-        nth0(N1, Es, E).
-
 %?- transportation([1,1], [1,1], [[1,1],[1,1]], Ms).
 
 %?- transportation([12,7,14], [3,15,9,6], [[20,50,10,60],[70,40,60,30],[40,80,70,40]], Ms).
