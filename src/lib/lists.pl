@@ -243,53 +243,82 @@ unify_same(E-V, Prev-Var, E-V) :-
         ).
 
 
-nth0(N, Es0, E, Es) :-
+nth0(N, Es0, E) :-
    nonvar(N),
    '$skip_max_list'(Skip, N, Es0,Es1),
    !,
    (  Skip == N
-   -> Es1 = [E|Es]
+   -> Es1 = [E|_]
    ;  ( var(Es1) ; Es1 = [_|_] ) % a partial or infinite list
    -> R is N-Skip,
       skipn(R,Es1,Es2),
-      Es2 = [E|Es]
+      Es2 = [E|_]
    ).
-nth0(N, Es0, E, Es) :-
+nth0(N, Es0, E) :-
    can_be(not_less_than_zero, N),
    Es0 = [E0|Es1],
-   nth0_el(0,N, E0,E, Es1,Es).
+   nth0_el(0,N, E0,E, Es1).
 
 skipn(N0, Es0,Es) :-
    N0>0,
    !, % should not be necessary #1028
-   Es0 = [_|Es1],
    N1 is N0-1,
+   Es0 = [_|Es1],
    skipn(N1, Es1,Es).
 skipn(0, Es,Es).
 
-nth0_el(N0,N, E0,E, Es0,Es) :-
+nth0_el(N0,N, E0,E, Es0) :-
    Es0 == [],
    !, % indexing
    N0 = N,
+   E0 = E.
+nth0_el(N,N, E,E, _).
+nth0_el(N0,N, _,E, [E0|Es0]) :-
+   N1 is N0+1,
+   nth0_el(N1,N, E0,E, Es0).
+
+nth1(N, Es0, E) :-
+   N \== 0,
+   nth0(N, [_|Es0], E),
+   N \== 0.
+
+skipn(N0, Es0,Es, Xs0,Xs) :-
+   N0>0,
+   !, % should not be necessary #1028
+   N1 is N0-1,
+   Es0 = [E|Es1],
+   Xs0 = [E|Xs1],
+   skipn(N1, Es1,Es, Xs1,Xs).
+skipn(0, Es,Es, Xs,Xs).
+
+nth0(N, Es0, E, Es) :-
+   integer(N),
+   N >= 0,
+   !,
+   skipn(N, Es0,Es1, Es,Es2),
+   Es1 = [E|Es2].
+nth0(N, Es0, E, Es) :-
+   can_be(not_less_than_zero, N),
+   Es0 = [E0|Es1],
+   nth0_elx(0,N, E0,E, Es1, Es).
+
+nth0_elx(N0,N, E0,E, Es0, Es) :-
+   Es0 == [],
+   !,
+   N0 = N,
    E0 = E,
    Es0 = Es.
-nth0_el(N,N, E,E, Es,Es).
-nth0_el(N0,N, _,E, [E0|Es0],Es) :-
+nth0_elx(N,N, E,E, Es, Es).
+nth0_elx(N0,N, E0,E, [E1|Es0], [E0|Es]) :-
    N1 is N0+1,
-   nth0_el(N1,N, E0,E, Es0,Es).
+   nth0_elx(N1,N, E1,E, Es0, Es).
 
 % p.p.8.5
 
-nth0(N, Es0, E) :-
-   nth0(N, Es0, E, _).
-
 nth1(N, Es0, E, Es) :-
    N \== 0,
-   nth0(N, [_|Es0], E, Es),
+   nth0(N, [_|Es0], E, [_|Es]),
    N \== 0.
-
-nth1(N, Es0, E) :-
-   nth1(N, Es0, E, _).
 
 
 list_max([N|Ns], Max) :-
