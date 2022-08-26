@@ -52,6 +52,11 @@ must_be_(var, Term) :-
         ;   throw(error(uninstantiation_error(Term), must_be/2))
         ).
 must_be_(integer, Term) :- check_(integer, integer, Term).
+must_be_(not_less_than_zero, N) :-
+        must_be(integer, N),
+        (   N >= 0 -> true
+        ;   domain_error(not_less_than_zero, N, must_be/2)
+        ).
 must_be_(atom, Term)    :- check_(atom, atom, Term).
 must_be_(character, T)  :- check_(error:character, character, T).
 must_be_(in_character, T) :- check_(error:in_character, in_character, T).
@@ -135,6 +140,7 @@ type(list).
 type(var).
 type(boolean).
 type(term).
+type(not_less_than_zero).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    can_be(Type, Term)
@@ -158,6 +164,13 @@ can_be(Type, Term) :-
         ).
 
 can_(integer, Term) :- integer(Term).
+can_(not_less_than_zero, N) :-
+        (   integer(N) ->
+            (   N >= 0 -> true
+            ;   domain_error(not_less_than_zero, N, can_be/2)
+            )
+        ;   type_error(integer, N, can_be/2)
+        ).
 can_(atom, Term)    :- atom(Term).
 can_(character, T)  :- character(T).
 can_(in_character, T) :- in_character(T).

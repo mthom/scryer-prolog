@@ -1,7 +1,7 @@
 :- module(lists, [member/2, select/3, append/2, append/3, foldl/4, foldl/5,
 		          memberchk/2, reverse/2, length/2, maplist/2,
 		          maplist/3, maplist/4, maplist/5, maplist/6,
-		          maplist/7, maplist/8, maplist/9, same_length/2, nth0/3,
+		          maplist/7, maplist/8, maplist/9, same_length/2, nth0/3, nth0/4, nth1/3, nth1/4,
 		          sum_list/2, transpose/2, list_to_set/2, list_max/2,
                   list_min/2, permutation/2]).
 
@@ -243,21 +243,82 @@ unify_same(E-V, Prev-Var, E-V) :-
         ).
 
 
-nth0(N, Es, E) :-
-        can_be(integer, N),
-        can_be(list, Es),
-        (   integer(N) ->
-            '$skip_max_list'(N, N, Es, [E|_])
-        ;   nth0_search(N, Es, E)
-        ).
+nth0(N, Es0, E) :-
+   nonvar(N),
+   '$skip_max_list'(Skip, N, Es0,Es1),
+   !,
+   (  Skip == N
+   -> Es1 = [E|_]
+   ;  ( var(Es1) ; Es1 = [_|_] ) % a partial or infinite list
+   -> R is N-Skip,
+      skipn(R,Es1,Es2),
+      Es2 = [E|_]
+   ).
+nth0(N, Es0, E) :-
+   can_be(not_less_than_zero, N),
+   Es0 = [E0|Es1],
+   nth0_el(0,N, E0,E, Es1).
 
-nth0_search(N, Es, E) :-
-        nth0_search(0, N, Es, E).
+skipn(N0, Es0,Es) :-
+   N0>0,
+   !, % should not be necessary #1028
+   N1 is N0-1,
+   Es0 = [_|Es1],
+   skipn(N1, Es1,Es).
+skipn(0, Es,Es).
 
-nth0_search(N, N, [E|_], E).
-nth0_search(N0, N, [_|Es], E) :-
-        N1 is N0 + 1,
-        nth0_search(N1, N, Es, E).
+nth0_el(N0,N, E0,E, Es0) :-
+   Es0 == [],
+   !, % indexing
+   N0 = N,
+   E0 = E.
+nth0_el(N,N, E,E, _).
+nth0_el(N0,N, _,E, [E0|Es0]) :-
+   N1 is N0+1,
+   nth0_el(N1,N, E0,E, Es0).
+
+nth1(N, Es0, E) :-
+   N \== 0,
+   nth0(N, [_|Es0], E),
+   N \== 0.
+
+skipn(N0, Es0,Es, Xs0,Xs) :-
+   N0>0,
+   !, % should not be necessary #1028
+   N1 is N0-1,
+   Es0 = [E|Es1],
+   Xs0 = [E|Xs1],
+   skipn(N1, Es1,Es, Xs1,Xs).
+skipn(0, Es,Es, Xs,Xs).
+
+nth0(N, Es0, E, Es) :-
+   integer(N),
+   N >= 0,
+   !,
+   skipn(N, Es0,Es1, Es,Es2),
+   Es1 = [E|Es2].
+nth0(N, Es0, E, Es) :-
+   can_be(not_less_than_zero, N),
+   Es0 = [E0|Es1],
+   nth0_elx(0,N, E0,E, Es1, Es).
+
+nth0_elx(N0,N, E0,E, Es0, Es) :-
+   Es0 == [],
+   !,
+   N0 = N,
+   E0 = E,
+   Es0 = Es.
+nth0_elx(N,N, E,E, Es, Es).
+nth0_elx(N0,N, E0,E, [E1|Es0], [E0|Es]) :-
+   N1 is N0+1,
+   nth0_elx(N1,N, E1,E, Es0, Es).
+
+% p.p.8.5
+
+nth1(N, Es0, E, Es) :-
+   N \== 0,
+   nth0(N, [_|Es0], E, [_|Es]),
+   N \== 0.
 
 
 list_max([N|Ns], Max) :-
