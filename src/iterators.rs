@@ -530,3 +530,38 @@ impl<'a> Iterator for ChunkedIterator<'a> {
         self.iter.next().map(|term| self.take_chunk(term))
     }
 }
+
+/*
+================================================================================
+
+This is a disjunction compilation experiment attempting to
+adapt the paper "Compiling Large Disjunctions" to Scryer Prolog.
+
+================================================================================
+*/
+
+enum VarInfo {
+    Perm,
+    Temp,
+    Void
+}
+
+pub struct ChunkInfo {
+    chunk_num: usize,
+    vars: Vec<(Rc<Var>, VarInfo)>,
+}
+
+pub struct BranchInfo {
+    branch_num: usize, // TODO: Rational?? or own type?
+    delta: usize, // TODO: Rational??
+    chunks: Vec<ChunkInfo>,
+}
+
+pub struct ControlIterator<'a> {
+    current_branch_num: usize, // TODO: same as above
+    state_stack: Vec<TermIterState<'a>>,
+    branch_map: IndexMap<Rc<Var>, Vec<BranchInfo>>,
+}
+
+impl ControlIterator {
+}
