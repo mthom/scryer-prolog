@@ -6631,17 +6631,6 @@ impl Machine {
         } else {
             let mut bytes = vec![];
             for c in self.machine_st.value_to_str_like(self.machine_st.registers[1]).unwrap().as_str().chars() {
-                if c as u32 > 255 {
-                    let stub = functor_stub(atom!("chars_base64"), 3);
-
-                    let err = self.machine_st.type_error(
-                        ValidType::Byte,
-                        char_as_cell!(c),
-                    );
-
-                    return Err(self.machine_st.error_form(err, stub));
-                }
-
                 bytes.push(c as u8);
             }
 
