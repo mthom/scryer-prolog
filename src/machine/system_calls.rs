@@ -6629,13 +6629,9 @@ impl Machine {
             }
 
             let b64 = base64::encode_config(bytes, config);
-            let cstr = if b64.len() == 0 {
-                empty_list_as_cell!()
-            } else {
-                atom_as_cstr_cell!(self.machine_st.atom_tbl.build_with(&b64))
-            };
+            let string = self.u8s_to_string(&b64.as_bytes());
 
-            unify!(self.machine_st, self.machine_st.registers[2], cstr);
+            unify!(self.machine_st, self.machine_st.registers[2], string);
         }
 
         Ok(())
