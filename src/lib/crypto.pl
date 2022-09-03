@@ -761,15 +761,15 @@ crypto_curve_scalar_mult(Curve, Scalar, point(X,Y), point(RX, RY)) :-
         curve_name(Curve, Name),
         curve_field_length(Curve, L0),
         L #= 2*L0, % for hex encoding
-        phrase(format_("04~|~`0t~16r~*+~`0t~16r~*+", [X,L,Y,L]), Hex),
-        hex_bytes(Hex, PointBytes),
+        phrase(format_("04~|~`0t~16r~*+~`0t~16r~*+", [X,L,Y,L]), PointHex),
+        hex_bytes(PointHex, PointBytes),
         once(bytes_integer(ScalarBytes, Scalar)),
         '$crypto_curve_scalar_mult'(Name, ScalarBytes, PointBytes, [_|Us]),
         maplist(char_code, Us, Bs),
-        length(BXs0, 32),
-        append(BXs0, BYs0, Bs),
-        maplist(reverse, [BXs0,BYs0], Rs),
-        maplist(bytes_integer, Rs, [RX,RY]).
+        length(XBs, 32),
+        append(XBs, YBs, Bs),
+        maplist(reverse, [XBs,YBs], RBs),
+        maplist(bytes_integer, RBs, [RX,RY]).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ?- crypto_name_curve(secp256k1, Curve),
