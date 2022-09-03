@@ -492,7 +492,7 @@ enum SystemClauseType {
     CryptoDataEncrypt,
     #[strum_discriminants(strum(props(Arity = "6", Name = "$crypto_data_decrypt")))]
     CryptoDataDecrypt,
-    #[strum_discriminants(strum(props(Arity = "5", Name = "$crypto_curve_scalar_mult")))]
+    #[strum_discriminants(strum(props(Arity = "4", Name = "$crypto_curve_scalar_mult")))]
     CryptoCurveScalarMult,
     #[strum_discriminants(strum(props(Arity = "4", Name = "$ed25519_sign")))]
     Ed25519Sign,

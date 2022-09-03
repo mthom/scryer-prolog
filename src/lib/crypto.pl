@@ -763,10 +763,14 @@ crypto_curve_scalar_mult(Curve, Scalar, point(X,Y), point(RX, RY)) :-
         curve_field_length(Curve, L0),
         L #= 2*L0, % for hex encoding
         phrase(format_("04~|~`0t~16r~*+~`0t~16r~*+", [X,L,Y,L]), Hex),
-        hex_bytes(Hex, Bytes),
-        '$crypto_curve_scalar_mult'(Name, Scalar, Bytes, SX, SY),
-        number_chars(RX, SX),
-        number_chars(RY, SY).
+        hex_bytes(Hex, PointBytes),
+        once(bytes_integer(ScalarBytes, Scalar)),
+        '$crypto_curve_scalar_mult'(Name, ScalarBytes, PointBytes, [_|Us]),
+        maplist(char_code, Us, Bs),
+        length(BXs0, 32),
+        append(BXs0, BYs0, Bs),
+        maplist(reverse, [BXs0,BYs0], Rs),
+        maplist(bytes_integer, Rs, [RX,RY]).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ?- crypto_name_curve(secp256k1, Curve),
@@ -818,16 +822,6 @@ fitting_exponent(N, E0, E) :-
             fitting_exponent(N, E1, E)
         ).
 
-crypto_name_curve(secp112r1,
-                  curve(secp112r1,
-                        0x00db7c2abf62e35e668076bead208b,
-                        0x00db7c2abf62e35e668076bead2088,
-                        0x659ef8ba043916eede8911702b22,
-                        point(0x09487239995a5ee76b55f9c2f098,
-                              0xa89ce5af8724c0a23e0e0ff77500),
-                        0x00db7c2abf62e35e7628dfac6561c5,
-                        14,
-                        1)).
 crypto_name_curve(secp256k1,
                   curve(secp256k1,
                         0x00fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f,
