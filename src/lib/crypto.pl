@@ -65,8 +65,7 @@
 
 hex_bytes(Hs, Bytes) :-
         (   ground(Hs) ->
-            must_be(list, Hs),
-            maplist(must_be(atom), Hs),
+            must_be(chars, Hs),
             (   phrase(hex_bytes(Hs), Bytes) ->
                 true
             ;   domain_error(hex_encoding, Hs, hex_bytes/2)
