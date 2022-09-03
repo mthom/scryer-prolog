@@ -69,9 +69,7 @@ use ring::{
 use ripemd160::{Digest, Ripemd160};
 use sha3::{Sha3_224, Sha3_256, Sha3_384, Sha3_512};
 
-use openssl::bn::{BigNum, BigNumContext};
-use openssl::ec::{EcGroup, EcPoint};
-use openssl::nid::Nid;
+use crrl::secp256k1;
 
 use sodiumoxide::crypto::scalarmult::curve25519::*;
 
@@ -6342,60 +6340,26 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn crypto_curve_scalar_mult(&mut self) {
-        let curve = cell_as_atom!(self.machine_st.registers[1]);
 
-        let curve_id = match curve {
-            atom!("secp112r1") => Nid::SECP112R1,
-            atom!("secp256k1") => Nid::SECP256K1,
-            _ => {
-                unreachable!()
+        let stub_gen = || functor_stub(atom!("crypto_curve_scalar_mult"), 4);
+        let scalar_bytes = self.machine_st.integers_to_bytevec(self.machine_st.registers[2], stub_gen);
+        let point_bytes = self.machine_st.integers_to_bytevec(self.machine_st.registers[3], stub_gen);
+
+        let mut point = secp256k1::Point::decode(&point_bytes).unwrap();
+        let scalar = secp256k1::Scalar::decode_reduce(&scalar_bytes);
+        point *= scalar;
+
+        let uncompressed = {
+            let buffer = String::from_iter(point.encode_uncompressed().iter().map(|b| *b as char));
+
+            if buffer.len() == 0 {
+                empty_list_as_cell!()
+            } else {
+                atom_as_cstr_cell!(self.machine_st.atom_tbl.build_with(&buffer))
             }
         };
 
-        let scalar = self.machine_st.store(self.machine_st.deref(self.machine_st.registers[2]));
-
-        let scalar = match Number::try_from(scalar) {
-            Ok(Number::Fixnum(n)) => Integer::from(n.get_num()),
-            Ok(Number::Integer(n)) => Integer::from(&*n),
-            _ => {
-                unreachable!()
-            }
-        };
-
-        let stub_gen = || functor_stub(atom!("crypto_curve_scalar_mult"), 5);
-        let qbytes = self.machine_st.integers_to_bytevec(self.machine_st.registers[3], stub_gen);
-
-        let mut bnctx = BigNumContext::new().unwrap();
-        let group = EcGroup::from_curve_name(curve_id).unwrap();
-        let mut point = EcPoint::from_bytes(&group, &qbytes, &mut bnctx).unwrap();
-        let scalar_bn = BigNum::from_dec_str(&scalar.to_string()).unwrap();
-        let mut result = EcPoint::new(&group).unwrap();
-
-        result.mul(&group, &mut point, &scalar_bn, &mut bnctx).ok();
-
-        let mut rx = BigNum::new().unwrap();
-        let mut ry = BigNum::new().unwrap();
-
-        result
-            .affine_coordinates_gfp(&group, &mut rx, &mut ry, &mut bnctx)
-            .ok();
-
-        let sx = rx.to_dec_str().unwrap();
-        let sx = if sx.len() == 0 {
-            empty_list_as_cell!()
-        } else {
-            atom_as_cstr_cell!(self.machine_st.atom_tbl.build_with(&sx))
-        };
-
-        let sy = ry.to_dec_str().unwrap();
-        let sy = if sy.len() == 0 {
-            empty_list_as_cell!()
-        } else {
-            atom_as_cstr_cell!(self.machine_st.atom_tbl.build_with(&sy))
-        };
-
-        unify!(self.machine_st, self.machine_st.registers[4], sx);
-        unify!(self.machine_st, self.machine_st.registers[5], sy);
+        unify!(self.machine_st, self.machine_st.registers[4], uncompressed);
     }
 
     #[inline(always)]
