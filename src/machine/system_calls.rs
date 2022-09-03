@@ -6272,15 +6272,7 @@ impl Machine {
             )
         );
 
-        let complete_string = {
-            let buffer = String::from_iter(in_out.iter().map(|b| *b as char));
-
-            if buffer.len() == 0 {
-                empty_list_as_cell!()
-            } else {
-                atom_as_cstr_cell!(self.machine_st.atom_tbl.build_with(&buffer))
-            }
-        };
+        let complete_string = self.u8s_to_string(&in_out);
 
         unify!(self.machine_st, self.machine_st.registers[6], tag_list);
         unify!(self.machine_st, self.machine_st.registers[7], complete_string);
@@ -6349,15 +6341,7 @@ impl Machine {
         let scalar = secp256k1::Scalar::decode_reduce(&scalar_bytes);
         point *= scalar;
 
-        let uncompressed = {
-            let buffer = String::from_iter(point.encode_uncompressed().iter().map(|b| *b as char));
-
-            if buffer.len() == 0 {
-                empty_list_as_cell!()
-            } else {
-                atom_as_cstr_cell!(self.machine_st.atom_tbl.build_with(&buffer))
-            }
-        };
+        let uncompressed = self.u8s_to_string(&point.encode_uncompressed());
 
         unify!(self.machine_st, self.machine_st.registers[4], uncompressed);
     }
@@ -6365,15 +6349,7 @@ impl Machine {
     #[inline(always)]
     pub(crate) fn ed25519_new_key_pair(&mut self) {
         let pkcs8_bytes = signature::Ed25519KeyPair::generate_pkcs8(rng()).unwrap();
-        let complete_string = {
-            let buffer = String::from_iter(pkcs8_bytes.as_ref().iter().map(|b| *b as char));
-
-            if buffer.len() == 0 {
-                empty_list_as_cell!()
-            } else {
-                atom_as_cstr_cell!(self.machine_st.atom_tbl.build_with(&buffer))
-            }
-        };
+        let complete_string = self.u8s_to_string(pkcs8_bytes.as_ref());
 
         unify!(self.machine_st, self.machine_st.registers[1], complete_string)
     }
@@ -6390,17 +6366,7 @@ impl Machine {
             }
         };
 
-        let complete_string = {
-            let buffer = String::from_iter(
-                key_pair.public_key().as_ref().iter().map(|b| *b as char),
-            );
-
-            if buffer.len() == 0 {
-                empty_list_as_cell!()
-            } else {
-                atom_as_cstr_cell!(self.machine_st.atom_tbl.build_with(&buffer))
-            }
-        };
+        let complete_string = self.u8s_to_string(key_pair.public_key().as_ref());
 
         unify!(self.machine_st, self.machine_st.registers[2], complete_string);
     }
@@ -6463,14 +6429,9 @@ impl Machine {
 
         let result = scalarmult(&scalar, &point).unwrap();
 
-        let string = String::from_iter(result[..].iter().map(|b| *b as char));
-        let cstr = if string.len() == 0 {
-            empty_list_as_cell!()
-        } else {
-            atom_as_cstr_cell!(self.machine_st.atom_tbl.build_with(&string))
-        };
+        let string = self.u8s_to_string(&result[..]);
 
-        unify!(self.machine_st, self.machine_st.registers[3], cstr);
+        unify!(self.machine_st, self.machine_st.registers[3], string);
     }
 
     #[inline(always)]
@@ -6652,14 +6613,9 @@ impl Machine {
 
             match bytes {
                 Ok(bs) => {
-                    let string = String::from_iter(bs.iter().map(|b| *b as char));
-                    let cstr = if string.len() == 0 {
-                        empty_list_as_cell!()
-                    } else {
-                        atom_as_cstr_cell!(self.machine_st.atom_tbl.build_with(&string))
-                    };
+                    let string = self.u8s_to_string(&bs);
 
-                    unify!(self.machine_st, self.machine_st.registers[1], cstr);
+                    unify!(self.machine_st, self.machine_st.registers[1], string);
                 }
                 _ => {
                     self.machine_st.fail = true;
@@ -6669,28 +6625,13 @@ impl Machine {
         } else {
             let mut bytes = vec![];
             for c in self.machine_st.value_to_str_like(self.machine_st.registers[1]).unwrap().as_str().chars() {
-                if c as u32 > 255 {
-                    let stub = functor_stub(atom!("chars_base64"), 3);
-
-                    let err = self.machine_st.type_error(
-                        ValidType::Byte,
-                        char_as_cell!(c),
-                    );
-
-                    return Err(self.machine_st.error_form(err, stub));
-                }
-
                 bytes.push(c as u8);
             }
 
             let b64 = base64::encode_config(bytes, config);
-            let cstr = if b64.len() == 0 {
-                empty_list_as_cell!()
-            } else {
-                atom_as_cstr_cell!(self.machine_st.atom_tbl.build_with(&b64))
-            };
+            let string = self.u8s_to_string(&b64.as_bytes());
 
-            unify!(self.machine_st, self.machine_st.registers[2], cstr);
+            unify!(self.machine_st, self.machine_st.registers[2], string);
         }
 
         Ok(())
@@ -6964,6 +6905,16 @@ impl Machine {
 
                 result
             }
+        }
+    }
+
+    pub(super) fn u8s_to_string(&mut self, data: &[u8]) -> HeapCellValue {
+        let buffer = String::from_iter(data.iter().map(|b| *b as char));
+
+        if buffer.len() == 0 {
+            empty_list_as_cell!()
+        } else {
+            atom_as_cstr_cell!(self.machine_st.atom_tbl.build_with(&buffer))
         }
     }
 }
