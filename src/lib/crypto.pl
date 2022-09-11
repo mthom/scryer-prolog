@@ -713,12 +713,17 @@ curve25519_scalar_mult(Scalar, Point, Result) :-
         '$curve25519_scalar_mult'(ScalarBytes, PointBytes, Result).
 
 bytes_integer(Bs, N) :-
-        foldl(pow, Bs, 0-0, N-_).
+        foldl(pow, Bs, t(0,0,N), t(N,_,_)).
 
-pow(B, N0-I0, N-I) :-
+pow(B, t(N0,P0,I0), t(N,P,I)) :-
+        (   integer(I0) ->
+            B #= I0 mod 256,
+            I #= I0 >> 8
+        ;   true
+        ),
         B in 0..255,
-        N #= N0 + B*256^I0,
-        I #= I0 + 1.
+        N #= N0 + B*256^P0,
+        P #= P0 + 1.
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    Operations on Elliptic Curves
