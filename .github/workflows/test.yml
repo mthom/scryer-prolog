@@ -52,3 +52,17 @@ jobs:
           crate: cargo-msrv
       - name: Verify MSRV
         run: cargo msrv --verify
+  windows:
+    runs-on: windows-latest
+    steps:
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          update: true
+          install: >-
+            base-devel
+            mingw-w64-x86_64-rust
+      - name: Checkout sources
+        uses: actions/checkout@v3
+      - name: Test on Windows
+        run: cargo test --verbose --all
