@@ -54,6 +54,9 @@ jobs:
         run: cargo msrv --verify
   windows:
     runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
     steps:
       - name: Setup MSYS2
         uses: msys2/setup-msys2@v2
