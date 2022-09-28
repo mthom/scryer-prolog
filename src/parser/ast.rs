@@ -667,3 +667,30 @@ pub fn unfold_by_str(mut term: Term, s: Atom) -> Vec<Term> {
     terms.push(term);
     terms
 }
+
+fn unfold_by_str_ref_once(term: &Term, s: Atom) -> Option<(&Term, &Term)> {
+    if let Term::Clause(_, ref name, ref subterms) = term {
+        if name == &s && subterms.len() == 2 {
+            let fst = &subterms[0];
+            let snd = &subterms[1];
+
+            return Some((fst, snd));
+        }
+    }
+
+    None
+}
+
+pub fn unfold_by_str_ref(mut term: &Term, s: Atom) -> Vec<&Term> {
+    let mut terms = vec![];
+
+    while let Some((fst, snd)) = unfold_by_str_ref_once(&term, s) {
+        terms.push(fst);
+        term = snd;
+    }
+
+    terms.push(term);
+    terms
+}
+
+

@@ -5253,7 +5253,7 @@ impl Machine {
                 }
                 &Instruction::ExecuteUnattributedVar(_) => {
                     self.machine_st.unattributed_var();
-                    step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+                    self.machine_st.p = self.machine_st.cp;
                 }
                 &Instruction::CallGetDBRefs(_) => {
                     self.get_db_refs();

@@ -27,6 +27,7 @@ pub mod instructions {
     include!(concat!(env!("OUT_DIR"), "/instructions.rs"));
 }
 mod iterators;
+mod disjuncts;
 pub mod machine;
 mod raw_block;
 pub mod read;

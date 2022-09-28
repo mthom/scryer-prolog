@@ -1644,6 +1644,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallDeleteAllAttributesFromVar(_) |
                     &Instruction::CallUnattributedVar(_) |
                     &Instruction::CallGetDBRefs(_) |
+                    &Instruction::CallEnqueueAttributedVar(_) |
                     &Instruction::CallFetchGlobalVar(_) |
                     &Instruction::CallFirstStream(_) |
                     &Instruction::CallFlushOutput(_) |
@@ -1866,6 +1867,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteDeleteAllAttributesFromVar(_) |
                     &Instruction::ExecuteUnattributedVar(_) |
                     &Instruction::ExecuteGetDBRefs(_) |
+                    &Instruction::ExecuteEnqueueAttributedVar(_) |
                     &Instruction::ExecuteFetchGlobalVar(_) |
                     &Instruction::ExecuteFirstStream(_) |
                     &Instruction::ExecuteFlushOutput(_) |

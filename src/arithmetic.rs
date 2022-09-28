@@ -74,7 +74,7 @@ impl<'a> ArithInstructionIterator<'a> {
                     2,
                 ))
             }
-            Term::Var(cell, var) => TermIterState::Var(Level::Shallow, cell, var.clone()),
+            Term::Var(cell, var) => TermIterState::Var(Level::Shallow, cell, RcMutPtr::new(var)),
         };
 
         Ok(ArithInstructionIterator {
@@ -116,7 +116,7 @@ impl<'a> Iterator for ArithInstructionIterator<'a> {
                 }
                 TermIterState::Literal(_, _, c) => return Some(Ok(ArithTermRef::Literal(c))),
                 TermIterState::Var(lvl, cell, var) => {
-                    return Some(Ok(ArithTermRef::Var(lvl, cell, var.clone())));
+                    return Some(Ok(ArithTermRef::Var(lvl, cell, var.owned())));
                 }
                 _ => {
                     return Some(Err(ArithmeticError::NonEvaluableFunctor(
