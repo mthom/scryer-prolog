@@ -51,7 +51,6 @@ use std::net::{TcpListener, TcpStream, SocketAddr, ToSocketAddrs};
 use std::num::NonZeroU32;
 use std::ops::Sub;
 use std::process;
-use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -1410,7 +1409,7 @@ impl Machine {
 
             let vars: Vec<_> = vars
                 .union(&result.supp_vars) // difference + union does not cancel.
-                .map(|v| Term::Var(Cell::default(), Rc::new(format!("_{}", v.get_value()))))
+                .map(|v| Term::Var(Cell::default(), Var::Generated(v.get_value())))
                 .collect();
 
             let helper_clause_loc = self.code.len();

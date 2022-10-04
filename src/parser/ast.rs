@@ -572,6 +572,44 @@ impl Literal {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Var {
+    Generated(usize),
+    Named(Rc<String>),
+}
+
+impl From<String> for Var {
+    #[inline(always)]
+    fn from(value: String) -> Var {
+        Var::Named(Rc::new(value))
+    }
+}
+
+impl From<&str> for Var {
+    #[inline(always)]
+    fn from(value: &str) -> Var {
+        Var::Named(Rc::new(value.to_owned()))
+    }
+}
+
+impl Var {
+    #[inline(always)]
+    pub fn as_str(&self) -> Option<&str> {
+        match self {
+            Var::Generated(_) => None,
+            Var::Named(value) => Some(&value),
+        }
+    }
+
+    #[inline(always)]
+    pub fn to_string(&self) -> String {
+        match self {
+            Var::Generated(n) => format!("_{}", n),
+            Var::Named(value) => value.to_string(),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum Term {
     AnonVar,
@@ -582,7 +620,7 @@ pub enum Term {
     // other PartialString variants in as_partial_string.
     PartialString(Cell<RegType>, String, Box<Term>),
     CompleteString(Cell<RegType>, Atom),
-    Var(Cell<VarReg>, Rc<String>),
+    Var(Cell<VarReg>, Var),
 }
 
 impl Term {

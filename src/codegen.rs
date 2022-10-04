@@ -20,7 +20,6 @@ use indexmap::{IndexMap, IndexSet};
 
 use std::cell::Cell;
 use std::collections::VecDeque;
-use std::rc::Rc;
 
 #[derive(Debug)]
 pub(crate) struct ConjunctInfo<'a> {
@@ -170,7 +169,7 @@ impl CodeGenSettings {
 pub(crate) struct CodeGenerator<'a> {
     pub(crate) atom_tbl: &'a mut AtomTable,
     marker: DebrayAllocator,
-    pub(crate) var_count: IndexMap<Rc<String>, usize>,
+    pub(crate) var_count: IndexMap<Var, usize>,
     settings: CodeGenSettings,
     pub(crate) skeleton: PredicateSkeleton,
     pub(crate) jmp_by_locs: Vec<usize>,
@@ -180,7 +179,7 @@ pub(crate) struct CodeGenerator<'a> {
 impl DebrayAllocator {
     fn mark_var_in_non_callable(
         &mut self,
-        name: Rc<String>,
+        name: Var,
         term_loc: GenContext,
         vr: &Cell<VarReg>,
         code: &mut Code,
@@ -190,7 +189,7 @@ impl DebrayAllocator {
     }
 
     #[inline(always)]
-    pub(crate) fn get_binding(&self, name: &String) -> Option<RegType> {
+    pub(crate) fn get_binding(&self, name: &Var) -> Option<RegType> {
         match self.bindings().get(name) {
             Some(&VarData::Temp(_, t, _)) if t != 0 => Some(RegType::Temp(t)),
             Some(&VarData::Perm(p)) if p != 0 => Some(RegType::Perm(p)),
@@ -200,7 +199,7 @@ impl DebrayAllocator {
 
     pub(crate) fn mark_non_callable(
         &mut self,
-        name: Rc<String>,
+        name: Var,
         arg: usize,
         term_loc: GenContext,
         vr: &Cell<VarReg>,
@@ -299,7 +298,7 @@ impl<'b> CodeGenerator<'b> {
         }
     }
 
-    fn get_var_count(&self, var: &String) -> usize {
+    fn get_var_count(&self, var: &Var) -> usize {
         *self.var_count.get(var).unwrap()
     }
 
@@ -320,7 +319,7 @@ impl<'b> CodeGenerator<'b> {
     fn deep_var_instr<'a, Target: crate::targets::CompilationTarget<'a>>(
         &mut self,
         cell: &'a Cell<VarReg>,
-        var: &Rc<String>,
+        var: &Var,
         term_loc: GenContext,
         target: &mut Code,
     ) {
@@ -429,7 +428,7 @@ impl<'b> CodeGenerator<'b> {
                     self.marker.mark_non_var::<Target>(lvl, term_loc, cell, &mut target);
                     target.push(Target::to_pstr(lvl, atom, cell.get(), false));
                 }
-                TermRef::Var(lvl @ Level::Shallow, cell, ref var) if var.as_str() == "!" => {
+                TermRef::Var(lvl @ Level::Shallow, cell, var) if var.as_str() == Some("!") => {
                     if self.marker.is_unbound(var.clone()) {
                         if term_loc != GenContext::Head {
                             self.marker.mark_reserved_var::<Target>(
@@ -835,7 +834,7 @@ impl<'b> CodeGenerator<'b> {
 
     #[inline]
     fn compile_unblocked_cut(&mut self, code: &mut Code, cell: &Cell<VarReg>) {
-        let r = self.marker.get(Rc::new(String::from("!")));
+        let r = self.marker.get(Var::from("!"));
         cell.set(VarReg::Norm(r));
         code.push(instr!("$set_cp", cell.get().norm(), 0));
     }
@@ -844,7 +843,7 @@ impl<'b> CodeGenerator<'b> {
         &mut self,
         code: &mut Code,
         cell: &Cell<VarReg>,
-        var: Rc<String>,
+        var: Var,
         term_loc: GenContext,
     ) {
         let mut target = Code::new();

@@ -21,7 +21,6 @@ use std::convert::TryFrom;
 use std::fmt;
 use std::mem;
 use std::ops::{Deref, DerefMut};
-use std::rc::Rc;
 
 /*
  * The loader compiles Prolog terms read from a TermStream instance,
@@ -1429,8 +1428,7 @@ impl MachineState {
                     }
                 }
                 (HeapCellValueTag::Var | HeapCellValueTag::AttrVar | HeapCellValueTag::StackVar, h) => {
-                    let offset_string = format!("_{}", h);
-                    term_stack.push(Term::Var(Cell::default(), Rc::new(offset_string)));
+                    term_stack.push(Term::Var(Cell::default(), Var::Generated(h)));
                 }
                 (HeapCellValueTag::Cons | HeapCellValueTag::CStr | HeapCellValueTag::Fixnum |
                  HeapCellValueTag::Char | HeapCellValueTag::F64) => {

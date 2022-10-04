@@ -14,28 +14,27 @@ use fxhash::FxBuildHasher;
 
 use std::cell::Cell;
 use std::collections::BTreeSet;
-use std::rc::Rc;
 
 #[derive(Debug)]
 pub(crate) struct DebrayAllocator {
-    bindings: IndexMap<Rc<String>, VarData, FxBuildHasher>,
+    bindings: IndexMap<Var, VarData, FxBuildHasher>,
     arg_c: usize,
     temp_lb: usize,
     arity: usize, // 0 if not at head.
-    contents: IndexMap<usize, Rc<String>, FxBuildHasher>,
+    contents: IndexMap<usize, Var, FxBuildHasher>,
     in_use: BTreeSet<usize>,
     free_list: Vec<usize>,
 }
 
 impl DebrayAllocator {
-    fn is_curr_arg_distinct_from(&self, var: &String) -> bool {
+    fn is_curr_arg_distinct_from(&self, var: &Var) -> bool {
         match self.contents.get(&self.arg_c) {
-            Some(t_var) if **t_var != *var => true,
+            Some(t_var) if *t_var != *var => true,
             _ => false,
         }
     }
 
-    fn occurs_shallowly_in_head(&self, var: &String, r: usize) -> bool {
+    fn occurs_shallowly_in_head(&self, var: &Var, r: usize) -> bool {
         match self.bindings.get(var).unwrap() {
             &VarData::Temp(_, _, ref tvd) => tvd.use_set.contains(&(GenContext::Head, r)),
             _ => false,
@@ -48,7 +47,7 @@ impl DebrayAllocator {
         in_use_range || self.in_use.contains(&r)
     }
 
-    fn alloc_with_cr(&self, var: &String) -> usize {
+    fn alloc_with_cr(&self, var: &Var) -> usize {
         match self.bindings.get(var) {
             Some(&VarData::Temp(_, _, ref tvd)) => {
                 for &(_, reg) in tvd.use_set.iter() {
@@ -74,7 +73,7 @@ impl DebrayAllocator {
         }
     }
 
-    fn alloc_with_ca(&self, var: &String) -> usize {
+    fn alloc_with_ca(&self, var: &Var) -> usize {
         match self.bindings.get(var) {
             Some(&VarData::Temp(_, _, ref tvd)) => {
                 for &(_, reg) in tvd.use_set.iter() {
@@ -102,7 +101,7 @@ impl DebrayAllocator {
         }
     }
 
-    fn alloc_in_last_goal_hint(&self, chunk_num: usize) -> Option<(Rc<String>, usize)> {
+    fn alloc_in_last_goal_hint(&self, chunk_num: usize) -> Option<(Var, usize)> {
         // we want to allocate a register to the k^{th} parameter, par_k.
         // par_k may not be a temporary variable.
         let k = self.arg_c;
@@ -154,7 +153,7 @@ impl DebrayAllocator {
 
     fn alloc_reg_to_var<'a, Target: CompilationTarget<'a>>(
         &mut self,
-        var: &String,
+        var: &Var,
         lvl: Level,
         term_loc: GenContext,
         target: &mut Vec<Instruction>,
@@ -202,7 +201,7 @@ impl DebrayAllocator {
         final_index
     }
 
-    fn in_place(&self, var: &String, term_loc: GenContext, r: RegType, k: usize) -> bool {
+    fn in_place(&self, var: &Var, term_loc: GenContext, r: RegType, k: usize) -> bool {
         match term_loc {
             GenContext::Head if !r.is_perm() => r.reg_num() == k,
             _ => match self.bindings().get(var).unwrap() {
@@ -293,7 +292,7 @@ impl Allocator for DebrayAllocator {
 
     fn mark_var<'a, Target: CompilationTarget<'a>>(
         &mut self,
-        var: Rc<String>,
+        var: Var,
         lvl: Level,
         cell: &'a Cell<VarReg>,
         term_loc: GenContext,
@@ -321,7 +320,7 @@ impl Allocator for DebrayAllocator {
 
     fn mark_reserved_var<'a, Target: CompilationTarget<'a>>(
         &mut self,
-        var: Rc<String>,
+        var: Var,
         lvl: Level,
         cell: &'a Cell<VarReg>,
         term_loc: GenContext,

@@ -9,7 +9,6 @@ use indexmap::{IndexMap, IndexSet};
 use std::cell::Cell;
 use std::collections::BTreeSet;
 use std::mem::swap;
-use std::rc::Rc;
 use std::vec::Vec;
 
 // labeled with chunk numbers.
@@ -84,8 +83,8 @@ type VariableFixture<'a> = (VarStatus, Vec<&'a Cell<VarReg>>);
 
 #[derive(Debug)]
 pub(crate) struct VariableFixtures<'a> {
-    perm_vars: IndexMap<Rc<String>, VariableFixture<'a>>,
-    last_chunk_temp_vars: IndexSet<Rc<String>>,
+    perm_vars: IndexMap<Var, VariableFixture<'a>>,
+    last_chunk_temp_vars: IndexSet<Var>,
 }
 
 impl<'a> VariableFixtures<'a> {
@@ -96,11 +95,11 @@ impl<'a> VariableFixtures<'a> {
         }
     }
 
-    pub(crate) fn insert(&mut self, var: Rc<String>, vs: VariableFixture<'a>) {
+    pub(crate) fn insert(&mut self, var: Var, vs: VariableFixture<'a>) {
         self.perm_vars.insert(var, vs);
     }
 
-    pub(crate) fn insert_last_chunk_temp_var(&mut self, var: Rc<String>) {
+    pub(crate) fn insert_last_chunk_temp_var(&mut self, var: Var) {
         self.last_chunk_temp_vars.insert(var);
     }
 
@@ -115,7 +114,7 @@ impl<'a> VariableFixtures<'a> {
         // Compute the conflict set of u.
 
         // 1.
-        let mut use_sets: IndexMap<Rc<String>, OccurrenceSet> = IndexMap::new();
+        let mut use_sets: IndexMap<Var, OccurrenceSet> = IndexMap::new();
 
         for (var, &mut (ref mut var_status, _)) in self.iter_mut() {
             if let &mut VarStatus::Temp(_, ref mut var_data) = var_status {
@@ -132,7 +131,7 @@ impl<'a> VariableFixtures<'a> {
                 if let GenContext::Last(cn_u) = term_loc {
                     for (ref t, &mut (ref mut var_status, _)) in self.iter_mut() {
                         if let &mut VarStatus::Temp(cn_t, ref mut t_data) = var_status {
-                            if cn_u == cn_t && *u != ***t {
+                            if cn_u == cn_t && u != **t {
                                 if !t_data.uses_reg(reg) {
                                     t_data.no_use_set.insert(reg);
                                 }
@@ -153,11 +152,11 @@ impl<'a> VariableFixtures<'a> {
         }
     }
 
-    fn get_mut(&mut self, u: Rc<String>) -> Option<&mut VariableFixture<'a>> {
+    fn get_mut(&mut self, u: Var) -> Option<&mut VariableFixture<'a>> {
         self.perm_vars.get_mut(&u)
     }
 
-    fn iter_mut(&mut self) -> indexmap::map::IterMut<Rc<String>, VariableFixture<'a>> {
+    fn iter_mut(&mut self) -> indexmap::map::IterMut<Var, VariableFixture<'a>> {
         self.perm_vars.iter_mut()
     }
 
@@ -218,11 +217,11 @@ impl<'a> VariableFixtures<'a> {
         }
     }
 
-    pub(crate) fn into_iter(self) -> indexmap::map::IntoIter<Rc<String>, VariableFixture<'a>> {
+    pub(crate) fn into_iter(self) -> indexmap::map::IntoIter<Var, VariableFixture<'a>> {
         self.perm_vars.into_iter()
     }
 
-    fn values(&self) -> indexmap::map::Values<Rc<String>, VariableFixture<'a>> {
+    fn values(&self) -> indexmap::map::Values<Var, VariableFixture<'a>> {
         self.perm_vars.values()
     }
 

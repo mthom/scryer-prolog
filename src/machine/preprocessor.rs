@@ -12,7 +12,6 @@ use indexmap::IndexSet;
 use std::cell::Cell;
 use std::collections::VecDeque;
 use std::convert::TryFrom;
-use std::rc::Rc;
 
 /*
  *  The preprocessor fabricates if-then-else ( .. -> ... ; ...)
@@ -373,7 +372,7 @@ fn mark_cut_variable(term: &mut Term) -> bool {
     };
 
     if cut_var_found {
-        *term = Term::Var(Cell::default(), Rc::new(String::from("!")));
+        *term = Term::Var(Cell::default(), Var::from("!"));
         true
     } else {
         false
@@ -656,7 +655,7 @@ fn compute_head(term: &Term) -> Vec<Term> {
         }
     }
 
-    vars.insert(Rc::new(String::from("!")));
+    vars.insert(Var::from("!"));
     vars.into_iter()
         .map(|v| Term::Var(Cell::default(), v))
         .collect()
@@ -767,7 +766,7 @@ impl Preprocessor {
                 }
             }
             Term::Literal(_, Literal::Char('!')) => Ok(QueryTerm::BlockedCut),
-            Term::Var(_, ref v) if v.as_str() == "!" => {
+            Term::Var(_, ref v) if v.as_str() == Some("!") => {
                 Ok(QueryTerm::UnblockedCut(Cell::default()))
             }
             Term::Clause(r, name, mut terms) => match (name, source_arity(&terms)) {

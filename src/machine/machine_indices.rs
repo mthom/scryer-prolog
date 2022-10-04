@@ -16,7 +16,6 @@ use modular_bitfield::specifiers::*;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::ops::{Deref, DerefMut};
-use std::rc::Rc;
 
 use crate::types::*;
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -228,8 +227,8 @@ impl CodeIndex {
     }
 }
 
-pub(crate) type HeapVarDict = IndexMap<Rc<String>, HeapCellValue, FxBuildHasher>;
-pub(crate) type AllocVarDict = IndexMap<Rc<String>, VarData, FxBuildHasher>;
+pub(crate) type HeapVarDict = IndexMap<Var, HeapCellValue, FxBuildHasher>;
+pub(crate) type AllocVarDict = IndexMap<Var, VarData, FxBuildHasher>;
 
 pub(crate) type GlobalVarDir = IndexMap<Atom, (Ball, Option<HeapCellValue>), FxBuildHasher>;
 

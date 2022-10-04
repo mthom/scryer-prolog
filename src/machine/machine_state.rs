@@ -21,7 +21,6 @@ use indexmap::IndexMap;
 use std::convert::TryFrom;
 use std::fmt;
 use std::ops::{Index, IndexMut};
-use std::rc::Rc;
 
 pub(crate) type Registers = [HeapCellValue; MAX_ARITY + 1];
 
@@ -501,13 +500,13 @@ impl MachineState {
     pub fn read_term(&mut self, stream: Stream, indices: &mut IndexStore) -> CallResult {
         fn push_var_eq_functors<'a>(
             heap: &mut Heap,
-            iter: impl Iterator<Item = (&'a Rc<String>, &'a HeapCellValue)>,
+            iter: impl Iterator<Item = (&'a Var, &'a HeapCellValue)>,
             atom_tbl: &mut AtomTable,
         ) -> Vec<HeapCellValue> {
             let mut list_of_var_eqs = vec![];
 
             for (var, binding) in iter {
-                let var_atom = atom_tbl.build_with(&var);
+                let var_atom = atom_tbl.build_with(&var.to_string());
                 let h = heap.len();
 
                 heap.push(atom_as_cell!(atom!("="), 2));
@@ -673,7 +672,7 @@ impl MachineState {
 
         let printer = match self.try_from_list(self.registers[6], stub_gen) {
             Ok(addrs) => {
-                let mut var_names: IndexMap<HeapCellValue, Rc<String>> = IndexMap::new();
+                let mut var_names: IndexMap<HeapCellValue, Var> = IndexMap::new();
 
                 for addr in addrs {
                     read_heap_cell!(addr,
@@ -691,18 +690,18 @@ impl MachineState {
 
                                 read_heap_cell!(atom,
                                     (HeapCellValueTag::Char, c) => {
-                                        var_names.insert(var, Rc::new(c.to_string()));
+                                        var_names.insert(var, Var::from(c.to_string()));
                                     }
                                     (HeapCellValueTag::Atom, (name, _arity)) => {
                                         debug_assert_eq!(_arity, 0);
-                                        var_names.insert(var, Rc::new(name.as_str().to_owned()));
+                                        var_names.insert(var, Var::from(name.as_str()));
                                     }
                                     (HeapCellValueTag::Str, s) => {
                                         let (name, arity) = cell_as_atom_cell!(self.heap[s])
                                             .get_name_and_arity();
 
                                         debug_assert_eq!(arity, 0);
-                                        var_names.insert(var, Rc::new(name.as_str().to_owned()));
+                                        var_names.insert(var, Var::from(name.as_str()));
                                     }
                                     _ => {
                                         unreachable!();

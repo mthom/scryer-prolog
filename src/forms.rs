@@ -21,7 +21,6 @@ use std::convert::TryFrom;
 use std::fmt;
 use std::ops::AddAssign;
 use std::path::PathBuf;
-use std::rc::Rc;
 
 use crate::{is_infix, is_postfix};
 
@@ -85,8 +84,8 @@ pub enum QueryTerm {
     Clause(Cell<RegType>, ClauseType, Vec<Term>, CallPolicy),
     BlockedCut, // a cut which is 'blocked by letters', like the P term in P -> Q.
     UnblockedCut(Cell<VarReg>),
-    GetLevelAndUnify(Cell<VarReg>, Rc<String>),
-    Jump(JumpStub),
+    GetLevelAndUnify(Cell<VarReg>, Var),
+    Jump(JumpStub), // SOON: Branch(Vec<QueryTerm>),
 }
 
 impl QueryTerm {

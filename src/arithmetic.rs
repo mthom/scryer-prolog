@@ -22,7 +22,6 @@ use std::convert::TryFrom;
 use std::f64;
 use std::num::FpCategory;
 use std::ops::Div;
-use std::rc::Rc;
 use std::vec::Vec;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -74,7 +73,7 @@ impl<'a> ArithInstructionIterator<'a> {
                     2,
                 ))
             }
-            Term::Var(cell, var) => TermIterState::Var(Level::Shallow, cell, RcMutPtr::new(var)),
+            Term::Var(cell, var) => TermIterState::Var(Level::Shallow, cell, VarPtr::from(var)),
         };
 
         Ok(ArithInstructionIterator {
@@ -87,7 +86,7 @@ impl<'a> ArithInstructionIterator<'a> {
 pub(crate) enum ArithTermRef<'a> {
     Literal(&'a Literal),
     Op(Atom, usize), // name, arity.
-    Var(Level, &'a Cell<VarReg>, Rc<String>),
+    Var(Level, &'a Cell<VarReg>, Var),
 }
 
 impl<'a> Iterator for ArithInstructionIterator<'a> {
@@ -115,8 +114,8 @@ impl<'a> Iterator for ArithInstructionIterator<'a> {
                     }
                 }
                 TermIterState::Literal(_, _, c) => return Some(Ok(ArithTermRef::Literal(c))),
-                TermIterState::Var(lvl, cell, var) => {
-                    return Some(Ok(ArithTermRef::Var(lvl, cell, var.owned())));
+                TermIterState::Var(lvl, cell, var_ref) => {
+                    return Some(Ok(ArithTermRef::Var(lvl, cell, Var::from(var_ref))));
                 }
                 _ => {
                     return Some(Err(ArithmeticError::NonEvaluableFunctor(
@@ -317,7 +316,7 @@ impl<'a> ArithmeticEvaluator<'a> {
                 ArithTermRef::Var(lvl, cell, name) => {
                     let r = if lvl == Level::Shallow {
                         self.marker.mark_non_callable(
-                            name.clone(),
+                            name,
                             arg,
                             term_loc,
                             cell,

@@ -8,7 +8,6 @@ use crate::machine::machine_indices::*;
 use crate::targets::*;
 
 use std::cell::Cell;
-use std::rc::Rc;
 
 pub(crate) trait Allocator {
     fn new() -> Self;
@@ -30,7 +29,7 @@ pub(crate) trait Allocator {
 
     fn mark_reserved_var<'a, Target: CompilationTarget<'a>>(
         &mut self,
-        var_name: Rc<String>,
+        var_name: Var,
         lvl: Level,
         cell: &'a Cell<VarReg>,
         term_loc: GenContext,
@@ -41,7 +40,7 @@ pub(crate) trait Allocator {
 
     fn mark_var<'a, Target: CompilationTarget<'a>>(
         &mut self,
-        var_name: Rc<String>,
+        var_name: Var,
         lvl: Level,
         cell: &'a Cell<VarReg>,
         context: GenContext,
@@ -88,17 +87,17 @@ pub(crate) trait Allocator {
         perm_vs
     }
 
-    fn get(&self, var: Rc<String>) -> RegType {
+    fn get(&self, var: Var) -> RegType {
         self.bindings()
             .get(&var)
             .map_or(temp_v!(0), |v| v.as_reg_type())
     }
 
-    fn is_unbound(&self, var: Rc<String>) -> bool {
+    fn is_unbound(&self, var: Var) -> bool {
         self.get(var).reg_num() == 0
     }
 
-    fn record_register(&mut self, var: Rc<String>, r: RegType) {
+    fn record_register(&mut self, var: Var, r: RegType) {
         match self.bindings_mut().get_mut(&var).unwrap() {
             &mut VarData::Temp(_, ref mut s, _) => *s = r.reg_num(),
             &mut VarData::Perm(ref mut s) => *s = r.reg_num(),

@@ -7,10 +7,39 @@ use std::cell::Cell;
 use std::collections::VecDeque;
 use std::fmt;
 use std::fmt::Debug;
-use std::hash::{Hash, Hasher};
+use std::hash::{Hash};
 use std::iter::*;
-use std::rc::Rc;
 use std::vec::Vec;
+
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+pub(crate) struct VarPtr {
+    ptr: std::ptr::NonNull<Var>,
+}
+
+impl From<&Var> for VarPtr {
+    #[inline]
+    fn from(value: &Var) -> VarPtr {
+        unsafe {
+            VarPtr { ptr: std::ptr::NonNull::new_unchecked(value as *const _ as *mut _) }
+        }
+    }
+}
+
+impl From<VarPtr> for Var {
+    #[inline]
+    fn from(value: VarPtr) -> Var {
+        unsafe {
+            (*value.ptr.as_ptr()).clone()
+        }
+    }
+}
+
+impl VarPtr {
+    pub(crate) fn set(&mut self, value: Var) {
+        unsafe { *self.ptr.as_mut() = value; }
+    }
+}
+
 
 #[derive(Debug, Clone)]
 pub(crate) enum TermRef<'a> {
@@ -20,7 +49,7 @@ pub(crate) enum TermRef<'a> {
     Clause(Level, &'a Cell<RegType>, Atom, &'a Vec<Term>),
     PartialString(Level, &'a Cell<RegType>, &'a String, &'a Box<Term>),
     CompleteString(Level, &'a Cell<RegType>, Atom),
-    Var(Level, &'a Cell<VarReg>, Rc<String>),
+    Var(Level, &'a Cell<VarReg>, Var),
 }
 
 impl<'a> TermRef<'a> {
@@ -37,58 +66,6 @@ impl<'a> TermRef<'a> {
     }
 }
 
-#[derive(Clone, Debug)]
-pub(crate) struct RcMutPtr<T: Debug> {
-    owned: Rc<T>,
-    ptr: *mut Rc<T>,
-}
-
-impl<T: Debug> RcMutPtr<T> {
-    #[inline]
-    pub(crate) fn new(rc: &Rc<T>) -> Self {
-        Self { owned: rc.clone(), ptr: rc as *const _ as *mut _ }
-    }
-
-    #[inline]
-    pub(crate) fn owned(&self) -> Rc<T> {
-        self.owned.clone()
-    }
-
-    #[inline]
-    pub(crate) fn set(&mut self, var_b_marker: &Rc<T>) {
-        self.owned = var_b_marker.clone();
-
-        unsafe {
-            if !self.ptr.is_null() {
-                *self.ptr = self.owned.clone();
-            }
-        }
-    }
-}
-
-impl<T: Debug> From<T> for RcMutPtr<T> {
-    #[inline]
-    fn from(value: T) -> RcMutPtr<T> {
-        let owned = Rc::new(value);
-        RcMutPtr { owned, ptr: std::ptr::null_mut() }
-    }
-}
-
-impl<T: Debug + PartialEq> PartialEq for RcMutPtr<T> {
-    fn eq(&self, rhs: &Self) -> bool {
-        &self.owned == &rhs.owned
-    }
-}
-
-impl<T: Debug + Eq> Eq for RcMutPtr<T> {}
-
-impl<T: Debug + Hash> Hash for RcMutPtr<T> {
-    #[inline(always)]
-    fn hash<H: Hasher>(&self, hasher: &mut H) {
-        self.owned.hash(hasher)
-    }
-}
-
 #[derive(Debug)]
 pub(crate) enum TermIterState<'a> {
     AnonVar(Level),
@@ -99,7 +76,8 @@ pub(crate) enum TermIterState<'a> {
     InitialPartialString(Level, &'a Cell<RegType>, &'a String, &'a Box<Term>),
     FinalPartialString(Level, &'a Cell<RegType>, &'a String, &'a Box<Term>),
     CompleteString(Level, &'a Cell<RegType>, Atom),
-    Var(Level, &'a Cell<VarReg>, RcMutPtr<String>),
+    UnblockedCut(Level, &'a Cell<VarReg>),
+    Var(Level, &'a Cell<VarReg>, VarPtr),
 }
 
 impl<'a> TermIterState<'a> {
@@ -119,7 +97,7 @@ impl<'a> TermIterState<'a> {
             Term::CompleteString(cell, atom) => {
                 TermIterState::CompleteString(lvl, cell, *atom)
             }
-            Term::Var(cell, var) => TermIterState::Var(lvl, cell, RcMutPtr::new(var)),
+            Term::Var(cell, var) => TermIterState::Var(lvl, cell, VarPtr::from(var)),
         }
     }
 }
@@ -160,7 +138,7 @@ impl<'a> QueryIterator<'a> {
                 *name,
                 terms,
             ),
-            Term::Var(cell, var) => TermIterState::Var(Level::Root, cell, RcMutPtr::new(var)),
+            Term::Var(cell, var) => TermIterState::Var(Level::Root, cell, VarPtr::from(var)),
         };
 
         QueryIterator {
@@ -183,13 +161,14 @@ impl<'a> QueryIterator<'a> {
                 }
             }
             &QueryTerm::UnblockedCut(ref cell) => {
-                let state = TermIterState::Var(Level::Root, cell, RcMutPtr::from("!".to_string()));
+                let state = TermIterState::UnblockedCut(Level::Root, cell);
+
                 QueryIterator {
                     state_stack: vec![state],
                 }
             }
             &QueryTerm::GetLevelAndUnify(ref cell, ref var) => {
-                let state = TermIterState::Var(Level::Root, cell, RcMutPtr::new(var));
+                let state = TermIterState::Var(Level::Root, cell, VarPtr::from(var));
                 QueryIterator {
                     state_stack: vec![state],
                 }
@@ -267,7 +246,10 @@ impl<'a> Iterator for QueryIterator<'a> {
                     return Some(TermRef::Literal(lvl, cell, constant));
                 }
                 TermIterState::Var(lvl, cell, var) => {
-                    return Some(TermRef::Var(lvl, cell, var.owned()));
+                    return Some(TermRef::Var(lvl, cell, Var::from(var)));
+                }
+                TermIterState::UnblockedCut(lvl, cell) => {
+                    return Some(TermRef::Var(lvl, cell, Var::from("!")));
                 }
             };
         }
@@ -333,7 +315,7 @@ impl<'a> FactIterator<'a> {
                 vec![TermIterState::Literal(Level::Root, cell, constant)]
             }
             Term::Var(cell, var) => {
-                vec![TermIterState::Var(Level::Root, cell, RcMutPtr::new(var))]
+                vec![TermIterState::Var(Level::Root, cell, VarPtr::from(var))]
             }
         };
 
@@ -380,7 +362,7 @@ impl<'a> Iterator for FactIterator<'a> {
                     return Some(TermRef::Literal(lvl, cell, constant))
                 }
                 TermIterState::Var(lvl, cell, var) => {
-                    return Some(TermRef::Var(lvl, cell, var.owned()));
+                    return Some(TermRef::Var(lvl, cell, Var::from(var)));
                 }
                 _ => {}
             }
@@ -420,7 +402,7 @@ impl<'a> ChunkedTerm<'a> {
 fn contains_cut_var<'a, Iter: Iterator<Item = &'a Term>>(terms: Iter) -> bool {
     for term in terms {
         if let &Term::Var(_, ref var) = term {
-            if var.as_str() == "!" {
+            if var.as_str() == Some("!") {
                 return true;
             }
         }
