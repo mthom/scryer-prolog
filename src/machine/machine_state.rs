@@ -536,7 +536,7 @@ impl MachineState {
 
         loop {
             match self.read(stream, &indices.op_dir) {
-                Ok(term_write_result) => {
+                Ok(mut term_write_result) => {
                     let heap_loc = read_heap_cell!(self.heap[term_write_result.heap_loc],
                         (HeapCellValueTag::PStr | HeapCellValueTag::PStrOffset) => {
                             pstr_loc_as_cell!(term_write_result.heap_loc)
@@ -566,6 +566,10 @@ impl MachineState {
                                 singleton_var_set.insert(var, false);
                             }
                         }
+                    }
+
+                    for var in term_write_result.var_dict.values_mut() {
+                        *var = heap_bound_deref(&self.heap, *var);
                     }
 
                     let singleton_var_list = push_var_eq_functors(
