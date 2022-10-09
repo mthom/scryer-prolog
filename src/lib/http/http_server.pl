@@ -79,8 +79,7 @@ module_qualification(M, H0, H) :-
     H =.. [Method, Path, M:Goal].
 
 http_listen_(Port, Handlers) :-
-    number_chars(Port, CPort),
-    append("0.0.0.0:", CPort, Addr),
+    phrase(format_("0.0.0.0:~d", [Port]), Addr),
     '$http_listen'(Addr, HttpListener),!,
     format("Listening at ~s\n", [Addr]),
     http_loop(HttpListener, Handlers).
@@ -99,10 +98,14 @@ http_loop(HttpListener, Handlers) :-
 	    HttpResponse = http_response(_, _, _),
 	    (call(Handler, HttpRequest, HttpResponse) ->
 		 send_response(ResponseHandle, HttpResponse)
-	    ;    '$http_answer'(ResponseHandle, 500, [], "Internal Server Error")
+	    ;    (
+		'$http_answer'(ResponseHandle, 500, [], ResponseStream),
+		call_cleanup(format(ResponseStream, "Internal Server Error", []), close(ResponseStream)))
 	    )
 	)
-    ; '$http_answer'(ResponseHandle, 404, [], "Not Found")
+    ; (
+	'$http_answer'(ResponseHandle, 404, [], ResponseStream),
+	call_cleanup(format(ResponseStream, "Not Found"), close(ResponseStream)))
     ),
     http_loop(HttpListener, Handlers).
 
@@ -110,29 +113,35 @@ send_response(ResponseHandle, http_response(StatusCode0, text(ResponseText), Res
     default(StatusCode0, 200, StatusCode),
     maplist(map_header_kv_2, ResponseHeaders, ResponseHeaders0),
     '$http_answer'(ResponseHandle, StatusCode, ResponseHeaders, ResponseStream),
-    format(ResponseStream, "~s", [ResponseText]),
-    close(ResponseStream).
+    call_cleanup(
+	format(ResponseStream, "~s", [ResponseText]),
+	close(ResponseStream)
+    ).
 
 send_response(ResponseHandle, http_response(StatusCode0, bytes(ResponseBytes), ResponseHeaders0)) :-
     default(StatusCode0, 200, StatusCode),
     maplist(map_header_kv_2, ResponseHeaders, ResponseHeaders0),
     '$http_answer'(ResponseHandle, StatusCode, ResponseHeaders, ResponseStream),
-    format(ResponseStream, "~s", [ResponseBytes]),
-    close(ResponseStream).
+    call_cleanup(
+	format(ResponseStream, "~s", [ResponseBytes]),
+	close(ResponseStream)
+    ).
 
 send_response(ResponseHandle, http_response(StatusCode0, file(Filename), ResponseHeaders0)) :-
     default(StatusCode0, 200, StatusCode),
     maplist(map_header_kv_2, ResponseHeaders, ResponseHeaders0),
     '$http_answer'(ResponseHandle, StatusCode, ResponseHeaders, ResponseStream),
-    setup_call_cleanup(
-	open(Filename, read, FileStream, [type(binary)]),
-	(
-	    get_n_chars(FileStream, _, FileCs),
-	    format(ResponseStream, "~s", [FileCs])
+    call_cleanup(
+	setup_call_cleanup(
+	    open(Filename, read, FileStream, [type(binary)]),
+	    (
+		get_n_chars(FileStream, _, FileCs),
+		format(ResponseStream, "~s", [FileCs])
+	    ),
+	    close(FileStream)
 	),
-	close(FileStream)
-    ),
-    close(ResponseStream).
+        close(ResponseStream)
+    ).
     
 
 default(Var, Default, Out) :-
