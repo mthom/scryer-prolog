@@ -84,7 +84,7 @@ type VariableFixture<'a> = (VarStatus, Vec<&'a Cell<VarReg>>);
 #[derive(Debug)]
 pub(crate) struct VariableFixtures<'a> {
     perm_vars: IndexMap<Var, VariableFixture<'a>>,
-    last_chunk_temp_vars: IndexSet<Var>,
+    last_chunk_temp_vars: IndexSet<Var>, // TODO: has no use at all!
 }
 
 impl<'a> VariableFixtures<'a> {

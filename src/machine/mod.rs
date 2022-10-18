@@ -16,6 +16,7 @@ pub mod machine_state;
 pub mod machine_state_impl;
 pub mod mock_wam;
 pub mod partial_string;
+pub mod disjuncts;
 pub mod preprocessor;
 pub mod stack;
 pub mod streams;

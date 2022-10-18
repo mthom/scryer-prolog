@@ -1,6 +1,7 @@
 use crate::arena::*;
 use crate::atom_table::*;
 use crate::instructions::*;
+use crate::machine::disjuncts::VarRecord;
 use crate::machine::heap::*;
 use crate::machine::loader::PredicateQueue;
 use crate::machine::machine_errors::*;
@@ -34,7 +35,7 @@ pub type JumpStub = Vec<Term>;
 
 #[derive(Debug, Clone)]
 pub enum TopLevel {
-    Fact(Term), // Term, line_num, col_num
+    Fact(Fact), // Term, line_num, col_num
     Predicate(Predicate),
     Query(Vec<QueryTerm>),
     Rule(Rule), // Rule, line_num, col_num
@@ -82,10 +83,11 @@ pub enum CallPolicy {
 pub enum QueryTerm {
     // register, clause type, subterms, clause call policy.
     Clause(Cell<RegType>, ClauseType, Vec<Term>, CallPolicy),
-    BlockedCut, // a cut which is 'blocked by letters', like the P term in P -> Q.
-    UnblockedCut(Cell<VarReg>),
+    Cut,
+    Not(Vec<QueryTerm>),
+    IfThen(Vec<QueryTerm>, Vec<QueryTerm>),
+    Branch(Vec<Vec<QueryTerm>>),
     GetLevelAndUnify(Cell<VarReg>, Var),
-    Jump(JumpStub), // SOON: Branch(Vec<QueryTerm>),
 }
 
 impl QueryTerm {
@@ -99,17 +101,24 @@ impl QueryTerm {
     pub(crate) fn arity(&self) -> usize {
         match self {
             &QueryTerm::Clause(_, _, ref subterms, ..) => subterms.len(),
-            &QueryTerm::BlockedCut | &QueryTerm::UnblockedCut(..) => 0,
-            &QueryTerm::Jump(ref vars) => vars.len(),
-            &QueryTerm::GetLevelAndUnify(..) => 1,
+            &QueryTerm::Cut | &QueryTerm::Branch(_) => 0,
+            &QueryTerm::IfThen(..) => 2,
+            &QueryTerm::Not(_) | &QueryTerm::GetLevelAndUnify(..) => 1,
         }
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct Fact {
+    pub(crate) head: Term,
+    pub(crate) var_records: Vec<VarRecord>,
 }
 
 #[derive(Debug, Clone)]
 pub struct Rule {
     pub(crate) head: (Atom, Vec<Term>, QueryTerm),
     pub(crate) clauses: Vec<QueryTerm>,
+    pub(crate) var_records: Vec<VarRecord>,
 }
 
 #[derive(Clone, Debug, Hash)]
