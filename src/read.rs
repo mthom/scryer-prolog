@@ -390,6 +390,12 @@ impl<'a, 'b> TermWriter<'a, 'b> {
                     put_complete_string(self.heap, src.as_str(), self.atom_tbl);
                 }
                 &TermRef::PartialString(lvl, _, ref src, _) => {
+                    if let Level::Root = lvl {
+                        // Var tags can't refer directly to partial strings,
+                        // so a PStrLoc cell must be pushed.
+                        self.heap.push(pstr_loc_as_cell!(heap_loc + 1));
+                    }
+
                     allocate_pstr(self.heap, src.as_str(), self.atom_tbl);
 
                     let h = self.heap.len();
