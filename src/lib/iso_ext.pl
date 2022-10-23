@@ -75,19 +75,19 @@ scc_helper(C, G, Bb) :-
     '$get_cp'(Cp),
     '$install_scc_cleaner'(C, NBb),
     '$call_with_inference_counting'(call(G)),
-    ( '$check_cp'(Cp) ->
-      '$reset_block'(Bb),
-      run_cleaners_without_handling(Cp)
-    ; true
-    ; '$reset_block'(NBb),
-      '$fail'
+    (  '$check_cp'(Cp) ->
+       '$reset_block'(Bb),
+       run_cleaners_without_handling(Cp)
+    ;  true
+    ;  '$reset_block'(NBb),
+       '$fail'
     ).
 scc_helper(_, _, Bb) :-
     '$reset_block'(Bb),
-    '$get_ball'(Ball),
-    '$erase_ball',
+    '$push_ball_stack',
     run_cleaners_with_handling,
-    throw(Ball).
+    '$pop_from_ball_stack',
+    '$unwind_stack'.
 scc_helper(_, _, _) :-
     '$get_cp'(Cp),
     run_cleaners_without_handling(Cp),
@@ -130,10 +130,13 @@ end_block(B, _Bb, NBb, L) :-
 
 :- non_counted_backtracking handle_ile/3.
 
-handle_ile(B, inference_limit_exceeded(B), inference_limit_exceeded) :- !.
-handle_ile(B, E, _) :-
+handle_ile(B, inference_limit_exceeded(B), inference_limit_exceeded) :-
+    !,
+    '$pop_ball_stack'.
+handle_ile(B, _, _) :-
     '$remove_call_policy_check'(B),
-    throw(E).
+    '$pop_from_ball_stack',
+    '$unwind_stack'.
 
 :- meta_predicate(call_with_inference_limit(0, ?, ?)).
 
@@ -167,18 +170,18 @@ call_with_inference_limit(G, L, R, Bb, B) :-
     '$call_with_inference_counting'(call(G)),
     '$inference_level'(R, B),
     '$remove_inference_counter'(B, Count1),
-    is(Diff, L - (Count1 - Count0)),
+    Diff is L - (Count1 - Count0),
     end_block(B, Bb, NBb, Diff).
 call_with_inference_limit(_, _, R, Bb, B) :-
     '$reset_block'(Bb),
     '$remove_inference_counter'(B, _),
     (  '$get_ball'(Ball),
+       '$push_ball_stack',
        '$get_level'(Cp),
        '$set_cp_by_default'(Cp)
     ;  '$remove_call_policy_check'(B),
        '$fail'
     ),
-    '$erase_ball',
     handle_ile(B, Ball, R).
 
 partial_string(String, L, L0) :-

@@ -404,8 +404,6 @@ enum SystemClauseType {
     InferenceLevel,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$clean_up_block")))]
     CleanUpBlock,
-    #[strum_discriminants(strum(props(Arity = "0", Name = "$erase_ball")))]
-    EraseBall,
     #[strum_discriminants(strum(props(Arity = "0", Name = "$fail")))]
     Fail,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$get_ball")))]
@@ -434,6 +432,12 @@ enum SystemClauseType {
     ReturnFromVerifyAttr,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$set_ball")))]
     SetBall,
+    #[strum_discriminants(strum(props(Arity = "0", Name = "$push_ball_stack")))]
+    PushBallStack,
+    #[strum_discriminants(strum(props(Arity = "0", Name = "$pop_ball_stack")))]
+    PopBallStack,
+    #[strum_discriminants(strum(props(Arity = "0", Name = "$pop_from_ball_stack")))]
+    PopFromBallStack,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$set_cp_by_default")))]
     SetCutPointByDefault(RegType),
     #[strum_discriminants(strum(props(Arity = "1", Name = "$set_double_quotes")))]
@@ -1680,7 +1684,6 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallSetStreamPosition(_) |
                     &Instruction::CallInferenceLevel(_) |
                     &Instruction::CallCleanUpBlock(_) |
-                    &Instruction::CallEraseBall(_) |
                     &Instruction::CallFail(_) |
                     &Instruction::CallGetBall(_) |
                     &Instruction::CallGetCurrentBlock(_) |
@@ -1703,6 +1706,9 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallResetBlock(_) |
                     &Instruction::CallReturnFromVerifyAttr(_) |
                     &Instruction::CallSetBall(_) |
+                    &Instruction::CallPushBallStack(_) |
+                    &Instruction::CallPopBallStack(_) |
+                    &Instruction::CallPopFromBallStack(_) |
                     &Instruction::CallSetCutPointByDefault(..) |
                     &Instruction::CallSetDoubleQuotes(_) |
                     &Instruction::CallSetSeed(_) |
@@ -1892,7 +1898,6 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteSetStreamPosition(_) |
                     &Instruction::ExecuteInferenceLevel(_) |
                     &Instruction::ExecuteCleanUpBlock(_) |
-                    &Instruction::ExecuteEraseBall(_) |
                     &Instruction::ExecuteFail(_) |
                     &Instruction::ExecuteGetBall(_) |
                     &Instruction::ExecuteGetCurrentBlock(_) |
@@ -1915,6 +1920,9 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteResetBlock(_) |
                     &Instruction::ExecuteReturnFromVerifyAttr(_) |
                     &Instruction::ExecuteSetBall(_) |
+                    &Instruction::ExecutePushBallStack(_) |
+                    &Instruction::ExecutePopBallStack(_) |
+                    &Instruction::ExecutePopFromBallStack(_) |
                     &Instruction::ExecuteSetCutPointByDefault(_, _) |
                     &Instruction::ExecuteSetDoubleQuotes(_) |
                     &Instruction::ExecuteSetSeed(_) |
