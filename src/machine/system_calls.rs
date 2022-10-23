@@ -4805,11 +4805,6 @@ impl Machine {
     }
 
     #[inline(always)]
-    pub(crate) fn erase_ball(&mut self) {
-        self.machine_st.ball.reset();
-    }
-
-    #[inline(always)]
     pub(crate) fn get_ball(&mut self) {
         let addr = self.machine_st.store(self.machine_st.deref(self.machine_st.registers[1]));
         let h = self.machine_st.heap.len();
@@ -4826,6 +4821,29 @@ impl Machine {
             Some(r) => self.machine_st.bind(r, self.machine_st.heap[h]),
             _ => self.machine_st.fail = true,
         };
+    }
+
+    #[inline(always)]
+    pub(crate) fn push_ball_stack(&mut self) {
+        if self.machine_st.ball.stub.len() > 0 {
+            self.machine_st.ball_stack.push(
+                mem::replace(&mut self.machine_st.ball, Ball::new())
+            );
+        } else {
+            self.machine_st.fail = true;
+        }
+    }
+
+    #[inline(always)]
+    pub(crate) fn pop_ball_stack(&mut self) {
+        self.machine_st.ball_stack.pop();
+    }
+
+    #[inline(always)]
+    pub(crate) fn pop_from_ball_stack(&mut self) {
+        if let Some(ball) = self.machine_st.ball_stack.pop() {
+            self.machine_st.ball = ball;
+        }
     }
 
     #[inline(always)]

@@ -75,6 +75,7 @@ pub struct MachineState {
     pub(super) hb: usize,
     pub(super) block: usize, // an offset into the OR stack.
     pub(super) ball: Ball,
+    pub(super) ball_stack: Vec<Ball>, // save current ball before jumping via, e.g., verify_attr interrupt.
     pub(super) lifted_heap: Heap,
     pub(super) interms: Vec<Number>, // intermediate numbers.
     // locations of cleaners, cut points, the previous block. for setup_call_cleanup.
@@ -113,6 +114,7 @@ impl fmt::Debug for MachineState {
             .field("hb", &self.hb)
             .field("block", &self.block)
             .field("ball", &self.ball)
+            .field("ball_stack", &self.ball_stack)
             .field("lifted_heap", &self.lifted_heap)
             .field("interms", &self.interms)
             .field("flags", &self.flags)

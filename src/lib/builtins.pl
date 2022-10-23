@@ -644,6 +644,7 @@ catch(G,C,R,Bb) :-
 catch(G,C,R,Bb) :-
     '$reset_block'(Bb),
     '$get_ball'(Ball),
+    '$push_ball_stack', % move ball to ball stack.
     handle_ball(Ball, C, R).
 
 
@@ -660,9 +661,10 @@ end_block(Bb, NBb) :-
 
 handle_ball(C, C, R) :-
     !,
-    '$erase_ball',
+    '$pop_ball_stack', % remove ball from ball stack.
     call(R).
 handle_ball(_, _, _) :-
+    '$pop_from_ball_stack', % restore ball from ball stack.
     '$unwind_stack'.
 
 :- non_counted_backtracking throw/1.

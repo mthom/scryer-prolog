@@ -4125,14 +4125,6 @@ impl Machine {
                     self.clean_up_block();
                     self.machine_st.p = self.machine_st.cp;
                 }
-                &Instruction::CallEraseBall(_) => {
-                    self.erase_ball();
-                    self.machine_st.p += 1;
-                }
-                &Instruction::ExecuteEraseBall(_) => {
-                    self.erase_ball();
-                    self.machine_st.p = self.machine_st.cp;
-                }
                 &Instruction::CallFail(_) | &Instruction::ExecuteFail(_) => {
                     self.machine_st.backtrack();
                 }
@@ -4282,6 +4274,30 @@ impl Machine {
                 }
                 &Instruction::ExecuteSetBall(_) => {
                     self.set_ball();
+                    self.machine_st.p = self.machine_st.cp;
+                }
+                &Instruction::CallPushBallStack(_) => {
+                    self.push_ball_stack();
+                    step_or_fail!(self, self.machine_st.p += 1);
+                }
+                &Instruction::ExecutePushBallStack(_) => {
+                    self.push_ball_stack();
+                    step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+                }
+                &Instruction::CallPopBallStack(_) => {
+                    self.pop_ball_stack();
+                    self.machine_st.p += 1;
+                }
+                &Instruction::ExecutePopBallStack(_) => {
+                    self.pop_ball_stack();
+                    self.machine_st.p = self.machine_st.cp;
+                }
+                &Instruction::CallPopFromBallStack(_) => {
+                    self.pop_from_ball_stack();
+                    self.machine_st.p += 1;
+                }
+                &Instruction::ExecutePopFromBallStack(_) => {
+                    self.pop_from_ball_stack();
                     self.machine_st.p = self.machine_st.cp;
                 }
                 &Instruction::CallSetCutPointByDefault(r, _) => {
@@ -4970,11 +4986,11 @@ impl Machine {
                 }
                 &Instruction::CallPredicateDefined(_) => {
                     self.machine_st.fail = !self.predicate_defined();
-                    self.machine_st.p += 1;
+                    step_or_fail!(self, self.machine_st.p += 1);
                 }
                 &Instruction::ExecutePredicateDefined(_) => {
                     self.machine_st.fail = !self.predicate_defined();
-                    self.machine_st.p = self.machine_st.cp;
+                    step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                 }
                 &Instruction::CallStripModule(_) => {
                     let (module_loc, qualified_goal) = self.machine_st.strip_module(
