@@ -6112,55 +6112,22 @@ put_free(F) :- put_attr(F, free, true).
 
 free_node(F) :- get_attr(F, free, true).
 
-del_vars_attr(Vars, Attr) :- maplist(del_attr(Attr), Vars).
-
-%del_attr_(Attr, Var) :- del_attr(Var, Attr).
-
-/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  This needs to be spelt out.
-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
-
-% del_attr_(edges, Var)    :- del_attr(Var, edges).
-% del_attr_(parent, Var)   :- del_attr(Var, parent).
-% del_attr_(g0_edges, Var) :- del_attr(Var, g0_edges).
-% del_attr_(index, Var)    :- del_attr(Var, index).
-% del_attr_(visited, Var)  :- del_attr(Var, visited).
-
-del_all_attrs(Var) :-
-        (   var(Var) ->
-            Atts = [clpz,
-                    clpz_aux,
-                    clpz_relation,
-                    edges,
-                    flow,
-                    parent,
-                    free,
-                    g0_edges,
-                    used,
-                    lowlink,
-                    value,
-                    visited,
-                    index,
-                    in_stack,
-                    clpz_gcc_vs,
-                    clpz_gcc_num,
-                    clpz_gcc_occurred],
-            maplist(remove_attr(Var), Atts)
-        ;   true
-        ).
-
-remove_attr(Var, Attr) :-
-        functor(Term, Attr, 1),
-        put_atts(Var, -Term).
-
 :- meta_predicate with_local_attributes(?, 0, ?).
+
+:- dynamic(nat_copy/1).
 
 with_local_attributes(Vars, Goal, Result) :-
         catch((Goal,
-               maplist(del_all_attrs, Vars),
-               % reset all attributes, only the result matters
-               throw(local_attributes(Result,Vars))),
-              local_attributes(Result,Vars),
+               % Create a copy where all attributes are removed. Only
+               % the result and its relation to Vars matters. We throw
+               % an exception to undo all modifications to attributes
+               % we made during propagation, and unify the variables
+               % in the thrown copy with Vars in order to get the
+               % intended variables in Result.
+               asserta(nat_copy(Vars-Result)),
+               retract(nat_copy(Copy)),
+               throw(local_attributes(Copy))),
+              local_attributes(Vars-Result),
               true).
 
 distinct(Vars) -->
