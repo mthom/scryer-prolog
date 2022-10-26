@@ -793,7 +793,8 @@ pub(crate) fn xor(n1: Number, n2: Number, arena: &mut Arena) -> Result<Number, M
         (Number::Integer(_), n2) | (Number::Fixnum(_), n2) => {
             Err(numerical_type_error(ValidType::Integer, n2, stub_gen))
         }
-        _ => Err(numerical_type_error(ValidType::Integer, n2, stub_gen)),
+        (n1, Number::Integer(_)) => Err(numerical_type_error(ValidType::Integer, n1, stub_gen)),
+        _ => Err(numerical_type_error(ValidType::Integer, n1, stub_gen)),
     }
 }
 
