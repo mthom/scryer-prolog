@@ -2432,6 +2432,12 @@ impl Machine {
             addr
         } else {
             match Number::try_from(addr) {
+                Ok(Number::Integer(ref n)) if **n == -1_i64 => {
+                    fixnum_as_cell!(Fixnum::build_with(-1))
+                }
+                Ok(Number::Fixnum(n)) if n.get_num() == -1_i64 => {
+                    fixnum_as_cell!(Fixnum::build_with(-1))
+                }
                 Ok(Number::Integer(n)) => {
                     if let Some(nb) = n.to_u8() {
                         fixnum_as_cell!(Fixnum::build_with(nb as i64))
