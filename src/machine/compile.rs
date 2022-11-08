@@ -2428,9 +2428,9 @@ impl Machine {
         module_name: HeapCellValue,
         key: PredicateKey,
     ) -> CodeIndex {
-        let mut loader: Loader<'_, LiveLoadAndMachineState<'_>> = Loader::new(
+        let mut loader: Loader<'_, InlineLoadState<'_>> = Loader::new(
             self,
-            LiveTermStream::new(ListingSource::User),
+            InlineTermStream {},
         );
 
         let module_name = if module_name.get_tag() == HeapCellValueTag::Atom {
@@ -2448,9 +2448,9 @@ impl Machine {
         vars: &[Term],
     ) -> Result<(), SessionError> {
         let mut compile = || {
-            let mut loader: Loader<'_, LiveLoadAndMachineState<'_>> = Loader::new(
+            let mut loader: Loader<'_, InlineLoadState<'_>> = Loader::new(
                 self,
-                LiveTermStream::new(ListingSource::User),
+                InlineTermStream {},
             );
 
             let term = loader.read_term_from_heap(term_loc)?;

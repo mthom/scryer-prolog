@@ -390,6 +390,64 @@ impl<'a> LoadState<'a> for BootstrappingLoadState<'a> {
     }
 }
 
+pub struct InlineLoadState<'a> {
+    machine_st: &'a mut MachineState,
+    pub payload: LoadStatePayload<InlineTermStream>,
+}
+
+impl<'a> Deref for InlineLoadState<'a> {
+    type Target = LoadStatePayload<InlineTermStream>;
+
+    #[inline(always)]
+    fn deref(&self) -> &Self::Target {
+        &self.payload
+    }
+}
+
+impl<'a> DerefMut for InlineLoadState<'a> {
+    #[inline(always)]
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.payload
+    }
+}
+
+impl<'a> LoadState<'a> for InlineLoadState<'a> {
+    type TS = InlineTermStream;
+    type LoaderFieldType = InlineLoadState<'a>;
+    type Evacuable = ();
+
+    #[inline(always)]
+    fn new(machine_st: &'a mut MachineState, payload: LoadStatePayload<Self::TS>) -> Self::LoaderFieldType {
+	InlineLoadState { machine_st, payload }
+    }
+
+    fn evacuate(_loader: Loader<'a, Self>) -> Result<Self::Evacuable, SessionError> {
+	Ok(())
+    }
+
+    #[inline(always)]
+    fn should_drop_load_state(_loader: &Loader<'a, Self>) -> bool {
+	false
+    }
+
+    #[inline(always)]
+    fn reset_machine(_loader: &mut Loader<'a, Self>) {
+    }
+
+    #[inline(always)]
+    fn machine_st(load_state: &mut Self::LoaderFieldType) -> &mut MachineState {
+        &mut load_state.machine_st
+    }
+
+    #[inline(always)]
+    fn err_on_builtin_overwrite(
+        _loader: &Loader<'a, Self>,
+        _key: PredicateKey,
+    ) -> Result<(), SessionError> {
+        Ok(())
+    }
+}
+
 pub struct Loader<'a, LS: LoadState<'a>> {
     pub(super) payload: LS::LoaderFieldType,
     pub(super) wam_prelude: MachinePreludeView<'a>,
@@ -2389,21 +2447,15 @@ impl Machine {
     }
 
     pub(crate) fn builtin_property(&mut self) {
-        let key = self
+        let (name, arity) = self
             .machine_st
             .read_predicate_key(self.machine_st.registers[1], self.machine_st.registers[2]);
 
-        match ClauseType::from(key.0, key.1, &mut self.machine_st.arena) {
-            ClauseType::BuiltIn(_) | ClauseType::Inlined(..) | ClauseType::CallN(_) => {
+        if !ClauseType::is_inbuilt(name, arity) { // ClauseType::from(key.0, key.1, &mut self.machine_st.arena) {
+            if let Some(module) = self.indices.modules.get(&(atom!("builtins"))) {
+                self.machine_st.fail = !module.code_dir.contains_key(&(name, arity));
                 return;
             }
-            ClauseType::Named(arity, name, _) => {
-                if let Some(module) = self.indices.modules.get(&(atom!("builtins"))) {
-                    self.machine_st.fail = !module.code_dir.contains_key(&(name, arity));
-                    return;
-                }
-            }
-            _ => {}
         }
 
         self.machine_st.fail = true;
