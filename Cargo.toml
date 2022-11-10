@@ -13,10 +13,6 @@ build = "build/main.rs"
 rust-version = "1.61"
 
 [features]
-num = ["num-rug-adapter"]
-# no default features to make num tests work
-# workaround for --no-default-features and --features not working intuitively for workspaces with a root package
-# see rust-lang/cargo#7160
 default = ["rug"]
 
 [build-dependencies]
@@ -44,7 +40,6 @@ lexical = "5.2.2"
 libc = "0.2.62"
 modular-bitfield = "0.11.2"
 ctrlc = "3.2.2"
-num-rug-adapter = { version = "0.1.6", optional = true }
 ordered-float = "2.6.0"
 phf = { version = "0.9",  features = ["macros"] }
 ref_thread_local = "0.0.0"
@@ -76,7 +71,6 @@ serial_test = "0.5.1"
 
 [patch.crates-io]
 modular-bitfield = { git = "https://github.com/mthom/modular-bitfield" }
-num-rug-adapter = { git = "https://github.com/mthom/num-rug-adapter" }
 
 [profile.release]
 debug = true

@@ -1061,47 +1061,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "num-bigint"
-version = "0.2.6"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "090c7f9998ee0ff65aa5b723e4009f7b217707f1fb5ea551329cc4d6231fb304"
-dependencies = [
- "autocfg 1.1.0",
- "num-integer",
- "num-traits",
-]
-
-[[package]]
 name = "num-integer"
 version = "0.1.44"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d2cc698a63b549a70bc047073d2949cce27cd1c7b0a4a862d08a8031bc2801db"
 dependencies = [
  "autocfg 1.1.0",
- "num-traits",
-]
-
-[[package]]
-name = "num-rational"
-version = "0.2.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5c000134b5dbf44adc5cb772486d335293351644b801551abe8f75c84cfa4aef"
-dependencies = [
- "autocfg 1.1.0",
- "num-bigint",
- "num-integer",
- "num-traits",
-]
-
-[[package]]
-name = "num-rug-adapter"
-version = "0.1.6"
-source = "git+https://github.com/mthom/num-rug-adapter#58ec611ca8ac4d6ebf41e41f588f472e51a23e60"
-dependencies = [
- "libc",
- "num-bigint",
- "num-integer",
- "num-rational",
  "num-traits",
 ]
 
@@ -1726,7 +1691,7 @@ checksum = "d29ab0c6d3fc0ee92fe66e2d99f700eab17a8d57d1c1d3b748380fb20baa78cd"
 
 [[package]]
 name = "scryer-prolog"
-version = "0.9.0"
+version = "0.9.1"
 dependencies = [
  "assert_cmd",
  "base64",
@@ -1750,7 +1715,6 @@ dependencies = [
  "libc",
  "modular-bitfield",
  "native-tls",
- "num-rug-adapter",
  "ordered-float",
  "phf 0.9.0",
  "predicates-core",
