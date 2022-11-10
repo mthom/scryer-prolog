@@ -9,7 +9,9 @@
                     partial_string_tail/2,
                     setup_call_cleanup/3,
                     call_nth/2,
-                    copy_term_nat/2]).
+                    copy_term_nat/2,
+		    asserta/2,
+		    assertz/2]).
 
 :- use_module(library(error), [can_be/2,
                                domain_error/3,
@@ -247,3 +249,17 @@ call_nth_nesting(C, ID) :-
 
 copy_term_nat(Source, Dest) :-
     '$copy_term_without_attr_vars'(Source, Dest).
+
+
+asserta(Module, (Head :- Body)) :-
+    !,
+    '$asserta'(Module, Head, Body).
+asserta(Module, Fact) :-
+    '$asserta'(Module, Fact, true).
+
+assertz(Module, (Head :- Body)) :-
+    !,
+    '$assertz'(Module, Head, Body).
+assertz(Module, Fact) :-
+    '$assertz'(Module, Fact, true).
+

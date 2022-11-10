@@ -1,13 +1,11 @@
 :- module(builtins, [(=)/2, (\=)/2, (\+)/1, !/0, (',')/2, (->)/2,
-                     (;)/2, (=..)/2, /* (:)/2, (:)/3, (:)/4, (:)/5,
-                     (:)/6, (:)/7, (:)/8, (:)/9, (:)/10, (:)/11,
-                     (:)/12, */ abolish/1, asserta/1, asserta/2,
-                     assertz/1, assertz/2, at_end_of_stream/0,
-                     at_end_of_stream/1, atom_chars/2, atom_codes/2,
-                     atom_concat/3, atom_length/2, bagof/3, call/1,
-                     call/2, call/3, call/4, call/5, call/6, call/7,
-                     call/8, call/9, callable/1, catch/3, char_code/2,
-                     clause/2, close/1, close/2, current_input/1,
+                     (;)/2, (=..)/2, abolish/1, asserta/1, assertz/1,
+                     at_end_of_stream/0, at_end_of_stream/1,
+                     atom_chars/2, atom_codes/2, atom_concat/3,
+                     atom_length/2, bagof/3, call/1, call/2, call/3,
+                     call/4, call/5, call/6, call/7, call/8, call/9,
+                     callable/1, catch/3, char_code/2, clause/2,
+                     close/1, close/2, current_input/1,
                      current_output/1, current_op/3,
                      current_predicate/1, current_prolog_flag/2,
                      error/2, fail/0, false/0, findall/3, findall/4,
@@ -59,66 +57,6 @@ call(_, _, _, _, _, _, _, _).
 
 call(_, _, _, _, _, _, _, _, _).
 
-% dynamic module resolution.
-
-/*
-
-Module : Predicate :-
-    (  atom(Module) -> '$module_call'(Module, Predicate)
-    ;  throw(error(type_error(atom, Module), (:)/2))
-    ).
-
-:(Module, Predicate, A1) :-
-    (  atom(Module) -> '$module_call'(Module, Predicate, A1)
-    ;  throw(error(type_error(atom, Module), (:)/2))
-    ).
-
-:(Module, Predicate, A1, A2) :-
-    (  atom(Module) -> '$module_call'(Module, Predicate, A1, A2)
-    ;  throw(error(type_error(atom, Module), (:)/2))
-    ).
-
-:(Module, Predicate, A1, A2, A3) :-
-    (  atom(Module) -> '$module_call'(Module, Predicate, A1, A2, A3)
-    ;  throw(error(type_error(atom, Module), (:)/2))
-    ).
-
-:(Module, Predicate, A1, A2, A3, A4) :-
-    (  atom(Module) -> '$module_call'(A4, Module, Predicate, A1, A2, A3)
-    ;  throw(error(type_error(atom, Module), (:)/2))
-    ).
-
-:(Module, Predicate, A1, A2, A3, A4, A5) :-
-    (  atom(Module) -> '$module_call'(Module, Predicate, A1, A2, A3, A4, A5)
-    ;  throw(error(type_error(atom, Module), (:)/2))
-    ).
-
-:(Module, Predicate, A1, A2, A3, A4, A5, A6) :-
-    (  atom(Module) -> '$module_call'(Module, Predicate, A1, A2, A3, A4, A5, A6)
-    ;  throw(error(type_error(atom, Module), (:)/2))
-    ).
-
-:(Module, Predicate, A1, A2, A3, A4, A5, A6, A7) :-
-    (  atom(Module) -> '$module_call'(Module, Predicate, A1, A2, A3, A4, A5, A6, A7)
-    ;  throw(error(type_error(atom, Module), (:)/2))
-    ).
-
-:(Module, Predicate, A1, A2, A3, A4, A5, A6, A7, A8) :-
-    (  atom(Module) -> '$module_call'(Module, Predicate, A1, A2, A3, A4, A5, A6, A7, A8)
-    ;  throw(error(type_error(atom, Module), (:)/2))
-    ).
-
-:(Module, Predicate, A1, A2, A3, A4, A5, A6, A7, A8, A9) :-
-    (  atom(Module) -> '$module_call'(Module, Predicate, A1, A2, A3, A4, A5, A6, A7, A8, A9)
-    ;  throw(error(type_error(atom, Module), (:)/2))
-    ).
-
-:(Module, Predicate, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10) :-
-    (  atom(Module) -> '$module_call'(Module, Predicate, A1, A2, A3, A4, A5, A6, A7, A8, A9, A10)
-    ;  throw(error(type_error(atom, Module), (:)/2))
-    ).
-
-*/
 
 :- meta_predicate catch(0, ?, 0).
 
@@ -897,25 +835,14 @@ clause(H, B) :-
 
 asserta(Clause0) :-
     loader:strip_subst_module(Clause0, user, Module, Clause),
-    asserta(Module, Clause).
+    iso_ext:asserta(Module, Clause).
 
-asserta(Module, (Head :- Body)) :-
-    !,
-    '$asserta'(Module, Head, Body).
-asserta(Module, Fact) :-
-    '$asserta'(Module, Fact, true).
 
 :- meta_predicate assertz(:).
 
 assertz(Clause0) :-
     loader:strip_subst_module(Clause0, user, Module, Clause),
-    assertz(Module, Clause).
-
-assertz(Module, (Head :- Body)) :-
-    !,
-    '$assertz'(Module, Head, Body).
-assertz(Module, Fact) :-
-    '$assertz'(Module, Fact, true).
+    iso_ext:assertz(Module, Clause).
 
 
 :- meta_predicate retract(:).
