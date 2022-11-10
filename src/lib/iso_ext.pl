@@ -1,8 +1,3 @@
-%% for builtins that are not part of the ISO standard.
-%% must be loaded at the REPL with
-
-%% ?- use_module(library(iso_ext)).
-
 :- module(iso_ext, [bb_b_put/2,
                     bb_get/2,
                     bb_put/2,
@@ -14,8 +9,9 @@
                     partial_string_tail/2,
                     setup_call_cleanup/3,
                     call_nth/2,
-%                   variant/2,
-                    copy_term_nat/2]).
+                    copy_term_nat/2,
+		    asserta/2,
+		    assertz/2]).
 
 :- use_module(library(error), [can_be/2,
                                domain_error/3,
@@ -64,7 +60,7 @@ call_cleanup(G, C) :- setup_call_cleanup(true, G, C).
 
 setup_call_cleanup(S, G, C) :-
     '$get_b_value'(B),
-    '$call_with_inference_counting'('$call'(S)),
+    '$call_with_inference_counting'(call(S)),
     '$set_cp_by_default'(B),
     '$get_current_block'(Bb),
     (  C = _:CC,
@@ -80,20 +76,20 @@ setup_call_cleanup(S, G, C) :-
 scc_helper(C, G, Bb) :-
     '$get_cp'(Cp),
     '$install_scc_cleaner'(C, NBb),
-    '$call_with_inference_counting'('$call'(G)),
-    ( '$check_cp'(Cp) ->
-      '$reset_block'(Bb),
-      run_cleaners_without_handling(Cp)
-    ; true
-    ; '$reset_block'(NBb),
-      '$fail'
+    '$call_with_inference_counting'(call(G)),
+    (  '$check_cp'(Cp) ->
+       '$reset_block'(Bb),
+       run_cleaners_without_handling(Cp)
+    ;  true
+    ;  '$reset_block'(NBb),
+       '$fail'
     ).
 scc_helper(_, _, Bb) :-
     '$reset_block'(Bb),
-    '$get_ball'(Ball),
-    '$erase_ball',
+    '$push_ball_stack',
     run_cleaners_with_handling,
-    throw(Ball).
+    '$pop_from_ball_stack',
+    '$unwind_stack'.
 scc_helper(_, _, _) :-
     '$get_cp'(Cp),
     run_cleaners_without_handling(Cp),
@@ -115,7 +111,7 @@ run_cleaners_with_handling :-
 run_cleaners_without_handling(Cp) :-
     '$get_scc_cleaner'(C),
     '$get_level'(B),
-    '$call'(C),
+    call(C),
     '$set_cp_by_default'(B),
     run_cleaners_without_handling(Cp).
 run_cleaners_without_handling(Cp) :-
@@ -136,10 +132,13 @@ end_block(B, _Bb, NBb, L) :-
 
 :- non_counted_backtracking handle_ile/3.
 
-handle_ile(B, inference_limit_exceeded(B), inference_limit_exceeded) :- !.
-handle_ile(B, E, _) :-
+handle_ile(B, inference_limit_exceeded(B), inference_limit_exceeded) :-
+    !,
+    '$pop_ball_stack'.
+handle_ile(B, _, _) :-
     '$remove_call_policy_check'(B),
-    throw(E).
+    '$pop_from_ball_stack',
+    '$unwind_stack'.
 
 :- meta_predicate(call_with_inference_limit(0, ?, ?)).
 
@@ -170,21 +169,21 @@ install_inference_counter(B, L, Count0) :-
 call_with_inference_limit(G, L, R, Bb, B) :-
     '$install_new_block'(NBb),
     '$install_inference_counter'(B, L, Count0),
-    '$call_with_inference_counting'('$call'(G)),
+    '$call_with_inference_counting'(call(G)),
     '$inference_level'(R, B),
     '$remove_inference_counter'(B, Count1),
-    is(Diff, L - (Count1 - Count0)),
+    Diff is L - (Count1 - Count0),
     end_block(B, Bb, NBb, Diff).
 call_with_inference_limit(_, _, R, Bb, B) :-
     '$reset_block'(Bb),
     '$remove_inference_counter'(B, _),
     (  '$get_ball'(Ball),
+       '$push_ball_stack',
        '$get_level'(Cp),
        '$set_cp_by_default'(Cp)
     ;  '$remove_call_policy_check'(B),
        '$fail'
     ),
-    '$erase_ball',
     handle_ile(B, Ball, R).
 
 partial_string(String, L, L0) :-
@@ -250,3 +249,17 @@ call_nth_nesting(C, ID) :-
 
 copy_term_nat(Source, Dest) :-
     '$copy_term_without_attr_vars'(Source, Dest).
+
+
+asserta(Module, (Head :- Body)) :-
+    !,
+    '$asserta'(Module, Head, Body).
+asserta(Module, Fact) :-
+    '$asserta'(Module, Fact, true).
+
+assertz(Module, (Head :- Body)) :-
+    !,
+    '$assertz'(Module, Head, Body).
+assertz(Module, Fact) :-
+    '$assertz'(Module, Fact, true).
+

@@ -154,24 +154,21 @@ impl ClauseInfo for PredicateKey {
 
 impl ClauseInfo for Term {
     fn name(&self) -> Option<Atom> {
-        //, atom_tbl: &AtomTable) -> Option<StringBuffer> {
         match self {
             Term::Clause(_, name, terms) => {
-                // let str_buf = StringBuffer::from(*name, atom_tbl);
 
-                match name.as_str() {
-                    // str_buf.as_str() {
-                    ":-" => {
+                match name {
+                    atom!(":-") => {
                         match terms.len() {
                             1 => None,            // a declaration.
-                            2 => terms[0].name(), //.map(|name| StringBuffer::from(name, atom_tbl)),
+                            2 => terms[0].name(),
                             _ => Some(*name),
                         }
                     }
                     _ => Some(*name), //str_buf),
                 }
             }
-            Term::Literal(_, Literal::Atom(name)) => Some(*name), //Some(StringBuffer::from(*name, atom_tbl)),
+            Term::Literal(_, Literal::Atom(name)) => Some(*name),
             _ => None,
         }
     }

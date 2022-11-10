@@ -336,7 +336,7 @@ impl<'a, 'b> TermWriter<'a, 'b> {
                     self.push_stub_addr();
                     self.push_stub_addr();
                 }
-                &TermRef::Clause(Level::Root, _, ref ct, subterms) => {
+                &TermRef::Clause(Level::Root, _, name, subterms) => {
                     if subterms.len() > MAX_ARITY {
                         return Err(CompilationError::ExceededMaxArity);
                     }
@@ -348,7 +348,7 @@ impl<'a, 'b> TermWriter<'a, 'b> {
                     });
 
                     self.queue.push_back((subterms.len(), h + 2));
-                    let named = atom_as_cell!(ct.name(), subterms.len());
+                    let named = atom_as_cell!(name, subterms.len());
 
                     self.heap.push(named);
 
@@ -358,9 +358,9 @@ impl<'a, 'b> TermWriter<'a, 'b> {
 
                     continue;
                 }
-                &TermRef::Clause(_, _, ref ct, subterms) => {
+                &TermRef::Clause(_, _, name, subterms) => {
                     self.queue.push_back((subterms.len(), h + 1));
-                    let named = atom_as_cell!(ct.name(), subterms.len());
+                    let named = atom_as_cell!(name, subterms.len());
 
                     self.heap.push(named);
 
@@ -390,6 +390,12 @@ impl<'a, 'b> TermWriter<'a, 'b> {
                     put_complete_string(self.heap, src.as_str(), self.atom_tbl);
                 }
                 &TermRef::PartialString(lvl, _, ref src, _) => {
+                    if let Level::Root = lvl {
+                        // Var tags can't refer directly to partial strings,
+                        // so a PStrLoc cell must be pushed.
+                        self.heap.push(pstr_loc_as_cell!(heap_loc + 1));
+                    }
+
                     allocate_pstr(self.heap, src.as_str(), self.atom_tbl);
 
                     let h = self.heap.len();

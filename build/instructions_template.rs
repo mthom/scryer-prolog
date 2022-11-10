@@ -190,9 +190,9 @@ enum REPLCodePtr {
     DynamicProperty,
     #[strum_discriminants(strum(props(Arity = "3", Name = "$abolish_clause")))]
     AbolishClause,
-    #[strum_discriminants(strum(props(Arity = "5", Name = "$asserta")))]
+    #[strum_discriminants(strum(props(Arity = "3", Name = "$asserta")))]
     Asserta,
-    #[strum_discriminants(strum(props(Arity = "5", Name = "$assertz")))]
+    #[strum_discriminants(strum(props(Arity = "3", Name = "$assertz")))]
     Assertz,
     #[strum_discriminants(strum(props(Arity = "4", Name = "$retract_clause")))]
     Retract,
@@ -404,8 +404,6 @@ enum SystemClauseType {
     InferenceLevel,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$clean_up_block")))]
     CleanUpBlock,
-    #[strum_discriminants(strum(props(Arity = "0", Name = "$erase_ball")))]
-    EraseBall,
     #[strum_discriminants(strum(props(Arity = "0", Name = "$fail")))]
     Fail,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$get_ball")))]
@@ -434,6 +432,12 @@ enum SystemClauseType {
     ReturnFromVerifyAttr,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$set_ball")))]
     SetBall,
+    #[strum_discriminants(strum(props(Arity = "0", Name = "$push_ball_stack")))]
+    PushBallStack,
+    #[strum_discriminants(strum(props(Arity = "0", Name = "$pop_ball_stack")))]
+    PopBallStack,
+    #[strum_discriminants(strum(props(Arity = "0", Name = "$pop_from_ball_stack")))]
+    PopFromBallStack,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$set_cp_by_default")))]
     SetCutPointByDefault(RegType),
     #[strum_discriminants(strum(props(Arity = "1", Name = "$set_double_quotes")))]
@@ -492,7 +496,7 @@ enum SystemClauseType {
     CryptoDataEncrypt,
     #[strum_discriminants(strum(props(Arity = "6", Name = "$crypto_data_decrypt")))]
     CryptoDataDecrypt,
-    #[strum_discriminants(strum(props(Arity = "5", Name = "$crypto_curve_scalar_mult")))]
+    #[strum_discriminants(strum(props(Arity = "4", Name = "$crypto_curve_scalar_mult")))]
     CryptoCurveScalarMult,
     #[strum_discriminants(strum(props(Arity = "4", Name = "$ed25519_sign")))]
     Ed25519Sign,
@@ -544,10 +548,22 @@ enum SystemClauseType {
     DeterministicLengthRundown,
     #[strum_discriminants(strum(props(Arity = "7", Name = "$http_open")))]
     HttpOpen,
+    #[strum_discriminants(strum(props(Arity = "2", Name = "$http_listen")))]
+    HttpListen,
+    #[strum_discriminants(strum(props(Arity = "7", Name = "$http_accept")))]
+    HttpAccept,
+    #[strum_discriminants(strum(props(Arity = "4", Name = "$http_answer")))]
+    HttpAnswer,
     #[strum_discriminants(strum(props(Arity = "3", Name = "$predicate_defined")))]
     PredicateDefined,
     #[strum_discriminants(strum(props(Arity = "3", Name = "$strip_module")))]
     StripModule,
+    #[strum_discriminants(strum(props(Arity = "4", Name = "$compile_inline_or_expanded_goal")))]
+    CompileInlineOrExpandedGoal,
+    #[strum_discriminants(strum(props(Arity = "arity", Name = "$call_inline")))]
+    InlineCallN(usize),
+    #[strum_discriminants(strum(props(Arity = "1", Name = "$is_expanded_or_inlined")))]
+    IsExpandedOrInlined,
     REPL(REPLCodePtr),
 }
 
@@ -1435,6 +1451,12 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::DefaultExecuteN(arity, _) => {
                         functor!(atom!("execute_default_n"), [fixnum(arity)])
                     }
+                    &Instruction::CallInlineCallN(arity, _) => {
+                        functor!(atom!("call_n_inline"), [fixnum(arity)])
+                    }
+                    &Instruction::ExecuteInlineCallN(arity, _) => {
+                        functor!(atom!("call_n_inline"), [fixnum(arity)])
+                    }
                     &Instruction::CallTermGreaterThan(_) |
                     &Instruction::CallTermLessThan(_) |
                     &Instruction::CallTermGreaterThanOrEqual(_) |
@@ -1597,6 +1619,8 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallDeleteHeadAttribute(_) |
                     &Instruction::CallDynamicModuleResolution(..) |
                     &Instruction::CallPrepareCallClause(..) |
+                    &Instruction::CallCompileInlineOrExpandedGoal(..) |
+                    &Instruction::CallIsExpandedOrInlined(_) |
                     &Instruction::CallEnqueueAttributedVar(_) |
                     &Instruction::CallFetchGlobalVar(_) |
                     &Instruction::CallFirstStream(_) |
@@ -1660,7 +1684,6 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallSetStreamPosition(_) |
                     &Instruction::CallInferenceLevel(_) |
                     &Instruction::CallCleanUpBlock(_) |
-                    &Instruction::CallEraseBall(_) |
                     &Instruction::CallFail(_) |
                     &Instruction::CallGetBall(_) |
                     &Instruction::CallGetCurrentBlock(_) |
@@ -1672,6 +1695,9 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallCpuNow(_) |
                     &Instruction::CallDeterministicLengthRundown(_) |
                     &Instruction::CallHttpOpen(_) |
+                    &Instruction::CallHttpListen(_) |
+                    &Instruction::CallHttpAccept(_) |
+                    &Instruction::CallHttpAnswer(_) |
                     &Instruction::CallPredicateDefined(_) |
                     &Instruction::CallStripModule(_) |
                     &Instruction::CallCurrentTime(_) |
@@ -1680,6 +1706,9 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallResetBlock(_) |
                     &Instruction::CallReturnFromVerifyAttr(_) |
                     &Instruction::CallSetBall(_) |
+                    &Instruction::CallPushBallStack(_) |
+                    &Instruction::CallPopBallStack(_) |
+                    &Instruction::CallPopFromBallStack(_) |
                     &Instruction::CallSetCutPointByDefault(..) |
                     &Instruction::CallSetDoubleQuotes(_) |
                     &Instruction::CallSetSeed(_) |
@@ -1804,6 +1833,8 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteDeleteHeadAttribute(_) |
                     &Instruction::ExecuteDynamicModuleResolution(..) |
                     &Instruction::ExecutePrepareCallClause(..) |
+                    &Instruction::ExecuteCompileInlineOrExpandedGoal(..) |
+                    &Instruction::ExecuteIsExpandedOrInlined(_) |
                     &Instruction::ExecuteEnqueueAttributedVar(_) |
                     &Instruction::ExecuteFetchGlobalVar(_) |
                     &Instruction::ExecuteFirstStream(_) |
@@ -1867,7 +1898,6 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteSetStreamPosition(_) |
                     &Instruction::ExecuteInferenceLevel(_) |
                     &Instruction::ExecuteCleanUpBlock(_) |
-                    &Instruction::ExecuteEraseBall(_) |
                     &Instruction::ExecuteFail(_) |
                     &Instruction::ExecuteGetBall(_) |
                     &Instruction::ExecuteGetCurrentBlock(_) |
@@ -1879,6 +1909,9 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteCpuNow(_) |
                     &Instruction::ExecuteDeterministicLengthRundown(_) |
                     &Instruction::ExecuteHttpOpen(_) |
+                    &Instruction::ExecuteHttpListen(_) |
+                    &Instruction::ExecuteHttpAccept(_) |
+                    &Instruction::ExecuteHttpAnswer(_) |
                     &Instruction::ExecutePredicateDefined(_) |
                     &Instruction::ExecuteStripModule(_) |
                     &Instruction::ExecuteCurrentTime(_) |
@@ -1887,6 +1920,9 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteResetBlock(_) |
                     &Instruction::ExecuteReturnFromVerifyAttr(_) |
                     &Instruction::ExecuteSetBall(_) |
+                    &Instruction::ExecutePushBallStack(_) |
+                    &Instruction::ExecutePopBallStack(_) |
+                    &Instruction::ExecutePopFromBallStack(_) |
                     &Instruction::ExecuteSetCutPointByDefault(_, _) |
                     &Instruction::ExecuteSetDoubleQuotes(_) |
                     &Instruction::ExecuteSetSeed(_) |
@@ -2179,6 +2215,7 @@ pub fn generate_instructions_rs() -> TokenStream {
     let mut clause_type_from_name_and_arity_arms = vec![];
     let mut clause_type_to_instr_arms = vec![];
     let mut clause_type_name_arms = vec![];
+    let mut is_inbuilt_arms = vec![];
 
     for (name, arity, variant) in instr_data.compare_number_variants {
         let ident = variant.ident.clone();
@@ -2233,6 +2270,12 @@ pub fn generate_instructions_rs() -> TokenStream {
                 ) => Instruction::#instr_ident(#(#placeholder_ids),*, 0)
             }
         );
+
+        is_inbuilt_arms.push(
+            quote! {
+                (atom!(#name), #arity) => true
+            }
+        );
     }
 
     for (name, arity, variant) in instr_data.compare_term_variants {
@@ -2260,6 +2303,12 @@ pub fn generate_instructions_rs() -> TokenStream {
                 ClauseType::BuiltIn(
                     BuiltInClauseType::CompareTerm(CompareTerm::#ident)
                 ) => Instruction::#instr_ident(0)
+            }
+        );
+
+        is_inbuilt_arms.push(
+            quote! {
+                (atom!(#name), #arity) => true
             }
         );
     }
@@ -2323,6 +2372,12 @@ pub fn generate_instructions_rs() -> TokenStream {
                 ) => Instruction::#instr_ident(0)
             }
         });
+
+        is_inbuilt_arms.push(
+            quote! {
+                (atom!(#name), #arity) => true
+            }
+        );
     }
 
     for (name, arity, variant) in instr_data.inlined_type_variants {
@@ -2382,6 +2437,12 @@ pub fn generate_instructions_rs() -> TokenStream {
                 ) => Instruction::#instr_ident(#(#placeholder_ids),*,0)
             }
         );
+
+        is_inbuilt_arms.push(
+            quote! {
+                (atom!(#name), #arity) => true
+            }
+        );
     }
 
     for (name, arity, variant) in instr_data.system_clause_type_variants {
@@ -2410,6 +2471,12 @@ pub fn generate_instructions_rs() -> TokenStream {
                 quote! {
                     (atom!(#name), #arity) => ClauseType::System(
                         SystemClauseType::#ident(temp_v!(1))
+                    )
+                }
+            } else if ident.to_string() == "InlineCallN" {
+                quote! {
+                    (atom!(#name), arity) => ClauseType::System(
+                        SystemClauseType::#ident(arity)
                     )
                 }
             } else {
@@ -2442,6 +2509,7 @@ pub fn generate_instructions_rs() -> TokenStream {
         });
 
         let ident = variant.ident;
+
         let instr_ident = if ident != "CallContinuation" {
             format_ident!("Call{}", ident)
         } else {
@@ -2465,6 +2533,18 @@ pub fn generate_instructions_rs() -> TokenStream {
                 ) => Instruction::#instr_ident(0)
             }
         });
+
+        is_inbuilt_arms.push(
+            if let Arity::Ident("arity") = &arity {
+                quote! {
+                    (atom!(#name), _arity) => true
+                }
+            } else {
+                quote! {
+                    (atom!(#name), #arity) => true
+                }
+            }
+        );
     }
 
     for (name, arity, variant) in instr_data.repl_code_ptr_variants {
@@ -2530,6 +2610,12 @@ pub fn generate_instructions_rs() -> TokenStream {
                 )) => Instruction::#instr_ident(0)
             }
         });
+
+        is_inbuilt_arms.push(
+            quote! {
+                (atom!(#name), #arity) => true
+            }
+        );
     }
 
     for (name, arity, variant) in instr_data.clause_type_variants {
@@ -2537,7 +2623,7 @@ pub fn generate_instructions_rs() -> TokenStream {
 
         if ident == "Named" {
             clause_type_from_name_and_arity_arms.push(quote! {
-                (name, arity) => ClauseType::Named(arity, name, CodeIndex::default())
+                (name, arity) => ClauseType::Named(arity, name, CodeIndex::default(arena))
             });
 
             clause_type_to_instr_arms.push(quote! {
@@ -2599,6 +2685,12 @@ pub fn generate_instructions_rs() -> TokenStream {
                 ClauseType::#ident => Instruction::#ident(0)
             }
         });
+
+        is_inbuilt_arms.push(
+            quote! {
+                (atom!(#name), _arity) => true
+            }
+        );
     }
 
     let to_execute_arms: Vec<_> = instr_data.instr_variants
@@ -2933,7 +3025,7 @@ pub fn generate_instructions_rs() -> TokenStream {
         }
 
         impl ClauseType {
-            pub fn from(name: Atom, arity: usize) -> ClauseType {
+            pub fn from(name: Atom, arity: usize, arena: &mut Arena) -> ClauseType {
                 match (name, arity) {
                     #(
                         #clause_type_from_name_and_arity_arms,
@@ -2949,19 +3041,12 @@ pub fn generate_instructions_rs() -> TokenStream {
                 }
             }
 
-            pub fn is_builtin(&self) -> bool {
-                if let ClauseType::BuiltIn(_) = self {
-                    true
-                } else {
-                    false
-                }
-            }
-
-            pub fn is_inlined(&self) -> bool {
-                if let ClauseType::Inlined(_) = self {
-                    true
-                } else {
-                    false
+            pub fn is_inbuilt(name: Atom, arity: usize) -> bool {
+                match (name, arity) {
+                    #(
+                        #is_inbuilt_arms,
+                    )*
+                    _ => false,
                 }
             }
 
@@ -3156,7 +3241,7 @@ enum Arity {
 impl From<&'static str> for Arity {
     fn from(arity: &'static str) -> Self {
         usize::from_str_radix(&arity, 10)
-            .map(|n| Arity::Static(n))
+            .map(Arity::Static)
             .unwrap_or_else(|_| Arity::Ident(arity))
     }
 }

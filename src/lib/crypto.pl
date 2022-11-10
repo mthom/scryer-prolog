@@ -65,8 +65,7 @@
 
 hex_bytes(Hs, Bytes) :-
         (   ground(Hs) ->
-            must_be(list, Hs),
-            maplist(must_be(atom), Hs),
+            must_be(chars, Hs),
             (   phrase(hex_bytes(Hs), Bytes) ->
                 true
             ;   domain_error(hex_encoding, Hs, hex_bytes/2)
@@ -104,10 +103,10 @@ must_be_bytes(Bytes, Context) :-
         ).
 
 
-must_be_byte_chars(Chars, Context) :-
+must_be_octet_chars(Chars, Context) :-
         must_be(chars, Chars),
         (   '$first_non_octet'(Chars, F) ->
-            domain_error(byte_char, F, Context)
+            domain_error(octet_character, F, Context)
         ;   true
         ).
 
@@ -611,7 +610,7 @@ encoding_chars(octet, Bs, Cs) :-
             maplist(char_code, Cs, Bs)
         ;   Bs = Cs
         ),
-        must_be_byte_chars(Cs, crypto_encoding).
+        must_be_octet_chars(Cs, crypto_encoding).
 encoding_chars(utf8, Cs, Cs) :-
         must_be(chars, Cs).
 
@@ -652,17 +651,17 @@ ed25519_new_keypair(Pair) :-
         '$ed25519_new_keypair'(Pair).
 
 ed25519_keypair_public_key(Pair, PublicKey) :-
-        must_be_byte_chars(Pair, ed25519_keypair_public_key),
+        must_be_octet_chars(Pair, ed25519_keypair_public_key),
         '$ed25519_keypair_public_key'(Pair, PublicKey).
 
 ed25519_sign(Key, Data0, Signature, Options) :-
-        must_be_byte_chars(Key, ed25519_sign),
+        must_be_octet_chars(Key, ed25519_sign),
         options_data_chars(Options, Data0, Data, Encoding),
         '$ed25519_sign'(Key, Data, Encoding, Signature0),
         hex_bytes(Signature, Signature0).
 
 ed25519_verify(Key, Data0, Signature0, Options) :-
-        must_be_byte_chars(Key, ed25519_verify),
+        must_be_octet_chars(Key, ed25519_verify),
         options_data_chars(Options, Data0, Data, Encoding),
         hex_bytes(Signature0, Signature),
         '$ed25519_verify'(Key, Data, Encoding, Signature).
@@ -714,12 +713,17 @@ curve25519_scalar_mult(Scalar, Point, Result) :-
         '$curve25519_scalar_mult'(ScalarBytes, PointBytes, Result).
 
 bytes_integer(Bs, N) :-
-        foldl(pow, Bs, 0-0, N-_).
+        foldl(pow, Bs, t(0,0,N), t(N,_,_)).
 
-pow(B, N0-I0, N-I) :-
+pow(B, t(N0,P0,I0), t(N,P,I)) :-
+        (   integer(I0) ->
+            B #= I0 mod 256,
+            I #= I0 >> 8
+        ;   true
+        ),
         B in 0..255,
-        N #= N0 + B*256^I0,
-        I #= I0 + 1.
+        N #= N0 + B*256^P0,
+        P #= P0 + 1.
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    Operations on Elliptic Curves
@@ -762,11 +766,15 @@ crypto_curve_scalar_mult(Curve, Scalar, point(X,Y), point(RX, RY)) :-
         curve_name(Curve, Name),
         curve_field_length(Curve, L0),
         L #= 2*L0, % for hex encoding
-        phrase(format_("04~|~`0t~16r~*+~`0t~16r~*+", [X,L,Y,L]), Hex),
-        hex_bytes(Hex, Bytes),
-        '$crypto_curve_scalar_mult'(Name, Scalar, Bytes, SX, SY),
-        number_chars(RX, SX),
-        number_chars(RY, SY).
+        phrase(format_("04~|~`0t~16r~*+~`0t~16r~*+", [X,L,Y,L]), PointHex),
+        hex_bytes(PointHex, PointBytes),
+        once(bytes_integer(ScalarBytes, Scalar)),
+        '$crypto_curve_scalar_mult'(Name, ScalarBytes, PointBytes, [_|Us]),
+        maplist(char_code, Us, Bs),
+        length(XBs, 32),
+        append(XBs, YBs, Bs),
+        maplist(reverse, [XBs,YBs], RBs),
+        maplist(bytes_integer, RBs, [RX,RY]).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ?- crypto_name_curve(secp256k1, Curve),
@@ -818,16 +826,6 @@ fitting_exponent(N, E0, E) :-
             fitting_exponent(N, E1, E)
         ).
 
-crypto_name_curve(secp112r1,
-                  curve(secp112r1,
-                        0x00db7c2abf62e35e668076bead208b,
-                        0x00db7c2abf62e35e668076bead2088,
-                        0x659ef8ba043916eede8911702b22,
-                        point(0x09487239995a5ee76b55f9c2f098,
-                              0xa89ce5af8724c0a23e0e0ff77500),
-                        0x00db7c2abf62e35e7628dfac6561c5,
-                        14,
-                        1)).
 crypto_name_curve(secp256k1,
                   curve(secp256k1,
                         0x00fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f,

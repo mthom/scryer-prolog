@@ -179,6 +179,14 @@ impl<'a> HeapPStrIter<'a> {
             if self.at_string_terminator() {
                 self.focus = empty_list_as_cell!();
                 self.brent_st.hare = result.focus;
+            } else {
+                read_heap_cell!(self.heap[result.focus],
+                    (HeapCellValueTag::Lis | HeapCellValueTag::Str) => {
+                        self.focus = self.heap[self.brent_st.hare];
+                    }
+                    _ => {
+                    }
+                );
             }
         }
 
@@ -330,7 +338,7 @@ impl<'a> HeapPStrIter<'a> {
                         })
                     } else {
                         None
-                    }
+                    };
                 }
                 (HeapCellValueTag::Str, s) => {
                     let (name, arity) = cell_as_atom_cell!(self.heap[s])

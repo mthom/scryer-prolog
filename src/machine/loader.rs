@@ -390,6 +390,64 @@ impl<'a> LoadState<'a> for BootstrappingLoadState<'a> {
     }
 }
 
+pub struct InlineLoadState<'a> {
+    machine_st: &'a mut MachineState,
+    pub payload: LoadStatePayload<InlineTermStream>,
+}
+
+impl<'a> Deref for InlineLoadState<'a> {
+    type Target = LoadStatePayload<InlineTermStream>;
+
+    #[inline(always)]
+    fn deref(&self) -> &Self::Target {
+        &self.payload
+    }
+}
+
+impl<'a> DerefMut for InlineLoadState<'a> {
+    #[inline(always)]
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.payload
+    }
+}
+
+impl<'a> LoadState<'a> for InlineLoadState<'a> {
+    type TS = InlineTermStream;
+    type LoaderFieldType = InlineLoadState<'a>;
+    type Evacuable = ();
+
+    #[inline(always)]
+    fn new(machine_st: &'a mut MachineState, payload: LoadStatePayload<Self::TS>) -> Self::LoaderFieldType {
+	InlineLoadState { machine_st, payload }
+    }
+
+    fn evacuate(_loader: Loader<'a, Self>) -> Result<Self::Evacuable, SessionError> {
+	Ok(())
+    }
+
+    #[inline(always)]
+    fn should_drop_load_state(_loader: &Loader<'a, Self>) -> bool {
+	false
+    }
+
+    #[inline(always)]
+    fn reset_machine(_loader: &mut Loader<'a, Self>) {
+    }
+
+    #[inline(always)]
+    fn machine_st(load_state: &mut Self::LoaderFieldType) -> &mut MachineState {
+        &mut load_state.machine_st
+    }
+
+    #[inline(always)]
+    fn err_on_builtin_overwrite(
+        _loader: &Loader<'a, Self>,
+        _key: PredicateKey,
+    ) -> Result<(), SessionError> {
+        Ok(())
+    }
+}
+
 pub struct Loader<'a, LS: LoadState<'a>> {
     pub(super) payload: LS::LoaderFieldType,
     pub(super) wam_prelude: MachinePreludeView<'a>,
@@ -510,6 +568,27 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     term_stack.push(Term::Literal(Cell::default(), Literal::try_from(addr).unwrap()));
                 }
                 (HeapCellValueTag::Atom, (name, arity)) => {
+                    let h = iter.focus();
+                    let mut arity = arity;
+
+                    if iter.heap.len() > h + arity + 1 {
+                        let value = iter.heap[h + arity + 1];
+
+                        if let Some(idx) = get_structure_index(value) {
+                            // in the second condition, arity == 0,
+                            // meaning idx cannot pertain to this atom
+                            // if it is the direct subterm of a larger
+                            // structure.
+                            if arity > 0 || !iter.direct_subterm_of_str(h) {
+                                term_stack.push(
+                                    Term::Literal(Cell::default(), Literal::CodeIndex(idx))
+                                );
+
+                                arity += 1;
+                            }
+                        }
+                    }
+
                     if arity == 0 {
                         term_stack.push(Term::Literal(Cell::default(), Literal::Atom(name)));
                     } else {
@@ -708,7 +787,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                             module
                                 .code_dir
                                 .get_mut(&key)
-                                .map(|code_idx| code_idx.replace(old_code_idx));
+                                .map(|code_idx| code_idx.set(old_code_idx));
                         }
                         None => {}
                     }
@@ -733,10 +812,9 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                         .indices
                         .code_dir
                         .get_mut(&key)
-                        .map(|code_idx| code_idx.replace(old_code_idx));
+                        .map(|code_idx| code_idx.set(old_code_idx));
                 }
                 RetractionRecord::AddedIndex(index_key, clause_loc) => {
-                    // WAS: inner_index_locs) => {
                     if let Some(index_loc) = index_key.switch_on_term_loc() {
                         let indexing_code = match &mut self.wam_prelude.code[index_loc] {
                             Instruction::IndexingCode(indexing_code) => indexing_code,
@@ -1271,13 +1349,13 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
 
         let code_index = self.get_or_insert_code_index(key, compilation_target);
 
-        if let IndexPtr::Undefined = code_index.get() {
+        if code_index.is_undefined() {
             set_code_index(
                 &mut self.payload.retraction_info,
                 &compilation_target,
                 key,
-                &code_index,
-                IndexPtr::DynamicUndefined,
+                code_index,
+                IndexPtr::dynamic_undefined(),
             );
         }
     }
@@ -1491,7 +1569,6 @@ impl Machine {
         let mut loader = self.loader_from_heap_evacuable(temp_v!(3));
 
         let declare_module = || {
-            // let export_list = export_list?;
             let exports = loader.extract_module_export_list_from_heap(temp_v!(2))?;
 
             let module_decl = ModuleDecl {
@@ -1885,18 +1962,22 @@ impl Machine {
         }
     }
 
-    pub(crate) fn compile_assert<'a>(&'a mut self, append_or_prepend: AppendOrPrepend) -> CallResult {
-        let key = self
-            .machine_st
-            .read_predicate_key(self.machine_st[temp_v!(3)], self.machine_st[temp_v!(4)]);
-
+    pub(crate) fn compile_assert(&mut self, append_or_prepend: AppendOrPrepend) -> CallResult
+    {
         let module_name = cell_as_atom!(
-            self.machine_st.store(self.machine_st.deref(self.machine_st.registers[5]))
+            self.machine_st.store(self.machine_st.deref(self.machine_st.registers[1]))
         );
 
         let compilation_target = match module_name {
             atom!("user") => CompilationTarget::User,
             _ => CompilationTarget::Module(module_name),
+        };
+
+        let stub_gen = || {
+            match append_or_prepend {
+                AppendOrPrepend::Append  => functor_stub(atom!("assertz"), 1),
+                AppendOrPrepend::Prepend => functor_stub(atom!("asserta"), 1),
+            }
         };
 
         let mut compile_assert = || {
@@ -1905,8 +1986,49 @@ impl Machine {
 
             loader.payload.compilation_target = compilation_target;
 
-            let head = loader.read_term_from_heap(temp_v!(1))?;
-            let body = loader.read_term_from_heap(temp_v!(2))?;
+            let head = loader.read_term_from_heap(temp_v!(2))?;
+
+            let name = if let Some(name) = head.name() {
+                name
+            } else {
+                return Err(SessionError::from(CompilationError::InvalidRuleHead));
+            };
+
+            let arity = head.arity();
+
+            let is_dynamic_predicate = loader
+                  .wam_prelude
+                  .indices
+                  .is_dynamic_predicate(
+                      module_name,
+                      (name, arity),
+                  );
+
+            let no_such_predicate =
+                if !is_dynamic_predicate && !ClauseType::is_inbuilt(name, arity) {
+                    let idx_tag = loader
+                        .wam_prelude
+                        .indices
+                        .get_predicate_code_index(
+                            name,
+                            arity,
+                            module_name,
+                        )
+                        .map(|code_idx| code_idx.get_tag())
+                        .unwrap_or(IndexPtrTag::DynamicUndefined);
+
+                    idx_tag == IndexPtrTag::DynamicUndefined ||
+                    idx_tag == IndexPtrTag::Undefined
+                } else {
+                    is_dynamic_predicate
+                };
+
+            if !no_such_predicate {
+                LiveLoadAndMachineState::machine_st(&mut loader.payload).fail = true;
+                return LiveLoadAndMachineState::evacuate(loader);
+            }
+
+            let body = loader.read_term_from_heap(temp_v!(3))?;
 
             let asserted_clause = Term::Clause(
                 Cell::default(),
@@ -1915,10 +2037,10 @@ impl Machine {
             );
 
             // if a new predicate was just created, make it dynamic.
-            loader.add_dynamic_predicate(compilation_target, key.0, key.1)?;
+            loader.add_dynamic_predicate(compilation_target, name, arity)?;
 
             loader.incremental_compile_clause(
-                key,
+                (name, arity),
                 asserted_clause,
                 compilation_target,
                 false,
@@ -1929,7 +2051,7 @@ impl Machine {
             LiveLoadAndMachineState::machine_st(&mut loader.payload).global_clock += 1;
 
             loader.compile_clause_clauses(
-                key,
+                (name, arity),
                 compilation_target,
                 std::iter::once((head, body)),
                 append_or_prepend,
@@ -1940,14 +2062,30 @@ impl Machine {
 
         match compile_assert() {
             Ok(_) => Ok(()),
-            Err(e) => {
-                let stub = match append_or_prepend {
-                    AppendOrPrepend::Append  => functor_stub(atom!("assertz"), 1),
-                    AppendOrPrepend::Prepend => functor_stub(atom!("asserta"), 1),
-                };
-                let err = self.machine_st.session_error(e);
+            Err(SessionError::CompilationError(
+                CompilationError::InvalidRuleHead |
+                CompilationError::InadmissibleFact
+            )) => {
+                let err = self.machine_st.type_error(
+                    ValidType::Callable,
+                    self.machine_st.registers[2],
+                );
 
-                Err(self.machine_st.error_form(err, stub))
+                Err(self.machine_st.error_form(err, stub_gen()))
+            }
+            Err(SessionError::CompilationError(
+                CompilationError::InadmissibleQueryTerm
+            )) => {
+                let err = self.machine_st.type_error(
+                    ValidType::Callable,
+                    self.machine_st.registers[3],
+                );
+
+                Err(self.machine_st.error_form(err, stub_gen()))
+            }
+            Err(e) => {
+                let err = self.machine_st.session_error(e);
+                Err(self.machine_st.error_form(err, stub_gen()))
             }
         }
     }
@@ -2019,10 +2157,10 @@ impl Machine {
                 .indices
                 .remove_predicate_skeleton(&compilation_target, &key);
 
-            let code_index = loader
+            let mut code_index = loader
                 .get_or_insert_code_index(key, compilation_target);
 
-            code_index.set(IndexPtr::Undefined);
+            code_index.set(IndexPtr::undefined());
 
             loader.payload.compilation_target = clause_clause_compilation_target;
 
@@ -2187,7 +2325,7 @@ impl Machine {
 
         let (predicate_name, arity) = self
             .machine_st
-            .read_predicate_key(self.machine_st[temp_v!(2)], self.machine_st[temp_v!(3)]);
+            .read_predicate_key(self.machine_st.registers[2], self.machine_st.registers[3]);
 
         let compilation_target = match module_name {
             atom!("user") => CompilationTarget::User,
@@ -2309,21 +2447,15 @@ impl Machine {
     }
 
     pub(crate) fn builtin_property(&mut self) {
-        let key = self
+        let (name, arity) = self
             .machine_st
             .read_predicate_key(self.machine_st.registers[1], self.machine_st.registers[2]);
 
-        match ClauseType::from(key.0, key.1) {
-            ClauseType::BuiltIn(_) | ClauseType::Inlined(..) | ClauseType::CallN(_) => {
+        if !ClauseType::is_inbuilt(name, arity) { // ClauseType::from(key.0, key.1, &mut self.machine_st.arena) {
+            if let Some(module) = self.indices.modules.get(&(atom!("builtins"))) {
+                self.machine_st.fail = !module.code_dir.contains_key(&(name, arity));
                 return;
             }
-            ClauseType::Named(arity, name, _) => {
-                if let Some(module) = self.indices.modules.get(&(atom!("builtins"))) {
-                    self.machine_st.fail = !module.code_dir.contains_key(&(name, arity));
-                    return;
-                }
-            }
-            _ => {}
         }
 
         self.machine_st.fail = true;
@@ -2355,14 +2487,19 @@ impl<'a> Loader<'a, LiveLoadAndMachineState<'a>> {
 
 #[inline]
 pub(super) fn load_module(
+    machine_st: &mut MachineState,
     code_dir: &mut CodeDir,
     op_dir: &mut OpDir,
     meta_predicate_dir: &mut MetaPredicateDir,
     compilation_target: &CompilationTarget,
     module: &Module,
 ) {
-    import_module_exports(
-        &mut RetractionInfo::new(0),
+    let ts = LiveTermStream::new(ListingSource::User);
+    let payload = LoadStatePayload::new(0, ts);
+    let mut payload = LiveLoadAndMachineState::new(machine_st, payload);
+
+    import_module_exports::<LiveLoadAndMachineState>(
+        &mut payload,
         &compilation_target,
         module,
         code_dir,

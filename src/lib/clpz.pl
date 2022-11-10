@@ -123,6 +123,8 @@
 :- use_module(library(si)).
 :- use_module(library(freeze)).
 :- use_module(library(arithmetic)).
+:- use_module(library(debug)).
+:- use_module(library(format)).
 
 % :- use_module(library(types)).
 
@@ -194,6 +196,8 @@ type_error(Expectation, Term) :-
         type_error(Expectation, Term, unknown(Term)-1).
 
 
+:- meta_predicate(partition(1, ?, ?, ?)).
+
 partition(Pred, Ls0, As, Bs) :-
         include(Pred, Ls0, As),
         exclude(Pred, Ls0, Bs).
@@ -214,6 +218,8 @@ partition_([X|Xs], Pred, Ls0, Es0, Gs0) :-
    include/3 and exclude/3
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
+:- meta_predicate(include(1, ?, ?)).
+
 include(Goal, Ls0, Ls) :-
         include_(Ls0, Goal, Ls).
 
@@ -226,6 +232,7 @@ include_([L|Ls0], Goal, Ls) :-
         include_(Ls0, Goal, Rest).
 
 
+:- meta_predicate(exclude(1, ?, ?)).
 
 exclude(Goal, Ls0, Ls) :-
         exclude_(Ls0, Goal, Ls).
@@ -2236,8 +2243,8 @@ all_distinct(Ls) :-
         fd_must_be_list(Ls, all_distinct(Ls)-1),
         maplist(fd_variable, Ls),
         make_propagator(pdistinct(Ls), Prop),
-        distinct_attach(Ls, Prop, []),
-        trigger_once(Prop).
+        new_queue(Q0),
+        phrase((distinct_attach(Ls, Prop, []),trigger_prop(Prop),do_queue), [Q0], _).
 
 %% nvalue(?N, +Vars).
 %
@@ -4045,12 +4052,13 @@ trigger_props(fd_props(Gs,Bs,Os)) -->
 trigger_props_([]) --> [].
 trigger_props_([P|Ps]) --> trigger_prop(P), trigger_props_(Ps).
 
-trigger_prop(_P) :- true. % TODO: What to do?
+trigger_prop(P) :- trigger_once(P).
 
 trigger_prop(Propagator) -->
         { propagator_state(Propagator, State) },
         (   { State == dead } -> []
         ;   { get_attr(State, clpz_aux, queued) } -> []
+        ;   { bb_get('$clpz_current_propagator', C), C == State } -> []
         ;   % passive
             %{ format("triggering: ~w\n", [Propagator]) },
             { put_attr(State, clpz_aux, queued) },
@@ -4143,12 +4151,13 @@ no_reactivation(pgcc_single(_,_)).
 %no_reactivation(scalar_product(_,_,_,_)).
 
 activate_propagator(propagator(P,State)) -->
+        % { portray_clause(running(P)) },
         (   State == dead -> []
         ;   { del_attr(State, clpz_aux) },
             (   { no_reactivation(P) } ->
-                %b_setval('$clpz_current_propagator', State), TODO
-                run_propagator(P, State)
-                %b_setval('$clpz_current_propagator', [])
+                { bb_b_put('$clpz_current_propagator', State) },
+                run_propagator(P, State),
+                { bb_b_put('$clpz_current_propagator', []) }
             ;   run_propagator(P, State)
             )
         ).
@@ -4194,7 +4203,8 @@ queue_get_arg_(Queue, Which, Element) :-
         ).
 
 queue_enabled --> state(queue(_,_,_,Aux)), { \+ get_atts(Aux, +enabled(false)) }.
-
+disable_queue --> state(queue(_,_,_,Aux)), { put_atts(Aux, +enabled(false)) }.
+enable_queue --> state(queue(_,_,_,Aux)), { put_atts(Aux, +enabled(true)) }.
 
 portray_propagator(propagator(P,_), F) :- functor(P, F, _).
 
@@ -4389,14 +4399,14 @@ run_propagator(pdifferent(Left,Right,X,_), MState) -->
         run_propagator(pexclude(Left,Right,X), MState).
 
 run_propagator(pexclude(Left,Right,X), _) -->
-        { (   ground(X) ->
-              disable_queue,
-              exclude_fire(Left, Right, X),
-              enable_queue
-          ;   true
-          ) }.
+        (   ground(X) ->
+            disable_queue,
+            exclude_fire(Left, Right, X),
+            enable_queue
+        ;   true
+        ).
 
-run_propagator(pdistinct(Ls), _MState) --> { distinct(Ls) }.
+run_propagator(pdistinct(Ls), _MState) --> distinct(Ls).
 
 run_propagator(pnvalue(N, Vars), _MState) --> { propagate_nvalue(N, Vars) }.
 
@@ -4430,8 +4440,8 @@ run_propagator(pgcc(Vs, _, Pairs), _) --> { gcc_global(Vs, Pairs) }.
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 run_propagator(pcircuit(Vs), _MState) -->
-        { distinct(Vs),
-          propagate_circuit(Vs) }.
+        distinct(Vs),
+        { propagate_circuit(Vs) }.
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -5928,12 +5938,12 @@ max_factor(L1, U1, L2, U2, Max) :-
    CSPs", AAAI-94, Seattle, WA, USA, pp 362--367, 1994
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
-distinct_attach([], _, _).
-distinct_attach([X|Xs], Prop, Right) :-
+distinct_attach([], _, _) --> [].
+distinct_attach([X|Xs], Prop, Right) -->
         (   var(X) ->
-            init_propagator(X, Prop),
-            make_propagator(pexclude(Xs,Right,X), P1),
-            init_propagator(X, P1),
+            { init_propagator(X, Prop),
+              make_propagator(pexclude(Xs,Right,X), P1),
+              init_propagator(X, P1) },
             trigger_prop(P1)
         ;   exclude_fire(Xs, Right, X)
         ),
@@ -6102,59 +6112,26 @@ put_free(F) :- put_attr(F, free, true).
 
 free_node(F) :- get_attr(F, free, true).
 
-del_vars_attr(Vars, Attr) :- maplist(del_attr(Attr), Vars).
-
-%del_attr_(Attr, Var) :- del_attr(Var, Attr).
-
-/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  This needs to be spelt out.
-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
-
-% del_attr_(edges, Var)    :- del_attr(Var, edges).
-% del_attr_(parent, Var)   :- del_attr(Var, parent).
-% del_attr_(g0_edges, Var) :- del_attr(Var, g0_edges).
-% del_attr_(index, Var)    :- del_attr(Var, index).
-% del_attr_(visited, Var)  :- del_attr(Var, visited).
-
-del_all_attrs(Var) :-
-        (   var(Var) ->
-            Atts = [clpz,
-                    clpz_aux,
-                    clpz_relation,
-                    edges,
-                    flow,
-                    parent,
-                    free,
-                    g0_edges,
-                    used,
-                    lowlink,
-                    value,
-                    visited,
-                    index,
-                    in_stack,
-                    clpz_gcc_vs,
-                    clpz_gcc_num,
-                    clpz_gcc_occurred],
-            maplist(remove_attr(Var), Atts)
-        ;   true
-        ).
-
-remove_attr(Var, Attr) :-
-        functor(Term, Attr, 1),
-        put_atts(Var, -Term).
-
 :- meta_predicate with_local_attributes(?, 0, ?).
+
+:- dynamic(nat_copy/1).
 
 with_local_attributes(Vars, Goal, Result) :-
         catch((Goal,
-               maplist(del_all_attrs, Vars),
-               % reset all attributes, only the result matters
-               throw(local_attributes(Result,Vars))),
-              local_attributes(Result,Vars),
+               % Create a copy where all attributes are removed. Only
+               % the result and its relation to Vars matters. We throw
+               % an exception to undo all modifications to attributes
+               % we made during propagation, and unify the variables
+               % in the thrown copy with Vars in order to get the
+               % intended variables in Result.
+               asserta(nat_copy(Vars-Result)),
+               retract(nat_copy(Copy)),
+               throw(local_attributes(Copy))),
+              local_attributes(Vars-Result),
               true).
 
-distinct(Vars) :-
-        with_local_attributes(Vars,
+distinct(Vars) -->
+        { with_local_attributes(Vars,
            (   difference_arcs(Vars, FreeLeft, FreeRight0),
                length(FreeLeft, LFL),
                length(FreeRight0, LFR),
@@ -6165,10 +6142,15 @@ distinct(Vars) :-
                maplist(g_g0, FreeLeft),
                scc(FreeLeft, g0_successors),
                maplist(dfs_used, FreeRight),
-               phrase(distinct_goals(FreeLeft), Gs)), Gs),
+               phrase(distinct_goals(FreeLeft), Gs)), Gs) },
         disable_queue,
-        maplist(call, Gs),
+        neq_nums(Gs),
         enable_queue.
+
+neq_nums([]) --> [].
+neq_nums([neq_num(V,N)|VNs]) -->
+        % { portray_clause(neq_num(V, N)) },
+        neq_num(V, N), neq_nums(VNs).
 
 distinct_goals([]) --> [].
 distinct_goals([V|Vs]) -->
@@ -6184,7 +6166,7 @@ distinct_goals_([flow_to(F,To)|Es], V) -->
               get_attr(To, lowlink, L2),
               L1 =\= L2 } ->
             { get_attr(To, value, N) },
-            [clpz:neq_num(V, N)]
+            [neq_num(V, N)]
         ;   []
         ),
         distinct_goals_(Es, V).
@@ -6373,6 +6355,10 @@ all_distinct([X|Right], Left, Orig) :-
         all_distinct(Right, [X|Left], Orig).
 
 exclude_fire(Left, Right, E) :-
+        all_neq(Left, E),
+        all_neq(Right, E).
+
+exclude_fire(Left, Right, E) -->
         all_neq(Left, E),
         all_neq(Right, E).
 
@@ -6937,6 +6923,11 @@ vs_key_min_others([V|Vs], Key, Min0, Min, Others) :-
             )
         ).
 
+all_neq([], _) --> [].
+all_neq([X|Xs], C) -->
+        neq_num(X, C),
+        all_neq(Xs, C).
+
 all_neq([], _).
 all_neq([X|Xs], C) :-
         neq_num(X, C),
@@ -6968,8 +6959,8 @@ circuit(Vs) :-
         (   L =:= 1 -> true
         ;   neq_index(Vs, 1),
             make_propagator(pcircuit(Vs), Prop),
-            distinct_attach(Vs, Prop, []),
-            trigger_once(Prop)
+            new_queue(Q0),
+            phrase((distinct_attach(Vs, Prop, []),trigger_prop(Prop),do_queue), [Q0], _)
         ).
 
 neq_index([], _).
@@ -7148,10 +7139,6 @@ contribution_at(T, Task, Offset-Bs, Contribution) :-
             nth0(Index, Bs, B),
             ?(Contribution) #= B*C
         ).
-
-nth1(I, Es, E) :-
-        I0 is I-1,
-        nth0(I0, Es, E).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 

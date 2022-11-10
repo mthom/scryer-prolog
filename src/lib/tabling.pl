@@ -67,7 +67,7 @@ table_and_status_for_variant(V,T,S) :-
   tbd_table_status(T,S).
 
 
-:- meta_predicate start_tabling(?, 0).
+:- meta_predicate start_tabling(?, :).
 
 start_tabling(Wrapper,Worker) :-
   put_new_trie_table_link,

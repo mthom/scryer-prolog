@@ -119,3 +119,21 @@ impl TermStream for LiveTermStream {
         &self.listing_src
     }
 }
+
+pub struct InlineTermStream {
+}
+
+impl TermStream for InlineTermStream {
+    fn next(&mut self, _: &CompositeOpDir) -> Result<Term, CompilationError> {
+	Err(CompilationError::from(ParserError::UnexpectedEOF))
+    }
+
+    fn eof(&mut self) -> Result<bool, CompilationError> {
+	Ok(true)
+    }
+
+    fn listing_src(&self) -> &ListingSource {
+	&ListingSource::User
+    }
+}
+

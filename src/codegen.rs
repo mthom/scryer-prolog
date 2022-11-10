@@ -263,6 +263,27 @@ impl DebrayAllocator {
     }
 }
 
+// if the final argument of the structure is a Literal::Index,
+// decrement the arity of the PutStructure instruction by 1.
+fn trim_structure_by_last_arg(instr: &mut Instruction, last_arg: &Term) {
+    match instr {
+        Instruction::PutStructure(_, ref mut arity, _) |
+        Instruction::GetStructure(_, ref mut arity, _) => {
+            if let Term::Literal(_, Literal::CodeIndex(_)) = last_arg {
+                // it is acceptable if arity == 0 is the result of
+                // this decrement. call/N will have to read the index
+                // constant for '$call_inline' to succeed. to find it,
+                // it must know the heap location of the index.
+                // self.store must stop before reading the atom into a
+                // register.
+
+                *arity -= 1;
+            }
+        }
+        _ => {}
+    }
+}
+
 impl<'b> CodeGenerator<'b> {
     pub(crate) fn new(atom_tbl: &'b mut AtomTable, settings: CodeGenSettings) -> Self {
         CodeGenerator {
@@ -369,9 +390,15 @@ impl<'b> CodeGenerator<'b> {
                         self.marker.mark_anon_var::<Target>(lvl, term_loc, &mut target);
                     }
                 }
-                TermRef::Clause(lvl, cell, ct, terms) => {
+                TermRef::Clause(lvl, cell, name, terms) => {
                     self.marker.mark_non_var::<Target>(lvl, term_loc, cell, &mut target);
-                    target.push(Target::to_structure(ct.name(), terms.len(), cell.get()));
+                    target.push(Target::to_structure(name, terms.len(), cell.get()));
+
+                    if let Some(instr) = target.last_mut() {
+                        if let Some(term) = terms.last() {
+                            trim_structure_by_last_arg(instr, term);
+                        }
+                    }
 
                     for subterm in terms {
                         self.subterm_to_instr::<Target>(subterm, term_loc, is_exposed, &mut target);
@@ -1039,10 +1066,7 @@ impl<'b> CodeGenerator<'b> {
         let iter = query_term_post_order_iter(term);
         let query = self.compile_target::<QueryInstruction, _>(iter, term_loc, is_exposed);
 
-        if !query.is_empty() {
-            code.extend(query.into_iter());
-        }
-
+        code.extend(query.into_iter());
         self.add_conditional_call(code, term, num_perm_vars_left);
     }
 

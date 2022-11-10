@@ -1,5 +1,6 @@
 use crate::arena::*;
 use crate::atom_table::*;
+use crate::machine::machine_indices::*;
 use crate::parser::char_reader::*;
 use crate::types::HeapCellValueTag;
 
@@ -530,6 +531,7 @@ impl Neg for Fixnum {
 pub enum Literal {
     Atom(Atom),
     Char(char),
+    CodeIndex(CodeIndex),
     Fixnum(Fixnum),
     Integer(TypedArenaPtr<Integer>),
     Rational(TypedArenaPtr<Rational>),
@@ -551,6 +553,7 @@ impl fmt::Display for Literal {
                 write!(f, "{}", atom.flat_index())
             }
             Literal::Char(c) => write!(f, "'{}'", *c as u32),
+            Literal::CodeIndex(i) => write!(f, "{:x}", i.as_ptr() as u64),
             Literal::Fixnum(n) => write!(f, "{}", n.get_num()),
             Literal::Integer(ref n) => write!(f, "{}", n),
             Literal::Rational(ref n) => write!(f, "{}", n),

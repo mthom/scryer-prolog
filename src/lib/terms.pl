@@ -4,8 +4,8 @@
 
 numbervars(Term, N0, N) :-
    catch(internal_numbervars(Term, N0, N),
-	 error(E,Ctx),
-	 ( ( var(Ctx) -> Ctx = numbervars/3 ; true ), throw(error(E,Ctx) ) ) ).
+	     error(E,Ctx),
+	     ( ( var(Ctx) -> Ctx = numbervars/3 ; true ), throw(error(E,Ctx) ) ) ).
 
 internal_numbervars(Term, N0, N) :-
    must_be(integer, N0),

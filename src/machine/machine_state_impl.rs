@@ -47,6 +47,7 @@ impl MachineState {
             hb: 0,
             block: 0,
             ball: Ball::new(),
+            ball_stack: vec![],
             lifted_heap: Heap::new(),
             interms: vec![Number::default();256],
             cont_pts: Vec::with_capacity(256),
@@ -347,10 +348,27 @@ impl MachineState {
                 debug_assert_eq!(arity, 0);
                 self.fail = cstr_atom != atom!("[]");
             }
+            (HeapCellValueTag::Str, s) => {
+                let (name, arity) = cell_as_atom_cell!(self.heap[s])
+                    .get_name_and_arity();
+
+                if arity == 0 {
+                    self.fail = atom == atom!("") && name != atom!("[]");
+                } else {
+                    // this is intentionally the same policy for
+                    // value.tag() == Lis and PStrLoc. they're not
+                    // grouped together to allow for arity == 0.
+                    self.unify_partial_string(atom_as_cstr_cell!(atom), value);
+
+                    if !self.pdl.is_empty() {
+                        self.unify();
+                    }
+                }
+            }
             (HeapCellValueTag::CStr, cstr_atom) => {
                 self.fail = atom != cstr_atom;
             }
-            (HeapCellValueTag::Str | HeapCellValueTag::Lis | HeapCellValueTag::PStrLoc) => {
+            (HeapCellValueTag::Lis | HeapCellValueTag::PStrLoc) => {
                 self.unify_partial_string(atom_as_cstr_cell!(atom), value);
 
                 if !self.pdl.is_empty() {
@@ -553,6 +571,12 @@ impl MachineState {
             (HeapCellValueTag::Atom, (name, arity)) => {
                 self.fail = !(arity == 0 && name == atom);
             }
+            (HeapCellValueTag::Str, s) => {
+                let (name, arity) = cell_as_atom_cell!(self.heap[s])
+                    .get_name_and_arity();
+
+                self.fail = !(arity == 0 && name == atom);
+            }
             (HeapCellValueTag::CStr, cstr_atom) if atom == atom!("[]") => {
                 self.fail = cstr_atom != atom!("");
             }
@@ -581,6 +605,16 @@ impl MachineState {
     pub fn unify_char(&mut self, c: char, value: HeapCellValue) {
         read_heap_cell!(value,
             (HeapCellValueTag::Atom, (name, arity)) => {
+                if let Some(c2) = name.as_char() {
+                    self.fail = !(c == c2 && arity == 0);
+                } else {
+                    self.fail = true;
+                }
+            }
+            (HeapCellValueTag::Str, s) => {
+                let (name, arity) = cell_as_atom_cell!(self.heap[s])
+                    .get_name_and_arity();
+
                 if let Some(c2) = name.as_char() {
                     self.fail = !(c == c2 && arity == 0);
                 } else {
@@ -739,11 +773,6 @@ impl MachineState {
                         self.unify_atom(name, d2);
                     }
                     (HeapCellValueTag::Str, s1) => {
-                        if d2.is_constant() {
-                            self.fail = true;
-                            break;
-                        }
-
                         if tabu_list.contains(&(d1, d2)) {
                             continue;
                         }
@@ -969,9 +998,7 @@ impl MachineState {
                 }
             }
             (HeapCellValueTag::Atom, (n2, a2)) => {
-                if !(a1 == 0 && a2 == 0 && n1 == n2) {
-                    self.fail = true;
-                }
+                self.fail = !(a1 == 0 && a2 == 0 && n1 == n2);
             }
             (HeapCellValueTag::AttrVar, h) => {
                 if self.bind_with_occurs_check(Ref::attr_var(h), str_loc_as_cell!(s1)) {
@@ -1285,11 +1312,6 @@ impl MachineState {
                         self.unify_atom(name, d2);
                     }
                     (HeapCellValueTag::Str, s1) => {
-                        if d2.is_constant() {
-                            self.fail = true;
-                            break;
-                        }
-
                         if tabu_list.contains(&(d1, d2)) {
                             continue;
                         }
@@ -1492,8 +1514,8 @@ impl MachineState {
             let v1 = self.store(s1);
             let v2 = self.store(s2);
 
-            let order_cat_v1 = v1.order_category();
-            let order_cat_v2 = v2.order_category();
+            let order_cat_v1 = v1.order_category(&self.heap);
+            let order_cat_v2 = v2.order_category(&self.heap);
 
             if order_cat_v1 != order_cat_v2 {
                 self.pdl.clear();
@@ -1552,6 +1574,15 @@ impl MachineState {
                                         );
                                     }
                                 }
+                                (HeapCellValueTag::Str, s) => {
+                                    let n2 = cell_as_atom_cell!(self.heap[s])
+                                        .get_name();
+
+                                    if n1 != n2 {
+                                        self.pdl.clear();
+                                        return Some(n1.cmp(&n2));
+                                    }
+                                }
                                 _ => {
                                     unreachable!();
                                 }
@@ -1579,8 +1610,64 @@ impl MachineState {
                                         return Some(c1.cmp(&c2));
                                     }
                                 }
+                                (HeapCellValueTag::Str, s) => {
+                                    let n2 = cell_as_atom_cell!(self.heap[s])
+                                        .get_name();
+
+                                    if let Some(c2) = n2.as_char() {
+                                        if c1 != c2 {
+                                            self.pdl.clear();
+                                            return Some(c1.cmp(&c2));
+                                        }
+                                    } else {
+                                        self.pdl.clear();
+                                        return Some(
+                                            Some(c1).cmp(&n2.chars().next())
+                                                    .then(Ordering::Less)
+                                        );
+                                    }
+                                }
                                 _ => {
                                     unreachable!()
+                                }
+                            )
+                        }
+                        (HeapCellValueTag::Str, s) => {
+                            let n1 = cell_as_atom_cell!(self.heap[s])
+                                .get_name();
+
+                            read_heap_cell!(v2,
+                                (HeapCellValueTag::Atom, (n2, _a2)) => {
+                                    if n1 != n2 {
+                                        self.pdl.clear();
+                                        return Some(n1.cmp(&n2));
+                                    }
+                                }
+                                (HeapCellValueTag::Char, c2) => {
+                                    if let Some(c1) = n1.as_char() {
+                                        if c1 != c2 {
+                                            self.pdl.clear();
+                                            return Some(c1.cmp(&c2));
+                                        }
+                                    } else {
+                                        self.pdl.clear();
+                                        return Some(
+                                            n1.chars().next().cmp(&Some(c2))
+                                              .then(Ordering::Greater)
+                                        );
+                                    }
+                                }
+                                (HeapCellValueTag::Str, s) => {
+                                    let n2 = cell_as_atom_cell!(self.heap[s])
+                                        .get_name();
+
+                                    if n1 != n2 {
+                                        self.pdl.clear();
+                                        return Some(n1.cmp(&n2));
+                                    }
+                                }
+                                _ => {
+                                    unreachable!();
                                 }
                             )
                         }
@@ -1597,8 +1684,8 @@ impl MachineState {
                     ) -> Option<Ordering> {
                         let compound = Some(TermOrderCategory::Compound);
 
-                        if iter2.focus.order_category() != compound {
-                            Some(compound.cmp(&iter2.focus.order_category()))
+                        if iter2.focus.order_category(iter2.heap) != compound {
+                            Some(compound.cmp(&iter2.focus.order_category(iter2.heap)))
                         } else {
                             let c1 = match iteratee {
                                 PStrIteratee::Char(_, c) => c,
@@ -2116,7 +2203,7 @@ impl MachineState {
                     heap_bound_deref(iter.heap, value),
                 ));
 
-                if value.is_compound() {
+                if value.is_compound(iter.heap) {
                     return true;
                 }
             }
@@ -2403,6 +2490,21 @@ impl MachineState {
                             a1.as_var().unwrap(),
                         );
                     }
+                    (HeapCellValueTag::Str, s) => {
+                        let (name, atom_arity) = cell_as_atom_cell!(self.heap[s])
+                            .get_name_and_arity();
+
+                        if atom_arity == 0 {
+                            self.try_functor_fabricate_struct(
+                                name,
+                                arity as usize,
+                                a1.as_var().unwrap(),
+                            );
+                        } else {
+                            let err = self.type_error(ValidType::Atomic, store_name);
+                            return Err(self.error_form(err, stub_gen()));
+                        }
+                    }
                     (HeapCellValueTag::Char, c) => {
                         let c = self.atom_tbl.build_with(&c.to_string());
 
@@ -2444,6 +2546,17 @@ impl MachineState {
                 let err = self.instantiation_error();
                 Err(self.error_form(err, stub_gen()))
             }
+            (HeapCellValueTag::Str, s) => {
+                let (name, arity) = cell_as_atom_cell!(self.heap[s])
+                    .get_name_and_arity();
+
+                if name == atom!("[]") && arity == 0 {
+                    Ok(vec![])
+                } else {
+                    let err = self.type_error(ValidType::List, value);
+                    Err(self.error_form(err, stub_gen()))
+                }
+            }
             (HeapCellValueTag::Atom, (name, arity)) => {
                 if name == atom!("[]") && arity == 0 {
                     Ok(vec![])
@@ -2483,6 +2596,17 @@ impl MachineState {
                 }
                 (HeapCellValueTag::PStrLoc, l) => {
                     return self.try_from_partial_string(result, l, stub_gen, a1);
+                }
+                (HeapCellValueTag::Str, s) => {
+                    let (name, arity) = cell_as_atom_cell!(self.heap[s])
+                        .get_name_and_arity();
+
+                    if name == atom!("[]") && arity == 0 {
+                        break;
+                    } else {
+                        let err = self.type_error(ValidType::List, a1);
+                        return Err(self.error_form(err, stub_gen()));
+                    }
                 }
                 (HeapCellValueTag::Atom, (name, arity)) => {
                     if name == atom!("[]") && arity == 0 {

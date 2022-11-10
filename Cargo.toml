@@ -1,6 +1,6 @@
 [package]
 name = "scryer-prolog"
-version = "0.9.0"
+version = "0.9.1"
 authors = ["Mark Thom <markjordanthom@gmail.com>"]
 edition = "2021"
 description = "A modern Prolog implementation written mostly in Rust."
@@ -10,13 +10,9 @@ license = "BSD-3-Clause"
 keywords = ["prolog", "prolog-interpreter", "prolog-system"]
 categories = ["command-line-utilities"]
 build = "build/main.rs"
-rust-version = "1.57"
+rust-version = "1.61"
 
 [features]
-num = ["num-rug-adapter"]
-# no default features to make num tests work
-# workaround for --no-default-features and --features not working intuitively for workspaces with a root package
-# see rust-lang/cargo#7160
 default = ["rug"]
 
 [build-dependencies]
@@ -44,7 +40,6 @@ lexical = "5.2.2"
 libc = "0.2.62"
 modular-bitfield = "0.11.2"
 ctrlc = "3.2.2"
-num-rug-adapter = { version = "0.1.6", optional = true }
 ordered-float = "2.6.0"
 phf = { version = "0.9",  features = ["macros"] }
 ref_thread_local = "0.0.0"
@@ -54,7 +49,7 @@ ring = "0.16.13"
 ripemd160 = "0.8.0"
 sha3 = "0.8.2"
 blake2 = "0.8.1"
-openssl = { version = "0.10.29", features = ["vendored"] }
+crrl ="0.2.0"
 native-tls = "0.2.4"
 chrono = "0.4.11"
 select = "0.4.3"
@@ -67,6 +62,7 @@ ryu = "1.0.9"
 hyper = { version = "0.14", features = ["full"] }
 hyper-tls = "0.5.0"
 tokio = { version = "1", features = ["full"] }
+futures = "0.3"
 
 [dev-dependencies]
 assert_cmd = "1.0.3"
@@ -75,7 +71,6 @@ serial_test = "0.5.1"
 
 [patch.crates-io]
 modular-bitfield = { git = "https://github.com/mthom/modular-bitfield" }
-num-rug-adapter = { git = "https://github.com/mthom/num-rug-adapter" }
 
 [profile.release]
 debug = true

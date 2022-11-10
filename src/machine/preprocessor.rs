@@ -470,14 +470,141 @@ pub(super) fn setup_declaration<'a, LS: LoadState<'a>>(
     }
 }
 
+fn build_meta_predicate_clause<'a, LS: LoadState<'a>>(
+    loader: &mut Loader<'a, LS>,
+    module_name: Atom,
+    terms: Vec<Term>,
+    meta_specs: Vec<MetaSpec>,
+) -> Vec<Term> {
+    let mut arg_terms = Vec::with_capacity(terms.len());
+
+    for (term, meta_spec) in terms.into_iter().zip(meta_specs.iter()) {
+        if let MetaSpec::RequiresExpansionWithArgument(supp_args) = meta_spec {
+            if let Some(name) = term.name() {
+                if name == atom!("$call") {
+                    arg_terms.push(term);
+                    continue;
+                }
+
+                let arity = term.arity();
+
+                fn get_qualified_name(
+                    module_term: &Term,
+                    qualified_term: &Term,
+                ) -> Option<(Atom, Atom)> {
+                    if let Term::Literal(_, Literal::Atom(module_name)) = module_term {
+                        if let Some(name) = qualified_term.name() {
+                            return Some((*module_name, name));
+                        }
+                    }
+
+                    None
+                }
+
+                fn identity_fn(_module_name: Atom, term: Term) -> Term {
+                    term
+                }
+
+                fn tag_with_module_name(module_name: Atom, term: Term) -> Term {
+                    Term::Clause(Cell::default(), atom!(":"), vec![
+                        Term::Literal(Cell::default(), Literal::Atom(module_name)),
+                        term
+                    ])
+                }
+
+                let process_term: fn(Atom, Term) -> Term;
+
+                let (module_name, key, term) = match term {
+                    Term::Clause(cell, atom!(":"), mut terms) if terms.len() == 2 => {
+                        if let Some((module_name, name)) = get_qualified_name(&terms[0], &terms[1]) {
+                            process_term = tag_with_module_name;
+                            (module_name, (name, terms[1].arity() + supp_args), terms.pop().unwrap())
+                        } else {
+                            arg_terms.push(Term::Clause(cell, atom!(":"), terms));
+                            continue;
+                        }
+                    }
+                    term => {
+                        process_term = identity_fn;
+                        (module_name, (name, arity + supp_args), term)
+                    }
+                };
+
+                let term = match term {
+                    Term::Clause(cell, name, mut terms) => {
+                        if let Some(Term::Literal(_, Literal::CodeIndex(_))) = terms.last() {
+                            arg_terms.push(process_term(
+                                module_name,
+                                Term::Clause(cell, name, terms),
+                            ));
+
+                            continue;
+                        }
+
+                        let idx = loader.get_or_insert_qualified_code_index(module_name, key);
+
+                        terms.push(Term::Literal(Cell::default(), Literal::CodeIndex(idx)));
+                        process_term(module_name, Term::Clause(cell, name, terms))
+                    }
+                    Term::Literal(cell, Literal::Atom(name)) => {
+                        let idx = loader.get_or_insert_qualified_code_index(module_name, key);
+
+                        process_term(module_name, Term::Clause(
+                            cell,
+                            name,
+                            vec![Term::Literal(Cell::default(), Literal::CodeIndex(idx))],
+                        ))
+                    }
+                    term => term,
+                };
+
+                arg_terms.push(term);
+                continue;
+            }
+        }
+
+        arg_terms.push(term);
+    }
+
+    arg_terms
+}
+
 #[inline]
 fn clause_to_query_term<'a, LS: LoadState<'a>>(
     loader: &mut Loader<'a, LS>,
     name: Atom,
-    terms: Vec<Term>,
+    mut terms: Vec<Term>,
     call_policy: CallPolicy,
 ) -> QueryTerm {
-    let ct = loader.get_clause_type(name, terms.len());
+    if let Some(Term::Literal(_, Literal::CodeIndex(_))) = terms.last() {
+        // supplementary code vector indices are unnecessary for
+        // root-level clauses.
+        terms.pop();
+    }
+
+    let mut ct = loader.get_clause_type(name, terms.len());
+
+    if let ClauseType::Named(arity, name, idx) = ct {
+        if let Some(meta_specs) = loader.get_meta_specs(name, arity).cloned() {
+            let module_name = loader.payload.compilation_target.module_name();
+            let terms = build_meta_predicate_clause(
+                loader,
+                module_name,
+                terms,
+                meta_specs,
+            );
+
+            return QueryTerm::Clause(
+                Cell::default(),
+                ClauseType::Named(arity, name, idx),
+                terms,
+                call_policy,
+            );
+        }
+
+        ct = ClauseType::Named(arity, name, idx);
+    }
+
     QueryTerm::Clause(Cell::default(), ct, terms, call_policy)
 }
 
@@ -486,11 +613,118 @@ fn qualified_clause_to_query_term<'a, LS: LoadState<'a>>(
     loader: &mut Loader<'a, LS>,
     module_name: Atom,
     name: Atom,
-    terms: Vec<Term>,
+    mut terms: Vec<Term>,
     call_policy: CallPolicy,
 ) -> QueryTerm {
-    let ct = loader.get_qualified_clause_type(module_name, name, terms.len());
+    if let Some(Term::Literal(_, Literal::CodeIndex(_))) = terms.last() {
+        // supplementary code vector indices are unnecessary for
+        // root-level clauses.
+        terms.pop();
+    }
+
+    let mut ct = loader.get_qualified_clause_type(module_name, name, terms.len());
+
+    if let ClauseType::Named(arity, name, idx) = ct {
+        if let Some(meta_specs) = loader.get_meta_specs(name, arity).cloned() {
+            let terms = build_meta_predicate_clause(
+                loader,
+                module_name,
+                terms,
+                meta_specs,
+            );
+
+            return QueryTerm::Clause(
+                Cell::default(),
+                ClauseType::Named(arity, name, idx),
+                terms,
+                call_policy,
+            );
+        }
+
+        ct = ClauseType::Named(arity, name, idx);
+    }
+
     QueryTerm::Clause(Cell::default(), ct, terms, call_policy)
+}
+
+fn compute_head(term: &Term) -> Vec<Term> {
+    let mut vars = IndexSet::new();
+
+    for term in post_order_iter(term) {
+        if let TermRef::Var(_, _, v) = term {
+            vars.insert(v.clone());
+        }
+    }
+
+    vars.insert(Rc::new(String::from("!")));
+    vars.into_iter()
+        .map(|v| Term::Var(Cell::default(), v))
+        .collect()
+}
+
+pub(crate) fn build_rule_body(vars: &[Term], body_term: Term) -> Term {
+    let head_term = Term::Clause(Cell::default(), atom!(""), vars.iter().cloned().collect());
+    let rule = vec![head_term, body_term];
+
+    Term::Clause(Cell::default(), atom!(":-"), rule)
+}
+
+// the terms form the body of the rule. We create a head, by
+// gathering variables from the body of terms and recording them
+// in the head clause.
+fn build_rule(body_term: Term) -> (JumpStub, VecDeque<Term>) {
+    // collect the vars of body_term into a head, return the num_vars
+    // (the arity) as well.
+    let vars = compute_head(&body_term);
+    let rule = build_rule_body(&vars, body_term);
+
+    (vars, VecDeque::from(vec![rule]))
+}
+
+fn build_disjunct(body_term: Term) -> (JumpStub, VecDeque<Term>) {
+    let vars = compute_head(&body_term);
+    let results = unfold_by_str(body_term, atom!(";"))
+        .into_iter()
+        .map(|term| {
+            let mut subterms = unfold_by_str(term, atom!(","));
+            mark_cut_variables(&mut subterms);
+
+            check_for_internal_if_then(&mut subterms);
+
+            let term = subterms.pop().unwrap();
+            let clause = fold_by_str(subterms.into_iter(), term, atom!(","));
+
+            build_rule_body(&vars, clause)
+        })
+        .collect();
+
+    (vars, results)
+}
+
+fn build_if_then(prec: Term, conq: Term) -> (JumpStub, VecDeque<Term>) {
+    let mut prec_seq = unfold_by_str(prec, atom!(","));
+    let comma_sym = atom!(",");
+    let cut_sym = Literal::Atom(atom!("!"));
+
+    prec_seq.push(Term::Literal(Cell::default(), cut_sym));
+
+    mark_cut_variables_as(&mut prec_seq, atom!("blocked_!"));
+
+    let mut conq_seq = unfold_by_str(conq, atom!(","));
+
+    mark_cut_variables(&mut conq_seq);
+    prec_seq.extend(conq_seq.into_iter());
+
+    let back_term = prec_seq.pop().unwrap();
+    let front_term = prec_seq.pop().unwrap();
+
+    let body_term = Term::Clause(
+        Cell::default(),
+        comma_sym,
+        vec![front_term, back_term],
+    );
+
+    build_rule(fold_by_str(prec_seq.into_iter(), body_term, comma_sym))
 }
 
 #[derive(Debug)]
@@ -514,86 +748,6 @@ impl Preprocessor {
         }
     }
 
-    fn compute_head(&self, term: &Term) -> Vec<Term> {
-        let mut vars = IndexSet::new();
-
-        for term in post_order_iter(term) {
-            if let TermRef::Var(_, _, v) = term {
-                vars.insert(v.clone());
-            }
-        }
-
-        vars.insert(Rc::new(String::from("!")));
-        vars.into_iter()
-            .map(|v| Term::Var(Cell::default(), v))
-            .collect()
-    }
-
-    fn fabricate_rule_body(&self, vars: &Vec<Term>, body_term: Term) -> Term {
-        let head_term = Term::Clause(Cell::default(), atom!(""), vars.clone());
-        let rule = vec![head_term, body_term];
-
-        Term::Clause(Cell::default(), atom!(":-"), rule)
-    }
-
-    // the terms form the body of the rule. We create a head, by
-    // gathering variables from the body of terms and recording them
-    // in the head clause.
-    fn fabricate_rule(&self, body_term: Term) -> (JumpStub, VecDeque<Term>) {
-        // collect the vars of body_term into a head, return the num_vars
-        // (the arity) as well.
-        let vars = self.compute_head(&body_term);
-        let rule = self.fabricate_rule_body(&vars, body_term);
-
-        (vars, VecDeque::from(vec![rule]))
-    }
-
-    fn fabricate_disjunct(&self, body_term: Term) -> (JumpStub, VecDeque<Term>) {
-        let vars = self.compute_head(&body_term);
-        let results = unfold_by_str(body_term, atom!(";"))
-            .into_iter()
-            .map(|term| {
-                let mut subterms = unfold_by_str(term, atom!(","));
-                mark_cut_variables(&mut subterms);
-
-                check_for_internal_if_then(&mut subterms);
-
-                let term = subterms.pop().unwrap();
-                let clause = fold_by_str(subterms.into_iter(), term, atom!(","));
-
-                self.fabricate_rule_body(&vars, clause)
-            })
-            .collect();
-
-        (vars, results)
-    }
-
-    fn fabricate_if_then(&self, prec: Term, conq: Term) -> (JumpStub, VecDeque<Term>) {
-        let mut prec_seq = unfold_by_str(prec, atom!(","));
-        let comma_sym = atom!(",");
-        let cut_sym = Literal::Atom(atom!("!"));
-
-        prec_seq.push(Term::Literal(Cell::default(), cut_sym));
-
-        mark_cut_variables_as(&mut prec_seq, atom!("blocked_!"));
-
-        let mut conq_seq = unfold_by_str(conq, atom!(","));
-
-        mark_cut_variables(&mut conq_seq);
-        prec_seq.extend(conq_seq.into_iter());
-
-        let back_term = prec_seq.pop().unwrap();
-        let front_term = prec_seq.pop().unwrap();
-
-        let body_term = Term::Clause(
-            Cell::default(),
-            comma_sym,
-            vec![front_term, back_term],
-        );
-
-        self.fabricate_rule(fold_by_str(prec_seq.into_iter(), body_term, comma_sym))
-    }
-
     fn to_query_term<'a, LS: LoadState<'a>>(
         &mut self,
         loader: &mut Loader<'a, LS>,
@@ -605,7 +759,9 @@ impl Preprocessor {
                     Ok(QueryTerm::BlockedCut)
                 } else {
                     Ok(clause_to_query_term(
-                        loader, name, vec![],
+                        loader,
+                        name,
+                        vec![],
                         self.settings.default_call_policy(),
                     ))
                 }
@@ -618,7 +774,7 @@ impl Preprocessor {
                 (atom!(";"), 2) => {
                     let term = Term::Clause(r, name, terms);
 
-                    let (stub, clauses) = self.fabricate_disjunct(term);
+                    let (stub, clauses) = build_disjunct(term);
                     self.queue.push_back(clauses);
 
                     Ok(QueryTerm::Jump(stub))
@@ -627,7 +783,7 @@ impl Preprocessor {
                     let conq = terms.pop().unwrap();
                     let prec = terms.pop().unwrap();
 
-                    let (stub, clauses) = self.fabricate_if_then(prec, conq);
+                    let (stub, clauses) = build_if_then(prec, conq);
                     self.queue.push_back(clauses);
 
                     Ok(QueryTerm::Jump(stub))
@@ -644,7 +800,7 @@ impl Preprocessor {
                     let terms = vec![prec, conq];
 
                     let term = Term::Clause(Cell::default(), atom!(";"), terms);
-                    let (stub, clauses) = self.fabricate_disjunct(term);
+                    let (stub, clauses) = build_disjunct(term);
 
                     debug_assert!(clauses.len() > 0);
                     self.queue.push_back(clauses);
@@ -689,8 +845,8 @@ impl Preprocessor {
 
                             Ok(clause_to_query_term(
                                 loader,
-                                name,
-                                terms,
+                                atom!("call"),
+                                vec![Term::Clause(r, name, terms)],
                                 self.settings.default_call_policy(),
                             ))
                         }

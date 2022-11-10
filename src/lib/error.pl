@@ -10,6 +10,10 @@
                   type_error/3
                   ]).
 
+
+:- meta_predicate check_(1, ?, ?).
+
+
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    must_be(Type, Term)
 
@@ -31,6 +35,8 @@
        - in_character
        - integer
        - list
+       - octet_character
+       - octet_chars
        - term
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
@@ -46,6 +52,11 @@ must_be_(var, Term) :-
         ;   throw(error(uninstantiation_error(Term), must_be/2))
         ).
 must_be_(integer, Term) :- check_(integer, integer, Term).
+must_be_(not_less_than_zero, N) :-
+        must_be(integer, N),
+        (   N >= 0 -> true
+        ;   domain_error(not_less_than_zero, N, must_be/2)
+        ).
 must_be_(atom, Term)    :- check_(atom, atom, Term).
 must_be_(character, T)  :- check_(error:character, character, T).
 must_be_(in_character, T) :- check_(error:in_character, in_character, T).
@@ -58,6 +69,17 @@ must_be_(chars, Ls) :-
             % because that library itself imports library(error).
             true
         ;   all_characters(Ls)
+        ).
+must_be_(octet_character, C) :-
+        must_be(character, C),
+        (   octet_character(C) -> true
+        ;   domain_error(octet_character, C, must_be/2)
+        ).
+must_be_(octet_chars, Cs) :-
+        must_be(chars, Cs),
+        (   '$first_non_octet'(Cs, C) ->
+            domain_error(octet_character, C, must_be/2)
+        ;   true
         ).
 must_be_(list, Term)    :- check_(error:ilist, list, Term).
 must_be_(type, Term)    :- check_(error:type, type, Term).
@@ -90,6 +112,10 @@ character(C) :-
         atom(C),
         atom_length(C, 1).
 
+octet_character(C) :-
+        char_code(C, Code),
+        0 =< Code, Code =< 0xff.
+
 in_character(C) :-
         (   character(C)
         ;   C == end_of_file
@@ -107,11 +133,14 @@ type(integer).
 type(atom).
 type(character).
 type(in_character).
+type(octet_character).
+type(octet_chars).
 type(chars).
 type(list).
 type(var).
 type(boolean).
 type(term).
+type(not_less_than_zero).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    can_be(Type, Term)
@@ -135,6 +164,13 @@ can_be(Type, Term) :-
         ).
 
 can_(integer, Term) :- integer(Term).
+can_(not_less_than_zero, N) :-
+        (   integer(N) ->
+            (   N >= 0 -> true
+            ;   domain_error(not_less_than_zero, N, can_be/2)
+            )
+        ;   type_error(integer, N, can_be/2)
+        ).
 can_(atom, Term)    :- atom(Term).
 can_(character, T)  :- character(T).
 can_(in_character, T) :- in_character(T).
@@ -142,6 +178,17 @@ can_(chars, Ls)     :-
         (   '$is_partial_string'(Ls) -> true
         ;   can_be(list, Ls),
             can_be_chars(Ls)
+        ).
+can_(octet_character, C) :-
+        (   octet_character(C) -> true
+        ;   domain_error(octet_character, C, can_be/2)
+        ).
+can_(octet_chars, Cs) :-
+        can_be(chars, Cs),
+        (   '$skip_max_list'(_, _, Cs, []), % temporarily turn Cs into a list
+            '$first_non_octet'(Cs, C) ->
+            domain_error(octet_character, C, can_be/2)
+        ;   true
         ).
 can_(list, Term)    :- list_or_partial_list(Term).
 can_(boolean, Term) :- boolean(Term).

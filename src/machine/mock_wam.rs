@@ -61,7 +61,6 @@ impl MockWAM {
 
         let mut printer = HCPrinter::new(
             &mut self.machine_st.heap,
-            &mut self.machine_st.arena,
             &self.op_dir,
             PrinterOutputter::new(),
             heap_loc_as_cell!(term_write_result.heap_loc),
@@ -272,6 +271,7 @@ impl Machine {
 
         if let Some(ref mut builtins) = wam.indices.modules.get_mut(&atom!("builtins")) {
             load_module(
+                &mut wam.machine_st,
                 &mut wam.indices.code_dir,
                 &mut wam.indices.op_dir,
                 &mut wam.indices.meta_predicates,
@@ -297,6 +297,7 @@ impl Machine {
 
         if let Some(loader) = wam.indices.modules.get(&atom!("loader")) {
             load_module(
+                &mut wam.machine_st,
                 &mut wam.indices.code_dir,
                 &mut wam.indices.op_dir,
                 &mut wam.indices.meta_predicates,

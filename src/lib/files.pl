@@ -1,5 +1,5 @@
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   Written June 2020 by Markus Triska (triska@metalevel.at)
+   Written 2020, 2022 by Markus Triska (triska@metalevel.at)
    Part of Scryer Prolog.
 
    Predicates for reasoning about files and directories.
@@ -65,6 +65,7 @@
 :- use_module(library(error)).
 :- use_module(library(lists)).
 :- use_module(library(charsio)).
+:- use_module(library(dcgs)).
 
 directory_files(Directory, Files) :-
         must_be(chars, Directory),
@@ -73,7 +74,6 @@ directory_files(Directory, Files) :-
 
 file_size(File, Size) :-
         file_must_exist(File, file_size/2),
-        must_be(chars, File),
         can_be(integer, Size),
         '$file_size'(File, Size).
 
@@ -95,12 +95,10 @@ make_directory_path(Directory) :-
 
 delete_file(File) :-
         file_must_exist(File, delete_file/1),
-        must_be(chars, File),
         '$delete_file'(File).
 
 rename_file(File, Renamed) :-
         file_must_exist(File, rename_file/2),
-        must_be(chars, File),
         must_be(chars, Renamed),
         '$rename_file'(File, Renamed).
 
@@ -201,19 +199,19 @@ path_segments(Path, Segments) :-
         (   var(Path) ->
             must_be(list, Segments),
             maplist(must_be(chars), Segments),
-            append_with_separator(Segments, Sep, Path)
+            phrase(append_with_separator(Segments, Sep), Path)
         ;   must_be(chars, Path),
             path_to_segments(Path, Sep, Segments)
         ).
 
-append_with_separator([], _, []).
-append_with_separator([Segment|Segments], Sep, Path) :-
-        append_with_separator_(Segments, Segment, Sep, Path).
+append_with_separator([], _) --> [].
+append_with_separator([Segment|Segments], Sep) -->
+        append_with_separator_(Segments, Segment, Sep).
 
-append_with_separator_([], Segment, _, Segment).
-append_with_separator_([Segment|Segments], Prev, Sep, Path) :-
-        append(Prev, [Sep|Rest], Path),
-        append_with_separator_(Segments, Segment, Sep, Rest).
+append_with_separator_([], Segment, _) --> seq(Segment).
+append_with_separator_([Segment|Segments], Prev, Sep) -->
+        seq(Prev), [Sep],
+        append_with_separator_(Segments, Segment, Sep).
 
 path_to_segments(Path, Sep, Segments) :-
         (   append(Front, [Sep|Ps], Path) ->

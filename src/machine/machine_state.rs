@@ -75,6 +75,7 @@ pub struct MachineState {
     pub(super) hb: usize,
     pub(super) block: usize, // an offset into the OR stack.
     pub(super) ball: Ball,
+    pub(super) ball_stack: Vec<Ball>, // save current ball before jumping via, e.g., verify_attr interrupt.
     pub(super) lifted_heap: Heap,
     pub(super) interms: Vec<Number>, // intermediate numbers.
     // locations of cleaners, cut points, the previous block. for setup_call_cleanup.
@@ -113,6 +114,7 @@ impl fmt::Debug for MachineState {
             .field("hb", &self.hb)
             .field("block", &self.block)
             .field("ball", &self.ball)
+            .field("ball_stack", &self.ball_stack)
             .field("lifted_heap", &self.lifted_heap)
             .field("interms", &self.interms)
             .field("flags", &self.flags)
@@ -418,6 +420,17 @@ impl MachineState {
                         }
                     }
                 }
+                (HeapCellValueTag::Str, s) => {
+                    let (name, arity) = cell_as_atom_cell!(self.heap[s])
+                        .get_name_and_arity();
+
+                    if arity == 0 {
+                        if let Some(c) = name.as_char() {
+                            chars.push(c);
+                            continue;
+                        }
+                    }
+                }
                 _ => {
                 }
             );
@@ -452,6 +465,20 @@ impl MachineState {
         self.iip = 0;
         self.num_of_args = arity;
         self.b0 = self.b;
+    }
+
+    #[inline(always)]
+    pub fn neck_cut(&mut self) {
+        let b = self.b;
+        let b0 = self.b0;
+
+        if b > b0 {
+            self.b = b0;
+
+            if b > self.e {
+                self.stack.truncate(b);
+            }
+        }
     }
 
     // Safety: the atom_tbl lives for the lifetime of the machine, as does the helper, so the ptr
@@ -511,7 +538,7 @@ impl MachineState {
 
         loop {
             match self.read(stream, &indices.op_dir) {
-                Ok(term_write_result) => {
+                Ok(mut term_write_result) => {
                     let heap_loc = read_heap_cell!(self.heap[term_write_result.heap_loc],
                         (HeapCellValueTag::PStr | HeapCellValueTag::PStrOffset) => {
                             pstr_loc_as_cell!(term_write_result.heap_loc)
@@ -541,6 +568,10 @@ impl MachineState {
                                 singleton_var_set.insert(var, false);
                             }
                         }
+                    }
+
+                    for var in term_write_result.var_dict.values_mut() {
+                        *var = heap_bound_deref(&self.heap, *var);
                     }
 
                     let singleton_var_list = push_var_eq_functors(
@@ -666,6 +697,13 @@ impl MachineState {
                                         debug_assert_eq!(_arity, 0);
                                         var_names.insert(var, Rc::new(name.as_str().to_owned()));
                                     }
+                                    (HeapCellValueTag::Str, s) => {
+                                        let (name, arity) = cell_as_atom_cell!(self.heap[s])
+                                            .get_name_and_arity();
+
+                                        debug_assert_eq!(arity, 0);
+                                        var_names.insert(var, Rc::new(name.as_str().to_owned()));
+                                    }
                                     _ => {
                                         unreachable!();
                                     }
@@ -677,34 +715,64 @@ impl MachineState {
                     );
                 }
 
+                let ignore_ops = read_heap_cell!(ignore_ops,
+                    (HeapCellValueTag::Atom, (name, _arity)) => {
+                        name == atom!("true")
+                    }
+                    (HeapCellValueTag::Str, s) => {
+                        let (name, arity) = cell_as_atom_cell!(self.heap[s])
+                            .get_name_and_arity();
+
+                        debug_assert_eq!(arity, 0);
+                        name == atom!("true")
+                    }
+                    _ => {
+                        unreachable!()
+                    }
+                );
+
+                let numbervars = read_heap_cell!(numbervars,
+                    (HeapCellValueTag::Atom, (name, _arity)) => {
+                        name == atom!("true")
+                    }
+                    (HeapCellValueTag::Str, s) => {
+                        let (name, arity) = cell_as_atom_cell!(self.heap[s])
+                            .get_name_and_arity();
+
+                        debug_assert_eq!(arity, 0);
+                        name == atom!("true")
+                    }
+                    _ => {
+                        unreachable!()
+                    }
+                );
+
+                let quoted = read_heap_cell!(quoted,
+                    (HeapCellValueTag::Atom, (name, _arity)) => {
+                        name == atom!("true")
+                    }
+                    (HeapCellValueTag::Str, s) => {
+                        let (name, arity) = cell_as_atom_cell!(self.heap[s])
+                            .get_name_and_arity();
+
+                        debug_assert_eq!(arity, 0);
+                        name == atom!("true")
+                    }
+                    _ => {
+                        unreachable!()
+                    }
+                );
+
                 let mut printer = HCPrinter::new(
                     &mut self.heap,
-                    &mut self.arena,
                     op_dir,
                     PrinterOutputter::new(),
                     term_to_be_printed,
                 );
 
-                if let HeapCellValueTag::Atom = ignore_ops.get_tag() {
-                    let name = cell_as_atom!(ignore_ops);
-                    printer.ignore_ops = name == atom!("true");
-                } else {
-                    unreachable!();
-                }
-
-                if let HeapCellValueTag::Atom = numbervars.get_tag() {
-                    let name = cell_as_atom!(numbervars);
-                    printer.numbervars = name == atom!("true");
-                } else {
-                    unreachable!();
-                }
-
-                if let HeapCellValueTag::Atom = quoted.get_tag() {
-                    let name = cell_as_atom!(quoted);
-                    printer.quoted = name == atom!("true");
-                } else {
-                    unreachable!();
-                }
+                printer.ignore_ops = ignore_ops;
+                printer.numbervars = numbervars;
+                printer.quoted = quoted;
 
                 match Number::try_from(max_depth) {
                     Ok(Number::Fixnum(n)) => {
