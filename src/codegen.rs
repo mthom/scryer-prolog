@@ -1,7 +1,6 @@
 use crate::atom_table::*;
 use crate::parser::ast::*;
 use crate::{perm_v, temp_v};
-
 use crate::allocator::*;
 use crate::arithmetic::*;
 use crate::debray_allocator::*;
@@ -22,14 +21,14 @@ use std::cell::Cell;
 use std::collections::VecDeque;
 
 #[derive(Debug)]
-pub(crate) struct ConjunctInfo<'a> {
-    pub(crate) perm_vs: VariableFixtures<'a>,
+pub(crate) struct ConjunctInfo {
+    pub(crate) perm_vs: VariableFixtures,
     pub(crate) num_of_chunks: usize,
     pub(crate) has_deep_cut: bool,
 }
 
-impl<'a> ConjunctInfo<'a> {
-    fn new(perm_vs: VariableFixtures<'a>, num_of_chunks: usize, has_deep_cut: bool) -> Self {
+impl ConjunctInfo {
+    fn new(perm_vs: VariableFixtures, num_of_chunks: usize, has_deep_cut: bool) -> Self {
         ConjunctInfo {
             perm_vs,
             num_of_chunks,
@@ -191,8 +190,8 @@ impl DebrayAllocator {
     #[inline(always)]
     pub(crate) fn get_binding(&self, name: &Var) -> Option<RegType> {
         match self.bindings().get(name) {
-            Some(&VarData::Temp(_, t, _)) if t != 0 => Some(RegType::Temp(t)),
-            Some(&VarData::Perm(p)) if p != 0 => Some(RegType::Perm(p)),
+            Some(&VarAlloc::Temp(_, t, _)) if t != 0 => Some(RegType::Temp(t)),
+            Some(&VarAlloc::Perm(p)) if p != 0 => Some(RegType::Perm(p)),
             _ => None,
         }
     }
@@ -861,7 +860,7 @@ impl<'b> CodeGenerator<'b> {
     fn compile_seq<'a>(
         &mut self,
         iter: ChunkedIterator<'a>,
-        conjunct_info: &ConjunctInfo<'a>,
+        conjunct_info: &ConjunctInfo,
         code: &mut Code,
     ) -> Result<(), CompilationError> {
         for (chunk_num, _, terms) in iter.rule_body_iter() {
@@ -925,11 +924,11 @@ impl<'b> CodeGenerator<'b> {
         }
     }
 
-    fn compile_cleanup<'a>(
+    fn compile_cleanup(
         &mut self,
         code: &mut Code,
-        conjunct_info: &ConjunctInfo<'a>,
-        toc: &'a QueryTerm,
+        conjunct_info: &ConjunctInfo,
+        toc: &QueryTerm,
     ) {
         // add a proceed to bookend any trailing cuts.
         match toc {
@@ -937,7 +936,7 @@ impl<'b> CodeGenerator<'b> {
                 code.push(instr!("proceed"));
             }
             _ => {}
-        };
+        }
 
         // perform lco.
         let dealloc_index = Self::lco(code);

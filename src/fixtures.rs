@@ -4,6 +4,7 @@ use crate::forms::*;
 use crate::instructions::*;
 use crate::iterators::*;
 
+use bit_set::*;
 use indexmap::{IndexMap, IndexSet};
 
 use std::cell::Cell;
@@ -11,15 +12,23 @@ use std::collections::BTreeSet;
 use std::mem::swap;
 use std::vec::Vec;
 
-// labeled with chunk numbers.
+pub(crate) type OccurrenceSet = IndexSet<(GenContext, usize)>;
+
 #[derive(Debug)]
-pub(crate) enum VarStatus {
-    Perm(usize),
-    Temp(usize, TempVarData), // Perm(chunk_num) | Temp(chunk_num, _)
+pub(crate) struct TempVarData {
+    pub(crate) last_term_arity: usize,
+    pub(crate) use_set: OccurrenceSet,
+    pub(crate) no_use_set: BitSet<usize>,
+    pub(crate) conflict_set: BitSet<usize>,
 }
 
-pub(crate) type OccurrenceSet = BTreeSet<(GenContext, usize)>;
+#[derive(Debug)]
+pub(crate) struct TempVarStatus {
+    chunk_num: usize,
+    temp_var_data: TempVarData,
+}
 
+// TODO: get ridda this! I think.
 // Perm: 0 initially, a stack register once processed.
 // Temp: labeled with chunk_num and temp offset (unassigned if 0).
 #[derive(Debug)]
@@ -37,21 +46,13 @@ impl VarData {
     }
 }
 
-#[derive(Debug)]
-pub(crate) struct TempVarData {
-    pub(crate) last_term_arity: usize,
-    pub(crate) use_set: OccurrenceSet,
-    pub(crate) no_use_set: BTreeSet<usize>,
-    pub(crate) conflict_set: BTreeSet<usize>,
-}
-
 impl TempVarData {
     pub(crate) fn new(last_term_arity: usize) -> Self {
         TempVarData {
             last_term_arity: last_term_arity,
-            use_set: BTreeSet::new(),
-            no_use_set: BTreeSet::new(),
-            conflict_set: BTreeSet::new(),
+            use_set: BitSet::new(),
+            no_use_set: BitSet::new(),
+            conflict_set: BitSet::new(),
         }
     }
 
@@ -68,7 +69,7 @@ impl TempVarData {
     pub(crate) fn populate_conflict_set(&mut self) {
         if self.last_term_arity > 0 {
             let arity = self.last_term_arity;
-            let mut conflict_set: BTreeSet<usize> = (1..arity).collect();
+            let mut conflict_set: BitSet<usize> = (1..arity).collect();
 
             for &(_, reg) in self.use_set.iter() {
                 conflict_set.remove(&reg);
@@ -79,26 +80,26 @@ impl TempVarData {
     }
 }
 
-type VariableFixture<'a> = (VarStatus, Vec<&'a Cell<VarReg>>);
-
 #[derive(Debug)]
-pub(crate) struct VariableFixtures<'a> {
-    perm_vars: IndexMap<Var, VariableFixture<'a>>,
-    last_chunk_temp_vars: IndexSet<Var>, // TODO: has no use at all!
+pub(crate) struct VariableFixtures {
+    temp_vars: IndexMap<usize, TempVarStatus>,
+    last_chunk_temp_vars: IndexSet<usize>, // TODO: has no use at all! remove it.
 }
 
 impl<'a> VariableFixtures<'a> {
     pub(crate) fn new() -> Self {
         VariableFixtures {
-            perm_vars: IndexMap::new(),
+            temp_vars: IndexMap::new(),
             last_chunk_temp_vars: IndexSet::new(),
         }
     }
 
+    // TODO: get rid of this also.
     pub(crate) fn insert(&mut self, var: Var, vs: VariableFixture<'a>) {
-        self.perm_vars.insert(var, vs);
+        self.temp_vars.insert(var, vs);
     }
 
+    // TODO: used?
     pub(crate) fn insert_last_chunk_temp_var(&mut self, var: Var) {
         self.last_chunk_temp_vars.insert(var);
     }
@@ -114,27 +115,26 @@ impl<'a> VariableFixtures<'a> {
         // Compute the conflict set of u.
 
         // 1.
-        let mut use_sets: IndexMap<Var, OccurrenceSet> = IndexMap::new();
+        let mut use_sets: IndexMap<usize, OccurrenceSet> = IndexMap::new();
 
-        for (var, &mut (ref mut var_status, _)) in self.iter_mut() {
-            if let &mut VarStatus::Temp(_, ref mut var_data) = var_status {
-                let mut use_set = OccurrenceSet::new();
+        for (var_gen_index, ref mut var_status) in self.temp_vars.iter_mut() {
+            let TempVarStatus { ref mut temp_var_data, .. } = var_status;
+            let mut use_set = OccurrenceSet::new();
 
-                swap(&mut var_data.use_set, &mut use_set);
-                use_sets.insert((*var).clone(), use_set);
-            }
+            mem::swap(&mut temp_var_data.use_set, &mut use_set);
+            use_sets.insert(var_gen_index, use_set);
         }
 
         for (u, use_set) in use_sets.drain(..) {
             // 2.
             for &(term_loc, reg) in use_set.iter() {
                 if let GenContext::Last(cn_u) = term_loc {
-                    for (ref t, &mut (ref mut var_status, _)) in self.iter_mut() {
-                        if let &mut VarStatus::Temp(cn_t, ref mut t_data) = var_status {
-                            if cn_u == cn_t && u != **t {
-                                if !t_data.uses_reg(reg) {
-                                    t_data.no_use_set.insert(reg);
-                                }
+                    for (var_gen_index, ref mut var_status) in self.terms_vars.iter_mut() {
+                        let TempVarStatus { chunk_num, ref mut temp_var_data } = var_status;
+
+                        if cn_u == chunk_num && u != var_gen_index {
+                            if !temp_var_data.uses_reg(reg) {
+                                temp_var_data.no_use_set.insert(reg);
                             }
                         }
                     }
@@ -142,22 +142,11 @@ impl<'a> VariableFixtures<'a> {
             }
 
             // 3.
-            match self.get_mut(u).unwrap() {
-                &mut (VarStatus::Temp(_, ref mut u_data), _) => {
-                    u_data.use_set = use_set;
-                    u_data.populate_conflict_set();
-                }
-                _ => {}
-            };
+            let TempVarStatus { ref mut temp_var_data, ..} = self.temp_vars.get_mut(u).unwrap();
+
+            temp_var_data.use_set = use_set;
+            temp_var_data.populate_conflict_set();
         }
-    }
-
-    fn get_mut(&mut self, u: Var) -> Option<&mut VariableFixture<'a>> {
-        self.perm_vars.get_mut(&u)
-    }
-
-    fn iter_mut(&mut self) -> indexmap::map::IterMut<Var, VariableFixture<'a>> {
-        self.perm_vars.iter_mut()
     }
 
     fn record_temp_info(&mut self, tvd: &mut TempVarData, arg_c: usize, term_loc: GenContext) {
@@ -169,84 +158,27 @@ impl<'a> VariableFixtures<'a> {
         };
     }
 
-    pub(crate) fn vars_above_threshold(&self, index: usize) -> usize {
-        let mut var_count = 0;
-
-        for &(ref var_status, _) in self.values() {
-            if let &VarStatus::Perm(i) = var_status {
-                if i > index {
-                    var_count += 1;
-                }
-            }
-        }
-
-        var_count
-    }
-
-    pub(crate) fn mark_vars_in_chunk<I>(&mut self, iter: I, lt_arity: usize, term_loc: GenContext)
-    where
-        I: Iterator<Item = TermRef<'a>>,
-    {
+    pub(crate) fn mark_temp_var(
+        &mut self,
+        generated_var_index: usize,
+        lvl: Level,
+        classify_info: &ClassifyInfo,
+        term_loc: GenContext,
+    ) {
         let chunk_num = term_loc.chunk_num();
-        let mut arg_c = 1;
 
-        for term_ref in iter {
-            if let &TermRef::Var(lvl, cell, ref var) = &term_ref {
-                let mut status = self.perm_vars.swap_remove(var).unwrap_or((
-                    VarStatus::Temp(chunk_num, TempVarData::new(lt_arity)),
-                    Vec::new(),
-                ));
-
-                status.1.push(cell);
-
-                match status.0 {
-                    VarStatus::Temp(cn, ref mut tvd) if cn == chunk_num => {
-                        if let Level::Shallow = lvl {
-                            self.record_temp_info(tvd, arg_c, term_loc);
-                        }
-                    }
-                    _ => status.0 = VarStatus::Perm(chunk_num),
-                };
-
-                self.perm_vars.insert(var.clone(), status);
+        let mut status = self.temp_vars.swap_remove(generated_var_index).unwrap_or_else(|| {
+            TempVarStatus {
+                chunk_num,
+                temp_var_data: TempVarData::new(classify_info.arity),
             }
+        });
 
-            if let Level::Shallow = term_ref.level() {
-                arg_c += 1;
-            }
+        if let Level::Shallow = lvl {
+            self.record_temp_info(&mut status, classify_info.arg_c, term_loc);
         }
-    }
 
-    pub(crate) fn into_iter(self) -> indexmap::map::IntoIter<Var, VariableFixture<'a>> {
-        self.perm_vars.into_iter()
-    }
-
-    fn values(&self) -> indexmap::map::Values<Var, VariableFixture<'a>> {
-        self.perm_vars.values()
-    }
-
-    pub(crate) fn size(&self) -> usize {
-        self.perm_vars.len()
-    }
-
-    pub(crate) fn set_perm_vals(&self, has_deep_cuts: bool) {
-        let mut values_vec: Vec<_> = self
-            .values()
-            .filter_map(|ref v| match &v.0 {
-                &VarStatus::Perm(i) => Some((i, &v.1)),
-                _ => None,
-            })
-            .collect();
-
-        values_vec.sort_by_key(|ref v| v.0);
-
-        let offset = has_deep_cuts as usize;
-
-        for (i, (_, cells)) in values_vec.into_iter().rev().enumerate() {
-            for cell in cells {
-                cell.set(VarReg::Norm(RegType::Perm(i + 1 + offset)));
-            }
-        }
+        self.temp_vars.insert(Var::Generated(generated_var_index), status);
     }
 }
 

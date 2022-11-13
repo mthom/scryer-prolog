@@ -227,7 +227,7 @@ macro_rules! perm_v {
     };
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum GenContext {
     Head,
     Mid(usize),

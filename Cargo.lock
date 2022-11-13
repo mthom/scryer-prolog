@@ -1855,6 +1855,7 @@ version = "0.9.1"
 dependencies = [
  "assert_cmd",
  "base64",
+ "bit-set",
  "blake2 0.8.1",
  "chrono",
  "cpu-time",

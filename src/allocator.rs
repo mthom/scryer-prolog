@@ -63,32 +63,30 @@ pub(crate) trait Allocator {
     // TODO: wha.. why?? grrr. it drains the VarStatus data from vs (which it owns!)
     // into self.bindings and perm_vs after all is computed (i.e. vs.populate_restricting_sets()
     // and vs.set_perm_vals(has_deep_cut) have both been called).
+    /*
     fn drain_var_data<'a>(
         &mut self,
-        vs: VariableFixtures<'a>,
+        vs: VariableFixtures,
         num_of_chunks: usize,
-    ) -> VariableFixtures<'a> {
+    ) -> VariableFixtures {
         let mut perm_vs = VariableFixtures::new();
 
-        for (var, (var_status, cells)) in vs.into_iter() {
+        for (var, var_status) in vs.into_iter() {
             match var_status {
                 VarStatus::Temp(chunk_num, tvd) => {
                     self.bindings_mut()
-                        .insert(var.clone(), VarData::Temp(chunk_num, 0, tvd));
-
-                    if chunk_num + 1 == num_of_chunks {
-                        perm_vs.insert_last_chunk_temp_var(var);
-                    }
+                        .insert(var.clone(), VarAlloc::Temp(chunk_num, 0, tvd));
                 }
                 VarStatus::Perm(_) => {
-                    self.bindings_mut().insert(var.clone(), VarData::Perm(0));
-                    perm_vs.insert(var, (var_status, cells));
+                    self.bindings_mut().insert(var.clone(), VarAlloc::Perm(0));
+                    perm_vs.insert(var, var_status);
                 }
             };
         }
 
         perm_vs
     }
+    */
 
     fn get(&self, var: Var) -> RegType {
         self.bindings()
@@ -102,8 +100,8 @@ pub(crate) trait Allocator {
 
     fn record_register(&mut self, var: Var, r: RegType) {
         match self.bindings_mut().get_mut(&var).unwrap() {
-            &mut VarData::Temp(_, ref mut s, _) => *s = r.reg_num(),
-            &mut VarData::Perm(ref mut s) => *s = r.reg_num(),
+            &mut VarAlloc::Temp(_, ref mut s, _) => *s = r.reg_num(),
+            &mut VarAlloc::Perm(ref mut s) => *s = r.reg_num(),
         }
     }
 }

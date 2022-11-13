@@ -40,7 +40,6 @@ impl VarPtr {
     }
 }
 
-
 #[derive(Debug, Clone)]
 pub(crate) enum TermRef<'a> {
     AnonVar(Level),
