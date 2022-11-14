@@ -747,7 +747,7 @@ impl<'b> CodeGenerator<'b> {
     ) -> Result<(), CompilationError> {
         macro_rules! compile_expr {
             ($self:expr, $terms:expr, $term_loc:expr, $code:expr) => ({
-                let (acode, at) = $self.compile_arith_expr(&$terms[1], 1, $term_loc, 2)?;
+                let (acode, at) = $self.compile_arith_expr($terms, 1, $term_loc, 2)?;
                 $code.extend(acode.into_iter());
                 at
             });
@@ -765,7 +765,7 @@ impl<'b> CodeGenerator<'b> {
                     code,
                 );
 
-                compile_expr!(self, terms, term_loc, code)
+                compile_expr!(self, &terms[1], term_loc, code)
             }
             &Term::Literal(_, c @ Literal::Integer(_) |
                               c @ Literal::Float(_) |
@@ -775,7 +775,7 @@ impl<'b> CodeGenerator<'b> {
                 code.push(instr!("put_constant", Level::Shallow, v, temp_v!(1)));
 
                 self.marker.advance_arg();
-                compile_expr!(self, terms, term_loc, code)
+                compile_expr!(self, &terms[1], term_loc, code)
             }
             _ => {
                 code.push(instr!("$fail", 0));

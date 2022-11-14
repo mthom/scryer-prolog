@@ -67,19 +67,6 @@ impl<'a> ArithInstructionIterator<'a> {
             Term::Clause(cell, name, terms) => {
                 TermIterState::Clause(Level::Shallow, 0, cell, *name, terms)
             }
-            /* match ClauseType::from(*name, terms.len()) {
-                ct @ ClauseType::Named(..) => {
-                    Ok(TermIterState::Clause(Level::Shallow, 0, cell, ct, terms))
-                }
-                ct @ ClauseType::Inlined(InlinedClauseType::IsFloat(_)) => {
-                    // let ct = ClauseType::Named(1, atom!("float"), CodeIndex::default());
-                    Ok(TermIterState::Clause(Level::Shallow, 0, cell, ct, terms))
-                }
-                _ => Err(ArithmeticError::NonEvaluableFunctor(
-                    Literal::Atom(*name),
-                    terms.len(),
-                )),
-            }?,*/
             Term::Literal(cell, cons) => TermIterState::Literal(Level::Shallow, cell, cons),
             Term::Cons(..) | Term::PartialString(..) | Term::CompleteString(..) => {
                 return Err(ArithmeticError::NonEvaluableFunctor(
@@ -320,8 +307,7 @@ impl<'a> ArithmeticEvaluator<'a> {
         src: &'a Term,
         term_loc: GenContext,
         arg: usize,
-    ) -> Result<ArithCont, ArithmeticError>
-    {
+    ) -> Result<ArithCont, ArithmeticError> {
         let mut code = vec![];
         let mut iter = src.iter()?;
 
@@ -338,15 +324,19 @@ impl<'a> ArithmeticEvaluator<'a> {
                             &mut code,
                         )
                     } else if term_loc.is_last() || cell.get().norm().reg_num() == 0 {
-                        self.marker.mark_var::<QueryInstruction>(
-                            name.clone(),
-                            lvl,
-                            cell,
-                            term_loc,
-                            &mut code,
-                        );
+                        if let Some(r) = self.marker.get_binding(&name) {
+                            r
+                        } else {
+                            self.marker.mark_var::<QueryInstruction>(
+                                name.clone(),
+                                lvl,
+                                cell,
+                                term_loc,
+                                &mut code,
+                            );
 
-                        self.marker.get_binding(&name).unwrap()
+                            self.marker.get_binding(&name).unwrap()
+                        }
                     } else {
                         cell.get().norm()
                     };
