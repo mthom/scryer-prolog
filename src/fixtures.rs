@@ -253,68 +253,163 @@ impl<'a> VariableFixtures<'a> {
 
 #[derive(Debug)]
 pub(crate) struct UnsafeVarMarker {
-    pub(crate) unsafe_vars: IndexMap<RegType, usize>,
-    pub(crate) safe_vars: IndexSet<RegType>,
+    pub(crate) unsafe_perm_vars: IndexMap<usize, usize>,
+    pub(crate) unsafe_temp_vars: IndexSet<usize>,
+    pub(crate) safe_perm_vars: IndexSet<usize>,
+    pub(crate) safe_temp_vars: IndexSet<usize>,
 }
 
 impl UnsafeVarMarker {
     pub(crate) fn new() -> Self {
         UnsafeVarMarker {
-            unsafe_vars: IndexMap::new(),
-            safe_vars: IndexSet::new(),
+            unsafe_perm_vars: IndexMap::new(),
+            unsafe_temp_vars: IndexSet::new(),
+            safe_perm_vars: IndexSet::new(),
+            safe_temp_vars: IndexSet::new(),
         }
     }
 
-    pub(crate) fn from_safe_vars(safe_vars: IndexSet<RegType>) -> Self {
-        UnsafeVarMarker {
-            unsafe_vars: IndexMap::new(),
-            safe_vars,
+    pub(crate) fn from_fact_vars(safe_vars: IndexSet<RegType>) -> Self {
+        let mut unsafe_var_marker = Self::new();
+
+        for r in safe_vars {
+            unsafe_var_marker.mark_var_as_safe(r);
+        }
+
+        unsafe_var_marker
+    }
+
+    fn mark_var_as_safe(&mut self, r: RegType) {
+        match r {
+            RegType::Temp(t) => {
+                self.safe_temp_vars.insert(t);
+            }
+            RegType::Perm(p) => {
+                self.safe_perm_vars.insert(p);
+            }
+        };
+    }
+
+    fn mark_var_as_unsafe(&mut self, r: RegType, phase: usize) {
+        match r {
+            RegType::Temp(t) => {
+                self.unsafe_temp_vars.insert(t);
+            }
+            RegType::Perm(p) => {
+                self.unsafe_perm_vars.insert(p, phase);
+            }
         }
     }
 
-    pub(crate) fn mark_safe_vars(&mut self, query_instr: &Instruction) -> bool {
+    fn mark_safe_vars(&mut self, query_instr: &Instruction) -> bool {
         match query_instr {
             &Instruction::PutVariable(r @ RegType::Temp(_), _) |
             &Instruction::SetVariable(r) => {
-                self.safe_vars.insert(r);
+                self.mark_var_as_safe(r);
                 true
             }
             _ => false,
         }
     }
 
-    pub(crate) fn mark_phase(&mut self, query_instr: &Instruction, phase: usize) {
+    fn mark_phase(&mut self, query_instr: &Instruction, phase: usize) {
         match query_instr {
             &Instruction::PutValue(r @ RegType::Perm(_), _) |
             &Instruction::SetValue(r) => {
-                let p = self.unsafe_vars.entry(r).or_insert(0);
-                *p = phase;
+                self.mark_var_as_unsafe(r, phase);
             }
             _ => {}
         }
     }
 
-    pub(crate) fn mark_unsafe_vars(&mut self, query_instr: &mut Instruction, phase: usize) {
+    fn mark_unsafe_perm_vars(&mut self, query_instr: &mut Instruction, phase: usize) {
         match query_instr {
-            &mut Instruction::PutValue(RegType::Perm(i), arg) => {
-                if let Some(p) = self.unsafe_vars.swap_remove(&RegType::Perm(i)) {
-                    if p == phase {
-                        *query_instr = Instruction::PutUnsafeValue(i, arg);
-                        self.safe_vars.insert(RegType::Perm(i));
+            &mut Instruction::PutValue(RegType::Perm(p), arg) => {
+                if let Some(ph) = self.unsafe_perm_vars.swap_remove(&p) {
+                    if ph == phase {
+                        *query_instr = Instruction::PutUnsafeValue(p, arg);
+                        self.safe_perm_vars.insert(p);
                     } else {
-                        self.unsafe_vars.insert(RegType::Perm(i), p);
+                        self.unsafe_perm_vars.insert(p, ph);
                     }
                 }
             }
-            &mut Instruction::SetValue(r) => {
-                if !self.safe_vars.contains(&r) {
-                    *query_instr = Instruction::SetLocalValue(r);
+            &mut Instruction::SetValue(r @ RegType::Perm(p)) if !self.safe_perm_vars.contains(&p) => {
+                *query_instr = Instruction::SetLocalValue(r);
 
-                    self.safe_vars.insert(r);
-                    self.unsafe_vars.remove(&r);
-                }
+                self.safe_perm_vars.insert(p);
+                self.unsafe_perm_vars.remove(&p);
             }
             _ => {}
+        }
+    }
+
+    fn mark_unsafe_temp_vars(&mut self, query_instr: &mut Instruction) {
+        match query_instr {
+            &mut Instruction::SetValue(r @ RegType::Temp(t)) if !self.safe_temp_vars.contains(&t) => {
+                *query_instr = Instruction::SetLocalValue(r);
+
+                self.safe_temp_vars.insert(t);
+                self.unsafe_temp_vars.remove(&t);
+            }
+            _ => {
+            }
+        }
+    }
+
+    fn clear_temp_vars(&mut self) {
+        self.safe_temp_vars.clear();
+        self.unsafe_temp_vars.clear();
+    }
+
+    pub(crate) fn mark_unsafe_instrs(&mut self, code: &mut Code) {
+        if code.is_empty() {
+            return;
+        }
+
+        let mut code_index = 0;
+
+        for phase in 0.. {
+            while code[code_index].is_query_instr() {
+                let query_instr = &mut code[code_index];
+
+                if !self.mark_safe_vars(query_instr) {
+                    self.mark_phase(query_instr, phase);
+                    self.mark_unsafe_temp_vars(query_instr);
+                }
+
+                code_index += 1;
+            }
+
+            while code_index < code.len() && !code[code_index].is_query_instr() {
+                code_index += 1;
+            }
+
+            self.clear_temp_vars();
+
+            if code_index >= code.len() {
+                break;
+            }
+        }
+
+        code_index = 0;
+
+        for phase in 0.. {
+            while code[code_index].is_query_instr() {
+                let query_instr = &mut code[code_index];
+                self.mark_unsafe_perm_vars(query_instr, phase);
+                code_index += 1;
+            }
+
+            // ensure phase->instruction assignments match those of
+            // the previous for loop.
+            while code_index < code.len() && !code[code_index].is_query_instr() {
+                code_index += 1;
+            }
+
+            if code_index >= code.len() {
+                break;
+            }
         }
     }
 }

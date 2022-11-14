@@ -49,48 +49,6 @@ impl<'a> ConjunctInfo<'a> {
     fn perm_var_offset(&self) -> usize {
         self.has_deep_cut as usize
     }
-
-    fn mark_unsafe_vars(&self, mut unsafe_var_marker: UnsafeVarMarker, code: &mut Code) {
-        if code.is_empty() {
-            return;
-        }
-
-        let mut code_index = 0;
-
-        for phase in 0.. {
-            while code[code_index].is_query_instr() {
-                let query_instr = &mut code[code_index];
-
-                if !unsafe_var_marker.mark_safe_vars(query_instr) {
-                    unsafe_var_marker.mark_phase(query_instr, phase);
-                }
-
-                code_index += 1;
-            }
-
-            if code_index + 1 < code.len() {
-                code_index += 1;
-            } else {
-                break;
-            }
-        }
-
-        code_index = 0;
-
-        for phase in 0.. {
-            while code[code_index].is_query_instr() {
-                let query_instr = &mut code[code_index];
-                unsafe_var_marker.mark_unsafe_vars(query_instr, phase);
-                code_index += 1;
-            }
-
-            if code_index + 1 < code.len() {
-                code_index += 1;
-            } else {
-                break;
-            }
-        }
-    }
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -989,7 +947,8 @@ impl<'b> CodeGenerator<'b> {
         let iter = ChunkedIterator::from_rule_body(p1, clauses);
         self.compile_seq(iter, &conjunct_info, &mut code, false)?;
 
-        conjunct_info.mark_unsafe_vars(unsafe_var_marker, &mut code);
+        unsafe_var_marker.mark_unsafe_instrs(&mut code);
+
         self.compile_cleanup(&mut code, &conjunct_info, clauses.last().unwrap_or(p1));
 
         Ok(code)
@@ -1013,7 +972,7 @@ impl<'b> CodeGenerator<'b> {
             }
         }
 
-        UnsafeVarMarker::from_safe_vars(safe_vars)
+        UnsafeVarMarker::from_fact_vars(safe_vars)
     }
 
     pub(crate) fn compile_fact(&mut self, term: &Term) -> Result<Code, CompilationError> {
