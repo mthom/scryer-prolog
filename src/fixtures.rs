@@ -257,6 +257,7 @@ pub(crate) struct UnsafeVarMarker {
     pub(crate) unsafe_temp_vars: IndexSet<usize>,
     pub(crate) safe_perm_vars: IndexSet<usize>,
     pub(crate) safe_temp_vars: IndexSet<usize>,
+    pub(crate) temp_vars_to_perm_vars: IndexMap<usize, usize>,
 }
 
 impl UnsafeVarMarker {
@@ -266,6 +267,7 @@ impl UnsafeVarMarker {
             unsafe_temp_vars: IndexSet::new(),
             safe_perm_vars: IndexSet::new(),
             safe_temp_vars: IndexSet::new(),
+            temp_vars_to_perm_vars: IndexMap::new(),
         }
     }
 
@@ -301,11 +303,24 @@ impl UnsafeVarMarker {
         }
     }
 
+    // returns true if the instruction at *query_instr cannot be
+    // changed by mark_unsafe_vars.
     fn mark_safe_vars(&mut self, query_instr: &Instruction) -> bool {
         match query_instr {
             &Instruction::PutVariable(r @ RegType::Temp(_), _) |
             &Instruction::SetVariable(r) => {
                 self.mark_var_as_safe(r);
+                true
+            }
+            &Instruction::PutVariable(RegType::Perm(p), t) => {
+                self.temp_vars_to_perm_vars.insert(t, p);
+                true
+            }
+            &Instruction::CallIs(RegType::Temp(t), ..) => {
+                if let Some(p) = self.temp_vars_to_perm_vars.get(&t) {
+                    self.mark_var_as_safe(RegType::Perm(*p));
+                }
+
                 true
             }
             _ => false,
@@ -324,34 +339,37 @@ impl UnsafeVarMarker {
 
     fn mark_unsafe_perm_vars(&mut self, query_instr: &mut Instruction, phase: usize) {
         match query_instr {
-            &mut Instruction::PutValue(RegType::Perm(p), arg) => {
-                if let Some(ph) = self.unsafe_perm_vars.swap_remove(&p) {
-                    if ph == phase {
-                        *query_instr = Instruction::PutUnsafeValue(p, arg);
-                        self.safe_perm_vars.insert(p);
-                    } else {
-                        self.unsafe_perm_vars.insert(p, ph);
+            &mut Instruction::PutValue(RegType::Perm(p), arg)
+                if !self.safe_perm_vars.contains(&p) => {
+                    if let Some(ph) = self.unsafe_perm_vars.swap_remove(&p) {
+                        if ph == phase {
+                            *query_instr = Instruction::PutUnsafeValue(p, arg);
+                            self.safe_perm_vars.insert(p);
+                        } else {
+                            self.unsafe_perm_vars.insert(p, ph);
+                        }
                     }
                 }
-            }
-            &mut Instruction::SetValue(r @ RegType::Perm(p)) if !self.safe_perm_vars.contains(&p) => {
-                *query_instr = Instruction::SetLocalValue(r);
+            &mut Instruction::SetValue(r @ RegType::Perm(p))
+                if !self.safe_perm_vars.contains(&p) => {
+                    *query_instr = Instruction::SetLocalValue(r);
 
-                self.safe_perm_vars.insert(p);
-                self.unsafe_perm_vars.remove(&p);
-            }
+                    self.safe_perm_vars.insert(p);
+                    self.unsafe_perm_vars.remove(&p);
+                }
             _ => {}
         }
     }
 
     fn mark_unsafe_temp_vars(&mut self, query_instr: &mut Instruction) {
         match query_instr {
-            &mut Instruction::SetValue(r @ RegType::Temp(t)) if !self.safe_temp_vars.contains(&t) => {
-                *query_instr = Instruction::SetLocalValue(r);
+            &mut Instruction::SetValue(r @ RegType::Temp(t))
+                if !self.safe_temp_vars.contains(&t) => {
+                    *query_instr = Instruction::SetLocalValue(r);
 
-                self.safe_temp_vars.insert(t);
-                self.unsafe_temp_vars.remove(&t);
-            }
+                    self.safe_temp_vars.insert(t);
+                    self.unsafe_temp_vars.remove(&t);
+                }
             _ => {
             }
         }
@@ -360,6 +378,7 @@ impl UnsafeVarMarker {
     fn clear_temp_vars(&mut self) {
         self.safe_temp_vars.clear();
         self.unsafe_temp_vars.clear();
+        self.temp_vars_to_perm_vars.clear();
     }
 
     pub(crate) fn mark_unsafe_instrs(&mut self, code: &mut Code) {
@@ -382,6 +401,7 @@ impl UnsafeVarMarker {
             }
 
             while code_index < code.len() && !code[code_index].is_query_instr() {
+                self.mark_safe_vars(&code[code_index]);
                 code_index += 1;
             }
 
