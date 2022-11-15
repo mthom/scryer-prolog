@@ -679,4 +679,5 @@ If Scryer Prolog crashes or yields unexpected errors, consider filing
 an&nbsp;[issue](https://github.com/mthom/scryer-prolog/issues).
 
 To get in touch with the Scryer Prolog community, participate in
-[discussions](https://github.com/mthom/scryer-prolog/discussions)!
+[discussions](https://github.com/mthom/scryer-prolog/discussions)
+or visit our #scryer IRC channel on [Libera](https://libera.chat)!
