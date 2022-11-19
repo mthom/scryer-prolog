@@ -3058,11 +3058,10 @@ impl Machine {
         }
 
         if stream.at_end_of_stream() {
-            let end_of_file = atom!("end_of_file");
             stream.set_past_end_of_stream(true);
 
-            self.machine_st.unify_atom(
-                end_of_file,
+            self.machine_st.unify_fixnum(
+                Fixnum::build_with(-1),
                 self.machine_st.store(self.machine_st.deref(self.machine_st.registers[2])),
             );
 
