@@ -17,7 +17,7 @@ use std::collections::BTreeSet;
 
 #[derive(Debug)]
 pub(crate) struct DebrayAllocator {
-    bindings: IndexMap<Var, VarData, FxBuildHasher>,
+    bindings: IndexMap<Var, VarAlloc, FxBuildHasher>,
     arg_c: usize,
     temp_lb: usize,
     arity: usize, // 0 if not at head.
@@ -36,7 +36,7 @@ impl DebrayAllocator {
 
     fn occurs_shallowly_in_head(&self, var: &Var, r: usize) -> bool {
         match self.bindings.get(var).unwrap() {
-            &VarData::Temp(_, _, ref tvd) => tvd.use_set.contains(&(GenContext::Head, r)),
+            &VarAlloc::Temp(_, _, ref tvd) => tvd.use_set.contains(&(GenContext::Head, r)),
             _ => false,
         }
     }
@@ -49,7 +49,7 @@ impl DebrayAllocator {
 
     fn alloc_with_cr(&self, var: &Var) -> usize {
         match self.bindings.get(var) {
-            Some(&VarData::Temp(_, _, ref tvd)) => {
+            Some(&VarAlloc::Temp(_, _, ref tvd)) => {
                 for &(_, reg) in tvd.use_set.iter() {
                     if !self.is_in_use(reg) {
                         return reg;
@@ -75,7 +75,7 @@ impl DebrayAllocator {
 
     fn alloc_with_ca(&self, var: &Var) -> usize {
         match self.bindings.get(var) {
-            Some(&VarData::Temp(_, _, ref tvd)) => {
+            Some(&VarAlloc::Temp(_, _, ref tvd)) => {
                 for &(_, reg) in tvd.use_set.iter() {
                     if !self.is_in_use(reg) {
                         return reg;
@@ -114,7 +114,7 @@ impl DebrayAllocator {
                 // (GenContext::Last(_), k) is in t_var.use_set.
 
                 let tvd = self.bindings.get(t_var).unwrap();
-                if let &VarData::Temp(_, _, ref tvd) = tvd {
+                if let &VarAlloc::Temp(_, _, ref tvd) = tvd {
                     if !tvd.use_set.contains(&(GenContext::Last(chunk_num), k)) {
                         return Some((t_var.clone(), self.alloc_with_ca(t_var)));
                     }
@@ -205,7 +205,7 @@ impl DebrayAllocator {
         match term_loc {
             GenContext::Head if !r.is_perm() => r.reg_num() == k,
             _ => match self.bindings().get(var).unwrap() {
-                &VarData::Temp(_, o, _) if r.reg_num() == k => o == k,
+                &VarAlloc::Temp(_, o, _) if r.reg_num() == k => o == k,
                 _ => false,
             },
         }

@@ -487,6 +487,8 @@ impl VariableClassifier {
         Ok(())
     }
 
+    // TODO: maybe replace Vec<QueryTerm> with an iterator that has, in the stream,
+    // with a 'QueryTerm' that toggles the chunk num and type, like we do here.
     fn classify_body_variables<'a, LS: LoadState<'a>>(
         &mut self,
         loader: &mut Loader<'a, LS>,
@@ -826,6 +828,7 @@ impl BranchMap {
 
         debug_assert_eq!(var_data.records.len(), var_num);
 
+        var_data.fixtures.populate_restricting_sets();
         var_data
     }
 }

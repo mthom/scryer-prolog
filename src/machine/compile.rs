@@ -57,6 +57,7 @@ pub(super) fn compile_relation(
     }
 }
 
+/*
 pub(super) fn compile_appendix(
     code: &mut Code,
     mut queue: VecDeque<TopLevel>,
@@ -97,6 +98,7 @@ pub(super) fn compile_appendix(
 
     Ok(())
 }
+*/
 
 fn lower_bound_of_target_clause(skeleton: &PredicateSkeleton, target_pos: usize) -> usize {
     if target_pos == 0 {
@@ -1342,7 +1344,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         let mut preprocessor = Preprocessor::new(settings);
 
         let clause = self.try_term_to_tl(term, &mut preprocessor)?;
-        let queue = preprocessor.parse_queue(self)?;
+        // let queue = preprocessor.parse_queue(self)?;
 
         let mut cg = CodeGenerator::new(
             &mut LS::machine_st(&mut self.payload).atom_tbl,
@@ -1351,6 +1353,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
 
         let mut clause_code = cg.compile_predicate(&vec![clause])?;
 
+        /*
         compile_appendix(
             &mut clause_code,
             queue,
@@ -1358,6 +1361,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             settings.non_counted_bt,
             cg.atom_tbl,
         )?;
+        */
 
         Ok(StandaloneCompileResult {
             clause_code,
@@ -1385,7 +1389,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             clauses.push(self.try_term_to_tl(term, &mut preprocessor)?);
         }
 
-        let queue = preprocessor.parse_queue(self)?;
+        // let queue = preprocessor.parse_queue(self)?;
 
         let mut cg = CodeGenerator::new(
             &mut LS::machine_st(&mut self.payload).atom_tbl,
@@ -1394,6 +1398,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
 
         let mut code = cg.compile_predicate(&clauses)?;
 
+        /*
         compile_appendix(
             &mut code,
             queue,
@@ -1401,6 +1406,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             settings.non_counted_bt,
             cg.atom_tbl,
         )?;
+         */
 
         if settings.is_extensible {
             let mut clause_clause_locs = VecDeque::new();

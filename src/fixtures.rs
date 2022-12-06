@@ -1,16 +1,10 @@
-use crate::parser::ast::*;
-
 use crate::forms::*;
 use crate::instructions::*;
-use crate::iterators::*;
+use crate::machine::disjuncts::ClassifyInfo;
+use crate::parser::ast::*;
 
 use bit_set::*;
 use indexmap::{IndexMap, IndexSet};
-
-use std::cell::Cell;
-use std::collections::BTreeSet;
-use std::mem::swap;
-use std::vec::Vec;
 
 pub(crate) type OccurrenceSet = IndexSet<(GenContext, usize)>;
 
@@ -28,20 +22,19 @@ pub(crate) struct TempVarStatus {
     temp_var_data: TempVarData,
 }
 
-// TODO: get ridda this! I think.
 // Perm: 0 initially, a stack register once processed.
 // Temp: labeled with chunk_num and temp offset (unassigned if 0).
 #[derive(Debug)]
-pub(crate) enum VarData {
+pub(crate) enum VarAlloc {
     Perm(usize),
     Temp(usize, usize, TempVarData),
 }
 
-impl VarData {
+impl VarAlloc {
     pub(crate) fn as_reg_type(&self) -> RegType {
         match self {
-            &VarData::Temp(_, r, _) => RegType::Temp(r),
-            &VarData::Perm(r) => RegType::Perm(r),
+            &VarAlloc::Temp(_, r, _) => RegType::Temp(r),
+            &VarAlloc::Perm(r) => RegType::Perm(r),
         }
     }
 }
@@ -50,7 +43,7 @@ impl TempVarData {
     pub(crate) fn new(last_term_arity: usize) -> Self {
         TempVarData {
             last_term_arity: last_term_arity,
-            use_set: BitSet::new(),
+            use_set: BitSet::<usize>::new(),
             no_use_set: BitSet::new(),
             conflict_set: BitSet::new(),
         }
@@ -72,7 +65,7 @@ impl TempVarData {
             let mut conflict_set: BitSet<usize> = (1..arity).collect();
 
             for &(_, reg) in self.use_set.iter() {
-                conflict_set.remove(&reg);
+                conflict_set.remove(reg);
             }
 
             self.conflict_set = conflict_set;
@@ -83,25 +76,13 @@ impl TempVarData {
 #[derive(Debug)]
 pub(crate) struct VariableFixtures {
     temp_vars: IndexMap<usize, TempVarStatus>,
-    last_chunk_temp_vars: IndexSet<usize>, // TODO: has no use at all! remove it.
 }
 
-impl<'a> VariableFixtures<'a> {
+impl VariableFixtures {
     pub(crate) fn new() -> Self {
         VariableFixtures {
             temp_vars: IndexMap::new(),
-            last_chunk_temp_vars: IndexSet::new(),
         }
-    }
-
-    // TODO: get rid of this also.
-    pub(crate) fn insert(&mut self, var: Var, vs: VariableFixture<'a>) {
-        self.temp_vars.insert(var, vs);
-    }
-
-    // TODO: used?
-    pub(crate) fn insert_last_chunk_temp_var(&mut self, var: Var) {
-        self.last_chunk_temp_vars.insert(var);
     }
 
     // computes no_use and conflict sets for all temp vars.
@@ -121,7 +102,7 @@ impl<'a> VariableFixtures<'a> {
             let TempVarStatus { ref mut temp_var_data, .. } = var_status;
             let mut use_set = OccurrenceSet::new();
 
-            mem::swap(&mut temp_var_data.use_set, &mut use_set);
+            std::mem::swap(&mut temp_var_data.use_set, &mut use_set);
             use_sets.insert(var_gen_index, use_set);
         }
 

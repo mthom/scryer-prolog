@@ -1,7 +1,7 @@
 use crate::arena::*;
 use crate::atom_table::*;
 use crate::instructions::*;
-use crate::machine::disjuncts::VarRecord;
+use crate::machine::disjuncts::VarData;
 use crate::machine::heap::*;
 use crate::machine::loader::PredicateQueue;
 use crate::machine::machine_errors::*;
@@ -57,7 +57,7 @@ impl AppendOrPrepend {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Level {
     Deep,
     Root,
@@ -79,7 +79,7 @@ pub enum CallPolicy {
     Counted,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum QueryTerm {
     // register, clause type, subterms, clause call policy.
     Clause(Cell<RegType>, ClauseType, Vec<Term>, CallPolicy),
@@ -111,14 +111,14 @@ impl QueryTerm {
 #[derive(Debug, Clone)]
 pub struct Fact {
     pub(crate) head: Term,
-    pub(crate) var_records: Vec<VarRecord>,
+    pub(crate) var_data: VarData,
 }
 
 #[derive(Debug, Clone)]
 pub struct Rule {
     pub(crate) head: (Atom, Vec<Term>, QueryTerm),
     pub(crate) clauses: Vec<QueryTerm>,
-    pub(crate) var_records: Vec<VarRecord>,
+    pub(crate) var_data: VarData,
 }
 
 #[derive(Clone, Debug, Hash)]
@@ -224,7 +224,7 @@ impl ClauseInfo for PredicateClause {
 
 #[derive(Debug, Clone)]
 pub enum PredicateClause {
-    Fact(Term),
+    Fact(Fact),
     Rule(Rule),
 }
 

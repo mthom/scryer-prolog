@@ -553,9 +553,9 @@ impl Preprocessor {
                     self.settings.default_call_policy(),
                 );
 
-                let (head, var_records) = classifier.classify_fact(term)?;
+                let (head, var_data) = classifier.classify_fact(term)?;
 
-                Ok(Fact { head, var_records })
+                Ok(Fact { head, var_data })
             }
             _ => Err(CompilationError::InadmissibleFact),
         }
@@ -571,7 +571,7 @@ impl Preprocessor {
             self.settings.default_call_policy(),
         );
 
-        let (head, mut query_terms, var_records) =
+        let (head, mut query_terms, var_data) =
             classifier.classify_rule(loader, head, body)?;
 
         let clauses = query_terms.drain(1..).collect();
@@ -581,12 +581,12 @@ impl Preprocessor {
             Term::Clause(_, name, terms) => Ok(Rule {
                 head: (name, terms, qt),
                 clauses,
-                var_records,
+                var_data,
             }),
             Term::Literal(_, Literal::Atom(name)) => Ok(Rule {
                 head: (name, vec![], qt),
                 clauses,
-                var_records,
+                var_data,
             }),
             _ => Err(CompilationError::InvalidRuleHead),
         }

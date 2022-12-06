@@ -456,6 +456,7 @@ impl<'b> CodeGenerator<'b> {
         target
     }
 
+    /*
     fn collect_var_data<'a>(&mut self, mut iter: ChunkedIterator<'a>) -> ConjunctInfo<'a> {
         let mut vs = VariableFixtures::new();
 
@@ -486,6 +487,7 @@ impl<'b> CodeGenerator<'b> {
         let vs = self.marker.drain_var_data(vs, num_of_chunks);
         ConjunctInfo::new(vs, num_of_chunks, has_deep_cut)
     }
+    */
 
     fn add_conditional_call(&mut self, code: &mut Code, qt: &QueryTerm, pvs: usize) {
         match qt {
@@ -912,7 +914,8 @@ impl<'b> CodeGenerator<'b> {
         Ok(())
     }
 
-    fn compile_seq_prelude(&mut self, conjunct_info: &ConjunctInfo, body: &mut Code) {
+    fn compile_seq_prelude(&mut self, var_data: &VarData, body: &mut Code) {
+        /*
         if conjunct_info.allocates() {
             let perm_vars = conjunct_info.perm_vars();
 
@@ -922,6 +925,7 @@ impl<'b> CodeGenerator<'b> {
                 body.push(Instruction::GetLevel(perm_v!(1)));
             }
         }
+        */
     }
 
     fn compile_cleanup(
@@ -955,18 +959,19 @@ impl<'b> CodeGenerator<'b> {
     }
 
     pub(crate) fn compile_rule(&mut self, rule: &Rule) -> Result<Code, CompilationError> {
-        let iter = ChunkedIterator::from_rule(rule);
-        let conjunct_info = self.collect_var_data(iter);
+        // let iter = ChunkedIterator::from_rule(rule);
+        // let conjunct_info = self.collect_var_data(iter);
 
         let &Rule {
             head: (_, ref args, ref p1),
             ref clauses,
+            ref var_data,
         } = rule;
 
         let mut code = Code::new();
 
         self.marker.reset_at_head(args);
-        self.compile_seq_prelude(&conjunct_info, &mut code);
+        self.compile_seq_prelude(&var_data, &mut code);
 
         let iter = FactIterator::from_rule_head_clause(args);
         let mut fact = self.compile_target::<FactInstruction, _>(iter, GenContext::Head);
@@ -1015,15 +1020,15 @@ impl<'b> CodeGenerator<'b> {
         UnsafeVarMarker::from_fact_vars(safe_vars)
     }
 
-    pub(crate) fn compile_fact(&mut self, term: &Term) -> Result<Code, CompilationError> {
+    pub(crate) fn compile_fact(&mut self, fact: &Fact) -> Result<Code, CompilationError> {
         self.update_var_count(post_order_iter(term));
 
-        let mut vs = VariableFixtures::new();
+        // let mut vs = VariableFixtures::new();
 
-        vs.mark_vars_in_chunk(post_order_iter(term), term.arity(), GenContext::Head);
+        // vs.mark_vars_in_chunk(post_order_iter(term), term.arity(), GenContext::Head);
 
-        vs.populate_restricting_sets();
-        self.marker.drain_var_data(vs, 1);
+        // vs.populate_restricting_sets();
+        // self.marker.drain_var_data(vs, 1);
 
         let mut code = Vec::new();
 
