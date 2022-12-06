@@ -4336,7 +4336,21 @@ impl Machine {
         let mut addrs = vec![];
 
         for idx in 1..num_cells + 1 {
-            addrs.push(self.machine_st.stack[stack_loc!(AndFrame, e, idx)]);
+            let addr = self.machine_st.stack[stack_loc!(AndFrame, e, idx)];
+            let addr = self.machine_st.store(self.machine_st.deref(addr));
+
+            // avoid pushing stack variables to the heap where they
+            // must not go.
+            if addr.is_stack_var() {
+                let h = self.machine_st.heap.len();
+
+                self.machine_st.heap.push(heap_loc_as_cell!(h));
+                self.machine_st.bind(Ref::heap_cell(h), addr);
+
+                addrs.push(heap_loc_as_cell!(h));
+            } else {
+                addrs.push(addr);
+            }
         }
 
         let chunk = str_loc_as_cell!(self.machine_st.heap.len());
