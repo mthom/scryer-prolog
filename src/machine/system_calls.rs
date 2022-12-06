@@ -6318,7 +6318,7 @@ impl Machine {
     #[inline(always)]
     pub(crate) fn crypto_data_decrypt(&mut self) {
         let data = self.string_encoding_bytes(self.machine_st.registers[1], atom!("octet"));
-        let encoding = cell_as_atom!(self.machine_st.registers[5]);
+        let encoding = cell_as_atom!(self.machine_st.store(self.machine_st.deref(self.machine_st.registers[5])));
 
         let aad = self.string_encoding_bytes(self.machine_st.registers[2], encoding);
         let stub1_gen = || functor_stub(atom!("crypto_data_decrypt"), 7);
