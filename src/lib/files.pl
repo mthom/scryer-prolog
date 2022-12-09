@@ -70,8 +70,9 @@ In this library, directories and files are represented as
                   file_exists/1,
                   directory_exists/1,
                   delete_file/1,
-				  rename_file/2,
-				  delete_directory/1,
+		  rename_file/2,
+		  copy_file/2,
+		  delete_directory/1,
                   make_directory/1,
                   make_directory_path/1,
                   working_directory/2,
@@ -149,6 +150,11 @@ rename_file(File, Renamed) :-
         file_must_exist(File, rename_file/2),
         must_be(chars, Renamed),
         '$rename_file'(File, Renamed).
+
+copy_file(File, Copied) :-
+	file_must_exist(File, copy_file/2),
+	must_be(chars, Copied),
+	'$copy_file'(File, Copied).
 
 %% delete_directory(+Directory).
 %
