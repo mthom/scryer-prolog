@@ -4165,11 +4165,8 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn op_declaration(&mut self) -> CallResult {
-        let priority = self.machine_st.registers[1];
-        let specifier = self.machine_st.registers[2];
-        let op = self.machine_st.registers[3];
-
-        let priority = self.machine_st.store(self.machine_st.deref(priority));
+        let priority = self.deref_register(1);
+        let specifier = cell_as_atom_cell!(self.deref_register(2)).get_name();
 
         let priority = match Number::try_from(priority) {
             Ok(Number::Integer(n)) => n.to_u16().unwrap(),
@@ -4179,10 +4176,7 @@ impl Machine {
             }
         };
 
-        let specifier = cell_as_atom_cell!(self.machine_st.store(self.machine_st.deref(specifier)))
-            .get_name();
-
-        let op = read_heap_cell!(self.machine_st.store(self.machine_st.deref(op)),
+        let op = read_heap_cell!(self.deref_register(3),
             (HeapCellValueTag::Char, c) => {
                 self.machine_st.atom_tbl.build_with(&c.to_string())
             }
@@ -4283,16 +4277,15 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn get_attr_var_queue_delimiter(&mut self) {
-        let addr = self.machine_st.registers[1];
+        let addr = self.deref_register(1);
         let value = Fixnum::build_with(self.machine_st.attr_var_init.attr_var_queue.len() as i64);
 
-        self.machine_st.unify_fixnum(value, self.machine_st.store(self.machine_st.deref(addr)));
+        self.machine_st.unify_fixnum(value, addr);
     }
 
     #[inline(always)]
     pub(crate) fn get_attr_var_queue_beyond(&mut self) {
-        let addr = self.machine_st.registers[1];
-        let addr = self.machine_st.store(self.machine_st.deref(addr));
+        let addr = self.deref_register(1);
 
         let b = match Number::try_from(addr) {
             Ok(Number::Integer(n)) => n.to_usize(),
