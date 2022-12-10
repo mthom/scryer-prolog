@@ -71,7 +71,7 @@ In this library, directories and files are represented as
                   directory_exists/1,
                   delete_file/1,
 		  rename_file/2,
-		  copy_file/2,
+		  file_copy/2,
 		  delete_directory/1,
                   make_directory/1,
                   make_directory_path/1,
@@ -151,10 +151,13 @@ rename_file(File, Renamed) :-
         must_be(chars, Renamed),
         '$rename_file'(File, Renamed).
 
-copy_file(File, Copied) :-
-	file_must_exist(File, copy_file/2),
+%% file_copy(+File, +Copied).
+%
+% Succeeds if File is copied to Copied
+file_copy(File, Copied) :-
+	file_must_exist(File, file_copy/2),
 	must_be(chars, Copied),
-	'$copy_file'(File, Copied).
+	'$file_copy'(File, Copied).
 
 %% delete_directory(+Directory).
 %

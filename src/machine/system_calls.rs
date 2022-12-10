@@ -1654,7 +1654,7 @@ impl Machine {
     }
 
     #[inline(always)]
-    pub(crate) fn copy_file(&mut self) {
+    pub(crate) fn file_copy(&mut self) {
 	if let Some(file) = self.machine_st.value_to_str_like(self.machine_st.registers[1]) {
 	    if let Some(copied) = self.machine_st.value_to_str_like(self.machine_st.registers[2]) {
 		if fs::copy(file.as_str(), copied.as_str()).is_ok() {
