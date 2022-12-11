@@ -412,8 +412,6 @@ enum SystemClauseType {
     GetCurrentBlock,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$get_cp")))]
     GetCutPoint,
-    #[strum_discriminants(strum(props(Arity = "1", Name = "$get_staggered_cp")))]
-    GetStaggeredCutPoint,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$get_double_quotes")))]
     GetDoubleQuotes,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$install_new_block")))]
@@ -1688,7 +1686,6 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallGetBall(_) |
                     &Instruction::CallGetCurrentBlock(_) |
                     &Instruction::CallGetCutPoint(_) |
-                    &Instruction::CallGetStaggeredCutPoint(_) |
                     &Instruction::CallGetDoubleQuotes(_) |
                     &Instruction::CallInstallNewBlock(_) |
                     &Instruction::CallMaybe(_) |
@@ -1902,7 +1899,6 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteGetBall(_) |
                     &Instruction::ExecuteGetCurrentBlock(_) |
                     &Instruction::ExecuteGetCutPoint(_) |
-                    &Instruction::ExecuteGetStaggeredCutPoint(_) |
                     &Instruction::ExecuteGetDoubleQuotes(_) |
                     &Instruction::ExecuteInstallNewBlock(_) |
                     &Instruction::ExecuteMaybe(_) |

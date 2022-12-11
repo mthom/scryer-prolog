@@ -4152,14 +4152,6 @@ impl Machine {
                     self.get_cut_point();
                     step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                 }
-                &Instruction::CallGetStaggeredCutPoint(_) => {
-                    self.get_staggered_cut_point();
-                    step_or_fail!(self, self.machine_st.p += 1);
-                }
-                &Instruction::ExecuteGetStaggeredCutPoint(_) => {
-                    self.get_staggered_cut_point();
-                    step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
-                }
                 &Instruction::CallGetDoubleQuotes(_) => {
                     self.get_double_quotes();
                     step_or_fail!(self, self.machine_st.p += 1);

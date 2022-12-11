@@ -4851,62 +4851,6 @@ impl Machine {
     }
 
     #[inline(always)]
-    pub(crate) fn get_staggered_cut_point(&mut self) {
-        use std::sync::Once;
-
-        let b = self.deref_register(1);
-
-        static mut SEMICOLON_SECOND_BRANCH_LOC: usize = 0;
-        static LOC_INIT: Once = Once::new();
-
-        let semicolon_second_clause_p = unsafe {
-            LOC_INIT.call_once(|| {
-                if let Some(builtins) = self.indices.modules.get(&atom!("builtins")) {
-                    match builtins.code_dir.get(&(atom!("staggered_sc"), 2)).map(|cell| cell.get()) {
-                        Some(ip) if ip.tag() == IndexPtrTag::Index => {
-                            let p = ip.p() as usize;
-
-                            match &self.code[p] {
-                                &Instruction::TryMeElse(o) => {
-                                    SEMICOLON_SECOND_BRANCH_LOC = p + o;
-                                }
-                                _ => {
-                                    unreachable!();
-                                }
-                            }
-                        }
-                        _ => {
-                            unreachable!();
-                        }
-                    }
-                } else {
-                    unreachable!();
-                }
-            });
-
-            SEMICOLON_SECOND_BRANCH_LOC
-        };
-
-        let staggered_b0 = if self.machine_st.b > 0 {
-            let or_frame = self.machine_st.stack.index_or_frame(self.machine_st.b);
-
-            if or_frame.prelude.bp == semicolon_second_clause_p {
-                or_frame.prelude.b0
-            } else {
-                self.machine_st.b0
-            }
-        } else {
-            self.machine_st.b0
-        };
-
-        let staggered_b0 = integer_as_cell!(
-            Number::arena_from(staggered_b0, &mut self.machine_st.arena)
-        );
-
-        self.machine_st.bind(b.as_var().unwrap(), staggered_b0);
-    }
-
-    #[inline(always)]
     pub(crate) fn next_ep(&mut self) {
         let first_arg = self.deref_register(1);
 
