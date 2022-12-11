@@ -677,6 +677,17 @@ impl Machine {
 
                     self.machine_st.p += 1;
                 }
+		&Instruction::Lcm(ref a1, ref a2, t) => {
+		    let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
+		    let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(a2));
+
+		    self.machine_st.interms[t - 1] = try_or_throw_gen!(
+			&mut self.machine_st,
+			lcm(n1, n2, &mut self.machine_st.arena)
+		    );
+
+		    self.machine_st.p += 1;
+		}
                 &Instruction::Pow(ref a1, ref a2, t) => {
                     let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
                     let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(a2));

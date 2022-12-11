@@ -681,6 +681,8 @@ enum InstructionTemplate {
     Rem(ArithmeticTerm, ArithmeticTerm, usize),
     #[strum_discriminants(strum(props(Arity = "2", Name = "gcd")))]
     Gcd(ArithmeticTerm, ArithmeticTerm, usize),
+    #[strum_discriminants(strum(props(Arity = "2", Name = "lcm")))]
+    Lcm(ArithmeticTerm, ArithmeticTerm, usize),
     #[strum_discriminants(strum(props(Arity = "1", Name = "sign")))]
     Sign(ArithmeticTerm, usize),
     #[strum_discriminants(strum(props(Arity = "1", Name = "cos")))]
@@ -1349,6 +1351,9 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::Gcd(ref at_1, ref at_2, t) => {
                         arith_instr_bin_functor(h, atom!("gcd"), arena, at_1, at_2, t)
                     }
+		    &Instruction::Lcm(ref at_1, ref at_2, t) => {
+			arith_instr_bin_functor(h, atom!("lcm"), arena, at_1, at_2, t)
+		    }
                     &Instruction::Sign(ref at, t) => {
                         arith_instr_unary_functor(h, atom!("sign"), arena, at, t)
                     }

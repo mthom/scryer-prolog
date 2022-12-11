@@ -239,6 +239,7 @@ impl<'a> ArithmeticEvaluator<'a> {
             atom!("mod") => Ok(Instruction::Mod(a1, a2, t)),
             atom!("rem") => Ok(Instruction::Rem(a1, a2, t)),
             atom!("gcd") => Ok(Instruction::Gcd(a1, a2, t)),
+	    atom!("lcm") => Ok(Instruction::Lcm(a1, a2, t)),
             atom!("atan2") => Ok(Instruction::ATan2(a1, a2, t)),
             _ => Err(ArithmeticError::NonEvaluableFunctor(Literal::Atom(name), 2)),
         }

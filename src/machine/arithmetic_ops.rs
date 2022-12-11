@@ -942,6 +942,50 @@ pub(crate) fn gcd(n1: Number, n2: Number, arena: &mut Arena) -> Result<Number, M
     }
 }
 
+pub(crate) fn lcm(n1: Number, n2: Number, arena: &mut Arena) -> Result<Number, MachineStubGen> {
+    let stub_gen = || {
+	let lcm_atom = atom!("lcm");
+	functor_stub(lcm_atom, 2)
+    };
+
+    match (n1, n2) {
+	(Number::Fixnum(n1), Number::Fixnum(n2)) => {
+            let n1_i = n1.get_num() as isize;
+            let n2_i = n2.get_num() as isize;
+
+	    if n1_i == 0 && n2_i == 0 {
+		return Ok(Number::arena_from(0, arena))
+	    }
+
+            if let Some(result) = isize_gcd(n1_i, n2_i) {
+		let isize_lcm = n2_i / result * n1_i;
+                Ok(Number::arena_from(isize_lcm, arena))
+            } else {
+                Ok(Number::arena_from(
+                    Integer::from(n1_i).lcm(&Integer::from(n2_i)),
+                    arena,
+                ))
+            }
+        }
+        (Number::Fixnum(n1), Number::Integer(n2)) | (Number::Integer(n2), Number::Fixnum(n1)) => {
+            let n1 = Integer::from(n1.get_num());
+            Ok(Number::arena_from(Integer::from(n2.lcm_ref(&n1)), arena))
+        }
+        (Number::Integer(n1), Number::Integer(n2)) => {
+            Ok(Number::arena_from(Integer::from(n1.lcm_ref(&n2)), arena))
+        }
+	(Number::Float(f), _) | (_, Number::Float(f)) => {
+            let n = Number::Float(f);
+            Err(numerical_type_error(ValidType::Integer, n, stub_gen))
+        }
+        (Number::Rational(r), _) | (_, Number::Rational(r)) => {
+            let n = Number::Rational(r);
+            Err(numerical_type_error(ValidType::Integer, n, stub_gen))
+        }
+    }
+    
+}
+
 pub(crate) fn atan2(n1: Number, n2: Number) -> Result<f64, MachineStubGen> {
     if n1.is_zero() && n2.is_zero() {
         let stub_gen = || {
@@ -1220,6 +1264,9 @@ impl MachineState {
                             atom!("gcd") => self.interms.push(
                                 drop_iter_on_err!(self, iter, gcd(a1, a2, &mut self.arena))
                             ),
+			    atom!("lcm") => self.interms.push(
+				drop_iter_on_err!(self, iter, lcm(a1, a2, &mut self.arena))
+			    ),
                             _ => {
                                 let evaluable_stub = functor_stub(name, 2);
                                 let stub = stub_gen();
