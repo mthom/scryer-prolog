@@ -1,4 +1,4 @@
-:- module(arithmetic, [expmod/4, lsb/2, msb/2, number_to_rational/2,
+:- module(arithmetic, [expmod/4, lcm/3, lsb/2, msb/2, number_to_rational/2,
                        number_to_rational/3, popcount/2,
                        rational_numerator_denominator/3]).
 
@@ -27,6 +27,22 @@ expmod_(Base0, Expo0, Mod, C, R) :-
     Expo is Expo0 >> 1,
     Base is (Base0 * Base0) mod Mod,
     expmod_(Base, Expo, Mod, C, R).
+
+%% lcm(+A, +B, -Lcm) is det.
+%
+% Calculates the Least common multiple for A and B: the smallest positive integer
+% that is divisible by both A and B.
+% 
+% A and B need to be integers.
+lcm(A, B, X) :-
+    builtins:must_be_number(A, lcm/2),
+    builtins:must_be_number(B, lcm/2),
+    (   \+ integer(A) -> type_error(integer, A, lcm/2)
+    ;   \+ integer(B) -> type_error(integer, B, lcm/2)
+    ;   (A = 0, B = 0) -> X = 0
+    ;   builtins:can_be_number(X, lcm/2),
+	X is abs(B) // gcd(A,B) * abs(A)
+    ).
 
 lsb(X, N) :-
     builtins:must_be_number(X, lsb/2),
