@@ -745,11 +745,10 @@ findall_with_existential(Template, Goal, PairedSolutions, Witnesses0, Witnesses)
 
 bagof(Template, Goal, Solution) :-
     error:can_be(list, Solution),
-    term_variables(Template, TemplateVars0),
-    term_variables(Goal, GoalVars0),
-    sort(TemplateVars0, TemplateVars),
-    sort(GoalVars0, GoalVars),
-    set_difference(GoalVars, TemplateVars, Witnesses0),
+    term_variables(Template, TemplateVars),
+    term_variables(Goal, GoalVars),
+    term_variables(TemplateVars+GoalVars, TGVs),
+    lists:append(TemplateVars, Witnesses0, TGVs),
     findall_with_existential(Template, Goal, PairedSolutions0, Witnesses0, Witnesses),
     keysort(PairedSolutions0, PairedSolutions),
     group_by_variants(PairedSolutions, GroupedSolutions),
@@ -773,11 +772,10 @@ iterate_variants_and_sort([_|GroupSolutions], Ws, Solution) :-
 
 setof(Template, Goal, Solution) :-
     error:can_be(list, Solution),
-    term_variables(Template, TemplateVars0),
-    term_variables(Goal, GoalVars0),
-    sort(TemplateVars0, TemplateVars),
-    sort(GoalVars0, GoalVars),
-    set_difference(GoalVars, TemplateVars, Witnesses0),
+    term_variables(Template, TemplateVars),
+    term_variables(Goal, GoalVars),
+    term_variables(TemplateVars+GoalVars, TGVs),
+    lists:append(TemplateVars, Witnesses0, TGVs),
     findall_with_existential(Template, Goal, PairedSolutions0, Witnesses0, Witnesses),
     keysort(PairedSolutions0, PairedSolutions),
     group_by_variants(PairedSolutions, GroupedSolutions),
