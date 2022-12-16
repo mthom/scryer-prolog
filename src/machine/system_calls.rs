@@ -3355,71 +3355,6 @@ impl Machine {
     }
 
     #[inline(always)]
-    pub(crate) fn delete_attribute(&mut self) {
-        let ls0 = self.deref_register(1);
-
-        if let HeapCellValueTag::Lis = ls0.get_tag() {
-            let l1 = ls0.get_value();
-            let ls1 = self.machine_st.store(self.machine_st.deref(heap_loc_as_cell!(l1 + 1)));
-
-            if let HeapCellValueTag::Lis = ls1.get_tag() {
-                let l2 = ls1.get_value();
-
-                let old_addr = self.machine_st.store(self.machine_st.deref(self.machine_st.heap[l1+1]));
-                let tail = self.machine_st.store(self.machine_st.deref(heap_loc_as_cell!(l2 + 1)));
-
-                let tail = if tail.is_var() {
-                    heap_loc_as_cell!(l1 + 1)
-                } else {
-                    tail
-                };
-
-                let trail_ref = read_heap_cell!(old_addr,
-                    (HeapCellValueTag::Var, h) => {
-                        TrailRef::AttrVarHeapLink(h)
-                    }
-                    (HeapCellValueTag::Lis, l) => {
-                        TrailRef::AttrVarListLink(l1 + 1, l)
-                    }
-                    _ => {
-                        unreachable!()
-                    }
-                );
-
-                self.machine_st.heap[l1 + 1] = tail;
-                self.machine_st.trail(trail_ref);
-            }
-        }
-    }
-
-    #[inline(always)]
-     pub(crate) fn delete_head_attribute(&mut self) {
-        let addr = self.deref_register(1);
-
-        debug_assert_eq!(addr.get_tag(), HeapCellValueTag::AttrVar);
-
-        let h = addr.get_value();
-        let addr = self.machine_st.store(self.machine_st.deref(self.machine_st.heap[h + 1]));
-
-        debug_assert_eq!(addr.get_tag(), HeapCellValueTag::Lis);
-
-        let l = addr.get_value();
-        let tail = self.machine_st.store(self.machine_st.deref(self.machine_st.heap[l + 1]));
-
-        let tail = if tail.is_var() {
-            self.machine_st.heap[h] = heap_loc_as_cell!(h);
-            self.machine_st.trail(TrailRef::Ref(Ref::attr_var(h)));
-
-            heap_loc_as_cell!(h + 1)
-        } else {
-            tail
-        };
-
-        self.machine_st.heap[h + 1] = tail;
-        self.machine_st.trail(TrailRef::AttrVarListLink(h + 1, l));
-    }
-
-    #[inline(always)]
     pub(crate) fn dynamic_module_resolution(
         &mut self,
         narity: usize,
@@ -3471,19 +3406,6 @@ impl Machine {
         }
 
         Ok((module_name, key))
-    }
-
-    #[inline(always)]
-    pub(crate) fn enqueue_attributed_var(&mut self) {
-        let addr = self.deref_register(1);
-
-        read_heap_cell!(addr,
-            (HeapCellValueTag::AttrVar, h) => {
-                self.machine_st.attr_var_init.attr_var_queue.push(h);
-            }
-            _ => {
-            }
-        );
     }
 
     #[inline(always)]
@@ -4306,6 +4228,84 @@ impl Machine {
             let list_addr = self.machine_st.registers[2];
             unify!(self.machine_st, var_list_addr, list_addr);
         }
+    }
+
+    #[inline(always)]
+    pub(crate) fn enqueue_attributed_var(&mut self) {
+        let addr = self.deref_register(1);
+
+        read_heap_cell!(addr,
+            (HeapCellValueTag::AttrVar, h) => {
+                self.machine_st.attr_var_init.attr_var_queue.push(h);
+            }
+            _ => {
+            }
+        );
+    }
+
+    #[inline(always)]
+    pub(crate) fn delete_attribute(&mut self) {
+        let ls0 = self.deref_register(1);
+
+        if let HeapCellValueTag::Lis = ls0.get_tag() {
+            let l1 = ls0.get_value();
+            let ls1 = self.machine_st.store(self.machine_st.deref(heap_loc_as_cell!(l1 + 1)));
+
+            if let HeapCellValueTag::Lis = ls1.get_tag() {
+                let l2 = ls1.get_value();
+
+                let old_addr = self.machine_st.store(self.machine_st.deref(self.machine_st.heap[l1+1]));
+                let tail = self.machine_st.store(self.machine_st.deref(heap_loc_as_cell!(l2 + 1)));
+
+                let tail = if tail.is_var() {
+                    heap_loc_as_cell!(l1 + 1)
+                } else {
+                    tail
+                };
+
+                let trail_ref = read_heap_cell!(old_addr,
+                    (HeapCellValueTag::Var, h) => {
+                        TrailRef::AttrVarHeapLink(h)
+                    }
+                    (HeapCellValueTag::Lis, l) => {
+                        TrailRef::AttrVarListLink(l1 + 1, l)
+                    }
+                    _ => {
+                        unreachable!()
+                    }
+                );
+
+                self.machine_st.heap[l1 + 1] = tail;
+                self.machine_st.trail(trail_ref);
+            }
+        }
+    }
+
+    #[inline(always)]
+     pub(crate) fn delete_head_attribute(&mut self) {
+        let addr = self.deref_register(1);
+
+        debug_assert_eq!(addr.get_tag(), HeapCellValueTag::AttrVar);
+
+        let h = addr.get_value();
+        let addr = self.machine_st.store(self.machine_st.deref(self.machine_st.heap[h + 1]));
+
+        debug_assert_eq!(addr.get_tag(), HeapCellValueTag::Lis);
+
+        let l = addr.get_value();
+        let tail = self.machine_st.store(self.machine_st.deref(self.machine_st.heap[l + 1]));
+
+        let tail = if tail.is_var() {
+            self.machine_st.heap[h] = heap_loc_as_cell!(h);
+            self.machine_st.trail(TrailRef::Ref(Ref::attr_var(h)));
+
+            heap_loc_as_cell!(h + 1)
+        } else {
+            tail
+        };
+
+        self.machine_st.heap[h + 1] = tail;
+        self.machine_st.trail(TrailRef::AttrVarListLink(h + 1, l));
     }
 
     #[inline(always)]
