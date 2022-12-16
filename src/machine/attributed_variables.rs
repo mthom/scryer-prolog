@@ -33,8 +33,8 @@ impl AttrVarInitializer {
     }
 
     #[inline]
-    pub(super) fn reset(&mut self) {
-        self.attr_var_queue.clear();
+    pub(super) fn reset(&mut self, len: usize) {
+        self.attr_var_queue.truncate(len);
         self.bindings.clear();
     }
 }

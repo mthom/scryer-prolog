@@ -3683,14 +3683,6 @@ impl Machine {
                     try_or_throw!(self.machine_st, self.get_single_char());
                     step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                 }
-                &Instruction::CallResetAttrVarState(_) => {
-                    self.reset_attr_var_state();
-                    self.machine_st.p += 1;
-                }
-                &Instruction::ExecuteResetAttrVarState(_) => {
-                    self.reset_attr_var_state();
-                    self.machine_st.p = self.machine_st.cp;
-                }
                 &Instruction::CallTruncateIfNoLiftedHeapGrowthDiff(_) => {
                     self.truncate_if_no_lifted_heap_growth_diff();
                     step_or_fail!(self, self.machine_st.p += 1);

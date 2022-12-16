@@ -296,8 +296,6 @@ enum SystemClauseType {
     GetCode,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$get_single_char")))]
     GetSingleChar,
-    #[strum_discriminants(strum(props(Arity = "0", Name = "$reset_attr_var_state")))]
-    ResetAttrVarState,
     #[strum_discriminants(strum(props(Arity = "2", Name = "$truncate_if_no_lh_growth_diff")))]
     TruncateIfNoLiftedHeapGrowthDiff,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$truncate_if_no_lh_growth")))]
@@ -1628,7 +1626,6 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallGetNChars(_) |
                     &Instruction::CallGetCode(_) |
                     &Instruction::CallGetSingleChar(_) |
-                    &Instruction::CallResetAttrVarState(_) |
                     &Instruction::CallTruncateIfNoLiftedHeapGrowthDiff(_) |
                     &Instruction::CallTruncateIfNoLiftedHeapGrowth(_) |
                     &Instruction::CallGetAttributedVariableList(_) |
@@ -1841,7 +1838,6 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteGetNChars(_) |
                     &Instruction::ExecuteGetCode(_) |
                     &Instruction::ExecuteGetSingleChar(_) |
-                    &Instruction::ExecuteResetAttrVarState(_) |
                     &Instruction::ExecuteTruncateIfNoLiftedHeapGrowthDiff(_) |
                     &Instruction::ExecuteTruncateIfNoLiftedHeapGrowth(_) |
                     &Instruction::ExecuteGetAttributedVariableList(_) |

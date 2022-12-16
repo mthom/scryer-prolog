@@ -123,6 +123,7 @@ pub(crate) struct OrFramePrelude {
     pub(crate) tr: usize,
     pub(crate) h: usize,
     pub(crate) b0: usize,
+    pub(crate) attr_var_queue_len: usize,
 }
 
 #[derive(Debug)]

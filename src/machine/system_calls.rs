@@ -4623,9 +4623,9 @@ impl Machine {
     }
 
     #[inline(always)]
-    pub(crate) fn reset_attr_var_state(&mut self) {
+    pub(crate) fn reset_attr_var_state(&mut self, queue_len: usize) {
         self.restore_instr_at_verify_attr_interrupt();
-        self.machine_st.attr_var_init.reset();
+        self.machine_st.attr_var_init.reset(queue_len);
     }
 
     #[inline(always)]
@@ -4653,6 +4653,8 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn return_from_verify_attr(&mut self) {
+        self.restore_instr_at_verify_attr_interrupt();
+
         let e = self.machine_st.e;
         let frame_len = self.machine_st.stack.index_and_frame(e).prelude.univ_prelude.num_cells;
 
