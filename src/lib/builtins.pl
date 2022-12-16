@@ -158,9 +158,8 @@ G1 -> G2 :- control_entry_point((G1 -> G2)).
 :- non_counted_backtracking staggered_if_then/2.
 
 staggered_if_then(G1, G2) :-
-    '$get_staggered_cp'(B),
     call(G1),
-    '$set_cp'(B),
+    !,
     call(G2).
 
 G1 ; G2 :- control_entry_point((G1 ; G2)).
@@ -168,9 +167,15 @@ G1 ; G2 :- control_entry_point((G1 ; G2)).
 
 :- non_counted_backtracking staggered_sc/2.
 
-staggered_sc(G, _) :- call(G).
+staggered_sc(G, _) :-
+    (  nonvar(G),
+       G = '$call'(builtins:staggered_if_then(G1, G2)) ->
+       call(G1),
+       !,
+       call(G2)
+    ;  call(G)
+    ).
 staggered_sc(_, G) :- call(G).
-
 
 !.
 
@@ -179,6 +184,7 @@ staggered_sc(_, G) :- call(G).
 set_cp(B) :- '$set_cp'(B).
 
 ','(G1, G2) :- control_entry_point((G1, G2)).
+
 
 :- non_counted_backtracking control_entry_point/1.
 
@@ -203,47 +209,15 @@ cont_list_goal([Cont], Cont) :- !.
 cont_list_goal(Conts, '$call'(builtins:dispatch_call_list(Conts))).
 
 
-:- non_counted_backtracking module_qualified_cut/1.
-
-module_qualified_cut(Gs) :-
-    (  functor(Gs, call, 1) ->
-       arg(1, Gs, G1)
-    ;  Gs = G1
-    ),
-    functor(G1, (:), 2),
-    arg(2, G1, G2),
-    G2 == !.
-
-
 :- non_counted_backtracking dispatch_prep/3.
 
 dispatch_prep(Gs, B, [Cont|Conts]) :-
     (  callable(Gs) ->
-       (  functor(Gs, ',', 2) ->
-          arg(1, Gs, G1),
-          arg(2, Gs, G2),
-          dispatch_prep(G1, B, IConts1),
-          cont_list_goal(IConts1, Cont),
-          dispatch_prep(G2, B, Conts)
-       ;  functor(Gs, ';', 2) ->
-          arg(1, Gs, G1),
-          arg(2, Gs, G2),
-          dispatch_prep(G1, B, IConts0),
-          dispatch_prep(G2, B, IConts1),
-          cont_list_goal(IConts0, Cont0),
-          cont_list_goal(IConts1, Cont1),
-          Cont = '$call'(builtins:staggered_sc(Cont0, Cont1)),
-          Conts = []
-       ;  functor(Gs, ->, 2) ->
-          arg(1, Gs, G1),
-          arg(2, Gs, G2),
-          dispatch_prep(G1, B, IConts1),
-          dispatch_prep(G2, B, IConts2),
-          cont_list_goal(IConts1, Cont1),
-          cont_list_goal(IConts2, Cont2),
-          Cont = '$call'(builtins:staggered_if_then(Cont1, Cont2)),
-          Conts = []
-       ;  ( Gs == ! ; module_qualified_cut(Gs) ) ->
+       strip_module(Gs, M, Gs0),
+       (  nonvar(Gs0),
+          dispatch_prep_(Gs0, B, [Cont|Conts]) ->
+          true
+       ;  Gs0 == ! ->
           Cont = '$call'(builtins:set_cp(B)),
           Conts = []
        ;  Cont = Gs,
@@ -254,6 +228,28 @@ dispatch_prep(Gs, B, [Cont|Conts]) :-
        Conts = []
     ;  throw(dispatch_prep_error)
     ).
+
+
+:- non_counted_backtracking dispatch_prep_/3.
+
+dispatch_prep_((G1, G2), B, [Cont|Conts]) :-
+    dispatch_prep(G1, B, IConts1),
+    cont_list_goal(IConts1, Cont),
+    dispatch_prep(G2, B, Conts).
+dispatch_prep_((G1 ; G2), B, [Cont|Conts]) :-
+    dispatch_prep(G1, B, IConts0),
+    dispatch_prep(G2, B, IConts1),
+    cont_list_goal(IConts0, Cont0),
+    cont_list_goal(IConts1, Cont1),
+    Cont = '$call'(builtins:staggered_sc(Cont0, Cont1)),
+    Conts = [].
+dispatch_prep_((G1 -> G2), B, [Cont|Conts]) :-
+    dispatch_prep(G1, B, IConts1),
+    dispatch_prep(G2, B, IConts2),
+    cont_list_goal(IConts1, Cont1),
+    cont_list_goal(IConts2, Cont2),
+    Cont = '$call'(builtins:staggered_if_then(Cont1, Cont2)),
+    Conts = [].
 
 
 :- non_counted_backtracking dispatch_call_list/1.
