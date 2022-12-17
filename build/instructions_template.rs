@@ -722,9 +722,9 @@ enum InstructionTemplate {
     Allocate(usize), // num_frames.
     #[strum_discriminants(strum(props(Arity = "0", Name = "deallocate")))]
     Deallocate,
-    #[strum_discriminants(strum(props(Arity = "3", Name = "jmp_by_call")))]
+    #[strum_discriminants(strum(props(Arity = "arity", Name = "jmp_by_call")))]
     JmpByCall(usize, usize), // arity, relative offset.
-    #[strum_discriminants(strum(props(Arity = "3", Name = "jmp_by_execute")))]
+    #[strum_discriminants(strum(props(Arity = "arity", Name = "jmp_by_execute")))]
     JmpByExecute(usize, usize), // arity, relative offset.
     #[strum_discriminants(strum(props(Arity = "1", Name = "rev_jmp_by")))]
     RevJmpBy(usize),
