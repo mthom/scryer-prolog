@@ -1,3 +1,9 @@
+/** Useful general predicates that are not ISO standard yet
+
+Predicates available here are similar to the ones defined in builtin.pl,
+but they're not part of the ISO Prolog standard at the moment.
+*/
+
 :- module(iso_ext, [bb_b_put/2,
                     bb_get/2,
                     bb_put/2,
@@ -22,25 +28,70 @@
 
 :- meta_predicate(forall(0, 0)).
 
+%% forall(Generate, Test).
+%
+% For all bindings possible by Generate, Test must be true.
+%
+% In this example, it checks that all numbers are even:
+% 
+%     ?- Ns = [2,4,6], forall(member(N, Ns), 0 is N mod 2).
+%        Ns = [2,4,6].
 forall(Generate, Test) :-
     \+ (Generate, \+ Test).
 
-%% (non-)backtrackable global variables.
+% (non-)backtrackable global variables.
 
+%% bb_put(+Key, +Value).
+%
+% Sets a global variable named Key (must be an atom) with value Value.
+% The global variable isn't backtrackable. Check bb\_b\_put/2 for the
+% backtrackable version.
+%
+%     ?- bb_put(city, "Valladolid").
+%        true.
+%     ?- bb_get(city, X).
+%        X = "Valladolid".
+% In this example one can understand the difference between bb\_put/2 and
+% bb\_b\_put/2:
+%
+%     ?- bb_put(city, "Valladolid"), (bb_put(city, "Salamanca"), false);(bb_get(city, X)).
+%        X = "Salamanca".
+%     ?- bb_put(city, "Valladolid"), (bb_b_put(city, "Salamanca"), false);(bb_get(city, X)).
+%        X = "Valladolid".
 bb_put(Key, Value) :-
     (  atom(Key) ->
        '$store_global_var'(Key, Value)
     ;  type_error(atom, Key, bb_put/2)
     ).
 
-%% backtrackable global variables.
+% backtrackable global variables.
 
+%% bb_b_put(+Key, +Value).
+%
+% Sets a global variable named Key (must be an atom) with value Value.
+% The global variable is backtrackable. Check bb\_put/2 for the
+% non-backtrackable version.
+%
+%     ?- bb_b_put(city, "Valladolid").
+%        true.
+%     ?- bb_get(city, X).
+%        X = "Valladolid".
+% In this example one can understand the difference between bb\_put/2 and
+% bb\_b\_put/2:
+%
+%     ?- bb_put(city, "Valladolid"), (bb_put(city, "Salamanca"), false);(bb_get(city, X)).
+%        X = "Salamanca".
+%     ?- bb_put(city, "Valladolid"), (bb_b_put(city, "Salamanca"), false);(bb_get(city, X)).
+%        X = "Valladolid".
 bb_b_put(Key, Value) :-
     (  atom(Key) ->
        '$store_backtrackable_global_var'(Key, Value)
     ;  type_error(atom, Key, bb_b_put/2)
     ).
 
+%% bb_get(+Key, -Value).
+%
+% Gets the value Value of a global variable named Key (must be an atom)
 bb_get(Key, Value) :-
     (  atom(Key) ->
        '$fetch_global_var'(Key, Value)
@@ -52,12 +103,23 @@ bb_get(Key, Value) :-
 
 :- meta_predicate(call_cleanup(0, 0)).
 
+%% call_cleanup(Goal, Cleanup).
+%
+% Executes Goal and then, either on success or failure, executes Cleanup.
+% The success or failure of Cleanup is ignored and choice points created inside are destroyed.
 call_cleanup(G, C) :- setup_call_cleanup(true, G, C).
 
 :- meta_predicate(setup_call_cleanup(0, 0, 0)).
 
 :- non_counted_backtracking setup_call_cleanup/3.
 
+%% setup_call_cleanup(Setup, Goal, Cleanup).
+%
+% If Setup succeeds, Cleanup will be called after the execution of Goal. Goal itself can succeed or not.
+%
+% In this example, we use the predicate to always close an open file:
+%
+%     ?- setup_call_cleanup(open(File, read, Stream), do_something_with_stream(Stream), close(Stream)).
 setup_call_cleanup(S, G, C) :-
     '$get_b_value'(B),
     '$call_with_inference_counting'(call(S)),
@@ -144,6 +206,9 @@ handle_ile(B, _, _) :-
 
 :- non_counted_backtracking call_with_inference_limit/3.
 
+%% call_with_inference_limit(Goal, Limit, Result).
+%
+% Similar to `call(Goal)` but it limits the number of inferences for each solution of Goal.
 call_with_inference_limit(G, L, R) :-
     (  integer(L) ->
        (  L < 0 ->
@@ -186,6 +251,10 @@ call_with_inference_limit(_, _, R, Bb, B) :-
     ),
     handle_ile(B, Ball, R).
 
+%% partial_string(String, L, L0)
+%
+% Explicitly construct a partial string "manually". It can be used as an optimized append/3.
+% It's not recommended to use this predicate in application code.
 partial_string(String, L, L0) :-
     (  String == [] ->
        L = L0
@@ -195,9 +264,17 @@ partial_string(String, L, L0) :-
        '$create_partial_string'(Atom, L, L0)
     ).
 
+%% partial_string(+String)
+%
+% Succeeds if String is a _partial string_. A partial string is a string composed of several smaller
+% strings, even just one. That means all strings in Scryer are partial strings.
 partial_string(String) :-
     '$is_partial_string'(String).
 
+%% partial_string_tail(+String, -Tail).
+%
+% Unifies Tail with the last section of the partial string.
+% It's not recommended to use this predicate in application code.
 partial_string_tail(String, Tail) :-
     (  partial_string(String) ->
        '$partial_string_tail'(String, Tail)
@@ -209,6 +286,9 @@ partial_string_tail(String, Tail) :-
 
 :- meta_predicate(call_nth(0, ?)).
 
+%% call_nth(Goal, N).
+%
+% Succeeds when Goal succeeded for the Nth time (there are at least N solutions)
 call_nth(Goal, N) :-
     can_be(integer, N),
     (   integer(N) ->
@@ -247,16 +327,24 @@ call_nth_nesting(C, ID) :-
     bb_put(i_call_nth_counter, C).
 
 
+%% copy_term_nat(Source, Dest)
+%
+% Similar to copy\_term/2 but without attribute variables
 copy_term_nat(Source, Dest) :-
     '$copy_term_without_attr_vars'(Source, Dest).
 
-
+%% asserta(Module, Rule_Fact).
+%
+% Similar to asserta/1 but allows specifying a Module
 asserta(Module, (Head :- Body)) :-
     !,
     '$asserta'(Module, Head, Body).
 asserta(Module, Fact) :-
     '$asserta'(Module, Fact, true).
 
+%% assertz(Module, Rule_Fact).
+%
+% Similar to assertz/1 but allows specifying a Module
 assertz(Module, (Head :- Body)) :-
     !,
     '$assertz'(Module, Head, Body).
