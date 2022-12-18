@@ -3533,6 +3533,14 @@ impl Machine {
                     self.rename_file();
                     step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                 }
+		&Instruction::CallFileCopy(_) => {
+		    self.file_copy();
+		    step_or_fail!(self, self.machine_st.p += 1);
+		}
+		&Instruction::ExecuteFileCopy(_) => {
+		    self.file_copy();
+		    step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+		}
                 &Instruction::CallWorkingDirectory(_) => {
                     try_or_throw!(self.machine_st, self.working_directory());
                     step_or_fail!(self, self.machine_st.p += 1);

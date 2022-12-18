@@ -1654,6 +1654,19 @@ impl Machine {
     }
 
     #[inline(always)]
+    pub(crate) fn file_copy(&mut self) {
+	if let Some(file) = self.machine_st.value_to_str_like(self.machine_st.registers[1]) {
+	    if let Some(copied) = self.machine_st.value_to_str_like(self.machine_st.registers[2]) {
+		if fs::copy(file.as_str(), copied.as_str()).is_ok() {
+		    return;
+		}
+	    }
+	}
+
+	self.machine_st.fail = true;
+    }
+
+    #[inline(always)]
     pub(crate) fn delete_directory(&mut self) {
         if let Some(dir) = self.machine_st.value_to_str_like(self.machine_st.registers[1]) {
             match fs::remove_dir(dir.as_str()) {

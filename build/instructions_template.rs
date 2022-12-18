@@ -262,6 +262,8 @@ enum SystemClauseType {
     DeleteFile,
     #[strum_discriminants(strum(props(Arity = "2", Name = "$rename_file")))]
     RenameFile,
+    #[strum_discriminants(strum(props(Arity = "2", Name = "$file_copy")))]
+    FileCopy,
     #[strum_discriminants(strum(props(Arity = "2", Name = "$working_directory")))]
     WorkingDirectory,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$delete_directory")))]
@@ -1607,6 +1609,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallMakeDirectoryPath(_) |
                     &Instruction::CallDeleteFile(_) |
                     &Instruction::CallRenameFile(_) |
+		    &Instruction::CallFileCopy(_) |
                     &Instruction::CallWorkingDirectory(_) |
                     &Instruction::CallDeleteDirectory(_) |
                     &Instruction::CallPathCanonical(_) |
@@ -1819,6 +1822,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteMakeDirectoryPath(_) |
                     &Instruction::ExecuteDeleteFile(_) |
                     &Instruction::ExecuteRenameFile(_) |
+		    &Instruction::ExecuteFileCopy(_) |
                     &Instruction::ExecuteWorkingDirectory(_) |
                     &Instruction::ExecuteDeleteDirectory(_) |
                     &Instruction::ExecutePathCanonical(_) |
