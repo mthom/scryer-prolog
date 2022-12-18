@@ -5919,10 +5919,10 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn crypto_data_hash(&mut self) {
-        let encoding = cell_as_atom!(self.machine_st.registers[2]);
+        let encoding = cell_as_atom!(self.deref_register(2));
         let bytes = self.string_encoding_bytes(self.machine_st.registers[1], encoding);
 
-        let algorithm = cell_as_atom!(self.machine_st.registers[4]);
+        let algorithm = cell_as_atom!(self.deref_register(4));
 
         let ints_list = match algorithm {
             atom!("sha3_224") => {
@@ -6059,7 +6059,7 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn crypto_data_hkdf(&mut self) {
-        let encoding = cell_as_atom!(self.machine_st.registers[2]);
+        let encoding = cell_as_atom!(self.deref_register(2));
         let data = self.string_encoding_bytes(self.machine_st.registers[1], encoding);
 
         let stub1_gen = || functor_stub(atom!("crypto_data_hkdf"), 4);
@@ -6068,7 +6068,7 @@ impl Machine {
         let stub2_gen = || functor_stub(atom!("crypto_data_hkdf"), 4);
         let info = self.machine_st.integers_to_bytevec(self.machine_st.registers[4], stub2_gen);
 
-        let algorithm = cell_as_atom!(self.machine_st.registers[5]);
+        let algorithm = cell_as_atom!(self.deref_register(5));
 
         let length = self.deref_register(6);
 
@@ -6174,7 +6174,7 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn crypto_data_encrypt(&mut self) {
-        let encoding = cell_as_atom!(self.machine_st.registers[3]);
+        let encoding = cell_as_atom!(self.deref_register(3));
 
         let data = self.string_encoding_bytes(self.machine_st.registers[1], encoding);
         let aad = self.string_encoding_bytes(self.machine_st.registers[2], encoding);
@@ -6314,7 +6314,7 @@ impl Machine {
     #[inline(always)]
     pub(crate) fn ed25519_sign(&mut self) {
         let key = self.string_encoding_bytes(self.machine_st.registers[1], atom!("octet"));
-        let encoding = cell_as_atom!(self.machine_st.registers[3]);
+        let encoding = cell_as_atom!(self.deref_register(3));
         let data = self.string_encoding_bytes(self.machine_st.registers[2], encoding);
 
         let key_pair = match signature::Ed25519KeyPair::from_pkcs8(&key) {
@@ -6342,7 +6342,7 @@ impl Machine {
     #[inline(always)]
     pub(crate) fn ed25519_verify(&mut self) {
         let key = self.string_encoding_bytes(self.machine_st.registers[1], atom!("octet"));
-        let encoding = cell_as_atom!(self.machine_st.registers[3]);
+        let encoding = cell_as_atom!(self.deref_register(3));
         let data = self.string_encoding_bytes(self.machine_st.registers[2], encoding);
         let stub_gen = || functor_stub(atom!("ed25519_verify"), 5);
         let signature = self.machine_st.integers_to_bytevec(self.machine_st.registers[4], stub_gen);
@@ -6531,8 +6531,8 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn chars_base64(&mut self) -> CallResult {
-        let padding = cell_as_atom!(self.machine_st.registers[3]);
-        let charset = cell_as_atom!(self.machine_st.registers[4]);
+        let padding = cell_as_atom!(self.deref_register(3));
+        let charset = cell_as_atom!(self.deref_register(4));
 
         let config = if padding == atom!("true") {
             if charset == atom!("standard") {
