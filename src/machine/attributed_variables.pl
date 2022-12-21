@@ -1,11 +1,9 @@
 :- module('$atts', []).
 
-
 driver(Vars, Values) :-
     iterate(Vars, Values, ListOfListsOfGoalLists),
     !,
     call_goals(ListOfListsOfGoalLists),
-    '$reset_attr_var_state',
     '$return_from_verify_attr'.
 
 iterate([Var|VarBindings], [Value|ValueBindings], [ListOfGoalLists | ListsCubed]) :-

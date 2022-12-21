@@ -262,6 +262,8 @@ enum SystemClauseType {
     DeleteFile,
     #[strum_discriminants(strum(props(Arity = "2", Name = "$rename_file")))]
     RenameFile,
+    #[strum_discriminants(strum(props(Arity = "2", Name = "$file_copy")))]
+    FileCopy,
     #[strum_discriminants(strum(props(Arity = "2", Name = "$working_directory")))]
     WorkingDirectory,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$delete_directory")))]
@@ -296,8 +298,6 @@ enum SystemClauseType {
     GetCode,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$get_single_char")))]
     GetSingleChar,
-    #[strum_discriminants(strum(props(Arity = "0", Name = "$reset_attr_var_state")))]
-    ResetAttrVarState,
     #[strum_discriminants(strum(props(Arity = "2", Name = "$truncate_if_no_lh_growth_diff")))]
     TruncateIfNoLiftedHeapGrowthDiff,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$truncate_if_no_lh_growth")))]
@@ -412,8 +412,6 @@ enum SystemClauseType {
     GetCurrentBlock,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$get_cp")))]
     GetCutPoint,
-    #[strum_discriminants(strum(props(Arity = "1", Name = "$get_staggered_cp")))]
-    GetStaggeredCutPoint,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$get_double_quotes")))]
     GetDoubleQuotes,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$install_new_block")))]
@@ -726,9 +724,9 @@ enum InstructionTemplate {
     Allocate(usize), // num_frames.
     #[strum_discriminants(strum(props(Arity = "0", Name = "deallocate")))]
     Deallocate,
-    #[strum_discriminants(strum(props(Arity = "3", Name = "jmp_by_call")))]
+    #[strum_discriminants(strum(props(Arity = "arity", Name = "jmp_by_call")))]
     JmpByCall(usize, usize), // arity, relative offset.
-    #[strum_discriminants(strum(props(Arity = "3", Name = "jmp_by_execute")))]
+    #[strum_discriminants(strum(props(Arity = "arity", Name = "jmp_by_execute")))]
     JmpByExecute(usize, usize), // arity, relative offset.
     #[strum_discriminants(strum(props(Arity = "1", Name = "rev_jmp_by")))]
     RevJmpBy(usize),
@@ -1611,6 +1609,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallMakeDirectoryPath(_) |
                     &Instruction::CallDeleteFile(_) |
                     &Instruction::CallRenameFile(_) |
+		    &Instruction::CallFileCopy(_) |
                     &Instruction::CallWorkingDirectory(_) |
                     &Instruction::CallDeleteDirectory(_) |
                     &Instruction::CallPathCanonical(_) |
@@ -1630,7 +1629,6 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallGetNChars(_) |
                     &Instruction::CallGetCode(_) |
                     &Instruction::CallGetSingleChar(_) |
-                    &Instruction::CallResetAttrVarState(_) |
                     &Instruction::CallTruncateIfNoLiftedHeapGrowthDiff(_) |
                     &Instruction::CallTruncateIfNoLiftedHeapGrowth(_) |
                     &Instruction::CallGetAttributedVariableList(_) |
@@ -1688,7 +1686,6 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallGetBall(_) |
                     &Instruction::CallGetCurrentBlock(_) |
                     &Instruction::CallGetCutPoint(_) |
-                    &Instruction::CallGetStaggeredCutPoint(_) |
                     &Instruction::CallGetDoubleQuotes(_) |
                     &Instruction::CallInstallNewBlock(_) |
                     &Instruction::CallMaybe(_) |
@@ -1825,6 +1822,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteMakeDirectoryPath(_) |
                     &Instruction::ExecuteDeleteFile(_) |
                     &Instruction::ExecuteRenameFile(_) |
+		    &Instruction::ExecuteFileCopy(_) |
                     &Instruction::ExecuteWorkingDirectory(_) |
                     &Instruction::ExecuteDeleteDirectory(_) |
                     &Instruction::ExecutePathCanonical(_) |
@@ -1844,7 +1842,6 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteGetNChars(_) |
                     &Instruction::ExecuteGetCode(_) |
                     &Instruction::ExecuteGetSingleChar(_) |
-                    &Instruction::ExecuteResetAttrVarState(_) |
                     &Instruction::ExecuteTruncateIfNoLiftedHeapGrowthDiff(_) |
                     &Instruction::ExecuteTruncateIfNoLiftedHeapGrowth(_) |
                     &Instruction::ExecuteGetAttributedVariableList(_) |
@@ -1902,7 +1899,6 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteGetBall(_) |
                     &Instruction::ExecuteGetCurrentBlock(_) |
                     &Instruction::ExecuteGetCutPoint(_) |
-                    &Instruction::ExecuteGetStaggeredCutPoint(_) |
                     &Instruction::ExecuteGetDoubleQuotes(_) |
                     &Instruction::ExecuteInstallNewBlock(_) |
                     &Instruction::ExecuteMaybe(_) |

@@ -570,10 +570,11 @@ impl Machine {
         let old_tr = or_frame.prelude.tr;
         let curr_tr = self.machine_st.tr;
         let target_h = or_frame.prelude.h;
+        let attr_var_queue_len = or_frame.prelude.attr_var_queue_len;
 
         self.machine_st.tr = or_frame.prelude.tr;
+        self.reset_attr_var_state(attr_var_queue_len);
 
-        self.reset_attr_var_state();
         self.machine_st.hb = target_h;
 
         self.unwind_trail(old_tr, curr_tr);
@@ -603,9 +604,10 @@ impl Machine {
         let old_tr = or_frame.prelude.tr;
         let curr_tr = self.machine_st.tr;
         let target_h = or_frame.prelude.h;
+        let attr_var_queue_len = or_frame.prelude.attr_var_queue_len;
 
         self.machine_st.tr = or_frame.prelude.tr;
-        self.reset_attr_var_state();
+        self.reset_attr_var_state(attr_var_queue_len);
 
         self.machine_st.hb = target_h;
         self.machine_st.p = self.machine_st.p + offset;
@@ -640,7 +642,7 @@ impl Machine {
         self.machine_st.tr = or_frame.prelude.tr;
         self.machine_st.b = or_frame.prelude.b;
 
-        self.reset_attr_var_state();
+        self.reset_attr_var_state(or_frame.prelude.attr_var_queue_len);
 
         self.machine_st.hb = target_h;
         self.machine_st.p = self.machine_st.p + offset;
@@ -676,7 +678,7 @@ impl Machine {
         self.machine_st.tr = or_frame.prelude.tr;
         self.machine_st.b = or_frame.prelude.b;
 
-        self.reset_attr_var_state();
+        self.reset_attr_var_state(or_frame.prelude.attr_var_queue_len);
 
         self.machine_st.hb = target_h;
         self.machine_st.p += 1;

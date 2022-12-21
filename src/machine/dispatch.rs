@@ -3533,6 +3533,14 @@ impl Machine {
                     self.rename_file();
                     step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                 }
+		&Instruction::CallFileCopy(_) => {
+		    self.file_copy();
+		    step_or_fail!(self, self.machine_st.p += 1);
+		}
+		&Instruction::ExecuteFileCopy(_) => {
+		    self.file_copy();
+		    step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+		}
                 &Instruction::CallWorkingDirectory(_) => {
                     try_or_throw!(self.machine_st, self.working_directory());
                     step_or_fail!(self, self.machine_st.p += 1);
@@ -3682,14 +3690,6 @@ impl Machine {
                 &Instruction::ExecuteGetSingleChar(_) => {
                     try_or_throw!(self.machine_st, self.get_single_char());
                     step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
-                }
-                &Instruction::CallResetAttrVarState(_) => {
-                    self.reset_attr_var_state();
-                    self.machine_st.p += 1;
-                }
-                &Instruction::ExecuteResetAttrVarState(_) => {
-                    self.reset_attr_var_state();
-                    self.machine_st.p = self.machine_st.cp;
                 }
                 &Instruction::CallTruncateIfNoLiftedHeapGrowthDiff(_) => {
                     self.truncate_if_no_lifted_heap_growth_diff();
@@ -4150,14 +4150,6 @@ impl Machine {
                 }
                 &Instruction::ExecuteGetCutPoint(_) => {
                     self.get_cut_point();
-                    step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
-                }
-                &Instruction::CallGetStaggeredCutPoint(_) => {
-                    self.get_staggered_cut_point();
-                    step_or_fail!(self, self.machine_st.p += 1);
-                }
-                &Instruction::ExecuteGetStaggeredCutPoint(_) => {
-                    self.get_staggered_cut_point();
                     step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                 }
                 &Instruction::CallGetDoubleQuotes(_) => {

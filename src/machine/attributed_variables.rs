@@ -33,8 +33,8 @@ impl AttrVarInitializer {
     }
 
     #[inline]
-    pub(super) fn reset(&mut self) {
-        self.attr_var_queue.clear();
+    pub(super) fn reset(&mut self, len: usize) {
+        self.attr_var_queue.truncate(len);
         self.bindings.clear();
     }
 }
@@ -146,6 +146,16 @@ impl MachineState {
                     }
 
                     let value = unmark_cell_bits!(value);
+
+                    if h != iter.focus() {
+                        let deref_value = heap_bound_store(iter.heap, heap_bound_deref(iter.heap, value));
+
+                        if deref_value.is_compound(iter.heap) {
+                            // a cyclic structure is bound to the attributed variable at h.
+                            // it mustn't be included in seen_vars.
+                            continue;
+                        }
+                    }
 
                     seen_vars.push(value);
                     seen_set.insert(h);

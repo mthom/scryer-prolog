@@ -13,7 +13,7 @@ programming, which is itself written in a high-level language.
 Produce an implementation of the Warren Abstract Machine in Rust, done
 according to the progression of languages in [Warren's Abstract
 Machine: A Tutorial
-Reconstruction](http://wambook.sourceforge.net/wambook.pdf).
+Reconstruction](https://github.com/mthom/scryer-prolog/blob/master/wambook/wambook.pdf).
 
 Phase 1 has been completed in that Scryer Prolog implements in some form
 all of the WAM book, including lists, cuts, Debray allocation, first

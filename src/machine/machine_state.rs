@@ -849,6 +849,7 @@ impl MachineState {
         or_frame.prelude.tr = self.tr;
         or_frame.prelude.h = self.heap.len();
         or_frame.prelude.b0 = self.b0;
+        or_frame.prelude.attr_var_queue_len = self.attr_var_init.attr_var_queue.len();
 
         self.b = b;
 
@@ -876,6 +877,7 @@ impl MachineState {
         or_frame.prelude.tr = self.tr;
         or_frame.prelude.h = self.heap.len();
         or_frame.prelude.b0 = self.b0;
+        or_frame.prelude.attr_var_queue_len = self.attr_var_init.attr_var_queue.len();
 
         self.b = b;
 
