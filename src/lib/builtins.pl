@@ -208,7 +208,7 @@ set_prolog_flag(Flag, _) :-
 
 %% fail.
 %
-% A predicate that always fails
+% A predicate that always fails. The more declarative false/0 should be used instead.
 fail :- '$fail'.
 
 
@@ -216,13 +216,13 @@ fail :- '$fail'.
 
 %% \+(Goal)
 %
-% Succeeds if Goal fails
+% True iff Goal fails
 \+ G :- call(G), !, false.
 \+ _.
 
 %% \=(?X, ?Y)
 %
-% Succeeds if X and Y can't be unified
+% True iff X and Y can't be unified
 X \= X :- !, false.
 _ \= _.
 
@@ -237,7 +237,7 @@ once(G) :- call(G), !.
 
 %% repeat.
 %
-% This predicate enters an infinite loop, always succeeding and generating infinite choice points
+% This predicate succeeds arbitrarily often, generating choice points with that.
 repeat.
 repeat :- repeat.
 
@@ -458,7 +458,7 @@ univ_errors(Term, List, N) :-
 
 %% =..(Term, List)
 %
-% Univ operator. Term is a term whose functor is the head of the List, and the rest of arguments of Term
+% Univ operator. True iff Term is a term whose functor is the head of the List, and the rest of arguments of Term
 % are in tail of the List. Example:
 %
 %     ?- f(a, X) =.. List.
@@ -1032,7 +1032,7 @@ setof(Template, Goal, Solution) :-
 
 %% clause(Head, Body).
 %
-% Succeeds if Head can be unified with a clause head and Body with its corresponding clause body.
+% True iff Head can be unified with a clause head and Body with its corresponding clause body.
 clause(H, B) :-
     (  var(H) ->
        throw(error(instantiation_error, clause/2))
@@ -1271,7 +1271,7 @@ abolish(Pred) :-
 %% current_predicate(Pred).
 %
 % Pred must satisfy: `Pred = Name/Arity`.
-% Pred unifies with a predicate description of a predicate that is currently loaded at the moment.
+% True iff there's a predicate Pred that is currently loaded at the moment.
 % It can be used to check for existence of a predicate or to enumerate all loaded predicates
 current_predicate(Pred) :-
     (  var(Pred) ->
@@ -1305,7 +1305,7 @@ can_be_op_specifier(Spec) :- op_specifier(Spec).
 
 %% current_op(Priority, Spec, Op)
 %
-% Succeeds if there's an operator defined with name Op, with spec Spec and priority Priority.
+% True iff there's an operator defined with name Op, with spec Spec and priority Priority.
 % Can be used to find all operators currently defined.
 current_op(Priority, Spec, Op) :-
     (  can_be_op_priority(Priority),
@@ -1408,7 +1408,7 @@ halt(N) :-
 
 %% atom_length(+Atom, -Length).
 %
-% Succeeds when Atom is an atom of Length characters. Example:
+% True iff Atom is an atom of Length characters. Example:
 %
 %     ?- atom_length(marseille, N).
 %        N = 9.
@@ -1707,7 +1707,7 @@ number_codes(N, Chs) :-
 
 %% subsumes_term(General, Specific)
 %
-% Succeeds if General can be made equivalent to Specific by only binding variables
+% True iff General can be made equivalent to Specific by only binding variables
 % in Generic. The implementation unifies with occurs check always and ensures that
 % the variables of Specific did not change. Some examples:
 %
@@ -1725,7 +1725,7 @@ subsumes_term(General, Specific) :-
 
 %% unify_with_occurs_check(?X, ?Y).
 %
-% Unify with occurs check.The occurs check prevents the creation cyclic terms but is
+% True iff X and Y unify with occurs check. The occurs check prevents the creation cyclic terms but is
 % computationally more expensive. The (=)/2 operator can also do occurs check if enabled
 % via set\_prolog\_flag/2. Example:
 %
@@ -2067,7 +2067,7 @@ stream_property(S, P) :-
 
 %% at_end_of_stream(+Stream).
 %
-% Succeeds if the stream Stream has ended
+% True iff the stream Stream has ended
 at_end_of_stream(S_or_a) :-
     (  var(S_or_a) ->
        throw(error(instantiation_error, at_end_of_stream/1))
@@ -2080,7 +2080,7 @@ at_end_of_stream(S_or_a) :-
 
 %% at_end_of_stream.
 %
-% Succeeds if the current input stream has ended
+% True iff the current input stream has ended
 at_end_of_stream :-
     current_input(S),
     stream_property(S, end_of_stream(E)),
@@ -2101,7 +2101,7 @@ set_stream_position(S_or_a, Position) :-
 
 %% callable(X).
 %
-% Succeeds if X is bound o an atom or a compund term.
+% True iff X is bound o an atom or a compund term.
 callable(X) :-
     (  nonvar(X), functor(X, F, _), atom(F) ->
        true
