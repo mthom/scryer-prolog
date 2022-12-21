@@ -38,18 +38,18 @@ internal settings and basic I/O are all here.
 
 %% =(?X, ?Y)
 %
-% Unify two variables. This is the most basic operation of Prolog.
+% True if X and Y can be unified. This is the most basic operation of Prolog.
 % Unification also happens when doing head matching in a rule.
 X = X.
 
 %% true.
 %
-% Always succeeds
+% Always true.
 true.
 
 %% false.
 %
-% Always fails
+% Always false.
 false :- '$fail'.
 
 
@@ -119,8 +119,9 @@ call(_, _, _, _, _, _, _, _, _).
 
 %% current_prolog_flag(Flag, Value)
 %
-% Returns the current Value of several flags in the running system. A flag is a setting which value affects
-% internal operation of the Prolog system. Some flags are read-only, while others can be set with set\_prolog\_flag/2.
+% True iff Flag is a flag supported by the processor, and Value is the value currently associated with it.
+% A flag is a setting which value affects internal operation of the Prolog system. Some flags are read-only,
+% while others can be set with set\_prolog\_flag/2.
 %
 % The flags that Scryer Prolog support are:
 %  * `max\_arity`: The max arity a predicate can have in Prolog. On Scryer is set to 1023. Read only.
@@ -163,7 +164,7 @@ current_prolog_flag(Flag, _) :-
 
 %% set_prolog_flag(Flag, Value).
 %
-% Changes the internal value of the flag. To see the list of flags supported by Scryer Prolog,
+% Sets the internal value of the flag. To see the list of flags supported by Scryer Prolog,
 % check current\_prolog\_flag/2. The flags that are read only will fail if you try to change their values 
 set_prolog_flag(Flag, Value) :-
     (var(Flag) ; var(Value)),
