@@ -41,8 +41,7 @@
     (  L \= Attr ->
        nonvar(Ls),
        '$get_from_list'(Ls, V, Attr)
-    ;  L = Attr,
-       '$enqueue_attr_var'(V)
+    ;  L = Attr
     ).
 
 '$put_attr'(V, Attr) :-
@@ -65,8 +64,7 @@
     nonvar(Att),
     (  Att \= Attr ->
        '$del_attr_buried'(Ls0, Ls1, V, Attr)
-    ;  '$enqueue_attr_var'(V),
-       '$del_attr_head'(V),
+    ;  '$del_attr_head'(V),
        '$del_attr'(Ls1, V, Attr)
     ).
 
@@ -84,8 +82,7 @@
     ;  Ls1 = [Att | Ls2] ->
        (  Att \= Attr ->
           '$del_attr_buried'(Ls1, Ls2, V, Attr)
-       ;  '$enqueue_attr_var'(V),
-	      '$del_attr_non_head'(Ls0), %% set tail of Ls0 = tail of Ls1. can be undone by backtracking.
+       ;  '$del_attr_non_head'(Ls0), %% set tail of Ls0 = tail of Ls1. can be undone by backtracking.
 	      '$del_attr_step'(Ls1, V, Attr)
        )
     ).
