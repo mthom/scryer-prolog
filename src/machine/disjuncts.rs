@@ -137,24 +137,6 @@ impl DerefMut for BranchMap {
 
 type RootSet = IndexSet<BranchNumber>;
 
-#[derive(Debug, Clone, Copy)]
-enum ChunkType {
-    Head,
-    Mid,
-    Last,
-}
-
-impl ChunkType {
-    #[inline(always)]
-    fn to_gen_context(self, chunk_num: usize) -> GenContext {
-        match self {
-            ChunkType::Head => GenContext::Head,
-            ChunkType::Mid => GenContext::Mid(chunk_num),
-            ChunkType::Last => GenContext::Last(chunk_num),
-        }
-    }
-}
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct ClassifyInfo {
     arg_c: usize,
@@ -257,7 +239,7 @@ fn merge_branch_seq<Iter: Iterator<Item = BranchInfo>>(branches: Iter) -> Branch
 }
 
 fn flatten_into_disjunct(build_stack: &mut Vec<QueryTerm>, preceding_len: usize) {
-    let iter = build_stack.drain(preceding_len ..);
+    let iter = build_stack.drain(preceding_len + 1 ..);
 
     if let QueryTerm::Branch(ref mut disjuncts) = &mut build_stack[preceding_len] {
         disjuncts.push(iter.collect());
@@ -341,28 +323,6 @@ impl VariableClassifier {
 
         Ok((head, query_terms, self.branch_map.separate_and_classify_variables()))
     }
-
-    /*
-    pub fn to_branch_map(mut self, term: Term) -> Result<ClassifierResult, CompilationError> {
-        self.root_set.insert(BranchNumber::default());
-
-        let (head_term, query_terms) = match term {
-            Term::Clause(_, atom!(":-"), terms) if terms.len() == 2 => {
-                let head_term = terms[0];
-
-                self.classify_head_variables(&head_term)?;
-                (head_term, self.classify_body_variables(terms[1])?)
-            }
-            _ => {
-                self.classify_head_variables(&term)?;
-                (term, vec![])
-            }
-        };
-
-        self.merge_branches();
-        Ok((head_term, query_terms, self.branch_map))
-    }
-    */
 
     fn merge_branches(&mut self) {
         for branches in self.branch_map.values_mut() {
@@ -487,8 +447,6 @@ impl VariableClassifier {
         Ok(())
     }
 
-    // TODO: maybe replace Vec<QueryTerm> with an iterator that has, in the stream,
-    // with a 'QueryTerm' that toggles the chunk num and type, like we do here.
     fn classify_body_variables<'a, LS: LoadState<'a>>(
         &mut self,
         loader: &mut Loader<'a, LS>,
@@ -515,15 +473,18 @@ impl VariableClassifier {
                 TraversalState::IncrChunkNum => {
                     self.current_chunk_num += 1;
                     chunk_type = ChunkType::Mid;
+                    build_stack.push(QueryTerm::ChunkTypeBoundary(chunk_type));
                 }
                 TraversalState::ResetCallPolicy(call_policy) => {
                     self.call_policy = call_policy;
                 }
                 TraversalState::SetLastChunkType => {
                     chunk_type = ChunkType::Last;
+                    build_stack.push(QueryTerm::ChunkTypeBoundary(chunk_type));
                 }
                 TraversalState::BuildDisjunct(reset_chunk_type, preceding_len) => {
                     chunk_type = reset_chunk_type;
+                    build_stack.push(QueryTerm::ChunkTypeBoundary(chunk_type));
                     flatten_into_disjunct(&mut build_stack, preceding_len);
                 }
                 TraversalState::BuildFinalDisjunct(preceding_len) => {
@@ -579,7 +540,7 @@ impl VariableClassifier {
                             }
 
                             let build_stack_len = build_stack.len();
-                            build_stack.push(QueryTerm::Branch(vec![]));
+                            build_stack.push(QueryTerm::Branch(Vec::with_capacity(branches.len())));
 
                             state_stack.push(TraversalState::RepBranchNum(
                                 self.current_branch_num.halve_delta(),
@@ -630,6 +591,7 @@ impl VariableClassifier {
                             state_stack.push(TraversalState::IncrChunkNum);
 
                             // TODO: need to classify this variable?
+                            // what is the difference between $get_cp and this exactly?
                             if let Term::Var(_, ref var) = &terms[0] {
                                 build_stack.push(
                                     QueryTerm::GetLevelAndUnify(

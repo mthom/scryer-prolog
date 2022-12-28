@@ -79,6 +79,24 @@ pub enum CallPolicy {
     Counted,
 }
 
+#[derive(Debug, Clone, Copy)]
+enum ChunkType {
+    Head,
+    Mid,
+    Last,
+}
+
+impl ChunkType {
+    #[inline(always)]
+    pub fn to_gen_context(self, chunk_num: usize) -> GenContext {
+        match self {
+            ChunkType::Head => GenContext::Head,
+            ChunkType::Mid => GenContext::Mid(chunk_num),
+            ChunkType::Last => GenContext::Last(chunk_num),
+        }
+    }
+}
+
 #[derive(Debug)]
 pub enum QueryTerm {
     // register, clause type, subterms, clause call policy.
@@ -88,6 +106,7 @@ pub enum QueryTerm {
     IfThen(Vec<QueryTerm>, Vec<QueryTerm>),
     Branch(Vec<Vec<QueryTerm>>),
     GetLevelAndUnify(Cell<VarReg>, Var),
+    ChunkTypeBoundary(ChunkType),
 }
 
 impl QueryTerm {
