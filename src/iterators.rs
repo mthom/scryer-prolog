@@ -424,6 +424,7 @@ pub(crate) fn breadth_first_iter<'a>(term: &'a Term, iterable_root: bool) -> Fac
     FactIterator::new(term, iterable_root)
 }
 
+/*
 #[derive(Debug)]
 pub(crate) enum ChunkedTerm<'a> {
     HeadClause(Atom, &'a Vec<Term>),
@@ -563,3 +564,4 @@ impl<'a> Iterator for ChunkedIterator<'a> {
         self.iter.next().map(|term| self.take_chunk(term))
     }
 }
+*/
