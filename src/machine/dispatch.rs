@@ -1152,17 +1152,6 @@ impl Machine {
                     self.machine_st[r] = fixnum_as_cell!(Fixnum::build_with(b0 as i64));
                     self.machine_st.p += 1;
                 }
-                &Instruction::GetLevelAndUnify(r) => {
-                    // let b0 = self.machine_st[perm_v!(1)];
-                    let b0 = cell_as_fixnum!(
-                        self.machine_st.stack[stack_loc!(AndFrame, self.machine_st.e, 1)]
-                    );
-                    let a = self.machine_st.store(self.machine_st.deref(self.machine_st[r]));
-
-                    // unify_fn!(&mut self.machine_st, a, b0);
-                    self.machine_st.unify_fixnum(b0, a);
-                    step_or_fail!(self, self.machine_st.p += 1);
-                }
                 &Instruction::Cut(r) => {
                     let value = self.machine_st[r];
                     self.machine_st.cut_body(value);

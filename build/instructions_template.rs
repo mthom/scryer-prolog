@@ -639,8 +639,6 @@ enum InstructionTemplate {
     Cut(RegType),
     #[strum_discriminants(strum(props(Arity = "1", Name = "get_level")))]
     GetLevel(RegType),
-    #[strum_discriminants(strum(props(Arity = "1", Name = "get_level_and_unify")))]
-    GetLevelAndUnify(RegType),
     #[strum_discriminants(strum(props(Arity = "0", Name = "neck_cut")))]
     NeckCut,
     // choice instruction
@@ -1297,10 +1295,6 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::GetLevel(r) => {
                         let rt_stub = reg_type_into_functor(r);
                         functor!(atom!("get_level"), [str(h, 0)], [rt_stub])
-                    }
-                    &Instruction::GetLevelAndUnify(r) => {
-                        let rt_stub = reg_type_into_functor(r);
-                        functor!(atom!("get_level_and_unify"), [str(h, 0)], [rt_stub])
                     }
                     &Instruction::NeckCut => {
                         functor!(atom!("neck_cut"))

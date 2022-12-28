@@ -105,7 +105,6 @@ pub enum QueryTerm {
     Not(Vec<QueryTerm>),
     IfThen(Vec<QueryTerm>, Vec<QueryTerm>),
     Branch(Vec<Vec<QueryTerm>>),
-    GetLevelAndUnify(Cell<VarReg>, Var),
     ChunkTypeBoundary(ChunkType),
 }
 
@@ -122,7 +121,7 @@ impl QueryTerm {
             &QueryTerm::Clause(_, _, ref subterms, ..) => subterms.len(),
             &QueryTerm::Cut | &QueryTerm::Branch(_) => 0,
             &QueryTerm::IfThen(..) => 2,
-            &QueryTerm::Not(_) | &QueryTerm::GetLevelAndUnify(..) => 1,
+            &QueryTerm::Not(_) => 1,
         }
     }
 }

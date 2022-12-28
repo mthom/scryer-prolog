@@ -173,10 +173,6 @@ impl<'a> QueryIterator<'a> {
             &QueryTerm::Cut => {
                 self.state_stack.push(TermIterState::Cut(lvl));
             }
-            &QueryTerm::GetLevelAndUnify(ref cell, ref var) => {
-                // TODO: get rid of it if possible. or! specialized TermIterState variant.
-                self.state_stack.push(TermIterState::Var(lvl, cell, VarPtr::from(var)));
-            }
             &QueryTerm::Not(ref terms) => {
                 self.state_stack.push(TermIterState::Fail(lvl));
                 self.state_stack.push(TermIterState::Cut(lvl));
@@ -520,11 +516,6 @@ impl<'a> ChunkedIterator<'a> {
                 }
                 ChunkedTerm::BodyTerm(&QueryTerm::Cut) => {
                     result.push(term);
-                }
-                ChunkedTerm::BodyTerm(&QueryTerm::GetLevelAndUnify(..)) => {
-                    result.push(term);
-                    arity = 1;
-                    break;
                 }
                 ChunkedTerm::BodyTerm(&QueryTerm::Clause(_, ClauseType::Inlined(_), ..)) => {
                     result.push(term);

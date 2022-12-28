@@ -566,7 +566,7 @@ impl VariableClassifier {
 
                             let build_stack_len = build_stack.len();
 
-                            // TODO: insert GetLevelAndUnify between
+                            // TODO: insert GetCutPoint between
                             // the two traversal states and detect
                             // that as a chunk boundary in
                             // insert_set_last_chunk_type ??
@@ -586,22 +586,6 @@ impl VariableClassifier {
 
                             state_stack.push(TraversalState::BuildNot(build_stack_len));
                             state_stack.push(TraversalState::Term(terms[0]));
-                        }
-                        Term::Clause(_, atom!("$get_level"), terms) if terms.len() == 1 => {
-                            state_stack.push(TraversalState::IncrChunkNum);
-
-                            // TODO: need to classify this variable?
-                            // what is the difference between $get_cp and this exactly?
-                            if let Term::Var(_, ref var) = &terms[0] {
-                                build_stack.push(
-                                    QueryTerm::GetLevelAndUnify(
-                                        Cell::default(),
-                                        var.clone(),
-                                    ),
-                                );
-                            } else {
-                                return Err(CompilationError::InadmissibleQueryTerm);
-                            }
                         }
                         Term::Clause(_, atom!(":"), mut terms) if terms.len() == 2 => {
                             let term_loc = chunk_type.to_gen_context(self.current_chunk_num);

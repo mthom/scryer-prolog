@@ -840,25 +840,6 @@ impl<'b> CodeGenerator<'b> {
         code.push(instr!("$set_cp", cell.get().norm(), 0));
     }
 
-    fn compile_get_level_and_unify(
-        &mut self,
-        code: &mut Code,
-        cell: &Cell<VarReg>,
-        var: Var,
-        term_loc: GenContext,
-    ) {
-        let mut target = Code::new();
-
-        self.marker.reset_arg(1);
-        self.marker.mark_var::<QueryInstruction>(var, Level::Shallow, cell, term_loc, &mut target);
-
-        if !target.is_empty() {
-            code.extend(target.into_iter());
-        }
-
-        code.push(instr!("get_level_and_unify", cell.get().norm()));
-    }
-
     fn compile_seq<'a>(
         &mut self,
         iter: ChunkedIterator<'a>,
@@ -874,9 +855,6 @@ impl<'b> CodeGenerator<'b> {
                 };
 
                 match *term {
-                    &QueryTerm::GetLevelAndUnify(ref cell, ref var) => {
-                        self.compile_get_level_and_unify(code, cell, var.clone(), term_loc)
-                    }
                     &QueryTerm::UnblockedCut(ref cell) => self.compile_unblocked_cut(code, cell),
                     &QueryTerm::BlockedCut => code.push(if chunk_num == 0 {
                         Instruction::NeckCut

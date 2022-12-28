@@ -175,7 +175,7 @@ scc_helper(_, _, _) :-
 
 run_cleaners_with_handling :-
     '$get_scc_cleaner'(C),
-    '$get_level'(B),
+    '$get_cp'(B),
     catch(C, _, true),
     '$set_cp_by_default'(B),
     run_cleaners_with_handling.
@@ -186,7 +186,7 @@ run_cleaners_with_handling :-
 
 run_cleaners_without_handling(Cp) :-
     '$get_scc_cleaner'(C),
-    '$get_level'(B),
+    '$get_cp'(B),
     call(C),
     '$set_cp_by_default'(B),
     run_cleaners_without_handling(Cp).
@@ -258,7 +258,7 @@ call_with_inference_limit(_, _, R, Bb, B) :-
     '$remove_inference_counter'(B, _),
     (  '$get_ball'(Ball),
        '$push_ball_stack',
-       '$get_level'(Cp),
+       '$get_cp'(Cp),
        '$set_cp_by_default'(Cp)
     ;  '$remove_call_policy_check'(B),
        '$fail'
