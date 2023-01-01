@@ -77,8 +77,7 @@ pub(crate) struct QueryIterator<'a> {
 
 impl<'a> QueryIterator<'a> {
     fn push_subterm(&mut self, lvl: Level, term: &'a Term) {
-        self.state_stack
-            .push(TermIterState::subterm_to_state(lvl, term));
+        self.state_stack.push(TermIterState::subterm_to_state(lvl, term));
     }
 
     fn from_rule_head_clause(terms: &'a Vec<Term>) -> Self {
@@ -193,7 +192,29 @@ impl<'a> Iterator for QueryIterator<'a> {
                 TermIterState::InitialCons(lvl, cell, head, tail) => {
                     self.state_stack.push(TermIterState::FinalCons(lvl, cell, head, tail));
 
-                    self.push_subterm(lvl.child_level(), tail);
+                    if let Term::Cons(inner_cell, inner_head, inner_tail) = tail {
+                        // if the lvl is shallow, we've encountered
+                        // the first cons cell of a list. for all
+                        // remaining cons cells in the list, use the
+                        // parent cons' register cell so that the same
+                        // register is used across all the put_list
+                        // instructions for this list except the head.
+
+                        self.state_stack.push(TermIterState::InitialCons(
+                            lvl.child_level(),
+                            if let Level::Deep = lvl {
+                                cell
+                            } else {
+                                inner_cell
+                            },
+                            inner_head.as_ref(),
+                            inner_tail.as_ref(),
+                        ));
+                    } else {
+                        self.push_subterm(lvl.child_level(), tail);
+                    }
+
+                    // self.push_subterm(lvl.child_level(), tail);
                     self.push_subterm(lvl.child_level(), head);
                 }
                 TermIterState::InitialPartialString(lvl, cell, string, tail) => {

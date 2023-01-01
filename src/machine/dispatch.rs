@@ -3202,7 +3202,9 @@ impl Machine {
                     self.machine_st.p += 1;
                 }
                 &Instruction::PutList(_, reg) => {
-                    self.machine_st[reg] = list_loc_as_cell!(self.machine_st.heap.len());
+                    // subtract 2 because the instructions to emit the terms to the heap
+                    // precede this instruction.
+                    self.machine_st[reg] = list_loc_as_cell!(self.machine_st.heap.len() - 2);
                     self.machine_st.p += 1;
                 }
                 &Instruction::PutPartialString(_, string, reg, has_tail) => {

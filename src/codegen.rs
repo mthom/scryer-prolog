@@ -242,6 +242,70 @@ fn trim_structure_by_last_arg(instr: &mut Instruction, last_arg: &Term) {
     }
 }
 
+trait ConsCompile<'a>: CompilationTarget<'a> {
+    fn compile_cons(
+        cg: &mut CodeGenerator,
+        lvl: Level,
+        term_loc: GenContext,
+        head: &'a Term,
+        tail: &'a Term,
+        cell: &'a Cell<RegType>,
+        is_exposed: bool,
+        target: &mut Code,
+    );
+}
+
+impl<'a> ConsCompile<'a> for FactInstruction {
+    fn compile_cons(
+        cg: &mut CodeGenerator,
+        lvl: Level,
+        term_loc: GenContext,
+        head: &'a Term,
+        tail: &'a Term,
+        cell: &'a Cell<RegType>,
+        is_exposed: bool,
+        target: &mut Code,
+    ) {
+        cg.marker.mark_non_var::<FactInstruction>(lvl, term_loc, cell, target);
+        target.push(FactInstruction::to_list(lvl, cell.get()));
+
+        cg.subterm_to_instr::<FactInstruction>(head, term_loc, is_exposed, target);
+        cg.subterm_to_instr::<FactInstruction>(tail, term_loc, is_exposed, target);
+    }
+}
+
+impl<'a> ConsCompile<'a> for QueryInstruction {
+    fn compile_cons(
+        cg: &mut CodeGenerator,
+        lvl: Level,
+        term_loc: GenContext,
+        head: &'a Term,
+        tail: &'a Term,
+        cell: &'a Cell<RegType>,
+        is_exposed: bool,
+        target: &mut Code,
+    ) {
+        let mut r_opt = None;
+
+        if let Term::Cons(..) = tail {
+            if lvl == Level::Deep {
+                r_opt = Some(cell.get());
+            }
+        }
+
+        cg.marker.mark_non_var::<QueryInstruction>(lvl, term_loc, cell, target);
+        cg.subterm_to_instr::<QueryInstruction>(head, term_loc, is_exposed, target);
+
+        if let Some(r) = r_opt {
+            target.push(QueryInstruction::clause_arg_to_instr(r));
+        } else {
+            cg.subterm_to_instr::<QueryInstruction>(tail, term_loc, is_exposed, target);
+        }
+
+        target.push(QueryInstruction::to_list(lvl, cell.get()));
+    }
+}
+
 impl<'b> CodeGenerator<'b> {
     pub(crate) fn new(atom_tbl: &'b mut AtomTable, settings: CodeGenSettings) -> Self {
         CodeGenerator {
@@ -334,7 +398,7 @@ impl<'b> CodeGenerator<'b> {
         is_exposed: bool,
     ) -> Code
     where
-        Target: crate::targets::CompilationTarget<'a>,
+        Target: crate::targets::CompilationTarget<'a> + ConsCompile<'a>,
         Iter: Iterator<Item = TermRef<'a>>,
     {
         let mut target: Code = Vec::new();
@@ -363,11 +427,16 @@ impl<'b> CodeGenerator<'b> {
                     }
                 }
                 TermRef::Cons(lvl, cell, head, tail) => {
-                    self.marker.mark_non_var::<Target>(lvl, term_loc, cell, &mut target);
-                    target.push(Target::to_list(lvl, cell.get()));
-
-                    self.subterm_to_instr::<Target>(head, term_loc, is_exposed, &mut target);
-                    self.subterm_to_instr::<Target>(tail, term_loc, is_exposed, &mut target);
+                    Target::compile_cons(
+                        self,
+                        lvl,
+                        term_loc,
+                        head,
+                        tail,
+                        cell,
+                        is_exposed,
+                        &mut target,
+                    );
                 }
                 TermRef::Literal(lvl @ Level::Shallow, cell, Literal::String(ref string)) => {
                     self.marker.mark_non_var::<Target>(lvl, term_loc, cell, &mut target);
