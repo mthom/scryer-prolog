@@ -79,8 +79,8 @@ pub enum CallPolicy {
     Counted,
 }
 
-#[derive(Debug, Clone, Copy)]
-enum ChunkType {
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub enum ChunkType {
     Head,
     Mid,
     Last,
@@ -95,6 +95,11 @@ impl ChunkType {
             ChunkType::Last => GenContext::Last(chunk_num),
         }
     }
+
+    #[inline(always)]
+    pub fn is_last(self) -> bool {
+        self == ChunkType::Last
+    }
 }
 
 #[derive(Debug)]
@@ -104,6 +109,7 @@ pub enum QueryTerm {
     Cut,
     Not(Vec<QueryTerm>),
     IfThen(Vec<QueryTerm>, Vec<QueryTerm>),
+    LocalCut(Cell<VarReg>), // for IfThen.
     Branch(Vec<Vec<QueryTerm>>),
     ChunkTypeBoundary(ChunkType),
 }

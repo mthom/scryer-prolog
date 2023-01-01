@@ -148,7 +148,7 @@ impl VariableFixtures {
     ) {
         let chunk_num = term_loc.chunk_num();
 
-        let mut status = self.temp_vars.swap_remove(generated_var_index).unwrap_or_else(|| {
+        let mut status = self.temp_vars.swap_remove(&generated_var_index).unwrap_or_else(|| {
             TempVarStatus {
                 chunk_num,
                 temp_var_data: TempVarData::new(classify_info.arity),

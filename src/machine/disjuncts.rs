@@ -202,8 +202,6 @@ pub struct VarRecord {
     pub num_occurrences: usize,
 }
 
-// TODO: already exists a VarData! although it may no longer exist??
-// Also, the name is too similar to VarInfo. Think of better names!
 pub struct VarData {
     pub records:  Vec<VarRecord>,
     pub fixtures: VariableFixtures,
@@ -243,47 +241,50 @@ fn flatten_into_disjunct(build_stack: &mut Vec<QueryTerm>, preceding_len: usize)
 
     if let QueryTerm::Branch(ref mut disjuncts) = &mut build_stack[preceding_len] {
         disjuncts.push(iter.collect());
+    } else {
+        unreachable!();
     }
 }
 
 fn term_in_other_chunk(term: &Term) -> Option<bool> {
     match term {
         Term::Clause(_, name, terms) => Some(!ClauseType::is_inbuilt(*name, terms.len())),
-        Term::Literal(_, Literal::Atom(atom!("!"))) |
-        Term::Literal(_, Literal::Char('!')) => Some(false),
+        Term::Literal(_, Literal::Atom(atom!("!")) | Literal::Char('!')) => Some(false),
         Term::Literal(_, Literal::Atom(name)) => Some(!ClauseType::is_inbuilt(*name, 0)),
         Term::Var(..) => Some(true),
         _ => None,
     }
 }
 
-// returns true if the insertion of SetLastChunkType was the final push.
+// returns true if SetLastChunkType was pushed.
 // expects that iter iterates over a conjunct of Terms in reverse order.
 fn insert_set_last_chunk_type(
     state_stack: &mut Vec<TraversalState>,
     mut iter: impl Iterator<Item = TraversalState>,
 ) -> bool {
     let beg = state_stack.len();
-    let mut idx = beg;
+
+    let mut will_break = false;
+    let mut last_chunk_delim = beg;
 
     while let Some(traversal_st) = iter.next() {
         match traversal_st {
             TraversalState::Term(term) | TraversalState::BuildIf(_, term) => {
-                let mut will_break = false;
+                will_break = false;
 
                 match term_in_other_chunk(&term) {
-                    Some(true) if idx > beg => will_break = true,
-                    Some(_) => idx += 1,
+                    Some(true) if last_chunk_delim > beg => will_break = true,
+                    Some(_) => last_chunk_delim += 1,
                     None => will_break = true,
                 }
 
                 if will_break {
+                    // recall that iter iterates in reverse order.
+                    // therefore this is the correct push order.
                     state_stack.push(TraversalState::SetLastChunkType);
                     state_stack.push(traversal_st);
 
                     break;
-                } else {
-                    state_stack.push(traversal_st);
                 }
             }
             _ => {
@@ -293,7 +294,7 @@ fn insert_set_last_chunk_type(
     }
 
     state_stack.extend(iter);
-    idx == state_stack.len()
+    will_break
 }
 
 impl VariableClassifier {
@@ -513,9 +514,11 @@ impl VariableClassifier {
                                 .chain(std::iter::once(terms[0]))
                                 .map(TraversalState::Term);
 
-                            if let ChunkType::Last = chunk_type {
-                                if !insert_set_last_chunk_type(&mut state_stack, iter) {
-                                    chunk_type = ChunkType::Mid;
+                            if ChunkType::Mid != chunk_type {
+                                if insert_set_last_chunk_type(&mut state_stack, iter) {
+                                    if chunk_type.is_last() {
+                                        chunk_type = ChunkType::Mid;
+                                    }
                                 }
                             } else {
                                 state_stack.extend(iter);
@@ -575,9 +578,11 @@ impl VariableClassifier {
                                             TraversalState::Term(if_term)]
                                 .into_iter();
 
-                            if let ChunkType::Last = chunk_type {
-                                if !insert_set_last_chunk_type(&mut state_stack, iter) {
-                                    chunk_type = ChunkType::Mid;
+                            if ChunkType::Mid != chunk_type {
+                                if insert_set_last_chunk_type(&mut state_stack, iter) {
+                                    if chunk_type.is_last() {
+                                        chunk_type = ChunkType::Mid;
+                                    }
                                 }
                             }
                         }
@@ -686,8 +691,7 @@ impl VariableClassifier {
                                 ),
                             );
                         }
-                        Term::Literal(_, Literal::Atom(atom!("!"))) |
-                        Term::Literal(_, Literal::Char('!')) => {
+                        Term::Literal(_, Literal::Atom(atom!("!")) | Literal::Char('!')) => {
                             build_stack.push(QueryTerm::Cut);
                         }
                         Term::Literal(cell, Literal::Atom(name)) => {
