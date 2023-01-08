@@ -242,6 +242,41 @@ fn trim_structure_by_last_arg(instr: &mut Instruction, last_arg: &Term) {
     }
 }
 
+trait AddToFreeList<'a, Target: CompilationTarget<'a>> {
+    fn add_term_to_free_list(&mut self, r: RegType);
+    fn add_subterm_to_free_list(&mut self, term: &Term);
+}
+
+impl<'a, 'b> AddToFreeList<'a, FactInstruction> for CodeGenerator<'b> {
+    #[inline(always)]
+    fn add_term_to_free_list(&mut self, r: RegType) {
+        self.marker.add_to_free_list(r);
+    }
+
+    fn add_subterm_to_free_list(&mut self, _term: &Term) {}
+}
+
+impl<'a, 'b> AddToFreeList<'a, QueryInstruction> for CodeGenerator<'b> {
+    fn add_term_to_free_list(&mut self, _r: RegType) {}
+
+    #[inline(always)]
+    fn add_subterm_to_free_list(&mut self, term: &Term) {
+        if let Some(cell) = structure_cell(term) {
+            self.marker.add_to_free_list(cell.get());
+        }
+    }
+}
+
+fn structure_cell(term: &Term) -> Option<&Cell<RegType>> {
+    match term {
+        &Term::Cons(ref cell, ..) |
+        &Term::Clause(ref cell, ..) |
+        Term::PartialString(ref cell, ..) |
+        Term::CompleteString(ref cell, ..) => Some(cell),
+        _ => None,
+    }
+}
+
 impl<'b> CodeGenerator<'b> {
     pub(crate) fn new(atom_tbl: &'b mut AtomTable, settings: CodeGenSettings) -> Self {
         CodeGenerator {
@@ -287,10 +322,9 @@ impl<'b> CodeGenerator<'b> {
         cell: &'a Cell<VarReg>,
         var: &Rc<String>,
         term_loc: GenContext,
-        is_exposed: bool,
         target: &mut Code,
     ) {
-        if is_exposed || self.get_var_count(var.as_ref()) > 1 {
+        if self.get_var_count(var.as_ref()) > 1 {
             self.marker.mark_var::<Target>(var.clone(), Level::Deep, cell, term_loc, target);
         } else {
             Self::add_or_increment_void_instr::<Target>(target);
@@ -301,13 +335,9 @@ impl<'b> CodeGenerator<'b> {
         &mut self,
         subterm: &'a Term,
         term_loc: GenContext,
-        is_exposed: bool,
         target: &mut Code,
     ) {
         match subterm {
-            &Term::AnonVar if is_exposed => {
-                self.marker.mark_anon_var::<Target>(Level::Deep, term_loc, target);
-            }
             &Term::AnonVar => {
                 Self::add_or_increment_void_instr::<Target>(target);
             }
@@ -322,7 +352,7 @@ impl<'b> CodeGenerator<'b> {
                 target.push(Target::constant_subterm(constant.clone()));
             }
             &Term::Var(ref cell, ref var) => {
-                self.deep_var_instr::<Target>(cell, var, term_loc, is_exposed, target);
+                self.deep_var_instr::<Target>(cell, var, term_loc, target);
             }
         };
     }
@@ -331,11 +361,11 @@ impl<'b> CodeGenerator<'b> {
         &mut self,
         iter: Iter,
         term_loc: GenContext,
-        is_exposed: bool,
     ) -> Code
     where
         Target: crate::targets::CompilationTarget<'a>,
         Iter: Iterator<Item = TermRef<'a>>,
+        CodeGenerator<'b>: AddToFreeList<'a, Target>
     {
         let mut target: Code = Vec::new();
 
@@ -352,6 +382,8 @@ impl<'b> CodeGenerator<'b> {
                     self.marker.mark_non_var::<Target>(lvl, term_loc, cell, &mut target);
                     target.push(Target::to_structure(name, terms.len(), cell.get()));
 
+                    <CodeGenerator<'b> as AddToFreeList<'a, Target>>::add_term_to_free_list(self, cell.get());
+
                     if let Some(instr) = target.last_mut() {
                         if let Some(term) = terms.last() {
                             trim_structure_by_last_arg(instr, term);
@@ -359,15 +391,24 @@ impl<'b> CodeGenerator<'b> {
                     }
 
                     for subterm in terms {
-                        self.subterm_to_instr::<Target>(subterm, term_loc, is_exposed, &mut target);
+                        self.subterm_to_instr::<Target>(subterm, term_loc, &mut target);
+                    }
+
+                    for subterm in terms {
+                        <CodeGenerator<'b> as AddToFreeList<'a, Target>>::add_subterm_to_free_list(self, subterm);
                     }
                 }
                 TermRef::Cons(lvl, cell, head, tail) => {
                     self.marker.mark_non_var::<Target>(lvl, term_loc, cell, &mut target);
                     target.push(Target::to_list(lvl, cell.get()));
 
-                    self.subterm_to_instr::<Target>(head, term_loc, is_exposed, &mut target);
-                    self.subterm_to_instr::<Target>(tail, term_loc, is_exposed, &mut target);
+                    <CodeGenerator<'b> as AddToFreeList<'a, Target>>::add_term_to_free_list(self, cell.get());
+
+                    self.subterm_to_instr::<Target>(head, term_loc, &mut target);
+                    self.subterm_to_instr::<Target>(tail, term_loc, &mut target);
+
+                    <CodeGenerator<'b> as AddToFreeList<'a, Target>>::add_subterm_to_free_list(self, head);
+                    <CodeGenerator<'b> as AddToFreeList<'a, Target>>::add_subterm_to_free_list(self, tail);
                 }
                 TermRef::Literal(lvl @ Level::Shallow, cell, Literal::String(ref string)) => {
                     self.marker.mark_non_var::<Target>(lvl, term_loc, cell, &mut target);
@@ -382,7 +423,7 @@ impl<'b> CodeGenerator<'b> {
                     let atom = self.atom_tbl.build_with(&string);
 
                     target.push(Target::to_pstr(lvl, atom, cell.get(), true));
-                    self.subterm_to_instr::<Target>(tail, term_loc, is_exposed, &mut target);
+                    self.subterm_to_instr::<Target>(tail, term_loc, &mut target);
                 }
                 TermRef::CompleteString(lvl, cell, atom) => {
                     self.marker.mark_non_var::<Target>(lvl, term_loc, cell, &mut target);
@@ -823,7 +864,6 @@ impl<'b> CodeGenerator<'b> {
         iter: ChunkedIterator<'a>,
         conjunct_info: &ConjunctInfo<'a>,
         code: &mut Code,
-        is_exposed: bool,
     ) -> Result<(), CompilationError> {
         for (chunk_num, _, terms) in iter.rule_body_iter() {
             for (i, term) in terms.iter().enumerate() {
@@ -859,7 +899,7 @@ impl<'b> CodeGenerator<'b> {
                             conjunct_info.perm_vs.vars_above_threshold(i + 1)
                         };
 
-                        self.compile_query_line(term, term_loc, code, num_perm_vars, is_exposed);
+                        self.compile_query_line(term, term_loc, code, num_perm_vars);
 
                         if self.marker.max_reg_allocated() > MAX_ARITY {
                             return Err(CompilationError::ExceededMaxArity);
@@ -931,7 +971,7 @@ impl<'b> CodeGenerator<'b> {
         self.compile_seq_prelude(&conjunct_info, &mut code);
 
         let iter = FactIterator::from_rule_head_clause(args);
-        let mut fact = self.compile_target::<FactInstruction, _>(iter, GenContext::Head, false);
+        let mut fact = self.compile_target::<FactInstruction, _>(iter, GenContext::Head);
 
         if self.marker.max_reg_allocated() > MAX_ARITY {
             return Err(CompilationError::ExceededMaxArity);
@@ -945,7 +985,7 @@ impl<'b> CodeGenerator<'b> {
         }
 
         let iter = ChunkedIterator::from_rule_body(p1, clauses);
-        self.compile_seq(iter, &conjunct_info, &mut code, false)?;
+        self.compile_seq(iter, &conjunct_info, &mut code)?;
 
         unsafe_var_marker.mark_unsafe_instrs(&mut code);
 
@@ -994,7 +1034,6 @@ impl<'b> CodeGenerator<'b> {
             let mut compiled_fact = self.compile_target::<FactInstruction, _>(
                 iter,
                 GenContext::Head,
-                false,
             );
 
             if self.marker.max_reg_allocated() > MAX_ARITY {
@@ -1018,12 +1057,11 @@ impl<'b> CodeGenerator<'b> {
         term_loc: GenContext,
         code: &mut Code,
         num_perm_vars_left: usize,
-        is_exposed: bool,
     ) {
         self.marker.reset_arg(term.arity());
 
         let iter = query_term_post_order_iter(term);
-        let query = self.compile_target::<QueryInstruction, _>(iter, term_loc, is_exposed);
+        let query = self.compile_target::<QueryInstruction, _>(iter, term_loc);
 
         code.extend(query.into_iter());
         self.add_conditional_call(code, term, num_perm_vars_left);

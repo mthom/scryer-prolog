@@ -6,7 +6,7 @@ use crate::forms::Level;
 use crate::instructions::*;
 use crate::machine::machine_indices::*;
 use crate::parser::ast::*;
-use crate::targets::CompilationTarget;
+use crate::targets::*;
 
 use crate::temp_v;
 
@@ -24,6 +24,7 @@ pub(crate) struct DebrayAllocator {
     arity: usize, // 0 if not at head.
     contents: IndexMap<usize, Rc<String>, FxBuildHasher>,
     in_use: BTreeSet<usize>,
+    free_list: Vec<usize>,
 }
 
 impl DebrayAllocator {
@@ -182,14 +183,21 @@ impl DebrayAllocator {
     fn alloc_reg_to_non_var(&mut self) -> usize {
         let mut final_index = 0;
 
+        while let Some(r) = self.free_list.pop() {
+            if !self.in_use.contains(&r) {
+                self.in_use.insert(r);
+                return r;
+            }
+        }
+
         for index in self.temp_lb.. {
             if !self.in_use.contains(&index) {
                 final_index = index;
+                self.in_use.insert(final_index);
                 break;
             }
         }
 
-        self.in_use.insert(final_index);
         self.temp_lb = final_index + 1;
         final_index
     }
@@ -203,6 +211,15 @@ impl DebrayAllocator {
             },
         }
     }
+
+    pub fn add_to_free_list(&mut self, r: RegType) {
+        if let RegType::Temp(r) = r {
+            if r > self.arity {
+                self.in_use.remove(&r);
+                self.free_list.push(r);
+            }
+        }
+    }
 }
 
 impl Allocator for DebrayAllocator {
@@ -214,6 +231,7 @@ impl Allocator for DebrayAllocator {
             bindings: IndexMap::with_hasher(FxBuildHasher::default()),
             contents: IndexMap::with_hasher(FxBuildHasher::default()),
             in_use: BTreeSet::new(),
+            free_list: vec![],
         }
     }
 
@@ -356,11 +374,13 @@ impl Allocator for DebrayAllocator {
         self.bindings.clear();
         self.contents.clear();
         self.in_use.clear();
+        self.free_list.clear();
     }
 
     fn reset_contents(&mut self) {
         self.contents.clear();
         self.in_use.clear();
+        self.free_list.clear();
     }
 
     fn advance_arg(&mut self) {
