@@ -7700,7 +7700,7 @@ attributes_goals([propagator(P, State)|As]) -->
 with_clpz(G, clpz:G).
 
 unwrap_with(_, V, V)           :- var(V), !.
-unwrap_with(Goal, ?(V0), V)    :- !, call(Goal, V0, V).
+unwrap_with(Goal, #V0, V)    :- !, call(Goal, V0, V).
 unwrap_with(Goal, Term0, Term) :-
         Term0 =.. [F|Args0],
         maplist(unwrap_with(Goal), Args0, Args),
@@ -7709,26 +7709,26 @@ unwrap_with(Goal, Term0, Term) :-
 bare_integer(V0, V)    :- ( integer(V0) -> V = V0 ; V = #(V0) ).
 
 attribute_goal_(presidual(Goal))       --> [Goal].
-attribute_goal_(pgeq(A,B))             --> [?(A) #>= ?(B)].
-attribute_goal_(pplus(X,Y,Z))          --> [?(X) + ?(Y) #= ?(Z)].
-attribute_goal_(pneq(A,B))             --> [?(A) #\= ?(B)].
-attribute_goal_(ptimes(X,Y,Z))         --> [?(X) * ?(Y) #= ?(Z)].
-attribute_goal_(absdiff_neq(X,Y,C))    --> [abs(?(X) - ?(Y)) #\= C].
-attribute_goal_(x_eq_abs_plus_v(X,V))  --> [?(X) #= abs(?(X)) + ?(V)].
-attribute_goal_(x_neq_y_plus_z(X,Y,Z)) --> [?(X) #\= ?(Y) + ?(Z)].
-attribute_goal_(x_leq_y_plus_c(X,Y,C)) --> [?(X) #=< ?(Y) + C].
-attribute_goal_(ptzdiv(X,Y,Z))         --> [?(X) // ?(Y) #= ?(Z)].
-attribute_goal_(pdiv(X,Y,Z))           --> [?(X) div ?(Y) #= ?(Z)].
-attribute_goal_(prdiv(X,Y,Z))          --> [?(X) / ?(Y) #= ?(Z)].
-attribute_goal_(pexp(X,Y,Z))           --> [?(X) ^ ?(Y) #= ?(Z)].
-attribute_goal_(psign(X,Y))            --> [?(Y) #= sign(?(X))].
-attribute_goal_(pabs(X,Y))             --> [?(Y) #= abs(?(X))].
-attribute_goal_(pmod(X,M,K))           --> [?(X) mod ?(M) #= ?(K)].
-attribute_goal_(prem(X,Y,Z))           --> [?(X) rem ?(Y) #= ?(Z)].
-attribute_goal_(pmax(X,Y,Z))           --> [?(Z) #= max(?(X),?(Y))].
-attribute_goal_(pmin(X,Y,Z))           --> [?(Z) #= min(?(X),?(Y))].
-attribute_goal_(pxor(X,Y,Z))           --> [?(Z) #= xor(?(X), ?(Y))].
-attribute_goal_(ppopcount(X,Y))        --> [?(Y) #= popcount(?(X))].
+attribute_goal_(pgeq(A,B))             --> [#A #>= #B].
+attribute_goal_(pplus(X,Y,Z))          --> [#X + #Y #= #Z].
+attribute_goal_(pneq(A,B))             --> [#A #\= #B].
+attribute_goal_(ptimes(X,Y,Z))         --> [#X * #Y #= #Z].
+attribute_goal_(absdiff_neq(X,Y,C))    --> [abs(#X - #Y) #\= C].
+attribute_goal_(x_eq_abs_plus_v(X,V))  --> [#X #= abs(#X) + #V].
+attribute_goal_(x_neq_y_plus_z(X,Y,Z)) --> [#X #\= #Y + #Z].
+attribute_goal_(x_leq_y_plus_c(X,Y,C)) --> [#X #=< #Y + C].
+attribute_goal_(ptzdiv(X,Y,Z))         --> [#X // #Y #= #Z].
+attribute_goal_(pdiv(X,Y,Z))           --> [#X div #Y #= #Z].
+attribute_goal_(prdiv(X,Y,Z))          --> [#X / #Y #= #Z].
+attribute_goal_(pexp(X,Y,Z))           --> [#X ^ #Y #= #Z].
+attribute_goal_(psign(X,Y))            --> [#Y #= sign(#X)].
+attribute_goal_(pabs(X,Y))             --> [#Y #= abs(#X)].
+attribute_goal_(pmod(X,M,K))           --> [#X mod #M #= #K].
+attribute_goal_(prem(X,Y,Z))           --> [#X rem #Y #= #Z].
+attribute_goal_(pmax(X,Y,Z))           --> [#Z #= max(#X,#Y)].
+attribute_goal_(pmin(X,Y,Z))           --> [#Z #= min(#X,#Y)].
+attribute_goal_(pxor(X,Y,Z))           --> [#Z #= xor(#X, #Y)].
+attribute_goal_(ppopcount(X,Y))        --> [#Y #= popcount(#X)].
 attribute_goal_(scalar_product_neq(Cs,Vs,C)) -->
         [Left #\= Right],
         { scalar_product_left_right([-1|Cs], [C|Vs], Left, Right) }.
@@ -7758,41 +7758,41 @@ attribute_goal_(rel_tuple(R, Tuple)) -->
 attribute_goal_(pzcompare(O,A,B)) --> [zcompare(O,A,B)].
 % reified constraints
 attribute_goal_(reified_in(V, D, B)) -->
-        [V in Drep #<==> ?(B)],
+        [V in Drep #<==> #B],
         { domain_to_drep(D, Drep) }.
 attribute_goal_(reified_tuple_in(Tuple, R, B)) -->
         { get_attr(R, clpz_relation, Rel) },
-        [tuples_in([Tuple], Rel) #<==> ?(B)].
+        [tuples_in([Tuple], Rel) #<==> #B].
 attribute_goal_(kill_reified_tuples(_,_,_)) --> [].
 attribute_goal_(tuples_not_in(_,_,_)) --> [].
-attribute_goal_(reified_fd(V,B)) --> [finite_domain(V) #<==> ?(B)].
+attribute_goal_(reified_fd(V,B)) --> [finite_domain(V) #<==> #B].
 attribute_goal_(pskeleton(X,Y,D,_,Z,F)) -->
         { Prop =.. [F,X,Y,Z],
           phrase(attribute_goal_(Prop), Goals), list_goal(Goals, Goal) },
-        [?(D) #= 1 #==> Goal, ?(Y) #\= 0 #==> ?(D) #= 1].
+        [#D #= 1 #==> Goal, #Y #\= 0 #==> #D #= 1].
 attribute_goal_(reified_neq(DX,X,DY,Y,_,B)) -->
-        conjunction(DX, DY, ?(X) #\= ?(Y), B).
+        conjunction(DX, DY, #X #\= #Y, B).
 attribute_goal_(reified_eq(DX,X,DY,Y,_,B))  -->
-        conjunction(DX, DY, ?(X) #= ?(Y), B).
+        conjunction(DX, DY, #X #= #Y, B).
 attribute_goal_(reified_geq(DX,X,DY,Y,_,B)) -->
-        conjunction(DX, DY, ?(X) #>= ?(Y), B).
-attribute_goal_(reified_and(X,_,Y,_,B))    --> [?(X) #/\ ?(Y) #<==> ?(B)].
-attribute_goal_(reified_or(X, _, Y, _, B)) --> [?(X) #\/ ?(Y) #<==> ?(B)].
-attribute_goal_(reified_not(X, Y))         --> [#\ ?(X) #<==> ?(Y)].
-attribute_goal_(preified_slash(X, Y, _, R)) --> [?(X)/ ?(Y) #= R].
-attribute_goal_(pimpl(X, Y, _))            --> [?(X) #==> ?(Y)].
+        conjunction(DX, DY, #X #>= #Y, B).
+attribute_goal_(reified_and(X,_,Y,_,B))    --> [#X #/\ #Y #<==> #B].
+attribute_goal_(reified_or(X, _, Y, _, B)) --> [#X #\/ #Y #<==> #B].
+attribute_goal_(reified_not(X, Y))         --> [#\ #X #<==> #Y].
+attribute_goal_(preified_slash(X, Y, _, R)) --> [#X/ #Y #= R].
+attribute_goal_(pimpl(X, Y, _))            --> [#X #==> #Y].
 attribute_goal_(pfunction(Op, A, B, R)) -->
-        { Expr =.. [Op,?(A),?(B)] },
-        [?(R) #= Expr].
+        { Expr =.. [Op,#A,#B] },
+        [#R #= Expr].
 attribute_goal_(pfunction(Op, A, R)) -->
-        { Expr =.. [Op,?(A)] },
-        [?(R) #= Expr].
+        { Expr =.. [Op,#A] },
+        [#R #= Expr].
 
 conjunction(A, B, G, D) -->
-        (   { A == 1, B == 1 } -> [G #<==> ?(D)]
-        ;   { A == 1 } -> [(?(B) #/\ G) #<==> ?(D)]
-        ;   { B == 1 } -> [(?(A) #/\ G) #<==> ?(D)]
-        ;   [(?(A) #/\ ?(B) #/\ G) #<==> ?(D)]
+        (   { A == 1, B == 1 } -> [G #<==> #D]
+        ;   { A == 1 } -> [(#B #/\ G) #<==> #D]
+        ;   { B == 1 } -> [(#A #/\ G) #<==> #D]
+        ;   [(#A #/\ #B #/\ G) #<==> #D]
         ).
 
 original_goal(original_goal(State, Goal)) -->
@@ -7838,7 +7838,7 @@ scalar_plusterm([CV|CVs], T) :-
 
 plusterm_(CV, T0, T0+T) :- coeff_var_term(CV, T).
 
-coeff_var_term(C-V, T) :- ( C =:= 1 -> T = ?(V) ; T = C * ?(V) ).
+coeff_var_term(C-V, T) :- ( C =:= 1 -> T = #V ; T = C * #V ).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    Reified predicates for use with predicates from library(reif).
