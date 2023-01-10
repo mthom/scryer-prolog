@@ -3509,9 +3509,12 @@ L #\ R :- (L #\/ R) #/\ #\ (L #/\ R).
    undefined, created auxiliary constraints are killed, and the
    "clpz" attribute is removed from auxiliary variables.
 
-   For (/)/2, mod/2 and rem/2, we create a skeleton propagator and
+   For mod/2, div/2, rem/2 etc. we create a skeleton propagator and
    remember it as an auxiliary constraint. The pskeleton propagator
    can use the skeleton when the constraint is defined.
+
+   We cannot use a skeleton propagator for (/)/2, since (/)/2 can
+   fail in cases such as 0 #==> X #= 1/2, where we expect success.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 parse_reified(E, R, D,
@@ -3528,7 +3531,7 @@ parse_reified(E, R, D,
                m(max(A,B))   => [d(D), p(pgeq(R, A)), p(pgeq(R, B)), p(pmax(A,B,R)), a(A,B,R)],
                m(min(A,B))   => [d(D), p(pgeq(A, R)), p(pgeq(B, R)), p(pmin(A,B,R)), a(A,B,R)],
                m(abs(A))     => [g(?(R)#>=0), d(D), p(pabs(A, R)), a(A,R)],
-               m(A/B)        => [skeleton(A,B,D,R,prdiv)],
+               m(A/B)        => [p(preified_slash(A,B,D,R)), a(A,B,R)],
                m(A//B)       => [skeleton(A,B,D,R,ptzdiv)],
                m(A div B)    => [skeleton(A,B,D,R,pdiv)],
                m(A mod B)    => [skeleton(A,B,D,R,pmod)],
@@ -5833,6 +5836,26 @@ run_propagator(pimpl(X, Y, Ps), MState) -->
         ).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+run_propagator(preified_slash(X, Y, D, R), MState) -->
+        (   Y == 0 ->
+            kill(MState),
+            D = 0
+        ;   nonvar(X),
+            nonvar(Y) ->
+            kill(MState),
+            (   X mod Y =:= 0 ->
+                D = 1,
+                R is X // Y
+            ;   D = 0
+            )
+        ;   D == 1 ->
+            kill(MState),
+            queue_goal(X/Y #= R)
+        ;   []
+        ).
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 update_bounds(X, XD, XPs, XL, XU, NXL, NXU) -->
@@ -7756,6 +7779,7 @@ attribute_goal_(reified_geq(DX,X,DY,Y,_,B)) -->
 attribute_goal_(reified_and(X,_,Y,_,B))    --> [?(X) #/\ ?(Y) #<==> ?(B)].
 attribute_goal_(reified_or(X, _, Y, _, B)) --> [?(X) #\/ ?(Y) #<==> ?(B)].
 attribute_goal_(reified_not(X, Y))         --> [#\ ?(X) #<==> ?(Y)].
+attribute_goal_(preified_slash(X, Y, _, R)) --> [?(X)/ ?(Y) #= R].
 attribute_goal_(pimpl(X, Y, _))            --> [?(X) #==> ?(Y)].
 attribute_goal_(pfunction(Op, A, B, R)) -->
         { Expr =.. [Op,?(A),?(B)] },
