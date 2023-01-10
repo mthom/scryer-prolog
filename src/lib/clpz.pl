@@ -3,7 +3,7 @@
     Author:        Markus Triska
     E-mail:        triska@metalevel.at
     WWW:           https://www.metalevel.at
-    Copyright (C): 2016-2022 Markus Triska
+    Copyright (C): 2016-2023 Markus Triska
 
     This library provides CLP(ℤ):
 
@@ -922,8 +922,8 @@ expressions with the functor `(?)/1` or `(#)/1`. For example:
 ?- assertz(clpz:monotonic).
 true.
 
-?- #(X) #= #(Y) + #(Z).
-#(Y)+ #(Z)#= #(X).
+?- #X #= #Y + #Z.
+   clpz:(#Y+ #Z#= #X).
 
 ?-          X #= 2, X = 1+1.
 ERROR: Arguments are not sufficiently instantiated
@@ -1917,7 +1917,7 @@ label([], _, Selection, Order, Choice, Optim0, Consistency, Vars) :-
 exprs_singlevars([], []).
 exprs_singlevars([E|Es], [SV|SVs]) :-
         E =.. [F,Expr],
-        ?(Single) #= Expr,
+        #Single #= Expr,
         SV =.. [F,Single],
         exprs_singlevars(Es, SVs).
 
@@ -2316,7 +2316,7 @@ coeff_int_linsum(C, I, S0, S) :- S is S0 + C*I.
 
 sum([], _, Sum, Op, Value) :- call(Op, Sum, Value).
 sum([C|Cs], [X|Xs], Acc, Op, Value) :-
-        ?(NAcc) #= Acc + C* ?(X),
+        #NAcc #= Acc + C* #X,
         sum(Cs, Xs, NAcc, Op, Value).
 
 multiples([], [], _).
@@ -2325,7 +2325,7 @@ multiples([C|Cs], [V|Vs], Left) :-
             (   N =\= 1, gcd(C,N) =:= 1 ->
                 gcd(Cs, N, GCD0),
                 gcd(Left, GCD0, GCD),
-                (   GCD > 1 -> ?(V) #= GCD * ?(_)
+                (   GCD > 1 -> #V #= GCD * #_
                 ;   true
                 )
             ;   true
@@ -2556,21 +2556,21 @@ parse_clpz(E, R,
                                    g(constrain_to_integer(E)), g(E = R)],
              g(integer(E))     => [g(R = E)],
              ?(E)              => [g(must_be_fd_integer(E)), g(R = E)],
-             #(E)              => [g(must_be_fd_integer(E)), g(R = E)],
+             #E                => [g(must_be_fd_integer(E)), g(R = E)],
              m(A+B)            => [p(pplus(A, B, R))],
              % power_var_num/3 must occur before */2 to be useful
              g(power_var_num(E, V, N)) => [p(pexp(V, N, R))],
              m(A*B)            => [p(ptimes(A, B, R))],
              m(A-B)            => [p(pplus(R,B,A))],
              m(-A)             => [p(ptimes(-1,A,R))],
-             m(max(A,B))       => [g(A #=< ?(R)), g(B #=< R), p(pmax(A, B, R))],
-             m(min(A,B))       => [g(A #>= ?(R)), g(B #>= R), p(pmin(A, B, R))],
+             m(max(A,B))       => [g(A #=< #R), g(B #=< R), p(pmax(A, B, R))],
+             m(min(A,B))       => [g(A #>= #R), g(B #>= R), p(pmin(A, B, R))],
              m(A mod B)        => [g(B #\= 0), p(pmod(A, B, R))],
              m(A rem B)        => [g(B #\= 0), p(prem(A, B, R))],
-             m(abs(A))         => [g(?(R) #>= 0), p(pabs(A, R))],
+             m(abs(A))         => [g(#R #>= 0), p(pabs(A, R))],
              m(A/B)            => [g(B #\= 0), p(prdiv(A, B, R))],
              m(A//B)           => [g(B #\= 0), p(ptzdiv(A, B, R))],
-             m(A div B)        => [g(?(R) #= (A - (A mod B)) // B)],
+             m(A div B)        => [g(#R #= (A - (A mod B)) // B)],
              m(A^B)            => [p(pexp(A, B, R))],
              m(sign(A))        => [g(R in -1..1), p(psign(A, R))],
              % bitwise operations
@@ -2614,7 +2614,7 @@ parse_matcher(E, R, Matcher, Clause) :-
 
 parse_condition(g(Goal), E, E)       --> [Goal, !].
 parse_condition(?(E), _, ?(E))       --> [!].
-parse_condition(#(E), _, #(E))       --> [!].
+parse_condition(#E, _, #E)           --> [!].
 parse_condition(m(Match), _, Match0) -->
         [!],
         { copy_term(Match, Match0),
@@ -2765,7 +2765,7 @@ matches([
          m_c(any(X) #>= any(Y), left_right_linsum_const(X, Y, Cs, Vs, Const)) =>
             [g((   Cs = [1], Vs = [A] -> geq(A, Const)
                ;   Cs = [-1], Vs = [A] -> Const1 is -Const, geq(Const1, A)
-               ;   Cs = [1,1], Vs = [A,B] -> ?(A) + ?(B) #= ?(S), geq(S, Const)
+               ;   Cs = [1,1], Vs = [A,B] -> #A + #B #= #S, geq(S, Const)
                ;   Cs = [1,-1], Vs = [A,B] ->
                    (   Const =:= 0 -> geq(A, B)
                    ;   C1 is -Const,
@@ -2777,13 +2777,13 @@ matches([
                        propagator_init_trigger(x_leq_y_plus_c(A, B, C1))
                    )
                ;   Cs = [-1,-1], Vs = [A,B] ->
-                   ?(A) + ?(B) #= ?(S), Const1 is -Const, geq(Const1, S)
+                   #A + #B #= #S, Const1 is -Const, geq(Const1, S)
                ;   scalar_product_(#>=, Cs, Vs, Const)
                ))],
          m(any(X) - any(Y) #>= integer(C))     => [d(X, X1), d(Y, Y1), g(C1 is -C), p(x_leq_y_plus_c(Y1, X1, C1))],
          m(integer(X) #>= any(Z) + integer(A)) => [g(C is X - A), r(C, Z)],
          m(abs(any(X)-any(Y)) #>= any(Z))  =>
-           [d(X, X1), d(Y, Y1), d(Z, Z1), g((abs(?(A))#= ?(B),Y1+A#=X1,Z1#=<B))],
+           [d(X, X1), d(Y, Y1), d(Z, Z1), g((abs(#A)#= #B,Y1+A#=X1,Z1#=<B))],
          m(abs(any(X)) #>= integer(I))         => [d(X, RX), g((I>0 -> I1 is -I, RX in inf..I1 \/ I..sup; true))],
          m(integer(I) #>= abs(any(X)))         => [d(X, RX), g(I>=0), g(I1 is -I), g(RX in I1..I)],
          m(any(X) #>= any(Y))                  => [d(X, RX), d(Y, RY), g(geq(RX, RY))],
@@ -2874,7 +2874,7 @@ matcher(m_c(Matcher,Cond), Gs) -->
         ).
 
 match(any(A), T)     --> [A = T].
-match(var(V), T)     --> [( nonvar(T), ( T = ?(Var) ; T = #(Var) ) ->
+match(var(V), T)     --> [( nonvar(T), ( T = ?(Var) ; T = #Var ) ->
                             must_be_fd_integer(Var), V = Var
                           ; v_or_i(T), V = T
                           )].
@@ -2937,7 +2937,7 @@ expr_conds(E, E)                 --> [integer(E)],
         { var(E), !, \+ monotonic }.
 expr_conds(E, E)                 --> { integer(E) }.
 expr_conds(?(E), E)              --> [integer(E)].
-expr_conds(#(E), E)              --> [integer(E)].
+expr_conds(#E, E)                --> [integer(E)].
 expr_conds(-E0, -E)              --> expr_conds(E0, E).
 expr_conds(abs(E0), abs(E))      --> expr_conds(E0, E).
 expr_conds(A0+B0, A+B)           --> expr_conds(A0, A), expr_conds(B0, B).
@@ -3118,7 +3118,7 @@ user:goal_expansion(Goal0, Goal) :-
 linsum(X, S, S)    --> { var(X), !, non_monotonic(X) }, [vn(X,1)].
 linsum(I, S0, S)   --> { integer(I), S is S0 + I }.
 linsum(?(X), S, S) --> { must_be_fd_integer(X) }, [vn(X,1)].
-linsum(#(X), S, S) --> { must_be_fd_integer(X) }, [vn(X,1)].
+linsum(#X, S, S)   --> { must_be_fd_integer(X) }, [vn(X,1)].
 linsum(-A, S0, S)  --> mulsum(A, -1, S0, S).
 linsum(N*A, S0, S) --> { integer(N) }, !, mulsum(A, N, S0, S).
 linsum(A*N, S0, S) --> { integer(N) }, !, mulsum(A, N, S0, S).
@@ -3509,9 +3509,12 @@ L #\ R :- (L #\/ R) #/\ #\ (L #/\ R).
    undefined, created auxiliary constraints are killed, and the
    "clpz" attribute is removed from auxiliary variables.
 
-   For (/)/2, mod/2 and rem/2, we create a skeleton propagator and
+   For mod/2, div/2, rem/2 etc. we create a skeleton propagator and
    remember it as an auxiliary constraint. The pskeleton propagator
    can use the skeleton when the constraint is defined.
+
+   We cannot use a skeleton propagator for (/)/2, since (/)/2 can
+   fail in cases such as 0 #==> X #= 1/2, where we expect success.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 parse_reified(E, R, D,
@@ -3520,15 +3523,15 @@ parse_reified(E, R, D,
                                  g(constrain_to_integer(E)), g(R = E), g(D=1)],
                g(integer(E)) => [g(R=E), g(D=1)],
                ?(E)          => [g(must_be_fd_integer(E)), g(R=E), g(D=1)],
-               #(E)          => [g(must_be_fd_integer(E)), g(R=E), g(D=1)],
+               #E            => [g(must_be_fd_integer(E)), g(R=E), g(D=1)],
                m(A+B)        => [d(D), p(pplus(A,B,R)), a(A,B,R)],
                m(A*B)        => [d(D), p(ptimes(A,B,R)), a(A,B,R)],
                m(A-B)        => [d(D), p(pplus(R,B,A)), a(A,B,R)],
                m(-A)         => [d(D), p(ptimes(-1,A,R)), a(R)],
                m(max(A,B))   => [d(D), p(pgeq(R, A)), p(pgeq(R, B)), p(pmax(A,B,R)), a(A,B,R)],
                m(min(A,B))   => [d(D), p(pgeq(A, R)), p(pgeq(B, R)), p(pmin(A,B,R)), a(A,B,R)],
-               m(abs(A))     => [g(?(R)#>=0), d(D), p(pabs(A, R)), a(A,R)],
-               m(A/B)        => [skeleton(A,B,D,R,prdiv)],
+               m(abs(A))     => [g(#R#>=0), d(D), p(pabs(A, R)), a(A,R)],
+               m(A/B)        => [p(preified_slash(A,B,D,R)), a(A,B,R)],
                m(A//B)       => [skeleton(A,B,D,R,ptzdiv)],
                m(A div B)    => [skeleton(A,B,D,R,pdiv)],
                m(A mod B)    => [skeleton(A,B,D,R,pmod)],
@@ -3543,7 +3546,7 @@ parse_reified(E, R, D,
                m(A>>B)       => [function(D,>>,A,B,R)],
                m(A/\B)       => [function(D,/\,A,B,R)],
                m(A\/B)       => [function(D,\/,A,B,R)],
-               m(xor(A, B))  => [skeleton(A,B,D,R,pxor)],
+               m(xor(A, B))  => [function(D,xor,A,B,R)],
                g(true)       => [g(domain_error(clpz_expression, E))]]
              ).
 
@@ -3573,7 +3576,7 @@ parse_reified(E, R, D, Matcher, Clause) :-
 
 reified_condition(g(Goal), E, E, []) --> [{Goal}, !].
 reified_condition(?(E), _, ?(E), []) --> [!].
-reified_condition(#(E), _, #(E), []) --> [!].
+reified_condition(#E, _, #E, [])     --> [!].
 reified_condition(m(Match), _, Match0, Ds) -->
         [!],
         { copy_term(Match, Match0),
@@ -3637,7 +3640,7 @@ reify(Expr, B, Ps) :-
 reifiable(E)      :- var(E), non_monotonic(E).
 reifiable(E)      :- integer(E), E in 0..1.
 reifiable(?(E))   :- must_be_fd_integer(E).
-reifiable(#(E))   :- must_be_fd_integer(E).
+reifiable(#E)     :- must_be_fd_integer(E).
 reifiable(V in _) :- fd_variable(V).
 reifiable(Expr)   :-
         Expr =.. [Op,Left,Right],
@@ -3658,7 +3661,7 @@ reify(E, B) --> { B in 0..1 }, reify_(E, B).
 reify_(E, B) --> { var(E), !, E = B }.
 reify_(E, B) --> { integer(E), E = B }.
 reify_(?(B), B) --> [].
-reify_(#(B), B) --> [].
+reify_(#B, B) --> [].
 reify_(V in Drep, B) -->
         { drep_to_domain(Drep, Dom) },
         propagator_init_trigger(reified_in(V,Dom,B)),
@@ -3667,7 +3670,7 @@ reify_(tuples_in(Tuples, Relation), B) -->
         { maplist(relation_tuple_b_prop(Relation), Tuples, Bs, Ps),
           maplist(monotonic, Bs, Bs1),
           fold_statement(conjunction, Bs1, And),
-          ?(B) #<==> And },
+          #B #<==> And },
         propagator_init_trigger([B], tuples_not_in(Tuples, Relation, B)),
         kill_reified_tuples(Bs, Ps, Bs),
         list(Ps),
@@ -3769,7 +3772,7 @@ conjunction(E, Conj, Conj #/\ E).
 
 disjunction(E, Disj, Disj #\/ E).
 
-var_eq(V, N, ?(V) #= N).
+var_eq(V, N, #V #= N).
 
 % Match variables to created skeleton.
 
@@ -4271,7 +4274,7 @@ lex_chain_(Prop, Ls, Prev, Ls) :-
 
 lex_le([], []).
 lex_le([V1|V1s], [V2|V2s]) :-
-        ?(V1) #=< ?(V2),
+        #V1 #=< #V2,
         (   integer(V1) ->
             (   integer(V2) ->
                 (   V1 =:= V2 -> lex_le(V1s, V2s) ;  true )
@@ -5833,6 +5836,26 @@ run_propagator(pimpl(X, Y, Ps), MState) -->
         ).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+run_propagator(preified_slash(X, Y, D, R), MState) -->
+        (   Y == 0 ->
+            kill(MState),
+            D = 0
+        ;   nonvar(X),
+            nonvar(Y) ->
+            kill(MState),
+            (   X mod Y =:= 0 ->
+                D = 1,
+                R is X // Y
+            ;   D = 0
+            )
+        ;   D == 1 ->
+            kill(MState),
+            queue_goal(X/Y #= R)
+        ;   []
+        ).
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 update_bounds(X, XD, XPs, XL, XU, NXL, NXU) -->
@@ -6536,7 +6559,7 @@ element_domain(V, VD) :-
 
 element_([], _, _, _).
 element_([I|Is], N0, N, V) :-
-        ?(I) #\= ?(V) #==> ?(N) #\= N0,
+        #I #\= #V #==> #N #\= N0,
         N1 is N0 + 1,
         element_(Is, N1, N, V).
 
@@ -7080,25 +7103,25 @@ cumulative(Tasks, Options) :-
 fully_elastic_relaxation(Tasks, Limit) :-
         maplist(task_duration_consumption, Tasks, Ds, Cs),
         maplist(area, Ds, Cs, As),
-        sum(As, #=, ?(Area)),
-        ?(MinTime) #= (Area + Limit - 1) // Limit,
+        sum(As, #=, #Area),
+        #MinTime #= (Area + Limit - 1) // Limit,
         tasks_minstart_maxend(Tasks, MinStart, MaxEnd),
         MaxEnd #>= MinStart + MinTime.
 
 task_duration_consumption(task(_,D,_,C,_), D, C).
 
-area(X, Y, Area) :- ?(Area) #= ?(X) * ?(Y).
+area(X, Y, Area) :- #Area #= #X * #Y.
 
 tasks_minstart_maxend(Tasks, Start, End) :-
         maplist(task_start_end, Tasks, [Start0|Starts], [End0|Ends]),
         foldl(min_, Starts, Start0, Start),
         foldl(max_, Ends, End0, End).
 
-max_(E, M0, M) :- ?(M) #= max(E, M0).
+max_(E, M0, M) :- #M #= max(E, M0).
 
-min_(E, M0, M) :- ?(M) #= min(E, M0).
+min_(E, M0, M) :- #M #= min(E, M0).
 
-task_start_end(task(Start,_,End,_,_), ?(Start), ?(End)).
+task_start_end(task(Start,_,End,_,_), #Start, #End).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    All time slots must respect the resource limit.
@@ -7113,8 +7136,8 @@ resource_limit(T0, T, Tasks, Bss, L) :-
 
 task_bs(Task, InfStart-Bs) :-
         Task = task(Start,D,End,_,_Id),
-        ?(D) #> 0,
-        ?(End) #= ?(Start) + ?(D),
+        #D #> 0,
+        #End #= #Start + #D,
         maplist(finite_domain, [End,Start,D]),
         fd_inf(Start, InfStart),
         fd_sup(End, SupEnd),
@@ -7124,20 +7147,20 @@ task_bs(Task, InfStart-Bs) :-
 
 task_running([], _, _, _).
 task_running([B|Bs], Start, End, T) :-
-        ((T #>= Start) #/\ (T #< End)) #<==> ?(B),
+        ((T #>= Start) #/\ (T #< End)) #<==> #B,
         T1 is T + 1,
         task_running(Bs, Start, End, T1).
 
 contribution_at(T, Task, Offset-Bs, Contribution) :-
         Task = task(Start,_,End,C,_),
-        ?(C) #>= 0,
+        #C #>= 0,
         fd_inf(Start, InfStart),
         fd_sup(End, SupEnd),
         (   T < InfStart -> Contribution = 0
         ;   T >= SupEnd -> Contribution = 0
         ;   Index is T - Offset,
             nth0(Index, Bs, B),
-            ?(Contribution) #= B*C
+            #Contribution #= B*C
         ).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -7165,10 +7188,10 @@ non_overlapping_(A, B) :-
         a_not_in_b(B, A).
 
 a_not_in_b([_,AX,AW,AY,AH], [_,BX,BW,BY,BH]) :-
-        ?(AX) #=< ?(BX) #/\ ?(BX) #< ?(AX) + ?(AW) #==>
-                   ?(AY) + ?(AH) #=< ?(BY) #\/ ?(BY) + ?(BH) #=< ?(AY),
-        ?(AY) #=< ?(BY) #/\ ?(BY) #< ?(AY) + ?(AH) #==>
-                   ?(AX) + ?(AW) #=< ?(BX) #\/ ?(BX) + ?(BW) #=< ?(AX).
+        #AX #=< #BX #/\ #BX #< #AX + #AW #==>
+                   #AY + #AH #=< #BY #\/ #BY + #BH #=< #AY,
+        #AY #=< #BY #/\ #BY #< #AY + #AH #==>
+                   #AX + #AW #=< #BX #\/ #BX + #BW #=< #AX.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -7325,7 +7348,7 @@ exprs_values([E0|Es], [V|Vs]) -->
         { term_variables(E0, EVs0),
           copy_term(E0, E),
           term_variables(E, EVs),
-          ?(V) #= E },
+          #V #= E },
         match_variables(EVs0, EVs),
         exprs_values(Es, Vs).
 
@@ -7375,7 +7398,7 @@ source(source(_)).
 
 sink(sink(_)).
 
-monotonic(Var, ?(Var)).
+monotonic(Var, #Var).
 
 arc_normalized(Cs, Arc0, Arc) :- arc_normalized_(Arc0, Cs, Arc).
 
@@ -7434,9 +7457,9 @@ zcompare(Order, A, B) :-
             propagator_init_trigger([A,B], pzcompare(Order, A, B))
         ).
 
-zcompare_(=, A, B) :- ?(A) #= ?(B).
-zcompare_(<, A, B) :- ?(A) #< ?(B).
-zcompare_(>, A, B) :- ?(A) #> ?(B).
+zcompare_(=, A, B) :- #A #= #B.
+zcompare_(<, A, B) :- #A #< #B.
+zcompare_(>, A, B) :- #A #> #B.
 
 %% chain(+Relation, +Zs)
 %
@@ -7469,7 +7492,7 @@ chain_relation(#=<).
 chain_relation(#>).
 chain_relation(#>=).
 
-chain(Relation, X, Prev, X) :- call(Relation, ?(Prev), ?(X)).
+chain(Relation, X, Prev, X) :- call(Relation, #Prev, #X).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
@@ -7677,35 +7700,35 @@ attributes_goals([propagator(P, State)|As]) -->
 with_clpz(G, clpz:G).
 
 unwrap_with(_, V, V)           :- var(V), !.
-unwrap_with(Goal, ?(V0), V)    :- !, call(Goal, V0, V).
+unwrap_with(Goal, #V0, V)    :- !, call(Goal, V0, V).
 unwrap_with(Goal, Term0, Term) :-
         Term0 =.. [F|Args0],
         maplist(unwrap_with(Goal), Args0, Args),
         Term =.. [F|Args].
 
-bare_integer(V0, V)    :- ( integer(V0) -> V = V0 ; V = #(V0) ).
+bare_integer(V0, V)    :- ( integer(V0) -> V = V0 ; V = #V0 ).
 
 attribute_goal_(presidual(Goal))       --> [Goal].
-attribute_goal_(pgeq(A,B))             --> [?(A) #>= ?(B)].
-attribute_goal_(pplus(X,Y,Z))          --> [?(X) + ?(Y) #= ?(Z)].
-attribute_goal_(pneq(A,B))             --> [?(A) #\= ?(B)].
-attribute_goal_(ptimes(X,Y,Z))         --> [?(X) * ?(Y) #= ?(Z)].
-attribute_goal_(absdiff_neq(X,Y,C))    --> [abs(?(X) - ?(Y)) #\= C].
-attribute_goal_(x_eq_abs_plus_v(X,V))  --> [?(X) #= abs(?(X)) + ?(V)].
-attribute_goal_(x_neq_y_plus_z(X,Y,Z)) --> [?(X) #\= ?(Y) + ?(Z)].
-attribute_goal_(x_leq_y_plus_c(X,Y,C)) --> [?(X) #=< ?(Y) + C].
-attribute_goal_(ptzdiv(X,Y,Z))         --> [?(X) // ?(Y) #= ?(Z)].
-attribute_goal_(pdiv(X,Y,Z))           --> [?(X) div ?(Y) #= ?(Z)].
-attribute_goal_(prdiv(X,Y,Z))          --> [?(X) / ?(Y) #= ?(Z)].
-attribute_goal_(pexp(X,Y,Z))           --> [?(X) ^ ?(Y) #= ?(Z)].
-attribute_goal_(psign(X,Y))            --> [?(Y) #= sign(?(X))].
-attribute_goal_(pabs(X,Y))             --> [?(Y) #= abs(?(X))].
-attribute_goal_(pmod(X,M,K))           --> [?(X) mod ?(M) #= ?(K)].
-attribute_goal_(prem(X,Y,Z))           --> [?(X) rem ?(Y) #= ?(Z)].
-attribute_goal_(pmax(X,Y,Z))           --> [?(Z) #= max(?(X),?(Y))].
-attribute_goal_(pmin(X,Y,Z))           --> [?(Z) #= min(?(X),?(Y))].
-attribute_goal_(pxor(X,Y,Z))           --> [?(Z) #= xor(?(X), ?(Y))].
-attribute_goal_(ppopcount(X,Y))        --> [?(Y) #= popcount(?(X))].
+attribute_goal_(pgeq(A,B))             --> [#A #>= #B].
+attribute_goal_(pplus(X,Y,Z))          --> [#X + #Y #= #Z].
+attribute_goal_(pneq(A,B))             --> [#A #\= #B].
+attribute_goal_(ptimes(X,Y,Z))         --> [#X * #Y #= #Z].
+attribute_goal_(absdiff_neq(X,Y,C))    --> [abs(#X - #Y) #\= C].
+attribute_goal_(x_eq_abs_plus_v(X,V))  --> [#X #= abs(#X) + #V].
+attribute_goal_(x_neq_y_plus_z(X,Y,Z)) --> [#X #\= #Y + #Z].
+attribute_goal_(x_leq_y_plus_c(X,Y,C)) --> [#X #=< #Y + C].
+attribute_goal_(ptzdiv(X,Y,Z))         --> [#X // #Y #= #Z].
+attribute_goal_(pdiv(X,Y,Z))           --> [#X div #Y #= #Z].
+attribute_goal_(prdiv(X,Y,Z))          --> [#X / #Y #= #Z].
+attribute_goal_(pexp(X,Y,Z))           --> [#X ^ #Y #= #Z].
+attribute_goal_(psign(X,Y))            --> [#Y #= sign(#X)].
+attribute_goal_(pabs(X,Y))             --> [#Y #= abs(#X)].
+attribute_goal_(pmod(X,M,K))           --> [#X mod #M #= #K].
+attribute_goal_(prem(X,Y,Z))           --> [#X rem #Y #= #Z].
+attribute_goal_(pmax(X,Y,Z))           --> [#Z #= max(#X,#Y)].
+attribute_goal_(pmin(X,Y,Z))           --> [#Z #= min(#X,#Y)].
+attribute_goal_(pxor(X,Y,Z))           --> [#Z #= xor(#X, #Y)].
+attribute_goal_(ppopcount(X,Y))        --> [#Y #= popcount(#X)].
 attribute_goal_(scalar_product_neq(Cs,Vs,C)) -->
         [Left #\= Right],
         { scalar_product_left_right([-1|Cs], [C|Vs], Left, Right) }.
@@ -7735,40 +7758,41 @@ attribute_goal_(rel_tuple(R, Tuple)) -->
 attribute_goal_(pzcompare(O,A,B)) --> [zcompare(O,A,B)].
 % reified constraints
 attribute_goal_(reified_in(V, D, B)) -->
-        [V in Drep #<==> ?(B)],
+        [V in Drep #<==> #B],
         { domain_to_drep(D, Drep) }.
 attribute_goal_(reified_tuple_in(Tuple, R, B)) -->
         { get_attr(R, clpz_relation, Rel) },
-        [tuples_in([Tuple], Rel) #<==> ?(B)].
+        [tuples_in([Tuple], Rel) #<==> #B].
 attribute_goal_(kill_reified_tuples(_,_,_)) --> [].
 attribute_goal_(tuples_not_in(_,_,_)) --> [].
-attribute_goal_(reified_fd(V,B)) --> [finite_domain(V) #<==> ?(B)].
+attribute_goal_(reified_fd(V,B)) --> [finite_domain(V) #<==> #B].
 attribute_goal_(pskeleton(X,Y,D,_,Z,F)) -->
         { Prop =.. [F,X,Y,Z],
           phrase(attribute_goal_(Prop), Goals), list_goal(Goals, Goal) },
-        [?(D) #= 1 #==> Goal, ?(Y) #\= 0 #==> ?(D) #= 1].
+        [#D #= 1 #==> Goal, #Y #\= 0 #==> #D #= 1].
 attribute_goal_(reified_neq(DX,X,DY,Y,_,B)) -->
-        conjunction(DX, DY, ?(X) #\= ?(Y), B).
+        conjunction(DX, DY, #X #\= #Y, B).
 attribute_goal_(reified_eq(DX,X,DY,Y,_,B))  -->
-        conjunction(DX, DY, ?(X) #= ?(Y), B).
+        conjunction(DX, DY, #X #= #Y, B).
 attribute_goal_(reified_geq(DX,X,DY,Y,_,B)) -->
-        conjunction(DX, DY, ?(X) #>= ?(Y), B).
-attribute_goal_(reified_and(X,_,Y,_,B))    --> [?(X) #/\ ?(Y) #<==> ?(B)].
-attribute_goal_(reified_or(X, _, Y, _, B)) --> [?(X) #\/ ?(Y) #<==> ?(B)].
-attribute_goal_(reified_not(X, Y))         --> [#\ ?(X) #<==> ?(Y)].
-attribute_goal_(pimpl(X, Y, _))            --> [?(X) #==> ?(Y)].
+        conjunction(DX, DY, #X #>= #Y, B).
+attribute_goal_(reified_and(X,_,Y,_,B))    --> [#X #/\ #Y #<==> #B].
+attribute_goal_(reified_or(X, _, Y, _, B)) --> [#X #\/ #Y #<==> #B].
+attribute_goal_(reified_not(X, Y))         --> [#\ #X #<==> #Y].
+attribute_goal_(preified_slash(X, Y, _, R)) --> [#X/ #Y #= R].
+attribute_goal_(pimpl(X, Y, _))            --> [#X #==> #Y].
 attribute_goal_(pfunction(Op, A, B, R)) -->
-        { Expr =.. [Op,?(A),?(B)] },
-        [?(R) #= Expr].
+        { Expr =.. [Op,#A,#B] },
+        [#R #= Expr].
 attribute_goal_(pfunction(Op, A, R)) -->
-        { Expr =.. [Op,?(A)] },
-        [?(R) #= Expr].
+        { Expr =.. [Op,#A] },
+        [#R #= Expr].
 
 conjunction(A, B, G, D) -->
-        (   { A == 1, B == 1 } -> [G #<==> ?(D)]
-        ;   { A == 1 } -> [(?(B) #/\ G) #<==> ?(D)]
-        ;   { B == 1 } -> [(?(A) #/\ G) #<==> ?(D)]
-        ;   [(?(A) #/\ ?(B) #/\ G) #<==> ?(D)]
+        (   { A == 1, B == 1 } -> [G #<==> #D]
+        ;   { A == 1 } -> [(#B #/\ G) #<==> #D]
+        ;   { B == 1 } -> [(#A #/\ G) #<==> #D]
+        ;   [(#A #/\ #B #/\ G) #<==> #D]
         ).
 
 original_goal(original_goal(State, Goal)) -->
@@ -7814,7 +7838,7 @@ scalar_plusterm([CV|CVs], T) :-
 
 plusterm_(CV, T0, T0+T) :- coeff_var_term(CV, T).
 
-coeff_var_term(C-V, T) :- ( C =:= 1 -> T = ?(V) ; T = C * ?(V) ).
+coeff_var_term(C-V, T) :- ( C =:= 1 -> T = #V ; T = C * #V ).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    Reified predicates for use with predicates from library(reif).
