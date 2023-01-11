@@ -2310,7 +2310,7 @@ single_value(V, V)    :- var(V), !, non_monotonic(V).
 single_value(V, V)    :- integer(V).
 single_value(?(V), V) :- fd_variable(V).
 
-coeff_var_plusterm(C, V, T0, T0+(C* ?(V))).
+coeff_var_plusterm(C, V, T0, T0+(C* #V)).
 
 coeff_int_linsum(C, I, S0, S) :- S is S0 + C*I.
 
