@@ -2310,7 +2310,7 @@ single_value(V, V)    :- var(V), !, non_monotonic(V).
 single_value(V, V)    :- integer(V).
 single_value(?(V), V) :- fd_variable(V).
 
-coeff_var_plusterm(C, V, T0, T0+(C* ?(V))).
+coeff_var_plusterm(C, V, T0, T0+(C* #V)).
 
 coeff_int_linsum(C, I, S0, S) :- S is S0 + C*I.
 
@@ -3542,6 +3542,7 @@ parse_reified(E, R, D,
                m(msb(A))     => [function(D,msb,A,R)],
                m(lsb(A))     => [function(D,lsb,A,R)],
                m(popcount(A)) => [function(D,popcount,A,R)],
+               m(sign(A))    => [function(D,sign,A,R)],
                m(A<<B)       => [function(D,<<,A,B,R)],
                m(A>>B)       => [function(D,>>,A,B,R)],
                m(A/\B)       => [function(D,/\,A,B,R)],
