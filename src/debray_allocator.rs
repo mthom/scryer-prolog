@@ -214,10 +214,8 @@ impl DebrayAllocator {
 
     pub fn add_to_free_list(&mut self, r: RegType) {
         if let RegType::Temp(r) = r {
-            if r > self.arity {
-                self.in_use.remove(&r);
-                self.free_list.push(r);
-            }
+            self.in_use.remove(&r);
+            self.free_list.push(r);
         }
     }
 }
