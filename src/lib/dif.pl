@@ -1,3 +1,8 @@
+/**
+Provides predicate dif/2. dif/2 is a constraint that is true only if both of its
+arguments are different terms.
+*/
+
 :- module(dif, [dif/2]).
 
 :- use_module(library(atts)).
@@ -38,6 +43,20 @@ verify_attributes(Var, Value, Goals) :-
 % Probably the world's worst dif/2 implementation. I'm open to
 % suggestions for improvement.
 
+%% dif(?X, ?Y).
+%
+% True iff X and Y are different terms. Unlike \\=/2, dif/2 is more declarative because if X and Y can
+% unify but they're not yet equal, the decision is delayed, and prevents X and Y to become equal later.
+% Examples:
+%
+%     ?- dif(a, a).
+%        false.
+%     ?- dif(a, b).
+%        true.
+%     ?- dif(X, b).
+%        dif:dif(X,b).
+%     ?- dif(X, b), X = b.
+%        false.
 dif(X, Y) :-
     X \== Y,
     (   X \= Y -> true
