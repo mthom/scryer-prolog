@@ -243,14 +243,22 @@ fn trim_structure_by_last_arg(instr: &mut Instruction, last_arg: &Term) {
 }
 
 trait AddToFreeList<'a, Target: CompilationTarget<'a>> {
+    fn add_term_to_free_list(&mut self, r: RegType);
     fn add_subterm_to_free_list(&mut self, term: &Term);
 }
 
 impl<'a, 'b> AddToFreeList<'a, FactInstruction> for CodeGenerator<'b> {
+    fn add_term_to_free_list(&mut self, r: RegType) {
+        self.marker.add_to_free_list(r);
+    }
+
     fn add_subterm_to_free_list(&mut self, _term: &Term) {}
 }
 
 impl<'a, 'b> AddToFreeList<'a, QueryInstruction> for CodeGenerator<'b> {
+    #[inline(always)]
+    fn add_term_to_free_list(&mut self, _r: RegType) {}
+
     #[inline(always)]
     fn add_subterm_to_free_list(&mut self, term: &Term) {
         if let Some(cell) = structure_cell(term) {
@@ -374,6 +382,8 @@ impl<'b> CodeGenerator<'b> {
                     self.marker.mark_non_var::<Target>(lvl, term_loc, cell, &mut target);
                     target.push(Target::to_structure(name, terms.len(), cell.get()));
 
+                    <CodeGenerator<'b> as AddToFreeList<'a, Target>>::add_term_to_free_list(self, cell.get());
+
                     if let Some(instr) = target.last_mut() {
                         if let Some(term) = terms.last() {
                             trim_structure_by_last_arg(instr, term);
@@ -391,6 +401,8 @@ impl<'b> CodeGenerator<'b> {
                 TermRef::Cons(lvl, cell, head, tail) => {
                     self.marker.mark_non_var::<Target>(lvl, term_loc, cell, &mut target);
                     target.push(Target::to_list(lvl, cell.get()));
+
+                    <CodeGenerator<'b> as AddToFreeList<'a, Target>>::add_term_to_free_list(self, cell.get());
 
                     self.subterm_to_instr::<Target>(head, term_loc, &mut target);
                     self.subterm_to_instr::<Target>(tail, term_loc, &mut target);
@@ -964,6 +976,8 @@ impl<'b> CodeGenerator<'b> {
         if self.marker.max_reg_allocated() > MAX_ARITY {
             return Err(CompilationError::ExceededMaxArity);
         }
+
+        self.marker.reset_free_list();
 
         let mut unsafe_var_marker = UnsafeVarMarker::new();
 

@@ -218,6 +218,10 @@ impl DebrayAllocator {
             self.free_list.push(r);
         }
     }
+
+    pub fn reset_free_list(&mut self) {
+        self.free_list.clear();
+    }
 }
 
 impl Allocator for DebrayAllocator {
