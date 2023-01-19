@@ -33,9 +33,11 @@ but they're not part of the ISO Prolog standard at the moment.
 % For all bindings possible by Generate, Test must be true.
 %
 % In this example, it checks that all numbers are even:
-% 
-%     ?- Ns = [2,4,6], forall(member(N, Ns), 0 is N mod 2).
-%        Ns = [2,4,6].
+%
+% ```
+% ?- Ns = [2,4,6], forall(member(N, Ns), 0 is N mod 2).
+%    Ns = [2,4,6].
+% ```
 forall(Generate, Test) :-
     \+ (Generate, \+ Test).
 
@@ -44,20 +46,25 @@ forall(Generate, Test) :-
 %% bb_put(+Key, +Value).
 %
 % Sets a global variable named Key (must be an atom) with value Value.
-% The global variable isn't backtrackable. Check bb\_b\_put/2 for the
+% The global variable isn't backtrackable. Check `bb_b_put/2` for the
 % backtrackable version.
 %
-%     ?- bb_put(city, "Valladolid").
-%        true.
-%     ?- bb_get(city, X).
-%        X = "Valladolid".
-% In this example one can understand the difference between bb\_put/2 and
-% bb\_b\_put/2:
+% ```
+% ?- bb_put(city, "Valladolid").
+%    true.
+% ?- bb_get(city, X).
+%    X = "Valladolid".
+% ```
 %
-%     ?- bb_put(city, "Valladolid"), (bb_put(city, "Salamanca"), false);(bb_get(city, X)).
-%        X = "Salamanca".
-%     ?- bb_put(city, "Valladolid"), (bb_b_put(city, "Salamanca"), false);(bb_get(city, X)).
-%        X = "Valladolid".
+% In this example one can understand the difference between `bb_put/2` and
+% `bb_b_put/2`:
+%
+% ```
+% ?- bb_put(city, "Valladolid"), (bb_put(city, "Salamanca"), false);(bb_get(city, X)).
+%    X = "Salamanca".
+% ?- bb_put(city, "Valladolid"), (bb_b_put(city, "Salamanca"), false);(bb_get(city, X)).
+%    X = "Valladolid".
+% ```
 bb_put(Key, Value) :-
     (  atom(Key) ->
        '$store_global_var'(Key, Value)
@@ -69,20 +76,25 @@ bb_put(Key, Value) :-
 %% bb_b_put(+Key, +Value).
 %
 % Sets a global variable named Key (must be an atom) with value Value.
-% The global variable is backtrackable. Check bb\_put/2 for the
+% The global variable is backtrackable. Check `bb_put/2` for the
 % non-backtrackable version.
 %
-%     ?- bb_b_put(city, "Valladolid").
-%        true.
-%     ?- bb_get(city, X).
-%        X = "Valladolid".
-% In this example one can understand the difference between bb\_put/2 and
-% bb\_b\_put/2:
+% ```
+% ?- bb_b_put(city, "Valladolid").
+%    true.
+% ?- bb_get(city, X).
+%    X = "Valladolid".
+% ```
 %
-%     ?- bb_put(city, "Valladolid"), (bb_put(city, "Salamanca"), false);(bb_get(city, X)).
-%        X = "Salamanca".
-%     ?- bb_put(city, "Valladolid"), (bb_b_put(city, "Salamanca"), false);(bb_get(city, X)).
-%        X = "Valladolid".
+% In this example one can understand the difference between `bb_put/2` and
+% `bb_b_put/2`:
+%
+% ```
+% ?- bb_put(city, "Valladolid"), (bb_put(city, "Salamanca"), false);(bb_get(city, X)).
+%    X = "Salamanca".
+% ?- bb_put(city, "Valladolid"), (bb_b_put(city, "Salamanca"), false);(bb_get(city, X)).
+%    X = "Valladolid".
+% ```
 bb_b_put(Key, Value) :-
     (  atom(Key) ->
        '$store_backtrackable_global_var'(Key, Value)
@@ -119,7 +131,9 @@ call_cleanup(G, C) :- setup_call_cleanup(true, G, C).
 %
 % In this example, we use the predicate to always close an open file:
 %
-%     ?- setup_call_cleanup(open(File, read, Stream), do_something_with_stream(Stream), close(Stream)).
+% ```
+% ?- setup_call_cleanup(open(File, read, Stream), do_something_with_stream(Stream), close(Stream)).
+% ```
 setup_call_cleanup(S, G, C) :-
     '$get_b_value'(B),
     '$call_with_inference_counting'(call(S)),
@@ -329,13 +343,13 @@ call_nth_nesting(C, ID) :-
 
 %% copy_term_nat(Source, Dest)
 %
-% Similar to copy\_term/2 but without attribute variables
+% Similar to `copy_term/2` but without attribute variables
 copy_term_nat(Source, Dest) :-
     '$copy_term_without_attr_vars'(Source, Dest).
 
 %% asserta(Module, Rule_Fact).
 %
-% Similar to asserta/1 but allows specifying a Module
+% Similar to `asserta/1` but allows specifying a Module
 asserta(Module, (Head :- Body)) :-
     !,
     '$asserta'(Module, Head, Body).
@@ -344,7 +358,7 @@ asserta(Module, Fact) :-
 
 %% assertz(Module, Rule_Fact).
 %
-% Similar to assertz/1 but allows specifying a Module
+% Similar to `assertz/1` but allows specifying a Module
 assertz(Module, (Head :- Body)) :-
     !,
     '$assertz'(Module, Head, Body).

@@ -105,53 +105,60 @@ goal_expansion(del_attr(Var, Module), (var(Var) -> put_atts(Var, -Access);true))
         Access =.. [Module,_].
 
 
-/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+/**
    Each CLP(B) variable belongs to exactly one BDD. Each CLP(B)
    variable gets an attribute (in module "clpb") of the form:
 
-        index_root(Index,Root)
+   ```
+   index_root(Index,Root)
+   ```
 
    where Index is the variable's unique integer index, and Root is the
    root of the BDD that the variable belongs to.
 
-   Each CLP(B) variable also gets an attribute in module clpb_hash: an
+   Each CLP(B) variable also gets an attribute in module `clpb_hash`: an
    association table node(LID,HID) -> Node, to keep the BDD reduced.
    The association table of each variable must be rebuilt on occasion
    to remove nodes that are no longer reachable. We rebuild the
    association tables of involved variables after BDDs are merged to
    build a new root. This only serves to reclaim memory: Keeping a
    node in a local table even when it no longer occurs in any BDD does
-   not affect the solver's correctness. However, apply_shortcut/4
+   not affect the solver's correctness. However, `apply_shortcut/4`
    relies on the invariant that every node that occurs in the relevant
    BDDs is also registered in the table of its branching variable.
 
-   A root is a logical variable with a single attribute ("clpb_bdd")
+   A root is a logical variable with a single attribute ("clpb\_bdd")
    of the form:
 
-        Sat-BDD
+   ```
+   Sat-BDD
+   ```
 
    where Sat is the SAT formula (in original form) that corresponds to
    BDD. Sat is necessary to rebuild the BDD after variable aliasing,
-   and to project all remaining constraints to a list of sat/1 goals.
+   and to project all remaining constraints to a list of `sat/1` goals.
 
    Finally, a BDD is either:
 
-      *)  The integers 0 or 1, denoting false and true, respectively, or
-      *)  A node of the form
+      *  The integers 0 or 1, denoting false and true, respectively, or
+      *  A node of the form
 
-           node(ID, Var, Low, High, Aux)
-               Where ID is the node's unique integer ID, Var is the
-               node's branching variable, and Low and High are the
-               node's low (Var = 0) and high (Var = 1) children. Aux
-               is a free variable, one for each node, that can be used
-               to attach attributes and store intermediate results.
+         ```
+         node(ID, Var, Low, High, Aux)
+         ```
+
+         Where ID is the node's unique integer ID, Var is the
+         node's branching variable, and Low and High are the
+         node's low (Var = 0) and high (Var = 1) children. Aux
+         is a free variable, one for each node, that can be used
+         to attach attributes and store intermediate results.
 
    Variable aliasing is treated as a conjunction of corresponding SAT
    formulae.
 
    You should think of CLP(B) as a potentially vast collection of BDDs
    that can range from small to gigantic in size, and which can merge.
-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+*/
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    Type checking.
@@ -1108,7 +1115,7 @@ indomain(1).
 %
 % Examples:
 %
-% ==
+% ```
 % ?- sat(A =< B), Vs = [A,B], sat_count(+[1|Vs], Count).
 % Vs = [A, B],
 % Count = 3,
@@ -1120,7 +1127,7 @@ indomain(1).
 % Vs = [...],
 % CountOr = 1329227995784915872903807060280344575,
 % CountAnd = 1.
-% ==
+% ```
 
 
 
@@ -1248,7 +1255,7 @@ random_bindings(VNum, Node) -->
 % linear objective function over Boolean variables Vs with integer
 % coefficients Weights. This predicate assigns 0 and 1 to the
 % variables in Vs such that all stated constraints are satisfied, and
-% Maximum is the maximum of sum(Weight_i*V_i) over all admissible
+% Maximum is the maximum of `sum(Weight_i*V_i)` over all admissible
 % assignments.  On backtracking, all admissible assignments that
 % attain the optimum are generated.
 %
@@ -1257,10 +1264,10 @@ random_bindings(VNum, Node) -->
 %
 % Example:
 %
-% ==
+% ```
 % ?- sat(A#B), weighted_maximum([1,2,1], [A,B,C], Maximum).
 % A = 0, B = 1, C = 1, Maximum = 3.
-% ==
+% ```
 
 weighted_maximum(Ws, Vars, Max) :-
         must_be(list(integer), Ws),

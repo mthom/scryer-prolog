@@ -1,12 +1,12 @@
 /** Predicates for reasoning about files and directories.
 
 In this library, directories and files are represented as
-*lists of characters*. This is an ideal representation:
+_lists of characters_. This is an ideal representation:
 
 * Lists of characters can be conveniently reasoned about with DCGs
-   and built-in Prolog predicates from library(lists). This alone
+   and built-in Prolog predicates from `library(lists)`. This alone
    is already a very compelling argument to use them.
-* Other Scryer libraries such as library(http/http_open) also already
+* Other Scryer libraries such as `library(http/http_open)` also already
    use lists of characters to represent paths.
 * File names are mostly ephemeral, so it is good for efficiency
    that they can quickly allocated transiently on the heap, leaving the
@@ -123,14 +123,14 @@ directory_exists(Directory) :-
 %% make_directory(+Directory).
 %
 % Succeeds if it creates a new directory named Directory in the current system.
-% If you want to create a nested directory, use make\_directory\_path/1.
+% If you want to create a nested directory, use `make_directory_path/1`.
 make_directory(Directory) :-
         must_be(chars, Directory),
         '$make_directory'(Directory).
 
 %% make_directory_path(+Directory).
 %
-% Similar to make\_directory/1 but recursively creates directories if they're missing.
+% Similar to `make_directory/1` but recursively creates directories if they're missing.
 % Equivalent to mkdir -p in Unix.
 make_directory_path(Directory) :-
         must_be(chars, Directory),
@@ -182,8 +182,8 @@ directory_must_exist(Directory, Context) :-
 %
 % Dir0 is the current working directory, and the working directory
 % is changed to Dir.
-
-% Use `working\_directory(Ds, Ds)` to determine the current working directory,
+% 
+% Use `working_directory/2` to determine the current working directory,
 % and leave it as is.
 
 working_directory(Dir0, Dir) :-
@@ -220,7 +220,7 @@ path_canonical(Ps, Cs) :-
 %
 % For a file File that must exist, it returns a time stamp  T with the modification time
 %
-% T is a time stamp compatible with library(time). 
+% T is a time stamp compatible with `library(time)`. 
 file_modification_time(File, T) :-
         file_time_(File, modification, T).
 
@@ -228,7 +228,7 @@ file_modification_time(File, T) :-
 %
 % For a file File that must exist, it returns a time stamp  T with the access time
 %
-% T is a time stamp compatible with library(time).
+% T is a time stamp compatible with `library(time)`.
 file_access_time(File, T) :-
         file_time_(File, access, T).
 
@@ -236,7 +236,7 @@ file_access_time(File, T) :-
 %
 % For a file File that must exist, it returns a time stamp  T with the creation time
 %
-% T is a time stamp compatible with library(time).
+% T is a time stamp compatible with `library(time)`.
 file_creation_time(File, T) :-
         file_time_(File, creation, T).
 
@@ -258,15 +258,19 @@ file_time_(File, Which, T) :-
 %
 % Examples:
 %
-%     ?- path_segments("/hello/there", Segments).
-%        Segments = [[],"hello","there"].
-%     ?- path_segments(Path, ["hello","there"]).
-%        Path = "hello/there".
-%
+% ```
+% ?- path_segments("/hello/there", Segments).
+%    Segments = [[],"hello","there"].
+% ?- path_segments(Path, ["hello","there"]).
+%    Path = "hello/there".
+% ```
+% 
 % To obtain the platform-specific directory separator, you can use:
 %
-%     ?- path_segments(Separator, ["",""]).
-%        Separator = "/".
+% ```
+% ?- path_segments(Separator, ["",""]).
+%    Separator = "/".
+% ```
 
 path_segments(Path, Segments) :-
         '$directory_separator'(Sep),

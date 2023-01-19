@@ -172,7 +172,7 @@ gen_assoc_(Key, t(_,_,_,_,R), Val) :-
 %
 % True if Key-Value is an association in Assoc.
 %
-% Throws error: type_error(assoc, Assoc) if Assoc is not an association list.
+% Throws error: type\_error(assoc, Assoc) if Assoc is not an association list.
 
 get_assoc(Key, Assoc, Val) :-
     must_be(assoc, Assoc),
@@ -218,7 +218,7 @@ get_assoc(>, Key, V, L, R, Val, V, L, NR, NVal) :-
 % Create an association from a list Pairs of Key-Value pairs. List
 % must not contain duplicate keys.
 %
-% Throws error: domain_error(unique_key_pairs, List) if List contains duplicate keys
+% Throws error: domain\_error(unique\_key\_pairs, List) if List contains duplicate keys
 
 list_to_assoc(List, Assoc) :-
     (  List = [] -> Assoc = t
@@ -249,7 +249,7 @@ list_to_assoc(N, List, More, Depth, t(K,V,Balance,L,R)) :-
 % pairs. The pairs must occur in strictly ascending order of
 % their keys.
 %
-% Throws error: domain_error(key_ordered_pairs, List) if pairs are not ordered.
+% Throws error: domain\_error(key\_ordered\_pairs, List) if pairs are not ordered.
 
 ord_list_to_assoc(Sorted, Assoc) :-
     (  Sorted = [] -> Assoc = t

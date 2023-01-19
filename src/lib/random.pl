@@ -30,9 +30,9 @@ random(R) :-
 %
 % Generates a random integer number between Lower (inclusive) and Upper (exclusive).
 %
-% Throws instantiation\_error if Lower or Upper are variables.
+% Throws `instantiation_error` if Lower or Upper are variables.
 %
-% Throws type\_error if Lower or Upper aren't integers.
+% Throws `type_error` if Lower or Upper aren't integers.
 random_integer(Lower, Upper, R) :-
     var(R),
     (   (var(Lower) ; var(Upper)) ->
