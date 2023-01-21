@@ -5,7 +5,7 @@
 
 /** Make HTTP requests.
 
-This library contains the predicate http\_open/3 which allows you to perform HTTP(S) calls.
+This library contains the predicate `http_open/3` which allows you to perform HTTP(S) calls.
 Useful for making API calls, or parsing websites. It uses Hyper underneath.
 */
 
@@ -30,8 +30,10 @@ Useful for making API calls, or parsing websites. It uses Hyper underneath.
 %
 % Example:
 %
-%     ?- http_open("https://www.example.com", S, []), get_n_chars(S, N, HTML).
-%        S = '$stream'(0x7fb548001be8), N = 1256, HTML = "<!doctype html>\n<ht ...".
+% ```
+% ?- http_open("https://www.example.com", S, []), get_n_chars(S, N, HTML).
+%    S = '$stream'(0x7fb548001be8), N = 1256, HTML = "<!doctype html>\n<ht ...".
+% ```
 http_open(Address, Response, Options) :-
     parse_http_options(Options, OptionValues),
     ( member(method(Method), OptionValues) -> true; Method = get),
