@@ -12,6 +12,12 @@
    Public domain code.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
+/** Predicates for reasoning about the operating system (OS) environment.
+
+This includes predicates about environment variables, calls to shell and
+finding out the PID of the running system.
+*/
+
 :- module(os, [getenv/2,
                setenv/2,
                unsetenv/1,
@@ -24,25 +30,60 @@
 :- use_module(library(lists)).
 :- use_module(library(si)).
 
+%% getenv(+Key, -Value).
+%
+% True iff Value contains the value of the environment variable Key.
+% Example:
+%
+% ```
+% ?- getenv("LANG", Ls).
+%    Ls = "en_US.UTF-8".
+% ```
 getenv(Key, Value) :-
         must_be_env_var(Key),
         '$getenv'(Key, Value).
 
+%% setenv(+Key, +Value).
+%
+% Sets the environment variable Key to Value
 setenv(Key, Value) :-
         must_be_env_var(Key),
         must_be_chars(Value),
         '$setenv'(Key, Value).
 
+%% unsetenv(+Key).
+%
+% Unsets the environment variable Key
 unsetenv(Key) :-
         must_be_env_var(Key),
         '$unsetenv'(Key).
 
+%% shell(+Command)
+%
+% Equivalent to `shell(Command, 0)`.
 shell(Command) :- shell(Command, 0).
+
+%% shell(+Command, -Status).
+%
+% True iff executes Command in a shell of the operating system and the exit code is Status.
+% Keep in mind the shell syntax is dependant on the operating system, so it should be
+% used very carefully.
+%
+% Example (using Linux and fish shell):
+%
+% ```
+% ?- shell("echo $SHELL", Status).
+% /bin/fish
+%    Status = 0.
+% ```
 shell(Command, Status) :-
     must_be_chars(Command),
     can_be(integer, Status),
     '$shell'(Command, Status).
 
+%% pid(-PID).
+%
+% True iff PID is the process identification number of current Scryer Prolog instance.
 pid(PID) :-
         can_be(integer, PID),
         '$pid'(PID).
