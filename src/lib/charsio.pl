@@ -1,3 +1,11 @@
+/** High-level predicates to work with chars and strings
+
+This module contains predicates that relates strings of chars
+to other representations, as well as high-level predicates to
+read and write chars.
+
+*/
+
 :- module(charsio, [char_type/2,
                     chars_utf8bytes/2,
                     get_single_char/1,
@@ -65,6 +73,38 @@ extend_var_list_([V|Vs], N, VarList, NewVarList, VarType) :-
     ).
 
 
+%% char_type(+Char, -Type).
+%
+% Given a Char, Type is one of the categories that char fits in.
+% Possible categories are:
+%
+% - `alnum`
+% - `alpha`
+% - `alphabetic`
+% - `alphanumeric`
+% - `ascii`
+% - `ascii_graphic`
+% - `ascii_punctuation`
+% - `binary_digit`
+% - `control`
+% - `decimal_digit`
+% - `exponent`
+% - `graphic`
+% - `graphic_token`
+% - `hexadecimal_digit`
+% - `layout`
+% - `lower`
+% - `meta`
+% - `numeric`
+% - `octal_digit`
+% - `octet`
+% - `prolog`
+% - `sign`
+% - `solo`
+% - `symbolic_control`
+% - `symbolic_hexadecimal`
+% - `upper`
+% - `whitespace`
 char_type(Char, Type) :-
         must_be(character, Char),
         (   ground(Type) ->
@@ -106,18 +146,40 @@ ctype(upper).
 ctype(whitespace).
 
 
+%% get_single_char(-Char).
+%
+% Gets a single char from the current input stream.
 get_single_char(C) :-
     (  var(C) -> '$get_single_char'(C)
     ;  atom_length(C, 1) -> '$get_single_char'(C)
     ;  type_error(in_character, C, get_single_char/1)
     ).
 
-
+%% read_from_chars(+Chars, -Term).
+%
+% Given a string made of chars which contains a representation of
+% a Prolog term, Term is the Prolog term represented. Example:
+%
+% ```
+% ?- read_from_chars("f(x,y).", X).
+%    X = f(x,y).
+% ```
 read_from_chars(Chars, Term) :-
     must_be(chars, Chars),
     '$read_term_from_chars'(Chars, Term).
 
-
+%% write_term_to_chars(+Term, +Options, -Chars).
+%
+% Given a Term which is a Prolog term and a set of options, Chars is
+% string representation of that term. Options available are:
+%
+%  * `ignore_ops(+Boolean)` if `true`, the generic term representation is used everywhere. In `false`
+%    (default), operators do not use that generic term representation.
+%  * `max_depth(+N)` if the term is nested deeper than N, print the reminder as ellipses.
+%    If N = 0 (default), there's no limit.
+%  * `numbervars(+Boolean)` if true, replaces `$VAR(N)` variables with letters, in order. Default is false.
+%  * `quoted(+Boolean)` if true, strings and atoms that need quotes to be valid Prolog synytax, are quoted. Default is false.
+%  * `variable_names(+List)` assign names to variables in term. List should be a list of terms of format `Name=Var`.
 write_term_to_chars(_, Options, _) :-
     var(Options), instantiation_error(write_term_to_chars/3).
 write_term_to_chars(Term, Options, Chars) :-
@@ -151,6 +213,17 @@ encode(Code, Prefix, Nb) -->
 % Maps characters and UTF-8 bytes.
 % If Cs is a variable, parses Bs as a list of UTF-8 bytes.
 % Otherwise, transform the list of characters Cs to UTF-8 bytes.
+
+%% chars_utf8bytes(?Chars, ?Bytes).
+%
+% Maps a string made of chars with a list of UTF-8 bytes. Some examples:
+%
+% ```
+% ?- chars_utf8bytes("Prolog", X).
+%   X = [80,114,111,108,111,103].
+% ?- chars_utf8bytes(X, [226, 136, 145]).
+%    X = "∑".
+% ```
 chars_utf8bytes(Cs, Bs) :-
   var(Cs), must_be(list, Bs) ->
     once(phrase(decode_utf8(Cs), Bs))
@@ -177,7 +250,10 @@ continuation(Code, Chars, Nb) --> [Byte],
 % each remaining continuation byte (if any) will raise 0xFFFD too
 continuation(_, ['\xFFFD\'|T], _) --> [_], decode_utf8(T).
 
-
+%% read_line_to_chars(+Stream, -Chars, +InitialChars).
+%
+% Reads chars from stream Stream until it finds a `\n` character.
+% InitialChars will be appended at the end of Chars
 read_line_to_chars(Stream, Cs0, Cs) :-
         '$get_n_chars'(Stream, 1, Char), % this also works for binary streams
         (   Char == [] -> Cs0 = Cs
@@ -188,13 +264,11 @@ read_line_to_chars(Stream, Cs0, Cs) :-
             )
         ).
 
-/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   Read N characters from Stream.
-
-   If N is a variable, read until EOF, unifying N with the number of
-   characters read.
-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
-
+%% get_n_chars(+Stream, ?N, -Chars).
+%
+% Read N chars from stream Stream. N can be an integer, in that case
+% only N chars are read, or a variable, unifying N with the number of chars
+% read until it found EOF.
 get_n_chars(Stream, N, Cs) :-
         can_be(integer, N),
         (   var(N) ->
@@ -211,24 +285,26 @@ read_to_eof(Stream, Cs) :-
             read_to_eof(Stream, Rest)
         ).
 
-/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   Relation between a list of characters Cs and its Base64 encoding Bs,
-   also a list of characters.
-
-   At least one of the arguments must be instantiated.
-
-   Options are:
-
-      - padding(Boolean)
-        Whether to use padding: true (the default) or false.
-      - charset(C)
-        Either 'standard' (RFC 4648 §4, the default) or 'url' (RFC 4648 §5).
-
-   Example:
-
-      ?- chars_base64("hello", Bs, []).
-         Bs = "aGVsbG8=".
-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+%% chars_base64(?Chars, ?Base64, +Options).
+%
+% Relation between a list of characters Cs and its Base64 encoding Bs,
+% also a list of characters.
+%
+% At least one of the arguments must be instantiated.
+%
+% Options are:
+%
+% - `padding(Boolean)`
+%   Whether to use padding: true (the default) or false.
+% - `charset(C)`
+%   Either 'standard' (RFC 4648 §4, the default) or 'url' (RFC 4648 §5).
+%
+% Example:
+%
+% ```
+% ?- chars_base64("hello", Bs, []).
+%    Bs = "aGVsbG8=".
+% ```
 
 chars_base64(Cs, Bs, Options) :-
         must_be(list, Options),
