@@ -562,6 +562,10 @@ enum SystemClauseType {
     InlineCallN(usize),
     #[strum_discriminants(strum(props(Arity = "1", Name = "$is_expanded_or_inlined")))]
     IsExpandedOrInlined,
+    #[strum_discriminants(strum(props(Arity = "3", Name = "$get_clause_p")))]
+    GetClauseP,
+    #[strum_discriminants(strum(props(Arity = "6", Name = "$invoke_clause_at_p")))]
+    InvokeClauseAtP,
     REPL(REPLCodePtr),
 }
 
@@ -1620,6 +1624,8 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallPrepareCallClause(..) |
                     &Instruction::CallCompileInlineOrExpandedGoal(..) |
                     &Instruction::CallIsExpandedOrInlined(_) |
+                    &Instruction::CallGetClauseP(_) |
+                    &Instruction::CallInvokeClauseAtP(_) |
                     &Instruction::CallEnqueueAttributedVar(_) |
                     &Instruction::CallFetchGlobalVar(_) |
                     &Instruction::CallFirstStream(_) |
@@ -1822,7 +1828,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteMakeDirectoryPath(_) |
                     &Instruction::ExecuteDeleteFile(_) |
                     &Instruction::ExecuteRenameFile(_) |
-		    &Instruction::ExecuteFileCopy(_) |
+		            &Instruction::ExecuteFileCopy(_) |
                     &Instruction::ExecuteWorkingDirectory(_) |
                     &Instruction::ExecuteDeleteDirectory(_) |
                     &Instruction::ExecutePathCanonical(_) |
@@ -1833,6 +1839,8 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecutePrepareCallClause(..) |
                     &Instruction::ExecuteCompileInlineOrExpandedGoal(..) |
                     &Instruction::ExecuteIsExpandedOrInlined(_) |
+                    &Instruction::ExecuteGetClauseP(_) |
+                    &Instruction::ExecuteInvokeClauseAtP(_) |
                     &Instruction::ExecuteEnqueueAttributedVar(_) |
                     &Instruction::ExecuteFetchGlobalVar(_) |
                     &Instruction::ExecuteFirstStream(_) |

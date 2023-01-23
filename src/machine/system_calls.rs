@@ -457,6 +457,20 @@ impl BrentAlgState {
 }
 
 impl MachineState {
+    pub(crate) fn name_and_arity_from_heap(&self, cell: HeapCellValue) -> Option<PredicateKey> {
+        read_heap_cell!(self.store(self.deref(cell)),
+            (HeapCellValueTag::Str, s) => {
+                Some(cell_as_atom_cell!(self.heap[s]).get_name_and_arity())
+            }
+            (HeapCellValueTag::Atom, (name, _arity)) => {
+                Some((name, 0))
+            }
+            _ => {
+                None
+            }
+        )
+    }
+
     #[inline]
     pub(crate) fn variable_set<S: BuildHasher>(
         &mut self,
@@ -988,6 +1002,116 @@ impl MachineState {
 }
 
 impl Machine {
+    #[inline(always)]
+    pub(crate) fn get_clause_p(&self, module_name: Atom) -> (usize, usize) {
+        use crate::machine::loader::CompilationTarget;
+
+        let key_cell = self.machine_st.registers[1];
+        let key = self.machine_st.name_and_arity_from_heap(key_cell).unwrap();
+
+        let compilation_target = if module_name == atom!("user") {
+            CompilationTarget::User
+        } else {
+            CompilationTarget::Module(module_name)
+        };
+
+        let skeleton = self.indices.get_predicate_skeleton(
+            &compilation_target,
+            &key,
+        ).unwrap();
+
+        if self.machine_st.b > self.machine_st.e {
+            let or_frame = self.machine_st.stack.index_or_frame(self.machine_st.b);
+            let bp = or_frame.prelude.bp;
+
+            match &self.code[bp] {
+                &Instruction::IndexingCode(ref indexing_code) => {
+                    match &indexing_code[or_frame.prelude.boip as usize] {
+                        &IndexingLine::IndexedChoice(ref indexed_choice) => {
+                            let p = or_frame.prelude.biip as usize - 1;
+
+                            match &indexed_choice[p] {
+                                &IndexedChoiceInstruction::Try(offset) |
+                                &IndexedChoiceInstruction::Retry(offset) => {
+                                    let clause_clause_loc = skeleton.core.clause_clause_locs[p];
+                                    (clause_clause_loc, bp + offset)
+                                }
+                                &IndexedChoiceInstruction::Trust(_) => {
+                                    unreachable!()
+                                }
+                            }
+                        }
+                        _ => {
+                            unreachable!()
+                        }
+                    }
+                }
+                _ => unreachable!()
+            }
+        } else {
+            let module_name = match compilation_target {
+                CompilationTarget::User => atom!("builtins"),
+                CompilationTarget::Module(target) => target,
+            };
+
+            let bp = self.indices
+                .get_predicate_code_index(atom!("$clause"), 2, module_name)
+                .and_then(|idx| idx.local())
+                .unwrap();
+
+            macro_rules! extract_ptr {
+                ($ptr: expr) => {
+                    match $ptr {
+                        IndexingCodePtr::External(p) => return (
+                            skeleton.core.clause_clause_locs.back().cloned().unwrap(),
+                            bp + p,
+                        ),
+                        IndexingCodePtr::Internal(boip) => boip,
+                        _ => unreachable!(),
+                    }
+                };
+            }
+
+            match &self.code[bp] {
+                &Instruction::IndexingCode(ref indexing_code) => {
+                    let indexing_code_ptr = match &indexing_code[0] {
+                        &IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(_, _, c, _, s)) => {
+                            if key.1 > 0 { s } else { c }
+                        }
+                        _ => {
+                            unreachable!()
+                        }
+                    };
+
+                    let boip = extract_ptr!(indexing_code_ptr);
+
+                    let boip = match &indexing_code[boip] {
+                        &IndexingLine::Indexing(IndexingInstruction::SwitchOnStructure(ref hm)) => {
+                            boip + extract_ptr!(hm.get(&key).cloned().unwrap())
+                        }
+                        &IndexingLine::Indexing(IndexingInstruction::SwitchOnConstant(ref hm)) => {
+                            boip + extract_ptr!(hm.get(&Literal::Atom(key.0)).cloned().unwrap())
+                        }
+                        _ => boip,
+                    };
+
+                    match &indexing_code[boip] {
+                        &IndexingLine::IndexedChoice(ref indexed_choice) => {
+                            return (
+                                skeleton.core.clause_clause_locs.back().cloned().unwrap(),
+                                bp + indexed_choice.back().unwrap().offset(),
+                            );
+                        }
+                        _ => unreachable!(),
+                    }
+                }
+                _ => {
+                    return (skeleton.core.clause_clause_locs.back().cloned().unwrap(), bp);
+                }
+            }
+        }
+    }
+
     #[inline(always)]
     pub(crate) fn deref_register(&mut self, i: usize) -> HeapCellValue {
 	self.machine_st.store(self.machine_st.deref(self.machine_st.registers[i]))
@@ -3281,20 +3405,14 @@ impl Machine {
     pub(crate) fn head_is_dynamic(&mut self) {
         let module_name = cell_as_atom!(self.deref_register(1));
 
-        let (name, arity) = read_heap_cell!(
-            self.deref_register(2),
-            (HeapCellValueTag::Str, s) => {
-                cell_as_atom_cell!(self.machine_st.heap[s]).get_name_and_arity()
+        match self.machine_st.name_and_arity_from_heap(self.machine_st.registers[2]) {
+            Some((name, arity)) => {
+                self.machine_st.fail = !self.indices.is_dynamic_predicate(module_name, (name, arity));
             }
-            (HeapCellValueTag::Atom, (name, _arity)) => {
-                (name, 0)
+            None => {
+                self.machine_st.fail = true;
             }
-            _ => {
-                unreachable!()
-            }
-        );
-
-        self.machine_st.fail = !self.indices.is_dynamic_predicate(module_name, (name, arity));
+        }
     }
 
     #[inline(always)]
@@ -4669,7 +4787,7 @@ impl Machine {
         self.restore_instr_at_verify_attr_interrupt();
 
         let e = self.machine_st.e;
-        let frame_len = self.machine_st.stack.index_and_frame(e).prelude.univ_prelude.num_cells;
+        let frame_len = self.machine_st.stack.index_and_frame(e).prelude.num_cells;
 
         for i in 1..frame_len - 2 {
             self.machine_st.registers[i] = self.machine_st.stack[stack_loc!(AndFrame, e, i)];
