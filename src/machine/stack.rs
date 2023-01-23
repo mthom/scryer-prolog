@@ -36,14 +36,9 @@ impl Drop for Stack {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct FramePrelude {
-    pub(crate) num_cells: usize,
-}
-
 #[derive(Debug)]
 pub(crate) struct AndFramePrelude {
-    pub(crate) univ_prelude: FramePrelude,
+    pub(crate) num_cells: usize,
     pub(crate) e: usize,
     pub(crate) cp: usize,
 }
@@ -113,7 +108,7 @@ impl IndexMut<usize> for Stack {
 
 #[derive(Debug)]
 pub(crate) struct OrFramePrelude {
-    pub(crate) univ_prelude: FramePrelude,
+    pub(crate) num_cells: usize,
     pub(crate) e: usize,
     pub(crate) cp: usize,
     pub(crate) b: usize,
@@ -208,7 +203,7 @@ impl Stack {
             }
 
             let and_frame = &mut *(new_ptr as *mut AndFrame);
-            and_frame.prelude.univ_prelude.num_cells = num_cells;
+            and_frame.prelude.num_cells = num_cells;
 
             e
         }
@@ -232,7 +227,7 @@ impl Stack {
             }
 
             let or_frame = &mut *(new_ptr as *mut OrFrame);
-            or_frame.prelude.univ_prelude.num_cells = num_cells;
+            or_frame.prelude.num_cells = num_cells;
 
             b
         }
@@ -298,7 +293,7 @@ mod tests {
             0// 10 * mem::size_of::<HeapCellValue>() + prelude_size::<AndFrame>()
         );
 
-        assert_eq!(and_frame.prelude.univ_prelude.num_cells, 10);
+        assert_eq!(and_frame.prelude.num_cells, 10);
 
         for idx in 0..10 {
             assert_eq!(and_frame[idx + 1], stack_loc_as_cell!(AndFrame, e, idx + 1));

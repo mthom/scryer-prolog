@@ -1010,7 +1010,6 @@ impl Machine {
                                         .stack
                                         .index_or_frame(self.machine_st.b)
                                         .prelude
-                                        .univ_prelude
                                         .num_cells;
 
                                     self.machine_st.cc = cell_as_fixnum!(
@@ -1081,7 +1080,6 @@ impl Machine {
                                         .stack
                                         .index_or_frame(self.machine_st.b)
                                         .prelude
-                                        .univ_prelude
                                         .num_cells;
 
                                     self.machine_st.cc = cell_as_fixnum!(
@@ -3143,7 +3141,6 @@ impl Machine {
                                                 .stack
                                                 .index_or_frame(b)
                                                 .prelude
-                                                .univ_prelude
                                                 .num_cells;
 
                                             self.machine_st.cc = cell_as_fixnum!(
@@ -5087,6 +5084,128 @@ impl Machine {
                             (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
                         );
                     }
+                }
+                &Instruction::CallGetClauseP(_) => {
+                    let module_name = cell_as_atom!(self.deref_register(3));
+
+                    let (n, p) = self.get_clause_p(module_name);
+
+                    let r = self.machine_st.registers[2];
+                    let r = self.machine_st.store(self.machine_st.deref(r));
+
+                    let h = self.machine_st.heap.len();
+                    self.machine_st.heap.extend(functor!(atom!("-"), [fixnum(n), fixnum(p)]));
+
+                    let r = r.as_var().unwrap();
+                    self.machine_st.bind(r, str_loc_as_cell!(h));
+
+                    step_or_fail!(self, self.machine_st.p += 1);
+                }
+                &Instruction::ExecuteGetClauseP(_) => {
+                    let module_name = cell_as_atom!(self.deref_register(3));
+
+                    let (n, p) = self.get_clause_p(module_name);
+
+                    let r = self.machine_st.registers[2];
+                    let r = self.machine_st.store(self.machine_st.deref(r));
+
+                    let h = self.machine_st.heap.len();
+                    self.machine_st.heap.extend(functor!(atom!("-"), [fixnum(n), fixnum(p)]));
+
+                    let r = r.as_var().unwrap();
+                    self.machine_st.bind(r, str_loc_as_cell!(h));
+
+                    step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+                }
+                &Instruction::CallInvokeClauseAtP(_) => {
+                    let key_cell = self.machine_st.registers[1];
+                    let key = self.machine_st.name_and_arity_from_heap(key_cell).unwrap();
+
+                    let l = self.machine_st.registers[3];
+                    let l = self.machine_st.store(self.machine_st.deref(l));
+
+                    let l = match Number::try_from(l) {
+                        Ok(Number::Fixnum(l)) => l.get_num() as usize,
+                        _ => unreachable!(),
+                    };
+
+                    let p = self.machine_st.registers[4];
+                    let p = self.machine_st.store(self.machine_st.deref(p));
+
+                    let p = match Number::try_from(p) {
+                        Ok(Number::Fixnum(p)) => p.get_num() as usize,
+                        _ => unreachable!(),
+                    };
+
+                    let module_name = cell_as_atom!(self.deref_register(6));
+
+                    let compilation_target = match module_name {
+                        atom!("user") => CompilationTarget::User,
+                        _ => CompilationTarget::Module(module_name),
+                    };
+
+                    let skeleton = self.indices.get_predicate_skeleton_mut(
+                        &compilation_target,
+                        &key,
+                    ).unwrap();
+
+                    match skeleton.target_pos_of_clause_clause_loc(l) {
+                        Some(n) => {
+                            let r = self.machine_st.store(self.machine_st.deref(
+                                self.machine_st.registers[5],
+                            ));
+
+                            self.machine_st.unify_fixnum(Fixnum::build_with(n as i64), r);
+                        }
+                        None => {}
+                    }
+
+                    self.machine_st.call_at_index(2, p);
+                }
+                &Instruction::ExecuteInvokeClauseAtP(_) => {
+                    let key_cell = self.machine_st.registers[1];
+                    let key = self.machine_st.name_and_arity_from_heap(key_cell).unwrap();
+
+                    let l = self.machine_st.registers[3];
+                    let l = self.machine_st.store(self.machine_st.deref(l));
+
+                    let l = match Number::try_from(l) {
+                        Ok(Number::Fixnum(l)) => l.get_num() as usize,
+                        _ => unreachable!(),
+                    };
+
+                    let p = self.machine_st.registers[4];
+                    let p = self.machine_st.store(self.machine_st.deref(p));
+
+                    let p = match Number::try_from(p) {
+                        Ok(Number::Fixnum(p)) => p.get_num() as usize,
+                        _ => unreachable!(),
+                    };
+
+                    let module_name = cell_as_atom!(self.deref_register(6));
+
+                    let compilation_target = match module_name {
+                        atom!("user") => CompilationTarget::User,
+                        _ => CompilationTarget::Module(module_name),
+                    };
+
+                    let skeleton = self.indices.get_predicate_skeleton_mut(
+                        &compilation_target,
+                        &key,
+                    ).unwrap();
+
+                    match skeleton.target_pos_of_clause_clause_loc(l) {
+                        Some(n) => {
+                            let r = self.machine_st.store(self.machine_st.deref(
+                                self.machine_st.registers[5],
+                            ));
+
+                            self.machine_st.unify_fixnum(Fixnum::build_with(n as i64), r);
+                        }
+                        None => {}
+                    }
+
+                    self.machine_st.execute_at_index(2, p);
                 }
             }
         }

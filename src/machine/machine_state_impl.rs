@@ -2786,7 +2786,7 @@ impl MachineState {
 
         if self.e > self.b {
             let frame = self.stack.index_and_frame(self.e);
-            let size = AndFrame::size_of(frame.prelude.univ_prelude.num_cells);
+            let size = AndFrame::size_of(frame.prelude.num_cells);
 
             self.stack.truncate(self.e + size);
         }

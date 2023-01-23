@@ -371,22 +371,11 @@ impl IndexStore {
         module: Atom,
     ) -> Option<CodeIndex> {
         if module == atom!("user") {
-            /*match ClauseType::from(name, arity) {
-                ClauseType::Named(arity, name, _) => */
             self.code_dir.get(&(name, arity)).cloned()
-            /*    _ => None,
-            }*/
         } else {
             self.modules
                 .get(&module)
-                .and_then(|module|/* |module| match ClauseType::from(name, arity) {
-                    ClauseType::Named(arity, name, _) => { */
-                        module.code_dir.get(&(name, arity)).cloned()
-                    /*
-                    }
-                    _ => None,
-                } */
-                )
+                .and_then(|module| module.code_dir.get(&(name, arity)).cloned())
         }
     }
 

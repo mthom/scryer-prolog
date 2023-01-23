@@ -1869,7 +1869,13 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                             skeleton.clauses[target_pos + 1].clause_start =
                                 skeleton.clauses[target_pos].clause_start;
 
-                            let index_ptr_opt = if target_pos == 0 {
+                            let update_code_index = target_pos == 0 &&
+                                skeleton.clauses[target_pos + 1]
+                                  .opt_arg_index_key
+                                  .switch_on_term_loc()
+                                  .is_none();
+
+                            let index_ptr_opt = if update_code_index {
                                 Some(IndexPtr::index(clause_loc))
                             } else {
                                 None
