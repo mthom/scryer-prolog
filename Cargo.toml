@@ -61,7 +61,7 @@ static_assertions = "1.1.0"
 ryu = "1.0.9"
 hyper = { version = "0.14", features = ["full"] }
 hyper-tls = "0.5.0"
-tokio = { version = "1", features = ["full"] }
+tokio = { version = "1.24.2", features = ["full"] }
 futures = "0.3"
 
 [dev-dependencies]
