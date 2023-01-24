@@ -9,20 +9,22 @@ This library provides reasoning and working with [UUID](https://en.wikipedia.org
 (only version 4 right now).
 
 There are three predicates:
- * uuidv4/1, to generate a new UUIDv4
- * uuidv4\_string/1, to generate a new UUIDv4 in string hex representation
- * uuid\_string/2, to converte between UUID list of bytes and UUID hex representation
+
+ * `uuidv4/1`, to generate a new UUIDv4
+ * `uuidv4_string/1`, to generate a new UUIDv4 in string hex representation
+ * `uuid_string/2`, to converte between UUID list of bytes and UUID hex representation
 
 Examples:
 
-    ?- uuidv4(X).
-       X = [42,147,248,242,117,196,79,2,129,159|...].
-    ?- uuidv4_string(X).
-       X = "428499fc-76e3-4240- ...".
-    ?- uuidv4(X), uuid_string(X, S).
-       X = [173,12,244,152,139,118,64,139,137,4|...], S = "ad0cf498-8b76-408b- ...".
-    ?- uuid_string(X, "61ae692e-eaf6-4199-8dd3-9f01db70a20b").
-       X = [97,174,105,46,234,246,65,153,141,211|...].
+```
+?- uuidv4(X).
+   X = [42,147,248,242,117,196,79,2,129,159|...].
+?- uuidv4_string(X).
+   X = "428499fc-76e3-4240- ...".
+?- uuidv4(X), uuid_string(X, S).
+   X = [173,12,244,152,139,118,64,139,137,4|...], S = "ad0cf498-8b76-408b- ...".
+?- uuid_string(X, "61ae692e-eaf6-4199-8dd3-9f01db70a20b").
+   X = [97,174,105,46,234,246,65,153,141,211|...].
 */
 
 :- module(uuid, [
@@ -64,7 +66,7 @@ uuidv4(Uuid) :-
 %% uuidv4_string(-UuidString).
 %
 % Generates a new UUID v4 (random). It unifies with a string representation of the UUID.
-% It is equivalent of calling uuidv4/1 followed by uuid\_string/2.
+% It is equivalent of calling `uuidv4/1` followed by `uuid_string/2`.
 uuidv4_string(String) :- uuidv4(Uuid), uuid_string(Uuid, String).
 
 %% uuid_string(?UuidBytes, ?UuidString).

@@ -61,14 +61,14 @@ neighbours of each vertex are also  in   standard  order (as produced by
 sort). This form is convenient for many calculations.
 
 A   new   UGraph   from    raw    data     can    be    created    using
-vertices\_edges\_to\_ugraph/3.
+`vertices_edges_to_ugraph/3`.
 
 Adapted to support some of  the   functionality  of  the SICStus ugraphs
 library by Vitor Santos Costa.
 
 Ported from YAP 5.0.1 to SWI-Prolog by Jan Wielemaker.
 
-Ported from SWI-Prolog to Scryer by Adrián Arroyo Calle
+Ported from SWI-Prolog to Scryer by [Adrián Arroyo Calle](https://adrianistan.eu)
 
 License: BSD-2 or Artistic 2.0
 */
@@ -81,8 +81,10 @@ License: BSD-2 or Artistic 2.0
 %
 % Unify Vertices with all vertices appearing in Graph. Example:
 %
-%     ?- vertices([1-[3,5],2-[4],3-[],4-[5],5-[]], L).
-%        L = [1, 2, 3, 4, 5]
+% ```
+% ?- vertices([1-[3,5],2-[4],3-[],4-[5],5-[]], L).
+%    L = [1, 2, 3, 4, 5]
+% ```
 
 vertices([], []) :- !.
 vertices([Vertex-_|Graph], [Vertex|Vertices]) :-
@@ -97,14 +99,18 @@ vertices([Vertex-_|Graph], [Vertex|Vertices]) :-
 % edges will appear in Vertices but not  in Edges. Moreover, it is
 % sufficient for a vertice to appear in Edges.
 %
-%     ?- vertices_edges_to_ugraph([],[1-3,2-4,4-5,1-5], L).
-%        L = [1-[3,5], 2-[4], 3-[], 4-[5], 5-[]]
-%
+% ```
+% ?- vertices_edges_to_ugraph([],[1-3,2-4,4-5,1-5], L).
+%    L = [1-[3,5], 2-[4], 3-[], 4-[5], 5-[]]
+% ```
+% 
 % In this case all  vertices  are   defined  implicitly.  The next
 % example shows three unconnected vertices:
 %
-%     ?- vertices_edges_to_ugraph([6,7,8],[1-3,2-4,4-5,1-5], L).
-%        L = [1-[3,5], 2-[4], 3-[], 4-[5], 5-[], 6-[], 7-[], 8-[]]
+% ```
+% ?- vertices_edges_to_ugraph([6,7,8],[1-3,2-4,4-5,1-5], L).
+%    L = [1-[3,5], 2-[4], 3-[], 4-[5], 5-[], 6-[], 7-[], 8-[]]
+% ```
 
 vertices_edges_to_ugraph(Vertices, Edges, Graph) :-
     sort(Edges, EdgeSet),
@@ -119,8 +125,10 @@ vertices_edges_to_ugraph(Vertices, Edges, Graph) :-
 % Unify NewGraph with a new  graph  obtained   by  adding  the list of
 % Vertices to Graph. Example:
 %
-%     ?- add_vertices([1-[3,5],2-[]], [0,1,2,9], NG).
-%        NG = [0-[], 1-[3,5], 2-[], 9-[]]
+% ```
+% ?- add_vertices([1-[3,5],2-[]], [0,1,2,9], NG).
+%    NG = [0-[], 1-[3,5], 2-[], 9-[]]
+% ```
 
 % replace with real msort/2 when available
 msort_(List, Sorted) :-
@@ -158,10 +166,12 @@ add_empty_vertices([V|G], [V-[]|NG]) :-
 % Vertices and all the edges that start from  or go to a vertex in
 % Vertices to the Graph. Example:
 %
-%     ?- del_vertices([1-[3,5],2-[4],3-[],4-[5],5-[],6-[],7-[2,6],8-[]],
-%                   [2,1],
-%                   NL).
-%        NL = [3-[],4-[5],5-[],6-[],7-[6],8-[]]
+% ```
+% ?- del_vertices([1-[3,5],2-[4],3-[],4-[5],5-[],6-[],7-[2,6],8-[]],
+%               [2,1],
+%               NL).
+%    NL = [3-[],4-[5],5-[],6-[],7-[6],8-[]]
+% ```
 
 del_vertices(Graph, Vertices, NewGraph) :-
     sort(Vertices, V1),             % JW: was msort
@@ -195,12 +205,14 @@ split_on_del_vertices(=, _, _, [_|Vs], Vs, _, NG, NG).
 % Unify NewGraph with a new graph obtained by adding the list of Edges
 % to Graph. Example:
 %
-%     ?- add_edges([1-[3,5],2-[4],3-[],4-[5],
-%                 5-[],6-[],7-[],8-[]],
-%                [1-6,2-3,3-2,5-7,3-2,4-5],
-%                NL).
-%        NL = [1-[3,5,6], 2-[3,4], 3-[2], 4-[5],
-%         5-[7], 6-[], 7-[], 8-[]]
+% ```
+% ?- add_edges([1-[3,5],2-[4],3-[],4-[5],
+%             5-[],6-[],7-[],8-[]],
+%            [1-6,2-3,3-2,5-7,3-2,4-5],
+%            NL).
+%    NL = [1-[3,5,6], 2-[3,4], 3-[2], 4-[5],
+%     5-[7], 6-[], 7-[], 8-[]]
+% ```
 
 add_edges(Graph, Edges, NewGraph) :-
     p_to_s_graph(Edges, G1),
@@ -210,8 +222,10 @@ add_edges(Graph, Edges, NewGraph) :-
 %
 % NewGraph is the union of Graph1 and Graph2. Example:
 %
-%     ?- ugraph_union([1-[2],2-[3]],[2-[4],3-[1,2,4]],L).
-%        L = [1-[2], 2-[3,4], 3-[1,2,4]]
+% ```
+% ?- ugraph_union([1-[2],2-[3]],[2-[4],3-[1,2,4]],L).
+%    L = [1-[2], 2-[3,4], 3-[1,2,4]]
+% ```
 
 ugraph_union(Set1, [], Set1) :- !.
 ugraph_union([], Set2, Set2) :- !.
@@ -232,10 +246,12 @@ ugraph_union(>, Head1, Tail1, Head2, Tail2, [Head2|Union]) :-
 % Unify NewGraph with a new graph  obtained   by  removing the list of
 % Edges from Graph. Notice that no vertices are deleted. Example:
 %
-%     ?- del_edges([1-[3,5],2-[4],3-[],4-[5],5-[],6-[],7-[],8-[]],
-%                [1-6,2-3,3-2,5-7,3-2,4-5,1-3],
-%                NL).
-%        NL = [1-[5],2-[4],3-[],4-[],5-[],6-[],7-[],8-[]]
+% ```
+% ?- del_edges([1-[3,5],2-[4],3-[],4-[5],5-[],6-[],7-[],8-[]],
+%            [1-6,2-3,3-2,5-7,3-2,4-5,1-3],
+%            NL).
+%    NL = [1-[5],2-[4],3-[],4-[],5-[],6-[],7-[],8-[]]
+% ```
 
 del_edges(Graph, Edges, NewGraph) :-
     p_to_s_graph(Edges, G1),
@@ -243,7 +259,7 @@ del_edges(Graph, Edges, NewGraph) :-
 
 %% graph_subtract(+Set1, +Set2, ?Difference)
 %
-% Is based on ord_subtract
+% Is based on `ord_subtract/3`
 
 graph_subtract(Set1, [], Set1) :- !.
 graph_subtract([], _, []).
@@ -263,8 +279,10 @@ graph_subtract(>, Head1, Tail1, _,     Tail2, Difference) :-
 %
 % Unify Edges with all edges appearing in Graph. Example:
 %
-%     ?- edges([1-[3,5],2-[4],3-[],4-[5],5-[]], L).
-%        L = [1-3, 1-5, 2-4, 4-5]
+% ```
+% ?- edges([1-[3,5],2-[4],3-[],4-[5],5-[]], L).
+%    L = [1-3, 1-5, 2-4, 4-5]
+% ```
 
 edges(Graph, Edges) :-
     s_to_p_graph(Graph, Edges).
@@ -309,8 +327,10 @@ s_to_p_graph([Neib|Neibs], Vertex, [Vertex-Neib|P], Rest_P) :-
 % Generate the graph Closure  as  the   transitive  closure  of Graph.
 % Example:
 %
-%     ?- transitive_closure([1-[2,3],2-[4,5],4-[6]],L).
-%        L = [1-[2,3,4,5,6], 2-[4,5,6], 4-[6]]
+% ```
+% ?- transitive_closure([1-[2,3],2-[4,5],4-[6]],L).
+%    L = [1-[2,3,4,5,6], 2-[4,5,6], 4-[6]]
+% ```
 
 transitive_closure(Graph, Closure) :-
     warshall(Graph, Graph, Closure).
@@ -336,12 +356,14 @@ warshall([], _, _, []).
 %
 % Unify NewGraph with a new graph obtained from Graph by replacing
 % all edges of the form V1-V2 by edges of the form V2-V1. The cost
-% is O(|V|*log(|V|)). Notice that an undirected   graph is its own
+% is O(|V|\*log(|V|)). Notice that an undirected   graph is its own
 % transpose. Example:
 %
-%     ?- transpose([1-[3,5],2-[4],3-[],4-[5],
-%                   5-[],6-[],7-[],8-[]], NL).
-%        NL = [1-[],2-[],3-[1],4-[2],5-[1,4],6-[],7-[],8-[]]
+% ```
+% ?- transpose([1-[3,5],2-[4],3-[],4-[5],
+%               5-[],6-[],7-[],8-[]], NL).
+%    NL = [1-[],2-[],3-[1],4-[2],5-[1,4],6-[],7-[],8-[]]
+% ```
 
 transpose_ugraph(Graph, NewGraph) :-
     edges(Graph, Edges),
@@ -358,8 +380,10 @@ flip_edges([Key-Val|Pairs], [Val-Key|Flipped]) :-
 % Compose NewGraph by connecting the  _drains_   of  LeftGraph  to the
 % _sources_ of RightGraph. Example:
 %
-%     ?- compose([1-[2],2-[3]],[2-[4],3-[1,2,4]],L).
-%        L = [1-[4], 2-[1,2,4], 3-[]]
+% ```
+% ?- compose([1-[2],2-[3]],[2-[4],3-[1,2,4]],L).
+%    L = [1-[4], 2-[1,2,4], 3-[]]
+% ```
 
 compose(G1, G2, Composition) :-
     vertices(G1, V1),
@@ -401,8 +425,10 @@ compose1(=, V1, Vs1, V1, N2, G2, SoFar, Comp) :-
 % acyclic. In the example we show   how  topological sorting works
 % for a linear graph:
 %
-%     ?- top_sort([1-[2], 2-[3], 3-[]], L).
-%        L = [1, 2, 3]
+% ```
+% ?- top_sort([1-[2], 2-[3], 3-[]], L).
+%    L = [1, 2, 3]
+% ```
 
 top_sort(Graph, Sorted) :-
     vertices_and_zeros(Graph, Vertices, Counts0),
@@ -412,8 +438,8 @@ top_sort(Graph, Sorted) :-
 
 %% top_sort(+Graph, -Sorted, ?Tail) is semidet.
 %
-% The  predicate  top\_sort/3  is  a  difference  list  version  of
-% top\_sort/2.
+% The  predicate  `top_sort/3`  is  a  difference  list  version  of
+% `top_sort/2`.
 
 top_sort(Graph, Sorted0, Sorted) :-
     vertices_and_zeros(Graph, Vertices, Counts0),
@@ -496,13 +522,15 @@ decr_list(Neibs, [_|Vertices], [N|Counts1], [N|Counts2], Zi, Zo) :-
 % Neigbours is a sorted list of  the   neighbours  of Vertex in Graph.
 % Example:
 %
-%     ?- neighbours(4,[1-[3,5],2-[4],3-[],
-%                    4-[1,2,7,5],5-[],6-[],7-[],8-[]], NL).
-%        NL = [1,2,7,5]
+% ```
+% ?- neighbours(4,[1-[3,5],2-[4],3-[],
+%                4-[1,2,7,5],5-[],6-[],7-[],8-[]], NL).
+%    NL = [1,2,7,5]
+% ```
 
 %% neighbors(+Vertex, +Graph, -Neigbours) is det.
 %
-% Same as neighbours/3
+% Same as `neighbours/3`.
 
 neighbors(Vertex, Graph, Neig) :-
     neighbours(Vertex, Graph, Neig).
@@ -523,13 +551,15 @@ neighbours(V,[_|G],Neig) :-
 %
 % Can be used to order a not-connected graph as follows:
 %
-%     top_sort_unconnected(Graph, Vertices) :-
-%       (   top_sort(Graph, Vertices)
-%       ->  true
-%       ;   connect_ugraph(Graph, Start, Connected),
-%           top_sort(Connected, Ordered0),
-%           Ordered0 = [Start|Vertices]
-%       ).
+% ```
+% top_sort_unconnected(Graph, Vertices) :-
+%   (   top_sort(Graph, Vertices)
+%   ->  true
+%   ;   connect_ugraph(Graph, Start, Connected),
+%       top_sort(Connected, Ordered0),
+%       Ordered0 = [Start|Vertices]
+%   ).
+% ```
 
 connect_ugraph([], 0, []) :- !.
 connect_ugraph(Graph, Start, [Start-Vertices|Graph]) :-
@@ -542,7 +572,7 @@ connect_ugraph(Graph, Start, [Start-Vertices|Graph]) :-
 % Unify Before to a term that comes   before  Term in the standard
 % order of terms.
 %
-% Throws instantiation_error if Term is unbound.
+% Throws `instantiation_error` if Term is unbound.
 
 before(X, _) :-
     var(X),
@@ -561,12 +591,13 @@ before(_, 0).
 % _not_ connected in UGraphIn and  all   edges  from UGraphIn removed.
 % Example:
 %
-%     ?- complement([1-[3,5],2-[4],3-[],
-%                  4-[1,2,7,5],5-[],6-[],7-[],8-[]], NL).
-%        NL = [1-[2,4,6,7,8],2-[1,3,5,6,7,8],3-[1,2,4,5,6,7,8],
-%         4-[3,5,6,8],5-[1,2,3,4,6,7,8],6-[1,2,3,4,5,7,8],
-%         7-[1,2,3,4,5,6,8],8-[1,2,3,4,5,6,7]]
-%
+% ```
+% ?- complement([1-[3,5],2-[4],3-[],
+%              4-[1,2,7,5],5-[],6-[],7-[],8-[]], NL).
+%    NL = [1-[2,4,6,7,8],2-[1,3,5,6,7,8],3-[1,2,4,5,6,7,8],
+%     4-[3,5,6,8],5-[1,2,3,4,6,7,8],6-[1,2,3,4,5,7,8],
+%     7-[1,2,3,4,5,6,8],8-[1,2,3,4,5,6,7]]
+% ```
 
 
 % TODO: Simple two-step algorithm. You could be smarter, I suppose.
@@ -586,8 +617,10 @@ complement([V-Ns|G], Vs, [V-INs|NG]) :-
 % True when Vertices is  an  ordered   set  of  vertices  reachable in
 % UGraph, including Vertex.  Example:
 %
-%     ?- reachable(1,[1-[3,5],2-[4],3-[],4-[5],5-[]],V).
-%        V = [1, 3, 5]
+% ```
+% ?- reachable(1,[1-[3,5],2-[4],3-[],4-[5],5-[]],V).
+%    V = [1, 3, 5]
+% ```
 
 reachable(N, G, Rs) :-
     reachable([N], G, [N], Rs).

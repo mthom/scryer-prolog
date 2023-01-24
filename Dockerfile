@@ -1,5 +1,5 @@
 # See https://github.com/LukeMathWalker/cargo-chef
-ARG RUST_VERSION=1.61-buster
+ARG RUST_VERSION=1-buster
 FROM rust:${RUST_VERSION} as planner
 WORKDIR /scryer-prolog
 RUN cargo install cargo-chef 

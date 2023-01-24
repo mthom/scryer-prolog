@@ -1,3 +1,13 @@
+/** Support for Definite Clause Grammars.
+
+A Prolog definite clause grammar (DCG) describes a sequence. Operationally, DCGs
+can be used to parse, generate, complete and check sequences manifested as lists.
+
+Check [The Power of Prolog chapter on DCGs](https://www.metalevel.at/prolog/dcg)
+to learn more about them.
+*/
+
+
 :- module(dcgs,
           [op(1105, xfy, '|'),
            phrase/2,
@@ -16,9 +26,44 @@
 
 :- meta_predicate phrase(2, ?, ?).
 
+%% phrase(+Body, ?Ls).
+%
+% True iff Body describes the list Ls. Body must be a DCG body.
+% It is equivalent to `phrase(Body, Ls, [])`.
+%
+% Examples:
+%
+% ```
+% as --> [].
+% as --> [a], as.
+%
+% ?- phrase(as, Ls).
+%    Ls = []
+% ;  Ls = "a"
+% ;  Ls = "aa"
+% ;  Ls = "aaa"
+% ;  ... .
+%
+% ?- phrase(as, "aaa").
+%    true.
+% ```
+
 phrase(GRBody, S0) :-
     phrase(GRBody, S0, []).
 
+%% phrase(+Body, ?Ls, ?Ls0).
+%
+% True iff Body describes part of the list Ls and the rest of Ls is Ls0.
+%
+% Example:
+%
+% ```
+% ?- phrase(seq(X), "aaa", Y).
+%    X = [], Y = "aaa"
+% ;  X = "a", Y = "aa"
+% ;  X = "aa", Y = "a"
+% ;  X = "aaa", Y = [].
+% ```
 phrase(GRBody, S0, S) :-
     strip_module(GRBody, M, GRBody1),
     (  var(GRBody) ->
@@ -131,6 +176,9 @@ user:term_expansion(Term0, Term) :-
     nonvar(Term0),
     dcg_rule(Term0, Term).
 
+
+%% seq(Seq)//
+% 
 % Describes a sequence
 seq(Xs, Cs0,Cs) :-
    var(Xs),
@@ -141,10 +189,14 @@ seq(Xs, Cs0,Cs) :-
 seq([]) --> [].
 seq([E|Es]) --> [E], seq(Es).
 
+%% seqq(SeqOfSeqs)//
+%
 % Describes a sequence of sequences
 seqq([]) --> [].
 seqq([Es|Ess]) --> seq(Es), seqq(Ess).
 
+%% ...//
+%
 % Describes an arbitrary number of elements
 ...(Cs0,Cs) :-
    Cs0 == [],

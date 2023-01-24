@@ -1,6 +1,6 @@
 /**
 Predicates for handling network sockets, both as a server and as a client.
-As a server, you should open a socket an call socket\_server\_accept/4 to get a stream for each connection.
+As a server, you should open a socket an call `socket_server_accept/4` to get a stream for each connection.
 As a client, you should just open a socket and you will receive a stream.
 In both cases, with a stream, you can use the usual predicates to read and write to the stream.
 */
@@ -18,10 +18,10 @@ In both cases, with a stream, you can use the usual predicates to read and write
 %
 % The following options are available:
 %
-%  * alias(+Alias): Set an alias to the stream
-%  * eof_action(+Action): Defined what happens if the end of the stream is reached. Values: `error`, `eof_code` and `reset`.
-%  * reposition(+Boolean): Specifies whether repositioning is required for the stream. `false` is the default.
-%  * type(+Type): Type can be `text` or `binary`. Defines the type of the stream, if it's optimized for plain text
+%  * `alias(+Alias)`: Set an alias to the stream
+%  * `eof_action(+Action)`: Defined what happens if the end of the stream is reached. Values: `error`, `eof_code` and `reset`.
+%  * `reposition(+Boolean)`: Specifies whether repositioning is required for the stream. `false` is the default.
+%  * `type(+Type)`: Type can be `text` or `binary`. Defines the type of the stream, if it's optimized for plain text
 %    or just binary
 %
 socket_client_open(Addr, Stream, Options) :-
@@ -47,7 +47,7 @@ socket_client_open(Addr, Stream, Options) :-
 %% socket_server_open(+Addr, -ServerSocket).
 %
 % Open a server socket, returning a ServerSocket. Use that ServerSocket to accept incoming connections in
-% socket\_server\_accept/4. Addr must satisfy `Addr = Address:Port`. Depending on the operating system
+% `socket_server_accept/4`. Addr must satisfy `Addr = Address:Port`. Depending on the operating system
 % configuration, some ports might be reserved for superusers.
 socket_server_open(Addr, ServerSocket) :-
     must_be(var, ServerSocket),
@@ -67,10 +67,10 @@ socket_server_open(Addr, ServerSocket) :-
 %
 % The following options are available:
 %
-%  * alias(+Alias): Set an alias to the stream
-%  * eof_action(+Action): Defined what happens if the end of the stream is reached. Values: `error`, `eof_code` and `reset`.
-%  * reposition(+Boolean): Specifies whether repositioning is required for the stream. `false` is the default.
-%  * type(+Type): Type can be `text` or `binary`. Defines the type of the stream, if it's optimized for plain text
+%  * `alias(+Alias)`: Set an alias to the stream
+%  * `eof_action(+Action)`: Defined what happens if the end of the stream is reached. Values: `error`, `eof_code` and `reset`.
+%  * `reposition(+Boolean)`: Specifies whether repositioning is required for the stream. `false` is the default.
+%  * `type(+Type)`: Type can be `text` or `binary`. Defines the type of the stream, if it's optimized for plain text
 %    or just binary
 % 
 socket_server_accept(ServerSocket, Client, Stream, Options) :-

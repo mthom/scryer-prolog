@@ -1,51 +1,51 @@
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    Written in December 2020 by Adrián Arroyo (adrian.arroyocalle@gmail.com)
    Updated in March 2022 by Adrián Arroyo to use the Hyper backend
-   Part of Scryer Prolog
+   Part of Scryer Prolog.
+   I place this code in the public domain. Use it in any way you want.
+*/
 
-   This library provides an starting point to build HTTP server based applications.
-   It is based on Hyper, which allows for HTTP/1.0, HTTP/1.1 and HTTP/2. However,
-   some advanced features that Hyper provides are still not accesible.
+/** This library provides an starting point to build HTTP server based applications.
+It is based on Hyper, which allows for HTTP/1.0, HTTP/1.1 and HTTP/2. However,
+some advanced features that Hyper provides are still not accesible.
 
-   Usage
-   ==========
-   The main predicate of the library is http_listen/2, which needs a port number
-    (usually 80) and a list of handlers. A handler is a compound term with the functor
-   as one HTTP method (in lowercase) and followed by a Route Match and a predicate
-   which will handle the call.
+## Usage
 
-   text_handler(Request, Response) :-
-    http_status_code(Response, 200),
-    http_body(Response, text("Welcome to Scryer Prolog!")).
+The main predicate of the library is http\_listen/2, which needs a port number
+(usually 80) and a list of handlers. A handler is a compound term with the functor
+as one HTTP method (in lowercase) and followed by a Route Match and a predicate
+which will handle the call.
 
-   parameter_handler(User, Request, Response) :-
-    http_body(Response, text(User)).
+    text_handler(Request, Response) :-
+      http_status_code(Response, 200),
+      http_body(Response, text("Welcome to Scryer Prolog!")).
+    
+    parameter_handler(User, Request, Response) :-
+      http_body(Response, text(User)).
+       
+    http_listen(7890, [
+      get(echo, text_handler),           % GET /echo
+      post(user/User, parameter_handler(User)) % POST /user/<User>
+    ]).
 
-   http_listen(7890, [
-        get(echo, text_handler),           % GET /echo
-        post(user/User, parameter_handler(User)) % POST /user/<User>
-   ]).
-
-   Every handler predicate will have at least 2-arity, with Request and Response.
-   Although you can work directly with http_request and http_response terms, it is
-   recommeded to use the helper predicates, which are easier to understand and cleaner:
-   - http_headers(Response/Request, Headers)
-   - http_status_code(Responde, StatusCode)
-   - http_body(Response/Request, text(Body))
-   - http_body(Response/Request, binary(Body))
-   - http_body(Request, form(Form))
-   - http_body(Response, file(Filename))
-   - http_redirect(Response, Url)
-   - http_query(Request, QueryName, QueryValue)
+Every handler predicate will have at least 2-arity, with Request and Response.
+Although you can work directly with http\_request and http\_response terms, it is
+recommeded to use the helper predicates, which are easier to understand and cleaner:
+   - `http\_headers(Response/Request, Headers)`
+   - `http\_status\_code(Responde, StatusCode)`
+   - `http\_body(Response/Request, text(Body))`
+   - `http\_body(Response/Request, binary(Body))`
+   - `http\_body(Request, form(Form))`
+   - `http\_body(Response, file(Filename))`
+   - `http\_redirect(Response, Url)`
+   - `http\_query(Request, QueryName, QueryValue)`
 
    Some things that are still missing:
    - Read forms in multipart format
    - HTTP Basic Auth
    - Session handling via cookies
-   - HTML Templating
-
-   I place this code in the public domain. Use it in any way you want.
-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+   - HTML Templating (but you can use [Teruel](https://github.com/aarroyoc/teruel/) and/or [Marquete](https://github.com/aarroyoc/marquete/) for that)
+*/
 
 
 :- module(http_server, [
@@ -68,6 +68,11 @@
 :- use_module(library(pio)).
 :- use_module(library(time)).
 
+%% http_listen(+Port, +Handlers).
+%
+% Listens for HTTP connections on port Port. Each handler on the list Handlers should be of the form: `HttpVerb(PathUnification, Predicate)`.
+% For example: `get(user/User, get\_info(User))` will match an HTTP request that is a GET, the path unifies with /user/User (where User is a variable)
+% and it will call get_info with three arguments: an http\_request term, an http\_response term and User. 
 http_listen(Port, Module:Handlers0) :-
     must_be(integer, Port),
     must_be(list, Handlers0),
@@ -206,9 +211,20 @@ string_without(Not, [Char|String]) -->
 string_without(_, []) -->
     [].
 
+%% http_headers(?Request_Response, ?Headers).
+%
+% True iff Request_Response is a request or response with headers Headers. Can be used both to get headers (usually in from a request)
+% and to add headers (usually in a response).
 http_headers(http_request(Headers, _, _), Headers).
 http_headers(http_response(_, _, Headers), Headers).
 
+%% http_body(?Request_Response, ?Body).
+%
+% True iff Body is the body of the request or response. A body can be of the following types:
+%  * `bytes(Bytes)` for both requests and responses, interprets the body as bytes
+%  * `text(Bytes)` for both requests and responses, interprets the body as text
+%  * `form(Form)` only for requests, interprets the body as an `application/x-www-form-urlencoded` form.
+%  * `file(File)` only for responses, interprets the body as the content of a file (useful to send static files).
 http_body(http_request(_, stream(StreamBody), _), bytes(BytesBody)) :- get_n_chars(StreamBody, _, BytesBody).
 http_body(http_request(_, stream(StreamBody), _), text(TextBody)) :- get_n_chars(StreamBody, _, TextBody).
 http_body(http_request(Headers, stream(StreamBody), _), form(FormBody)) :- 
@@ -218,8 +234,19 @@ http_body(http_request(Headers, stream(StreamBody), _), form(FormBody)) :-
 http_body(http_request(_, Body, _), Body).
 http_body(http_response(_, Body, _), Body).
 
+%% http_status_code(?Response, ?StatusCode).
+%
+% True iff the status code of the response Response unifies with StatusCode.
 http_status_code(http_response(StatusCode, _, _), StatusCode).
+
+%% http_redirect(-Response, +Uri).
+%
+% True iff Response is a response that redirects the user to the uri Uri.
 http_redirect(http_response(307, text("Moved Temporarily"), ["Location"-Uri]), Uri).
+
+%% http_query(+Request, ?Key, ?Value).
+%
+% True iff there's a query in request Request with key Key and value Value.
 http_query(http_request(_, _, Queries), Key, Value) :- member(Key-Value, Queries).
 
 parse_queries([Key-Value|Queries]) -->

@@ -839,7 +839,7 @@ impl MachineState {
         let b = self.stack.allocate_or_frame(n);
         let or_frame = self.stack.index_or_frame_mut(b);
 
-        or_frame.prelude.univ_prelude.num_cells = n;
+        or_frame.prelude.num_cells = n;
         or_frame.prelude.e = self.e;
         or_frame.prelude.cp = self.cp;
         or_frame.prelude.b = self.b;
@@ -867,7 +867,7 @@ impl MachineState {
         let b = self.stack.allocate_or_frame(n);
         let or_frame = self.stack.index_or_frame_mut(b);
 
-        or_frame.prelude.univ_prelude.num_cells = n;
+        or_frame.prelude.num_cells = n;
         or_frame.prelude.e = self.e;
         or_frame.prelude.cp = self.cp;
         or_frame.prelude.b = self.b;

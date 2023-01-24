@@ -854,70 +854,30 @@ retract(Clause0) :-
        retract_module_clause(Head, Body, Module)
     ).
 
-module_retract_clauses([Clause|Clauses0], Head, Body, Name, Arity, Module) :-
-    functor(VarHead, Name, Arity),
-    findall((VarHead :- VarBody), Module:'$clause'(VarHead, VarBody), Clauses1),
-    (  first_match_index(Clauses1, (Head :- Body), 0, N) ->
+retract_clauses([L-P | Ps], Head, Body, Name, Arity, Module) :-
+    '$invoke_clause_at_p'(Head, Body, L, P, N, Module),
+    (  integer(N) ->
        '$retract_clause'(Name, Arity, N, Module)
-    ;  Clause = (Head :- Body)
+    ;  true % the clause at index N has already been retracted in this
+            % case but unify (Head :- Body) anyway.
     ),
-    (  Clauses0 == [] -> !
+    (  Ps == [] -> !
     ;  true
     ).
+retract_clauses([_ | Ps], Head, Body, Name, Arity, Module) :-
+    retract_clauses(Ps, Head, Body, Name, Arity, Module).
 
-
-module_retract_clauses([_|Clauses0], Head, Body, Name, Arity, Module) :-
-    module_retract_clauses(Clauses0, Head, Body, Name, Arity, Module).
-
-
-call_module_retract(Head, Body, Name, Arity, Module) :-
-    findall((Head :- Body), Module:'$clause'(Head, Body), Clauses),
-    module_retract_clauses(Clauses, Head, Body, Name, Arity, Module).
-
-
-retract_module_clause(Head, Body, Module) :-
-    (  var(Head) ->
-       throw(error(instantiation_error, retract/1))
-    ;  callable(Head),
-       functor(Head, Name, Arity) ->
-       (  '$no_such_predicate'(Module, Head) ->
-          '$fail'
-       ;  '$head_is_dynamic'(Module, Head) ->
-          (  Module == user ->
-             call_retract(Head, Body, Name, Arity)
-          ;  call_module_retract(Head, Body, Name, Arity, Module)
-          )
-       ;  throw(error(permission_error(modify, static_procedure, Name/Arity), retract/1))
-       )
-    ;  throw(error(type_error(callable, Head), retract/1))
-    ).
-
-
-first_match_index([Clause | _], Clause, N, N) :-
-    !.
-first_match_index([_ | Clauses], Clause, N0, N) :-
-    N1 is N0 + 1,
-    first_match_index(Clauses, Clause, N1, N).
-
-
-retract_clauses([Clause | Clauses0], Head, Body, Name, Arity) :-
-    functor(VarHead, Name, Arity),
-    findall((VarHead :- VarBody), builtins:'$clause'(VarHead, VarBody), Clauses1),
-    (  first_match_index(Clauses1, (Head :- Body), 0, N) ->
-       '$retract_clause'(Name, Arity, N, user)
-    ;  Clause = (Head :- Body)
+call_retract_helper(Head, Body, P, Module) :-
+    (  Module == user ->
+       ClauseQualifier = builtins
+    ;  ClauseQualifier = Module
     ),
-    (  Clauses0 == [] -> !
-    ;  true
-    ).
-retract_clauses([_ | Clauses0], Head, Body, Name, Arity) :-
-    retract_clauses(Clauses0, Head, Body, Name, Arity).
+    ClauseQualifier:'$clause'(Head, Body),
+    '$get_clause_p'(Head, P, Module).
 
-
-call_retract(Head, Body, Name, Arity) :-
-    findall((Head :- Body), builtins:'$clause'(Head, Body), Clauses),
-    retract_clauses(Clauses, Head, Body, Name, Arity).
-
+call_retract(Head, Body, Name, Arity, Module) :-
+    findall(P, builtins:call_retract_helper(Head, Body, P, Module), Ps),
+    retract_clauses(Ps, Head, Body, Name, Arity, Module).
 
 retract_clause(Head, Body) :-
     (  var(Head) ->
@@ -932,12 +892,25 @@ retract_clause(Head, Body) :-
        ;  '$no_such_predicate'(user, Head) ->
           '$fail'
        ;  '$head_is_dynamic'(user, Head) ->
-          call_retract(Head, Body, Name, Arity)
+          call_retract(Head, Body, Name, Arity, user)
        ;  throw(error(permission_error(modify, static_procedure, Name/Arity), retract/1))
        )
     ;  throw(error(type_error(callable, Head), retract/1))
     ).
 
+retract_module_clause(Head, Body, Module) :-
+    (  var(Head) ->
+       throw(error(instantiation_error, retract/1))
+    ;  callable(Head),
+       functor(Head, Name, Arity) ->
+       (  '$no_such_predicate'(Module, Head) ->
+          '$fail'
+       ;  '$head_is_dynamic'(Module, Head) ->
+          call_retract(Head, Body, Name, Arity, Module)
+       ;  throw(error(permission_error(modify, static_procedure, Name/Arity), retract/1))
+       )
+    ;  throw(error(type_error(callable, Head), retract/1))
+    ).
 
 :- meta_predicate retractall(:).
 

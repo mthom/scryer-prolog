@@ -555,7 +555,7 @@ impl Machine {
     fn retry_me_else(&mut self, offset: usize) {
         let b = self.machine_st.b;
         let or_frame = self.machine_st.stack.index_or_frame_mut(b);
-        let n = or_frame.prelude.univ_prelude.num_cells;
+        let n = or_frame.prelude.num_cells;
 
         for i in 0..n {
             self.machine_st.registers[i + 1] = or_frame[i];
@@ -589,7 +589,7 @@ impl Machine {
     fn retry(&mut self, offset: usize) {
         let b = self.machine_st.b;
         let or_frame = self.machine_st.stack.index_or_frame_mut(b);
-        let n = or_frame.prelude.univ_prelude.num_cells;
+        let n = or_frame.prelude.num_cells;
 
         for i in 0..n {
             self.machine_st.registers[i+1] = or_frame[i];
@@ -625,7 +625,7 @@ impl Machine {
     fn trust(&mut self, offset: usize) {
         let b = self.machine_st.b;
         let or_frame = self.machine_st.stack.index_or_frame(b);
-        let n = or_frame.prelude.univ_prelude.num_cells;
+        let n = or_frame.prelude.num_cells;
 
         for i in 0..n {
             self.machine_st.registers[i+1] = or_frame[i];
@@ -661,7 +661,7 @@ impl Machine {
     fn trust_me(&mut self) {
         let b = self.machine_st.b;
         let or_frame = self.machine_st.stack.index_or_frame(b);
-        let n = or_frame.prelude.univ_prelude.num_cells;
+        let n = or_frame.prelude.num_cells;
 
         for i in 0..n {
             self.machine_st.registers[i+1] = or_frame[i];

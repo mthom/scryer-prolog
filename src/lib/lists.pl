@@ -66,12 +66,14 @@ resource_error(Resource, Context) :-
 % Relates a list to its length (number of items). It can be used to count the elements of a current list or
 % to create a list full of free variables with N length.
 %
-%     ?- length([a,b,c], 3).
-%        true.
-%     ?- length([a,b,c], N).
-%        N = 3.
-%     ?- length(Xs, 3).
-%        Xs = [_A, _B, _C].
+% ```
+% ?- length([a,b,c], 3).
+%    true.
+% ?- length([a,b,c], N).
+%    N = 3.
+% ?- length(Xs, 3).
+%    Xs = [_A, _B, _C].
+% ```
 
 length(Xs0, N) :-
    '$skip_max_list'(M, N, Xs0,Xs),
@@ -115,10 +117,11 @@ length_addendum([_|Xs], N, M) :-
 %
 % Succeeds when X unifies with an item of the list Xs, which can be at any position.
 %
-%     ?- member(X, "hello world").
-%        X = h
-%     ;  ... .
-%
+% ```
+% ?- member(X, "hello world").
+%    X = h
+% ;  ... .
+% ```
 member(X, [X|_]).
 member(X, [_|Xs]) :- member(X, Xs).
 
@@ -126,9 +129,10 @@ member(X, [_|Xs]) :- member(X, Xs).
 %
 % Succeeds when the list Xs1 is the list Xs0 without the item X
 %
-%     ?- select(c, "abcd", X).
-%        X = "abd".
-%
+% ```
+% ?- select(c, "abcd", X).
+%    X = "abd".
+% ```
 select(X, [X|Xs], Xs).
 select(X, [Y|Xs], [Y|Ys]) :- select(X, Xs, Ys).
 
@@ -136,9 +140,10 @@ select(X, [Y|Xs], [Y|Ys]) :- select(X, Xs, Ys).
 %
 % Concatenates a list of lists
 %
-%     ?- append([[1, 2], [3]], Xs).
-%        Xs = [1, 2, 3].
-%
+% ```
+% ?- append([[1, 2], [3]], Xs).
+%    Xs = [1, 2, 3].
+% ```
 append([], []).
 append([L0|Ls0], Ls) :-
     append(L0, Rest, Ls),
@@ -148,15 +153,16 @@ append([L0|Ls0], Ls) :-
 %
 % List Xs is the concatenation of Xs0 and Xs1
 %
-%     ?- append([1,2,3], [4,5,6], Xs).
-%        Xs = [1, 2, 3, 4, 5, 6].
-%
+% ```
+% ?- append([1,2,3], [4,5,6], Xs).
+%    Xs = [1, 2, 3, 4, 5, 6].
+% ```
 append([], R, R).
 append([X|L], R, [X|S]) :- append(L, R, S).
 
 %% memberchk(?X, +Xs).
 %
-% This predicate is similar to member/2, but it only provides a single answer
+% This predicate is similar to `member/2`, but it only provides a single answer
 memberchk(X, Xs) :- member(X, Xs), !.
 
 %% reverse(?Xs, ?Ys).
@@ -179,9 +185,10 @@ reverse([_|Xs], [Y1|Ys], YsPreludeRev, Xss) :-
 %
 % This is a metapredicate that applies predicate to each element of the list Xs0
 %
-%     ?- maplist(write, [1,2,3]).
-%     123   true.
-%
+% ```
+% ?- maplist(write, [1,2,3]).
+% 123   true.
+% ```
 maplist(_, []).
 maplist(Cont1, [E1|E1s]) :-
     call(Cont1, E1),
@@ -191,9 +198,10 @@ maplist(Cont1, [E1|E1s]) :-
 %
 % This is a metapredicate that applies predicate to each element of the lists Xs0 and Xs1.
 %
-%     ?- maplist(length, ["hello", "prolog", "marseille"], Xs1).
-%        Xs1 = [5,6,9].
-%
+% ```
+% ?- maplist(length, ["hello", "prolog", "marseille"], Xs1).
+%    Xs1 = [5,6,9].
+% ```
 maplist(_, [], []).
 maplist(Cont2, [E1|E1s], [E2|E2s]) :-
     call(Cont2, E1, E2),
@@ -251,8 +259,10 @@ maplist(Cont, [E1|E1s], [E2|E2s], [E3|E3s], [E4|E4s], [E5|E5s], [E6|E6s], [E7|E7
 %
 % Takes a lists of numbers and unifies Sum with the result of summing all the elements of the list.
 %
-%     ?- sum_list([2,2,2], 6).
-%        true.
+% ```
+% ?- sum_list([2,2,2], 6).
+%    true.
+% ```
 sum_list(Ls, S) :-
         foldl(lists:sum_, Ls, 0, S).
 
@@ -274,12 +284,15 @@ same_length([_|As], [_|Bs]) :-
 %
 % For example, if we define sum_ as:
 %
-%     sum_(L, S0, S) :- S is S0 + L.
+% ```
+% sum_(L, S0, S) :- S is S0 + L.
+% ```
 %
-% Then we can define sum\_list/2 as the following:
+% Then we can define `sum_list/2` as the following:
 %
-%     sum_list(Ls, S) :- foldl(sum_, Ls, 0, S).
-%
+% ```
+% sum_list(Ls, S) :- foldl(sum_, Ls, 0, S).
+% ```
 
 foldl(Goal_3, Ls, A0, A) :-
         foldl_(Ls, Goal_3, A0, A).
@@ -291,7 +304,7 @@ foldl_([L|Ls], G_3, A0, A) :-
 
 %% foldl(+Predicate, ?Ls0, ?Ls1, +A0, ?A).
 %
-% Same as foldl/4 but with an extra list
+% Same as `foldl/4` but with an extra list
 foldl(Goal_4, Xs, Ys, A0, A) :-
         foldl_(Xs, Ys, Goal_4, A0, A).
 
@@ -305,9 +318,10 @@ foldl_([X|Xs], [Y|Ys], G_4, A0, A) :-
 %
 % If Ls is a list of lists, Ts contains the transposition
 %
-%     ?- transpose([[1,1],[2,2]], Ts).
-%        Ts = [[1,2],[1,2]].
-%
+% ```
+% ?- transpose([[1,1],[2,2]], Ts).
+%    Ts = [[1,2],[1,2]].
+% ```
 transpose(Ls, Ts) :-
         lists_transpose(Ls, Ts).
 
@@ -325,9 +339,10 @@ list_first_rest([L|Ls], L, Ls).
 %
 % Takes a list Ls0 and returns a list Set that doesn't contain any repeated element
 %
-%     ?- list_to_set([2,3,4,4,1,2], Set).
-%        Set = [2,3,4,1].
-%
+% ```
+% ?- list_to_set([2,3,4,4,1,2], Set).
+%    Set = [2,3,4,1].
+% ```
 list_to_set(Ls0, Ls) :-
         maplist(lists:with_var, Ls0, LVs0),
         keysort(LVs0, LVs),
@@ -359,8 +374,10 @@ unify_same(E-V, Prev-Var, E-V) :-
 %
 % Succeeds if in the N position of the list Ls, we found the element E. The elements start counting from zero.
 %
-%     ?- nth0(2, [1,2,3,4], 3).
-%        true.
+% ```
+% ?- nth0(2, [1,2,3,4], 3).
+%    true.
+% ```
 nth0(N, Es0, E) :-
    nonvar(N),
    '$skip_max_list'(Skip, N, Es0,Es1),
@@ -399,8 +416,10 @@ nth0_el(N0,N, _,E, [E0|Es0]) :-
 %
 % Succeeds if in the N position of the list Ls, we found the element E. The elements start counting from one.
 %
-%     ?- nth1(2, [1,2,3,4], 2).
-%        true.
+% ```
+% ?- nth1(2, [1,2,3,4], 2).
+%    true.
+% ```
 nth1(N, Es0, E) :-
    N \== 0,
    nth0(N, [_|Es0], E),
@@ -419,8 +438,10 @@ skipn(0, Es,Es, Xs,Xs).
 %
 % Succeeds if in the N position of the list Ls, we found the element E and the rest of the list is Rs. The elements start counting from zero.
 %
-%     ?- nth0(2, [1,2,3,4], 3, [1,2,4]).
-%        true.
+% ```
+% ?- nth0(2, [1,2,3,4], 3, [1,2,4]).
+%    true.
+% ```
 nth0(N, Es0, E, Es) :-
    integer(N),
    N >= 0,
@@ -449,8 +470,10 @@ nth0_elx(N0,N, E0,E, [E1|Es0], [E0|Es]) :-
 %
 % Succeeds if in the N position of the list Ls, we found the element E and the rest of the list is Rs. The elements start counting from one.
 %
-%     ?- nth1(2, [1,2,3,4], 2, [1,3,4]).
-%        true.
+% ```
+% ?- nth1(2, [1,2,3,4], 2, [1,3,4]).
+%    true.
+% ```
 nth1(N, Es0, E, Es) :-
    N \== 0,
    nth0(N, [_|Es0], E, [_|Es]),
@@ -478,7 +501,7 @@ list_min_(N, Min0, Min) :-
 %
 % True when Xs is a permutation of Ys. This can solve for Ys given
 % Xs or Xs given Ys, or  even   enumerate  Xs and Ys together. The
-% predicate  permutation/2  is  primarily   intended  to  generate
+% predicate  `permutation/2`  is  primarily   intended  to  generate
 % permutations. Note that a list of  length N has N! permutations,
 % and  unbounded  permutation  generation   becomes  prohibitively
 % expensive, even for rather short lists (10! = 3,628,800).
@@ -486,12 +509,14 @@ list_min_(N, Min0, Min) :-
 % The example below illustrates that Xs   and Ys being proper lists
 % is not a sufficient condition to use the above replacement.
 %
-%     ?- permutation([1,2], [X,Y]).
-%        X = 1, Y = 2
-%     ;  X = 2, Y = 1
-%     ;  false.
+% ```
+% ?- permutation([1,2], [X,Y]).
+%    X = 1, Y = 2
+% ;  X = 2, Y = 1
+% ;  false.
+% ```
 %
-%   Throws type\_error(list, Arg) if either argument is not a proper
+%   Throws `type_error(list, Arg)` if either argument is not a proper
 %   or partial list.
 
 permutation(Xs, Ys) :-
