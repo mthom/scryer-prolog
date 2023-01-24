@@ -284,30 +284,31 @@ exclude_([L|Ls0], Goal, Ls) :-
 
 /** <module> Constraint Logic Programming over Integers
 
-## Introduction			{#clpz-intro}
+## Introduction
 
 This library provides CLP(ℤ): Constraint Logic Programming over
 Integers.
 
 CLP(ℤ) is an instance of the general CLP(.) scheme, extending logic
 programming with reasoning over specialised domains. CLP(ℤ) lets us
-reason about **integers** in a way that honors the relational nature
+reason about *integers* in a way that honors the relational nature
 of Prolog.
 
 There are two major use cases of CLP(ℤ) constraints:
 
-    1. [**declarative integer arithmetic**](<#clpz-integer-arith>)
-    2. solving **combinatorial problems** such as planning, scheduling
+    1. [*declarative integer arithmetic*](<#clpz-integer-arith>)
+
+    2. solving *combinatorial problems* such as planning, scheduling
        and allocation tasks.
 
 The predicates of this library can be classified as:
 
-    * _arithmetic_ constraints like #=/2, #>/2 and #\=/2 [](<#clpz-arithmetic>)
-    * the _membership_ constraints in/2 and ins/2 [](<#clpz-membership>)
-    * the _enumeration_ predicates indomain/1, label/1 and labeling/2 [](<#clpz-enumeration>)
-    * _combinatorial_ constraints like all_distinct/1 and global_cardinality/2 [](<#clpz-global>)
-    * _reification_ predicates such as #<==>/2 [](<#clpz-reification-predicates>)
-    * _reflection_ predicates such as fd_dom/2 [](<#clpz-reflection-predicates>)
+    * _arithmetic_ constraints like `#=/2`, `#>/2` and `#\=/2`
+    * the _membership_ constraints `in/2` and `ins/2`
+    * the _enumeration_ predicates `indomain/1`, `label/1` and `labeling/2`
+    * _combinatorial_ constraints like `all_distinct/1` and `global_cardinality/2`
+    * _reification_ predicates such as `#<==>/2`
+    * _reflection_ predicates such as `fd_dom/2`
 
 In most cases, [_arithmetic constraints_](<#clpz-arith-constraints>)
 are the only predicates you will ever need from this library. When
@@ -324,16 +325,16 @@ is highly advisable that you make CLP(ℤ) constraints available in all
 your programs. One way to do this is to put the following directive in
 your =|~/.scryerrc|= initialisation file:
 
-==
+```
 :- use_module(library(clpz)).
-==
+```
 
 All example programs that appear in the CLP(ℤ) documentation assume
 that you have done this.
 
 Important concepts and principles of this library are illustrated by
 means of usage examples that are available in a public git repository:
-[**github.com/triska/clpz**](https://github.com/triska/clpz)
+[*https://github.com/triska/clpz*](https://github.com/triska/clpz)
 
 If you are used to the complicated operational considerations that
 low-level arithmetic primitives necessitate, then moving to CLP(ℤ)
@@ -353,7 +354,7 @@ primitives are impure limitations that are better deferred to more
 advanced lectures.
 
 More information about CLP(ℤ) constraints and their implementation is
-contained in: [**metalevel.at/drt.pdf**](https://www.metalevel.at/drt.pdf)
+contained in: [*metalevel.at/drt.pdf*](https://www.metalevel.at/drt.pdf)
 
 The best way to discuss applying, improving and extending CLP(ℤ)
 constraints is to use the dedicated `clpz` tag on
@@ -369,37 +370,37 @@ arithmetic constraints is that they are true _relations_ and can be
 used in all directions. For most programs, arithmetic constraints are
 the only predicates you will ever need from this library.
 
-The most important arithmetic constraint is #=/2, which subsumes both
-`(is)/2` and `(=:=)/2` over integers. Use #=/2 to make your programs
-more general.
+The most important arithmetic constraint is `(#=)/2`, which subsumes
+both `(is)/2` and `(=:=)/2` over integers. Use `(#=)/2` to make your
+programs more general.
 
 In total, the arithmetic constraints are:
 
-    | Expr1 `#=`  Expr2  | Expr1 equals Expr2                       |
-    | Expr1 `#\=` Expr2  | Expr1 is not equal to Expr2              |
-    | Expr1 `#>=` Expr2  | Expr1 is greater than or equal to Expr2  |
-    | Expr1 `#=<` Expr2  | Expr1 is less than or equal to Expr2     |
-    | Expr1 `#>` Expr2   | Expr1 is greater than Expr2              |
-    | Expr1 `#<` Expr2   | Expr1 is less than Expr2                 |
+| Expr1 `#=`  Expr2  | Expr1 equals Expr2                       |
+| Expr1 `#\=` Expr2  | Expr1 is not equal to Expr2              |
+| Expr1 `#>=` Expr2  | Expr1 is greater than or equal to Expr2  |
+| Expr1 `#=<` Expr2  | Expr1 is less than or equal to Expr2     |
+| Expr1 `#>` Expr2   | Expr1 is greater than Expr2              |
+| Expr1 `#<` Expr2   | Expr1 is less than Expr2                 |
 
 `Expr1` and `Expr2` denote *arithmetic expressions*, which are:
 
-    | _integer_          | Given value                          |
-    | _variable_         | Unknown integer                      |
-    | ?(_variable_)      | Unknown integer                      |
-    | -Expr              | Unary minus                          |
-    | Expr + Expr        | Addition                             |
-    | Expr * Expr        | Multiplication                       |
-    | Expr - Expr        | Subtraction                          |
-    | Expr ^ Expr        | Exponentiation                       |
-    | min(Expr,Expr)     | Minimum of two expressions           |
-    | max(Expr,Expr)     | Maximum of two expressions           |
-    | Expr `mod` Expr    | Modulo induced by floored division   |
-    | Expr `rem` Expr    | Modulo induced by truncated division |
-    | abs(Expr)          | Absolute value                       |
-    | sign(Expr)         | Sign (-1, 0, 1) of Expr              |
-    | Expr // Expr       | Truncated integer division           |
-    | Expr div Expr      | Floored integer division             |
+| _integer_          | Given value                          |
+| _variable_         | Unknown integer                      |
+| #(_variable_)      | Unknown integer                      |
+| -Expr              | Unary minus                          |
+| Expr + Expr        | Addition                             |
+| Expr * Expr        | Multiplication                       |
+| Expr - Expr        | Subtraction                          |
+| Expr ^ Expr        | Exponentiation                       |
+| min(Expr,Expr)     | Minimum of two expressions           |
+| max(Expr,Expr)     | Maximum of two expressions           |
+| Expr `mod` Expr    | Modulo induced by floored division   |
+| Expr `rem` Expr    | Modulo induced by truncated division |
+| abs(Expr)          | Absolute value                       |
+| sign(Expr)         | Sign (-1, 0, 1) of Expr              |
+| Expr // Expr       | Truncated integer division           |
+| Expr div Expr      | Floored integer division             |
 
 where `Expr` again denotes an arithmetic expression.
 
@@ -416,19 +417,19 @@ reason about integers. Therefore, it is recommended that you put the
 following directive in your =|~/.scryerrc|= initialisation file to make
 CLP(ℤ) constraints available in all your programs:
 
-==
+```
 :- use_module(library(clpz)).
-==
+```
 
 Throughout the following, it is assumed that you have done this.
 
 The most basic use of CLP(ℤ) constraints is _evaluation_ of
 arithmetic expressions involving integers. For example:
 
-==
+```
 ?- X #= 1+2.
-X = 3.
-==
+   X = 3.
+```
 
 This could in principle also be achieved with the lower-level
 predicate `(is)/2`. However, an important advantage of arithmetic
@@ -436,22 +437,22 @@ constraints is their purely relational nature: Constraints can be used
 in _all directions_, also if one or more of their arguments are only
 partially instantiated. For example:
 
-==
+```
 ?- 3 #= Y+2.
-Y = 1.
-==
+   Y = 1.
+```
 
 This relational nature makes CLP(ℤ) constraints easy to explain and
 use, and well suited for beginners and experienced Prolog programmers
 alike. In contrast, when using low-level integer arithmetic, we get:
 
-==
+```
 ?- 3 is Y+2.
-ERROR: is/2: Arguments are not sufficiently instantiated
+   error(instantiation_error,(is)/2).
 
 ?- 3 =:= Y+2.
-ERROR: =:=/2: Arguments are not sufficiently instantiated
-==
+   error(instantiation_error,(is)/2).
+```
 
 Due to the necessary operational considerations, the use of these
 low-level arithmetic predicates is considerably harder to understand
@@ -467,19 +468,19 @@ constraints at compilation time so that low-level arithmetic
 predicates are _automatically_ used whenever possible. For example,
 the predicate:
 
-==
+```
 positive_integer(N) :- N #>= 1.
-==
+```
 
 is executed as if it were written as:
 
-==
+```
 positive_integer(N) :-
         (   integer(N)
         ->  N >= 1
         ;   N #>= 1
         ).
-==
+```
 
 This illustrates why the performance of CLP(ℤ) constraints is almost
 always completely satisfactory when they are used in modes that can be
@@ -504,50 +505,50 @@ simple example.
 Consider first a rather conventional definition of `n_factorial/2`,
 relating each natural number _N_ to its factorial _F_:
 
-==
+```
 n_factorial(0, 1).
 n_factorial(N, F) :-
         N #> 0,
         N1 #= N - 1,
         n_factorial(N1, F1),
         F #= N * F1.
-==
+```
 
 This program uses CLP(ℤ) constraints _instead_ of low-level
 arithmetic throughout, and everything that _would have worked_ with
 low-level arithmetic _also_ works with CLP(ℤ) constraints, retaining
 roughly the same performance. For example:
 
-==
+```
 ?- n_factorial(47, F).
-F = 258623241511168180642964355153611979969197632389120000000000 ;
-false.
-==
+   F = 258623241511168180642964355153611979969197632389120000000000
+;  false.
+```
 
 Now the point: Due to the increased flexibility and generality of
 CLP(ℤ) constraints, we are free to _reorder_ the goals as follows:
 
-==
+```
 n_factorial(0, 1).
 n_factorial(N, F) :-
         N #> 0,
         N1 #= N - 1,
         F #= N * F1,
         n_factorial(N1, F1).
-==
+```
 
 In this concrete case, _termination_ properties of the predicate are
 improved. For example, the following queries now both terminate:
 
-==
+```
 ?- n_factorial(N, 1).
-N = 0 ;
-N = 1 ;
-false.
+   N = 0
+;  N = 1
+;  false.
 
 ?- n_factorial(N, 3).
-false.
-==
+   false.
+```
 
 To make the predicate terminate if _any_ argument is instantiated, add
 the (implied) constraint `F #\= 0` before the recursive call.
@@ -558,8 +559,8 @@ The value of CLP(ℤ) constraints does _not_ lie in completely freeing
 us from _all_ procedural phenomena. For example, the two programs do
 not even have the same _termination properties_ in all cases.
 Instead, the primary benefit of CLP(ℤ) constraints is that they allow
-you to try different execution orders and apply [**declarative
-debugging**](https://www.metalevel.at/prolog/debugging.html)
+you to try different execution orders and apply [*declarative
+debugging*](https://www.metalevel.at/prolog/debugging.html)
 techniques _at all_!  Reordering goals (and clauses) can significantly
 impact the performance of Prolog programs, and you are free to try
 different variants if you use declarative approaches. Moreover, since
@@ -601,7 +602,7 @@ and by enumeration predicates like labeling/2.
 As another example, consider _Sudoku_: It is a popular puzzle
 over integers that can be easily solved with CLP(ℤ) constraints.
 
-==
+```
 sudoku(Rows) :-
         length(Rows, 9), maplist(same_length(Rows), Rows),
         append(Rows, Vs), Vs ins 1..9,
@@ -627,23 +628,23 @@ problem(1, [[_,_,_,_,_,_,_,_,_],
             [5,_,_,_,_,_,_,7,3],
             [_,_,2,_,1,_,_,_,_],
             [_,_,_,_,4,_,_,_,9]]).
-==
+```
 
 Sample query:
 
-==
-?- problem(1, Rows), sudoku(Rows), maplist(writeln, Rows).
-[9,8,7,6,5,4,3,2,1]
-[2,4,6,1,7,3,9,8,5]
-[3,5,1,9,2,8,7,4,6]
-[1,2,8,5,3,7,6,9,4]
-[6,3,4,8,9,2,1,5,7]
-[7,9,5,4,6,1,8,3,2]
-[5,1,9,2,8,6,4,7,3]
-[4,7,2,3,1,9,5,6,8]
-[8,6,3,7,4,5,2,1,9]
-Rows = [[9, 8, 7, 6, 5, 4, 3, 2|...], ... , [...|...]].
-==
+```
+?- problem(1, Rows), sudoku(Rows), maplist(portray_clause, Rows).
+[9,8,7,6,5,4,3,2,1].
+[2,4,6,1,7,3,9,8,5].
+[3,5,1,9,2,8,7,4,6].
+[1,2,8,5,3,7,6,9,4].
+[6,3,4,8,9,2,1,5,7].
+[7,9,5,4,6,1,8,3,2].
+[5,1,9,2,8,6,4,7,3].
+[4,7,2,3,1,9,5,6,8].
+[8,6,3,7,4,5,2,1,9].
+   Rows = [[9,8,7,6,5,4,3,2,1]|...].
+```
 
 In this concrete case, the constraint solver is strong enough to find
 the unique solution without any search.
@@ -653,31 +654,29 @@ the unique solution without any search.
 
 Here is an example session with a few queries and their answers:
 
-==
+```
 ?- X #> 3.
-X in 4..sup.
+   clpz:(X in 4..sup).
 
 ?- X #\= 20.
-X in inf..19\/21..sup.
+   clpz:(X in inf..19\/21..sup).
 
 ?- 2*X #= 10.
-X = 5.
+   X = 5.
 
 ?- X*X #= 144.
-X in -12\/12.
+   clpz:(X in-12\/12)
+;  false.
 
 ?- 4*X + 2*Y #= 24, X + Y #= 9, [X,Y] ins 0..sup.
-X = 3,
-Y = 6.
+   X = 3, Y = 6.
 
 ?- X #= Y #<==> B, X in 0..3, Y in 4..5.
-B = 0,
-X in 0..3,
-Y in 4..5.
-==
+   B = 0, clpz:(X in 0..3), clpz:(Y in 4..5).
+```
 
 The answers emitted by the toplevel are called _residual programs_,
-and the goals that comprise each answer are called **residual goals**.
+and the goals that comprise each answer are called *residual goals*.
 In each case above, and as for all pure programs, the residual program
 is declaratively equivalent to the original query. From the residual
 goals, it is clear that the constraint solver has deduced additional
@@ -689,12 +688,12 @@ make sure that all constrained variables are displayed. To make the
 constraints a variable is involved in available as a Prolog term for
 further reasoning within your program, use copy_term/3. For example:
 
-==
+```
 ?- X #= Y + Z, X in 0..5, copy_term([X,Y,Z], [X,Y,Z], Gs).
 Gs = [clpz: (X in 0..5), clpz: (Y+Z#=X)],
 X in 0..5,
 Y+Z#=X.
-==
+```
 
 This library also provides _reflection_ predicates (like fd_dom/2,
 fd_size/2 etc.) with which we can inspect a variable's current
@@ -722,7 +721,7 @@ cryptoarithmetic puzzle SEND + MORE = MONEY, where different letters
 denote distinct integers between 0 and 9. It can be modeled in CLP(ℤ)
 as follows:
 
-==
+```
 puzzle([S,E,N,D] + [M,O,R,E] = [M,O,N,E,Y]) :-
         Vars = [S,E,N,D,M,O,R,Y],
         Vars ins 0..9,
@@ -731,14 +730,14 @@ puzzle([S,E,N,D] + [M,O,R,E] = [M,O,N,E,Y]) :-
                   M*1000 + O*100 + R*10 + E #=
         M*10000 + O*1000 + N*100 + E*10 + Y,
         M #\= 0, S #\= 0.
-==
+```
 
 Notice that we are _not_ using labeling/2 in this predicate, so that
 we can first execute and observe the modeling part in isolation.
 Sample query and its result (actual variables replaced for
 readability):
 
-==
+```
 ?- puzzle(As+Bs=Cs).
 As = [9, A2, A3, A4],
 Bs = [1, 0, B3, A2],
@@ -750,7 +749,7 @@ A3 in 5..8,
 A4 in 2..8,
 B3 in 2..8,
 C5 in 2..8.
-==
+```
 
 From this answer, we see that this core relation _terminates_ and is in
 fact _deterministic_. Moreover, we see from the residual goals that
@@ -761,13 +760,11 @@ parts are cleanly separated.
 Labeling can then be used to search for solutions in a separate
 predicate or goal:
 
-==
+```
 ?- puzzle(As+Bs=Cs), label(As).
-As = [9, 5, 6, 7],
-Bs = [1, 0, 8, 5],
-Cs = [1, 0, 6, 5, 2] ;
-false.
-==
+   As = [9,5,6,7], Bs = [1,0,8,5], Cs = [1,0,6,5,2]
+;  false.
+```
 
 In this case, it suffices to label a subset of variables to find the
 puzzle's unique solution, since the constraint solver is strong enough
@@ -801,12 +798,12 @@ column, and which are subject to certain constraints.
 In fact, let us now generalize the task to the so-called _N queens
 puzzle_, which is obtained by replacing 8 by _N_ everywhere it occurs
 in the above description. We implement the above considerations in the
-**core relation** `n_queens/2`, where the first argument is the number
+*core relation* `n_queens/2`, where the first argument is the number
 of queens (which is identical to the number of rows and columns of the
 generalized chessboard), and the second argument is a list of _N_
 integers that represents a solution in the form described above.
 
-==
+```
 n_queens(N, Qs) :-
         length(Qs, N),
         Qs ins 1..N,
@@ -821,7 +818,7 @@ safe_queens([Q|Qs], Q0, D0) :-
         abs(Q0 - Q) #\= D0,
         D1 #= D0 + 1,
         safe_queens(Qs, Q0, D1).
-==
+```
 
 Note that all these predicates can be used in _all directions_: We
 can use them to _find_ solutions, _test_ solutions and _complete_
@@ -829,22 +826,25 @@ partially instantiated solutions.
 
 The original task can be readily solved with the following query:
 
-==
+```
 ?- n_queens(8, Qs), label(Qs).
-Qs = [1, 5, 8, 6, 3, 7, 2, 4] .
-==
+   Qs = [1,5,8,6,3,7,2,4]
+;  ... .
+```
 
 Using suitable labeling strategies, we can easily find solutions with
 80 queens and more:
 
-==
+```
 ?- n_queens(80, Qs), labeling([ff], Qs).
-Qs = [1, 3, 5, 44, 42, 4, 50, 7, 68|...] .
+   Qs = [1,3,5,44,42,4,50,7,68,57,76,61,6,39,30,40,8,54,36,41,...]
+;  ... .
 
 ?- time((n_queens(90, Qs), labeling([ff], Qs))).
-% 5,904,401 inferences, 0.722 CPU in 0.737 seconds (98% CPU)
-Qs = [1, 3, 5, 50, 42, 4, 49, 7, 59|...] .
-==
+   % CPU time: 31.351s
+   Qs = [1,3,5,50,42,4,49,7,59,48,46,63,6,55,47,64,8,70,58,67,...]
+;  ... .
+```
 
 Experimenting with different search strategies is easy because we have
 separated the core relation from the actual search.
@@ -868,7 +868,7 @@ If necessary, we can use `once/1` to commit to the first optimal
 solution. However, it is often very valuable to see alternative
 solutions that are _also_ optimal, so that we can choose among optimal
 solutions by other criteria. For the sake of
-[**purity**](https://www.metalevel.at/prolog/purity.html) and
+[*purity*](https://www.metalevel.at/prolog/purity.html) and
 completeness, we recommend to avoid `once/1` and other constructs that
 lead to impurities in CLP(ℤ) programs.
 
@@ -883,13 +883,13 @@ _reified_, which means reflecting their truth values into Boolean
 values represented by the integers 0 and 1. Let P and Q denote
 reifiable constraints or Boolean variables, then:
 
-    | #\ Q      | True iff Q is false                  |
-    | P #\/ Q   | True iff either P or Q               |
-    | P #/\ Q   | True iff both P and Q                |
-    | P #\ Q    | True iff either P or Q, but not both |
-    | P #<==> Q | True iff P and Q are equivalent      |
-    | P #==> Q  | True iff P implies Q                 |
-    | P #<== Q  | True iff Q implies P                 |
+| #\ Q      | True iff Q is false                  |
+| P #\/ Q   | True iff either P or Q               |
+| P #/\ Q   | True iff both P and Q                |
+| P #\ Q    | True iff either P or Q, but not both |
+| P #<==> Q | True iff P and Q are equivalent      |
+| P #==> Q  | True iff P implies Q                 |
+| P #<== Q  | True iff Q implies P                 |
 
 The constraints of this table are reifiable as well.
 
@@ -902,32 +902,32 @@ In the default execution mode, CLP(ℤ) constraints still exhibit some
 non-relational properties. For example, _adding_ constraints can yield
 new solutions:
 
-==
+```
 ?-          X #= 2, X = 1+1.
-false.
+   false.
 
 ?- X = 1+1, X #= 2, X = 1+1.
-X = 1+1.
-==
+   X = 1+1.
+```
 
 This behaviour is highly problematic from a logical point of view, and
 it may render declarative debugging techniques inapplicable.
 
-Assert `clpz:monotonic` to make CLP(ℤ) **monotonic**: This means
+Assert `clpz:monotonic` to make CLP(ℤ) *monotonic*: This means
 that _adding_ new constraints _cannot_ yield new solutions. When this
 flag is `true`, we must wrap variables that occur in arithmetic
 expressions with the functor `(?)/1` or `(#)/1`. For example:
 
-==
+```
 ?- assertz(clpz:monotonic).
-true.
+   true.
 
 ?- #X #= #Y + #Z.
    clpz:(#Y+ #Z#= #X).
 
 ?-          X #= 2, X = 1+1.
-ERROR: Arguments are not sufficiently instantiated
-==
+   error(instantiation_error,instantiation_error(unknown(_408),1)).
+```
 
 The wrapper can be omitted for variables that are already constrained
 to integers.
@@ -942,7 +942,7 @@ As an example of how it can be done currently, let us define a new
 custom constraint `oneground(X,Y,Z)`, where Z shall be 1 if at least
 one of X and Y is instantiated:
 
-==
+```
 :- multifile clpz:run_propagator/2.
 
 oneground(X, Y, Z) :-
@@ -956,7 +956,7 @@ clpz:run_propagator(oneground(X, Y, Z), MState) :-
         ;   integer(Y) -> clpz:kill(MState), Z = 1
         ;   true
         ).
-==
+```
 
 First, clpz:make_propagator/2 is used to transform a user-defined
 representation of the new constraint to an internal form. With
@@ -973,12 +973,12 @@ that can be used to prevent further invocations of the propagator when
 the constraint has become entailed, by using clpz:kill/1. An example
 of using the new constraint:
 
-==
+```
 ?- oneground(X, Y, Z), Y = 5.
 Y = 5,
 Z = 1,
 X in inf..sup.
-==
+```
 
 @author [Markus Triska](https://www.metalevel.at)
 */
@@ -1718,7 +1718,7 @@ intervals_to_domain(Is, D) :-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 
-%% ?Var in +Domain
+%% in(?Var, +Domain)
 %
 %  Var is an element of Domain. Domain is one of:
 %
@@ -1745,7 +1745,7 @@ fd_variable(V) :-
         ;   type_error(integer, V)
         ).
 
-%% +Vars ins +Domain
+%% ins(+Vars, +Domain)
 %
 %  The variables in the list Vars are elements of Domain.
 
@@ -1850,18 +1850,18 @@ label(Vs) :- labeling([], Vs).
 % must make Expr ground. If several such options are specified, they
 % are interpreted from left to right, e.g.:
 %
-% ==
+% ```
 % ?- [X,Y] ins 10..20, labeling([max(X),min(Y)],[X,Y]).
-% ==
+% ```
 %
 % This generates solutions in descending order of X, and for each
 % binding of X, solutions are generated in ascending order of Y. To
 % obtain the incomplete behaviour that other systems exhibit with
 % "maximize(Expr)" and "minimize(Expr)", use once/1, e.g.:
 %
-% ==
+% ```
 % once(labeling([max(Expr)], Vars))
-% ==
+% ```
 %
 % Labeling is always complete, always terminates, and yields no
 % redundant solutions.
@@ -2232,12 +2232,12 @@ all_different([X|Right], Left, Orig) :-
 %  can detect that not all variables can assume distinct values given
 %  the following domains:
 %
-%  ==
+% ```
 %  ?- maplist(in, Vs,
 %             [1\/3..4, 1..2\/4, 1..2\/4, 1..3, 1..3, 1..6]),
 %     all_distinct(Vs).
 %  false.
-%  ==
+% ```
 
 all_distinct(Ls) :-
         fd_must_be_list(Ls, all_distinct(Ls)-1),
@@ -2268,13 +2268,13 @@ zero_or_more([_|_], N) :- N #> 0.
 % The sum of elements of the list Vars is in relation Rel to Expr.
 % Rel is one of #=, #\=, #<, #>, #=< or #>=. For example:
 %
-% ==
+% ```
 % ?- [A,B,C] ins 0..sup, sum([A,B,C], #=, 100).
 % A in 0..100,
 % A+B+C#=100,
 % B in 0..100,
 % C in 0..100.
-% ==
+% ```
 
 sum(Vs, Op, Value) :-
         must_be(list, Vs),
@@ -2902,24 +2902,24 @@ match_goal(p(Prop), _) -->
 
 
 
-%% ?X #>= ?Y
+%% #>=(?X, ?Y)
 %
-% Same as Y #=< X. When reasoning over integers, replace >=/2 by #>=/2
+% Same as Y #=< X. When reasoning over integers, replace (>=)/2 by (#>=)/2
 % to obtain more general relations.
 
 X #>= Y :- clpz_geq(X, Y).
 
 clpz_geq(X, Y) :- clpz_geq_(X, Y), reinforce(X), reinforce(Y).
 
-%% ?X #=< ?Y
+%% #=<(?X, ?Y)
 %
 % The arithmetic expression X is less than or equal to Y. When
-% reasoning over integers, replace =</2 by #=</2 to obtain more
+% reasoning over integers, replace (=<)/2 by (#=<)/2 to obtain more
 % general relations.
 
 X #=< Y :- Y #>= X.
 
-%% ?X #= ?Y
+%% #=(?X, ?Y)
 %
 % The arithmetic expression X equals Y. When reasoning over integers,
 % replace is/2 by #=/2 to obtain more general relations.
@@ -3272,10 +3272,10 @@ integer_kroot_leq(L, U, N, K, R) :-
             )
         ).
 
-%% ?X #\= ?Y
+%% #\=(?X, ?Y)
 %
 % The arithmetic expressions X and Y evaluate to distinct integers.
-% When reasoning over integers, replace =\=/2 by #\=/2 to obtain more
+% When reasoning over integers, replace (=\=)/2 by (#\=)/2 to obtain more
 % general relations.
 
 X #\= Y :- clpz_neq(X, Y), do_queue.
@@ -3303,7 +3303,7 @@ neq_num(X, N) -->
         ).
 
 
-%% ?X #> ?Y
+%% #>(?X, ?Y)
 %
 % Same as Y #< X.
 
@@ -3312,14 +3312,14 @@ X #> Y  :- X #>= Y + 1.
 %% #<(?X, ?Y)
 %
 % The arithmetic expression X is less than Y. When reasoning over
-% integers, replace </2 by #</2 to obtain more general relations.
+% integers, replace `(<)/2` by `(#<)/2` to obtain more general relations.
 %
 % In addition to its regular use in tasks that require it, this
 % constraint can also be useful to eliminate uninteresting symmetries
 % from a problem. For example, all possible matches between pairs
 % built from four players in total:
 %
-% ==
+% ```
 % ?- Vs = [A,B,C,D], Vs ins 1..4,
 %         all_different(Vs),
 %         A #< B, C #< D, A #< C,
@@ -3327,45 +3327,45 @@ X #> Y  :- X #>= Y + 1.
 % Ms = [ pair(1, 2)-pair(3, 4),
 %        pair(1, 3)-pair(2, 4),
 %        pair(1, 4)-pair(2, 3)].
-% ==
+% ```
 
 X #< Y  :- Y #> X.
 
-%% #\ +Q
+%% #\(+Q)
 %
 % The reifiable constraint Q does _not_ hold. For example, to obtain
 % the complement of a domain:
 %
-% ==
+% ```
 % ?- #\ X in -3..0\/10..80.
 % X in inf.. -4\/1..9\/81..sup.
-% ==
+% ```
 
 #\ Q       :- reify(Q, 0), do_queue.
 
-%% ?P #<==> ?Q
+%% #<==>(?P, ?Q)
 %
 % P and Q are equivalent. For example:
 %
-% ==
+% ```
 % ?- X #= 4 #<==> B, X #\= 4.
 % B = 0,
 % X in inf..3\/5..sup.
-% ==
+% ```
 % The following example uses reified constraints to relate a list of
 % finite domain variables to the number of occurrences of a given value:
 %
-% ==
+% ```
 % vs_n_num(Vs, N, Num) :-
 %         maplist(eq_b(N), Vs, Bs),
 %         sum(Bs, #=, Num).
 %
 % eq_b(X, Y, B) :- X #= Y #<==> B.
-% ==
+% ```
 %
 % Sample queries and their results:
 %
-% ==
+% ```
 % ?- Vs = [X,Y,Z], Vs ins 0..1, vs_n_num(Vs, 4, Num).
 % Vs = [X, Y, Z],
 % Num = 0,
@@ -3377,11 +3377,11 @@ X #< Y  :- Y #> X.
 % X = 2,
 % Y = 2,
 % Z = 2.
-% ==
+% ```
 
 L #<==> R  :- reify(L, B), reify(R, B), do_queue.
 
-%% ?P #==> ?Q
+%% #==>(?P, ?Q)
 %
 % P implies Q.
 
@@ -3404,13 +3404,13 @@ L #==> R   :-
         append(LPs, RPs, Ps),
         propagator_init_trigger([LB,RB], pimpl(LB,RB,Ps)).
 
-%% ?P #<== ?Q
+%% #<==(?P, ?Q)
 %
 % Q implies P.
 
 L #<== R   :- R #==> L.
 
-%% ?P #/\ ?Q
+%% #/\(?P, ?Q)
 %
 % P and Q hold.
 
@@ -3439,19 +3439,19 @@ conjunctive_neqs_vals(A #/\ B) -->
         conjunctive_neqs_vals(A),
         conjunctive_neqs_vals(B).
 
-%% ?P #\/ ?Q
+%% #\/(?P, ?Q)
 %
 % P or Q holds. For example, the sum of natural numbers below 1000
 % that are multiples of 3 or 5:
 %
-% ==
+% ```
 % ?- findall(N, (N mod 3 #= 0 #\/ N mod 5 #= 0, N in 0..999,
 %                indomain(N)),
 %            Ns),
 %    sum(Ns, #=, Sum).
 % Ns = [0, 3, 5, 6, 9, 10, 12, 15, 18|...],
 % Sum = 233168.
-% ==
+% ```
 
 L #\/ R :-
         (   disjunctive_eqs_var_drep(L #\/ R, Var, Drep) -> Var in Drep
@@ -3483,7 +3483,7 @@ disjunctive_eqs_vals(A #\/ B) -->
         disjunctive_eqs_vals(A),
         disjunctive_eqs_vals(B).
 
-%% ?P #\ ?Q
+%% #\(?P, ?Q)
 %
 % Either P holds or Q holds, but not both.
 
@@ -4296,18 +4296,18 @@ lex_le([V1|V1s], [V2|V2s]) :-
 % example, if 1 is compatible with 2 and 5, and 4 is compatible with 0
 % and 3:
 %
-% ==
+% ```
 % ?- tuples_in([[X,Y]], [[1,2],[1,5],[4,0],[4,3]]), X = 4.
 % X = 4,
 % Y in 0\/3.
-% ==
+% ```
 %
 % As another example, consider a train schedule represented as a list
 % of quadruples, denoting departure and arrival places and times for
 % each train. In the following program, Ps is a feasible journey of
 % length 3 from A to D via trains that are part of the given schedule.
 %
-% ==
+% ```
 % trains([[1,2,0,1],
 %         [2,3,4,5],
 %         [2,3,0,1],
@@ -4321,14 +4321,14 @@ lex_le([V1|V1s], [V2|V2s]) :-
 %         T4 #> T3,
 %         trains(Ts),
 %         tuples_in(Ps, Ts).
-% ==
+% ```
 %
 % In this example, the unique solution is found without labeling:
 %
-% ==
+% ```
 % ?- threepath(1, 4, Ps).
 % Ps = [[1, 2, 0, 1], [2, 3, 4, 5], [3, 4, 8, 9]].
-% ==
+% ```
 
 tuples_in(Tuples, Relation) :-
         must_be(list(list), Tuples),
@@ -6444,24 +6444,24 @@ num_subsets([S|Ss], Dom, Num0, Num, NonSubs) :-
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%%  serialized(+Starts, +Durations)
+%% serialized(+Starts, +Durations)
 %
-%   Describes a set of non-overlapping tasks.
-%   Starts = [S_1,...,S_n], is a list of variables or integers,
-%   Durations = [D_1,...,D_n] is a list of non-negative integers.
-%   Constrains Starts and Durations to denote a set of
-%   non-overlapping tasks, i.e.: S_i + D_i =< S_j or S_j + D_j =<
-%   S_i for all 1 =< i < j =< n. Example:
+%  Describes a set of non-overlapping tasks.
+%  Starts = [S_1,...,S_n], is a list of variables or integers,
+%  Durations = [D_1,...,D_n] is a list of non-negative integers.
+%  Constrains Starts and Durations to denote a set of
+%  non-overlapping tasks, i.e.: S_i + D_i =< S_j or S_j + D_j =<
+%  S_i for all 1 =< i < j =< n. Example:
 %
-%   ==
-%   ?- length(Vs, 3),
-%      Vs ins 0..3,
-%      serialized(Vs, [1,2,3]),
-%      label(Vs).
-%   Vs = [0, 1, 3] ;
-%   Vs = [2, 0, 3] ;
-%   false.
-%   ==
+% ```
+% ?- length(Vs, 3),
+%    Vs ins 0..3,
+%    serialized(Vs, [1,2,3]),
+%    label(Vs).
+%    Vs = [0,1,3]
+% ;  Vs = [2,0,3]
+% ;  false.
+% ```
 %
 %  @see Dorndorf et al. 2000, "Constraint Propagation Techniques for the
 %       Disjunctive Scheduling Problem"
@@ -6541,10 +6541,10 @@ serialize_upper_bound(I, D_I, J, D_J, MState) -->
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%%    element(?N, +Vs, ?V)
+%% element(?N, +Vs, ?V)
 %
-%     The N-th element of the list of finite domain variables Vs is V.
-%     Analogous to nth1/3.
+%  The N-th element of the list of finite domain variables Vs is V.
+%  Analogous to nth1/3.
 
 element(N, Is, V) :-
         must_be(list, Is),
@@ -6576,38 +6576,39 @@ integers_remaining([V|Vs], N0, Dom, D0, D) :-
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%%    global_cardinality(+Vs, +Pairs)
+%% global_cardinality(+Vs, +Pairs)
 %
-%     Global      Cardinality      constraint.        Equivalent      to
-%     global_cardinality(Vs, Pairs, []). Example:
+%  Global      Cardinality      constraint.        Equivalent      to
+%  `global_cardinality(Vs, Pairs, [])`. Example:
 %
-%     ==
-%     ?- Vs = [_,_,_], global_cardinality(Vs, [1-2,3-_]), label(Vs).
-%     Vs = [1, 1, 3] ;
-%     Vs = [1, 3, 1] ;
-%     Vs = [3, 1, 1].
-%     ==
+% ```
+% ?- Vs = [_,_,_], global_cardinality(Vs, [1-2,3-_]), label(Vs).
+%    Vs = [1,1,3]
+% ;  Vs = [1,3,1]
+% ;  Vs = [3,1,1]
+% ;  false.
+% ```
 
 global_cardinality(Xs, Pairs) :- global_cardinality(Xs, Pairs, []).
 
-%%    global_cardinality(+Vs, +Pairs, +Options)
+%% global_cardinality(+Vs, +Pairs, +Options)
 %
-%     Global Cardinality constraint. Vs  is  a   list  of  finite domain
-%     variables, Pairs is a list  of  Key-Num   pairs,  where  Key is an
-%     integer and Num is a finite  domain variable. The constraint holds
-%     iff each V in Vs is equal to   some key, and for each Key-Num pair
-%     in Pairs, the number of occurrences of   Key in Vs is Num. Options
-%     is a list of options. Supported options are:
+%  Global Cardinality constraint. Vs  is  a   list  of  finite domain
+%  variables, Pairs is a list  of  Key-Num   pairs,  where  Key is an
+%  integer and Num is a finite  domain variable. The constraint holds
+%  iff each V in Vs is equal to   some key, and for each Key-Num pair
+%  in Pairs, the number of occurrences of   Key in Vs is Num. Options
+%  is a list of options. Supported options are:
 %
-%     * consistency(value)
-%     A weaker form of consistency is used.
+%  `consistency(value)`
+%  A weaker form of consistency is used.
 %
-%     * cost(Cost, Matrix)
-%     Matrix is a list of rows, one for each variable, in the order
-%     they occur in Vs. Each of these rows is a list of integers, one
-%     for each key, in the order these keys occur in Pairs. When
-%     variable v_i is assigned the value of key k_j, then the
-%     associated cost is Matrix_{ij}. Cost is the sum of all costs.
+%  `cost(Cost, Matrix)`
+%  Matrix is a list of rows, one for each variable, in the order
+%  they occur in Vs. Each of these rows is a list of integers, one
+%  for each key, in the order these keys occur in Pairs. When
+%  variable v\_i is assigned the value of key k\_j, then the
+%  associated cost is Matrix\_{ij}. Cost is the sum of all costs.
 
 global_cardinality(Xs, Pairs, Options) :-
         must_be(list(list), [Xs,Pairs,Options]),
@@ -6959,21 +6960,22 @@ all_neq([X|Xs], C) :-
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-%%    circuit(+Vs)
+%% circuit(+Vs)
 %
-%     True iff the list Vs of finite domain variables induces a
-%     Hamiltonian circuit. The k-th element of Vs denotes the
-%     successor of node k. Node indexing starts with 1. Examples:
+% True iff the list Vs of finite domain variables induces a
+% Hamiltonian circuit. The k-th element of Vs denotes the
+% successor of node k. Node indexing starts with 1. Examples:
 %
-%     ==
-%     ?- length(Vs, _), circuit(Vs), label(Vs).
-%     Vs = [] ;
-%     Vs = [1] ;
-%     Vs = [2, 1] ;
-%     Vs = [2, 3, 1] ;
-%     Vs = [3, 1, 2] ;
-%     Vs = [2, 3, 4, 1] .
-%     ==
+% ```
+% ?- length(Vs, _), circuit(Vs), label(Vs).
+%    Vs = []
+% ;  Vs = [1]
+% ;  Vs = [2,1]
+% ;  Vs = [2,3,1]
+% ;  Vs = [3,1,2]
+% ;  Vs = [2,3,4,1]
+% ;  ... .
+% ```
 
 circuit(Vs) :-
         must_be(list, Vs),
@@ -7060,21 +7062,21 @@ cumulative(Tasks) :- cumulative(Tasks, [limit(1)]).
 %  For example, given the following predicate that relates three tasks
 %  of durations 2 and 3 to a list containing their starting times:
 %
-%  ==
+% ```
 %  tasks_starts(Tasks, [S1,S2,S3]) :-
 %          Tasks = [task(S1,3,_,1,_),
 %                   task(S2,2,_,1,_),
 %                   task(S3,2,_,1,_)].
-%  ==
+% ```
 %
 %  We can use cumulative/2 as follows, and obtain a schedule:
 %
-%  ==
+% ```
 %  ?- tasks_starts(Tasks, Starts), Starts ins 0..10,
 %     cumulative(Tasks, [limit(2)]), label(Starts).
 %  Tasks = [task(0, 3, 3, 1, _G36), task(0, 2, 2, 1, _G45), ...],
 %  Starts = [0, 0, 2] .
-%  ==
+% ```
 
 cumulative(Tasks, Options) :-
         must_be(list(list), [Tasks,Options]),
@@ -7204,22 +7206,23 @@ a_not_in_b([_,AX,AW,AY,AH], [_,BX,BW,BY,BH]) :-
 %  example, a list of binary finite domain variables is constrained to
 %  contain at least two consecutive ones:
 %
-%  ==
-%  two_consecutive_ones(Vs) :-
-%          automaton(Vs, [source(a),sink(c)],
-%                    [arc(a,0,a), arc(a,1,b),
-%                     arc(b,0,a), arc(b,1,c),
-%                     arc(c,0,c), arc(c,1,c)]).
-%  ==
+% ```
+% two_consecutive_ones(Vs) :-
+%         automaton(Vs, [source(a),sink(c)],
+%                       [arc(a,0,a), arc(a,1,b),
+%                        arc(b,0,a), arc(b,1,c),
+%                        arc(c,0,c), arc(c,1,c)]).
+% ```
 %
 %  Example query:
 %
-%  ==
-%  ?- length(Vs, 3), two_consecutive_ones(Vs), label(Vs).
-%  Vs = [0, 1, 1] ;
-%  Vs = [1, 1, 0] ;
-%  Vs = [1, 1, 1].
-%  ==
+% ```
+% ?- length(Vs, 3), two_consecutive_ones(Vs), label(Vs).
+%    Vs = [0,1,1]
+% ;  Vs = [1,1,0]
+% ;  Vs = [1,1,1]
+% ;  false.
+% ```
 
 automaton(Sigs, Ns, As) :- automaton(_, _, Sigs, Ns, As, [], [], _).
 
@@ -7255,7 +7258,7 @@ automaton(Sigs, Ns, As) :- automaton(_, _, Sigs, Ns, As, [], [], _).
 %  number of inflexions, which are switches between strictly ascending
 %  and strictly descending subsequences:
 %
-%  ==
+% ```
 %  sequence_inflexions(Vs, N) :-
 %          variables_signature(Vs, Sigs),
 %          automaton(Sigs, _, Sigs,
@@ -7276,11 +7279,11 @@ automaton(Sigs, Ns, As) :- automaton(_, _, Sigs, Ns, As, [], [], _).
 %          Prev #< V #<==> S #= 1,
 %          Prev #> V #<==> S #= 2,
 %          variables_signature_(Vs, V, Sigs).
-%  ==
+% ```
 %
 %  Example queries:
 %
-%  ==
+% ```
 %  ?- sequence_inflexions([1,2,3,3,2,1,3,0], N).
 %  N = 3.
 %
@@ -7288,7 +7291,7 @@ automaton(Sigs, Ns, As) :- automaton(_, _, Sigs, Ns, As, [], [], _).
 %     sequence_inflexions(Ls, 3), label(Ls).
 %  Ls = [0, 1, 0, 1, 0] ;
 %  Ls = [1, 0, 1, 0, 1].
-%  ==
+% ```
 
 template_var_path(V, Var, []) :- var(V), !, V == Var.
 template_var_path(T, Var, [N|Ns]) :-
@@ -7416,7 +7419,7 @@ arc_normalized_(arc(S0,L,S), Cs, arc(S0,L,S,Cs)).
 % deterministic while preserving their generality and completeness.
 % For example:
 %
-% ==
+% ```
 % n_factorial(N, F) :-
 %         zcompare(C, N, 0),
 %         n_factorial_(C, N, F).
@@ -7425,27 +7428,27 @@ arc_normalized_(arc(S0,L,S), Cs, arc(S0,L,S,Cs)).
 % n_factorial_(>, N, F) :-
 %         F #= F0*N, N1 #= N - 1,
 %         n_factorial(N1, F0).
-% ==
+% ```
 %
 % This version is deterministic if the first argument is instantiated,
 % because first argument indexing can distinguish the two different
 % clauses:
 %
-% ==
+% ```
 % ?- n_factorial(30, F).
-% F = 265252859812191058636308480000000.
-% ==
+%    F = 265252859812191058636308480000000.
+% ```
 %
 % The predicate can still be used in all directions, including the
 % most general query:
 %
-% ==
+% ```
 % ?- n_factorial(N, F).
-% N = 0,
-% F = 1 ;
-% N = F, F = 1 ;
-% N = F, F = 2 .
-% ==
+%    N = 0, F = 1
+% ;  N = 1, F = 1
+% ;  N = 2, F = 2
+% ;  ... .
+% ```
 
 zcompare(Order, A, B) :-
         (   nonvar(Order) ->
@@ -7469,11 +7472,11 @@ zcompare_(>, A, B) :- #A #> #B.
 % Relation, in the order they appear in the list. Relation must be #=,
 % #=<, #>=, #< or #>. For example:
 %
-% ==
+% ```
 % ?- chain(#>=, [X,Y,Z]).
 % X#>=Y,
 % Y#>=Z.
-% ==
+% ```
 
 chain(Relation, Zs) :-
         must_be(list, Zs),
@@ -7556,22 +7559,22 @@ fd_size(X, S) :-
 %  following code, you can convert a _finite_ domain to a list of
 %  integers:
 %
-%  ==
+% ```
 %  dom_integers(D, Is) :- phrase(dom_integers_(D), Is).
 %
 %  dom_integers_(I)      --> { integer(I) }, [I].
 %  dom_integers_(L..U)   --> { numlist(L, U, Is) }, Is.
 %  dom_integers_(D1\/D2) --> dom_integers_(D1), dom_integers_(D2).
-%  ==
+% ```
 %
 %  Example:
 %
-%  ==
+% ```
 %  ?- X in 1..5, X #\= 4, fd_dom(X, D), dom_integers(D, Is).
 %  D = 1..3\/5,
 %  Is = [1,2,3,5],
 %  X in 1..3\/5.
-%  ==
+% ```
 
 fd_dom(X, Drep) :-
         (   fd_get(X, XD, _) ->
