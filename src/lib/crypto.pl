@@ -1,20 +1,20 @@
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   Written 2020, 2021, 2022 by Markus Triska (triska@metalevel.at)
+   Written 2020-2023 by Markus Triska (triska@metalevel.at)
    Part of Scryer Prolog.
 
-   Predicates for cryptographic applications.
+/** Predicates for cryptographic applications.
 
-   This library assumes that the Prolog flag double_quotes is set to chars.
+   This library assumes that the Prolog flag `double_quotes` is set to `chars`.
    In Scryer Prolog, lists of characters are very efficiently represented,
    and strings have the advantage that the atom table remains unmodified.
 
    Especially for cryptographic applications, it is an advantage that
    using strings leaves little trace of what was processed in the system.
 
-   For predicates that accept an encoding/1 option to specify the encoding
-   of the input data, if encoding(octet) is used, then the input can also
-   be specified as a list of bytes, i.e., integers between 0 and 255.
-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+   For predicates that accept an `encoding/1` option to specify the encoding
+   of the input data, if `encoding(octet)` is used, then the input can also
+   be specified as a list of _bytes_, i.e., integers between 0 and 255.
+*/
 
 :- module(crypto,
           [hex_bytes/2,                  % ?Hex, ?Bytes
@@ -48,20 +48,20 @@
 :- use_module(library(si)).
 :- use_module(library(iso_ext), [partial_string/3]).
 
-/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   hex_bytes(?Hex, ?Bytes) is det.
 
-   Relation between a hexadecimal sequence and a list of bytes. Hex
-   is a string of hexadecimal numbers. Bytes is a list of *integers*
-   between 0 and 255 that represent the sequence as a list of bytes.
-   At least one of the arguments must be instantiated.
-
-   Example:
-
-   ?- hex_bytes("501ACE", Bs).
-      Bs = [80,26,206].
-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
-
+%% hex_bytes(?Hex, ?Bytes) is det.
+%
+%  Relation between a hexadecimal sequence and a list of bytes. Hex
+%  is a string of hexadecimal numbers. Bytes is a list of _integers_
+%  between 0 and 255 that represent the sequence as a list of bytes.
+%  At least one of the arguments must be instantiated.
+%
+%   Example:
+%
+% ```
+%   ?- hex_bytes("501ACE", Bs).
+%      Bs = [80,26,206].
+% ```
 
 hex_bytes(Hs, Bytes) :-
         (   ground(Hs) ->
@@ -113,47 +113,52 @@ must_be_octet_chars(Chars, Context) :-
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    Cryptographically secure random numbers
    =======================================
-
-   crypto_n_random_bytes(+N, -Bytes) is det
-
-   Bytes is unified with a list of N cryptographically secure
-   pseudo-random bytes. Each byte is an integer between 0 and 255. If
-   the internal pseudo-random number generator (PRNG) has not been
-   seeded with enough entropy to ensure an unpredictable byte
-   sequence, an exception is thrown.
-
-   One way to relate such a list of bytes to an _integer_ is to use
-   CLP(ℤ) constraints as follows:
-
-   :- use_module(library(clpz)).
-   :- use_module(library(lists)).
-
-   bytes_integer(Bs, N) :-
-           foldl(pow, Bs, 0-0, N-_).
-
-   pow(B, N0-I0, N-I) :-
-           B in 0..255,
-           N #= N0 + B*256^I0,
-           I #= I0 + 1.
-
-   With this definition, we can generate a random 256-bit integer
-   _from_ a list of 32 random _bytes_:
-
-   ?- crypto_n_random_bytes(32, Bs),
-      bytes_integer(Bs, I).
-      Bs = [146,166,162,210,242,7,25,132,64,94|...],
-      I = 337420085690608915485...(56 digits omitted).
-
-   The above relation also works in the other direction, letting you
-   translate an integer _to_ a list of bytes. In addition, you can
-   use hex_bytes/2 to convert bytes to _tokens_ that can be easily
-   exchanged in your applications.
-
-   ?- crypto_n_random_bytes(12, Bs),
-      hex_bytes(Hex, Bs).
-      Bs = [34,25,50,72,58,63,50,172,32,46|...], Hex = "221932483a3f32ac202 ...".
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
+%% crypto_n_random_bytes(+N, -Bytes) is det.
+%
+%  Bytes is unified with a list of N cryptographically secure
+%  pseudo-random bytes. Each byte is an integer between 0 and 255. If
+%  the internal pseudo-random number generator (PRNG) has not been
+%  seeded with enough entropy to ensure an unpredictable byte
+%  sequence, an exception is thrown.
+%
+%  One way to relate such a list of bytes to an _integer_ is to use
+%  CLP(ℤ) constraints as follows:
+%
+% ```
+%  :- use_module(library(clpz)).
+%  :- use_module(library(lists)).
+%
+%  bytes_integer(Bs, N) :-
+%          foldl(pow, Bs, 0-0, N-_).
+%
+%  pow(B, N0-I0, N-I) :-
+%          B in 0..255,
+%          N #= N0 + B*256^I0,
+%          I #= I0 + 1.
+% ```
+%
+%  With this definition, we can generate a random 256-bit integer
+%  _from_ a list of 32 random _bytes_:
+%
+% ```
+%  ?- crypto_n_random_bytes(32, Bs),
+%     bytes_integer(Bs, I).
+%     Bs = [146,166,162,210,242,7,25,132,64,94|...],
+%     I = 337420085690608915485...(56 digits omitted).
+% ```
+%
+%  The above relation also works in the other direction, letting you
+%  translate an integer _to_ a list of bytes. In addition, you can
+%  use `hex_bytes/2` to convert bytes to _tokens_ that can be easily
+%  exchanged in your applications.
+%
+% ```
+%  ?- crypto_n_random_bytes(12, Bs),
+%     hex_bytes(Hex, Bs).
+%     Bs = [34,25,50,72,58,63,50,172,32,46|...], Hex = "221932483a3f32ac202 ...".
+% ```
 
 crypto_n_random_bytes(N, Bs) :-
         must_be(integer, N),
@@ -165,29 +170,33 @@ crypto_random_byte(B) :- '$crypto_random_byte'(B).
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    Hashing
    =======
-
-   crypto_data_hash(+Data, -Hash, +Options)
-
-   Where Data is a list of characters, and Hash is the computed hash
-   as a list of hexadecimal characters.
-
-   Options is a list of:
-
-     - algorithm(+A)
-       where A is one of ripemd160, sha256, sha384, sha512, sha512_256,
-       sha3_224, sha3_256, sha3_384, sha3_512, blake2s256, blake2b512,
-       or a variable. If A is a variable, then it is unified with the
-       default algorithm, which is an algorithm that is considered
-       cryptographically secure at the time of this writing.
-     - encoding(+Encoding)
-       The default encoding is utf8. The alternative is octet,
-       to treat the input as a list of raw bytes.
-
-   Example:
-
-   ?- crypto_data_hash("abc", Hs, [algorithm(sha256)]).
-      Hs = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad".
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+%% crypto_data_hash(+Data, -Hash, +Options)
+%
+%  Where Data is a list of characters, and Hash is the computed hash
+%  as a list of hexadecimal characters.
+%
+%  Options is a list of:
+%
+%    - `algorithm(+A)`
+%      where `A` is one of `ripemd160`, `sha256`, `sha384`, `sha512`,
+%      `sha512_256`, `sha3_224`, `sha3_256`, `sha3_384`,
+%      `sha3_512`, `blake2s256`, `blake2b512`, or a variable. If `A` is
+%      a variable, then it is unified with the default algorithm,
+%      which is an algorithm that is considered cryptographically
+%      secure at the time of this writing.
+%
+%    - `encoding(+Encoding)`
+%      The default encoding is `utf8`. The alternative is `octet`, to
+%      treat the input as a list of raw bytes.
+%
+%  Example:
+%
+% ```
+%  ?- crypto_data_hash("abc", Hs, [algorithm(sha256)]).
+%     Hs = "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad".
+% ```
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    SHA256 is the current default for several hash-related predicates.
@@ -238,38 +247,36 @@ hash_algorithm(blake2s256).
 hash_algorithm(blake2b512).
 
 
-/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   crypto_data_hkdf(+Data, +Length, -Bytes, +Options) is det.
-
-   Concentrate possibly dispersed entropy of Data and then expand it
-   to the desired length. Data is a list of characters.
-
-   Bytes is unified with a list of bytes of length Length, and is
-   suitable as input keying material and initialization vectors to
-   symmetric encryption algorithms.
-
-   Admissible options are:
-
-     - algorithm(+Algorithm)
-       One of sha256, sha384 or sha512. If you specify a variable,
-       then it is unified with the algorithm that was used, which is a
-       cryptographically secure algorithm by default.
-     - info(+Info)
-       Optional context and application specific information,
-       specified as a list of characters. The default is [].
-     - salt(+List)
-       Optionally, a list of bytes that are used as salt. The
-       default is all zeroes.
-     - encoding(+Encoding)
-       The default encoding is utf8. The alternative is octet,
-       to treat the input as a list of raw bytes.
-
-   The `info/1`  option can be  used to  generate multiple keys  from a
-   single  master key,  using for  example values  such as  "key" and
-   "iv", or the name of a file that is to be encrypted.
-
-   See crypto_n_random_bytes/2 to obtain a suitable salt.
-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+%% crypto_data_hkdf(+Data, +Length, -Bytes, +Options) is det.
+%
+%  Concentrate possibly dispersed entropy of Data and then expand it
+%  to the desired length. Data is a list of characters.
+%
+%  Bytes is unified with a list of bytes of length Length, and is
+%  suitable as input keying material and initialization vectors to
+%  symmetric encryption algorithms.
+%
+%  Admissible options are:
+%
+%    - `algorithm(+Algorithm)`
+%      One of `sha256`, `sha384` or `sha512`. If you specify a variable,
+%      then it is unified with the algorithm that was used, which is a
+%      cryptographically secure algorithm by default.
+%    - `info(+Info)`
+%      Optional context and application specific information,
+%      specified as a list of characters. The default is `[]`.
+%    - `salt(+List)`
+%      Optionally, a list of bytes that are used as salt. The
+%      default is all zeroes.
+%    - `encoding(+Encoding)`
+%      The default encoding is `utf8`. The alternative is `octet`,
+%      to treat the input as a list of raw bytes.
+%
+%  The `info/1`  option can be  used to  generate multiple keys  from a
+%  single  master key,  using for  example values  such as  "key" and
+%  "iv", or the name of a file that is to be encrypted.
+%
+%  See `crypto_n_random_bytes/2` to obtain a suitable salt.
 
 crypto_data_hkdf(Data0, L, Bytes, Options0) :-
         functor_hash_options(algorithm, Algorithm, Options0, Options),
@@ -323,14 +330,12 @@ chars_bytes_(Cs, Bytes, Context) :-
    know if you need to rely on any specifics of this format.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
-/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   crypto_password_hash(+Password, ?Hash) is semidet.
-
-   If Hash is instantiated, the predicate succeeds _iff_ the hash
-   matches the given password. Otherwise, the call is equivalent to
-   crypto_password_hash(Password, Hash, []) and computes a
-   password-based hash using the default options.
-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+%% crypto_password_hash(+Password, ?Hash) is semidet.
+%
+%  If Hash is instantiated, the predicate succeeds _iff_ the hash
+%  matches the given password. Otherwise, the call is equivalent to
+%  `crypto_password_hash(Password, Hash, [])` and computes a
+%  password-based hash using the default options.
 
 crypto_password_hash(Password0, Hash) :-
         (   nonvar(Hash) ->
@@ -353,58 +358,56 @@ dollar_segments(Ls, Segments) :-
         ).
 
 
-/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   crypto_password_hash(+Password, -Hash, +Options) is det.
-
-   Derive Hash based on Password. This predicate is similar to
-   crypto_data_hash/3 in that it derives a hash from given data.
-   However, it is tailored for the specific use case of _passwords_.
-   One essential distinction is that for this use case, the derivation
-   of a hash should be _as slow as possible_ to counteract brute-force
-   attacks over possible passwords.
-
-   Another important distinction is that equal passwords must yield,
-   with very high probability, _different_ hashes. For this reason,
-   cryptographically strong random numbers are automatically added to
-   the password before a hash is derived.
-
-   Hash is unified with a string that contains the computed hash and
-   all parameters that were used, except for the password. Instead of
-   storing passwords, store these hashes. Later, you can verify the
-   validity of a password with crypto_password_hash/2, comparing the
-   then entered password to the stored hash. If you need to export this
-   atom, you should treat it as opaque ASCII data with up to 255 bytes
-   of length. The maximal length may increase in the future.
-
-   Admissible options are:
-
-     - algorithm(+Algorithm)
-       The algorithm to use. Currently, the only available algorithm
-       is 'pbkdf2-sha512', which is therefore also the default.
-     - cost(+C)
-       C is an integer, denoting the binary logarithm of the number
-       of _iterations_ used for the derivation of the hash. This
-       means that the number of iterations is set to 2^C. Currently,
-       the default is 17, and thus more than one hundred _thousand_
-       iterations. You should set this option as high as your server
-       and users can tolerate. The default is subject to change and
-       will likely increase in the future or adapt to new algorithms.
-     - salt(+Salt)
-       Use the given list of bytes as salt. By default,
-       cryptographically secure random numbers are generated for this
-       purpose. The default is intended to be secure, and constitutes
-       the typical use case of this predicate.
-
-   Currently, PBKDF2 with SHA-512 is used as the hash derivation
-   function, using 128 bits of salt. All default parameters, including
-   the algorithm, are subject to change, and other algorithms will also
-   become available in the future. Since computed hashes store all
-   parameters that were used during their derivation, such changes will
-   not affect the operation of existing deployments. Note though that
-   new hashes will then be computed with the new default parameters.
-
-   See crypto_data_hkdf/4 for generating keys from Hash.
-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+%% crypto_password_hash(+Password, -Hash, +Options) is det.
+%
+%  Derive Hash based on Password. This predicate is similar to
+%  `crypto_data_hash/3` in that it derives a hash from given data.
+%  However, it is tailored for the specific use case of _passwords_.
+%  One essential distinction is that for this use case, the derivation
+%  of a hash should be _as slow as possible_ to counteract brute-force
+%  attacks over possible passwords.
+%
+%  Another important distinction is that equal passwords must yield,
+%  with very high probability, _different_ hashes. For this reason,
+%  cryptographically strong random numbers are automatically added to
+%  the password before a hash is derived.
+%
+%  Hash is unified with a string that contains the computed hash and
+%  all parameters that were used, except for the password. Instead of
+%  storing passwords, store these hashes. Later, you can verify the
+%  validity of a password with `crypto_password_hash/2`, comparing the
+%  then entered password to the stored hash. If you need to export this
+%  atom, you should treat it as opaque ASCII data with up to 255 bytes
+%  of length. The maximal length may increase in the future.
+%
+%  Admissible options are:
+%
+%    - `algorithm(+Algorithm)`
+%      The algorithm to use. Currently, the only available algorithm
+%      is `'pbkdf2-sha512'`, which is therefore also the default.
+%    - `cost(+C)`
+%      C is an integer, denoting the binary logarithm of the number
+%      of _iterations_ used for the derivation of the hash. This
+%      means that the number of iterations is set to 2^C. Currently,
+%      the default is 17, and thus more than one hundred _thousand_
+%      iterations. You should set this option as high as your server
+%      and users can tolerate. The default is subject to change and
+%      will likely increase in the future or adapt to new algorithms.
+%    - `salt(+Salt)`
+%      Use the given list of bytes as salt. By default,
+%      cryptographically secure random numbers are generated for this
+%      purpose. The default is intended to be secure, and constitutes
+%      the typical use case of this predicate.
+%
+%  Currently, PBKDF2 with SHA-512 is used as the hash derivation
+%  function, using 128 bits of salt. All default parameters, including
+%  the algorithm, are subject to change, and other algorithms will also
+%  become available in the future. Since computed hashes store all
+%  parameters that were used during their derivation, such changes will
+%  not affect the operation of existing deployments. Note though that
+%  new hashes will then be computed with the new default parameters.
+%
+%  See `crypto_data_hkdf/4` for generating keys from Hash.
 
 crypto_password_hash(Password0, Hash, Options) :-
         chars_bytes_(Password0, Password, crypto_password_hash/3),
@@ -435,97 +438,94 @@ bytes_base64(Bytes, Base64) :-
             chars_base64(Chars, Base64, [padding(false)])
         ).
 
-/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   crypto_data_encrypt(+PlainText,
-                       +Algorithm,
-                       +Key,
-                       +IV,
-                       -CipherText,
-                       +Options).
-
-   Encrypt the given PlainText, using the symmetric algorithm
-   Algorithm, key Key, and initialization vector (or nonce) IV, to
-   give CipherText.
-
-   PlainText must be a list of characters, Key and IV must be lists of
-   bytes, and CipherText is created as a list of characters.
-
-   Keys and IVs can be chosen at random (using for example
-   crypto_n_random_bytes/2) or derived from input keying material (IKM)
-   using for example crypto_data_hkdf/4. This input is often a shared
-   secret, such as a negotiated point on an elliptic curve, or the hash
-   that was computed from a password via crypto_password_hash/3 with a
-   freshly generated and specified _salt_.
-
-   Reusing the same combination of Key and IV typically leaks at least
-   _some_ information about the plaintext. For example, identical
-   plaintexts will then correspond to identical ciphertexts. For some
-   algorithms, reusing an IV with the same Key has disastrous results
-   and can cause the loss of all properties that are otherwise
-   guaranteed. Especially in such cases, an IV is also called a
-   _nonce_ (number used once).
-
-   It is safe to store and  transfer the used initialization vector (or
-   nonce) in plain text, but the key _must be kept secret_.
-
-   Currently, the only supported algorithm is 'chacha20-poly1305', a
-   powerful and efficient _authenticated_ encryption scheme, providing
-   secrecy and at the same time reliable protection against undetected
-   _modifications_ of the encrypted data. This is a very good choice
-   for virtually all use cases. It is a stream cipher and can encrypt
-   data of any length up to 256 GB. Further, the encrypted data has
-   exactly the same length as the original, and no padding is used.
-
-   Options:
-
-      - encoding(+Encoding)
-      Encoding to use for PlainText. Default is utf8. The alternative
-      is octet to treat PlainText as raw bytes.
-
-      - tag(-List)
-      For authenticated encryption schemes, List is unified with a
-      list of _bytes_ holding the tag. This tag must be provided for
-      decryption.
-
-      - aad(+Data)
-      Data is additional authenticated data (AAD), a list of
-      characters. It is authenticated in that it influences the tag,
-      but it is not encrypted. The encoding/1 option also specifies
-      the encoding of Data.
-
-   Here is an example encryption and decryption, using the ChaCha20
-   stream cipher with the Poly1305 authenticator. This cipher uses a
-   256-bit key and a 96-bit nonce, i.e., 32 and 12 _bytes_,
-   respectively:
-
-    ?- Algorithm = 'chacha20-poly1305',
-       crypto_n_random_bytes(32, Key),
-       crypto_n_random_bytes(12, IV),
-       crypto_data_encrypt("this text is to be encrypted", Algorithm,
-                   Key, IV, CipherText, [tag(Tag)]),
-       crypto_data_decrypt(CipherText, Algorithm,
-                   Key, IV, RecoveredText, [tag(Tag)]).
-
-   Yielding:
-
-       Algorithm = 'chacha20-poly1305',
-       Key = [113,247,153,134,177,220,13,193,50,150|...],
-       IV = [135,20,149,153,63,35,68,114,247,171|...],
-       CipherText = "\x94\0Ej\x94\®Â\x95\óÑÆXÃn¾ð©b\x1c\ ...",
-       RecoveredText = "this text is to be  ...",
-       Tag = [152,117,152,17,162,75,150,206,144,40|...]
-
-   In this example, we use crypto_n_random_bytes/2 to generate a key
-   and nonce from cryptographically secure random numbers. For
-   repeated applications, you must ensure that a nonce is only used
-   _once_ together with the same key. Note that for _authenticated_
-   encryption schemes, the _tag_ that was computed during encryption
-   is necessary for decryption. It is safe to store and transfer the
-   tag in plain text.
-
-   See also crypto_data_decrypt/6, and hex_bytes/2 for conversion
-   between bytes and hex encoding.
-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+%% crypto_data_encrypt(+PlainText, +Algorithm, +Key, +IV, -CipherText, +Options).
+%
+%  Encrypt the given PlainText, using the symmetric algorithm
+%  Algorithm, key Key, and initialization vector (or nonce) IV, to
+%  give CipherText.
+%
+%  PlainText must be a list of characters, Key and IV must be lists of
+%  bytes, and CipherText is created as a list of characters.
+%
+%  Keys and IVs can be chosen at random (using for example
+%  `crypto_n_random_bytes/2`) or derived from input keying material (IKM)
+%  using for example `crypto_data_hkdf/4`. This input is often a shared
+%  secret, such as a negotiated point on an elliptic curve, or the hash
+%  that was computed from a password via `crypto_password_hash/3` with a
+%  freshly generated and specified _salt_.
+%
+%  Reusing the same combination of Key and IV typically leaks at least
+%  _some_ information about the plaintext. For example, identical
+%  plaintexts will then correspond to identical ciphertexts. For some
+%  algorithms, reusing an IV with the same Key has disastrous results
+%  and can cause the loss of all properties that are otherwise
+%  guaranteed. Especially in such cases, an IV is also called a
+%  _nonce_ (number used once).
+%
+%  It is safe to store and  transfer the used initialization vector (or
+%  nonce) in plain text, but the key _must be kept secret_.
+%
+%  Currently, the only supported algorithm is 'chacha20-poly1305', a
+%  powerful and efficient _authenticated_ encryption scheme, providing
+%  secrecy and at the same time reliable protection against undetected
+%  _modifications_ of the encrypted data. This is a very good choice
+%  for virtually all use cases. It is a stream cipher and can encrypt
+%  data of any length up to 256 GB. Further, the encrypted data has
+%  exactly the same length as the original, and no padding is used.
+%
+%  Options:
+%
+%     - `encoding(+Encoding)`
+%     Encoding to use for PlainText. Default is utf8. The alternative
+%     is octet to treat PlainText as raw bytes.
+%
+%     - `tag(-List)`
+%     For authenticated encryption schemes, List is unified with a
+%     list of _bytes_ holding the tag. This tag must be provided for
+%     decryption.
+%
+%     - `aad(+Data)`
+%     Data is additional authenticated data (AAD), a list of
+%     characters. It is authenticated in that it influences the tag,
+%     but it is not encrypted. The `encoding/1` option also specifies
+%     the encoding of Data.
+%
+%  Here is an example encryption and decryption, using the ChaCha20
+%  stream cipher with the Poly1305 authenticator. This cipher uses a
+%  256-bit key and a 96-bit nonce, i.e., 32 and 12 _bytes_,
+%  respectively:
+%
+% ```
+%   ?- Algorithm = 'chacha20-poly1305',
+%      crypto_n_random_bytes(32, Key),
+%      crypto_n_random_bytes(12, IV),
+%      crypto_data_encrypt("this text is to be encrypted", Algorithm,
+%                  Key, IV, CipherText, [tag(Tag)]),
+%      crypto_data_decrypt(CipherText, Algorithm,
+%                  Key, IV, RecoveredText, [tag(Tag)]).
+% ```
+%
+%  Yielding:
+%
+% ```
+%      Algorithm = 'chacha20-poly1305',
+%      Key = [113,247,153,134,177,220,13,193,50,150|...],
+%      IV = [135,20,149,153,63,35,68,114,247,171|...],
+%      CipherText = "\x94\0Ej\x94\®Â\x95\óÑÆXÃn¾ð©b\x1c\ ...",
+%      RecoveredText = "this text is to be  ...",
+%      Tag = [152,117,152,17,162,75,150,206,144,40|...]
+% ```
+%
+%  In this example, we use `crypto_n_random_bytes/2` to generate a key
+%  and nonce from cryptographically secure random numbers. For
+%  repeated applications, you must ensure that a nonce is only used
+%  _once_ together with the same key. Note that for _authenticated_
+%  encryption schemes, the _tag_ that was computed during encryption
+%  is necessary for decryption. It is safe to store and transfer the
+%  tag in plain text.
+%
+%  See also `crypto_data_decrypt/6`, and `hex_bytes/2` for conversion
+%  between bytes and hex encoding.
 
 crypto_data_encrypt(PlainText0, Algorithm, Key, IV, CipherText, Options) :-
         options_data_chars(Options, PlainText0, PlainText, Encoding),
@@ -549,37 +549,30 @@ algorithm_key_iv('chacha20-poly1305', Key, IV) :-
         length(Key, 32),
         length(IV, 12).
 
-/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  crypto_data_decrypt(+CipherText,
-                      +Algorithm,
-                      +Key,
-                      +IV,
-                      -PlainText,
-                      +Options).
-
-   Decrypt the given CipherText, using the symmetric algorithm
-   Algorithm, key Key, and initialization vector IV, to give
-   PlainText. CipherText must be a list of characters, and Key and IV
-   must be lists of bytes. PlainText is created as a list of
-   characters.
-
-   Currently, the only supported algorithm is 'chacha20-poly1305',
-   a very secure, fast and versatile authenticated encryption method.
-
-   Options is a list of:
-
-    - encoding(+Encoding)
-    Encoding to use for PlainText. The default is utf8. The
-    alternative is octet, which is used if the data are raw bytes.
-
-    - tag(+Tag)
-    For authenticated encryption schemes, the tag must be specified as
-    a list of bytes exactly as they were generated upon encryption.
-
-    - aad(+Data)
-    Any additional authenticated data (AAD) must be specified. The
-    encoding/1 option also specifies the encoding of Data.
-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+%% crypto_data_decrypt(+CipherText, +Algorithm, +Key, +IV, -PlainText, +Options).
+%
+%  Decrypt the given CipherText, using the symmetric algorithm
+%  Algorithm, key Key, and initialization vector IV, to give
+%  PlainText. CipherText must be a list of characters, and Key and IV
+%  must be lists of bytes. PlainText is created as a list of
+%  characters.
+%
+%  Currently, the only supported algorithm is 'chacha20-poly1305',
+%  a very secure, fast and versatile authenticated encryption method.
+%
+%  Options is a list of:
+%
+%   - `encoding(+Encoding)`
+%   Encoding to use for PlainText. The default is utf8. The
+%   alternative is octet, which is used if the data are raw bytes.
+%
+%   - `tag(+Tag)`
+%   For authenticated encryption schemes, the tag must be specified as
+%   a list of bytes exactly as they were generated upon encryption.
+%
+%   - `aad(+Data)`
+%   Any additional authenticated data (AAD) must be specified. The
+%   `encoding/1` option also specifies the encoding of Data.
 
 crypto_data_decrypt(CipherText0, Algorithm, Key, IV, PlainText, Options) :-
         option(tag(Tag), Options, []),
@@ -617,48 +610,52 @@ encoding_chars(utf8, Cs, Cs) :-
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    Digital signatures with Ed25519
    ===============================
-
-   - ed25519_new_keypair(-Pair)
-     Yields a new Ed25519 key pair Pair, a list of characters. The
-     pair contains the private key and must be kept absolutely secret.
-     Pair can be used for signing. Its public key can be obtained
-     with ed25519_keypair_public_key/2.
-
-   - ed25519_keypair_public_key(+Pair, -PublicKey)
-     PublicKey is the public key of the given key pair. The public key
-     can be used for signature verification, and can be shared freely.
-     The public key is represented as a list of characters.
-
-   - ed25519_sign(+Key, +Data, -Signature, +Options)
-     Key and Data must be lists of characters. Key is a key pair in
-     PKCS#8 v2 format as generated by ed25519_new_keypair/1. Sign Data
-     with Key, yielding Signature as a list of hexadecimal characters.
-
-   - ed25519_verify(+Key, +Data, +Signature, +Options)
-     Key and Data must be lists of characters. Key is a public key.
-     Succeeds if Data was signed with the private key corresponding to
-     Key, where Signature is a list of hexadecimal characters as
-     generated by ed25519_sign/4. Fails otherwise.
-
-   Currently, the only option for signing and verifying is:
-
-     - encoding(+Encoding)
-       The default encoding of Data is utf8. The alternative is octet,
-       which treats Data as a list of raw bytes.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+%% ed25519_new_keypair(-Pair)
+%
+%  Yields a new Ed25519 key pair Pair, a list of characters. The
+%  pair contains the private key and must be kept absolutely secret.
+%  Pair can be used for signing. Its public key can be obtained
+%  with `ed25519_keypair_public_key/2`.
 
 ed25519_new_keypair(Pair) :-
         '$ed25519_new_keypair'(Pair).
 
+%% ed25519_keypair_public_key(+Pair, -PublicKey)
+%
+%  PublicKey is the public key of the given key pair. The public key
+%  can be used for signature verification, and can be shared freely.
+%  The public key is represented as a list of characters.
+
 ed25519_keypair_public_key(Pair, PublicKey) :-
         must_be_octet_chars(Pair, ed25519_keypair_public_key),
         '$ed25519_keypair_public_key'(Pair, PublicKey).
+
+%% ed25519_sign(+Key, +Data, -Signature, +Options)
+%
+%  Key and Data must be lists of characters. Key is a key pair in
+%  PKCS#8 v2 format as generated by `ed25519_new_keypair/1`. Sign Data
+%  with Key, yielding Signature as a list of hexadecimal characters.
 
 ed25519_sign(Key, Data0, Signature, Options) :-
         must_be_octet_chars(Key, ed25519_sign),
         options_data_chars(Options, Data0, Data, Encoding),
         '$ed25519_sign'(Key, Data, Encoding, Signature0),
         hex_bytes(Signature, Signature0).
+
+%% ed25519_verify(+Key, +Data, +Signature, +Options)
+%
+%  Key and Data must be lists of characters. Key is a public key.
+%  Succeeds if Data was signed with the private key corresponding to
+%  Key, where Signature is a list of hexadecimal characters as
+%  generated by `ed25519_sign/4`. Fails otherwise.
+%
+%  Currently, the only option for signing and verifying is:
+%
+%  - `encoding(+Encoding)`
+%    The default encoding of Data is `utf8`. The alternative is `octet`,
+%    which treats Data as a list of raw bytes.
 
 ed25519_verify(Key, Data0, Signature0, Options) :-
         must_be_octet_chars(Key, ed25519_verify),
@@ -669,37 +666,42 @@ ed25519_verify(Key, Data0, Signature0, Options) :-
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    X25519: ECDH key exchange over Curve25519
    =========================================
-
-   Points on Curve25519 are represented as lists of characters that denote
-   the u-coordinate of the Montgomery curve.
-
-   - curve25519_generator(-Gs)
-     Gs is the generator point of Curve25519.
-
-   - curve25519_scalar_mult(+Scalar, +Ps, -Rs)
-     Scalar must be an integer between 0 and 2^256-1,
-     or a list of 32 bytes, and Ps must be a point on the curve.
-     Computes the point Rs = Scalar*Ps as mandated by X25519.
-
-   Alice and Bob can use this to establish a shared secret as follows,
-   where Gs is the generator point of Curve25519:
-
-     1. Alice creates a random integer a and sends As = a*Gs to Bob.
-     2. Bob creates a random integer b and sends Bs = b*Gs to Alice.
-     3. Alice computes Rs = a*Bs.
-     4. Bob computes Rs = b*As.
-     5. Alice and Bob use crypto_data_hkdf/4 on Rs with suitable
-        (same) parameters to obtain lists of bytes that can be used as
-        keys and initialization vectors for symmetric encryption.
-
-   If a and b are kept secret, this method is considered very secure.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+%% curve25519_generator(-Gs)
+%
+%  Points on Curve25519 are represented as lists of characters that
+%  denote the u-coordinate of the Montgomery curve. Gs is the
+%  generator point of Curve25519.
 
 curve25519_generator(Gs) :-
         length(Gs0, 32),
         Gs0 = [9|Zs],
         maplist(=(0), Zs),
         maplist(char_code, Gs, Gs0).
+
+%% curve25519_scalar_mult(+Scalar, +Ps, -Rs)
+%
+%  Scalar must be an integer between 0 and 2^256-1,
+%  or a list of 32 bytes, and Ps must be a point on the curve.
+%  Computes the point _Rs = Scalar*Ps as_ mandated by X25519.
+%
+%  Alice and Bob can use this to establish a shared secret as follows,
+%  where Gs is the generator point of Curve25519:
+%
+%    1. Alice creates a random integer _a_ and sends _As = a*Gs_ to Bob.
+%
+%    2. Bob creates a random integer _b_ and sends _Bs = b*Gs_ to Alice.
+%
+%    3. Alice computes _Rs = a*Bs_.
+%
+%    4. Bob computes _Rs = b*As_.
+%
+%    5. Alice and Bob use `crypto_data_hkdf/4` on Rs with suitable
+%       (same) parameters to obtain lists of bytes that can be used as
+%       keys and initialization vectors for symmetric encryption.
+%
+%  If _a_ and _b_ are kept secret, this method is considered very secure.
 
 curve25519_scalar_mult(Scalar, Point, Result) :-
         (   integer_si(Scalar) ->
