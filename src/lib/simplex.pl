@@ -77,9 +77,9 @@ thesis project, for example.
 A *linear programming problem* or simply *linear program* (LP)
 consists of:
 
-  - a set of _linear_ **constraints**
-  - a set of **variables**
-  - a _linear_ **objective function**.
+  - a set of _linear_ *constraints*
+  - a set of *variables*
+  - a _linear_ *objective function*.
 
 The goal is to assign values to the variables so as to _maximize_ (or
 minimize) the value of the objective function while satisfying all
@@ -107,10 +107,10 @@ non-negativity constraints should therefore be stated explicitly.
 This is the "radiation therapy" example, taken from _Introduction to
 Operations Research_ by Hillier and Lieberman.
 
-[**Prolog DCG notation**](https://www.metalevel.at/prolog/dcg) is
+[*Prolog DCG notation*](https://www.metalevel.at/prolog/dcg) is
 used to _implicitly_ thread the state through posting the constraints:
 
-==
+```
 :- use_module(library(simplex)).
 :- use_module(library(dcgs)).
 
@@ -125,15 +125,15 @@ post_constraints -->
 	constraint([0.6*x1, 0.4*x2] >= 6),
 	constraint([x1] >= 0),
 	constraint([x2] >= 0).
-==
+```
 
 An example query:
 
-==
+```
 ?- radiation(S), variable_value(S, x1, Val1),
 		 variable_value(S, x2, Val2).
    S = solved(...), Val1 = 15 rdiv 2, Val2 = 9 rdiv 2.
-==
+```
 
 ## Example 2     {#simplex-ex-2}
 
@@ -143,7 +143,7 @@ Here is an instance of the knapsack problem described above, where `C
 variables, `x(1)` and `x(2)` that denote how many items to take of
 each type.
 
-==
+```
 :- use_module(library(simplex)).
 
 knapsack(S) :-
@@ -155,15 +155,15 @@ knapsack_constraints(S) :-
 	constraint([6*x(1), 4*x(2)] =< 8, S0, S1),
 	constraint([x(1)] =< 1, S1, S2),
 	constraint([x(2)] =< 2, S2, S).
-==
+```
 
 An example query yields:
 
-==
+```
 ?- knapsack(S), variable_value(S, x(1), X1),
 	        variable_value(S, x(2), X2).
    S = solved(...), X1 = 1 rdiv 1, X2 = 1 rdiv 2.
-==
+```
 
 That is, we are to take the one item of the first type, and half of one of
 the items of the other type to maximize the total value of items in the
@@ -171,23 +171,23 @@ knapsack.
 
 If items can not be split, integrality constraints have to be imposed:
 
-==
+```
 knapsack_integral(S) :-
 	knapsack_constraints(S0),
 	constraint(integral(x(1)), S0, S1),
 	constraint(integral(x(2)), S1, S2),
 	maximize([7*x(1), 4*x(2)], S2, S).
-==
+```
 
 Now the result is different:
 
-==
+```
 ?- knapsack_integral(S), variable_value(S, x(1), X1),
 			 variable_value(S, x(2), X2).
 
 X1 = 0
 X2 = 2
-==
+```
 
 That is, we are to take only the _two_ items of the second type.
 Notice in particular that always choosing the remaining item with best
@@ -207,7 +207,7 @@ The task is to find a _minimal_ number of these coins that amount to
 111 units in total. We introduce variables `c(1)`, `c(5)` and `c(20)`
 denoting how many coins to take of the respective type:
 
-==
+```
 :- use_module(library(simplex)).
 
 coins(S) :-
@@ -226,16 +226,16 @@ coins -->
 	constraint(integral(c(5))),
 	constraint(integral(c(20))),
 	minimize([c(1), c(5), c(20)]).
-==
+```
 
 An example query:
 
-==
+```
 ?- coins(S), variable_value(S, c(1), C1),
 	     variable_value(S, c(5), C5),
 	     variable_value(S, c(20), C20).
    S = solved(...), C1 = 1 rdiv 1, C5 = 2 rdiv 1, C20 = 5 rdiv 1.
-==
+```
 
 @author [Markus Triska](https://www.metalevel.at)
 */
