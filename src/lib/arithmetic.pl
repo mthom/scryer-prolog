@@ -1,3 +1,8 @@
+/** Arithmetic predicates
+
+These predicates are additions to standard the arithmetic functions provided by `is/2`.
+*/
+
 :- module(arithmetic, [expmod/4, lcm/3, lsb/2, msb/2, number_to_rational/2,
                        number_to_rational/3, popcount/2,
                        rational_numerator_denominator/3]).
@@ -6,6 +11,10 @@
 :- use_module(library(error)).
 :- use_module(library(lists), [append/3, member/2]).
 
+
+%% expmod(+Base, +Expo, +Mod, -R).
+%
+% Modular exponentiation. Base, Expo and Mod must be integers.
 expmod(Base, Expo, Mod, R) :-
     (   member(N, [Base, Expo, Mod]), var(N) -> instantiation_error(expmod/4)
     ;   member(N, [Base, Expo, Mod]), \+ integer(N) ->
@@ -44,6 +53,9 @@ lcm(A, B, X) :-
 	X is abs(B) // gcd(A,B) * abs(A)
     ).
 
+%% lsb(+X, -N).
+%
+% True iff N is the least significat bit of integer X
 lsb(X, N) :-
     builtins:must_be_number(X, lsb/2),
     (   \+ integer(X) -> type_error(integer, X, lsb/2)
@@ -53,6 +65,9 @@ lsb(X, N) :-
         msb_(X1, -1, N)
     ).
 
+%% msb(+X, -N).
+%
+% True iff N is the most significant bit of integer X
 msb(X, N) :-
     builtins:must_be_number(X, msb/2),
     (   \+ integer(X) -> type_error(integer, X, msb/2)
@@ -68,6 +83,9 @@ msb_(X, M, N) :-
     M1 is M + 1,
     msb_(X1, M1, N).
 
+%% number_to_rational(+Real, -Fraction).
+%
+% True iff given a number Real, Fraction is the same number represented as a fraction.
 number_to_rational(Real, Fraction) :-
     (   var(Real) -> instantiation_error(number_to_rational/2)
     ;   integer(Real) -> Fraction is Real rdiv 1
@@ -126,12 +144,20 @@ simplify_fraction(A0/B0, A/B) :-
     A is A0 // G,
     B is B0 // G.
 
+%% rational_numerator_denominator(+Fraction, -Numerator, -Denominator).
+%
+% True iff given a fraction Fraction, Numerator is the numerator of that fraction
+% and Denominator the denominator.
 rational_numerator_denominator(R, N, D) :-
     write_term_to_chars(R, [], Cs),
     append(Ns, [' ', r, d, i, v, ' '|Ds], Cs),
     number_chars(N, Ns),
     number_chars(D, Ds).
 
+%% popcount(+Number, -Bits1).
+%
+% True iff given an integer Number, Bits1 is the amount of 1 bits the binary representation
+% of that number has.
 popcount(X, N) :-
     must_be(integer, X),
     '$popcount'(X, N).
