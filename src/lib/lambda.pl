@@ -50,11 +50,13 @@ programming based on call/N.
 Lambda expressions are represented by ordinary Prolog terms.
 There are two kinds of lambda expressions:
 
+```
     Free+\X1^X2^ ..^XN^Goal
 
          \X1^X2^ ..^XN^Goal
+```
 
-The second is a shorthand for t+\X1^X2^..^XN^Goal.
+The second is a shorthand for `t+\X1^X2^..^XN^Goal`.
 
 Xi are the parameters.
 
@@ -70,20 +72,20 @@ currently not checked. Violations may lead to unexpected bindings.
 
 In the following example the parentheses around X>3 are necessary.
 
-==
+```
 ?- use_module(library(lambda)).
 ?- use_module(library(lists)).
 
 ?- maplist(\X^(X>3),[4,5,9]).
    true.
-==
+```
 
 In the following X is a variable that is shared by both instances of
 the lambda expression. The second query illustrates the cooperation of
 continuations and lambdas. The lambda expression is in this case a
 continuation expecting a further argument.
 
-==
+```
 ?- use_module(library(dif)).
    true.
 
@@ -92,11 +94,12 @@ continuation expecting a further argument.
 
 ?- Xs = [A,B], maplist(X+\dif(X), Xs).
    Xs = [A,B], dif:dif(X,A), dif:dif(X,B).
-==
+```
 
 The following queries are all equivalent. To see this, use
-the fact f(x,y).
-==
+the fact `f(x,y)`.
+
+```
 ?- call(f,A1,A2).
 ?- call(\X^f(X),A1,A2).
 ?- call(\X^Y^f(X,Y), A1,A2).
@@ -105,10 +108,10 @@ the fact f(x,y).
 ?- call(f(A1),A2).
 ?- f(A1,A2).
    A1 = x, A2 = y.
-==
+```
 
 Further discussions
-http://www.complang.tuwien.ac.at/ulrich/Prolog-inedit/ISO-Hiord
+[http://www.complang.tuwien.ac.at/ulrich/Prolog-inedit/ISO-Hiord](http://www.complang.tuwien.ac.at/ulrich/Prolog-inedit/ISO-Hiord)
 
 @tbd Static expansion similar to apply_macros.
 @author Ulrich Neumerkel
