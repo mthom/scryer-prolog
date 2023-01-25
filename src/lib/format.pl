@@ -1,82 +1,16 @@
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   Written 2020, 2021, 2022 by Markus Triska (triska@metalevel.at)
+   Written 2020-2023 by Markus Triska (triska@metalevel.at)
    Part of Scryer Prolog.
-
-   This library provides the nonterminal format_//2 to describe
-   formatted strings. format/[2,3] are provided for impure output.
-
-   Usage:
-   ======
-
-   phrase(format_(FormatString, Arguments), Ls)
-
-   format_//2 describes a list of characters Ls that are formatted
-   according to FormatString. FormatString is a string (i.e.,
-   a list of characters) that specifies the layout of Ls.
-   The characters in FormatString are used literally, except
-   for the following tokens with special meaning:
-
-     ~w    use the next available argument from Arguments here
-     ~q    use the next argument here, formatted as by writeq/1
-     ~a    use the next argument here, which must be an atom
-     ~s    use the next argument here, which must be a string
-     ~d    use the next argument here, which must be an integer
-     ~f    use the next argument here, a floating point number
-     ~Nf   where N is an integer: format the float argument
-           using N digits after the decimal point
-     ~Nd   like ~d, placing the last N digits after a decimal point;
-           if N is 0 or omitted, no decimal point is used.
-     ~ND   like ~Nd, separating digits to the left of the decimal point
-           in groups of three, using the character "," (comma)
-     ~NU   like ~ND, using "_" (underscore) to separate groups of digits
-     ~NL   format an integer so that at most N digits appear on a line.
-           If N is 0 or omitted, it defaults to 72.
-     ~Nr   where N is an integer between 2 and 36: format the
-           next argument, which must be an integer, in radix N.
-           The characters "a" to "z" are used for radices 10 to 36.
-           If N is omitted, it defaults to 8 (octal).
-     ~NR   like ~Nr, except that "A" to "Z" are used for radices > 9
-     ~|    place a tab stop at this position
-     ~N|   where N is an integer: place a tab stop at text column N
-     ~N+   where N is an integer: place a tab stop N characters
-           after the previous tab stop (or start of line)
-     ~t    distribute spaces evenly between the two closest tab stops
-     ~`Ct  like ~t, use character C instead of spaces to fill the space
-     ~n    newline
-     ~Nn   N newlines
-     ~i    ignore the next argument
-     ~~    the literal ~
-
-   Instead of ~N, you can write ~* to use the next argument from Arguments
-   as the numeric argument.
-
-   The predicate format/2 is like format_//2, except that it outputs
-   the text on the terminal instead of describing it declaratively.
-
-   format/3, used as format(Stream, FormatString, Arguments), outputs
-   the described string to the given Stream. If Stream is a binary
-   stream, then the code of each emitted character must be in 0..255.
-
-   If at all possible, format_//2 should be used, to stress pure parts
-   that enable easy testing etc. If necessary, you can emit the list Ls
-   with maplist(put_char, Ls) or, much faster, with format("~s", [Ls]).
-   Ideally, however, you use phrase_to_file/[2,3] or phrase_to_stream/2
-   from library(pio) to write the described list directly to a file
-   or stream, respectively: phrase_to_stream(format_(..., [...]), S).
-   The advantage of this is that an ideal implementation writes
-   the characters as they become known, without manifesting the list.
-
-   The entire library only works if the Prolog flag double_quotes
-   is set to chars, the default value in Scryer Prolog. This should
-   also stay that way, to encourage a sensible environment.
-
-   Example:
-
-   ?- phrase(format_("~s~n~`.t~w!~12|", ["hello",there]), Cs).
-   %@    Cs = "hello\n......there!".
-
    I place this code in the public domain. Use it in any way you want.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+/** This library provides the nonterminal `format_//2` to describe
+    formatted strings. `format/[2,3]` are provided for _impure_ output.
+
+    The entire library only works if the Prolog flag `double_quotes`
+    is set to `chars`, the default value in Scryer Prolog. This should
+    also stay that way, to encourage a sensible environment.
+*/
 
 :- module(format, [format_//2,
                    format/2,
@@ -93,6 +27,61 @@
 :- use_module(library(charsio)).
 :- use_module(library(between)).
 :- use_module(library(pio)).
+
+%% format_(+FormatString, +Arguments)//
+%
+% Usage:
+%
+% ```
+% phrase(format_(FormatString, Arguments), Ls)
+% ```
+%
+% `format_//2` describes a list of characters Ls that are formatted
+% according to FormatString. FormatString is a string (i.e., a list of
+% characters) that specifies the layout of Ls. The characters in
+% FormatString are used literally, except for the following tokens
+% with special meaning:
+%
+% |  ~w   |  use the next available argument from Arguments here           |
+% |  ~q   |  use the next argument here, formatted as by `writeq/1`        |
+% |  ~a   |  use the next argument here, which must be an atom             |
+% |  ~s   |  use the next argument here, which must be a string            |
+% |  ~d   |  use the next argument here, which must be an integer          |
+% |  ~f   |  use the next argument here, a floating point number           |
+% |  ~Nf  |  where N is an integer: format the float argument              |
+% |       |  using N digits after the decimal point                        |
+% |  ~Nd  |  like ~d, placing the last N digits after a decimal point;     |
+% |       |  if N is 0 or omitted, no decimal point is used.               |
+% |  ~ND  |  like ~Nd, separating digits to the left of the decimal point  |
+% |       |  in groups of three, using the character "," (comma)           |
+% |  ~NU  |  like ~ND, using "_" (underscore) to separate groups of digits |
+% |  ~NL  |  format an integer so that at most N digits appear on a line.  |
+% |       |  If N is 0 or omitted, it defaults to 72.                      |
+% |  ~Nr  |  where N is an integer between 2 and 36: format the            |
+% |       |  next argument, which must be an integer, in radix N.          |
+% |       |  The characters "a" to "z" are used for radices 10 to 36.      |
+% |       |  If N is omitted, it defaults to 8 (octal).                    |
+% |  ~NR  |  like ~Nr, except that "A" to "Z" are used for radices > 9     |
+% |   ~|  |  place a tab stop at this position                             |
+% |  ~N|  |  where N is an integer: place a tab stop at text column N      |
+% |  ~N+  |  where N is an integer: place a tab stop N characters          |
+% |       |  after the previous tab stop (or start of line)                |
+% |  ~t   |  distribute spaces evenly between the two closest tab stops    |
+% |  ~`Ct |  like ~t, use character C instead of spaces to fill the space  |
+% |  ~n   |  newline                                                       |
+% |  ~Nn  |  N newlines                                                    |
+% |  ~i   |  ignore the next argument                                      |
+% |  \~\~ |  the literal ~                                                 |
+%
+% Instead of `~N`, you can write `~*` to use the next argument from
+% Arguments as the numeric argument.
+%
+% Example:
+%
+% ```
+% ?- phrase(format_("~s~n~`.t~w!~12|", ["hello",there]), Cs).
+%    Cs = "hello\n......there!".
+% ```
 
 format_(Fs, Args) -->
         { must_be(list, Fs),
@@ -414,9 +403,31 @@ digits(uppercase, "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ").
    Impure I/O, implemented as a small wrapper over format_//2.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
+%% format(+Fs, +Args)
+%
+%  The predicate `format/2` is like `format_//2`, except that it
+%  outputs the text on the terminal instead of describing it
+%  declaratively as a list of characters.
+%
+%  If at all possible, `format_//2` should be used, to stress pure
+%  parts that enable easy testing etc. If necessary, you can emit the
+%  described list of characters `Ls` with `maplist(put_char, Ls)` or,
+%  much faster, with `format("~s", [Ls])`. Ideally, however, you use
+%  `phrase_to_file/[2,3]` or `phrase_to_stream/2` from `library(pio)`
+%  to write the described list directly to a file or stream,
+%  respectively: `phrase_to_stream(format_(..., [...]), S)`. The
+%  advantage of this is that an ideal implementation writes the
+%  characters as they become known, without manifesting the list.
+
 format(Fs, Args) :-
         current_output(Stream),
         format(Stream, Fs, Args).
+
+%% format(Stream, FormatString, Arguments)
+%
+%  Output the described string to the given Stream. If Stream is a
+%  binary stream, then the code of each emitted character must be in
+%  0..255.
 
 format(Stream, Fs, Args) :-
         phrase_to_stream(format_(Fs, Args), Stream),
@@ -486,10 +497,13 @@ aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 
    In the eventual library organization, portray_clause/1 and
    related predicates may be placed in their own dedicated library.
-
-   portray_clause/1 is useful for printing solutions in such a way
-   that they can be read back with read/1.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+
+%% portray_clause(+Term)
+%
+%  `portray_clause/1` is useful for printing solutions in such a way
+%  that they can be read back with `read/1`.
 
 portray_clause(Term) :-
         current_output(Out),
