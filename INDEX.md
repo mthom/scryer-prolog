@@ -12,13 +12,13 @@ logic and constraint programming.
 Some of the Scryer Prolog features are:
 
 * ISO standard compliant
-* Integrated constraint progamming libraries: clp(B), clp(Z).
-* Definite Clause Grammars
-* Coroutining support (`dif/2`, `freeze/2`, ...)
+* Integrated constraint programming libraries: [clp(B)](/clpb.html), [clp(Z)](/clpz.html).
+* [Definite Clause Grammars](/dcgs.html)
+* Coroutining support ([`dif/2`](/dif.html), [`freeze/2`](/freeze.html), ...)
 * Tabling and SLG resolution
 * Compact string representation
-* Network libraries (TCP sockets, HTTP server, HTTP client, ...)
-* Cryptographical predicates
+* Network libraries ([TCP sockets](/sockets.html), [HTTP server](/http/http_server.html), [HTTP client](/http/http_open.html), ...)
+* [Cryptographical predicates](/crypto.html)
 * WAM based engine, cross-platform made in Rust
 * _and more..._
 
@@ -36,12 +36,14 @@ It's still to this day one of the best examples and one of the most popular lang
 of logic programming. That's because Prolog allows us to elegantly solve many tasks with short and
 general programs.
 
-If you want to learn more about Prolog history, [check this video](https://www.youtube.com/watch?v=74Ig_QKndvE).
+If you want a more detailed description of Prolog, check [A Tour of Prolog](https://www.youtube.com/watch?v=8XUutFBbUrg).
+
+If you want to learn more about Prolog history, [check this video](https://www.youtube.com/watch?v=74Ig_QKndvE) and [this talk](https://prologyear.logicprogramming.org/videos/PrologDay_Session_1_talk.mp4).
 
 ## Where can I learn Prolog?
 
 There are a lot of classical Prolog books. Those books can teach you the basics of Prolog. Some
-examples are: _The Art of Prolog (Shapiro)_, _Programming in Prolog (Cloksin, Mellish)_ and _The Craft
+examples are: _The Art of Prolog (Shapiro)_, _Programming in Prolog (Clocksin, Mellish)_ and _The Craft
 of Prolog (O'Keefe)_. However, most of them are not updated to _modern_ Prolog.
 We recommend _[The Power of Prolog (Markus Triska)](https://www.metalevel.at/prolog)_ for modern Prolog. For reference about
 the builtin Prolog modules and libraries in Scryer, check the documentation site. It's this!
