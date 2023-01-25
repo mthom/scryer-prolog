@@ -21,6 +21,8 @@
     the greatest attractions of pure Prolog code, and one of the
     strongest arguments for keeping to the pure core of Prolog as far
     as possible.
+
+    Scryer Prolog implements tabling as described by Desouter et al. in [*Tabling as a Library with Delimited Control*](https://www.ijcai.org/Proceedings/16/Papers/619.pdf).
 */
 
 :- module(tabling,
