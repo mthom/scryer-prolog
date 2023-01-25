@@ -28,32 +28,32 @@ current_time(T) :-
 
 %% format_time(FormatString, TimeStamp)//
 %
-%  The nonterminal format_time//2 describes a list of characters that
-%  are formatted according to a format string. Usage:
+% The nonterminal format_time//2 describes a list of characters that
+% are formatted according to a format string. Usage:
 %
 % ```
 %    phrase(format_time(FormatString, TimeStamp), Cs)
 % ```
 %
-%  TimeStamp represents a moment in time in an opaque form, as for
-%  example obtained by `current_time/1`.
+% TimeStamp represents a moment in time in an opaque form, as for
+% example obtained by `current_time/1`.
 %
-%  FormatString is a list of characters that are interpreted literally,
-%  except for the following specifiers (and possibly more in the future):
+% FormatString is a list of characters that are interpreted literally,
+% except for the following specifiers (and possibly more in the future):
 %
-%  |  %Y |  year of the time stamp. Example: 2020.                |
-%  |  %m |  month number (01-12), zero-padded to 2 digits         |
-%  |  %d |  day number (01-31), zero-padded to 2 digits           |
-%  |  %H |  hour number (00-24), zero-padded to 2 digits          |
-%  |  %M |  minute number (00-59), zero-padded to 2 digits        |
-%  |  %S |  second number (00-60), zero-padded to 2 digits        |
-%  |  %b |  abbreviated month name, always 3 letters              |
-%  |  %a |  abbreviated weekday name, always 3 letters            |
-%  |  %A |  full weekday name                                     |
-%  |  %j |  day of the year (001-366), zero-padded to 3 digits    |
-%  |  %% |  the literal %                                         |
+% |  `%Y` |  year of the time stamp. Example: 2020.                |
+% |  `%m` |  month number (01-12), zero-padded to 2 digits         |
+% |  `%d` |  day number (01-31), zero-padded to 2 digits           |
+% |  `%H` |  hour number (00-24), zero-padded to 2 digits          |
+% |  `%M` |  minute number (00-59), zero-padded to 2 digits        |
+% |  `%S` |  second number (00-60), zero-padded to 2 digits        |
+% |  `%b` |  abbreviated month name, always 3 letters              |
+% |  `%a` |  abbreviated weekday name, always 3 letters            |
+% |  `%A` |  full weekday name                                     |
+% |  `%j` |  day of the year (001-366), zero-padded to 3 digits    |
+% |  `%%` |  the literal `%`                                       |
 %
-%  Example:
+% Example:
 %
 % ```
 %    ?- current_time(T), phrase(format_time("%d.%m.%Y (%H:%M:%S)", T), Cs).
