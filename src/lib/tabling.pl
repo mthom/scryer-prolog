@@ -1,3 +1,29 @@
+/** Tabling, also called SLG resolution.
+
+    SLG resolution is an alternative execution strategy that sometimes
+    helps to improve termination and performance characters of Prolog
+    predicates.
+
+    To enable this execution strategy for a Prolog predicate, add a
+    `(table)/1` directive, using the prefix operator `table` that this
+    module defines. For example, to enable tabling for the predicate
+    `p/2`, use:
+
+```
+:- use_module(library(tabling)).
+
+:- table p/2.
+
+...
+```
+
+    The possibility to apply different execution strategies is one of
+    the greatest attractions of pure Prolog code, and one of the
+    strongest arguments for keeping to the pure core of Prolog as far
+    as possible.
+
+    Scryer Prolog implements tabling as described by Desouter et al. in [*Tabling as a Library with Delimited Control*](https://www.ijcai.org/Proceedings/16/Papers/619.pdf).
+*/
 
 :- module(tabling,
 	  [ start_tabling/2,		% +Wrapper, :Worker.
