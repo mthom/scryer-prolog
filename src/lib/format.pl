@@ -42,36 +42,36 @@
 % FormatString are used literally, except for the following tokens
 % with special meaning:
 %
-% |  ~w   |  use the next available argument from Arguments here           |
-% |  ~q   |  use the next argument here, formatted as by `writeq/1`        |
-% |  ~a   |  use the next argument here, which must be an atom             |
-% |  ~s   |  use the next argument here, which must be a string            |
-% |  ~d   |  use the next argument here, which must be an integer          |
-% |  ~f   |  use the next argument here, a floating point number           |
-% |  ~Nf  |  where N is an integer: format the float argument              |
-% |       |  using N digits after the decimal point                        |
-% |  ~Nd  |  like ~d, placing the last N digits after a decimal point;     |
-% |       |  if N is 0 or omitted, no decimal point is used.               |
-% |  ~ND  |  like ~Nd, separating digits to the left of the decimal point  |
-% |       |  in groups of three, using the character "," (comma)           |
-% |  ~NU  |  like ~ND, using "_" (underscore) to separate groups of digits |
-% |  ~NL  |  format an integer so that at most N digits appear on a line.  |
-% |       |  If N is 0 or omitted, it defaults to 72.                      |
-% |  ~Nr  |  where N is an integer between 2 and 36: format the            |
-% |       |  next argument, which must be an integer, in radix N.          |
-% |       |  The characters "a" to "z" are used for radices 10 to 36.      |
-% |       |  If N is omitted, it defaults to 8 (octal).                    |
-% |  ~NR  |  like ~Nr, except that "A" to "Z" are used for radices > 9     |
-% |   ~|  |  place a tab stop at this position                             |
-% |  ~N|  |  where N is an integer: place a tab stop at text column N      |
-% |  ~N+  |  where N is an integer: place a tab stop N characters          |
-% |       |  after the previous tab stop (or start of line)                |
-% |  ~t   |  distribute spaces evenly between the two closest tab stops    |
-% |  ~`Ct |  like ~t, use character C instead of spaces to fill the space  |
-% |  ~n   |  newline                                                       |
-% |  ~Nn  |  N newlines                                                    |
-% |  ~i   |  ignore the next argument                                      |
-% |  \~\~ |  the literal ~                                                 |
+% | `~w`     |  use the next available argument from Arguments here           |
+% | `~q`     |  use the next argument here, formatted as by `writeq/1`        |
+% | `~a`     |  use the next argument here, which must be an atom             |
+% | `~s`     |  use the next argument here, which must be a string            |
+% | `~d`     |  use the next argument here, which must be an integer          |
+% | `~f`     |  use the next argument here, a floating point number           |
+% | `~Nf`    |  where N is an integer: format the float argument              |
+% |          |  using N digits after the decimal point                        |
+% | `~Nd`    |  like ~d, placing the last N digits after a decimal point;     |
+% |          |  if N is 0 or omitted, no decimal point is used.               |
+% | `~ND`    |  like ~Nd, separating digits to the left of the decimal point  |
+% |          |  in groups of three, using the character "," (comma)           |
+% | `~NU`    |  like ~ND, using "_" (underscore) to separate groups of digits |
+% | `~NL`    |  format an integer so that at most N digits appear on a line.  |
+% |          |  If N is 0 or omitted, it defaults to 72.                      |
+% | `~Nr`    |  where N is an integer between 2 and 36: format the            |
+% |          |  next argument, which must be an integer, in radix N.          |
+% |          |  The characters "a" to "z" are used for radices 10 to 36.      |
+% |          |  If N is omitted, it defaults to 8 (octal).                    |
+% | `~NR`    |  like ~Nr, except that "A" to "Z" are used for radices > 9     |
+% | `~|`     |  place a tab stop at this position                             |
+% | `~N|`    |  where N is an integer: place a tab stop at text column N      |
+% | `~N+`    |  where N is an integer: place a tab stop N characters          |
+% |          |  after the previous tab stop (or start of line)                |
+% | `~t`     |  distribute spaces evenly between the two closest tab stops    |
+% | ``~`Ct`` |  like ~t, use character C instead of spaces to fill the space  |
+% | `~n`     |  newline                                                       |
+% | `~Nn`    |  N newlines                                                    |
+% | `~i`     |  ignore the next argument                                      |
+% | `~~`     |  the literal ~                                                 |
 %
 % Instead of `~N`, you can write `~*` to use the next argument from
 % Arguments as the numeric argument.
