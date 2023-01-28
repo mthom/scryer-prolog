@@ -73,6 +73,8 @@ resource_error(Resource, Context) :-
 %    N = 3.
 % ?- length(Xs, 3).
 %    Xs = [_A, _B, _C].
+% ?- length("chars", N).
+%    N = 5.
 % ```
 
 length(Xs0, N) :-
