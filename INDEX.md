@@ -15,7 +15,7 @@ Some of the Scryer Prolog features are:
 * Integrated constraint programming libraries: [clp(B)](/clpb.html), [clp(Z)](/clpz.html).
 * [Definite Clause Grammars](/dcgs.html)
 * Coroutining support ([`dif/2`](/dif.html), [`freeze/2`](/freeze.html), ...)
-* Tabling and SLG resolution
+* [Tabling and SLG resolution](/tabling.html)
 * Compact string representation
 * Network libraries ([TCP sockets](/sockets.html), [HTTP server](/http/http_server.html), [HTTP client](/http/http_open.html), ...)
 * [Cryptographical predicates](/crypto.html)
