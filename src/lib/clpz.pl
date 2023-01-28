@@ -2962,8 +2962,8 @@ expr_conds(A0>>B0, A>>B) --> expr_conds(A0, A), expr_conds(B0, B).
 expr_conds(A0/\B0, A/\B) --> expr_conds(A0, A), expr_conds(B0, B).
 expr_conds(A0\/B0, A\/B) --> expr_conds(A0, A), expr_conds(B0, B).
 expr_conds(xor(A0,B0), xor(A,B)) --> expr_conds(A0, A), expr_conds(B0, B).
-expr_conds(lsb(A0), lsb(A)) --> expr_conds(A0, A).
-expr_conds(msb(A0), msb(A)) --> expr_conds(A0, A).
+% expr_conds(lsb(A0), lsb(A)) --> expr_conds(A0, A).
+% expr_conds(msb(A0), msb(A)) --> expr_conds(A0, A).
 expr_conds(popcount(A0), Count) -->
         expr_conds(A0, A),
         [I is A, arithmetic:popcount(I, Count)].
@@ -3539,8 +3539,8 @@ parse_reified(E, R, D,
                m(A^B)        => [d(D), p(pexp(A,B,R)), a(A,B,R)],
                % bitwise operations
                m(\A)         => [function(D,\,A,R)],
-               m(msb(A))     => [function(D,msb,A,R)],
-               m(lsb(A))     => [function(D,lsb,A,R)],
+               m(msb(A))     => [g(#A#>0) ,function(D,msb,A,R)],
+               m(lsb(A))     => [g(#A#>0), function(D,lsb,A,R)],
                m(popcount(A)) => [function(D,popcount,A,R)],
                m(sign(A))    => [function(D,sign,A,R)],
                m(A<<B)       => [function(D,<<,A,B,R)],
@@ -5683,8 +5683,11 @@ run_propagator(pfunction(Op,A,B,R), MState) -->
 run_propagator(pfunction(Op,A,R), MState) -->
         (   integer(A) ->
             kill(MState),
-            Expr =.. [Op,A],
-            R is Expr
+            (   Op == msb -> { msb(A, R) }
+            ;   Op == lsb -> { lsb(A, R) }
+            ;   Expr =.. [Op,A],
+                R is Expr
+            )
         ;   []
         ).
 
