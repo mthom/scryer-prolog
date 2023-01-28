@@ -296,7 +296,7 @@ of Prolog.
 
 There are two major use cases of CLP(ℤ) constraints:
 
-    1. [*declarative integer arithmetic*](<#clpz-integer-arith>)
+    1. [*declarative integer arithmetic*](#clpz-integer-arith)
 
     2. solving *combinatorial problems* such as planning, scheduling
        and allocation tasks.
@@ -310,7 +310,7 @@ The predicates of this library can be classified as:
     * _reification_ predicates such as `#<==>/2`
     * _reflection_ predicates such as `fd_dom/2`
 
-In most cases, [_arithmetic constraints_](<#clpz-arith-constraints>)
+In most cases, [_arithmetic constraints_](#clpz-arith-constraints)
 are the only predicates you will ever need from this library. When
 reasoning over integers, simply replace low-level arithmetic
 predicates like `(is)/2` and `(>)/2` by the corresponding CLP(ℤ)
@@ -362,7 +362,8 @@ constraints is to use the dedicated `clpz` tag on
 foremost CLP(ℤ) experts regularly participate in these discussions
 and will help you for free on this platform.
 
-## Arithmetic constraints		{#clpz-arith-constraints}
+{#clpz-arith-constraints}
+## Arithmetic constraints
 
 In modern Prolog systems, *arithmetic constraints* subsume and
 supersede low-level predicates over integers. The main advantage of
@@ -408,7 +409,8 @@ The bitwise operations `(\)/1`, `(/\)/2`, `(\/)/2`, `(>>)/2`,
 `(<<)/2`, `lsb/1`, `msb/1`, `popcount/1` and `(xor)/2` are also
 supported.
 
-## Declarative integer arithmetic		{#clpz-integer-arith}
+{#clpz-integer-arith}
+## Declarative integer arithmetic
 
 The [_arithmetic constraints_](#clpz-arith-constraints) `(#=)/2`,
 `(#>)/2` etc. are meant to be used _instead_ of the primitives
@@ -460,7 +462,7 @@ and should therefore be deferred to more advanced lectures.
 
 For supported expressions, CLP(ℤ) constraints are drop-in
 replacements of these low-level arithmetic predicates, often yielding
-more general programs. See [`n_factorial/2`](<#clpz-factorial>) for an
+more general programs. See [`n_factorial/2`](#clpz-factorial) for an
 example.
 
 This library uses goal_expansion/2 to automatically rewrite
@@ -497,7 +499,8 @@ primitives by providing declarative alternatives that are meant to be
 used instead.
 
 
-## Example: Factorial relation {#clpz-factorial}
+{#clpz-factorial}
+## Example: Factorial relation
 
 We illustrate the benefit of using `(#=)/2` for more generality with a
 simple example.
@@ -571,7 +574,8 @@ eliminate the complexity of introducing `(is)/2` and `(=:=)/2` to
 beginners, since _both_ predicates are subsumed by `(#=)/2` when
 reasoning over integers.
 
-## Combinatorial constraints  {#clpz-combinatorial}
+{#clpz-combinatorial}
+## Combinatorial constraints
 
 In addition to subsuming and replacing low-level arithmetic
 predicates, CLP(ℤ) constraints are often used to solve combinatorial
@@ -581,7 +585,8 @@ most frequently used *combinatorial constraints* are `all_distinct/1`,
 several other constraints like `disjoint2/1` and `automaton/8`, which are
 useful in more specialized applications.
 
-## Domains                             {#clpz-domains}
+{#clpz-domains}
+## Domains
 
 Each CLP(ℤ) variable has an associated set of admissible integers,
 which we call the variable's *domain*. Initially, the domain of each
@@ -597,7 +602,8 @@ is automatically unified to that element.
 Domains are taken into account when further constraints are stated,
 and by enumeration predicates like labeling/2.
 
-## Example: Sudoku {#clpz-sudoku}
+{#clpz-sudoku}
+## Example: Sudoku
 
 As another example, consider _Sudoku_: It is a popular puzzle
 over integers that can be easily solved with CLP(ℤ) constraints.
@@ -650,7 +656,8 @@ In this concrete case, the constraint solver is strong enough to find
 the unique solution without any search.
 
 
-## Residual goals				{#clpz-residual-goals}
+{#clpz-residual-goals}
+## Residual goals
 
 Here is an example session with a few queries and their answers:
 
@@ -700,7 +707,8 @@ This library also provides _reflection_ predicates (like `fd_dom/2`,
 domain. These predicates can be useful if you want to implement your
 own labeling strategies.
 
-## Core relations and search    {#clpz-search}
+{#clpz-search}
+## Core relations and search
 
 Using CLP(ℤ) constraints to solve combinatorial tasks typically
 consists of two phases:
@@ -772,7 +780,8 @@ to reduce the domains of remaining variables to singleton sets. In
 general though, it is necessary to label all variables to obtain
 ground solutions.
 
-## Example: Eight queens puzzle {#clpz-n-queens}
+{#clpz-n-queens}
+## Example: Eight queens puzzle
 
 We illustrate the concepts of the preceding sections by means of the
 so-called _eight queens puzzle_. The task is to place 8 queens on an
@@ -851,7 +860,8 @@ separated the core relation from the actual search.
 
 
 
-## Optimisation    {#clpz-optimisation}
+{#clpz-optimisation}
+## Optimisation
 
 We can use `labeling/2` to minimize or maximize the value of a CLP(ℤ)
 expression, and generate solutions in increasing or decreasing order
@@ -876,7 +886,8 @@ Related to optimisation with CLP(ℤ) constraints are `library(simplex)`
 and CLP(Q) which reason about _linear_ constraints over rational
 numbers.
 
-## Reification				{#clpz-reification}
+{#clpz-reification}
+## Reification
 
 The constraints `(in)/2`, `(#=)/2`, `(#\=)/2`, `(#<)/2`, `(#>)/2`,
 `(#=<)/2`, and `(#>=)/2` can be _reified_, which means reflecting
@@ -897,7 +908,8 @@ The constraints of this table are reifiable as well.
 When reasoning over Boolean variables, also consider using CLP(B)
 constraints as provided by `library(clpb)`.
 
-## Enabling monotonic CLP(ℤ)		{#clpz-monotonicity}
+{#clpz-monotonicity}
+## Enabling monotonic CLP(ℤ)
 
 In the default execution mode, CLP(ℤ) constraints still exhibit some
 non-relational properties. For example, _adding_ constraints can yield
@@ -933,7 +945,8 @@ expressions with the functor `(?)/1` or `(#)/1`. For example:
 The wrapper can be omitted for variables that are already constrained
 to integers.
 
-## Custom constraints			{#clpz-custom-constraints}
+{#clpz-custom-constraints}
+## Custom constraints
 
 We can define custom constraints. The mechanism to do this is not yet
 finalised, and we welcome suggestions and descriptions of use cases
