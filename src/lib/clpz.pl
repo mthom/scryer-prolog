@@ -282,14 +282,14 @@ exclude_([L|Ls0], Goal, Ls) :-
 :- op(700, xfx, cis_lt).
 :- op(1200, xfx, ++>).
 
-/** <module> Constraint Logic Programming over Integers
+/** Constraint Logic Programming over Integers
 
 ## Introduction
 
 This library provides CLP(ℤ): Constraint Logic Programming over
 Integers.
 
-CLP(ℤ) is an instance of the general CLP(.) scheme, extending logic
+CLP(ℤ) is an instance of the general CLP(_X_) scheme, extending logic
 programming with reasoning over specialised domains. CLP(ℤ) lets us
 reason about *integers* in a way that honors the relational nature
 of Prolog.
@@ -303,7 +303,7 @@ There are two major use cases of CLP(ℤ) constraints:
 
 The predicates of this library can be classified as:
 
-    * _arithmetic_ constraints like `#=/2`, `#>/2` and `#\=/2`
+    * _arithmetic_ constraints like `(#=)/2`, `(#>)/2` and `(#\=)/2`
     * the _membership_ constraints `in/2` and `ins/2`
     * the _enumeration_ predicates `indomain/1`, `label/1` and `labeling/2`
     * _combinatorial_ constraints like `all_distinct/1` and `global_cardinality/2`
@@ -314,7 +314,7 @@ In most cases, [_arithmetic constraints_](<#clpz-arith-constraints>)
 are the only predicates you will ever need from this library. When
 reasoning over integers, simply replace low-level arithmetic
 predicates like `(is)/2` and `(>)/2` by the corresponding CLP(ℤ)
-constraints like #=/2 and #>/2 to honor and preserve declarative
+constraints like `(#=)/2` and `(#>)/2` to honor and preserve declarative
 properties of your programs. For satisfactory performance, arithmetic
 constraints are implicitly rewritten at compilation time so that
 low-level fallback predicates are automatically used whenever
@@ -323,7 +323,7 @@ possible.
 Almost all Prolog programs also reason about integers. Therefore, it
 is highly advisable that you make CLP(ℤ) constraints available in all
 your programs. One way to do this is to put the following directive in
-your =|~/.scryerrc|= initialisation file:
+your `~/.scryerrc` initialisation file:
 
 ```
 :- use_module(library(clpz)).
@@ -410,12 +410,12 @@ supported.
 
 ## Declarative integer arithmetic		{#clpz-integer-arith}
 
-The [_arithmetic constraints_](<#clpz-arith-constraints>) #=/2, #>/2
-etc. are meant to be used _instead_ of the primitives `(is)/2`,
-`(=:=)/2`, `(>)/2` etc. over integers. Almost all Prolog programs also
-reason about integers. Therefore, it is recommended that you put the
-following directive in your =|~/.scryerrc|= initialisation file to make
-CLP(ℤ) constraints available in all your programs:
+The [_arithmetic constraints_](#clpz-arith-constraints) `(#=)/2`,
+`(#>)/2` etc. are meant to be used _instead_ of the primitives
+`(is)/2`, `(=:=)/2`, `(>)/2` etc. over integers. Almost all Prolog
+programs also reason about integers. Therefore, it is recommended that
+you put the following directive in your =|~/.scryerrc|= initialisation
+file to make CLP(ℤ) constraints available in all your programs:
 
 ```
 :- use_module(library(clpz)).
@@ -499,7 +499,7 @@ used instead.
 
 ## Example: Factorial relation {#clpz-factorial}
 
-We illustrate the benefit of using #=/2 for more generality with a
+We illustrate the benefit of using `(#=)/2` for more generality with a
 simple example.
 
 Consider first a rather conventional definition of `n_factorial/2`,
@@ -560,7 +560,7 @@ us from _all_ procedural phenomena. For example, the two programs do
 not even have the same _termination properties_ in all cases.
 Instead, the primary benefit of CLP(ℤ) constraints is that they allow
 you to try different execution orders and apply [*declarative
-debugging*](https://www.metalevel.at/prolog/debugging.html)
+debugging*](https://www.metalevel.at/prolog/debugging)
 techniques _at all_!  Reordering goals (and clauses) can significantly
 impact the performance of Prolog programs, and you are free to try
 different variants if you use declarative approaches. Moreover, since
@@ -568,27 +568,27 @@ all CLP(ℤ) constraints _always terminate_, placing them earlier can
 at most _improve_, never worsen, the termination properties of your
 programs. An additional benefit of CLP(ℤ) constraints is that they
 eliminate the complexity of introducing `(is)/2` and `(=:=)/2` to
-beginners, since _both_ predicates are subsumed by #=/2 when reasoning
-over integers.
+beginners, since _both_ predicates are subsumed by `(#=)/2` when
+reasoning over integers.
 
 ## Combinatorial constraints  {#clpz-combinatorial}
 
 In addition to subsuming and replacing low-level arithmetic
 predicates, CLP(ℤ) constraints are often used to solve combinatorial
 problems such as planning, scheduling and allocation tasks. Among the
-most frequently used *combinatorial constraints* are all_distinct/1,
-global_cardinality/2 and cumulative/2. This library also provides
-several other constraints like disjoint2/1 and automaton/8, which are
+most frequently used *combinatorial constraints* are `all_distinct/1`,
+`global_cardinality/2` and `cumulative/2`. This library also provides
+several other constraints like `disjoint2/1` and `automaton/8`, which are
 useful in more specialized applications.
 
 ## Domains                             {#clpz-domains}
 
 Each CLP(ℤ) variable has an associated set of admissible integers,
 which we call the variable's *domain*. Initially, the domain of each
-CLP(ℤ) variable is the set of _all_ integers. CLP(ℤ) constraints
-like #=/2, #>/2 and #\=/2 can at most reduce, and never extend, the
-domains of their arguments. The constraints in/2 and ins/2 let us
-explicitly state domains of CLP(ℤ) variables. The process of
+CLP(ℤ) variable is the set of _all_ integers. CLP(ℤ) constraints like
+`(#=)/2`, `(#>)/2` and `(#\=)/2` can at most reduce, and never extend,
+the domains of their arguments. The constraints `(in)/2` and `(ins)/2`
+let us explicitly state domains of CLP(ℤ) variables. The process of
 determining and adjusting domains of variables is called constraint
 *propagation*, and it is performed automatically by this library. When
 the domain of a variable contains only one element, then the variable
@@ -683,10 +683,10 @@ goals, it is clear that the constraint solver has deduced additional
 domain restrictions in many cases.
 
 To inspect residual goals, it is best to let the toplevel display them
-for us. Wrap the call of your predicate into call_residue_vars/2 to
+for us. Wrap the call of your predicate into `call_residue_vars/2` to
 make sure that all constrained variables are displayed. To make the
 constraints a variable is involved in available as a Prolog term for
-further reasoning within your program, use copy_term/3. For example:
+further reasoning within your program, use `copy_term/3`. For example:
 
 ```
 ?- X #= Y + Z, X in 0..5, copy_term([X,Y,Z], [X,Y,Z], Gs).
@@ -695,8 +695,8 @@ X in 0..5,
 Y+Z#=X.
 ```
 
-This library also provides _reflection_ predicates (like fd_dom/2,
-fd_size/2 etc.) with which we can inspect a variable's current
+This library also provides _reflection_ predicates (like `fd_dom/2`,
+`fd_size/2` etc.) with which we can inspect a variable's current
 domain. These predicates can be useful if you want to implement your
 own labeling strategies.
 
@@ -732,7 +732,7 @@ puzzle([S,E,N,D] + [M,O,R,E] = [M,O,N,E,Y]) :-
         M #\= 0, S #\= 0.
 ```
 
-Notice that we are _not_ using labeling/2 in this predicate, so that
+Notice that we are _not_ using `labeling/2` in this predicate, so that
 we can first execute and observe the modeling part in isolation.
 Sample query and its result (actual variables replaced for
 readability):
@@ -853,7 +853,7 @@ separated the core relation from the actual search.
 
 ## Optimisation    {#clpz-optimisation}
 
-We can use labeling/2 to minimize or maximize the value of a CLP(ℤ)
+We can use `labeling/2` to minimize or maximize the value of a CLP(ℤ)
 expression, and generate solutions in increasing or decreasing order
 of the value. See the labeling options `min(Expr)` and `max(Expr)`,
 respectively.
@@ -868,7 +868,7 @@ If necessary, we can use `once/1` to commit to the first optimal
 solution. However, it is often very valuable to see alternative
 solutions that are _also_ optimal, so that we can choose among optimal
 solutions by other criteria. For the sake of
-[*purity*](https://www.metalevel.at/prolog/purity.html) and
+[*purity*](https://www.metalevel.at/prolog/purity) and
 completeness, we recommend to avoid `once/1` and other constructs that
 lead to impurities in CLP(ℤ) programs.
 
@@ -878,10 +878,11 @@ numbers.
 
 ## Reification				{#clpz-reification}
 
-The constraints in/2, #=/2, #\=/2, #</2, #>/2, #=</2, and #>=/2 can be
-_reified_, which means reflecting their truth values into Boolean
-values represented by the integers 0 and 1. Let P and Q denote
-reifiable constraints or Boolean variables, then:
+The constraints `(in)/2`, `(#=)/2`, `(#\=)/2`, `(#<)/2`, `(#>)/2`,
+`(#=<)/2`, and `(#>=)/2` can be _reified_, which means reflecting
+their truth values into Boolean values represented by the integers 0
+and 1. Let P and Q denote reifiable constraints or Boolean variables,
+then:
 
 | #\ Q      | True iff Q is false                  |
 | P #\/ Q   | True iff either P or Q               |
@@ -958,19 +959,19 @@ clpz:run_propagator(oneground(X, Y, Z), MState) :-
         ).
 ```
 
-First, clpz:make_propagator/2 is used to transform a user-defined
+First, `clpz:make_propagator/2` is used to transform a user-defined
 representation of the new constraint to an internal form. With
-clpz:init_propagator/2, this internal form is then attached to X and
+`clpz:init_propagator/2`, this internal form is then attached to X and
 Y. From now on, the propagator will be invoked whenever the domains of
-X or Y are changed. Then, clpz:trigger_once/1 is used to give the
+X or Y are changed. Then, `clpz:trigger_once/1` is used to give the
 propagator its first chance for propagation even though the variables'
-domains have not yet changed. Finally, clpz:run_propagator/2 is
+domains have not yet changed. Finally, `clpz:run_propagator/2` is
 extended to define the actual propagator. As explained, this predicate
 is automatically called by the constraint solver. The first argument
 is the user-defined representation of the constraint as used in
-clpz:make_propagator/2, and the second argument is a mutable state
+`clpz:make_propagator/2`, and the second argument is a mutable state
 that can be used to prevent further invocations of the propagator when
-the constraint has become entailed, by using clpz:kill/1. An example
+the constraint has become entailed, by using `clpz:kill/1`. An example
 of using the new constraint:
 
 ```
@@ -2922,7 +2923,7 @@ X #=< Y :- Y #>= X.
 %% #=(?X, ?Y)
 %
 % The arithmetic expression X equals Y. When reasoning over integers,
-% replace is/2 by #=/2 to obtain more general relations.
+% replace `(is)/2` by `(#=)/2` to obtain more general relations.
 
 X #= Y :- clpz_equal(X, Y).
 
