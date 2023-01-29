@@ -304,10 +304,10 @@ There are two major use cases of CLP(ℤ) constraints:
 The predicates of this library can be classified as:
 
     * _arithmetic_ constraints like `(#=)/2`, `(#>)/2` and `(#\=)/2`
-    * the _membership_ constraints `in/2` and `ins/2`
+    * the _membership_ constraints `(in)/2` and `(ins)/2`
     * the _enumeration_ predicates `indomain/1`, `label/1` and `labeling/2`
     * _combinatorial_ constraints like `all_distinct/1` and `global_cardinality/2`
-    * _reification_ predicates such as `#<==>/2`
+    * _reification_ predicates such as `(#<==>)/2`
     * _reflection_ predicates such as `fd_dom/2`
 
 In most cases, [_arithmetic constraints_](#clpz-arith-constraints)
@@ -7569,7 +7569,7 @@ fd_size(X, S) :-
 
 %% fd_dom(+Var, -Dom)
 %
-%  Dom is the current domain (see in/2) of Var. This predicate is
+%  Dom is the current domain (see `(in)/2`) of Var. This predicate is
 %  useful if you want to reason about domains. It is _not_ needed if
 %  you only want to display remaining domains; instead, separate your
 %  model from the search part and let the toplevel display this
