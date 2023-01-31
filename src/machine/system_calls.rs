@@ -5138,10 +5138,20 @@ impl Machine {
     #[inline(always)]
     pub(crate) fn read_term_from_chars(&mut self) -> CallResult {
         if let Some(atom_or_string) = self.machine_st.value_to_str_like(self.machine_st.registers[1]) {
-            let chars = atom_or_string.to_string();
-            let stream = Stream::from_owned_string(chars, &mut self.machine_st.arena);
+            let chars = CharReader::new(ByteStream::from_string(atom_or_string.to_string()));
+            let mut parser = Parser::new(chars, &mut self.machine_st);
 
-            let term_write_result = match self.machine_st.read(stream, &self.indices.op_dir) {
+            let term_write_result = parser.read_term(&CompositeOpDir::new(&self.indices.op_dir, None))
+                .map_err(CompilationError::from)
+                .and_then(|term| {
+                    write_term_to_heap(
+                        &term,
+                        &mut self.machine_st.heap,
+                        &mut self.machine_st.atom_tbl,
+                    )
+                });
+
+            let term_write_result = match term_write_result {
                 Ok(term_write_result) => term_write_result,
                 Err(e) => {
                     let stub = functor_stub(atom!("read_term_from_chars"), 2);

@@ -102,6 +102,13 @@ impl EOFAction {
 #[derive(Debug)]
 pub struct ByteStream(Cursor<Vec<u8>>);
 
+impl ByteStream {
+    #[inline(always)]
+    pub fn from_string(string: String) -> Self {
+        ByteStream(Cursor::new(string.into()))
+    }
+}
+
 impl Read for ByteStream {
     #[inline]
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
@@ -1132,14 +1139,14 @@ impl Stream {
 
                 Ok(())
             }
-	    Stream::HttpWrite(ref mut http_stream) => {
+	        Stream::HttpWrite(ref mut http_stream) => {
                 unsafe {
                     http_stream.set_tag(ArenaHeaderTag::Dropped);
                     std::ptr::drop_in_place(&mut http_stream.inner_mut().body_writer as *mut _);
                 }
 
                 Ok(())
-	    }
+	        }
             Stream::InputFile(mut file_stream) => {
                 // close the stream by dropping the inner File.
                 unsafe {

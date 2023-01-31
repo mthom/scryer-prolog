@@ -698,9 +698,9 @@ unsafe fn drop_slab_in_place(value: &mut AllocSlab) {
         ArenaHeaderTag::HttpReadStream => {
             ptr::drop_in_place(value.payload_offset::<StreamLayout<CharReader<HttpReadStream>>>());
         }
-	ArenaHeaderTag::HttpWriteStream => {
-	    ptr::drop_in_place(value.payload_offset::<StreamLayout<CharReader<HttpWriteStream>>>());
-	}
+	    ArenaHeaderTag::HttpWriteStream => {
+	        ptr::drop_in_place(value.payload_offset::<StreamLayout<CharReader<HttpWriteStream>>>());
+	    }
         ArenaHeaderTag::ReadlineStream => {
             ptr::drop_in_place(value.payload_offset::<StreamLayout<ReadlineStream>>());
         }
@@ -721,12 +721,12 @@ unsafe fn drop_slab_in_place(value: &mut AllocSlab) {
         ArenaHeaderTag::TcpListener => {
             ptr::drop_in_place(value.payload_offset::<TcpListener>());
         }
-	ArenaHeaderTag::HttpListener => {
-	    ptr::drop_in_place(value.payload_offset::<HttpListener>());
-	}
-	ArenaHeaderTag::HttpResponse => {
-	    ptr::drop_in_place(value.payload_offset::<HttpResponse>());
-	}
+	    ArenaHeaderTag::HttpListener => {
+	        ptr::drop_in_place(value.payload_offset::<HttpListener>());
+	    }
+	    ArenaHeaderTag::HttpResponse => {
+	        ptr::drop_in_place(value.payload_offset::<HttpResponse>());
+	    }
         ArenaHeaderTag::StandardOutputStream => {
             ptr::drop_in_place(value.payload_offset::<StreamLayout<StandardOutputStream>>());
         }
