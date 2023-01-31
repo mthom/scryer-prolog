@@ -12,8 +12,9 @@ use std::iter::*;
 use std::vec::Vec;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
-pub(crate) struct VarPtr {
-    ptr: std::ptr::NonNull<Var>,
+pub(crate) enum VarPtr {
+    ToVar(std::ptr::NonNull<Var>),
+    InSitu(usize),
 }
 
 impl From<&Var> for VarPtr {
@@ -26,17 +27,27 @@ impl From<&Var> for VarPtr {
 }
 
 impl From<VarPtr> for Var {
-    #[inline]
+    #[inline(always)]
     fn from(value: VarPtr) -> Var {
-        unsafe {
-            (*value.ptr.as_ptr()).clone()
+        match value {
+            VarPtr::ToPtr(ptr) => unsafe {
+                (*ptr.ptr.as_ptr()).clone()
+            },
+            VarPtr::InSitu(var_num) => {
+                Var::Generated(var_num)
+            }
         }
     }
 }
 
 impl VarPtr {
     pub(crate) fn set(&mut self, value: Var) {
-        unsafe { *self.ptr.as_mut() = value; }
+        match self {
+            VarPtr::ToVar(ref mut ptr) =>
+                unsafe { *ptr.as_mut() = value },
+            VarPtr::InSitu(_) => {
+            }
+        }
     }
 }
 

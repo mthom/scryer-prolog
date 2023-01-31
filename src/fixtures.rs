@@ -139,27 +139,22 @@ impl VariableFixtures {
         };
     }
 
-    pub(crate) fn mark_temp_var(
-        &mut self,
-        generated_var_index: usize,
-        lvl: Level,
-        classify_info: &ClassifyInfo,
-        term_loc: GenContext,
-    ) {
+    pub(crate) fn mark_temp_var(&mut self, var_info: &VarInfo) {
         let chunk_num = term_loc.chunk_num();
+        let var = Var::from(var_info.var_ptr);
 
-        let mut status = self.temp_vars.swap_remove(&generated_var_index).unwrap_or_else(|| {
+        let mut status = self.temp_vars.swap_remove(&var).unwrap_or_else(|| {
             TempVarStatus {
                 chunk_num,
-                temp_var_data: TempVarData::new(classify_info.arity),
+                temp_var_data: TempVarData::new(var_info.classify_info.arity),
             }
         });
 
-        if let Level::Shallow = lvl {
-            self.record_temp_info(&mut status, classify_info.arg_c, term_loc);
+        if let Level::Shallow = var_info.lvl {
+            self.record_temp_info(&mut status, var_info.classify_info.arg_c, term_loc);
         }
 
-        self.temp_vars.insert(Var::Generated(generated_var_index), status);
+        self.temp_vars.insert(var, status);
     }
 }
 

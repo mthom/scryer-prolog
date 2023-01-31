@@ -150,9 +150,9 @@ enum TraversalState {
     // add the last disjunct to a QueryTerm::Branch, continuing from
     // where it leaves off.
     BuildFinalDisjunct(usize),
-    BuildIf(usize, Term), // build the P term of P -> Q
-    BuildThen(usize, Vec<QueryTerm>), // build the Q term of P -> Q
-    BuildNot(usize), // build the P term of \+ P
+    Fail,
+    GetCutPoint(usize),
+    LocalCut(usize),
     ResetCallPolicy(CallPolicy),
     Term(Term),
     AddBranchNum(BranchNumber), // set current_branch_number, add it to the root set
@@ -186,6 +186,7 @@ pub struct VariableClassifier {
     current_branch_num: BranchNumber,
     current_chunk_num: usize,
     branch_map: BranchMap,
+    var_num: usize,
     root_set: RootSet,
 }
 
@@ -196,10 +197,21 @@ pub enum VarClassification {
     Perm,
 }
 
+#[derive(Clone, Debug)]
 pub struct VarRecord {
     pub classification: VarClassification,
     pub chunk_occurrences: Vec<usize>,
     pub num_occurrences: usize,
+}
+
+impl Default for VarRecord {
+    fn default() -> Self {
+        VarRecord {
+            classification: VarClassification::Void,
+            chunk_occurrences: vec![],
+            num_occurrences: 0,
+        }
+    }
 }
 
 pub struct VarData {
@@ -269,7 +281,7 @@ fn insert_set_last_chunk_type(
 
     while let Some(traversal_st) = iter.next() {
         match traversal_st {
-            TraversalState::Term(term) | TraversalState::BuildIf(_, term) => {
+            TraversalState::Term(term) => {
                 will_break = false;
 
                 match term_in_other_chunk(&term) {
@@ -288,7 +300,7 @@ fn insert_set_last_chunk_type(
                 }
             }
             _ => {
-                unreachable!();
+                state_stack.push(traversal_st);
             }
         }
     }
@@ -305,12 +317,13 @@ impl VariableClassifier {
             current_chunk_num: 0,
             branch_map: BranchMap(BranchMapInt::new()),
             root_set: RootSet::new(),
+            var_num: 0,
         }
     }
 
     pub fn classify_fact(mut self, term: Term) -> Result<ClassifyFactResult, CompilationError> {
         self.classify_head_variables(&term)?;
-        Ok((term, self.branch_map.separate_and_classify_variables()))
+        Ok((term, self.branch_map.separate_and_classify_variables(self.var_num)))
     }
 
     pub fn classify_rule<'a, LS: LoadState<'a>>(
@@ -322,7 +335,7 @@ impl VariableClassifier {
         self.classify_head_variables(&head)?;
         let query_terms = self.classify_body_variables(loader, body)?;
 
-        Ok((head, query_terms, self.branch_map.separate_and_classify_variables()))
+        Ok((head, query_terms, self.branch_map.separate_and_classify_variables(self.var_num)))
     }
 
     fn merge_branches(&mut self) {
@@ -396,6 +409,20 @@ impl VariableClassifier {
         chunk_info.vars.push(var_info);
     }
 
+    fn probe_in_situ_var(&mut self, chunk_type: ChunkType, var_num: usize) {
+        let classify_info = ClassifyInfo { arg_c: 0, arity: 0 };
+
+        let var_info = VarInfo {
+            var_ptr: VarPtr::InSitu(var_num),
+            classify_info,
+            lvl: Level::Shallow,
+        };
+
+        let term_loc = chunk_type.to_gen_context(self.current_chunk_num);
+
+        self.probe_body_var(Var::Generated(var_num), term_loc, var_info);
+    }
+
     fn classify_head_variables(&mut self, term: &Term) -> Result<(), CompilationError> {
         match term {
             Term::Clause(..) | Term::Literal(_, Literal::Atom(_)) => {
@@ -403,10 +430,7 @@ impl VariableClassifier {
             _ => return Err(CompilationError::InvalidRuleHead),
         }
 
-        let mut classify_info = ClassifyInfo {
-            arg_c: 0,
-            arity: term.arity(),
-        };
+        let mut classify_info = ClassifyInfo { arg_c: 0, arity: term.arity() };
 
         // false argument to breadth_first_iter because the root is not iterable.
         for term_ref in breadth_first_iter(term, false) {
@@ -491,19 +515,20 @@ impl VariableClassifier {
                 TraversalState::BuildFinalDisjunct(preceding_len) => {
                     flatten_into_disjunct(&mut build_stack, preceding_len);
                 }
-                TraversalState::BuildIf(preceding_len, then_term) => {
-                    let iter = build_stack.drain(preceding_len ..);
+                TraversalState::GetCutPoint(var_num) => {
+                    let term_loc = chunk_type.to_gen_context(self.current_chunk_num);
 
-                    state_stack.push(TraversalState::BuildThen(preceding_len, iter.collect()));
-                    state_stack.push(TraversalState::Term(then_term));
+                    self.probe_in_situ_var(term_loc, var_num);
+                    build_stack.push(QueryTerm::GetCutPoint(var_num));
                 }
-                TraversalState::BuildThen(preceding_len, if_terms) => {
-                    let iter = build_stack.drain(preceding_len ..);
-                    build_stack.push(QueryTerm::IfThen(if_terms, iter.collect()));
+                TraversalState::LocalCut(var_num) => {
+                    let term_loc = chunk_type.to_gen_context(self.current_chunk_num);
+
+                    self.probe_in_situ_var(term_loc, var_num);
+                    build_stack.push(QueryTerm::LocalCut(var_num));
                 }
-                TraversalState::BuildNot(preceding_len) => {
-                    let iter = build_stack.drain(preceding_len ..);
-                    build_stack.push(QueryTerm::Not(iter.collect()));
+                TraversalState::Fail => {
+                    build_stack.push(QueryTerm::Fail);
                 }
                 TraversalState::Term(term) => {
                     match term {
@@ -567,16 +592,13 @@ impl VariableClassifier {
                             let then_term = terms.pop().unwrap();
                             let if_term = terms.pop().unwrap();
 
-                            let build_stack_len = build_stack.len();
-
-                            // TODO: insert GetCutPoint between
-                            // the two traversal states and detect
-                            // that as a chunk boundary in
-                            // insert_set_last_chunk_type ??
-
-                            let iter = vec![TraversalState::BuildIf(build_stack_len, then_term),
-                                            TraversalState::Term(if_term)]
+                            let iter = vec![TraversalState::Term(then_term),
+                                            TraversalState::LocalCut(self.var_num),
+                                            TraversalState::Term(if_term),
+                                            TraversalState::GetCutPoint(self.var_num)]
                                 .into_iter();
+
+                            self.var_num += 1;
 
                             if ChunkType::Mid != chunk_type {
                                 if insert_set_last_chunk_type(&mut state_stack, iter) {
@@ -587,10 +609,12 @@ impl VariableClassifier {
                             }
                         }
                         Term::Clause(_, atom!("\\+"), terms) if terms.len() == 1 => {
-                            let build_stack_len = build_stack.len();
-
-                            state_stack.push(TraversalState::BuildNot(build_stack_len));
+                            state_stack.push(TraversalState::Fail);
+                            state_stack.push(TraversalState::LocalCut(self.var_num));
                             state_stack.push(TraversalState::Term(terms[0]));
+                            state_stack.push(TraversalState::GetCutPoint(self.var_num));
+
+                            self.var_num += 1;
                         }
                         Term::Clause(_, atom!(":"), mut terms) if terms.len() == 2 => {
                             let term_loc = chunk_type.to_gen_context(self.current_chunk_num);
@@ -692,7 +716,7 @@ impl VariableClassifier {
                             );
                         }
                         Term::Literal(_, Literal::Atom(atom!("!")) | Literal::Char('!')) => {
-                            build_stack.push(QueryTerm::Cut);
+                            build_stack.push(QueryTerm::GlobalCut);
                         }
                         Term::Literal(cell, Literal::Atom(name)) => {
                             if !ClauseType::is_inbuilt(name, 0) {
@@ -722,43 +746,46 @@ impl VariableClassifier {
 }
 
 impl BranchMap {
-    pub fn separate_and_classify_variables(&mut self) -> VarData {
-        let mut var_num  = 0usize;
+    pub fn separate_and_classify_variables(&mut self, mut var_num: usize) -> VarData {
         let mut var_data = VarData {
-            records:  vec![],
+            records:  vec![VarRecord::default(); self.len()],
             fixtures: VariableFixtures::new(),
         };
 
-        for branches in self.values_mut() {
+        for (var, branches) in self.iter_mut() {
             for branch in branches.iter_mut() {
                 let mut num_occurrences = 0;
-                let mut chunk_occurrences = vec![];
 
-                let classification = if branch.chunks.len() > 1 {
-                    VarClassification::Perm
+                let idx = if let Var::Generated(var_num) = var {
+                    *var_num
                 } else {
-                    branch.chunks
-                        .first()
-                        .map(|chunk| if chunk.vars.len() > 1 {
-                            VarClassification::Temp
-                        } else {
-                            VarClassification::Void
-                        })
-                        .unwrap_or(VarClassification::Void)
+                    var_num += 1;
+                    var_num - 1
                 };
 
+                var_data.records[idx].classification =
+                    if branch.chunks.len() > 1 {
+                        VarClassification::Perm
+                    } else {
+                        branch.chunks
+                            .first()
+                            .map(|chunk| if chunk.vars.len() > 1 {
+                                VarClassification::Temp
+                            } else {
+                                VarClassification::Void
+                            })
+                            .unwrap_or(VarClassification::Void)
+                    };
+
+                var_data.records[idx].chunk_occurrences.reserve(branch.chunks.len());
+
                 for chunk in branch.chunks.iter_mut() {
-                    num_occurrences += chunk.vars.len();
+                    var_data.records[idx].num_occurrences += chunk.vars.len();
 
                     if let VarClassification::Temp = classification {
                         for var_info in chunk.vars.iter_mut() {
                             var_info.var_ptr.set(Var::Generated(var_num));
-                            var_data.fixtures.mark_temp_var(
-                                var_num,
-                                var_info.lvl,
-                                &var_info.classify_info,
-                                chunk.term_loc,
-                            );
+                            var_data.fixtures.mark_temp_var(&var_info);
                         }
                     } else {
                         for var_info in chunk.vars.iter_mut() {
@@ -766,13 +793,8 @@ impl BranchMap {
                         }
                     }
 
-                    chunk_occurrences.push(chunk.chunk_num);
+                    var_data.records[idx].chunk_occurrences.push(chunk.chunk_num);
                 }
-
-                let record = VarRecord { classification, chunk_occurrences, num_occurrences };
-                var_data.records.push(record);
-
-                var_num += 1;
             }
         }
 

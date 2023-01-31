@@ -106,10 +106,10 @@ impl ChunkType {
 pub enum QueryTerm {
     // register, clause type, subterms, clause call policy.
     Clause(Cell<RegType>, ClauseType, Vec<Term>, CallPolicy),
-    Cut,
-    Not(Vec<QueryTerm>),
-    IfThen(Vec<QueryTerm>, Vec<QueryTerm>),
-    LocalCut(Cell<VarReg>), // for IfThen.
+    Fail,
+    GlobalCut,
+    GetCutPoint(usize),
+    LocalCut(usize),
     Branch(Vec<Vec<QueryTerm>>),
     ChunkTypeBoundary(ChunkType),
 }
