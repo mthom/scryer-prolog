@@ -416,7 +416,7 @@ The [_arithmetic constraints_](#clpz-arith-constraints) `(#=)/2`,
 `(#>)/2` etc. are meant to be used _instead_ of the primitives
 `(is)/2`, `(=:=)/2`, `(>)/2` etc. over integers. Almost all Prolog
 programs also reason about integers. Therefore, it is recommended that
-you put the following directive in your =|~/.scryerrc|= initialisation
+you put the following directive in your `~/.scryerrc` initialisation
 file to make CLP(ℤ) constraints available in all your programs:
 
 ```
