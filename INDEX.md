@@ -5,7 +5,7 @@
    X = "Scryer Prolog!".
 ```
 
-![scryer](scryer.png){width=128 style=float:right;} Scryer Prolog is a free software ISO Prolog system intended to be an industrial
+![scryer](scryer.png){width=128 style=float:right;} [Scryer Prolog](https://github.com/mthom/scryer-prolog) is a free software ISO Prolog system intended to be an industrial
 strength production environment *and* a testbed for bleeding edge research in
 logic and constraint programming.
 
@@ -38,7 +38,7 @@ general programs.
 
 If you want a more detailed description of Prolog, check [A Tour of Prolog](https://www.youtube.com/watch?v=8XUutFBbUrg).
 
-If you want to learn more about Prolog history, [check this video](https://www.youtube.com/watch?v=74Ig_QKndvE) and [this talk](https://prologyear.logicprogramming.org/videos/PrologDay_Session_1_talk.mp4).
+If you want to learn more about Prolog history, check the videos [l'Aventure Prolog](https://www.youtube.com/watch?v=74Ig_QKndvE) and [50 years of Prolog and beyond](https://prologyear.logicprogramming.org/videos/PrologDay_Session_1_talk.mp4).
 
 ## Where can I learn Prolog?
 
@@ -61,7 +61,7 @@ There's also a [Docker image](https://github.com/mthom/scryer-prolog#docker-inst
 ## Support and discussions
 
 If Scryer Prolog crashes or yields unexpected errors, consider filing
-an&nbsp;[issue](https://github.com/mthom/scryer-prolog/issues).
+an [issue](https://github.com/mthom/scryer-prolog/issues).
 
 To get in touch with the Scryer Prolog community, participate in
 [discussions](https://github.com/mthom/scryer-prolog/discussions)
