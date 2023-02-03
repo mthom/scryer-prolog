@@ -600,6 +600,7 @@ write_term(Term, Options) :-
 %% write_term(+Stream, +Term, +Options).
 %
 % Write Term to the stream Stream according to some output syntax options. The options avaibale are:
+%
 %  * `ignore_ops(+Boolean)` if `true`, the generic term representation is used everywhere. In `false`
 %    (default), operators do not use that generic term representation.
 %  * `max_depth(+N)` if the term is nested deeper than N, print the reminder as ellipses.
@@ -2056,6 +2057,7 @@ stream_iter(S) :-
 %
 % For stream Stream, StreamProperty is a property that applies to that stream.
 % StreamProperty can be one of the following:
+%
 %  * `input` if stream is an input stream.
 %  * `output` if stream is an output stream.
 %  * `input_output` if stream is both an input and an output stream.
