@@ -671,7 +671,7 @@ pub(crate) fn shr(n1: Number, n2: Number, arena: &mut Arena) -> Result<Number, M
 
 pub(crate) fn shl(n1: Number, n2: Number, arena: &mut Arena) -> Result<Number, MachineStubGen> {
     let stub_gen = || {
-        let shl_atom = atom!(">>");
+        let shl_atom = atom!("<<");
         functor_stub(shl_atom, 2)
     };
 
