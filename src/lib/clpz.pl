@@ -895,13 +895,13 @@ their truth values into Boolean values represented by the integers 0
 and 1. Let P and Q denote reifiable constraints or Boolean variables,
 then:
 
-| #\ Q      | True iff Q is false                  |
-| P #\/ Q   | True iff either P or Q               |
-| P #/\ Q   | True iff both P and Q                |
-| P #\ Q    | True iff either P or Q, but not both |
-| P #<==> Q | True iff P and Q are equivalent      |
-| P #==> Q  | True iff P implies Q                 |
-| P #<== Q  | True iff Q implies P                 |
+| `#\ Q`      | True iff Q is false                  |
+| `P #\/ Q`   | True iff either P or Q               |
+| `P #/\ Q`   | True iff both P and Q                |
+| `P #\ Q`    | True iff either P or Q, but not both |
+| `P #<==> Q` | True iff P and Q are equivalent      |
+| `P #==> Q`  | True iff P implies Q                 |
+| `P #<== Q`  | True iff Q implies P                 |
 
 The constraints of this table are reifiable as well.
 
