@@ -1,0 +1,169 @@
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+Errata for:
+
+        Warren's Abstract Machine: A Tutorial Reconstruction
+        Hassan Ait-Kaci
+        MIT Press, Cambridge, MA
+        1991
+
+        ISBN 0-262-51058-8 (paper)
+        ISBN 0-262-01123-9 (cloth)
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+I am enclosing below the most up-to-date list of typos, bugs, and their -
+easy - fixes... Anything else that you will find, please report back to
+me. Who knows, one day when my stack is finally empty (ha!), I'll work on a
+second edition with extensions. In the mean time, please accept my
+apologies for your painful reading. On the other hand, my book's bugs and
+typos are a wonderful indicator of who did or not actually try to implement
+the code therein!
+
+These bug reports and fixes are to be credited to James Anhalt III
+(anhalt@cs.ucla.edu), Dan Friedman (dfried@cs.indiana.edu), Michael Levy
+(mlevy@csr.uvic.ca), Donald A. Smith (dsmith@chaos.cs.brandeis.edu), and
+Neng Fa Zhou (zhou@csce.kyushu-u.ac.jp).  Big thanks to all.
+
+-hak    ___________________________________________________________________
+        Hassan Ait-Kaci, Professor
+        ___________________________________________________________________
+        School of Computing Science     phone:  +1 (604) 291 55 89
+        Simon Fraser University         fax:    +1 (604) 291 30 45
+        Burnaby, British Columbia       email:  hak@cs.sfu.ca
+        V5A 1S6, Canada                 url:    http://www.isg.sfu.ca/~hak/
+        ___________________________________________________________________
+
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+In the definition of get_structure (fig 2.6, page 13) S should be
+initialized to 1 before exiting get_structure in either READ or WRITE
+modes.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+There is a problem with stack frames allocation. Namely, the book defines
+ALLOCATE as:
+
+    (*)  if E > B
+          then newE <- E + CODE[STACK[E + 1] - 1] + 2
+          else ...
+
+While this should be:
+
+    (**) if E > B
+          then newE <- E + CODE[CP - 1] + 2
+          else ...
+
+The following code shows why:
+
+    a/0		allocate
+    		...
+    		call b/0,1
+    L1		...
+    b/0		allocate
+    		...
+    		call c/0,3
+    L2		...    
+    c/0		allocate
+    		...
+
+Now when b/0 calls c/0 the stack should look like:
+
+	|-------|
+	|CE: 	|0	<- a's environment
+	|-------|
+	|CP: 	|1
+	|-------|
+	|Y1:	|2
+	|-------|
+E ->	|CE: 0	|3	<- b's environment
+	|-------|
+	|CP: L1	|4
+	|-------|
+	|Y1:	|5
+	|-------|
+	|Y2:	|6
+	|-------|
+	|Y3:	|7
+	|-------|
+	|	|8	<- we want c's environment to start here
+	|-------|
+	|	|9
+	|-------|
+
+CP = L2
+P = c/0
+
+So when c/0 executes allocate ...
+
+With (*) the new value of E would be:
+
+	E = 3 + CODE[STACK[3 + 1] - 1] + 2
+	E = 3 + CODE[L1 - 1] + 2
+	E = 3 + 1 + 2
+	E = 6
+
+	which overwrites Y2 and Y3 since it uses the 1 from a/0
+
+Whereas (**) gives us:
+
+	E = 3 + CODE[CP - 1] + 2
+	E = 3 + CODE[L2 - 1] + 2
+	E = 3 + 3 + 2
+	E = 8
+
+	which is right since b/0 wants to save 3 locals
+
+This same problem exists in all the instructions that deal with
+allocating new stack frames.
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+As described UNIFY_CONSTANT does not increment the S register, this
+makes it very hard to read structures with constants which are not the
+last argument. Easy fix...
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+When allocating a new choice or environment frame on the stack, one
+should use CP (the continuation pointer) insteads of E+1 (the stored
+continuation pointer) to find out the number of Y variables to preserve
+in the previous environment frame. This is because the continuation
+pointer is stored on the stack only if an ALLOCATE instruction is used
+and so only CP has the real value.
+
+Thus, instead of
+
+    if (E > B)
+       NewB = E + *(((int *) *(E+1))-1) + 2;
+    else NewB = B + *B + FIXED_CHOICE_FRAME_SIZE;
+
+one should use code like
+
+    if (E > B)
+       NewB = E + *(CP-1) + 2;
+    else NewB = B + *B + FIXED_CHOICE_FRAME_SIZE;
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+The try, retry, and trust instructions reset the HB register to an 
+incorrect value. The problem is that n is computed from the original 
+value of B (n <- STACK[B]). Hence n is no longer valid when HB is 
+re-loaded. The correct code is: 
+
+     HB <- STACK[B+STACK[B]+6]
+
+There is a more subtle related bug that usually doesn't matter very 
+much: both cut and neck_cut should also reset HB. If they do not, 
+some uneccessary trailing will occur. This normally doesnt matter 
+too much (aside from a small performance penalty), but it does turn 
+out to be a problem if you try to implement Older and Rummel's incremental 
+garbage collection algorithm, because you end up with dangling trail 
+references to collected heap storage. O&R's algorithm relies on knowing 
+that there are no trail references below a certain point into the 
+tip of the heap. 
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
