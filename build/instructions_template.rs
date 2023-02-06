@@ -566,6 +566,8 @@ enum SystemClauseType {
     GetClauseP,
     #[strum_discriminants(strum(props(Arity = "6", Name = "$invoke_clause_at_p")))]
     InvokeClauseAtP,
+    #[strum_discriminants(strum(props(Arity = "2", Name = "$get_from_attr_list")))]
+    GetFromAttributedVarList,
     REPL(REPLCodePtr),
 }
 
@@ -1626,6 +1628,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallIsExpandedOrInlined(_) |
                     &Instruction::CallGetClauseP(_) |
                     &Instruction::CallInvokeClauseAtP(_) |
+                    &Instruction::CallGetFromAttributedVarList(_) |
                     &Instruction::CallEnqueueAttributedVar(_) |
                     &Instruction::CallFetchGlobalVar(_) |
                     &Instruction::CallFirstStream(_) |
@@ -1841,6 +1844,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteIsExpandedOrInlined(_) |
                     &Instruction::ExecuteGetClauseP(_) |
                     &Instruction::ExecuteInvokeClauseAtP(_) |
+                    &Instruction::ExecuteGetFromAttributedVarList(_) |
                     &Instruction::ExecuteEnqueueAttributedVar(_) |
                     &Instruction::ExecuteFetchGlobalVar(_) |
                     &Instruction::ExecuteFirstStream(_) |

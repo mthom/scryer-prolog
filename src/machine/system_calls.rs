@@ -4329,6 +4329,71 @@ impl Machine {
     }
 
     #[inline(always)]
+    pub(crate) fn get_from_attributed_variable_list(&mut self) {
+        let mut attrs_list = self.deref_register(1);
+        let attr = self.deref_register(2);
+
+        let (name, arity) = match self.machine_st.name_and_arity_from_heap(attr) {
+            Some(key) => key,
+            None => {
+                self.machine_st.fail = true;
+                return;
+            }
+        };
+
+        while let HeapCellValueTag::Lis = attrs_list.get_tag() {
+            let mut list_head = self.machine_st.heap[attrs_list.get_value()];
+
+            loop {
+                read_heap_cell!(list_head,
+                    (HeapCellValueTag::AttrVar | HeapCellValueTag::Var, h) => {
+                        if list_head != self.machine_st.heap[h] {
+                            list_head = self.machine_st.heap[h];
+                        } else {
+                            self.machine_st.fail = true;
+                            return;
+                        }
+                    }
+                    (HeapCellValueTag::Str | HeapCellValueTag::Atom) => {
+                        let (t_name, t_arity) = self.machine_st
+                            .name_and_arity_from_heap(list_head)
+                            .unwrap();
+
+                        if name == t_name && arity == t_arity {
+                            let old_tr = self.machine_st.tr;
+
+                            unify!(self.machine_st, list_head, attr);
+
+                            if self.machine_st.fail {
+                                let curr_tr = self.machine_st.trail.len();
+
+                                self.unwind_trail(old_tr, curr_tr);
+                                self.machine_st.tr = old_tr;
+
+                                self.machine_st.pdl.clear();
+                                self.machine_st.fail = false;
+                            } else {
+                                return;
+                            }
+                        }
+
+                        break;
+                    }
+                    _ => {
+                        break;
+                    }
+                );
+            }
+
+            attrs_list = self.machine_st.store(
+                self.machine_st.deref(self.machine_st.heap[attrs_list.get_value()+1])
+            );
+        }
+
+        self.machine_st.fail = true;
+    }
+
+    #[inline(always)]
     pub(crate) fn get_attr_var_queue_delimiter(&mut self) {
         let addr = self.deref_register(1);
         let value = Fixnum::build_with(self.machine_st.attr_var_init.attr_var_queue.len() as i64);

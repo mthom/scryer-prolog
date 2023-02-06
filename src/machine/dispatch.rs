@@ -5207,6 +5207,14 @@ impl Machine {
 
                     self.machine_st.execute_at_index(2, p);
                 }
+                &Instruction::CallGetFromAttributedVarList(_) => {
+                    self.get_from_attributed_variable_list();
+                    step_or_fail!(self, self.machine_st.p += 1);
+                }
+                &Instruction::ExecuteGetFromAttributedVarList(_) => {
+                    self.get_from_attributed_variable_list();
+                    step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+                }
             }
         }
 

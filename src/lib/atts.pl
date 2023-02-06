@@ -34,8 +34,9 @@
 '$get_attr'(V, Attr) :-
     '$get_attr_list'(V, Ls),
     nonvar(Ls),
-    '$get_from_list'(Ls, V, Attr).
+    '$get_from_attr_list'(Ls, Attr).
 
+/*
 '$get_from_list'([L|Ls], V, Attr) :-
     nonvar(L),
     (  L \= Attr ->
@@ -43,6 +44,7 @@
        '$get_from_list'(Ls, V, Attr)
     ;  L = Attr
     ).
+*/
 
 '$put_attr'(V, Attr) :-
     '$get_attr_list'(V, Ls),
