@@ -19,74 +19,10 @@
     '$default_attr_list'(PGs, Module, AttrVar).
 '$default_attr_list'([], _, _) --> [].
 
-'$absent_attr'(V, Attr) :-
-    '$get_attr_list'(V, Ls),
-    '$absent_from_list'(Ls, Attr).
-
-'$absent_from_list'(X, Attr) :-
-    (  var(X) ->
-       true
-    ;  X = [L|Ls],
-       L \= Attr ->
-       '$absent_from_list'(Ls, Attr)
-    ).
-
-'$get_attr'(V, Attr) :-
-    '$get_attr_list'(V, Ls),
-    nonvar(Ls),
-    '$get_from_attr_list'(Ls, Attr).
-
-/*
-'$get_from_list'([L|Ls], V, Attr) :-
-    nonvar(L),
-    (  L \= Attr ->
-       nonvar(Ls),
-       '$get_from_list'(Ls, V, Attr)
-    ;  L = Attr
-    ).
-*/
-
-'$put_attr'(V, Attr) :-
-    '$get_attr_list'(V, Ls),
-    '$add_to_list'(Ls, V, Attr).
-
-'$add_to_list'(Ls, V, Attr) :-
-    (  var(Ls) ->
-       Ls = [Attr | _],
-       '$enqueue_attr_var'(V)
-    ;  Ls = [_ | Ls0],
-       '$add_to_list'(Ls0, V, Attr)
-    ).
-
-'$del_attr'(Ls0, _, _) :-
-    var(Ls0),
-    !.
-'$del_attr'(Ls0, V, Attr) :-
-    Ls0 = [Att | Ls1],
-    nonvar(Att),
-    (  Att \= Attr ->
-       '$del_attr_buried'(Ls0, Ls1, V, Attr)
-    ;  '$del_attr_head'(V),
-       '$del_attr'(Ls1, V, Attr)
-    ).
-
-'$del_attr_step'(Ls1, V, Attr) :-
-    (  nonvar(Ls1) ->
-       Ls1 = [_ | Ls2],
-       '$del_attr_buried'(Ls1, Ls2, V, Attr)
+'$absent_attr'(V, Module, Attr) :-
+    (  '$get_from_attr_list'(V, Module, Attr) ->
+       false
     ;  true
-    ).
-
-%% assumptions: Ls0 is a list, Ls1 is its tail;
-%%              the head of Ls0 can be ignored.
-'$del_attr_buried'(Ls0, Ls1, V, Attr) :-
-    (  var(Ls1) -> true
-    ;  Ls1 = [Att | Ls2] ->
-       (  Att \= Attr ->
-          '$del_attr_buried'(Ls1, Ls2, V, Attr)
-       ;  '$del_attr_non_head'(Ls0), %% set tail of Ls0 = tail of Ls1. can be undone by backtracking.
-	      '$del_attr_step'(Ls1, V, Attr)
-       )
     ).
 
 '$copy_attr_list'(L, _Module, []) :- var(L), !.
@@ -144,38 +80,28 @@ put_attr(Name, Arity, Module) -->
     { functor(Attr, Name, Arity) },
     [(put_atts(V, +Attr) :-
           !,
-          functor(Attr, Head, Arity),
-	      functor(AttrForm, Head, Arity),
-	      '$get_attr_list'(V, Ls),
-	      atts:'$del_attr'(Ls, V, Module:AttrForm),
-	      atts:'$put_attr'(V, Module:Attr)),
-     (put_atts(V,  Attr) :-
+          '$put_to_attr_list'(V, Module, Attr)),
+     (put_atts(V, Attr) :-
           !,
-          functor(Attr, Head, Arity),
-	      functor(AttrForm, Head, Arity),
-	      '$get_attr_list'(V, Ls),
-	      atts:'$del_attr'(Ls, V, Module:AttrForm),
-	      atts:'$put_attr'(V, Module:Attr)),
+          '$put_to_attr_list'(V, Module, Attr)),
      (put_atts(V, -Attr) :-
           !,
-          functor(Attr, _, _),
-	      '$get_attr_list'(V, Ls),
-	      atts:'$del_attr'(Ls, V, Module:Attr))].
+          '$del_from_attr_list'(V, Module, Attr))].
 
 get_attr(Name, Arity, Module) -->
     { functor(Attr, Name, Arity) },
     [(get_atts(V, +Attr) :-
           !,
           functor(Attr, _, _),
-          atts:'$get_attr'(V, Module:Attr)),
+          atts:'$get_from_attr_list'(V, Module, Attr)),
      (get_atts(V,  Attr) :-
           !,
           functor(Attr, _, _),
-          atts:'$get_attr'(V, Module:Attr)),
+          atts:'$get_from_attr_list'(V, Module, Attr)),
      (get_atts(V, -Attr) :-
           !,
           functor(Attr, _, _),
-          atts:'$absent_attr'(V, Module:Attr))].
+          atts:'$absent_attr'(V, Module, Attr))].
 
 user:goal_expansion(Term, M:put_atts(Var, Attr)) :-
     nonvar(Term),

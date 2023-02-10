@@ -870,7 +870,18 @@ impl Machine {
                     let l = self.machine_st.trail[i + 1].get_value() as usize;
 
                     if l < self.machine_st.hb {
-                        self.machine_st.heap[h] = list_loc_as_cell!(l);
+                        if h == l {
+                            self.machine_st.heap[h] = heap_loc_as_cell!(h);
+                        } else {
+                            read_heap_cell!(self.machine_st.heap[l],
+                                (HeapCellValueTag::Var) => {
+                                    self.machine_st.heap[h] = list_loc_as_cell!(l);
+                                }
+                                _ => {
+                                    self.machine_st.heap[h] = heap_loc_as_cell!(l);
+                                }
+                            );
+                        }
                     } else {
                         self.machine_st.heap[h] = heap_loc_as_cell!(h);
                     }
