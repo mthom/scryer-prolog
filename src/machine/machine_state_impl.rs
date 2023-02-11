@@ -130,16 +130,6 @@ impl MachineState {
                     }
                 }
             }
-            TrailRef::AttrVarHeapLink(h) => {
-                if h < self.hb {
-                    self.trail.push(TrailEntry::build_with(
-                        TrailEntryTag::TrailedAttrVarHeapLink,
-                        h as u64,
-                    ));
-
-                    self.tr += 1;
-                }
-            }
             TrailRef::AttrVarListLink(h, l) => {
                 if h < self.hb {
                     self.trail.push(TrailEntry::build_with(

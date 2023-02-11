@@ -863,9 +863,6 @@ impl Machine {
                 TrailEntryTag::TrailedAttrVar => {
                     self.machine_st.heap[h] = attr_var_as_cell!(h);
                 }
-                TrailEntryTag::TrailedAttrVarHeapLink => {
-                    self.machine_st.heap[h] = heap_loc_as_cell!(h);
-                }
                 TrailEntryTag::TrailedAttrVarListLink => {
                     let l = self.machine_st.trail[i + 1].get_value() as usize;
 
