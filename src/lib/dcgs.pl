@@ -215,6 +215,9 @@ user:goal_expansion(phrase(GRBody, S, S0), GRBody2) :-
           E,
           dcgs:error_goal(E, GRBody1)
          ),
-    module_call_qualified(M, GRBody1, GRBody2).
+    (  GRBody = (_:_) ->
+       GRBody2 = M:GRBody1
+    ;  GRBody2 = GRBody1
+    ).
 
 user:goal_expansion(phrase(GRBody, S), phrase(GRBody, S, [])).
