@@ -25,11 +25,6 @@ call_project_attributes([Module|Modules], QueryVars, AttrVars) :-
     ),
     call_project_attributes(Modules, QueryVars, AttrVars).
 
-call_attribute_goals([], _, _).
-call_attribute_goals([Module|Modules], GoalCaller, AttrVars) :-
-    call(GoalCaller, AttrVars, Module, Goals),
-    call_attribute_goals(Modules, GoalCaller, AttrVars).
-
 '$print_attribute_goals_exception'(Module, E) :-
     (  E = error(evaluation_error((Module:attribute_goals)/3), attribute_goals/3)
     ;  E = error(existence_error(procedure, attribute_goals/3), attribute_goals/3)

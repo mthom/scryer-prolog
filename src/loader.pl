@@ -620,7 +620,7 @@ strip_module(Goal, M, G) :-
 
 strip_subst_module(Goal, M1, M2, G) :-
     '$strip_module'(Goal, M2, G),
-    (  var(M2) ->
+    (  var(M2), \+ functor(Goal, (:), 2) ->
        M2 = M1
     ;  true
     ).
