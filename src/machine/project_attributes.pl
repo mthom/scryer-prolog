@@ -1,7 +1,11 @@
 :- module('$project_atts', [copy_term/3]).
 
+:- use_module(library(dcgs)).
+:- use_module(library(lambda)).
+:- use_module(library(lists), [foldl/4]).
+
 project_attributes(QueryVars, AttrVars) :-
-    gather_attr_modules(AttrVars, Modules0),
+    phrase(gather_attr_modules(AttrVars), Modules0),
     sort(Modules0, Modules),
     call_project_attributes(Modules, QueryVars, AttrVars).
 
@@ -17,9 +21,9 @@ project_attributes(QueryVars, AttrVars) :-
 call_project_attributes([], _, _).
 call_project_attributes([Module|Modules], QueryVars, AttrVars) :-
     (   catch(Module:project_attributes(QueryVars, AttrVars),
-	      E,
-	      '$project_atts':'$print_project_attributes_exception'(Module, E)
-	     )
+	          E,
+	          '$project_atts':'$print_project_attributes_exception'(Module, E)
+	         )
     ->  true
     ;   true
     ),
@@ -72,25 +76,33 @@ call_attribute_goals_with_module_prefix([Module | Modules], GoalCaller, AttrVars
     module_prefixed_goals(Goals0, Module, Goals, Gs),
     call_attribute_goals_with_module_prefix(Modules, GoalCaller, AttrVars, Gs).
 
+gather_attr_modules([]) --> [].
+gather_attr_modules([AttrVar|AttrVars]) -->
+    { '$get_attr_list'(AttrVar, Attrs) },
+    copy_attribute_modules(Attrs),
+    gather_attr_modules(AttrVars).
 
-gather_attr_modules([], []).
-gather_attr_modules([AttrVar|AttrVars], Modules) :-
-    '$get_attr_list'(AttrVar, Attrs),
-    copy_attribute_modules(Attrs, Modules, Modules0),
-    gather_attr_modules(AttrVars, Modules0).
+copy_attribute_modules(Attrs) -->
+    { var(Attrs) },
+    !.
+copy_attribute_modules([Module:_|Attrs]) -->
+    [Module],
+    copy_attribute_modules(Attrs).
 
-copy_attribute_modules(Attrs, Ls, Ls) :-
-    var(Attrs), !.
-copy_attribute_modules([Module:_|Attrs], [Module|Modules0], Modules1) :-
-    copy_attribute_modules(Attrs, Modules0, Modules1).
+gather_residual_goals([]) --> [].
+gather_residual_goals([V|Vs]) -->
+    { '$get_attr_list'(V, Attrs),
+      phrase(copy_attribute_modules(Attrs), Modules0),
+      sort(Modules0, Modules) },
+    foldl(V+\M^phrase(M:attribute_goals(V)), Modules),
+    gather_residual_goals(Vs).
 
+delete_all_attributes(Term) :- '$delete_all_attributes'(Term).
 
-copy_term(Source, Dest, Goals) :-
-    '$term_attributed_variables'(Source, AttrVars),
-    gather_attr_modules(AttrVars, Modules0),
-    sort(Modules0, Modules),
-    call_attribute_goals_with_module_prefix(Modules, '$project_atts':call_query_var_goals,
-                                            AttrVars, Goals0),
-    sort(Goals0, Goals1),
-    !,
-    '$copy_term_without_attr_vars'([Source | Goals1], [Dest | Goals]).
+copy_term(Term, Copy, Gs) :-
+        '$term_attributed_variables'(Term, Vs),
+        findall(Term-Gs,
+                ( phrase(gather_residual_goals(Vs), Gs),
+                  delete_all_attributes(Term)
+                ),
+                [Copy-Gs]).

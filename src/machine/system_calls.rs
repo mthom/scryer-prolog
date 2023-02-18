@@ -1037,6 +1037,27 @@ impl MachineState {
 
 impl Machine {
     #[inline(always)]
+    pub(crate) fn delete_all_attributes(&mut self) {
+        let h = self.machine_st.heap.len();
+
+        self.machine_st.heap.push(heap_loc_as_cell!(h));
+        self.machine_st.registers[2] = heap_loc_as_cell!(h);
+
+        self.term_attributed_variables();
+
+        let mut list_of_attr_vars = self.deref_register(2);
+
+        while let HeapCellValueTag::Lis = list_of_attr_vars.get_tag() {
+            let attr_var_loc = list_of_attr_vars.get_value();
+
+            self.machine_st.heap[attr_var_loc] = heap_loc_as_cell!(attr_var_loc);
+            self.machine_st.trail(TrailRef::Ref(Ref::attr_var(attr_var_loc)));
+
+            list_of_attr_vars = self.machine_st.heap[attr_var_loc + 1];
+        }
+    }
+
+    #[inline(always)]
     pub(crate) fn get_clause_p(&self, module_name: Atom) -> (usize, usize) {
         use crate::machine::loader::CompilationTarget;
 
