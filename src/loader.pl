@@ -11,7 +11,6 @@
                    current_module/1
                   ]).
 
-
 :- use_module(library(error)).
 :- use_module(library(lists)).
 :- use_module(library(pairs)).
@@ -221,7 +220,12 @@ complete_partial_goal(N, HeadArg, InnerHeadArgs, SuppArgs, CompleteHeadArg) :-
     integer(N),
     N >= 0,
     HeadArg =.. [Functor | InnerHeadArgs],
-    length(SuppArgs, N),
+    % the next two lines are equivalent to length(SuppArgs, N) but
+    % avoid length/2 so that copy_term/3 (which is invoked by
+    % length/2) can be bootstrapped without self-reference.
+    functor(SuppArgsFunctor, '.', N),
+    SuppArgsFunctor =.. [_ | SuppArgs],
+    % length(SuppArgs, N),
     append(InnerHeadArgs, SuppArgs, InnerHeadArgs0),
     CompleteHeadArg =.. [Functor | InnerHeadArgs0].
 
