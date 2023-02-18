@@ -12,8 +12,7 @@ programming, which is itself written in a high-level language.
 
 Produce an implementation of the Warren Abstract Machine in Rust, done
 according to the progression of languages in [Warren's Abstract
-Machine: A Tutorial
-Reconstruction](https://github.com/mthom/scryer-prolog/blob/master/wambook/wambook.pdf).
+Machine: A Tutorial Reconstruction](https://github.com/mthom/scryer-prolog/blob/master/wambook/wambook.pdf).
 
 Phase 1 has been completed in that Scryer Prolog implements in some form
 all of the WAM book, including lists, cuts, Debray allocation, first
@@ -52,9 +51,9 @@ Extend Scryer Prolog to include the following, among other features:
       `bb_put/2` (non-backtrackable) and `bb_b_put/2`
       (backtrackable).
 - [x] Delimited continuations based on reset/3, shift/1 (documented in
-      "Delimited Continuations for Prolog").
+      "[Delimited Continuations for Prolog](https://www.swi-prolog.org/download/publications/iclp2013.pdf)").
 - [x] Tabling library based on delimited continuations
-      (documented in "Tabling as a Library with Delimited Control").
+      (documented in "[Tabling as a Library with Delimited Control](https://www.ijcai.org/Proceedings/16/Papers/619.pdf)").
 - [x] A _redone_ representation of strings as difference lists of
       characters, using a packed internal representation.
 - [x] clp(B) and clp(ℤ) as builtin libraries.
@@ -69,7 +68,7 @@ Extend Scryer Prolog to include the following, among other features:
   - [ ] Greatly reducing the number of instructions used to compile disjunctives.
   - [ ] Storing short atoms to heap cells without writing them to the atom table.
 - [ ] A compacting garbage collector satisfying the five properties of
-      "Precise Garbage Collection in Prolog." (_in progress_)
+      "[Precise Garbage Collection in Prolog](https://www.swi-prolog.org/download/publications/lifegc.pdf)." (_in progress_)
 - [ ] Mode declarations.
 
 ## Phase 3
@@ -88,12 +87,12 @@ nice to have in the future. They'd make a good project for anyone wanting
 to contribute code to Scryer Prolog.
 
 1. Implement the global analysis techniques described in Peter van
-Roy's thesis, "Can Logic Programming Execute as Fast as Imperative
-Programming?"
+Roy's thesis, "[Can Logic Programming Execute as Fast as Imperative
+Programming?](https://www.info.ucl.ac.be/~pvr/Peter.thesis/Peter.thesis.html)"
 
 2. Add unum representation and arithmetic, using either an existing
 unum implementation or an ad hoc one. Unums are described in
-Gustafson's book "The End of Error."
+Gustafson's book "[The End of Error](http://www.johngustafson.net/unums.html)."
 
 3. Add concurrent tables to manage shared references to atoms and
 strings.
