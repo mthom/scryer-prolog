@@ -5207,12 +5207,12 @@ impl Machine {
                     self.delete_from_attributed_variable_list();
                     step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                 }
-                &Instruction::CallDeleteAllAttributes(_) => {
-                    self.delete_all_attributes();
+                &Instruction::CallDeleteAllAttributesFromVar(_) => {
+                    self.delete_all_attributes_from_var();
                     self.machine_st.p += 1;
                 }
-                &Instruction::ExecuteDeleteAllAttributes(_) => {
-                    self.delete_all_attributes();
+                &Instruction::ExecuteDeleteAllAttributesFromVar(_) => {
+                    self.delete_all_attributes_from_var();
                     self.machine_st.p = self.machine_st.cp;
                 }
             }

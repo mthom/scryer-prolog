@@ -1,8 +1,9 @@
 :- module('$project_atts', [copy_term/3]).
 
 :- use_module(library(dcgs)).
+:- use_module(library(error), [can_be/2]).
 :- use_module(library(lambda)).
-:- use_module(library(lists), [foldl/4]).
+:- use_module(library(lists), [foldl/4, maplist/2]).
 
 project_attributes(QueryVars, AttrVars) :-
     phrase(gather_attr_modules(AttrVars), Modules0),
@@ -97,12 +98,13 @@ gather_residual_goals([V|Vs]) -->
     foldl(V+\M^phrase(M:attribute_goals(V)), Modules),
     gather_residual_goals(Vs).
 
-delete_all_attributes(Term) :- '$delete_all_attributes'(Term).
+delete_all_attributes_from_var(V) :- '$delete_all_attributes_from_var'(V).
 
 copy_term(Term, Copy, Gs) :-
-        '$term_attributed_variables'(Term, Vs),
-        findall(Term-Gs,
-                ( phrase(gather_residual_goals(Vs), Gs),
-                  delete_all_attributes(Term)
-                ),
-                [Copy-Gs]).
+   can_be(list, Gs),
+   findall(Term-Rs, term_residual_goals(Term,Rs), [Copy-Gs]).
+
+term_residual_goals(Term,Rs) :-
+   '$term_attributed_variables'(Term, Vs),
+   phrase(gather_residual_goals(Vs), Rs),
+   maplist(delete_all_attributes_from_var, Vs).

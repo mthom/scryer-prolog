@@ -566,8 +566,8 @@ enum SystemClauseType {
     PutToAttributedVarList,
     #[strum_discriminants(strum(props(Arity = "3", Name = "$del_from_attr_list")))]
     DeleteFromAttributedVarList,
-    #[strum_discriminants(strum(props(Arity = "1", Name = "$delete_all_attributes")))]
-    DeleteAllAttributes,
+    #[strum_discriminants(strum(props(Arity = "1", Name = "$delete_all_attributes_from_var")))]
+    DeleteAllAttributesFromVar,
     REPL(REPLCodePtr),
 }
 
@@ -1629,7 +1629,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallGetFromAttributedVarList(_) |
                     &Instruction::CallPutToAttributedVarList(_) |
                     &Instruction::CallDeleteFromAttributedVarList(_) |
-                    &Instruction::CallDeleteAllAttributes(_) |
+                    &Instruction::CallDeleteAllAttributesFromVar(_) |
                     &Instruction::CallFetchGlobalVar(_) |
                     &Instruction::CallFirstStream(_) |
                     &Instruction::CallFlushOutput(_) |
@@ -1845,7 +1845,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteGetFromAttributedVarList(_) |
                     &Instruction::ExecutePutToAttributedVarList(_) |
                     &Instruction::ExecuteDeleteFromAttributedVarList(_) |
-                    &Instruction::ExecuteDeleteAllAttributes(_) |
+                    &Instruction::ExecuteDeleteAllAttributesFromVar(_) |
                     &Instruction::ExecuteFetchGlobalVar(_) |
                     &Instruction::ExecuteFirstStream(_) |
                     &Instruction::ExecuteFlushOutput(_) |
