@@ -51,9 +51,9 @@ Extend Scryer Prolog to include the following, among other features:
       `bb_put/2` (non-backtrackable) and `bb_b_put/2`
       (backtrackable).
 - [x] Delimited continuations based on reset/3, shift/1 (documented in
-      "[Delimited Continuations for Prolog](https://www.swi-prolog.org/download/publications/iclp2013.pdf)").
+      "[Delimited Continuations for Prolog](https://biblio.ugent.be/publication/5646080/file/5646081)").
 - [x] Tabling library based on delimited continuations
-      (documented in "[Tabling as a Library with Delimited Control](https://www.ijcai.org/Proceedings/16/Papers/619.pdf)").
+      (documented in "[Tabling as a Library with Delimited Control](https://biblio.ugent.be/publication/6880648/file/6885145.pdf)").
 - [x] A _redone_ representation of strings as difference lists of
       characters, using a packed internal representation.
 - [x] clp(B) and clp(ℤ) as builtin libraries.
@@ -68,7 +68,7 @@ Extend Scryer Prolog to include the following, among other features:
   - [ ] Greatly reducing the number of instructions used to compile disjunctives.
   - [ ] Storing short atoms to heap cells without writing them to the atom table.
 - [ ] A compacting garbage collector satisfying the five properties of
-      "[Precise Garbage Collection in Prolog](https://www.swi-prolog.org/download/publications/lifegc.pdf)." (_in progress_)
+      "[Precise Garbage Collection in Prolog](https://www.complang.tuwien.ac.at/ulrich/papers/PDF/2008-ciclops.pdf)." (_in progress_)
 - [ ] Mode declarations.
 
 ## Phase 3
