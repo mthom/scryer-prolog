@@ -90,12 +90,21 @@ copy_attribute_modules([Module:_|Attrs]) -->
     [Module],
     copy_attribute_modules(Attrs).
 
+attribute_goals_or_fail(M, V, V0, V1) :-
+    (  catch(M:attribute_goals(V, V0, V1),
+             E,
+             '$project_atts':'$print_attribute_goals_exception'(M, E)
+            ) ->
+       true
+    ;  V0 = V1
+    ).
+
 gather_residual_goals([]) --> [].
 gather_residual_goals([V|Vs]) -->
     { '$get_attr_list'(V, Attrs),
       phrase(copy_attribute_modules(Attrs), Modules0),
       sort(Modules0, Modules) },
-    foldl(V+\M^phrase(M:attribute_goals(V)), Modules),
+    foldl(V+\M^attribute_goals_or_fail(M, V), Modules),
     gather_residual_goals(Vs).
 
 delete_all_attributes_from_var(V) :- '$delete_all_attributes_from_var'(V).
@@ -105,6 +114,6 @@ copy_term(Term, Copy, Gs) :-
    findall(Term-Rs, term_residual_goals(Term,Rs), [Copy-Gs]).
 
 term_residual_goals(Term,Rs) :-
-   '$term_attributed_variables'(Term, Vs),
-   phrase(gather_residual_goals(Vs), Rs),
-   maplist(delete_all_attributes_from_var, Vs).
+    '$term_attributed_variables'(Term, Vs),
+    phrase(gather_residual_goals(Vs), Rs),
+    maplist(delete_all_attributes_from_var, Vs).
