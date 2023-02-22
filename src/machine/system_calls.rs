@@ -6,6 +6,7 @@ use lazy_static::lazy_static;
 use crate::arena::*;
 use crate::atom_table::*;
 use crate::forms::*;
+use crate::ffi::*;
 use crate::heap_iter::*;
 use crate::heap_print::*;
 use crate::http::{self, HttpListener, HttpResponse};
@@ -40,6 +41,7 @@ use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::convert::{TryFrom, Infallible};
 use std::env;
+use std::ffi::CString;
 use std::fs;
 use std::hash::{BuildHasher, BuildHasherDefault};
 use std::io::{ErrorKind, Read, Write};
@@ -4169,6 +4171,156 @@ impl Machine {
 	    }
 	);
 
+	Ok(())
+    }
+
+    #[inline(always)]
+    pub(crate) fn load_foreign_lib(&mut self) -> CallResult {
+	let library_name = self.deref_register(1);
+	let args_reg = self.deref_register(2);
+	if let Some(library_name) = self.machine_st.value_to_str_like(library_name) {
+	    let stub_gen = || functor_stub(atom!("use_foreign_module"), 2);
+	    match self.machine_st.try_from_list(args_reg, stub_gen) {
+		Ok(addrs) => {
+		    let mut functions = Vec::new();
+		    for heap_cell in addrs {
+			read_heap_cell!(heap_cell,
+			    (HeapCellValueTag::Str, s) => {
+			        let name = cell_as_atom_cell!(self.machine_st.heap[s]).get_name();
+				let args: Vec<Atom> = match self.machine_st.try_from_list(self.machine_st.heap[s + 1], stub_gen) {
+				    Ok(addrs) => {
+					let mut args = Vec::new();
+					for heap_cell in addrs {
+					    args.push(cell_as_atom_cell!(heap_cell).get_name());
+					}
+					args
+				    }
+				    Err(e) => return Err(e)
+				};
+				let return_value = cell_as_atom_cell!(self.machine_st.heap[s + 2]);
+				functions.push(FunctionDefinition {
+				    name: name.as_str().to_string(),
+				    args,
+				    return_value: return_value.get_name(),
+				});
+			    }
+			    _ => {
+			        unreachable!()
+		            }
+			)
+		    }
+		    if let Ok(_) = self.foreign_function_table.load_library(library_name.as_str(), &functions) {
+		        return Ok(());
+	            }
+		}
+		Err(e) => return Err(e)
+	    };
+	}
+	self.machine_st.fail = true;
+	Ok(())
+    }
+
+    #[inline(always)]
+    pub(crate) fn foreign_call(&mut self) -> CallResult {
+	let function_name = self.deref_register(1);
+	let args_reg = self.deref_register(2);
+	let return_value = self.deref_register(3);
+	if let Some(function_name) = self.machine_st.value_to_str_like(function_name) {
+   	    let stub_gen = || functor_stub(atom!("foreign_call"), 3);
+	    fn map_arg(mut machine_st: &mut MachineState, source: HeapCellValue) -> crate::ffi::Value {
+		match Number::try_from(source) {
+		    Ok(Number::Fixnum(n)) => {
+			Value::Int(n.get_num())
+		    },
+		    Ok(Number::Float(n)) => {
+			Value::Float(n.into_inner())
+		    },
+		    _ => {
+			let stub_gen = || functor_stub(atom!("foreign_call"), 3);
+			if let Some(string) = machine_st.value_to_str_like(source) {
+			    Value::CString(CString::new(string.as_str()).unwrap())
+			} else {
+			    match machine_st.try_from_list(source, stub_gen) {
+				Ok(args) => {
+				    let mut iter = args.into_iter();
+				    if let Some(struct_name) = machine_st.value_to_str_like(iter.next().unwrap()) {
+					Value::Struct(struct_name.as_str().to_string(), iter.map(|x| map_arg(&mut machine_st, x)).collect())
+				    } else {
+					unreachable!()
+				    }
+				}
+				_ => {
+				    unreachable!()
+				}
+			    }
+			}
+		    }
+		}
+	    }
+	    match self.machine_st.try_from_list(args_reg, stub_gen) {
+		Ok(args) => {
+		    let args: Vec<_> = args.into_iter().map(|x| map_arg(&mut self.machine_st, x)).collect();
+	    	    match self.foreign_function_table.exec(function_name.as_str(), args) {
+			Ok(result) => {
+			    match result {
+				Value::Int(n) => self.machine_st.unify_fixnum(Fixnum::build_with(n), return_value),
+				Value::Struct(name, mut args) => {
+				    args.insert(0, Value::CString(CString::new(name).unwrap()));
+				    let struct_list = heap_loc_as_cell!(
+					iter_to_heap_list(
+					    &mut self.machine_st.heap,
+					    args.into_iter()
+						.map(|val| {
+						    match val {
+							Value::Int(n) => fixnum_as_cell!(Fixnum::build_with(n)),
+							Value::CString(cstr) => atom_as_cell!(self.machine_st.atom_tbl.build_with(&cstr.into_string().unwrap())),
+							_ => unreachable!()
+						    }
+						}),
+					)
+				    );
+				    unify!(self.machine_st, return_value, struct_list);
+				}
+				_ => {
+				    unreachable!();
+				}
+			    }
+			    return Ok(());
+			},
+			Err(e) => {
+			    // throw error
+			    self.machine_st.fail = true;
+			    return Ok(());
+			}
+		    }
+		}
+		Err(e) => return Err(e)
+	    }
+	}
+	self.machine_st.fail = true;
+	Ok(())
+    }
+
+    #[inline(always)]
+    pub(crate) fn define_foreign_struct(&mut self) -> CallResult {
+	let struct_name = self.deref_register(1);
+	let fields_reg = self.deref_register(2);
+	if let Some(struct_name) = self.machine_st.value_to_str_like(struct_name) {
+	    let stub_gen = || functor_stub(atom!("define_foreign_struct"), 2);
+	    let fields: Vec<Atom> = match self.machine_st.try_from_list(fields_reg, stub_gen) {
+		Ok(addrs) => {
+		    let mut args = Vec::new();
+		    for heap_cell in addrs {
+			args.push(cell_as_atom_cell!(heap_cell).get_name());
+		    }
+		    args
+		}
+		Err(e) => return Err(e)
+	    };
+	    self.foreign_function_table.define_struct(struct_name.as_str(), fields);
+	    return Ok(())
+	}
+	self.machine_st.fail = true;
 	Ok(())
     }
 

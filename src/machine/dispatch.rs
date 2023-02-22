@@ -4221,6 +4221,30 @@ impl Machine {
 		    try_or_throw!(self.machine_st, self.http_answer());
 		    step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
 		}
+		&Instruction::CallLoadForeignLib(_) => {
+		    try_or_throw!(self.machine_st, self.load_foreign_lib());
+		    step_or_fail!(self, self.machine_st.p += 1);
+		}
+		&Instruction::ExecuteLoadForeignLib(_) => {
+		    try_or_throw!(self.machine_st, self.load_foreign_lib());
+		    step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+		}
+		&Instruction::CallForeignCall(_) => {
+		    try_or_throw!(self.machine_st, self.foreign_call());
+		    step_or_fail!(self, self.machine_st.p += 1);
+		}
+		&Instruction::ExecuteForeignCall(_) => {
+		    try_or_throw!(self.machine_st, self.foreign_call());
+		    step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+		}
+		&Instruction::CallDefineForeignStruct(_) => {
+		    try_or_throw!(self.machine_st, self.define_foreign_struct());
+		    step_or_fail!(self, self.machine_st.p += 1);
+		}
+		&Instruction::ExecuteDefineForeignStruct(_) => {
+		    try_or_throw!(self.machine_st, self.define_foreign_struct());
+		    step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+		}
                 &Instruction::CallCurrentTime(_) => {
                     self.current_time();
                     step_or_fail!(self, self.machine_st.p += 1);

@@ -552,6 +552,12 @@ enum SystemClauseType {
     HttpAccept,
     #[strum_discriminants(strum(props(Arity = "4", Name = "$http_answer")))]
     HttpAnswer,
+    #[strum_discriminants(strum(props(Arity = "2", Name = "$load_foreign_lib")))]
+    LoadForeignLib,
+    #[strum_discriminants(strum(props(Arity = "3", Name = "$foreign_call")))]
+    ForeignCall,
+    #[strum_discriminants(strum(props(Arity = "2", Name = "$define_foreign_struct")))]
+    DefineForeignStruct,
     #[strum_discriminants(strum(props(Arity = "3", Name = "$predicate_defined")))]
     PredicateDefined,
     #[strum_discriminants(strum(props(Arity = "3", Name = "$strip_module")))]
@@ -1701,6 +1707,9 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallHttpListen(_) |
                     &Instruction::CallHttpAccept(_) |
                     &Instruction::CallHttpAnswer(_) |
+		    &Instruction::CallLoadForeignLib(_) |
+		    &Instruction::CallForeignCall(_) |
+		    &Instruction::CallDefineForeignStruct(_) |
                     &Instruction::CallPredicateDefined(_) |
                     &Instruction::CallStripModule(_) |
                     &Instruction::CallCurrentTime(_) |
@@ -1916,6 +1925,9 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteHttpListen(_) |
                     &Instruction::ExecuteHttpAccept(_) |
                     &Instruction::ExecuteHttpAnswer(_) |
+		    &Instruction::ExecuteLoadForeignLib(_) |
+		    &Instruction::ExecuteForeignCall(_) |
+		    &Instruction::ExecuteDefineForeignStruct(_) |
                     &Instruction::ExecutePredicateDefined(_) |
                     &Instruction::ExecuteStripModule(_) |
                     &Instruction::ExecuteCurrentTime(_) |
