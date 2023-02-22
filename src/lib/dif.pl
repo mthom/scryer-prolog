@@ -40,9 +40,6 @@ verify_attributes(Var, Value, Goals) :-
     ;   Goals = []
     ).
 
-% Probably the world's worst dif/2 implementation. I'm open to
-% suggestions for improvement.
-
 %% dif(?X, ?Y).
 %
 % True iff X and Y are different terms. Unlike `\=/2`, `dif/2` is more declarative because if X and Y can
@@ -69,12 +66,16 @@ dif(X, Y) :-
         )
     ).
 
-gather_dif_goals([]) --> [].
-gather_dif_goals([(X \== Y) | Goals]) -->
-    [dif:dif(X, Y)],
-    gather_dif_goals(Goals).
+gather_dif_goals(_, []) --> [].
+gather_dif_goals(V, [(X \== Y) | Goals]) -->
+    (  { term_variables(X, [V0 | _]),
+         V == V0 } ->
+       [dif:dif(X, Y)]
+    ;  []
+    ),
+    gather_dif_goals(V, Goals).
 
 attribute_goals(X) -->
     { get_atts(X, +dif(Goals)) },
-    gather_dif_goals(Goals),
+    gather_dif_goals(X, Goals),
     { put_atts(X, -dif(_)) }.
