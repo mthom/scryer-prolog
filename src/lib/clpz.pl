@@ -7711,7 +7711,7 @@ attributes_goals([]) --> [].
 attributes_goals([propagator(P, State)|As]) -->
         (   { ground(State) } -> []
         ;   { phrase(attribute_goal_(P), Gs) } ->
-            { % del_attr(State, clpz_aux), State = processed,
+            { del_attr(State, clpz_aux), State = processed,
               (   monotonic ->
                   maplist(unwrap_with(bare_integer), Gs, Gs1)
               ;   maplist(unwrap_with(=), Gs, Gs1)
@@ -7822,7 +7822,7 @@ conjunction(A, B, G, D) -->
 
 original_goal(original_goal(State, Goal)) -->
         (   { var(State) } ->
-%            { State = processed },
+            { State = processed },
             [Goal]
         ;   []
         ).
