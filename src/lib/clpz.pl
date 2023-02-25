@@ -220,31 +220,23 @@ partition_([X|Xs], Pred, Ls0, Es0, Gs0) :-
 
 :- meta_predicate(include(1, ?, ?)).
 
-include(Goal, Ls0, Ls) :-
-        include_(Ls0, Goal, Ls).
-
-include_([], _, []).
-include_([L|Ls0], Goal, Ls) :-
+include(_, [], []).
+include(Goal, [L|Ls0], Ls) :-
         (   call(Goal, L) ->
             Ls = [L|Rest]
         ;   Ls = Rest
         ),
-        include_(Ls0, Goal, Rest).
-
+        include(Goal, Ls0, Rest).
 
 :- meta_predicate(exclude(1, ?, ?)).
 
-exclude(Goal, Ls0, Ls) :-
-        exclude_(Ls0, Goal, Ls).
-
-exclude_([], _, []).
-exclude_([L|Ls0], Goal, Ls) :-
+exclude(_, [], []).
+exclude(Goal, [L|Ls0], Ls) :-
         (   call(Goal, L) ->
             Ls = Rest
         ;   Ls = [L|Rest]
         ),
-        exclude_(Ls0, Goal, Rest).
-
+        exclude(Goal, Ls0, Rest).
 
 %:- discontiguous clpz:goal_expansion/5.
 
