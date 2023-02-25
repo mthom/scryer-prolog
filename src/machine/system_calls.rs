@@ -4288,9 +4288,10 @@ impl Machine {
 			    return Ok(());
 			},
 			Err(e) => {
-			    // throw error
-			    self.machine_st.fail = true;
-			    return Ok(());
+			    let stub = functor_stub(atom!("current_input"), 1);
+			    let err = self.machine_st.ffi_error(e);
+
+                            return Err(self.machine_st.error_form(err, stub));
 			}
 		    }
 		}

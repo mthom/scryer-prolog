@@ -120,61 +120,32 @@ impl ForeignFunctionTable {
 	Ok(())
     }
 
-    fn build_pointer_args(mut args: &mut Vec<Value>, type_args: &Vec<*mut ffi_type>, structs_table: &mut HashMap<String, StructImpl>) -> Result<PointerArgs, FFIError> {
+    fn build_pointer_args(args: &mut Vec<Value>, type_args: &Vec<*mut ffi_type>, structs_table: &mut HashMap<String, StructImpl>) -> Result<PointerArgs, FFIError> {
 	let mut pointers = Vec::with_capacity(args.len());
 	let mut memory = Vec::new();
 	for i in 0..args.len() {
 	    let field_type = type_args[i];
 	    unsafe {
+		macro_rules! push_int {
+		    ($type:ty) => {
+			{
+			    let n: $type = <$type>::try_from(args[i].as_int()?).map_err(|_| FFIError::ValueDontFit)?;
+			    let mut box_value = Box::new(n) as Box<dyn Any>;
+			    pointers.push(&mut *box_value as *mut _ as *mut c_void);
+			    memory.push(box_value);
+			}
+		    }
+		}
+		
 		match (*field_type).type_ as u32 {
-		    libffi::raw::FFI_TYPE_UINT8 => {
-			let n: u8 = u8::try_from(args[i].as_int()?).map_err(|_| FFIError::ValueDontFit)?;
-			let mut box_value = Box::new(n) as Box<dyn Any>;
-			pointers.push(&mut *box_value as *mut _ as *mut c_void);
-			memory.push(box_value);
-		    },
-		    libffi::raw::FFI_TYPE_SINT8 => {
-			let n: i8 = i8::try_from(args[i].as_int()?).map_err(|_| FFIError::ValueDontFit)?;
-			let mut box_value = Box::new(n) as Box<dyn Any>;
-			pointers.push(&mut *box_value as *mut _ as *mut c_void);
-			memory.push(box_value);
-		    },
-		    libffi::raw::FFI_TYPE_UINT16 => {
-			let n: u16 = u16::try_from(args[i].as_int()?).map_err(|_| FFIError::ValueDontFit)?;
-			let mut box_value = Box::new(n) as Box<dyn Any>;
-			pointers.push(&mut *box_value as *mut _ as *mut c_void);
-			memory.push(box_value);
-		    },
-		    libffi::raw::FFI_TYPE_SINT16 => {
-			let n: i16 = i16::try_from(args[i].as_int()?).map_err(|_| FFIError::ValueDontFit)?;
-			let mut box_value = Box::new(n) as Box<dyn Any>;
-			pointers.push(&mut *box_value as *mut _ as *mut c_void);
-			memory.push(box_value);
-		    },
-		    libffi::raw::FFI_TYPE_UINT32 => {
-			let n: u32 = u32::try_from(args[i].as_int()?).map_err(|_| FFIError::ValueDontFit)?;
-			let mut box_value = Box::new(n) as Box<dyn Any>;
-			pointers.push(&mut *box_value as *mut _ as *mut c_void);
-			memory.push(box_value);
-		    },
-		    libffi::raw::FFI_TYPE_SINT32 => {
-			let n: i32 = i32::try_from(args[i].as_int()?).map_err(|_| FFIError::ValueDontFit)?;
-			let mut box_value = Box::new(n) as Box<dyn Any>;
-			pointers.push(&mut *box_value as *mut _ as *mut c_void);
-			memory.push(box_value);
-		    },
-		    libffi::raw::FFI_TYPE_UINT64 => {
-			let n: u64 = u64::try_from(args[i].as_int()?).map_err(|_| FFIError::ValueDontFit)?;
-			let mut box_value = Box::new(n) as Box<dyn Any>;
-			pointers.push(&mut *box_value as *mut _ as *mut c_void);
-			memory.push(box_value);
-		    },
-		    libffi::raw::FFI_TYPE_SINT64 => {
-			let n: i64 = args[i].as_int()?;
-			let mut box_value = Box::new(n) as Box<dyn Any>;
-			pointers.push(&mut *box_value as *mut _ as *mut c_void);
-			memory.push(box_value);
-		    },
+		    libffi::raw::FFI_TYPE_UINT8 => push_int!(u8),
+		    libffi::raw::FFI_TYPE_SINT8 => push_int!(i8),
+		    libffi::raw::FFI_TYPE_UINT16 => push_int!(u16),
+		    libffi::raw::FFI_TYPE_SINT16 => push_int!(i16),
+		    libffi::raw::FFI_TYPE_UINT32 => push_int!(u32),
+		    libffi::raw::FFI_TYPE_SINT32 => push_int!(i32),
+		    libffi::raw::FFI_TYPE_UINT64 => push_int!(u64),
+		    libffi::raw::FFI_TYPE_SINT64 => push_int!(i64),
 		    libffi::raw::FFI_TYPE_FLOAT => {
 			let n: f32 = args[i].as_float()? as f32;
 			let mut box_value = Box::new(n) as Box<dyn Any>;
@@ -193,34 +164,46 @@ impl ForeignFunctionTable {
 		    },
 		    libffi::raw::FFI_TYPE_STRUCT => {
 			match args[i] {
-			    Value::Struct(ref name, ref struct_args) => {
+			    Value::Struct(ref name, ref mut struct_args) => {
 				if let Some(ref mut struct_type) = structs_table.get_mut(name) {
 				    let layout = Layout::from_size_align(struct_type.ffi_type.size, struct_type.ffi_type.alignment.into()).unwrap();
 				    let ptr = alloc(layout) as *mut c_void;
 				    let mut field_ptr = ptr;
+				    
 				    for i in 0..(struct_type.fields.len()-1) {
+				        macro_rules! try_write_int {
+					    ($type:ty) => {
+						{
+						    let n: $type = <$type>::try_from(struct_args[i].as_int()?).map_err(|_| FFIError::ValueDontFit)?;
+						    std::ptr::write(field_ptr as *mut $type, n);
+						    field_ptr = field_ptr.add(std::mem::size_of::<$type>());
+						}
+					    }
+					}
+
+					macro_rules! write {
+					    ($type:ty, $value:expr) => {
+						{
+						    let data: $type = $value;
+						    std::ptr::write(field_ptr as *mut $type, data);
+						    field_ptr = field_ptr.add(std::mem::size_of::<$type>());
+						}
+					    }
+					}
+
 					let field = struct_type.fields[i];
 					match (*field).type_ as u32 {
-					    libffi::raw::FFI_TYPE_UINT8 => {
-						let n: u8 = u8::try_from(struct_args[i].as_int()?).map_err(|_| FFIError::ValueDontFit)?;
-						std::ptr::write(field_ptr as *mut u8, n);
-						field_ptr = field_ptr.add(std::mem::size_of::<u8>());
-					    },
-					    libffi::raw::FFI_TYPE_UINT32 => {
-						let n: u32 = u32::try_from(struct_args[i].as_int()?).map_err(|_| FFIError::ValueDontFit)?;
-						std::ptr::write(field_ptr as *mut u32, n);
-						field_ptr = field_ptr.add(std::mem::size_of::<u32>());
-					    },
-					    libffi::raw::FFI_TYPE_SINT32 => {
-						let n: u32 = u32::try_from(struct_args[i].as_int()?).map_err(|_| FFIError::ValueDontFit)?;
-						std::ptr::write(field_ptr as *mut u32, n);
-						field_ptr = field_ptr.add(std::mem::size_of::<u32>());
-					    },					    
-					    libffi::raw::FFI_TYPE_FLOAT => {
-						let n: f32 = struct_args[i].as_float()? as f32;
-						std::ptr::write(field_ptr as *mut f32, n);
-						field_ptr = field_ptr.add(std::mem::size_of::<f32>());
-					    },
+					    libffi::raw::FFI_TYPE_UINT8 => try_write_int!(u8),
+					    libffi::raw::FFI_TYPE_SINT8 => try_write_int!(i8),
+					    libffi::raw::FFI_TYPE_UINT16 => try_write_int!(u16),
+					    libffi::raw::FFI_TYPE_SINT16 => try_write_int!(i16),
+					    libffi::raw::FFI_TYPE_UINT32 => try_write_int!(u32),
+					    libffi::raw::FFI_TYPE_SINT32 => try_write_int!(i32),
+					    libffi::raw::FFI_TYPE_UINT64 => try_write_int!(u64),
+					    libffi::raw::FFI_TYPE_SINT64 => try_write_int!(i64),
+					    libffi::raw::FFI_TYPE_POINTER => write!(*mut c_void, struct_args[i].as_ptr()?),
+					    libffi::raw::FFI_TYPE_FLOAT => write!(f32, struct_args[i].as_float()? as f32),
+					    libffi::raw::FFI_TYPE_DOUBLE => write!(f64, struct_args[i].as_float()?),
 					    _ => {
 						unreachable!()
 					    }
@@ -247,42 +230,66 @@ impl ForeignFunctionTable {
 
     pub fn exec(&mut self, name: &str, mut args: Vec<Value>) -> Result<Value, FFIError> {
 	let function_impl = self.table.get_mut(name).ok_or(FFIError::FunctionNotFound)?;
-	let mut pointer_args = Self::build_pointer_args(&mut args, &function_impl.args, &mut self.structs).unwrap();
+	let mut pointer_args = Self::build_pointer_args(&mut args, &function_impl.args, &mut self.structs)?;
+	
 	return unsafe {
+	    macro_rules! call_and_return {
+		($type:ty) => {
+		    {
+			let mut n: Box<u8> = Box::new(0);
+			libffi::raw::ffi_call(
+			    &mut function_impl.cif,
+			    Some(*function_impl.code_ptr.as_safe_fun()),
+			    &mut *n as *mut _ as *mut c_void,
+			    pointer_args.pointers.as_mut_ptr() as *mut *mut c_void
+			);
+			Ok(Value::Int(i64::from(*n)))
+		    }
+		}
+	    }
+	    
 	    match (*function_impl.cif.rtype).type_ as u32 {
-		libffi::raw::FFI_TYPE_VOID => {
-		    let mut _n: Box<i32> = Box::new(0);
+		libffi::raw::FFI_TYPE_VOID => call_and_return!(i32),
+		libffi::raw::FFI_TYPE_UINT8 => call_and_return!(u8),
+		libffi::raw::FFI_TYPE_SINT8 => call_and_return!(i8),
+		libffi::raw::FFI_TYPE_UINT16 => call_and_return!(u16),
+		libffi::raw::FFI_TYPE_SINT16 => call_and_return!(i16),
+		libffi::raw::FFI_TYPE_UINT32 => call_and_return!(u32),
+		libffi::raw::FFI_TYPE_SINT32 => call_and_return!(i32),
+		libffi::raw::FFI_TYPE_UINT64 => {
+		    let mut n: Box<u64> = Box::new(0);
 		    libffi::raw::ffi_call(
 			&mut function_impl.cif,
 			Some(*function_impl.code_ptr.as_safe_fun()),
-			&mut *_n as *mut _ as *mut c_void,
+			&mut *n as *mut _ as *mut c_void,
 			pointer_args.pointers.as_mut_ptr() as *mut *mut c_void
 		    );
-		    Ok(Value::Int(0))
+		    Ok(Value::Int(i64::try_from(*n).map_err(|_| FFIError::ValueDontFit)?))
 		},
-		libffi::raw::FFI_TYPE_SINT8 => {
-		    let mut n: Box<i8> = Box::new(0);
+		libffi::raw::FFI_TYPE_SINT64 => call_and_return!(i64),
+		libffi::raw::FFI_TYPE_FLOAT => {
+		    let mut n: Box<f32> = Box::new(0.0);
 		    libffi::raw::ffi_call(
 			&mut function_impl.cif,
 			Some(*function_impl.code_ptr.as_safe_fun()),
 			&mut *n as *mut _ as *mut c_void,
 			pointer_args.pointers.as_mut_ptr() as *mut *mut c_void
 		    );
-		    Ok(Value::Int(i64::from(*n)))
-		},		    
-		libffi::raw::FFI_TYPE_SINT32 => {
-		    let mut n: Box<i32> = Box::new(0);
+		    Ok(Value::Float((*n).into()))
+		},
+		libffi::raw::FFI_TYPE_DOUBLE => {
+		    let mut n: Box<f64> = Box::new(0.0);
 		    libffi::raw::ffi_call(
 			&mut function_impl.cif,
 			Some(*function_impl.code_ptr.as_safe_fun()),
 			&mut *n as *mut _ as *mut c_void,
 			pointer_args.pointers.as_mut_ptr() as *mut *mut c_void
 		    );
-		    Ok(Value::Int(i64::from(*n)))
+		    Ok(Value::Float(*n))
 		},
 		libffi::raw::FFI_TYPE_STRUCT => {
 		    let mut returns = Vec::new();
-		    let mut struct_type = self.structs.get_mut(&function_impl.return_struct_name.clone().ok_or(FFIError::StructNotFound)?).ok_or(FFIError::StructNotFound)?;
+		    let struct_type = self.structs.get_mut(&function_impl.return_struct_name.clone().ok_or(FFIError::StructNotFound)?).ok_or(FFIError::StructNotFound)?;
 		    let layout = Layout::from_size_align(struct_type.ffi_type.size, struct_type.ffi_type.alignment.into()).unwrap();
 		    let ptr = alloc(layout) as *mut c_void;
 		    libffi::raw::ffi_call(
@@ -292,25 +299,33 @@ impl ForeignFunctionTable {
 			pointer_args.pointers.as_mut_ptr() as *mut *mut c_void
 		    );
 
-		    let mut field_ptr = ptr;
+    		    let mut field_ptr = ptr;
+		    
+		    macro_rules! read_and_push_int {
+			($type:ty) => {
+			    {
+				let n = std::ptr::read(field_ptr as *mut $type);
+				returns.push(Value::Int(i64::from(n)));
+				field_ptr = field_ptr.add(std::mem::size_of::<$type>());
+			    }
+			}
+		    }
+
 		    for i in 0..(struct_type.fields.len()-1) {
 			let field = struct_type.fields[i];
 			match (*field).type_ as u32 {
-			    libffi::raw::FFI_TYPE_UINT8 => {
-				let n = std::ptr::read(field_ptr as *mut u8);
-				returns.push(Value::Int(i64::from(n)));
-				field_ptr = field_ptr.add(std::mem::size_of::<u8>());
+			    libffi::raw::FFI_TYPE_UINT8 => read_and_push_int!(u8),
+			    libffi::raw::FFI_TYPE_SINT8 => read_and_push_int!(i8),
+			    libffi::raw::FFI_TYPE_UINT16 => read_and_push_int!(u16),
+			    libffi::raw::FFI_TYPE_SINT16 => read_and_push_int!(i16),
+			    libffi::raw::FFI_TYPE_UINT32 => read_and_push_int!(u32),
+			    libffi::raw::FFI_TYPE_SINT32 => read_and_push_int!(i32),
+			    libffi::raw::FFI_TYPE_UINT64 => {
+				let n = std::ptr::read(field_ptr as *mut u64);
+				returns.push(Value::Int(i64::try_from(n).map_err(|_| FFIError::ValueDontFit)?));
+				field_ptr = field_ptr.add(std::mem::size_of::<u64>());
 			    },
-			    libffi::raw::FFI_TYPE_SINT32 => {
-				let n = std::ptr::read(field_ptr as *mut i32);
-				returns.push(Value::Int(i64::from(n)));
-				field_ptr = field_ptr.add(std::mem::size_of::<i32>());
-			    },
-			    libffi::raw::FFI_TYPE_UINT32 => {
-				let n = std::ptr::read(field_ptr as *mut u32);
-				returns.push(Value::Int(i64::from(n)));
-				field_ptr = field_ptr.add(std::mem::size_of::<u32>());
-			    },
+			    libffi::raw::FFI_TYPE_SINT64 => read_and_push_int!(i64),
 			    _ => {
 				unreachable!()
 			    }
