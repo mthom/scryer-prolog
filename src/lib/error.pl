@@ -1,5 +1,5 @@
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   Written 2018-2022 by Markus Triska (triska@metalevel.at)
+   Written 2018-2023 by Markus Triska (triska@metalevel.at)
    I place this code in the public domain. Use it in any way you want.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
@@ -85,11 +85,11 @@ must_be_(list, Term)    :- check_(error:ilist, list, Term).
 must_be_(type, Term)    :- check_(error:type, type, Term).
 must_be_(boolean, Term) :- check_(error:boolean, boolean, Term).
 must_be_(term, Term)    :-
-        (   \+ ground(Term) ->
-            instantiation_error(must_be/2)
-        ;   \+ acyclic_term(Term) ->
-            type_error(term, Term, must_be/2)
-        ;   true
+        (   acyclic_term(Term) ->
+            (   ground(Term) ->  true
+            ;   instantiation_error(must_be/2)
+            )
+        ;   type_error(term, Term, must_be/2)
         ).
 
 % We cannot use maplist(must_be(character), Cs), because library(lists)
