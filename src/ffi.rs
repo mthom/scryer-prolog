@@ -30,15 +30,16 @@ pub struct ForeignFunctionTable {
     structs: HashMap<String, StructImpl>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 struct StructImpl {
     ffi_type: ffi_type,
     fields: Vec<*mut ffi_type>,
+    atom_fields: Vec<Atom>,
 }
 
 struct PointerArgs {
     pointers: Vec<*mut c_void>,
-    memory: Vec<Box<dyn Any>>,
+    _memory: Vec<Box<dyn Any>>,
 }
 
 impl ForeignFunctionTable {
@@ -46,41 +47,41 @@ impl ForeignFunctionTable {
 	self.table.extend(other.table);
     }
 
-    pub fn define_struct(&mut self, name: &str, fields: Vec<Atom>) {
-	let mut fields: Vec<_> = fields.iter().map(|x| self.map_type_ffi(&x)).collect();
+    pub fn define_struct(&mut self, name: &str, atom_fields: Vec<Atom>) {
+	let mut fields: Vec<_> = atom_fields.iter().map(|x| self.map_type_ffi(&x)).collect();
 	fields.push(std::ptr::null_mut::<ffi_type>());
 	let mut struct_type: ffi_type = Default::default();
 	struct_type.type_ = type_tag::STRUCT;
 	struct_type.elements = fields.as_mut_ptr();
-	self.structs.insert(name.to_string(), StructImpl { ffi_type: struct_type, fields});
+	self.structs.insert(name.to_string(), StructImpl { ffi_type: struct_type, fields, atom_fields});
     }
 
     fn map_type_ffi(&mut self, source: &Atom) -> *mut ffi_type {
 	unsafe {
-	match source {
-	    atom!("sint64") => &mut types::sint64,
-	    atom!("sint32") => &mut types::sint32,
-	    atom!("sint16") => &mut types::sint16,
-	    atom!("sint8") => &mut types::sint8,
-	    atom!("uint64") => &mut types::uint64,
-	    atom!("uint32") => &mut types::uint32,
-	    atom!("uint16") => &mut types::uint16,
-	    atom!("uint8") => &mut types::uint8,
-	    atom!("bool") => &mut types::sint8,
-	    atom!("void") => &mut types::void,
-	    atom!("cstr") => &mut types::pointer,
-	    atom!("ptr") => &mut types::pointer,
-	    atom!("f32") => &mut types::float,
-	    atom!("f64") => &mut types::double,
-	    struct_name => {
-		match self.structs.get_mut(struct_name.as_str()) {
-		    Some(ref mut struct_type) => {
-			&mut struct_type.ffi_type
-		    },
-		    None => unreachable!()
+	    match source {
+		atom!("sint64") => &mut types::sint64,
+		atom!("sint32") => &mut types::sint32,
+		atom!("sint16") => &mut types::sint16,
+		atom!("sint8") => &mut types::sint8,
+		atom!("uint64") => &mut types::uint64,
+		atom!("uint32") => &mut types::uint32,
+		atom!("uint16") => &mut types::uint16,
+		atom!("uint8") => &mut types::uint8,
+		atom!("bool") => &mut types::sint8,
+		atom!("void") => &mut types::void,
+		atom!("cstr") => &mut types::pointer,
+		atom!("ptr") => &mut types::pointer,
+		atom!("f32") => &mut types::float,
+		atom!("f64") => &mut types::double,
+		struct_name => {
+		    match self.structs.get_mut(struct_name.as_str()) {
+			Some(ref mut struct_type) => {
+			    &mut struct_type.ffi_type
+			},
+			None => unreachable!()
+		    }
 		}
 	    }
-	}
 	}
     }
 
@@ -122,7 +123,7 @@ impl ForeignFunctionTable {
 
     fn build_pointer_args(args: &mut Vec<Value>, type_args: &Vec<*mut ffi_type>, structs_table: &mut HashMap<String, StructImpl>) -> Result<PointerArgs, FFIError> {
 	let mut pointers = Vec::with_capacity(args.len());
-	let mut memory = Vec::new();
+	let mut _memory = Vec::new();
 	for i in 0..args.len() {
 	    let field_type = type_args[i];
 	    unsafe {
@@ -132,7 +133,7 @@ impl ForeignFunctionTable {
 			    let n: $type = <$type>::try_from(args[i].as_int()?).map_err(|_| FFIError::ValueDontFit)?;
 			    let mut box_value = Box::new(n) as Box<dyn Any>;
 			    pointers.push(&mut *box_value as *mut _ as *mut c_void);
-			    memory.push(box_value);
+			    _memory.push(box_value);
 			}
 		    }
 		}
@@ -150,73 +151,22 @@ impl ForeignFunctionTable {
 			let n: f32 = args[i].as_float()? as f32;
 			let mut box_value = Box::new(n) as Box<dyn Any>;
 			pointers.push(&mut *box_value as *mut _ as *mut c_void);
-			memory.push(box_value);
+			_memory.push(box_value);
 		    },
 		    libffi::raw::FFI_TYPE_DOUBLE => {
 			let n: f64 = args[i].as_float()?;
 			let mut box_value = Box::new(n) as Box<dyn Any>;
 			pointers.push(&mut *box_value as *mut _ as *mut c_void);
-			memory.push(box_value);
+			_memory.push(box_value);
 		    },
 		    libffi::raw::FFI_TYPE_POINTER => {
 			let ptr: *mut c_void = args[i].as_ptr()?;
 			pointers.push(ptr);
 		    },
 		    libffi::raw::FFI_TYPE_STRUCT => {
-			match args[i] {
-			    Value::Struct(ref name, ref mut struct_args) => {
-				if let Some(ref mut struct_type) = structs_table.get_mut(name) {
-				    let layout = Layout::from_size_align(struct_type.ffi_type.size, struct_type.ffi_type.alignment.into()).unwrap();
-				    let ptr = alloc(layout) as *mut c_void;
-				    let mut field_ptr = ptr;
-				    
-				    for i in 0..(struct_type.fields.len()-1) {
-				        macro_rules! try_write_int {
-					    ($type:ty) => {
-						{
-						    let n: $type = <$type>::try_from(struct_args[i].as_int()?).map_err(|_| FFIError::ValueDontFit)?;
-						    std::ptr::write(field_ptr as *mut $type, n);
-						    field_ptr = field_ptr.add(std::mem::size_of::<$type>());
-						}
-					    }
-					}
-
-					macro_rules! write {
-					    ($type:ty, $value:expr) => {
-						{
-						    let data: $type = $value;
-						    std::ptr::write(field_ptr as *mut $type, data);
-						    field_ptr = field_ptr.add(std::mem::size_of::<$type>());
-						}
-					    }
-					}
-
-					let field = struct_type.fields[i];
-					match (*field).type_ as u32 {
-					    libffi::raw::FFI_TYPE_UINT8 => try_write_int!(u8),
-					    libffi::raw::FFI_TYPE_SINT8 => try_write_int!(i8),
-					    libffi::raw::FFI_TYPE_UINT16 => try_write_int!(u16),
-					    libffi::raw::FFI_TYPE_SINT16 => try_write_int!(i16),
-					    libffi::raw::FFI_TYPE_UINT32 => try_write_int!(u32),
-					    libffi::raw::FFI_TYPE_SINT32 => try_write_int!(i32),
-					    libffi::raw::FFI_TYPE_UINT64 => try_write_int!(u64),
-					    libffi::raw::FFI_TYPE_SINT64 => try_write_int!(i64),
-					    libffi::raw::FFI_TYPE_POINTER => write!(*mut c_void, struct_args[i].as_ptr()?),
-					    libffi::raw::FFI_TYPE_FLOAT => write!(f32, struct_args[i].as_float()? as f32),
-					    libffi::raw::FFI_TYPE_DOUBLE => write!(f64, struct_args[i].as_float()?),
-					    _ => {
-						unreachable!()
-					    }
-					}
-				    }
-				    pointers.push(ptr);
-				    memory.push(Box::from_raw(ptr));
-				} else {
-				    return Err(FFIError::InvalidStructName);
-				}
-			    }
-			    _ => return Err(FFIError::ValueCast)
-			}
+			let (mut ptr, _size, _align) = Self::build_struct(&mut args[i], structs_table)?;
+			pointers.push(&mut *ptr as *mut _ as *mut c_void);
+			_memory.push(ptr);
 		    },
 		    _ => return Err(FFIError::InvalidFFIType)
 		}
@@ -224,8 +174,76 @@ impl ForeignFunctionTable {
 	}
 	Ok(PointerArgs {
 	    pointers,
-	    memory
+	    _memory
 	})
+    }
+
+    fn build_struct(arg: &mut Value, structs_table: &mut HashMap<String, StructImpl>) -> Result<(Box<dyn Any>, usize, usize), FFIError> {
+	unsafe {
+        match arg {
+	    Value::Struct(ref name, ref mut struct_args) => {
+		if let Some(ref mut struct_type) = structs_table.clone().get_mut(name) {
+		    let layout = Layout::from_size_align(struct_type.ffi_type.size, struct_type.ffi_type.alignment.into()).unwrap();
+		    let align = struct_type.ffi_type.alignment as usize;
+		    let size = struct_type.ffi_type.size;
+		    let ptr = alloc(layout) as *mut c_void;
+		    let mut field_ptr = ptr;
+
+		    for i in 0..(struct_type.fields.len()-1) {
+			macro_rules! try_write_int {
+			    ($type:ty) => {
+				{
+				    field_ptr = field_ptr.add(field_ptr.align_offset(std::mem::align_of::<$type>()));
+				    let n: $type = <$type>::try_from(struct_args[i].as_int()?).map_err(|_| FFIError::ValueDontFit)?;
+				    std::ptr::write(field_ptr as *mut $type, n);
+				    field_ptr = field_ptr.add(std::mem::size_of::<$type>());
+				}
+			    }
+			}
+
+			macro_rules! write {
+			    ($type:ty, $value:expr) => {
+				{
+				    let data: $type = $value;
+				    std::ptr::write(field_ptr as *mut $type, data);
+				    field_ptr = field_ptr.add(align);
+				}
+			    }
+			}
+
+			let field = struct_type.fields[i];
+			match (*field).type_ as u32 {
+			    libffi::raw::FFI_TYPE_UINT8 => try_write_int!(u8),
+			    libffi::raw::FFI_TYPE_SINT8 => try_write_int!(i8),
+			    libffi::raw::FFI_TYPE_UINT16 => try_write_int!(u16),
+			    libffi::raw::FFI_TYPE_SINT16 => try_write_int!(i16),
+			    libffi::raw::FFI_TYPE_UINT32 => try_write_int!(u32),
+			    libffi::raw::FFI_TYPE_SINT32 => try_write_int!(i32),
+			    libffi::raw::FFI_TYPE_UINT64 => try_write_int!(u64),
+			    libffi::raw::FFI_TYPE_SINT64 => try_write_int!(i64),
+			    libffi::raw::FFI_TYPE_POINTER => write!(*mut c_void, struct_args[i].as_ptr()?),
+			    libffi::raw::FFI_TYPE_FLOAT => write!(f32, struct_args[i].as_float()? as f32),
+			    libffi::raw::FFI_TYPE_DOUBLE => write!(f64, struct_args[i].as_float()?),
+			    libffi::raw::FFI_TYPE_STRUCT => {
+				let (struct_ptr, struct_size, struct_align) = Self::build_struct(&mut struct_args[i], structs_table)?;
+				field_ptr = field_ptr.add(field_ptr.align_offset(struct_align));
+				
+				std::ptr::copy(& *struct_ptr as *const _ as *const c_void, field_ptr as *mut c_void, struct_size);
+				field_ptr = field_ptr.add(struct_size);
+			    },
+			    _ => {
+				unreachable!()
+			    }
+			}
+		    }
+		    return Ok((Box::from_raw(ptr), size, align));
+		} else {
+		    return Err(FFIError::InvalidStructName);
+		}
+	    }
+	    _ => return Err(FFIError::ValueCast)
+	}
+	}
     }
 
     pub fn exec(&mut self, name: &str, mut args: Vec<Value>) -> Result<Value, FFIError> {
@@ -288,55 +306,74 @@ impl ForeignFunctionTable {
 		    Ok(Value::Float(*n))
 		},
 		libffi::raw::FFI_TYPE_STRUCT => {
-		    let mut returns = Vec::new();
-		    let struct_type = self.structs.get_mut(&function_impl.return_struct_name.clone().ok_or(FFIError::StructNotFound)?).ok_or(FFIError::StructNotFound)?;
+		    let name = &function_impl.return_struct_name.clone().ok_or(FFIError::StructNotFound)?;
+		    let struct_type = self.structs.get(name).ok_or(FFIError::StructNotFound)?;
 		    let layout = Layout::from_size_align(struct_type.ffi_type.size, struct_type.ffi_type.alignment.into()).unwrap();
 		    let ptr = alloc(layout) as *mut c_void;
+
 		    libffi::raw::ffi_call(
 			&mut function_impl.cif,
 			Some(*function_impl.code_ptr.as_safe_fun()),
 			&mut *ptr as *mut _ as *mut c_void,
 			pointer_args.pointers.as_mut_ptr() as *mut *mut c_void
 		    );
-
-    		    let mut field_ptr = ptr;
-		    
-		    macro_rules! read_and_push_int {
-			($type:ty) => {
-			    {
-				let n = std::ptr::read(field_ptr as *mut $type);
-				returns.push(Value::Int(i64::from(n)));
-				field_ptr = field_ptr.add(std::mem::size_of::<$type>());
-			    }
-			}
-		    }
-
-		    for i in 0..(struct_type.fields.len()-1) {
-			let field = struct_type.fields[i];
-			match (*field).type_ as u32 {
-			    libffi::raw::FFI_TYPE_UINT8 => read_and_push_int!(u8),
-			    libffi::raw::FFI_TYPE_SINT8 => read_and_push_int!(i8),
-			    libffi::raw::FFI_TYPE_UINT16 => read_and_push_int!(u16),
-			    libffi::raw::FFI_TYPE_SINT16 => read_and_push_int!(i16),
-			    libffi::raw::FFI_TYPE_UINT32 => read_and_push_int!(u32),
-			    libffi::raw::FFI_TYPE_SINT32 => read_and_push_int!(i32),
-			    libffi::raw::FFI_TYPE_UINT64 => {
-				let n = std::ptr::read(field_ptr as *mut u64);
-				returns.push(Value::Int(i64::try_from(n).map_err(|_| FFIError::ValueDontFit)?));
-				field_ptr = field_ptr.add(std::mem::size_of::<u64>());
-			    },
-			    libffi::raw::FFI_TYPE_SINT64 => read_and_push_int!(i64),
-			    _ => {
-				unreachable!()
-			    }
-			}
-		    }
+		    let struct_val = self.read_struct(ptr, name, struct_type);
 		    drop(Box::from_raw(ptr));
-		    Ok(Value::Struct("texture".into(), returns))
-		},
+		    struct_val
+		}
 	    _ => unreachable!()
 	    }
 	};
+    }
+
+    fn read_struct(&self, ptr: *mut c_void, name: &str, struct_type: &StructImpl) -> Result<Value, FFIError> {
+	unsafe {
+	    let mut returns = Vec::new();
+	    let mut field_ptr = ptr;
+
+	    for i in 0..(struct_type.fields.len()-1) {
+		let field = struct_type.fields[i];
+
+		macro_rules! read_and_push_int {
+		    ($type:ty) => {
+			{
+			    field_ptr = field_ptr.add(field_ptr.align_offset(std::mem::align_of::<$type>()));
+			    let n = std::ptr::read(field_ptr as *mut $type);
+			    returns.push(Value::Int(i64::from(n)));
+			    field_ptr = field_ptr.add(std::mem::size_of::<$type>());
+			}
+		    }
+		}
+
+		match (*field).type_ as u32 {
+		    libffi::raw::FFI_TYPE_UINT8 => read_and_push_int!(u8),
+		    libffi::raw::FFI_TYPE_SINT8 => read_and_push_int!(i8),
+		    libffi::raw::FFI_TYPE_UINT16 => read_and_push_int!(u16),
+		    libffi::raw::FFI_TYPE_SINT16 => read_and_push_int!(i16),
+		    libffi::raw::FFI_TYPE_UINT32 => read_and_push_int!(u32),
+		    libffi::raw::FFI_TYPE_SINT32 => read_and_push_int!(i32),
+		    libffi::raw::FFI_TYPE_UINT64 => {
+			field_ptr = field_ptr.add(field_ptr.align_offset(std::mem::align_of::<u64>()));
+			let n = std::ptr::read(field_ptr as *mut u64);
+			returns.push(Value::Int(i64::try_from(n).map_err(|_| FFIError::ValueDontFit)?));
+			field_ptr = field_ptr.add(std::mem::size_of::<u64>());
+		    },
+		    libffi::raw::FFI_TYPE_SINT64 => read_and_push_int!(i64),
+		    libffi::raw::FFI_TYPE_STRUCT => {
+			let substruct = struct_type.atom_fields[i].as_str();
+			let struct_type = self.structs.get(substruct).ok_or(FFIError::StructNotFound)?;
+			field_ptr = field_ptr.add(field_ptr.align_offset(struct_type.ffi_type.alignment as usize));
+			let struct_val = self.read_struct(field_ptr, substruct, struct_type);
+			returns.push(struct_val?);
+			field_ptr = field_ptr.add(struct_type.ffi_type.size);
+		    },
+		    _ => {
+			unreachable!()
+		    }
+		}
+	    }
+	    Ok(Value::Struct(name.into(), returns))
+	}
     }
 }
 

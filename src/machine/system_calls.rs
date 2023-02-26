@@ -4257,6 +4257,7 @@ impl Machine {
 		    }
 		}
 	    }
+	  
 	    match self.machine_st.try_from_list(args_reg, stub_gen) {
 		Ok(args) => {
 		    let args: Vec<_> = args.into_iter().map(|x| map_arg(&mut self.machine_st, x)).collect();
@@ -4264,22 +4265,9 @@ impl Machine {
 			Ok(result) => {
 			    match result {
 				Value::Int(n) => self.machine_st.unify_fixnum(Fixnum::build_with(n), return_value),
-				Value::Struct(name, mut args) => {
-				    args.insert(0, Value::CString(CString::new(name).unwrap()));
-				    let struct_list = heap_loc_as_cell!(
-					iter_to_heap_list(
-					    &mut self.machine_st.heap,
-					    args.into_iter()
-						.map(|val| {
-						    match val {
-							Value::Int(n) => fixnum_as_cell!(Fixnum::build_with(n)),
-							Value::CString(cstr) => atom_as_cell!(self.machine_st.atom_tbl.build_with(&cstr.into_string().unwrap())),
-							_ => unreachable!()
-						    }
-						}),
-					)
-				    );
-				    unify!(self.machine_st, return_value, struct_list);
+				Value::Struct(name, args) => {
+				    let struct_value = self.build_struct(&name, args);
+				    unify!(self.machine_st, return_value, struct_value);
 				}
 				_ => {
 				    unreachable!();
@@ -4300,6 +4288,26 @@ impl Machine {
 	}
 	self.machine_st.fail = true;
 	Ok(())
+    }
+
+    fn build_struct(&mut self, name: &str, mut args: Vec<Value>) -> HeapCellValue {
+	args.insert(0, Value::CString(CString::new(name).unwrap()));
+	let cells: Vec<_> = args.into_iter()
+	    .map(|val| {
+		match val {
+			    Value::Int(n) => fixnum_as_cell!(Fixnum::build_with(n)),
+			    Value::CString(cstr) => atom_as_cell!(self.machine_st.atom_tbl.build_with(&cstr.into_string().unwrap())),
+			    Value::Struct(name, struct_args) => self.build_struct(&name, struct_args),
+			    _ => unreachable!()
+		}
+	    }).collect();
+		
+	heap_loc_as_cell!(
+	    iter_to_heap_list(
+		&mut self.machine_st.heap,
+		cells.into_iter()
+	    )
+        )
     }
 
     #[inline(always)]
