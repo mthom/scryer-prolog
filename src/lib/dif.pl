@@ -23,13 +23,22 @@ dif_set_variables([Var|Vars], X, Y) :-
     put_dif_att(Var, X, Y),
     dif_set_variables(Vars, X, Y).
 
+filter_non_unifiable_goals([]) --> [].
+filter_non_unifiable_goals([(X \== Y)|Goals]) -->
+    (   { '$terms_unify'(X, Y) } ->
+        [(X \== Y)]
+    ;   []
+    ),
+    filter_non_unifiable_goals(Goals).
+
 append_goals([], _).
 append_goals([Var|Vars], Goals) :-
     (   get_atts(Var, +dif(VarGoals)) ->
 	    append(Goals, VarGoals, NewGoals0),
-	    sort(NewGoals0, NewGoals)
-    ;   NewGoals = Goals
+	    sort(NewGoals0, NewGoals1)
+    ;   NewGoals1 = Goals
     ),
+    phrase(filter_non_unifiable_goals(NewGoals1), NewGoals),
     put_atts(Var, +dif(NewGoals)),
     append_goals(Vars, Goals).
 
@@ -68,7 +77,8 @@ dif(X, Y) :-
 
 gather_dif_goals(_, []) --> [].
 gather_dif_goals(V, [(X \== Y) | Goals]) -->
-    (  { term_variables(X, [V0 | _]),
+    (  { '$terms_unify'(X,Y),
+         term_variables(X, [V0 | _]),
          V == V0 } ->
        [dif:dif(X, Y)]
     ;  []

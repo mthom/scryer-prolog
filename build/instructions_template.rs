@@ -568,6 +568,8 @@ enum SystemClauseType {
     DeleteFromAttributedVarList,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$delete_all_attributes_from_var")))]
     DeleteAllAttributesFromVar,
+    #[strum_discriminants(strum(props(Arity = "2", Name = "$terms_unify")))]
+    TermsUnify,
     REPL(REPLCodePtr),
 }
 
@@ -1630,6 +1632,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallPutToAttributedVarList(_) |
                     &Instruction::CallDeleteFromAttributedVarList(_) |
                     &Instruction::CallDeleteAllAttributesFromVar(_) |
+                    &Instruction::CallTermsUnify(_) |
                     &Instruction::CallFetchGlobalVar(_) |
                     &Instruction::CallFirstStream(_) |
                     &Instruction::CallFlushOutput(_) |
@@ -1846,6 +1849,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecutePutToAttributedVarList(_) |
                     &Instruction::ExecuteDeleteFromAttributedVarList(_) |
                     &Instruction::ExecuteDeleteAllAttributesFromVar(_) |
+                    &Instruction::ExecuteTermsUnify(_) |
                     &Instruction::ExecuteFetchGlobalVar(_) |
                     &Instruction::ExecuteFirstStream(_) |
                     &Instruction::ExecuteFlushOutput(_) |

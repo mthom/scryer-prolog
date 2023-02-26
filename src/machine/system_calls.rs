@@ -1037,6 +1037,61 @@ impl MachineState {
 
 impl Machine {
     #[inline(always)]
+    pub(crate) fn terms_unify(&mut self) {
+        /*
+         * unify the terms in registers 1 and 2 using the
+         * AttributelessUnifier of unify.rs, so-named because it does
+         * not invoke any side effects that would normally ensue upon
+         * unifying attributed variables. it takes the place of the
+         * idiomatic unification check
+         *
+         * \+ \+ X == Y
+         *
+         * when such effects are meant to be avoided. the only side
+         * effects it creates are new variable bindings in the heap
+         * and subsequent records on the trail, and they are
+         * immediately undone using unwind_trail() regardless of
+         * whether unification succeeds.
+         */
+
+        // no need to deref_register here, the unifier will take care
+        // of it.
+
+        let term_1 = self.machine_st.registers[1];
+        let term_2 = self.machine_st.registers[2];
+        let tr = self.machine_st.tr;
+
+        use crate::machine::unify::*;
+
+        self.machine_st.pdl.push(term_2);
+        self.machine_st.pdl.push(term_1);
+
+        if self.machine_st.unify_fn as usize ==
+            MachineState::unify_with_occurs_check_with_error as usize ||
+           self.machine_st.unify_fn as usize ==
+            MachineState::unify_with_occurs_check as usize
+        {
+            // don't throw an error even if MachineState::unify_with_occurs_check_with_error
+            // is the current value of self.machine_st.unify_fn. this is only a unifiability
+            // test, it never throws.
+
+            let unifier = AttributelessUnifier::from(&mut self.machine_st);
+            let mut unifier = CompositeUnifierForOccursCheck::from(unifier);
+
+            unifier.unify_internal();
+        } else {
+            let mut unifier = AttributelessUnifier::from(&mut self.machine_st);
+            unifier.unify_internal();
+        }
+
+        self.machine_st.pdl.clear();
+        self.unwind_trail(tr, self.machine_st.trail.len());
+
+        self.machine_st.tr = tr;
+        self.machine_st.trail.truncate(tr);
+    }
+
+    #[inline(always)]
     pub(crate) fn delete_all_attributes_from_var(&mut self) {
         let attr_var = self.deref_register(1);
 
@@ -7213,4 +7268,3 @@ impl hkdf::KeyType for MyKey<usize> {
         self.0
     }
 }
-

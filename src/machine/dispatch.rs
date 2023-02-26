@@ -5215,6 +5215,14 @@ impl Machine {
                     self.delete_all_attributes_from_var();
                     self.machine_st.p = self.machine_st.cp;
                 }
+                &Instruction::CallTermsUnify(_) => {
+                    self.terms_unify();
+                    step_or_fail!(self, self.machine_st.p += 1);
+                }
+                &Instruction::ExecuteTermsUnify(_) => {
+                    self.terms_unify();
+                    step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+                }
             }
         }
 
