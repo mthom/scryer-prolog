@@ -111,7 +111,11 @@ delete_all_attributes_from_var(V) :- '$delete_all_attributes_from_var'(V).
 
 copy_term(Term, Copy, Gs) :-
    can_be(list, Gs),
-   findall(Term-Rs, term_residual_goals(Term,Rs), [Copy-Gs]).
+   findall(Term-Rs, term_residual_goals(Term,Rs), [Copy-Gs]),
+   (  var(Gs) ->
+      Gs = []
+   ;  true
+   ).
 
 term_residual_goals(Term,Rs) :-
     '$term_attributed_variables'(Term, Vs),
