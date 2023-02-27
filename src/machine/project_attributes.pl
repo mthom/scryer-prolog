@@ -38,20 +38,6 @@ call_project_attributes([Module|Modules], QueryVars, AttrVars) :-
        nl
     ).
 
-call_query_var_goals([], _, []).
-call_query_var_goals([AttrVar|AttrVars], Module, Goals) :-
-    (  catch((  Module:attribute_goals(AttrVar, Goals, RGoals0),
-	            atts:'$default_attr_list'(Module, AttrVar, RGoals0, RGoals)
-	         ),
-	         E,
-	         (  '$project_atts':'$print_attribute_goals_exception'(Module, E),
-		        atts:'$default_attr_list'(Module, AttrVar, Goals, RGoals)
-	         ))
-    -> true
-    ;  atts:'$default_attr_list'(Module, AttrVar, Goals, RGoals)
-    ),
-    call_query_var_goals(AttrVars, Module, RGoals).
-
 call_attr_var_goals([], _, []).
 call_attr_var_goals([AttrVar|AttrVars], Module, Goals) :-
     (  catch(Module:attribute_goals(AttrVar, Goals, RGoals),
@@ -90,21 +76,26 @@ copy_attribute_modules([Module:_|Attrs]) -->
     [Module],
     copy_attribute_modules(Attrs).
 
-attribute_goals_or_fail(M, V, V0, V1) :-
+gather_residual_goals_(M, V, V0, V1) :-
     (  catch(M:attribute_goals(V, V0, V1),
              E,
-             '$project_atts':'$print_attribute_goals_exception'(M, E)
+             ('$project_atts':'$print_attribute_goals_exception'(M, E),
+              V0 = V1)
             ) ->
        true
     ;  V0 = V1
     ).
+
+gather_residual_goals(M, V) -->
+    gather_residual_goals_(M, V),
+    atts:'$default_attr_list'(M, V).
 
 gather_residual_goals([]) --> [].
 gather_residual_goals([V|Vs]) -->
     { '$get_attr_list'(V, Attrs),
       phrase(copy_attribute_modules(Attrs), Modules0),
       sort(Modules0, Modules) },
-    foldl(V+\M^attribute_goals_or_fail(M, V), Modules),
+    foldl(V+\M^gather_residual_goals(M, V), Modules),
     gather_residual_goals(Vs).
 
 delete_all_attributes_from_var(V) :- '$delete_all_attributes_from_var'(V).
