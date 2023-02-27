@@ -1,3 +1,24 @@
+/* How does FFI work?
+
+Each WAM machine has a ForeignFunctionTable instance that contains a table of functions and structs.
+
+Structs are defined via foreign_struct/2. Basic types are defined by libffi, but struct types need to
+be manually defined to get an ffi_type. Additionally, to recover structs from return arguments, we store
+fields and atom_fields, as a way to lookup the content of the struct (fields) and the nested structs (atom_fields).
+
+Functions are defined via use_foreign_module/2. It opens a library and leaks the memory of the library,
+to prevent Rust freeing the memory. There's no way to recover that memory at the moment. We get a pointer for
+each function and we build a CIF for each one, with the input arguments and the return argument.
+
+Exec happens via '$foreign_call', we find the function, we try to cast the values that we have to the definition
+of the function, we reserve memory for them and we build an array of pointers. To get the return argument, we
+reserve enough memory for the return and we build the Scryer values from them.
+
+Structs are a bit tricky as they need to be aligned. For that, we reserve enough memory (libffi calculates that)
+and for each field: we add to the pointer until we're aligned to the next data type we're going to write, we write it,
+and finally we add the pointer the size of what we've written.
+*/
+
 use crate::atom_table::Atom;
 
 use std::alloc::{alloc, Layout};
