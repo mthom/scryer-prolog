@@ -211,7 +211,7 @@ Here is an example session with a few queries and their answers:
    T = 1, clpb:sat(X=:=X*Y), clpb:sat(Y=:=Y*Z).
 
 ?- sat(1#X#a#b).
-   sat(X=:=a#b).
+   clpb:sat(X=:=a#b).
 ```
 
 The pending residual goals constrain remaining variables to Boolean
@@ -348,7 +348,7 @@ does compute =|XOR|= as intended:
 
 ```
 ?- xor(x, y, Z).
-sat(Z=:=x#y).
+   clpb:sat(Z=:=x#y).
 ```
 
 ## Acknowledgments

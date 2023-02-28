@@ -272,16 +272,10 @@ enum SystemClauseType {
     PathCanonical,
     #[strum_discriminants(strum(props(Arity = "3", Name = "$file_time")))]
     FileTime,
-    #[strum_discriminants(strum(props(Arity = "1", Name = "$del_attr_non_head")))]
-    DeleteAttribute,
-    #[strum_discriminants(strum(props(Arity = "1", Name = "$del_attr_head")))]
-    DeleteHeadAttribute,
     #[strum_discriminants(strum(props(Arity = "arity", Name = "$module_call")))]
     DynamicModuleResolution(usize),
     #[strum_discriminants(strum(props(Arity = "arity", Name = "$prepare_call_clause")))]
     PrepareCallClause(usize),
-    #[strum_discriminants(strum(props(Arity = "1", Name = "$enqueue_attr_var")))]
-    EnqueueAttributedVar,
     #[strum_discriminants(strum(props(Arity = "2", Name = "$fetch_global_var")))]
     FetchGlobalVar,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$first_stream")))]
@@ -572,6 +566,14 @@ enum SystemClauseType {
     GetClauseP,
     #[strum_discriminants(strum(props(Arity = "6", Name = "$invoke_clause_at_p")))]
     InvokeClauseAtP,
+    #[strum_discriminants(strum(props(Arity = "3", Name = "$get_from_attr_list")))]
+    GetFromAttributedVarList,
+    #[strum_discriminants(strum(props(Arity = "3", Name = "$put_to_attr_list")))]
+    PutToAttributedVarList,
+    #[strum_discriminants(strum(props(Arity = "3", Name = "$del_from_attr_list")))]
+    DeleteFromAttributedVarList,
+    #[strum_discriminants(strum(props(Arity = "1", Name = "$delete_all_attributes_from_var")))]
+    DeleteAllAttributesFromVar,
     REPL(REPLCodePtr),
 }
 
@@ -1624,15 +1626,16 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallDeleteDirectory(_) |
                     &Instruction::CallPathCanonical(_) |
                     &Instruction::CallFileTime(_) |
-                    &Instruction::CallDeleteAttribute(_) |
-                    &Instruction::CallDeleteHeadAttribute(_) |
                     &Instruction::CallDynamicModuleResolution(..) |
                     &Instruction::CallPrepareCallClause(..) |
                     &Instruction::CallCompileInlineOrExpandedGoal(..) |
                     &Instruction::CallIsExpandedOrInlined(_) |
                     &Instruction::CallGetClauseP(_) |
                     &Instruction::CallInvokeClauseAtP(_) |
-                    &Instruction::CallEnqueueAttributedVar(_) |
+                    &Instruction::CallGetFromAttributedVarList(_) |
+                    &Instruction::CallPutToAttributedVarList(_) |
+                    &Instruction::CallDeleteFromAttributedVarList(_) |
+                    &Instruction::CallDeleteAllAttributesFromVar(_) |
                     &Instruction::CallFetchGlobalVar(_) |
                     &Instruction::CallFirstStream(_) |
                     &Instruction::CallFlushOutput(_) |
@@ -1842,15 +1845,16 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteDeleteDirectory(_) |
                     &Instruction::ExecutePathCanonical(_) |
                     &Instruction::ExecuteFileTime(_) |
-                    &Instruction::ExecuteDeleteAttribute(_) |
-                    &Instruction::ExecuteDeleteHeadAttribute(_) |
                     &Instruction::ExecuteDynamicModuleResolution(..) |
                     &Instruction::ExecutePrepareCallClause(..) |
                     &Instruction::ExecuteCompileInlineOrExpandedGoal(..) |
                     &Instruction::ExecuteIsExpandedOrInlined(_) |
                     &Instruction::ExecuteGetClauseP(_) |
                     &Instruction::ExecuteInvokeClauseAtP(_) |
-                    &Instruction::ExecuteEnqueueAttributedVar(_) |
+                    &Instruction::ExecuteGetFromAttributedVarList(_) |
+                    &Instruction::ExecutePutToAttributedVarList(_) |
+                    &Instruction::ExecuteDeleteFromAttributedVarList(_) |
+                    &Instruction::ExecuteDeleteAllAttributesFromVar(_) |
                     &Instruction::ExecuteFetchGlobalVar(_) |
                     &Instruction::ExecuteFirstStream(_) |
                     &Instruction::ExecuteFlushOutput(_) |

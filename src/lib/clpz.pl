@@ -220,31 +220,23 @@ partition_([X|Xs], Pred, Ls0, Es0, Gs0) :-
 
 :- meta_predicate(include(1, ?, ?)).
 
-include(Goal, Ls0, Ls) :-
-        include_(Ls0, Goal, Ls).
-
-include_([], _, []).
-include_([L|Ls0], Goal, Ls) :-
+include(_, [], []).
+include(Goal, [L|Ls0], Ls) :-
         (   call(Goal, L) ->
             Ls = [L|Rest]
         ;   Ls = Rest
         ),
-        include_(Ls0, Goal, Rest).
-
+        include(Goal, Ls0, Rest).
 
 :- meta_predicate(exclude(1, ?, ?)).
 
-exclude(Goal, Ls0, Ls) :-
-        exclude_(Ls0, Goal, Ls).
-
-exclude_([], _, []).
-exclude_([L|Ls0], Goal, Ls) :-
+exclude(_, [], []).
+exclude(Goal, [L|Ls0], Ls) :-
         (   call(Goal, L) ->
             Ls = Rest
         ;   Ls = [L|Rest]
         ),
-        exclude_(Ls0, Goal, Rest).
-
+        exclude(Goal, Ls0, Rest).
 
 %:- discontiguous clpz:goal_expansion/5.
 
@@ -7711,7 +7703,7 @@ attributes_goals([]) --> [].
 attributes_goals([propagator(P, State)|As]) -->
         (   { ground(State) } -> []
         ;   { phrase(attribute_goal_(P), Gs) } ->
-            { % del_attr(State, clpz_aux), State = processed,
+            { del_attr(State, clpz_aux), State = processed,
               (   monotonic ->
                   maplist(unwrap_with(bare_integer), Gs, Gs1)
               ;   maplist(unwrap_with(=), Gs, Gs1)
@@ -7822,7 +7814,7 @@ conjunction(A, B, G, D) -->
 
 original_goal(original_goal(State, Goal)) -->
         (   { var(State) } ->
-%            { State = processed },
+            { State = processed },
             [Goal]
         ;   []
         ).

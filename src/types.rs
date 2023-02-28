@@ -53,7 +53,6 @@ pub enum HeapCellValueView {
     // trail elements.
     TrailedHeapVar = 0b011101,
     TrailedStackVar = 0b011111,
-    TrailedAttrVarHeapLink =  0b100001,
     TrailedAttrVarListLink =  0b100011,
     TrailedAttachedValue =    0b100101,
     TrailedBlackboardEntry =  0b100111,
@@ -182,7 +181,6 @@ impl Ref {
 #[derive(Debug, Clone, Copy)]
 pub enum TrailRef {
     Ref(Ref),
-    AttrVarHeapLink(usize),
     AttrVarListLink(usize, usize),
     BlackboardEntry(Atom),
     BlackboardOffset(Atom, HeapCellValue), // key atom, key value
@@ -194,7 +192,6 @@ pub(crate) enum TrailEntryTag {
     TrailedHeapVar = 0b011110,
     TrailedStackVar = 0b011111,
     TrailedAttrVar = 0b101110,
-    TrailedAttrVarHeapLink = 0b100010,
     TrailedAttrVarListLink = 0b100011,
     TrailedAttachedValue = 0b101010,
     TrailedBlackboardEntry = 0b100110,

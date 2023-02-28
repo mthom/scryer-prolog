@@ -3570,22 +3570,6 @@ impl Machine {
                     self.file_time();
                     step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                 }
-                &Instruction::CallDeleteAttribute(_) => {
-                    self.delete_attribute();
-                    self.machine_st.p += 1;
-                }
-                &Instruction::ExecuteDeleteAttribute(_) => {
-                    self.delete_attribute();
-                    self.machine_st.p = self.machine_st.cp;
-                }
-                &Instruction::CallDeleteHeadAttribute(_) => {
-                    self.delete_head_attribute();
-                    self.machine_st.p += 1;
-                }
-                &Instruction::ExecuteDeleteHeadAttribute(_) => {
-                    self.delete_head_attribute();
-                    self.machine_st.p = self.machine_st.cp;
-                }
                 &Instruction::CallDynamicModuleResolution(arity, _) => {
                     let (module_name, key) = try_or_throw!(
                         self.machine_st,
@@ -3615,14 +3599,6 @@ impl Machine {
                     if self.machine_st.fail {
                         self.machine_st.backtrack();
                     }
-                }
-                &Instruction::CallEnqueueAttributedVar(_) => {
-                    self.enqueue_attributed_var();
-                    self.machine_st.p += 1;
-                }
-                &Instruction::ExecuteEnqueueAttributedVar(_) => {
-                    self.enqueue_attributed_var();
-                    self.machine_st.p = self.machine_st.cp;
                 }
                 &Instruction::CallFetchGlobalVar(_) => {
                     self.fetch_global_var();
@@ -5230,6 +5206,38 @@ impl Machine {
                     }
 
                     self.machine_st.execute_at_index(2, p);
+                }
+                &Instruction::CallGetFromAttributedVarList(_) => {
+                    self.get_from_attributed_variable_list();
+                    step_or_fail!(self, self.machine_st.p += 1);
+                }
+                &Instruction::ExecuteGetFromAttributedVarList(_) => {
+                    self.get_from_attributed_variable_list();
+                    step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+                }
+                &Instruction::CallPutToAttributedVarList(_) => {
+                    self.put_to_attributed_variable_list();
+                    step_or_fail!(self, self.machine_st.p += 1);
+                }
+                &Instruction::ExecutePutToAttributedVarList(_) => {
+                    self.put_to_attributed_variable_list();
+                    step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+                }
+                &Instruction::CallDeleteFromAttributedVarList(_) => {
+                    self.delete_from_attributed_variable_list();
+                    step_or_fail!(self, self.machine_st.p += 1);
+                }
+                &Instruction::ExecuteDeleteFromAttributedVarList(_) => {
+                    self.delete_from_attributed_variable_list();
+                    step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+                }
+                &Instruction::CallDeleteAllAttributesFromVar(_) => {
+                    self.delete_all_attributes_from_var();
+                    self.machine_st.p += 1;
+                }
+                &Instruction::ExecuteDeleteAllAttributesFromVar(_) => {
+                    self.delete_all_attributes_from_var();
+                    self.machine_st.p = self.machine_st.cp;
                 }
             }
         }

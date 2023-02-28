@@ -52,6 +52,7 @@ impl MachineState {
             self.cp = INSTALL_VERIFY_ATTR_INTERRUPT;
         }
 
+        debug_assert_eq!(self.heap[h].get_tag(), HeapCellValueTag::AttrVar);
         self.attr_var_init.bindings.push((h, addr));
     }
 
@@ -63,10 +64,9 @@ impl MachineState {
             .map(|(ref h, _)| attr_var_as_cell!(*h));
 
         let var_list_addr = heap_loc_as_cell!(iter_to_heap_list(&mut self.heap, iter));
-
         let iter = self.attr_var_init.bindings.drain(0..).map(|(_, ref v)| *v);
-
         let value_list_addr = heap_loc_as_cell!(iter_to_heap_list(&mut self.heap, iter));
+
         (var_list_addr, value_list_addr)
     }
 

@@ -812,8 +812,9 @@ impl PredicateInfo {
     }
 
     #[inline]
-    pub(crate) fn must_retract_local_clauses(&self) -> bool {
-        self.is_extensible && self.has_clauses && !self.is_discontiguous
+    pub(crate) fn must_retract_local_clauses(&self, is_cross_module_clause: bool) -> bool {
+        self.is_extensible && self.has_clauses && !self.is_discontiguous &&
+            !(self.is_multifile && is_cross_module_clause)
     }
 }
 

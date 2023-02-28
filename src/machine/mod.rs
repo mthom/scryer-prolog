@@ -21,6 +21,7 @@ pub mod stack;
 pub mod streams;
 pub mod system_calls;
 pub mod term_stream;
+pub mod unify;
 
 use crate::arena::*;
 use crate::arithmetic::*;
@@ -257,31 +258,22 @@ impl Machine {
         let mut path_buf = current_dir();
         path_buf.push("machine/attributed_variables.pl");
 
-        bootstrapping_compile(
-            Stream::from_static_string(
-                include_str!("attributed_variables.pl"),
-                &mut self.machine_st.arena,
-            ),
-            self,
-            ListingSource::from_file_and_path(
-                atom!("attributed_variables"),
-                path_buf,
-            ),
-        )
-        .unwrap();
+        let stream = Stream::from_static_string(
+            include_str!("attributed_variables.pl"),
+            &mut self.machine_st.arena,
+        );
+
+        self.load_file(path_buf.to_str().unwrap(), stream);
 
         let mut path_buf = current_dir();
         path_buf.push("machine/project_attributes.pl");
 
-        bootstrapping_compile(
-            Stream::from_static_string(
-                include_str!("project_attributes.pl"),
-                &mut self.machine_st.arena,
-            ),
-            self,
-            ListingSource::from_file_and_path(atom!("project_attributes"), path_buf),
-        )
-        .unwrap();
+        let stream = Stream::from_static_string(
+            include_str!("project_attributes.pl"),
+            &mut self.machine_st.arena,
+        );
+
+        self.load_file(path_buf.to_str().unwrap(), stream);
 
         if let Some(module) = self.indices.modules.get(&atom!("$atts")) {
             if let Some(code_index) = module.code_dir.get(&(atom!("driver"), 2)) {
@@ -866,14 +858,22 @@ impl Machine {
                 TrailEntryTag::TrailedAttrVar => {
                     self.machine_st.heap[h] = attr_var_as_cell!(h);
                 }
-                TrailEntryTag::TrailedAttrVarHeapLink => {
-                    self.machine_st.heap[h] = heap_loc_as_cell!(h);
-                }
                 TrailEntryTag::TrailedAttrVarListLink => {
                     let l = self.machine_st.trail[i + 1].get_value() as usize;
 
                     if l < self.machine_st.hb {
-                        self.machine_st.heap[h] = list_loc_as_cell!(l);
+                        if h == l {
+                            self.machine_st.heap[h] = heap_loc_as_cell!(h);
+                        } else {
+                            read_heap_cell!(self.machine_st.heap[l],
+                                (HeapCellValueTag::Var) => {
+                                    self.machine_st.heap[h] = list_loc_as_cell!(l);
+                                }
+                                _ => {
+                                    self.machine_st.heap[h] = heap_loc_as_cell!(l);
+                                }
+                            );
+                        }
                     } else {
                         self.machine_st.heap[h] = heap_loc_as_cell!(h);
                     }

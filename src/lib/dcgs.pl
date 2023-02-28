@@ -75,13 +75,6 @@ phrase(GRBody, S0, S) :-
     ;  call(M:GRBody1, S0, S)
     ).
 
-
-module_call_qualified(M, Call, Call1) :-
-    (  nonvar(M) -> Call1 = M:Call
-    ;  Call = Call1
-    ).
-
-
 % The same version of the below two dcg_rule clauses, but with module scoping.
 dcg_rule(( M:NonTerminal, Terminals --> GRBody ), ( M:Head :- Body )) :-
     dcg_non_terminal(NonTerminal, S0, S, Head),
@@ -127,7 +120,10 @@ dcg_body(NonTerminal, S0, S, Goal1) :-
     NonTerminal \= ( \+ _ ),
     loader:strip_module(NonTerminal, M, NonTerminal0),
     dcg_non_terminal(NonTerminal0, S0, S, Goal0),
-    module_call_qualified(M, Goal0, Goal1).
+    (  functor(NonTerminal, (:), 2) ->
+       Goal1 = M:Goal0
+    ;  Goal1 = Goal0
+    ).
 
 % The following constructs in a grammar rule body
 % are defined in the corresponding subclauses.
@@ -215,6 +211,9 @@ user:goal_expansion(phrase(GRBody, S, S0), GRBody2) :-
           E,
           dcgs:error_goal(E, GRBody1)
          ),
-    module_call_qualified(M, GRBody1, GRBody2).
+    (  GRBody = (_:_) ->
+       GRBody2 = M:GRBody1
+    ;  GRBody2 = GRBody1
+    ).
 
 user:goal_expansion(phrase(GRBody, S), phrase(GRBody, S, [])).

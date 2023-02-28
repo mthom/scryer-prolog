@@ -2280,14 +2280,17 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             .ok_or(SessionError::NamelessEntry)?;
 
         let listing_src_file_name = self.listing_src_file_name();
-        let payload_compilation_target = self.payload.compilation_target;
 
-        let mut predicate_info = self
-            .wam_prelude
-            .indices
-            .get_predicate_skeleton(&self.payload.predicates.compilation_target, &key)
-            .map(|skeleton| skeleton.predicate_info())
-            .unwrap_or_default();
+        // payload_compilation_target describes the compilation context,
+        // e.g. compiling
+        //
+        // table_wrapper:tabled(get_node(A), b).
+        //
+        // without a module declaration means self.payload.compilation_target
+        // is CompilationTarget::User while self.payload.predicates.compilation_target
+        // is CompilationTarget::Module(atom!("table_wrapper")).
+
+        let payload_compilation_target = self.payload.compilation_target;
 
         let local_predicate_info = self
             .wam_prelude
@@ -2301,34 +2304,37 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             .map(|skeleton| skeleton.predicate_info())
             .unwrap_or_default();
 
-        if local_predicate_info.must_retract_local_clauses() {
+        let mut predicate_info = self
+            .wam_prelude
+            .indices
+            .get_predicate_skeleton(&self.payload.predicates.compilation_target, &key)
+            .map(|skeleton| skeleton.predicate_info())
+            .unwrap_or_default();
+
+        let is_cross_module_clause =
+            payload_compilation_target != self.payload.predicates.compilation_target;
+
+        if local_predicate_info.must_retract_local_clauses(is_cross_module_clause) {
             self.retract_local_clauses(&key, predicate_info.is_dynamic);
         }
-
-        let do_incremental_compile =
-            if payload_compilation_target == self.payload.predicates.compilation_target {
-                predicate_info.compile_incrementally()
-            } else {
-                local_predicate_info.is_multifile && predicate_info.compile_incrementally()
-            };
 
         let predicates_len = self.payload.predicates.len();
         let non_counted_bt = self.payload.non_counted_bt_preds.contains(&key);
 
-        if do_incremental_compile {
+        if predicate_info.compile_incrementally() {
             let predicates = self.payload.predicates.take();
 
             for term in predicates.predicates {
                 self.incremental_compile_clause(
                     key,
                     term,
-                    payload_compilation_target,
+                    self.payload.predicates.compilation_target,
                     non_counted_bt,
                     AppendOrPrepend::Append,
                 )?;
             }
         } else {
-            if payload_compilation_target != self.payload.predicates.compilation_target {
+            if is_cross_module_clause {
                 if !local_predicate_info.is_extensible {
                     if predicate_info.is_multifile {
                         println!(
@@ -2343,9 +2349,11 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                         .indices
                         .remove_predicate_skeleton(&self.payload.predicates.compilation_target, &key)
                     {
+                        let compilation_target = self.payload.predicates.compilation_target;
+
                         if predicate_info.is_dynamic {
                             let clause_clause_compilation_target =
-                                match self.payload.predicates.compilation_target {
+                                match compilation_target {
                                     CompilationTarget::User => {
                                         CompilationTarget::Module(atom!("builtins"))
                                     }
@@ -2364,7 +2372,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
 
                         self.payload.retraction_info.push_record(
                             RetractionRecord::RemovedSkeleton(
-                                payload_compilation_target,
+                                compilation_target,
                                 key,
                                 skeleton,
                             ),
@@ -2415,9 +2423,11 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                 .clause_clauses.drain(0..std::cmp::min(predicates_len, clause_clauses_len))
                 .collect();
 
+            let compilation_target = self.payload.predicates.compilation_target;
+
             self.compile_clause_clauses(
                 key,
-                payload_compilation_target,
+                compilation_target,
                 clauses_vec.into_iter(),
                 AppendOrPrepend::Append,
             )?;
