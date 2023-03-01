@@ -4310,12 +4310,17 @@ impl Machine {
 			Ok(result) => {
 			    match result {
 				Value::Int(n) => self.machine_st.unify_fixnum(Fixnum::build_with(n), return_value),
+				Value::Float(n) => {
+				    let n = float_alloc!(n, self.machine_st.arena);
+				    self.machine_st.unify_f64(n, return_value)
+				},
 				Value::Struct(name, args) => {
 				    let struct_value = self.build_struct(&name, args);
 				    unify!(self.machine_st, return_value, struct_value);
 				}
-				_ => {
-				    unreachable!();
+				Value::CString(cstr) => {
+				    let cstr = self.machine_st.atom_tbl.build_with(cstr.to_str().unwrap());
+				    self.machine_st.unify_complete_string(cstr, return_value);
 				}
 			    }
 			    return Ok(());
@@ -4340,10 +4345,10 @@ impl Machine {
 	let cells: Vec<_> = args.into_iter()
 	    .map(|val| {
 		match val {
-			    Value::Int(n) => fixnum_as_cell!(Fixnum::build_with(n)),
-			    Value::CString(cstr) => atom_as_cell!(self.machine_st.atom_tbl.build_with(&cstr.into_string().unwrap())),
-			    Value::Struct(name, struct_args) => self.build_struct(&name, struct_args),
-			    _ => unreachable!()
+		    Value::Int(n) => fixnum_as_cell!(Fixnum::build_with(n)),
+		    Value::Float(n) => HeapCellValue::from(float_alloc!(n, self.machine_st.arena)),
+		    Value::CString(cstr) => atom_as_cell!(self.machine_st.atom_tbl.build_with(&cstr.into_string().unwrap())),
+		    Value::Struct(name, struct_args) => self.build_struct(&name, struct_args),
 		}
 	    }).collect();
 		

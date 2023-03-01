@@ -306,6 +306,7 @@ impl ForeignFunctionTable {
 		    Ok(Value::Int(i64::try_from(*n).map_err(|_| FFIError::ValueDontFit)?))
 		},
 		libffi::raw::FFI_TYPE_SINT64 => call_and_return!(i64),
+		libffi::raw::FFI_TYPE_POINTER => call_and_return!(*mut c_void),
 		libffi::raw::FFI_TYPE_FLOAT => {
 		    let mut n: Box<f32> = Box::new(0.0);
 		    libffi::raw::ffi_call(
@@ -380,6 +381,7 @@ impl ForeignFunctionTable {
 			field_ptr = field_ptr.add(std::mem::size_of::<u64>());
 		    },
 		    libffi::raw::FFI_TYPE_SINT64 => read_and_push_int!(i64),
+		    libffi::raw::FFI_TYPE_POINTER => read_and_push_int!(i64),
 		    libffi::raw::FFI_TYPE_STRUCT => {
 			let substruct = struct_type.atom_fields[i].as_str();
 			let struct_type = self.structs.get(substruct).ok_or(FFIError::StructNotFound)?;
