@@ -63,6 +63,8 @@ hyper = { version = "0.14", features = ["full"] }
 hyper-tls = "0.5.0"
 tokio = { version = "1.24.2", features = ["full"] }
 futures = "0.3"
+libffi = "3.1.0"
+libloading = "0.7"
 derive_deref = "1.1.1"
 
 [dev-dependencies]

@@ -1,6 +1,7 @@
 use crate::atom_table::*;
 use crate::parser::ast::*;
 
+use crate::ffi::FFIError;
 use crate::forms::*;
 use crate::machine::heap::*;
 use crate::machine::loader::CompilationTarget;
@@ -513,6 +514,24 @@ impl MachineState {
             location: None,
             from: ErrorProvenance::Received,
         }
+    }
+
+    pub(super) fn ffi_error(&mut self, err: FFIError) -> MachineError {
+	let error_atom = match err {
+	    FFIError::ValueCast => atom!("value_cast"),
+	    FFIError::ValueDontFit => atom!("value_dont_fit"),
+	    FFIError::InvalidFFIType => atom!("invalid_ffi_type"),
+	    FFIError::InvalidStructName => atom!("invalid_struct_name"),
+	    FFIError::FunctionNotFound => atom!("function_not_found"),
+	    FFIError::StructNotFound => atom!("struct_not_found"),
+	};
+	let stub = functor!(atom!("ffi_error"),[atom(error_atom)]);
+
+	MachineError {
+	    stub,
+	    location: None,
+	    from: ErrorProvenance::Constructed,
+	}
     }
 
     pub(super) fn error_form(&mut self, err: MachineError, src: FunctorStub) -> MachineStub {

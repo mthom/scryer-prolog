@@ -27,6 +27,7 @@ use crate::arena::*;
 use crate::arithmetic::*;
 use crate::atom_table::*;
 use crate::forms::*;
+use crate::ffi::ForeignFunctionTable;
 use crate::instructions::*;
 use crate::machine::args::*;
 use crate::machine::compile::*;
@@ -66,6 +67,7 @@ pub struct Machine {
     pub(super) user_error: Stream,
     pub(super) load_contexts: Vec<LoadContext>,
     pub(super) runtime: Runtime,
+    pub(super) foreign_function_table: ForeignFunctionTable, 
 }
 
 #[derive(Debug)]
@@ -435,6 +437,7 @@ impl Machine {
             user_error,
             load_contexts: vec![],
             runtime,
+	    foreign_function_table: Default::default(),
         };
 
         let mut lib_path = current_dir();

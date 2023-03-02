@@ -964,6 +964,35 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fc7fcc620a3bff7cdd7a365be3376c97191aeaccc2a603e600951e452615bf89"
 
 [[package]]
+name = "libffi"
+version = "3.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6cb06d5b4c428f3cd682943741c39ed4157ae989fffe1094a08eaf7c4014cf60"
+dependencies = [
+ "libc",
+ "libffi-sys",
+]
+
+[[package]]
+name = "libffi-sys"
+version = "2.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "11c6f11e063a27ffe040a9d15f0b661bf41edc2383b7ae0e0ad5a7e7d53d9da3"
+dependencies = [
+ "cc",
+]
+
+[[package]]
+name = "libloading"
+version = "0.7.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b67380fd3b2fbe7527a606e18729d21c6f3951633d0500574c4dc22d2d638b9f"
+dependencies = [
+ "cfg-if",
+ "winapi",
+]
+
+[[package]]
 name = "libsodium-sys"
 version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1845,6 +1874,8 @@ dependencies = [
  "lazy_static",
  "lexical",
  "libc",
+ "libffi",
+ "libloading",
  "modular-bitfield",
  "native-tls",
  "ordered-float",
