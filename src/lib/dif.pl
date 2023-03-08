@@ -65,7 +65,7 @@ dif(X, Y) :-
 
 gather_dif_goals(_, []) --> [].
 gather_dif_goals(V, [(X \== Y) | Goals]) -->
-    (  { term_variables(X, [V0 | _]),
+    (  { term_variables(X-Y, [V0 | _]),
          V == V0 } ->
        [dif:dif(X, Y)]
     ;  []
