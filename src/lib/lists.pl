@@ -67,14 +67,12 @@ resource_error(Resource, Context) :-
 % to create a list full of free variables with N length.
 %
 % ```
-% ?- length([a,b,c], 3).
+% ?- length("abc", 3).
 %    true.
-% ?- length([a,b,c], N).
+% ?- length("abc", N).
 %    N = 3.
 % ?- length(Xs, 3).
 %    Xs = [_A, _B, _C].
-% ?- length("chars", N).
-%    N = 5.
 % ```
 
 length(Xs0, N) :-
