@@ -59,16 +59,13 @@ verify_attributes(Var, Value, Goals) :-
 dif(X, Y) :-
     X \== Y,
     (   X \= Y -> true
-    ;   (   term_variables(X, XVars),
-            term_variables(Y, YVars),
-            dif_set_variables(XVars, X, Y),
-            dif_set_variables(YVars, X, Y)
-        )
+    ;   term_variables(dif(X,Y), Vars),
+        dif_set_variables(Vars, X, Y)
     ).
 
 gather_dif_goals(_, []) --> [].
 gather_dif_goals(V, [(X \== Y) | Goals]) -->
-    (  { term_variables(X, [V0 | _]),
+    (  { term_variables(X-Y, [V0 | _]),
          V == V0 } ->
        [dif:dif(X, Y)]
     ;  []
