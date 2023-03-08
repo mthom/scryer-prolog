@@ -63,7 +63,7 @@ resource_error(Resource, Context) :-
 
 %% length(?Xs, ?N).
 %
-% Relates a list to its length (number of items). It can be used to count the elements of a current list or
+% Relates a list to its length (number of elements). It can be used to count the elements of a current list or
 % to create a list full of free variables with N length.
 %
 % ```
