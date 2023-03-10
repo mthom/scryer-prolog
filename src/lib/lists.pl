@@ -63,18 +63,16 @@ resource_error(Resource, Context) :-
 
 %% length(?Xs, ?N).
 %
-% Relates a list to its length (number of items). It can be used to count the elements of a current list or
+% Relates a list to its length (number of elements). It can be used to count the elements of a current list or
 % to create a list full of free variables with N length.
 %
 % ```
-% ?- length([a,b,c], 3).
+% ?- length("abc", 3).
 %    true.
-% ?- length([a,b,c], N).
+% ?- length("abc", N).
 %    N = 3.
 % ?- length(Xs, 3).
-%    Xs = [_A, _B, _C].
-% ?- length("chars", N).
-%    N = 5.
+%    Xs = [_A,_B,_C].
 % ```
 
 length(Xs0, N) :-
@@ -133,7 +131,8 @@ member(X, [_|Xs]) :- member(X, Xs).
 %
 % ```
 % ?- select(c, "abcd", X).
-%    X = "abd".
+%    X = "abd"
+% ;  false.
 % ```
 select(X, [X|Xs], Xs).
 select(X, [Y|Xs], [Y|Ys]) :- select(X, Xs, Ys).
@@ -144,7 +143,7 @@ select(X, [Y|Xs], [Y|Ys]) :- select(X, Xs, Ys).
 %
 % ```
 % ?- append([[1, 2], [3]], Xs).
-%    Xs = [1, 2, 3].
+%    Xs = [1,2,3].
 % ```
 append([], []).
 append([L0|Ls0], Ls) :-
@@ -157,7 +156,7 @@ append([L0|Ls0], Ls) :-
 %
 % ```
 % ?- append([1,2,3], [4,5,6], Xs).
-%    Xs = [1, 2, 3, 4, 5, 6].
+%    Xs = [1,2,3,4,5,6].
 % ```
 append([], R, R).
 append([X|L], R, [X|S]) :- append(L, R, S).
