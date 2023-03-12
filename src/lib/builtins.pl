@@ -124,6 +124,7 @@ call(_, _, _, _, _, _, _, _, _).
 % while others can be set with `set_prolog_flag/2`.
 %
 % The flags that Scryer Prolog support are:
+% 
 %  * `max_arity`: The max arity a predicate can have in Prolog. On Scryer is set to 1023. Read only.
 %  * `bounded`: `true` if integer arithmethic is bounded between some min/max values. On Scryer is always set
 %    to `false` since it supports unbounded integer arithmethic. Read only.
