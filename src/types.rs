@@ -470,6 +470,11 @@ impl HeapCellValue {
     }
 
     #[inline]
+    pub fn is_attr_var(self) -> bool {
+        self.get_tag() == HeapCellValueTag::AttrVar
+    }
+
+    #[inline]
     pub(crate) fn as_var(self) -> Option<Ref> {
         read_heap_cell!(self,
             (HeapCellValueTag::Var, h) => {

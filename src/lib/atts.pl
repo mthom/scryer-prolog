@@ -115,7 +115,9 @@ user:goal_expansion(Term, M:get_atts(Var, Attr)) :-
 call_residue_vars(Goal, Vars) :-
     '$get_attr_var_queue_delim'(B),
     call(Goal),
-    '$get_attr_var_queue_beyond'(B, Vars).
+    '$get_attr_var_queue_beyond'(B, AttrVars),
+    '$project_atts':copy_term(AttrVars, AttrVars, Gs),
+    '$term_attributed_variables_without_attrs'(Gs, Vars).
 
 term_attributed_variables(Term, Vars) :-
     '$term_attributed_variables'(Term, Vars).
