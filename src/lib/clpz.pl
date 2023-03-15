@@ -3943,10 +3943,7 @@ put_terminating(X, Dom, Ps) -->
             )
         ).
 
-new_queue(queue(Goals,Fast,Slow,_Aux)) :-
-        put_atts(Goals, +queue([],_)),
-        put_atts(Fast, +queue([],_)),
-        put_atts(Slow, +queue([],_)).
+new_queue(queue(_Goals,_Fast,_Slow,_Aux)).
 
 queue_goal(Goal) --> insert_queue(Goal, 1).
 queue_fast(Prop) --> insert_queue(Prop, 2).
@@ -3955,11 +3952,10 @@ queue_slow(Prop) --> insert_queue(Prop, 3).
 insert_queue(Element, Which) -->
         state(Queue),
         { arg(Which, Queue, Arg),
-          get_atts(Arg, queue(Head0,Tail0)),
-          (   Head0 == [] ->
-              Head = [Element|Tail]
-          ;   Head = Head0,
+          (   get_atts(Arg, queue(Head0,Tail0)) ->
+              Head = Head0,
               Tail0 = [Element|Tail]
+          ;   Head = [Element|Tail]
           ),
           put_atts(Arg, +queue(Head,Tail)) }.
 
@@ -4187,11 +4183,15 @@ do_queue -->
         ;   true
         ).
 
+:- meta_predicate(ignore(0)).
+
+ignore(Goal) :- ( Goal -> true ; true ).
+
 print_queue -->
         state(queue(Goal,Fast,Slow,_)),
-        { get_atts(Goal, +queue(GHs,_)),
-          get_atts(Fast, +queue(FHs,_)),
-          get_atts(Slow, +queue(SHs,_)),
+        { ignore(get_atts(Goal, +queue(GHs,_))),
+          ignore(get_atts(Fast, +queue(FHs,_))),
+          ignore(get_atts(Slow, +queue(SHs,_))),
           format("Current queue:~n   goal: ~q~n   fast: ~q~n   slow: ~q~n~n", [GHs,FHs,SHs]) }.
 
 
@@ -4208,7 +4208,7 @@ queue_get_arg_(Queue, Which, Element) :-
         arg(Which, Queue, Arg),
         get_atts(Arg, +queue([Element|Elements],Tail)),
         (   var(Elements) ->
-            put_atts(Arg, +queue([],_))
+            put_atts(Arg, -queue(_,_))
         ;   put_atts(Arg, +queue(Elements,Tail))
         ).
 
