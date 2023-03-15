@@ -7684,10 +7684,6 @@ intervals_to_drep([A0-B0|Rest], Drep0, Drep) :-
         intervals_to_drep(Rest, Drep0 \/ D1, Drep).
 
 attribute_goals(X) -->
-        { get_atts(X, queue(_,_)) },
-        !,
-        { put_atts(X, -queue(_,_)) }.
-attribute_goals(X) -->
         % { get_attr(X, clpz, Attr), format("A: ~w\n", [Attr]) },
         { get_attr(X, clpz, clpz_attr(_,_,_,Dom,fd_props(Gs,Bs,Os),_)),
           append(Gs, Bs, Ps0),
