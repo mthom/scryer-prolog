@@ -508,24 +508,23 @@ impl MachineState {
     }
 
     #[inline]
-    pub(crate) fn filter_cell_set<S: BuildHasher>(
+    pub(crate) fn variable_set<S: BuildHasher>(
         &mut self,
         seen_set: &mut IndexSet<HeapCellValue, S>,
         value: HeapCellValue,
-        filter_fn: impl Fn(HeapCellValue) -> bool,
     ) {
         let mut iter = stackful_preorder_iter(&mut self.heap, value);
 
         while let Some(value) = iter.next() {
             let value = unmark_cell_bits!(value);
 
-            if filter_fn(value) {
+            if value.is_var() {
                 let value = unmark_cell_bits!(heap_bound_store(
                     iter.heap,
                     heap_bound_deref(iter.heap, value)
                 ));
 
-                if filter_fn(value) {
+                if value.is_var() {
                     seen_set.insert(value);
                 }
             }
@@ -1244,11 +1243,7 @@ impl Machine {
         // complete_partial_goal prior to goal_expansion.
         let mut supp_vars = IndexSet::with_hasher(FxBuildHasher::default());
 
-        self.machine_st.filter_cell_set(
-            &mut supp_vars,
-            self.machine_st.registers[2],
-            |value| value.is_var(),
-        );
+        self.machine_st.variable_set(&mut supp_vars, self.machine_st.registers[2]);
 
         struct GoalAnalysisResult {
             is_simple_goal: bool,
@@ -1268,11 +1263,7 @@ impl Machine {
                 // fill expanded_vars with variables of the partial
                 // goal pre-completion by complete_partial_goal.
                 for idx in s + 1 .. s + arity - supp_vars.len() + 1 {
-                    self.machine_st.filter_cell_set(
-                        &mut expanded_vars,
-                        self.machine_st.heap[idx],
-                        |value| value.is_var(),
-                    );
+                    self.machine_st.variable_set(&mut expanded_vars, self.machine_st.heap[idx]);
                 }
 
                 let is_simple_goal = if arity >= supp_vars.len() {
@@ -4646,9 +4637,7 @@ impl Machine {
 
                 if self.machine_st.heap[match_site + 1].get_tag() == HeapCellValueTag::Lis {
                     let prev_tail_value = self.machine_st.heap[match_site + 1].get_value();
-
                     self.machine_st.heap[prev_tail].set_value(prev_tail_value);
-                    self.machine_st.attr_var_init.attr_var_queue.push(attr_var_list - 1);
                 } else {
                     self.machine_st.heap[prev_tail] = heap_loc_as_cell!(prev_tail);
                 }
@@ -4696,8 +4685,6 @@ impl Machine {
         self.machine_st.heap.push(str_loc_as_cell!(h+1));
         self.machine_st.heap.extend(functor!(atom!(":"), [cell(module), cell(attr)]));
 
-        self.machine_st.attr_var_init.attr_var_queue.push(attr_var_list - 1);
-
         match self.match_attribute(self.machine_st.heap[attr_var_list], module, attr) {
             Some(AttrListMatch { match_site, .. }) => {
                 let (match_site, l) = match match_site {
@@ -4727,6 +4714,7 @@ impl Machine {
                 self.machine_st.heap.push(heap_loc_as_cell!(h));
                 self.machine_st.heap.push(heap_loc_as_cell!(h+5));
 
+                self.machine_st.attr_var_init.attr_var_queue.push(attr_var_list - 1);
                 self.machine_st.trail(TrailRef::AttrVarListLink(attr_var_list, attr_var_list));
             }
         }
@@ -6136,7 +6124,7 @@ impl Machine {
     }
 
     #[inline(always)]
-    pub(crate) fn term_variables(&mut self, filter_fn: impl Fn(HeapCellValue) -> bool) {
+    pub(crate) fn term_variables(&mut self) {
         let stored_v = self.deref_register(1);
         let a2 = self.deref_register(2);
 
@@ -6147,7 +6135,7 @@ impl Machine {
 
         let mut seen_set = IndexSet::with_hasher(FxBuildHasher::default());
 
-        self.machine_st.filter_cell_set(&mut seen_set, stored_v, filter_fn);
+        self.machine_st.variable_set(&mut seen_set, stored_v);
 
         let outcome = heap_loc_as_cell!(
             iter_to_heap_list(&mut self.machine_st.heap, seen_set.into_iter())

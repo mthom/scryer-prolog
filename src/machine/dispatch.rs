@@ -4392,11 +4392,11 @@ impl Machine {
                     step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                 }
                 &Instruction::CallTermVariables(_) => {
-                    self.term_variables(|value| value.is_var());
+                    self.term_variables();
                     step_or_fail!(self, self.machine_st.p += 1);
                 }
                 &Instruction::ExecuteTermVariables(_) => {
-                    self.term_variables(|value| value.is_var());
+                    self.term_variables();
                     step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                 }
                 &Instruction::CallTermVariablesUnderMaxDepth(_) => {
@@ -5238,14 +5238,6 @@ impl Machine {
                 &Instruction::ExecuteDeleteAllAttributesFromVar(_) => {
                     self.delete_all_attributes_from_var();
                     self.machine_st.p = self.machine_st.cp;
-                }
-                &Instruction::CallTermAttributedVariablesWithoutAttrs(_) => {
-                    self.term_variables(|value| value.is_attr_var());
-                    step_or_fail!(self, self.machine_st.p += 1);
-                }
-                &Instruction::ExecuteTermAttributedVariablesWithoutAttrs(_) => {
-                    self.term_variables(|value| value.is_attr_var());
-                    step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                 }
             }
         }
