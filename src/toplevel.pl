@@ -1,7 +1,6 @@
 :- module('$toplevel', [argv/1,
                         copy_term/3]).
 
-:- use_module(library(atts), [call_residue_vars/2]).
 :- use_module(library(charsio)).
 :- use_module(library(error)).
 :- use_module(library(files)).
@@ -181,8 +180,8 @@ submit_query_and_print_results_(Term, VarList) :-
     '$get_b_value'(B),
     bb_put('$report_all', false),
     bb_put('$report_n_more', 0),
-    atts:call_residue_vars(user:Term, AttrVars),
-    write_eqs_and_read_input(B, VarList, AttrVars),
+    call(user:Term),
+    write_eqs_and_read_input(B, VarList),
     !.
 submit_query_and_print_results_(_, _) :-
     (   bb_get('$answer_count', 0) ->
@@ -287,10 +286,11 @@ trailing_period_is_ambiguous(Value) :-
 term_variables_under_max_depth(Term, MaxDepth, Vars) :-
     '$term_variables_under_max_depth'(Term, MaxDepth, Vars).
 
-write_eqs_and_read_input(B, VarList, AttrVars) :-
+write_eqs_and_read_input(B, VarList) :-
     gather_query_vars(VarList, OrigVars),
     % one layer of depth added for (=/2) functor
     '$term_variables_under_max_depth'(OrigVars, 22, Vars0),
+    '$term_attributed_variables'(VarList, AttrVars),
     '$project_atts':project_attributes(Vars0, AttrVars),
     copy_term(AttrVars, AttrVars, AttrGoals),
     term_variables(AttrGoals, AttrGoalVars),
