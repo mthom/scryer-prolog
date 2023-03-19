@@ -5239,6 +5239,14 @@ impl Machine {
                     self.delete_all_attributes_from_var();
                     self.machine_st.p = self.machine_st.cp;
                 }
+                &Instruction::CallUnattributedVar(_) => {
+                    self.machine_st.unattributed_var();
+                    step_or_fail!(self, self.machine_st.p += 1);
+                }
+                &Instruction::ExecuteUnattributedVar(_) => {
+                    self.machine_st.unattributed_var();
+                    step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+                }
             }
         }
 

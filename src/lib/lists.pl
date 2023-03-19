@@ -92,7 +92,7 @@ length(_, N) :-
 
 length_rundown(Xs, 0) :- !, Xs = [].
 length_rundown(Vs, N) :-
-    \+ \+ '$project_atts':copy_term(Vs,Vs,[]), % unconstrained
+    '$unattributed_var'(Vs), % unconstrained
     !,
     '$det_length_rundown'(Vs, N).
 length_rundown([_|Xs], N) :- % force unification
@@ -100,7 +100,7 @@ length_rundown([_|Xs], N) :- % force unification
     length(Xs, N1). % maybe some new info on Xs
 
 failingvarskip(Xs) :-
-    \+ \+ '$project_atts':copy_term(Xs,Xs,[]), % unconstrained
+    '$unattributed_var'(Xs), % unconstrained
     !.
 failingvarskip([_|Xs0]) :- % force unification
     '$skip_max_list'(_, _, Xs0,Xs),

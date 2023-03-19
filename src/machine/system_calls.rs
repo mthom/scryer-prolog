@@ -471,6 +471,25 @@ struct AttrListMatch {
 }
 
 impl MachineState {
+    #[inline(always)]
+    pub(crate) fn unattributed_var(&mut self) {
+        let attr_var = self.store(self.deref(self.registers[1]));
+
+        if !attr_var.is_var() {
+            self.fail = true;
+            return;
+        }
+
+        read_heap_cell!(attr_var,
+            (HeapCellValueTag::AttrVar, h) => {
+                let list_cell = self.store(self.deref(self.heap[h+1]));
+                self.fail = list_cell.get_tag() == HeapCellValueTag::Lis;
+            }
+            _ => {
+            }
+        );
+    }
+
     pub(crate) fn get_attr_var_list(&mut self, attr_var: HeapCellValue) -> Option<usize> {
         read_heap_cell!(attr_var,
             (HeapCellValueTag::AttrVar, h) => {
