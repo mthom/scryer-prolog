@@ -7,7 +7,13 @@ macro_rules! char_class {
 #[macro_export]
 macro_rules! alpha_char {
     ($c: expr) => {
-        $c.is_alphabetic() || $c == '_'
+        (!$c.is_numeric() &&
+         !$c.is_whitespace() &&
+         !$c.is_control() &&
+         !$crate::graphic_token_char!($c) &&
+         !$crate::layout_char!($c) &&
+         !$crate::meta_char!($c) &&
+         !$crate::solo_char!($c)) || $c == '_'
     };
 }
 
