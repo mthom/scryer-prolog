@@ -45,7 +45,7 @@ Extend Scryer Prolog to include the following, among other features:
   - [x] Support for `attribute_goals/2` and `project_attributes/2`
   - [x] `call_residue_vars/2`
 - [x] `if_/3` and related predicates, following the developments of the
-      paper "Indexing `dif/2`".
+      paper "[Indexing `dif/2`](https://arxiv.org/abs/1607.01590)".
 - [x] All-solutions predicates (`findall/{3,4}`, `bagof/3`, `setof/3`, `forall/2`).
 - [x] Clause creation and destruction (`asserta/1`, `assertz/1`,
       `retract/1`, `abolish/1`) with logical update semantics.
@@ -115,16 +115,20 @@ distribution should be uninstalled from your system before rustup is
 used.
 
 Currently the only way to install the latest version of Scryer is to
-clone directly from this git repository, which can be done as follows:
+clone directly from this git repository, and compile the system. This
+can be done as follows:
 
 ```
 $> git clone https://github.com/mthom/scryer-prolog
 $> cd scryer-prolog
-$> cargo run [--release]
+$> cargo build --release
 ```
 
-The optional `--release` flag will perform various optimizations,
-producing a faster executable.
+The `--release` flag performs various optimizations, producing a
+faster executable.
+
+After compilation, the executable `scryer-prolog` is available in the
+directory&nbsp;`target/release` and can be invoked to run the system.
 
 On Windows, Scryer Prolog is easier to build inside a [MSYS2](https://www.msys2.org/)
 environment as some crates may require native C compilation. However, 
