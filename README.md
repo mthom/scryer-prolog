@@ -45,7 +45,7 @@ Extend Scryer Prolog to include the following, among other features:
   - [x] Support for `attribute_goals/2` and `project_attributes/2`
   - [x] `call_residue_vars/2`
 - [x] `if_/3` and related predicates, following the developments of the
-      paper "Indexing `dif/2`".
+      paper "[Indexing `dif/2`](https://arxiv.org/abs/1607.01590)".
 - [x] All-solutions predicates (`findall/{3,4}`, `bagof/3`, `setof/3`, `forall/2`).
 - [x] Clause creation and destruction (`asserta/1`, `assertz/1`,
       `retract/1`, `abolish/1`) with logical update semantics.
