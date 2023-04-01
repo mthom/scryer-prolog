@@ -127,6 +127,9 @@ $> cargo build --release
 The `--release` flag performs various optimizations, producing a
 faster executable.
 
+After compilation, the executable `scryer-prolog` is available in the
+directory&nbsp;`target/release` and can be invoked to run the system.
+
 On Windows, Scryer Prolog is easier to build inside a [MSYS2](https://www.msys2.org/)
 environment as some crates may require native C compilation. However, 
 the resulting binary does not need MSYS2 to run. When executing Scryer in a shell, it is recommended to use a more advanced shell than mintty (the default MSYS2 shell). The [Windows Terminal](https://github.com/microsoft/terminal) works correctly.
