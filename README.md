@@ -115,12 +115,13 @@ distribution should be uninstalled from your system before rustup is
 used.
 
 Currently the only way to install the latest version of Scryer is to
-clone directly from this git repository, which can be done as follows:
+clone directly from this git repository, and compile the system. This
+can be done as follows:
 
 ```
 $> git clone https://github.com/mthom/scryer-prolog
 $> cd scryer-prolog
-$> cargo run [--release]
+$> cargo build [--release]
 ```
 
 The optional `--release` flag will perform various optimizations,
