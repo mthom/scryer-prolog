@@ -121,11 +121,11 @@ can be done as follows:
 ```
 $> git clone https://github.com/mthom/scryer-prolog
 $> cd scryer-prolog
-$> cargo build [--release]
+$> cargo build --release
 ```
 
-The optional `--release` flag will perform various optimizations,
-producing a faster executable.
+The `--release` flag performs various optimizations, producing a
+faster executable.
 
 On Windows, Scryer Prolog is easier to build inside a [MSYS2](https://www.msys2.org/)
 environment as some crates may require native C compilation. However, 
