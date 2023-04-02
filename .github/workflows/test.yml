@@ -8,7 +8,7 @@ jobs:
       matrix:
         include:
           - { os: windows-latest, rust-version: stable,  shell: 'msys2 {0}' }
-          - { os: macos-10.15,    rust-version: stable,  shell: bash }
+          - { os: macos-11,       rust-version: stable,  shell: bash }
           - { os: ubuntu-20.04,   rust-version: stable,  shell: bash }
           - { os: ubuntu-20.04,   rust-version: 1.63,    shell: bash }
           - { os: ubuntu-20.04,   rust-version: beta,    shell: bash }
@@ -16,9 +16,6 @@ jobs:
     defaults:
       run:
         shell: ${{ matrix.shell }}
-    outputs:
-      os: ${{ matrix.os }}
-      rust-version: ${{ matrix.rust-version }}
     steps:
       - uses: actions/checkout@v3
       - uses: dtolnay/rust-toolchain@master
@@ -56,7 +53,7 @@ jobs:
         run: cargo fmt --check || echo "::warning ::cargo fmt found some formatting changes that may improve readability"
       - name: Check clippy
         if: startsWith(matrix.os,'ubuntu') && matrix.rust-version == 'stable'
-        run: cargo clippy || echo "::warning ::cargo clippy found some code style changes that may be more idiomatic"
+        run: cargo clippy --no-deps || echo "::warning ::cargo clippy found some code style changes that may be more idiomatic"
 
       # On stable rust builds, build a binary and publish as a github actions
       # artifact. These binaries could be useful for testing the pipeline but
