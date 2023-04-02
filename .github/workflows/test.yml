@@ -6,66 +6,68 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-20.04, macos-10.15]
-        rust-version: [stable, beta]
-    steps:
-      - name: Checkout sources
-        uses: actions/checkout@v2
-      - name: Install Rust
-        uses: actions-rs/toolchain@v1
-        with:
-          profile: minimal
-          toolchain: ${{ matrix.rust-version }}
-          override: true
-      - name: Build lib
-        uses: actions-rs/cargo@v1
-        with:
-          command: rustc
-          args: --verbose --lib -- -D warnings
-      - name: Build bin
-        uses: actions-rs/cargo@v1
-        with:
-          command: rustc
-          args: --verbose --bin scryer-prolog -- -D warnings
-      - name: Test
-        uses: actions-rs/cargo@v1
-        with:
-          command: test
-          args: --verbose --all
-      - name: Num tests
-        uses: actions-rs/cargo@v1
-        continue-on-error: true
-        with:
-          command: test
-          args: --verbose --all --no-default-features --features num
-  msrv:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      matrix:
-        os: [ubuntu-20.04, macos-10.15]
-    steps:
-      - name: Checkout sources
-        uses: actions/checkout@v2
-      - name: Install cargo-msrv
-        uses: baptiste0928/cargo-install@v1.1.0
-        with:
-          crate: cargo-msrv
-      - name: Verify MSRV
-        run: cargo msrv --verify
-  windows:
-    runs-on: windows-latest
+        include:
+          - { os: windows-latest, rust-version: stable,  shell: 'msys2 {0}' }
+          - { os: macos-10.15,    rust-version: stable,  shell: bash }
+          - { os: ubuntu-20.04,   rust-version: stable,  shell: bash }
+          - { os: ubuntu-20.04,   rust-version: 1.63,    shell: bash }
+          - { os: ubuntu-20.04,   rust-version: beta,    shell: bash }
+          - { os: ubuntu-20.04,   rust-version: nightly, shell: bash }
     defaults:
       run:
-        shell: msys2 {0}
+        shell: ${{ matrix.shell }}
+    outputs:
+      os: ${{ matrix.os }}
+      rust-version: ${{ matrix.rust-version }}
     steps:
-      - name: Setup MSYS2
-        uses: msys2/setup-msys2@v2
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@master
+        if: "!startsWith(matrix.os, 'windows')"
+        id: toolchain
+        with:
+          toolchain: ${{ matrix.rust-version }}
+          components: clippy, rustfmt
+      - uses: msys2/setup-msys2@v2
+        if: startsWith(matrix.os,'windows')
         with:
           update: true
           install: >-
             base-devel
             mingw-w64-x86_64-rust
-      - name: Checkout sources
-        uses: actions/checkout@v3
-      - name: Test on Windows
+      - uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ matrix.os }}_rustc-${{ steps.toolchain.outputs.cachekey }}_cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      # Build and test.
+      - name: Build library
+        run: cargo rustc --verbose --lib -- -D warnings
+      - name: Test
         run: cargo test --verbose --all
+
+      # Only run formatting & style check on one job to not spam warnings.
+      - name: Check formatting
+        if: startsWith(matrix.os,'ubuntu') && matrix.rust-version == 'stable'
+        run: cargo fmt --check || echo "::warning ::cargo fmt found some formatting changes that may improve readability"
+      - name: Check clippy
+        if: startsWith(matrix.os,'ubuntu') && matrix.rust-version == 'stable'
+        run: cargo clippy || echo "::warning ::cargo clippy found some code style changes that may be more idiomatic"
+
+      # On stable rust builds, build a binary and publish as a github actions
+      # artifact. These binaries could be useful for testing the pipeline but
+      # are only retained by github for 90 days.
+      # TODO: Check that they actually work.
+      - name: Build release binary
+        if: matrix.rust-version == 'stable'
+        run: cargo rustc --verbose --bin scryer-prolog --release -- -D warnings
+      - name: Publish artifact
+        if: matrix.rust-version == 'stable'
+        uses: actions/upload-artifact@v3
+        with:
+          path: target/release/scryer-prolog*
+          name: scryer-prolog_${{ matrix.os }}

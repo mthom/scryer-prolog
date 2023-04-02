@@ -4,7 +4,6 @@
     <Package Description="An open source industrial strength production environment for ISO Prolog that is also a testbed for bleeding edge research in logic and constraint programming, which is itself written in a high-level language." Platform="x64" Keywords="prolog" Id="*" Compressed="yes" InstallScope="perMachine" InstallerVersion="300" Languages="1033" SummaryCodepage="1252" Manufacturer="Scryer Prolog contributors"/>
     <Property Id="APPHELPLINK" Value="https://github.com/mthom/scryer-prolog"/>
     <Media Id="1" Cabinet="scryer.cab" EmbedCab="yes" />
-    
     <Directory Id="TARGETDIR" Name="SourceDir">
       <Directory Id="ProgramFilesFolder" Name="PFiles">
         <Directory Id="INSTALLDIR" Name="Scryer Prolog">
@@ -14,18 +13,16 @@
         </Directory>
       </Directory>
       <Directory Id="ProgramMenuFolder">
-	<Component Id="ApplicationShortcut" Guid="8c9b14a3-e7b1-4d30-a892-61d7371dcae2">
+        <Component Id="ApplicationShortcut" Guid="8c9b14a3-e7b1-4d30-a892-61d7371dcae2">
           <Shortcut Id="ApplicationStarMenuShortcut" Name="Scryer Prolog" Description="Launch Scryer Prolog" Target="[#ScryerPrologEXE]" WorkingDirectory="INSTALLDIR"/>
-	  <RemoveFolder Id="ApplicationShortcut" On="uninstall"/>
-	  <RegistryValue Root="HKCU" Key="Software\Microsoft\ScryerProlog" Name="installed" Type="integer" Value="1" KeyPath="yes"/>
-	</Component>
+          <RemoveFolder Id="ApplicationShortcut" On="uninstall"/>
+          <RegistryValue Root="HKCU" Key="Software\Microsoft\ScryerProlog" Name="installed" Type="integer" Value="1" KeyPath="yes"/>
+        </Component>
       </Directory>
     </Directory>
-
     <Feature Id="Complete" Level="1" Display="expand" ConfigurableDirectory="INSTALLDIR">
       <ComponentRef Id="MainExecutable"/>
       <ComponentRef Id="ApplicationShortcut"/>
     </Feature>
   </Product>
 </Wix>
-  

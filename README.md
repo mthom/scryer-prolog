@@ -60,7 +60,7 @@ Extend Scryer Prolog to include the following, among other features:
       characters, using a packed internal representation.
 - [x] clp(B) and clp(ℤ) as builtin libraries.
 - [x] Streams and predicates for stream control.
-  - [x] A simple sockets library representing TCP connections as streams.  
+  - [x] A simple sockets library representing TCP connections as streams.
 - [x] Incremental compilation and loading process, newly written,
       primarily in Prolog.
 - [ ] Improvements to the WAM compiler and heap representation:
@@ -131,7 +131,7 @@ After compilation, the executable `scryer-prolog` is available in the
 directory&nbsp;`target/release` and can be invoked to run the system.
 
 On Windows, Scryer Prolog is easier to build inside a [MSYS2](https://www.msys2.org/)
-environment as some crates may require native C compilation. However, 
+environment as some crates may require native C compilation. However,
 the resulting binary does not need MSYS2 to run. When executing Scryer in a shell, it is recommended to use a more advanced shell than mintty (the default MSYS2 shell). The [Windows Terminal](https://github.com/microsoft/terminal) works correctly.
 
 To build a Windows Installer, you'll need first Scryer Prolog compiled in release mode, then, with WiX Toolset installed, execute:
@@ -141,7 +141,7 @@ light.exe scryer-prolog.wixobj
 ```
 It will generate a very basic MSI file which installs the main executable and a shortcut in the Start Menu. It can be installed with a double-click. To uninstall, go to the Control Panel and uninstall as usual.
 
-Scryer Prolog must be built with **Rust 1.61 and up**.
+Scryer Prolog must be built with **Rust 1.63 and up**.
 
 ### Docker Install
 
