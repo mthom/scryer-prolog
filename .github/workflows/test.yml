@@ -47,7 +47,7 @@ jobs:
       - name: Test
         run: cargo test --verbose --all
 
-      # Only run formatting & style check on one job to not spam warnings.
+      # Run code formatting and style checks on one job to not spam warnings.
       - name: Check formatting
         if: startsWith(matrix.os,'ubuntu') && matrix.rust-version == 'stable'
         run: cargo fmt --check || echo "::warning ::cargo fmt found some formatting changes that may improve readability"
@@ -61,10 +61,26 @@ jobs:
       # TODO: Check that they actually work.
       - name: Build release binary
         if: matrix.rust-version == 'stable'
-        run: cargo rustc --verbose --bin scryer-prolog --release -- -D warnings
+        run: |
+          cargo rustc --verbose --bin scryer-prolog --release -- -D warnings
+          echo "$PWD/target/release" >> $GITHUB_PATH
       - name: Publish artifact
         if: matrix.rust-version == 'stable'
         uses: actions/upload-artifact@v3
         with:
           path: target/release/scryer-prolog*
           name: scryer-prolog_${{ matrix.os }}
+
+      # Run iso compliance tests.
+      - name: Install Logtalk
+        if: startsWith(matrix.os,'ubuntu') && matrix.rust-version == 'stable'
+        uses: logtalk-actions/setup-logtalk@master
+        with:
+          logtalk-version: git
+          logtalk-tool-dependencies: false
+      - name: Run compliance test suite
+        if: startsWith(matrix.os,'ubuntu') && matrix.rust-version == 'stable'
+        working-directory: /home/runner/logtalk/tests/prolog
+        run: |
+          scryer-prolog -v
+          logtalk_tester -p scryer -g "set_logtalk_flag(clean,off)" -w -t 360
