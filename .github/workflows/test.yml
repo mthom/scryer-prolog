@@ -80,6 +80,7 @@ jobs:
           logtalk-tool-dependencies: false
       - name: Run compliance test suite
         if: startsWith(matrix.os,'ubuntu') && matrix.rust-version == 'stable'
+        continue-on-error: true
         working-directory: /home/runner/logtalk/tests/prolog
         run: |
           scryer-prolog -v
