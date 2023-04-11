@@ -4357,14 +4357,14 @@ list_first_rest([L|Ls], L, Ls).
 tuple_domain([], _) --> [].
 tuple_domain([T|Ts], Relation0) -->
         { maplist(list_first_rest, Relation0, Firsts, Relation1) },
-        (   var(T) ->
-            (   Firsts = [Unique] -> T = Unique
-            ;   { list_to_domain(Firsts, FDom),
+        (   Firsts = [Unique] -> T = Unique
+        ;   (   var(T) ->
+                { list_to_domain(Firsts, FDom),
                   fd_get(T, TDom, TPs),
                   domains_intersection(TDom, FDom, TDom1) },
                 fd_put(T, TDom1, TPs)
+            ;   []
             )
-        ;   []
         ),
         tuple_domain(Ts, Relation1).
 
