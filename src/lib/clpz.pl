@@ -4490,14 +4490,20 @@ run_propagator(pgeq(A,B), MState) -->
 
 run_propagator(rel_tuple(R, Tuple), MState) -->
         { get_attr(R, clpz_relation, Relation) },
-        (   { ground(Tuple) } -> kill(MState), { memberchk(Tuple, Relation) }
+        (   { ground(Tuple) } ->
+            kill(MState),
+            { del_attr(R, clpz_relation),
+              memberchk(Tuple, Relation) }
         ;   { relation_unifiable(Relation, Tuple, Us, false, Changed),
               Us = [_|_] },
             (   { Tuple = [First,Second], ( ground(First) ; ground(Second) ) } ->
                 kill(MState)
             ;   []
             ),
-            (   { Us = [Single] } -> kill(MState), Single = Tuple
+            (   { Us = [Single] } ->
+                kill(MState),
+                { del_attr(R, clpz_relation) },
+                Single = Tuple
             ;   { Changed } ->
                 { put_attr(R, clpz_relation, Us),
                 disable_queue },
