@@ -4505,10 +4505,10 @@ run_propagator(rel_tuple(R, Tuple), MState) -->
                 { del_attr(R, clpz_relation) },
                 Single = Tuple
             ;   { Changed } ->
-                { put_attr(R, clpz_relation, Us),
-                disable_queue },
+                { put_attr(R, clpz_relation, Us) },
+                disable_queue,
                 tuple_domain(Tuple, Us),
-                { enable_queue }
+                enable_queue
             ;   []
             )
         ).
