@@ -147,7 +147,7 @@
         clpz_gcc_num/1,
         clpz_gcc_occurred/1,
         queue/2,
-        enabled/1.
+        disabled/0.
 
 :- dynamic(monotonic/0).
 :- dynamic(clpz_equal_/2).
@@ -2684,7 +2684,7 @@ clear_queue(queue(Goals,Fast,Slow,Aux)) :-
         put_atts(Goals, -queue(_,_)),
         put_atts(Fast, -queue(_,_)),
         put_atts(Slow, -queue(_,_)),
-        put_atts(Aux, -enabled(_)).
+        put_atts(Aux, -disabled).
 
 collect_goal(Qs) --> collect_arg(Qs, 1).
 collect_fast(Qs) --> collect_arg(Qs, 2).
@@ -4212,9 +4212,9 @@ queue_get_arg_(Queue, Which, Element) :-
         ;   put_atts(Arg, +queue(Elements,Tail))
         ).
 
-queue_enabled --> state(queue(_,_,_,Aux)), { \+ get_atts(Aux, +enabled(false)) }.
-disable_queue --> state(queue(_,_,_,Aux)), { put_atts(Aux, +enabled(false)) }.
-enable_queue --> state(queue(_,_,_,Aux)), { put_atts(Aux, +enabled(true)) }.
+queue_enabled --> state(queue(_,_,_,Aux)), { \+ get_atts(Aux, disabled) }.
+disable_queue --> state(queue(_,_,_,Aux)), { put_atts(Aux, +disabled) }.
+enable_queue --> state(queue(_,_,_,Aux)), { put_atts(Aux, -disabled) }.
 
 portray_propagator(propagator(P,_), F) :- functor(P, F, _).
 
@@ -4357,21 +4357,23 @@ list_first_rest([L|Ls], L, Ls).
 tuple_domain([], _) --> [].
 tuple_domain([T|Ts], Relation0) -->
         { maplist(list_first_rest, Relation0, Firsts, Relation1) },
-        (   var(T) ->
-            (   Firsts = [Unique] -> T = Unique
-            ;   { list_to_domain(Firsts, FDom),
+        (   Firsts = [Unique] -> T = Unique
+        ;   (   var(T) ->
+                { list_to_domain(Firsts, FDom),
                   fd_get(T, TDom, TPs),
                   domains_intersection(TDom, FDom, TDom1) },
                 fd_put(T, TDom1, TPs)
+            ;   []
             )
-        ;   []
         ),
         tuple_domain(Ts, Relation1).
 
 tuple_freeze(Tuple, Relation) :-
-        put_attr(R, clpz_relation, Relation),
-        make_propagator(rel_tuple(R, Tuple), Prop),
-        tuple_freeze_(Tuple, Prop).
+        (   ground(Tuple) -> true
+        ;   put_attr(R, clpz_relation, Relation),
+            make_propagator(rel_tuple(R, Tuple), Prop),
+            tuple_freeze_(Tuple, Prop)
+        ).
 
 tuple_freeze_([], _).
 tuple_freeze_([T|Ts], Prop) :-
@@ -4490,19 +4492,25 @@ run_propagator(pgeq(A,B), MState) -->
 
 run_propagator(rel_tuple(R, Tuple), MState) -->
         { get_attr(R, clpz_relation, Relation) },
-        (   { ground(Tuple) } -> kill(MState), { memberchk(Tuple, Relation) }
+        (   { ground(Tuple) } ->
+            kill(MState),
+            { del_attr(R, clpz_relation),
+              memberchk(Tuple, Relation) }
         ;   { relation_unifiable(Relation, Tuple, Us, false, Changed),
               Us = [_|_] },
             (   { Tuple = [First,Second], ( ground(First) ; ground(Second) ) } ->
                 kill(MState)
             ;   []
             ),
-            (   { Us = [Single] } -> kill(MState), Single = Tuple
+            (   { Us = [Single] } ->
+                kill(MState),
+                { del_attr(R, clpz_relation) },
+                Single = Tuple
             ;   { Changed } ->
-                { put_attr(R, clpz_relation, Us),
-                disable_queue },
+                { put_attr(R, clpz_relation, Us) },
+                disable_queue,
                 tuple_domain(Tuple, Us),
-                { enable_queue }
+                enable_queue
             ;   []
             )
         ).
