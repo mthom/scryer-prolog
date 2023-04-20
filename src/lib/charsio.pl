@@ -104,7 +104,32 @@ extend_var_list_([V|Vs], N, VarList, NewVarList, VarType) :-
 % - `symbolic_control`
 % - `symbolic_hexadecimal`
 % - `upper`
+% - `to_lower(Lower)`
+% - `to_upper(Upper)`
 % - `whitespace`
+%
+% An example:
+%
+% ```
+% ?- char_type(a, Type).
+%    Type = alnum
+% ;  Type = alpha
+% ;  Type = alphabetic
+% ;  Type = alphanumeric
+% ;  Type = ascii
+% ;  Type = ascii_graphic
+% ;  Type = hexadecimal_digit
+% ;  Type = lower
+% ;  Type = octet
+% ;  Type = prolog
+% ;  Type = symbolic_control
+% ;  Type = to_lower("a")
+% ;  Type = to_upper("A")
+% ;  false.
+% ```
+%
+% Note that uppercase and lowercase transformations use a string. This is because
+% some characters do not map 1:1 between lowercase and uppercase.
 char_type(Char, Type) :-
         must_be(character, Char),
         (   ground(Type) ->
@@ -142,6 +167,8 @@ ctype(sign).
 ctype(solo).
 ctype(symbolic_control).
 ctype(symbolic_hexadecimal).
+ctype(to_lower(_)).
+ctype(to_upper(_)).
 ctype(upper).
 ctype(whitespace).
 
