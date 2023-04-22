@@ -57,7 +57,7 @@ jobs:
       - name: Test and report
         if: matrix.extra
         run: |
-          cargo install cargo2junit
+          cargo install cargo2junit --force
           cargo test --all -- -Z unstable-options --format json --report-time | cargo2junit > cargo_test_results.xml
       - name: Publish cargo test results artifact
         if: matrix.extra
