@@ -626,8 +626,25 @@ impl Term {
     }
 }
 
+#[inline]
+pub fn source_arity(terms: &[Term]) -> usize {
+    if let Some(last_arg) = terms.last() {
+        if let Term::Literal(_, Literal::CodeIndex(_)) = last_arg {
+            return terms.len() - 1;
+        }
+    }
+
+    terms.len()
+}
+
 fn unfold_by_str_once(term: &mut Term, s: Atom) -> Option<(Term, Term)> {
     if let Term::Clause(_, ref name, ref mut subterms) = term {
+        if let Some(last_arg) = subterms.last() {
+            if let Term::Literal(_, Literal::CodeIndex(_)) = last_arg {
+                subterms.pop();
+            }
+        }
+
         if name == &s && subterms.len() == 2 {
             let snd = subterms.pop().unwrap();
             let fst = subterms.pop().unwrap();

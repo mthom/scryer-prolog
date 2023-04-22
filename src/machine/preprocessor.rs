@@ -399,7 +399,7 @@ fn check_for_internal_if_then(terms: &mut Vec<Term>) {
     }
 
     if let Some(Term::Clause(_, name, ref subterms)) = terms.last() {
-        if *name != atom!("->") || subterms.len() != 2 {
+        if *name != atom!("->") || source_arity(subterms) != 2 {
             return;
         }
     } else {
@@ -770,7 +770,7 @@ impl Preprocessor {
             Term::Var(_, ref v) if v.as_str() == "!" => {
                 Ok(QueryTerm::UnblockedCut(Cell::default()))
             }
-            Term::Clause(r, name, mut terms) => match (name, terms.len()) {
+            Term::Clause(r, name, mut terms) => match (name, source_arity(&terms)) {
                 (atom!(";"), 2) => {
                     let term = Term::Clause(r, name, terms);
 
@@ -900,7 +900,7 @@ impl Preprocessor {
             let mut term = term;
 
             if let Term::Clause(cell, name, terms) = term {
-                if name == atom!(",") && terms.len() == 2 {
+                if name == atom!(",") && source_arity(&terms) == 2 {
                     let term = Term::Clause(cell, name, terms);
                     let mut subterms = unfold_by_str(term, atom!(","));
 
