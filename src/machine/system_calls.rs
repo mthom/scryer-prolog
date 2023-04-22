@@ -2794,15 +2794,17 @@ impl Machine {
 		
 		match (name, arity) {
 		    (atom!("to_upper"), 1) => {
-			let reg = self.machine_st.heap[s+1];
-			let upper_str = self.machine_st.atom_tbl.build_with(&c.to_uppercase().to_string());
-			self.machine_st.unify_complete_string(upper_str, reg);
+			let reg = self.machine_st.deref(self.machine_st.heap[s+1]);
+			let atom = self.machine_st.atom_tbl.build_with(&c.to_uppercase().to_string());
+			let upper_str = string_as_cstr_cell!(atom);
+			unify!(self.machine_st, reg, upper_str);
 			self.machine_st.fail = false;
 		    }
 		    (atom!("to_lower"), 1) => {
-			let reg = self.machine_st.heap[s+1];
-			let lower_str = self.machine_st.atom_tbl.build_with(&c.to_lowercase().to_string());
-			self.machine_st.unify_complete_string(lower_str, reg);
+			let reg = self.machine_st.deref(self.machine_st.heap[s+1]);
+			let atom = self.machine_st.atom_tbl.build_with(&c.to_lowercase().to_string());
+			let lower_str = string_as_cstr_cell!(atom);
+			unify!(self.machine_st, reg, lower_str);
 			self.machine_st.fail = false;
 		    }		    
 		    _ => {
