@@ -67,7 +67,7 @@ jobs:
           path: cargo_test_results.xml
       - name: Publish cargo test summary
         if: matrix.extra
-        uses: EnricoMi/publish-unit-test-result-action/composite@branch-publish-summary-on-fork
+        uses: EnricoMi/publish-unit-test-result-action/composite@master
         with:
           check_name: Cargo test summary
           files: cargo_test_results.xml
@@ -133,7 +133,7 @@ jobs:
           name: logtalk-test-results
           path: '${{ env.LOGTALKUSER }}/tests/prolog/**/*.xml'
       - name: Publish Logtalk test summary
-        uses: EnricoMi/publish-unit-test-result-action/composite@branch-publish-summary-on-fork
+        uses: EnricoMi/publish-unit-test-result-action/composite@master
         with:
           check_name: Logtalk test summary
           files: '${{ env.LOGTALKUSER }}/tests/prolog/**/*.xml'
