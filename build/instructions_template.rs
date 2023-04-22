@@ -470,6 +470,8 @@ enum SystemClauseType {
     UnwindStack,
     #[strum_discriminants(strum(props(Arity = "4", Name = "$wam_instructions")))]
     WAMInstructions,
+    #[strum_discriminants(strum(props(Arity = "2", Name = "$inlined_instructions")))]
+    InlinedInstructions,
     #[strum_discriminants(strum(props(Arity = "7", Name = "$write_term")))]
     WriteTerm,
     #[strum_discriminants(strum(props(Arity = "7", Name = "$write_term_to_chars")))]
@@ -1747,6 +1749,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallUnwindEnvironments(_) |
                     &Instruction::CallUnwindStack(_) |
                     &Instruction::CallWAMInstructions(_) |
+                    &Instruction::CallInlinedInstructions(_) |
                     &Instruction::CallWriteTerm(_) |
                     &Instruction::CallWriteTermToChars(_) |
                     &Instruction::CallScryerPrologVersion(_) |
@@ -1933,9 +1936,9 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteHttpListen(_) |
                     &Instruction::ExecuteHttpAccept(_) |
                     &Instruction::ExecuteHttpAnswer(_) |
-		    &Instruction::ExecuteLoadForeignLib(_) |
-		    &Instruction::ExecuteForeignCall(_) |
-		    &Instruction::ExecuteDefineForeignStruct(_) |
+		            &Instruction::ExecuteLoadForeignLib(_) |
+		            &Instruction::ExecuteForeignCall(_) |
+		            &Instruction::ExecuteDefineForeignStruct(_) |
                     &Instruction::ExecutePredicateDefined(_) |
                     &Instruction::ExecuteStripModule(_) |
                     &Instruction::ExecuteCurrentTime(_) |
@@ -1967,6 +1970,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteUnwindEnvironments(_) |
                     &Instruction::ExecuteUnwindStack(_) |
                     &Instruction::ExecuteWAMInstructions(_) |
+                    &Instruction::ExecuteInlinedInstructions(_) |
                     &Instruction::ExecuteWriteTerm(_) |
                     &Instruction::ExecuteWriteTermToChars(_) |
                     &Instruction::ExecuteScryerPrologVersion(_) |

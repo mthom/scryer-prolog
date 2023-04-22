@@ -4445,6 +4445,14 @@ impl Machine {
                     try_or_throw!(self.machine_st, self.wam_instructions());
                     step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                 }
+                &Instruction::CallInlinedInstructions(_) => {
+                    self.inlined_instructions();
+                    self.machine_st.p += 1;
+                }
+                &Instruction::ExecuteInlinedInstructions(_) => {
+                    self.inlined_instructions();
+                    self.machine_st.p = self.machine_st.cp;
+                }
                 &Instruction::CallWriteTerm(_) => {
                     try_or_throw!(self.machine_st, self.write_term());
                     step_or_fail!(self, self.machine_st.p += 1);

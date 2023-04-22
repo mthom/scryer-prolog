@@ -6267,6 +6267,43 @@ impl Machine {
         false
     }
 
+    fn walk_code_at_ptr(&mut self, index_ptr: usize) -> HeapCellValue {
+        let mut h = self.machine_st.heap.len();
+
+        let mut functors = vec![];
+        let mut functor_list = vec![];
+
+        walk_code(&self.code, index_ptr, |instr| {
+            let old_len = functors.len();
+            instr.enqueue_functors(h, &mut self.machine_st.arena, &mut functors);
+            let new_len = functors.len();
+
+            for index in old_len..new_len {
+                let functor_len = functors[index].len();
+
+                match functor_len {
+                    0 => {}
+                    1 => {
+                        functor_list.push(heap_loc_as_cell!(h));
+                        h += functor_len;
+                    }
+                    _ => {
+                        functor_list.push(str_loc_as_cell!(h));
+                        h += functor_len;
+                    }
+                }
+            }
+        });
+
+        for functor in functors {
+            self.machine_st.heap.extend(functor.into_iter());
+        }
+
+        heap_loc_as_cell!(
+            iter_to_heap_list(&mut self.machine_st.heap, functor_list.into_iter())
+        )
+    }
+
     #[inline(always)]
     pub(crate) fn wam_instructions(&mut self) -> CallResult {
         let module_name = cell_as_atom!(self.deref_register(1));
@@ -6318,45 +6355,28 @@ impl Machine {
             }
         };
 
-        let mut h = self.machine_st.heap.len();
-
-        let mut functors = vec![];
-        let mut functor_list = vec![];
-
-        walk_code(&self.code, first_idx, |instr| {
-            let old_len = functors.len();
-            instr.enqueue_functors(h, &mut self.machine_st.arena, &mut functors);
-            let new_len = functors.len();
-
-            for index in old_len..new_len {
-                let functor_len = functors[index].len();
-
-                match functor_len {
-                    0 => {}
-                    1 => {
-                        functor_list.push(heap_loc_as_cell!(h));
-                        h += functor_len;
-                    }
-                    _ => {
-                        functor_list.push(str_loc_as_cell!(h));
-                        h += functor_len;
-                    }
-                }
-            }
-        });
-
-        for functor in functors {
-            self.machine_st.heap.extend(functor.into_iter());
-        }
-
-        let listing = heap_loc_as_cell!(
-            iter_to_heap_list(&mut self.machine_st.heap, functor_list.into_iter())
-        );
-
+        let listing = self.walk_code_at_ptr(first_idx);
         let listing_var = self.machine_st.registers[4];
 
         unify!(self.machine_st, listing, listing_var);
         Ok(())
+    }
+
+    #[inline(always)]
+    pub(crate) fn inlined_instructions(&mut self) {
+        let index_ptr = self.deref_register(1);
+        let index_ptr = match Number::try_from(index_ptr) {
+            Ok(Number::Fixnum(n)) => n.get_num() as usize,
+            Ok(Number::Integer(n)) => n.to_usize().unwrap(),
+            _ => {
+                unreachable!()
+            }
+        };
+
+        let listing = self.walk_code_at_ptr(index_ptr);
+        let listing_var = self.machine_st.registers[2];
+
+        unify!(self.machine_st, listing, listing_var);
     }
 
     #[inline(always)]
