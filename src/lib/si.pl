@@ -36,7 +36,8 @@
                integer_si/1,
                atomic_si/1,
                list_si/1,
-               chars_si/1]).
+               chars_si/1,
+               dif_si/2]).
 
 :- use_module(library(lists)).
 
@@ -64,3 +65,9 @@ list_si(L0) :-
 chars_si(Cs) :-
    list_si(Cs),
    '$is_partial_string'(Cs).
+
+dif_si(X, Y) :-
+   X \== Y,
+   ( X \= Y -> true
+   ; throw(error(instantiation_error,dif_si/2))
+   ).
