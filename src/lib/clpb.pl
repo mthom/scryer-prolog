@@ -1628,6 +1628,7 @@ skip_to_var_(Var, Weight, [Var0-Weight0|VWs0], VWs) -->
 
 attribute_goals(Var) -->
         { var_index_root(Var, _, Root) },
+        !,
         (   { root_get_formula_bdd(Root, Formula, BDD) } ->
             { del_bdd(Root) },
             (   { clpb_residuals(bdd) } ->
@@ -1655,6 +1656,10 @@ attribute_goals(Var) -->
             booleans(RestVs)
         ;   boolean(Var)  % the variable may have occurred only in taut/2
         ).
+attribute_goals(Var) -->
+        { get_atts(Var, clpb_bdd(BDD)),
+          ground(BDD),
+          put_atts(Var, -clpb_bdd(_)) }.
 
 del_clpb(Var) :-
         del_attr(Var, clpb),
