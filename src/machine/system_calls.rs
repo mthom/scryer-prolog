@@ -3660,44 +3660,74 @@ impl Machine {
     }
 
     #[inline(always)]
-    pub(crate) fn get_next_db_ref(&mut self) {
-        let a1 = self.deref_register(1);
+    pub(crate) fn lookup_db_ref(&mut self) {
+        let name = cell_as_atom!(self.deref_register(1));
+        let arity = cell_as_fixnum!(self.deref_register(2)).get_num() as usize;
 
-        if let Some(name_var) = a1.as_var() {
-            let mut iter = self.indices.code_dir.iter();
+        if self.indices.code_dir.get(&(name, arity)).is_none() {
+            self.machine_st.fail = true;
+        }
+    }
 
-            while let Some(((name, arity), _)) = iter.next() {
-                let arity_var = self.machine_st.deref(self.machine_st.registers[2])
-                    .as_var().unwrap();
+    #[inline(always)]
+    pub(crate) fn get_db_refs(&mut self) {
+        let name_match: fn(Atom, Atom) -> bool;
+        let arity_match: fn(usize, usize) -> bool;
 
-                self.machine_st.bind(name_var, atom_as_cell!(name));
-                self.machine_st.bind(arity_var, fixnum_as_cell!(Fixnum::build_with(*arity as i64)));
+        let atom = self.deref_register(1);
 
+        let pred_atom = if atom.is_var() {
+            name_match = |_, _| true;
+            atom!("")
+        } else {
+            name_match = |atom_1, atom_2| atom_1 == atom_2;
+            cell_as_atom!(atom)
+        };
+
+        let arity = self.deref_register(2);
+
+        let pred_arity = if arity.is_var() {
+            arity_match = |_, _| true;
+            0
+        } else {
+            arity_match = |arity_1, arity_2| arity_1 == arity_2;
+
+            let arity = match Number::try_from(arity) {
+                Ok(Number::Fixnum(n)) => Some(n.get_num() as usize),
+                Ok(Number::Integer(n)) => n.to_usize(),
+                _ => None,
+            };
+
+            if let Some(arity) = arity {
+                arity
+            } else {
+                self.machine_st.fail = true;
                 return;
             }
+        };
 
-            self.machine_st.fail = true;
-        } else if a1.get_tag() == HeapCellValueTag::Atom {
-            let name = cell_as_atom!(a1);
-            let arity = cell_as_fixnum!(self.deref_register(2)).get_num() as usize;
+        let h = self.machine_st.heap.len();
+        let mut num_functors = 0;
 
-            match self.machine_st.get_next_db_ref(&self.indices, &DBRef::NamedPred(name, arity)) {
-                Some(DBRef::NamedPred(name, arity)) => {
-                    let atom_var = self.machine_st.deref(self.machine_st.registers[3])
-                        .as_var().unwrap();
+        for (name, arity) in self.indices.code_dir.keys() {
+            if name_match(pred_atom, *name) && arity_match(pred_arity, *arity) {
+                self.machine_st.heap.extend(
+                    functor!(atom!("/"), [cell(atom_as_cell!(name)), fixnum(*arity)]),
+                );
 
-                    let arity_var = self.machine_st.deref(self.machine_st.registers[4])
-                        .as_var().unwrap();
-
-                    self.machine_st.bind(atom_var, atom_as_cell!(name));
-                    self.machine_st.bind(arity_var, fixnum_as_cell!(Fixnum::build_with(arity as i64)));
-                }
-                Some(DBRef::Op(..)) | None => {
-                    self.machine_st.fail = true;
-                }
+                num_functors += 1;
             }
+        }
+
+        if num_functors > 0 {
+            let h = iter_to_heap_list(
+                &mut self.machine_st.heap,
+                (0 .. num_functors).map(|i| str_loc_as_cell!(h + 3 * i)),
+            );
+
+            unify!(self.machine_st, heap_loc_as_cell!(h), self.machine_st.registers[3]);
         } else {
-            self.machine_st.fail = true;
+            unify!(self.machine_st, empty_list_as_cell!(), self.machine_st.registers[3]);
         }
     }
 

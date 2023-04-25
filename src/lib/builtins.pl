@@ -1205,7 +1205,6 @@ module_abolish(Pred, Module) :-
     ;  throw(error(type_error(predicate_indicator, Module:Pred), abolish/1))
     ).
 
-
 :- meta_predicate abolish(:).
 
 %% abolish(Pred).
@@ -1246,13 +1245,6 @@ abolish(Pred) :-
     ;  throw(error(type_error(predicate_indicator, Pred), abolish/1))
     ).
 
-
-'$iterate_db_refs'(Name, Arity, Name/Arity). % :-
-%   '$lookup_db_ref'(Ref, Name, Arity).
-'$iterate_db_refs'(RName, RArity, Name/Arity) :-
-    '$get_next_db_ref'(RName, RArity, RRName, RRArity),
-    '$iterate_db_refs'(RRName, RRArity, Name/Arity).
-
 %% current_predicate(Pred).
 %
 % Pred must satisfy: `Pred = Name/Arity`.
@@ -1260,26 +1252,27 @@ abolish(Pred) :-
 % It can be used to check for existence of a predicate or to enumerate all loaded predicates
 current_predicate(Pred) :-
     (  var(Pred) ->
-       '$get_next_db_ref'(RN, RA, _, _),
-       '$iterate_db_refs'(RN, RA, Pred)
-    ;  Pred \= _/_ ->
-       throw(error(type_error(predicate_indicator, Pred), current_predicate/1))
-    ;  Pred = Name/Arity,
-       (  nonvar(Name), \+ atom(Name)
-       ;  nonvar(Arity), \+ integer(Arity)
-       ;  integer(Arity), Arity < 0
-       ) ->
-       throw(error(type_error(predicate_indicator, Pred), current_predicate/1))
-    ;  '$get_next_db_ref'(RN, RA, _, _),
-       '$iterate_db_refs'(RN, RA, Pred)
+       '$get_db_refs'(_, _, PIs),
+       lists:member(Pred, PIs)
+    ;  Pred = Name/Arity ->
+       (  (  nonvar(Name), \+ atom(Name)
+          ;  nonvar(Arity), \+ integer(Arity)
+          ;  integer(Arity), Arity < 0
+          ) ->
+          throw(error(type_error(predicate_indicator, Pred), current_predicate/1))
+       ;  nonvar(Name),
+          nonvar(Arity) ->
+          '$lookup_db_ref'(Name, Arity)
+       ;  '$get_db_refs'(Name, Arity, PIs),
+          lists:member(Pred, PIs)
+       )
+    ;  throw(error(type_error(predicate_indicator, Pred), current_predicate/1))
     ).
-
 
 '$iterate_op_db_refs'(RPriority, RSpec, ROp, _, RPriority, RSpec, ROp).
 '$iterate_op_db_refs'(RPriority, RSpec, ROp, OssifiedOpDir, Priority, Spec, Op) :-
     '$get_next_op_db_ref'(RPriority, RSpec, ROp, OssifiedOpDir, RRPriority, RRSpec, RROp),
     '$iterate_op_db_refs'(RRPriority, RRSpec, RROp, OssifiedOpDir, Priority, Spec, Op).
-
 
 can_be_op_priority(Priority) :- var(Priority).
 can_be_op_priority(Priority) :- op_priority(Priority).

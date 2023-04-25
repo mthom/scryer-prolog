@@ -3720,12 +3720,12 @@ impl Machine {
                     self.get_continuation_chunk();
                     step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                 }
-                &Instruction::CallGetNextDBRef(_) => {
-                    self.get_next_db_ref();
+                &Instruction::CallLookupDBRef(_) => {
+                    self.lookup_db_ref();
                     step_or_fail!(self, self.machine_st.p += 1);
                 }
-                &Instruction::ExecuteGetNextDBRef(_) => {
-                    self.get_next_db_ref();
+                &Instruction::ExecuteLookupDBRef(_) => {
+                    self.lookup_db_ref();
                     step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                 }
                 &Instruction::CallGetNextOpDBRef(_) => {
@@ -5253,6 +5253,14 @@ impl Machine {
                 }
                 &Instruction::ExecuteUnattributedVar(_) => {
                     self.machine_st.unattributed_var();
+                    step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+                }
+                &Instruction::CallGetDBRefs(_) => {
+                    self.get_db_refs();
+                    step_or_fail!(self, self.machine_st.p += 1);
+                }
+                &Instruction::ExecuteGetDBRefs(_) => {
+                    self.get_db_refs();
                     step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                 }
             }

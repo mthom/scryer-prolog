@@ -306,10 +306,10 @@ enum SystemClauseType {
     GetBValue,
     #[strum_discriminants(strum(props(Arity = "3", Name = "$get_cont_chunk")))]
     GetContinuationChunk,
-    #[strum_discriminants(strum(props(Arity = "4", Name = "$get_next_db_ref")))]
-    GetNextDBRef,
     #[strum_discriminants(strum(props(Arity = "7", Name = "$get_next_op_db_ref")))]
     GetNextOpDBRef,
+    #[strum_discriminants(strum(props(Arity = "2", Name = "$lookup_db_ref")))]
+    LookupDBRef,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$is_partial_string")))]
     IsPartialString,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$halt")))]
@@ -578,6 +578,8 @@ enum SystemClauseType {
     DeleteAllAttributesFromVar,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$unattributed_var")))]
     UnattributedVar,
+    #[strum_discriminants(strum(props(Arity = "3", Name = "$get_db_refs")))]
+    GetDBRefs,
     REPL(REPLCodePtr),
 }
 
@@ -1641,6 +1643,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallDeleteFromAttributedVarList(_) |
                     &Instruction::CallDeleteAllAttributesFromVar(_) |
                     &Instruction::CallUnattributedVar(_) |
+                    &Instruction::CallGetDBRefs(_) |
                     &Instruction::CallFetchGlobalVar(_) |
                     &Instruction::CallFirstStream(_) |
                     &Instruction::CallFlushOutput(_) |
@@ -1656,8 +1659,8 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallGetAttrVarQueueBeyond(_) |
                     &Instruction::CallGetBValue(_) |
                     &Instruction::CallGetContinuationChunk(_) |
-                    &Instruction::CallGetNextDBRef(_) |
                     &Instruction::CallGetNextOpDBRef(_) |
+                    &Instruction::CallLookupDBRef(_) |
                     &Instruction::CallIsPartialString(_) |
                     &Instruction::CallHalt(_) |
                     &Instruction::CallGetLiftedHeapFromOffset(_) |
@@ -1862,6 +1865,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteDeleteFromAttributedVarList(_) |
                     &Instruction::ExecuteDeleteAllAttributesFromVar(_) |
                     &Instruction::ExecuteUnattributedVar(_) |
+                    &Instruction::ExecuteGetDBRefs(_) |
                     &Instruction::ExecuteFetchGlobalVar(_) |
                     &Instruction::ExecuteFirstStream(_) |
                     &Instruction::ExecuteFlushOutput(_) |
@@ -1877,8 +1881,8 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteGetAttrVarQueueBeyond(_) |
                     &Instruction::ExecuteGetBValue(_) |
                     &Instruction::ExecuteGetContinuationChunk(_) |
-                    &Instruction::ExecuteGetNextDBRef(_) |
                     &Instruction::ExecuteGetNextOpDBRef(_) |
+                    &Instruction::ExecuteLookupDBRef(_) |
                     &Instruction::ExecuteIsPartialString(_) |
                     &Instruction::ExecuteHalt(_) |
                     &Instruction::ExecuteGetLiftedHeapFromOffset(_) |
