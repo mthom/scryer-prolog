@@ -172,7 +172,9 @@ fn char_to_string(is_quoted: bool, c: char) -> String {
         '\'' | '\n' | '\r' | '\t' | '\u{0b}' | '\u{0c}' | '\u{08}' | '\u{07}' | '"' | '\\' => {
             c.to_string()
         }
-        '\u{0}'..='\u{1f}' => format!("\\x{:x}\\", c as u32), // print all other control characters in hex.
+        '\u{0}'..='\u{1f}' | '\u{7f}' ..= '\u{a0}'
+        // print all other control characters, and also non-breaking space, in hex.
+            => format!("\\x{:x}\\", c as u32),
         _ => c.to_string(),
     }
 }
