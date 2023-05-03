@@ -295,25 +295,19 @@ same_length([_|As], [_|Bs]) :-
 % sum_list(Ls, S) :- foldl(sum_, Ls, 0, S).
 % ```
 
-foldl(Goal_3, Ls, A0, A) :-
-        foldl_(Ls, Goal_3, A0, A).
-
-foldl_([], _, A, A).
-foldl_([L|Ls], G_3, A0, A) :-
+foldl(_, [], A, A).
+foldl(G_3, [L|Ls], A0, A) :-
         call(G_3, L, A0, A1),
-        foldl_(Ls, G_3, A1, A).
+        foldl(G_3, Ls, A1, A).
 
 %% foldl(+Predicate, ?Ls0, ?Ls1, +A0, ?A).
 %
 % Same as `foldl/4` but with an extra list
-foldl(Goal_4, Xs, Ys, A0, A) :-
-        foldl_(Xs, Ys, Goal_4, A0, A).
 
-
-foldl_([], [], _, A, A).
-foldl_([X|Xs], [Y|Ys], G_4, A0, A) :-
+foldl(_, [], [], A, A).
+foldl(G_4, [X|Xs], [Y|Ys], A0, A) :-
         call(G_4, X, Y, A0, A1),
-        foldl_(Xs, Ys, G_4, A1, A).
+        foldl(G_4, Xs, Ys, A1, A).
 
 %% transpose(?Ls, ?Ts).
 %
