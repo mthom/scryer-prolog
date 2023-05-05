@@ -20,7 +20,7 @@ macro_rules! alpha_char {
 #[macro_export]
 macro_rules! alpha_numeric_char {
     ($c: expr) => {
-        $crate::alpha_char!($c) || $crate::decimal_digit_char!($c)
+        $crate::alpha_char!($c) || $c.is_numeric()
     };
 }
 
