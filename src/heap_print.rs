@@ -169,13 +169,16 @@ fn char_to_string(is_quoted: bool, c: char) -> String {
         '\u{08}' if is_quoted => "\\b".to_string(), // UTF-8 backspace
         '\u{07}' if is_quoted => "\\a".to_string(), // UTF-8 alert
         '\\' if is_quoted => "\\\\".to_string(),
-        '\'' | '\n' | '\r' | '\t' | '\u{0b}' | '\u{0c}' | '\u{08}' | '\u{07}' | '"' | '\\' => {
+        ' ' | '\'' | '\n' | '\r' | '\t' | '\u{0b}' | '\u{0c}' | '\u{08}' | '\u{07}' | '"' | '\\' => {
             c.to_string()
         }
-        '\u{0}'..='\u{1f}' | '\u{7f}' ..= '\u{a0}'
-        // print all other control characters, and also non-breaking space, in hex.
-            => format!("\\x{:x}\\", c as u32),
-        _ => c.to_string(),
+        _ =>
+            if c.is_whitespace() || c.is_control() {
+                // print all other control and whitespace characters in hex.
+                format!("\\x{:x}\\", c as u32)
+            } else {
+                c.to_string()
+            }
     }
 }
 
