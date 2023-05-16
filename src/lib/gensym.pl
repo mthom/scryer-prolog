@@ -28,4 +28,5 @@ gensym(Base, Unique) :-
 
 reset_gensym(Base) :-
     atom_si(Base),
-    bb_put(Base, 0).
+    gensym_key(Base, BaseKey),
+    bb_put(BaseKey, 0).
