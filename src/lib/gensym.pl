@@ -19,13 +19,12 @@ gensym(Base, Unique) :-
     must_be(var, Unique),
     atom_si(Base),
     gensym_key(Base, BaseKey),
-    (  bb_get(BaseKey, UniqueID0) ->
-       UniqueID is UniqueID0 + 1,
-       bb_put(BaseKey, UniqueID),
-       append_id(Base, UniqueID, Unique)
-    ;  bb_put(BaseKey, 1),
-       append_id(Base, 1, Unique)
-    ).
+    (  bb_get(BaseKey, UniqueID0) -> true
+    ;  UniqueID0 = 0
+    ),
+    UniqueID is UniqueID0 + 1,
+    append_id(Base, UniqueID, Unique),
+    bb_put(BaseKey, UniqueID).
 
 reset_gensym(Base) :-
     atom_si(Base),
