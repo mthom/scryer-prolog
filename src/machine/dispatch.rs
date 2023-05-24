@@ -2601,13 +2601,16 @@ impl Machine {
                     read_heap_cell!(d,
                         (HeapCellValueTag::Cons, ptr) => {
                             match_untyped_arena_ptr!(ptr,
-                                 (ArenaHeaderTag::Rational, _r) => {
+                                 (ArenaHeaderTag::Rational | ArenaHeaderTag::Integer, _r) => {
                                      self.machine_st.p += 1;
                                  }
                                  _ => {
                                      self.machine_st.backtrack();
                                  }
                             );
+                        }
+                        (HeapCellValueTag::Fixnum) => {
+                            self.machine_st.p += 1;
                         }
                         _ => {
                             self.machine_st.backtrack();
@@ -2620,13 +2623,16 @@ impl Machine {
                     read_heap_cell!(d,
                         (HeapCellValueTag::Cons, ptr) => {
                             match_untyped_arena_ptr!(ptr,
-                                 (ArenaHeaderTag::Rational, _r) => {
+                                 (ArenaHeaderTag::Rational | ArenaHeaderTag::Integer, _r) => {
                                      self.machine_st.p = self.machine_st.cp;
                                  }
                                  _ => {
                                      self.machine_st.backtrack();
                                  }
                             );
+                        }
+                        (HeapCellValueTag::Fixnum) => {
+                            self.machine_st.p = self.machine_st.cp;
                         }
                         _ => {
                             self.machine_st.backtrack();
