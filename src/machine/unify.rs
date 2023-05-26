@@ -651,10 +651,12 @@ fn bind_with_occurs_check<U: Unifier>(unifier: &mut U, r: Ref, value: HeapCellVa
     let mut occurs_triggered = false;
 
     if !value.is_constant() {
-        for addr in stackful_preorder_iter(&mut unifier.heap, value) {
-            let addr = unmark_cell_bits!(addr);
+        let machine_st: &mut MachineState = unifier.deref_mut();
 
-            if let Some(inner_r) = addr.as_var() {
+        for cell in stackful_preorder_iter(&mut machine_st.heap, &mut machine_st.stack, value) {
+            let cell = unmark_cell_bits!(cell);
+
+            if let Some(inner_r) = cell.as_var() {
                 if r == inner_r {
                     occurs_triggered = true;
                     break;

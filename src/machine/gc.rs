@@ -3,7 +3,7 @@ use crate::machine::heap::*;
 use crate::types::*;
 
 #[cfg(test)]
-use crate::heap_iter::FocusedHeapIter;
+use crate::heap_iter::{IterStackLoc, FocusedHeapIter, HeapOrStackTag};
 
 use core::marker::PhantomData;
 
@@ -75,8 +75,8 @@ pub(crate) struct StacklessPreOrderHeapIter<'a, UMP: UnmarkPolicy> {
 #[cfg(test)]
 impl<'a> FocusedHeapIter for StacklessPreOrderHeapIter<'a, IteratorUMP> {
     #[inline]
-    fn focus(&self) -> usize {
-        self.current
+    fn focus(&self) -> IterStackLoc {
+        IterStackLoc::iterable_loc(self.current, HeapOrStackTag::Heap)
     }
 }
 
