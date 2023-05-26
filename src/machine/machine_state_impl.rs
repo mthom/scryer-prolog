@@ -1125,7 +1125,7 @@ impl MachineState {
             return false;
         }
 
-        let mut iter = stackful_preorder_iter(&mut self.heap, value);
+        let mut iter = stackful_preorder_iter(&mut self.heap, &mut self.stack, value);
 
         while let Some(value) = iter.next() {
             if value.get_forwarding_bit() {
@@ -1626,7 +1626,7 @@ impl MachineState {
             return true;
         }
 
-        let mut iter = stackful_preorder_iter(&mut self.heap, value);
+        let mut iter = stackful_preorder_iter(&mut self.heap, &mut self.stack, value);
 
         while let Some(value) = iter.next() {
             let value = unmark_cell_bits!(value);

@@ -558,10 +558,10 @@ impl MachineState {
 
                     let mut singleton_var_set: IndexMap<Ref, bool> = IndexMap::new();
 
-                    for addr in stackful_preorder_iter(&mut self.heap, term) {
-                        let addr = unmark_cell_bits!(addr);
+                    for cell in stackful_preorder_iter(&mut self.heap, &mut self.stack, term) {
+                        let cell = unmark_cell_bits!(cell);
 
-                        if let Some(var) = addr.as_var() {
+                        if let Some(var) = cell.as_var() {
                             if !singleton_var_set.contains_key(&var) {
                                 singleton_var_set.insert(var, true);
                             } else {

@@ -136,7 +136,7 @@ impl MachineState {
         let mut seen_set = IndexSet::new();
         let mut seen_vars = vec![];
 
-        let mut iter = stackful_preorder_iter(&mut self.heap, cell);
+        let mut iter = stackful_preorder_iter(&mut self.heap, &mut self.stack, cell);
 
         while let Some(value) = iter.next() {
             read_heap_cell!(value,
@@ -147,7 +147,7 @@ impl MachineState {
 
                     let value = unmark_cell_bits!(value);
 
-                    if h != iter.focus() {
+                    if h != iter.focus().value() as usize {
                         let deref_value = heap_bound_store(iter.heap, heap_bound_deref(iter.heap, value));
 
                         if deref_value.is_compound(iter.heap) {
@@ -167,7 +167,7 @@ impl MachineState {
                     loop {
                         read_heap_cell!(iter.heap[l],
                             (HeapCellValueTag::Lis) => {
-                                iter.push_stack(l);
+                                iter.push_stack(IterStackLoc::iterable_loc(l, HeapOrStackTag::Heap));
                                 // l = elem + 1;
                                 break;
                             }

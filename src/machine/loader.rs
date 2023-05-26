@@ -536,7 +536,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         let term_addr = machine_st[heap_term_loc];
 
         let mut term_stack = vec![];
-        let mut iter = stackful_post_order_iter(&mut machine_st.heap, term_addr);
+        let mut iter = stackful_post_order_iter(&mut machine_st.heap, &mut machine_st.stack, term_addr);
 
         while let Some(addr) = iter.next() {
             let addr = unmark_cell_bits!(addr);
@@ -568,7 +568,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     term_stack.push(Term::Literal(Cell::default(), Literal::try_from(addr).unwrap()));
                 }
                 (HeapCellValueTag::Atom, (name, arity)) => {
-                    let h = iter.focus();
+                    let h = iter.focus().value() as usize;
                     let mut arity = arity;
 
                     if iter.heap.len() > h + arity + 1 {
