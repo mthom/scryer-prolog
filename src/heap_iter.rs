@@ -1,8 +1,9 @@
 #[cfg(test)]
 pub(crate) use crate::machine::gc::{IteratorUMP, StacklessPreOrderHeapIter};
-use crate::machine::heap::*;
 
 use crate::atom_table::*;
+use crate::machine::heap::*;
+use crate::machine::stack::*;
 use crate::types::*;
 
 use modular_bitfield::prelude::*;
@@ -72,6 +73,7 @@ fn forward_if_referent_marked(heap: &mut [HeapCellValue], h: usize) {
 #[derive(Debug)]
 pub struct StackfulPreOrderHeapIter<'a> {
     pub heap: &'a mut Vec<HeapCellValue>,
+    machine_stack: Option<&'a Stack>,
     stack: Vec<IterStackLoc>,
     h: usize,
 }
@@ -109,8 +111,13 @@ impl<'a> StackfulPreOrderHeapIter<'a> {
         Self {
             heap,
             h,
+            machine_stack: None,
             stack: vec![IterStackLoc::iterable_heap_loc(h)],
         }
+    }
+
+    pub fn iterate_over_machine_stack(&mut self, stack: &'a Stack) {
+        self.machine_stack = Some(stack);
     }
 
     #[inline]
@@ -166,6 +173,26 @@ impl<'a> StackfulPreOrderHeapIter<'a> {
         }
     }
 
+    fn stack_deref(&self, s: usize) -> Option<HeapCellValue> {
+        if let Some(stack) = &self.machine_stack {
+            let mut cell = stack[s];
+
+            while cell.is_stack_var() {
+                let s = cell.get_value();
+
+                if cell == stack[s] {
+                    break;
+                }
+
+                cell = stack[s];
+            }
+
+            return Some(cell);
+        }
+
+        None
+    }
+
     fn follow(&mut self) -> Option<HeapCellValue> {
         while let Some(h) = self.stack.pop() {
             if h.is_pending_mark() {
@@ -193,7 +220,14 @@ impl<'a> StackfulPreOrderHeapIter<'a> {
                 continue;
             }
 
-            read_heap_cell!(*cell,
+            let cell = if cell.get_tag() == HeapCellValueTag::StackVar {
+                let cell = *cell;
+                self.stack_deref(cell.get_value()).unwrap_or(cell)
+            } else {
+                *cell
+            };
+
+            read_heap_cell!(cell,
                (HeapCellValueTag::Str | HeapCellValueTag::PStrLoc, vh) => {
                    self.push_if_unmarked(vh);
                    self.stack.push(IterStackLoc::mark_heap_loc(vh));
@@ -241,7 +275,7 @@ impl<'a> StackfulPreOrderHeapIter<'a> {
                    return Some(self.heap[h]);
                }
                _ => {
-                   return Some(*cell);
+                   return Some(cell);
                }
             )
         }

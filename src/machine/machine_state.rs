@@ -766,6 +766,7 @@ impl MachineState {
                 let mut printer = HCPrinter::new(
                     &mut self.heap,
                     &mut self.atom_tbl,
+                    &mut self.stack,
                     op_dir,
                     PrinterOutputter::new(),
                     term_to_be_printed,
