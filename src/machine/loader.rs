@@ -1404,7 +1404,7 @@ impl MachineState {
         let term_addr = self[r];
 
         let mut term_stack = vec![];
-        let mut iter = stackful_post_order_iter(&mut self.heap, term_addr);
+        let mut iter = stackful_post_order_iter(&mut self.heap, &mut self.stack, term_addr);
 
         while let Some(addr) = iter.next() {
             let addr = unmark_cell_bits!(addr);
