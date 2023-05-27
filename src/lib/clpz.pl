@@ -5153,7 +5153,7 @@ run_propagator(pmodz(X,Y,Z), MState) -->
                       domain_remove_smaller_than(ZD3, ZMin, ZD5) },
                     fd_put(Z, ZD5, ZPs)
                     % queue_goal(Z in ZMin..0)
-                ;   { fd_get(Y, _, n(YL), n(YU), _) } ->
+                ;   { fd_get(Y, _, n(YL), n(YU), _), YL < 0, YU > 0 } ->
                     ZMin is YL + 1,
                     ZMax is YU - 1,
                     { fd_get(Z, ZD1, ZPs),
