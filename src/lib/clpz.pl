@@ -5019,8 +5019,6 @@ run_propagator(pmod(X,Y,Z), MState) -->
                 % queue_goal(X #=< XMax)
             ;   true
             )
-            % kill(MState),
-            % queue_goal(X #= Z + Y * _) % Add a variable to be efficient.
         ;   nonvar(Z), nonvar(X) ->
             (   Z > 0 ->
                 (   X < 0 -> true
@@ -5180,7 +5178,7 @@ run_propagator(pmodz(X,Y,Z), MState) -->
             )
         ).
 
-run_propagator(pmody(X,Y,Z), MState) -->
+run_propagator(pmody(_X,Y,Z), _MState) -->
         (   nonvar(Y) -> true % Nothing to do.
         % ;   nonvar(X) -> true
         ;   nonvar(Z) ->
@@ -5196,7 +5194,7 @@ run_propagator(pmody(X,Y,Z), MState) -->
                   domain_remove_greater_than(YD, YMax, YD1) },
                 fd_put(Y, YD1, YPs)
                 % queue_goal(Y #< Z)
-            ;   Z =:= 0 -> kill(MState), queue_goal(X / Y #= _)
+            ;   Z =:= 0 % Multiple solutions so do nothing special.
             )
         ;   (   { fd_get(Z, _, n(ZL), _, _), ZL > 0 } ->
                 { fd_get(Y, YD, YPs),
