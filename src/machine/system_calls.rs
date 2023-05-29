@@ -1011,6 +1011,8 @@ impl MachineState {
         let mut string = String::new();
 
         for addr in addrs {
+            let addr = self.store(self.deref(addr));
+
             match Number::try_from(addr) {
                 Ok(Number::Fixnum(n)) => {
                     match u32::try_from(n.get_num()) {
