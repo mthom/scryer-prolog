@@ -841,19 +841,19 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
     }
 
     fn check_for_seen(&mut self) -> Option<HeapCellValue> {
-        if let Some(addr) = self.iter.next() {
-            let is_cyclic = addr.get_forwarding_bit();
+        if let Some(cell) = self.iter.next() {
+            let is_cyclic = cell.get_forwarding_bit();
 
-            let addr = heap_bound_store(
+            let cell = heap_bound_store(
                 self.iter.heap,
-                heap_bound_deref(self.iter.heap, addr),
+                heap_bound_deref(self.iter.heap, cell),
             );
 
-            let addr = unmark_cell_bits!(addr);
+            let cell = unmark_cell_bits!(cell);
 
-            match self.var_names.get(&addr).cloned() {
-                Some(var) if addr.is_var() => {
-                    // If addr is an unbound variable and maps to
+            match self.var_names.get(&cell).cloned() {
+                Some(var) if cell.is_var() => {
+                    // If cell is an unbound variable and maps to
                     // a name via heap_locs, append the name to
                     // the current output, and return None. None
                     // short-circuits handle_heap_term.
@@ -868,7 +868,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                     None
                 }
                 var_opt => {
-                    if is_cyclic && addr.is_compound(self.iter.heap) {
+                    if is_cyclic && cell.is_compound(self.iter.heap) {
                         // self-referential variables are marked "cyclic".
                         match var_opt {
                             Some(var) => {
@@ -891,7 +891,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                         return None;
                     }
 
-                    Some(addr)
+                    Some(cell)
                 }
             }
         } else {
