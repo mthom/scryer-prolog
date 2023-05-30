@@ -258,6 +258,7 @@ pub(crate) struct UnsafeVarMarker {
     pub(crate) safe_perm_vars: IndexSet<usize>,
     pub(crate) safe_temp_vars: IndexSet<usize>,
     pub(crate) temp_vars_to_perm_vars: IndexMap<usize, usize>,
+    pub(crate) perm_vars_to_temp_vars: IndexMap<usize, usize>,
 }
 
 impl UnsafeVarMarker {
@@ -268,6 +269,7 @@ impl UnsafeVarMarker {
             safe_perm_vars: IndexSet::new(),
             safe_temp_vars: IndexSet::new(),
             temp_vars_to_perm_vars: IndexMap::new(),
+            perm_vars_to_temp_vars: IndexMap::new(),
         }
     }
 
@@ -344,14 +346,16 @@ impl UnsafeVarMarker {
                     if let Some(ph) = self.unsafe_perm_vars.swap_remove(&p) {
                         if ph == phase {
                             *query_instr = Instruction::PutUnsafeValue(p, arg);
-                            self.safe_perm_vars.insert(p);
+                            self.perm_vars_to_temp_vars.insert(p, arg);
                         } else {
                             self.unsafe_perm_vars.insert(p, ph);
                         }
                     }
                 }
-            &mut Instruction::SetValue(r @ RegType::Perm(p))
-                if !self.safe_perm_vars.contains(&p) => {
+            &mut Instruction::SetValue(r @ RegType::Perm(p)) =>
+                if let Some(t) = self.perm_vars_to_temp_vars.get(&p) {
+                    *query_instr = Instruction::SetValue(RegType::Temp(*t));
+                } else {
                     *query_instr = Instruction::SetLocalValue(r);
 
                     self.safe_perm_vars.insert(p);
