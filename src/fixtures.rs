@@ -357,9 +357,6 @@ impl UnsafeVarMarker {
                     *query_instr = Instruction::SetValue(RegType::Temp(*t));
                 } else {
                     *query_instr = Instruction::SetLocalValue(r);
-
-                    self.safe_perm_vars.insert(p);
-                    self.unsafe_perm_vars.remove(&p);
                 }
             _ => {}
         }
