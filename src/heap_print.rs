@@ -848,7 +848,6 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 self.iter.heap,
                 heap_bound_deref(self.iter.heap, cell),
             );
-
             let cell = unmark_cell_bits!(cell);
 
             match self.var_names.get(&cell).cloned() {
