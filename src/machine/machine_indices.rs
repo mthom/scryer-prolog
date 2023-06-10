@@ -8,7 +8,7 @@ use crate::machine::machine_state::*;
 use crate::machine::streams::Stream;
 
 use fxhash::FxBuildHasher;
-use indexmap::IndexMap;
+use indexmap::{IndexMap, IndexSet};
 use modular_bitfield::{BitfieldSpecifier, bitfield};
 use modular_bitfield::specifiers::*;
 
@@ -243,12 +243,15 @@ pub(crate) type LocalExtensiblePredicates =
 
 pub(crate) type CodeDir = IndexMap<PredicateKey, CodeIndex, FxBuildHasher>;
 
+pub(crate) type GoalExpansionIndices = IndexSet<PredicateKey, FxBuildHasher>;
+
 #[derive(Debug)]
 pub struct IndexStore {
     pub(super) code_dir: CodeDir,
     pub(super) extensible_predicates: ExtensiblePredicates,
     pub(super) local_extensible_predicates: LocalExtensiblePredicates,
     pub(super) global_variables: GlobalVarDir,
+    pub(super) goal_expansion_indices: GoalExpansionIndices,
     pub(super) meta_predicates: MetaPredicateDir,
     pub(super) modules: ModuleDir,
     pub(super) op_dir: OpDir,
@@ -257,6 +260,11 @@ pub struct IndexStore {
 }
 
 impl IndexStore {
+    #[inline(always)]
+    pub(crate) fn goal_expansion_defined(&self, key: PredicateKey) -> bool {
+        self.goal_expansion_indices.contains(&key)
+    }
+
     pub(crate) fn get_predicate_skeleton_mut(
         &mut self,
         compilation_target: &CompilationTarget,

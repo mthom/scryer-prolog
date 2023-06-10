@@ -560,8 +560,8 @@ enum SystemClauseType {
     StripModule,
     #[strum_discriminants(strum(props(Arity = "4", Name = "$compile_inline_or_expanded_goal")))]
     CompileInlineOrExpandedGoal,
-    #[strum_discriminants(strum(props(Arity = "arity", Name = "$call_inline")))]
-    InlineCallN(usize),
+    #[strum_discriminants(strum(props(Arity = "arity", Name = "$fast_call")))]
+    FastCallN(usize),
     #[strum_discriminants(strum(props(Arity = "1", Name = "$is_expanded_or_inlined")))]
     IsExpandedOrInlined,
     #[strum_discriminants(strum(props(Arity = "3", Name = "$get_clause_p")))]
@@ -1472,11 +1472,11 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::DefaultExecuteN(arity) => {
                         functor!(atom!("execute_default_n"), [fixnum(arity)])
                     }
-                    &Instruction::CallInlineCallN(arity) => {
-                        functor!(atom!("call_n_inline"), [fixnum(arity)])
+                    &Instruction::CallFastCallN(arity) => {
+                        functor!(atom!("call_fast_call_n"), [fixnum(arity)])
                     }
-                    &Instruction::ExecuteInlineCallN(arity) => {
-                        functor!(atom!("call_n_inline"), [fixnum(arity)])
+                    &Instruction::ExecuteFastCallN(arity) => {
+                        functor!(atom!("execute_fast_call_n"), [fixnum(arity)])
                     }
                     &Instruction::CallTermGreaterThan |
                     &Instruction::CallTermLessThan |

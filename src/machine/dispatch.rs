@@ -5058,12 +5058,12 @@ impl Machine {
                     self.machine_st.fail = !self.is_expanded_or_inlined();
                     step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                 }
-                &Instruction::CallInlineCallN(arity) => {
+                &Instruction::CallFastCallN(arity) => {
                     let call_at_index = |wam: &mut Machine, name, arity, ptr| {
                         wam.try_call(name, arity, ptr)
                     };
 
-                    try_or_throw!(self.machine_st, self.call_inline(arity, call_at_index));
+                    try_or_throw!(self.machine_st, self.fast_call(arity, call_at_index));
 
                     if self.machine_st.fail {
                         self.machine_st.backtrack();
@@ -5074,12 +5074,12 @@ impl Machine {
                         );
                     }
                 }
-                &Instruction::ExecuteInlineCallN(arity) => {
+                &Instruction::ExecuteFastCallN(arity) => {
                     let call_at_index = |wam: &mut Machine, name, arity, ptr| {
                         wam.try_execute(name, arity, ptr)
                     };
 
-                    try_or_throw!(self.machine_st, self.call_inline(arity, call_at_index));
+                    try_or_throw!(self.machine_st, self.fast_call(arity, call_at_index));
 
                     if self.machine_st.fail {
                         self.machine_st.backtrack();
