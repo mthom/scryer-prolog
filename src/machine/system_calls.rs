@@ -1203,29 +1203,29 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn deref_register(&mut self, i: usize) -> HeapCellValue {
-	self.machine_st.store(self.machine_st.deref(self.machine_st.registers[i]))
+	    self.machine_st.store(self.machine_st.deref(self.machine_st.registers[i]))
     }
 
     #[inline(always)]
-    pub(crate) fn call_inline(
+    pub(crate) fn fast_call(
         &mut self,
         arity: usize,
         call_at_index: impl Fn(&mut Machine, Atom, usize, IndexPtr) -> CallResult,
     ) -> CallResult {
         let arity = arity - 1;
-        let goal = self.deref_register(1);
+        let (mut module_name, mut goal) = self.machine_st.strip_module(
+            self.machine_st.registers[1],
+            heap_loc_as_cell!(0),
+        );
 
-        let load_registers = |machine_st: &mut MachineState, goal: HeapCellValue| -> Option<PredicateKey> {
+        let load_registers = |machine_st: &mut MachineState, goal: HeapCellValue, goal_arity: usize| {
             read_heap_cell!(goal,
-                (HeapCellValueTag::Str, s) => {
-                    let (name, goal_arity) = cell_as_atom_cell!(machine_st.heap[s])
-                        .get_name_and_arity();
-
-                    if goal_arity > 0 {
+                (HeapCellValueTag::Str | HeapCellValueTag::Atom, s) => {
+                    if goal_arity > 1 {
                         for idx in (1 .. arity + 1).rev() {
                             machine_st.registers[idx + goal_arity] = machine_st.registers[idx + 1];
                         }
-                    } else {
+                    } else if goal_arity == 0 {
                         for idx in 1 .. arity + 1 {
                             machine_st.registers[idx] = machine_st.registers[idx + 1];
                         }
@@ -1234,8 +1234,6 @@ impl Machine {
                     for idx in 1 .. goal_arity + 1 {
                         machine_st.registers[idx] = machine_st.heap[s+idx];
                     }
-
-                    Some((name, goal_arity))
                 }
                 _ => {
                     unreachable!()
@@ -1243,34 +1241,69 @@ impl Machine {
             )
         };
 
-        read_heap_cell!(goal,
+        let (mut name, mut goal_arity, index_cell_opt) = read_heap_cell!(goal,
             (HeapCellValueTag::Str, s) => {
-                let goal_arity = cell_as_atom_cell!(self.machine_st.heap[s]).get_arity();
+                let (name, arity) = cell_as_atom_cell!(self.machine_st.heap[s]).get_name_and_arity();
 
-                if self.machine_st.heap.len() > s + goal_arity + 1 {
-                    let index_cell = self.machine_st.heap[s+goal_arity+1];
-
-                    if let Some(code_index) = get_structure_index(index_cell) {
-                        if code_index.is_undefined() {
-                            self.machine_st.fail = true;
-                            return Ok(());
-                        }
-
-                        match load_registers(&mut self.machine_st, goal) {
-                            Some((name, goal_arity)) => {
-                                let arity = goal_arity + arity;
-                                self.machine_st.neck_cut();
-                                return call_at_index(self, name, arity, code_index.get());
-                            }
-                            None => {
-                            }
-                        }
-                    }
-                }
+                (name, arity, if self.machine_st.heap.len() > s + arity + 1 {
+                    get_structure_index(self.machine_st.heap[s + arity + 1])
+                } else {
+                    None
+                })
+            }
+            (HeapCellValueTag::Atom, (name, arity)) => {
+                debug_assert_eq!(arity, 0);
+                (name, arity, None)
             }
             _ => {
+                self.machine_st.fail = true;
+                return Ok(());
             }
         );
+
+        let mut arity = arity + goal_arity;
+
+        let index_cell = index_cell_opt.or_else(|| {
+            let is_internal_call = name == atom!("$call") && goal_arity > 0;
+
+            if !is_internal_call && self.indices.goal_expansion_defined((name, arity)) {
+                None
+            } else {
+                if is_internal_call {
+                    debug_assert_eq!(goal.get_tag(), HeapCellValueTag::Str);
+                    goal = self.machine_st.heap[goal.get_value()+1];
+                    (module_name, goal) = self.machine_st.strip_module(goal, module_name);
+
+                    if let Some((inner_name, inner_arity)) = self.machine_st.name_and_arity_from_heap(goal) {
+                        arity -= goal_arity;
+                        (name, goal_arity) = (inner_name, inner_arity);
+                        arity += goal_arity;
+                    } else {
+                        return None;
+                    }
+                }
+
+                let module_name = if module_name.get_tag() != HeapCellValueTag::Atom {
+                    if let Some(load_context) = self.load_contexts.last() {
+                        load_context.module
+                    } else {
+                        atom!("user")
+                    }
+                } else {
+                    cell_as_atom!(module_name)
+                };
+
+                self.indices.get_predicate_code_index(name, arity, module_name)
+            }
+        });
+
+        if let Some(code_index) = index_cell {
+            if !code_index.is_undefined() {
+                load_registers(&mut self.machine_st, goal, goal_arity);
+                self.machine_st.neck_cut();
+                return call_at_index(self, name, arity, code_index.get());
+            }
+        }
 
         self.machine_st.fail = true;
         Ok(())
@@ -1490,34 +1523,11 @@ impl Machine {
     }
 
     #[inline(always)]
-    pub(crate) fn prepare_call_clause(&mut self, arity: usize) -> CallResult {
+    pub(crate) fn strip_module(&mut self) {
         let (module_loc, qualified_goal) = self.machine_st.strip_module(
-            self.machine_st.registers[3],
+            self.machine_st.registers[1],
             self.machine_st.registers[2],
         );
-
-        // the first three arguments don't belong to the containing call/N.
-        let arity = arity - 3;
-
-        let (name, narity, s) = self.machine_st.setup_call_n_init_goal_info(
-            qualified_goal,
-            arity,
-        )?;
-
-        let module_loc = self.machine_st.store(self.machine_st.deref(module_loc));
-
-        if module_loc.is_var() {
-            self.load_context_module(module_loc);
-
-            if self.machine_st.fail {
-                self.machine_st.fail = false;
-                self.machine_st.unify_atom(atom!("user"), module_loc);
-
-                if self.machine_st.fail {
-                    return Ok(());
-                }
-            }
-        }
 
         let target_module_loc = self.machine_st.registers[2];
 
@@ -1527,9 +1537,26 @@ impl Machine {
             target_module_loc
         );
 
-        if self.machine_st.fail {
-            return Ok(());
-        }
+        let target_qualified_goal = self.machine_st.registers[3];
+
+        unify_fn!(
+            &mut self.machine_st,
+            qualified_goal,
+            target_qualified_goal
+        );
+    }
+
+    #[inline(always)]
+    pub(crate) fn prepare_call_clause(&mut self, arity: usize) -> CallResult {
+        let qualified_goal = self.deref_register(2);
+
+        // the first two arguments don't belong to the containing call/N.
+        let arity = arity - 2;
+
+        let (name, narity, s) = self.machine_st.setup_call_n_init_goal_info(
+            qualified_goal,
+            arity,
+        )?;
 
         // assemble goal from pre-loaded (narity) and supplementary
         // (arity) arguments.
@@ -1545,15 +1572,10 @@ impl Machine {
             }
 
             for idx in 1 .. arity + 1 {
-                self.machine_st.heap.push(self.machine_st.registers[3 + idx]);
+                self.machine_st.heap.push(self.machine_st.registers[2 + idx]);
             }
 
-            let index_cell = self.machine_st.heap[s + narity + 1];
-
-            if get_structure_index(index_cell).is_some() {
-                self.machine_st.heap.push(index_cell);
-                str_loc_as_cell!(h)
-            } else if narity + arity > 0 {
+            if narity + arity > 0 {
                 str_loc_as_cell!(h)
             } else {
                 heap_loc_as_cell!(h)
@@ -1569,6 +1591,65 @@ impl Machine {
         );
 
         Ok(())
+    }
+
+    #[inline(always)]
+    pub(crate) fn dynamic_module_resolution(
+        &mut self,
+        narity: usize,
+    ) -> Result<(Atom, PredicateKey), MachineStub> {
+        let module_name = self.deref_register(1);
+
+        let module_name = read_heap_cell!(module_name,
+            (HeapCellValueTag::Atom, (name, _arity)) => {
+                debug_assert_eq!(_arity, 0);
+                name
+            }
+            (HeapCellValueTag::Str, s) => {
+                let (module_name, _arity) = cell_as_atom_cell!(self.machine_st.heap[s])
+                    .get_name_and_arity();
+
+                debug_assert_eq!(_arity, 0);
+                module_name
+            }
+            _ if module_name.is_var() => {
+                if let Some(load_context) = self.load_contexts.last() {
+                    load_context.module
+                } else {
+                    atom!("user")
+                }
+            }
+            _ => {
+                unreachable!()
+            }
+        );
+
+        let goal = self.deref_register(2);
+
+        let (name, arity, s) = self.machine_st.setup_call_n_init_goal_info(goal, narity)?;
+
+        // TODO: think we just need the 'Greater' branch here.
+        match arity.cmp(&2) {
+            Ordering::Less => {
+                for i in arity + 1..arity + narity + 1 {
+                    self.machine_st.registers[i] = self.machine_st.registers[i + 2 - arity];
+                }
+            }
+            Ordering::Greater => {
+                for i in (arity + 1..arity + narity + 1).rev() {
+                    self.machine_st.registers[i] = self.machine_st.registers[i + 2 - arity];
+                }
+            }
+            Ordering::Equal => {}
+        }
+
+        let key = (name, arity + narity);
+
+        for i in 1..arity + 1 {
+            self.machine_st.registers[i] = self.machine_st.heap[s + i];
+        }
+
+        Ok((module_name, key))
     }
 
     #[inline(always)]
@@ -3605,60 +3686,6 @@ impl Machine {
         for addr in self.machine_st.lifted_heap[old_threshold + 1 ..].iter_mut() {
             *addr -= self.machine_st.heap.len() + lh_offset;
         }
-    }
-
-    #[inline(always)]
-    pub(crate) fn dynamic_module_resolution(
-        &mut self,
-        narity: usize,
-    ) -> Result<(Atom, PredicateKey), MachineStub> {
-        let module_name = self.deref_register(1);
-
-        let module_name = read_heap_cell!(module_name,
-            (HeapCellValueTag::Atom, (name, _arity)) => {
-                debug_assert_eq!(_arity, 0);
-                name
-            }
-            (HeapCellValueTag::Str, s) => {
-                let (module_name, _arity) = cell_as_atom_cell!(self.machine_st.heap[s])
-                    .get_name_and_arity();
-
-                debug_assert_eq!(_arity, 0);
-                module_name
-            }
-            _ if module_name.is_var() => {
-                atom!("user")
-            }
-            _ => {
-                unreachable!()
-            }
-        );
-
-        let goal = self.deref_register(2);
-
-        let (name, arity, s) = self.machine_st.setup_call_n_init_goal_info(goal, narity)?;
-
-        match arity.cmp(&2) {
-            Ordering::Less => {
-                for i in arity + 1..arity + narity + 1 {
-                    self.machine_st.registers[i] = self.machine_st.registers[i + 2 - arity];
-                }
-            }
-            Ordering::Greater => {
-                for i in (arity + 1..arity + narity + 1).rev() {
-                    self.machine_st.registers[i] = self.machine_st.registers[i + 2 - arity];
-                }
-            }
-            Ordering::Equal => {}
-        }
-
-        let key = (name, arity + narity);
-
-        for i in 1..arity + 1 {
-            self.machine_st.registers[i] = self.machine_st.heap[s + i];
-        }
-
-        Ok((module_name, key))
     }
 
     #[inline(always)]

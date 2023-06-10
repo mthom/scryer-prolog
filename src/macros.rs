@@ -590,6 +590,7 @@ macro_rules! index_store {
             extensible_predicates: ExtensiblePredicates::with_hasher(FxBuildHasher::default()),
             local_extensible_predicates: LocalExtensiblePredicates::with_hasher(FxBuildHasher::default()),
             global_variables: GlobalVarDir::with_hasher(FxBuildHasher::default()),
+            goal_expansion_indices: GoalExpansionIndices::with_hasher(FxBuildHasher::default()),
             meta_predicates: MetaPredicateDir::with_hasher(FxBuildHasher::default()),
             modules: $modules,
             op_dir: $op_dir,

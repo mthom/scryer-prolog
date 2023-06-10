@@ -181,7 +181,8 @@ submit_query_and_print_results_(Term, VarList) :-
     '$get_b_value'(B),
     bb_put('$report_all', false),
     bb_put('$report_n_more', 0),
-    atts:call_residue_vars(user:Term, AttrVars),
+    expand_goal(Term, user, Term0),
+    atts:call_residue_vars(user:Term0, AttrVars),
     write_eqs_and_read_input(B, VarList, AttrVars),
     !.
 submit_query_and_print_results_(_, _) :-

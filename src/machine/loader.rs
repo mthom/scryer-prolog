@@ -1692,6 +1692,21 @@ impl Machine {
         let add_clause = || {
             let term = loader.read_term_from_heap(temp_v!(2))?;
 
+            let indexing_arg = match term.name() {
+                Some(atom!(":-")) => term.first_arg().and_then(Term::first_arg),
+                Some(_) => term.first_arg(),
+                None => None,
+            };
+
+            if let Some(indexing_term) = indexing_arg {
+                if let Some(indexing_name) = indexing_term.name() {
+                    loader.wam_prelude
+                        .indices
+                        .goal_expansion_indices
+                        .insert((indexing_name, indexing_term.arity()));
+                }
+            }
+
             loader.incremental_compile_clause(
                 (atom!("goal_expansion"), 2),
                 term,
