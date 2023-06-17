@@ -2,7 +2,6 @@ use crate::parser::ast::*;
 
 use crate::arena::*;
 use crate::atom_table::*;
-use crate::fixtures::*;
 use crate::forms::*;
 use crate::machine::loader::*;
 use crate::machine::machine_state::*;
@@ -227,8 +226,8 @@ impl CodeIndex {
     }
 }
 
-pub(crate) type HeapVarDict = IndexMap<Var, HeapCellValue, FxBuildHasher>;
-pub(crate) type AllocVarDict = IndexMap<Var, VarAlloc, FxBuildHasher>;
+pub(crate) type HeapVarDict = IndexMap<VarPtr, HeapCellValue, FxBuildHasher>;
+// pub(crate) type AllocVarDict = IndexMap<Var, VarAlloc, FxBuildHasher>;
 
 pub(crate) type GlobalVarDir = IndexMap<Atom, (Ball, Option<HeapCellValue>), FxBuildHasher>;
 

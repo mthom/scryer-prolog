@@ -540,23 +540,7 @@ macro_rules! functor_term {
 macro_rules! compare_number_instr {
     ($cmp: expr, $at_1: expr, $at_2: expr) => {{
         $cmp.set_terms($at_1, $at_2);
-        call_clause!(ClauseType::Inlined(InlinedClauseType::CompareNumber($cmp)), 0)
-    }};
-}
-
-macro_rules! call_clause {
-    ($clause_type:expr, $pvs:expr) => {{
-        let mut instr = $clause_type.to_instr();
-        instr.perm_vars_mut().map(|pvs| *pvs = $pvs);
-        instr
-    }};
-}
-
-macro_rules! call_clause_by_default {
-    ($clause_type:expr, $pvs:expr) => {{
-        let mut instr = $clause_type.to_instr().to_default();
-        instr.perm_vars_mut().map(|pvs| *pvs = $pvs);
-        instr
+        ClauseType::Inlined(InlinedClauseType::CompareNumber($cmp)).to_instr()
     }};
 }
 

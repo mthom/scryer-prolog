@@ -1,10 +1,9 @@
 use crate::atom_table::*;
 use crate::parser::ast::*;
-use crate::{perm_v, temp_v};
+use crate::temp_v;
 use crate::allocator::*;
 use crate::arithmetic::*;
 use crate::debray_allocator::*;
-use crate::fixtures::*;
 use crate::forms::*;
 use crate::indexing::*;
 use crate::instructions::*;
@@ -13,39 +12,139 @@ use crate::targets::*;
 use crate::types::*;
 
 use crate::instr;
+use crate::machine::disjuncts::*;
 use crate::machine::machine_errors::*;
 
-use indexmap::{IndexMap, IndexSet};
+use fxhash::FxBuildHasher;
+use indexmap::IndexSet;
 
 use std::cell::Cell;
 use std::collections::VecDeque;
 
 #[derive(Debug)]
-pub(crate) struct ConjunctInfo {
-    pub(crate) perm_vs: VariableFixtures,
-    pub(crate) num_of_chunks: usize,
-    pub(crate) has_deep_cut: bool,
+pub struct BranchCodeStack {
+    pub stack: Vec<Vec<CodeDeque>>,
 }
 
-impl ConjunctInfo {
-    fn new(perm_vs: VariableFixtures, num_of_chunks: usize, has_deep_cut: bool) -> Self {
-        ConjunctInfo {
-            perm_vs,
-            num_of_chunks,
-            has_deep_cut,
+pub type SubsumedBranchHits = IndexSet<usize, FxBuildHasher>;
+
+impl BranchCodeStack {
+    fn new() -> Self {
+        Self { stack: vec![] }
+    }
+
+    fn add_new_branch_stack(&mut self) {
+        self.stack.push(vec![]);
+    }
+
+    fn add_new_branch(&mut self) {
+        if self.stack.is_empty() {
+            self.add_new_branch_stack();
+        }
+
+        if let Some(branches) = self.stack.last_mut() {
+            branches.push(CodeDeque::new());
         }
     }
 
-    fn allocates(&self) -> bool {
-        self.perm_vs.size() > 0 || self.num_of_chunks > 1 || self.has_deep_cut
+    fn code<'a>(&'a mut self, default_code: &'a mut CodeDeque) -> &'a mut CodeDeque {
+        self.stack.last_mut()
+            .and_then(|stack| stack.last_mut())
+            .unwrap_or(default_code)
     }
 
-    fn perm_vars(&self) -> usize {
-        self.perm_vs.size() + self.perm_var_offset()
+    fn push_missing_vars(&mut self, depth: usize, marker: &mut DebrayAllocator) -> SubsumedBranchHits {
+        let mut subsumed_hits = SubsumedBranchHits::with_hasher(FxBuildHasher::default());
+
+        for idx in (self.stack.len() - depth .. self.stack.len()).rev() {
+            let branch = &mut marker.branch_stack[idx];
+            let branch_hits = &branch.hits;
+
+            for (&var_num, branches) in branch_hits.iter() {
+                let record = &marker.var_data.records[var_num];
+
+                if record.running_count < record.num_occurrences {
+                    if !branches.all() {
+                        branch.deep_safety.insert(var_num);
+                        branch.shallow_safety.insert(var_num);
+
+                        let r = record.allocation.as_reg_type();
+
+                        // iterate over unset bits.
+                        for branch_idx in branches.iter_zeros() {
+                            if branch_idx + 1 == branches.len() && idx + 1 != self.stack.len() {
+                                break;
+                            }
+
+                            self.stack[idx][branch_idx].push_back(instr!("put_variable", r, 0));
+                        }
+                    }
+
+                    subsumed_hits.insert(var_num);
+                }
+            }
+        }
+
+        subsumed_hits
     }
 
-    fn perm_var_offset(&self) -> usize {
-        self.has_deep_cut as usize
+    fn push_jump_instrs(&mut self, depth: usize) {
+        // add 2 in each arm length to compensate for each jump
+        // instruction and each branch instruction not yet added.
+        let mut jump_span: usize = self.stack[self.stack.len() - depth ..]
+            .iter()
+            .map(|branch| branch.iter().map(|code| code.len() + 2).sum::<usize>())
+            .sum();
+
+        jump_span -= depth;
+
+        for idx in self.stack.len() - depth .. self.stack.len() {
+            let inner_len = self.stack[idx].len();
+
+            for (inner_idx, code) in self.stack[idx].iter_mut().enumerate() {
+                if inner_idx + 1 == inner_len {
+                    jump_span -= code.len() + 1; // = jump_span.saturating_sub(code.len() + 1);
+                } else {
+                    jump_span -= code.len() + 1;
+                    code.push_back(instr!("jmp_by_call", jump_span as usize));
+
+                    // saturate at 0 if underflow happens, which only
+                    // happens when jump_span is no longer needed
+                    // anyway. still, we don't want to panic at
+                    // underflow.
+                    jump_span -= 1;
+                }
+            }
+        }
+
+        // eliminate terminating jump instruction in last arm of last
+        // branch.
+        // self.stack.last_mut()
+        //     .and_then(|branch| branch.last_mut())
+        //     .map(|code| code.pop_back());
+    }
+
+    fn pop_branch(&mut self, depth: usize, settings: CodeGenSettings) -> CodeDeque {
+        let mut combined_code = CodeDeque::new();
+
+        for mut branch_arm in self.stack.drain(self.stack.len() - depth ..).rev() {
+            let num_branch_arms = branch_arm.len();
+            branch_arm.last_mut().map(|code| code.extend(combined_code.drain(..)));
+
+            for (idx, code) in branch_arm.into_iter().enumerate() {
+                combined_code.push_back(if idx == 0 {
+                    Instruction::TryMeElse(code.len() + 1)
+                } else if idx + 1 < num_branch_arms {
+                    settings.retry_me_else(code.len() + 1)
+                } else {
+                    settings.trust_me()
+                });
+
+                combined_code.extend(code.into_iter());
+            }
+        }
+
+        combined_code
     }
 }
 
@@ -168,53 +267,49 @@ impl CodeGenSettings {
 pub(crate) struct CodeGenerator<'a> {
     pub(crate) atom_tbl: &'a mut AtomTable,
     marker: DebrayAllocator,
-    pub(crate) var_count: IndexMap<Var, usize>,
     settings: CodeGenSettings,
     pub(crate) skeleton: PredicateSkeleton,
-    pub(crate) jmp_by_locs: Vec<usize>,
-    global_jmp_by_locs_offset: usize,
 }
 
 impl DebrayAllocator {
     fn mark_var_in_non_callable(
         &mut self,
-        name: Var,
+        var_num: usize,
         term_loc: GenContext,
         vr: &Cell<VarReg>,
-        code: &mut Code,
+        code: &mut CodeDeque,
     ) -> RegType {
-        self.mark_var::<QueryInstruction>(name, Level::Shallow, vr, term_loc, code);
-        vr.get().norm()
-    }
+        self.mark_var::<QueryInstruction>(
+            var_num,
+            Level::Shallow,
+            vr,
+            term_loc,
+            code,
+        );
 
-    #[inline(always)]
-    pub(crate) fn get_binding(&self, name: &Var) -> Option<RegType> {
-        match self.bindings().get(name) {
-            Some(&VarAlloc::Temp(_, t, _)) if t != 0 => Some(RegType::Temp(t)),
-            Some(&VarAlloc::Perm(p)) if p != 0 => Some(RegType::Perm(p)),
-            _ => None,
-        }
+        vr.get().norm()
     }
 
     pub(crate) fn mark_non_callable(
         &mut self,
-        name: Var,
+        var_num: usize,
         arg: usize,
         term_loc: GenContext,
         vr: &Cell<VarReg>,
-        code: &mut Code,
+        code: &mut CodeDeque,
     ) -> RegType {
-        match self.get_binding(&name) {
-            Some(RegType::Temp(t)) => RegType::Temp(t),
-            Some(RegType::Perm(p)) => {
+        match self.get_binding(var_num) {
+            RegType::Temp(t) if t != 0 => RegType::Temp(t),
+            RegType::Perm(p) if p != 0 => {
                 if let GenContext::Last(_) = term_loc {
-                    self.mark_var_in_non_callable(name.clone(), term_loc, vr, code);
+                    self.mark_var_in_non_callable(var_num, term_loc, vr, code);
                     temp_v!(arg)
                 } else {
+                    self.increment_running_count(var_num);
                     RegType::Perm(p)
                 }
             }
-            None => self.mark_var_in_non_callable(name, term_loc, vr, code),
+            _ => self.mark_var_in_non_callable(var_num, term_loc, vr, code),
         }
     }
 }
@@ -280,50 +375,34 @@ impl<'b> CodeGenerator<'b> {
         CodeGenerator {
             atom_tbl,
             marker: DebrayAllocator::new(),
-            var_count: IndexMap::new(),
             settings,
             skeleton: PredicateSkeleton::new(),
-            jmp_by_locs: vec![],
-            global_jmp_by_locs_offset: 0,
         }
     }
 
-    fn update_var_count<'a, Iter: Iterator<Item = TermRef<'a>>>(&mut self, iter: Iter) {
-        for term in iter {
-            if let TermRef::Var(_, _, var) = term {
-                let entry = self.var_count.entry(var).or_insert(0);
-                *entry += 1;
-            }
-        }
-    }
-
-    fn get_var_count(&self, var: &Var) -> usize {
-        *self.var_count.get(var).unwrap()
-    }
-
-    fn add_or_increment_void_instr<'a, Target>(target: &mut Code)
+    fn add_or_increment_void_instr<'a, Target>(target: &mut CodeDeque)
     where
         Target: crate::targets::CompilationTarget<'a>,
     {
-        if let Some(ref mut instr) = target.last_mut() {
+        if let Some(ref mut instr) = target.back_mut() {
             if Target::is_void_instr(&*instr) {
                 Target::incr_void_instr(instr);
                 return;
             }
         }
 
-        target.push(Target::to_void(1));
+        target.push_back(Target::to_void(1));
     }
 
     fn deep_var_instr<'a, Target: crate::targets::CompilationTarget<'a>>(
         &mut self,
         cell: &'a Cell<VarReg>,
-        var: &Var,
+        var_num: usize,
         term_loc: GenContext,
-        target: &mut Code,
+        target: &mut CodeDeque,
     ) {
-        if self.get_var_count(var.as_ref()) > 1 {
-            self.marker.mark_var::<Target>(var.clone(), Level::Deep, cell, term_loc, target);
+        if self.marker.var_data.records[var_num].num_occurrences > 1 {
+            self.marker.mark_var::<Target>(var_num, Level::Deep, cell, term_loc, target);
         } else {
             Self::add_or_increment_void_instr::<Target>(target);
         }
@@ -333,7 +412,7 @@ impl<'b> CodeGenerator<'b> {
         &mut self,
         subterm: &'a Term,
         term_loc: GenContext,
-        target: &mut Code,
+        target: &mut CodeDeque,
     ) {
         match subterm {
             &Term::AnonVar => {
@@ -344,13 +423,13 @@ impl<'b> CodeGenerator<'b> {
             Term::PartialString(ref cell, ..) |
             Term::CompleteString(ref cell, ..) => {
                 self.marker.mark_non_var::<Target>(Level::Deep, term_loc, cell, target);
-                target.push(Target::clause_arg_to_instr(cell.get()));
+                target.push_back(Target::clause_arg_to_instr(cell.get()));
             }
             &Term::Literal(_, ref constant) => {
-                target.push(Target::constant_subterm(constant.clone()));
+                target.push_back(Target::constant_subterm(constant.clone()));
             }
-            &Term::Var(ref cell, ref var) => {
-                self.deep_var_instr::<Target>(cell, var, term_loc, target);
+            &Term::Var(ref cell, ref var_ptr) => {
+                self.deep_var_instr::<Target>(cell, var_ptr.to_var_num().unwrap(), term_loc, target);
             }
         };
     }
@@ -359,13 +438,13 @@ impl<'b> CodeGenerator<'b> {
         &mut self,
         iter: Iter,
         term_loc: GenContext,
-    ) -> Code
+    ) -> CodeDeque
     where
         Target: crate::targets::CompilationTarget<'a>,
         Iter: Iterator<Item = TermRef<'a>>,
         CodeGenerator<'b>: AddToFreeList<'a, Target>
     {
-        let mut target: Code = Vec::new();
+        let mut target = CodeDeque::new();
 
         for term in iter {
             match term {
@@ -378,11 +457,11 @@ impl<'b> CodeGenerator<'b> {
                 }
                 TermRef::Clause(lvl, cell, name, terms) => {
                     self.marker.mark_non_var::<Target>(lvl, term_loc, cell, &mut target);
-                    target.push(Target::to_structure(name, terms.len(), cell.get()));
+                    target.push_back(Target::to_structure(name, terms.len(), cell.get()));
 
                     <CodeGenerator<'b> as AddToFreeList<'a, Target>>::add_term_to_free_list(self, cell.get());
 
-                    if let Some(instr) = target.last_mut() {
+                    if let Some(instr) = target.back_mut() {
                         if let Some(term) = terms.last() {
                             trim_structure_by_last_arg(instr, term);
                         }
@@ -398,7 +477,7 @@ impl<'b> CodeGenerator<'b> {
                 }
                 TermRef::Cons(lvl, cell, head, tail) => {
                     self.marker.mark_non_var::<Target>(lvl, term_loc, cell, &mut target);
-                    target.push(Target::to_list(lvl, cell.get()));
+                    target.push_back(Target::to_list(lvl, cell.get()));
 
                     <CodeGenerator<'b> as AddToFreeList<'a, Target>>::add_term_to_free_list(self, cell.get());
 
@@ -410,44 +489,31 @@ impl<'b> CodeGenerator<'b> {
                 }
                 TermRef::Literal(lvl @ Level::Shallow, cell, Literal::String(ref string)) => {
                     self.marker.mark_non_var::<Target>(lvl, term_loc, cell, &mut target);
-                    target.push(Target::to_pstr(lvl, *string, cell.get(), false));
+                    target.push_back(Target::to_pstr(lvl, *string, cell.get(), false));
                 }
                 TermRef::Literal(lvl @ Level::Shallow, cell, constant) => {
                     self.marker.mark_non_var::<Target>(lvl, term_loc, cell, &mut target);
-                    target.push(Target::to_constant(lvl, *constant, cell.get()));
+                    target.push_back(Target::to_constant(lvl, *constant, cell.get()));
                 }
                 TermRef::PartialString(lvl, cell, string, tail) => {
                     self.marker.mark_non_var::<Target>(lvl, term_loc, cell, &mut target);
                     let atom = self.atom_tbl.build_with(&string);
 
-                    target.push(Target::to_pstr(lvl, atom, cell.get(), true));
+                    target.push_back(Target::to_pstr(lvl, atom, cell.get(), true));
                     self.subterm_to_instr::<Target>(tail, term_loc, &mut target);
                 }
                 TermRef::CompleteString(lvl, cell, atom) => {
                     self.marker.mark_non_var::<Target>(lvl, term_loc, cell, &mut target);
-                    target.push(Target::to_pstr(lvl, atom, cell.get(), false));
-                }
-                TermRef::Var(lvl @ Level::Shallow, cell, var) if var.as_str() == Some("!") => {
-                    if self.marker.is_unbound(var.clone()) {
-                        if term_loc != GenContext::Head {
-                            self.marker.mark_reserved_var::<Target>(
-                                var.clone(),
-                                lvl,
-                                cell,
-                                term_loc,
-                                &mut target,
-                                perm_v!(1),
-                                false,
-                            );
-
-                            continue;
-                        }
-                    }
-
-                    self.marker.mark_var::<Target>(var.clone(), lvl, cell, term_loc, &mut target);
+                    target.push_back(Target::to_pstr(lvl, atom, cell.get(), false));
                 }
                 TermRef::Var(lvl @ Level::Shallow, cell, var) => {
-                    self.marker.mark_var::<Target>(var.clone(), lvl, cell, term_loc, &mut target);
+                    self.marker.mark_var::<Target>(
+                        var.to_var_num().unwrap(),
+                        lvl,
+                        cell,
+                        term_loc,
+                        &mut target,
+                    );
                 }
                 _ => {}
             };
@@ -456,82 +522,27 @@ impl<'b> CodeGenerator<'b> {
         target
     }
 
-    /*
-    fn collect_var_data<'a>(&mut self, mut iter: ChunkedIterator<'a>) -> ConjunctInfo<'a> {
-        let mut vs = VariableFixtures::new();
-
-        while let Some((chunk_num, lt_arity, chunked_terms)) = iter.next() {
-            for (i, chunked_term) in chunked_terms.iter().enumerate() {
-                let term_loc = match chunked_term {
-                    &ChunkedTerm::HeadClause(..) => GenContext::Head,
-                    &ChunkedTerm::BodyTerm(_) => {
-                        if i < chunked_terms.len() - 1 {
-                            GenContext::Mid(chunk_num)
-                        } else {
-                            GenContext::Last(chunk_num)
-                        }
-                    }
-                };
-
-                self.update_var_count(chunked_term.post_order_iter());
-                vs.mark_vars_in_chunk(chunked_term.post_order_iter(), lt_arity, term_loc);
-            }
+    fn add_call(&mut self, code: &mut CodeDeque, call_instr: Instruction, call_policy: CallPolicy) {
+        if self.marker.in_tail_position && self.marker.var_data.allocates {
+            code.push_back(instr!("deallocate"));
         }
 
-        let num_of_chunks = iter.chunk_num;
-        let has_deep_cut = iter.encountered_deep_cut();
-
-        vs.populate_restricting_sets();
-        vs.set_perm_vals(has_deep_cut);
-
-        let vs = self.marker.drain_var_data(vs, num_of_chunks);
-        ConjunctInfo::new(vs, num_of_chunks, has_deep_cut)
-    }
-    */
-
-    fn add_conditional_call(&mut self, code: &mut Code, qt: &QueryTerm, pvs: usize) {
-        match qt {
-            &QueryTerm::Jump(ref vars) => {
-                self.jmp_by_locs.push(code.len());
-                code.push(instr!("jmp_by_call", vars.len(), 0, pvs));
-            }
-            &QueryTerm::Clause(_, ref ct, _, CallPolicy::Default) => {
-                code.push(call_clause_by_default!(ct.clone(), pvs));
-            }
-            &QueryTerm::Clause(_, ref ct, _, CallPolicy::Counted) => {
-                code.push(call_clause!(ct.clone(), pvs));
-            }
-            _ => {}
-        }
-    }
-
-    fn lco(code: &mut Code) -> usize {
-        let mut dealloc_index = code.len() - 1;
-        let last_instr = code.pop();
-
-        match last_instr {
-            Some(instr @ Instruction::Proceed) => {
-                code.push(instr);
-            }
-            Some(instr @ Instruction::Cut(_)) => {
-                dealloc_index += 1;
-                code.push(instr);
-            }
-            Some(mut instr) if instr.is_ctrl_instr() => {
-                code.push(if instr.perm_vars_mut().is_some() {
-                    instr.to_execute()
+        match call_policy {
+            CallPolicy::Default => {
+                if self.marker.in_tail_position {
+                    code.push_back(call_instr.to_execute().to_default());
                 } else {
-                    dealloc_index += 1;
-                    instr
-                });
+                    code.push_back(call_instr.to_default())
+                }
             }
-            Some(instr) => {
-                code.push(instr);
+            CallPolicy::Counted => {
+                if self.marker.in_tail_position {
+                    code.push_back(call_instr.to_execute());
+                } else {
+                    code.push_back(call_instr)
+                }
             }
-            None => {}
         }
-
-        dealloc_index
     }
 
     fn compile_inlined<'a>(
@@ -539,9 +550,9 @@ impl<'b> CodeGenerator<'b> {
         ct: &InlinedClauseType,
         terms: &'a Vec<Term>,
         term_loc: GenContext,
-        code: &mut Code,
+        code: &mut CodeDeque,
     ) -> Result<(), CompilationError> {
-        match ct {
+        let call_instr = match ct {
             &InlinedClauseType::CompareNumber(mut cmp) => {
                 self.marker.reset_arg(2);
 
@@ -559,29 +570,29 @@ impl<'b> CodeGenerator<'b> {
                 let at_1 = at_1.unwrap_or(interm!(1));
                 let at_2 = at_2.unwrap_or(interm!(2));
 
-                code.push(compare_number_instr!(cmp, at_1, at_2));
+                compare_number_instr!(cmp, at_1, at_2)
             }
             &InlinedClauseType::IsAtom(..) => match &terms[0] {
                 &Term::Literal(_, Literal::Char(_)) |
                 &Term::Literal(_, Literal::Atom(atom!("[]"))) |
                 &Term::Literal(_, Literal::Atom(..)) => {
-                    code.push(instr!("$succeed", 0));
+                    instr!("$succeed")
                 }
                 &Term::Var(ref vr, ref name) => {
                     self.marker.reset_arg(1);
 
                     let r = self.marker.mark_non_callable(
-                        name.clone(),
+                        name.to_var_num().unwrap(),
                         1,
                         term_loc,
                         vr,
                         code,
                     );
 
-                    code.push(instr!("atom", r, 0));
+                    instr!("atom", r)
                 }
                 _ => {
-                    code.push(instr!("$fail", 0));
+                    instr!("$fail")
                 }
             },
             &InlinedClauseType::IsAtomic(..) => match &terms[0] {
@@ -590,26 +601,26 @@ impl<'b> CodeGenerator<'b> {
                 &Term::Cons(..) |
                 &Term::PartialString(..) |
                 &Term::CompleteString(..) => {
-                    code.push(instr!("$fail", 0));
+                    instr!("$fail")
                 }
                 &Term::Literal(_, Literal::String(_)) => {
-                    code.push(instr!("$fail", 0));
+                    instr!("$fail")
                 }
                 &Term::Literal(..) => {
-                    code.push(instr!("$succeed", 0));
+                    instr!("$succeed")
                 }
                 &Term::Var(ref vr, ref name) => {
                     self.marker.reset_arg(1);
 
                     let r = self.marker.mark_non_callable(
-                        name.clone(),
+                        name.to_var_num().unwrap(),
                         1,
                         term_loc,
                         vr,
                         code,
                     );
 
-                    code.push(instr!("atomic", r, 0));
+                    instr!("atomic", r)
                 }
             },
             &InlinedClauseType::IsCompound(..) => match &terms[0] {
@@ -618,57 +629,57 @@ impl<'b> CodeGenerator<'b> {
                 &Term::PartialString(..) |
                 &Term::CompleteString(..) |
                 &Term::Literal(_, Literal::String(..)) => {
-                    code.push(instr!("$succeed", 0));
+                    instr!("$succeed")
                 }
                 &Term::Var(ref vr, ref name) => {
                     self.marker.reset_arg(1);
 
                     let r = self.marker.mark_non_callable(
-                        name.clone(),
+                        name.to_var_num().unwrap(),
                         1,
                         term_loc,
                         vr,
                         code,
                     );
 
-                    code.push(instr!("compound", r, 0));
+                    instr!("compound", r)
                 }
                 _ => {
-                    code.push(instr!("$fail", 0));
+                    instr!("$fail")
                 }
             },
             &InlinedClauseType::IsRational(..) => match &terms[0] {
                 &Term::Literal(_, Literal::Rational(_)) => {
-                    code.push(instr!("$succeed", 0));
+                    instr!("$succeed")
                 }
                 &Term::Var(ref vr, ref name) => {
                     self.marker.reset_arg(1);
-                    let r = self.marker.mark_non_callable(name.clone(), 1,  term_loc, vr, code);
-                    code.push(instr!("rational", r, 0));
+                    let r = self.marker.mark_non_callable(name.to_var_num().unwrap(), 1,  term_loc, vr, code);
+                    instr!("rational", r)
                 }
                 _ => {
-                    code.push(instr!("$fail", 0));
+                    instr!("$fail")
                 }
             },
             &InlinedClauseType::IsFloat(..) => match &terms[0] {
                 &Term::Literal(_, Literal::Float(_)) => {
-                    code.push(instr!("$succeed", 0));
+                    instr!("$succeed")
                 }
                 &Term::Var(ref vr, ref name) => {
                     self.marker.reset_arg(1);
 
                     let r = self.marker.mark_non_callable(
-                        name.clone(),
+                        name.to_var_num().unwrap(),
                         1,
                         term_loc,
                         vr,
                         code,
                     );
 
-                    code.push(instr!("float", r, 0));
+                    instr!("float", r)
                 }
                 _ => {
-                    code.push(instr!("$fail", 0));
+                    instr!("$fail")
                 }
             },
             &InlinedClauseType::IsNumber(..) => match &terms[0] {
@@ -676,66 +687,66 @@ impl<'b> CodeGenerator<'b> {
                 &Term::Literal(_, Literal::Rational(_)) |
                 &Term::Literal(_, Literal::Integer(_)) |
                 &Term::Literal(_, Literal::Fixnum(_)) => {
-                    code.push(instr!("$succeed", 0));
+                    instr!("$succeed")
                 }
                 &Term::Var(ref vr, ref name) => {
                     self.marker.reset_arg(1);
 
                     let r = self.marker.mark_non_callable(
-                        name.clone(),
+                        name.to_var_num().unwrap(),
                         1,
                         term_loc,
                         vr,
                         code,
                     );
 
-                    code.push(instr!("number", r, 0));
+                    instr!("number", r)
                 }
                 _ => {
-                    code.push(instr!("$fail", 0));
+                    instr!("$fail")
                 }
             },
             &InlinedClauseType::IsNonVar(..) => match &terms[0] {
                 &Term::AnonVar => {
-                    code.push(instr!("$fail", 0));
+                    instr!("$fail")
                 }
                 &Term::Var(ref vr, ref name) => {
                     self.marker.reset_arg(1);
 
                     let r = self.marker.mark_non_callable(
-                        name.clone(),
+                        name.to_var_num().unwrap(),
                         1,
                         term_loc,
                         vr,
                         code,
                     );
 
-                    code.push(instr!("nonvar", r, 0));
+                    instr!("nonvar", r)
                 }
                 _ => {
-                    code.push(instr!("$succeed", 0));
+                    instr!("$succeed")
                 }
             },
             &InlinedClauseType::IsInteger(..) => match &terms[0] {
                 &Term::Literal(_, Literal::Integer(_)) |
                 &Term::Literal(_, Literal::Fixnum(_)) => {
-                    code.push(instr!("$succeed", 0));
+                    instr!("$succeed")
                 }
                 &Term::Var(ref vr, ref name) => {
                     self.marker.reset_arg(1);
 
                     let r = self.marker.mark_non_callable(
-                        name.clone(),
+                        name.to_var_num().unwrap(),
                         1,
                         term_loc,
                         vr,
                         code,
                     );
 
-                    code.push(instr!("integer", r, 0));
+                    instr!("integer", r)
                 }
                 _ => {
-                    code.push(instr!("$fail", 0));
+                    instr!("$fail")
                 }
             },
             &InlinedClauseType::IsVar(..) => match &terms[0] {
@@ -744,26 +755,29 @@ impl<'b> CodeGenerator<'b> {
                 &Term::Cons(..) |
                 &Term::PartialString(..) |
                 &Term::CompleteString(..) => {
-                    code.push(instr!("$fail", 0));
+                    instr!("$fail")
                 }
                 &Term::AnonVar => {
-                    code.push(instr!("$succeed", 0));
+                    instr!("$succeed")
                 }
                 &Term::Var(ref vr, ref name) => {
                     self.marker.reset_arg(1);
 
                     let r = self.marker.mark_non_callable(
-                        name.clone(),
+                        name.to_var_num().unwrap(),
                         1,
                         term_loc,
                         vr,
                         code,
                     );
 
-                    code.push(instr!("var", r, 0));
+                    instr!("var", r)
                 }
             },
-        }
+        };
+
+        // inlined predicates are never counted, so this overrides nothing.
+        self.add_call(code, call_instr, CallPolicy::Counted);
 
         Ok(())
     }
@@ -782,7 +796,7 @@ impl<'b> CodeGenerator<'b> {
     fn compile_is_call(
         &mut self,
         terms: &Vec<Term>,
-        code: &mut Code,
+        code: &mut CodeDeque,
         term_loc: GenContext,
         call_policy: CallPolicy,
     ) -> Result<(), CompilationError> {
@@ -798,8 +812,11 @@ impl<'b> CodeGenerator<'b> {
 
         let at = match &terms[0] {
             &Term::Var(ref vr, ref name) => {
+                let var_num = name.to_var_num().unwrap();
+                self.marker.mark_temp_to_safe_perm(var_num);
+
                 self.marker.mark_var::<QueryInstruction>(
-                    name.clone(),
+                    var_num,
                     Level::Shallow,
                     vr,
                     term_loc,
@@ -813,208 +830,189 @@ impl<'b> CodeGenerator<'b> {
                               c @ Literal::Rational(_) |
                               c @ Literal::Fixnum(_)) => {
                 let v = HeapCellValue::from(c);
-                code.push(instr!("put_constant", Level::Shallow, v, temp_v!(1)));
+                code.push_back(instr!("put_constant", Level::Shallow, v, temp_v!(1)));
 
                 self.marker.advance_arg();
                 compile_expr!(self, &terms[1], term_loc, code)
             }
             _ => {
-                code.push(instr!("$fail", 0));
+                code.push_back(instr!("$fail"));
                 return Ok(());
             }
         };
 
         let at = at.unwrap_or(interm!(1));
+        self.add_call(code, instr!("is", temp_v!(1), at), call_policy);
 
-        Ok(if let CallPolicy::Default = call_policy {
-            code.push(instr!("is", default, temp_v!(1), at, 0));
-        } else {
-            code.push(instr!("is", temp_v!(1), at, 0));
-        })
-    }
-
-    #[inline]
-    fn compile_unblocked_cut(&mut self, code: &mut Code, cell: &Cell<VarReg>) {
-        let r = self.marker.get(Var::from("!"));
-        cell.set(VarReg::Norm(r));
-        code.push(instr!("$set_cp", cell.get().norm(), 0));
+        Ok(())
     }
 
     fn compile_seq<'a>(
         &mut self,
-        iter: ChunkedIterator<'a>,
-        conjunct_info: &ConjunctInfo,
-        code: &mut Code,
+        clauses: &ChunkedTermVec,
+        code: &mut CodeDeque,
     ) -> Result<(), CompilationError> {
-        for (chunk_num, _, terms) in iter.rule_body_iter() {
-            for (i, term) in terms.iter().enumerate() {
-                let term_loc = if i + 1 < terms.len() {
-                    GenContext::Mid(chunk_num)
-                } else {
-                    GenContext::Last(chunk_num)
-                };
+        let mut chunk_num = 0;
+        let mut branch_code_stack = BranchCodeStack::new();
+        let mut clause_iter = ClauseIterator::new(clauses);
 
-                match *term {
-                    &QueryTerm::UnblockedCut(ref cell) => self.compile_unblocked_cut(code, cell),
-                    &QueryTerm::BlockedCut => code.push(if chunk_num == 0 {
-                        Instruction::NeckCut
-                    } else {
-                        Instruction::Cut(perm_v!(1))
-                    }),
-                    &QueryTerm::Clause(
-                        _,
-                        ClauseType::BuiltIn(BuiltInClauseType::Is(..)),
-                        ref terms,
-                        call_policy,
-                    ) => self.compile_is_call(terms, code, term_loc, call_policy)?,
-                    &QueryTerm::Clause(_, ClauseType::Inlined(ref ct), ref terms, _) => {
-                        self.compile_inlined(ct, terms, term_loc, code)?
-                    }
-                    _ => {
-                        let num_perm_vars = if chunk_num == 0 {
-                            conjunct_info.perm_vars()
+        while let Some(clause_item) = clause_iter.next() {
+            match clause_item {
+                ClauseItem::Chunk(chunk) => {
+                    for (idx, term) in chunk.iter().enumerate() {
+                        let term_loc = if idx + 1 < chunk.len() {
+                            GenContext::Mid(chunk_num)
                         } else {
-                            conjunct_info.perm_vs.vars_above_threshold(i + 1)
+                            self.marker.in_tail_position = clause_iter.in_tail_position();
+                            GenContext::Last(chunk_num)
                         };
 
-                        self.compile_query_line(term, term_loc, code, num_perm_vars);
+                        match term {
+                            &QueryTerm::GetLevel(var_num) => {
+                                let code = branch_code_stack.code(code);
+                                let r = self.marker.mark_cut_var(var_num, chunk_num);
+                                code.push_back(instr!("get_level", r));
+                            }
+                            &QueryTerm::GetCutPoint { var_num, prev_b } => {
+                                let code = branch_code_stack.code(code);
+                                let r = self.marker.mark_cut_var(var_num, chunk_num);
 
-                        if self.marker.max_reg_allocated() > MAX_ARITY {
-                            return Err(CompilationError::ExceededMaxArity);
+                                code.push_back(if prev_b {
+                                    instr!("get_prev_level", r)
+                                } else {
+                                    instr!("get_cut_point", r)
+                                });
+                            }
+                            &QueryTerm::GlobalCut(var_num) => {
+                                let code = branch_code_stack.code(code);
+
+                                if chunk_num == 0 {
+                                    code.push_back(instr!("neck_cut"));
+                                } else {
+                                    let r = self.marker.get_binding(var_num);
+                                    // let r = self.marker.mark_cut_var(var_num, chunk_num);
+                                    code.push_back(instr!("cut", r));
+                                }
+
+                                if self.marker.in_tail_position {
+                                    if self.marker.var_data.allocates {
+                                        code.push_back(instr!("deallocate"));
+                                    }
+
+                                    code.push_back(instr!("proceed"));
+                                }
+                            }
+                            &QueryTerm::LocalCut(var_num) => {
+                                let code = branch_code_stack.code(code);
+                                let r = self.marker.get_binding(var_num);
+                                // let r = self.marker.mark_cut_var(var_num, chunk_num);
+                                code.push_back(instr!("cut", r));
+
+                                if self.marker.in_tail_position {
+                                    if self.marker.var_data.allocates {
+                                        code.push_back(instr!("deallocate"));
+                                    }
+
+                                    code.push_back(instr!("proceed"));
+                                }
+                            }
+                            &QueryTerm::Clause(
+                                _,
+                                ClauseType::BuiltIn(BuiltInClauseType::Is(..)),
+                                ref terms,
+                                call_policy,
+                            ) => self.compile_is_call(terms, branch_code_stack.code(code), term_loc, call_policy)?,
+                            &QueryTerm::Clause(_, ClauseType::Inlined(ref ct), ref terms, _) => {
+                                self.compile_inlined(ct, terms, term_loc, branch_code_stack.code(code))?
+                            }
+                            &QueryTerm::Fail => {
+                                branch_code_stack.code(code).push_back(instr!("$fail"));
+                            }
+                            term @ &QueryTerm::Clause(..) => {
+                                self.compile_query_line(term, term_loc, branch_code_stack.code(code));
+
+                                if self.marker.max_reg_allocated() > MAX_ARITY {
+                                    return Err(CompilationError::ExceededMaxArity);
+                                }
+                            }
                         }
                     }
+
+                    chunk_num += 1;
+                    self.marker.in_tail_position = false;
+                    self.marker.reset_contents();
+                }
+                ClauseItem::FirstBranch(num_branches) => {
+                    branch_code_stack.add_new_branch_stack();
+                    branch_code_stack.add_new_branch();
+
+                    self.marker.add_branch_stack(num_branches);
+                    self.marker.add_branch();
+                }
+                ClauseItem::NextBranch => {
+                    branch_code_stack.add_new_branch();
+                    self.marker.add_branch();
+                    self.marker.incr_current_branch();
+                }
+                ClauseItem::BranchEnd(depth) => {
+                    if !clause_iter.in_tail_position() {
+                        let subsumed_hits = branch_code_stack.push_missing_vars(depth, &mut self.marker);
+                        self.marker.pop_branch(depth, subsumed_hits);
+                        branch_code_stack.push_jump_instrs(depth);
+                    } else {
+                        self.marker.drain_branches(depth);
+                    }
+
+                    let settings = CodeGenSettings {
+                        non_counted_bt: self.settings.non_counted_bt,
+                        is_extensible: false,
+                        global_clock_tick: None,
+                    };
+
+                    let branch_code = branch_code_stack.pop_branch(depth, settings);
+                    branch_code_stack.code(code).extend(branch_code);
                 }
             }
+        }
 
-            self.marker.reset_contents();
+        if self.marker.var_data.allocates {
+            code.push_front(instr!("allocate", self.marker.num_perm_vars()));
         }
 
         Ok(())
     }
 
-    fn compile_seq_prelude(&mut self, var_data: &VarData, body: &mut Code) {
-        /*
-        if conjunct_info.allocates() {
-            let perm_vars = conjunct_info.perm_vars();
-
-            body.push(Instruction::Allocate(perm_vars));
-
-            if conjunct_info.has_deep_cut {
-                body.push(Instruction::GetLevel(perm_v!(1)));
-            }
-        }
-        */
-    }
-
-    fn compile_cleanup(
-        &mut self,
-        code: &mut Code,
-        conjunct_info: &ConjunctInfo,
-        toc: &QueryTerm,
-    ) {
-        // add a proceed to bookend any trailing cuts.
-        match toc {
-            &QueryTerm::BlockedCut | &QueryTerm::UnblockedCut(..) => {
-                code.push(instr!("proceed"));
-            }
-            _ => {}
-        }
-
-        // perform lco.
-        let dealloc_index = Self::lco(code);
-
-        if conjunct_info.allocates() {
-            let offset = self.global_jmp_by_locs_offset;
-
-            if let Some(jmp_by_offset) = self.jmp_by_locs[offset..].last_mut() {
-                if *jmp_by_offset == dealloc_index {
-                    *jmp_by_offset += 1;
-                }
-            }
-
-            code.insert(dealloc_index, instr!("deallocate"));
-        }
-    }
-
-    pub(crate) fn compile_rule(&mut self, rule: &Rule) -> Result<Code, CompilationError> {
-        // let iter = ChunkedIterator::from_rule(rule);
-        // let conjunct_info = self.collect_var_data(iter);
-
-        let &Rule {
-            head: (_, ref args, ref p1),
-            ref clauses,
-            ref var_data,
-        } = rule;
-
-        let mut code = Code::new();
+    pub(crate) fn compile_rule(&mut self, rule: &Rule, var_data: VarData) -> Result<Code, CompilationError> {
+        let Rule { head: (_, args), clauses } = rule;
+        self.marker.var_data = var_data;
+        let mut code = VecDeque::new();
 
         self.marker.reset_at_head(args);
-        self.compile_seq_prelude(&var_data, &mut code);
 
-        let iter = FactIterator::from_rule_head_clause(args);
-        let mut fact = self.compile_target::<FactInstruction, _>(iter, GenContext::Head);
+        let iter = FactIterator::from_rule_head_clause(&args);
+        let fact = self.compile_target::<FactInstruction, _>(iter, GenContext::Head);
 
         if self.marker.max_reg_allocated() > MAX_ARITY {
             return Err(CompilationError::ExceededMaxArity);
         }
 
         self.marker.reset_free_list();
+        code.extend(fact.into_iter());
 
-        let mut unsafe_var_marker = UnsafeVarMarker::new();
+        self.compile_seq(clauses, &mut code)?;
 
-        if !fact.is_empty() {
-            unsafe_var_marker = self.mark_unsafe_fact_vars(&mut fact);
-            code.extend(fact.into_iter());
-        }
-
-        let iter = ChunkedIterator::from_rule_body(p1, clauses);
-        self.compile_seq(iter, &conjunct_info, &mut code)?;
-
-        unsafe_var_marker.mark_unsafe_instrs(&mut code);
-
-        self.compile_cleanup(&mut code, &conjunct_info, clauses.last().unwrap_or(p1));
-
-        Ok(code)
+        Ok(Vec::from(code))
     }
 
-    fn mark_unsafe_fact_vars(&self, fact: &mut Code) -> UnsafeVarMarker {
-        let mut safe_vars = IndexSet::new();
-
-        for fact_instr in fact.iter_mut() {
-            match fact_instr {
-                &mut Instruction::UnifyValue(r) => {
-                    if !safe_vars.contains(&r) {
-                        *fact_instr = Instruction::UnifyLocalValue(r);
-                        safe_vars.insert(r);
-                    }
-                }
-                &mut Instruction::UnifyVariable(r) => {
-                    safe_vars.insert(r);
-                }
-                _ => {}
-            }
-        }
-
-        UnsafeVarMarker::from_fact_vars(safe_vars)
-    }
-
-    pub(crate) fn compile_fact(&mut self, fact: &Fact) -> Result<Code, CompilationError> {
-        self.update_var_count(post_order_iter(term));
-
-        // let mut vs = VariableFixtures::new();
-
-        // vs.mark_vars_in_chunk(post_order_iter(term), term.arity(), GenContext::Head);
-
-        // vs.populate_restricting_sets();
-        // self.marker.drain_var_data(vs, 1);
-
+    pub(crate) fn compile_fact(&mut self, fact: &Fact, var_data: VarData) -> Result<Code, CompilationError> {
         let mut code = Vec::new();
+        self.marker.var_data = var_data;
 
-        if let &Term::Clause(_, _, ref args) = term {
+        if let Term::Clause(_, _, args) = &fact.head {
             self.marker.reset_at_head(args);
 
-            let iter = FactInstruction::iter(term);
-            let mut compiled_fact = self.compile_target::<FactInstruction, _>(
+            let iter = FactInstruction::iter(&fact.head);
+            let compiled_fact = self.compile_target::<FactInstruction, _>(
                 iter,
                 GenContext::Head,
             );
@@ -1023,40 +1021,27 @@ impl<'b> CodeGenerator<'b> {
                 return Err(CompilationError::ExceededMaxArity);
             }
 
-            self.mark_unsafe_fact_vars(&mut compiled_fact);
-
-            if !compiled_fact.is_empty() {
-                code.extend(compiled_fact.into_iter());
-            }
+            code.extend(compiled_fact.into_iter());
         }
 
         code.push(instr!("proceed"));
         Ok(code)
     }
 
-    fn compile_query_line(
-        &mut self,
-        term: &QueryTerm,
-        term_loc: GenContext,
-        code: &mut Code,
-        num_perm_vars_left: usize,
-    ) {
+    fn compile_query_line(&mut self, term: &QueryTerm, term_loc: GenContext, code: &mut CodeDeque) {
         self.marker.reset_arg(term.arity());
 
-        let iter = query_term_post_order_iter(term);
+        let iter = QueryIterator::new(term);
         let query = self.compile_target::<QueryInstruction, _>(iter, term_loc);
 
         code.extend(query.into_iter());
-        self.add_conditional_call(code, term, num_perm_vars_left);
-    }
 
-    #[inline]
-    fn increment_jmp_by_locs_by(&mut self, incr: usize) {
-        let offset = self.global_jmp_by_locs_offset;
-
-        for loc in &mut self.jmp_by_locs[offset..] {
-            *loc += incr;
-        }
+        match term {
+            &QueryTerm::Clause(_, ref ct, _, call_policy) => {
+                self.add_call(code, ct.to_instr(), call_policy);
+            }
+            _ => unreachable!()
+        };
     }
 
     fn split_predicate(clauses: &[PredicateClause]) -> Vec<ClauseSpan> {
@@ -1121,30 +1106,35 @@ impl<'b> CodeGenerator<'b> {
 
     fn compile_pred_subseq<I: Indexer>(
         &mut self,
-        clauses: &[PredicateClause],
+        clauses: &mut [PredicateClause],
         optimal_index: usize,
     ) -> Result<Code, CompilationError> {
         let mut code = VecDeque::new();
         let mut code_offsets = CodeOffsets::new(I::new(), optimal_index + 1);
 
         let mut skip_stub_try_me_else = false;
-        let jmp_by_locs_len = self.jmp_by_locs.len();
+        let clauses_len = clauses.len();
 
-        for (i, clause) in clauses.iter().enumerate() {
+        for (i, clause) in clauses.iter_mut().enumerate() {
             self.marker.reset();
 
             let mut clause_index_info = ClauseIndexInfo::new(code.len());
-            self.global_jmp_by_locs_offset = self.jmp_by_locs.len();
 
             let clause_code = match clause {
-                &PredicateClause::Fact(ref fact, ..) => self.compile_fact(fact)?,
-                &PredicateClause::Rule(ref rule, ..) => self.compile_rule(rule)?,
+                PredicateClause::Fact(fact, var_data) => {
+                    let var_data = std::mem::replace(var_data, VarData::default());
+                    self.compile_fact(&fact, var_data)?
+                }
+                PredicateClause::Rule(rule, var_data) => {
+                    let var_data = std::mem::replace(var_data, VarData::default());
+                    self.compile_rule(&rule, var_data)?
+                }
             };
 
-            if clauses.len() > 1 {
+            if clauses_len > 1 {
                 let choice = match i {
                     0 => self.settings.internal_try_me_else(clause_code.len() + 1),
-                    _ if i == clauses.len() - 1 => self.settings.internal_trust_me(),
+                    _ if i + 1 == clauses_len => self.settings.internal_trust_me(),
                     _ => self.settings.internal_retry_me_else(clause_code.len() + 1),
                 };
 
@@ -1170,21 +1160,8 @@ impl<'b> CodeGenerator<'b> {
             if let Some(arg) = arg {
                 let index = code.len();
 
-                if clauses.len() > 1 || self.settings.is_extensible {
+                if clauses_len > 1 || self.settings.is_extensible {
                     code_offsets.index_term(arg, index, &mut clause_index_info, self.atom_tbl);
-                }
-            }
-
-            if !(code_offsets.no_indices() && clauses.len() == 1 && self.settings.is_extensible) {
-                // the peculiar condition of this block, when false,
-                // anticipates code.pop_front() being called about a
-                // dozen lines below.
-
-                if !skip_stub_try_me_else {
-                    // if the condition is false, code_offsets.no_indices() is false,
-                    // so don't repeat the work of the condition on skip_stub_try_me_else
-                    // below.
-                    self.increment_jmp_by_locs_by(code.len());
                 }
             }
 
@@ -1192,23 +1169,14 @@ impl<'b> CodeGenerator<'b> {
             code.extend(clause_code.into_iter());
         }
 
-        let index_code = if clauses.len() > 1 || self.settings.is_extensible {
+        let index_code = if clauses_len > 1 || self.settings.is_extensible {
             code_offsets.compute_indices(skip_stub_try_me_else)
         } else {
             vec![]
         };
 
-        self.global_jmp_by_locs_offset = jmp_by_locs_len;
-
         if !index_code.is_empty() {
             code.push_front(Instruction::IndexingCode(index_code));
-
-            if skip_stub_try_me_else {
-                // skip the TryMeElse(0) also.
-                self.increment_jmp_by_locs_by(2);
-            } else {
-                self.increment_jmp_by_locs_by(1);
-            }
         } else if clauses.len() == 1 && self.settings.is_extensible {
             // the condition is the value of skip_stub_try_me_else, which is
             // true if the predicate is not dynamic. This operation must apply
@@ -1223,7 +1191,7 @@ impl<'b> CodeGenerator<'b> {
 
     pub(crate) fn compile_predicate(
         &mut self,
-        clauses: &Vec<PredicateClause>,
+        mut clauses: Vec<PredicateClause>,
     ) -> Result<Code, CompilationError> {
         let mut code = Code::new();
 
@@ -1234,12 +1202,12 @@ impl<'b> CodeGenerator<'b> {
             let skel_lower_bound = self.skeleton.clauses.len();
             let code_segment = if self.settings.is_dynamic() {
                 self.compile_pred_subseq::<DynamicCodeIndices>(
-                    &clauses[left..right],
+                    &mut clauses[left..right],
                     instantiated_arg_index,
                 )?
             } else {
                 self.compile_pred_subseq::<StaticCodeIndices>(
-                    &clauses[left..right],
+                    &mut clauses[left..right],
                     instantiated_arg_index,
                 )?
             };
@@ -1271,11 +1239,16 @@ impl<'b> CodeGenerator<'b> {
                 }
             }
 
-            self.increment_jmp_by_locs_by(code.len());
-            self.global_jmp_by_locs_offset = self.jmp_by_locs.len();
-
             code.extend(code_segment.into_iter());
         }
+
+        /*
+        for line in &code {
+            println!("{:?}", line);
+        }
+
+        println!("");
+        */
 
         Ok(code)
     }

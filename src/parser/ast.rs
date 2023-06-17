@@ -4,11 +4,11 @@ use crate::machine::machine_indices::*;
 use crate::parser::char_reader::*;
 use crate::types::HeapCellValueTag;
 
-use std::cell::Cell;
+use std::cell::{Cell, Ref, RefCell, RefMut};
 use std::fmt;
-use std::hash::Hash;
+use std::hash::{Hash, Hasher};
 use std::io::{Error as IOError};
-use std::ops::Neg;
+use std::ops::{Deref, Neg};
 use std::rc::Rc;
 use std::vec::Vec;
 
@@ -572,23 +572,89 @@ impl Literal {
     }
 }
 
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VarPtr(Rc<RefCell<Var>>);
+
+impl Hash for VarPtr {
+    #[inline(always)]
+    fn hash<H: Hasher>(&self, hasher: &mut H) {
+        self.borrow().hash(hasher)
+    }
+}
+
+impl Deref for VarPtr {
+    type Target = RefCell<Var>;
+
+    #[inline(always)]
+    fn deref(&self) -> &Self::Target {
+        self.0.deref()
+    }
+}
+
+impl VarPtr {
+    #[inline(always)]
+    pub(crate) fn borrow(&self) -> Ref<'_, Var> {
+        self.0.borrow()
+    }
+
+    #[inline(always)]
+    pub(crate) fn borrow_mut(&self) -> RefMut<'_, Var> {
+        self.0.borrow_mut()
+    }
+
+    pub(crate) fn to_var_num(&self) -> Option<usize> {
+        match *self.borrow() {
+            Var::Generated(var_num) => Some(var_num),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn set(&self, var: Var) {
+        let mut var_ref = self.borrow_mut();
+        *var_ref = var;
+    }
+}
+
+impl From<Var> for VarPtr {
+    #[inline(always)]
+    fn from(value: Var) -> VarPtr {
+        VarPtr(Rc::new(RefCell::new(value)))
+    }
+}
+
+impl From<String> for VarPtr {
+    #[inline(always)]
+    fn from(value: String) -> VarPtr {
+        VarPtr::from(Var::from(value))
+    }
+}
+
+impl From<&str> for VarPtr {
+    #[inline(always)]
+    fn from(value: &str) -> VarPtr {
+        VarPtr::from(value.to_owned())
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Var {
     Generated(usize),
-    Named(Rc<String>),
+    InSitu(usize),
+    Named(String),
 }
 
 impl From<String> for Var {
     #[inline(always)]
     fn from(value: String) -> Var {
-        Var::Named(Rc::new(value))
+        Var::Named(value)
     }
 }
 
 impl From<&str> for Var {
     #[inline(always)]
     fn from(value: &str) -> Var {
-        Var::Named(Rc::new(value.to_owned()))
+        Var::Named(value.to_owned())
     }
 }
 
@@ -596,16 +662,16 @@ impl Var {
     #[inline(always)]
     pub fn as_str(&self) -> Option<&str> {
         match self {
-            Var::Generated(_) => None,
             Var::Named(value) => Some(&value),
+            _ => None,
         }
     }
 
     #[inline(always)]
     pub fn to_string(&self) -> String {
         match self {
-            Var::Generated(n) => format!("_{}", n),
-            Var::Named(value) => value.to_string(),
+            Var::InSitu(n) | Var::Generated(n) => format!("_{}", n),
+            Var::Named(value) => value.to_owned(),
         }
     }
 }
@@ -620,7 +686,7 @@ pub enum Term {
     // other PartialString variants in as_partial_string.
     PartialString(Cell<RegType>, String, Box<Term>),
     CompleteString(Cell<RegType>, Atom),
-    Var(Cell<VarReg>, Var),
+    Var(Cell<VarReg>, VarPtr),
 }
 
 impl Term {

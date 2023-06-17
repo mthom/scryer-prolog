@@ -20,25 +20,23 @@ use std::cell::Cell;
 use std::collections::VecDeque;
 use std::convert::TryFrom;
 use std::fmt;
-use std::ops::AddAssign;
+use std::ops::{AddAssign, Deref, DerefMut};
 use std::path::PathBuf;
 
 use crate::{is_infix, is_postfix};
 
 pub type PredicateKey = (Atom, usize); // name, arity.
 
-pub type Predicate = Vec<PredicateClause>;
-
+/*
 // vars of predicate, toplevel offset.  Vec<Term> is always a vector
 // of vars (we get their adjoining cells this way).
 pub type JumpStub = Vec<Term>;
+*/
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum TopLevel {
-    Fact(Fact), // Term, line_num, col_num
-    Predicate(Predicate),
-    Query(Vec<QueryTerm>),
-    Rule(Rule), // Rule, line_num, col_num
+    Fact(Fact, VarData), // Term, line_num, col_num
+    Rule(Rule, VarData), // Rule, line_num, col_num
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -79,11 +77,28 @@ pub enum CallPolicy {
     Counted,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ChunkType {
     Head,
     Mid,
     Last,
+}
+
+#[derive(Debug)]
+pub enum RootIterationPolicy {
+    Iterated,
+    NotIterated,
+}
+
+impl RootIterationPolicy {
+    #[inline(always)]
+    pub fn iterable(&self) -> bool {
+        if let RootIterationPolicy::Iterated = self {
+            true
+        } else {
+            false
+        }
+    }
 }
 
 impl ChunkType {
@@ -103,46 +118,103 @@ impl ChunkType {
 }
 
 #[derive(Debug)]
+pub enum ChunkedTerms {
+    Branch(Vec<VecDeque<ChunkedTerms>>),
+    Chunk(VecDeque<QueryTerm>),
+}
+
+#[derive(Debug)]
+pub struct ChunkedTermVec {
+    pub chunk_vec: VecDeque<ChunkedTerms>,
+}
+
+impl Deref for ChunkedTermVec {
+    type Target = VecDeque<ChunkedTerms>;
+
+    #[inline(always)]
+    fn deref(&self) -> &Self::Target {
+        &self.chunk_vec
+    }
+}
+
+impl DerefMut for ChunkedTermVec {
+    #[inline(always)]
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.chunk_vec
+    }
+}
+
+impl ChunkedTermVec {
+    #[inline]
+    pub fn new() -> Self {
+        Self { chunk_vec: VecDeque::new() }
+    }
+
+    pub fn reserve_branch(&mut self, capacity: usize) {
+        self.chunk_vec.push_back(ChunkedTerms::Branch(Vec::with_capacity(capacity)));
+    }
+
+    pub fn push_branch_arm(&mut self, branch: VecDeque<ChunkedTerms>) {
+        match self.chunk_vec.back_mut().unwrap() {
+            ChunkedTerms::Branch(branches) => {
+                branches.push(branch);
+            }
+            ChunkedTerms::Chunk(_) => {
+                self.chunk_vec.push_back(ChunkedTerms::Branch(vec![branch]));
+            }
+        }
+    }
+
+    #[inline]
+    pub fn add_chunk(&mut self) {
+        self.chunk_vec.push_back(ChunkedTerms::Chunk(VecDeque::from(vec![])));
+    }
+
+    pub fn push_chunk_term(&mut self, term: QueryTerm) {
+        match self.chunk_vec.back_mut() {
+            Some(ChunkedTerms::Branch(_)) => {
+                self.chunk_vec.push_back(ChunkedTerms::Chunk(VecDeque::from(vec![term])));
+            }
+            Some(ChunkedTerms::Chunk(chunk)) => {
+                chunk.push_back(term);
+            }
+            None => {
+                self.chunk_vec.push_back(ChunkedTerms::Chunk(VecDeque::from(vec![term])));
+            }
+        }
+    }
+}
+
+#[derive(Debug)]
 pub enum QueryTerm {
     // register, clause type, subterms, clause call policy.
     Clause(Cell<RegType>, ClauseType, Vec<Term>, CallPolicy),
     Fail,
-    GlobalCut,
-    GetCutPoint(usize),
-    LocalCut(usize),
-    Branch(Vec<Vec<QueryTerm>>),
-    ChunkTypeBoundary(ChunkType),
+    LocalCut(usize), // var_num
+    GlobalCut(usize), // var_num
+    GetCutPoint { var_num: usize, prev_b: bool },
+    GetLevel(usize), // var_num
 }
 
 impl QueryTerm {
-    pub(crate) fn set_call_policy(&mut self, cp: CallPolicy) {
-        match self {
-            &mut QueryTerm::Clause(_, _, _, ref mut clause_cp) => *clause_cp = cp,
-            _ => {}
-        }
-    }
-
     pub(crate) fn arity(&self) -> usize {
         match self {
             &QueryTerm::Clause(_, _, ref subterms, ..) => subterms.len(),
-            &QueryTerm::Cut | &QueryTerm::Branch(_) => 0,
-            &QueryTerm::IfThen(..) => 2,
-            &QueryTerm::Not(_) => 1,
+            &QueryTerm::GetLevel(_) | &QueryTerm::GetCutPoint { .. } => 1,
+            _ => 0,
         }
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Fact {
     pub(crate) head: Term,
-    pub(crate) var_data: VarData,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub struct Rule {
-    pub(crate) head: (Atom, Vec<Term>, QueryTerm),
-    pub(crate) clauses: Vec<QueryTerm>,
-    pub(crate) var_data: VarData,
+    pub(crate) head: (Atom, Vec<Term>),
+    pub(crate) clauses: ChunkedTermVec,
 }
 
 #[derive(Clone, Debug, Hash)]
@@ -233,29 +305,29 @@ impl ClauseInfo for Rule {
 impl ClauseInfo for PredicateClause {
     fn name(&self) -> Option<Atom> {
         match self {
-            &PredicateClause::Fact(ref term, ..) => term.name(),
+            &PredicateClause::Fact(ref term, ..) => term.head.name(),
             &PredicateClause::Rule(ref rule, ..) => rule.name(),
         }
     }
 
     fn arity(&self) -> usize {
         match self {
-            &PredicateClause::Fact(ref term, ..) => term.arity(),
+            &PredicateClause::Fact(ref term, ..) => term.head.arity(),
             &PredicateClause::Rule(ref rule, ..) => rule.arity(),
         }
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub enum PredicateClause {
-    Fact(Fact),
-    Rule(Rule),
+    Fact(Fact, VarData),
+    Rule(Rule, VarData),
 }
 
 impl PredicateClause {
     pub(crate) fn args(&self) -> Option<&[Term]> {
         match self {
-            PredicateClause::Fact(term, ..) => match term {
+            PredicateClause::Fact(term, ..) => match &term.head {
                 Term::Clause(_, _, args) => Some(&args),
                 _ => None,
             },

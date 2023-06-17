@@ -23,12 +23,8 @@ fn capture_offset(line: &Instruction, index: usize, stack: &mut Vec<usize>) -> b
         {
             stack.push(index + offset);
         }
-        &Instruction::JmpByCall(_, offset, _) => {
+        &Instruction::JmpByCall(offset) => {
             stack.push(index + offset);
-        }
-        &Instruction::JmpByExecute(_, offset, _) => {
-            stack.push(index + offset);
-            return true;
         }
         &Instruction::Proceed => {
             return true;

@@ -28,6 +28,7 @@ walkdir = "2"
 
 [dependencies]
 bit-set = "0.5.3"
+bitvec = "1"
 cpu-time = "1.0.0"
 crossterm = "0.20.0"
 dirs-next = "2.0.0"

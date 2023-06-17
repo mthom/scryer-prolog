@@ -426,7 +426,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
                 if v.trim() == "_" {
                     self.terms.push(Term::AnonVar);
                 } else {
-                    self.terms.push(Term::Var(Cell::default(), Var::from(v)));
+                    self.terms.push(Term::Var(Cell::default(), VarPtr::from(v)));
                 }
 
                 TokenType::Term

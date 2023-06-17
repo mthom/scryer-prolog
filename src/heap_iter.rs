@@ -424,7 +424,6 @@ mod tests {
     use super::*;
     use crate::machine::mock_wam::*;
 
-
     #[test]
     fn heap_stackless_iter_tests() {
         let mut wam = MockWAM::new();

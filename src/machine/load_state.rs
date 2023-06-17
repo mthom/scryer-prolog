@@ -444,10 +444,8 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         let tl = preprocessor.try_term_to_tl(self, term)?;
 
         Ok(match tl {
-            TopLevel::Fact(fact) => PredicateClause::Fact(fact),
-            TopLevel::Rule(rule) => PredicateClause::Rule(rule),
-            TopLevel::Query(_) => return Err(SessionError::QueryCannotBeDefinedAsFact),
-            _ => unreachable!(),
+            TopLevel::Fact(fact, var_data) => PredicateClause::Fact(fact, var_data),
+            TopLevel::Rule(rule, var_data) => PredicateClause::Rule(rule, var_data),
         })
     }
 

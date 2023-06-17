@@ -10,19 +10,7 @@ use crate::parser::ast::*;
 use indexmap::IndexSet;
 
 use std::cell::Cell;
-use std::collections::VecDeque;
 use std::convert::TryFrom;
-
-pub(crate) fn fold_by_str<I>(terms: I, mut term: Term, sym: Atom) -> Term
-where
-    I: DoubleEndedIterator<Item = Term>,
-{
-    for prec in terms.rev() {
-        term = Term::Clause(Cell::default(), sym, vec![prec, term]);
-    }
-
-    term
-}
 
 pub(crate) fn to_op_decl(
     prec: u16,
@@ -546,16 +534,15 @@ impl Preprocessor {
         }
     }
 
-    fn setup_fact(&mut self, term: Term) -> Result<Fact, CompilationError> {
+    fn setup_fact(&mut self, term: Term) -> Result<(Fact, VarData), CompilationError> {
         match term {
             Term::Clause(..) | Term::Literal(_, Literal::Atom(..)) => {
-                let mut classifier = VariableClassifier::new(
+                let classifier = VariableClassifier::new(
                     self.settings.default_call_policy(),
                 );
 
                 let (head, var_data) = classifier.classify_fact(term)?;
-
-                Ok(Fact { head, var_data })
+                Ok((Fact { head }, var_data))
             }
             _ => Err(CompilationError::InadmissibleFact),
         }
@@ -566,28 +553,22 @@ impl Preprocessor {
         loader: &mut Loader<'a, LS>,
         head: Term,
         body: Term,
-    ) -> Result<Rule, CompilationError> {
-        let mut classifier = VariableClassifier::new(
+    ) -> Result<(Rule, VarData), CompilationError> {
+        let classifier = VariableClassifier::new(
             self.settings.default_call_policy(),
         );
 
-        let (head, mut query_terms, var_data) =
-            classifier.classify_rule(loader, head, body)?;
-
-        let clauses = query_terms.drain(1..).collect();
-        let qt = query_terms.pop().unwrap();
+        let (head, clauses, var_data) = classifier.classify_rule(loader, head, body)?;
 
         match head {
-            Term::Clause(_, name, terms) => Ok(Rule {
-                head: (name, terms, qt),
+            Term::Clause(_, name, terms) => Ok((Rule {
+                head: (name, terms),
                 clauses,
-                var_data,
-            }),
-            Term::Literal(_, Literal::Atom(name)) => Ok(Rule {
-                head: (name, vec![], qt),
+            }, var_data)),
+            Term::Literal(_, Literal::Atom(name)) => Ok((Rule {
+                head: (name, vec![]),
                 clauses,
-                var_data,
-            }),
+            }, var_data)),
             _ => Err(CompilationError::InvalidRuleHead),
         }
     }
@@ -613,20 +594,29 @@ impl Preprocessor {
         term: Term,
     ) -> Result<TopLevel, CompilationError> {
         match term {
-            Term::Clause(r, name, terms) => {
+            Term::Clause(r, name, mut terms) => {
                 let is_rule = name == atom!(":-") && terms.len() == 2;
 
                 if is_rule {
-                    Ok(TopLevel::Rule(self.setup_rule(loader, terms[0], terms[1])?))
+                    let tail = terms.pop().unwrap();
+                    let head = terms.pop().unwrap();
+
+                    let (rule, var_data) = self.setup_rule(loader, head, tail)?;
+                    Ok(TopLevel::Rule(rule, var_data))
                 } else {
                     let term = Term::Clause(r, name, terms);
-                    Ok(TopLevel::Fact(self.setup_fact(term)?))
+                    let (fact, var_data) = self.setup_fact(term)?;
+                    Ok(TopLevel::Fact(fact, var_data))
                 }
             }
-            term => Ok(TopLevel::Fact(self.setup_fact(term)?)),
+            term => {
+                let (fact, var_data) = self.setup_fact(term)?;
+                Ok(TopLevel::Fact(fact, var_data))
+            }
         }
     }
 
+    /*
     fn try_terms_to_tls<'a, I: IntoIterator<Item = Term>, LS: LoadState<'a>>(
         &mut self,
         loader: &mut Loader<'a, LS>,
@@ -640,4 +630,5 @@ impl Preprocessor {
 
         Ok(results)
     }
+    */
 }

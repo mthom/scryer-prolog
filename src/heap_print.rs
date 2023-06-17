@@ -472,7 +472,7 @@ pub struct HCPrinter<'a, Outputter> {
     state_stack: Vec<TokenOrRedirect>,
     toplevel_spec: Option<DirectedOp>,
     last_item_idx: usize,
-    pub var_names: IndexMap<HeapCellValue, Var>,
+    pub var_names: IndexMap<HeapCellValue, VarPtr>,
     pub numbervars_offset: Integer,
     pub numbervars: bool,
     pub quoted: bool,
@@ -803,7 +803,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         if let Some(var) = self.var_names.get(&addr) {
             read_heap_cell!(addr,
                (HeapCellValueTag::Var | HeapCellValueTag::AttrVar | HeapCellValueTag::StackVar) => {
-                   return Some(var.to_string());
+                   return Some(var.borrow().to_string());
                }
                _ => {
                    self.iter.push_stack(h);
@@ -847,7 +847,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                     // short-circuits handle_heap_term.
                     // self.iter.pop_stack();
 
-                    let var_str = var.to_string();
+                    let var_str = var.borrow().to_string();
 
                     push_space_if_amb!(self, &var_str, {
                         append_str!(self, &var_str);
@@ -862,7 +862,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                             Some(var) => {
                                 // If the term is bound to a named variable,
                                 // print the variable's name to output.
-                                let var_str = var.to_string();
+                                let var_str = var.borrow().to_string();
 
                                 push_space_if_amb!(self, &var_str, {
                                     append_str!(self, &var_str);
