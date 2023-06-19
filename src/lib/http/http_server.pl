@@ -121,37 +121,44 @@ http_loop(HttpListener, Handlers) :-
 send_response(ResponseHandle, http_response(StatusCode0, text(ResponseText), ResponseHeaders0)) :-
     default(StatusCode0, 200, StatusCode),
     maplist(map_header_kv_2, ResponseHeaders, ResponseHeaders0),
-    '$http_answer'(ResponseHandle, StatusCode, ResponseHeaders, ResponseStream),
-    call_cleanup(
-	format(ResponseStream, "~s", [ResponseText]),
-	close(ResponseStream)
+    '$http_answer'(ResponseHandle, StatusCode, ResponseHeaders, ResponseStream0),
+    open(stream(ResponseStream0), write, ResponseStream, [type(text)]),
+    catch(
+	call_cleanup(format(ResponseStream, "~s", [ResponseText]),close(ResponseStream)),
+	error(existence_error(stream, _), _),
+	true
     ).
 
 send_response(ResponseHandle, http_response(StatusCode0, bytes(ResponseBytes), ResponseHeaders0)) :-
     default(StatusCode0, 200, StatusCode),
     maplist(map_header_kv_2, ResponseHeaders, ResponseHeaders0),
     '$http_answer'(ResponseHandle, StatusCode, ResponseHeaders, ResponseStream),
-    call_cleanup(
-	format(ResponseStream, "~s", [ResponseBytes]),
-	close(ResponseStream)
+    catch(
+        call_cleanup(format(ResponseStream, "~s", [ResponseBytes]),close(ResponseStream)),
+	error(existence_error(stream, _), _),
+	true
     ).
 
 send_response(ResponseHandle, http_response(StatusCode0, file(Filename), ResponseHeaders0)) :-
     default(StatusCode0, 200, StatusCode),
     maplist(map_header_kv_2, ResponseHeaders, ResponseHeaders0),
     '$http_answer'(ResponseHandle, StatusCode, ResponseHeaders, ResponseStream),
-    call_cleanup(
-	setup_call_cleanup(
-	    open(Filename, read, FileStream, [type(binary)]),
-	    (
-		get_n_chars(FileStream, _, FileCs),
-		format(ResponseStream, "~s", [FileCs])
+    catch(
+	call_cleanup(
+	    setup_call_cleanup(
+		open(Filename, read, FileStream, [type(binary)]),
+		(
+		    get_n_chars(FileStream, _, FileCs),
+		    format(ResponseStream, "~s", [FileCs])
+		),
+		close(FileStream)
 	    ),
-	    close(FileStream)
+	    close(ResponseStream)
 	),
-        close(ResponseStream)
+	error(existence_error(stream, _), _),
+	true
     ).
-    
+
 
 default(Var, Default, Out) :-
     (var(Var) -> Out = Default

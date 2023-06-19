@@ -9,6 +9,7 @@ use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
 use crate::machine::machine_state::*;
 use crate::types::*;
+use crate::http::HttpResponse;
 
 pub use modular_bitfield::prelude::*;
 
@@ -26,7 +27,6 @@ use std::ops::{Deref, DerefMut};
 use std::ptr;
 
 use native_tls::TlsStream;
-use hyper::body::{Bytes, Sender};
 
 #[derive(Debug, BitfieldSpecifier, Clone, Copy, PartialEq, Eq, Hash)]
 #[bits = 1]
@@ -276,7 +276,10 @@ impl Read for HttpReadStream {
 }
 
 pub struct HttpWriteStream {
-    body_writer: Sender,
+    status_code: u16,
+    headers: hyper::HeaderMap,
+    response: TypedArenaPtr<HttpResponse>,
+    buffer: Vec<u8>,
 }
 
 impl Debug for HttpWriteStream {
@@ -288,17 +291,28 @@ impl Debug for HttpWriteStream {
 impl Write for HttpWriteStream {
     #[inline]
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-	    let bytes = Bytes::copy_from_slice(buf);
-	    let len = bytes.len();
-	    match self.body_writer.try_send_data(bytes) {
-	        Ok(()) => Ok(len),
-	        Err(_) => Err(std::io::Error::from(ErrorKind::Interrupted))
-	    }
+	self.buffer.extend_from_slice(buf);
+	Ok(buf.len())
     }
 
     #[inline]
     fn flush(&mut self) -> std::io::Result<()> {
-	    Ok(())
+	let (ready, response, cvar) = &**self.response;
+
+	let mut ready = ready.lock().unwrap();
+	{
+	    let mut response = response.lock().unwrap();
+	
+	    let bytes = bytes::Bytes::copy_from_slice(&self.buffer);
+	    let mut response_ = hyper::Response::builder()
+	        .status(self.status_code);
+	    *response_.headers_mut().unwrap() = self.headers.clone();
+	    *response = Some(response_.body(http_body_util::Full::new(bytes)).unwrap());
+	}
+	*ready = true;
+	cvar.notify_one();
+
+	Ok(())
     }
 }
 
@@ -1084,15 +1098,20 @@ impl Stream {
 
     #[inline]
     pub(crate) fn from_http_sender(
-	    body_writer: Sender,
-	    arena: &mut Arena,
+	response: TypedArenaPtr<HttpResponse>,
+	status_code: u16,
+	headers: hyper::HeaderMap,
+	arena: &mut Arena,
     ) -> Self {
-	    Stream::HttpWrite(arena_alloc!(
-	        StreamLayout::new(CharReader::new(HttpWriteStream {
-		        body_writer
-	        })),
-	        arena
-	    ))
+	Stream::HttpWrite(arena_alloc!(
+	    StreamLayout::new(CharReader::new(HttpWriteStream {
+		response,
+		status_code,
+		headers,
+		buffer: Vec::new(),
+	    })),
+	    arena
+	))
     }
 
     #[inline]
@@ -1139,10 +1158,10 @@ impl Stream {
 
                 Ok(())
             }
-	        Stream::HttpWrite(ref mut http_stream) => {
+	    Stream::HttpWrite(ref mut http_stream) => {
                 unsafe {
                     http_stream.set_tag(ArenaHeaderTag::Dropped);
-                    std::ptr::drop_in_place(&mut http_stream.inner_mut().body_writer as *mut _);
+                    std::ptr::drop_in_place(&mut http_stream.inner_mut().buffer as *mut _);
                 }
 
                 Ok(())

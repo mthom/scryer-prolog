@@ -61,13 +61,15 @@ smallvec = "1.8.0"
 sodiumoxide = "0.2.6"
 static_assertions = "1.1.0"
 ryu = "1.0.9"
-hyper = { version = "0.14", features = ["full"] }
-hyper-tls = "0.5.0"
-tokio = { version = "1.24.2", features = ["full"] }
+hyper = { version = "1.0.0-rc.3", features = ["full"] }
+tokio = { version = "1.28.2", features = ["full"] }
 futures = "0.3"
 libffi = "3.1.0"
 libloading = "0.7"
 derive_deref = "1.1.1"
+http-body-util = "0.1.0-rc.2"
+bytes = "1"
+reqwest = { version = "0.11.18", features = ["blocking"] }
 
 [dev-dependencies]
 assert_cmd = "1.0.3"
