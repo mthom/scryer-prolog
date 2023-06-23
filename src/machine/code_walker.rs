@@ -1,5 +1,6 @@
 use crate::instructions::*;
 
+use fxhash::FxBuildHasher;
 use indexmap::IndexSet;
 
 fn capture_offset(line: &Instruction, index: usize, stack: &mut Vec<usize>) -> bool {
@@ -7,34 +8,24 @@ fn capture_offset(line: &Instruction, index: usize, stack: &mut Vec<usize>) -> b
         &Instruction::TryMeElse(offset) if offset > 0 => {
             stack.push(index + offset);
         }
-        &Instruction::DefaultRetryMeElse(offset) |
-        &Instruction::RetryMeElse(offset)
-            if offset > 0 =>
-        {
+        &Instruction::DefaultRetryMeElse(offset) | &Instruction::RetryMeElse(offset) if offset > 0 => {
             stack.push(index + offset);
         }
-        &Instruction::DynamicElse(_, _, NextOrFail::Next(offset))
-            if offset > 0 =>
-        {
+        &Instruction::DynamicElse(_, _, NextOrFail::Next(offset)) if offset > 0 => {
             stack.push(index + offset);
         }
-        &Instruction::DynamicInternalElse(_, _, NextOrFail::Next(offset))
-            if offset > 0 =>
-        {
+        &Instruction::DynamicInternalElse(_, _, NextOrFail::Next(offset)) if offset > 0 => {
             stack.push(index + offset);
         }
-        &Instruction::JmpByCall(offset) => {
-            stack.push(index + offset);
-        }
-        &Instruction::Proceed => {
+        &Instruction::Proceed | &Instruction::JmpByCall(_) => {
             return true;
         }
         &Instruction::RevJmpBy(offset) => {
             if offset > 0 {
                 stack.push(index - offset);
-            } else {
-                return true;
             }
+
+            return true;
         }
         instr if instr.is_execute() => {
             return true;
@@ -51,7 +42,7 @@ fn capture_offset(line: &Instruction, index: usize, stack: &mut Vec<usize>) -> b
  */
 pub(crate) fn walk_code(code: &Code, p: usize, mut walker: impl FnMut(&Instruction)) {
     let mut stack = vec![p];
-    let mut visited_indices = IndexSet::new();
+    let mut visited_indices = IndexSet::with_hasher(FxBuildHasher::default());
 
     while let Some(first_index) = stack.pop() {
         if visited_indices.contains(&first_index) {
@@ -69,23 +60,3 @@ pub(crate) fn walk_code(code: &Code, p: usize, mut walker: impl FnMut(&Instructi
         }
     }
 }
-
-/* A function for code walking that might result in modification to
- * the code. Otherwise identical to walk_code.
- */
-/*
-pub(crate) fn walk_code_mut(code: &mut Code, p: usize, mut walker: impl FnMut(&mut Line))
-{
-    let mut queue = VecDeque::from(vec![p]);
-
-    while let Some(first_idx) = queue.pop_front() {
-        let mut last_idx = first_idx;
-
-        capture_next_range(code, &mut queue, &mut last_idx);
-
-        for instr in &mut code[first_idx .. last_idx + 1] {
-            walker(instr);
-        }
-    }
-}
-*/
