@@ -332,7 +332,7 @@ trait AddToFreeList<'a, Target: CompilationTarget<'a>> {
 
 impl<'a, 'b> AddToFreeList<'a, FactInstruction> for CodeGenerator<'b> {
     fn add_term_to_free_list(&mut self, r: RegType) {
-        self.marker.add_to_free_list(r);
+        self.marker.add_reg_to_free_list(r);
     }
 
     fn add_subterm_to_free_list(&mut self, _term: &Term) {}
@@ -345,7 +345,7 @@ impl<'a, 'b> AddToFreeList<'a, QueryInstruction> for CodeGenerator<'b> {
     #[inline(always)]
     fn add_subterm_to_free_list(&mut self, term: &Term) {
         if let Some(cell) = structure_cell(term) {
-            self.marker.add_to_free_list(cell.get());
+            self.marker.add_reg_to_free_list(cell.get());
         }
     }
 }
@@ -881,7 +881,6 @@ impl<'b> CodeGenerator<'b> {
                                     code.push_back(instr!("neck_cut"));
                                 } else {
                                     let r = self.marker.get_binding(var_num);
-                                    // let r = self.marker.mark_cut_var(var_num, chunk_num);
                                     code.push_back(instr!("cut", r));
                                 }
 
@@ -896,7 +895,6 @@ impl<'b> CodeGenerator<'b> {
                             &QueryTerm::LocalCut(var_num) => {
                                 let code = branch_code_stack.code(code);
                                 let r = self.marker.get_binding(var_num);
-                                // let r = self.marker.mark_cut_var(var_num, chunk_num);
                                 code.push_back(instr!("cut", r));
 
                                 if self.marker.in_tail_position {
@@ -905,6 +903,8 @@ impl<'b> CodeGenerator<'b> {
                                     }
 
                                     code.push_back(instr!("proceed"));
+                                } else {
+                                    self.marker.free_cut_var(chunk_num, var_num);
                                 }
                             }
                             &QueryTerm::Clause(

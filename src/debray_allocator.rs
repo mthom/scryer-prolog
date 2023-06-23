@@ -382,7 +382,7 @@ impl DebrayAllocator {
         p
     }
 
-    pub fn add_to_free_list(&mut self, r: RegType) {
+    pub(crate) fn add_reg_to_free_list(&mut self, r: RegType) {
         if let RegType::Temp(r) = r {
             self.in_use.remove(r);
             self.temp_free_list.push(r);
@@ -406,22 +406,43 @@ impl DebrayAllocator {
         self.var_data.records[var_num].running_count += 1;
     }
 
+    fn add_perm_to_free_list(&mut self, chunk_num: usize, var_num: usize) {
+        match &self.var_data.records[var_num].allocation {
+            VarAlloc::Perm(..) => {
+                self.perm_free_list.push_back((chunk_num, var_num));
+            }
+            _ => {}
+        }
+    }
+
     fn pop_free_perm(&mut self, chunk_num: usize) -> Option<usize> {
-        if let Some((perm_chunk_num, var_num)) = self.perm_free_list.front().cloned() {
-            if chunk_num == perm_chunk_num {
-                None
-            } else {
+        while let Some((perm_chunk_num, var_num)) = self.perm_free_list.front().cloned() {
+            if chunk_num > perm_chunk_num {
                 self.perm_free_list.pop_front();
 
                 match &mut self.var_data.records[var_num].allocation {
-                    &mut VarAlloc::Perm(p, _) => {
-                        Some(p)
+                    VarAlloc::Perm(p, PermVarAllocation::Pending) if *p > 0 => {
+                        return Some(std::mem::replace(p, 0));
                     }
-                    _ => unreachable!()
+                    _ => {
+                    }
                 }
+            } else {
+                return None;
             }
-        } else {
-            None
+        }
+
+        None
+    }
+
+    pub(crate) fn free_cut_var(&mut self, chunk_num: usize, var_num: usize) {
+        match &mut self.var_data.records[var_num].allocation {
+            VarAlloc::Perm(_, allocation) => {
+                *allocation = PermVarAllocation::Pending;
+                self.add_perm_to_free_list(chunk_num, var_num);
+            }
+            _ => {
+            }
         }
     }
 
@@ -704,7 +725,7 @@ impl Allocator for DebrayAllocator {
         if record.running_count < record.num_occurrences {
             record.running_count += 1;
         } else if r.is_perm() {
-            self.perm_free_list.push_back((term_loc.chunk_num(), var_num));
+            self.add_perm_to_free_list(term_loc.chunk_num(), var_num);
         }
 
         self.in_use.insert(o);
