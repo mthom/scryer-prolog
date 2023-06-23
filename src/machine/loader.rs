@@ -1435,7 +1435,7 @@ impl MachineState {
                     term_stack.push(Term::Literal(Cell::default(), Literal::try_from(addr).unwrap()));
                 }
                 (HeapCellValueTag::Atom, (name, arity)) => {
-                    let h = iter.focus();
+                    let h = iter.focus().value() as usize;
                     let mut arity = arity;
 
                     if iter.heap.len() > h + arity + 1 {

@@ -4987,51 +4987,11 @@ impl Machine {
                     step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                 }
                 &Instruction::CallStripModule => {
-                    let (module_loc, qualified_goal) = self.machine_st.strip_module(
-                        self.machine_st.registers[1],
-                        self.machine_st.registers[2],
-                    );
-
-                    let target_module_loc = self.machine_st.registers[2];
-
-                    unify_fn!(
-                        &mut self.machine_st,
-                        module_loc,
-                        target_module_loc
-                    );
-
-                    let target_qualified_goal = self.machine_st.registers[3];
-
-                    unify_fn!(
-                        &mut self.machine_st,
-                        qualified_goal,
-                        target_qualified_goal
-                    );
-
+                    self.strip_module();
                     step_or_fail!(self, self.machine_st.p += 1);
                 }
                 &Instruction::ExecuteStripModule => {
-                    let (module_loc, qualified_goal) = self.machine_st.strip_module(
-                        self.machine_st.registers[1],
-                        self.machine_st.registers[2],
-                    );
-
-                    let target_module_loc = self.machine_st.registers[2];
-
-                    unify_fn!(
-                        &mut self.machine_st,
-                        module_loc,
-                        target_module_loc
-                    );
-
-                    let target_qualified_goal = self.machine_st.registers[3];
-
-                    unify_fn!(
-                        &mut self.machine_st,
-                        qualified_goal,
-                        target_qualified_goal
-                    );
-
+                    self.strip_module();
                     step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                 }
                 &Instruction::CallPrepareCallClause(arity) => {
