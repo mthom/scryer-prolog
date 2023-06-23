@@ -414,8 +414,7 @@ impl DebrayAllocator {
                 self.perm_free_list.pop_front();
 
                 match &mut self.var_data.records[var_num].allocation {
-                    &mut VarAlloc::Perm(p, ref mut allocation) => {
-                        *allocation = PermVarAllocation::Pending;
+                    &mut VarAlloc::Perm(p, _) => {
                         Some(p)
                     }
                     _ => unreachable!()
@@ -426,21 +425,18 @@ impl DebrayAllocator {
         }
     }
 
-    pub(crate) fn mark_temp_to_safe_perm(&mut self, var_num: usize) {
-        match &self.var_data.records[var_num].allocation {
-            &VarAlloc::Temp { to_perm_var_num: Some(perm_var_num), .. } => {
-                let branch_designator = self.current_branch_designator();
+    pub(crate) fn mark_safe_var_unconditionally(&mut self, var_num: usize) {
+        let branch_designator = self.current_branch_designator();
 
-                match &mut self.var_data.records[perm_var_num].allocation {
-                    VarAlloc::Perm(_, PermVarAllocation::Done { deep_safety, shallow_safety, .. }) => {
-                        *deep_safety = VarSafetyStatus::unneeded(branch_designator);
-                        *shallow_safety = VarSafetyStatus::unneeded(branch_designator);
-                    }
-                    _ => unreachable!()
-                }
+        match &mut self.var_data.records[var_num].allocation {
+            VarAlloc::Perm(_, PermVarAllocation::Done { deep_safety, shallow_safety, .. }) => {
+                *deep_safety = VarSafetyStatus::unneeded(branch_designator);
+                *shallow_safety = VarSafetyStatus::unneeded(branch_designator);
             }
-            _ => {
+            VarAlloc::Temp { safety, .. } => {
+                *safety = VarSafetyStatus::unneeded(branch_designator);
             }
+            _ => unreachable!(),
         }
     }
 
@@ -708,11 +704,6 @@ impl Allocator for DebrayAllocator {
         if record.running_count < record.num_occurrences {
             record.running_count += 1;
         } else if r.is_perm() {
-            match &mut self.var_data.records[var_num].allocation {
-                VarAlloc::Perm(_, allocation) => *allocation = PermVarAllocation::Pending,
-                _ => unreachable!(),
-            }
-
             self.perm_free_list.push_back((term_loc.chunk_num(), var_num));
         }
 

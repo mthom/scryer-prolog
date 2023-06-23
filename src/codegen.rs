@@ -803,7 +803,6 @@ impl<'b> CodeGenerator<'b> {
         let at = match &terms[0] {
             &Term::Var(ref vr, ref name) => {
                 let var_num = name.to_var_num().unwrap();
-                self.marker.mark_temp_to_safe_perm(var_num);
 
                 self.marker.mark_var::<QueryInstruction>(
                     var_num,
@@ -812,6 +811,8 @@ impl<'b> CodeGenerator<'b> {
                     term_loc,
                     code,
                 );
+
+                self.marker.mark_safe_var_unconditionally(var_num);
 
                 compile_expr!(self, &terms[1], term_loc, code)
             }

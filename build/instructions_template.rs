@@ -2311,6 +2311,12 @@ pub fn generate_instructions_rs() -> TokenStream {
                 (atom!(#name), #arity) => true
             }
         );
+
+        is_inlined_arms.push(
+            quote! {
+                (atom!(#name), #arity) => true
+            }
+        );
     }
 
     for (name, arity, variant) in instr_data.compare_term_variants {
