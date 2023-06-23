@@ -1717,7 +1717,7 @@ mod tests {
                 heap_loc_as_cell!(0)
             );
 
-            printer.var_names.insert(list_loc_as_cell!(1), Var::from("L"));
+            printer.var_names.insert(list_loc_as_cell!(1), VarPtr::from("L"));
 
             let output = printer.print();
 
@@ -1778,7 +1778,7 @@ mod tests {
                 heap_loc_as_cell!(0)
             );
 
-            printer.var_names.insert(list_loc_as_cell!(1), Var::from("L"));
+            printer.var_names.insert(list_loc_as_cell!(1), VarPtr::from("L"));
 
             let output = printer.print();
 
