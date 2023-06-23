@@ -5,6 +5,8 @@ on:
   pull_request:
   schedule:
     - cron: '0 0 * * 3' # At 12:00 AM, only on Wednesday
+  label:
+    types: [created, edited]
 
 jobs:
   build-test:
@@ -53,12 +55,12 @@ jobs:
         if: "!matrix.extra"
         run: cargo test --all --verbose
 
-      # Extra steps
+      # Extra steps only run once to avoid duplication, when matrix.extra is true
       - name: Test and report
         if: matrix.extra
         run: |
           cargo install cargo2junit --force
-          cargo test --all -- -Z unstable-options --format json --report-time | cargo2junit > cargo_test_results.xml
+          RUSTC_BOOTSTRAP=1 cargo test --all -- -Z unstable-options --format json --report-time | cargo2junit > cargo_test_results.xml
       - name: Publish cargo test results artifact
         if: matrix.extra
         uses: actions/upload-artifact@v3
@@ -99,6 +101,7 @@ jobs:
     runs-on: ubuntu-20.04
     needs: [build-test]
     steps:
+      # Download prebuilt ubuntu binary from build-test job, setup logtalk
       - uses: actions/download-artifact@v3
         with:
           name: scryer-prolog_ubuntu-20.04
@@ -139,3 +142,23 @@ jobs:
           files: '${{ env.LOGTALKUSER }}/tests/prolog/**/*.xml'
           fail_on: nothing
           comment_mode: off
+
+  # Publish binaries when building for a tag
+  release:
+    runs-on: ubuntu-20.04
+    needs: [build-test]
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/download-artifact@v3
+      - name: Zip binaries for release
+        run: |
+          zip scryer-prolog_macos-11.zip ./scryer-prolog_macos-11/scryer-prolog
+          zip scryer-prolog_ubuntu-20.04.zip ./scryer-prolog_ubuntu-20.04/scryer-prolog
+          zip scryer-prolog_windows-latest.zip ./scryer-prolog_windows-latest/scryer-prolog.exe
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            scryer-prolog_macos-11.zip
+            scryer-prolog_ubuntu-20.04.zip
+            scryer-prolog_windows-latest.zip
