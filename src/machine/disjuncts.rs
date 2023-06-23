@@ -839,12 +839,3 @@ impl BranchMap {
         var_data
     }
 }
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn disjunct_compilation() {
-        let mut wam = MachineState::new();
-        let mut op_dir = default_op_dir();
-    }
-}

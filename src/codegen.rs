@@ -103,25 +103,15 @@ impl BranchCodeStack {
 
             for (inner_idx, code) in self.stack[idx].iter_mut().enumerate() {
                 if inner_idx + 1 == inner_len {
-                    jump_span -= code.len() + 1; // = jump_span.saturating_sub(code.len() + 1);
+                    jump_span -= code.len() + 1;
                 } else {
                     jump_span -= code.len() + 1;
                     code.push_back(instr!("jmp_by_call", jump_span as usize));
 
-                    // saturate at 0 if underflow happens, which only
-                    // happens when jump_span is no longer needed
-                    // anyway. still, we don't want to panic at
-                    // underflow.
                     jump_span -= 1;
                 }
             }
         }
-
-        // eliminate terminating jump instruction in last arm of last
-        // branch.
-        // self.stack.last_mut()
-        //     .and_then(|branch| branch.last_mut())
-        //     .map(|code| code.pop_back());
     }
 
     fn pop_branch(&mut self, depth: usize, settings: CodeGenSettings) -> CodeDeque {
@@ -1241,14 +1231,6 @@ impl<'b> CodeGenerator<'b> {
 
             code.extend(code_segment.into_iter());
         }
-
-        /*
-        for line in &code {
-            println!("{:?}", line);
-        }
-
-        println!("");
-        */
 
         Ok(code)
     }
