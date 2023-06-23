@@ -218,13 +218,13 @@ fail :- '$fail'.
 %% \+(Goal)
 %
 % True iff Goal fails
-\+ G :- call(G), !, false.
+\+ G :- call(G), !, '$fail'.
 \+ _.
 
 %% \=(?X, ?Y)
 %
 % True iff X and Y can't be unified
-X \= X :- !, false.
+X \= X :- !, '$fail'.
 _ \= _.
 
 

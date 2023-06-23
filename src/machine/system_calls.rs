@@ -51,7 +51,6 @@ use std::net::{TcpListener, TcpStream, SocketAddr, ToSocketAddrs};
 use std::num::NonZeroU32;
 use std::ops::Sub;
 use std::process;
-use std::rc::Rc;
 use std::str::FromStr;
 use std::sync::Arc;
 
@@ -1445,7 +1444,7 @@ impl Machine {
 
             let vars: Vec<_> = vars
                 .union(&result.supp_vars) // difference + union does not cancel.
-                .map(|v| Term::Var(Cell::default(), Rc::new(format!("_{}", v.get_value()))))
+                .map(|v| Term::Var(Cell::default(), VarPtr::from(format!("_{}", v.get_value()))))
                 .collect();
 
             let helper_clause_loc = self.code.len();
@@ -1655,8 +1654,8 @@ impl Machine {
     #[inline(always)]
     pub(crate) fn is_reset_cont_marker(&self, p: usize) -> bool {
         match &self.code[p] {
-            &Instruction::CallResetContinuationMarker(_) |
-            &Instruction::ExecuteResetContinuationMarker(_) => true,
+            &Instruction::CallResetContinuationMarker |
+            &Instruction::ExecuteResetContinuationMarker => true,
             _ => false
         }
     }
@@ -4941,9 +4940,7 @@ impl Machine {
 
         let p_functor = self.deref_register(2);
 
-        let p = to_local_code_ptr(&self.machine_st.heap, p_functor).unwrap();
-
-        let num_cells = *self.code[p].perm_vars_mut().unwrap();
+        let num_cells = self.machine_st.stack.index_and_frame(e).prelude.num_cells;
         let mut addrs = vec![];
 
         for idx in 1..num_cells + 1 {

@@ -44,60 +44,6 @@ pub(super) fn bootstrapping_compile(
     Ok(())
 }
 
-// throw errors if declaration or query found.
-pub(super) fn compile_relation(
-    cg: &mut CodeGenerator,
-    tl: &TopLevel,
-) -> Result<Code, CompilationError> {
-    match tl {
-        &TopLevel::Query(_) => Err(CompilationError::ExpectedRel),
-        &TopLevel::Predicate(ref clauses) => cg.compile_predicate(&clauses),
-        &TopLevel::Fact(ref fact, ..) => cg.compile_fact(fact),
-        &TopLevel::Rule(ref rule, ..) => cg.compile_rule(rule),
-    }
-}
-
-pub(super) fn compile_appendix(
-    code: &mut Code,
-    mut queue: VecDeque<TopLevel>,
-    jmp_by_locs: Vec<usize>,
-    non_counted_bt: bool,
-    atom_tbl: &mut AtomTable,
-) -> Result<(), CompilationError> {
-    let mut jmp_by_locs = VecDeque::from(jmp_by_locs);
-
-    while let Some(jmp_by_offset) = jmp_by_locs.pop_front() {
-        let code_len = code.len();
-
-        match &mut code[jmp_by_offset] {
-            &mut Instruction::JmpByCall(_, ref mut offset, ..) |
-            &mut Instruction::JmpByExecute(_, ref mut offset, ..) => {
-                *offset = code_len - jmp_by_offset;
-            }
-            _ => {
-                unreachable!()
-            }
-        }
-
-        // false because the inner predicate is a one-off, hence not extensible.
-        let settings = CodeGenSettings {
-            global_clock_tick: None,
-            is_extensible: false,
-            non_counted_bt,
-        };
-
-        let mut cg = CodeGenerator::new(atom_tbl, settings);
-
-        let tl = queue.pop_front().unwrap();
-        let decl_code = compile_relation(&mut cg, &tl)?;
-
-        jmp_by_locs.extend(cg.jmp_by_locs.into_iter().map(|offset| offset + code.len()));
-        code.extend(decl_code.into_iter());
-    }
-
-    Ok(())
-}
-
 fn lower_bound_of_target_clause(skeleton: &PredicateSkeleton, target_pos: usize) -> usize {
     if target_pos == 0 {
         return 0;
@@ -1342,22 +1288,14 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         let mut preprocessor = Preprocessor::new(settings);
 
         let clause = self.try_term_to_tl(term, &mut preprocessor)?;
-        let queue = preprocessor.parse_queue(self)?;
+        // let queue = preprocessor.parse_queue(self)?;
 
         let mut cg = CodeGenerator::new(
             &mut LS::machine_st(&mut self.payload).atom_tbl,
             settings,
         );
 
-        let mut clause_code = cg.compile_predicate(&vec![clause])?;
-
-        compile_appendix(
-            &mut clause_code,
-            queue,
-            cg.jmp_by_locs,
-            settings.non_counted_bt,
-            cg.atom_tbl,
-        )?;
+        let clause_code = cg.compile_predicate(vec![clause])?;
 
         Ok(StandaloneCompileResult {
             clause_code,
@@ -1385,22 +1323,12 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             clauses.push(self.try_term_to_tl(term, &mut preprocessor)?);
         }
 
-        let queue = preprocessor.parse_queue(self)?;
-
         let mut cg = CodeGenerator::new(
             &mut LS::machine_st(&mut self.payload).atom_tbl,
             settings,
         );
 
-        let mut code = cg.compile_predicate(&clauses)?;
-
-        compile_appendix(
-            &mut code,
-            queue,
-            cg.jmp_by_locs,
-            settings.non_counted_bt,
-            cg.atom_tbl,
-        )?;
+        let mut code = cg.compile_predicate(clauses)?;
 
         if settings.is_extensible {
             let mut clause_clause_locs = VecDeque::new();

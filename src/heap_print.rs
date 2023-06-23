@@ -481,7 +481,7 @@ pub struct HCPrinter<'a, Outputter> {
     state_stack: Vec<TokenOrRedirect>,
     toplevel_spec: Option<DirectedOp>,
     last_item_idx: usize,
-    pub var_names: IndexMap<HeapCellValue, Rc<String>>,
+    pub var_names: IndexMap<HeapCellValue, VarPtr>,
     pub numbervars_offset: Integer,
     pub numbervars: bool,
     pub quoted: bool,
@@ -815,7 +815,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         if let Some(var) = self.var_names.get(&cell) {
             read_heap_cell!(cell,
                (HeapCellValueTag::Var | HeapCellValueTag::AttrVar | HeapCellValueTag::StackVar) => {
-                   return Some(format!("{}", var.as_str()));
+                   return Some(var.borrow().to_string());
                }
                _ => {
                    self.iter.push_stack(h);
@@ -858,10 +858,10 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                     // short-circuits handle_heap_term.
                     // self.iter.pop_stack();
 
-                    let var_str = var.as_str();
+                    let var_str = var.borrow().to_string();
 
-                    push_space_if_amb!(self, var_str, {
-                        append_str!(self, var_str);
+                    push_space_if_amb!(self, &var_str, {
+                        append_str!(self, &var_str);
                     });
 
                     None
@@ -873,8 +873,10 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                             Some(var) => {
                                 // If the term is bound to a named variable,
                                 // print the variable's name to output.
-                                push_space_if_amb!(self, &var, {
-                                    append_str!(self, &var);
+                                let var_str = var.borrow().to_string();
+
+                                push_space_if_amb!(self, &var_str, {
+                                    append_str!(self, &var_str);
                                 });
                             }
                             None => {
@@ -1739,9 +1741,7 @@ mod tests {
                 heap_loc_as_cell!(0)
             );
 
-            printer
-                .var_names
-                .insert(list_loc_as_cell!(1), Rc::new("L".to_string()));
+            printer.var_names.insert(list_loc_as_cell!(1), VarPtr::from("L"));
 
             let output = printer.print();
 
@@ -1808,9 +1808,7 @@ mod tests {
                 heap_loc_as_cell!(0)
             );
 
-            printer
-                .var_names
-                .insert(list_loc_as_cell!(1), Rc::new("L".to_string()));
+            printer.var_names.insert(list_loc_as_cell!(1), VarPtr::from("L"));
 
             let output = printer.print();
 

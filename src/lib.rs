@@ -16,7 +16,7 @@ mod arithmetic;
 pub mod codegen;
 mod debray_allocator;
 mod ffi;
-mod fixtures;
+mod variable_records;
 mod forms;
 mod heap_iter;
 pub mod heap_print;

@@ -22,7 +22,6 @@ use std::convert::TryFrom;
 use std::f64;
 use std::num::FpCategory;
 use std::ops::Div;
-use std::rc::Rc;
 use std::vec::Vec;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
@@ -53,7 +52,7 @@ pub(crate) struct ArithInstructionIterator<'a> {
     state_stack: Vec<TermIterState<'a>>,
 }
 
-pub(crate) type ArithCont = (Code, Option<ArithmeticTerm>);
+pub(crate) type ArithCont = (CodeDeque, Option<ArithmeticTerm>);
 
 impl<'a> ArithInstructionIterator<'a> {
     fn push_subterm(&mut self, lvl: Level, term: &'a Term) {
@@ -74,7 +73,7 @@ impl<'a> ArithInstructionIterator<'a> {
                     2,
                 ))
             }
-            Term::Var(cell, var) => TermIterState::Var(Level::Shallow, cell, var.clone()),
+            Term::Var(cell, var_ptr) => TermIterState::Var(Level::Shallow, cell, var_ptr.clone()),
         };
 
         Ok(ArithInstructionIterator {
@@ -87,7 +86,7 @@ impl<'a> ArithInstructionIterator<'a> {
 pub(crate) enum ArithTermRef<'a> {
     Literal(&'a Literal),
     Op(Atom, usize), // name, arity.
-    Var(Level, &'a Cell<VarReg>, Rc<String>),
+    Var(Level, &'a Cell<VarReg>, VarPtr),
 }
 
 impl<'a> Iterator for ArithInstructionIterator<'a> {
@@ -115,8 +114,8 @@ impl<'a> Iterator for ArithInstructionIterator<'a> {
                     }
                 }
                 TermIterState::Literal(_, _, c) => return Some(Ok(ArithTermRef::Literal(c))),
-                TermIterState::Var(lvl, cell, var) => {
-                    return Some(Ok(ArithTermRef::Var(lvl, cell, var.clone())));
+                TermIterState::Var(lvl, cell, var_ptr) => {
+                    return Some(Ok(ArithTermRef::Var(lvl, cell, var_ptr)));
                 }
                 _ => {
                     return Some(Err(ArithmeticError::NonEvaluableFunctor(
@@ -308,43 +307,48 @@ impl<'a> ArithmeticEvaluator<'a> {
         term_loc: GenContext,
         arg: usize,
     ) -> Result<ArithCont, ArithmeticError> {
-        let mut code = vec![];
+        let mut code = CodeDeque::new();
         let mut iter = src.iter()?;
 
         while let Some(term_ref) = iter.next() {
             match term_ref? {
                 ArithTermRef::Literal(c) => push_literal(&mut self.interm, c)?,
                 ArithTermRef::Var(lvl, cell, name) => {
+                    let var_num = name.to_var_num().unwrap();
+
                     let r = if lvl == Level::Shallow {
                         self.marker.mark_non_callable(
-                            name.clone(),
+                            var_num,
                             arg,
                             term_loc,
                             cell,
                             &mut code,
                         )
                     } else if term_loc.is_last() || cell.get().norm().reg_num() == 0 {
-                        if let Some(r) = self.marker.get_binding(&name) {
-                            r
-                        } else {
+                        let r = self.marker.get_binding(var_num);
+
+                        if r.reg_num() == 0 {
                             self.marker.mark_var::<QueryInstruction>(
-                                name.clone(),
+                                var_num,
                                 lvl,
                                 cell,
                                 term_loc,
                                 &mut code,
                             );
-
-                            self.marker.get_binding(&name).unwrap()
+                        } else {
+                            self.marker.increment_running_count(var_num);
                         }
+
+                        r
                     } else {
+                        self.marker.increment_running_count(var_num);
                         cell.get().norm()
                     };
 
                     self.interm.push(ArithmeticTerm::Reg(r));
                 }
                 ArithTermRef::Op(name, arity) => {
-                    code.push(self.instr_from_clause(name, arity)?);
+                    code.push_back(self.instr_from_clause(name, arity)?);
                 }
             }
         }

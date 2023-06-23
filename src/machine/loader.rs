@@ -21,7 +21,6 @@ use std::convert::TryFrom;
 use std::fmt;
 use std::mem;
 use std::ops::{Deref, DerefMut};
-use std::rc::Rc;
 
 /*
  * The loader compiles Prolog terms read from a TermStream instance,
@@ -465,6 +464,11 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         }
     }
 
+    pub(crate) fn read_term_from_heap(&mut self, r: RegType) -> Result<Term, SessionError> {
+        let machine_st = LS::machine_st(&mut self.payload);
+        machine_st.read_term_from_heap(r)
+    }
+
     pub(crate) fn load(mut self) -> Result<LS::Evacuable, SessionError> {
         while let Some(decl) = self.dequeue_terms()? {
             self.load_decl(decl)?;
@@ -529,106 +533,6 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         }
 
         Ok(())
-    }
-
-    pub(super) fn read_term_from_heap(&mut self, heap_term_loc: RegType) -> Result<Term, SessionError> {
-        let machine_st = LS::machine_st(&mut self.payload);
-        let term_addr = machine_st[heap_term_loc];
-
-        let mut term_stack = vec![];
-        let mut iter = stackful_post_order_iter(&mut machine_st.heap, &mut machine_st.stack, term_addr);
-
-        while let Some(addr) = iter.next() {
-            let addr = unmark_cell_bits!(addr);
-
-            read_heap_cell!(addr,
-                (HeapCellValueTag::Lis) => {
-                    use crate::parser::parser::as_partial_string;
-
-                    let tail = term_stack.pop().unwrap();
-                    let head = term_stack.pop().unwrap();
-
-                    match as_partial_string(head, tail) {
-                        Ok((string, Some(tail))) => {
-                            term_stack.push(Term::PartialString(Cell::default(), string, tail));
-                        }
-                        Ok((string, None)) => {
-                            let atom = machine_st.atom_tbl.build_with(&string);
-                            term_stack.push(Term::CompleteString(Cell::default(), atom));
-                        }
-                        Err(cons_term) => term_stack.push(cons_term),
-                    }
-                }
-                (HeapCellValueTag::Var | HeapCellValueTag::AttrVar | HeapCellValueTag::StackVar, h) => {
-                    let offset_string = format!("_{}", h);
-                    term_stack.push(Term::Var(Cell::default(), Rc::new(offset_string)));
-                }
-                (HeapCellValueTag::Cons | HeapCellValueTag::CStr | HeapCellValueTag::Fixnum |
-                 HeapCellValueTag::Char | HeapCellValueTag::F64) => {
-                    term_stack.push(Term::Literal(Cell::default(), Literal::try_from(addr).unwrap()));
-                }
-                (HeapCellValueTag::Atom, (name, arity)) => {
-                    let h = iter.focus().value() as usize;
-                    let mut arity = arity;
-
-                    if iter.heap.len() > h + arity + 1 {
-                        let value = iter.heap[h + arity + 1];
-
-                        if let Some(idx) = get_structure_index(value) {
-                            // in the second condition, arity == 0,
-                            // meaning idx cannot pertain to this atom
-                            // if it is the direct subterm of a larger
-                            // structure.
-                            if arity > 0 || !iter.direct_subterm_of_str(h) {
-                                term_stack.push(
-                                    Term::Literal(Cell::default(), Literal::CodeIndex(idx))
-                                );
-
-                                arity += 1;
-                            }
-                        }
-                    }
-
-                    if arity == 0 {
-                        term_stack.push(Term::Literal(Cell::default(), Literal::Atom(name)));
-                    } else {
-                        let subterms = term_stack
-                            .drain(term_stack.len() - arity ..)
-                            .collect();
-
-                        term_stack.push(Term::Clause(Cell::default(), name, subterms));
-                    }
-                }
-                (HeapCellValueTag::PStr, atom) => {
-                    let tail = term_stack.pop().unwrap();
-
-                    if let Term::Literal(_, Literal::Atom(atom!("[]"))) = &tail {
-                        term_stack.push(Term::CompleteString(Cell::default(), atom));
-                    } else {
-                        term_stack.push(Term::PartialString(
-                            Cell::default(),
-                            atom.as_str().to_owned(),
-                            Box::new(tail),
-                        ));
-                    }
-                }
-                (HeapCellValueTag::PStrLoc, h) => {
-                    let atom = cell_as_atom_cell!(iter.heap[h]).get_name();
-                    let tail = term_stack.pop().unwrap();
-
-                    term_stack.push(Term::PartialString(
-                        Cell::default(),
-                        atom.as_str().to_owned(),
-                        Box::new(tail),
-                    ));
-                }
-                _ => {
-                }
-            );
-        }
-
-        debug_assert!(term_stack.len() == 1);
-        Ok(term_stack.pop().unwrap())
     }
 
     fn reset_machine(&mut self) {
@@ -1143,7 +1047,9 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         &mut self,
         r: RegType,
     ) -> Result<IndexSet<ModuleExport>, SessionError> {
-        let export_list = self.read_term_from_heap(r)?;
+        let machine_st = LS::machine_st(&mut self.payload);
+
+        let export_list = machine_st.read_term_from_heap(r)?;
         let atom_tbl = &mut LS::machine_st(&mut self.payload).atom_tbl;
         let export_list = setup_module_export_list(export_list, atom_tbl)?;
 
@@ -1490,6 +1396,106 @@ impl<'a> MachinePreludeView<'a> {
                 }
             }
         }
+    }
+}
+
+impl MachineState {
+    pub(super) fn read_term_from_heap(&mut self, r: RegType) -> Result<Term, SessionError> {
+        let term_addr = self[r];
+
+        let mut term_stack = vec![];
+        let mut iter = stackful_post_order_iter(&mut self.heap, &mut self.stack, term_addr);
+
+        while let Some(addr) = iter.next() {
+            let addr = unmark_cell_bits!(addr);
+
+            read_heap_cell!(addr,
+                (HeapCellValueTag::Lis) => {
+                    use crate::parser::parser::as_partial_string;
+
+                    let tail = term_stack.pop().unwrap();
+                    let head = term_stack.pop().unwrap();
+
+                    match as_partial_string(head, tail) {
+                        Ok((string, Some(tail))) => {
+                            term_stack.push(Term::PartialString(Cell::default(), string, tail));
+                        }
+                        Ok((string, None)) => {
+                            let atom = self.atom_tbl.build_with(&string);
+                            term_stack.push(Term::CompleteString(Cell::default(), atom));
+                        }
+                        Err(cons_term) => term_stack.push(cons_term),
+                    }
+                }
+                (HeapCellValueTag::Var | HeapCellValueTag::AttrVar | HeapCellValueTag::StackVar, h) => {
+                    term_stack.push(Term::Var(Cell::default(), VarPtr::from(format!("_{}", h))));
+                }
+                (HeapCellValueTag::Cons | HeapCellValueTag::CStr | HeapCellValueTag::Fixnum |
+                 HeapCellValueTag::Char | HeapCellValueTag::F64) => {
+                    term_stack.push(Term::Literal(Cell::default(), Literal::try_from(addr).unwrap()));
+                }
+                (HeapCellValueTag::Atom, (name, arity)) => {
+                    let h = iter.focus().value() as usize;
+                    let mut arity = arity;
+
+                    if iter.heap.len() > h + arity + 1 {
+                        let value = iter.heap[h + arity + 1];
+
+                        if let Some(idx) = get_structure_index(value) {
+                            // in the second condition, arity == 0,
+                            // meaning idx cannot pertain to this atom
+                            // if it is the direct subterm of a larger
+                            // structure.
+                            if arity > 0 || !iter.direct_subterm_of_str(h) {
+                                term_stack.push(
+                                    Term::Literal(Cell::default(), Literal::CodeIndex(idx))
+                                );
+
+                                arity += 1;
+                            }
+                        }
+                    }
+
+                    if arity == 0 {
+                        term_stack.push(Term::Literal(Cell::default(), Literal::Atom(name)));
+                    } else {
+                        let subterms = term_stack
+                            .drain(term_stack.len() - arity ..)
+                            .collect();
+
+                        term_stack.push(Term::Clause(Cell::default(), name, subterms));
+                    }
+                }
+                (HeapCellValueTag::PStr, atom) => {
+                    let tail = term_stack.pop().unwrap();
+
+                    if let Term::Literal(_, Literal::Atom(atom!("[]"))) = &tail {
+                        term_stack.push(Term::CompleteString(Cell::default(), atom));
+                    } else {
+                        term_stack.push(Term::PartialString(
+                            Cell::default(),
+                            atom.as_str().to_owned(),
+                            Box::new(tail),
+                        ));
+                    }
+                }
+                (HeapCellValueTag::PStrLoc, h) => {
+                    let atom = cell_as_atom_cell!(iter.heap[h]).get_name();
+                    let tail = term_stack.pop().unwrap();
+
+                    term_stack.push(Term::PartialString(
+                        Cell::default(),
+                        atom.as_str().to_owned(),
+                        Box::new(tail),
+                    ));
+                }
+                _ => {
+                }
+            );
+        }
+
+        debug_assert!(term_stack.len() == 1);
+        Ok(term_stack.pop().unwrap())
     }
 }
 

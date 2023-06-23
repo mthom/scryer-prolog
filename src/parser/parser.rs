@@ -8,7 +8,6 @@ use crate::parser::rug::ops::NegAssign;
 
 use std::cell::Cell;
 use std::mem;
-use std::rc::Rc;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum TokenType {
@@ -427,7 +426,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
                 if v.trim() == "_" {
                     self.terms.push(Term::AnonVar);
                 } else {
-                    self.terms.push(Term::Var(Cell::default(), Rc::new(v)));
+                    self.terms.push(Term::Var(Cell::default(), VarPtr::from(v)));
                 }
 
                 TokenType::Term

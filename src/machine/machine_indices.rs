@@ -2,7 +2,6 @@ use crate::parser::ast::*;
 
 use crate::arena::*;
 use crate::atom_table::*;
-use crate::fixtures::*;
 use crate::forms::*;
 use crate::machine::loader::*;
 use crate::machine::machine_state::*;
@@ -16,7 +15,6 @@ use modular_bitfield::specifiers::*;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::ops::{Deref, DerefMut};
-use std::rc::Rc;
 
 use crate::types::*;
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -228,8 +226,8 @@ impl CodeIndex {
     }
 }
 
-pub(crate) type HeapVarDict = IndexMap<Rc<String>, HeapCellValue, FxBuildHasher>;
-pub(crate) type AllocVarDict = IndexMap<Rc<String>, VarData, FxBuildHasher>;
+pub(crate) type HeapVarDict = IndexMap<VarPtr, HeapCellValue, FxBuildHasher>;
+// pub(crate) type AllocVarDict = IndexMap<Var, VarAlloc, FxBuildHasher>;
 
 pub(crate) type GlobalVarDir = IndexMap<Atom, (Ball, Option<HeapCellValue>), FxBuildHasher>;
 

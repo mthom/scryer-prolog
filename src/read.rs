@@ -317,7 +317,7 @@ impl<'a, 'b> TermWriter<'a, 'b> {
     fn write_term_to_heap(mut self, term: &'a Term) -> Result<TermWriteResult, CompilationError> {
         let heap_loc = self.heap.len();
 
-        for term in breadth_first_iter(term, true) {
+        for term in breadth_first_iter(term, RootIterationPolicy::Iterated) {
             let h = self.heap.len();
 
             match &term {
@@ -372,9 +372,9 @@ impl<'a, 'b> TermWriter<'a, 'b> {
                     let addr = self.term_as_addr(&term, h);
                     self.heap.push(addr);
                 }
-                &TermRef::Var(Level::Root, _, ref var) => {
+                &TermRef::Var(Level::Root, _, ref var_ptr) => {
                     let addr = self.term_as_addr(&term, h);
-                    self.var_dict.insert(var.clone(), heap_loc_as_cell!(h));
+                    self.var_dict.insert(var_ptr.clone(), heap_loc_as_cell!(h));
                     self.heap.push(addr);
                 }
                 &TermRef::AnonVar(_) => {

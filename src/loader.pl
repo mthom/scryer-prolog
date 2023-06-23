@@ -541,6 +541,7 @@ open_file(Path, Stream) :-
             )
     ).
 
+
 use_module(Module, Exports, Evacuable) :-
     (  var(Module) ->
        instantiation_error(load/1)
@@ -562,10 +563,9 @@ use_module(Module, Exports, Evacuable) :-
           stream_property(Stream, file_name(PathFileName)),
           file_load(Stream, PathFileName, Subevacuable),
           '$use_module'(Evacuable, Subevacuable, Exports)
-       ;  type_error(atom, Library, load/1)
+       ;  type_error(atom, Module, load/1)
        )
     ).
-
 
 
 check_predicate_property(meta_predicate, Module, Name, Arity, MetaPredicateTerm) :-

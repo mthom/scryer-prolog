@@ -16,6 +16,7 @@ pub mod machine_state;
 pub mod machine_state_impl;
 pub mod mock_wam;
 pub mod partial_string;
+pub mod disjuncts;
 pub mod preprocessor;
 pub mod stack;
 pub mod streams;
@@ -67,7 +68,7 @@ pub struct Machine {
     pub(super) user_error: Stream,
     pub(super) load_contexts: Vec<LoadContext>,
     pub(super) runtime: Runtime,
-    pub(super) foreign_function_table: ForeignFunctionTable, 
+    pub(super) foreign_function_table: ForeignFunctionTable,
 }
 
 #[derive(Debug)]
@@ -364,46 +365,46 @@ impl Machine {
             Instruction::BreakFromDispatchLoop,
             Instruction::InstallVerifyAttr,
             Instruction::VerifyAttrInterrupt,
-            Instruction::ExecuteTermGreaterThan(0),
-            Instruction::ExecuteTermLessThan(0),
-            Instruction::ExecuteTermGreaterThanOrEqual(0),
-            Instruction::ExecuteTermLessThanOrEqual(0),
-            Instruction::ExecuteTermEqual(0),
-            Instruction::ExecuteTermNotEqual(0),
-            Instruction::ExecuteNumberGreaterThan(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2)), 0),
-            Instruction::ExecuteNumberLessThan(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2)), 0),
-            Instruction::ExecuteNumberGreaterThanOrEqual(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2)), 0),
-            Instruction::ExecuteNumberLessThanOrEqual(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2)), 0),
-            Instruction::ExecuteNumberEqual(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2)), 0),
-            Instruction::ExecuteNumberNotEqual(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2)), 0),
-            Instruction::ExecuteIs(temp_v!(1), ar_reg!(temp_v!(2)), 0),
-            Instruction::ExecuteAcyclicTerm(0),
-            Instruction::ExecuteArg(0),
-            Instruction::ExecuteCompare(0),
-            Instruction::ExecuteCopyTerm(0),
-            Instruction::ExecuteFunctor(0),
-            Instruction::ExecuteGround(0),
-            Instruction::ExecuteKeySort(0),
-            Instruction::ExecuteRead(0),
-            Instruction::ExecuteSort(0),
-            Instruction::ExecuteN(1, 0),
-            Instruction::ExecuteN(2, 0),
-            Instruction::ExecuteN(3, 0),
-            Instruction::ExecuteN(4, 0),
-            Instruction::ExecuteN(5, 0),
-            Instruction::ExecuteN(6, 0),
-            Instruction::ExecuteN(7, 0),
-            Instruction::ExecuteN(8, 0),
-            Instruction::ExecuteN(9, 0),
-            Instruction::ExecuteIsAtom(temp_v!(1), 0),
-            Instruction::ExecuteIsAtomic(temp_v!(1), 0),
-            Instruction::ExecuteIsCompound(temp_v!(1), 0),
-            Instruction::ExecuteIsInteger(temp_v!(1), 0),
-            Instruction::ExecuteIsNumber(temp_v!(1), 0),
-            Instruction::ExecuteIsRational(temp_v!(1), 0),
-            Instruction::ExecuteIsFloat(temp_v!(1), 0),
-            Instruction::ExecuteIsNonVar(temp_v!(1), 0),
-            Instruction::ExecuteIsVar(temp_v!(1), 0)
+            Instruction::ExecuteTermGreaterThan,
+            Instruction::ExecuteTermLessThan,
+            Instruction::ExecuteTermGreaterThanOrEqual,
+            Instruction::ExecuteTermLessThanOrEqual,
+            Instruction::ExecuteTermEqual,
+            Instruction::ExecuteTermNotEqual,
+            Instruction::ExecuteNumberGreaterThan(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
+            Instruction::ExecuteNumberLessThan(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
+            Instruction::ExecuteNumberGreaterThanOrEqual(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
+            Instruction::ExecuteNumberLessThanOrEqual(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
+            Instruction::ExecuteNumberEqual(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
+            Instruction::ExecuteNumberNotEqual(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
+            Instruction::ExecuteIs(temp_v!(1), ar_reg!(temp_v!(2))),
+            Instruction::ExecuteAcyclicTerm,
+            Instruction::ExecuteArg,
+            Instruction::ExecuteCompare,
+            Instruction::ExecuteCopyTerm,
+            Instruction::ExecuteFunctor,
+            Instruction::ExecuteGround,
+            Instruction::ExecuteKeySort,
+            Instruction::ExecuteRead,
+            Instruction::ExecuteSort,
+            Instruction::ExecuteN(1),
+            Instruction::ExecuteN(2),
+            Instruction::ExecuteN(3),
+            Instruction::ExecuteN(4),
+            Instruction::ExecuteN(5),
+            Instruction::ExecuteN(6),
+            Instruction::ExecuteN(7),
+            Instruction::ExecuteN(8),
+            Instruction::ExecuteN(9),
+            Instruction::ExecuteIsAtom(temp_v!(1)),
+            Instruction::ExecuteIsAtomic(temp_v!(1)),
+            Instruction::ExecuteIsCompound(temp_v!(1)),
+            Instruction::ExecuteIsInteger(temp_v!(1)),
+            Instruction::ExecuteIsNumber(temp_v!(1)),
+            Instruction::ExecuteIsRational(temp_v!(1)),
+            Instruction::ExecuteIsFloat(temp_v!(1)),
+            Instruction::ExecuteIsNonVar(temp_v!(1)),
+            Instruction::ExecuteIsVar(temp_v!(1))
         ].into_iter());
 
         for (p, instr) in self.code[impls_offset ..].iter().enumerate() {
@@ -689,6 +690,8 @@ impl Machine {
     fn try_call(&mut self, name: Atom, arity: usize, idx: IndexPtr) -> CallResult {
         let compiled_tl_index = idx.p() as usize;
 
+        // println!("calling {}/{}", name.as_str(), arity);
+
         match idx.tag() {
             IndexPtrTag::DynamicUndefined => {
                 self.machine_st.fail = true;
@@ -711,6 +714,8 @@ impl Machine {
     #[inline(always)]
     fn try_execute(&mut self, name: Atom, arity: usize, idx: IndexPtr) -> CallResult {
         let compiled_tl_index = idx.p() as usize;
+
+        // println!("executing {}/{}", name.as_str(), arity);
 
         match idx.tag() {
             IndexPtrTag::DynamicUndefined => {

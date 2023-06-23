@@ -5,9 +5,7 @@ use crate::parser::ast::*;
 
 use std::cell::Cell;
 use std::collections::VecDeque;
-use std::fmt;
 use std::iter::*;
-use std::rc::Rc;
 use std::vec::Vec;
 
 #[derive(Debug, Clone)]
@@ -18,34 +16,36 @@ pub(crate) enum TermRef<'a> {
     Clause(Level, &'a Cell<RegType>, Atom, &'a Vec<Term>),
     PartialString(Level, &'a Cell<RegType>, &'a String, &'a Box<Term>),
     CompleteString(Level, &'a Cell<RegType>, Atom),
-    Var(Level, &'a Cell<VarReg>, Rc<String>),
+    Var(Level, &'a Cell<VarReg>, VarPtr),
 }
 
+/*
 impl<'a> TermRef<'a> {
-    pub(crate) fn level(self) -> Level {
+    pub(crate) fn level(&self) -> Level {
         match self {
-            TermRef::AnonVar(lvl)
-            | TermRef::Cons(lvl, ..)
-            | TermRef::Literal(lvl, ..)
-            | TermRef::Var(lvl, ..)
-            | TermRef::Clause(lvl, ..)
-            | TermRef::CompleteString(lvl, ..)
-            | TermRef::PartialString(lvl, ..) => lvl,
+            TermRef::AnonVar(lvl) |
+            TermRef::Cons(lvl, ..) |
+            TermRef::Literal(lvl, ..) |
+            TermRef::Var(lvl, ..) |
+            TermRef::Clause(lvl, ..) |
+            TermRef::CompleteString(lvl, ..) |
+            TermRef::PartialString(lvl, ..) => *lvl,
         }
     }
 }
+*/
 
 #[derive(Debug)]
 pub(crate) enum TermIterState<'a> {
     AnonVar(Level),
-    Literal(Level, &'a Cell<RegType>, &'a Literal),
     Clause(Level, usize, &'a Cell<RegType>, Atom, &'a Vec<Term>),
+    Literal(Level, &'a Cell<RegType>, &'a Literal),
     InitialCons(Level, &'a Cell<RegType>, &'a Term, &'a Term),
     FinalCons(Level, &'a Cell<RegType>, &'a Term, &'a Term),
     InitialPartialString(Level, &'a Cell<RegType>, &'a String, &'a Box<Term>),
     FinalPartialString(Level, &'a Cell<RegType>, &'a String, &'a Box<Term>),
     CompleteString(Level, &'a Cell<RegType>, Atom),
-    Var(Level, &'a Cell<VarReg>, Rc<String>),
+    Var(Level, &'a Cell<VarReg>, VarPtr),
 }
 
 impl<'a> TermIterState<'a> {
@@ -65,7 +65,7 @@ impl<'a> TermIterState<'a> {
             Term::CompleteString(cell, atom) => {
                 TermIterState::CompleteString(lvl, cell, *atom)
             }
-            Term::Var(cell, var) => TermIterState::Var(lvl, cell, var.clone()),
+            Term::Var(cell, var_ptr) => TermIterState::Var(lvl, cell, var_ptr.clone()),
         }
     }
 }
@@ -77,10 +77,10 @@ pub(crate) struct QueryIterator<'a> {
 
 impl<'a> QueryIterator<'a> {
     fn push_subterm(&mut self, lvl: Level, term: &'a Term) {
-        self.state_stack
-            .push(TermIterState::subterm_to_state(lvl, term));
+        self.state_stack.push(TermIterState::subterm_to_state(lvl, term));
     }
 
+    /*
     fn from_rule_head_clause(terms: &'a Vec<Term>) -> Self {
         let state_stack = terms
             .iter()
@@ -90,6 +90,7 @@ impl<'a> QueryIterator<'a> {
 
         QueryIterator { state_stack }
     }
+    */
 
     fn from_term(term: &'a Term) -> Self {
         let state = match term {
@@ -106,7 +107,7 @@ impl<'a> QueryIterator<'a> {
                 *name,
                 terms,
             ),
-            Term::Var(cell, var) => TermIterState::Var(Level::Root, cell, var.clone()),
+            Term::Var(cell, var_ptr) => TermIterState::Var(Level::Root, cell, var_ptr.clone()),
         };
 
         QueryIterator {
@@ -114,45 +115,23 @@ impl<'a> QueryIterator<'a> {
         }
     }
 
-    fn new(term: &'a QueryTerm) -> Self {
+    fn extend_state(&mut self, lvl: Level, term: &'a QueryTerm) {
         match term {
             &QueryTerm::Clause(ref cell, ClauseType::CallN(_), ref terms, _) => {
-                let state = TermIterState::Clause(Level::Root, 1, cell, atom!("$call"), terms);
-                QueryIterator {
-                    state_stack: vec![state],
-                }
+                self.state_stack.push(TermIterState::Clause(lvl, 1, cell, atom!("$call"), terms));
             }
             &QueryTerm::Clause(ref cell, ref ct, ref terms, _) => {
-                let state = TermIterState::Clause(Level::Root, 0, cell, ct.name(), terms);
-                QueryIterator {
-                    state_stack: vec![state],
-                }
+                self.state_stack.push(TermIterState::Clause(lvl, 0, cell, ct.name(), terms));
             }
-            &QueryTerm::UnblockedCut(ref cell) => {
-                let state = TermIterState::Var(Level::Root, cell, Rc::new("!".to_string()));
-                QueryIterator {
-                    state_stack: vec![state],
-                }
+            _ => {
             }
-            &QueryTerm::GetLevelAndUnify(ref cell, ref var) => {
-                let state = TermIterState::Var(Level::Root, cell, var.clone());
-                QueryIterator {
-                    state_stack: vec![state],
-                }
-            }
-            &QueryTerm::Jump(ref vars) => {
-                let state_stack = vars
-                    .iter()
-                    .rev()
-                    .map(|t| TermIterState::subterm_to_state(Level::Shallow, t))
-                    .collect();
-
-                QueryIterator { state_stack }
-            }
-            &QueryTerm::BlockedCut => QueryIterator {
-                state_stack: vec![],
-            },
         }
+    }
+
+    pub fn new(term: &'a QueryTerm) -> Self {
+        let mut iter = QueryIterator { state_stack: vec![] };
+        iter.extend_state(Level::Root, term);
+        iter
     }
 }
 
@@ -212,8 +191,8 @@ impl<'a> Iterator for QueryIterator<'a> {
                 TermIterState::Literal(lvl, cell, constant) => {
                     return Some(TermRef::Literal(lvl, cell, constant));
                 }
-                TermIterState::Var(lvl, cell, var) => {
-                    return Some(TermRef::Var(lvl, cell, var));
+                TermIterState::Var(lvl, cell, var_ptr) => {
+                    return Some(TermRef::Var(lvl, cell, var_ptr));
                 }
             };
         }
@@ -225,7 +204,7 @@ impl<'a> Iterator for QueryIterator<'a> {
 #[derive(Debug)]
 pub(crate) struct FactIterator<'a> {
     state_queue: VecDeque<TermIterState<'a>>,
-    iterable_root: bool,
+    iterable_root: RootIterationPolicy,
 }
 
 impl<'a> FactIterator<'a> {
@@ -242,11 +221,11 @@ impl<'a> FactIterator<'a> {
 
         FactIterator {
             state_queue,
-            iterable_root: false,
+            iterable_root: RootIterationPolicy::NotIterated,
         }
     }
 
-    fn new(term: &'a Term, iterable_root: bool) -> Self {
+    fn new(term: &'a Term, iterable_root: RootIterationPolicy) -> Self {
         let states = match term {
             Term::AnonVar => {
                 vec![TermIterState::AnonVar(Level::Root)]
@@ -278,8 +257,8 @@ impl<'a> FactIterator<'a> {
             Term::Literal(cell, constant) => {
                 vec![TermIterState::Literal(Level::Root, cell, constant)]
             }
-            Term::Var(cell, var) => {
-                vec![TermIterState::Var(Level::Root, cell, var.clone())]
+            Term::Var(cell, var_ptr) => {
+                vec![TermIterState::Var(Level::Root, cell, var_ptr.clone())]
             }
         };
 
@@ -305,7 +284,7 @@ impl<'a> Iterator for FactIterator<'a> {
                     }
 
                     match lvl {
-                        Level::Root if !self.iterable_root => continue,
+                        Level::Root if !self.iterable_root.iterable() => continue,
                         _ => return Some(TermRef::Clause(lvl, cell, name, child_terms)),
                     };
                 }
@@ -325,8 +304,8 @@ impl<'a> Iterator for FactIterator<'a> {
                 TermIterState::Literal(lvl, cell, constant) => {
                     return Some(TermRef::Literal(lvl, cell, constant))
                 }
-                TermIterState::Var(lvl, cell, var) => {
-                    return Some(TermRef::Var(lvl, cell, var));
+                TermIterState::Var(lvl, cell, var_ptr) => {
+                    return Some(TermRef::Var(lvl, cell, var_ptr));
                 }
                 _ => {}
             }
@@ -340,193 +319,130 @@ pub(crate) fn post_order_iter<'a>(term: &'a Term) -> QueryIterator<'a> {
     QueryIterator::from_term(term)
 }
 
-pub(crate) fn breadth_first_iter<'a>(term: &'a Term, iterable_root: bool) -> FactIterator<'a> {
+pub(crate) fn breadth_first_iter<'a>(term: &'a Term, iterable_root: RootIterationPolicy) -> FactIterator<'a> {
     FactIterator::new(term, iterable_root)
 }
 
+#[derive(Debug, Copy, Clone)]
+enum ClauseIteratorState<'a> {
+    RemainingChunks(&'a VecDeque<ChunkedTerms>, usize),
+    RemainingBranches(&'a Vec<VecDeque<ChunkedTerms>>, usize),
+}
+
+#[derive(Debug, Clone)]
+pub(crate) enum ClauseItem<'a> {
+    FirstBranch(usize),
+    NextBranch,
+    BranchEnd(usize),
+    Chunk(&'a VecDeque<QueryTerm>),
+}
+
 #[derive(Debug)]
-pub(crate) enum ChunkedTerm<'a> {
-    HeadClause(Atom, &'a Vec<Term>),
-    BodyTerm(&'a QueryTerm),
+pub(crate) struct ClauseIterator<'a> {
+    state_stack: Vec<ClauseIteratorState<'a>>,
+    remaining_chunks_on_stack: usize,
 }
 
-pub(crate) fn query_term_post_order_iter<'a>(query_term: &'a QueryTerm) -> QueryIterator<'a> {
-    QueryIterator::new(query_term)
-}
-
-impl<'a> ChunkedTerm<'a> {
-    pub(crate) fn post_order_iter(&self) -> QueryIterator<'a> {
-        match self {
-            &ChunkedTerm::BodyTerm(qt) => QueryIterator::new(qt),
-            &ChunkedTerm::HeadClause(_, terms) => QueryIterator::from_rule_head_clause(terms),
+fn state_from_chunked_terms<'a>(chunk_vec: &'a VecDeque<ChunkedTerms>) -> ClauseIteratorState<'a> {
+    if chunk_vec.len() == 1 {
+        if let Some(ChunkedTerms::Branch(ref branches)) = chunk_vec.front() {
+            return ClauseIteratorState::RemainingBranches(branches, 0);
         }
     }
+
+    ClauseIteratorState::RemainingChunks(chunk_vec, 0)
 }
 
-fn contains_cut_var<'a, Iter: Iterator<Item = &'a Term>>(terms: Iter) -> bool {
-    for term in terms {
-        if let &Term::Var(_, ref var) = term {
-            if var.as_str() == "!" {
-                return true;
+impl<'a> ClauseIterator<'a> {
+    pub fn new(clauses: &'a ChunkedTermVec) -> Self {
+        match state_from_chunked_terms(&clauses.chunk_vec) {
+            state @ ClauseIteratorState::RemainingBranches(..) => {
+                Self {
+                    state_stack: vec![state],
+                    remaining_chunks_on_stack: 0,
+                }
+            }
+            state @ ClauseIteratorState::RemainingChunks(..) => {
+                Self {
+                    state_stack: vec![state],
+                    remaining_chunks_on_stack: 1,
+                }
             }
         }
     }
 
-    false
-}
-
-pub(crate) struct ChunkedIterator<'a> {
-    pub(crate) chunk_num: usize,
-    iter: Box<dyn Iterator<Item = ChunkedTerm<'a>> + 'a>,
-    deep_cut_encountered: bool,
-    cut_var_in_head: bool,
-}
-
-impl<'a> fmt::Debug for ChunkedIterator<'a> {
-    fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
-        fmt.debug_struct("ChunkedIterator")
-            .field("chunk_num", &self.chunk_num)
-            // Hacky solution.
-            .field("iter", &"Box<dyn Iterator<Item = ChunkedTerm<'a>> + 'a>")
-            .field("deep_cut_encountered", &self.deep_cut_encountered)
-            .field("cut_var_in_head", &self.cut_var_in_head)
-            .finish()
+    #[inline(always)]
+    pub fn in_tail_position(&self) -> bool {
+        self.remaining_chunks_on_stack == 0
     }
-}
 
-type ChunkedIteratorItem<'a> = (usize, usize, Vec<ChunkedTerm<'a>>);
-type RuleBodyIteratorItem<'a> = (usize, usize, Vec<&'a QueryTerm>);
+    fn branch_end_depth(&mut self) -> usize {
+        let mut depth = 1;
 
-impl<'a> ChunkedIterator<'a> {
-    pub(crate) fn rule_body_iter(self) -> Box<dyn Iterator<Item = RuleBodyIteratorItem<'a>> + 'a> {
-        Box::new(self.filter_map(|(cn, lt_arity, terms)| {
-            let filtered_terms: Vec<_> = terms
-                .into_iter()
-                .filter_map(|ct| match ct {
-                    ChunkedTerm::BodyTerm(qt) => Some(qt),
-                    _ => None,
-                })
-                .collect();
-
-            if filtered_terms.is_empty() {
-                None
-            } else {
-                Some((cn, lt_arity, filtered_terms))
+        while let Some(state) = self.state_stack.pop() {
+            match state {
+                ClauseIteratorState::RemainingBranches(terms, focus) if terms.len() == focus => {
+                    depth += 1;
+                }
+                _ => {
+                    self.state_stack.push(state);
+                    break;
+                }
             }
-        }))
-    }
-
-    pub(crate) fn from_rule_body(p1: &'a QueryTerm, clauses: &'a Vec<QueryTerm>) -> Self {
-        let inner_iter = Box::new(once(ChunkedTerm::BodyTerm(p1)));
-        let iter = inner_iter.chain(clauses.iter().map(|t| ChunkedTerm::BodyTerm(t)));
-
-        ChunkedIterator {
-            chunk_num: 0,
-            iter: Box::new(iter),
-            deep_cut_encountered: false,
-            cut_var_in_head: false,
-        }
-    }
-
-    pub(crate) fn from_rule(rule: &'a Rule) -> Self {
-        let &Rule {
-            head: (ref name, ref args, ref p1),
-            ref clauses,
-        } = rule;
-
-        let iter = once(ChunkedTerm::HeadClause(name.clone(), args));
-        let inner_iter = Box::new(once(ChunkedTerm::BodyTerm(p1)));
-        let iter = iter.chain(inner_iter.chain(clauses.iter().map(|t| ChunkedTerm::BodyTerm(t))));
-
-        ChunkedIterator {
-            chunk_num: 0,
-            iter: Box::new(iter),
-            deep_cut_encountered: false,
-            cut_var_in_head: false,
-        }
-    }
-
-    pub(crate) fn encountered_deep_cut(&self) -> bool {
-        self.deep_cut_encountered
-    }
-
-    fn take_chunk(&mut self, term: ChunkedTerm<'a>) -> (usize, usize, Vec<ChunkedTerm<'a>>) {
-        let mut arity = 0;
-        let mut item = Some(term);
-        let mut result = Vec::new();
-
-        while let Some(term) = item {
-            match term {
-                ChunkedTerm::HeadClause(_, terms) => {
-                    if contains_cut_var(terms.iter()) {
-                        self.cut_var_in_head = true;
-                    }
-
-                    result.push(term);
-                }
-                ChunkedTerm::BodyTerm(&QueryTerm::Jump(ref vars)) => {
-                    result.push(term);
-                    arity = vars.len();
-
-                    if contains_cut_var(vars.iter()) && !self.cut_var_in_head {
-                        self.deep_cut_encountered = true;
-                    }
-
-                    break;
-                }
-                ChunkedTerm::BodyTerm(&QueryTerm::BlockedCut) => {
-                    result.push(term);
-
-                    if self.chunk_num > 0 {
-                        self.deep_cut_encountered = true;
-                    }
-                }
-                ChunkedTerm::BodyTerm(&QueryTerm::GetLevelAndUnify(..)) => {
-                    self.deep_cut_encountered = true;
-
-                    result.push(term);
-                    arity = 1;
-                    break;
-                }
-                ChunkedTerm::BodyTerm(&QueryTerm::UnblockedCut(..)) => {
-                    self.deep_cut_encountered = true;
-                    result.push(term);
-                }
-                ChunkedTerm::BodyTerm(&QueryTerm::Clause(_, ClauseType::Inlined(_), ..)) => {
-                    result.push(term)
-                }
-                ChunkedTerm::BodyTerm(&QueryTerm::Clause(
-                    _,
-                    ClauseType::CallN(_),
-                    ref subterms,
-                    _,
-                )) => {
-                    result.push(term);
-                    arity = subterms.len() + 1;
-                    break;
-                }
-                ChunkedTerm::BodyTerm(qt) => {
-                    result.push(term);
-                    arity = qt.arity();
-                    break;
-                }
-            };
-
-            item = self.iter.next();
         }
 
-        let chunk_num = self.chunk_num;
-        self.chunk_num += 1;
-
-        (chunk_num, arity, result)
+        depth
     }
 }
 
-impl<'a> Iterator for ChunkedIterator<'a> {
-    // the chunk number, last term arity, and vector of references.
-    type Item = ChunkedIteratorItem<'a>;
+impl<'a> Iterator for ClauseIterator<'a> {
+    type Item = ClauseItem<'a>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        self.iter.next().map(|term| self.take_chunk(term))
+        while let Some(state) = self.state_stack.pop() {
+            match state {
+                ClauseIteratorState::RemainingChunks(chunks, focus) if focus < chunks.len() => {
+                    if focus + 1 < chunks.len() {
+                        self.state_stack.push(ClauseIteratorState::RemainingChunks(chunks, focus + 1));
+                    } else {
+                        self.remaining_chunks_on_stack -= 1;
+                    }
+
+                    match &chunks[focus] {
+                        ChunkedTerms::Branch(branches) => {
+                            self.state_stack.push(ClauseIteratorState::RemainingBranches(branches, 0));
+                        }
+                        ChunkedTerms::Chunk(chunk) => {
+                            return Some(ClauseItem::Chunk(chunk));
+                        }
+                    }
+                }
+                ClauseIteratorState::RemainingChunks(chunks, focus) => {
+                    debug_assert_eq!(chunks.len(), focus);
+                }
+                ClauseIteratorState::RemainingBranches(branches, focus) if focus < branches.len() => {
+                    self.state_stack.push(ClauseIteratorState::RemainingBranches(&branches, focus + 1));
+                    let state = state_from_chunked_terms(&branches[focus]);
+
+                    if let ClauseIteratorState::RemainingChunks(..) = &state {
+                        self.remaining_chunks_on_stack += 1;
+                    }
+
+                    self.state_stack.push(state);
+
+                    return if focus == 0 {
+                        Some(ClauseItem::FirstBranch(branches.len()))
+                    } else {
+                        Some(ClauseItem::NextBranch)
+                    };
+                }
+                ClauseIteratorState::RemainingBranches(branches, focus) => {
+                    debug_assert_eq!(branches.len(), focus);
+                    return Some(ClauseItem::BranchEnd(self.branch_end_depth()));
+                }
+            }
+        }
+
+        None
     }
 }
