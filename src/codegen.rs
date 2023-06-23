@@ -904,7 +904,7 @@ impl<'b> CodeGenerator<'b> {
 
                                     code.push_back(instr!("proceed"));
                                 } else {
-                                    self.marker.free_cut_var(chunk_num, var_num);
+                                    self.marker.free_var(chunk_num, var_num);
                                 }
                             }
                             &QueryTerm::Clause(

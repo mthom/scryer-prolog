@@ -151,8 +151,11 @@ impl DebrayAllocator {
         };
 
         for var_num in subsumed_hits.iter().cloned() {
+            let running_count = self.var_data.records[var_num].running_count;
+            let num_occurrences = self.var_data.records[var_num].num_occurrences;
+
             match &mut self.var_data.records[var_num].allocation {
-                VarAlloc::Perm(_, ref mut allocation) => {
+                VarAlloc::Perm(_, allocation) => {
                     let shallow_safety = VarSafetyStatus::needed_if(
                         shallow_safety.contains(var_num),
                         branch_designator,
@@ -163,7 +166,9 @@ impl DebrayAllocator {
                         branch_designator,
                     );
 
-                    *allocation = PermVarAllocation::Done { shallow_safety, deep_safety };
+                    if running_count < num_occurrences {
+                        *allocation = PermVarAllocation::Done { shallow_safety, deep_safety };
+                    }
                 }
                 _ => unreachable!()
             }
@@ -435,7 +440,7 @@ impl DebrayAllocator {
         None
     }
 
-    pub(crate) fn free_cut_var(&mut self, chunk_num: usize, var_num: usize) {
+    pub(crate) fn free_var(&mut self, chunk_num: usize, var_num: usize) {
         match &mut self.var_data.records[var_num].allocation {
             VarAlloc::Perm(_, allocation) => {
                 *allocation = PermVarAllocation::Pending;
@@ -724,8 +729,8 @@ impl Allocator for DebrayAllocator {
 
         if record.running_count < record.num_occurrences {
             record.running_count += 1;
-        } else if r.is_perm() {
-            self.add_perm_to_free_list(term_loc.chunk_num(), var_num);
+        } else {
+            self.free_var(term_loc.chunk_num(), var_num);
         }
 
         self.in_use.insert(o);
