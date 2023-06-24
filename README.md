@@ -67,7 +67,7 @@ Extend Scryer Prolog to include the following, among other features:
   - [ ] Replacing choice points pivoting on inlined semi-deterministic predicates
         (`atom`, `var`, etc) with if/else ladders. (_in progress_)
   - [ ] Inlining all built-ins and system call instructions.
-  - [ ] Greatly reducing the number of instructions used to compile disjunctives.
+  - [x] Greatly reducing the number of instructions used to compile disjunctives.
   - [ ] Storing short atoms to heap cells without writing them to the atom table.
 - [ ] A compacting garbage collector satisfying the five properties of
       "[Precise Garbage Collection in Prolog](https://www.complang.tuwien.ac.at/ulrich/papers/PDF/2008-ciclops.pdf)." (_in progress_)
