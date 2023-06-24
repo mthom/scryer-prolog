@@ -299,17 +299,17 @@ get_line_to_chars(Stream, Cs0, Cs) :-
 get_n_chars(Stream, N, Cs) :-
         can_be(integer, N),
         (   var(N) ->
-            read_to_eof(Stream, Cs),
+            get_to_eof(Stream, Cs),
             length(Cs, N)
         ;   N >= 0,
             '$get_n_chars'(Stream, N, Cs)
         ).
 
-read_to_eof(Stream, Cs) :-
+get_to_eof(Stream, Cs) :-
         '$get_n_chars'(Stream, 512, Cs0),
         (   Cs0 == [] -> Cs = []
         ;   partial_string(Cs0, Cs, Rest),
-            read_to_eof(Stream, Rest)
+            get_to_eof(Stream, Rest)
         ).
 
 %% chars_base64(?Chars, ?Base64, +Options).
