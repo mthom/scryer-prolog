@@ -181,7 +181,7 @@ impl<'a> HeapPStrIter<'a> {
                 self.brent_st.hare = result.focus;
             } else {
                 read_heap_cell!(self.heap[result.focus],
-                    (HeapCellValueTag::Lis | HeapCellValueTag::Str) => {
+                    (HeapCellValueTag::Lis | HeapCellValueTag::Str | HeapCellValueTag::PStr) => {
                         self.focus = self.heap[self.brent_st.hare];
                     }
                     _ => {
