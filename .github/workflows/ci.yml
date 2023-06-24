@@ -1,12 +1,14 @@
 name: CI
+
 on:
   push:
     branches: [master]
+    tags:
+      - "v**"
   pull_request:
   schedule:
     - cron: '0 0 * * 3' # At 12:00 AM, only on Wednesday
-  label:
-    types: [created, edited]
+  workflow_dispatch:
 
 jobs:
   build-test:
