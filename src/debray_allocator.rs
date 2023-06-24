@@ -14,6 +14,7 @@ use indexmap::IndexMap;
 
 use std::cell::Cell;
 use std::collections::VecDeque;
+use std::ops::{Deref, DerefMut};
 
 pub type BranchHits = IndexMap<usize, BitVec, FxBuildHasher>; // key: var_num, value: branch arm occurrences.
 
@@ -41,24 +42,51 @@ impl BranchOccurrences {
 }
 
 #[derive(Debug)]
-pub(crate) struct DebrayAllocator {
-    pub(crate) var_data: VarData, // var_data replaces bindings.
-    pub(crate) branch_stack: Vec<BranchOccurrences>,
-    pub(crate) in_tail_position: bool,
-    // bindings: IndexMap<usize, VarWitness, FxBuildHasher>, // VarNum -> VarWitness
-    arg_c: usize,
-    temp_lb: usize,
-    perm_lb: usize,
-    arity: usize, // 0 if not at head.
-    shallow_temp_mappings: IndexMap<usize, usize, FxBuildHasher>,
-    in_use: BitSet<usize>, // deep and non-var allocations
-    temp_free_list: Vec<usize>,
-    perm_free_list: VecDeque<(usize, usize)>, // chunk_num, var_num
+pub(crate) struct BranchStack {
+    stack: Vec<BranchOccurrences>,
 }
 
-impl DebrayAllocator {
+impl Deref for BranchStack {
+    type Target = Vec<BranchOccurrences>;
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        &self.stack
+    }
+}
+
+impl DerefMut for BranchStack {
+    #[inline]
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.stack
+    }
+}
+
+impl BranchStack {
+    fn branch_subsumes(&self, branch: &BranchDesignator, sub_branch: &BranchDesignator) -> bool {
+        if branch.branch_stack_num < sub_branch.branch_stack_num {
+            if branch.branch_stack_num == 0 {
+                true
+            } else {
+                let idx = branch.branch_stack_num - 1;
+                self[idx].current_branch == branch.branch_num
+            }
+        } else {
+            branch == sub_branch
+        }
+    }
+
+    fn safety_unneeded_in_branch(&self, safety: &VarSafetyStatus, branch: &BranchDesignator) -> bool {
+        match safety {
+            VarSafetyStatus::Needed => false,
+            VarSafetyStatus::LocallyUnneeded(planter_branch) =>
+                self.branch_subsumes(planter_branch, branch),
+            VarSafetyStatus::GloballyUnneeded => true,
+        }
+    }
+
     pub(crate) fn add_branch_occurrence(&mut self, var_num: usize) {
-        if let Some(occurrences) = self.branch_stack.last_mut() {
+        if let Some(occurrences) = self.last_mut() {
             debug_assert!(occurrences.current_branch < occurrences.num_branches);
 
             let num_branches = occurrences.num_branches;
@@ -72,32 +100,70 @@ impl DebrayAllocator {
     }
 
     pub(crate) fn add_branch_stack(&mut self, num_branches: usize) {
-        self.branch_stack.push(BranchOccurrences::new(num_branches));
+        self.push(BranchOccurrences::new(num_branches));
     }
 
     pub(crate) fn current_branch_designator(&self) -> BranchDesignator {
-        let num_branches = self.branch_stack.len();
-        let current_branch = self.branch_stack.last()
+        let branch_stack_num = self.len();
+        let branch_num = self.last()
             .map(|occurrences| occurrences.current_branch)
             .unwrap_or(0);
 
-        BranchDesignator((num_branches, current_branch))
+        BranchDesignator { branch_stack_num, branch_num }
     }
 
-    pub(crate) fn add_branch(&mut self) {
-        let branch_designator = self.current_branch_designator();
-        let branch_occurrences = self.branch_stack.last_mut().unwrap();
+    #[inline]
+    pub(crate) fn incr_current_branch(&mut self) {
+        let branch_occurrences = self.last_mut().unwrap();
+        branch_occurrences.current_branch += 1;
+    }
 
-        for var_num in branch_occurrences.subsumed_hits.drain(..) {
+    #[inline]
+    pub(crate) fn drain_branches(&mut self, depth: usize) -> std::vec::Drain<BranchOccurrences> {
+        let start_idx = self.len() - depth;
+        self.drain(start_idx ..)
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct DebrayAllocator {
+    pub(crate) var_data: VarData, // var_data replaces bindings.
+    pub(crate) branch_stack: BranchStack,
+    pub(crate) in_tail_position: bool,
+    arg_c: usize,
+    temp_lb: usize,
+    perm_lb: usize,
+    arity: usize, // 0 if not at head.
+    shallow_temp_mappings: IndexMap<usize, usize, FxBuildHasher>,
+    in_use: BitSet<usize>, // deep and non-var allocations
+    temp_free_list: Vec<usize>,
+    perm_free_list: VecDeque<(usize, usize)>, // chunk_num, var_num
+}
+
+impl DebrayAllocator {
+    pub(crate) fn add_branch(&mut self) {
+        let branch_designator = self.branch_stack.current_branch_designator();
+        let subsumed_hits = {
+            let branch_occurrences = self.branch_stack.last_mut().unwrap();
+
+            std::mem::replace(
+                &mut branch_occurrences.subsumed_hits,
+                SubsumedBranchHits::with_hasher(FxBuildHasher::default()),
+            )
+        };
+
+        for var_num in subsumed_hits {
             match &mut self.var_data.records[var_num].allocation {
                 VarAlloc::Perm(_, ref mut allocation) => {
                     match allocation {
                         PermVarAllocation::Done { shallow_safety, deep_safety, .. } => {
-                            if !shallow_safety.is_unneeded(branch_designator) {
+                            if !self.branch_stack.safety_unneeded_in_branch(shallow_safety, &branch_designator) {
+                                let branch_occurrences = self.branch_stack.last_mut().unwrap();
                                 branch_occurrences.shallow_safety.insert(var_num);
                             }
 
-                            if !deep_safety.is_unneeded(branch_designator) {
+                            if !self.branch_stack.safety_unneeded_in_branch(deep_safety, &branch_designator) {
+                                let branch_occurrences = self.branch_stack.last_mut().unwrap();
                                 branch_occurrences.deep_safety.insert(var_num);
                             }
                         }
@@ -113,20 +179,8 @@ impl DebrayAllocator {
         }
     }
 
-    #[inline]
-    pub(crate) fn incr_current_branch(&mut self) {
-        let branch_occurrences = self.branch_stack.last_mut().unwrap();
-        branch_occurrences.current_branch += 1;
-    }
-
-    #[inline]
-    pub(crate) fn drain_branches(&mut self, depth: usize) -> std::vec::Drain<BranchOccurrences> {
-        let start_idx = self.branch_stack.len() - depth;
-        self.branch_stack.drain(start_idx ..)
-    }
-
     pub(crate) fn pop_branch(&mut self, depth: usize, subsumed_hits: SubsumedBranchHits) {
-        let removed_branches = self.drain_branches(depth);
+        let removed_branches = self.branch_stack.drain_branches(depth);
 
         let (deep_safety, shallow_safety) = removed_branches
             .into_iter()
@@ -138,7 +192,7 @@ impl DebrayAllocator {
                       (deep_safety, shallow_safety)
                   });
 
-        let branch_designator = self.current_branch_designator();
+        let branch_designator = self.branch_stack.current_branch_designator();
 
         let (deep_safety, shallow_safety) = match self.branch_stack.last_mut() {
             Some(latest_branch) => {
@@ -176,7 +230,7 @@ impl DebrayAllocator {
 
         if self.branch_stack.len() > 0 {
             for var_num in subsumed_hits {
-                self.add_branch_occurrence(var_num);
+                self.branch_stack.add_branch_occurrence(var_num);
             }
         }
     }
@@ -452,7 +506,7 @@ impl DebrayAllocator {
     }
 
     pub(crate) fn mark_safe_var_unconditionally(&mut self, var_num: usize) {
-        let branch_designator = self.current_branch_designator();
+        let branch_designator = self.branch_stack.current_branch_designator();
 
         match &mut self.var_data.records[var_num].allocation {
             VarAlloc::Perm(_, PermVarAllocation::Done { deep_safety, shallow_safety, .. }) => {
@@ -467,7 +521,7 @@ impl DebrayAllocator {
     }
 
     fn mark_safe_var(&mut self, var_num: usize, lvl: Level, term_loc: GenContext) {
-        let branch_designator = self.current_branch_designator();
+        let branch_designator = self.branch_stack.current_branch_designator();
 
         match &mut self.var_data.records[var_num].allocation {
             VarAlloc::Perm(_, PermVarAllocation::Done { deep_safety, shallow_safety, .. }) => {
@@ -503,11 +557,11 @@ impl DebrayAllocator {
         r: RegType,
         arg_c: usize,
     ) -> Instruction {
-        let branch_designator = self.current_branch_designator();
+        let branch_designator = self.branch_stack.current_branch_designator();
 
         match &mut self.var_data.records[var_num].allocation {
             VarAlloc::Perm(_, PermVarAllocation::Done { ref mut shallow_safety, .. }) => {
-                if !self.in_tail_position || shallow_safety.is_unneeded(branch_designator) {
+                if !self.in_tail_position || self.branch_stack.safety_unneeded_in_branch(shallow_safety, &branch_designator) {
                     Target::argument_to_value(r, arg_c)
                 } else {
                     *shallow_safety = VarSafetyStatus::unneeded(branch_designator);
@@ -515,7 +569,7 @@ impl DebrayAllocator {
                 }
             }
             VarAlloc::Temp { ref mut safety, .. } => {
-                if safety.is_unneeded(branch_designator) {
+                if self.branch_stack.safety_unneeded_in_branch(safety, &branch_designator) {
                     Target::argument_to_value(r, arg_c)
                 } else {
                     *safety = VarSafetyStatus::GloballyUnneeded;
@@ -533,11 +587,11 @@ impl DebrayAllocator {
         var_num: usize,
         r: RegType,
     ) -> Instruction {
-        let branch_designator = self.current_branch_designator();
+        let branch_designator = self.branch_stack.current_branch_designator();
 
         match &mut self.var_data.records[var_num].allocation {
             VarAlloc::Perm(_, PermVarAllocation::Done { ref mut deep_safety, .. }) => {
-                if deep_safety.is_unneeded(branch_designator) {
+                if self.branch_stack.safety_unneeded_in_branch(deep_safety, &branch_designator) {
                     Target::subterm_to_value(r)
                 } else {
                     *deep_safety = VarSafetyStatus::unneeded(branch_designator);
@@ -545,7 +599,7 @@ impl DebrayAllocator {
                 }
             }
             VarAlloc::Temp { ref mut safety, .. } => {
-                if safety.is_unneeded(branch_designator) {
+                if self.branch_stack.safety_unneeded_in_branch(safety, &branch_designator) {
                     Target::subterm_to_value(r)
                 } else {
                     *safety = VarSafetyStatus::unneeded(branch_designator);
@@ -572,7 +626,7 @@ impl Allocator for DebrayAllocator {
             in_use: BitSet::default(),
             temp_free_list: vec![],
             perm_free_list: VecDeque::new(),
-            branch_stack: vec![],
+            branch_stack: BranchStack { stack: vec![] }
         }
     }
 
@@ -720,7 +774,7 @@ impl Allocator for DebrayAllocator {
         if !r.is_perm() {
             self.shallow_temp_mappings.insert(o, var_num);
         } else if r.is_perm() && is_new_var {
-            self.add_branch_occurrence(var_num);
+            self.branch_stack.add_branch_occurrence(var_num);
         }
 
         let record = &mut self.var_data.records[var_num];

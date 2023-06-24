@@ -937,13 +937,14 @@ impl<'b> CodeGenerator<'b> {
                     branch_code_stack.add_new_branch_stack();
                     branch_code_stack.add_new_branch();
 
-                    self.marker.add_branch_stack(num_branches);
+                    self.marker.branch_stack.add_branch_stack(num_branches);
                     self.marker.add_branch();
                 }
                 ClauseItem::NextBranch => {
                     branch_code_stack.add_new_branch();
+
                     self.marker.add_branch();
-                    self.marker.incr_current_branch();
+                    self.marker.branch_stack.incr_current_branch();
                 }
                 ClauseItem::BranchEnd(depth) => {
                     if !clause_iter.in_tail_position() {
@@ -951,7 +952,7 @@ impl<'b> CodeGenerator<'b> {
                         self.marker.pop_branch(depth, subsumed_hits);
                         branch_code_stack.push_jump_instrs(depth);
                     } else {
-                        self.marker.drain_branches(depth);
+                        self.marker.branch_stack.drain_branches(depth);
                     }
 
                     let settings = CodeGenSettings {

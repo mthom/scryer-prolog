@@ -13,17 +13,15 @@ pub struct TempVarData {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct BranchDesignator(pub (usize, usize));
+pub struct BranchDesignator {
+    pub branch_stack_num: usize,
+    pub branch_num: usize,
+}
 
 impl BranchDesignator {
     #[inline]
-    pub fn is_subbranch(&self) -> bool {
-        (self.0).0 > 0
-    }
-
-    #[inline]
-    pub fn subsumes(&self, branch_designator: &Self) -> bool {
-        (self.0).0 < (branch_designator.0).0 || self == branch_designator
+    pub fn is_sub_branch(&self) -> bool {
+        self.branch_stack_num > 0
     }
 }
 
@@ -37,7 +35,7 @@ pub enum VarSafetyStatus {
 
 impl VarSafetyStatus {
     pub(crate) fn unneeded(current_branch: BranchDesignator) -> Self {
-        if current_branch.is_subbranch() {
+        if current_branch.is_sub_branch() {
             VarSafetyStatus::LocallyUnneeded(current_branch)
         } else {
             VarSafetyStatus::GloballyUnneeded
@@ -45,19 +43,10 @@ impl VarSafetyStatus {
     }
 
     #[inline]
-    pub(crate) fn is_unneeded(&self, current_branch: BranchDesignator) -> bool {
-        match self {
-            &VarSafetyStatus::Needed => false,
-            &VarSafetyStatus::LocallyUnneeded(planter_branch) => planter_branch.subsumes(&current_branch),
-            &VarSafetyStatus::GloballyUnneeded => true,
-        }
-    }
-
-    #[inline]
     pub(crate) fn needed_if(needed: bool, branch_designator: BranchDesignator) -> Self {
         if needed {
             VarSafetyStatus::Needed
-        } else if (branch_designator.0).0 == 0 {
+        } else if branch_designator.branch_stack_num == 0 {
             VarSafetyStatus::GloballyUnneeded
         } else {
             VarSafetyStatus::LocallyUnneeded(branch_designator)
