@@ -598,6 +598,9 @@ impl VariableClassifier {
                             if let TraversalState::BuildDisjunct(build_stack_len) = state_stack[final_disjunct_loc] {
                                 state_stack[final_disjunct_loc] = TraversalState::BuildFinalDisjunct(build_stack_len);
                             }
+
+                            self.current_chunk_type = ChunkType::Mid;
+                            self.current_chunk_num += 1;
                         }
                         Term::Clause(_, atom!("->"), mut terms) if terms.len() == 2 => {
                             let then_term = terms.pop().unwrap();
@@ -631,6 +634,9 @@ impl VariableClassifier {
                             state_stack.push(TraversalState::Cut { var_num: self.var_num, is_global: false });
                             state_stack.push(TraversalState::Term(not_term));
                             state_stack.push(TraversalState::GetCutPoint { var_num: self.var_num, prev_b: true });
+
+                            self.current_chunk_type = ChunkType::Mid;
+                            self.current_chunk_num += 1;
 
                             self.var_num += 1;
                         }
