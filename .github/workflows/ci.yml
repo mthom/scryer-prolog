@@ -1,12 +1,14 @@
 name: CI
+
 on:
   push:
     branches: [master]
+    tags:
+      - "v**"
   pull_request:
   schedule:
     - cron: '0 0 * * 3' # At 12:00 AM, only on Wednesday
-  label:
-    types: [created, edited]
+  workflow_dispatch:
 
 jobs:
   build-test:
@@ -17,7 +19,7 @@ jobs:
           - { os: windows-latest, rust-version: stable,  shell: 'msys2 {0}' }
           - { os: macos-11,       rust-version: stable,  shell: bash }
           - { os: ubuntu-20.04,   rust-version: stable,  shell: bash, extra: true }
-          - { os: ubuntu-20.04,   rust-version: 1.63,    shell: bash }
+          - { os: ubuntu-20.04,   rust-version: 1.65,    shell: bash }
           - { os: ubuntu-20.04,   rust-version: beta,    shell: bash }
           - { os: ubuntu-20.04,   rust-version: nightly, shell: bash }
     defaults:
