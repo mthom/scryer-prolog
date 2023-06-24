@@ -10,7 +10,7 @@ read and write chars.
                     chars_utf8bytes/2,
                     get_single_char/1,
                     get_n_chars/3,
-                    read_line_to_chars/3,
+                    get_line_to_chars/3,
                     read_from_chars/2,
                     write_term_to_chars/3,
                     chars_base64/3]).
@@ -277,17 +277,17 @@ continuation(Code, Chars, Nb) --> [Byte],
 % each remaining continuation byte (if any) will raise 0xFFFD too
 continuation(_, ['\xFFFD\'|T], _) --> [_], decode_utf8(T).
 
-%% read_line_to_chars(+Stream, -Chars, +InitialChars).
+%% get_line_to_chars(+Stream, -Chars, +InitialChars).
 %
 % Reads chars from stream Stream until it finds a `\n` character.
 % InitialChars will be appended at the end of Chars
-read_line_to_chars(Stream, Cs0, Cs) :-
+get_line_to_chars(Stream, Cs0, Cs) :-
         '$get_n_chars'(Stream, 1, Char), % this also works for binary streams
         (   Char == [] -> Cs0 = Cs
         ;   Char = [C],
             Cs0 = [C|Rest],
             (   C == '\n' -> Rest = Cs
-            ;   read_line_to_chars(Stream, Rest, Cs)
+            ;   get_line_to_chars(Stream, Rest, Cs)
             )
         ).
 
@@ -299,17 +299,17 @@ read_line_to_chars(Stream, Cs0, Cs) :-
 get_n_chars(Stream, N, Cs) :-
         can_be(integer, N),
         (   var(N) ->
-            read_to_eof(Stream, Cs),
+            get_to_eof(Stream, Cs),
             length(Cs, N)
         ;   N >= 0,
             '$get_n_chars'(Stream, N, Cs)
         ).
 
-read_to_eof(Stream, Cs) :-
+get_to_eof(Stream, Cs) :-
         '$get_n_chars'(Stream, 512, Cs0),
         (   Cs0 == [] -> Cs = []
         ;   partial_string(Cs0, Cs, Rest),
-            read_to_eof(Stream, Rest)
+            get_to_eof(Stream, Rest)
         ).
 
 %% chars_base64(?Chars, ?Base64, +Options).
