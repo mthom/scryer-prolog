@@ -799,7 +799,7 @@ pub enum CycleSearchResult {
     NotList(usize, HeapCellValue), // the list length until the second argument in the heap
     PartialList(usize, Ref), // the list length (up to max), and an offset into the heap.
     ProperList(usize),       // the list length.
-    PStrLocation(usize, usize), // list length (up to max), the heap address of the PStrOffset
+    PStrLocation(usize, usize, usize), // list length (up to max), the heap address of the PStr, the offset
     UntouchedList(usize, usize),   // list length (up to max), the address of an uniterated Addr::Lis(address).
     UntouchedCStr(Atom, usize),
 }
