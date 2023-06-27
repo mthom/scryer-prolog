@@ -9,11 +9,14 @@
 	  ]).
 
 :- use_module(library(atts)).
+:- use_module(library(dcgs)).
 :- use_module(library(iso_ext)).
 
 :- attribute table_global_worklist/1.
 
 verify_attributes(_, _, []).
+
+attribute_goals(X) --> { put_atts(X, -table_global_worklist(_)) }.
 
 put_new_global_worklist :-
   (  bb_get(table_global_worklist_initialized, _) ->

@@ -56,12 +56,17 @@
 :- use_module(library(tabling/batched_worklist)).
 
 :- use_module(library(atts)).
+:- use_module(library(dcgs)).
 :- use_module(library(gensym)).
 :- use_module(library(iso_ext)).
 
 :- attribute table_status/1, newly_created_table_identifiers/1.
 
 verify_attributes(_, _, []).
+
+attribute_goals(X) -->
+    { put_atts(X, -table_status(_)),
+      put_atts(X, -newly_created_table_identifiers(_)) }.
 
 % This file defines the table datastructure.
 %

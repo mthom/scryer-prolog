@@ -49,11 +49,19 @@
 :- use_module(library(tabling/double_linked_list)).
 
 :- use_module(library(atts)).
+:- use_module(library(dcgs)).
 :- use_module(library(lists)).
 
 :- attribute executing_all_work/1, worklist_presence/1, wkl_answer_cluster/1, wkl_suspension_cluster/1, wkl_answer_cluster_pointer_flag/1.
 
 verify_attributes(_, _, []).
+
+attribute_goals(X) -->
+    { put_atts(X, -executing_all_work(_)),
+      put_atts(X, -worklist_presence(_)),
+      put_atts(X, -wkl_answer_cluster(_)),
+      put_atts(X, -wkl_suspension_cluster(_)),
+      put_atts(X, -wkl_answer_cluster_pointer_flag(_)) }.
 
 /** <module> Tabling Worklist management
 

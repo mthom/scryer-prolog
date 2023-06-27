@@ -45,11 +45,16 @@
 
 :- use_module(library(assoc)).
 :- use_module(library(atts)).
+:- use_module(library(dcgs)).
 :- use_module(library(lists)).
 
 :- attribute maybe_just/1, children/1.
 
 verify_attributes(_, _, []).
+
+attribute_goals(X) -->
+    { put_atts(X, -maybe_just(_)),
+      put_atts(X, -children(_)) }.
 
 % Implementation of a prefix tree, a.k.a. trie %
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
