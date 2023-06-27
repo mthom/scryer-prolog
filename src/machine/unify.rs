@@ -496,7 +496,7 @@ pub(crate) trait Unifier: DerefMut<Target = MachineState> {
              }
              (ArenaHeaderTag::Stream, stream) => {
                  read_heap_cell!(value,
-                     (HeapCellValueTag::AttrVar | HeapCellValueTag::Var) => {
+                     (HeapCellValueTag::AttrVar | HeapCellValueTag::Var | HeapCellValueTag::StackVar) => {
                          Self::bind(self, value.as_var().unwrap(), untyped_arena_ptr_as_cell!(ptr));
                      }
                      (HeapCellValueTag::Atom, (name, arity)) => {
