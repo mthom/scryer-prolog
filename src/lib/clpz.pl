@@ -6168,8 +6168,7 @@ with_local_attributes(Vars, Goal, Result) :-
                % we made during propagation, and unify the variables
                % in the thrown copy with Vars in order to get the
                % intended variables in Result.
-               asserta(nat_copy(Vars-Result)),
-               retract(nat_copy(Copy)),
+               copy_term_nat(Vars-Result, Copy),
                throw(local_attributes(Copy))),
               local_attributes(Vars-Result),
               true).
