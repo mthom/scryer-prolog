@@ -494,6 +494,29 @@ pub(crate) trait Unifier: DerefMut<Target = MachineState> {
              (ArenaHeaderTag::Rational, rat_ptr) => {
                  Self::unify_big_num(self, rat_ptr, value);
              }
+             (ArenaHeaderTag::Stream, stream) => {
+                 read_heap_cell!(value,
+                     (HeapCellValueTag::AttrVar | HeapCellValueTag::Var) => {
+                         Self::bind(self, value.as_var().unwrap(), untyped_arena_ptr_as_cell!(ptr));
+                     }
+                     (HeapCellValueTag::Atom, (name, arity)) => {
+                         if arity > 0 {
+                             self.fail = true;
+                         } else {
+                             let stream_options = stream.options();
+
+                             if let Some(alias) = stream_options.get_alias() {
+                                 self.fail = name != alias;
+                             } else {
+                                 self.fail = true;
+                             }
+                         }
+                     }
+                     _ => {
+                         self.fail = true;
+                     }
+                 );
+             }
              _ => {
                  if let Some(r) = value.as_var() {
                      Self::bind(self, r, untyped_arena_ptr_as_cell!(ptr));
