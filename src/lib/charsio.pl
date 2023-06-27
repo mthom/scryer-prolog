@@ -193,6 +193,7 @@ get_single_char(C) :-
 % ```
 read_from_chars(Chars, Term) :-
     must_be(chars, Chars),
+    must_be(var, Term),
     '$read_term_from_chars'(Chars, Term).
 
 %% write_term_to_chars(+Term, +Options, -Chars).

@@ -859,7 +859,13 @@ impl<'a, R: CharRead> Lexer<'a, R> {
 
                     self.get_single_quoted_char()
                         .map(|c| Token::Literal(Literal::Fixnum(Fixnum::build_with(c as i64))))
-                        .or_else(|_| {
+                        .or_else(|err| {
+                            match err {
+                                ParserError::UnexpectedChar('\'', ..) => {
+                                }
+                                err => return Err(err),
+                            }
+
                             self.return_char(c);
 
                             i64::from_str_radix(&token, 10)
