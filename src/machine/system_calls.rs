@@ -3744,12 +3744,25 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn lookup_db_ref(&mut self) {
-        let name = cell_as_atom!(self.deref_register(1));
-        let arity = cell_as_fixnum!(self.deref_register(2)).get_num() as usize;
+        let module_name = self.deref_register(1);
+        let name = cell_as_atom!(self.deref_register(2));
+        let arity = cell_as_fixnum!(self.deref_register(3)).get_num() as usize;
 
-        if self.indices.code_dir.get(&(name, arity)).is_none() {
-            self.machine_st.fail = true;
-        }
+        let module_name = read_heap_cell!(module_name,
+            (HeapCellValueTag::Atom, (module_name, _arity)) => {
+                module_name
+            }
+            (HeapCellValueTag::AttrVar | HeapCellValueTag::Var) => {
+                atom!("user")
+            }
+            _ => {
+                unreachable!()
+            }
+        );
+
+        self.machine_st.fail = self.indices
+            .get_predicate_code_index(name, arity, module_name)
+            .is_none();
     }
 
     #[inline(always)]
@@ -3757,7 +3770,19 @@ impl Machine {
         let name_match: fn(Atom, Atom) -> bool;
         let arity_match: fn(usize, usize) -> bool;
 
-        let atom = self.deref_register(1);
+        let module_name = read_heap_cell!(self.deref_register(1),
+            (HeapCellValueTag::Atom, (module_name, _arity)) => {
+                module_name
+            }
+            (HeapCellValueTag::AttrVar | HeapCellValueTag::Var) => {
+                atom!("user")
+            }
+            _ => {
+                unreachable!()
+            }
+        );
+
+        let atom = self.deref_register(2);
 
         let pred_atom = if atom.is_var() {
             name_match = |_, _| true;
@@ -3767,7 +3792,7 @@ impl Machine {
             cell_as_atom!(atom)
         };
 
-        let arity = self.deref_register(2);
+        let arity = self.deref_register(3);
 
         let pred_arity = if arity.is_var() {
             arity_match = |_, _| true;
@@ -3792,7 +3817,19 @@ impl Machine {
         let h = self.machine_st.heap.len();
         let mut num_functors = 0;
 
-        for (name, arity) in self.indices.code_dir.keys() {
+        let code_dir = if module_name == atom!("user") {
+            &self.indices.code_dir
+        } else {
+            match self.indices.modules.get(&module_name).map(|module| &module.code_dir) {
+                Some(code_dir) => code_dir,
+                None => {
+                    self.machine_st.fail = true;
+                    return;
+                }
+            }
+        };
+
+        for (name, arity) in code_dir.keys() {
             if name_match(pred_atom, *name) && arity_match(pred_arity, *arity) {
                 self.machine_st.heap.extend(
                     functor!(atom!("/"), [cell(atom_as_cell!(name)), fixnum(*arity)]),

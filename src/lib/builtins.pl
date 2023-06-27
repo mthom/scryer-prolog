@@ -1254,7 +1254,13 @@ current_predicate(Pred) :-
     (  var(Pred) ->
        '$get_db_refs'(_, _, PIs),
        lists:member(Pred, PIs)
-    ;  Pred = Name/Arity ->
+    ;  '$strip_module'(Pred, Module, UnqualifiedPred),
+       (  var(Module),
+          \+ functor(Pred, (:), 2)
+       ;  atom(Module)
+       ),
+       nonvar(UnqualifiedPred),
+       UnqualifiedPred = Name/Arity ->
        (  (  nonvar(Name), \+ atom(Name)
           ;  nonvar(Arity), \+ integer(Arity)
           ;  integer(Arity), Arity < 0
@@ -1262,9 +1268,9 @@ current_predicate(Pred) :-
           throw(error(type_error(predicate_indicator, Pred), current_predicate/1))
        ;  nonvar(Name),
           nonvar(Arity) ->
-          '$lookup_db_ref'(Name, Arity)
-       ;  '$get_db_refs'(Name, Arity, PIs),
-          lists:member(Pred, PIs)
+          '$lookup_db_ref'(Module, Name, Arity)
+       ;  '$get_db_refs'(Module, Name, Arity, PIs),
+          lists:member(UnqualifiedPred, PIs)
        )
     ;  throw(error(type_error(predicate_indicator, Pred), current_predicate/1))
     ).

@@ -308,7 +308,7 @@ enum SystemClauseType {
     GetContinuationChunk,
     #[strum_discriminants(strum(props(Arity = "7", Name = "$get_next_op_db_ref")))]
     GetNextOpDBRef,
-    #[strum_discriminants(strum(props(Arity = "2", Name = "$lookup_db_ref")))]
+    #[strum_discriminants(strum(props(Arity = "3", Name = "$lookup_db_ref")))]
     LookupDBRef,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$is_partial_string")))]
     IsPartialString,
@@ -578,7 +578,7 @@ enum SystemClauseType {
     DeleteAllAttributesFromVar,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$unattributed_var")))]
     UnattributedVar,
-    #[strum_discriminants(strum(props(Arity = "3", Name = "$get_db_refs")))]
+    #[strum_discriminants(strum(props(Arity = "4", Name = "$get_db_refs")))]
     GetDBRefs,
     REPL(REPLCodePtr),
 }
