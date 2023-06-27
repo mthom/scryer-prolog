@@ -2475,11 +2475,10 @@ impl Machine {
         if !ClauseType::is_inbuilt(name, arity) { // ClauseType::from(key.0, key.1, &mut self.machine_st.arena) {
             if let Some(module) = self.indices.modules.get(&(atom!("builtins"))) {
                 self.machine_st.fail = !module.code_dir.contains_key(&(name, arity));
-                return;
+            } else {
+                self.machine_st.fail = true;
             }
         }
-
-        self.machine_st.fail = true;
     }
 }
 
