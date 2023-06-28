@@ -16,8 +16,8 @@ but they're not part of the ISO Prolog standard at the moment.
                     setup_call_cleanup/3,
                     call_nth/2,
                     copy_term_nat/2,
-		    asserta/2,
-		    assertz/2]).
+		            asserta/2,
+		            assertz/2]).
 
 :- use_module(library(error), [can_be/2,
                                domain_error/3,

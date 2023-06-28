@@ -1252,14 +1252,13 @@ abolish(Pred) :-
 % It can be used to check for existence of a predicate or to enumerate all loaded predicates
 current_predicate(Pred) :-
     (  var(Pred) ->
-       '$get_db_refs'(_, _, PIs),
+       '$get_db_refs'(_, _, _, PIs),
        lists:member(Pred, PIs)
     ;  '$strip_module'(Pred, Module, UnqualifiedPred),
        (  var(Module),
           \+ functor(Pred, (:), 2)
        ;  atom(Module)
        ),
-       nonvar(UnqualifiedPred),
        UnqualifiedPred = Name/Arity ->
        (  (  nonvar(Name), \+ atom(Name)
           ;  nonvar(Arity), \+ integer(Arity)

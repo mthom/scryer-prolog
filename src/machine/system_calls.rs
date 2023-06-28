@@ -3774,7 +3774,7 @@ impl Machine {
             (HeapCellValueTag::Atom, (module_name, _arity)) => {
                 module_name
             }
-            (HeapCellValueTag::AttrVar | HeapCellValueTag::Var) => {
+            (HeapCellValueTag::AttrVar | HeapCellValueTag::Var | HeapCellValueTag::StackVar) => {
                 atom!("user")
             }
             _ => {
@@ -3845,9 +3845,9 @@ impl Machine {
                 (0 .. num_functors).map(|i| str_loc_as_cell!(h + 3 * i)),
             );
 
-            unify!(self.machine_st, heap_loc_as_cell!(h), self.machine_st.registers[3]);
+            unify!(self.machine_st, heap_loc_as_cell!(h), self.machine_st.registers[4]);
         } else {
-            unify!(self.machine_st, empty_list_as_cell!(), self.machine_st.registers[3]);
+            unify!(self.machine_st, empty_list_as_cell!(), self.machine_st.registers[4]);
         }
     }
 
