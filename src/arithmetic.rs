@@ -685,7 +685,7 @@ impl TryFrom<HeapCellValue> for Number {
            (HeapCellValueTag::F64, n) => {
                Ok(Number::Float(*n))
            }
-           (HeapCellValueTag::Fixnum, n) => {
+           (HeapCellValueTag::Fixnum | HeapCellValueTag::CutPoint, n) => {
                Ok(Number::Fixnum(n))
            }
            _ => {

@@ -30,6 +30,7 @@ pub enum HeapCellValueTag {
     Atom = 0b010111,
     PStr = 0b011001,
     CStr = 0b011011,
+    CutPoint = 0b011111,
 }
 
 #[derive(BitfieldSpecifier, Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -50,13 +51,15 @@ pub enum HeapCellValueView {
     Atom = 0b010111,
     PStr = 0b011001,
     CStr = 0b011011,
+    CutPoint = 0b011111,
     // trail elements.
-    TrailedHeapVar = 0b011101,
-    TrailedStackVar = 0b011111,
+    TrailedHeapVar = 0b101111,
+    TrailedStackVar = 0b101011,
+    TrailedAttrVar = 0b100001,
     TrailedAttrVarListLink =  0b100011,
     TrailedAttachedValue =    0b100101,
     TrailedBlackboardEntry =  0b100111,
-    TrailedBlackboardOffset = 0b101001,
+    TrailedBlackboardOffset = 0b110011,
 }
 
 #[derive(BitfieldSpecifier, Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
@@ -189,13 +192,13 @@ pub enum TrailRef {
 #[derive(BitfieldSpecifier, Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[bits = 6]
 pub(crate) enum TrailEntryTag {
-    TrailedHeapVar = 0b011110,
-    TrailedStackVar = 0b011111,
-    TrailedAttrVar = 0b101110,
-    TrailedAttrVarListLink = 0b100011,
-    TrailedAttachedValue = 0b101010,
-    TrailedBlackboardEntry = 0b100110,
-    TrailedBlackboardOffset = 0b100111,
+    TrailedHeapVar = 0b101111,
+    TrailedStackVar = 0b101011,
+    TrailedAttrVar = 0b100001,
+    TrailedAttrVarListLink =  0b100011,
+    TrailedAttachedValue =    0b100101,
+    TrailedBlackboardEntry =  0b100111,
+    TrailedBlackboardOffset = 0b110011,
 }
 
 #[bitfield]

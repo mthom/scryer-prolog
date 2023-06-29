@@ -1149,17 +1149,17 @@ impl Machine {
                 &Instruction::GetLevel(r) => {
                     let b0 = self.machine_st.b0;
 
-                    self.machine_st[r] = fixnum_as_cell!(Fixnum::build_with(b0 as i64));
+                    self.machine_st[r] = fixnum_as_cell!(Fixnum::as_cutpoint(b0 as i64));
                     self.machine_st.p += 1;
                 }
                 &Instruction::GetPrevLevel(r) => {
                     let prev_b = self.machine_st.stack.index_or_frame(self.machine_st.b).prelude.b;
 
-                    self.machine_st[r] = fixnum_as_cell!(Fixnum::build_with(prev_b as i64));
+                    self.machine_st[r] = fixnum_as_cell!(Fixnum::as_cutpoint(prev_b as i64));
                     self.machine_st.p += 1;
                 }
                 &Instruction::GetCutPoint(r) => {
-                    self.machine_st[r] = fixnum_as_cell!(Fixnum::build_with(self.machine_st.b as i64));
+                    self.machine_st[r] = fixnum_as_cell!(Fixnum::as_cutpoint(self.machine_st.b as i64));
                     self.machine_st.p += 1;
                 }
                 &Instruction::Cut(r) => {

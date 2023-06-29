@@ -981,7 +981,7 @@ impl MachineState {
 
         self.p = cp + 1;
 
-        // adjust cut point to occur after call_continuation.
+        /*
         if num_cells > 0 {
             if let HeapCellValueTag::Fixnum = self.heap[s + 2].get_tag() {
                 and_frame[1] = fixnum_as_cell!(Fixnum::build_with(self.b as i64));
@@ -989,9 +989,15 @@ impl MachineState {
                 and_frame[1] = self.heap[s + 2];
             }
         }
+        */
 
-        for index in s + 3..s + 2 + num_cells {
-            and_frame[index - (s + 1)] = self.heap[index];
+        for index in s + 2..s + 2 + num_cells {
+            if let HeapCellValueTag::CutPoint = self.heap[index].get_tag() {
+                // adjust cut point to occur after call_continuation.
+                and_frame[index - (s + 1)] = fixnum_as_cell!(Fixnum::as_cutpoint(self.b as i64));
+            } else {
+                and_frame[index - (s + 1)] = self.heap[index];
+            }
         }
 
         self.e = e;
@@ -5557,13 +5563,13 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn get_b_value(&mut self) {
-        let n = Fixnum::build_with(i64::try_from(self.machine_st.b).unwrap());
+        let n = Fixnum::as_cutpoint(i64::try_from(self.machine_st.b).unwrap());
         self.machine_st.unify_fixnum(n, self.machine_st.registers[1]);
     }
 
     #[inline(always)]
     pub(crate) fn get_cut_point(&mut self) {
-        let n = Fixnum::build_with(i64::try_from(self.machine_st.b0).unwrap());
+        let n = Fixnum::as_cutpoint(i64::try_from(self.machine_st.b0).unwrap());
         self.machine_st.unify_fixnum(n, self.machine_st.registers[1]);
     }
 

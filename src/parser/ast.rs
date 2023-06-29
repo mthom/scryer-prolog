@@ -494,6 +494,15 @@ impl Fixnum {
     }
 
     #[inline]
+    pub fn as_cutpoint(num: i64) -> Self {
+        Fixnum::new()
+            .with_num(u64::from_ne_bytes(num.to_ne_bytes()) & ((1 << 56) - 1))
+            .with_tag(HeapCellValueTag::CutPoint as u8)
+            .with_m(false)
+            .with_f(false)
+    }
+
+    #[inline]
     pub fn build_with_checked(num: i64) -> Result<Self, OutOfBounds> {
         const UPPER_BOUND: i64 = (1 << 55) - 1;
         const LOWER_BOUND: i64 = -(1 << 55);

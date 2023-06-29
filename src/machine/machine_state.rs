@@ -821,7 +821,7 @@ impl MachineState {
         let b = self.b;
 
         read_heap_cell!(value,
-            (HeapCellValueTag::Fixnum, b0) => {
+            (HeapCellValueTag::CutPoint, b0) => {
                 let b0 = b0.get_num() as usize;
 
                 if b > b0 {
