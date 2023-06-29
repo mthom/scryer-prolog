@@ -335,11 +335,11 @@ impl<'a> ArithmeticEvaluator<'a> {
                                 term_loc,
                                 &mut code,
                             );
+                            cell.get().norm()
                         } else {
                             self.marker.increment_running_count(var_num);
+                            r
                         }
-
-                        r
                     } else {
                         self.marker.increment_running_count(var_num);
                         cell.get().norm()
