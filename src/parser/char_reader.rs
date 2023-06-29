@@ -111,7 +111,7 @@ impl<R> CharReader<R> {
 }
 
 impl<R: Read> CharReader<R> {
-    fn refresh_buffer(&mut self) -> io::Result<&[u8]> {
+    pub fn refresh_buffer(&mut self) -> io::Result<&[u8]> {
         // If we've reached the end of our internal buffer then we need to fetch
         // some more data from the underlying reader.
         // Branch using `>=` instead of the more correct `==`

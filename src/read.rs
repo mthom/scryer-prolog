@@ -83,7 +83,7 @@ fn get_prompt() -> &'static str {
 #[derive(Debug)]
 pub struct ReadlineStream {
     rl: Editor<Helper>,
-    pending_input: Cursor<String>,
+    pending_input: CharReader<Cursor<String>>,
     add_history: bool,
 }
 
@@ -107,7 +107,7 @@ impl ReadlineStream {
 
         ReadlineStream {
             rl,
-            pending_input: Cursor::new(pending_input.to_owned()),
+            pending_input: CharReader::new(Cursor::new(pending_input.to_owned())),
             add_history: add_history,
         }
     }
@@ -119,29 +119,35 @@ impl ReadlineStream {
 
     #[inline]
     pub fn reset(&mut self) {
-        self.pending_input.get_mut().clear();
-        self.pending_input.set_position(0);
+        self.pending_input.reset_buffer();
+
+        let pending_input = self.pending_input.get_mut();
+
+        pending_input.get_mut().clear();
+        pending_input.set_position(0);
     }
 
     fn call_readline(&mut self) -> std::io::Result<usize> {
         match self.rl.readline(get_prompt()) {
             Ok(text) => {
-                *self.pending_input.get_mut() = text;
-                self.pending_input.set_position(0);
+                self.pending_input.reset_buffer();
+
+                *self.pending_input.get_mut().get_mut() = text;
+                self.pending_input.get_mut().set_position(0);
 
                 unsafe {
                     if PROMPT {
-                        self.rl.history_mut().add(self.pending_input.get_ref());
+                        self.rl.history_mut().add(self.pending_input.get_ref().get_ref());
                         self.save_history();
                         PROMPT = false;
                     }
                 }
 
-                if self.pending_input.get_ref().chars().last() != Some('\n') {
-                    *self.pending_input.get_mut() += "\n";
+                if self.pending_input.get_ref().get_ref().chars().last() != Some('\n') {
+                    *self.pending_input.get_mut().get_mut() += "\n";
                 }
 
-                Ok(self.pending_input.get_ref().len())
+                Ok(self.pending_input.get_ref().get_ref().len())
             }
             Err(ReadlineError::Eof) => Ok(0),
             Err(e) => Err(Error::new(ErrorKind::InvalidInput, e)),
@@ -164,9 +170,13 @@ impl ReadlineStream {
         }
     }
 
+    #[inline]
     pub(crate) fn peek_byte(&mut self) -> std::io::Result<u8> {
+        let bytes = self.pending_input.refresh_buffer()?;
+        let byte = bytes.iter().next().cloned();
+
         loop {
-            match self.pending_input.get_ref().bytes().next() {
+            match byte {
                 Some(0) => {
                     return Ok(0);
                 }
@@ -178,7 +188,7 @@ impl ReadlineStream {
                         return Err(e);
                     }
                     Ok(0) => {
-                        self.pending_input.get_mut().push('\u{0}');
+                        self.pending_input.get_mut().get_mut().push('\u{0}');
                         return Ok(0);
                     }
                     _ => {
@@ -203,24 +213,23 @@ impl Read for ReadlineStream {
 }
 
 impl CharRead for ReadlineStream {
+    #[inline]
     fn peek_char(&mut self) -> Option<std::io::Result<char>> {
         loop {
-            let pos = self.pending_input.position() as usize;
-
-            match self.pending_input.get_ref()[pos ..].chars().next() {
-                Some('\u{0}') => {
+            match self.pending_input.peek_char() {
+                Some(Ok('\u{0}')) => {
                     return Some(Ok('\u{0}'));
                 }
-                Some(c) => {
+                Some(Ok(c)) => {
                     return Some(Ok(c));
                 }
-                None => {
+                _ => {
                     match self.call_readline() {
                         Err(e) => {
                             return Some(Err(e));
                         }
                         Ok(0) => {
-                            self.pending_input.get_mut().push('\u{0}');
+                            self.pending_input.get_mut().get_mut().push('\u{0}');
                             return Some(Ok('\u{0}'));
                         }
                         _ => {
@@ -232,14 +241,14 @@ impl CharRead for ReadlineStream {
         }
     }
 
+    #[inline]
     fn consume(&mut self, nread: usize) {
-        let offset = self.pending_input.position() as usize;
-        self.pending_input.set_position((offset + nread) as u64);
+        self.pending_input.consume(nread);
     }
 
+    #[inline]
     fn put_back_char(&mut self, c: char) {
-        let offset = self.pending_input.position() as usize;
-        self.pending_input.set_position((offset - c.len_utf8()) as u64);
+        self.pending_input.put_back_char(c);
     }
 }
 
