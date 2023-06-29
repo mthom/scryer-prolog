@@ -568,7 +568,12 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
     #[inline]
     fn ambiguity_check(&self, atom: &str) -> bool {
         let tail = self.outputter.range_from(self.last_item_idx..);
-        requires_space(tail, atom)
+
+        if !self.quoted || non_quoted_token(atom.chars()) {
+            requires_space(tail, atom)
+        } else {
+            requires_space(tail, "'")
+        }
     }
 
     fn enqueue_op(&mut self, mut max_depth: usize, name: Atom, spec: OpDesc) {
