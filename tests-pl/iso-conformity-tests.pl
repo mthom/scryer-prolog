@@ -551,8 +551,8 @@ test_213 :- read_from_chars("X is 0'\\\n+'1.", T),
             T = (_ is 0+1),
             call(T).
 
-test_259 :- read_from_chars("X is 0'\\\n+'/*'. % */1.", T),
-            T = (_ is 0+1),
+test_259 :- read_from_chars("X = 0'\\\n+'/*'. %*/1.", T),
+            T = (_ = 0+1),
             call(T).
 
 test_303 :- test_syntax_error("X = 0'\\\na.", syntax_error(incomplete_reduction)).
@@ -973,7 +973,7 @@ test_302 :- [] = '[]'.
 test_304 :- setup_call_cleanup(op(300,fy,~),
                                (  read_from_chars("~ (a = b).", T),
                                   writeq_term_to_chars(T, C),
-                                  C == "~(a=b)"
+                                  C == "~ (a=b)"
                                ),
                                op(0,fy,~)).
 
