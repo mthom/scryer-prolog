@@ -590,31 +590,21 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 right_directed_op,
             ));
         } else if is_prefix!(spec.get_spec()) {
-            match name {
-                atom!("-") | atom!("\\") => {
-                    self.format_prefix_op_with_space(max_depth, name, spec);
-                    return;
-                }
-                _ => {}
-            };
-
             if self.check_max_depth(&mut max_depth) {
                 self.iter.pop_stack();
 
                 self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
-                self.state_stack.push(TokenOrRedirect::Op(name, spec));
+                self.state_stack.push(TokenOrRedirect::Space);
+                self.state_stack.push(TokenOrRedirect::Atom(name));
 
                 return;
             }
 
-            let left_directed_op = DirectedOp::Left(name, spec);
+            let op = DirectedOp::Left(name, spec);
 
-            self.state_stack.push(TokenOrRedirect::CompositeRedirect(
-                max_depth,
-                left_directed_op,
-            ));
-
-            self.state_stack.push(TokenOrRedirect::Op(name, spec));
+            self.state_stack.push(TokenOrRedirect::CompositeRedirect(max_depth, op));
+            self.state_stack.push(TokenOrRedirect::Space);
+            self.state_stack.push(TokenOrRedirect::Atom(name));
         } else {
             match name.as_str() {
                 "|" => {
@@ -685,24 +675,6 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         self.state_stack.push(TokenOrRedirect::Atom(name));
 
         true
-    }
-
-    fn format_prefix_op_with_space(&mut self, mut max_depth: usize, name: Atom, spec: OpDesc) {
-        if self.check_max_depth(&mut max_depth) {
-            self.iter.pop_stack();
-
-            self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
-            self.state_stack.push(TokenOrRedirect::Space);
-            self.state_stack.push(TokenOrRedirect::Atom(name));
-
-            return;
-        }
-
-        let op = DirectedOp::Left(name, spec);
-
-        self.state_stack.push(TokenOrRedirect::CompositeRedirect(max_depth, op));
-        self.state_stack.push(TokenOrRedirect::Space);
-        self.state_stack.push(TokenOrRedirect::Atom(name));
     }
 
     fn format_bar_separator_op(&mut self, mut max_depth: usize, name: Atom, spec: OpDesc) {
@@ -1348,8 +1320,10 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             self.state_stack.push(TokenOrRedirect::Open);
 
             if let Some(ref op) = &op {
-                if op.is_left() && requires_space(op.as_atom().as_str(), "(") {
-                    self.state_stack.push(TokenOrRedirect::Space);
+                if !self.outputter.ends_with(" ") {
+                    if op.is_left() && requires_space(op.as_atom().as_str(), "(") {
+                        self.state_stack.push(TokenOrRedirect::Space);
+                    }
                 }
             }
         }

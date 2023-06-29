@@ -341,7 +341,7 @@ test_67 :- setup_call_cleanup((  current_op(P,fy,+),
                               op(P,fy,+)).
 
 test_257 :- writeq_term_to_chars([+{a},+[]], Chars),
-            Chars == "[+{a},+[]]".
+            Chars == "[+ {a},+ []]".
 
 test_68 :- [(:-)|(:-)]=[:-|:-].
 
@@ -568,7 +568,7 @@ test_131_132_133 :-
                           C0 == "' op' '1 '",
                           read_from_chars("' op'[].", T1),
                           writeq_term_to_chars(T1, C1),
-                          C1 == "' op'[]"
+                          C1 == "' op' []"
                        ),
                        op(0, fx, ' op')
                       ).
@@ -932,7 +932,7 @@ test_274_275 :-
     setup_call_cleanup(op(20,fx,--),
                        (  read_from_chars("--(a).", T0),
                           writeq_term_to_chars(T0, C0),
-                          C0 == "--a",
+                          C0 == "-- a",
                           op(0,fx,--),
                           read_from_chars("--(a).", T1),
                           writeq_term_to_chars(T1, C1),
@@ -981,7 +981,7 @@ test_305 :- writeq_term_to_chars(\ (a = b), C),
             C == "\\ (a=b)".
 
 test_306 :- writeq_term_to_chars(+ (a = b), C),
-            C == "+(a=b)".
+            C == "+ (a=b)".
 
 test_307 :- writeq_term_to_chars([/**/], C),
             C == "[]".
