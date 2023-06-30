@@ -213,7 +213,6 @@ needs_bracketing(Value, Op) :-
     arity_specifier(Arity, FSpec),
     (  Arity =:= 0
     ;  EqPrec < FPrec
-    ;  FPrec > 0, F == Value, graphic_token_char(F)
     ;  F \== '.', '$quoted_token'(F)
     ;  EqPrec =:= FPrec,
        member(EqSpec, [fx,xfx,yfx])
