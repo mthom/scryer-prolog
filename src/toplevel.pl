@@ -205,12 +205,14 @@ submit_query_and_print_results(Term, VarList) :-
 
 
 needs_bracketing(Value, Op) :-
-    catch((functor(Value, F, _),
-           current_op(EqPrec, EqSpec, Op),
-           current_op(FPrec, _, F)),
-          _,
-          false),
-    (  EqPrec < FPrec ->
+    nonvar(Value),
+    \+ integer(Value),
+    functor(Value, F, Arity),
+    current_op(FPrec, _, F),
+    current_op(EqPrec, EqSpec, Op),
+    (  Arity =:= 0 ->
+       true
+    ;  EqPrec < FPrec ->
        true
     ;  FPrec > 0, F == Value, graphic_token_char(F) ->
        true
@@ -228,7 +230,7 @@ write_goal(G, VarList, MaxDepth) :-
        ),
        write(Var),
        write(' = '),
-       (  needs_bracketing(Value, (=)) ->
+       (  needs_bracketing(Value, =) ->
           write('('),
           write_term(Value, [quoted(true), variable_names(NewVarList), max_depth(MaxDepth)]),
           write(')')
@@ -247,7 +249,7 @@ write_last_goal(G, VarList, MaxDepth) :-
        ),
        write(Var),
        write(' = '),
-       (  needs_bracketing(Value, (=)) ->
+       (  needs_bracketing(Value, =) ->
           write('('),
           write_term(Value, [quoted(true), variable_names(NewVarList), max_depth(MaxDepth)]),
           write(')')
@@ -271,8 +273,7 @@ write_eq(G, VarList, MaxDepth) :-
     write_last_goal(G, VarList, MaxDepth).
 
 graphic_token_char(C) :-
-    memberchk(C, ['#', '$', '&', '*', '+', '-', '.', ('/'), ':',
-                  '<', '=', '>', '?', '@', '^', '~', ('\\')]).
+    memberchk(C, [#, $, &, *, +, -, ., /, :, <, =, >, ?, @, ^, ~, \\]).
 
 list_last_item([C], C) :- !.
 list_last_item([_|Cs], D) :-
