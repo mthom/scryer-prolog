@@ -732,7 +732,10 @@ test_164 :- setup_call_cleanup((op(7,fy,p),op(9,yfx,p)),
 
 test_165 :- atom('.''-''.').
 
-test_166_167 :- setup_call_cleanup(current_op(P,xfy,'|'),
+test_166_167 :- setup_call_cleanup((  current_op(P,xfy,'|') ->
+                                      true
+                                   ;  P = 0
+                                   ),
                                    (  op(0,xfy,'|'),
                                       test_syntax_error("(a|b).", syntax_error(incomplete_reduction))),
                                    op(P,xfy,'|')).
