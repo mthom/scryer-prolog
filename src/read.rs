@@ -45,10 +45,11 @@ impl MachineState {
         let (term, num_lines_read) = {
             let prior_num_lines_read = inner.lines_read();
             let mut parser = Parser::new(inner, self);
+            let op_dir = CompositeOpDir::new(op_dir, None);
 
             parser.add_lines_read(prior_num_lines_read);
 
-            let term = parser.read_term(&CompositeOpDir::new(op_dir, None))
+            let term = parser.read_term(&op_dir, Tokens::Default)
                 .map_err(CompilationError::from)?;
 
             (term, parser.lines_read() - prior_num_lines_read)

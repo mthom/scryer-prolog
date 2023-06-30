@@ -24,6 +24,16 @@ enum TokenType {
     End,
 }
 
+/*
+Specifies whether the token sequence should be read from the lexer or
+provided via the Provided variant.
+*/
+#[derive(Debug)]
+pub enum Tokens {
+    Default,
+    Provided(Vec<Token>),
+}
+
 impl TokenType {
     fn is_sep(self) -> bool {
         matches!(
@@ -302,8 +312,17 @@ impl<'a, R: CharRead> Parser<'a, R> {
         Parser {
             lexer: Lexer::new(stream, machine_st),
             tokens: vec![],
-            stack: Vec::new(),
-            terms: Vec::new(),
+            stack: vec![],
+            terms: vec![],
+        }
+    }
+
+    pub fn from_lexer(lexer: Lexer<'a, R>) -> Self {
+        Parser {
+            lexer,
+            tokens: vec![],
+            stack: vec![],
+            terms: vec![],
         }
     }
 
@@ -1048,8 +1067,11 @@ impl<'a, R: CharRead> Parser<'a, R> {
     }
 
     // on success, returns the parsed term and the number of lines read.
-    pub fn read_term(&mut self, op_dir: &CompositeOpDir) -> Result<Term, ParserError> {
-        self.tokens = read_tokens(&mut self.lexer)?;
+    pub fn read_term(&mut self, op_dir: &CompositeOpDir, tokens: Tokens) -> Result<Term, ParserError> {
+        self.tokens = match tokens {
+            Tokens::Default => read_tokens(&mut self.lexer)?,
+            Tokens::Provided(tokens) => tokens,
+        };
 
         while let Some(token) = self.tokens.pop() {
             self.shift_token(token, op_dir)?;

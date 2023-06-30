@@ -886,75 +886,92 @@ impl MachineState {
         indices: &IndexStore,
         stub_gen: impl Fn() -> FunctorStub,
     ) -> CallResult {
+        use crate::parser::lexer::*;
+
         let nx = self.store(self.deref(self.registers[2]));
+        let add_dot = !string.ends_with(".");
+        let cursor = std::io::Cursor::new(string);
 
-        let mut charcode_space = false;
-        let mut cs = string.chars();
+        let iter = std::io::Read::chain(
+            cursor,
+            {
+                let mut dot_buf: [u8; '.'.len_utf8()] = [0u8];
 
-        loop {
-            let c = cs.next();
+                if add_dot {
+                    '.'.encode_utf8(&mut dot_buf);
+                }
 
-            if c == None {
-                break;
+                std::io::Cursor::new(dot_buf)
+            },
+        );
+
+        let mut lexer = Lexer::new(CharReader::new(iter), self);
+        let mut tokens = vec![];
+
+        match lexer.next_token() {
+            Ok(token @ Token::Literal(Literal::Atom(atom!("-")) | Literal::Char('-'))) => {
+                tokens.push(token);
+
+                if let Ok(token) = lexer.next_token() {
+                    tokens.push(token);
+                }
             }
-
-            if c == Some('0')
-                && cs.next() == Some('\'')
-                && cs.next() == Some(' ')
-                && cs.next() == None {
-                charcode_space = true;
-                break;
+            Ok(token) => {
+                tokens.push(token);
+            }
+            Err(err) => {
+                let err = self.syntax_error(err);
+                return Err(self.error_form(err, stub_gen()));
             }
         }
 
-        if !charcode_space {
-            if let Some(c) = string.chars().last() {
-                if layout_char!(c) {
-                    let (line_num, col_num) = string.chars().fold((0, 0), |(line_num, col_num), c| {
-                        if new_line_char!(c) {
-                            (1 + line_num, 0)
-                        } else {
-                            (line_num, col_num + 1)
+        loop {
+            match lexer.lookahead_char() {
+                Err(ParserError::UnexpectedEOF) => {
+                    let mut parser = Parser::from_lexer(lexer);
+                    let op_dir = CompositeOpDir::new(&indices.op_dir, None);
+
+                    tokens.reverse();
+
+                    match parser.read_term(&op_dir, Tokens::Provided(tokens)) {
+                        Err(err) => {
+                            let err = self.syntax_error(err);
+                            return Err(self.error_form(err, stub_gen()));
                         }
-                    });
+                        Ok(Term::Literal(_, Literal::Rational(n))) => {
+                            self.unify_rational(n, nx);
+                        }
+                        Ok(Term::Literal(_, Literal::Float(n))) => {
+                            self.unify_f64(n.as_ptr(), nx);
+                        }
+                        Ok(Term::Literal(_, Literal::Integer(n))) => {
+                            self.unify_big_int(n, nx);
+                        }
+                        Ok(Term::Literal(_, Literal::Fixnum(n))) => {
+                            self.unify_fixnum(n, nx);
+                        }
+                        _ => {
+                            let err = ParserError::ParseBigInt(0, 0);
+                            let err = self.syntax_error(err);
+
+                            return Err(self.error_form(err, stub_gen()));
+                        }
+                    }
+
+                    break;
+                }
+                Ok('.') => {
+                    lexer.skip_char('.');
+                }
+                Ok(c) => {
+                    let (line_num, col_num) = (lexer.line_num, lexer.col_num);
+
                     let err = ParserError::UnexpectedChar(c, line_num, col_num);
                     let err = self.syntax_error(err);
 
                     return Err(self.error_form(err, stub_gen()));
                 }
-            }
-        }
-
-        let mut dot_buf: [u8; '.'.len_utf8()] = [0u8];
-        '.'.encode_utf8(&mut dot_buf);
-
-        let cursor = std::io::Cursor::new(string);
-        let iter = std::io::Read::chain(cursor, std::io::Cursor::new(dot_buf));
-
-        let mut parser = Parser::new(CharReader::new(iter), self);
-
-        match parser.read_term(&CompositeOpDir::new(&indices.op_dir, None)) {
-            Err(err) => {
-                let err = self.syntax_error(err);
-                return Err(self.error_form(err, stub_gen()));
-            }
-            Ok(Term::Literal(_, Literal::Rational(n))) => {
-                self.unify_rational(n, nx);
-            }
-            Ok(Term::Literal(_, Literal::Float(n))) => {
-                self.unify_f64(n.as_ptr(), nx);
-            }
-            Ok(Term::Literal(_, Literal::Integer(n))) => {
-                self.unify_big_int(n, nx);
-            }
-            Ok(Term::Literal(_, Literal::Fixnum(n))) => {
-                self.unify_fixnum(n, nx);
-            }
-            _ => {
-                let err = ParserError::ParseBigInt(0, 0);
-                let err = self.syntax_error(err);
-
-                return Err(self.error_form(err, stub_gen()));
+                Err(_) => unreachable!(),
             }
         }
 
@@ -5730,8 +5747,9 @@ impl Machine {
         if let Some(atom_or_string) = self.machine_st.value_to_str_like(self.machine_st.registers[1]) {
             let chars = CharReader::new(ByteStream::from_string(atom_or_string.to_string()));
             let mut parser = Parser::new(chars, &mut self.machine_st);
+            let op_dir = CompositeOpDir::new(&self.indices.op_dir, None);
 
-            let term_write_result = parser.read_term(&CompositeOpDir::new(&self.indices.op_dir, None))
+            let term_write_result = parser.read_term(&op_dir, Tokens::Default)
                 .map_err(CompilationError::from)
                 .and_then(|term| {
                     write_term_to_heap(

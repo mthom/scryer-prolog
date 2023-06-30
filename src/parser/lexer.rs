@@ -110,7 +110,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
         self.reader.put_back_char(c);
     }
 
-    fn skip_char(&mut self, c: char) {
+    pub fn skip_char(&mut self, c: char) {
         self.reader.consume(c.len_utf8());
 
         if new_line_char!(c) {

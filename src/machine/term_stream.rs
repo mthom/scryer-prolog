@@ -52,7 +52,7 @@ impl<'a> TermStream for BootstrappingTermStream<'a> {
     fn next(&mut self, op_dir: &CompositeOpDir) -> Result<Term, CompilationError> {
         self.parser.reset();
         self.parser
-            .read_term(op_dir)
+            .read_term(op_dir, Tokens::Default)
             .map_err(CompilationError::from)
     }
 
