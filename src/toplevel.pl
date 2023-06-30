@@ -208,19 +208,18 @@ needs_bracketing(Value, Op) :-
     nonvar(Value),
     \+ integer(Value),
     functor(Value, F, Arity),
-    current_op(FPrec, _, F),
+    current_op(FPrec, FSpec, F),
     current_op(EqPrec, EqSpec, Op),
-    (  Arity =:= 0 ->
-       true
-    ;  EqPrec < FPrec ->
-       true
-    ;  FPrec > 0, F == Value, graphic_token_char(F) ->
-       true
-    ;  F \== '.', '$quoted_token'(F) ->
-       true
-    ;  EqPrec == FPrec,
-       memberchk(EqSpec, [fx,xfx,yfx])
+    arity_specifier(Arity, FSpec),
+    (  Arity =:= 0
+    ;  EqPrec < FPrec
+    ;  EqPrec =:= FPrec,
+       member(EqSpec, [fx,xfx,yfx])
     ).
+
+arity_specifier(0, _).
+arity_specifier(1, S) :- atom_chars(S, [_,_]).
+arity_specifier(2, S) :- atom_chars(S, [_,_,_]).
 
 write_goal(G, VarList, MaxDepth) :-
     (  G = (Var = Value) ->
