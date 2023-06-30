@@ -827,6 +827,10 @@ impl<'a, R: CharRead> Parser<'a, R> {
             return false;
         }
 
+        if let Some(TokenType::Open | TokenType::OpenCT) = self.stack.last().map(|token| token.tt) {
+            return false;
+        }
+
         let idx = self.stack.len() - 2;
         let td = self.stack.remove(idx);
 
