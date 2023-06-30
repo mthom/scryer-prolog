@@ -211,16 +211,12 @@ needs_bracketing(Value, Op) :-
     current_op(FPrec, FSpec, F),
     current_op(EqPrec, EqSpec, Op),
     arity_specifier(Arity, FSpec),
-    (  Arity =:= 0 ->
-       true
-    ;  EqPrec < FPrec ->
-       true
-    ;  FPrec > 0, F == Value, graphic_token_char(F) ->
-       true
-    ;  F \== '.', '$quoted_token'(F) ->
-       true
-    ;  EqPrec == FPrec,
-       memberchk(EqSpec, [fx,xfx,yfx])
+    (  Arity =:= 0
+    ;  EqPrec < FPrec
+    ;  FPrec > 0, F == Value, graphic_token_char(F)
+    ;  F \== '.', '$quoted_token'(F)
+    ;  EqPrec =:= FPrec,
+       member(EqSpec, [fx,xfx,yfx])
     ).
 
 arity_specifier(0, _).
