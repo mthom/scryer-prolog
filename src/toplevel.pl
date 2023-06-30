@@ -208,6 +208,7 @@ needs_bracketing(Value, Op) :-
     nonvar(Value),
     \+ integer(Value),
     functor(Value, F, Arity),
+    atom(F),
     current_op(FPrec, FSpec, F),
     current_op(EqPrec, EqSpec, Op),
     arity_specifier(Arity, FSpec),
