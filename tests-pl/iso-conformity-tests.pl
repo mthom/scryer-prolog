@@ -1023,4 +1023,4 @@ run_tests :-
     ).
 
 % FIXME: enable once all tests pass.
-% :- initialization_goals(run_tests).
+% :- initialization(run_tests).
