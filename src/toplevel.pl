@@ -206,7 +206,6 @@ submit_query_and_print_results(Term, VarList) :-
 
 needs_bracketing(Value, Op) :-
     nonvar(Value),
-    \+ integer(Value),
     functor(Value, F, Arity),
     atom(F),
     current_op(FPrec, FSpec, F),
