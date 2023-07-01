@@ -239,7 +239,7 @@ impl Machine {
             user_error,
             load_contexts: vec![],
             runtime,
-	    foreign_function_table: Default::default(),
+	        foreign_function_table: Default::default(),
         };
 
         let mut lib_path = current_dir();

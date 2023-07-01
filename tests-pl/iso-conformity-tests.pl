@@ -5,7 +5,6 @@
 :- use_module(library(files)).
 :- use_module(library(format)).
 :- use_module(library(iso_ext)).
-:- use_module(library(lists), [append/3]).
 
 writeq_term_to_chars(Term, Chars) :-
     Options = [ignore_ops(false), numbervars(true), quoted(true), variable_names([])],
@@ -1016,11 +1015,9 @@ run_tests :-
             Tests),
     phrase(run_tests(Tests), FailedTests),
     (  FailedTests == [] ->
-       write('All tests passed'),
-       nl
-    ;  format("Failed ISO conformity tests: ~w~n", [FailedTests]),
+       write('All tests passed')
+    ;  format("Failed ISO conformity tests: ~w", [FailedTests]),
        false
     ).
 
-% FIXME: enable once all tests pass.
-% :- initialization(run_tests).
+:- initialization(run_tests).
