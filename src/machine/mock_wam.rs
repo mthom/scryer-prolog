@@ -64,6 +64,7 @@ impl MockWAM {
             &mut self.machine_st.atom_tbl,
             &mut self.machine_st.stack,
             &self.op_dir,
+            self.machine_st.flags,
             PrinterOutputter::new(),
             heap_loc_as_cell!(term_write_result.heap_loc),
         );

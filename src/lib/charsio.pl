@@ -206,13 +206,14 @@ read_from_chars(Chars, Term) :-
 %  * `max_depth(+N)` if the term is nested deeper than N, print the reminder as ellipses.
 %    If N = 0 (default), there's no limit.
 %  * `numbervars(+Boolean)` if true, replaces `$VAR(N)` variables with letters, in order. Default is false.
-%  * `quoted(+Boolean)` if true, strings and atoms that need quotes to be valid Prolog synytax, are quoted. Default is false.
+%  * `quoted(+Boolean)` if true, strings and atoms that need quotes to be valid Prolog syntax, are quoted. Default is false.
 %  * `variable_names(+List)` assign names to variables in term. List should be a list of terms of format `Name=Var`.
+%  * `double_quotes(+Boolean)` if true, strings are printed in double quotes rather than with list notation. Default is false.
 write_term_to_chars(_, Options, _) :-
     var(Options), instantiation_error(write_term_to_chars/3).
 write_term_to_chars(Term, Options, Chars) :-
     builtins:parse_write_options(Options,
-                                 [IgnoreOps, MaxDepth, NumberVars, Quoted, VNNames],
+                                 [DoubleQuotes, IgnoreOps, MaxDepth, NumberVars, Quoted, VNNames],
                                  write_term_to_chars/3),
     (  nonvar(Chars)  ->
        throw(error(uninstantiation_error(Chars), write_term_to_chars/3))
@@ -221,7 +222,7 @@ write_term_to_chars(Term, Options, Chars) :-
     ),
     term_variables(Term, Vars),
     extend_var_list(Vars, VNNames, NewVarNames, numbervars),
-    '$write_term_to_chars'(Chars, Term, IgnoreOps, NumberVars, Quoted, NewVarNames, MaxDepth).
+    '$write_term_to_chars'(Chars, Term, IgnoreOps, NumberVars, Quoted, NewVarNames, MaxDepth, DoubleQuotes).
 
 % Encodes Ch character to list of Bytes.
 char_utf8bytes(Ch, Bytes) :-

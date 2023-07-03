@@ -472,9 +472,9 @@ enum SystemClauseType {
     WAMInstructions,
     #[strum_discriminants(strum(props(Arity = "2", Name = "$inlined_instructions")))]
     InlinedInstructions,
-    #[strum_discriminants(strum(props(Arity = "7", Name = "$write_term")))]
+    #[strum_discriminants(strum(props(Arity = "8", Name = "$write_term")))]
     WriteTerm,
-    #[strum_discriminants(strum(props(Arity = "7", Name = "$write_term_to_chars")))]
+    #[strum_discriminants(strum(props(Arity = "8", Name = "$write_term_to_chars")))]
     WriteTermToChars,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$scryer_prolog_version")))]
     ScryerPrologVersion,

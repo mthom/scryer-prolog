@@ -478,6 +478,7 @@ pub struct HCPrinter<'a, Outputter> {
     iter: StackfulPreOrderHeapIter<'a>,
     atom_tbl: &'a mut AtomTable,
     op_dir: &'a OpDir,
+    flags: MachineFlags,
     state_stack: Vec<TokenOrRedirect>,
     toplevel_spec: Option<DirectedOp>,
     last_item_idx: usize,
@@ -488,6 +489,7 @@ pub struct HCPrinter<'a, Outputter> {
     pub ignore_ops: bool,
     pub print_strings_as_strs: bool,
     pub max_depth: usize,
+    pub double_quotes: bool,
 }
 
 macro_rules! push_space_if_amb {
@@ -544,6 +546,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         atom_tbl: &'a mut AtomTable,
         stack: &'a mut Stack,
         op_dir: &'a OpDir,
+        flags: MachineFlags,
         output: Outputter,
         cell: HeapCellValue,
     ) -> Self {
@@ -552,6 +555,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             iter: stackful_preorder_iter(heap, stack, cell),
             atom_tbl,
             op_dir,
+            flags,
             state_stack: vec![],
             toplevel_spec: None,
             last_item_idx: 0,
@@ -562,6 +566,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             var_names: IndexMap::new(),
             print_strings_as_strs: false,
             max_depth: 0,
+            double_quotes: false,
         }
     }
 
@@ -1164,9 +1169,11 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
         let at_cdr = self.outputter.ends_with("|");
 
-        if !at_cdr && !self.ignore_ops && end_cell.is_string_terminator(&self.iter.heap) {
-            self.remove_list_children(focus.value() as usize);
-            return self.print_proper_string(focus.value() as usize, max_depth);
+        if self.double_quotes && self.flags.double_quotes == DoubleQuotes::Chars {
+            if !at_cdr && !self.ignore_ops && end_cell.is_string_terminator(&self.iter.heap) {
+                self.remove_list_children(focus.value() as usize);
+                return self.print_proper_string(focus.value() as usize, max_depth);
+            }
         }
 
         if self.ignore_ops {

@@ -528,30 +528,34 @@ parse_options_list(Options, Selector, DefaultPairs, OptionValues, Stub) :-
 
 
 parse_write_options(Options, OptionValues, Stub) :-
-    DefaultOptions = [ignore_ops-false, max_depth-0, numbervars-false,
+    DefaultOptions = [double_quotes-false, ignore_ops-false, max_depth-0, numbervars-false,
                       quoted-false, variable_names-[]],
     parse_options_list(Options, builtins:parse_write_options_, DefaultOptions, OptionValues, Stub).
 
+
+parse_write_options_(double_quotes(DoubleQuotes), double_quotes-DoubleQuotes) :-
+    (  nonvar(DoubleQuotes),
+       lists:member(DoubleQuotes, [true, false]),
+       !
+    ;  throw(error(domain_error(write_option, double_quotes(DoubleQuotes)), _))
+    ).
 parse_write_options_(ignore_ops(IgnoreOps), ignore_ops-IgnoreOps) :-
     (  nonvar(IgnoreOps),
        lists:member(IgnoreOps, [true, false]),
        !
-    ;
-       throw(error(domain_error(write_option, ignore_ops(IgnoreOps)), _))
+    ;  throw(error(domain_error(write_option, ignore_ops(IgnoreOps)), _))
     ).
 parse_write_options_(quoted(Quoted), quoted-Quoted) :-
     (  nonvar(Quoted),
        lists:member(Quoted, [true, false]),
        !
-    ;
-       throw(error(domain_error(write_option, quoted(Quoted)), _))
+    ;  throw(error(domain_error(write_option, quoted(Quoted)), _))
     ).
 parse_write_options_(numbervars(NumberVars), numbervars-NumberVars) :-
     (  nonvar(NumberVars),
        lists:member(NumberVars, [true, false]),
        !
-    ;
-       throw(error(domain_error(write_option, numbervars(NumberVars)), _))
+    ;  throw(error(domain_error(write_option, numbervars(NumberVars)), _))
     ).
 parse_write_options_(variable_names(VNNames), variable_names-VNNames) :-
     must_be_var_names_list(VNNames),
@@ -560,8 +564,7 @@ parse_write_options_(max_depth(MaxDepth), max_depth-MaxDepth) :-
     (  integer(MaxDepth),
        MaxDepth >= 0,
        !
-    ;
-       throw(error(domain_error(write_option, max_depth(MaxDepth)), _))
+    ;  throw(error(domain_error(write_option, max_depth(MaxDepth)), _))
     ).
 parse_write_options_(E, _) :-
     throw(error(domain_error(write_option, E), _)).
@@ -607,11 +610,12 @@ write_term(Term, Options) :-
 %  * `max_depth(+N)` if the term is nested deeper than N, print the reminder as ellipses.
 %    If N = 0 (default), there's no limit.
 %  * `numbervars(+Boolean)` if true, replaces `$VAR(N)` variables with letters, in order. Default is false.
-%  * `quoted(+Boolean)` if true, strings and atoms that need quotes to be valid Prolog synytax, are quoted. Default is false.
+%  * `quoted(+Boolean)` if true, strings and atoms that need quotes to be valid Prolog syntax, are quoted. Default is false.
 %  * `variable_names(+List)` assign names to variables in term. List should be a list of terms of format `Name=Var`.
+%  * `double_quotes(+Boolean)` if true, strings are printed in double quotes rather than with list notation. Default is false.
 write_term(Stream, Term, Options) :-
-    parse_write_options(Options, [IgnoreOps, MaxDepth, NumberVars, Quoted, VNNames], write_term/3),
-    '$write_term'(Stream, Term, IgnoreOps, NumberVars, Quoted, VNNames, MaxDepth).
+    parse_write_options(Options, [DoubleQuotes, IgnoreOps, MaxDepth, NumberVars, Quoted, VNNames], write_term/3),
+    '$write_term'(Stream, Term, IgnoreOps, NumberVars, Quoted, VNNames, MaxDepth, DoubleQuotes).
 
 
 %% write(+Term).
@@ -619,26 +623,26 @@ write_term(Stream, Term, Options) :-
 % Write Term to the current output stream using a syntax similar to Prolog
 write(Term) :-
     current_output(Stream),
-    '$write_term'(Stream, Term, false, true, false, [], 0).
+    '$write_term'(Stream, Term, false, true, false, [], 0, false).
 
 %% write(+Stream, +Term).
 %
 % Write Term to the stream Stream using a syntax similar to Prolog
 write(Stream, Term) :-
-    '$write_term'(Stream, Term, false, true, false, [], 0).
+    '$write_term'(Stream, Term, false, true, false, [], 0, false).
 
 %% write_canonical(+Term).
 %
 % Write Term to the current output stream using canonical Prolog syntax. Can be read back as Prolog terms.
 write_canonical(Term) :-
     current_output(Stream),
-    '$write_term'(Stream, Term, true, false, true, [], 0).
+    '$write_term'(Stream, Term, true, false, true, [], 0, false).
 
 %% write_canonical(+Stream, +Term).
 %
 % Write Term to the stream Stream using canonical Prolog syntax. Can be read back as Prolog terms.
 write_canonical(Stream, Term) :-
-    '$write_term'(Stream, Term, true, false, true, [], 0).
+    '$write_term'(Stream, Term, true, false, true, [], 0, false).
 
 %% writeq(+Term).
 %
@@ -646,14 +650,14 @@ write_canonical(Stream, Term) :-
 % quoted according to Prolog syntax.
 writeq(Term) :-
     current_output(Stream),
-    '$write_term'(Stream, Term, false, true, true, [], 0).
+    '$write_term'(Stream, Term, false, true, true, [], 0, false).
 
 %% writeq(+Stream, +Term).
 %
 % Write Term to the stream Stream using a syntax similar to `write/1` but quoting the atoms that need to be
 % quoted according to Prolog syntax.
 writeq(Stream, Term) :-
-    '$write_term'(Stream, Term, false, true, true, [], 0).
+    '$write_term'(Stream, Term, false, true, true, [], 0, false).
 
 select_rightmost_options([Option-Value | OptionPairs], OptionValues) :-
     (  pairs:same_key(Option, OptionPairs, OtherValues, _),

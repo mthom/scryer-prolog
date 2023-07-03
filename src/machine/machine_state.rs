@@ -666,6 +666,7 @@ impl MachineState {
         let numbervars = self.store(self.deref(self.registers[4]));
         let quoted = self.store(self.deref(self.registers[5]));
         let max_depth = self.store(self.deref(self.registers[7]));
+        let double_quotes = self.store(self.deref(self.registers[8]));
 
         let term_to_be_printed = self.store(self.deref(self.registers[2]));
         let stub_gen = || functor_stub(atom!("write_term"), 2);
@@ -747,7 +748,25 @@ impl MachineState {
                 );
 
                 let quoted = read_heap_cell!(quoted,
-                    (HeapCellValueTag::Atom, (name, _arity)) => {
+                    (HeapCellValueTag::Atom, (name, arity)) => {
+                        debug_assert_eq!(arity, 0);
+                        name == atom!("true")
+                    }
+                    (HeapCellValueTag::Str, s) => {
+                        let (name, arity) = cell_as_atom_cell!(self.heap[s])
+                            .get_name_and_arity();
+
+                        debug_assert_eq!(arity, 0);
+                        name == atom!("true")
+                    }
+                    _ => {
+                        unreachable!()
+                    }
+                );
+
+                let double_quotes = read_heap_cell!(double_quotes,
+                    (HeapCellValueTag::Atom, (name, arity)) => {
+                        debug_assert_eq!(arity, 0);
                         name == atom!("true")
                     }
                     (HeapCellValueTag::Str, s) => {
@@ -767,6 +786,7 @@ impl MachineState {
                     &mut self.atom_tbl,
                     &mut self.stack,
                     op_dir,
+                    self.flags,
                     PrinterOutputter::new(),
                     term_to_be_printed,
                 );
@@ -774,6 +794,7 @@ impl MachineState {
                 printer.ignore_ops = ignore_ops;
                 printer.numbervars = numbervars;
                 printer.quoted = quoted;
+                printer.double_quotes = double_quotes;
 
                 match Number::try_from(max_depth) {
                     Ok(Number::Fixnum(n)) => {
