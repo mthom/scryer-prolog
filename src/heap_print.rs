@@ -478,6 +478,7 @@ pub struct HCPrinter<'a, Outputter> {
     iter: StackfulPreOrderHeapIter<'a>,
     atom_tbl: &'a mut AtomTable,
     op_dir: &'a OpDir,
+    flags: MachineFlags,
     state_stack: Vec<TokenOrRedirect>,
     toplevel_spec: Option<DirectedOp>,
     last_item_idx: usize,
@@ -488,6 +489,7 @@ pub struct HCPrinter<'a, Outputter> {
     pub ignore_ops: bool,
     pub print_strings_as_strs: bool,
     pub max_depth: usize,
+    pub double_quotes: bool,
 }
 
 macro_rules! push_space_if_amb {
@@ -544,6 +546,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         atom_tbl: &'a mut AtomTable,
         stack: &'a mut Stack,
         op_dir: &'a OpDir,
+        flags: MachineFlags,
         output: Outputter,
         cell: HeapCellValue,
     ) -> Self {
@@ -552,6 +555,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             iter: stackful_preorder_iter(heap, stack, cell),
             atom_tbl,
             op_dir,
+            flags,
             state_stack: vec![],
             toplevel_spec: None,
             last_item_idx: 0,
@@ -562,13 +566,19 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             var_names: IndexMap::new(),
             print_strings_as_strs: false,
             max_depth: 0,
+            double_quotes: false,
         }
     }
 
     #[inline]
     fn ambiguity_check(&self, atom: &str) -> bool {
         let tail = self.outputter.range_from(self.last_item_idx..);
-        requires_space(tail, atom)
+
+        if !self.quoted || non_quoted_token(atom.chars()) {
+            requires_space(tail, atom)
+        } else {
+            requires_space(tail, "'")
+        }
     }
 
     fn enqueue_op(&mut self, mut max_depth: usize, name: Atom, spec: OpDesc) {
@@ -590,31 +600,21 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 right_directed_op,
             ));
         } else if is_prefix!(spec.get_spec()) {
-            match name {
-                atom!("-") | atom!("\\") => {
-                    self.format_prefix_op_with_space(max_depth, name, spec);
-                    return;
-                }
-                _ => {}
-            };
-
             if self.check_max_depth(&mut max_depth) {
                 self.iter.pop_stack();
 
                 self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
-                self.state_stack.push(TokenOrRedirect::Op(name, spec));
+                self.state_stack.push(TokenOrRedirect::Space);
+                self.state_stack.push(TokenOrRedirect::Atom(name));
 
                 return;
             }
 
-            let left_directed_op = DirectedOp::Left(name, spec);
+            let op = DirectedOp::Left(name, spec);
 
-            self.state_stack.push(TokenOrRedirect::CompositeRedirect(
-                max_depth,
-                left_directed_op,
-            ));
-
-            self.state_stack.push(TokenOrRedirect::Op(name, spec));
+            self.state_stack.push(TokenOrRedirect::CompositeRedirect(max_depth, op));
+            self.state_stack.push(TokenOrRedirect::Space);
+            self.state_stack.push(TokenOrRedirect::Atom(name));
         } else {
             match name.as_str() {
                 "|" => {
@@ -685,24 +685,6 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         self.state_stack.push(TokenOrRedirect::Atom(name));
 
         true
-    }
-
-    fn format_prefix_op_with_space(&mut self, mut max_depth: usize, name: Atom, spec: OpDesc) {
-        if self.check_max_depth(&mut max_depth) {
-            self.iter.pop_stack();
-
-            self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
-            self.state_stack.push(TokenOrRedirect::Space);
-            self.state_stack.push(TokenOrRedirect::Atom(name));
-
-            return;
-        }
-
-        let op = DirectedOp::Left(name, spec);
-
-        self.state_stack.push(TokenOrRedirect::CompositeRedirect(max_depth, op));
-        self.state_stack.push(TokenOrRedirect::Space);
-        self.state_stack.push(TokenOrRedirect::Atom(name));
     }
 
     fn format_bar_separator_op(&mut self, mut max_depth: usize, name: Atom, spec: OpDesc) {
@@ -1187,9 +1169,11 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
         let at_cdr = self.outputter.ends_with("|");
 
-        if !at_cdr && !self.ignore_ops && end_cell.is_string_terminator(&self.iter.heap) {
-            self.remove_list_children(focus.value() as usize);
-            return self.print_proper_string(focus.value() as usize, max_depth);
+        if self.double_quotes && self.flags.double_quotes == DoubleQuotes::Chars {
+            if !at_cdr && !self.ignore_ops && end_cell.is_string_terminator(&self.iter.heap) {
+                self.remove_list_children(focus.value() as usize);
+                return self.print_proper_string(focus.value() as usize, max_depth);
+            }
         }
 
         if self.ignore_ops {
@@ -1348,8 +1332,10 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             self.state_stack.push(TokenOrRedirect::Open);
 
             if let Some(ref op) = &op {
-                if op.is_left() && requires_space(op.as_atom().as_str(), "(") {
-                    self.state_stack.push(TokenOrRedirect::Space);
+                if !self.outputter.ends_with(" ") {
+                    if op.is_left() && requires_space(op.as_atom().as_str(), "(") {
+                        self.state_stack.push(TokenOrRedirect::Space);
+                    }
                 }
             }
         }
@@ -1671,6 +1657,7 @@ mod tests {
                 &mut wam.machine_st.atom_tbl,
                 &mut wam.machine_st.stack,
                 &wam.op_dir,
+                wam.machine_st.flags,
                 PrinterOutputter::new(),
                 heap_loc_as_cell!(0)
             );
@@ -1700,6 +1687,7 @@ mod tests {
                 &mut wam.machine_st.atom_tbl,
                 &mut wam.machine_st.stack,
                 &wam.op_dir,
+                wam.machine_st.flags,
                 PrinterOutputter::new(),
                 heap_loc_as_cell!(0)
             );
@@ -1724,6 +1712,7 @@ mod tests {
                 &mut wam.machine_st.atom_tbl,
                 &mut wam.machine_st.stack,
                 &wam.op_dir,
+                wam.machine_st.flags,
                 PrinterOutputter::new(),
                 heap_loc_as_cell!(0)
             );
@@ -1737,6 +1726,7 @@ mod tests {
                 &mut wam.machine_st.atom_tbl,
                 &mut wam.machine_st.stack,
                 &wam.op_dir,
+                wam.machine_st.flags,
                 PrinterOutputter::new(),
                 heap_loc_as_cell!(0)
             );
@@ -1768,6 +1758,7 @@ mod tests {
                 &mut wam.machine_st.atom_tbl,
                 &mut wam.machine_st.stack,
                 &wam.op_dir,
+                wam.machine_st.flags,
                 PrinterOutputter::new(),
                 heap_loc_as_cell!(0),
             );
@@ -1787,6 +1778,7 @@ mod tests {
                 &mut wam.machine_st.atom_tbl,
                 &mut wam.machine_st.stack,
                 &wam.op_dir,
+                wam.machine_st.flags,
                 PrinterOutputter::new(),
                 heap_loc_as_cell!(0),
             );
@@ -1804,6 +1796,7 @@ mod tests {
                 &mut wam.machine_st.atom_tbl,
                 &mut wam.machine_st.stack,
                 &wam.op_dir,
+                wam.machine_st.flags,
                 PrinterOutputter::new(),
                 heap_loc_as_cell!(0)
             );
@@ -1834,6 +1827,7 @@ mod tests {
                 &mut wam.machine_st.atom_tbl,
                 &mut wam.machine_st.stack,
                 &wam.op_dir,
+                wam.machine_st.flags,
                 PrinterOutputter::new(),
                 heap_loc_as_cell!(0)
             );
@@ -1857,6 +1851,7 @@ mod tests {
                 &mut wam.machine_st.atom_tbl,
                 &mut wam.machine_st.stack,
                 &wam.op_dir,
+                wam.machine_st.flags,
                 PrinterOutputter::new(),
                 pstr_loc_as_cell!(0)
             );
@@ -1880,14 +1875,17 @@ mod tests {
         wam.machine_st.heap.push(empty_list_as_cell!());
 
         {
-            let printer = HCPrinter::new(
+            let mut printer = HCPrinter::new(
                 &mut wam.machine_st.heap,
                 &mut wam.machine_st.atom_tbl,
                 &mut wam.machine_st.stack,
                 &wam.op_dir,
+                wam.machine_st.flags,
                 PrinterOutputter::new(),
                 heap_loc_as_cell!(0),
             );
+
+            printer.double_quotes = true;
 
             let output = printer.print();
 
@@ -1907,7 +1905,7 @@ mod tests {
 
         assert_eq!(
             &wam.parse_and_print_term("[a,b,\"a\",[a,b,c]].").unwrap(),
-            "[a,b,\"a\",\"abc\"]"
+            "[a,b,[a],[a,b,c]]"
         );
 
         all_cells_unmarked(&wam.machine_st.heap);
@@ -1915,7 +1913,7 @@ mod tests {
         assert_eq!(
             &wam.parse_and_print_term("[\"abc\",e,f,[g,e,h,Y,v|[X,Y]]].")
                 .unwrap(),
-            "[\"abc\",e,f,[g,e,h,Y,v,X,Y]]"
+            "[[a,b,c],e,f,[g,e,h,Y,v,X,Y]]"
         );
 
         all_cells_unmarked(&wam.machine_st.heap);

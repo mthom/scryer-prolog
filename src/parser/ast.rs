@@ -313,7 +313,7 @@ impl Default for MachineFlags {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum DoubleQuotes {
     Atom,
     Chars,

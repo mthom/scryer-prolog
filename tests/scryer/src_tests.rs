@@ -69,3 +69,12 @@ fn setup_call_cleanup_process() {
 fn clpz_load() {
     load_module_test("src/tests/clpz/test_clpz.pl", "");
 }
+
+#[serial]
+#[test]
+fn iso_conformity_tests() {
+    load_module_test(
+        "tests-pl/iso-conformity-tests.pl",
+        "All tests passed",
+    );
+}

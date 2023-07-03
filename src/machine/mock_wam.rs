@@ -64,6 +64,7 @@ impl MockWAM {
             &mut self.machine_st.atom_tbl,
             &mut self.machine_st.stack,
             &self.op_dir,
+            self.machine_st.flags,
             PrinterOutputter::new(),
             heap_loc_as_cell!(term_write_result.heap_loc),
         );
@@ -239,7 +240,7 @@ impl Machine {
             user_error,
             load_contexts: vec![],
             runtime,
-	    foreign_function_table: Default::default(),
+	        foreign_function_table: Default::default(),
         };
 
         let mut lib_path = current_dir();
