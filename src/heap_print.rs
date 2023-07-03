@@ -1657,6 +1657,7 @@ mod tests {
                 &mut wam.machine_st.atom_tbl,
                 &mut wam.machine_st.stack,
                 &wam.op_dir,
+                wam.machine_st.flags,
                 PrinterOutputter::new(),
                 heap_loc_as_cell!(0)
             );
@@ -1686,6 +1687,7 @@ mod tests {
                 &mut wam.machine_st.atom_tbl,
                 &mut wam.machine_st.stack,
                 &wam.op_dir,
+                wam.machine_st.flags,
                 PrinterOutputter::new(),
                 heap_loc_as_cell!(0)
             );
@@ -1710,6 +1712,7 @@ mod tests {
                 &mut wam.machine_st.atom_tbl,
                 &mut wam.machine_st.stack,
                 &wam.op_dir,
+                wam.machine_st.flags,
                 PrinterOutputter::new(),
                 heap_loc_as_cell!(0)
             );
@@ -1723,6 +1726,7 @@ mod tests {
                 &mut wam.machine_st.atom_tbl,
                 &mut wam.machine_st.stack,
                 &wam.op_dir,
+                wam.machine_st.flags,
                 PrinterOutputter::new(),
                 heap_loc_as_cell!(0)
             );
@@ -1754,6 +1758,7 @@ mod tests {
                 &mut wam.machine_st.atom_tbl,
                 &mut wam.machine_st.stack,
                 &wam.op_dir,
+                wam.machine_st.flags,
                 PrinterOutputter::new(),
                 heap_loc_as_cell!(0),
             );
@@ -1773,6 +1778,7 @@ mod tests {
                 &mut wam.machine_st.atom_tbl,
                 &mut wam.machine_st.stack,
                 &wam.op_dir,
+                wam.machine_st.flags,
                 PrinterOutputter::new(),
                 heap_loc_as_cell!(0),
             );
@@ -1790,6 +1796,7 @@ mod tests {
                 &mut wam.machine_st.atom_tbl,
                 &mut wam.machine_st.stack,
                 &wam.op_dir,
+                wam.machine_st.flags,
                 PrinterOutputter::new(),
                 heap_loc_as_cell!(0)
             );
@@ -1820,6 +1827,7 @@ mod tests {
                 &mut wam.machine_st.atom_tbl,
                 &mut wam.machine_st.stack,
                 &wam.op_dir,
+                wam.machine_st.flags,
                 PrinterOutputter::new(),
                 heap_loc_as_cell!(0)
             );
@@ -1843,6 +1851,7 @@ mod tests {
                 &mut wam.machine_st.atom_tbl,
                 &mut wam.machine_st.stack,
                 &wam.op_dir,
+                wam.machine_st.flags,
                 PrinterOutputter::new(),
                 pstr_loc_as_cell!(0)
             );
@@ -1866,14 +1875,17 @@ mod tests {
         wam.machine_st.heap.push(empty_list_as_cell!());
 
         {
-            let printer = HCPrinter::new(
+            let mut printer = HCPrinter::new(
                 &mut wam.machine_st.heap,
                 &mut wam.machine_st.atom_tbl,
                 &mut wam.machine_st.stack,
                 &wam.op_dir,
+                wam.machine_st.flags,
                 PrinterOutputter::new(),
                 heap_loc_as_cell!(0),
             );
+
+            printer.double_quotes = true;
 
             let output = printer.print();
 
@@ -1893,7 +1905,7 @@ mod tests {
 
         assert_eq!(
             &wam.parse_and_print_term("[a,b,\"a\",[a,b,c]].").unwrap(),
-            "[a,b,\"a\",\"abc\"]"
+            "[a,b,[a],[a,b,c]]"
         );
 
         all_cells_unmarked(&wam.machine_st.heap);
@@ -1901,7 +1913,7 @@ mod tests {
         assert_eq!(
             &wam.parse_and_print_term("[\"abc\",e,f,[g,e,h,Y,v|[X,Y]]].")
                 .unwrap(),
-            "[\"abc\",e,f,[g,e,h,Y,v,X,Y]]"
+            "[[a,b,c],e,f,[g,e,h,Y,v,X,Y]]"
         );
 
         all_cells_unmarked(&wam.machine_st.heap);
