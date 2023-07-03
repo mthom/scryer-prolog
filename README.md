@@ -6,6 +6,8 @@ source industrial strength production environment that is also a
 testbed for bleeding edge research in logic and constraint
 programming, which is itself written in a high-level language.
 
+As of July 2023, **Scryer Prolog passes all [syntactic conformity&nbsp;tests](https://www.complang.tuwien.ac.at/ulrich/iso-prolog/conformity_testing)**.
+
 The homepage of the project is: [**https://www.scryer.pl**](https://www.scryer.pl)
 
 ![Scryer Logo: Cryer](logo/scryer.png)
