@@ -271,7 +271,7 @@ test_184 :- writeq_term_to_chars(-(-), Chars),
             Chars == "- (-)".
 
 test_185 :- writeq_term_to_chars(-[-], Chars),
-            Chars == "- \"-\"".
+            Chars == "- [-]".
 
 test_188 :- writeq_term_to_chars(-p(c), Chars),
             Chars == "- p(c)".
