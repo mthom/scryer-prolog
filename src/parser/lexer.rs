@@ -988,6 +988,17 @@ impl<'a, R: CharRead> Lexer<'a, R> {
 
                             return Ok(Token::End);
                         }
+                        Ok(c) if c == '\\' => {
+                            self.skip_char(c);
+
+                            if self.lookahead_char().ok() == Some('n') {
+                                self.skip_char('n');
+                                return Ok(Token::End);
+                            } else {
+                                self.return_char(c);
+                                self.return_char('.');
+                            }
+                        }
                         Err(ParserError::UnexpectedEOF) => {
                             return Ok(Token::End);
                         }
