@@ -7393,8 +7393,14 @@ impl Machine {
         match self.machine_st.devour_whitespace(stream) {
             Ok(false) => { // not at EOF.
             }
-            _ => {
+            Ok(true) => {
                 self.machine_st.fail = true;
+            }
+            Err(err) => {
+                let stub = functor_stub(atom!("load"), 1);
+                let err = self.machine_st.syntax_error(err);
+
+                return Err(self.machine_st.error_form(err, stub));
             }
         }
 
