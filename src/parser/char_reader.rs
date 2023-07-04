@@ -20,7 +20,7 @@ use std::str;
 
 pub struct CharReader<R> {
     inner: R,
-    buf: SmallVec<[u8;4]>,
+    buf: SmallVec<[u8;32]>,
     pos: usize,
 }
 
@@ -121,7 +121,7 @@ impl<R: Read> CharReader<R> {
 
             self.buf.clear();
 
-            let mut word = [0u8;4];
+            let mut word = [0u8; std::mem::size_of::<char>()];
             let nread = self.inner.read(&mut word)?;
 
             self.buf.extend_from_slice(&word[..nread]);
@@ -234,10 +234,10 @@ impl<R: Read> CharRead for CharReader<R> {
     #[inline(always)]
     fn put_back_char(&mut self, c: char) {
         let src_len = self.buf.len() - self.pos;
-        debug_assert!(src_len <= 4);
+        debug_assert!(src_len <= self.buf.capacity());
 
         let c_len = c.len_utf8();
-        let mut shifted_slice = [0u8; 4];
+        let mut shifted_slice = [0u8; 32];
 
         shifted_slice[0..src_len].copy_from_slice(&self.buf[self.pos .. self.buf.len()]);
 
