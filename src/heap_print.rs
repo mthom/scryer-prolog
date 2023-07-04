@@ -45,6 +45,15 @@ impl DirectedOp {
     }
 
     #[inline]
+    fn is_prefix(&self )-> bool {
+        match self {
+            &DirectedOp::Left(_name, cell) | &DirectedOp::Right(_name, cell) => {
+                is_prefix!(cell.get_spec() as u32)
+            }
+        }
+    }
+
+    #[inline]
     fn is_negative_sign(&self) -> bool {
         match self {
             &DirectedOp::Left(name, cell) | &DirectedOp::Right(name, cell) => {
@@ -604,7 +613,6 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 self.iter.pop_stack();
 
                 self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
-                self.state_stack.push(TokenOrRedirect::Space);
                 self.state_stack.push(TokenOrRedirect::Atom(name));
 
                 return;
@@ -613,7 +621,13 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             let op = DirectedOp::Left(name, spec);
 
             self.state_stack.push(TokenOrRedirect::CompositeRedirect(max_depth, op));
-            self.state_stack.push(TokenOrRedirect::Space);
+
+            /*
+            if fetch_op_spec(name, 2, self.op_dir).is_some() {
+                self.state_stack.push(TokenOrRedirect::Space);
+            }
+            */
+
             self.state_stack.push(TokenOrRedirect::Atom(name));
         } else {
             match name.as_str() {
@@ -938,13 +952,17 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
     }
 
     fn print_number(&mut self, max_depth: usize, n: NumberFocus, op: &Option<DirectedOp>) {
-        let add_brackets = if let Some(op) = op {
-            op.is_negative_sign() && !n.is_negative()
+        let (add_brackets, op_is_prefix) = if let Some(op) = op {
+            (op.is_negative_sign() && !n.is_negative(), op.is_prefix())
         } else {
-            false
+            (false, false)
         };
 
         if add_brackets {
+            if op_is_prefix && !self.outputter.ends_with(" ") {
+                push_char!(self, ' ');
+            }
+
             push_char!(self, '(');
         }
 
@@ -1333,8 +1351,10 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
             if let Some(ref op) = &op {
                 if !self.outputter.ends_with(" ") {
-                    if op.is_left() && requires_space(op.as_atom().as_str(), "(") {
-                        self.state_stack.push(TokenOrRedirect::Space);
+                    if op.is_left() {
+                        if op.is_prefix() || requires_space(op.as_atom().as_str(), "(") {
+                            self.state_stack.push(TokenOrRedirect::Space);
+                        }
                     }
                 }
             }
@@ -1457,7 +1477,9 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 let mut result = String::new();
 
                 if let Some(ref op) = op {
-                    if printer.outputter.ends_with(&format!(" {}", op.as_atom().as_str())) {
+                    let op_is_prefix = op.is_prefix() && op.is_left();
+
+                    if op_is_prefix || printer.outputter.ends_with(&format!(" {}", op.as_atom().as_str())) {
                         result.push(' ');
                     }
 
