@@ -616,6 +616,18 @@ impl HeapCellValue {
                         Some(TermOrderCategory::Compound)
                     }
                 }
+		HeapCellValueTag::Cons => {
+		    let ptr = cell_as_untyped_arena_ptr!(self);
+		    match_untyped_arena_ptr!(ptr,
+			(ArenaHeaderTag::Stream, stream) => {
+			    match stream.options().get_alias() {
+                                Some(_) => Some(TermOrderCategory::Atom),
+				None => Some(TermOrderCategory::Compound)
+			    }
+			},
+			_ => None
+		    )
+		}
                 _ => {
                     None
                 }
