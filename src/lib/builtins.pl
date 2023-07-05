@@ -301,18 +301,11 @@ set_cp(B) :- '$set_cp'(B).
 
 control_entry_point(G) :-
     functor(G, Name, Arity),
-    catch(builtins:control_entry_point_(G),
-          dispatch_prep_error,
-          builtins:throw(error(type_error(callable, G), Name/Arity))).
-
-
-:- non_counted_backtracking control_entry_point_/1.
-
-control_entry_point_(G) :-
     '$get_cp'(B),
-    dispatch_prep(G,B,Conts),
+    catch('$call'(builtins:dispatch_prep(G,B,Conts)),
+          dispatch_prep_error,
+          '$call'(builtins:throw(error(type_error(callable, G), Name/Arity)))),
     dispatch_call_list(Conts).
-
 
 :- non_counted_backtracking cont_list_to_goal/2.
 
@@ -771,7 +764,7 @@ catch(G,C,R,Bb) :-
 end_block(Bb, NBb) :-
     '$clean_up_block'(NBb),
     '$reset_block'(Bb).
-end_block(Bb, NBb) :-
+end_block(_Bb, NBb) :-
     '$reset_block'(NBb),
     '$fail'.
 

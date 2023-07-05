@@ -1532,7 +1532,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                     });
                 }
             }
-            (HeapCellValueTag::Fixnum, n) => {
+            (HeapCellValueTag::Fixnum | HeapCellValueTag::CutPoint, n) => {
                 self.print_number(max_depth, NumberFocus::Unfocused(Number::Fixnum(n)), &op);
             }
             (HeapCellValueTag::F64, f) => {
