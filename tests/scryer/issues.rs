@@ -54,10 +54,10 @@ fn handle_residual_goal() {
         true.\n   \
         true.\n   \
         false.\n   \
-        X = - X.\n   \
-        dif:dif(- X,X).\n   \
+        X = -X.\n   \
+        dif:dif(-X,X).\n   \
         false.\n   \
-        Vars = [X], dif:dif(- X,X).\n   \
+        Vars = [X], dif:dif(-X,X).\n   \
         true.\n   \
         true.\n   \
         true.\n\

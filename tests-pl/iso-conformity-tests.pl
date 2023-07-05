@@ -265,31 +265,31 @@ test_218 :- writeq_term_to_chars(-(1*2), Chars),
             Chars == "- (1*2)".
 
 test_140 :- writeq_term_to_chars(-a, Chars),
-            Chars == "- a".
+            Chars == "-a".
 
 test_184 :- writeq_term_to_chars(-(-), Chars),
             Chars == "- (-)".
 
 test_185 :- writeq_term_to_chars(-[-], Chars),
-            Chars == "- [-]".
+            Chars == "-[-]".
 
 test_188 :- writeq_term_to_chars(-p(c), Chars),
-            Chars == "- p(c)".
+            Chars == "-p(c)".
 
 test_189 :- writeq_term_to_chars(-{}, Chars),
-            Chars == "- {}".
+            Chars == "-{}".
 
 test_190 :- writeq_term_to_chars(-{a}, Chars),
-            Chars == "- {a}".
+            Chars == "-{a}".
 
 test_191 :- writeq_term_to_chars(-(-a), Chars),
-            Chars == "- - a".
+            Chars == "- -a".
 
 test_192 :- writeq_term_to_chars(-(-(-a)), Chars),
-            Chars == "- - - a".
+            Chars == "- - -a".
 
-test_216 :- writeq_term_to_chars(-(-1), Chars),
-            Chars == "- -1".
+test_216 :- writeq_term_to_chars(-(-(1)), Chars),
+            Chars == "- - (1)".
 
 test_215_248_249 :-
     setup_call_cleanup(op(100,yfx,~),
@@ -307,14 +307,14 @@ test_215_248_249 :-
 
 test_278 :- setup_call_cleanup(op(9,xfy,.),
                                (  writeq_term_to_chars(-[1], Chars),
-                                  Chars == "- [1]"
+                                  Chars == "-[1]"
                                ),
                                op(0,xfy,.)).
 
 test_279_296 :-
     setup_call_cleanup(op(9,xf,'$VAR'),
                        (  writeq_term_to_chars(-'$VAR'(0), Chars0),
-                          Chars0 == "- A",
+                          Chars0 == "-A",
                           writeq_term_to_chars('$VAR'(0), Chars1),
                           Chars1 == "A"
                        ),
@@ -340,7 +340,7 @@ test_67 :- setup_call_cleanup((  current_op(P,fy,+),
                               op(P,fy,+)).
 
 test_257 :- writeq_term_to_chars([+{a},+[]], Chars),
-            Chars == "[+ {a},+ []]".
+            Chars == "[+{a},+[]]".
 
 test_68 :- [(:-)|(:-)]=[:-|:-].
 
@@ -567,7 +567,7 @@ test_131_132_133 :-
                           C0 == "' op' '1 '",
                           read_from_chars("' op'[].", T1),
                           writeq_term_to_chars(T1, C1),
-                          C1 == "' op' []"
+                          C1 == "' op'[]"
                        ),
                        op(0, fx, ' op')
                       ).
@@ -595,7 +595,7 @@ test_142_143_144_221_258 :-
                           C1 == "[1]",
                           read_from_chars("-[1].", T2),
                           writeq_term_to_chars(T2, C2),
-                          C2 == "- [1]",
+                          C2 == "-[1]",
                           read_from_chars("X = 1.e.", T3),
                           writeq_term_to_chars(T3, C3),
                           C3 == "A=[1|e]",
@@ -934,7 +934,7 @@ test_274_275 :-
     setup_call_cleanup(op(20,fx,--),
                        (  read_from_chars("--(a).", T0),
                           writeq_term_to_chars(T0, C0),
-                          C0 == "-- a",
+                          C0 == "--a",
                           op(0,fx,--),
                           read_from_chars("--(a).", T1),
                           writeq_term_to_chars(T1, C1),
