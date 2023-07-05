@@ -786,7 +786,6 @@ impl MachineState {
                     &mut self.atom_tbl,
                     &mut self.stack,
                     op_dir,
-                    self.flags,
                     PrinterOutputter::new(),
                     term_to_be_printed,
                 );
