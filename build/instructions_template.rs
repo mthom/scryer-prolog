@@ -322,7 +322,7 @@ enum SystemClauseType {
     GetSCCCleaner,
     #[strum_discriminants(strum(props(Arity = "2", Name = "$head_is_dynamic")))]
     HeadIsDynamic,
-    #[strum_discriminants(strum(props(Arity = "2", Name = "$install_scc_cleaner")))]
+    #[strum_discriminants(strum(props(Arity = "1", Name = "$install_scc_cleaner")))]
     InstallSCCCleaner,
     #[strum_discriminants(strum(props(Arity = "3", Name = "$install_inference_counter")))]
     InstallInferenceCounter,
@@ -404,6 +404,8 @@ enum SystemClauseType {
     GetBall,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$get_current_block")))]
     GetCurrentBlock,
+    #[strum_discriminants(strum(props(Arity = "1", Name = "$get_current_scc_block")))]
+    GetCurrentSCCBlock,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$get_cp")))]
     GetCutPoint,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$get_double_quotes")))]
@@ -420,6 +422,8 @@ enum SystemClauseType {
     ReadTermFromChars,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$reset_block")))]
     ResetBlock,
+    #[strum_discriminants(strum(props(Arity = "1", Name = "$reset_scc_block")))]
+    ResetSCCBlock,
     #[strum_discriminants(strum(props(Arity = "0", Name = "$return_from_verify_attr")))]
     ReturnFromVerifyAttr,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$set_ball")))]
@@ -1713,6 +1717,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallFail |
                     &Instruction::CallGetBall |
                     &Instruction::CallGetCurrentBlock |
+                    &Instruction::CallGetCurrentSCCBlock |
                     &Instruction::CallGetCutPoint |
                     &Instruction::CallGetDoubleQuotes |
                     &Instruction::CallInstallNewBlock |
@@ -1732,6 +1737,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallQuotedToken |
                     &Instruction::CallReadTermFromChars |
                     &Instruction::CallResetBlock |
+                    &Instruction::CallResetSCCBlock |
                     &Instruction::CallReturnFromVerifyAttr |
                     &Instruction::CallSetBall |
                     &Instruction::CallPushBallStack |
@@ -1935,6 +1941,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteFail |
                     &Instruction::ExecuteGetBall |
                     &Instruction::ExecuteGetCurrentBlock |
+                    &Instruction::ExecuteGetCurrentSCCBlock |
                     &Instruction::ExecuteGetCutPoint |
                     &Instruction::ExecuteGetDoubleQuotes |
                     &Instruction::ExecuteInstallNewBlock |
@@ -1954,6 +1961,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteQuotedToken |
                     &Instruction::ExecuteReadTermFromChars |
                     &Instruction::ExecuteResetBlock |
+                    &Instruction::ExecuteResetSCCBlock |
                     &Instruction::ExecuteReturnFromVerifyAttr |
                     &Instruction::ExecuteSetBall |
                     &Instruction::ExecutePushBallStack |

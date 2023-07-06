@@ -503,6 +503,12 @@ impl Fixnum {
     }
 
     #[inline]
+    pub fn get_tag(&self) -> HeapCellValueTag {
+        use modular_bitfield::Specifier;
+        HeapCellValueTag::from_bytes(self.tag()).unwrap()
+    }
+
+    #[inline]
     pub fn build_with_checked(num: i64) -> Result<Self, OutOfBounds> {
         const UPPER_BOUND: i64 = (1 << 55) - 1;
         const LOWER_BOUND: i64 = -(1 << 55);

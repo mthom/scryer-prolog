@@ -4114,6 +4114,14 @@ impl Machine {
                     self.get_current_block();
                     step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                 }
+                &Instruction::CallGetCurrentSCCBlock => {
+                    self.get_current_scc_block();
+                    step_or_fail!(self, self.machine_st.p += 1);
+                }
+                &Instruction::ExecuteGetCurrentSCCBlock => {
+                    self.get_current_scc_block();
+                    step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+                }
                 &Instruction::CallGetCutPoint => {
                     self.get_cut_point();
                     step_or_fail!(self, self.machine_st.p += 1);
@@ -4248,6 +4256,14 @@ impl Machine {
                 }
                 &Instruction::ExecuteResetBlock => {
                     self.reset_block();
+                    step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+                }
+                &Instruction::CallResetSCCBlock => {
+                    self.reset_scc_block();
+                    step_or_fail!(self, self.machine_st.p += 1);
+                }
+                &Instruction::ExecuteResetSCCBlock => {
+                    self.reset_scc_block();
                     step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                 }
                 &Instruction::CallReturnFromVerifyAttr |

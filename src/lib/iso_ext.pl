@@ -138,7 +138,7 @@ setup_call_cleanup(S, G, C) :-
     '$get_b_value'(B),
     '$call_with_inference_counting'(call(S)),
     '$set_cp_by_default'(B),
-    '$get_current_block'(Bb),
+    '$get_current_scc_block'(Bb),
     (  C = _:CC,
        var(CC) ->
        instantiation_error(setup_call_cleanup/3)
@@ -151,17 +151,16 @@ setup_call_cleanup(S, G, C) :-
 
 scc_helper(C, G, Bb) :-
     '$get_cp'(Cp),
-    '$install_scc_cleaner'(C, NBb),
+    '$install_scc_cleaner'(C),
     '$call_with_inference_counting'(call(G)),
     (  '$check_cp'(Cp) ->
-       '$reset_block'(Bb),
+       '$reset_scc_block'(Bb),
        run_cleaners_without_handling(Cp)
     ;  true
-    ;  '$reset_block'(NBb),
-       '$fail'
+    ;  '$fail'
     ).
 scc_helper(_, _, Bb) :-
-    '$reset_block'(Bb),
+    '$reset_scc_block'(Bb),
     '$push_ball_stack',
     run_cleaners_with_handling,
     '$pop_from_ball_stack',

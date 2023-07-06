@@ -802,7 +802,7 @@ impl MachineState {
         unify_fn!(*self, list_of_vars, outcome);
     }
 
-    #[inline]
+    #[inline(always)]
     pub(crate) fn install_new_block(&mut self, value: HeapCellValue) -> usize {
         let value = self.store(self.deref(value));
 
@@ -5160,18 +5160,18 @@ impl Machine {
     pub(crate) fn get_scc_cleaner(&mut self) {
         let dest = self.machine_st.registers[1];
 
-        if let Some((addr, b_cutoff, prev_b)) = self.machine_st.cont_pts.pop() {
+        if let Some((addr, b_cutoff, prev_block)) = self.machine_st.cont_pts.pop() {
             let b = self.machine_st.stack.index_or_frame(self.machine_st.b).prelude.b;
 
             if b <= b_cutoff {
-                self.machine_st.block = prev_b;
+                self.machine_st.scc_block = prev_block;
 
                 if let Some(r) = dest.as_var() {
                     self.machine_st.bind(r, addr);
                     return;
                 }
             } else {
-                self.machine_st.cont_pts.push((addr, b_cutoff, prev_b));
+                self.machine_st.cont_pts.push((addr, b_cutoff, prev_block));
             }
         }
 
@@ -5203,11 +5203,11 @@ impl Machine {
     pub(crate) fn install_scc_cleaner(&mut self) {
         let addr = self.machine_st.registers[1];
         let b = self.machine_st.b;
-        let prev_block = self.machine_st.block;
+        let prev_block = self.machine_st.scc_block;
 
         self.machine_st.run_cleaners_fn = Machine::run_cleaners;
 
-        self.machine_st.install_new_block(self.machine_st.registers[2]);
+        self.machine_st.scc_block = b;
         self.machine_st.cont_pts.push((addr, b, prev_block));
     }
 
@@ -5574,8 +5574,18 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn get_current_block(&mut self) {
-        let n = Fixnum::build_with(i64::try_from(self.machine_st.block).unwrap());
-        self.machine_st.unify_fixnum(n, self.machine_st.registers[1]);
+        let addr = self.machine_st.registers[1];
+        let block = Fixnum::build_with(self.machine_st.block as i64);
+
+        self.machine_st.unify_fixnum(block, addr);
+    }
+
+    #[inline(always)]
+    pub(crate) fn get_current_scc_block(&mut self) {
+        let addr = self.machine_st.registers[1];
+        let block = Fixnum::build_with(self.machine_st.scc_block as i64);
+
+        self.machine_st.unify_fixnum(block, addr);
     }
 
     #[inline(always)]
@@ -5782,8 +5792,30 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn reset_block(&mut self) {
-        let addr = self.machine_st.deref(self.machine_st.registers[1]);
-        self.machine_st.reset_block(addr);
+        let addr = self.deref_register(1);
+
+        read_heap_cell!(addr,
+            (HeapCellValueTag::Fixnum, block) => {
+                self.machine_st.block = block.get_num() as usize;
+            }
+            _ => {
+                self.machine_st.fail = true;
+            }
+        );
+    }
+
+    #[inline(always)]
+    pub(crate) fn reset_scc_block(&mut self) {
+        let addr = self.deref_register(1);
+
+        read_heap_cell!(addr,
+            (HeapCellValueTag::Fixnum, block) => {
+                self.machine_st.scc_block = block.get_num() as usize;
+            }
+            _ => {
+                self.machine_st.fail = true;
+            }
+        );
     }
 
     #[inline(always)]

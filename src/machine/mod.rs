@@ -828,7 +828,7 @@ impl Machine {
 
         if let Some(&(_, b_cutoff, prev_block)) = self.machine_st.cont_pts.last() {
             if self.machine_st.b < b_cutoff {
-                let (idx, arity) = if self.machine_st.block > prev_block {
+                let (idx, arity) = if self.machine_st.effective_block() > prev_block {
                     (r_c_w_h, 0)
                 } else {
                     self.machine_st.registers[1] = fixnum_as_cell!(

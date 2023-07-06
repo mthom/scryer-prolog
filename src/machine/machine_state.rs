@@ -73,11 +73,12 @@ pub struct MachineState {
     pub(super) tr: usize,
     pub(super) hb: usize,
     pub(super) block: usize, // an offset into the OR stack.
+    pub(super) scc_block: usize, // an offset into the OR stack for setup_call_cleanup/3.
     pub(super) ball: Ball,
     pub(super) ball_stack: Vec<Ball>, // save current ball before jumping via, e.g., verify_attr interrupt.
     pub(super) lifted_heap: Heap,
     pub(super) interms: Vec<Number>, // intermediate numbers.
-    // locations of cleaners, cut points, the previous block. for setup_call_cleanup.
+    // locations of cleaners, cut points, the previous scc_block. for setup_call_cleanup/3.
     pub(super) cont_pts: Vec<(HeapCellValue, usize, usize)>,
     pub(super) cwil: CWIL,
     pub(crate) flags: MachineFlags,
@@ -112,6 +113,7 @@ impl fmt::Debug for MachineState {
             .field("tr", &self.tr)
             .field("hb", &self.hb)
             .field("block", &self.block)
+            .field("scc_block", &self.scc_block)
             .field("ball", &self.ball)
             .field("ball_stack", &self.ball_stack)
             .field("lifted_heap", &self.lifted_heap)

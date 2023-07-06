@@ -47,6 +47,7 @@ impl MachineState {
             tr: 0,
             hb: 0,
             block: 0,
+            scc_block: 0,
             ball: Ball::new(),
             ball_stack: vec![],
             lifted_heap: Heap::new(),
@@ -328,6 +329,11 @@ impl MachineState {
         unifier.unify_internal();
     }
 
+    #[inline(always)]
+    pub(super) fn effective_block(&self) -> usize {
+        std::cmp::max(self.block, self.scc_block)
+    }
+
     pub(super) fn set_ball(&mut self) {
         self.ball.reset();
 
@@ -341,8 +347,9 @@ impl MachineState {
         );
     }
 
+    #[inline(always)]
     pub(super) fn unwind_stack(&mut self) {
-        self.b = self.block;
+        self.b = self.effective_block();
         self.fail = true;
     }
 
@@ -1435,17 +1442,6 @@ impl MachineState {
         compare_term_test!(self, h1, h2)
             .map(|o| o != Ordering::Equal)
             .unwrap_or(true)
-    }
-
-    pub fn reset_block(&mut self, addr: HeapCellValue) {
-        read_heap_cell!(self.store(addr),
-            (HeapCellValueTag::Fixnum, n) => {
-                self.block = n.get_num() as usize;
-            }
-            _ => {
-                self.fail = true;
-            }
-        )
     }
 
     #[inline(always)]
