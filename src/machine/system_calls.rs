@@ -3400,11 +3400,7 @@ impl Machine {
             let result = iter.read_char();
 
             match result {
-                Some(Ok(c)) => {
-                    self.machine_st.unify_char(c, addr);
-                    break;
-                }
-                _ => {
+                Some(Ok('\u{0}')) | Some(Err(_)) | None => {
                     self.machine_st.eof_action(
                         self.machine_st.registers[2],
                         stream,
@@ -3417,6 +3413,10 @@ impl Machine {
                     } else if self.machine_st.fail {
                         break;
                     }
+                }
+                Some(Ok(c)) => {
+                    self.machine_st.unify_char(c, addr);
+                    break;
                 }
             }
         }
