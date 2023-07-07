@@ -168,17 +168,32 @@ impl<'a, R: CharRead> Lexer<'a, R> {
 
             let mut c = self.lookahead_char()?;
 
-            loop {
-                while !comment_2_char!(c) {
+            let mut comment_loop = || {
+                loop {
+                    while !comment_2_char!(c) {
+                        self.skip_char(c);
+                        c = self.lookahead_char()?;
+                    }
+
                     self.skip_char(c);
                     c = self.lookahead_char()?;
+
+                    if comment_1_char!(c) {
+                        break;
+                    }
                 }
 
-                self.skip_char(c);
-                c = self.lookahead_char()?;
+                Ok(())
+            };
 
-                if comment_1_char!(c) {
-                    break;
+            match comment_loop() {
+                Err(ParserError::UnexpectedEOF) => {
+                    return Err(ParserError::IncompleteReduction(self.line_num, self.col_num));
+                }
+                Err(e) => {
+                    return Err(e);
+                }
+                Ok(_) => {
                 }
             }
 
