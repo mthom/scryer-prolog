@@ -925,7 +925,7 @@ impl MachineState {
 
         loop {
             match lexer.lookahead_char() {
-                Err(ParserError::UnexpectedEOF) => {
+                Err(e) if e.is_unexpected_eof() => {
                     let mut parser = Parser::from_lexer(lexer);
                     let op_dir = CompositeOpDir::new(&indices.op_dir, None);
 
@@ -3377,7 +3377,7 @@ impl Machine {
         }
 
         let stub_gen = || functor_stub(atom!("get_char"), 2);
-        let mut iter = self.machine_st.open_parsing_stream(stream, atom!("get_char"), 2)?;
+        let result = self.machine_st.open_parsing_stream(stream);
 
         let addr = if addr.is_var() {
             addr
@@ -3396,11 +3396,26 @@ impl Machine {
             )
         };
 
-        loop {
-            let result = iter.read_char();
+        let mut iter = match result {
+            Ok(iter) => iter,
+            Err(e) => {
+                if e.is_unexpected_eof() {
+                    self.machine_st.unify_atom(atom!("end_of_file"), addr);
+                    return Ok(());
+                } else {
+                    let err = self.machine_st.session_error(SessionError::from(e));
+                    return Err(self.machine_st.error_form(err, stub_gen()));
+                }
+            }
+        };
 
-            match result {
-                Some(Ok('\u{0}')) | Some(Err(_)) | None => {
+        loop {
+            match iter.read_char() {
+                Some(Ok(c)) => {
+                    self.machine_st.unify_char(c, addr);
+                    break;
+                }
+                _ => {
                     self.machine_st.eof_action(
                         self.machine_st.registers[2],
                         stream,
@@ -3413,10 +3428,6 @@ impl Machine {
                     } else if self.machine_st.fail {
                         break;
                     }
-                }
-                Some(Ok(c)) => {
-                    self.machine_st.unify_char(c, addr);
-                    break;
                 }
             }
         }
@@ -3459,7 +3470,13 @@ impl Machine {
                 string.push(c as char);
             }
         } else {
-            let mut iter = self.machine_st.open_parsing_stream(stream, atom!("get_n_chars"), 2)?;
+            let mut iter = self.machine_st.open_parsing_stream(stream)
+                .map_err(|e| {
+                    let err = self.machine_st.session_error(SessionError::from(e));
+                    let stub = functor_stub(atom!("get_n_chars"), 2);
+
+                    self.machine_st.error_form(err, stub)
+                })?;
 
             for _ in 0..num {
                 let result = iter.read_char();
@@ -3557,7 +3574,13 @@ impl Machine {
             }
         };
 
-        let mut iter = self.machine_st.open_parsing_stream(stream.clone(), atom!("get_code"), 2)?;
+        let mut iter = self.machine_st.open_parsing_stream(stream)
+            .map_err(|e| {
+                let err = self.machine_st.session_error(SessionError::from(e));
+                let stub = functor_stub(atom!("get_code"), 2);
+
+                self.machine_st.error_form(err, stub)
+            })?;
 
         loop {
             let result = iter.read_char();

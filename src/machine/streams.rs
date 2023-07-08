@@ -1523,20 +1523,10 @@ impl MachineState {
         }
     }
 
-    pub(crate) fn open_parsing_stream(
-        &mut self,
-        mut stream: Stream,
-        stub_name: Atom,
-        stub_arity: usize,
-    ) -> Result<Stream, MachineStub> {
+    pub(crate) fn open_parsing_stream(&mut self, mut stream: Stream) -> Result<Stream, ParserError> {
         match stream.peek_char() {
             None => Ok(stream), // empty stream is handled gracefully by Lexer::eof
-            Some(Err(e)) => {
-                let err = self.session_error(SessionError::from(e));
-                let stub = functor_stub(stub_name, stub_arity);
-
-                Err(self.error_form(err, stub))
-            }
+            Some(Err(e)) => Err(ParserError::IO(e)),
             Some(Ok(c)) => {
                 if c == '\u{feff}' {
                     // skip UTF-8 BOM

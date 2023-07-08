@@ -7,7 +7,7 @@ use crate::types::HeapCellValueTag;
 use std::cell::{Cell, Ref, RefCell, RefMut};
 use std::fmt;
 use std::hash::{Hash, Hasher};
-use std::io::{Error as IOError};
+use std::io::{Error as IOError, ErrorKind};
 use std::ops::{Deref, Neg};
 use std::rc::Rc;
 use std::vec::Vec;
@@ -380,7 +380,7 @@ pub enum ParserError {
     NonPrologChar(usize, usize),
     ParseBigInt(usize, usize),
     UnexpectedChar(char, usize, usize),
-    UnexpectedEOF,
+    // UnexpectedEOF,
     Utf8Error(usize, usize),
 }
 
@@ -403,14 +403,28 @@ impl ParserError {
             ParserError::BackQuotedString(..) => atom!("back_quoted_string"),
             ParserError::IncompleteReduction(..) => atom!("incomplete_reduction"),
             ParserError::InvalidSingleQuotedCharacter(..) => atom!("invalid_single_quoted_character"),
+            ParserError::IO(e) if e.kind() == ErrorKind::UnexpectedEof => atom!("unexpected_end_of_file"),
             ParserError::IO(_) => atom!("input_output_error"),
-            ParserError::LexicalError(_) => atom!("lexical_error"), // TODO: ?
+            ParserError::LexicalError(_) => atom!("lexical_error"),
             ParserError::MissingQuote(..) => atom!("missing_quote"),
             ParserError::NonPrologChar(..) => atom!("non_prolog_character"),
             ParserError::ParseBigInt(..) => atom!("cannot_parse_big_int"),
             ParserError::UnexpectedChar(..) => atom!("unexpected_char"),
-            ParserError::UnexpectedEOF => atom!("unexpected_end_of_file"),
             ParserError::Utf8Error(..) => atom!("utf8_conversion_error"),
+        }
+    }
+
+    #[inline]
+    pub fn unexpected_eof() -> Self {
+        ParserError::IO(std::io::Error::from(ErrorKind::UnexpectedEof))
+    }
+
+    #[inline]
+    pub fn is_unexpected_eof(&self) -> bool {
+        if let ParserError::IO(e) = self {
+            e.kind() == ErrorKind::UnexpectedEof
+        } else {
+            false
         }
     }
 }

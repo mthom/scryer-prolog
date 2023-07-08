@@ -680,7 +680,6 @@ impl CompilationError {
                 functor!(atom!("no_such_module"), [atom(module_name)])
             }
             &CompilationError::InvalidRuleHead => {
-                
                 functor!(atom!("invalid_head_of_rule")) // TODO: type_error(callable, _).
             }
             &CompilationError::InvalidUseModuleDecl => {

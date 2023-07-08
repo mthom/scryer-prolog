@@ -634,21 +634,24 @@ impl MachineState {
                     return Ok(unify_fn!(*self, var_names_offset, var_names_addr));
                 }
                 Err(err) => {
-                    if let CompilationError::ParserError(ParserError::UnexpectedEOF) = err {
-                        self.eof_action(
-                            self.registers[2],
-                            stream,
-                            atom!("read_term"),
-                            3,
-                        )?;
+                    match err {
+                        CompilationError::ParserError(e) if e.is_unexpected_eof() => {
+                            self.eof_action(
+                                self.registers[2],
+                                stream,
+                                atom!("read_term"),
+                                3,
+                            )?;
 
-                        if stream.options().eof_action() == EOFAction::Reset {
-                            if self.fail == false {
-                                continue;
+                            if stream.options().eof_action() == EOFAction::Reset {
+                                if self.fail == false {
+                                    continue;
+                                }
                             }
-                        }
 
-                        return Ok(());
+                            return Ok(());
+                        }
+                        _ => {}
                     }
 
                     let stub = functor_stub(atom!("read_term"), 3);

@@ -150,7 +150,7 @@ impl ReadlineStream {
 
                 Ok(self.pending_input.get_ref().get_ref().len())
             }
-            Err(ReadlineError::Eof) => Ok(0),
+            Err(ReadlineError::Eof) => Err(Error::from(ErrorKind::UnexpectedEof)),
             Err(e) => Err(Error::new(ErrorKind::InvalidInput, e)),
         }
     }
@@ -178,19 +178,12 @@ impl ReadlineStream {
 
         loop {
             match byte {
-                Some(0) => {
-                    return Ok(0);
-                }
                 Some(b) => {
                     return Ok(b);
                 }
                 None => match self.call_readline() {
                     Err(e) => {
                         return Err(e);
-                    }
-                    Ok(0) => {
-                        self.pending_input.get_mut().get_mut().push('\u{0}');
-                        return Ok(0);
                     }
                     _ => {
                         set_prompt(false);
@@ -218,9 +211,6 @@ impl CharRead for ReadlineStream {
     fn peek_char(&mut self) -> Option<std::io::Result<char>> {
         loop {
             match self.pending_input.peek_char() {
-                Some(Ok('\u{0}')) => {
-                    return Some(Ok('\u{0}'));
-                }
                 Some(Ok(c)) => {
                     return Some(Ok(c));
                 }
@@ -228,10 +218,6 @@ impl CharRead for ReadlineStream {
                     match self.call_readline() {
                         Err(e) => {
                             return Some(Err(e));
-                        }
-                        Ok(0) => {
-                            self.pending_input.get_mut().get_mut().push('\u{0}');
-                            return Some(Ok('\u{0}'));
                         }
                         _ => {
                             set_prompt(false);

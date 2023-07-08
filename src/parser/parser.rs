@@ -275,7 +275,7 @@ fn read_tokens<R: CharRead>(lexer: &mut Lexer<R>) -> Result<Vec<Token>, ParserEr
                     break;
                 }
             }
-            Err(ParserError::UnexpectedEOF) if !tokens.is_empty() => {
+            Err(e) if e.is_unexpected_eof() && !tokens.is_empty() => {
                 return Err(ParserError::IncompleteReduction(
                     lexer.line_num,
                     lexer.col_num,
@@ -883,7 +883,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
         }) = get_op_desc(name, op_dir)
         {
             if (pre > 0 && inf + post > 0) || is_negate!(spec) {
-                match self.tokens.last().ok_or(ParserError::UnexpectedEOF)? {
+                match self.tokens.last().ok_or(ParserError::unexpected_eof())? {
                     // do this when layout hasn't been inserted,
                     // ie. why we don't match on Token::Open.
                     Token::OpenCT => {

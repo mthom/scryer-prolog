@@ -18,7 +18,7 @@ macro_rules! is_not_eof {
                 return Ok(true);
             }
             Ok(c) => c,
-            Err($crate::parser::ast::ParserError::UnexpectedEOF) => return Ok(true),
+            Err(e) if e.is_unexpected_eof() => return Ok(true),
             Err(e) => return Err(e),
         }
     };
@@ -94,14 +94,14 @@ impl<'a, R: CharRead> Lexer<'a, R> {
     pub fn lookahead_char(&mut self) -> Result<char, ParserError> {
         match self.reader.peek_char() {
             Some(Ok(c)) => Ok(c),
-            _ => Err(ParserError::UnexpectedEOF)
+            _ => Err(ParserError::unexpected_eof())
         }
     }
 
     pub fn read_char(&mut self) -> Result<char, ParserError> {
         match self.reader.read_char() {
             Some(Ok(c)) => Ok(c),
-            _ => Err(ParserError::UnexpectedEOF)
+            _ => Err(ParserError::unexpected_eof())
         }
     }
 
@@ -168,7 +168,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
 
             let mut c = self.lookahead_char()?;
 
-            let mut comment_loop = || {
+            let mut comment_loop = || -> Result<(), ParserError> {
                 loop {
                     while !comment_2_char!(c) {
                         self.skip_char(c);
@@ -187,7 +187,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
             };
 
             match comment_loop() {
-                Err(ParserError::UnexpectedEOF) => {
+                Err(e) if e.is_unexpected_eof() => {
                     return Err(ParserError::IncompleteReduction(self.line_num, self.col_num));
                 }
                 Err(e) => {
@@ -1003,7 +1003,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
 
                             return Ok(Token::End);
                         }
-                        Err(ParserError::UnexpectedEOF) => {
+                        Err(e) if e.is_unexpected_eof() => {
                             return Ok(Token::End);
                         }
                         _ => {
@@ -1055,7 +1055,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                 }
 
                 if c == '\u{0}' {
-                    return Err(ParserError::UnexpectedEOF);
+                    return Err(ParserError::unexpected_eof())
                 }
 
                 self.name_token(c)

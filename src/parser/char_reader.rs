@@ -117,8 +117,6 @@ impl<R: Read> CharReader<R> {
         // Branch using `>=` instead of the more correct `==`
         // to tell the compiler that the pos..cap slice is always valid.
         if self.pos >= self.buf.len() {
-            debug_assert!(self.pos >= self.buf.len());
-
             self.buf.clear();
 
             let mut word = [0u8; std::mem::size_of::<char>()];

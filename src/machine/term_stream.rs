@@ -125,15 +125,15 @@ pub struct InlineTermStream {
 
 impl TermStream for InlineTermStream {
     fn next(&mut self, _: &CompositeOpDir) -> Result<Term, CompilationError> {
-	Err(CompilationError::from(ParserError::UnexpectedEOF))
+	    Err(CompilationError::from(ParserError::unexpected_eof()))
     }
 
     fn eof(&mut self) -> Result<bool, CompilationError> {
-	Ok(true)
+	    Ok(true)
     }
 
     fn listing_src(&self) -> &ListingSource {
-	&ListingSource::User
+	    &ListingSource::User
     }
 }
 
