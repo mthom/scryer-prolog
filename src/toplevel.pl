@@ -83,7 +83,7 @@ print_help :-
 
 print_version :-
     '$scryer_prolog_version'(Version),
-    write(Version), nl,
+    maplist(put_char, Version), nl,
     halt.
 
 gather_goal(Type, Args0, Goals) :-
