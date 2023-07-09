@@ -680,6 +680,26 @@ not need additional tools and formalisms for its application, and
 further, it encourages declarative reasoning that can in principle
 also be performed automatically.
 
+## Applications
+
+Scryer Prolog's strong commitment to the Prolog ISO standard makes it
+ideally suited for use in corporations and government&nbsp;agencies
+that are subject to strict regulations pertaining to interoperability,
+standards&nbsp;compliance and warranty.
+
+Successful existing applications of Scryer Prolog include the
+[DocLog](https://github.com/aarroyoc/doclog)&nbsp;system which
+generates Scryer's own documentation and homepage, [Symbolic
+Analysis of Grants](https://www.brz.gv.at/en/BRZ-Tech-Blog/Tech-Blog-7-Symbolic-Analysis-of-Grants.html)
+by the Austrian Federal Computing Center, and parts of the
+[precautionary](https://github.com/dcnorris/precautionary/tree/main/exec/prolog)
+package for the analysis of dose-escalation trials in the
+safety-critical and highly regulated domain of clinical&nbsp;oncology.
+
+Scryer Prolog is also very well suited for teaching and learning
+Prolog, and for testing syntactic conformance and hence portability of
+existing Prolog&nbsp;programs.
+
 ## Support and discussions
 
 If Scryer Prolog crashes or yields unexpected errors, consider filing
