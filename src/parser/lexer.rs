@@ -24,9 +24,9 @@ macro_rules! consume_chars_with {
 }
 
 #[derive(Debug, Default)]
-pub struct LayoutInfo {
-    pub inserted: bool,
-    pub more: bool,
+struct LayoutInfo {
+    inserted: bool,
+    more: bool,
 }
 
 #[derive(Debug, PartialEq)]
@@ -909,7 +909,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
         }
     }
 
-    pub fn consume_layout(
+    fn consume_layout(
         &mut self,
         c: Option<char>,
         layout_info: &mut LayoutInfo,
@@ -938,19 +938,28 @@ impl<'a, R: CharRead> Lexer<'a, R> {
         Ok(())
     }
 
-    fn scan_for_layout(&mut self) -> Result<bool, ParserError> {
-        let mut layout_info = LayoutInfo { inserted: false, more: true };
+    pub fn scan_for_layout(&mut self) -> Result<bool, ParserError> {
+        match self.lookahead_char() {
+            Err(e) => {
+                Err(e)
+            }
+            Ok(c) => {
+                let mut layout_info = LayoutInfo { inserted: false, more: true };
+                let mut cr = Some(c);
 
-        loop {
-            let cr = self.lookahead_char();
-            self.consume_layout(cr.ok(), &mut layout_info)?;
+                loop {
+                    self.consume_layout(cr, &mut layout_info)?;
 
-            if !layout_info.more {
-                break;
+                    if !layout_info.more {
+                        break;
+                    }
+
+                    cr = self.lookahead_char().ok();
+                }
+
+                Ok(layout_info.inserted)
             }
         }
-
-        Ok(layout_info.inserted)
     }
 
     pub fn next_token(&mut self) -> Result<Token, ParserError> {

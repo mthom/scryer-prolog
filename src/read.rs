@@ -25,12 +25,12 @@ use std::io::{Cursor, Error, ErrorKind, Read};
 type SubtermDeque = VecDeque<(usize, usize)>;
 
 pub(crate) fn devour_whitespace<'a, R: CharRead>(parser: &mut Parser<'a, R>) -> Result<bool, ParserError> {
-    match parser.devour_whitespace() {
+    match parser.lexer.scan_for_layout() {
         Err(e) if e.is_unexpected_eof() => {
             Ok(true)
         }
         Err(e) => Err(e),
-        Ok(()) => {
+        Ok(_) => {
             Ok(false)
         }
     }

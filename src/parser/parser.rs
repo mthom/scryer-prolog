@@ -620,30 +620,6 @@ impl<'a, R: CharRead> Parser<'a, R> {
         false
     }
 
-    pub fn devour_whitespace(&mut self) -> Result<(), ParserError> {
-        match self.lexer.lookahead_char() {
-            Err(e) => { // if e.is_unexpected_eof() => {
-                return Err(e);
-            }
-            Ok(c) => {
-                let mut layout_info = LayoutInfo { inserted: false, more: true };
-                let mut cr = Some(c);
-
-                loop {
-                    self.lexer.consume_layout(cr, &mut layout_info)?;
-
-                    if !layout_info.more {
-                        break;
-                    }
-
-                    cr = self.lexer.lookahead_char().ok();
-                }
-            }
-        }
-
-        Ok(())
-    }
-
     pub fn reset(&mut self) {
         self.stack.clear()
     }
