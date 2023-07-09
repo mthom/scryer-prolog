@@ -280,7 +280,7 @@ write_eq(G, VarList, MaxDepth) :-
     write_last_goal(G, VarList, MaxDepth).
 
 graphic_token_char(C) :-
-    memberchk(C, [#, $, &, *, +, -, ., /, :, <, =, >, ?, @, ^, ~, \\]).
+    memberchk(C, [#, $, &, *, +, -, ., /, :, <, =, >, ?, @, ^, ~, \]).
 
 list_last_item([C], C) :- !.
 list_last_item([_|Cs], D) :-
