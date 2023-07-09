@@ -3400,8 +3400,12 @@ impl Machine {
             Ok(iter) => iter,
             Err(e) => {
                 if e.is_unexpected_eof() {
-                    self.machine_st.unify_atom(atom!("end_of_file"), addr);
-                    return Ok(());
+                    return self.machine_st.eof_action(
+                        self.machine_st.registers[2],
+                        stream,
+                        atom!("get_char"),
+                        2,
+                    );
                 } else {
                     let err = self.machine_st.session_error(SessionError::from(e));
                     return Err(self.machine_st.error_form(err, stub_gen()));
