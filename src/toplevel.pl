@@ -152,7 +152,6 @@ expand_op_list([Op | OtherOps], Pred, Spec, [(:- op(Pred, Spec, Op)) | OtherResu
 
 
 read_and_match :-
-    '$debug_hook',
     '$read_query_term'(_, Term, _, _, VarList),
     instruction_match(Term, VarList).
 
