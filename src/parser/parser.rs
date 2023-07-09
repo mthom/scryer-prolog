@@ -621,7 +621,26 @@ impl<'a, R: CharRead> Parser<'a, R> {
     }
 
     pub fn devour_whitespace(&mut self) -> Result<(), ParserError> {
-        self.lexer.scan_for_layout()?;
+        match self.lexer.lookahead_char() {
+            Err(e) => { // if e.is_unexpected_eof() => {
+                return Err(e);
+            }
+            Ok(c) => {
+                let mut layout_info = LayoutInfo { inserted: false, more: true };
+                let mut cr = Some(c);
+
+                loop {
+                    self.lexer.consume_layout(cr, &mut layout_info)?;
+
+                    if !layout_info.more {
+                        break;
+                    }
+
+                    cr = self.lexer.lookahead_char().ok();
+                }
+            }
+        }
+
         Ok(())
     }
 
@@ -1049,11 +1068,6 @@ impl<'a, R: CharRead> Parser<'a, R> {
         }
 
         Ok(())
-    }
-
-    #[inline]
-    pub fn eof(&mut self) -> Result<bool, ParserError> {
-        self.lexer.eof()
     }
 
     #[inline]

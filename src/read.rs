@@ -24,19 +24,19 @@ use std::io::{Cursor, Error, ErrorKind, Read};
 
 type SubtermDeque = VecDeque<(usize, usize)>;
 
-impl MachineState {
-    pub(crate) fn devour_whitespace(
-        &mut self,
-        mut inner: Stream,
-    ) -> Result<bool, ParserError> {
-        let mut parser = Parser::new(inner, self);
-
-        parser.devour_whitespace()?;
-        inner.add_lines_read(parser.lines_read());
-
-        parser.eof()
+pub(crate) fn devour_whitespace<'a, R: CharRead>(parser: &mut Parser<'a, R>) -> Result<bool, ParserError> {
+    match parser.devour_whitespace() {
+        Err(e) if e.is_unexpected_eof() => {
+            Ok(true)
+        }
+        Err(e) => Err(e),
+        Ok(()) => {
+            Ok(false)
+        }
     }
+}
 
+impl MachineState {
     pub(crate) fn read(
         &mut self,
         mut inner: Stream,

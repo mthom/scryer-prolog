@@ -7469,17 +7469,21 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn devour_whitespace(&mut self) -> CallResult {
-        let stream = self.machine_st.get_stream_or_alias(
+        let mut stream = self.machine_st.get_stream_or_alias(
             self.machine_st.registers[1],
             &self.indices.stream_aliases,
             atom!("$devour_whitespace"),
             1,
         )?;
 
-        match self.machine_st.devour_whitespace(stream) {
+        let mut parser = Parser::new(stream, &mut self.machine_st);
+
+        match devour_whitespace(&mut parser) {
             Ok(false) => { // not at EOF.
+                stream.add_lines_read(parser.lines_read());
             }
             Ok(true) => {
+                stream.add_lines_read(parser.lines_read());
                 self.machine_st.fail = true;
             }
             Err(err) => {

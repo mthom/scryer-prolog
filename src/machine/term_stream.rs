@@ -5,6 +5,7 @@ use crate::machine::loader::*;
 use crate::machine::machine_errors::*;
 use crate::parser::ast::*;
 use crate::parser::parser::*;
+use crate::read::devour_whitespace;
 
 use crate::predicate_queue;
 
@@ -58,8 +59,8 @@ impl<'a> TermStream for BootstrappingTermStream<'a> {
 
     #[inline]
     fn eof(&mut self) -> Result<bool, CompilationError> {
-        self.parser.devour_whitespace()?; // eliminate dangling comments before checking for EOF.
-        Ok(self.parser.eof()?)
+        devour_whitespace(&mut self.parser) // eliminate dangling comments before checking for EOF.
+            .map_err(CompilationError::from)
     }
 
     #[inline]
@@ -111,7 +112,7 @@ impl TermStream for LiveTermStream {
 
     #[inline]
     fn eof(&mut self) -> Result<bool, CompilationError> {
-        return Ok(self.term_queue.is_empty());
+        Ok(self.term_queue.is_empty())
     }
 
     #[inline]

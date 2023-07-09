@@ -10,20 +10,6 @@ use crate::parser::rug::Integer;
 use std::convert::TryFrom;
 use std::fmt;
 
-macro_rules! is_not_eof {
-    ($parser:expr, $c:expr) => {
-        match $c {
-            Ok('\u{0}') => {
-                $parser.consume('\u{0}'.len_utf8());
-                return Ok(true);
-            }
-            Ok(c) => c,
-            Err(e) if e.is_unexpected_eof() => return Ok(true),
-            Err(e) => return Err(e),
-        }
-    };
-}
-
 macro_rules! consume_chars_with {
     ($token:expr, $e:expr) => {
         loop {
@@ -35,6 +21,12 @@ macro_rules! consume_chars_with {
             }
         }
     };
+}
+
+#[derive(Debug, Default)]
+pub struct LayoutInfo {
+    pub inserted: bool,
+    pub more: bool,
 }
 
 #[derive(Debug, PartialEq)]
@@ -119,18 +111,6 @@ impl<'a, R: CharRead> Lexer<'a, R> {
         } else {
             self.col_num += 1;
         }
-    }
-
-    pub fn eof(&mut self) -> Result<bool, ParserError> {
-        let mut c = is_not_eof!(self.reader, self.lookahead_char());
-
-        while layout_char!(c) {
-            self.skip_char(c);
-
-            c = is_not_eof!(self.reader, self.lookahead_char());
-        }
-
-        Ok(false)
     }
 
     fn single_line_comment(&mut self) -> Result<(), ParserError> {
@@ -929,38 +909,48 @@ impl<'a, R: CharRead> Lexer<'a, R> {
         }
     }
 
-    pub fn scan_for_layout(&mut self) -> Result<bool, ParserError> {
-        let mut layout_inserted = false;
-        let mut more_layout = true;
+    pub fn consume_layout(
+        &mut self,
+        c: Option<char>,
+        layout_info: &mut LayoutInfo,
+    ) -> Result<(), ParserError> {
+        match c {
+            Some(c) if layout_char!(c) => {
+                self.skip_char(c);
+                layout_info.inserted = true;
+            }
+            Some(c) if end_line_comment_char!(c) => {
+                self.single_line_comment()?;
+                layout_info.inserted = true;
+            }
+            Some(c) if comment_1_char!(c) => {
+                if self.bracketed_comment()? {
+                    layout_info.inserted = true;
+                } else {
+                    layout_info.more = false;
+                }
+            }
+            _ => {
+                layout_info.more = false;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn scan_for_layout(&mut self) -> Result<bool, ParserError> {
+        let mut layout_info = LayoutInfo { inserted: false, more: true };
 
         loop {
             let cr = self.lookahead_char();
+            self.consume_layout(cr.ok(), &mut layout_info)?;
 
-            match cr {
-                Ok(c) if layout_char!(c) => {
-                    self.skip_char(c);
-                    layout_inserted = true;
-                }
-                Ok(c) if end_line_comment_char!(c) => {
-                    self.single_line_comment()?;
-                    layout_inserted = true;
-                }
-                Ok(c) if comment_1_char!(c) => {
-                    if self.bracketed_comment()? {
-                        layout_inserted = true;
-                    } else {
-                        more_layout = false;
-                    }
-                }
-                _ => more_layout = false,
-            };
-
-            if !more_layout {
+            if !layout_info.more {
                 break;
             }
         }
 
-        Ok(layout_inserted)
+        Ok(layout_info.inserted)
     }
 
     pub fn next_token(&mut self) -> Result<Token, ParserError> {
