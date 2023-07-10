@@ -155,7 +155,6 @@ enum TraversalState {
     RemoveBranchNum, // pop the current_branch_num and from the root set.
     AddBranchNum(BranchNumber), // set current_branch_num, add it to the root set
     RepBranchNum(BranchNumber), // replace current_branch_num and the latest in the root set
-    // SetChunkType(ChunkType), // consider remaining terms as belonging to a last chunk
 }
 
 #[derive(Debug)]
@@ -214,25 +213,11 @@ impl VarData {
 pub type ClassifyFactResult = (Term, VarData);
 pub type ClassifyRuleResult = (Term, ChunkedTermVec, VarData);
 
-fn merge_branch_seq<Iter: Iterator<Item = BranchInfo>>(branches: Iter) -> BranchInfo {
+fn merge_branch_seq(branches: impl Iterator<Item = BranchInfo>) -> BranchInfo {
     let mut branch_info = BranchInfo::new(BranchNumber::default());
 
     for mut branch in branches {
         branch_info.branch_num = branch.branch_num;
-
-        /*
-        if let Some(last_chunk) = branch_info.chunks.last_mut() {
-            if let Some(first_moved_chunk) = branch.chunks.first_mut() {
-                if last_chunk.chunk_num == first_moved_chunk.chunk_num {
-                    last_chunk.vars.extend(first_moved_chunk.vars.drain(..));
-                    branch_info.chunks.extend(branch.chunks.drain(1 ..));
-
-                    continue;
-                }
-            }
-        }
-        */
-
         branch_info.chunks.extend(branch.chunks.drain(..));
     }
 
