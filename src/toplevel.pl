@@ -432,4 +432,25 @@ print_exception_with_check(E) :-
     ).
 
 run_input_once :-
-    catch(read_and_match, E, print_exception(E)).
+    bb_put('$report_all', true),
+    catch(read_and_match_all_results, E, print_exception(E)).
+
+read_and_match_all_results :-
+    '$read_query_term'(_, Term, _, _, VarList),
+    bb_put('$answer_count', 0),
+    submit_query_and_print_all_results(Term, VarList).
+
+submit_query_and_print_all_results(Term, VarList) :-
+    '$get_b_value'(B),
+    bb_put('$report_all', true),
+    bb_put('$report_n_more', 0),
+    call(user:Term),
+    write_eqs_and_read_input(B, VarList),
+    !.
+submit_query_and_print_all_results(_, _) :-
+    (   bb_get('$answer_count', 0) ->
+        write('   ')
+    ;   true
+    ),
+    write('false.'),
+    nl.
