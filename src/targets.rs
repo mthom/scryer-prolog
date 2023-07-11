@@ -16,7 +16,7 @@ pub(crate) trait CompilationTarget<'a> {
 
     fn to_constant(lvl: Level, literal: Literal, r: RegType) -> Instruction;
     fn to_list(lvl: Level, r: RegType) -> Instruction;
-    fn to_structure(name: Atom, arity: usize, r: RegType) -> Instruction;
+    fn to_structure(lvl: Level, name: Atom, arity: usize, r: RegType) -> Instruction;
 
     fn to_void(num_subterms: usize) -> Instruction;
     fn is_void_instr(instr: &Instruction) -> bool;
@@ -51,8 +51,8 @@ impl<'a> CompilationTarget<'a> for FactInstruction {
         Instruction::GetConstant(lvl, HeapCellValue::from(constant), reg)
     }
 
-    fn to_structure(name: Atom, arity: usize, reg: RegType) -> Instruction {
-        Instruction::GetStructure(name, arity, reg)
+    fn to_structure(lvl: Level, name: Atom, arity: usize, reg: RegType) -> Instruction {
+        Instruction::GetStructure(lvl, name, arity, reg)
     }
 
     fn to_list(lvl: Level, reg: RegType) -> Instruction {
@@ -125,7 +125,7 @@ impl<'a> CompilationTarget<'a> for QueryInstruction {
         post_order_iter(term)
     }
 
-    fn to_structure(name: Atom, arity: usize, r: RegType) -> Instruction {
+    fn to_structure(_lvl: Level, name: Atom, arity: usize, r: RegType) -> Instruction {
         Instruction::PutStructure(name, arity, r)
     }
 
