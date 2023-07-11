@@ -307,6 +307,10 @@ impl Machine {
         self.run_module_predicate(atom!("$toplevel"), (atom!("$repl"), 1));
     }
 
+    pub fn run_input_once(&mut self) {
+        self.run_module_predicate(atom!("$toplevel"), (atom!("run_input_once"), 0));
+    }
+
     pub fn set_user_input(&mut self, input: String) {
         self.user_input = Stream::from_owned_string(input, &mut self.machine_st.arena);
     }
