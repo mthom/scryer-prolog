@@ -202,7 +202,7 @@ impl Stack {
                 offset += mem::size_of::<HeapCellValue>();
             }
 
-            let and_frame = &mut *(new_ptr as *mut AndFrame);
+            let and_frame = self.index_and_frame_mut(e);
             and_frame.prelude.num_cells = num_cells;
 
             e
@@ -226,7 +226,7 @@ impl Stack {
                 offset += mem::size_of::<HeapCellValue>();
             }
 
-            let or_frame = &mut *(new_ptr as *mut OrFrame);
+            let or_frame = self.index_or_frame_mut(b);
             or_frame.prelude.num_cells = num_cells;
 
             b

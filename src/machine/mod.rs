@@ -690,8 +690,6 @@ impl Machine {
     fn try_call(&mut self, name: Atom, arity: usize, idx: IndexPtr) -> CallResult {
         let compiled_tl_index = idx.p() as usize;
 
-        // println!("calling {}/{}", name.as_str(), arity);
-
         match idx.tag() {
             IndexPtrTag::DynamicUndefined => {
                 self.machine_st.fail = true;
@@ -714,8 +712,6 @@ impl Machine {
     #[inline(always)]
     fn try_execute(&mut self, name: Atom, arity: usize, idx: IndexPtr) -> CallResult {
         let compiled_tl_index = idx.p() as usize;
-
-        // println!("executing {}/{}", name.as_str(), arity);
 
         match idx.tag() {
             IndexPtrTag::DynamicUndefined => {
