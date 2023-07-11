@@ -598,7 +598,7 @@ enum InstructionTemplate {
     #[strum_discriminants(strum(props(Arity = "4", Name = "get_partial_string")))]
     GetPartialString(Level, Atom, RegType, bool),
     #[strum_discriminants(strum(props(Arity = "3", Name = "get_structure")))]
-    GetStructure(Atom, usize, RegType),
+    GetStructure(Level, Atom, usize, RegType),
     #[strum_discriminants(strum(props(Arity = "2", Name = "get_variable")))]
     GetVariable(RegType, usize),
     #[strum_discriminants(strum(props(Arity = "2", Name = "get_value")))]
@@ -2105,13 +2105,14 @@ fn generate_instruction_preface() -> TokenStream {
                             [lvl_stub, rt_stub]
                         )
                     }
-                    &Instruction::GetStructure(name, arity, r) => {
+                    &Instruction::GetStructure(lvl, name, arity, r) => {
+                        let lvl_stub = lvl.into_functor();
                         let rt_stub = reg_type_into_functor(r);
 
                         functor!(
                             atom!("get_structure"),
-                            [atom(name), fixnum(arity), str(h, 0)],
-                            [rt_stub]
+                            [str(h, 0), atom(name), fixnum(arity), str(h, 1)],
+                            [lvl_stub, rt_stub]
                         )
                     }
                     &Instruction::GetValue(r, arg) => {

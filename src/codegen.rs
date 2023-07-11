@@ -309,7 +309,7 @@ impl DebrayAllocator {
 fn trim_structure_by_last_arg(instr: &mut Instruction, last_arg: &Term) {
     match instr {
         Instruction::PutStructure(_, ref mut arity, _) |
-        Instruction::GetStructure(_, ref mut arity, _) => {
+        Instruction::GetStructure(.., ref mut arity, _) => {
             if let Term::Literal(_, Literal::CodeIndex(_)) = last_arg {
                 // it is acceptable if arity == 0 is the result of
                 // this decrement. call/N will have to read the index
@@ -447,7 +447,7 @@ impl<'b> CodeGenerator<'b> {
                 }
                 TermRef::Clause(lvl, cell, name, terms) => {
                     self.marker.mark_non_var::<Target>(lvl, term_loc, cell, &mut target);
-                    target.push_back(Target::to_structure(name, terms.len(), cell.get()));
+                    target.push_back(Target::to_structure(lvl, name, terms.len(), cell.get()));
 
                     <CodeGenerator<'b> as AddToFreeList<'a, Target>>::add_term_to_free_list(self, cell.get());
 

@@ -858,65 +858,6 @@ impl MachineState {
             }
         );
     }
-
-    #[inline(always)]
-    pub(super) fn try_me_else(&mut self, offset: usize) {
-        let n = self.num_of_args;
-        let b = self.stack.allocate_or_frame(n);
-        let or_frame = self.stack.index_or_frame_mut(b);
-
-        or_frame.prelude.num_cells = n;
-        or_frame.prelude.e = self.e;
-        or_frame.prelude.cp = self.cp;
-        or_frame.prelude.b = self.b;
-        or_frame.prelude.bp = self.p + offset;
-        or_frame.prelude.boip = 0;
-        or_frame.prelude.biip = 0;
-        or_frame.prelude.tr = self.tr;
-        or_frame.prelude.h = self.heap.len();
-        or_frame.prelude.b0 = self.b0;
-        or_frame.prelude.attr_var_queue_len = self.attr_var_init.attr_var_queue.len();
-
-        self.b = b;
-
-        for i in 0..n {
-            or_frame[i] = self.registers[i+1];
-        }
-
-        self.hb = self.heap.len();
-        self.p += 1;
-    }
-
-    #[inline(always)]
-    pub(super) fn indexed_try(&mut self, offset: usize) {
-        let n = self.num_of_args;
-        let b = self.stack.allocate_or_frame(n);
-        let or_frame = self.stack.index_or_frame_mut(b);
-
-        or_frame.prelude.num_cells = n;
-        or_frame.prelude.e = self.e;
-        or_frame.prelude.cp = self.cp;
-        or_frame.prelude.b = self.b;
-        or_frame.prelude.bp = self.p; // + 1; in self.iip now!
-        or_frame.prelude.boip = self.oip;
-        or_frame.prelude.biip = self.iip + 1;
-        or_frame.prelude.tr = self.tr;
-        or_frame.prelude.h = self.heap.len();
-        or_frame.prelude.b0 = self.b0;
-        or_frame.prelude.attr_var_queue_len = self.attr_var_init.attr_var_queue.len();
-
-        self.b = b;
-
-        for i in 0..n {
-            or_frame[i] = self.registers[i+1];
-        }
-
-        self.hb = self.heap.len();
-        self.p = self.p + offset;
-
-        self.oip = 0;
-        self.iip = 0;
-    }
 }
 
 #[derive(Debug)]

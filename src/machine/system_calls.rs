@@ -1277,7 +1277,7 @@ impl Machine {
     }
 
     #[inline(always)]
-    pub(crate) fn deref_register(&mut self, i: usize) -> HeapCellValue {
+    pub(crate) fn deref_register(&self, i: usize) -> HeapCellValue {
 	    self.machine_st.store(self.machine_st.deref(self.machine_st.registers[i]))
     }
 
