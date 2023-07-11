@@ -320,6 +320,17 @@ impl Machine {
         String::from_utf8(output_bytes).unwrap()
     }
 
+    pub fn load_module_string(&mut self, module_name: &str, program: String) {
+        let stream = Stream::from_owned_string(program, &mut self.machine_st.arena);
+        self.load_file(module_name, stream);
+    }
+
+    pub fn run_query(&mut self, query: String) -> String{
+        self.set_user_input(query);
+        self.run_input_once();
+        self.get_user_output()
+    }
+
     pub(crate) fn configure_modules(&mut self) {
         fn update_call_n_indices(loader: &Module, target_code_dir: &mut CodeDir, arena: &mut Arena) {
             for arity in 1..66 {
