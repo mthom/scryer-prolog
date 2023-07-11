@@ -360,7 +360,6 @@ impl Machine {
 
     pub fn parse_output(&self) -> QueryResult {
         let output = self.get_user_output();
-        println!("parse_output output: {:?}", output);
         let parsed_lines = output.split(";")
             .map(|s| s.trim())
             .map(|s| s.replace(".", ""))
@@ -386,8 +385,6 @@ impl Machine {
                 }
             })
             .collect::<Vec<QueryResultLine>>();
-
-        println!("parsed_lines: {:?}", parsed_lines);
 
         // If there is only one line, and it is true or false, return that.
         if parsed_lines.len() == 1 {
