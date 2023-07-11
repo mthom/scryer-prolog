@@ -495,6 +495,10 @@ impl MachineState {
             }
         }
 
+        if let Stream::Byte(_) = stream {
+            return self.read_term(stream, indices)
+        }
+
         unreachable!("Stream must be a Stream::Readline(_)")
     }
 

@@ -47,6 +47,7 @@ use ordered_float::OrderedFloat;
 
 use std::cmp::Ordering;
 use std::env;
+use std::io::Read;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use tokio::runtime::Runtime;
@@ -304,6 +305,15 @@ impl Machine {
         );
 
         self.run_module_predicate(atom!("$toplevel"), (atom!("$repl"), 1));
+    }
+
+    pub fn set_user_input(&mut self, input: String) {
+        self.user_input = Stream::from_owned_string(input, &mut self.machine_st.arena);
+    }
+
+    pub fn get_user_output(&mut self) -> String {
+        let output_bytes: Vec<_> = self.user_output.bytes().map(|b| b.unwrap()).collect();
+        String::from_utf8(output_bytes).unwrap()
     }
 
     pub(crate) fn configure_modules(&mut self) {
