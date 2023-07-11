@@ -46,6 +46,7 @@ use lazy_static::lazy_static;
 use ordered_float::OrderedFloat;
 
 use std::cmp::Ordering;
+use std::collections::BTreeMap;
 use std::env;
 use std::io::Read;
 use std::path::PathBuf;
@@ -178,6 +179,32 @@ pub(crate) fn get_structure_index(value: HeapCellValue) -> Option<CodeIndex> {
     );
 
     None
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum QueryResult {
+    True,
+    False,
+    Matches(Vec<QueryResultLine>),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum QueryResultLine {
+    True,
+    False,
+    Match(BTreeMap<String, Value>),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Value {
+    Integer(Integer),
+    Rational(Rational),
+    Float(OrderedFloat<f64>),
+    Atom(Atom),
+    String(String),
+    List(Vec<Value>),
+    Structure(Atom, Vec<Value>),
+    Var,
 }
 
 impl Machine {
@@ -315,7 +342,7 @@ impl Machine {
         self.user_input = Stream::from_owned_string(input, &mut self.machine_st.arena);
     }
 
-    pub fn get_user_output(&mut self) -> String {
+    pub fn get_user_output(&self) -> String {
         let output_bytes: Vec<_> = self.user_output.bytes().map(|b| b.unwrap()).collect();
         String::from_utf8(output_bytes).unwrap()
     }
@@ -325,11 +352,128 @@ impl Machine {
         self.load_file(module_name, stream);
     }
 
-    pub fn run_query(&mut self, query: String) -> String{
+    pub fn run_query(&mut self, query: String) -> QueryResult{
         self.set_user_input(query);
         self.run_input_once();
-        self.get_user_output()
+        self.parse_output()
     }
+
+    pub fn parse_output(&self) -> QueryResult {
+        let output = self.get_user_output();
+        println!("parse_output output: {:?}", output);
+        let parsed_lines = output.split(";")
+            .map(|s| s.trim())
+            .map(|s| s.replace(".", ""))
+            .filter(|s| !s.is_empty())
+            .map(|s| {
+                match s.as_str() {
+                    "true" => QueryResultLine::True,
+                    "false" => QueryResultLine::False,
+                    _ => QueryResultLine::Match(
+                        s.split(",")
+                            .map(|s| s.trim())
+                            .filter(|s| !s.is_empty())
+                            .map(|s| {
+                                let mut iter = s.split(" = ");
+
+                                let key = iter.next().unwrap().to_string();
+                                let value = iter.next().unwrap().to_string();
+
+                                (key, Machine::parse_value(value))
+                            })
+                            .collect::<BTreeMap<_, _>>()
+                        )
+                }
+            })
+            .collect::<Vec<QueryResultLine>>();
+
+        println!("parsed_lines: {:?}", parsed_lines);
+
+        // If there is only one line, and it is true or false, return that.
+        if parsed_lines.len() == 1 {
+            match parsed_lines[0].clone() {
+                QueryResultLine::True => return QueryResult::True,
+                QueryResultLine::False => return QueryResult::False,
+                _ => {}
+            }
+        }
+
+        // If there is at least one line with true and no matches, return true.
+        if parsed_lines.iter().any(|l| l == &QueryResultLine::True)
+          && !parsed_lines.iter().any(|l| {
+            if let &QueryResultLine::Match(_) = l { true } else { false }
+        }) {
+            return QueryResult::True;
+        }
+
+        // If there is at least one match, return all matches.
+        if parsed_lines.iter().any(|l| {
+            if let &QueryResultLine::Match(_) = l { true } else { false }
+        }) {
+            let all_matches = parsed_lines.into_iter()
+                .filter(|l| {
+                    if let &QueryResultLine::Match(_) = l { true } else { false }
+                })
+                .collect::<Vec<_>>();
+            return QueryResult::Matches(all_matches);
+        }
+
+        QueryResult::False
+    }
+
+    pub fn parse_value(string: String) -> Value {
+        let trimmed = string.trim();
+
+        if trimmed.starts_with("'") && trimmed.ends_with("'") {
+            Value::String(trimmed[1..trimmed.len() - 1].into())
+        } else 
+        if trimmed.starts_with("\"") && trimmed.ends_with("\"") {
+            Value::String(trimmed[1..trimmed.len() - 1].into())
+        } else if trimmed.starts_with("[") && trimmed.ends_with("]") {
+            let mut iter = trimmed[1..trimmed.len() - 1].split(",");
+
+            let mut values = vec![];
+
+            while let Some(value) = iter.next() {
+                values.push(Machine::parse_value(value.to_string()));
+            }
+
+            Value::List(values)
+        } else if trimmed.starts_with("{") && trimmed.ends_with("}") {
+            let mut iter = trimmed[1..trimmed.len() - 1].split(",");
+
+            let mut values = vec![];
+
+            while let Some(value) = iter.next() {
+                let mut iter = value.split(":");
+
+                let key = iter.next().unwrap().to_string();
+                let value = iter.next().unwrap().to_string();
+
+                values.push(Machine::parse_value(value));
+            }
+
+            Value::Structure(atom!("{}"), values)
+        } else if trimmed.starts_with("<<") && trimmed.ends_with(">>") {
+            let mut iter = trimmed[2..trimmed.len() - 2].split(",");
+
+            let mut values = vec![];
+
+            while let Some(value) = iter.next() {
+                let mut iter = value.split(":");
+
+                let key = iter.next().unwrap().to_string();
+                let value = iter.next().unwrap().to_string();
+
+                values.push(Machine::parse_value(value));
+            }
+
+            Value::Structure(atom!("<<>>"), values)
+        } else {
+            Value::String(string)
+        }
+    }
+
 
     pub(crate) fn configure_modules(&mut self) {
         fn update_call_n_indices(loader: &Module, target_code_dir: &mut CodeDir, arena: &mut Arena) {
