@@ -11,7 +11,6 @@ use crate::machine::machine_indices::*;
 use crate::machine::machine_state::*;
 use crate::machine::partial_string::*;
 use crate::machine::stack::*;
-use crate::machine::Stream;
 use crate::machine::unify::*;
 use crate::parser::ast::*;
 use crate::parser::rug::{Integer, Rational};
@@ -522,14 +521,6 @@ impl MachineState {
                                         return Some(n1.cmp(&n2));
                                     }
                                 }
-			        (HeapCellValueTag::Cons, ptr) => {
-			            let stream = cell_as_stream!(ptr);	
-			            let n2 = stream.options().get_alias().unwrap();
-				    if n1 != n2 {
-					self.pdl.clear();
-					return Some(n1.cmp(&n2));
-				    }
-				}
                                 _ => {
                                     unreachable!();
                                 }
@@ -574,22 +565,7 @@ impl MachineState {
                                         );
                                     }
                                 }
-				(HeapCellValueTag::Cons, ptr) => {
-				    let stream = cell_as_stream!(ptr);
-				    let n2 = stream.options().get_alias().unwrap();
-				    if let Some(c2) = n2.as_char() {
-                                        if c1 != c2 {
-                                            self.pdl.clear();
-                                            return Some(c1.cmp(&c2));
-                                        }
-                                    } else {
-                                        self.pdl.clear();
-                                        return Some(
-                                            Some(c1).cmp(&n2.chars().next())
-                                                    .then(Ordering::Less)
-                                        );
-                                    }
-				}					                                    _ => {
+                                _ => {
                                     unreachable!()
                                 }
                             )
@@ -628,65 +604,11 @@ impl MachineState {
                                         return Some(n1.cmp(&n2));
                                     }
                                 }
-				(HeapCellValueTag::Cons, ptr) => {
-			            let stream = cell_as_stream!(ptr);	
-			            let n2 = stream.options().get_alias().unwrap();
-				    if n1 != n2 {
-					self.pdl.clear();
-					return Some(n1.cmp(&n2));
-				    }
-				}
                                 _ => {
                                     unreachable!();
                                 }
                             )
                         }
-			(HeapCellValueTag::Cons, ptr) => {
-			    let stream = cell_as_stream!(ptr);
-			    let n1 = stream.options().get_alias().unwrap();
-                            read_heap_cell!(v2,
-                                (HeapCellValueTag::Atom, (n2, _a2)) => {
-                                    if n1 != n2 {
-                                        self.pdl.clear();
-                                        return Some(n1.cmp(&n2));
-                                    }
-                                }
-                                (HeapCellValueTag::Char, c2) => {
-                                    if let Some(c1) = n1.as_char() {
-                                        if c1 != c2 {
-                                            self.pdl.clear();
-                                            return Some(c1.cmp(&c2));
-                                        }
-                                    } else {
-                                        self.pdl.clear();
-                                        return Some(
-                                            n1.chars().next().cmp(&Some(c2))
-                                              .then(Ordering::Greater)
-                                        );
-                                    }
-                                }
-                                (HeapCellValueTag::Str, s) => {
-                                    let n2 = cell_as_atom_cell!(self.heap[s])
-                                        .get_name();
-
-                                    if n1 != n2 {
-                                        self.pdl.clear();
-                                        return Some(n1.cmp(&n2));
-                                    }
-                                }
-				(HeapCellValueTag::Cons, ptr) => {
-			            let stream = cell_as_stream!(ptr);	
-			            let n2 = stream.options().get_alias().unwrap();
-				    if n1 != n2 {
-					self.pdl.clear();
-					return Some(n1.cmp(&n2));
-				    }
-				}
-                                _ => {
-                                    unreachable!();
-                                }
-                            )
-                        }		
                         _ => {
                             unreachable!()
                         }
@@ -743,9 +665,6 @@ impl MachineState {
                                         Some((2, atom!(".")).cmp(&(arity, name)))
                                     }
                                 }
-				(HeapCellValueTag::Cons, _s) => {
-                                    Some(Ordering::Greater)
-				}
                                 _ => {
                                     unreachable!()
                                 }
@@ -849,10 +768,6 @@ impl MachineState {
                                         }
                                     }
                                 }
-				(HeapCellValueTag::Cons, _ptr) => {
-				    self.pdl.clear();
-				    return Some(Ordering::Greater);
-				}
                                 _ => {
                                     unreachable!();
                                 }
@@ -954,68 +869,11 @@ impl MachineState {
                                     self.heap.pop();
                                     self.heap.pop();
                                 }
-				(HeapCellValueTag::Cons, s2) => {
-                                    let stream = cell_as_stream!(s2);
-				    let ptr = stream.as_ptr() as u64;
-
-				    let (n1, a1) = cell_as_atom_cell!(self.heap[s1])
-					.get_name_and_arity();
-
-				    match (a1, n1).cmp(&(1, atom!("$stream"))) {
-					Ordering::Equal => {
-                                            self.pdl.push(HeapCellValue::from(ptr));
-                                            self.pdl.push(self.heap[s1+1]);
-					}
-					ordering => {
-					    self.pdl.clear();
-					    return Some(ordering);
-					}
-				    }
-				}
                                 _ => {
                                     unreachable!()
                                 }
                             )
                         }
-			(HeapCellValueTag::Cons, s1) => {
-                            let stream = cell_as_stream!(s1);
-			    let ptr = stream.as_ptr() as u64;					
-                            read_heap_cell!(v2,
-                                (HeapCellValueTag::Str, s2) => {
-				    let (n2, a2) = cell_as_atom_cell!(self.heap[s2])
-					.get_name_and_arity();
-
-				    match (1, atom!("$stream")).cmp(&(a2, n2)) {
-					Ordering::Equal => {
-                                            self.pdl.push(self.heap[s2+1]);					    
-                                            self.pdl.push(HeapCellValue::from(ptr));
-					}
-					ordering => {
-					    self.pdl.clear();
-					    return Some(ordering);
-					}
-				    }
-                                }
-			        (HeapCellValueTag::Lis, _l2) => {
-				    self.pdl.clear();
-				    return Some(Ordering::Less);
-                                }
-   	 		        (HeapCellValueTag::CStr | HeapCellValueTag::PStrLoc) => {
-				    self.pdl.clear();
-				    return Some(Ordering::Less);
-                                }
-				(HeapCellValueTag::Cons, s2) => {
-                                    let stream2 = cell_as_stream!(s2);
-				    let ptr2 = stream2.as_ptr() as u64;
-
-				    self.pdl.clear();
-				    return Some(ptr.cmp(&ptr2));
-				}
-                                _ => {
-                                    unreachable!()
-                                }
-                            )
-                        }		        
                         _ => {
                             unreachable!()
                         }
