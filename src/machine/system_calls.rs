@@ -2181,17 +2181,6 @@ impl Machine {
 
                 self.machine_st.fail = true;
             }
-            (HeapCellValueTag::Cons, ptr) => {
-                match_untyped_arena_ptr!(ptr,
-                     (ArenaHeaderTag::Stream, stream) => {
-                         let alias = stream.options().get_alias().unwrap();
-                         self.machine_st.unify_complete_string(alias, a2);
-                     }
-                     _ => {
-                         unreachable!();
-                     }
-                );
-            }
             _ => {
                 unreachable!();
             }
@@ -2250,22 +2239,6 @@ impl Machine {
                         return Err(e);
                     }
                 }
-            }
-            (HeapCellValueTag::Cons, ptr) => {
-                match_untyped_arena_ptr!(ptr,
-                     (ArenaHeaderTag::Stream, stream) => {
-                         let alias = stream.options().get_alias().unwrap();
-
-                         let iter = alias.chars()
-                             .map(|c| fixnum_as_cell!(Fixnum::build_with(c as i64)));
-
-                         let h = iter_to_heap_list(&mut self.machine_st.heap, iter);
-                         unify!(self.machine_st, heap_loc_as_cell!(h), self.machine_st.registers[2]);
-                     }
-                     _ => {
-                         unreachable!();
-                     }
-                );
             }
             _ => {
                 unreachable!();
