@@ -3102,9 +3102,10 @@ impl Machine {
         } else {
             read_heap_cell!(addr,
                 (HeapCellValueTag::Atom, (name, _arity)) => {
-                    let c = name.as_char().unwrap();
-                    write!(&mut stream, "{}", c).unwrap();
-                    return Ok(());
+                    if let Some(c) = name.as_char() {
+                        write!(&mut stream, "{}", c).unwrap();
+                        return Ok(());
+                    }
                 }
                 (HeapCellValueTag::Char, c) => {
                     write!(&mut stream, "{}", c).unwrap();
