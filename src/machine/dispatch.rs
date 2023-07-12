@@ -2376,20 +2376,6 @@ impl Machine {
                         (HeapCellValueTag::Char) => {
                             self.machine_st.p += 1;
                         }
-                        (HeapCellValueTag::Cons, c) => {
-                            match_untyped_arena_ptr!(c,
-                               (ArenaHeaderTag::Stream, stream) => {
-                                   if stream.options().get_alias().is_none() {
-                                       self.machine_st.backtrack();
-                                   } else {
-                                       self.machine_st.p += 1;
-                                   }
-                               }
-                               _ => {
-                                   self.machine_st.backtrack();
-                               }
-                            );
-                        }
                         _ => {
                             self.machine_st.backtrack();
                         }
@@ -2418,20 +2404,6 @@ impl Machine {
                         }
                         (HeapCellValueTag::Char) => {
                             self.machine_st.p = self.machine_st.cp;
-                        }
-                        (HeapCellValueTag::Cons, c) => {
-                            match_untyped_arena_ptr!(c,
-                               (ArenaHeaderTag::Stream, stream) => {
-                                   if stream.options().get_alias().is_none() {
-                                       self.machine_st.backtrack();
-                                   } else {
-                                       self.machine_st.p = self.machine_st.cp;
-                                   }
-                               }
-                               _ => {
-                                   self.machine_st.backtrack();
-                               }
-                            );
                         }
                         _ => {
                             self.machine_st.backtrack();
