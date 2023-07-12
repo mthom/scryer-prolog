@@ -9,6 +9,8 @@ use crate::types::*;
 
 use crate::try_numeric_result;
 
+use fxhash::FxBuildHasher;
+
 macro_rules! step_or_fail {
     ($self:expr, $step_e:expr) => {
         if $self.machine_st.fail {
@@ -182,6 +184,128 @@ impl MachineState {
 
         Ok(())
     }
+
+    #[inline(always)]
+    pub(crate) fn select_switch_on_term_index(
+        &self,
+        addr: HeapCellValue,
+        v: IndexingCodePtr,
+        c: IndexingCodePtr,
+        l: IndexingCodePtr,
+        s: IndexingCodePtr,
+    ) -> IndexingCodePtr {
+        read_heap_cell!(addr,
+            (HeapCellValueTag::Var |
+             HeapCellValueTag::StackVar |
+             HeapCellValueTag::AttrVar) => {
+                v
+            }
+            (HeapCellValueTag::PStrLoc |
+             HeapCellValueTag::Lis |
+             HeapCellValueTag::CStr) => {
+                l
+            }
+            (HeapCellValueTag::Fixnum |
+             HeapCellValueTag::Char |
+             HeapCellValueTag::F64) => {
+                c
+            }
+            (HeapCellValueTag::Atom, (_name, arity)) => {
+                // if arity == 0 { c } else { s }
+                debug_assert!(arity == 0);
+                c
+            }
+            (HeapCellValueTag::Str, st) => {
+                let (name, arity) = cell_as_atom_cell!(self.heap[st])
+                    .get_name_and_arity();
+
+                match (name, arity) {
+                    (atom!("."), 2) => l,
+                    (_, 0) => c,
+                    _ => s,
+                }
+            }
+            (HeapCellValueTag::Cons, ptr) => {
+                match ptr.get_tag() {
+                    ArenaHeaderTag::Rational | ArenaHeaderTag::Integer => {
+                        c
+                    }
+                    _ => {
+                        IndexingCodePtr::Fail
+                    }
+                }
+            }
+            _ => {
+                unreachable!();
+            }
+        )
+    }
+
+    #[inline(always)]
+    pub(crate) fn constant_to_literal(&self, addr: HeapCellValue) -> Literal {
+        read_heap_cell!(addr,
+            (HeapCellValueTag::Char, c) => {
+                Literal::Char(c)
+            }
+            (HeapCellValueTag::Fixnum, n) => {
+                Literal::Fixnum(n)
+            }
+            (HeapCellValueTag::F64, f) => {
+                Literal::Float(f.as_offset())
+            }
+            (HeapCellValueTag::Atom, (atom, arity)) => {
+                debug_assert_eq!(arity, 0);
+                Literal::Atom(atom)
+            }
+            (HeapCellValueTag::Str, s) => {
+                Literal::Atom(cell_as_atom_cell!(self.heap[s]).get_name())
+            }
+            (HeapCellValueTag::Cons, cons_ptr) => {
+                match_untyped_arena_ptr!(cons_ptr,
+                    (ArenaHeaderTag::Rational, r) => {
+                        Literal::Rational(r)
+                    }
+                    (ArenaHeaderTag::Integer, n) => {
+                        Literal::Integer(n)
+                    }
+                    _ => {
+                        unreachable!()
+                    }
+                )
+            }
+            _ => {
+                unreachable!()
+            }
+        )
+    }
+
+    #[inline(always)]
+    pub(crate) fn select_switch_on_structure_index(
+        &self,
+        addr: HeapCellValue,
+        hm: &IndexMap<(Atom, usize), IndexingCodePtr, FxBuildHasher>,
+    ) -> IndexingCodePtr {
+        read_heap_cell!(addr,
+            (HeapCellValueTag::Atom, (name, arity)) => {
+                match hm.get(&(name, arity)) {
+                    Some(offset) => *offset,
+                    None => IndexingCodePtr::Fail,
+                }
+            }
+            (HeapCellValueTag::Str, s) => {
+                let (name, arity) = cell_as_atom_cell!(self.heap[s])
+                    .get_name_and_arity();
+
+                match hm.get(&(name, arity)) {
+                    Some(offset) => *offset,
+                    None => IndexingCodePtr::Fail,
+                }
+            }
+            _ => {
+                IndexingCodePtr::Fail
+            }
+        )
+    }
 }
 
 impl Machine {
@@ -349,51 +473,7 @@ impl Machine {
         loop {
             match &indexing_lines[index] {
                 &IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(_, v, c, l, s)) => {
-                    let offset = read_heap_cell!(addr,
-                        (HeapCellValueTag::Var |
-                         HeapCellValueTag::StackVar |
-                         HeapCellValueTag::AttrVar) => {
-                            v
-                        }
-                        (HeapCellValueTag::PStrLoc |
-                         HeapCellValueTag::Lis |
-                         HeapCellValueTag::CStr) => {
-                            l
-                        }
-                        (HeapCellValueTag::Fixnum |
-                         HeapCellValueTag::Char |
-                         HeapCellValueTag::F64) => {
-                            c
-                        }
-                        (HeapCellValueTag::Atom, (_name, arity)) => {
-                            // if arity == 0 { c } else { s }
-                            debug_assert!(arity == 0);
-                            c
-                        }
-                        (HeapCellValueTag::Str, st) => {
-                            let (name, arity) = cell_as_atom_cell!(self.machine_st.heap[st])
-                                .get_name_and_arity();
-
-                            match (name, arity) {
-                                (atom!("."), 2) => l,
-                                (_, 0) => c,
-                                _ => s,
-                            }
-                        }
-                        (HeapCellValueTag::Cons, ptr) => {
-                            match ptr.get_tag() {
-                                ArenaHeaderTag::Rational | ArenaHeaderTag::Integer => {
-                                    c
-                                }
-                                _ => {
-                                    IndexingCodePtr::Fail
-                                }
-                            }
-                        }
-                        _ => {
-                            unreachable!();
-                        }
-                    );
+                    let offset = self.machine_st.select_switch_on_term_index(addr, v, c, l, s);
 
                     match offset {
                         IndexingCodePtr::Fail => {
@@ -423,41 +503,8 @@ impl Machine {
                         }
                     }
                 }
-                &IndexingLine::Indexing(IndexingInstruction::SwitchOnConstant(ref hm)) => {
-                    let lit = read_heap_cell!(addr,
-                        (HeapCellValueTag::Char, c) => {
-                            Literal::Char(c)
-                        }
-                        (HeapCellValueTag::Fixnum, n) => {
-                            Literal::Fixnum(n)
-                        }
-                        (HeapCellValueTag::F64, f) => {
-                            Literal::Float(f.as_offset())
-                        }
-                        (HeapCellValueTag::Atom, (atom, arity)) => {
-                            debug_assert_eq!(arity, 0);
-                            Literal::Atom(atom)
-                        }
-                        (HeapCellValueTag::Str, s) => {
-                            Literal::Atom(cell_as_atom_cell!(self.machine_st.heap[s]).get_name())
-                        }
-                        (HeapCellValueTag::Cons, cons_ptr) => {
-                            match_untyped_arena_ptr!(cons_ptr,
-                                (ArenaHeaderTag::Rational, r) => {
-                                    Literal::Rational(r)
-                                }
-                                (ArenaHeaderTag::Integer, n) => {
-                                    Literal::Integer(n)
-                                }
-                                _ => {
-                                    unreachable!()
-                                }
-                            )
-                        }
-                        _ => {
-                            unreachable!()
-                        }
-                    );
+                IndexingLine::Indexing(IndexingInstruction::SwitchOnConstant(hm)) => {
+                    let lit = self.machine_st.constant_to_literal(addr);
 
                     let offset = match hm.get(&lit) {
                         Some(offset) => *offset,
@@ -492,27 +539,8 @@ impl Machine {
                         }
                     }
                 }
-                &IndexingLine::Indexing(IndexingInstruction::SwitchOnStructure(ref hm)) => {
-                    let offset = read_heap_cell!(addr,
-                        (HeapCellValueTag::Atom, (name, arity)) => {
-                            match hm.get(&(name, arity)) {
-                                Some(offset) => *offset,
-                                None => IndexingCodePtr::Fail,
-                            }
-                        }
-                        (HeapCellValueTag::Str, s) => {
-                            let (name, arity) = cell_as_atom_cell!(self.machine_st.heap[s])
-                                .get_name_and_arity();
-
-                            match hm.get(&(name, arity)) {
-                                Some(offset) => *offset,
-                                None => IndexingCodePtr::Fail,
-                            }
-                        }
-                        _ => {
-                            IndexingCodePtr::Fail
-                        }
-                    );
+                IndexingLine::Indexing(IndexingInstruction::SwitchOnStructure(hm)) => {
+                    let offset = self.machine_st.select_switch_on_structure_index(addr, hm);
 
                     match offset {
                         IndexingCodePtr::Fail => {
@@ -997,7 +1025,7 @@ impl Machine {
                                                 fixnum_as_cell!(Fixnum::build_with(self.machine_st.cc as i64));
 
                                             self.machine_st.num_of_args += 1;
-                                            self.machine_st.try_me_else(next_i);
+                                            self.try_me_else(next_i);
                                             self.machine_st.num_of_args -= 1;
                                         }
                                         None => {
@@ -1067,7 +1095,7 @@ impl Machine {
                                                 fixnum_as_cell!(Fixnum::build_with(self.machine_st.cc as i64));
 
                                             self.machine_st.num_of_args += 1;
-                                            self.machine_st.try_me_else(next_i);
+                                            self.try_me_else(next_i);
                                             self.machine_st.num_of_args -= 1;
                                         }
                                         None => {
@@ -1118,7 +1146,7 @@ impl Machine {
                     }
                 }
                 &Instruction::TryMeElse(offset) => {
-                    self.machine_st.try_me_else(offset);
+                    self.try_me_else(offset);
                 }
                 &Instruction::DefaultRetryMeElse(offset) => {
                     self.retry_me_else(offset);
@@ -2879,7 +2907,7 @@ impl Machine {
 
                     step_or_fail!(self, self.machine_st.p += 1);
                 }
-                &Instruction::GetStructure(name, arity, reg) => {
+                &Instruction::GetStructure(_lvl, name, arity, reg) => {
                     let deref_v = self.machine_st.deref(self.machine_st[reg]);
                     let store_v = self.machine_st.store(deref_v);
 
@@ -3076,7 +3104,7 @@ impl Machine {
                         IndexingLine::IndexedChoice(ref indexed_choice) => {
                             match &indexed_choice[self.machine_st.iip as usize] {
                                 &IndexedChoiceInstruction::Try(offset) => {
-                                    self.machine_st.indexed_try(offset);
+                                    self.indexed_try(offset);
                                 }
                                 &IndexedChoiceInstruction::Retry(l) => {
                                     self.retry(l);
@@ -3122,7 +3150,7 @@ impl Machine {
                                                         fixnum_as_cell!(Fixnum::build_with(self.machine_st.cc as i64));
 
                                                     self.machine_st.num_of_args += 1;
-                                                    self.machine_st.indexed_try(offset);
+                                                    self.indexed_try(offset);
                                                     self.machine_st.num_of_args -= 1;
                                                 }
                                                 None => {

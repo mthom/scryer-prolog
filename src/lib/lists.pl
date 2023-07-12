@@ -122,8 +122,13 @@ length_addendum([_|Xs], N, M) :-
 %    X = h
 % ;  ... .
 % ```
-member(X, [X|_]).
-member(X, [_|Xs]) :- member(X, Xs).
+
+member(X, [L|Ls]) :-
+        member_(Ls, L, X).
+
+member_(_, X, X).
+member_([L|Ls], _, X) :-
+        member_(Ls, L, X).
 
 %% select(X, Xs0, Xs1).
 %
