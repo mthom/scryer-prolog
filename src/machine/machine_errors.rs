@@ -1,3 +1,4 @@
+use crate::arena::*;
 use crate::atom_table::*;
 use crate::parser::ast::*;
 
@@ -6,6 +7,7 @@ use crate::forms::*;
 use crate::machine::heap::*;
 use crate::machine::loader::CompilationTarget;
 use crate::machine::machine_state::*;
+use crate::machine::streams::*;
 use crate::machine::system_calls::BrentAlgState;
 use crate::types::*;
 
@@ -158,9 +160,29 @@ impl PermissionError for HeapCellValue {
         index_atom: Atom,
         perm: Permission,
     ) -> MachineError {
+        let cell = read_heap_cell!(self,
+            (HeapCellValueTag::Cons, ptr) => {
+                match_untyped_arena_ptr!(ptr,
+                    (ArenaHeaderTag::Stream, stream) => {
+                        if let Some(alias) = stream.options().get_alias() {
+                            atom_as_cell!(alias)
+                        } else {
+                            self
+                        }
+                    }
+                    _ => {
+                        self
+                    }
+                )
+            }
+            _ => {
+                self
+            }
+        );
+
         let stub = functor!(
             atom!("permission_error"),
-            [atom(perm.as_atom()), atom(index_atom), cell(self)]
+            [atom(perm.as_atom()), atom(index_atom), cell(cell)]
         );
 
         MachineError {

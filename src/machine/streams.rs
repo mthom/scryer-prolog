@@ -1491,21 +1491,21 @@ impl MachineState {
                         }
                         (HeapCellValueTag::Cons, ptr) => {
                             match_untyped_arena_ptr!(ptr,
-                                                     (ArenaHeaderTag::Stream, stream) => {
-                                                         return if stream.is_null_stream() {
-                                                             Err(self.open_permission_error(stream_as_cell!(stream), caller, arity))
-                                                         } else {
-                                                             Ok(stream)
-                                                         };
-                                                     }
-                                                     (ArenaHeaderTag::Dropped, _value) => {
-                                                         let stub = functor_stub(caller, arity);
-                                                         let err = self.existence_error(ExistenceError::Stream(addr));
+                                (ArenaHeaderTag::Stream, stream) => {
+                                    return if stream.is_null_stream() {
+                                        Err(self.open_permission_error(stream_as_cell!(stream), caller, arity))
+                                    } else {
+                                        Ok(stream)
+                                    };
+                                }
+                                (ArenaHeaderTag::Dropped, _value) => {
+                                    let stub = functor_stub(caller, arity);
+                                    let err = self.existence_error(ExistenceError::Stream(addr));
 
-                                                         return Err(self.error_form(err, stub));
-                                                     }
-                                                     _ => {
-                                                     }
+                                    return Err(self.error_form(err, stub));
+                                }
+                                _ => {
+                                }
                             );
                         }
                         _ => {
@@ -1547,7 +1547,15 @@ impl MachineState {
         arity: usize,
     ) -> MachineStub {
         let stub = functor_stub(caller, arity);
-        let err  = self.permission_error(perm, err_atom, stream_as_cell!(stream));
+        let err  = self.permission_error(
+            perm,
+            err_atom,
+            if let Some(alias) = stream.options().get_alias() {
+                atom_as_cell!(alias)
+            } else {
+                stream_as_cell!(stream)
+            },
+        );
 
         self.error_form(err, stub)
     }
@@ -1715,7 +1723,7 @@ impl MachineState {
                     }
                     ErrorKind::PermissionDenied => {
                         // 8.11.5.3k)
-                        return Err(self.open_permission_error(self[temp_v!(1)], atom!("open"), 4));
+                        return Err(self.open_permission_error(self.registers[1], atom!("open"), 4));
                     }
                     _ => {
                         let stub = functor_stub(atom!("open"), 4);
