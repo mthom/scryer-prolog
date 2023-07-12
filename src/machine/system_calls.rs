@@ -2447,7 +2447,7 @@ impl Machine {
             return Ok(());
         }
 
-         match addr {
+        let addr = match addr {
             addr if addr.is_var() => addr,
             addr => match Number::try_from(addr) {
                 Ok(Number::Integer(n)) => {
@@ -2477,6 +2477,7 @@ impl Machine {
             match stream.peek_byte().map_err(|e| e.kind()) {
                 Ok(b) => {
                     self.machine_st.unify_fixnum(Fixnum::build_with(b as i64), addr);
+                    break;
                 }
                 Err(ErrorKind::PermissionDenied) => {
                     self.machine_st.fail = true;
