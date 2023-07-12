@@ -1,9 +1,8 @@
 use ordered_float::OrderedFloat;
 use rug::*;
-use std::{collections::BTreeMap};
+use std::collections::BTreeMap;
 use crate::atom_table::*;
 
-use super::Machine;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum QueryResult {
@@ -120,7 +119,7 @@ impl TryFrom<String> for Value {
             while let Some(value) = iter.next() {
                 let mut iter = value.split(":");
 
-                let key = iter.next().unwrap().to_string();
+                let _key = iter.next().unwrap().to_string();
                 let value = iter.next().unwrap().to_string();
 
                 values.push(Value::try_from(value)?);
@@ -135,7 +134,7 @@ impl TryFrom<String> for Value {
             while let Some(value) = iter.next() {
                 let mut iter = value.split(":");
 
-                let key = iter.next().unwrap().to_string();
+                let _key = iter.next().unwrap().to_string();
                 let value = iter.next().unwrap().to_string();
 
                 values.push(Value::try_from(value)?);

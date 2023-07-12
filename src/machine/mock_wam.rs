@@ -316,8 +316,6 @@ impl Machine {
     }
 
     pub fn test_load_file(&mut self, file: &str) -> Vec<u8> {
-        use std::io::Read;
-
         let stream = Stream::from_owned_string(
             std::fs::read_to_string(AsRef::<std::path::Path>::as_ref(file)).unwrap(),
             &mut self.machine_st.arena,
