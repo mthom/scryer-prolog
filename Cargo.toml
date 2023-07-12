@@ -68,6 +68,7 @@ futures = "0.3"
 assert_cmd = "1.0.3"
 predicates-core = "1.0.2"
 serial_test = "0.5.1"
+maplit = "1.0.2"
 
 [patch.crates-io]
 modular-bitfield = { git = "https://github.com/mthom/modular-bitfield" }

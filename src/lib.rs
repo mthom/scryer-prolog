@@ -2,6 +2,8 @@
 
 #[macro_use]
 extern crate static_assertions;
+#[cfg(test)]
+#[macro_use] extern crate maplit;
 
 #[macro_use]
 pub mod macros;

@@ -8,7 +8,12 @@ use crate::atom_table::*;
 pub enum QueryResult {
     True,
     False,
-    Matches(Vec<QueryResultLine>),
+    Matches(Vec<QueryMatch>),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct QueryMatch {
+    pub bindings: BTreeMap<String, Value>
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -28,6 +33,24 @@ pub enum Value {
     List(Vec<Value>),
     Structure(Atom, Vec<Value>),
     Var,
+}
+
+impl From<BTreeMap<&str, Value>> for QueryMatch {
+    fn from(bindings: BTreeMap<&str, Value>) -> Self {
+        QueryMatch {
+            bindings: bindings.into_iter()
+                .map(|(k, v)| (k.to_string(), v))
+                .collect::<BTreeMap<_, _>>()
+        }
+    }
+}
+
+impl From<BTreeMap<String, Value>> for QueryMatch {
+    fn from(bindings: BTreeMap<String, Value>) -> Self {
+        QueryMatch {
+            bindings
+        }
+    }
 }
 
 impl From<Vec<QueryResultLine>> for QueryResult {
@@ -50,14 +73,21 @@ impl From<Vec<QueryResultLine>> for QueryResult {
         }
 
         // If there is at least one match, return all matches.
-        if query_result_lines.iter().any(|l| {
-            if let &QueryResultLine::Match(_) = l { true } else { false }
-        }) {
-            let all_matches = query_result_lines.into_iter()
-                .filter(|l| {
-                    if let &QueryResultLine::Match(_) = l { true } else { false }
-                })
-                .collect::<Vec<_>>();
+        let all_matches = query_result_lines.into_iter()
+            .filter(|l| {
+                if let &QueryResultLine::Match(_) = l { true } else { false }
+            })
+            .map(|l| {
+                match l {
+                    QueryResultLine::Match(m) => {
+                        QueryMatch::from(m)
+                    },
+                    _ => unreachable!()
+                }
+            })
+            .collect::<Vec<_>>();
+
+        if !all_matches.is_empty() {
             return QueryResult::Matches(all_matches);
         }
 
@@ -144,5 +174,11 @@ impl TryFrom<String> for Value {
         } else {
             Err(())
         }
+    }
+}
+
+impl From<&str> for Value {
+    fn from(str: &str) -> Self {
+        Value::String(str.to_string())
     }
 }

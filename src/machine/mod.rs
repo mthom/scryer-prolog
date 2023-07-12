@@ -936,3 +936,40 @@ impl Machine {
         }
     }
 }
+
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn programatic_query() {
+        let mut machine = Machine::with_test_streams();
+
+        machine.load_module_string("facts", String::from(r#"
+            triple("a", "p1", "b").
+            triple("a", "p2", "b").
+        "#));
+        
+        let query = String::from(r#"triple("a",P,"b")."#);
+        let output = machine.run_query(query);
+        assert_eq!(output, QueryResult::Matches(vec![
+            QueryMatch::from(btreemap!{
+                "P" => Value::from("p1"),
+            }),
+            QueryMatch::from(btreemap!{
+                "P" => Value::from("p2"),
+            }),
+        ]));
+
+        assert_eq!(
+            machine.run_query(String::from(r#"triple("a","p1","b")."#)), 
+            QueryResult::True
+        );
+
+        assert_eq!(
+            machine.run_query(String::from(r#"triple("x","y","z")."#)), 
+            QueryResult::False
+        );
+    }
+}
