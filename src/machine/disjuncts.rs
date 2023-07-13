@@ -716,6 +716,22 @@ impl VariableClassifier {
                                 ),
                             );
                         }
+                        var @ Term::Var(..) => {
+                            if update_chunk_data(self, atom!("call"), 1) {
+                                build_stack.add_chunk();
+                            }
+
+                            self.probe_body_term(1, 1, &var);
+
+                            build_stack.push_chunk_term(
+                                clause_to_query_term(
+                                    loader,
+                                    atom!("call"),
+                                    vec![var],
+                                    self.call_policy,
+                                ),
+                            );
+                        }
                         Term::Literal(_, Literal::Atom(atom!("!")) | Literal::Char('!')) => {
                             if self.global_cut_var_num.is_none() {
                                 self.global_cut_var_num = Some(self.var_num);

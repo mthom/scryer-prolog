@@ -466,7 +466,9 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
 
     pub(crate) fn read_term_from_heap(&mut self, r: RegType) -> Result<Term, SessionError> {
         let machine_st = LS::machine_st(&mut self.payload);
-        machine_st.read_term_from_heap(r)
+        let cell = machine_st[r];
+
+        machine_st.read_term_from_heap(cell)
     }
 
     pub(crate) fn load(mut self) -> Result<LS::Evacuable, SessionError> {
@@ -1048,8 +1050,9 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         r: RegType,
     ) -> Result<IndexSet<ModuleExport>, SessionError> {
         let machine_st = LS::machine_st(&mut self.payload);
+        let cell = machine_st[r];
 
-        let export_list = machine_st.read_term_from_heap(r)?;
+        let export_list = machine_st.read_term_from_heap(cell)?;
         let atom_tbl = &mut LS::machine_st(&mut self.payload).atom_tbl;
         let export_list = setup_module_export_list(export_list, atom_tbl)?;
 
@@ -1400,9 +1403,7 @@ impl<'a> MachinePreludeView<'a> {
 }
 
 impl MachineState {
-    pub(super) fn read_term_from_heap(&mut self, r: RegType) -> Result<Term, SessionError> {
-        let term_addr = self[r];
-
+    pub(super) fn read_term_from_heap(&mut self, term_addr: HeapCellValue) -> Result<Term, SessionError> {
         let mut term_stack = vec![];
         let mut iter = stackful_post_order_iter(&mut self.heap, &mut self.stack, term_addr);
 
@@ -1983,11 +1984,8 @@ impl Machine {
         }
     }
 
-    pub(crate) fn compile_assert(&mut self, append_or_prepend: AppendOrPrepend) -> CallResult
-    {
-        let module_name = cell_as_atom!(
-            self.machine_st.store(self.machine_st.deref(self.machine_st.registers[1]))
-        );
+    pub(crate) fn compile_assert(&mut self, append_or_prepend: AppendOrPrepend) -> CallResult {
+        let module_name = cell_as_atom!(self.deref_register(1));
 
         let compilation_target = match module_name {
             atom!("user") => CompilationTarget::User,
@@ -2001,13 +1999,20 @@ impl Machine {
             }
         };
 
+        let head = self.deref_register(2);
+
+        if head.is_var() {
+            let err = self.machine_st.instantiation_error();
+            return Err(self.machine_st.error_form(err, stub_gen()));
+        }
+
         let mut compile_assert = || {
             let mut loader: Loader<'_, LiveLoadAndMachineState<'_>> =
                 Loader::new(self, LiveTermStream::new(ListingSource::User));
 
             loader.payload.compilation_target = compilation_target;
 
-            let head = loader.read_term_from_heap(temp_v!(2))?;
+            let head = LiveLoadAndMachineState::machine_st(&mut loader.payload).read_term_from_heap(head)?;
 
             let name = if let Some(name) = head.name() {
                 name
