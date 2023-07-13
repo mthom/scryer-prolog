@@ -1123,7 +1123,7 @@ impl MachineState {
                       HeapCellValueTag::PStrLoc) => {
                          (atom!("."), 2)
                      }
-                     (HeapCellValueTag::AttrVar | HeapCellValueTag::Var) => {
+                     (HeapCellValueTag::AttrVar | HeapCellValueTag::Var | HeapCellValueTag::StackVar) => {
                          let err = self.instantiation_error();
                          return Err(self.error_form(err, stub_gen()));
                      }
