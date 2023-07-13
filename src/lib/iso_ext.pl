@@ -15,9 +15,10 @@ but they're not part of the ISO Prolog standard at the moment.
                     partial_string_tail/2,
                     setup_call_cleanup/3,
                     call_nth/2,
+                    countall/2,
                     copy_term_nat/2,
-		            asserta/2,
-		            assertz/2]).
+                    asserta/2,
+                    assertz/2]).
 
 :- use_module(library(error), [can_be/2,
                                domain_error/3,
@@ -339,6 +340,36 @@ call_nth_nesting(C, ID) :-
     bb_put(ID, 0),
     bb_put(i_call_nth_counter, C).
 
+%% countall(Goal, N).
+%
+% countall(Goal, N) counts all solutions of Goal and unifies N with
+% this number of solutions. This predicate always succeeds once.
+
+:- meta_predicate(countall(0, ?)).
+
+countall(Goal, N) :-
+    can_be(integer, N),
+    (   integer(N) ->
+        (   N < 0 ->
+            domain_error(not_less_than_zero, N, countall/2)
+        ;   N > 0
+        )
+    ;   true
+    ),
+    setup_call_cleanup(call_nth_nesting(C, ID),
+                       (   (   Goal,
+                               bb_get(ID, N0),
+                               N1 is N0 + 1,
+                               bb_put(ID, N1),
+                               false
+                           ;   bb_get(ID, N)
+                           )
+                       ),
+                       (   bb_get(i_call_nth_counter, C) ->
+                           C1 is C - 1,
+                           bb_put(i_call_nth_counter, C1)
+                       ;   true
+                       )).
 
 %% copy_term_nat(Source, Dest)
 %
