@@ -1612,6 +1612,8 @@ impl MachineState {
 
     // returns true on failure.
     pub fn ground_test(&mut self) -> bool {
+        use fxhash::FxBuildHasher;
+
         if self.registers[1].is_constant() {
             return false;
         }
@@ -1622,13 +1624,15 @@ impl MachineState {
             return true;
         }
 
+        let mut visited = IndexSet::with_hasher(FxBuildHasher::default());
         let mut iter = stackful_preorder_iter(&mut self.heap, &mut self.stack, value);
+        let mut stack_len = 0;
 
         while let Some(value) = iter.next() {
-            let value = unmark_cell_bits!(value);
+            let mut value = unmark_cell_bits!(value);
 
             if value.is_var() {
-                let value = heap_bound_store(
+                value = heap_bound_store(
                     iter.heap,
                     heap_bound_deref(iter.heap, value),
                 );
@@ -1637,6 +1641,18 @@ impl MachineState {
                     return true;
                 }
             }
+
+            if value.is_compound(iter.heap) {
+                if visited.contains(&value) {
+                    for _ in stack_len .. iter.stack_len() {
+                        iter.pop_stack();
+                    }
+                } else {
+                    visited.insert(value);
+                }
+            }
+
+            stack_len = iter.stack_len();
         }
 
         false

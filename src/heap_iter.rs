@@ -218,6 +218,11 @@ impl<'a> StackfulPreOrderHeapIter<'a> {
         None
     }
 
+    #[inline]
+    pub fn stack_len(&self) -> usize {
+        self.stack.len()
+    }
+
     fn push_if_unmarked(&mut self, loc: IterStackLoc) {
         let cell = self.read_cell_mut(loc);
 
