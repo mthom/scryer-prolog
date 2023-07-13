@@ -128,6 +128,19 @@ impl<R: Read> CharReader<R> {
 
         Ok(&self.buf[self.pos..])
     }
+
+    pub fn peek_byte(&mut self) -> Option<io::Result<u8>> {
+        match self.refresh_buffer() {
+            Ok(_buf) => {}
+            Err(e) => return Some(Err(e)),
+        }
+
+        return if let Some(b) = self.buf.get(0).cloned() {
+            Some(Ok(b))
+        } else {
+            None
+        };
+    }
 }
 
 impl<R: Read> CharRead for CharReader<R> {

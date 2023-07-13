@@ -1268,12 +1268,9 @@ impl Stream {
                 }
             }
             Stream::InputFile(ref mut file) => {
-                let mut b = [0u8; 1];
-
-                match file.read(&mut b)? {
-                    1 => {
-                        file.stream.get_mut().file.seek(SeekFrom::Current(-1))?;
-                        Ok(b[0])
+                match file.peek_byte() {
+                    Some(result) => {
+                        Ok(result?)
                     }
                     _ => Err(std::io::Error::new(
                         ErrorKind::UnexpectedEof,

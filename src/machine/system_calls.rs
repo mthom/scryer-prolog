@@ -2444,7 +2444,11 @@ impl Machine {
                 addr,
             );
 
-            return Ok(());
+            if !self.machine_st.fail {
+                return Ok(());
+            } else {
+                self.machine_st.fail = false;
+            }
         }
 
         let addr = match addr {
