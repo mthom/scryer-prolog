@@ -2437,17 +2437,15 @@ impl Machine {
         let addr = self.deref_register(2);
 
         if stream.at_end_of_stream() {
-            stream.set_past_end_of_stream(true);
-
             self.machine_st.unify_fixnum(
                 Fixnum::build_with(-1),
                 addr,
             );
 
-            if !self.machine_st.fail {
-                return Ok(());
-            } else {
+            if self.machine_st.fail {
                 self.machine_st.fail = false;
+            } else {
+                return Ok(());
             }
         }
 
@@ -2538,7 +2536,6 @@ impl Machine {
 
         if stream.at_end_of_stream() {
             let end_of_file = atom!("end_of_file");
-            stream.set_past_end_of_stream(true);
 
             self.machine_st.unify_atom(
                 end_of_file,
@@ -2634,15 +2631,16 @@ impl Machine {
         let a2 = self.deref_register(2);
 
         if stream.at_end_of_stream() {
-            let end_of_file = atom!("end_of_file");
-            stream.set_past_end_of_stream(true);
-
-            self.machine_st.unify_atom(
-                end_of_file,
+            self.machine_st.unify_fixnum(
+                Fixnum::build_with(-1),
                 a2,
             );
 
-            return Ok(());
+            if self.machine_st.fail {
+                self.machine_st.fail = false;
+            } else {
+                return Ok(());
+            }
         }
 
         let addr = read_heap_cell!(a2,
