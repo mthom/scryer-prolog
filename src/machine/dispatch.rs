@@ -4919,11 +4919,19 @@ impl Machine {
                     self.machine_st.p = self.machine_st.cp;
                 }
                 &Instruction::CallBuiltInProperty => {
-                    self.builtin_property();
+                    let key = self
+                        .machine_st
+                        .read_predicate_key(self.machine_st.registers[1], self.machine_st.registers[2]);
+
+                    self.machine_st.fail = !self.indices.builtin_property(key);
                     step_or_fail!(self, self.machine_st.p += 1);
                 }
                 &Instruction::ExecuteBuiltInProperty => {
-                    self.builtin_property();
+                    let key = self
+                        .machine_st
+                        .read_predicate_key(self.machine_st.registers[1], self.machine_st.registers[2]);
+
+                    self.machine_st.fail = !self.indices.builtin_property(key);
                     step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                 }
                 &Instruction::CallMetaPredicateProperty => {

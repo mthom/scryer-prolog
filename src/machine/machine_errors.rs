@@ -442,7 +442,7 @@ impl MachineState {
             // SessionError::CannotOverwriteImport(pred_atom) => {
                 self.permission_error(
                     Permission::Modify,
-                    atom!("private_procedure"),
+                    atom!("static_procedure"),
                     functor_stub(key.0, key.1).into_iter().collect::<MachineStub>(),
                 )
             }

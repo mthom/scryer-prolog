@@ -2016,6 +2016,7 @@ impl Machine {
             };
 
             let arity = head.arity();
+            let is_builtin = loader.wam_prelude.indices.builtin_property((name, arity));
 
             let is_dynamic_predicate = loader
                   .wam_prelude
@@ -2026,7 +2027,7 @@ impl Machine {
                   );
 
             let no_such_predicate =
-                if !is_dynamic_predicate && !ClauseType::is_inbuilt(name, arity) {
+                if !is_dynamic_predicate && !is_builtin {
                     let idx_tag = loader
                         .wam_prelude
                         .indices
@@ -2038,8 +2039,9 @@ impl Machine {
                         .map(|code_idx| code_idx.get_tag())
                         .unwrap_or(IndexPtrTag::DynamicUndefined);
 
-                    idx_tag == IndexPtrTag::DynamicUndefined ||
-                    idx_tag == IndexPtrTag::Undefined
+                    idx_tag == IndexPtrTag::DynamicUndefined || idx_tag == IndexPtrTag::Undefined
+                } else if is_builtin {
+                    return Err(SessionError::CannotOverwriteBuiltIn((name, arity)));
                 } else {
                     is_dynamic_predicate
                 };
@@ -2462,20 +2464,6 @@ impl Machine {
                 self.machine_st.fail = !skeleton.core.is_discontiguous;
             }
             None => {
-                self.machine_st.fail = true;
-            }
-        }
-    }
-
-    pub(crate) fn builtin_property(&mut self) {
-        let (name, arity) = self
-            .machine_st
-            .read_predicate_key(self.machine_st.registers[1], self.machine_st.registers[2]);
-
-        if !ClauseType::is_inbuilt(name, arity) { // ClauseType::from(key.0, key.1, &mut self.machine_st.arena) {
-            if let Some(module) = self.indices.modules.get(&(atom!("builtins"))) {
-                self.machine_st.fail = !module.code_dir.contains_key(&(name, arity));
-            } else {
                 self.machine_st.fail = true;
             }
         }

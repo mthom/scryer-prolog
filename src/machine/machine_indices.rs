@@ -3,6 +3,7 @@ use crate::parser::ast::*;
 use crate::arena::*;
 use crate::atom_table::*;
 use crate::forms::*;
+use crate::machine::ClauseType;
 use crate::machine::loader::*;
 use crate::machine::machine_state::*;
 use crate::machine::streams::Stream;
@@ -259,6 +260,20 @@ pub struct IndexStore {
 }
 
 impl IndexStore {
+    pub(crate) fn builtin_property(&self, key: PredicateKey) -> bool {
+        let (name, arity) = key;
+
+        if !ClauseType::is_inbuilt(name, arity) {
+            return if let Some(module) = self.modules.get(&(atom!("builtins"))) {
+                module.code_dir.contains_key(&(name, arity))
+            } else {
+                false
+            };
+        } else {
+            true
+        }
+    }
+
     #[inline(always)]
     pub(crate) fn goal_expansion_defined(&self, key: PredicateKey) -> bool {
         self.goal_expansion_indices.contains(&key)
