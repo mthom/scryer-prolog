@@ -55,6 +55,12 @@ impl AppendOrPrepend {
     }
 }
 
+#[derive(Debug)]
+pub enum VarComparison {
+    Indistinct,
+    Distinct
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Level {
     Deep,

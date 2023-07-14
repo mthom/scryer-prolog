@@ -584,6 +584,8 @@ enum SystemClauseType {
     UnattributedVar,
     #[strum_discriminants(strum(props(Arity = "4", Name = "$get_db_refs")))]
     GetDBRefs,
+    #[strum_discriminants(strum(props(Arity = "2", Name = "$keysort_with_constant_var_ordering")))]
+    KeySortWithConstantVarOrdering,
     REPL(REPLCodePtr),
 }
 
@@ -1653,6 +1655,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallDeleteAllAttributesFromVar |
                     &Instruction::CallUnattributedVar |
                     &Instruction::CallGetDBRefs |
+                    &Instruction::CallKeySortWithConstantVarOrdering |
                     &Instruction::CallFetchGlobalVar |
                     &Instruction::CallFirstStream |
                     &Instruction::CallFlushOutput |
@@ -1877,6 +1880,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteDeleteAllAttributesFromVar |
                     &Instruction::ExecuteUnattributedVar |
                     &Instruction::ExecuteGetDBRefs |
+                    &Instruction::ExecuteKeySortWithConstantVarOrdering |
                     &Instruction::ExecuteFetchGlobalVar |
                     &Instruction::ExecuteFirstStream |
                     &Instruction::ExecuteFlushOutput |

@@ -141,7 +141,7 @@ impl MachineState {
         Ok(())
     }
 
-    fn keysort(&mut self) -> CallResult {
+    fn keysort(&mut self, var_comparison: VarComparison) -> CallResult {
         self.check_keysort_errors()?;
 
         let stub_gen = || functor_stub(atom!("keysort"), 2);
@@ -155,7 +155,7 @@ impl MachineState {
         }
 
         key_pairs.sort_by(|a1, a2| {
-            compare_term_test!(self, a1.0, a2.0).unwrap_or(Ordering::Less)
+            compare_term_test!(self, a1.0, a2.0, var_comparison).unwrap_or(Ordering::Less)
         });
 
         let key_pairs = key_pairs.into_iter().map(|kp| kp.1);
@@ -1437,11 +1437,11 @@ impl Machine {
                     step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                 }
                 &Instruction::DefaultCallKeySort => {
-                    try_or_throw!(self.machine_st, self.machine_st.keysort());
+                    try_or_throw!(self.machine_st, self.machine_st.keysort(VarComparison::Distinct));
                     step_or_fail!(self, self.machine_st.p += 1);
                 }
                 &Instruction::DefaultExecuteKeySort => {
-                    try_or_throw!(self.machine_st, self.machine_st.keysort());
+                    try_or_throw!(self.machine_st, self.machine_st.keysort(VarComparison::Distinct));
 
                     if self.machine_st.fail {
                         self.machine_st.backtrack();
@@ -1870,7 +1870,7 @@ impl Machine {
                     }
                 }
                 &Instruction::CallKeySort => {
-                    try_or_throw!(self.machine_st, self.machine_st.keysort());
+                    try_or_throw!(self.machine_st, self.machine_st.keysort(VarComparison::Distinct));
 
                     if self.machine_st.fail {
                         self.machine_st.backtrack();
@@ -1884,7 +1884,35 @@ impl Machine {
                     }
                 }
                 &Instruction::ExecuteKeySort => {
-                    try_or_throw!(self.machine_st, self.machine_st.keysort());
+                    try_or_throw!(self.machine_st, self.machine_st.keysort(VarComparison::Distinct));
+
+                    if self.machine_st.fail {
+                        self.machine_st.backtrack();
+                    } else {
+                        try_or_throw!(
+                            self.machine_st,
+                            (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
+                        );
+
+                        self.machine_st.p = self.machine_st.cp;
+                    }
+                }
+                &Instruction::CallKeySortWithConstantVarOrdering => {
+                    try_or_throw!(self.machine_st, self.machine_st.keysort(VarComparison::Indistinct));
+
+                    if self.machine_st.fail {
+                        self.machine_st.backtrack();
+                    } else {
+                        try_or_throw!(
+                            self.machine_st,
+                            (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
+                        );
+
+                        self.machine_st.p += 1;
+                    }
+                }
+                &Instruction::ExecuteKeySortWithConstantVarOrdering => {
+                    try_or_throw!(self.machine_st, self.machine_st.keysort(VarComparison::Indistinct));
 
                     if self.machine_st.fail {
                         self.machine_st.backtrack();
