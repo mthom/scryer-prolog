@@ -2261,6 +2261,10 @@ pub fn generate_instructions_rs() -> TokenStream {
     let mut is_inbuilt_arms = vec![];
     let mut is_inlined_arms = vec![];
 
+    is_inbuilt_arms.push(quote! {
+        (atom!(":-"), 1 | 2) => true
+    });
+
     for (name, arity, variant) in instr_data.compare_number_variants {
         let ident = variant.ident.clone();
 
