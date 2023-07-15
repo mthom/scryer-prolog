@@ -5263,13 +5263,17 @@ impl Machine {
         };
 
         let bp = cell_as_fixnum!(a1).get_num() as usize;
+        let a3 = self.deref_register(3);
         let count = self.machine_st.cwil.add_limit(n, bp);
-        let count = arena_alloc!(count.clone(), &mut self.machine_st.arena);
+
+        if let Some(count) = count.to_i64() {
+            self.machine_st.unify_fixnum(Fixnum::build_with(count), a3);
+        } else {
+            let count = arena_alloc!(count.clone(), &mut self.machine_st.arena);
+            self.machine_st.unify_big_int(count, a3);
+        }
 
         self.machine_st.increment_call_count_fn = MachineState::increment_call_count;
-
-        let a3 = self.deref_register(3);
-        self.machine_st.unify_big_int(count, a3);
 
         Ok(())
     }
@@ -5410,14 +5414,18 @@ impl Machine {
     #[inline(always)]
     pub(crate) fn remove_inference_counter(&mut self) {
         let a1 = self.deref_register(1);
+        let a2 = self.deref_register(2);
+
         let bp = cell_as_fixnum!(a1).get_num() as usize;
 
         let count = self.machine_st.cwil.remove_limit(bp).clone();
-        let count = arena_alloc!(count.clone(), &mut self.machine_st.arena);
 
-        let a2 = self.deref_register(2);
-
-        self.machine_st.unify_big_int(count, a2);
+        if let Some(count) = count.to_i64() {
+            self.machine_st.unify_fixnum(Fixnum::build_with(count), a2);
+        } else {
+            let count = arena_alloc!(count.clone(), &mut self.machine_st.arena);
+            self.machine_st.unify_big_int(count, a2);
+        }
     }
 
     #[inline(always)]
