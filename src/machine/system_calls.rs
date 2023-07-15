@@ -5188,6 +5188,20 @@ impl Machine {
     }
 
     #[inline(always)]
+    pub(crate) fn get_unknown(&mut self) {
+        let a1 = self.deref_register(1);
+
+        self.machine_st.unify_atom(
+            match self.machine_st.flags.unknown {
+                Unknown::Error => atom!("error"),
+                Unknown::Fail => atom!("fail"),
+                Unknown::Warn => atom!("warning"),
+            },
+            a1,
+        );
+    }
+
+    #[inline(always)]
     pub(crate) fn get_scc_cleaner(&mut self) {
         let dest = self.machine_st.registers[1];
 
@@ -5521,12 +5535,27 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn set_double_quotes(&mut self) {
-        let atom = cell_as_atom!(self.machine_st.registers[1]);
+        let atom = cell_as_atom!(self.deref_register(1));
 
         self.machine_st.flags.double_quotes = match atom {
             atom!("atom") => DoubleQuotes::Atom,
             atom!("chars") => DoubleQuotes::Chars,
             atom!("codes") => DoubleQuotes::Codes,
+            _ => {
+                self.machine_st.fail = true;
+                return;
+            }
+        };
+    }
+
+    #[inline(always)]
+    pub(crate) fn set_unknown(&mut self) {
+        let atom = cell_as_atom!(self.deref_register(1));
+
+        self.machine_st.flags.unknown = match atom {
+            atom!("error") => Unknown::Error,
+            atom!("fail") => Unknown::Fail,
+            atom!("warning") => Unknown::Warn,
             _ => {
                 self.machine_st.fail = true;
                 return;

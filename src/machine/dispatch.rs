@@ -4194,6 +4194,14 @@ impl Machine {
                     self.get_double_quotes();
                     step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                 }
+                &Instruction::CallGetUnknown => {
+                    self.get_unknown();
+                    step_or_fail!(self, self.machine_st.p += 1);
+                }
+                &Instruction::ExecuteGetUnknown => {
+                    self.get_unknown();
+                    step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+                }
                 &Instruction::CallInstallNewBlock => {
                     self.machine_st.install_new_block(self.machine_st.registers[1]);
                     step_or_fail!(self, self.machine_st.p += 1);
@@ -4372,6 +4380,14 @@ impl Machine {
                 }
                 &Instruction::ExecuteSetDoubleQuotes => {
                     self.set_double_quotes();
+                    step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+                }
+                &Instruction::CallSetUnknown => {
+                    self.set_unknown();
+                    step_or_fail!(self, self.machine_st.p += 1);
+                }
+                &Instruction::ExecuteSetUnknown => {
+                    self.set_unknown();
                     step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                 }
                 &Instruction::CallSetSeed => {

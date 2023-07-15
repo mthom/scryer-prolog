@@ -140,7 +140,9 @@ call(_, _, _, _, _, _, _, _, _).
 %  * `occurs_check`: Returns if the occurs check is enabled. The occurs check prevents the creation cyclic terms.
 %    Historically the Prolog unification algorithm didn't do that check so changing the value modifies how Prolog
 %    operates in the low-level. Possible values are `false`  (default), `true` (unification has this check
-%    enabled) and `error` which throws an exception when a cylic term is created. Read ans write.
+%    enabled) and `error` which throws an exception when a cylic term is created. Read and write.
+%  * `unknown`: How undefined predicates are handled when called. Possible values are `error` (the default, an error is thrown),
+%    `fail` (the call silently fails) and `warn` (the call fails and a warning about the undefined predicate is printed).
 %
 current_prolog_flag(Flag, Value) :- Flag == max_arity, !, Value = 1023.
 current_prolog_flag(max_arity, 1023).
@@ -150,6 +152,8 @@ current_prolog_flag(Flag, Value) :- Flag == integer_rounding_function, !, Value 
 current_prolog_flag(integer_rounding_function, toward_zero).
 current_prolog_flag(Flag, Value) :- Flag == double_quotes, !, '$get_double_quotes'(Value).
 current_prolog_flag(double_quotes, Value) :- '$get_double_quotes'(Value).
+current_prolog_flag(Flag, Value) :- Flag == unknown, !, '$get_unknown'(Value).
+current_prolog_flag(unknown, Value) :- '$get_unknown'(Value).
 current_prolog_flag(Flag, _) :- Flag == max_integer, !, '$fail'.
 current_prolog_flag(Flag, _) :- Flag == min_integer, !, '$fail'.
 current_prolog_flag(Flag, OccursCheckEnabled) :-
@@ -190,6 +194,12 @@ set_prolog_flag(double_quotes, atom) :-
     !, '$set_double_quotes'(atom). % 7.11.2.5, list of char codes (UTF8).
 set_prolog_flag(double_quotes, codes) :-
     !, '$set_double_quotes'(codes).
+set_prolog_flag(unknown, error) :-
+    !, '$set_unknown'(error).
+set_prolog_flag(unknown, warning) :-
+    !, '$set_unknown'(warning).
+set_prolog_flag(unknown, fail) :-
+    !, '$set_unknown'(fail).
 set_prolog_flag(occurs_check, true) :-
     !, '$set_sto_as_unify'.
 set_prolog_flag(occurs_check, false) :-

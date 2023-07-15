@@ -55,7 +55,7 @@ impl AppendOrPrepend {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub enum VarComparison {
     Indistinct,
     Distinct
