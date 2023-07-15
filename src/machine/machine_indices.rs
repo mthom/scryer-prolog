@@ -264,11 +264,9 @@ impl IndexStore {
         let (name, arity) = key;
 
         if !ClauseType::is_inbuilt(name, arity) {
-            return if let Some(module) = self.modules.get(&(atom!("builtins"))) {
-                module.code_dir.contains_key(&(name, arity))
-            } else {
-                false
-            };
+            self.modules.get(&(atom!("builtins")))
+                .map(|module| module.code_dir.contains_key(&(name, arity)))
+                .unwrap_or(false)
         } else {
             true
         }

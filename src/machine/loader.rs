@@ -328,6 +328,10 @@ impl<'a> LoadState<'a> for LiveLoadAndMachineState<'a> {
         loader: &Loader<'a, Self>,
         key: PredicateKey,
     ) -> Result<(), SessionError> {
+        if ClauseType::is_inbuilt(key.0, key.1) {
+            return Err(SessionError::CannotOverwriteBuiltIn(key));
+        }
+
         if let Some(builtins) = loader.wam_prelude.indices.modules.get(&atom!("builtins")) {
             if builtins.module_decl.exports.contains(&ModuleExport::PredicateKey(key)) {
                 return Err(SessionError::CannotOverwriteBuiltIn(key));
