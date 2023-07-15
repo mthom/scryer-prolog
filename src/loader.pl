@@ -24,10 +24,14 @@ write_error(Error) :-
     ;  write('   ') % if '$first_answer' isn't defined yet or true,
                     % print indentation.
     ),
+    (  current_prolog_flag(double_quotes, chars) ->
+       DQ = true
+    ;  DQ = false
+    ),
     (  nonvar(Error),
        functor(Error, error, 2) ->
-       writeq(Error)
-    ;  writeq(throw(Error))
+       write_term(Error, [ignore_ops(false), numbervars(true), quoted(true), double_quotes(DQ)])
+    ;  write_term(throw(Error), [ignore_ops(false), numbervars(true), quoted(true), double_quotes(DQ)])
     ),
     write('.').
 
