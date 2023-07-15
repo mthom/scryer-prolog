@@ -5792,7 +5792,7 @@ impl Machine {
     }
 
     #[inline(always)]
-    pub(crate) fn read_term_from_chars(&mut self) -> CallResult {
+    pub(crate) fn read_from_chars(&mut self) -> CallResult {
         if let Some(atom_or_string) = self.machine_st.value_to_str_like(self.machine_st.registers[1]) {
             let chars = CharReader::new(ByteStream::from_string(atom_or_string.to_string()));
             let mut parser = Parser::new(chars, &mut self.machine_st);
@@ -5827,6 +5827,16 @@ impl Machine {
         }
 
         Ok(())
+    }
+
+    #[inline(always)]
+    pub(crate) fn read_term_from_chars(&mut self) -> CallResult {
+        if let Some(atom_or_string) = self.machine_st.value_to_str_like(self.machine_st.registers[1]) {
+            let stream = Stream::from_owned_string(atom_or_string.to_string(), &mut self.machine_st.arena);
+            self.machine_st.read_term(stream, &mut self.indices)
+        } else {
+            unreachable!()
+        }
     }
 
     #[inline(always)]

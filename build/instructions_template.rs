@@ -418,7 +418,9 @@ enum SystemClauseType {
     CurrentTime,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$quoted_token")))]
     QuotedToken,
-    #[strum_discriminants(strum(props(Arity = "2", Name = "$read_term_from_chars")))]
+    #[strum_discriminants(strum(props(Arity = "2", Name = "$read_from_chars")))]
+    ReadFromChars,
+    #[strum_discriminants(strum(props(Arity = "5", Name = "$read_term_from_chars")))]
     ReadTermFromChars,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$reset_block")))]
     ResetBlock,
@@ -1735,6 +1737,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallStripModule |
                     &Instruction::CallCurrentTime |
                     &Instruction::CallQuotedToken |
+                    &Instruction::CallReadFromChars |
                     &Instruction::CallReadTermFromChars |
                     &Instruction::CallResetBlock |
                     &Instruction::CallResetSCCBlock |
@@ -1959,6 +1962,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteStripModule |
                     &Instruction::ExecuteCurrentTime |
                     &Instruction::ExecuteQuotedToken |
+                    &Instruction::ExecuteReadFromChars |
                     &Instruction::ExecuteReadTermFromChars |
                     &Instruction::ExecuteResetBlock |
                     &Instruction::ExecuteResetSCCBlock |

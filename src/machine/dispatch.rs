@@ -4270,6 +4270,14 @@ impl Machine {
                     self.quoted_token();
                     step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                 }
+                &Instruction::CallReadFromChars => {
+                    try_or_throw!(self.machine_st, self.read_from_chars());
+                    step_or_fail!(self, self.machine_st.p += 1);
+                }
+                &Instruction::ExecuteReadFromChars => {
+                    try_or_throw!(self.machine_st, self.read_from_chars());
+                    step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+                }
                 &Instruction::CallReadTermFromChars => {
                     try_or_throw!(self.machine_st, self.read_term_from_chars());
                     step_or_fail!(self, self.machine_st.p += 1);

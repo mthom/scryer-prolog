@@ -12,6 +12,7 @@ read and write chars.
                     get_n_chars/3,
                     get_line_to_chars/3,
                     read_from_chars/2,
+                    read_term_from_chars/3,
                     write_term_to_chars/3,
                     chars_base64/3]).
 
@@ -194,7 +195,22 @@ get_single_char(C) :-
 read_from_chars(Chars, Term) :-
     must_be(chars, Chars),
     must_be(var, Term),
-    '$read_term_from_chars'(Chars, Term).
+    '$read_from_chars'(Chars, Term).
+
+%% read_term_from_chars(+Chars, -Term, +Options).
+%
+% Like `read_from_chars`, except the reader is configured according to
+% `Options` which are those of `read_term`.
+%
+% ```
+% ?- read_term_from_chars("f(X,y).", T, [variable_names(['X'=X])]).
+%    T = f(X,y).
+% ```
+read_term_from_chars(Chars, Term, Options) :-
+    must_be(chars, Chars),
+    must_be(var, Term),
+    builtins:parse_read_term_options(Options, [Singletons, VariableNames, Variables], read_term_from_chars/3),
+    '$read_term_from_chars'(Chars, Term, Singletons, Variables, VariableNames).
 
 %% write_term_to_chars(+Term, +Options, -Chars).
 %
