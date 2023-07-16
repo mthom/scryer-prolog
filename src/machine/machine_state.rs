@@ -12,6 +12,7 @@ use crate::machine::machine_indices::*;
 use crate::machine::stack::*;
 use crate::machine::streams::*;
 use crate::parser::ast::*;
+use crate::read::TermWriteResult;
 use crate::types::*;
 
 use crate::parser::rug::Integer;
@@ -482,24 +483,7 @@ impl MachineState {
         }
     }
 
-    // Safety: the atom_tbl lives for the lifetime of the machine, as does the helper, so the ptr
-    // will always be valid.
-    pub fn read_term_from_user_input(&mut self, stream: Stream, indices: &mut IndexStore) -> CallResult {
-        let atoms_ptr = (&self.atom_tbl.table) as *const indexmap::IndexSet<Atom>;
-
-        if let Stream::Readline(ptr) = stream {
-            unsafe {
-                let readline = ptr.as_ptr().as_mut().unwrap();
-                readline.set_atoms_for_completion(atoms_ptr);
-                let ret = self.read_term(stream, indices);
-                return ret
-            }
-        }
-
-        unreachable!("Stream must be a Stream::Readline(_)")
-    }
-
-    pub fn read_term(&mut self, stream: Stream, indices: &mut IndexStore) -> CallResult {
+    pub fn read_term_body(&mut self, mut term_write_result: TermWriteResult) -> CallResult {
         fn push_var_eq_functors<'a>(
             heap: &mut Heap,
             iter: impl Iterator<Item = (&'a VarPtr, &'a HeapCellValue)>,
@@ -521,6 +505,118 @@ impl MachineState {
             list_of_var_eqs
         }
 
+        let heap_loc = read_heap_cell!(self.heap[term_write_result.heap_loc],
+            (HeapCellValueTag::PStr | HeapCellValueTag::PStrOffset) => {
+                pstr_loc_as_cell!(term_write_result.heap_loc)
+            }
+            _ => {
+                heap_loc_as_cell!(term_write_result.heap_loc)
+            }
+        );
+
+        let term = self.registers[2];
+        unify_fn!(*self, heap_loc, term);
+        let term = heap_loc;
+
+        if self.fail {
+            return Ok(());
+        }
+
+        let mut singleton_var_set: IndexMap<Ref, bool> = IndexMap::new();
+
+        for cell in stackful_preorder_iter(&mut self.heap, &mut self.stack, term) {
+            let cell = unmark_cell_bits!(cell);
+
+            if let Some(var) = cell.as_var() {
+                if !singleton_var_set.contains_key(&var) {
+                    singleton_var_set.insert(var, true);
+                } else {
+                    singleton_var_set.insert(var, false);
+                }
+            }
+        }
+
+        for var in term_write_result.var_dict.values_mut() {
+            *var = heap_bound_deref(&self.heap, *var);
+        }
+
+        let singleton_var_list = push_var_eq_functors(
+            &mut self.heap,
+            term_write_result.var_dict.iter().filter(|(_, binding)| {
+                if let Some(r) = binding.as_var() {
+                    *singleton_var_set.get(&r).unwrap_or(&false)
+                } else {
+                    false
+                }
+            }),
+            &mut self.atom_tbl,
+        );
+
+        let mut var_list = Vec::with_capacity(singleton_var_set.len());
+
+        for (var_name, addr) in term_write_result.var_dict {
+            if let Some(var) = addr.as_var() {
+                let idx = singleton_var_set.get_index_of(&var).unwrap();
+                var_list.push((var_name, addr, idx));
+            }
+        }
+
+        var_list.sort_by(|(_,_,idx_1),(_,_,idx_2)| idx_1.cmp(idx_2));
+
+        let list_of_var_eqs = push_var_eq_functors(
+            &mut self.heap,
+            var_list.iter().map(|(var_name, var,_)| (var_name,var)),
+            &mut self.atom_tbl,
+        );
+
+        let singleton_addr = self.registers[3];
+        let singletons_offset = heap_loc_as_cell!(
+            iter_to_heap_list(&mut self.heap, singleton_var_list.into_iter())
+        );
+
+        unify_fn!(*self, singletons_offset, singleton_addr);
+
+        if self.fail {
+            return Ok(());
+        }
+
+        let vars_addr = self.registers[4];
+        let vars_offset = heap_loc_as_cell!(
+            iter_to_heap_list(&mut self.heap, var_list.into_iter().map(|(_,cell,_)| cell))
+        );
+
+        unify_fn!(*self, vars_offset, vars_addr);
+
+        if self.fail {
+            return Ok(());
+        }
+
+        let var_names_addr = self.registers[5];
+        let var_names_offset = heap_loc_as_cell!(
+            iter_to_heap_list(&mut self.heap, list_of_var_eqs.into_iter())
+        );
+
+        return Ok(unify_fn!(*self, var_names_offset, var_names_addr));
+    }
+
+    // Safety: the atom_tbl lives for the lifetime of the machine, as does the helper, so the ptr
+    // will always be valid.
+    pub fn read_term_from_user_input(&mut self, stream: Stream, indices: &mut IndexStore) -> CallResult {
+        let atoms_ptr = (&self.atom_tbl.table) as *const indexmap::IndexSet<Atom>;
+
+        if let Stream::Readline(ptr) = stream {
+            unsafe {
+                let readline = ptr.as_ptr().as_mut().unwrap();
+                readline.set_atoms_for_completion(atoms_ptr);
+                let ret = self.read_term(stream, indices);
+                return ret
+            }
+        }
+
+        unreachable!("Stream must be a Stream::Readline(_)")
+    }
+
+    pub fn read_term(&mut self, stream: Stream, indices: &mut IndexStore) -> CallResult {
         self.check_stream_properties(
             stream,
             StreamType::Text,
@@ -539,100 +635,7 @@ impl MachineState {
 
         loop {
             match self.read(stream, &indices.op_dir) {
-                Ok(mut term_write_result) => {
-                    let heap_loc = read_heap_cell!(self.heap[term_write_result.heap_loc],
-                        (HeapCellValueTag::PStr | HeapCellValueTag::PStrOffset) => {
-                            pstr_loc_as_cell!(term_write_result.heap_loc)
-                        }
-                        _ => {
-                            heap_loc_as_cell!(term_write_result.heap_loc)
-                        }
-                    );
-
-                    let term = self.registers[2];
-                    unify_fn!(*self, heap_loc, term);
-                    let term = heap_loc;
-
-                    if self.fail {
-                        return Ok(());
-                    }
-
-                    let mut singleton_var_set: IndexMap<Ref, bool> = IndexMap::new();
-
-                    for cell in stackful_preorder_iter(&mut self.heap, &mut self.stack, term) {
-                        let cell = unmark_cell_bits!(cell);
-
-                        if let Some(var) = cell.as_var() {
-                            if !singleton_var_set.contains_key(&var) {
-                                singleton_var_set.insert(var, true);
-                            } else {
-                                singleton_var_set.insert(var, false);
-                            }
-                        }
-                    }
-
-                    for var in term_write_result.var_dict.values_mut() {
-                        *var = heap_bound_deref(&self.heap, *var);
-                    }
-
-                    let singleton_var_list = push_var_eq_functors(
-                        &mut self.heap,
-                        term_write_result.var_dict.iter().filter(|(_, binding)| {
-                            if let Some(r) = binding.as_var() {
-                                *singleton_var_set.get(&r).unwrap_or(&false)
-                            } else {
-                                false
-                            }
-                        }),
-                        &mut self.atom_tbl,
-                    );
-
-                    let mut var_list = Vec::with_capacity(singleton_var_set.len());
-
-                    for (var_name, addr) in term_write_result.var_dict {
-                        if let Some(var) = addr.as_var() {
-                            let idx = singleton_var_set.get_index_of(&var).unwrap();
-                            var_list.push((var_name, addr, idx));
-                        }
-                    }
-
-                    var_list.sort_by(|(_,_,idx_1),(_,_,idx_2)| idx_1.cmp(idx_2));
-
-                    let list_of_var_eqs = push_var_eq_functors(
-                        &mut self.heap,
-                        var_list.iter().map(|(var_name, var,_)| (var_name,var)),
-                        &mut self.atom_tbl,
-                    );
-
-                    let singleton_addr = self.registers[3];
-                    let singletons_offset = heap_loc_as_cell!(
-                        iter_to_heap_list(&mut self.heap, singleton_var_list.into_iter())
-                    );
-
-                    unify_fn!(*self, singletons_offset, singleton_addr);
-
-                    if self.fail {
-                        return Ok(());
-                    }
-
-                    let vars_addr = self.registers[4];
-                    let vars_offset = heap_loc_as_cell!(
-                        iter_to_heap_list(&mut self.heap, var_list.into_iter().map(|(_,cell,_)| cell))
-                    );
-
-                    unify_fn!(*self, vars_offset, vars_addr);
-
-                    if self.fail {
-                        return Ok(());
-                    }
-
-                    let var_names_addr = self.registers[5];
-                    let var_names_offset = heap_loc_as_cell!(
-                        iter_to_heap_list(&mut self.heap, list_of_var_eqs.into_iter())
-                    );
-
-                    return Ok(unify_fn!(*self, var_names_offset, var_names_addr));
-                }
+                Ok(term_write_result) => return self.read_term_body(term_write_result),
                 Err(err) => {
                     match err {
                         CompilationError::ParserError(e) if e.is_unexpected_eof() => {
