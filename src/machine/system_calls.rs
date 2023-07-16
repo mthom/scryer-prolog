@@ -1433,10 +1433,15 @@ impl Machine {
                     post_supp_args
                         .zip(supp_vars.iter())
                         .all(|(arg_term, supp_var)| {
-                            let arg_term = self.machine_st.store(self.machine_st.deref(arg_term));
+                            let (module_loc, arg_term) = self.machine_st.strip_module(
+                                arg_term,
+                                heap_loc_as_cell!(0),
+                            );
 
-                            if arg_term.is_var() && supp_var.is_var() {
-                                return arg_term == *supp_var;
+                            if module_loc.is_var() || module_loc == atom_as_cell!(atom!("user")) {
+                                if arg_term.is_var() && supp_var.is_var() {
+                                    return arg_term == *supp_var;
+                                }
                             }
 
                             false
