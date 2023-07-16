@@ -115,18 +115,27 @@ layout_and_dot([C|Cs]) :-
     layout_and_dot(Cs).
 
 run_goals([]).
-run_goals([g(Gs0)|Goals]) :-
+run_goals([g(Gs0)|Goals]) :- !,
     (   ends_with_dot(Gs0) -> Gs1 = Gs0
     ;   append(Gs0, ".", Gs1)
     ),
-    read_from_chars(Gs1, Goal),
-    (   catch(
-            user:Goal,
-            Exception,
-            (write(Goal), write(' causes: '), write(Exception), nl) % halt?
-        )
-    ;   write('Warning: initialization failed for '),
-        write(Gs0), nl
+    double_quotes_option(DQ),
+    catch(read_term_from_chars(Gs1, Goal, [variable_names(VNs)]),
+          E,
+          (   write_term(Gs0, [double_quotes(DQ)]),
+              write(' cannot be read: '), write(E), nl,
+              halt
+          )
+    ),
+    (   catch(user:Goal,
+              Exception,
+              (   write_term(Goal, [variable_names(VNs),double_quotes(DQ)]),
+                  write(' causes: '),
+                  write_term(Exception, [double_quotes(DQ)]), nl % halt?
+              )
+        ) -> true
+    ;   write('Warning: initialization failed for: '),
+        write_term(Goal, [variable_names(VNs),double_quotes(DQ)]), nl
     ),
     run_goals(Goals).
 run_goals([Goal|_]) :-
