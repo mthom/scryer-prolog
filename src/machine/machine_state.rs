@@ -486,13 +486,13 @@ impl MachineState {
     pub fn read_term_body(&mut self, mut term_write_result: TermWriteResult) -> CallResult {
         fn push_var_eq_functors<'a>(
             heap: &mut Heap,
-            iter: impl Iterator<Item = (&'a VarPtr, &'a HeapCellValue)>,
+            iter: impl Iterator<Item = (&'a VarKey, &'a HeapCellValue)>,
             atom_tbl: &mut AtomTable,
         ) -> Vec<HeapCellValue> {
             let mut list_of_var_eqs = vec![];
 
             for (var, binding) in iter {
-                let var_atom = atom_tbl.build_with(&var.borrow().to_string());
+                let var_atom = atom_tbl.build_with(&var.to_string());
                 let h = heap.len();
 
                 heap.push(atom_as_cell!(atom!("="), 2));
@@ -542,7 +542,11 @@ impl MachineState {
 
         let singleton_var_list = push_var_eq_functors(
             &mut self.heap,
-            term_write_result.var_dict.iter().filter(|(_, binding)| {
+            term_write_result.var_dict.iter().filter(|(var_name, binding)| {
+                if var_name.is_anon() {
+                    return false;
+                }
+
                 if let Some(r) = binding.as_var() {
                     *singleton_var_set.get(&r).unwrap_or(&false)
                 } else {
@@ -565,7 +569,7 @@ impl MachineState {
 
         let list_of_var_eqs = push_var_eq_functors(
             &mut self.heap,
-            var_list.iter().map(|(var_name, var,_)| (var_name,var)),
+            var_list.iter().filter_map(|(var_name, var,_)| if var_name.is_anon() { None } else { Some((var_name,var)) }),
             &mut self.atom_tbl,
         );
 
@@ -616,7 +620,7 @@ impl MachineState {
         unreachable!("Stream must be a Stream::Readline(_)")
     }
 
-    pub fn read_term(&mut self, stream: Stream, indices: &mut IndexStore) -> CallResult {
+    pub fn read_term(&mut self, mut stream: Stream, indices: &mut IndexStore) -> CallResult {
         self.check_stream_properties(
             stream,
             StreamType::Text,
@@ -637,22 +641,27 @@ impl MachineState {
             match self.read(stream, &indices.op_dir) {
                 Ok(term_write_result) => return self.read_term_body(term_write_result),
                 Err(err) => {
-                    match err {
+                    match &err {
                         CompilationError::ParserError(e) if e.is_unexpected_eof() => {
-                            self.eof_action(
-                                self.registers[2],
-                                stream,
-                                atom!("read_term"),
-                                3,
-                            )?;
+                            if stream.at_end_of_stream() {
+                                unify!(self, self.registers[2], atom_as_cell!(atom!("end_of_file")));
+                                return Ok(());
+                            } else if stream.past_end_of_stream() {
+                                self.eof_action(
+                                    self.registers[2],
+                                    stream,
+                                    atom!("read_term"),
+                                    3,
+                                )?;
 
-                            if stream.options().eof_action() == EOFAction::Reset {
-                                if self.fail == false {
-                                    continue;
+                                if stream.options().eof_action() == EOFAction::Reset {
+                                    if self.fail == false {
+                                        continue;
+                                    }
                                 }
-                            }
 
-                            return Ok(());
+                                return Ok(());
+                            }
                         }
                         _ => {}
                     }

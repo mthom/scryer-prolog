@@ -227,7 +227,32 @@ impl CodeIndex {
     }
 }
 
-pub(crate) type HeapVarDict = IndexMap<VarPtr, HeapCellValue, FxBuildHasher>;
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum VarKey {
+    AnonVar(usize),
+    VarPtr(VarPtr),
+}
+
+impl VarKey {
+    #[inline]
+    pub(crate) fn to_string(&self) -> String {
+        match self {
+            VarKey::AnonVar(h) => format!("_{}", h),
+            VarKey::VarPtr(var) => var.borrow().to_string(),
+        }
+    }
+
+    #[inline(always)]
+    pub(crate) fn is_anon(&self) -> bool {
+        if let VarKey::AnonVar(_) = self {
+            true
+        } else {
+            false
+        }
+    }
+}
+
+pub(crate) type HeapVarDict = IndexMap<VarKey, HeapCellValue, FxBuildHasher>;
 
 pub(crate) type GlobalVarDir = IndexMap<Atom, (Ball, Option<HeapCellValue>), FxBuildHasher>;
 

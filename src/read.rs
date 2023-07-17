@@ -36,6 +36,25 @@ pub(crate) fn devour_whitespace<'a, R: CharRead>(parser: &mut Parser<'a, R>) -> 
     }
 }
 
+pub(crate) fn error_after_read_term<R>(
+    err: ParserError,
+    prior_num_lines_read: usize,
+    parser: &Parser<R>,
+) -> CompilationError {
+    if err.is_unexpected_eof() {
+        let line_num = parser.lexer.line_num;
+        let col_num = parser.lexer.col_num;
+
+        // rough overlap with errors 8.14.1.3 k) & l) of the ISO standard here
+        if !(line_num == prior_num_lines_read && col_num == 0) {
+            return CompilationError::from(ParserError::IncompleteReduction(line_num, col_num));
+        }
+    }
+
+    CompilationError::from(err)
+}
+
+
 impl MachineState {
     pub(crate) fn read(
         &mut self,
@@ -50,7 +69,7 @@ impl MachineState {
             parser.add_lines_read(prior_num_lines_read);
 
             let term = parser.read_term(&op_dir, Tokens::Default)
-                .map_err(CompilationError::from)?;
+                .map_err(|err| error_after_read_term(err, prior_num_lines_read, &parser))?; // CompilationError::from
 
             (term, parser.lines_read() - prior_num_lines_read)
         };
@@ -240,9 +259,9 @@ impl CharRead for ReadlineStream {
 }
 
 #[inline]
-pub(crate) fn write_term_to_heap(
-    term: &Term,
-    heap: &mut Heap,
+pub(crate) fn write_term_to_heap<'a, 'b>(
+    term: &'a Term,
+    heap: &'b mut Heap,
     atom_tbl: &mut AtomTable,
 ) -> Result<TermWriteResult, CompilationError> {
     let term_writer = TermWriter::new(heap, atom_tbl);
@@ -275,7 +294,7 @@ impl<'a, 'b> TermWriter<'a, 'b> {
     }
 
     #[inline]
-    fn modify_head_of_queue(&mut self, term: &TermRef<'a>, h: usize) {
+    fn modify_head_of_queue(&mut self, term: &TermRef, h: usize) {
         if let Some((arity, site_h)) = self.queue.pop_front() {
             self.heap[site_h] = self.term_as_addr(term, h);
 
@@ -291,7 +310,7 @@ impl<'a, 'b> TermWriter<'a, 'b> {
         self.heap.push(heap_loc_as_cell!(h));
     }
 
-    fn term_as_addr(&mut self, term: &TermRef<'a>, h: usize) -> HeapCellValue {
+    fn term_as_addr(&mut self, term: &TermRef, h: usize) -> HeapCellValue {
         match term {
             &TermRef::Cons(..) => list_loc_as_cell!(h),
             &TermRef::AnonVar(_) | &TermRef::Var(..) => heap_loc_as_cell!(h),
@@ -310,7 +329,7 @@ impl<'a, 'b> TermWriter<'a, 'b> {
         }
     }
 
-    fn write_term_to_heap(mut self, term: &'a Term) -> Result<TermWriteResult, CompilationError> {
+    fn write_term_to_heap(mut self, term: &Term) -> Result<TermWriteResult, CompilationError> {
         let heap_loc = self.heap.len();
 
         for term in breadth_first_iter(term, RootIterationPolicy::Iterated) {
@@ -364,17 +383,19 @@ impl<'a, 'b> TermWriter<'a, 'b> {
                         self.push_stub_addr();
                     }
                 }
-                &TermRef::AnonVar(Level::Root) | &TermRef::Literal(Level::Root, ..) => {
+                &TermRef::AnonVar(Level::Root) | TermRef::Literal(Level::Root, ..) => {
                     let addr = self.term_as_addr(&term, h);
                     self.heap.push(addr);
                 }
                 &TermRef::Var(Level::Root, _, ref var_ptr) => {
                     let addr = self.term_as_addr(&term, h);
-                    self.var_dict.insert(var_ptr.clone(), heap_loc_as_cell!(h));
+                    self.var_dict.insert(VarKey::VarPtr(var_ptr.clone()), addr);
                     self.heap.push(addr);
                 }
                 &TermRef::AnonVar(_) => {
                     if let Some((arity, site_h)) = self.queue.pop_front() {
+                        self.var_dict.insert(VarKey::AnonVar(h), heap_loc_as_cell!(site_h));
+
                         if arity > 1 {
                             self.queue.push_front((arity - 1, site_h + 1));
                         }
@@ -403,10 +424,12 @@ impl<'a, 'b> TermWriter<'a, 'b> {
                 }
                 &TermRef::Var(_, _, ref var) => {
                     if let Some((arity, site_h)) = self.queue.pop_front() {
-                        if let Some(addr) = self.var_dict.get(var).cloned() {
+                        let var_key = VarKey::VarPtr(var.clone());
+
+                        if let Some(addr) = self.var_dict.get(&var_key).cloned() {
                             self.heap[site_h] = addr;
                         } else {
-                            self.var_dict.insert(var.clone(), heap_loc_as_cell!(site_h));
+                            self.var_dict.insert(var_key, heap_loc_as_cell!(site_h));
                         }
 
                         if arity > 1 {
