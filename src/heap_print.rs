@@ -1185,7 +1185,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         let at_cdr = self.outputter.ends_with("|");
 
         if self.double_quotes {
-            if !at_cdr && !self.ignore_ops && end_cell.is_string_terminator(&self.iter.heap) {
+            if !self.ignore_ops && end_cell.is_string_terminator(&self.iter.heap) {
                 self.remove_list_children(focus.value() as usize);
                 return self.print_proper_string(focus.value() as usize, max_depth);
             }
