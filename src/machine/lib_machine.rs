@@ -32,7 +32,7 @@ mod tests {
 
     #[test]
     fn programatic_query() {
-        let mut machine = Machine::with_test_streams();
+        let mut machine = Machine::new_lib();
 
         machine.load_module_string(
             "facts",
