@@ -50,6 +50,12 @@ pub enum FirstOrNext {
     Next,
 }
 
+#[derive(Debug)]
+pub enum OnEOF {
+    Return,
+    Continue,
+}
+
 pub struct MachineState {
     pub atom_tbl: AtomTable,
     pub arena: Arena,
@@ -603,6 +609,23 @@ impl MachineState {
         return Ok(unify_fn!(*self, var_names_offset, var_names_addr));
     }
 
+    pub fn read_term_from_user_input_eof_handler(&mut self, stream: Stream) -> Result<OnEOF, MachineStub> {
+        self.eof_action(
+            self.registers[2],
+            stream,
+            atom!("read_term"),
+            3,
+        )?;
+
+        if stream.options().eof_action() == EOFAction::Reset {
+            if self.fail == false {
+                return Ok(OnEOF::Continue);
+            }
+        }
+
+        Ok(OnEOF::Return)
+    }
+
     // Safety: the atom_tbl lives for the lifetime of the machine, as does the helper, so the ptr
     // will always be valid.
     pub fn read_term_from_user_input(&mut self, stream: Stream, indices: &mut IndexStore) -> CallResult {
@@ -612,15 +635,45 @@ impl MachineState {
             unsafe {
                 let readline = ptr.as_ptr().as_mut().unwrap();
                 readline.set_atoms_for_completion(atoms_ptr);
-                let ret = self.read_term(stream, indices);
-                return ret
+                return self.read_term(
+                    stream,
+                    indices,
+                    MachineState::read_term_from_user_input_eof_handler,
+                );
             }
         }
 
         unreachable!("Stream must be a Stream::Readline(_)")
     }
 
-    pub fn read_term(&mut self, mut stream: Stream, indices: &mut IndexStore) -> CallResult {
+    pub fn read_term_eof_handler(&mut self, mut stream: Stream) -> Result<OnEOF, MachineStub> {
+        if stream.at_end_of_stream() {
+            unify!(self, self.registers[2], atom_as_cell!(atom!("end_of_file")));
+            return Ok(OnEOF::Return);
+        } else if stream.past_end_of_stream() {
+            self.eof_action(
+                self.registers[2],
+                stream,
+                atom!("read_term"),
+                3,
+            )?;
+
+            if stream.options().eof_action() == EOFAction::Reset {
+                if self.fail == false {
+                    return Ok(OnEOF::Continue);
+                }
+            }
+        }
+
+        Ok(OnEOF::Return)
+    }
+
+    pub fn read_term(
+        &mut self,
+        stream: Stream,
+        indices: &mut IndexStore,
+        eof_handler: impl Fn(&mut Self, Stream) -> Result<OnEOF, MachineStub>,
+    ) -> CallResult {
         self.check_stream_properties(
             stream,
             StreamType::Text,
@@ -643,24 +696,9 @@ impl MachineState {
                 Err(err) => {
                     match &err {
                         CompilationError::ParserError(e) if e.is_unexpected_eof() => {
-                            if stream.at_end_of_stream() {
-                                unify!(self, self.registers[2], atom_as_cell!(atom!("end_of_file")));
-                                return Ok(());
-                            } else if stream.past_end_of_stream() {
-                                self.eof_action(
-                                    self.registers[2],
-                                    stream,
-                                    atom!("read_term"),
-                                    3,
-                                )?;
-
-                                if stream.options().eof_action() == EOFAction::Reset {
-                                    if self.fail == false {
-                                        continue;
-                                    }
-                                }
-
-                                return Ok(());
+                            match eof_handler(self, stream)? {
+                                OnEOF::Return => return Ok(()),
+                                OnEOF::Continue => continue,
                             }
                         }
                         _ => {}

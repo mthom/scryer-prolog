@@ -5793,7 +5793,11 @@ impl Machine {
             3,
         )?;
 
-        self.machine_st.read_term(stream, &mut self.indices)
+        if let Stream::Readline(..) = stream {
+            self.machine_st.read_term(stream, &mut self.indices, MachineState::read_term_from_user_input_eof_handler)
+        } else {
+            self.machine_st.read_term(stream, &mut self.indices, MachineState::read_term_eof_handler)
+        }
     }
 
     #[inline(always)]
