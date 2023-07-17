@@ -884,19 +884,38 @@ impl PartialEq for Stream {
 
 impl Eq for Stream {}
 
+fn cursor_position<T>(past_end_of_stream: &mut bool, cursor: &Cursor<T>, cursor_len: u64) -> AtEndOfStream {
+    let position = cursor.position();
+
+    let at_end_of_stream = match position.cmp(&cursor_len) {
+        Ordering::Equal => AtEndOfStream::At,
+        Ordering::Greater => {
+            *past_end_of_stream = true;
+            AtEndOfStream::Past
+        }
+        Ordering::Less => AtEndOfStream::Not,
+    };
+
+    at_end_of_stream
+}
+
 impl Stream {
     #[inline]
     pub(crate) fn position(&mut self) -> Option<(u64, usize)> {
         // returns lines_read, position.
         let result = match self {
+            Stream::Byte(byte_stream_layout) => {
+                Some(byte_stream_layout.stream.get_ref().0.position())
+            }
+            Stream::StaticString(string_stream_layout) => {
+                Some(string_stream_layout.stream.stream.position())
+            }
             Stream::InputFile(file_stream) => {
                 file_stream.position()
             }
-            Stream::NamedTcp(..)
-                | Stream::NamedTls(..)
-                | Stream::Readline(..)
-                | Stream::StaticString(..)
-                | Stream::Byte(..) => Some(0),
+            Stream::NamedTcp(..) | Stream::NamedTls(..) | Stream::Readline(..) => {
+                Some(0)
+            }
             _ => None,
         };
 
@@ -971,38 +990,61 @@ impl Stream {
             return AtEndOfStream::Past;
         }
 
-        if let Stream::InputFile(stream_layout) = self {
-            let position = stream_layout.position();
+        match self {
+            Stream::Byte(stream_layout) => {
+                let StreamLayout {
+                    past_end_of_stream,
+                    stream,
+                    ..
+                } = &mut **stream_layout;
 
-            let StreamLayout {
-                past_end_of_stream,
-                stream,
-                ..
-            } = &mut **stream_layout;
+                let cursor_len = stream.get_ref().0.get_ref().len() as u64;
+                cursor_position(past_end_of_stream, &stream.get_ref().0, cursor_len)
+            }
+            Stream::StaticString(stream_layout) => {
+                let StreamLayout {
+                    past_end_of_stream,
+                    stream,
+                    ..
+                } = &mut **stream_layout;
 
-            match stream.get_ref().file.metadata() {
-                Ok(metadata) => {
-                    if let Some(position) = position {
-                        return match position.cmp(&metadata.len()) {
-                            Ordering::Equal => AtEndOfStream::At,
-                            Ordering::Less => AtEndOfStream::Not,
-                            Ordering::Greater => {
-                                *past_end_of_stream = true;
-                                AtEndOfStream::Past
+                let cursor_len = stream.stream.get_ref().len() as u64;
+                cursor_position(past_end_of_stream, &stream.stream, cursor_len)
+            }
+            Stream::InputFile(stream_layout) => {
+                let position = stream_layout.position();
+
+                let StreamLayout {
+                    past_end_of_stream,
+                    stream,
+                    ..
+                } = &mut **stream_layout;
+
+                match stream.get_ref().file.metadata() {
+                    Ok(metadata) => {
+                        if let Some(position) = position {
+                            match position.cmp(&metadata.len()) {
+                                Ordering::Equal => AtEndOfStream::At,
+                                Ordering::Less => AtEndOfStream::Not,
+                                Ordering::Greater => {
+                                    *past_end_of_stream = true;
+                                    AtEndOfStream::Past
+                                }
                             }
-                        };
-                    } else {
+                        } else {
+                            *past_end_of_stream = true;
+                            AtEndOfStream::Past
+                        }
+                    }
+                    _ => {
                         *past_end_of_stream = true;
                         AtEndOfStream::Past
                     }
                 }
-                _ => {
-                    *past_end_of_stream = true;
-                    AtEndOfStream::Past
-                }
             }
-        } else {
-            AtEndOfStream::Not
+            _ => {
+                AtEndOfStream::Not
+            }
         }
     }
 
@@ -1306,7 +1348,7 @@ impl MachineState {
         match eof_action {
             EOFAction::Error => {
                 stream.set_past_end_of_stream(true);
-                return Err(self.open_past_eos_error(stream, caller, arity));
+                Err(self.open_past_eos_error(stream, caller, arity))
             }
             EOFAction::EOFCode => {
                 let end_of_stream = if stream.options().stream_type() == StreamType::Binary {

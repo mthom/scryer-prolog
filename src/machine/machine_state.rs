@@ -616,7 +616,7 @@ impl MachineState {
         unreachable!("Stream must be a Stream::Readline(_)")
     }
 
-    pub fn read_term(&mut self, stream: Stream, indices: &mut IndexStore) -> CallResult {
+    pub fn read_term(&mut self, mut stream: Stream, indices: &mut IndexStore) -> CallResult {
         self.check_stream_properties(
             stream,
             StreamType::Text,
@@ -637,22 +637,27 @@ impl MachineState {
             match self.read(stream, &indices.op_dir) {
                 Ok(term_write_result) => return self.read_term_body(term_write_result),
                 Err(err) => {
-                    match err {
+                    match &err {
                         CompilationError::ParserError(e) if e.is_unexpected_eof() => {
-                            self.eof_action(
-                                self.registers[2],
-                                stream,
-                                atom!("read_term"),
-                                3,
-                            )?;
+                            if stream.at_end_of_stream() {
+                                unify!(self, self.registers[2], atom_as_cell!(atom!("end_of_file")));
+                                return Ok(());
+                            } else if stream.past_end_of_stream() {
+                                self.eof_action(
+                                    self.registers[2],
+                                    stream,
+                                    atom!("read_term"),
+                                    3,
+                                )?;
 
-                            if stream.options().eof_action() == EOFAction::Reset {
-                                if self.fail == false {
-                                    continue;
+                                if stream.options().eof_action() == EOFAction::Reset {
+                                    if self.fail == false {
+                                        continue;
+                                    }
                                 }
-                            }
 
-                            return Ok(());
+                                return Ok(());
+                            }
                         }
                         _ => {}
                     }

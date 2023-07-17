@@ -36,6 +36,25 @@ pub(crate) fn devour_whitespace<'a, R: CharRead>(parser: &mut Parser<'a, R>) -> 
     }
 }
 
+pub(crate) fn error_after_read_term<R>(
+    err: ParserError,
+    prior_num_lines_read: usize,
+    parser: &Parser<R>,
+) -> CompilationError {
+    if err.is_unexpected_eof() {
+        let line_num = parser.lexer.line_num;
+        let col_num = parser.lexer.col_num;
+
+        // rough overlap with errors 8.14.1.3 k) & l) of the ISO standard here
+        if !(line_num == prior_num_lines_read && col_num == 0) {
+            return CompilationError::from(ParserError::IncompleteReduction(line_num, col_num));
+        }
+    }
+
+    CompilationError::from(err)
+}
+
+
 impl MachineState {
     pub(crate) fn read(
         &mut self,
@@ -50,7 +69,7 @@ impl MachineState {
             parser.add_lines_read(prior_num_lines_read);
 
             let term = parser.read_term(&op_dir, Tokens::Default)
-                .map_err(CompilationError::from)?;
+                .map_err(|err| error_after_read_term(err, prior_num_lines_read, &parser))?; // CompilationError::from
 
             (term, parser.lines_read() - prior_num_lines_read)
         };

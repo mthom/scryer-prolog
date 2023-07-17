@@ -5797,71 +5797,70 @@ impl Machine {
     }
 
     #[inline(always)]
+    fn read_term_and_write_to_heap(
+        &mut self,
+        atom_or_string: AtomOrString,
+    ) -> Result<Option<TermWriteResult>, MachineStub> {
+        let string = match atom_or_string {
+            AtomOrString::Atom(atom) if atom == atom!("[]") => "".to_owned(),
+            _ => atom_or_string.to_string(),
+        };
+
+        let chars = CharReader::new(ByteStream::from_string(string));
+        let mut parser = Parser::new(chars, &mut self.machine_st);
+        let op_dir = CompositeOpDir::new(&self.indices.op_dir, None);
+
+        let term_write_result = parser.read_term(&op_dir, Tokens::Default)
+            .map_err(|err| error_after_read_term(err, 0, &parser))
+            .and_then(|term| {
+                write_term_to_heap(
+                    &term,
+                    &mut self.machine_st.heap,
+                    &mut self.machine_st.atom_tbl,
+                )
+            });
+
+        match term_write_result {
+            Ok(term_write_result) => Ok(Some(term_write_result)),
+            Err(CompilationError::ParserError(e)) if e.is_unexpected_eof() => {
+                let value = self.machine_st.registers[2];
+                self.machine_st.unify_atom(atom!("end_of_file"), value);
+
+                Ok(None)
+            }
+            Err(e) => {
+                let stub = functor_stub(atom!("read_term_from_chars"), 3);
+                let e = self.machine_st.session_error(SessionError::from(e));
+
+                Err(self.machine_st.error_form(e, stub))
+            }
+        }
+    }
+
+    #[inline(always)]
     pub(crate) fn read_from_chars(&mut self) -> CallResult {
         if let Some(atom_or_string) = self.machine_st.value_to_str_like(self.machine_st.registers[1]) {
-            let chars = CharReader::new(ByteStream::from_string(atom_or_string.to_string()));
-            let mut parser = Parser::new(chars, &mut self.machine_st);
-            let op_dir = CompositeOpDir::new(&self.indices.op_dir, None);
+            if let Some(term_write_result) = self.read_term_and_write_to_heap(atom_or_string)? {
+                let result = heap_loc_as_cell!(term_write_result.heap_loc);
+                let var = self.deref_register(2).as_var().unwrap();
 
-            let term_write_result = parser.read_term(&op_dir, Tokens::Default)
-                .map_err(CompilationError::from)
-                .and_then(|term| {
-                    write_term_to_heap(
-                        &term,
-                        &mut self.machine_st.heap,
-                        &mut self.machine_st.atom_tbl,
-                    )
-                });
+                self.machine_st.bind(var, result);
+            }
 
-            let term_write_result = match term_write_result {
-                Ok(term_write_result) => term_write_result,
-                Err(e) => {
-                    let stub = functor_stub(atom!("read_from_chars"), 2);
-                    let e = self.machine_st.session_error(SessionError::from(e));
-
-                    return Err(self.machine_st.error_form(e, stub));
-                }
-            };
-
-            let result = heap_loc_as_cell!(term_write_result.heap_loc);
-            let var = self.deref_register(2).as_var().unwrap();
-
-            self.machine_st.bind(var, result);
+            Ok(())
         } else {
             unreachable!()
         }
-
-        Ok(())
     }
 
     #[inline(always)]
     pub(crate) fn read_term_from_chars(&mut self) -> CallResult {
         if let Some(atom_or_string) = self.machine_st.value_to_str_like(self.machine_st.registers[1]) {
-            let chars = CharReader::new(ByteStream::from_string(atom_or_string.to_string()));
-            let mut parser = Parser::new(chars, &mut self.machine_st);
-            let op_dir = CompositeOpDir::new(&self.indices.op_dir, None);
-
-            let term_write_result = parser.read_term(&op_dir, Tokens::Default)
-                .map_err(CompilationError::from)
-                .and_then(|term| {
-                    write_term_to_heap(
-                        &term,
-                        &mut self.machine_st.heap,
-                        &mut self.machine_st.atom_tbl,
-                    )
-                });
-
-            let term_write_result = match term_write_result {
-                Ok(term_write_result) => term_write_result,
-                Err(e) => {
-                    let stub = functor_stub(atom!("read_term_from_chars"), 3);
-                    let e = self.machine_st.session_error(SessionError::from(e));
-
-                    return Err(self.machine_st.error_form(e, stub));
-                }
-            };
-
-            self.machine_st.read_term_body(term_write_result)
+            if let Some(term_write_result) = self.read_term_and_write_to_heap(atom_or_string)? {
+                self.machine_st.read_term_body(term_write_result)
+            } else {
+                Ok(())
+            }
         } else {
             unreachable!()
         }
