@@ -259,9 +259,9 @@ impl CharRead for ReadlineStream {
 }
 
 #[inline]
-pub(crate) fn write_term_to_heap(
-    term: &Term,
-    heap: &mut Heap,
+pub(crate) fn write_term_to_heap<'a, 'b>(
+    term: &'a Term,
+    heap: &'b mut Heap,
     atom_tbl: &mut AtomTable,
 ) -> Result<TermWriteResult, CompilationError> {
     let term_writer = TermWriter::new(heap, atom_tbl);
@@ -294,7 +294,7 @@ impl<'a, 'b> TermWriter<'a, 'b> {
     }
 
     #[inline]
-    fn modify_head_of_queue(&mut self, term: &TermRef<'a>, h: usize) {
+    fn modify_head_of_queue(&mut self, term: &TermRef, h: usize) {
         if let Some((arity, site_h)) = self.queue.pop_front() {
             self.heap[site_h] = self.term_as_addr(term, h);
 
@@ -310,7 +310,7 @@ impl<'a, 'b> TermWriter<'a, 'b> {
         self.heap.push(heap_loc_as_cell!(h));
     }
 
-    fn term_as_addr(&mut self, term: &TermRef<'a>, h: usize) -> HeapCellValue {
+    fn term_as_addr(&mut self, term: &TermRef, h: usize) -> HeapCellValue {
         match term {
             &TermRef::Cons(..) => list_loc_as_cell!(h),
             &TermRef::AnonVar(_) | &TermRef::Var(..) => heap_loc_as_cell!(h),
@@ -329,7 +329,7 @@ impl<'a, 'b> TermWriter<'a, 'b> {
         }
     }
 
-    fn write_term_to_heap(mut self, term: &'a Term) -> Result<TermWriteResult, CompilationError> {
+    fn write_term_to_heap(mut self, term: &Term) -> Result<TermWriteResult, CompilationError> {
         let heap_loc = self.heap.len();
 
         for term in breadth_first_iter(term, RootIterationPolicy::Iterated) {
@@ -383,17 +383,19 @@ impl<'a, 'b> TermWriter<'a, 'b> {
                         self.push_stub_addr();
                     }
                 }
-                &TermRef::AnonVar(Level::Root) | &TermRef::Literal(Level::Root, ..) => {
+                &TermRef::AnonVar(Level::Root) | TermRef::Literal(Level::Root, ..) => {
                     let addr = self.term_as_addr(&term, h);
                     self.heap.push(addr);
                 }
                 &TermRef::Var(Level::Root, _, ref var_ptr) => {
                     let addr = self.term_as_addr(&term, h);
-                    self.var_dict.insert(var_ptr.clone(), heap_loc_as_cell!(h));
+                    self.var_dict.insert(VarKey::VarPtr(var_ptr.clone()), addr);
                     self.heap.push(addr);
                 }
                 &TermRef::AnonVar(_) => {
                     if let Some((arity, site_h)) = self.queue.pop_front() {
+                        self.var_dict.insert(VarKey::AnonVar(h), heap_loc_as_cell!(site_h));
+
                         if arity > 1 {
                             self.queue.push_front((arity - 1, site_h + 1));
                         }
@@ -422,10 +424,12 @@ impl<'a, 'b> TermWriter<'a, 'b> {
                 }
                 &TermRef::Var(_, _, ref var) => {
                     if let Some((arity, site_h)) = self.queue.pop_front() {
-                        if let Some(addr) = self.var_dict.get(var).cloned() {
+                        let var_key = VarKey::VarPtr(var.clone());
+
+                        if let Some(addr) = self.var_dict.get(&var_key).cloned() {
                             self.heap[site_h] = addr;
                         } else {
-                            self.var_dict.insert(var.clone(), heap_loc_as_cell!(site_h));
+                            self.var_dict.insert(var_key, heap_loc_as_cell!(site_h));
                         }
 
                         if arity > 1 {

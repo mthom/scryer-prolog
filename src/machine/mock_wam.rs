@@ -71,7 +71,12 @@ impl MockWAM {
         printer.var_names = term_write_result
             .var_dict
             .into_iter()
-            .map(|(var, cell)| (cell, var))
+            .map(|(var, cell)| {
+                match var {
+                    VarKey::VarPtr(var) => (cell, var.clone()),
+                    VarKey::AnonVar(_) => (cell, VarPtr::from(var.to_string()))
+                }
+            })
             .collect();
 
         Ok(printer.print().result())
