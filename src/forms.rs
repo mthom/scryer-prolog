@@ -8,7 +8,7 @@ use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
 use crate::parser::ast::*;
 use crate::parser::parser::CompositeOpDesc;
-use crate::parser::rug::{Integer, Rational};
+use crate::parser::dashu::{Integer, Rational};
 use crate::types::*;
 
 use fxhash::FxBuildHasher;
@@ -765,9 +765,9 @@ impl Number {
     pub(crate) fn is_positive(&self) -> bool {
         match self {
             &Number::Fixnum(n) => n.get_num() > 0,
-            &Number::Integer(ref n) => &**n > &0,
+            &Number::Integer(ref n) => &**n > &Integer::from(0),
             &Number::Float(f) => f.is_sign_positive(),
-            &Number::Rational(ref r) => &**r > &0,
+            &Number::Rational(ref r) => &**r > &Rational::from(0),
         }
     }
 
@@ -775,9 +775,9 @@ impl Number {
     pub(crate) fn is_negative(&self) -> bool {
         match self {
             &Number::Fixnum(n) => n.get_num() < 0,
-            &Number::Integer(ref n) => &**n < &0,
+            &Number::Integer(ref n) => &**n < &Integer::from(0),
             &Number::Float(OrderedFloat(f)) => f.is_sign_negative() && OrderedFloat(f) != -0f64,
-            &Number::Rational(ref r) => &**r < &0,
+            &Number::Rational(ref r) => &**r < &Rational::from(0),
         }
     }
 
@@ -785,9 +785,9 @@ impl Number {
     pub(crate) fn is_zero(&self) -> bool {
         match self {
             &Number::Fixnum(n) => n.get_num() == 0,
-            &Number::Integer(ref n) => &**n == &0,
+            &Number::Integer(ref n) => &**n == &Integer::from(0),
             &Number::Float(f) => f == OrderedFloat(0f64) || f == OrderedFloat(-0f64),
-            &Number::Rational(ref r) => &**r == &0,
+            &Number::Rational(ref r) => &**r == &Rational::from(0),
         }
     }
 

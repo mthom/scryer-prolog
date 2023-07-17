@@ -24,7 +24,7 @@ use crate::machine::preprocessor::to_op_decl;
 use crate::machine::stack::*;
 use crate::machine::streams::*;
 use crate::parser::char_reader::*;
-use crate::parser::rug::Integer;
+use crate::parser::dashu::Integer;
 use crate::parser::rug::rand::RandState;
 use crate::read::*;
 use crate::types::*;

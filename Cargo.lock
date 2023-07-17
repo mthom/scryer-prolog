@@ -314,6 +314,79 @@ dependencies = [
 ]
 
 [[package]]
+name = "dashu"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "51a1b5a00793e3ac2239993ef582603764bcb333a4d04c2a0944639a7e916c85"
+dependencies = [
+ "dashu-base",
+ "dashu-float",
+ "dashu-int",
+ "dashu-macros",
+ "dashu-ratio",
+]
+
+[[package]]
+name = "dashu-base"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6f2585452b8ecf7c874045dba02a7914b7e5b2e3cdd5e152573413aa290197aa"
+
+[[package]]
+name = "dashu-float"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7a168f338914fab603c31a371207c8b3245ab5ff5e9a0f4fd64a9b5f8a972d1f"
+dependencies = [
+ "dashu-base",
+ "dashu-int",
+ "num-traits",
+ "rand",
+ "static_assertions",
+]
+
+[[package]]
+name = "dashu-int"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "57a1009a3ce0c4c64e977c5e7dd8c475278750e145cbb8956d1e28832f557975"
+dependencies = [
+ "cfg-if",
+ "dashu-base",
+ "num-order",
+ "num-traits",
+ "rand",
+ "static_assertions",
+]
+
+[[package]]
+name = "dashu-macros"
+version = "0.3.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f6fc2425b6724a7d5bfc8e57044e231803b5fc3a7283d6efbff34bfab6ebe014"
+dependencies = [
+ "dashu-base",
+ "dashu-float",
+ "dashu-int",
+ "dashu-ratio",
+ "proc-macro2",
+ "quote",
+]
+
+[[package]]
+name = "dashu-ratio"
+version = "0.3.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b4b57c839e72af6be14e5c55630ffc9429c9970aed48f7db449b2399467336b4"
+dependencies = [
+ "dashu-base",
+ "dashu-float",
+ "dashu-int",
+ "num-traits",
+ "rand",
+]
+
+[[package]]
 name = "derive_deref"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1154,6 +1227,36 @@ dependencies = [
 ]
 
 [[package]]
+name = "num-integer"
+version = "0.1.45"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "225d3389fb3509a24c93f5c29eb6bde2586b98d9f016636dff58d7c6f7569cd9"
+dependencies = [
+ "autocfg",
+ "num-traits",
+]
+
+[[package]]
+name = "num-modular"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "64a5fe11d4135c3bcdf3a95b18b194afa9608a5f6ff034f5d857bc9a27fb0119"
+dependencies = [
+ "num-integer",
+ "num-traits",
+]
+
+[[package]]
+name = "num-order"
+version = "1.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e81e321057a0370997b13e6638bba6bd7f6f426e1f8e9a2562490a28eb23e1bc"
+dependencies = [
+ "num-modular",
+ "num-traits",
+]
+
+[[package]]
 name = "num-traits"
 version = "0.2.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1669,6 +1772,7 @@ dependencies = [
  "crossterm",
  "crrl",
  "ctrlc",
+ "dashu",
  "derive_deref",
  "dirs-next",
  "divrem",

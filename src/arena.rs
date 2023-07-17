@@ -6,7 +6,7 @@ use crate::raw_block::*;
 use crate::read::*;
 
 use ordered_float::OrderedFloat;
-use crate::parser::rug::{Integer, Rational};
+use crate::parser::dashu::{Integer, Rational};
 
 use std::alloc;
 use std::fmt;
@@ -250,6 +250,26 @@ impl<T: ?Sized + ArenaAllocated> TypedArenaPtr<T> {
     #[inline]
     pub fn as_ptr(&self) -> *mut T {
         self.0.as_ptr()
+    }
+
+    #[inline]
+    pub fn to_i64(&self) -> Option<i64> {
+        self.to_i64()
+    }
+
+    #[inline]
+    pub fn to_u32(&self) -> Option<u32> {
+        self.to_u32()
+    }
+
+    #[inline]
+    pub fn to_usize(&self) -> Option<usize> {
+        self.to_usize()
+    }
+
+    #[inline]
+    pub fn to_isize(&self) -> Option<isize> {
+        self.to_isize()
     }
 
     #[inline]
@@ -788,7 +808,7 @@ mod tests {
     use crate::machine::partial_string::*;
 
     use ordered_float::OrderedFloat;
-    use crate::parser::rug::{Integer, Rational};
+    use crate::parser::dashu::{Integer, Rational};
 
     #[test]
     fn float_ptr_cast() {
@@ -889,7 +909,7 @@ mod tests {
 
         // rational
 
-        let big_rat = 2 * Rational::from(1u64 << 63);
+        let big_rat = Rational::from(2) * Rational::from(1u64 << 63);
         let big_rat_ptr: TypedArenaPtr<Rational> = arena_alloc!(big_rat, &mut wam.machine_st.arena);
 
         assert!(!big_rat_ptr.as_ptr().is_null());
@@ -915,7 +935,7 @@ mod tests {
           (HeapCellValueTag::Cons, cons_ptr) => {
               match_untyped_arena_ptr!(cons_ptr,
                  (ArenaHeaderTag::Rational, n) => {
-                     assert_eq!(&*n, &(2 * Rational::from(1u64 << 63)));
+                     assert_eq!(&*n, &(Rational::from(2) * Rational::from(1u64 << 63)));
                  }
                  _ => unreachable!()
               )

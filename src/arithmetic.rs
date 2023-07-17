@@ -10,7 +10,8 @@ use crate::types::*;
 
 use crate::parser::ast::*;
 use crate::parser::rug::ops::PowAssign;
-use crate::parser::rug::{Assign, Integer, Rational};
+use crate::parser::rug::{Assign};
+use crate::parser::dashu::{Integer, Rational};
 
 use crate::machine::machine_errors::*;
 
@@ -377,12 +378,12 @@ pub(crate) fn rnd_i<'a>(n: &'a Number, arena: &mut Arena) -> Number {
             if I64_MIN_TO_F <= f && f <= I64_MAX_TO_F {
                 fixnum!(Number, f.into_inner() as i64, arena)
             } else {
-                Number::Integer(arena_alloc!(Integer::from_f64(f.into_inner()).unwrap(), arena))
+                Number::Integer(arena_alloc!(Integer::from(f.into_inner()).unwrap(), arena))
             }
         }
         &Number::Rational(ref r) => {
             let r_ref = r.fract_floor_ref();
-            let (mut fract, mut floor) = (Rational::new(), Integer::new());
+            let (mut fract, mut floor) = (Rational::from(0), Integer::from(0));
             (&mut fract, &mut floor).assign(r_ref);
 
             if let Some(floor) = floor.to_i64() {
@@ -405,9 +406,9 @@ impl From<Fixnum> for Integer {
 pub(crate) fn rnd_f(n: &Number) -> f64 {
     match n {
         &Number::Fixnum(n) => n.get_num() as f64,
-        &Number::Integer(ref n) => n.to_f64(),
+        &Number::Integer(ref n) => n.to_f64().value(),
         &Number::Float(OrderedFloat(f)) => f,
-        &Number::Rational(ref r) => r.to_f64(),
+        &Number::Rational(ref r) => r.to_f64().value(),
     }
 }
 

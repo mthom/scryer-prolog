@@ -12,7 +12,7 @@ use std::ops::{Deref, Neg};
 use std::rc::Rc;
 use std::vec::Vec;
 
-use crate::parser::rug::{Integer, Rational};
+use crate::parser::dashu::{Integer, Rational};
 
 use fxhash::FxBuildHasher;
 use indexmap::IndexMap;

@@ -1,7 +1,7 @@
 use crate::arena::*;
 use crate::atom_table::*;
 use crate::parser::ast::*;
-use crate::parser::rug::{Integer, Rational};
+use crate::parser::dashu::{Integer, Rational};
 use crate::{
     alpha_numeric_char, capital_letter_char, cut_char, decimal_digit_char, graphic_token_char,
     is_fx, is_infix, is_postfix, is_prefix, is_xf, is_xfx, is_xfy, is_yfx, semicolon_char,
@@ -196,7 +196,7 @@ impl NumberFocus {
     fn is_negative(&self) -> bool {
         match self {
             NumberFocus::Unfocused(n) => n.is_negative(),
-            NumberFocus::Denominator(r) | NumberFocus::Numerator(r) => **r < 0,
+            NumberFocus::Denominator(r) | NumberFocus::Numerator(r) => **r < Rational::from(0),
         }
     }
 }
@@ -400,8 +400,8 @@ fn negated_op_needs_bracketing(
             && iter.leftmost_leaf_has_property(op_dir, |addr| match Number::try_from(addr) {
                 Ok(Number::Fixnum(n)) => n.get_num() > 0,
                 Ok(Number::Float(f)) => f > OrderedFloat(0f64),
-                Ok(Number::Integer(n)) => &*n > &0,
-                Ok(Number::Rational(n)) => &*n > &0,
+                Ok(Number::Integer(n)) => &*n > &Integer::from(0),
+                Ok(Number::Rational(n)) => &*n > &Rational::from(0),
                 _ => false,
             })
     } else {
@@ -514,7 +514,7 @@ pub(crate) fn numbervar(offset: &Integer, addr: HeapCellValue) -> Option<String>
         let j = n.div_rem_floor(Integer::from(26));
         let j = <(Integer, Integer)>::from(j).0;
 
-        if j == 0 {
+        if j == Integer::from(0) {
             CHAR_CODES[i].to_string()
         } else {
             format!("{}{}", CHAR_CODES[i], j)
@@ -530,7 +530,7 @@ pub(crate) fn numbervar(offset: &Integer, addr: HeapCellValue) -> Option<String>
             }
         }
         Ok(Number::Integer(n)) => {
-            if &*n >= &0 {
+            if &*n >= &Integer::from(0) {
                 Some(numbervar(Integer::from(offset + &*n)))
             } else {
                 None
@@ -1307,10 +1307,10 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                     if self.numbervars && arity == 1 && name == atom!("$VAR") {
                         !self.iter.immediate_leaf_has_property(|addr| {
                             match Number::try_from(addr) {
-                                Ok(Number::Integer(n)) => &*n >= &0,
+                                Ok(Number::Integer(n)) => &*n >= &Integer::from(0),
                                 Ok(Number::Fixnum(n)) => n.get_num() >= 0,
                                 Ok(Number::Float(f)) => f >= OrderedFloat(0f64),
-                                Ok(Number::Rational(r)) => &*r >= &0,
+                                Ok(Number::Rational(r)) => &*r >= &Integer::from(0),
                                 _ => false,
                             }
                         }) && needs_bracketing(op_desc, op)

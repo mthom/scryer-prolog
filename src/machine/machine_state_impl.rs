@@ -13,7 +13,7 @@ use crate::machine::partial_string::*;
 use crate::machine::stack::*;
 use crate::machine::unify::*;
 use crate::parser::ast::*;
-use crate::parser::rug::{Integer, Rational};
+use crate::parser::dashu::{Integer, Rational};
 
 use indexmap::IndexSet;
 

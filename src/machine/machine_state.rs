@@ -14,7 +14,7 @@ use crate::machine::streams::*;
 use crate::parser::ast::*;
 use crate::types::*;
 
-use crate::parser::rug::Integer;
+use crate::parser::dashu::Integer;
 
 use indexmap::IndexMap;
 
