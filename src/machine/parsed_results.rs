@@ -1,8 +1,7 @@
+use crate::atom_table::*;
 use ordered_float::OrderedFloat;
 use rug::*;
 use std::collections::BTreeMap;
-use crate::atom_table::*;
-
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum QueryResult {
@@ -13,7 +12,7 @@ pub enum QueryResult {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct QueryMatch {
-    pub bindings: BTreeMap<String, Value>
+    pub bindings: BTreeMap<String, Value>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -38,18 +37,17 @@ pub enum Value {
 impl From<BTreeMap<&str, Value>> for QueryMatch {
     fn from(bindings: BTreeMap<&str, Value>) -> Self {
         QueryMatch {
-            bindings: bindings.into_iter()
+            bindings: bindings
+                .into_iter()
                 .map(|(k, v)| (k.to_string(), v))
-                .collect::<BTreeMap<_, _>>()
+                .collect::<BTreeMap<_, _>>(),
         }
     }
 }
 
 impl From<BTreeMap<String, Value>> for QueryMatch {
     fn from(bindings: BTreeMap<String, Value>) -> Self {
-        QueryMatch {
-            bindings
-        }
+        QueryMatch { bindings }
     }
 }
 
@@ -65,25 +63,33 @@ impl From<Vec<QueryResultLine>> for QueryResult {
         }
 
         // If there is at least one line with true and no matches, return true.
-        if query_result_lines.iter().any(|l| l == &QueryResultLine::True)
+        if query_result_lines
+            .iter()
+            .any(|l| l == &QueryResultLine::True)
             && !query_result_lines.iter().any(|l| {
-            if let &QueryResultLine::Match(_) = l { true } else { false }
-        }) {
+                if let &QueryResultLine::Match(_) = l {
+                    true
+                } else {
+                    false
+                }
+            })
+        {
             return QueryResult::True;
         }
 
         // If there is at least one match, return all matches.
-        let all_matches = query_result_lines.into_iter()
+        let all_matches = query_result_lines
+            .into_iter()
             .filter(|l| {
-                if let &QueryResultLine::Match(_) = l { true } else { false }
-            })
-            .map(|l| {
-                match l {
-                    QueryResultLine::Match(m) => {
-                        QueryMatch::from(m)
-                    },
-                    _ => unreachable!()
+                if let &QueryResultLine::Match(_) = l {
+                    true
+                } else {
+                    false
                 }
+            })
+            .map(|l| match l {
+                QueryResultLine::Match(m) => QueryMatch::from(m),
+                _ => unreachable!(),
             })
             .collect::<Vec<_>>();
 
@@ -95,7 +101,6 @@ impl From<Vec<QueryResultLine>> for QueryResult {
     }
 }
 
-
 impl TryFrom<String> for QueryResultLine {
     type Error = ();
     fn try_from(string: String) -> Result<Self, Self::Error> {
@@ -103,10 +108,11 @@ impl TryFrom<String> for QueryResultLine {
             "true" => Ok(QueryResultLine::True),
             "false" => Ok(QueryResultLine::False),
             _ => Ok(QueryResultLine::Match(
-                string.split(",")
+                string
+                    .split(",")
                     .map(|s| s.trim())
                     .filter(|s| !s.is_empty())
-                    .map(|s| -> Result<(String, Value), ()>{
+                    .map(|s| -> Result<(String, Value), ()> {
                         let mut iter = s.split(" = ");
 
                         let key = iter.next().unwrap().to_string();
@@ -115,8 +121,8 @@ impl TryFrom<String> for QueryResultLine {
                         Ok((key, Value::try_from(value)?))
                     })
                     .filter_map(Result::ok)
-                    .collect::<BTreeMap<_, _>>()
-                ))
+                    .collect::<BTreeMap<_, _>>(),
+            )),
         }
     }
 }
@@ -128,8 +134,7 @@ impl TryFrom<String> for Value {
 
         if trimmed.starts_with("'") && trimmed.ends_with("'") {
             Ok(Value::String(trimmed[1..trimmed.len() - 1].into()))
-        } else 
-        if trimmed.starts_with("\"") && trimmed.ends_with("\"") {
+        } else if trimmed.starts_with("\"") && trimmed.ends_with("\"") {
             Ok(Value::String(trimmed[1..trimmed.len() - 1].into()))
         } else if trimmed.starts_with("[") && trimmed.ends_with("]") {
             let mut iter = trimmed[1..trimmed.len() - 1].split(",");
