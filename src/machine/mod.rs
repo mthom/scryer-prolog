@@ -385,7 +385,6 @@ impl Machine {
             Instruction::ExecuteFunctor,
             Instruction::ExecuteGround,
             Instruction::ExecuteKeySort,
-            Instruction::ExecuteRead,
             Instruction::ExecuteSort,
             Instruction::ExecuteN(1),
             Instruction::ExecuteN(2),

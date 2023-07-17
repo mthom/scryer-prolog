@@ -309,34 +309,6 @@ impl MachineState {
 }
 
 impl Machine {
-    fn read(&mut self) -> CallResult {
-        let stream = self.machine_st.get_stream_or_alias(
-            self.machine_st.registers[1],
-            &self.indices.stream_aliases,
-            atom!("read"),
-            2,
-        )?;
-
-        match self.machine_st.read(stream, &self.indices.op_dir) {
-            Ok(offset) => {
-                let value = self.machine_st.registers[2];
-                unify_fn!(&mut self.machine_st, value, heap_loc_as_cell!(offset.heap_loc));
-            }
-            Err(CompilationError::ParserError(e)) if e.is_unexpected_eof() => {
-                let value = self.machine_st.registers[2];
-                self.machine_st.unify_atom(atom!("end_of_file"), value);
-            }
-            Err(e) => {
-                let stub = functor_stub(atom!("read"), 2);
-                let err = self.machine_st.syntax_error(e);
-
-                return Err(self.machine_st.error_form(err, stub));
-            }
-        };
-
-        Ok(())
-    }
-
     pub(super) fn find_living_dynamic_else(&self, mut p: usize) -> Option<(usize, usize)> {
         loop {
             match &self.code[p] {
@@ -1334,19 +1306,6 @@ impl Machine {
                         }
                     }
                 }
-                &Instruction::DefaultCallRead => {
-                    try_or_throw!(self.machine_st, self.read());
-                    step_or_fail!(self, self.machine_st.p += 1);
-                }
-                &Instruction::DefaultExecuteRead => {
-                    try_or_throw!(self.machine_st, self.read());
-
-                    if self.machine_st.fail {
-                        self.machine_st.backtrack();
-                    } else {
-                        self.machine_st.p = self.machine_st.cp;
-                    }
-                }
                 &Instruction::DefaultCallCopyTerm => {
                     self.machine_st.copy_term(AttrVarPolicy::DeepCopy);
                     step_or_fail!(self, self.machine_st.p += 1);
@@ -1671,34 +1630,6 @@ impl Machine {
                         _ => {
                             self.machine_st.backtrack();
                         }
-                    }
-                }
-                &Instruction::CallRead => {
-                    try_or_throw!(self.machine_st, self.read());
-
-                    if self.machine_st.fail {
-                        self.machine_st.backtrack();
-                    } else {
-                        try_or_throw!(
-                            self.machine_st,
-                            (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                        );
-
-                        self.machine_st.p += 1;
-                    }
-                }
-                &Instruction::ExecuteRead => {
-                    try_or_throw!(self.machine_st, self.read());
-
-                    if self.machine_st.fail {
-                        self.machine_st.backtrack();
-                    } else {
-                        try_or_throw!(
-                            self.machine_st,
-                            (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                        );
-
-                        self.machine_st.p = self.machine_st.cp;
                     }
                 }
                 &Instruction::CallCopyTerm => {

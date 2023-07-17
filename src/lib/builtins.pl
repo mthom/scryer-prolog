@@ -17,13 +17,13 @@
                      peek_char/1, peek_char/2, peek_code/1,
                      peek_code/2, put_byte/1, put_byte/2, put_code/1,
                      put_code/2, put_char/1, put_char/2, read/1,
-                     read_term/2, read_term/3, repeat/0, retract/1,
-                     retractall/1, set_prolog_flag/2, set_input/1,
-                     set_stream_position/2, set_output/1, setof/3,
-                     stream_property/2, sub_atom/5, subsumes_term/2,
-                     term_variables/2, throw/1, true/0,
-                     unify_with_occurs_check/2, write/1, write/2,
-                     write_canonical/1, write_canonical/2,
+                     read/2, read_term/2, read_term/3, repeat/0,
+                     retract/1, retractall/1, set_prolog_flag/2,
+                     set_input/1, set_stream_position/2, set_output/1,
+                     setof/3, stream_property/2, sub_atom/5,
+                     subsumes_term/2, term_variables/2, throw/1,
+                     true/0, unify_with_occurs_check/2, write/1,
+                     write/2, write_canonical/1, write_canonical/2,
                      write_term/2, write_term/3, writeq/1, writeq/2]).
 
 /** Builtin predicates
@@ -668,9 +668,30 @@ parse_read_term_options(Options, OptionValues, Stub) :-
     parse_options_list(Options, builtins:parse_read_term_options_, DefaultOptions, OptionValues, Stub).
 
 
-parse_read_term_options_(singletons(Vars), singletons-Vars) :- !.
-parse_read_term_options_(variables(Vars), variables-Vars) :- !.
-parse_read_term_options_(variable_names(Vars), variable_names-Vars) :- !.
+parse_read_term_options_(singletons(Vars), singletons-Vars) :-
+    (  ( var(Vars)
+       ; '$skip_max_list'(_, _, Vars, Rs),
+         Rs == []
+       ) ->
+       !
+    ;  throw(error(domain_error(read_option, singletons(Vars)), read_term/2))
+    ).
+parse_read_term_options_(variables(Vars), variables-Vars) :-
+    (  ( var(Vars)
+       ; '$skip_max_list'(_, _, Vars, Rs),
+         Rs == []
+       ) ->
+       !
+    ;  throw(error(domain_error(read_option, variables(Vars)), read_term/2))
+    ).
+parse_read_term_options_(variable_names(Vars), variable_names-Vars) :-
+    (  ( var(Vars)
+       ; '$skip_max_list'(_, _, Vars, Rs),
+         Rs == []
+       ) ->
+       !
+    ;  throw(error(domain_error(read_option, variable_names(Vars)), read_term/2))
+    ).
 parse_read_term_options_(E,_) :-
     throw(error(domain_error(read_option, E), _)).
 
@@ -698,7 +719,11 @@ read_term(Term, Options) :-
 % to read input from a file or the user. Use other predicates like `phrase_from_file/2` for that.
 read(Term) :-
     current_input(Stream),
-    read(Stream, Term).
+    read_term(Stream, Term, []).
+    % read(Stream, Term).
+
+read(Stream, Term) :-
+    read_term(Stream, Term, []).
 
 % ensures List is either a variable or a list.
 can_be_list(List, _)  :-

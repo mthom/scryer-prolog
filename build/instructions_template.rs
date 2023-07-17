@@ -101,8 +101,6 @@ enum BuiltInClauseType {
     Is(RegType, ArithmeticTerm),
     #[strum_discriminants(strum(props(Arity = "2", Name = "keysort")))]
     KeySort,
-    #[strum_discriminants(strum(props(Arity = "2", Name = "read")))]
-    Read,
     #[strum_discriminants(strum(props(Arity = "2", Name = "sort")))]
     Sort,
 }
@@ -1504,7 +1502,6 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallFunctor |
                     &Instruction::CallGround |
                     &Instruction::CallKeySort |
-                    &Instruction::CallRead |
                     &Instruction::CallSort => {
                         let (name, arity) = self.to_name_and_arity();
                         functor!(atom!("call"), [atom(name), fixnum(arity)])
@@ -1530,7 +1527,6 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteGround |
                     &Instruction::ExecuteIs(..) |
                     &Instruction::ExecuteKeySort |
-                    &Instruction::ExecuteRead |
                     &Instruction::ExecuteSort => {
                         let (name, arity) = self.to_name_and_arity();
                         functor!(atom!("execute"), [atom(name), fixnum(arity)])
@@ -1556,7 +1552,6 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::DefaultCallGround |
                     &Instruction::DefaultCallIs(..) |
                     &Instruction::DefaultCallKeySort |
-                    &Instruction::DefaultCallRead |
                     &Instruction::DefaultCallSort => {
                         let (name, arity) = self.to_name_and_arity();
                         functor!(atom!("call_default"), [atom(name), fixnum(arity)])
@@ -1582,7 +1577,6 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::DefaultExecuteGround |
                     &Instruction::DefaultExecuteIs(..) |
                     &Instruction::DefaultExecuteKeySort |
-                    &Instruction::DefaultExecuteRead |
                     &Instruction::DefaultExecuteSort => {
                         let (name, arity) = self.to_name_and_arity();
                         functor!(atom!("execute_default"), [atom(name), fixnum(arity)])
