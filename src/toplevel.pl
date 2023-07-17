@@ -430,3 +430,4 @@ print_exception_with_check(E) :-
     % is expected to be printed instead.
     ;  print_exception(E)
     ).
+    
