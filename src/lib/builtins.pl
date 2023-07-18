@@ -1559,9 +1559,14 @@ atom_concat(Atom_1, Atom_2, Atom_12) :-
        (  var(Atom_12) ->
           throw(error(instantiation_error, atom_concat/3))
        ;  atom_chars(Atom_12, Atom_12_Chars),
-          lists:append(BeforeChars, AfterChars, Atom_12_Chars),
-          atom_chars(Atom_1, BeforeChars),
-          atom_chars(Atom_2, AfterChars)
+          (  var(Atom_2) ->
+             lists:append(BeforeChars, AfterChars, Atom_12_Chars),
+             atom_chars(Atom_2, AfterChars)
+          ;  atom_chars(Atom_2, AfterChars),
+             lists:append(BeforeChars, AfterChars, Atom_12_Chars),
+             !
+          ),
+          atom_chars(Atom_1, BeforeChars)
        )
     ;  var(Atom_2) ->
        (  var(Atom_12) -> throw(error(instantiation_error, atom_concat/3))
