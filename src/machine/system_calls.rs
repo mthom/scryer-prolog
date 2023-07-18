@@ -5863,6 +5863,11 @@ impl Machine {
             if let Some(term_write_result) = self.read_term_and_write_to_heap(atom_or_string)? {
                 self.machine_st.read_term_body(term_write_result)
             } else {
+                if !self.machine_st.fail {
+                    // wrote end_of_file term in this case.
+                    self.machine_st.write_read_term_options(vec![], vec![])?;
+                }
+
                 Ok(())
             }
         } else {

@@ -510,7 +510,7 @@ impl MachineState {
         }
     }
 
-    fn write_read_term_options(
+    pub fn write_read_term_options(
         &mut self,
         mut var_list: Vec<(VarKey, HeapCellValue, usize)>,
         singleton_var_list: Vec<HeapCellValue>,
