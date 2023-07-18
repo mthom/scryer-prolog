@@ -563,17 +563,19 @@ impl MachineState {
             }
         );
 
-        let term = self.registers[2];
-        unify_fn!(*self, heap_loc, term);
-        let term = heap_loc;
+        unify_fn!(*self, heap_loc, self.registers[2]);
 
         if self.fail {
             return Ok(());
         }
 
+        for var in term_write_result.var_dict.values_mut() {
+            *var = heap_bound_deref(&self.heap, *var);
+        }
+
         let mut singleton_var_set: IndexMap<Ref, bool> = IndexMap::new();
 
-        for cell in stackful_preorder_iter(&mut self.heap, &mut self.stack, term) {
+        for cell in stackful_preorder_iter(&mut self.heap, &mut self.stack, heap_loc) {
             let cell = unmark_cell_bits!(cell);
 
             if let Some(var) = cell.as_var() {
@@ -609,8 +611,9 @@ impl MachineState {
 
         for (var_name, addr) in term_write_result.var_dict {
             if let Some(var) = addr.as_var() {
-                let idx = singleton_var_set.get_index_of(&var).unwrap();
-                var_list.push((var_name, addr, idx));
+                if let Some(idx) = singleton_var_set.get_index_of(&var) {
+                    var_list.push((var_name, addr, idx));
+                }
             }
         }
 

@@ -422,7 +422,7 @@ impl<'a, 'b> TermWriter<'a, 'b> {
                         continue;
                     }
                 }
-                &TermRef::Var(_, _, ref var) => {
+                &TermRef::Var(.., ref var) => {
                     if let Some((arity, site_h)) = self.queue.pop_front() {
                         let var_key = VarKey::VarPtr(var.clone());
 
