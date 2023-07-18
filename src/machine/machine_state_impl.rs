@@ -435,7 +435,7 @@ impl MachineState {
         }
     }
 
-    pub fn compare_term_test(&mut self) -> Option<Ordering> {
+    pub fn compare_term_test(&mut self, var_comparison: VarComparison) -> Option<Ordering> {
         let mut tabu_list = IndexSet::new();
 
         while !self.pdl.is_empty() {
@@ -462,12 +462,14 @@ impl MachineState {
 
             match order_cat_v1 {
                 Some(TermOrderCategory::Variable) => {
-                    let v1 = v1.as_var().unwrap();
-                    let v2 = v2.as_var().unwrap();
+                    if let VarComparison::Distinct = var_comparison {
+                        let v1 = v1.as_var().unwrap();
+                        let v2 = v2.as_var().unwrap();
 
-                    if v1 != v2 {
-                        self.pdl.clear();
-                        return Some(v1.cmp(&v2));
+                        if v1 != v2 {
+                            self.pdl.clear();
+                            return Some(v1.cmp(&v2));
+                        }
                     }
                 }
                 Some(TermOrderCategory::FloatingPoint) => {

@@ -1027,6 +1027,24 @@ impl Machine {
     }
 
     #[inline(always)]
+    fn undefined_procedure(&mut self, name: Atom, arity: usize) -> CallResult {
+        match self.machine_st.flags.unknown {
+            Unknown::Error => {
+                Err(self.machine_st.throw_undefined_error(name, arity))
+            }
+            Unknown::Fail => {
+                self.machine_st.fail = true;
+                Ok(())
+            }
+            Unknown::Warn => {
+                println!("warning: predicate {}/{} is undefined", name.as_str(), arity);
+                self.machine_st.fail = true;
+                Ok(())
+            }
+        }
+    }
+
+    #[inline(always)]
     fn try_call(&mut self, name: Atom, arity: usize, idx: IndexPtr) -> CallResult {
         let compiled_tl_index = idx.p() as usize;
 
@@ -1035,7 +1053,7 @@ impl Machine {
                 self.machine_st.fail = true;
             }
             IndexPtrTag::Undefined => {
-                return Err(self.machine_st.throw_undefined_error(name, arity));
+                return self.undefined_procedure(name, arity);
             }
             IndexPtrTag::DynamicIndex => {
                 self.machine_st.dynamic_mode = FirstOrNext::First;
@@ -1058,7 +1076,7 @@ impl Machine {
                 self.machine_st.fail = true;
             }
             IndexPtrTag::Undefined => {
-                return Err(self.machine_st.throw_undefined_error(name, arity));
+                return self.undefined_procedure(name, arity);
             }
             IndexPtrTag::DynamicIndex => {
                 self.machine_st.dynamic_mode = FirstOrNext::First;
@@ -1087,7 +1105,7 @@ impl Machine {
                 if let Some(idx) = module.code_dir.get(&(name, arity)).cloned() {
                     self.try_call(name, arity, idx.get())
                 } else {
-                    Err(self.machine_st.throw_undefined_error(name, arity))
+                    self.undefined_procedure(name, arity)
                 }
             } else {
                 let stub = functor_stub(name, arity);
@@ -1106,14 +1124,14 @@ impl Machine {
             if let Some(idx) = self.indices.code_dir.get(&(name, arity)).cloned() {
                 self.try_execute(name, arity, idx.get())
             } else {
-                Err(self.machine_st.throw_undefined_error(name, arity))
+                self.undefined_procedure(name, arity)
             }
         } else {
             if let Some(module) = self.indices.modules.get(&module_name) {
                 if let Some(idx) = module.code_dir.get(&(name, arity)).cloned() {
                     self.try_execute(name, arity, idx.get())
                 } else {
-                    Err(self.machine_st.throw_undefined_error(name, arity))
+                    self.undefined_procedure(name, arity)
                 }
             } else {
                 let stub = functor_stub(name, arity);

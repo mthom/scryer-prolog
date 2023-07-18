@@ -303,12 +303,14 @@ pub type OpDir = IndexMap<(Atom, Fixity), OpDesc, FxBuildHasher>;
 #[derive(Debug, Clone, Copy)]
 pub struct MachineFlags {
     pub double_quotes: DoubleQuotes,
+    pub unknown: Unknown,
 }
 
 impl Default for MachineFlags {
     fn default() -> Self {
         MachineFlags {
             double_quotes: DoubleQuotes::default(),
+            unknown: Unknown::default(),
         }
     }
 }
@@ -337,6 +339,34 @@ impl DoubleQuotes {
 impl Default for DoubleQuotes {
     fn default() -> Self {
         DoubleQuotes::Chars
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum Unknown {
+    Error,
+    Fail,
+    Warn,
+}
+
+impl Unknown {
+    pub fn is_error(self) -> bool {
+        matches!(self, Unknown::Error)
+    }
+
+    pub fn is_fail(self) -> bool {
+        matches!(self, Unknown::Fail)
+    }
+
+    pub fn is_warn(self) -> bool {
+        matches!(self, Unknown::Warn)
+    }
+}
+
+impl Default for Unknown {
+    #[inline]
+    fn default() -> Self {
+        Unknown::Error
     }
 }
 

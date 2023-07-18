@@ -408,6 +408,8 @@ enum SystemClauseType {
     GetCutPoint,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$get_double_quotes")))]
     GetDoubleQuotes,
+    #[strum_discriminants(strum(props(Arity = "1", Name = "$get_unknown")))]
+    GetUnknown,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$install_new_block")))]
     InstallNewBlock,
     #[strum_discriminants(strum(props(Arity = "0", Name = "$maybe")))]
@@ -438,6 +440,8 @@ enum SystemClauseType {
     SetCutPointByDefault(RegType),
     #[strum_discriminants(strum(props(Arity = "1", Name = "$set_double_quotes")))]
     SetDoubleQuotes,
+    #[strum_discriminants(strum(props(Arity = "1", Name = "$set_unknown")))]
+    SetUnknown,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$set_seed")))]
     SetSeed,
     #[strum_discriminants(strum(props(Arity = "4", Name = "$skip_max_list")))]
@@ -584,6 +588,8 @@ enum SystemClauseType {
     UnattributedVar,
     #[strum_discriminants(strum(props(Arity = "4", Name = "$get_db_refs")))]
     GetDBRefs,
+    #[strum_discriminants(strum(props(Arity = "2", Name = "$keysort_with_constant_var_ordering")))]
+    KeySortWithConstantVarOrdering,
     REPL(REPLCodePtr),
 }
 
@@ -1649,6 +1655,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallDeleteAllAttributesFromVar |
                     &Instruction::CallUnattributedVar |
                     &Instruction::CallGetDBRefs |
+                    &Instruction::CallKeySortWithConstantVarOrdering |
                     &Instruction::CallFetchGlobalVar |
                     &Instruction::CallFirstStream |
                     &Instruction::CallFlushOutput |
@@ -1716,6 +1723,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallGetCurrentSCCBlock |
                     &Instruction::CallGetCutPoint |
                     &Instruction::CallGetDoubleQuotes |
+                    &Instruction::CallGetUnknown |
                     &Instruction::CallInstallNewBlock |
                     &Instruction::CallMaybe |
                     &Instruction::CallCpuNow |
@@ -1742,6 +1750,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallPopFromBallStack |
                     &Instruction::CallSetCutPointByDefault(..) |
                     &Instruction::CallSetDoubleQuotes |
+                    &Instruction::CallSetUnknown |
                     &Instruction::CallSetSeed |
                     &Instruction::CallSkipMaxList |
                     &Instruction::CallSleep |
@@ -1874,6 +1883,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteDeleteAllAttributesFromVar |
                     &Instruction::ExecuteUnattributedVar |
                     &Instruction::ExecuteGetDBRefs |
+                    &Instruction::ExecuteKeySortWithConstantVarOrdering |
                     &Instruction::ExecuteFetchGlobalVar |
                     &Instruction::ExecuteFirstStream |
                     &Instruction::ExecuteFlushOutput |
@@ -1941,6 +1951,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteGetCurrentSCCBlock |
                     &Instruction::ExecuteGetCutPoint |
                     &Instruction::ExecuteGetDoubleQuotes |
+                    &Instruction::ExecuteGetUnknown |
                     &Instruction::ExecuteInstallNewBlock |
                     &Instruction::ExecuteMaybe |
                     &Instruction::ExecuteCpuNow |
@@ -1967,6 +1978,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecutePopFromBallStack |
                     &Instruction::ExecuteSetCutPointByDefault(_) |
                     &Instruction::ExecuteSetDoubleQuotes |
+                    &Instruction::ExecuteSetUnknown |
                     &Instruction::ExecuteSetSeed |
                     &Instruction::ExecuteSkipMaxList |
                     &Instruction::ExecuteSleep |
