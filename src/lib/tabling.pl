@@ -164,7 +164,9 @@ activate(Wrapper,Worker,T) :-
 
 delim(Wrapper,Worker,Table) :-
 %   debug(tabling, 'ACT: ~p on ~p', [Wrapper, Table]),
-    reset(Worker,SourceCall,Continuation),
+    catch(reset(Worker,SourceCall,Continuation),
+          _,
+          fail),
    ( Continuation = none ->
      (	 add_answer(Table,Wrapper)
      ->	 true %debug(tabling, 'ADD: ~p', [Wrapper])
