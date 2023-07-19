@@ -323,8 +323,13 @@ get_n_chars(Stream, N, Cs) :-
             '$get_n_chars'(Stream, N, Cs)
         ).
 
+get_n_chars_wrapper(Stream, N, Cs) :-
+        '$get_n_chars'(Stream, N, Cs).
+
 get_to_eof(Stream, Cs) :-
-        '$get_n_chars'(Stream, 512, Cs0),
+        catch(get_n_chars_wrapper(Stream, 512, Cs0),
+              error(syntax_error(unexpected_end_of_file), _),
+              Cs0 = []),
         (   Cs0 == [] -> Cs = []
         ;   partial_string(Cs0, Cs, Rest),
             get_to_eof(Stream, Rest)
