@@ -1,17 +1,17 @@
-use super::{Machine, MachineConfig, QueryResult, QueryResultLine, Atom};
+use super::{Machine, MachineConfig, QueryResult, QueryResolution, QueryResolutionLine, Atom};
 
 impl Machine {
     pub fn new_lib() -> Self {
         Machine::new(MachineConfig::in_memory().with_toplevel(include_str!("../lib_toplevel.pl")))
     }
 
-    pub fn run_query(&mut self, query: String) -> Result<QueryResult, String> {
+    pub fn run_query(&mut self, query: String) -> QueryResult {
         self.set_user_input(query);
         self.run_top_level(atom!("$toplevel"), (atom!("run_input_once"), 0));
         self.parse_output()
     }
 
-    pub fn parse_output(&self) -> Result<QueryResult, String> {
+    pub fn parse_output(&self) -> QueryResult {
         let output = self.get_user_output().trim().to_string();
         if output.starts_with("error(") {
             Err(output)
@@ -21,9 +21,9 @@ impl Machine {
                 .map(|s| s.trim())
                 .map(|s| s.replace(".", ""))
                 .filter(|s| !s.is_empty())
-                .map(QueryResultLine::try_from)
+                .map(QueryResolutionLine::try_from)
                 .filter_map(Result::ok)
-                .collect::<Vec<QueryResultLine>>()
+                .collect::<Vec<QueryResolutionLine>>()
                 .into())
         }
     }
@@ -52,7 +52,7 @@ mod tests {
         let output = machine.run_query(query);
         assert_eq!(
             output,
-            Ok(QueryResult::Matches(vec![
+            Ok(QueryResolution::Matches(vec![
                 QueryMatch::from(btreemap! {
                     "P" => Value::from("p1"),
                 }),
@@ -64,12 +64,12 @@ mod tests {
 
         assert_eq!(
             machine.run_query(String::from(r#"triple("a","p1","b")."#)),
-            Ok(QueryResult::True)
+            Ok(QueryResolution::True)
         );
 
         assert_eq!(
             machine.run_query(String::from(r#"triple("x","y","z")."#)),
-            Ok(QueryResult::False)
+            Ok(QueryResolution::False)
         );
     }
 

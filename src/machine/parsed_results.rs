@@ -3,8 +3,10 @@ use ordered_float::OrderedFloat;
 use rug::*;
 use std::collections::BTreeMap;
 
+pub type QueryResult = Result<QueryResolution, String>;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum QueryResult {
+pub enum QueryResolution {
     True,
     False,
     Matches(Vec<QueryMatch>),
@@ -16,7 +18,7 @@ pub struct QueryMatch {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum QueryResultLine {
+pub enum QueryResolutionLine {
     True,
     False,
     Match(BTreeMap<String, Value>),
@@ -51,13 +53,13 @@ impl From<BTreeMap<String, Value>> for QueryMatch {
     }
 }
 
-impl From<Vec<QueryResultLine>> for QueryResult {
-    fn from(query_result_lines: Vec<QueryResultLine>) -> Self {
+impl From<Vec<QueryResolutionLine>> for QueryResolution {
+    fn from(query_result_lines: Vec<QueryResolutionLine>) -> Self {
         // If there is only one line, and it is true or false, return that.
         if query_result_lines.len() == 1 {
             match query_result_lines[0].clone() {
-                QueryResultLine::True => return QueryResult::True,
-                QueryResultLine::False => return QueryResult::False,
+                QueryResolutionLine::True => return QueryResolution::True,
+                QueryResolutionLine::False => return QueryResolution::False,
                 _ => {}
             }
         }
@@ -65,49 +67,49 @@ impl From<Vec<QueryResultLine>> for QueryResult {
         // If there is at least one line with true and no matches, return true.
         if query_result_lines
             .iter()
-            .any(|l| l == &QueryResultLine::True)
+            .any(|l| l == &QueryResolutionLine::True)
             && !query_result_lines.iter().any(|l| {
-                if let &QueryResultLine::Match(_) = l {
+                if let &QueryResolutionLine::Match(_) = l {
                     true
                 } else {
                     false
                 }
             })
         {
-            return QueryResult::True;
+            return QueryResolution::True;
         }
 
         // If there is at least one match, return all matches.
         let all_matches = query_result_lines
             .into_iter()
             .filter(|l| {
-                if let &QueryResultLine::Match(_) = l {
+                if let &QueryResolutionLine::Match(_) = l {
                     true
                 } else {
                     false
                 }
             })
             .map(|l| match l {
-                QueryResultLine::Match(m) => QueryMatch::from(m),
+                QueryResolutionLine::Match(m) => QueryMatch::from(m),
                 _ => unreachable!(),
             })
             .collect::<Vec<_>>();
 
         if !all_matches.is_empty() {
-            return QueryResult::Matches(all_matches);
+            return QueryResolution::Matches(all_matches);
         }
 
-        QueryResult::False
+        QueryResolution::False
     }
 }
 
-impl TryFrom<String> for QueryResultLine {
+impl TryFrom<String> for QueryResolutionLine {
     type Error = ();
     fn try_from(string: String) -> Result<Self, Self::Error> {
         match string.as_str() {
-            "true" => Ok(QueryResultLine::True),
-            "false" => Ok(QueryResultLine::False),
-            _ => Ok(QueryResultLine::Match(
+            "true" => Ok(QueryResolutionLine::True),
+            "false" => Ok(QueryResolutionLine::False),
+            _ => Ok(QueryResolutionLine::Match(
                 string
                     .split(",")
                     .map(|s| s.trim())
