@@ -114,9 +114,8 @@ impl TryFrom<String> for QueryResultLine {
                     .filter(|s| !s.is_empty())
                     .map(|s| -> Result<(String, Value), ()> {
                         let mut iter = s.split(" = ");
-
-                        let key = iter.next().unwrap().to_string();
-                        let value = iter.next().unwrap().to_string();
+                        let key = iter.next().ok_or(())?.to_string();
+                        let value = iter.next().ok_or(())?.to_string();
 
                         Ok((key, Value::try_from(value)?))
                     })
@@ -148,31 +147,29 @@ impl TryFrom<String> for Value {
             Ok(Value::List(values))
         } else if trimmed.starts_with("{") && trimmed.ends_with("}") {
             let mut iter = trimmed[1..trimmed.len() - 1].split(",");
-
             let mut values = vec![];
 
             while let Some(value) = iter.next() {
-                let mut iter = value.split(":");
-
-                let _key = iter.next().unwrap().to_string();
-                let value = iter.next().unwrap().to_string();
-
-                values.push(Value::try_from(value)?);
+                let items: Vec<_> = value.split(":").collect();
+                if items.len() == 2 {
+                    let _key = items[0].to_string();
+                    let value = items[1].to_string();
+                    values.push(Value::try_from(value)?);
+                }
             }
 
             Ok(Value::Structure(atom!("{}"), values))
         } else if trimmed.starts_with("<<") && trimmed.ends_with(">>") {
             let mut iter = trimmed[2..trimmed.len() - 2].split(",");
-
             let mut values = vec![];
 
             while let Some(value) = iter.next() {
-                let mut iter = value.split(":");
-
-                let _key = iter.next().unwrap().to_string();
-                let value = iter.next().unwrap().to_string();
-
-                values.push(Value::try_from(value)?);
+                let items: Vec<_> = value.split(":").collect();
+                if items.len() == 2 {
+                    let _key = items[0].to_string();
+                    let value = items[1].to_string();
+                    values.push(Value::try_from(value)?);
+                }
             }
 
             Ok(Value::Structure(atom!("<<>>"), values))
