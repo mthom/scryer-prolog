@@ -274,6 +274,13 @@ module_expanded_head_variables(Head, HeadVars) :-
     ).
 
 
+print_goal_expansion_warning(Pred) :-
+    nl,
+    write('Warning: clause body goal expansion failed because '),
+    writeq(Pred),
+    write(' is not callable.'),
+    nl.
+
 expand_term_goals(Terms0, Terms) :-
     (  Terms0 = (Head1 :- Body0) ->
        (  var(Head1) ->
@@ -282,13 +289,21 @@ expand_term_goals(Terms0, Terms) :-
           (  atom(Module) ->
              prolog_load_context(module, Target),
              module_expanded_head_variables(Head2, HeadVars),
-             expand_goal(Body0, Target, Body1, HeadVars),
+             catch(expand_goal(Body0, Target, Body1, HeadVars),
+                   error(type_error(callable, Pred), _),
+                   (  loader:print_goal_expansion_warning(Pred),
+                      builtins:(Body1 = Body0)
+                   )),
              Terms = (Module:Head2 :- Body1)
           ;  type_error(atom, Module, load/1)
           )
        ;  module_expanded_head_variables(Head1, HeadVars),
           prolog_load_context(module, Target),
-          expand_goal(Body0, Target, Body1, HeadVars),
+          catch(expand_goal(Body0, Target, Body1, HeadVars),
+                error(type_error(callable, Pred), _),
+                (  loader:print_goal_expansion_warning(Pred),
+                   builtins:(Body1 = Body0)
+                )),
           Terms = (Head1 :- Body1)
        )
     ;  Terms = Terms0
@@ -688,7 +703,10 @@ expand_subgoal(UnexpandedGoals, MS, M, ExpandedGoals, HeadVars) :-
 
 expand_module_name(ESG0, MS, M, ESG) :-
     (  var(ESG0) ->
-       ESG = M:ESG0
+       (  M == user ->
+          ESG = ESG0
+       ;  ESG = M:ESG0
+       )
     ;  ESG0 = _:_ ->
        ESG = ESG0
     ;  functor(ESG0, F, A0),
@@ -751,7 +769,6 @@ expand_module_names(Goals, MetaSpecs, Module, ExpandedGoals, HeadVars) :-
     ;  expand_meta_predicate_subgoals(SubGoals, MetaSpecs, Module, ExpandedGoalList, HeadVars),
        ExpandedGoals =.. [GoalFunctor | ExpandedGoalList]
     ).
-
 
 
 :- non_counted_backtracking expand_goal/3.

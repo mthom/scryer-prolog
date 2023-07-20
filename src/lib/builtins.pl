@@ -334,6 +334,9 @@ dispatch_prep(Gs, B, [Cont|Conts]) :-
        ;  Gs0 == ! ->
           Cont = '$call'(builtins:set_cp(B)),
           Conts = []
+       ;  nonvar(Gs0),
+          \+ callable(Gs0) ->
+          throw(dispatch_prep_error)
        ;  Cont = Gs,
           Conts = []
        )
