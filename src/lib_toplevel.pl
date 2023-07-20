@@ -50,6 +50,26 @@ needs_bracketing(Value, Op) :-
        memberchk(EqSpec, [fx,xfx,yfx])
     ).
 
+write_goal(G, VarList, MaxDepth) :-
+    (  G = (Var = Value) ->
+       (  var(Value) ->
+          select((Var = _), VarList, NewVarList)
+       ;  VarList = NewVarList
+       ),
+       write(Var),
+       write(' = '),
+       (  needs_bracketing(Value, (=)) ->
+          write('('),
+          write_term(Value, [quoted(true), variable_names(NewVarList), max_depth(MaxDepth)]),
+          write(')')
+       ;  write_term(Value, [quoted(true), variable_names(NewVarList), max_depth(MaxDepth)])
+       )
+    ;  G == [] ->
+       write('true')
+    ;  write_term(G, [quoted(true), variable_names(VarList), max_depth(MaxDepth)])
+    ).
+
+
 write_last_goal(G, VarList, MaxDepth) :-
     (  G = (Var = Value) ->
        (  var(Value) ->
