@@ -1465,9 +1465,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
         let print_struct = |printer: &mut Self, name: Atom, arity: usize| {
             if name == atom!("[]") && arity == 0 {
-                if !printer.at_cdr("") {
-                    append_str!(printer, "[]");
-                }
+                append_str!(printer, "[]");
             } else if arity > 0 {
                 if let Some(spec) = fetch_op_spec(name, arity, printer.op_dir) {
                     printer.handle_op_as_struct(

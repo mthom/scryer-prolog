@@ -17,6 +17,7 @@ use fxhash::FxBuildHasher;
 
 use indexmap::IndexSet;
 use rustyline::error::ReadlineError;
+use rustyline::history::DefaultHistory;
 use rustyline::{Config, Editor};
 
 use std::collections::VecDeque;
@@ -109,7 +110,7 @@ fn get_prompt() -> &'static str {
 
 #[derive(Debug)]
 pub struct ReadlineStream {
-    rl: Editor<Helper>,
+    rl: Editor<Helper, DefaultHistory>,
     pending_input: CharReader<Cursor<String>>,
     add_history: bool,
 }
@@ -117,10 +118,13 @@ pub struct ReadlineStream {
 impl ReadlineStream {
     #[inline]
     pub fn new(pending_input: &str, add_history: bool) -> Self {
-        let config = Config::builder().check_cursor_position(true).build();
+        let config = Config::builder()
+            .check_cursor_position(true)
+            .build();
+
         let helper = Helper::new();
 
-        let mut rl = Editor::with_config(config);
+        let mut rl = Editor::with_config(config).unwrap();
         rl.set_helper(Some(helper));
 
         if let Some(mut path) = dirs_next::home_dir() {
@@ -129,8 +133,6 @@ impl ReadlineStream {
                 println!("Warning: loading history failed");
             }
         }
-
-        // rl.bind_sequence(KeyEvent::from('\t'), Cmd::Insert(1, "\t".to_string()));
 
         ReadlineStream {
             rl,
@@ -164,7 +166,7 @@ impl ReadlineStream {
 
                 unsafe {
                     if PROMPT {
-                        self.rl.history_mut().add(self.pending_input.get_ref().get_ref());
+                        self.rl.add_history_entry(self.pending_input.get_ref().get_ref()).unwrap();
                         self.save_history();
                         PROMPT = false;
                     }
