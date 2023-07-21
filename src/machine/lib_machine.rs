@@ -83,4 +83,56 @@ mod tests {
             Err(String::from("error(existence_error(procedure,triple/3),triple/3)."))
         );
     }
+
+    #[test]
+    fn complex_results() {
+        let mut machine = Machine::new_lib();
+        machine.load_module_string(
+            "facts",
+                r#"
+                :- discontiguous(subject_class/2).
+                :- discontiguous(constructor/2).
+
+                subject_class("Todo", c).
+                constructor(c, '[{action: "addLink", source: "this", predicate: "todo://state", target: "todo://ready"}]').
+
+                subject_class("Recipe", xyz).
+                constructor(xyz, '[{action: "addLink", source: "this", predicate: "recipe://title", target: "literal://string:Meta%20Muffins"}]').
+            "#.to_string());
+
+        let result = machine.run_query(String::from("subject_class(\"Todo\", C), constructor(C, Actions)."));
+        assert_eq!(
+            result,
+            Ok(QueryResolution::Matches(vec![
+                QueryMatch::from(btreemap! {
+                    "C" => Value::from("c"),
+                    "Actions" => Value::from("[{action: \"addLink\", source: \"this\", predicate: \"todo://state\", target: \"todo://ready\"}]"),
+                }),
+            ]))
+        );
+
+        let result = machine.run_query(String::from("subject_class(\"Recipe\", C), constructor(C, Actions)."));
+        assert_eq!(
+            result,
+            Ok(QueryResolution::Matches(vec![
+                QueryMatch::from(btreemap! {
+                    "C" => Value::from("xyz"),
+                    "Actions" => Value::from("[{action: \"addLink\", source: \"this\", predicate: \"recipe://title\", target: \"literal://string:Meta%20Muffins\"}]"),
+                }),
+            ]))
+        );
+
+        let result = machine.run_query(String::from("subject_class(Class, _)."));
+        assert_eq!(
+            result,
+            Ok(QueryResolution::Matches(vec![
+                QueryMatch::from(btreemap! {
+                    "Class" => Value::from("Todo")
+                }),
+                QueryMatch::from(btreemap! {
+                    "Class" => Value::from("Recipe")
+                }),
+            ]))
+        );
+    }
 }

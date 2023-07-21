@@ -2,6 +2,8 @@ use crate::atom_table::*;
 use ordered_float::OrderedFloat;
 use rug::*;
 use std::collections::BTreeMap;
+use regex::Regex;
+use std::collections::HashMap;
 
 pub type QueryResult = Result<QueryResolution, String>;
 
@@ -103,6 +105,25 @@ impl From<Vec<QueryResolutionLine>> for QueryResolution {
     }
 }
 
+fn parse_prolog_response(input: &str) -> HashMap<String, String> {
+    let mut map: HashMap<String, String> = HashMap::new();
+    // Use regex to match strings including commas inside them
+    let re = Regex::new(r"(\w+)\s=\s([^,]*'[^']*'[^,]*|[^,]*)").unwrap();
+    
+    for cap in re.captures_iter(input) {
+        let key = cap[1].to_string();
+        let value = cap[2].trim_end_matches(',').trim().to_string();
+        // cut off at given characters/strings:
+        let value = value.split("\n").next().unwrap().to_string();
+        let value = value.split("  ").next().unwrap().to_string();
+        let value = value.split("\t").next().unwrap().to_string();
+        let value = value.split("error").next().unwrap().to_string();
+        map.insert(key, value);
+    }
+    
+    map
+}
+
 impl TryFrom<String> for QueryResolutionLine {
     type Error = ();
     fn try_from(string: String) -> Result<Self, Self::Error> {
@@ -110,20 +131,17 @@ impl TryFrom<String> for QueryResolutionLine {
             "true" => Ok(QueryResolutionLine::True),
             "false" => Ok(QueryResolutionLine::False),
             _ => Ok(QueryResolutionLine::Match(
-                string
-                    .split(",")
-                    .map(|s| s.trim())
-                    .filter(|s| !s.is_empty())
-                    .map(|s| -> Result<(String, Value), ()> {
-                        let mut iter = s.split(" = ");
-                        let key = iter.next().ok_or(())?.to_string();
-                        let value = iter.next().ok_or(())?.to_string();
-
+                parse_prolog_response(&string)
+                    .iter()
+                    .map(|(k, v)| -> Result<(String, Value), ()> {
+                        let key = k.to_string();
+                        let value = v.to_string();
                         Ok((key, Value::try_from(value)?))
                     })
                     .filter_map(Result::ok)
-                    .collect::<BTreeMap<_, _>>(),
-            )),
+                    .collect::<BTreeMap<_, _>>()
+                )
+            ),
         }
     }
 }
@@ -175,6 +193,8 @@ impl TryFrom<String> for Value {
             }
 
             Ok(Value::Structure(atom!("<<>>"), values))
+        } else if !trimmed.contains(",") && !trimmed.contains("'") && !trimmed.contains("\"") {
+            Ok(Value::String(trimmed.into()))
         } else {
             Err(())
         }
