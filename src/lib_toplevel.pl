@@ -101,6 +101,10 @@ write_eq((G1, G2), VarList, MaxDepth) :-
 write_eq(G, VarList, MaxDepth) :-
     write_last_goal(G, VarList, MaxDepth).
 
+list_last_item([C], C) :- !.
+list_last_item([_|Cs], D) :-
+    list_last_item(Cs, D).
+    
 term_variables_under_max_depth(Term, MaxDepth, Vars) :-
     '$term_variables_under_max_depth'(Term, MaxDepth, Vars).
 
@@ -134,12 +138,12 @@ write_eqs_and_read_input(B, VarList) :-
        (  Goals == [] ->
           write('true.'), nl
        ;  loader:thread_goals(Goals, ThreadedGoals, (',')),
-          write_eq(ThreadedGoals, NewVarList0, 20),
+          write_eq(ThreadedGoals, NewVarList0, 200000),
           write('.'),
           nl
        )
     ;  loader:thread_goals(Goals, ThreadedGoals, (',')),
-       write_eq(ThreadedGoals, NewVarList0, 20),
+       write_eq(ThreadedGoals, NewVarList0, 200000),
        read_input(ThreadedGoals, NewVarList0)
     ).
 
