@@ -959,12 +959,14 @@ impl<'a, R: CharRead> Parser<'a, R> {
 
     fn shift_token(&mut self, token: Token, op_dir: &CompositeOpDir) -> Result<(), ParserError> {
         fn negate_int_rc(mut t: TypedArenaPtr<Integer>) -> TypedArenaPtr<Integer> {
-            let mut data = t.neg();
+            let i: Integer = (*t).clone();
+            let mut data = i.neg();
             TypedArenaPtr::new(&mut data)
         }
 
-        fn negate_rat_rc(mut t: TypedArenaPtr<Rational>) -> TypedArenaPtr<Rational> {
-            let mut data = t.neg();
+        fn negate_rat_rc(t: TypedArenaPtr<Rational>) -> TypedArenaPtr<Rational> {
+            let r: Rational = (*t).clone();
+            let mut data = r.neg();
             TypedArenaPtr::new(&mut data)
         }
 
