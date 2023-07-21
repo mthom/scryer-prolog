@@ -1,13 +1,16 @@
+use dashu::Integer;
+use dashu::Rational;
+
 use crate::arena::*;
 use crate::atom_table::*;
 use crate::parser::ast::*;
 use crate::parser::char_reader::*;
 use crate::parser::lexer::*;
 
-use crate::parser::rug::ops::NegAssign;
 
 use std::cell::Cell;
 use std::mem;
+use std::ops::Neg;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum TokenType {
@@ -955,9 +958,14 @@ impl<'a, R: CharRead> Parser<'a, R> {
     }
 
     fn shift_token(&mut self, token: Token, op_dir: &CompositeOpDir) -> Result<(), ParserError> {
-        fn negate_rc<T: NegAssign>(mut t: TypedArenaPtr<T>) -> TypedArenaPtr<T> {
-            (&mut t).neg_assign();
-            t
+        fn negate_int_rc(mut t: TypedArenaPtr<Integer>) -> TypedArenaPtr<Integer> {
+            let mut data = t.neg();
+            TypedArenaPtr::new(&mut data)
+        }
+
+        fn negate_rat_rc(mut t: TypedArenaPtr<Rational>) -> TypedArenaPtr<Rational> {
+            let mut data = t.neg();
+            TypedArenaPtr::new(&mut data)
         }
 
         match token {
@@ -965,10 +973,10 @@ impl<'a, R: CharRead> Parser<'a, R> {
                 self.negate_number(n, |n| -n, |n, _| Literal::Fixnum(n))
             }
             Token::Literal(Literal::Integer(n)) => {
-                self.negate_number(n, negate_rc, |n, _| Literal::Integer(n))
+                self.negate_number(n, negate_int_rc, |n, _| Literal::Integer(n))
             }
             Token::Literal(Literal::Rational(n)) => {
-                self.negate_number(n, negate_rc, |r, _| Literal::Rational(r))
+                self.negate_number(n, negate_rat_rc, |r, _| Literal::Rational(r))
             }
             Token::Literal(Literal::Float(n)) => self.negate_number(
                 **n.as_ptr(),

@@ -18,6 +18,8 @@ use crate::machine::stack::*;
 use crate::machine::streams::*;
 use crate::types::*;
 
+use dashu::base::DivRem;
+use dashu::base::DivRemEuclid;
 use ordered_float::OrderedFloat;
 
 use indexmap::IndexMap;
@@ -510,8 +512,8 @@ pub(crate) fn numbervar(offset: &Integer, addr: HeapCellValue) -> Option<String>
             'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
         ];
 
-        let i = n.mod_u(26) as usize;
-        let j = n.div_rem_floor(Integer::from(26));
+        let i = n.div_rem_euclid(Integer::from(26)).1.to_f32().value() as usize;
+        let j = n.div_rem(Integer::from(26));
         let j = <(Integer, Integer)>::from(j).0;
 
         if j == Integer::from(0) {
@@ -969,14 +971,14 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 }
             },
             NumberFocus::Denominator(r) => {
-                let output_str = format!("{}", r.denom());
+                let output_str = format!("{}", r.denominator());
 
                 push_space_if_amb!(self, &output_str, {
                     append_str!(self, &output_str);
                 });
             }
             NumberFocus::Numerator(r) => {
-                let output_str = format!("{}", r.numer());
+                let output_str = format!("{}", r.numerator());
 
                 push_space_if_amb!(self, &output_str, {
                     append_str!(self, &output_str);

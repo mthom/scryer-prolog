@@ -6,9 +6,10 @@ use crate::machine::loader::*;
 use crate::machine::machine_errors::CompilationError;
 use crate::machine::preprocessor::*;
 use crate::parser::ast::*;
-use crate::parser::dashu::{Rational, Integer};
+use crate::parser::dashu::Rational;
 use crate::variable_records::*;
 
+use dashu::Integer;
 use indexmap::{IndexMap, IndexSet};
 
 use std::cell::Cell;
