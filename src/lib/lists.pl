@@ -396,7 +396,6 @@ nth0(N, Es0, E) :-
 
 skipn(N0, Es0,Es) :-
    N0>0,
-   !, % should not be necessary #1028
    N1 is N0-1,
    Es0 = [_|Es1],
    skipn(N1, Es1,Es).
