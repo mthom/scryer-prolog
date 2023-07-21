@@ -1,3 +1,5 @@
+use std::collections::HashSet;
+
 use super::{Machine, MachineConfig, QueryResult, QueryResolution, QueryResolutionLine, Atom};
 
 impl Machine {
@@ -16,6 +18,14 @@ impl Machine {
         if output.starts_with("error(") {
             Err(output)
         } else {
+            // Remove duplicate lines
+            let output = output
+                .lines()
+                .collect::<HashSet<&str>>()
+                .iter()
+                .cloned()
+                .collect::<Vec<&str>>()
+                .join("\n");
             Ok(output
                 .split(";")
                 .map(|s| s.trim())
