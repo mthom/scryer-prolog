@@ -212,6 +212,8 @@ impl<'a> ArithmeticEvaluator<'a> {
             atom!("round") => Ok(Instruction::Round(a1, t)),
             atom!("ceiling") => Ok(Instruction::Ceiling(a1, t)),
             atom!("floor") => Ok(Instruction::Floor(a1, t)),
+            atom!("float_integer_part") => Ok(Instruction::FloatIntegerPart(a1, t)),
+            atom!("float_fractional_part") => Ok(Instruction::FloatFractionalPart(a1, t)),
             atom!("sign") => Ok(Instruction::Sign(a1, t)),
             atom!("\\") => Ok(Instruction::BitwiseComplement(a1, t)),
             _ => Err(ArithmeticError::NonEvaluableFunctor(Literal::Atom(name), 1)),

@@ -1054,6 +1054,16 @@ pub(crate) fn log10(n1: Number) -> Result<f64, MachineStubGen> {
 }
 
 #[inline]
+pub(crate) fn float_fractional_part(n1: Number) -> Result<f64, MachineStubGen> {
+    unary_float_fn_template(n1, |f| f.fract())
+}
+
+#[inline]
+pub(crate) fn float_integer_part(n1: Number) -> Result<f64, MachineStubGen> {
+    unary_float_fn_template(n1, |f| f.trunc())
+}
+
+#[inline]
 pub(crate) fn sqrt(n1: Number) -> Result<f64, MachineStubGen> {
     if n1.is_negative() {
         let stub_gen = || {
@@ -1071,6 +1081,7 @@ pub(crate) fn sqrt(n1: Number) -> Result<f64, MachineStubGen> {
 pub(crate) fn floor(n1: Number, arena: &mut Arena) -> Number {
     rnd_i(&n1, arena)
 }
+
 
 #[inline]
 pub(crate) fn ceiling(n1: Number, arena: &mut Arena) -> Number {
@@ -1322,6 +1333,12 @@ impl MachineState {
                             ))),
                             atom!("log10") => self.interms.push(Number::Float(OrderedFloat(
                                 drop_iter_on_err!(self, iter, log10(a1))
+                            ))),
+                            atom!("float_fractional_part") => self.interms.push(Number::Float(OrderedFloat(
+                                drop_iter_on_err!(self, iter, float_fractional_part(a1))
+                            ))),
+                            atom!("float_integer_part") => self.interms.push(Number::Float(OrderedFloat(
+                                drop_iter_on_err!(self, iter, float_integer_part(a1))
                             ))),
                             atom!("sqrt") => self.interms.push(Number::Float(OrderedFloat(
                                 drop_iter_on_err!(self, iter, sqrt(a1))
