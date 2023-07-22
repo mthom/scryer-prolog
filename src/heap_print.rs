@@ -1465,6 +1465,12 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
         let print_struct = |printer: &mut Self, name: Atom, arity: usize| {
             if name == atom!("[]") && arity == 0 {
+                if let Some(TokenOrRedirect::CloseList(_)) = printer.state_stack.last() {
+                    if printer.at_cdr("") {
+                        return;
+                    }
+                }
+
                 append_str!(printer, "[]");
             } else if arity > 0 {
                 if let Some(spec) = fetch_op_spec(name, arity, printer.op_dir) {
@@ -1516,7 +1522,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             None => return,
         };
 
-        if !addr.is_compound(&self.iter.heap) && self.max_depth_exhausted(max_depth) {
+        if !addr.is_var() && !addr.is_compound(&self.iter.heap) && self.max_depth_exhausted(max_depth) {
             self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
             return;
         }
