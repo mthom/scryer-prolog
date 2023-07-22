@@ -1,4 +1,4 @@
-fn main() {
+fn main() -> std::process::ExitCode {
     use std::sync::atomic::Ordering;
     use scryer_prolog::*;
 
@@ -7,5 +7,5 @@ fn main() {
     }).unwrap();
 
     let mut wam = machine::Machine::new();
-    wam.run_top_level();
+    wam.run_top_level()
 }

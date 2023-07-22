@@ -558,7 +558,7 @@ impl Machine {
     }
 
     #[inline(always)]
-    pub(super) fn dispatch_loop(&mut self) {
+    pub(super) fn dispatch_loop(&mut self) -> std::process::ExitCode {
         'outer: loop {
         for _ in 0 .. INSTRUCTIONS_PER_INTERRUPT_POLL {
             match &self.code[self.machine_st.p] {
@@ -3809,13 +3809,8 @@ impl Machine {
                     self.is_partial_string();
                     step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                 }
-                &Instruction::CallHalt => {
-                    self.halt();
-                    self.machine_st.p += 1;
-                }
-                &Instruction::ExecuteHalt => {
-                    self.halt();
-                    self.machine_st.p = self.machine_st.cp;
+                &Instruction::CallHalt | &Instruction::ExecuteHalt => {
+                    return self.halt();
                 }
                 &Instruction::CallGetLiftedHeapFromOffset => {
                     self.get_lifted_heap_from_offset();
@@ -5356,5 +5351,7 @@ impl Machine {
             Err(_) => unreachable!(),
         }
         }
+
+        std::process::ExitCode::SUCCESS
     }
 }

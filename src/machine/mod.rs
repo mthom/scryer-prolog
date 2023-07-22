@@ -204,7 +204,7 @@ impl Machine {
         self.machine_st.throw_exception(err);
     }
 
-    fn run_module_predicate(&mut self, module_name: Atom, key: PredicateKey) {
+    fn run_module_predicate(&mut self, module_name: Atom, key: PredicateKey) -> std::process::ExitCode {
         if let Some(module) = self.indices.modules.get(&module_name) {
             if let Some(ref code_index) = module.code_dir.get(&key) {
                 let p = code_index.local().unwrap();
@@ -283,7 +283,7 @@ impl Machine {
         }
     }
 
-    pub fn run_top_level(&mut self) {
+    pub fn run_top_level(&mut self) -> std::process::ExitCode {
         let mut arg_pstrs = vec![];
 
         for arg in env::args() {
@@ -298,7 +298,7 @@ impl Machine {
             iter_to_heap_list(&mut self.machine_st.heap, arg_pstrs.into_iter())
         );
 
-        self.run_module_predicate(atom!("$toplevel"), (atom!("$repl"), 1));
+        self.run_module_predicate(atom!("$toplevel"), (atom!("$repl"), 1))
     }
 
     pub(crate) fn configure_modules(&mut self) {

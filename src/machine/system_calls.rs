@@ -5229,24 +5229,24 @@ impl Machine {
     }
 
     #[inline(always)]
-    pub(crate) fn halt(&mut self) {
+    pub(crate) fn halt(&mut self) -> std::process::ExitCode {
         let code = self.deref_register(1);
 
         let code = match Number::try_from(code) {
-            Ok(Number::Fixnum(n)) => i32::try_from(n.get_num()).unwrap(),
-            Ok(Number::Integer(n)) => n.to_i32().unwrap(),
+            Ok(Number::Fixnum(n)) => u8::try_from(n.get_num()).unwrap(),
+            Ok(Number::Integer(n)) => n.to_u8().unwrap(),
             Ok(Number::Rational(r)) => {
                 // n has already been confirmed as an integer, and
                 // internally, Rational is assumed reduced, so its
                 // denominator must be 1.
-                r.numer().to_i32().unwrap()
+                r.numer().to_u8().unwrap()
             }
             _ => {
                 unreachable!()
             }
         };
 
-        std::process::exit(code);
+        std::process::ExitCode::from(code)
     }
 
     #[inline(always)]
