@@ -1028,6 +1028,24 @@ impl Machine {
                     self.machine_st.interms[t - 1] = floor(n1, &mut self.machine_st.arena);
                     self.machine_st.p += 1;
                 }
+                &Instruction::FloatFractionalPart(ref a1, t) => {
+                    let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
+
+                    self.machine_st.interms[t - 1] = Number::Float(OrderedFloat(
+                        try_or_throw_gen!(&mut self.machine_st, float_fractional_part(n1))
+                    ));
+
+                    self.machine_st.p += 1;
+                }
+                &Instruction::FloatIntegerPart(ref a1, t) => {
+                    let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
+
+                    self.machine_st.interms[t - 1] = Number::Float(OrderedFloat(
+                        try_or_throw_gen!(&mut self.machine_st, float_integer_part(n1))
+                    ));
+
+                    self.machine_st.p += 1;
+                }
                 &Instruction::Plus(ref a1, t) => {
                     let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
 

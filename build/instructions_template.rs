@@ -743,6 +743,10 @@ enum InstructionTemplate {
     Ceiling(ArithmeticTerm, usize),
     #[strum_discriminants(strum(props(Arity = "1", Name = "floor")))]
     Floor(ArithmeticTerm, usize),
+    #[strum_discriminants(strum(props(Arity = "1", Name = "float_fractional_part")))]
+    FloatFractionalPart(ArithmeticTerm, usize),
+    #[strum_discriminants(strum(props(Arity = "1", Name = "float_integer_part")))]
+    FloatIntegerPart(ArithmeticTerm, usize),
     #[strum_discriminants(strum(props(Arity = "1", Name = "neg")))]
     Neg(ArithmeticTerm, usize),
     #[strum_discriminants(strum(props(Arity = "1", Name = "plus")))]
@@ -1462,6 +1466,12 @@ fn generate_instruction_preface() -> TokenStream {
                     }
                     &Instruction::Floor(ref at, t) => {
                         arith_instr_unary_functor(h, atom!("floor"), arena, at, t)
+                    }
+                    &Instruction::FloatFractionalPart(ref at, t) => {
+                        arith_instr_unary_functor(h, atom!("float_fractional_part"), arena, at, t)
+                    }
+                    &Instruction::FloatIntegerPart(ref at, t) => {
+                        arith_instr_unary_functor(h, atom!("float_integer_part"), arena, at, t)
                     }
                     &Instruction::Neg(ref at, t) => arith_instr_unary_functor(
                         h,
