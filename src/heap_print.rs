@@ -703,6 +703,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
     fn format_bar_separator_op(&mut self, mut max_depth: usize, name: Atom, spec: OpDesc) {
         if self.check_max_depth(&mut max_depth) {
             self.iter.pop_stack();
+            self.iter.pop_stack();
 
             let ellipsis_atom = atom!("...");
 
