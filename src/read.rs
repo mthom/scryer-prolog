@@ -81,15 +81,7 @@ impl MachineState {
 }
 
 static mut PROMPT: bool = false;
-static mut EMIT_NEWLINE: bool = false;
-
 const HISTORY_FILE: &'static str = ".scryer_history";
-
-pub(crate) fn set_emit_newline(value: bool) {
-    unsafe {
-        EMIT_NEWLINE = value;
-    }
-}
 
 pub(crate) fn set_prompt(value: bool) {
     unsafe {
@@ -171,10 +163,8 @@ impl ReadlineStream {
                         PROMPT = false;
                     }
 
-                    if EMIT_NEWLINE {
-                        if self.pending_input.get_ref().get_ref().chars().last() != Some('\n') {
-                            *self.pending_input.get_mut().get_mut() += "\n";
-                        }
+                    if self.pending_input.get_ref().get_ref().chars().last() != Some('\n') {
+                        *self.pending_input.get_mut().get_mut() += "\n";
                     }
                 }
 

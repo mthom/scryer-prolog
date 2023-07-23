@@ -5797,7 +5797,6 @@ impl Machine {
     pub(crate) fn read_query_term(&mut self) -> CallResult {
         self.user_input.reset();
 
-        set_emit_newline(true);
         set_prompt(true);
         // let result = self.machine_st.read_term(self.user_input, &mut self.indices);
         let result = self.machine_st.read_term_from_user_input(self.user_input, &mut self.indices);
