@@ -229,6 +229,8 @@ enum TokenOrRedirect {
     Space,
     LeftCurly,
     RightCurly,
+    ChildOpenList,
+    ChildCloseList,
     OpenList(Rc<Cell<(bool, usize)>>),
     CloseList(Rc<Cell<(bool, usize)>>),
     HeadTailSeparator,
@@ -1217,7 +1219,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 }
                 _ => {
                     let switch = Rc::new(Cell::new((!at_cdr, 0)));
-                    self.state_stack.push(TokenOrRedirect::CloseList(switch.clone()));
+                    let switch = self.close_list(switch);
 
                     let (h, offset) = pstr_loc_and_offset(self.iter.heap, focus.value() as usize);
                     let pstr = cell_as_string!(self.iter.heap[h]);
@@ -1265,7 +1267,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                         self.state_stack.pop();
                     }
 
-                    self.state_stack.push(TokenOrRedirect::OpenList(switch));
+                    self.open_list(switch);
                 }
             );
         }
@@ -1288,6 +1290,25 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         false
     }
 
+    fn close_list(&mut self, switch: Rc<Cell<(bool, usize)>>) -> Option<Rc<Cell<(bool, usize)>>> {
+        if let Some(TokenOrRedirect::Op(_, op_desc)) = self.state_stack.last() {
+            if is_postfix!(op_desc.get_spec()) || is_infix!(op_desc.get_spec()) {
+                self.state_stack.push(TokenOrRedirect::ChildCloseList);
+                return None;
+            }
+        }
+
+        self.state_stack.push(TokenOrRedirect::CloseList(switch.clone()));
+        Some(switch)
+    }
+
+    fn open_list(&mut self, switch: Option<Rc<Cell<(bool, usize)>>>) {
+        self.state_stack.push(match switch {
+            Some(switch) => TokenOrRedirect::OpenList(switch),
+            None => TokenOrRedirect::ChildOpenList,
+        });
+    }
+
     fn push_list(&mut self, mut max_depth: usize) {
         if self.max_depth_exhausted(max_depth) {
             self.iter.pop_stack();
@@ -1302,22 +1323,23 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
             let cell = Rc::new(Cell::new((true, 0)));
 
-            self.state_stack.push(TokenOrRedirect::CloseList(cell.clone()));
+            let switch = self.close_list(cell);
+
             self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
-            self.state_stack.push(TokenOrRedirect::OpenList(cell));
+            self.open_list(switch);
 
             return;
         }
 
         let cell = Rc::new(Cell::new((true, max_depth)));
 
-        self.state_stack.push(TokenOrRedirect::CloseList(cell.clone()));
+        let switch = self.close_list(cell);
 
         self.state_stack.push(TokenOrRedirect::FunctorRedirect(max_depth));
         self.state_stack.push(TokenOrRedirect::HeadTailSeparator); // bar
         self.state_stack.push(TokenOrRedirect::FunctorRedirect(max_depth+1));
 
-        self.state_stack.push(TokenOrRedirect::OpenList(cell));
+        self.open_list(switch);
     }
 
     fn handle_op_as_struct(
@@ -1617,7 +1639,6 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         if self.outputter.ends_with("|") {
             self.outputter.truncate(len - "|".len());
             append_str!(self, tr);
-
             true
         } else {
             false
@@ -1648,6 +1669,12 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 TokenOrRedirect::IpAddr(ip) => self.print_ip_addr(ip),
                 TokenOrRedirect::RawPtr(ptr) => self.print_raw_ptr(ptr),
                 TokenOrRedirect::Open => push_char!(self, '('),
+                TokenOrRedirect::ChildOpenList => {
+                    push_char!(self, '[');
+                }
+                TokenOrRedirect::ChildCloseList => {
+                    push_char!(self, ']');
+                }
                 TokenOrRedirect::OpenList(delimit) => {
                     if !self.at_cdr(",") {
                         push_char!(self, '[');
@@ -1951,5 +1978,22 @@ mod tests {
         all_cells_unmarked(&wam.machine_st.heap);
 
         assert_eq!(&wam.parse_and_print_term("f((a,b)).").unwrap(), "f((a,b))");
+
+        all_cells_unmarked(&wam.machine_st.heap);
+
+        wam.op_dir.insert(
+            (atom!("+"), Fixity::In),
+            OpDesc::build_with(500, YFX as u8),
+        );
+        wam.op_dir.insert(
+            (atom!("*"), Fixity::In),
+            OpDesc::build_with(400, YFX as u8),
+        );
+
+        assert_eq!(&wam.parse_and_print_term("[a|[] + b].").unwrap(), "[a|[]+b]");
+
+        all_cells_unmarked(&wam.machine_st.heap);
+
+        assert_eq!(&wam.parse_and_print_term("[a|[b|c]*d].").unwrap(), "[a|[b|c]*d]");
     }
 }
