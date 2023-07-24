@@ -958,7 +958,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
     }
 
     fn shift_token(&mut self, token: Token, op_dir: &CompositeOpDir) -> Result<(), ParserError> {
-        fn negate_int_rc(mut t: TypedArenaPtr<Integer>) -> TypedArenaPtr<Integer> {
+        fn negate_int_rc(t: TypedArenaPtr<Integer>) -> TypedArenaPtr<Integer> {
             let i: Integer = (*t).clone();
             let mut data = i.neg();
             TypedArenaPtr::new(&mut data)

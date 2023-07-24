@@ -23,7 +23,6 @@ use dashu::base::DivRemEuclid;
 use ordered_float::OrderedFloat;
 
 use indexmap::IndexMap;
-use tokio::io::Interest;
 
 use std::cell::Cell;
 use std::convert::TryFrom;

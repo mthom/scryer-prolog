@@ -36,7 +36,7 @@ use ordered_float::OrderedFloat;
 use fxhash::{FxBuildHasher, FxHasher};
 use indexmap::IndexSet;
 
-use ref_thread_local::{RefThreadLocal, ref_thread_local};
+pub(crate) use ref_thread_local::RefThreadLocal;
 
 use std::borrow::BorrowMut;
 use std::cell::Cell;

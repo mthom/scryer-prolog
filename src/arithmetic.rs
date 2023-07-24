@@ -381,7 +381,7 @@ pub(crate) fn rnd_i<'a>(n: &'a Number, arena: &mut Arena) -> Number {
             }
         }
         &Number::Rational(ref r) => {
-            let (mut fract, mut floor) = (r.fract(), r.floor());
+            let (_, floor) = (r.fract(), r.floor());
 
             if let Some(floor) = floor.to_i64() {
                 fixnum!(Number, floor, arena)
