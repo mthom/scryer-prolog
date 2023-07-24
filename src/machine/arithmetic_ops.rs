@@ -1,3 +1,6 @@
+use dashu::base::Abs;
+use dashu::base::Gcd;
+use dashu::integer::IBig;
 use divrem::*;
 
 use crate::arena::*;
@@ -8,7 +11,7 @@ use crate::heap_iter::*;
 use crate::machine::machine_errors::*;
 use crate::machine::machine_state::*;
 use crate::parser::ast::*;
-use crate::parser::rug::{Integer, Rational};
+use crate::parser::dashu::{Integer, Rational};
 use crate::types::*;
 
 use crate::fixnum;
@@ -159,7 +162,7 @@ pub(crate) fn add(lhs: Number, rhs: Number, arena: &mut Arena) -> Result<Number,
             Ok(Number::Float(add_f(float_fn_to_f(n1.get_num())?, n2)?))
         }
         (Number::Integer(n1), Number::Integer(n2)) => {
-            Ok(Number::arena_from(Integer::from(&*n1) + &*n2, arena)) // add_i
+            Ok(Number::arena_from(&*n1 + &*n2, arena)) // add_i
         }
         (Number::Integer(n1), Number::Float(OrderedFloat(n2)))
         | (Number::Float(OrderedFloat(n2)), Number::Integer(n1)) => {
@@ -167,7 +170,7 @@ pub(crate) fn add(lhs: Number, rhs: Number, arena: &mut Arena) -> Result<Number,
         }
         (Number::Integer(n1), Number::Rational(n2))
         | (Number::Rational(n2), Number::Integer(n1)) => {
-            Ok(Number::arena_from(Rational::from(&*n1) + &*n2, arena))
+            Ok(Number::arena_from(&*n1 + &*n2, arena))
         }
         (Number::Rational(n1), Number::Float(OrderedFloat(n2)))
         | (Number::Float(OrderedFloat(n2)), Number::Rational(n1)) => {
@@ -177,7 +180,7 @@ pub(crate) fn add(lhs: Number, rhs: Number, arena: &mut Arena) -> Result<Number,
             Ok(Number::Float(add_f(f1, f2)?))
         }
         (Number::Rational(r1), Number::Rational(r2)) => {
-            Ok(Number::arena_from(Rational::from(&*r1) + &*r2, arena))
+            Ok(Number::arena_from(&*r1 + &*r2, arena))
         }
     }
 }
@@ -191,9 +194,15 @@ pub(crate) fn neg(n: Number, arena: &mut Arena) -> Number {
                 Number::arena_from(-Integer::from(n.get_num()), arena)
             }
         }
-        Number::Integer(n) => Number::arena_from(-Integer::from(&*n), arena),
+        Number::Integer(n) => {
+            let n_clone: Integer = (*n).clone();
+            Number::arena_from(-Integer::from(n_clone), arena)
+        },
         Number::Float(OrderedFloat(f)) => Number::Float(OrderedFloat(-f)),
-        Number::Rational(r) => Number::arena_from(-Rational::from(&*r), arena),
+        Number::Rational(r) => {
+            let r_clone: Rational = (*r).clone();
+            Number::arena_from(-Rational::from(r_clone), arena)
+        },
     }
 }
 
@@ -203,12 +212,19 @@ pub(crate) fn abs(n: Number, arena: &mut Arena) -> Number {
             if let Some(n) = n.get_num().checked_abs() {
                 fixnum!(Number, n, arena)
             } else {
-                Number::arena_from(Integer::from(n.get_num()).abs(), arena)
+                let arena_int = Integer::from(n.get_num());
+                Number::arena_from(arena_int.abs(), arena)
             }
         }
-        Number::Integer(n) => Number::arena_from(Integer::from(n.abs_ref()), arena),
+        Number::Integer(n) => {
+            let n_clone: Integer = (*n).clone();
+            Number::arena_from(Integer::from(n_clone.abs()), arena)
+        },
         Number::Float(f) => Number::Float(f.abs()),
-        Number::Rational(r) => Number::arena_from(Rational::from(r.abs_ref()), arena),
+        Number::Rational(r) => {
+            let r_clone: Rational = (*r).clone();
+            Number::arena_from(Rational::from(r_clone.abs()), arena)
+        },
     }
 }
 
@@ -247,7 +263,8 @@ pub(crate) fn mul(lhs: Number, rhs: Number, arena: &mut Arena) -> Result<Number,
             Ok(Number::Float(mul_f(float_fn_to_f(n1.get_num())?, n2)?))
         }
         (Number::Integer(n1), Number::Integer(n2)) => {
-            Ok(Number::arena_from(Integer::from(&*n1) * &*n2, arena)) // mul_i
+            let n1_clone: Integer = (*n1).clone();
+            Ok(Number::arena_from(Integer::from(n1_clone) * &*n2, arena)) // mul_i
         }
         (Number::Integer(n1), Number::Float(OrderedFloat(n2)))
         | (Number::Float(OrderedFloat(n2)), Number::Integer(n1)) => {
@@ -255,7 +272,8 @@ pub(crate) fn mul(lhs: Number, rhs: Number, arena: &mut Arena) -> Result<Number,
         }
         (Number::Integer(n1), Number::Rational(n2))
         | (Number::Rational(n2), Number::Integer(n1)) => {
-            Ok(Number::arena_from(Rational::from(&*n1) * &*n2, arena))
+            let n1_clone: Integer = (*n1).clone();
+            Ok(Number::arena_from(Rational::from(n1_clone) * &*n2, arena))
         }
         (Number::Rational(n1), Number::Float(OrderedFloat(n2)))
         | (Number::Float(OrderedFloat(n2)), Number::Rational(n1)) => {
@@ -265,7 +283,8 @@ pub(crate) fn mul(lhs: Number, rhs: Number, arena: &mut Arena) -> Result<Number,
             Ok(Number::Float(mul_f(f1, f2)?))
         }
         (Number::Rational(r1), Number::Rational(r2)) => {
-            Ok(Number::arena_from(Rational::from(&*r1) * &*r2, arena))
+            let r1_clone: Rational = (*r1).clone();
+            Ok(Number::arena_from(Rational::from(r1_clone) * &*r2, arena))
         }
     }
 }
@@ -338,7 +357,7 @@ pub(crate) fn int_pow(n1: Number, n2: Number, arena: &mut Arena) -> Result<Numbe
         (Number::Fixnum(n1), Number::Integer(n2)) => {
             let n1_i = n1.get_num();
 
-            if !(n1_i == 1 || n1_i == 0 || n1_i == -1) && &*n2 < &0 {
+            if !(n1_i == 1 || n1_i == 0 || n1_i == -1) && &*n2 < &Integer::from(0) {
                 let n = Number::Fixnum(n1);
                 Err(numerical_type_error(ValidType::Float, n, stub_gen))
             } else {
@@ -349,7 +368,7 @@ pub(crate) fn int_pow(n1: Number, n2: Number, arena: &mut Arena) -> Result<Numbe
         (Number::Integer(n1), Number::Fixnum(n2)) => {
             let n2_i = n2.get_num();
 
-            if !(&*n1 == &1 || &*n1 == &0 || &*n1 == &-1) && n2_i < 0 {
+            if !(&*n1 == &Integer::from(1) || &*n1 == &Integer::from(0) || &*n1 == &Integer::from(-1)) && n2_i < 0 {
                 let n = Number::Integer(n1);
                 Err(numerical_type_error(ValidType::Float, n, stub_gen))
             } else {
@@ -358,7 +377,7 @@ pub(crate) fn int_pow(n1: Number, n2: Number, arena: &mut Arena) -> Result<Numbe
             }
         }
         (Number::Integer(n1), Number::Integer(n2)) => {
-            if !(&*n1 == &1 || &*n1 == &0 || &*n1 == &-1) && &*n2 < &0 {
+            if !(&*n1 == &Integer::from(1) || &*n1 == &Integer::from(0) || &*n1 == &Integer::from(-1)) && &*n2 < &Integer::from(0) {
                 let n = Number::Integer(n1);
                 Err(numerical_type_error(ValidType::Float, n, stub_gen))
             } else {
@@ -521,7 +540,7 @@ pub fn rational_from_number(
     match n {
         Number::Fixnum(n) => Ok(arena_alloc!(Rational::from(n.get_num()), arena)),
         Number::Rational(r) => Ok(r),
-        Number::Float(OrderedFloat(f)) => match Rational::from_f64(f) {
+        Number::Float(OrderedFloat(f)) => match Rational::simplest_from_f64(f) {
             Some(r) => Ok(arena_alloc!(r, arena)),
             None => Err(Box::new(move |machine_st| {
                 let instantiation_error = machine_st.instantiation_error();
@@ -530,7 +549,10 @@ pub fn rational_from_number(
                 machine_st.error_form(instantiation_error, stub)
             })),
         },
-        Number::Integer(n) => Ok(arena_alloc!(Rational::from(&*n), arena)),
+        Number::Integer(n) => {
+            let n_clone: Integer = (*n).clone();
+            Ok(arena_alloc!(Rational::from(n_clone), arena))
+        },
     }
 }
 
@@ -590,7 +612,7 @@ pub(crate) fn idiv(n1: Number, n2: Number, arena: &mut Arena) -> Result<Number, 
                 Err(zero_divisor_eval_error(stub_gen))
             } else {
                 Ok(Number::arena_from(
-                    <(Integer, Integer)>::from(n1.div_rem_ref(&*n2)).0,
+                    <(Integer, Integer)>::from(n1.div_rem_floor_ref(&*n2)).0,
                     arena,
                 ))
             }
@@ -696,7 +718,7 @@ pub(crate) fn shl(n1: Number, n2: Number, arena: &mut Arena) -> Result<Number, M
             let n1 = Integer::from(n1.get_num());
 
             match n2.to_u32() {
-                Some(n2) => Ok(Number::arena_from(n1 << n2, arena)),
+                Some(n2) => Ok(Number::arena_from(n1.to_u64().unwrap() << n2, arena)),
                 _ => {
 			        Ok(Number::arena_from(n1 << usize::max_value(), arena))
 		        }
@@ -709,7 +731,7 @@ pub(crate) fn shl(n1: Number, n2: Number, arena: &mut Arena) -> Result<Number, M
 		    }
         },
         (Number::Integer(n1), Number::Integer(n2)) => match n2.to_u32() {
-            Some(n2) => Ok(Number::arena_from(Integer::from(&*n1 << n2), arena)),
+            Some(n2) => Ok(Number::arena_from(Integer::from(n1.to_u64().unwrap() << n2), arena)),
             _ => {
 		        Ok(Number::arena_from(Integer::from(&*n1 << usize::max_value()),arena))
 	        }
@@ -926,18 +948,21 @@ pub(crate) fn gcd(n1: Number, n2: Number, arena: &mut Arena) -> Result<Number, M
             if let Some(result) = isize_gcd(n1_i, n2_i) {
                 Ok(Number::arena_from(result, arena))
             } else {
+                let value: IBig = Integer::from(n1_i).gcd(&Integer::from(n2_i)).into();
                 Ok(Number::arena_from(
-                    Integer::from(n1_i).gcd(&Integer::from(n2_i)),
+                    value,
                     arena,
                 ))
             }
         }
         (Number::Fixnum(n1), Number::Integer(n2)) | (Number::Integer(n2), Number::Fixnum(n1)) => {
             let n1 = Integer::from(n1.get_num());
-            Ok(Number::arena_from(Integer::from(n2.gcd_ref(&n1)), arena))
+            let n2_clone: Integer = (*n2).clone();
+            Ok(Number::arena_from(Integer::from(n2_clone.gcd(&n1)), arena))
         }
         (Number::Integer(n1), Number::Integer(n2)) => {
-            Ok(Number::arena_from(Integer::from(n1.gcd_ref(&n2)), arena))
+            let n1_clone: Integer = (*n1).clone();
+            Ok(Number::arena_from(Integer::from(n1_clone.gcd(&Integer::from(n2.to_isize().unwrap()))) as IBig, arena))
         }
         (Number::Float(f), _) | (_, Number::Float(f)) => {
             let n = Number::Float(f);
