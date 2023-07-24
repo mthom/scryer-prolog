@@ -23,6 +23,7 @@ use dashu::base::DivRemEuclid;
 use ordered_float::OrderedFloat;
 
 use indexmap::IndexMap;
+use tokio::io::Interest;
 
 use std::cell::Cell;
 use std::convert::TryFrom;
@@ -512,8 +513,10 @@ pub(crate) fn numbervar(offset: &Integer, addr: HeapCellValue) -> Option<String>
             'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
         ];
 
+        let n_clone: Integer = n.clone();
+
         let i = n.div_rem_euclid(Integer::from(26)).1.to_f32().value() as usize;
-        let j = n.div_rem(Integer::from(26));
+        let j = n_clone.div_rem(Integer::from(26));
         let j = <(Integer, Integer)>::from(j).0;
 
         if j == Integer::from(0) {

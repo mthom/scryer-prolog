@@ -194,9 +194,16 @@ pub(crate) fn neg(n: Number, arena: &mut Arena) -> Number {
                 Number::arena_from(-Integer::from(n.get_num()), arena)
             }
         }
-        Number::Integer(n) => Number::arena_from(-Integer::from(*n.clone()), arena),
+        
+        Number::Integer(n) => {
+            let n_clone: Integer = (*n).clone();
+            Number::arena_from(-Integer::from(n_clone), arena)
+        },
         Number::Float(OrderedFloat(f)) => Number::Float(OrderedFloat(-f)),
-        Number::Rational(r) => Number::arena_from(-Rational::from(*r), arena),
+        Number::Rational(r) => {
+            let r_clone: Rational = (*r).clone();
+            Number::arena_from(-Rational::from(r_clone), arena)
+        },
     }
 }
 
@@ -210,9 +217,15 @@ pub(crate) fn abs(n: Number, arena: &mut Arena) -> Number {
                 Number::arena_from(arena_int.abs(), arena)
             }
         }
-        Number::Integer(n) => Number::arena_from(Integer::from(n.abs()), arena),
+        Number::Integer(n) => {
+            let n_clone: Integer = (*n).clone();
+            Number::arena_from(Integer::from(n_clone.abs()), arena)
+        },
         Number::Float(f) => Number::Float(f.abs()),
-        Number::Rational(r) => Number::arena_from(Rational::from(r.abs()), arena),
+        Number::Rational(r) => {
+            let r_clone: Rational = (*r).clone();
+            Number::arena_from(Rational::from(r_clone.abs()), arena)
+        },
     }
 }
 
@@ -251,7 +264,8 @@ pub(crate) fn mul(lhs: Number, rhs: Number, arena: &mut Arena) -> Result<Number,
             Ok(Number::Float(mul_f(float_fn_to_f(n1.get_num())?, n2)?))
         }
         (Number::Integer(n1), Number::Integer(n2)) => {
-            Ok(Number::arena_from(Integer::from(*n1) * &*n2, arena)) // mul_i
+            let n1_clone: Integer = (*n1).clone();
+            Ok(Number::arena_from(Integer::from(n1_clone) * &*n2, arena)) // mul_i
         }
         (Number::Integer(n1), Number::Float(OrderedFloat(n2)))
         | (Number::Float(OrderedFloat(n2)), Number::Integer(n1)) => {
@@ -259,7 +273,8 @@ pub(crate) fn mul(lhs: Number, rhs: Number, arena: &mut Arena) -> Result<Number,
         }
         (Number::Integer(n1), Number::Rational(n2))
         | (Number::Rational(n2), Number::Integer(n1)) => {
-            Ok(Number::arena_from(Rational::from(*n1) * &*n2, arena))
+            let n1_clone: Integer = (*n1).clone();
+            Ok(Number::arena_from(Rational::from(n1_clone) * &*n2, arena))
         }
         (Number::Rational(n1), Number::Float(OrderedFloat(n2)))
         | (Number::Float(OrderedFloat(n2)), Number::Rational(n1)) => {
@@ -269,7 +284,8 @@ pub(crate) fn mul(lhs: Number, rhs: Number, arena: &mut Arena) -> Result<Number,
             Ok(Number::Float(mul_f(f1, f2)?))
         }
         (Number::Rational(r1), Number::Rational(r2)) => {
-            Ok(Number::arena_from(Rational::from(*r1) * &*r2, arena))
+            let r1_clone: Rational = (*r1).clone();
+            Ok(Number::arena_from(Rational::from(r1_clone) * &*r2, arena))
         }
     }
 }
@@ -534,7 +550,10 @@ pub fn rational_from_number(
                 machine_st.error_form(instantiation_error, stub)
             })),
         },
-        Number::Integer(n) => Ok(arena_alloc!(Rational::from(*n), arena)),
+        Number::Integer(n) => {
+            let n_clone: Integer = (*n).clone();
+            Ok(arena_alloc!(Rational::from(n_clone), arena))
+        },
     }
 }
 
@@ -939,10 +958,12 @@ pub(crate) fn gcd(n1: Number, n2: Number, arena: &mut Arena) -> Result<Number, M
         }
         (Number::Fixnum(n1), Number::Integer(n2)) | (Number::Integer(n2), Number::Fixnum(n1)) => {
             let n1 = Integer::from(n1.get_num());
-            Ok(Number::arena_from(Integer::from(n2.gcd(&n1)), arena))
+            let n2_clone: Integer = (*n2).clone();
+            Ok(Number::arena_from(Integer::from(n2_clone.gcd(&n1)), arena))
         }
         (Number::Integer(n1), Number::Integer(n2)) => {
-            Ok(Number::arena_from(Integer::from(n1.gcd(&Integer::from(n2.to_isize().unwrap()))) as IBig, arena))
+            let n1_clone: Integer = (*n1).clone();
+            Ok(Number::arena_from(Integer::from(n1_clone.gcd(&Integer::from(n2.to_isize().unwrap()))) as IBig, arena))
         }
         (Number::Float(f), _) | (_, Number::Float(f)) => {
             let n = Number::Float(f);
