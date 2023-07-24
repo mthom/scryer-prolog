@@ -26,7 +26,6 @@ use crate::machine::stack::*;
 use crate::machine::streams::*;
 use crate::parser::char_reader::*;
 use crate::parser::dashu::Integer;
-use crate::parser::rug::rand::RandState;
 use crate::read::*;
 use crate::types::*;
 use rand::{Rng, SeedableRng};
@@ -92,10 +91,6 @@ use hyper::service::{make_service_fn, service_fn};
 use hyper_tls::HttpsConnector;
 use tokio::sync::Mutex;
 use tokio::sync::mpsc::channel;
-
-ref_thread_local! {
-    pub(crate) static managed RANDOM_STATE: RandState<'static> = RandState::new();
-}
 
 pub(crate) fn get_key() -> KeyEvent {
     let key;

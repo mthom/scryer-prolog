@@ -1,9 +1,3 @@
-#[cfg(feature = "num-rug-adapter")]
-pub use num_rug_adapter as rug;
-
-#[cfg(feature = "rug")]
-pub use rug;
-
 pub use dashu;
 
 // #[macro_use]
