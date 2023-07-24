@@ -316,6 +316,7 @@ dependencies = [
 [[package]]
 name = "dashu"
 version = "0.3.1"
+source = "git+https://github.com/coasys/dashu.git#ae7ee53fad213e09da5fe4b30e9e9e8bce96aedd"
 dependencies = [
  "dashu-base",
  "dashu-float",
@@ -327,10 +328,12 @@ dependencies = [
 [[package]]
 name = "dashu-base"
 version = "0.3.1"
+source = "git+https://github.com/coasys/dashu.git#ae7ee53fad213e09da5fe4b30e9e9e8bce96aedd"
 
 [[package]]
 name = "dashu-float"
 version = "0.3.2"
+source = "git+https://github.com/coasys/dashu.git#ae7ee53fad213e09da5fe4b30e9e9e8bce96aedd"
 dependencies = [
  "dashu-base",
  "dashu-int",
@@ -342,6 +345,7 @@ dependencies = [
 [[package]]
 name = "dashu-int"
 version = "0.3.1"
+source = "git+https://github.com/coasys/dashu.git#ae7ee53fad213e09da5fe4b30e9e9e8bce96aedd"
 dependencies = [
  "cfg-if",
  "dashu-base",
@@ -354,6 +358,7 @@ dependencies = [
 [[package]]
 name = "dashu-macros"
 version = "0.3.1"
+source = "git+https://github.com/coasys/dashu.git#ae7ee53fad213e09da5fe4b30e9e9e8bce96aedd"
 dependencies = [
  "dashu-base",
  "dashu-float",
@@ -366,6 +371,7 @@ dependencies = [
 [[package]]
 name = "dashu-ratio"
 version = "0.3.2"
+source = "git+https://github.com/coasys/dashu.git#ae7ee53fad213e09da5fe4b30e9e9e8bce96aedd"
 dependencies = [
  "dashu-base",
  "dashu-float",
@@ -1029,6 +1035,7 @@ checksum = "f92be4933c13fd498862a9e02a3055f8a8d9c039ce33db97306fd5a6caa7f29b"
 [[package]]
 name = "libffi"
 version = "3.2.0"
+source = "git+https://github.com/coasys/libffi-rs.git?branch=windows-space#f6e9e50efde0aa4e940dd6f709a59bb426875362"
 dependencies = [
  "libc",
  "libffi-sys",
@@ -1037,6 +1044,7 @@ dependencies = [
 [[package]]
 name = "libffi-sys"
 version = "2.3.0"
+source = "git+https://github.com/coasys/libffi-rs.git?branch=windows-space#f6e9e50efde0aa4e940dd6f709a59bb426875362"
 dependencies = [
  "cc",
 ]
@@ -1286,6 +1294,7 @@ dependencies = [
 [[package]]
 name = "num-modular"
 version = "0.6.0"
+source = "git+https://github.com/coasys/num-modular.git#87d6dc30600207445e07c2cc84e0a47ff58f0aca"
 
 [[package]]
 name = "num-order"
