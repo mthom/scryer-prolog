@@ -253,26 +253,6 @@ impl<T: ?Sized + ArenaAllocated> TypedArenaPtr<T> {
     }
 
     #[inline]
-    pub fn to_i64(&self) -> Option<i64> {
-        self.to_i64()
-    }
-
-    #[inline]
-    pub fn to_u32(&self) -> Option<u32> {
-        self.to_u32()
-    }
-
-    #[inline]
-    pub fn to_usize(&self) -> Option<usize> {
-        self.to_usize()
-    }
-
-    #[inline]
-    pub fn to_isize(&self) -> Option<isize> {
-        self.to_isize()
-    }
-
-    #[inline]
     pub fn header_ptr(&self) -> *const ArenaHeader {
         let mut ptr = self.as_ptr() as *const u8 as usize;
         ptr -= T::header_offset_from_payload(); // mem::size_of::<*const ArenaHeader>();
