@@ -9,11 +9,11 @@ use crate::targets::QueryInstruction;
 use crate::types::*;
 
 use crate::parser::ast::*;
-use crate::parser::rug::ops::PowAssign;
-use crate::parser::rug::{Assign, Integer, Rational};
+use crate::parser::dashu::{Integer, Rational};
 
 use crate::machine::machine_errors::*;
 
+use dashu::base::Abs;
 use ordered_float::*;
 
 use std::cell::Cell;
@@ -386,13 +386,11 @@ pub(crate) fn rnd_i<'a>(n: &'a Number, arena: &mut Arena) -> Number {
             if I64_MIN_TO_F <= f && f <= I64_MAX_TO_F {
                 fixnum!(Number, f.into_inner() as i64, arena)
             } else {
-                Number::Integer(arena_alloc!(Integer::from_f64(f.into_inner()).unwrap(), arena))
+                Number::Integer(arena_alloc!(Integer::from(f.0 as i64), arena))
             }
         }
         &Number::Rational(ref r) => {
-            let r_ref = r.fract_floor_ref();
-            let (mut fract, mut floor) = (Rational::new(), Integer::new());
-            (&mut fract, &mut floor).assign(r_ref);
+            let (_, floor) = (r.fract(), r.floor());
 
             if let Some(floor) = floor.to_i64() {
                 fixnum!(Number, floor, arena)
@@ -414,9 +412,9 @@ impl From<Fixnum> for Integer {
 pub(crate) fn rnd_f(n: &Number) -> f64 {
     match n {
         &Number::Fixnum(n) => n.get_num() as f64,
-        &Number::Integer(ref n) => n.to_f64(),
+        &Number::Integer(ref n) => n.to_f64().value(),
         &Number::Float(OrderedFloat(f)) => f,
-        &Number::Rational(ref r) => r.to_f64(),
+        &Number::Rational(ref r) => r.to_f64().value(),
     }
 }
 
@@ -447,12 +445,12 @@ pub(crate) fn float_fn_to_f(n: i64) -> Result<f64, EvalError> {
 
 #[inline]
 pub(crate) fn float_i_to_f(n: &Integer) -> Result<f64, EvalError> {
-    classify_float(n.to_f64())
+    classify_float(n.to_f64().value())
 }
 
 #[inline]
 pub(crate) fn float_r_to_f(r: &Rational) -> Result<f64, EvalError> {
-    classify_float(r.to_f64())
+    classify_float(r.to_f64().value())
 }
 
 #[inline]
@@ -551,8 +549,8 @@ impl PartialEq for Number {
             (&Number::Fixnum(n1), &Number::Float(n2)) => OrderedFloat(n1.get_num() as f64).eq(&n2),
             (&Number::Float(n1), &Number::Fixnum(n2)) => n1.eq(&OrderedFloat(n2.get_num() as f64)),
             (&Number::Integer(ref n1), &Number::Integer(ref n2)) => n1.eq(n2),
-            (&Number::Integer(ref n1), Number::Float(n2)) => OrderedFloat(n1.to_f64()).eq(n2),
-            (&Number::Float(n1), &Number::Integer(ref n2)) => n1.eq(&OrderedFloat(n2.to_f64())),
+            (&Number::Integer(ref n1), Number::Float(n2)) => OrderedFloat(n1.to_f64().value()).eq(n2),
+            (&Number::Float(n1), &Number::Integer(ref n2)) => n1.eq(&OrderedFloat(n2.to_f64().value())),
             (&Number::Integer(ref n1), &Number::Rational(ref n2)) => {
                 #[cfg(feature = "num")]
                 {
@@ -573,8 +571,8 @@ impl PartialEq for Number {
                     &**n1 == &**n2
                 }
             }
-            (&Number::Rational(ref n1), &Number::Float(n2)) => OrderedFloat(n1.to_f64()).eq(&n2),
-            (&Number::Float(n1), &Number::Rational(ref n2)) => n1.eq(&OrderedFloat(n2.to_f64())),
+            (&Number::Rational(ref n1), &Number::Float(n2)) => OrderedFloat(n1.to_f64().value()).eq(&n2),
+            (&Number::Float(n1), &Number::Rational(ref n2)) => n1.eq(&OrderedFloat(n2.to_f64().value())),
             (&Number::Float(f1), &Number::Float(f2)) => f1.eq(&f2),
             (&Number::Rational(ref r1), &Number::Rational(ref r2)) => r1.eq(&r2),
         }
@@ -642,8 +640,8 @@ impl Ord for Number {
             (&Number::Fixnum(n1), &Number::Float(n2)) => OrderedFloat(n1.get_num() as f64).cmp(&n2),
             (&Number::Float(n1), &Number::Fixnum(n2)) => n1.cmp(&OrderedFloat(n2.get_num() as f64)),
             (&Number::Integer(n1), &Number::Integer(n2)) => (*n1).cmp(&*n2),
-            (&Number::Integer(n1), Number::Float(n2)) => OrderedFloat(n1.to_f64()).cmp(n2),
-            (&Number::Float(n1), &Number::Integer(ref n2)) => n1.cmp(&OrderedFloat(n2.to_f64())),
+            (&Number::Integer(n1), Number::Float(n2)) => OrderedFloat(n1.to_f64().value()).cmp(n2),
+            (&Number::Float(n1), &Number::Integer(ref n2)) => n1.cmp(&OrderedFloat(n2.to_f64().value())),
             (&Number::Integer(n1), &Number::Rational(n2)) => {
                 #[cfg(feature = "num")]
                 {
@@ -664,8 +662,8 @@ impl Ord for Number {
                     (&*n1).partial_cmp(&*n2).unwrap_or(Ordering::Less)
                 }
             }
-            (&Number::Rational(n1), &Number::Float(n2)) => OrderedFloat(n1.to_f64()).cmp(&n2),
-            (&Number::Float(n1), &Number::Rational(n2)) => n1.cmp(&OrderedFloat(n2.to_f64())),
+            (&Number::Rational(n1), &Number::Float(n2)) => OrderedFloat(n1.to_f64().value()).cmp(&n2),
+            (&Number::Float(n1), &Number::Rational(n2)) => n1.cmp(&OrderedFloat(n2.to_f64().value())),
             (&Number::Float(f1), &Number::Float(f2)) => f1.cmp(&f2),
             (&Number::Rational(r1), &Number::Rational(r2)) => (*r1).cmp(&*r2),
         }
@@ -706,7 +704,7 @@ impl TryFrom<HeapCellValue> for Number {
 
 // Computes n ^ power. Ignores the sign of power.
 pub(crate) fn binary_pow(mut n: Integer, power: &Integer) -> Integer {
-    let mut power = Integer::from(power.abs_ref());
+    let mut power = Integer::from(power.abs());
 
     if power == 0 {
         return Integer::from(1);
@@ -719,7 +717,7 @@ pub(crate) fn binary_pow(mut n: Integer, power: &Integer) -> Integer {
             oddand *= &n;
         }
 
-        n.pow_assign(2);
+        n = n.pow(2);
         power >>= 1;
     }
 

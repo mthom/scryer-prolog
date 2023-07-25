@@ -59,12 +59,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d468802bab17cbc0cc575e9b053f41e72aa36bfa6b7f55e3529ffa43161b97fa"
 
 [[package]]
-name = "az"
-version = "1.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7b7e4c2464d97fe331d41de9d5db0def0a96f4d823b8b32a2efd503578988973"
-
-[[package]]
 name = "backtrace"
 version = "0.3.67"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -353,6 +347,73 @@ checksum = "2a011bbe2c35ce9c1f143b7af6f94f29a167beb4cd1d29e6740ce836f723120e"
 dependencies = [
  "nix",
  "windows-sys 0.48.0",
+]
+
+[[package]]
+name = "dashu"
+version = "0.3.1"
+source = "git+https://github.com/coasys/dashu.git#ae7ee53fad213e09da5fe4b30e9e9e8bce96aedd"
+dependencies = [
+ "dashu-base",
+ "dashu-float",
+ "dashu-int",
+ "dashu-macros",
+ "dashu-ratio",
+]
+
+[[package]]
+name = "dashu-base"
+version = "0.3.1"
+source = "git+https://github.com/coasys/dashu.git#ae7ee53fad213e09da5fe4b30e9e9e8bce96aedd"
+
+[[package]]
+name = "dashu-float"
+version = "0.3.2"
+source = "git+https://github.com/coasys/dashu.git#ae7ee53fad213e09da5fe4b30e9e9e8bce96aedd"
+dependencies = [
+ "dashu-base",
+ "dashu-int",
+ "num-order",
+ "num-traits",
+ "static_assertions",
+]
+
+[[package]]
+name = "dashu-int"
+version = "0.3.1"
+source = "git+https://github.com/coasys/dashu.git#ae7ee53fad213e09da5fe4b30e9e9e8bce96aedd"
+dependencies = [
+ "cfg-if",
+ "dashu-base",
+ "num-modular 0.6.0",
+ "num-order",
+ "num-traits",
+ "static_assertions",
+]
+
+[[package]]
+name = "dashu-macros"
+version = "0.3.1"
+source = "git+https://github.com/coasys/dashu.git#ae7ee53fad213e09da5fe4b30e9e9e8bce96aedd"
+dependencies = [
+ "dashu-base",
+ "dashu-float",
+ "dashu-int",
+ "dashu-ratio",
+ "proc-macro2",
+ "quote",
+]
+
+[[package]]
+name = "dashu-ratio"
+version = "0.3.2"
+source = "git+https://github.com/coasys/dashu.git#ae7ee53fad213e09da5fe4b30e9e9e8bce96aedd"
+dependencies = [
+ "dashu-base",
+ "dashu-float",
+ "dashu-int",
+ "num-order",
+ "num-traits",
 ]
 
 [[package]]
@@ -709,16 +770,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "gmp-mpfr-sys"
-version = "1.5.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "13eabc29d16e4a621b495e3919c71ebb7caaed24380955671e7d417370fea95d"
-dependencies = [
- "libc",
- "windows-sys 0.42.0",
-]
-
-[[package]]
 name = "h2"
 version = "0.3.20"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -826,9 +877,9 @@ dependencies = [
 
 [[package]]
 name = "http-body-util"
-version = "0.1.0-rc.2"
+version = "0.1.0-rc.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "92445bc9cc14bfa0a3ce56817dc3b5bcc227a168781a356b702410789cec0d10"
+checksum = "08ef12f041acdd397010e5fb6433270c147d3b8b2d0a840cd7fff8e531dca5c8"
 dependencies = [
  "bytes",
  "futures-util",
@@ -1048,8 +1099,7 @@ checksum = "b4668fb0ea861c1df094127ac5f1da3409a82116a4ba74fca2e58ef927159bb3"
 [[package]]
 name = "libffi"
 version = "3.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ce826c243048e3d5cec441799724de52e2d42f820468431fc3fceee2341871e2"
+source = "git+https://github.com/coasys/libffi-rs.git?branch=windows-space#f6e9e50efde0aa4e940dd6f709a59bb426875362"
 dependencies = [
  "libc",
  "libffi-sys",
@@ -1058,8 +1108,7 @@ dependencies = [
 [[package]]
 name = "libffi-sys"
 version = "2.3.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f36115160c57e8529781b4183c2bb51fdc1f6d6d1ed345591d84be7703befb3c"
+source = "git+https://github.com/coasys/libffi-rs.git?branch=windows-space#f6e9e50efde0aa4e940dd6f709a59bb426875362"
 dependencies = [
  "cc",
 ]
@@ -1277,6 +1326,41 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c28774a7fd2fbb4f0babd8237ce554b73af68021b5f695a3cebd6c59bac0980f"
 dependencies = [
  "winapi",
+]
+
+[[package]]
+name = "num-integer"
+version = "0.1.45"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "225d3389fb3509a24c93f5c29eb6bde2586b98d9f016636dff58d7c6f7569cd9"
+dependencies = [
+ "autocfg",
+ "num-traits",
+]
+
+[[package]]
+name = "num-modular"
+version = "0.5.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "64a5fe11d4135c3bcdf3a95b18b194afa9608a5f6ff034f5d857bc9a27fb0119"
+dependencies = [
+ "num-integer",
+ "num-traits",
+]
+
+[[package]]
+name = "num-modular"
+version = "0.6.0"
+source = "git+https://github.com/coasys/num-modular.git#87d6dc30600207445e07c2cc84e0a47ff58f0aca"
+
+[[package]]
+name = "num-order"
+version = "1.0.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e81e321057a0370997b13e6638bba6bd7f6f426e1f8e9a2562490a28eb23e1bc"
+dependencies = [
+ "num-modular 0.5.1",
+ "num-traits",
 ]
 
 [[package]]
@@ -1749,17 +1833,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "rug"
-version = "1.19.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "555e8b44763d034526db899c88cd56ccc4486cd38b444c8aa0e79d4e70ae5a34"
-dependencies = [
- "az",
- "gmp-mpfr-sys",
- "libc",
-]
-
-[[package]]
 name = "rustc-demangle"
 version = "0.1.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1866,6 +1939,7 @@ dependencies = [
  "crossterm",
  "crrl",
  "ctrlc",
+ "dashu",
  "derive_deref",
  "dirs-next",
  "divrem",
@@ -1888,12 +1962,12 @@ dependencies = [
  "predicates-core",
  "proc-macro2",
  "quote",
+ "rand",
  "ref_thread_local",
  "reqwest",
  "ring",
  "ripemd160",
  "roxmltree",
- "rug",
  "rustyline",
  "ryu",
  "select",
@@ -1947,9 +2021,9 @@ dependencies = [
 
 [[package]]
 name = "serde"
-version = "1.0.164"
+version = "1.0.174"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9e8c8cf938e98f769bc164923b06dce91cea1751522f46f8466461af04c9027d"
+checksum = "3b88756493a5bd5e5395d53baa70b194b05764ab85b59e43e4b8f4e1192fa9b1"
 
 [[package]]
 name = "serde_json"

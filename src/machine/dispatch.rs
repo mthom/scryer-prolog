@@ -2608,7 +2608,7 @@ impl Machine {
                             self.machine_st.p += 1;
                         }
                         Ok(Number::Rational(n)) => {
-                            if n.denom() == &1 {
+                            if n.denominator().is_one() {
                                 self.machine_st.p += 1;
                             } else {
                                 self.machine_st.backtrack();
@@ -2627,7 +2627,7 @@ impl Machine {
                             self.machine_st.p = self.machine_st.cp;
                         }
                         Ok(Number::Rational(n)) => {
-                            if n.denom() == &1 {
+                            if n.denominator().is_one() {
                                 self.machine_st.p = self.machine_st.cp;
                             } else {
                                 self.machine_st.backtrack();

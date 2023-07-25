@@ -5,7 +5,7 @@ use crate::atom_table::*;
 pub use crate::machine::machine_state::*;
 use crate::parser::ast::*;
 use crate::parser::char_reader::*;
-use crate::parser::rug::Integer;
+use crate::parser::dashu::Integer;
 
 use std::convert::TryFrom;
 use std::fmt;

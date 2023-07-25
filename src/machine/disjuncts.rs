@@ -6,9 +6,10 @@ use crate::machine::loader::*;
 use crate::machine::machine_errors::CompilationError;
 use crate::machine::preprocessor::*;
 use crate::parser::ast::*;
-use crate::parser::rug::Rational;
+use crate::parser::dashu::Rational;
 use crate::variable_records::*;
 
+use dashu::Integer;
 use indexmap::{IndexMap, IndexSet};
 
 use std::cell::Cell;
@@ -221,7 +222,7 @@ fn merge_branch_seq(branches: impl Iterator<Item = BranchInfo>) -> BranchInfo {
         branch_info.chunks.extend(branch.chunks.drain(..));
     }
 
-    branch_info.branch_num.delta *= 2;
+    branch_info.branch_num.delta = branch_info.branch_num.delta * Integer::from(2);
     branch_info.branch_num.branch_num -= &branch_info.branch_num.delta;
 
     branch_info

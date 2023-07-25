@@ -15,7 +15,7 @@ use crate::parser::ast::*;
 use crate::read::TermWriteResult;
 use crate::types::*;
 
-use crate::parser::rug::Integer;
+use crate::parser::dashu::Integer;
 
 use indexmap::IndexMap;
 

@@ -13,7 +13,7 @@ use crate::machine::partial_string::*;
 use crate::machine::stack::*;
 use crate::machine::unify::*;
 use crate::parser::ast::*;
-use crate::parser::rug::{Integer, Rational};
+use crate::parser::dashu::{Integer, Rational};
 
 use indexmap::IndexSet;
 
@@ -1385,7 +1385,7 @@ impl MachineState {
                     Ok(Number::Float(_)) => {
                         return type_error(arity);
                     }
-                    Ok(Number::Rational(n)) if n.denom() != &1 => {
+                    Ok(Number::Rational(n)) if !n.denominator().is_one() => {
                         return type_error(arity);
                     }
                     Ok(n) if n > MAX_ARITY => {
@@ -1398,7 +1398,7 @@ impl MachineState {
                         let err = self.domain_error(DomainErrorType::NotLessThanZero, n);
                         return Err(self.error_form(err, stub_gen()));
                     }
-                    Ok(Number::Rational(n)) => n.numer().to_i64().unwrap(),
+                    Ok(Number::Rational(n)) => n.numerator().to_i64().unwrap(),
                     Ok(Number::Fixnum(n)) => n.get_num(),
                     Ok(Number::Integer(n)) => n.to_i64().unwrap(),
                     Err(_) => {
