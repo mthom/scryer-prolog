@@ -133,7 +133,7 @@ pub(super) fn import_module_exports<'a, LS: LoadState<'a>>(
                     meta_predicates.insert(key, meta_specs.clone());
                 }
 
-                if let Some(src_code_index) = imported_module.code_dir.get(&key) {
+                if let Some(src_code_index) = imported_module.code_dir.get(&key).cloned() {
                     let arena = &mut LS::machine_st(payload).arena;
 
                     let target_code_index = code_dir
@@ -148,6 +148,10 @@ pub(super) fn import_module_exports<'a, LS: LoadState<'a>>(
                         target_code_index,
                         src_code_index.get(),
                     );
+
+                    if src_code_index.is_dynamic_undefined() {
+                        code_dir.insert(key, src_code_index);
+                    }
                 } else {
                     return Err(SessionError::ModuleDoesNotContainExport(
                         imported_module.module_decl.name,

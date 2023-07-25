@@ -1631,23 +1631,16 @@ impl Machine {
             usize,
         ) -> Result<(), SessionError>,
     ) -> CallResult {
-        let module_name = cell_as_atom!(
-            self.machine_st.store(self.machine_st.deref(self.machine_st.registers[1]))
-        );
+        let module_name = cell_as_atom!(self.deref_register(1));
 
         let compilation_target = match module_name {
             atom!("user") => CompilationTarget::User,
             _ => CompilationTarget::Module(module_name),
         };
 
-        let predicate_name = cell_as_atom!(
-            self.machine_st.store(self.machine_st.deref(self.machine_st.registers[2]))
-        );
+        let predicate_name = cell_as_atom!(self.deref_register(2));
 
-        let arity = self
-            .machine_st
-            .store(self.machine_st.deref(self.machine_st.registers[3]));
-
+        let arity = self.deref_register(3);
         let arity = match Number::try_from(arity) {
             Ok(Number::Integer(n)) if &*n >= &Integer::from(0) && &*n <= &Integer::from(MAX_ARITY) => Ok(n.to_usize().unwrap()),
             Ok(Number::Fixnum(n)) if n.get_num() >= 0 && n.get_num() <= MAX_ARITY as i64 => {
