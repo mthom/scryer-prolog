@@ -998,6 +998,9 @@ test_310 :- test_syntax_error("writeq({\\+ (}).", syntax_error(incomplete_reduct
 
 test_311 :- test_syntax_error("Finis ().", syntax_error(incomplete_reduction)).
 
+test_318 :- writeq_term_to_chars(+((1*2)^3), C),
+            C == "+ (1*2)^3".
+
 run_tests([Test|Tests]) -->
     (  { call(Test) } ->
        []

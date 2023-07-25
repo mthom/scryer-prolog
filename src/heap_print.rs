@@ -26,7 +26,6 @@ use std::cell::Cell;
 use std::convert::TryFrom;
 use std::iter::once;
 use std::net::{IpAddr, TcpListener};
-use std::ops::{Range, RangeFrom};
 use std::rc::Rc;
 
 /* contains the location, name, precision and Specifier of the parent op. */
@@ -64,11 +63,7 @@ impl DirectedOp {
 
     #[inline]
     fn is_left(&self) -> bool {
-        if let &DirectedOp::Left(..) = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, DirectedOp::Left(..))
     }
 }
 
@@ -330,8 +325,7 @@ pub trait HCValueOutputter {
     fn ends_with(&self, s: &str) -> bool;
     fn len(&self) -> usize;
     fn truncate(&mut self, len: usize);
-    fn range(&self, range: Range<usize>) -> &str;
-    fn range_from(&self, range: RangeFrom<usize>) -> &str;
+    fn as_str(&self) -> &str;
 }
 
 #[derive(Debug)]
@@ -386,12 +380,8 @@ impl HCValueOutputter for PrinterOutputter {
         self.contents.truncate(len);
     }
 
-    fn range(&self, index: Range<usize>) -> &str {
-        &self.contents.as_str()[index]
-    }
-
-    fn range_from(&self, index: RangeFrom<usize>) -> &str {
-        &self.contents.as_str().get(index).unwrap_or("")
+    fn as_str(&self) -> &str {
+        &self.contents
     }
 }
 
@@ -492,6 +482,8 @@ pub struct HCPrinter<'a, Outputter> {
     state_stack: Vec<TokenOrRedirect>,
     toplevel_spec: Option<DirectedOp>,
     last_item_idx: usize,
+    num_ops_on_stack: usize,
+    parent_of_first_op: Option<(DirectedOp, usize)>,
     pub var_names: IndexMap<HeapCellValue, VarPtr>,
     pub numbervars_offset: Integer,
     pub numbervars: bool,
@@ -567,6 +559,8 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             state_stack: vec![],
             toplevel_spec: None,
             last_item_idx: 0,
+            num_ops_on_stack: 0,
+            parent_of_first_op: None,
             numbervars: false,
             numbervars_offset: Integer::from(0),
             quoted: false,
@@ -580,7 +574,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
     #[inline]
     fn ambiguity_check(&self, atom: &str) -> bool {
-        let tail = self.outputter.range_from(self.last_item_idx..);
+        let tail = &self.outputter.as_str()[self.last_item_idx..];
 
         if !self.quoted || non_quoted_token(atom.chars()) {
             requires_space(tail, atom)
@@ -589,7 +583,11 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         }
     }
 
-    fn enqueue_op(&mut self, mut max_depth: usize, name: Atom, spec: OpDesc) {
+    fn set_parent_of_first_op(&mut self, parent_op: Option<DirectedOp>) {
+        self.parent_of_first_op = parent_op.map(|op| (op, self.last_item_idx));
+    }
+
+    fn enqueue_op(&mut self, mut max_depth: usize, name: Atom, spec: OpDesc, parent_op: Option<DirectedOp>) {
         if is_postfix!(spec.get_spec()) {
             if self.max_depth_exhausted(max_depth) {
                 self.iter.pop_stack();
@@ -600,17 +598,15 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
                 self.state_stack.push(TokenOrRedirect::Op(name, spec));
                 self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
+            } else {
+                let right_directed_op = DirectedOp::Right(name, spec);
 
-                return;
+                self.state_stack.push(TokenOrRedirect::Op(name, spec));
+                self.state_stack.push(TokenOrRedirect::CompositeRedirect(
+                    max_depth,
+                    right_directed_op,
+                ));
             }
-
-            let right_directed_op = DirectedOp::Right(name, spec);
-
-            self.state_stack.push(TokenOrRedirect::Op(name, spec));
-            self.state_stack.push(TokenOrRedirect::CompositeRedirect(
-                max_depth,
-                right_directed_op,
-            ));
         } else if is_prefix!(spec.get_spec()) {
             if self.max_depth_exhausted(max_depth) {
                 self.iter.pop_stack();
@@ -620,15 +616,13 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 self.iter.pop_stack();
 
                 self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
-                self.state_stack.push(TokenOrRedirect::Atom(name));
+                self.state_stack.push(TokenOrRedirect::Op(name, spec));
+            } else {
+                let op = DirectedOp::Left(name, spec);
 
-                return;
+                self.state_stack.push(TokenOrRedirect::CompositeRedirect(max_depth, op));
+                self.state_stack.push(TokenOrRedirect::Op(name, spec));
             }
-
-            let op = DirectedOp::Left(name, spec);
-
-            self.state_stack.push(TokenOrRedirect::CompositeRedirect(max_depth, op));
-            self.state_stack.push(TokenOrRedirect::Atom(name));
         } else {
             match name.as_str() {
                 "|" => {
@@ -638,15 +632,11 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 _ => {}
             };
 
-            let left_directed_op = DirectedOp::Left(name, spec);
-            let right_directed_op = DirectedOp::Right(name, spec);
-
             if self.max_depth_exhausted(max_depth) {
                 self.iter.pop_stack();
                 self.iter.pop_stack();
 
                 self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
-
                 return;
             } else if self.check_max_depth(&mut max_depth) {
                 self.iter.pop_stack();
@@ -655,14 +645,21 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
                 self.state_stack.push(TokenOrRedirect::Op(name, spec));
                 self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
+            } else {
+                let left_directed_op = DirectedOp::Left(name, spec);
+                let right_directed_op = DirectedOp::Right(name, spec);
 
-                return;
+                self.state_stack.push(TokenOrRedirect::CompositeRedirect(max_depth, left_directed_op));
+                self.state_stack.push(TokenOrRedirect::Op(name, spec));
+                self.state_stack.push(TokenOrRedirect::CompositeRedirect(max_depth, right_directed_op));
             }
-
-            self.state_stack.push(TokenOrRedirect::CompositeRedirect(max_depth, left_directed_op));
-            self.state_stack.push(TokenOrRedirect::Op(name, spec));
-            self.state_stack.push(TokenOrRedirect::CompositeRedirect(max_depth, right_directed_op));
         }
+
+        if self.num_ops_on_stack == 0 {
+            self.set_parent_of_first_op(parent_op);
+        }
+
+        self.num_ops_on_stack += 1;
     }
 
     fn format_struct(&mut self, mut max_depth: usize, arity: usize, name: Atom) -> bool {
@@ -776,6 +773,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         arity: usize,
         name: Atom,
         op_desc: Option<OpDesc>,
+        parent_op: Option<DirectedOp>,
     ) -> bool {
         if self.numbervars && is_numbered_var(name, arity) {
             if self.format_numbered_vars() {
@@ -794,7 +792,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             }
 
             if !self.ignore_ops && spec.get_prec() > 0 {
-                self.enqueue_op(max_depth, name, spec);
+                self.enqueue_op(max_depth, name, spec, parent_op);
                 return true;
             }
         }
@@ -976,7 +974,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                     });
                 }
                 Number::Rational(r) => {
-                    self.print_rational(max_depth, r);
+                    self.print_rational(max_depth, r, *op);
                 }
                 n => {
                     let output_str = format!("{}", n);
@@ -1007,7 +1005,12 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         }
     }
 
-    fn print_rational(&mut self, mut max_depth: usize, r: TypedArenaPtr<Rational>) {
+    fn print_rational(
+        &mut self,
+        mut max_depth: usize,
+        r: TypedArenaPtr<Rational>,
+        parent_op: Option<DirectedOp>,
+    ) {
         if self.check_max_depth(&mut max_depth) {
             self.state_stack.push(TokenOrRedirect::Close);
             self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
@@ -1050,15 +1053,15 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                         NumberFocus::Denominator(r),
                         left_directed_op,
                     ));
-
-                    self.state_stack
-                        .push(TokenOrRedirect::Op(rdiv_ct, *op_desc));
-
+                    self.state_stack.push(TokenOrRedirect::Op(rdiv_ct, *op_desc));
                     self.state_stack.push(TokenOrRedirect::NumberFocus(
                         max_depth,
                         NumberFocus::Numerator(r),
                         right_directed_op,
                     ));
+
+                    self.num_ops_on_stack += 1;
+                    self.set_parent_of_first_op(parent_op);
                 } else {
                     self.state_stack.push(TokenOrRedirect::Close);
 
@@ -1347,7 +1350,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         &mut self,
         name: Atom,
         arity: usize,
-        op: &Option<DirectedOp>,
+        op: Option<DirectedOp>,
         is_functor_redirect: bool,
         op_desc: OpDesc,
         negated_operand: bool,
@@ -1378,20 +1381,33 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
         if add_brackets {
             self.state_stack.push(TokenOrRedirect::Close);
-        }
-
-        if self.format_clause(max_depth, arity, name, Some(op_desc)) && add_brackets {
+            self.format_clause(max_depth, arity, name, Some(op_desc), op);
             self.state_stack.push(TokenOrRedirect::Open);
 
-            if let Some(ref op) = &op {
-                if !self.outputter.ends_with(" ") {
-                    if op.is_left() {
-                        if op.is_prefix() || requires_space(op.as_atom().as_str(), "(") {
+            let parent_op = self.parent_of_first_op
+                .and_then(|(parent_op, last_item_idx)| {
+                    // if parent_op isn't printed to the output string
+                    // already, then it doesn't border the present op
+                    // and we should return None.
+                    if self.last_item_idx == last_item_idx {
+                        Some(parent_op)
+                    } else {
+                        None
+                    }
+                });
+
+            for op in &[op, parent_op] {
+                if let Some(ref op) = &op {
+                    if !self.outputter.ends_with(" ") {
+                        if op.is_left() && (op.is_prefix() || requires_space(op.as_atom().as_str(), "(")) {
                             self.state_stack.push(TokenOrRedirect::Space);
+                            break;
                         }
                     }
                 }
             }
+        } else {
+            self.format_clause(max_depth, arity, name, Some(op_desc), op);
         }
     }
 
@@ -1500,7 +1516,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                     printer.handle_op_as_struct(
                         name,
                         arity,
-                        &op,
+                        op,
                         is_functor_redirect,
                         spec,
                         negated_operand,
@@ -1508,7 +1524,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                     );
                 } else {
                     push_space_if_amb!(printer, name.as_str(), {
-                        printer.format_clause(max_depth, arity, name, None);
+                        printer.format_clause(max_depth, arity, name, None, op);
                     });
                 }
             } else if fetch_op_spec(name, arity, printer.op_dir).is_some() {
@@ -1566,7 +1582,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                     self.handle_op_as_struct(
                         name,
                         arity,
-                        &op,
+                        op,
                         is_functor_redirect,
                         spec,
                         negated_operand,
@@ -1574,7 +1590,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                     );
                 } else {
                     push_space_if_amb!(self, name.as_str(), {
-                        self.format_clause(max_depth, arity, name, None);
+                        self.format_clause(max_depth, arity, name, None, op);
                     });
                 }
             }
@@ -1655,7 +1671,11 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 TokenOrRedirect::Atom(atom) => self.print_impromptu_atom(atom),
                 TokenOrRedirect::BarAsOp => append_str!(self, " | "),
                 TokenOrRedirect::Char(c) => print_char!(self, self.quoted, c),
-                TokenOrRedirect::Op(atom, _) => self.print_op(atom.as_str()),
+                TokenOrRedirect::Op(atom, ..) => {
+                    self.num_ops_on_stack -= 1;
+                    self.parent_of_first_op = None;
+                    self.print_op(atom.as_str());
+                }
                 TokenOrRedirect::NumberedVar(num_var) => append_str!(self, &num_var),
                 TokenOrRedirect::CompositeRedirect(max_depth, op) => {
                     self.handle_heap_term(Some(op), false, max_depth)
