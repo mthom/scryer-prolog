@@ -1,4 +1,4 @@
-use std::collections::HashSet;
+use std::collections::BTreeSet;
 
 use super::{
     Machine, MachineConfig, QueryResult, QueryResolutionLine, 
@@ -36,19 +36,24 @@ impl Machine {
             Err(output)
         } else {
             // Remove duplicate lines
-            let output = output
-                .lines()
-                .collect::<HashSet<&str>>()
+            Ok(output
+                // 1. Split into disjunct matches
+                .split(";")
+                .map(|s| s.trim())
+                // 2. Dedupe through Set
+                .collect::<BTreeSet<&str>>()
                 .iter()
                 .cloned()
+                // 3. Back to Vec
                 .collect::<Vec<&str>>()
-                .join("\n");
-            Ok(output
-                .split(";")
+                .iter()
+                // 4. Trim and remove empty lines
                 .map(|s| s.trim())
                 .map(|s| s.replace(".", ""))
                 .filter(|s| !s.is_empty())
+                // 5. Parse into QueryResolutionLine
                 .map(QueryResolutionLine::try_from)
+                // 6. Remove lines that couldn't be parsed, so we still keep the ones they did
                 .filter_map(Result::ok)
                 .collect::<Vec<QueryResolutionLine>>()
                 .into())
@@ -154,10 +159,10 @@ mod tests {
             result,
             Ok(QueryResolution::Matches(vec![
                 QueryMatch::from(btreemap! {
-                    "Class" => Value::from("Todo")
+                    "Class" => Value::from("Recipe")
                 }),
                 QueryMatch::from(btreemap! {
-                    "Class" => Value::from("Recipe")
+                    "Class" => Value::from("Todo")
                 }),
             ]))
         );
