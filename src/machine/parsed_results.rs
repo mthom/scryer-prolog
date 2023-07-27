@@ -66,6 +66,18 @@ impl From<Vec<QueryResolutionLine>> for QueryResolution {
             }
         }
 
+        // If there is only one line, and it is an empty match, return true.
+        if query_result_lines.len() == 1 {
+            match query_result_lines[0].clone() {
+                QueryResolutionLine::Match(m) => {
+                    if m.is_empty() {
+                        return QueryResolution::True;
+                    }
+                }
+                _ => {}
+            }
+        }
+
         // If there is at least one line with true and no matches, return true.
         if query_result_lines
             .iter()
