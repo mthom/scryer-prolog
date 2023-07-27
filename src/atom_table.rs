@@ -54,7 +54,12 @@ static mut ATOM_TABLE_BUF_BASE: *const u8 = ptr::null_mut();
 #[cfg(test)]
 fn set_atom_tbl_buf_base(ptr: *const u8) {
     ATOM_TABLE_BUF_BASE.with(|atom_table_buf_base| {
-        *atom_table_buf_base.borrow_mut() = ptr;
+        let mut borrow = atom_table_buf_base.borrow_mut();
+        assert!(
+            borrow.is_null() || ptr.is_null(),
+            "Overwriting atom table base pointer!"
+        );
+        *borrow = ptr;
     });
 }
 
@@ -66,6 +71,11 @@ pub(crate) fn get_atom_tbl_buf_base() -> *const u8 {
 #[cfg(not(test))]
 fn set_atom_tbl_buf_base(ptr: *const u8) {
     unsafe {
+        // FIXME: to prevent a toctou race-condition an atomic compare_exchange or a global lock should be used
+        assert!(
+            ATOM_TABLE_BUF_BASE.is_null() || ptr.is_null(),
+            "Overwriting atom table base pointer!"
+        );
         ATOM_TABLE_BUF_BASE = ptr;
     }
 }
@@ -73,6 +83,13 @@ fn set_atom_tbl_buf_base(ptr: *const u8) {
 #[cfg(not(test))]
 pub(crate) fn get_atom_tbl_buf_base() -> *const u8 {
     unsafe { ATOM_TABLE_BUF_BASE }
+}
+
+#[test]
+#[should_panic(expected = "Overwriting atom table base pointer!")]
+fn atomtable_is_not_concurrency_safe() {
+    let table_a = AtomTable::new();
+    let table_b = AtomTable::new();
 }
 
 impl RawBlockTraits for AtomTable {
@@ -241,6 +258,7 @@ pub struct AtomTable {
 
 impl Drop for AtomTable {
     fn drop(&mut self) {
+        set_atom_tbl_buf_base(ptr::null());
         self.block.deallocate();
     }
 }
