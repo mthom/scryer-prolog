@@ -562,7 +562,10 @@ use_module(Module, Exports, Evacuable) :-
        )
     ).
 
-
+consult_stream(Stream, PathFileName) :-
+   '$push_load_state_payload'(Evacuable),
+    file_load(Stream, PathFileName, Subevacuable),
+    '$use_module'(Evacuable, Subevacuable, _).
 
 check_predicate_property(meta_predicate, Module, Name, Arity, MetaPredicateTerm) :-
     '$meta_predicate_property'(Module, Name, Arity, MetaPredicateTerm).

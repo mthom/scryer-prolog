@@ -1,10 +1,27 @@
 use std::collections::HashSet;
 
-use super::{Machine, MachineConfig, QueryResult, QueryResolution, QueryResolutionLine, Atom};
+use super::{
+    Machine, MachineConfig, QueryResult, QueryResolutionLine, 
+    Atom, AtomCell, HeapCellValue, HeapCellValueTag,
+    streams::Stream
+};
 
 impl Machine {
     pub fn new_lib() -> Self {
         Machine::new(MachineConfig::in_memory().with_toplevel(include_str!("../lib_toplevel.pl")))
+    }
+
+    pub fn load_module_string(&mut self, module_name: &str, program: String) {
+        let stream = Stream::from_owned_string(program, &mut self.machine_st.arena);
+        self.load_file(module_name, stream);
+    }
+
+    pub fn consult_module_string(&mut self, module_name: &str, program: String) {
+        let stream = Stream::from_owned_string(program, &mut self.machine_st.arena);
+        self.machine_st.registers[1] = stream_as_cell!(stream);
+        self.machine_st.registers[2] = atom_as_cell!(self.machine_st.atom_tbl.build_with(module_name));
+
+        self.run_module_predicate(atom!("loader"), (atom!("consult_stream"), 2));
     }
 
     pub fn run_query(&mut self, query: String) -> QueryResult {
@@ -42,7 +59,7 @@ impl Machine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::machine::{QueryMatch, Value};
+    use crate::machine::{QueryMatch, Value, QueryResolution};
 
     #[test]
     fn programatic_query() {
@@ -144,5 +161,65 @@ mod tests {
                 }),
             ]))
         );
+    }
+
+
+    #[test]
+    fn consult() {
+        let mut machine = Machine::new_lib();
+
+        machine.consult_module_string(
+            "facts",
+            String::from(
+                r#"
+            triple("a", "p1", "b").
+            triple("a", "p2", "b").
+        "#,
+            ),
+        );
+
+        let query = String::from(r#"triple("a",P,"b")."#);
+        let output = machine.run_query(query);
+        assert_eq!(
+            output,
+            Ok(QueryResolution::Matches(vec![
+                QueryMatch::from(btreemap! {
+                    "P" => Value::from("p1"),
+                }),
+                QueryMatch::from(btreemap! {
+                    "P" => Value::from("p2"),
+                }),
+            ]))
+        );
+
+        assert_eq!(
+            machine.run_query(String::from(r#"triple("a","p1","b")."#)),
+            Ok(QueryResolution::True)
+        );
+
+        assert_eq!(
+            machine.run_query(String::from(r#"triple("x","y","z")."#)),
+            Ok(QueryResolution::False)
+        );
+
+        machine.consult_module_string(
+            "facts",
+            String::from(
+                r#"
+            triple("a", "new", "b").
+        "#,
+            ),
+        );
+
+        assert_eq!(
+            machine.run_query(String::from(r#"triple("a","p1","b")."#)),
+            Ok(QueryResolution::False)
+        );
+
+        assert_eq!(
+            machine.run_query(String::from(r#"triple("a","new","b")."#)),
+            Ok(QueryResolution::True)
+        );
+
     }
 }
