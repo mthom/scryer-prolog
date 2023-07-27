@@ -2916,7 +2916,7 @@ impl Machine {
 		method_check!(is_alphanumeric, atom!("alphanumeric"));
 		macro_check!(alpha_numeric_char, atom!("alnum"));
 		method_check!(is_ascii, atom!("ascii"));
-		method_check!(is_ascii_punctuation, atom!("ascii_ponctuaction"));
+		method_check!(is_ascii_punctuation, atom!("ascii_punctuation"));
 		method_check!(is_ascii_graphic, atom!("ascii_graphic"));
 		// macro_check!(backslash_char, atom!("backslash"));
 		// macro_check!(back_quote_char, atom!("back_quote"));
