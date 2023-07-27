@@ -242,3 +242,30 @@ submit_query_and_print_all_results(_, _) :-
     ),
     write('false.'),
     nl.
+
+
+
+toplevel :-
+        read_term(Goal, [variable_names(VNs)]),
+        Goal,
+        write('bindings(['),
+        write_bindings(VNs),
+        write(']).'),
+        nl,
+        false.
+
+write_bindings([]).
+write_bindings([VN|VNs]) :-
+        write_bindings_(VNs, VN).
+
+write_bindings_([], VN) :-
+        write_binding(VN).
+write_bindings_([VN|VNs], Prev) :-
+        write_binding(Prev),
+        write(','),
+        write_bindings_(VNs, VN).
+
+write_binding(Var=Val) :-
+        write(Var),
+        write(=),
+        write_term(Val, [quoted(true),double_quotes(true)]).
