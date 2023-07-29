@@ -178,7 +178,7 @@ fn call_0() {
 #[should_panic(expected = "Overwriting atom table base pointer")]
 fn atomtable_is_not_concurrency_safe() {
     // this is basically the same test as scryer_prolog::atom_table::atomtable_is_not_concurrency_safe
-    // but for this integration test scryer_prolog is compiled with cfg!(not(test))  while for the unit test it is colpiled with cfg!(test)
+    // but for this integration test scryer_prolog is compiled with cfg!(not(test))  while for the unit test it is compiled with cfg!(test)
     // as the atom table implementation differ between cfg!(test) and cfg!(not(test)) both test serve a pourpose
     // Note: this integration test itself is compiled with cfg!(test) independent of scryer_prolog itself
     let _machine_a = Machine::with_test_streams();

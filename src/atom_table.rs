@@ -259,15 +259,15 @@ pub struct AtomTable {
 }
 
 #[cold]
-fn atom_table_base_pointer_missmatch(expected: *const u8, got: *const u8) -> ! {
+fn atom_table_base_pointer_mismatch(expected: *const u8, got: *const u8) -> ! {
     assert_eq!(expected, got, "Overwriting atom table base pointer, expected old value to be {expected:p}, but found {got:p}");
-    unreachable!("This should only be called in a case of a missmatch as such the assert_eq should have failed!")
+    unreachable!("This should only be called in a case of a mismatch as such the assert_eq should have failed!")
 }
 
 impl Drop for AtomTable {
     fn drop(&mut self) {
         if let Err(got) = set_atom_tbl_buf_base(self.block.base, ptr::null()) {
-            atom_table_base_pointer_missmatch(self.block.base, got);
+            atom_table_base_pointer_mismatch(self.block.base, got);
         }
         self.block.deallocate();
     }
@@ -280,7 +280,7 @@ impl AtomTable {
 
         if let Err(got) = set_atom_tbl_buf_base(ptr::null(), block.base) {
             block.deallocate();
-            atom_table_base_pointer_missmatch(ptr::null(), got);
+            atom_table_base_pointer_mismatch(ptr::null(), got);
         }
 
         Self {
@@ -324,7 +324,7 @@ impl AtomTable {
                         let old_base = self.block.base;
                         self.block.grow();
                         if let Err(got) = set_atom_tbl_buf_base(old_base, self.block.base) {
-                            atom_table_base_pointer_missmatch(old_base, got);
+                            atom_table_base_pointer_mismatch(old_base, got);
                         }
                     } else {
                         break;
