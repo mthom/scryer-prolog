@@ -37,42 +37,61 @@ impl From<bool> for Atom {
     }
 }
 
-#[cfg(test)]
-use std::cell::RefCell;
-
 const ATOM_TABLE_INIT_SIZE: usize = 1 << 16;
 const ATOM_TABLE_ALIGN: usize = 8;
 
 #[cfg(test)]
 thread_local! {
-    static ATOM_TABLE_BUF_BASE: RefCell<*const u8> = RefCell::new(ptr::null_mut());
+   static ATOM_TABLE_BUF_BASE: std::cell::RefCell<*const u8> = std::cell::RefCell::new(ptr::null_mut());
 }
 
 #[cfg(not(test))]
-static mut ATOM_TABLE_BUF_BASE: *const u8 = ptr::null_mut();
+static ATOM_TABLE_BUF_BASE: std::sync::atomic::AtomicPtr<u8> =
+    std::sync::atomic::AtomicPtr::new(ptr::null_mut());
 
+fn set_atom_tbl_buf_base(old_ptr: *const u8, new_ptr: *const u8) -> Result<(), *const u8> {
 #[cfg(test)]
-fn set_atom_tbl_buf_base(ptr: *const u8) {
+    {
     ATOM_TABLE_BUF_BASE.with(|atom_table_buf_base| {
-        *atom_table_buf_base.borrow_mut() = ptr;
-    });
+        let mut borrow = atom_table_buf_base.borrow_mut();
+            if *borrow != old_ptr {
+                Err(*borrow)
+            } else {
+                *borrow = new_ptr;
+                Ok(())
+            }
+        })?;
+    };
+    #[cfg(not(test))]
+    {
+        ATOM_TABLE_BUF_BASE
+            .compare_exchange(
+                old_ptr.cast_mut(),
+                new_ptr.cast_mut(),
+                std::sync::atomic::Ordering::Relaxed,
+                std::sync::atomic::Ordering::Relaxed,
+            )
+            .map_err(|ptr| ptr.cast_const())
+    }?;
+    Ok(())
 }
 
-#[cfg(test)]
 pub(crate) fn get_atom_tbl_buf_base() -> *const u8 {
+    #[cfg(test)]
+    {
     ATOM_TABLE_BUF_BASE.with(|atom_table_buf_base| *atom_table_buf_base.borrow())
 }
-
 #[cfg(not(test))]
-fn set_atom_tbl_buf_base(ptr: *const u8) {
-    unsafe {
-        ATOM_TABLE_BUF_BASE = ptr;
+    {
+        ATOM_TABLE_BUF_BASE.load(std::sync::atomic::Ordering::Relaxed)
     }
 }
 
-#[cfg(not(test))]
-pub(crate) fn get_atom_tbl_buf_base() -> *const u8 {
-    unsafe { ATOM_TABLE_BUF_BASE }
+#[test]
+#[should_panic(expected = "Overwriting atom table base pointer")]
+fn atomtable_is_not_concurrency_safe() {
+    let _table_a = AtomTable::new();
+    let _table_b = AtomTable::new();
 }
 
 impl RawBlockTraits for AtomTable {
@@ -239,8 +258,17 @@ pub struct AtomTable {
     pub table: IndexSet<Atom>,
 }
 
+#[cold]
+fn atom_table_base_pointer_mismatch(expected: *const u8, got: *const u8) -> ! {
+    assert_eq!(expected, got, "Overwriting atom table base pointer, expected old value to be {expected:p}, but found {got:p}");
+    unreachable!("This should only be called in a case of a mismatch as such the assert_eq should have failed!")
+}
+
 impl Drop for AtomTable {
     fn drop(&mut self) {
+        if let Err(got) = set_atom_tbl_buf_base(self.block.base, ptr::null()) {
+            atom_table_base_pointer_mismatch(self.block.base, got);
+        }
         self.block.deallocate();
     }
 }
@@ -248,13 +276,17 @@ impl Drop for AtomTable {
 impl AtomTable {
     #[inline]
     pub fn new() -> Self {
-        let table = Self {
-            block: RawBlock::new(),
-            table: IndexSet::new(),
-        };
+        let mut block = RawBlock::new();
 
-        set_atom_tbl_buf_base(table.block.base);
-        table
+        if let Err(got) = set_atom_tbl_buf_base(ptr::null(), block.base) {
+            block.deallocate();
+            atom_table_base_pointer_mismatch(ptr::null(), got);
+        }
+
+        Self {
+            block,
+            table: IndexSet::new(),
+        }
     }
 
     #[inline]
@@ -289,8 +321,11 @@ impl AtomTable {
                     ptr = self.block.alloc(size);
 
                     if ptr.is_null() {
+                        let old_base = self.block.base;
                         self.block.grow();
-                        set_atom_tbl_buf_base(self.block.base);
+                        if let Err(got) = set_atom_tbl_buf_base(old_base, self.block.base) {
+                            atom_table_base_pointer_mismatch(old_base, got);
+                        }
                     } else {
                         break;
                     }

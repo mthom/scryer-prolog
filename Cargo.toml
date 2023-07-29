@@ -74,7 +74,7 @@ rand = "0.8.5"
 [dev-dependencies]
 assert_cmd = "1.0.3"
 predicates-core = "1.0.2"
-serial_test = "0.5.1"
+serial_test = "2.0.0"
 
 [patch.crates-io]
 modular-bitfield = { git = "https://github.com/mthom/modular-bitfield" }
