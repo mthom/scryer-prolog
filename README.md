@@ -694,7 +694,8 @@ Analysis of Grants](https://www.brz.gv.at/en/BRZ-Tech-Blog/Tech-Blog-7-Symbolic-
 by the Austrian Federal Computing Center, and parts of the
 [precautionary](https://github.com/dcnorris/precautionary/tree/main/exec/prolog)
 package for the analysis of dose-escalation trials in the
-safety-critical and highly regulated domain of clinical&nbsp;oncology.
+safety-critical and highly regulated domain of oncology
+trial&nbsp;design.
 
 Scryer Prolog is also very well suited for teaching and learning
 Prolog, and for testing syntactic conformance and hence portability of
