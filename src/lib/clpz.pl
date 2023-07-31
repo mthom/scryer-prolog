@@ -5898,6 +5898,11 @@ in_(L, U, X) :-
         fd_put(X, NXD, XPs).
 
 min_max_factor(L1, U1, L2, U2, L3, U3, Min, Max) :-
+        % use findall/3 to forget auxiliary constraints that are only
+        % needed temporarily for reasoning about domain boundaries
+        findall(Min-Max, min_max_factor_(L1, U1, L2, U2, L3, U3, Min, Max), [Min-Max]).
+
+min_max_factor_(L1, U1, L2, U2, L3, U3, Min, Max) :-
         (   U1 cis_lt n(0),
             L2 cis_lt n(0), U2 cis_gt n(0),
             L3 cis_lt n(0), U3 cis_gt n(0) ->
