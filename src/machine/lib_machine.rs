@@ -26,7 +26,7 @@ impl Machine {
 
     pub fn run_query(&mut self, query: String) -> QueryResult {
         let input = format!("{}", query);
-        println!("Running query: {}", input);
+        //println!("Running query: {}", input);
         self.set_user_input(input);
         self.run_top_level(atom!("$toplevel"), (atom!("run_input_once"), 0));
         self.parse_output()
@@ -34,7 +34,7 @@ impl Machine {
 
     pub fn parse_output(&self) -> QueryResult {
         let output = self.get_user_output().trim().to_string();
-        println!("Output: {}", output);
+        //println!("Output: {}", output);
         if output.starts_with("error(") {
             Err(output)
         } else {
