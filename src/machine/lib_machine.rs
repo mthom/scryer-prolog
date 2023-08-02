@@ -28,7 +28,7 @@ impl Machine {
         let input = format!("{}", query);
         println!("Running query: {}", input);
         self.set_user_input(input);
-        self.run_top_level(atom!("$toplevel"), (atom!("toplevel"), 0));
+        self.run_top_level(atom!("$toplevel"), (atom!("run_input_once"), 0));
         self.parse_output()
     }
 

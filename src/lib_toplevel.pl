@@ -231,9 +231,9 @@ read_and_match_all_results :-
 submit_query_and_print_all_results(Term, VarList) :-
     '$get_b_value'(B),
     bb_put('$report_all', true),
-    bb_put('$report_n_more', 0),
+    bb_put('$report_n_more', 100),
     call(user:Term),
-    write_eqs_and_read_input(B, VarList),
+    write_eqs(B, VarList),
     !.
 submit_query_and_print_all_results(_, _) :-
     (   bb_get('$answer_count', 0) ->
@@ -242,6 +242,46 @@ submit_query_and_print_all_results(_, _) :-
     ),
     write('false.'),
     nl.
+
+write_eqs(B, VarList) :-
+    gather_query_vars(VarList, OrigVars),
+    % one layer of depth added for (=/2) functor
+    '$term_variables_under_max_depth'(OrigVars, 22, Vars0),
+    '$term_attributed_variables'(VarList, AttrVars),
+    '$project_atts':project_attributes(Vars0, AttrVars),
+    copy_term(AttrVars, AttrVars, AttrGoals),
+    term_variables(AttrGoals, AttrGoalVars),
+    append([Vars0, AttrGoalVars, AttrVars], Vars),
+    charsio:extend_var_list(Vars, VarList, NewVarList, fabricated),
+    '$get_b_value'(B0),
+    gather_equations(NewVarList, OrigVars, Equations),
+    append(Equations, AttrGoals, Goals),
+    % one layer of depth added for (=/2) functor
+    maplist(\Term^Vs^term_variables_under_max_depth(Term, 22, Vs), Equations, EquationVars),
+    % maplist(term_variables_under_max_depth(22), Equations, EquationVars),
+    append([AttrGoalVars | EquationVars], Vars1),
+    term_variables(Vars1, Vars2), % deduplicate vars of Vars1 but preserve their order.
+    charsio:extend_var_list(Vars2, VarList, NewVarList0, fabricated),
+    bb_get('$answer_count', Count),
+    (   Count =:= 0 ->
+        write('   ')
+    ;   true
+    ),
+    Count1 is Count + 1,
+    bb_put('$answer_count', Count1),
+    (  B0 == B ->
+       (  Goals == [] ->
+          write('true.'), nl
+       ;  loader:thread_goals(Goals, ThreadedGoals, (',')),
+          write_eq(ThreadedGoals, NewVarList0, 200000),
+          write('.'),
+          nl
+       )
+    ;  loader:thread_goals(Goals, ThreadedGoals, (',')),
+       write_eq(ThreadedGoals, NewVarList0, 200000),
+       write(';'), nl, false
+    ).
+
 
 
 
