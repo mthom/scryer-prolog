@@ -3784,8 +3784,11 @@ var_eq(V, N, #V #= N).
 % Match variables to created skeleton.
 
 skeleton(Vs, Vs-Prop) :-
-        maplist(prop_init(Prop), Vs),
-        trigger_once(Prop).
+        (   propagator_state(Prop, State), State == dead ->
+            true
+        ;   maplist(prop_init(Prop), Vs),
+            trigger_once(Prop)
+        ).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    A drep is a user-accessible and visible domain representation. N,
