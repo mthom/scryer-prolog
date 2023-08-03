@@ -4,7 +4,7 @@
 :- use_module(library(atts), [call_residue_vars/2]).
 :- use_module(library(charsio)).
 :- use_module(library(error)).
-:- use_module(library(files)).
+
 :- use_module(library(iso_ext)).
 :- use_module(library(lambda)).
 :- use_module(library(lists)).
@@ -107,82 +107,6 @@ list_last_item([_|Cs], D) :-
     
 term_variables_under_max_depth(Term, MaxDepth, Vars) :-
     '$term_variables_under_max_depth'(Term, MaxDepth, Vars).
-
-write_eqs_and_read_input(B, VarList) :-
-    gather_query_vars(VarList, OrigVars),
-    % one layer of depth added for (=/2) functor
-    '$term_variables_under_max_depth'(OrigVars, 22, Vars0),
-    '$term_attributed_variables'(VarList, AttrVars),
-    '$project_atts':project_attributes(Vars0, AttrVars),
-    copy_term(AttrVars, AttrVars, AttrGoals),
-    term_variables(AttrGoals, AttrGoalVars),
-    append([Vars0, AttrGoalVars, AttrVars], Vars),
-    charsio:extend_var_list(Vars, VarList, NewVarList, fabricated),
-    '$get_b_value'(B0),
-    gather_equations(NewVarList, OrigVars, Equations),
-    append(Equations, AttrGoals, Goals),
-    % one layer of depth added for (=/2) functor
-    maplist(\Term^Vs^term_variables_under_max_depth(Term, 22, Vs), Equations, EquationVars),
-    % maplist(term_variables_under_max_depth(22), Equations, EquationVars),
-    append([AttrGoalVars | EquationVars], Vars1),
-    term_variables(Vars1, Vars2), % deduplicate vars of Vars1 but preserve their order.
-    charsio:extend_var_list(Vars2, VarList, NewVarList0, fabricated),
-    bb_get('$answer_count', Count),
-    (   Count =:= 0 ->
-        write('   ')
-    ;   true
-    ),
-    Count1 is Count + 1,
-    bb_put('$answer_count', Count1),
-    (  B0 == B ->
-       (  Goals == [] ->
-          write('true.'), nl
-       ;  loader:thread_goals(Goals, ThreadedGoals, (',')),
-          write_eq(ThreadedGoals, NewVarList0, 200000),
-          write('.'),
-          nl
-       )
-    ;  loader:thread_goals(Goals, ThreadedGoals, (',')),
-       write_eq(ThreadedGoals, NewVarList0, 200000),
-       read_input(ThreadedGoals, NewVarList0)
-    ).
-
-read_input(ThreadedGoals, NewVarList) :-
-    (  bb_get('$report_all', true) ->
-       C = n
-    ;  bb_get('$report_n_more', N), N > 1 ->
-       N1 is N - 1,
-       bb_put('$report_n_more', N1),
-       C = n
-    ;  get_single_char(C)
-    ),
-    (  C = w ->
-       nl,
-       write('   '),
-       write_eq(ThreadedGoals, NewVarList, 0),
-       read_input(ThreadedGoals, NewVarList)
-    ;  C = p ->
-       nl,
-       write('   '),
-       write_eq(ThreadedGoals, NewVarList, 20),
-       read_input(ThreadedGoals, NewVarList)
-    ;  member(C, [';', ' ', n]) ->
-       nl, write(';  '), false
-    ;  C = h ->
-       help_message,
-       read_input(ThreadedGoals, NewVarList)
-    ;  member(C, ['\n', .]) ->
-       nl, write(';  ... .'), nl
-    ;  C = a ->
-       bb_put('$report_all', true),
-       nl, write(';  '), false
-    ;  C = f ->
-       bb_get('$answer_count', Count),
-       More is 5 - Count mod 5,
-       bb_put('$report_n_more', More),
-       nl, write(';  '), false
-    ;  read_input(ThreadedGoals, NewVarList)
-    ).
 
 gather_query_vars([_ = Var | Vars], QueryVars) :-
     (  var(Var) ->
