@@ -101,8 +101,6 @@ enum BuiltInClauseType {
     Is(RegType, ArithmeticTerm),
     #[strum_discriminants(strum(props(Arity = "2", Name = "keysort")))]
     KeySort,
-    #[strum_discriminants(strum(props(Arity = "2", Name = "read")))]
-    Read,
     #[strum_discriminants(strum(props(Arity = "2", Name = "sort")))]
     Sort,
 }
@@ -262,6 +260,8 @@ enum SystemClauseType {
     DeleteFile,
     #[strum_discriminants(strum(props(Arity = "2", Name = "$rename_file")))]
     RenameFile,
+    #[strum_discriminants(strum(props(Arity = "2", Name = "$file_copy")))]
+    FileCopy,
     #[strum_discriminants(strum(props(Arity = "2", Name = "$working_directory")))]
     WorkingDirectory,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$delete_directory")))]
@@ -270,16 +270,10 @@ enum SystemClauseType {
     PathCanonical,
     #[strum_discriminants(strum(props(Arity = "3", Name = "$file_time")))]
     FileTime,
-    #[strum_discriminants(strum(props(Arity = "1", Name = "$del_attr_non_head")))]
-    DeleteAttribute,
-    #[strum_discriminants(strum(props(Arity = "1", Name = "$del_attr_head")))]
-    DeleteHeadAttribute,
     #[strum_discriminants(strum(props(Arity = "arity", Name = "$module_call")))]
     DynamicModuleResolution(usize),
     #[strum_discriminants(strum(props(Arity = "arity", Name = "$prepare_call_clause")))]
     PrepareCallClause(usize),
-    #[strum_discriminants(strum(props(Arity = "1", Name = "$enqueue_attr_var")))]
-    EnqueueAttributedVar,
     #[strum_discriminants(strum(props(Arity = "2", Name = "$fetch_global_var")))]
     FetchGlobalVar,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$first_stream")))]
@@ -296,8 +290,6 @@ enum SystemClauseType {
     GetCode,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$get_single_char")))]
     GetSingleChar,
-    #[strum_discriminants(strum(props(Arity = "0", Name = "$reset_attr_var_state")))]
-    ResetAttrVarState,
     #[strum_discriminants(strum(props(Arity = "2", Name = "$truncate_if_no_lh_growth_diff")))]
     TruncateIfNoLiftedHeapGrowthDiff,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$truncate_if_no_lh_growth")))]
@@ -312,10 +304,10 @@ enum SystemClauseType {
     GetBValue,
     #[strum_discriminants(strum(props(Arity = "3", Name = "$get_cont_chunk")))]
     GetContinuationChunk,
-    #[strum_discriminants(strum(props(Arity = "4", Name = "$get_next_db_ref")))]
-    GetNextDBRef,
     #[strum_discriminants(strum(props(Arity = "7", Name = "$get_next_op_db_ref")))]
     GetNextOpDBRef,
+    #[strum_discriminants(strum(props(Arity = "3", Name = "$lookup_db_ref")))]
+    LookupDBRef,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$is_partial_string")))]
     IsPartialString,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$halt")))]
@@ -328,7 +320,7 @@ enum SystemClauseType {
     GetSCCCleaner,
     #[strum_discriminants(strum(props(Arity = "2", Name = "$head_is_dynamic")))]
     HeadIsDynamic,
-    #[strum_discriminants(strum(props(Arity = "2", Name = "$install_scc_cleaner")))]
+    #[strum_discriminants(strum(props(Arity = "1", Name = "$install_scc_cleaner")))]
     InstallSCCCleaner,
     #[strum_discriminants(strum(props(Arity = "3", Name = "$install_inference_counter")))]
     InstallInferenceCounter,
@@ -410,12 +402,14 @@ enum SystemClauseType {
     GetBall,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$get_current_block")))]
     GetCurrentBlock,
+    #[strum_discriminants(strum(props(Arity = "1", Name = "$get_current_scc_block")))]
+    GetCurrentSCCBlock,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$get_cp")))]
     GetCutPoint,
-    #[strum_discriminants(strum(props(Arity = "1", Name = "$get_staggered_cp")))]
-    GetStaggeredCutPoint,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$get_double_quotes")))]
     GetDoubleQuotes,
+    #[strum_discriminants(strum(props(Arity = "1", Name = "$get_unknown")))]
+    GetUnknown,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$install_new_block")))]
     InstallNewBlock,
     #[strum_discriminants(strum(props(Arity = "0", Name = "$maybe")))]
@@ -424,10 +418,14 @@ enum SystemClauseType {
     CurrentTime,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$quoted_token")))]
     QuotedToken,
-    #[strum_discriminants(strum(props(Arity = "2", Name = "$read_term_from_chars")))]
+    #[strum_discriminants(strum(props(Arity = "2", Name = "$read_from_chars")))]
+    ReadFromChars,
+    #[strum_discriminants(strum(props(Arity = "5", Name = "$read_term_from_chars")))]
     ReadTermFromChars,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$reset_block")))]
     ResetBlock,
+    #[strum_discriminants(strum(props(Arity = "1", Name = "$reset_scc_block")))]
+    ResetSCCBlock,
     #[strum_discriminants(strum(props(Arity = "0", Name = "$return_from_verify_attr")))]
     ReturnFromVerifyAttr,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$set_ball")))]
@@ -442,6 +440,8 @@ enum SystemClauseType {
     SetCutPointByDefault(RegType),
     #[strum_discriminants(strum(props(Arity = "1", Name = "$set_double_quotes")))]
     SetDoubleQuotes,
+    #[strum_discriminants(strum(props(Arity = "1", Name = "$set_unknown")))]
+    SetUnknown,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$set_seed")))]
     SetSeed,
     #[strum_discriminants(strum(props(Arity = "4", Name = "$skip_max_list")))]
@@ -478,9 +478,11 @@ enum SystemClauseType {
     UnwindStack,
     #[strum_discriminants(strum(props(Arity = "4", Name = "$wam_instructions")))]
     WAMInstructions,
-    #[strum_discriminants(strum(props(Arity = "7", Name = "$write_term")))]
+    #[strum_discriminants(strum(props(Arity = "2", Name = "$inlined_instructions")))]
+    InlinedInstructions,
+    #[strum_discriminants(strum(props(Arity = "8", Name = "$write_term")))]
     WriteTerm,
-    #[strum_discriminants(strum(props(Arity = "7", Name = "$write_term_to_chars")))]
+    #[strum_discriminants(strum(props(Arity = "8", Name = "$write_term_to_chars")))]
     WriteTermToChars,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$scryer_prolog_version")))]
     ScryerPrologVersion,
@@ -554,16 +556,40 @@ enum SystemClauseType {
     HttpAccept,
     #[strum_discriminants(strum(props(Arity = "4", Name = "$http_answer")))]
     HttpAnswer,
+    #[strum_discriminants(strum(props(Arity = "2", Name = "$load_foreign_lib")))]
+    LoadForeignLib,
+    #[strum_discriminants(strum(props(Arity = "3", Name = "$foreign_call")))]
+    ForeignCall,
+    #[strum_discriminants(strum(props(Arity = "2", Name = "$define_foreign_struct")))]
+    DefineForeignStruct,
     #[strum_discriminants(strum(props(Arity = "3", Name = "$predicate_defined")))]
     PredicateDefined,
     #[strum_discriminants(strum(props(Arity = "3", Name = "$strip_module")))]
     StripModule,
     #[strum_discriminants(strum(props(Arity = "4", Name = "$compile_inline_or_expanded_goal")))]
     CompileInlineOrExpandedGoal,
-    #[strum_discriminants(strum(props(Arity = "arity", Name = "$call_inline")))]
-    InlineCallN(usize),
+    #[strum_discriminants(strum(props(Arity = "arity", Name = "$fast_call")))]
+    FastCallN(usize),
     #[strum_discriminants(strum(props(Arity = "1", Name = "$is_expanded_or_inlined")))]
     IsExpandedOrInlined,
+    #[strum_discriminants(strum(props(Arity = "3", Name = "$get_clause_p")))]
+    GetClauseP,
+    #[strum_discriminants(strum(props(Arity = "6", Name = "$invoke_clause_at_p")))]
+    InvokeClauseAtP,
+    #[strum_discriminants(strum(props(Arity = "3", Name = "$get_from_attr_list")))]
+    GetFromAttributedVarList,
+    #[strum_discriminants(strum(props(Arity = "3", Name = "$put_to_attr_list")))]
+    PutToAttributedVarList,
+    #[strum_discriminants(strum(props(Arity = "3", Name = "$del_from_attr_list")))]
+    DeleteFromAttributedVarList,
+    #[strum_discriminants(strum(props(Arity = "1", Name = "$delete_all_attributes_from_var")))]
+    DeleteAllAttributesFromVar,
+    #[strum_discriminants(strum(props(Arity = "1", Name = "$unattributed_var")))]
+    UnattributedVar,
+    #[strum_discriminants(strum(props(Arity = "4", Name = "$get_db_refs")))]
+    GetDBRefs,
+    #[strum_discriminants(strum(props(Arity = "2", Name = "$keysort_with_constant_var_ordering")))]
+    KeySortWithConstantVarOrdering,
     REPL(REPLCodePtr),
 }
 
@@ -578,7 +604,7 @@ enum InstructionTemplate {
     #[strum_discriminants(strum(props(Arity = "4", Name = "get_partial_string")))]
     GetPartialString(Level, Atom, RegType, bool),
     #[strum_discriminants(strum(props(Arity = "3", Name = "get_structure")))]
-    GetStructure(Atom, usize, RegType),
+    GetStructure(Level, Atom, usize, RegType),
     #[strum_discriminants(strum(props(Arity = "2", Name = "get_variable")))]
     GetVariable(RegType, usize),
     #[strum_discriminants(strum(props(Arity = "2", Name = "get_value")))]
@@ -623,8 +649,10 @@ enum InstructionTemplate {
     Cut(RegType),
     #[strum_discriminants(strum(props(Arity = "1", Name = "get_level")))]
     GetLevel(RegType),
-    #[strum_discriminants(strum(props(Arity = "1", Name = "get_level_and_unify")))]
-    GetLevelAndUnify(RegType),
+    #[strum_discriminants(strum(props(Arity = "1", Name = "get_prev_level")))]
+    GetPrevLevel(RegType),
+    #[strum_discriminants(strum(props(Arity = "1", Name = "get_cut_point")))]
+    GetCutPoint(RegType),
     #[strum_discriminants(strum(props(Arity = "0", Name = "neck_cut")))]
     NeckCut,
     // choice instruction
@@ -715,10 +743,28 @@ enum InstructionTemplate {
     Ceiling(ArithmeticTerm, usize),
     #[strum_discriminants(strum(props(Arity = "1", Name = "floor")))]
     Floor(ArithmeticTerm, usize),
+    #[strum_discriminants(strum(props(Arity = "1", Name = "float_fractional_part")))]
+    FloatFractionalPart(ArithmeticTerm, usize),
+    #[strum_discriminants(strum(props(Arity = "1", Name = "float_integer_part")))]
+    FloatIntegerPart(ArithmeticTerm, usize),
     #[strum_discriminants(strum(props(Arity = "1", Name = "neg")))]
     Neg(ArithmeticTerm, usize),
     #[strum_discriminants(strum(props(Arity = "1", Name = "plus")))]
     Plus(ArithmeticTerm, usize),
+    #[strum_discriminants(strum(props(Arity = "1", Name = "acosh")))]
+    ACosh(ArithmeticTerm, usize),
+    #[strum_discriminants(strum(props(Arity = "1", Name = "asinh")))]
+    ASinh(ArithmeticTerm, usize),
+    #[strum_discriminants(strum(props(Arity = "1", Name = "atanh")))]
+    ATanh(ArithmeticTerm, usize),
+    #[strum_discriminants(strum(props(Arity = "1", Name = "cosh")))]
+    Cosh(ArithmeticTerm, usize),
+    #[strum_discriminants(strum(props(Arity = "1", Name = "sinh")))]
+    Sinh(ArithmeticTerm, usize),
+    #[strum_discriminants(strum(props(Arity = "1", Name = "tanh")))]
+    Tanh(ArithmeticTerm, usize),
+    #[strum_discriminants(strum(props(Arity = "1", Name = "log10")))]
+    Log10(ArithmeticTerm, usize),
     #[strum_discriminants(strum(props(Arity = "1", Name = "bitwise_complement")))]
     BitwiseComplement(ArithmeticTerm, usize),
     // control instructions
@@ -726,10 +772,8 @@ enum InstructionTemplate {
     Allocate(usize), // num_frames.
     #[strum_discriminants(strum(props(Arity = "0", Name = "deallocate")))]
     Deallocate,
-    #[strum_discriminants(strum(props(Arity = "3", Name = "jmp_by_call")))]
-    JmpByCall(usize, usize), // arity, relative offset.
-    #[strum_discriminants(strum(props(Arity = "3", Name = "jmp_by_execute")))]
-    JmpByExecute(usize, usize), // arity, relative offset.
+    #[strum_discriminants(strum(props(Arity = "1", Name = "jmp_by_call")))]
+    JmpByCall(usize), // relative offset.
     #[strum_discriminants(strum(props(Arity = "1", Name = "rev_jmp_by")))]
     RevJmpBy(usize),
     #[strum_discriminants(strum(props(Arity = "0", Name = "proceed")))]
@@ -1100,6 +1144,7 @@ fn generate_instruction_preface() -> TokenStream {
         }
 
         pub type Code = Vec<Instruction>;
+        pub type CodeDeque = VecDeque<Instruction>;
 
         impl Instruction {
             #[inline]
@@ -1282,9 +1327,13 @@ fn generate_instruction_preface() -> TokenStream {
                         let rt_stub = reg_type_into_functor(r);
                         functor!(atom!("get_level"), [str(h, 0)], [rt_stub])
                     }
-                    &Instruction::GetLevelAndUnify(r) => {
+                    &Instruction::GetPrevLevel(r) => {
                         let rt_stub = reg_type_into_functor(r);
-                        functor!(atom!("get_level_and_unify"), [str(h, 0)], [rt_stub])
+                        functor!(atom!("get_prev_level"), [str(h, 0)], [rt_stub])
+                    }
+                    &Instruction::GetCutPoint(r) => {
+                        let rt_stub = reg_type_into_functor(r);
+                        functor!(atom!("get_cut_point"), [str(h, 0)], [rt_stub])
                     }
                     &Instruction::NeckCut => {
                         functor!(atom!("neck_cut"))
@@ -1376,8 +1425,29 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ATan(ref at, t) => {
                         arith_instr_unary_functor(h, atom!("atan"), arena, at, t)
                     }
+                    &Instruction::ACosh(ref at, t) => {
+                        arith_instr_unary_functor(h, atom!("acosh"), arena, at, t)
+                    }
+                    &Instruction::ASinh(ref at, t) => {
+                        arith_instr_unary_functor(h, atom!("asinh"), arena, at, t)
+                    }
+                    &Instruction::ATanh(ref at, t) => {
+                        arith_instr_unary_functor(h, atom!("atanh"), arena, at, t)
+                    }
+                    &Instruction::Cosh(ref at, t) => {
+                        arith_instr_unary_functor(h, atom!("cosh"), arena, at, t)
+                    }
+                    &Instruction::Sinh(ref at, t) => {
+                        arith_instr_unary_functor(h, atom!("sinh"), arena, at, t)
+                    }
+                    &Instruction::Tanh(ref at, t) => {
+                        arith_instr_unary_functor(h, atom!("tanh"), arena, at, t)
+                    }
                     &Instruction::Sqrt(ref at, t) => {
                         arith_instr_unary_functor(h, atom!("sqrt"), arena, at, t)
+                    }
+                    &Instruction::Log10(ref at, t) => {
+                        arith_instr_unary_functor(h, atom!("log10"), arena, at, t)
                     }
                     &Instruction::Abs(ref at, t) => {
                         arith_instr_unary_functor(h, atom!("abs"), arena, at, t)
@@ -1396,6 +1466,12 @@ fn generate_instruction_preface() -> TokenStream {
                     }
                     &Instruction::Floor(ref at, t) => {
                         arith_instr_unary_functor(h, atom!("floor"), arena, at, t)
+                    }
+                    &Instruction::FloatFractionalPart(ref at, t) => {
+                        arith_instr_unary_functor(h, atom!("float_fractional_part"), arena, at, t)
+                    }
+                    &Instruction::FloatIntegerPart(ref at, t) => {
+                        arith_instr_unary_functor(h, atom!("float_integer_part"), arena, at, t)
                     }
                     &Instruction::Neg(ref at, t) => arith_instr_unary_functor(
                         h,
@@ -1439,30 +1515,30 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::DefaultExecuteNamed(arity, name, ..) => {
                         functor!(atom!("execute_default"), [atom(name), fixnum(arity)])
                     }
-                    &Instruction::CallN(arity, _) => {
+                    &Instruction::CallN(arity) => {
                         functor!(atom!("call_n"), [fixnum(arity)])
                     }
-                    &Instruction::ExecuteN(arity, _) => {
+                    &Instruction::ExecuteN(arity) => {
                         functor!(atom!("execute_n"), [fixnum(arity)])
                     }
-                    &Instruction::DefaultCallN(arity, _) => {
+                    &Instruction::DefaultCallN(arity) => {
                         functor!(atom!("call_default_n"), [fixnum(arity)])
                     }
-                    &Instruction::DefaultExecuteN(arity, _) => {
+                    &Instruction::DefaultExecuteN(arity) => {
                         functor!(atom!("execute_default_n"), [fixnum(arity)])
                     }
-                    &Instruction::CallInlineCallN(arity, _) => {
-                        functor!(atom!("call_n_inline"), [fixnum(arity)])
+                    &Instruction::CallFastCallN(arity) => {
+                        functor!(atom!("call_fast_call_n"), [fixnum(arity)])
                     }
-                    &Instruction::ExecuteInlineCallN(arity, _) => {
-                        functor!(atom!("call_n_inline"), [fixnum(arity)])
+                    &Instruction::ExecuteFastCallN(arity) => {
+                        functor!(atom!("execute_fast_call_n"), [fixnum(arity)])
                     }
-                    &Instruction::CallTermGreaterThan(_) |
-                    &Instruction::CallTermLessThan(_) |
-                    &Instruction::CallTermGreaterThanOrEqual(_) |
-                    &Instruction::CallTermLessThanOrEqual(_) |
-                    &Instruction::CallTermEqual(_) |
-                    &Instruction::CallTermNotEqual(_) |
+                    &Instruction::CallTermGreaterThan |
+                    &Instruction::CallTermLessThan |
+                    &Instruction::CallTermGreaterThanOrEqual |
+                    &Instruction::CallTermLessThanOrEqual |
+                    &Instruction::CallTermEqual |
+                    &Instruction::CallTermNotEqual |
                     &Instruction::CallNumberGreaterThan(..) |
                     &Instruction::CallNumberLessThan(..) |
                     &Instruction::CallNumberGreaterThanOrEqual(..) |
@@ -1470,545 +1546,569 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallNumberEqual(..) |
                     &Instruction::CallNumberNotEqual(..) |
                     &Instruction::CallIs(..) |
-                    &Instruction::CallAcyclicTerm(_) |
-                    &Instruction::CallArg(_) |
-                    &Instruction::CallCompare(_) |
-                    &Instruction::CallCopyTerm(_) |
-                    &Instruction::CallFunctor(_) |
-                    &Instruction::CallGround(_) |
-                    &Instruction::CallKeySort(_) |
-                    &Instruction::CallRead(_) |
-                    &Instruction::CallSort(_) => {
+                    &Instruction::CallAcyclicTerm |
+                    &Instruction::CallArg |
+                    &Instruction::CallCompare |
+                    &Instruction::CallCopyTerm |
+                    &Instruction::CallFunctor |
+                    &Instruction::CallGround |
+                    &Instruction::CallKeySort |
+                    &Instruction::CallSort => {
                         let (name, arity) = self.to_name_and_arity();
                         functor!(atom!("call"), [atom(name), fixnum(arity)])
                     }
                     //
-                    &Instruction::ExecuteTermGreaterThan(_) |
-                    &Instruction::ExecuteTermLessThan(_) |
-                    &Instruction::ExecuteTermGreaterThanOrEqual(_) |
-                    &Instruction::ExecuteTermLessThanOrEqual(_) |
-                    &Instruction::ExecuteTermEqual(_) |
-                    &Instruction::ExecuteTermNotEqual(_) |
+                    &Instruction::ExecuteTermGreaterThan |
+                    &Instruction::ExecuteTermLessThan |
+                    &Instruction::ExecuteTermGreaterThanOrEqual |
+                    &Instruction::ExecuteTermLessThanOrEqual |
+                    &Instruction::ExecuteTermEqual |
+                    &Instruction::ExecuteTermNotEqual |
                     &Instruction::ExecuteNumberGreaterThan(..) |
                     &Instruction::ExecuteNumberLessThan(..) |
                     &Instruction::ExecuteNumberGreaterThanOrEqual(..) |
                     &Instruction::ExecuteNumberLessThanOrEqual(..) |
                     &Instruction::ExecuteNumberEqual(..) |
                     &Instruction::ExecuteNumberNotEqual(..) |
-                    &Instruction::ExecuteAcyclicTerm(_) |
-                    &Instruction::ExecuteArg(_) |
-                    &Instruction::ExecuteCompare(_) |
-                    &Instruction::ExecuteCopyTerm(_) |
-                    &Instruction::ExecuteFunctor(_) |
-                    &Instruction::ExecuteGround(_) |
+                    &Instruction::ExecuteAcyclicTerm |
+                    &Instruction::ExecuteArg |
+                    &Instruction::ExecuteCompare |
+                    &Instruction::ExecuteCopyTerm |
+                    &Instruction::ExecuteFunctor |
+                    &Instruction::ExecuteGround |
                     &Instruction::ExecuteIs(..) |
-                    &Instruction::ExecuteKeySort(_) |
-                    &Instruction::ExecuteRead(_) |
-                    &Instruction::ExecuteSort(_) => {
+                    &Instruction::ExecuteKeySort |
+                    &Instruction::ExecuteSort => {
                         let (name, arity) = self.to_name_and_arity();
                         functor!(atom!("execute"), [atom(name), fixnum(arity)])
                     }
                     //
-                    &Instruction::DefaultCallTermGreaterThan(_) |
-                    &Instruction::DefaultCallTermLessThan(_) |
-                    &Instruction::DefaultCallTermGreaterThanOrEqual(_) |
-                    &Instruction::DefaultCallTermLessThanOrEqual(_) |
-                    &Instruction::DefaultCallTermEqual(_) |
-                    &Instruction::DefaultCallTermNotEqual(_) |
+                    &Instruction::DefaultCallTermGreaterThan |
+                    &Instruction::DefaultCallTermLessThan |
+                    &Instruction::DefaultCallTermGreaterThanOrEqual |
+                    &Instruction::DefaultCallTermLessThanOrEqual |
+                    &Instruction::DefaultCallTermEqual |
+                    &Instruction::DefaultCallTermNotEqual |
                     &Instruction::DefaultCallNumberGreaterThan(..) |
                     &Instruction::DefaultCallNumberLessThan(..) |
                     &Instruction::DefaultCallNumberGreaterThanOrEqual(..) |
                     &Instruction::DefaultCallNumberLessThanOrEqual(..) |
                     &Instruction::DefaultCallNumberEqual(..) |
                     &Instruction::DefaultCallNumberNotEqual(..) |
-                    &Instruction::DefaultCallAcyclicTerm(_) |
-                    &Instruction::DefaultCallArg(_) |
-                    &Instruction::DefaultCallCompare(_) |
-                    &Instruction::DefaultCallCopyTerm(_) |
-                    &Instruction::DefaultCallFunctor(_) |
-                    &Instruction::DefaultCallGround(_) |
+                    &Instruction::DefaultCallAcyclicTerm |
+                    &Instruction::DefaultCallArg |
+                    &Instruction::DefaultCallCompare |
+                    &Instruction::DefaultCallCopyTerm |
+                    &Instruction::DefaultCallFunctor |
+                    &Instruction::DefaultCallGround |
                     &Instruction::DefaultCallIs(..) |
-                    &Instruction::DefaultCallKeySort(_) |
-                    &Instruction::DefaultCallRead(_) |
-                    &Instruction::DefaultCallSort(_) => {
+                    &Instruction::DefaultCallKeySort |
+                    &Instruction::DefaultCallSort => {
                         let (name, arity) = self.to_name_and_arity();
                         functor!(atom!("call_default"), [atom(name), fixnum(arity)])
                     }
                     //
-                    &Instruction::DefaultExecuteTermGreaterThan(_) |
-                    &Instruction::DefaultExecuteTermLessThan(_) |
-                    &Instruction::DefaultExecuteTermGreaterThanOrEqual(_) |
-                    &Instruction::DefaultExecuteTermLessThanOrEqual(_) |
-                    &Instruction::DefaultExecuteTermEqual(_) |
-                    &Instruction::DefaultExecuteTermNotEqual(_) |
+                    &Instruction::DefaultExecuteTermGreaterThan |
+                    &Instruction::DefaultExecuteTermLessThan |
+                    &Instruction::DefaultExecuteTermGreaterThanOrEqual |
+                    &Instruction::DefaultExecuteTermLessThanOrEqual |
+                    &Instruction::DefaultExecuteTermEqual |
+                    &Instruction::DefaultExecuteTermNotEqual |
                     &Instruction::DefaultExecuteNumberGreaterThan(..) |
                     &Instruction::DefaultExecuteNumberLessThan(..) |
                     &Instruction::DefaultExecuteNumberGreaterThanOrEqual(..) |
                     &Instruction::DefaultExecuteNumberLessThanOrEqual(..) |
                     &Instruction::DefaultExecuteNumberEqual(..) |
                     &Instruction::DefaultExecuteNumberNotEqual(..) |
-                    &Instruction::DefaultExecuteAcyclicTerm(_) |
-                    &Instruction::DefaultExecuteArg(_) |
-                    &Instruction::DefaultExecuteCompare(_) |
-                    &Instruction::DefaultExecuteCopyTerm(_) |
-                    &Instruction::DefaultExecuteFunctor(_) |
-                    &Instruction::DefaultExecuteGround(_) |
+                    &Instruction::DefaultExecuteAcyclicTerm |
+                    &Instruction::DefaultExecuteArg |
+                    &Instruction::DefaultExecuteCompare |
+                    &Instruction::DefaultExecuteCopyTerm |
+                    &Instruction::DefaultExecuteFunctor |
+                    &Instruction::DefaultExecuteGround |
                     &Instruction::DefaultExecuteIs(..) |
-                    &Instruction::DefaultExecuteKeySort(_) |
-                    &Instruction::DefaultExecuteRead(_) |
-                    &Instruction::DefaultExecuteSort(_) => {
+                    &Instruction::DefaultExecuteKeySort |
+                    &Instruction::DefaultExecuteSort => {
                         let (name, arity) = self.to_name_and_arity();
                         functor!(atom!("execute_default"), [atom(name), fixnum(arity)])
                     }
-                    &Instruction::CallIsAtom(_, _) |
-                    &Instruction::CallIsAtomic(_, _) |
-                    &Instruction::CallIsCompound(_, _) |
-                    &Instruction::CallIsInteger(_, _) |
-                    &Instruction::CallIsNumber(_, _) |
-                    &Instruction::CallIsRational(_, _) |
-                    &Instruction::CallIsFloat(_, _) |
-                    &Instruction::CallIsNonVar(_, _) |
-                    &Instruction::CallIsVar(_, _) => {
+                    &Instruction::CallIsAtom(_) |
+                    &Instruction::CallIsAtomic(_) |
+                    &Instruction::CallIsCompound(_) |
+                    &Instruction::CallIsInteger(_) |
+                    &Instruction::CallIsNumber(_) |
+                    &Instruction::CallIsRational(_) |
+                    &Instruction::CallIsFloat(_) |
+                    &Instruction::CallIsNonVar(_) |
+                    &Instruction::CallIsVar(_) => {
                         let (name, arity) = self.to_name_and_arity();
                         functor!(atom!("call"), [atom(name), fixnum(arity)])
                     }
-                    &Instruction::ExecuteIsAtom(_, _) |
-                    &Instruction::ExecuteIsAtomic(_, _) |
-                    &Instruction::ExecuteIsCompound(_, _) |
-                    &Instruction::ExecuteIsInteger(_, _) |
-                    &Instruction::ExecuteIsNumber(_, _) |
-                    &Instruction::ExecuteIsRational(_, _) |
-                    &Instruction::ExecuteIsFloat(_, _) |
-                    &Instruction::ExecuteIsNonVar(_, _) |
-                    &Instruction::ExecuteIsVar(_, _) => {
+                    &Instruction::ExecuteIsAtom(_) |
+                    &Instruction::ExecuteIsAtomic(_) |
+                    &Instruction::ExecuteIsCompound(_) |
+                    &Instruction::ExecuteIsInteger(_) |
+                    &Instruction::ExecuteIsNumber(_) |
+                    &Instruction::ExecuteIsRational(_) |
+                    &Instruction::ExecuteIsFloat(_) |
+                    &Instruction::ExecuteIsNonVar(_) |
+                    &Instruction::ExecuteIsVar(_) => {
                         let (name, arity) = self.to_name_and_arity();
                         functor!(atom!("execute"), [atom(name), fixnum(arity)])
                     }
                     //
-                    &Instruction::CallAtomChars(_) |
-                    &Instruction::CallAtomCodes(_) |
-                    &Instruction::CallAtomLength(_) |
-                    &Instruction::CallBindFromRegister(_) |
-                    &Instruction::CallContinuation(_) |
-                    &Instruction::CallCharCode(_) |
-                    &Instruction::CallCharType(_) |
-                    &Instruction::CallCharsToNumber(_) |
-                    &Instruction::CallCodesToNumber(_) |
-                    &Instruction::CallCopyTermWithoutAttrVars(_) |
-                    &Instruction::CallCheckCutPoint(_) |
-                    &Instruction::CallClose(_) |
-                    &Instruction::CallCopyToLiftedHeap(_) |
-                    &Instruction::CallCreatePartialString(_) |
-                    &Instruction::CallCurrentHostname(_) |
-                    &Instruction::CallCurrentInput(_) |
-                    &Instruction::CallCurrentOutput(_) |
-                    &Instruction::CallDirectoryFiles(_) |
-                    &Instruction::CallFileSize(_) |
-                    &Instruction::CallFileExists(_) |
-                    &Instruction::CallDirectoryExists(_) |
-                    &Instruction::CallDirectorySeparator(_) |
-                    &Instruction::CallMakeDirectory(_) |
-                    &Instruction::CallMakeDirectoryPath(_) |
-                    &Instruction::CallDeleteFile(_) |
-                    &Instruction::CallRenameFile(_) |
-                    &Instruction::CallWorkingDirectory(_) |
-                    &Instruction::CallDeleteDirectory(_) |
-                    &Instruction::CallPathCanonical(_) |
-                    &Instruction::CallFileTime(_) |
-                    &Instruction::CallDeleteAttribute(_) |
-                    &Instruction::CallDeleteHeadAttribute(_) |
+                    &Instruction::CallAtomChars |
+                    &Instruction::CallAtomCodes |
+                    &Instruction::CallAtomLength |
+                    &Instruction::CallBindFromRegister |
+                    &Instruction::CallContinuation |
+                    &Instruction::CallCharCode |
+                    &Instruction::CallCharType |
+                    &Instruction::CallCharsToNumber |
+                    &Instruction::CallCodesToNumber |
+                    &Instruction::CallCopyTermWithoutAttrVars |
+                    &Instruction::CallCheckCutPoint |
+                    &Instruction::CallClose |
+                    &Instruction::CallCopyToLiftedHeap |
+                    &Instruction::CallCreatePartialString |
+                    &Instruction::CallCurrentHostname |
+                    &Instruction::CallCurrentInput |
+                    &Instruction::CallCurrentOutput |
+                    &Instruction::CallDirectoryFiles |
+                    &Instruction::CallFileSize |
+                    &Instruction::CallFileExists |
+                    &Instruction::CallDirectoryExists |
+                    &Instruction::CallDirectorySeparator |
+                    &Instruction::CallMakeDirectory |
+                    &Instruction::CallMakeDirectoryPath |
+                    &Instruction::CallDeleteFile |
+                    &Instruction::CallRenameFile |
+		            &Instruction::CallFileCopy |
+                    &Instruction::CallWorkingDirectory |
+                    &Instruction::CallDeleteDirectory |
+                    &Instruction::CallPathCanonical |
+                    &Instruction::CallFileTime |
                     &Instruction::CallDynamicModuleResolution(..) |
                     &Instruction::CallPrepareCallClause(..) |
-                    &Instruction::CallCompileInlineOrExpandedGoal(..) |
-                    &Instruction::CallIsExpandedOrInlined(_) |
-                    &Instruction::CallEnqueueAttributedVar(_) |
-                    &Instruction::CallFetchGlobalVar(_) |
-                    &Instruction::CallFirstStream(_) |
-                    &Instruction::CallFlushOutput(_) |
-                    &Instruction::CallGetByte(_) |
-                    &Instruction::CallGetChar(_) |
-                    &Instruction::CallGetNChars(_) |
-                    &Instruction::CallGetCode(_) |
-                    &Instruction::CallGetSingleChar(_) |
-                    &Instruction::CallResetAttrVarState(_) |
-                    &Instruction::CallTruncateIfNoLiftedHeapGrowthDiff(_) |
-                    &Instruction::CallTruncateIfNoLiftedHeapGrowth(_) |
-                    &Instruction::CallGetAttributedVariableList(_) |
-                    &Instruction::CallGetAttrVarQueueDelimiter(_) |
-                    &Instruction::CallGetAttrVarQueueBeyond(_) |
-                    &Instruction::CallGetBValue(_) |
-                    &Instruction::CallGetContinuationChunk(_) |
-                    &Instruction::CallGetNextDBRef(_) |
-                    &Instruction::CallGetNextOpDBRef(_) |
-                    &Instruction::CallIsPartialString(_) |
-                    &Instruction::CallHalt(_) |
-                    &Instruction::CallGetLiftedHeapFromOffset(_) |
-                    &Instruction::CallGetLiftedHeapFromOffsetDiff(_) |
-                    &Instruction::CallGetSCCCleaner(_) |
-                    &Instruction::CallHeadIsDynamic(_) |
-                    &Instruction::CallInstallSCCCleaner(_) |
-                    &Instruction::CallInstallInferenceCounter(_) |
-                    &Instruction::CallLiftedHeapLength(_) |
-                    &Instruction::CallLoadLibraryAsStream(_) |
-                    &Instruction::CallModuleExists(_) |
-                    &Instruction::CallNextEP(_) |
-                    &Instruction::CallNoSuchPredicate(_) |
-                    &Instruction::CallNumberToChars(_) |
-                    &Instruction::CallNumberToCodes(_) |
-                    &Instruction::CallOpDeclaration(_) |
-                    &Instruction::CallOpen(_) |
-                    &Instruction::CallSetStreamOptions(_) |
-                    &Instruction::CallNextStream(_) |
-                    &Instruction::CallPartialStringTail(_) |
-                    &Instruction::CallPeekByte(_) |
-                    &Instruction::CallPeekChar(_) |
-                    &Instruction::CallPeekCode(_) |
-                    &Instruction::CallPointsToContinuationResetMarker(_) |
-                    &Instruction::CallPutByte(_) |
-                    &Instruction::CallPutChar(_) |
-                    &Instruction::CallPutChars(_) |
-                    &Instruction::CallPutCode(_) |
-                    &Instruction::CallReadQueryTerm(_) |
-                    &Instruction::CallReadTerm(_) |
-                    &Instruction::CallRedoAttrVarBinding(_) |
-                    &Instruction::CallRemoveCallPolicyCheck(_) |
-                    &Instruction::CallRemoveInferenceCounter(_) |
-                    &Instruction::CallResetContinuationMarker(_) |
-                    &Instruction::CallRestoreCutPolicy(_) |
+                    &Instruction::CallCompileInlineOrExpandedGoal |
+                    &Instruction::CallIsExpandedOrInlined |
+                    &Instruction::CallGetClauseP |
+                    &Instruction::CallInvokeClauseAtP |
+                    &Instruction::CallGetFromAttributedVarList |
+                    &Instruction::CallPutToAttributedVarList |
+                    &Instruction::CallDeleteFromAttributedVarList |
+                    &Instruction::CallDeleteAllAttributesFromVar |
+                    &Instruction::CallUnattributedVar |
+                    &Instruction::CallGetDBRefs |
+                    &Instruction::CallKeySortWithConstantVarOrdering |
+                    &Instruction::CallFetchGlobalVar |
+                    &Instruction::CallFirstStream |
+                    &Instruction::CallFlushOutput |
+                    &Instruction::CallGetByte |
+                    &Instruction::CallGetChar |
+                    &Instruction::CallGetNChars |
+                    &Instruction::CallGetCode |
+                    &Instruction::CallGetSingleChar |
+                    &Instruction::CallTruncateIfNoLiftedHeapGrowthDiff |
+                    &Instruction::CallTruncateIfNoLiftedHeapGrowth |
+                    &Instruction::CallGetAttributedVariableList |
+                    &Instruction::CallGetAttrVarQueueDelimiter |
+                    &Instruction::CallGetAttrVarQueueBeyond |
+                    &Instruction::CallGetBValue |
+                    &Instruction::CallGetContinuationChunk |
+                    &Instruction::CallGetNextOpDBRef |
+                    &Instruction::CallLookupDBRef |
+                    &Instruction::CallIsPartialString |
+                    &Instruction::CallHalt |
+                    &Instruction::CallGetLiftedHeapFromOffset |
+                    &Instruction::CallGetLiftedHeapFromOffsetDiff |
+                    &Instruction::CallGetSCCCleaner |
+                    &Instruction::CallHeadIsDynamic |
+                    &Instruction::CallInstallSCCCleaner |
+                    &Instruction::CallInstallInferenceCounter |
+                    &Instruction::CallLiftedHeapLength |
+                    &Instruction::CallLoadLibraryAsStream |
+                    &Instruction::CallModuleExists |
+                    &Instruction::CallNextEP |
+                    &Instruction::CallNoSuchPredicate |
+                    &Instruction::CallNumberToChars |
+                    &Instruction::CallNumberToCodes |
+                    &Instruction::CallOpDeclaration |
+                    &Instruction::CallOpen |
+                    &Instruction::CallSetStreamOptions |
+                    &Instruction::CallNextStream |
+                    &Instruction::CallPartialStringTail |
+                    &Instruction::CallPeekByte |
+                    &Instruction::CallPeekChar |
+                    &Instruction::CallPeekCode |
+                    &Instruction::CallPointsToContinuationResetMarker |
+                    &Instruction::CallPutByte |
+                    &Instruction::CallPutChar |
+                    &Instruction::CallPutChars |
+                    &Instruction::CallPutCode |
+                    &Instruction::CallReadQueryTerm |
+                    &Instruction::CallReadTerm |
+                    &Instruction::CallRedoAttrVarBinding |
+                    &Instruction::CallRemoveCallPolicyCheck |
+                    &Instruction::CallRemoveInferenceCounter |
+                    &Instruction::CallResetContinuationMarker |
+                    &Instruction::CallRestoreCutPolicy |
                     &Instruction::CallSetCutPoint(..) |
-                    &Instruction::CallSetInput(_) |
-                    &Instruction::CallSetOutput(_) |
-                    &Instruction::CallStoreBacktrackableGlobalVar(_) |
-                    &Instruction::CallStoreGlobalVar(_) |
-                    &Instruction::CallStreamProperty(_) |
-                    &Instruction::CallSetStreamPosition(_) |
-                    &Instruction::CallInferenceLevel(_) |
-                    &Instruction::CallCleanUpBlock(_) |
-                    &Instruction::CallFail(_) |
-                    &Instruction::CallGetBall(_) |
-                    &Instruction::CallGetCurrentBlock(_) |
-                    &Instruction::CallGetCutPoint(_) |
-                    &Instruction::CallGetStaggeredCutPoint(_) |
-                    &Instruction::CallGetDoubleQuotes(_) |
-                    &Instruction::CallInstallNewBlock(_) |
-                    &Instruction::CallMaybe(_) |
-                    &Instruction::CallCpuNow(_) |
-                    &Instruction::CallDeterministicLengthRundown(_) |
-                    &Instruction::CallHttpOpen(_) |
-                    &Instruction::CallHttpListen(_) |
-                    &Instruction::CallHttpAccept(_) |
-                    &Instruction::CallHttpAnswer(_) |
-                    &Instruction::CallPredicateDefined(_) |
-                    &Instruction::CallStripModule(_) |
-                    &Instruction::CallCurrentTime(_) |
-                    &Instruction::CallQuotedToken(_) |
-                    &Instruction::CallReadTermFromChars(_) |
-                    &Instruction::CallResetBlock(_) |
-                    &Instruction::CallReturnFromVerifyAttr(_) |
-                    &Instruction::CallSetBall(_) |
-                    &Instruction::CallPushBallStack(_) |
-                    &Instruction::CallPopBallStack(_) |
-                    &Instruction::CallPopFromBallStack(_) |
+                    &Instruction::CallSetInput |
+                    &Instruction::CallSetOutput |
+                    &Instruction::CallStoreBacktrackableGlobalVar |
+                    &Instruction::CallStoreGlobalVar |
+                    &Instruction::CallStreamProperty |
+                    &Instruction::CallSetStreamPosition |
+                    &Instruction::CallInferenceLevel |
+                    &Instruction::CallCleanUpBlock |
+                    &Instruction::CallFail |
+                    &Instruction::CallGetBall |
+                    &Instruction::CallGetCurrentBlock |
+                    &Instruction::CallGetCurrentSCCBlock |
+                    &Instruction::CallGetCutPoint |
+                    &Instruction::CallGetDoubleQuotes |
+                    &Instruction::CallGetUnknown |
+                    &Instruction::CallInstallNewBlock |
+                    &Instruction::CallMaybe |
+                    &Instruction::CallCpuNow |
+                    &Instruction::CallDeterministicLengthRundown |
+                    &Instruction::CallHttpOpen |
+                    &Instruction::CallHttpListen |
+                    &Instruction::CallHttpAccept |
+                    &Instruction::CallHttpAnswer |
+		            &Instruction::CallLoadForeignLib |
+		            &Instruction::CallForeignCall |
+		            &Instruction::CallDefineForeignStruct |
+                    &Instruction::CallPredicateDefined |
+                    &Instruction::CallStripModule |
+                    &Instruction::CallCurrentTime |
+                    &Instruction::CallQuotedToken |
+                    &Instruction::CallReadFromChars |
+                    &Instruction::CallReadTermFromChars |
+                    &Instruction::CallResetBlock |
+                    &Instruction::CallResetSCCBlock |
+                    &Instruction::CallReturnFromVerifyAttr |
+                    &Instruction::CallSetBall |
+                    &Instruction::CallPushBallStack |
+                    &Instruction::CallPopBallStack |
+                    &Instruction::CallPopFromBallStack |
                     &Instruction::CallSetCutPointByDefault(..) |
-                    &Instruction::CallSetDoubleQuotes(_) |
-                    &Instruction::CallSetSeed(_) |
-                    &Instruction::CallSkipMaxList(_) |
-                    &Instruction::CallSleep(_) |
-                    &Instruction::CallSocketClientOpen(_) |
-                    &Instruction::CallSocketServerOpen(_) |
-                    &Instruction::CallSocketServerAccept(_) |
-                    &Instruction::CallSocketServerClose(_) |
-                    &Instruction::CallTLSAcceptClient(_) |
-                    &Instruction::CallTLSClientConnect(_) |
-                    &Instruction::CallSucceed(_) |
-                    &Instruction::CallTermAttributedVariables(_) |
-                    &Instruction::CallTermVariables(_) |
-                    &Instruction::CallTermVariablesUnderMaxDepth(_) |
-                    &Instruction::CallTruncateLiftedHeapTo(_) |
-                    &Instruction::CallUnifyWithOccursCheck(_) |
-                    &Instruction::CallUnwindEnvironments(_) |
-                    &Instruction::CallUnwindStack(_) |
-                    &Instruction::CallWAMInstructions(_) |
-                    &Instruction::CallWriteTerm(_) |
-                    &Instruction::CallWriteTermToChars(_) |
-                    &Instruction::CallScryerPrologVersion(_) |
-                    &Instruction::CallCryptoRandomByte(_) |
-                    &Instruction::CallCryptoDataHash(_) |
-                    &Instruction::CallCryptoDataHKDF(_) |
-                    &Instruction::CallCryptoPasswordHash(_) |
-                    &Instruction::CallCryptoDataEncrypt(_) |
-                    &Instruction::CallCryptoDataDecrypt(_) |
-                    &Instruction::CallCryptoCurveScalarMult(_) |
-                    &Instruction::CallEd25519Sign(_) |
-                    &Instruction::CallEd25519Verify(_) |
-                    &Instruction::CallEd25519NewKeyPair(_) |
-                    &Instruction::CallEd25519KeyPairPublicKey(_) |
-                    &Instruction::CallCurve25519ScalarMult(_) |
-                    &Instruction::CallFirstNonOctet(_) |
-                    &Instruction::CallLoadHTML(_) |
-                    &Instruction::CallLoadXML(_) |
-                    &Instruction::CallGetEnv(_) |
-                    &Instruction::CallSetEnv(_) |
-                    &Instruction::CallUnsetEnv(_) |
-                    &Instruction::CallShell(_) |
-                    &Instruction::CallPID(_) |
-                    &Instruction::CallCharsBase64(_) |
-                    &Instruction::CallDevourWhitespace(_) |
-                    &Instruction::CallIsSTOEnabled(_) |
-                    &Instruction::CallSetSTOAsUnify(_) |
-                    &Instruction::CallSetNSTOAsUnify(_) |
-                    &Instruction::CallSetSTOWithErrorAsUnify(_) |
-                    &Instruction::CallHomeDirectory(_) |
-                    &Instruction::CallDebugHook(_) |
-                    &Instruction::CallAddDiscontiguousPredicate(_) |
-                    &Instruction::CallAddDynamicPredicate(_) |
-                    &Instruction::CallAddMultifilePredicate(_) |
-                    &Instruction::CallAddGoalExpansionClause(_) |
-                    &Instruction::CallAddTermExpansionClause(_) |
-                    &Instruction::CallAddInSituFilenameModule(_) |
-                    &Instruction::CallClauseToEvacuable(_) |
-                    &Instruction::CallScopedClauseToEvacuable(_) |
-                    &Instruction::CallConcludeLoad(_) |
-                    &Instruction::CallDeclareModule(_) |
-                    &Instruction::CallLoadCompiledLibrary(_) |
-                    &Instruction::CallLoadContextSource(_) |
-                    &Instruction::CallLoadContextFile(_) |
-                    &Instruction::CallLoadContextDirectory(_) |
-                    &Instruction::CallLoadContextModule(_) |
-                    &Instruction::CallLoadContextStream(_) |
-                    &Instruction::CallPopLoadContext(_) |
-                    &Instruction::CallPopLoadStatePayload(_) |
-                    &Instruction::CallPushLoadContext(_) |
-                    &Instruction::CallPushLoadStatePayload(_) |
-                    &Instruction::CallUseModule(_) |
-                    &Instruction::CallBuiltInProperty(_) |
-                    &Instruction::CallMetaPredicateProperty(_) |
-                    &Instruction::CallMultifileProperty(_) |
-                    &Instruction::CallDiscontiguousProperty(_) |
-                    &Instruction::CallDynamicProperty(_) |
-                    &Instruction::CallAbolishClause(_) |
-                    &Instruction::CallAsserta(_) |
-                    &Instruction::CallAssertz(_) |
-                    &Instruction::CallRetract(_) |
-                    &Instruction::CallIsConsistentWithTermQueue(_) |
-                    &Instruction::CallFlushTermQueue(_) |
-                    &Instruction::CallRemoveModuleExports(_) |
-                    &Instruction::CallAddNonCountedBacktracking(_) |
-                    &Instruction::CallPopCount(_) => {
+                    &Instruction::CallSetDoubleQuotes |
+                    &Instruction::CallSetUnknown |
+                    &Instruction::CallSetSeed |
+                    &Instruction::CallSkipMaxList |
+                    &Instruction::CallSleep |
+                    &Instruction::CallSocketClientOpen |
+                    &Instruction::CallSocketServerOpen |
+                    &Instruction::CallSocketServerAccept |
+                    &Instruction::CallSocketServerClose |
+                    &Instruction::CallTLSAcceptClient |
+                    &Instruction::CallTLSClientConnect |
+                    &Instruction::CallSucceed |
+                    &Instruction::CallTermAttributedVariables |
+                    &Instruction::CallTermVariables |
+                    &Instruction::CallTermVariablesUnderMaxDepth |
+                    &Instruction::CallTruncateLiftedHeapTo |
+                    &Instruction::CallUnifyWithOccursCheck |
+                    &Instruction::CallUnwindEnvironments |
+                    &Instruction::CallUnwindStack |
+                    &Instruction::CallWAMInstructions |
+                    &Instruction::CallInlinedInstructions |
+                    &Instruction::CallWriteTerm |
+                    &Instruction::CallWriteTermToChars |
+                    &Instruction::CallScryerPrologVersion |
+                    &Instruction::CallCryptoRandomByte |
+                    &Instruction::CallCryptoDataHash |
+                    &Instruction::CallCryptoDataHKDF |
+                    &Instruction::CallCryptoPasswordHash |
+                    &Instruction::CallCryptoDataEncrypt |
+                    &Instruction::CallCryptoDataDecrypt |
+                    &Instruction::CallCryptoCurveScalarMult |
+                    &Instruction::CallEd25519Sign |
+                    &Instruction::CallEd25519Verify |
+                    &Instruction::CallEd25519NewKeyPair |
+                    &Instruction::CallEd25519KeyPairPublicKey |
+                    &Instruction::CallCurve25519ScalarMult |
+                    &Instruction::CallFirstNonOctet |
+                    &Instruction::CallLoadHTML |
+                    &Instruction::CallLoadXML |
+                    &Instruction::CallGetEnv |
+                    &Instruction::CallSetEnv |
+                    &Instruction::CallUnsetEnv |
+                    &Instruction::CallShell |
+                    &Instruction::CallPID |
+                    &Instruction::CallCharsBase64 |
+                    &Instruction::CallDevourWhitespace |
+                    &Instruction::CallIsSTOEnabled |
+                    &Instruction::CallSetSTOAsUnify |
+                    &Instruction::CallSetNSTOAsUnify |
+                    &Instruction::CallSetSTOWithErrorAsUnify |
+                    &Instruction::CallHomeDirectory |
+                    &Instruction::CallDebugHook |
+                    &Instruction::CallAddDiscontiguousPredicate |
+                    &Instruction::CallAddDynamicPredicate |
+                    &Instruction::CallAddMultifilePredicate |
+                    &Instruction::CallAddGoalExpansionClause |
+                    &Instruction::CallAddTermExpansionClause |
+                    &Instruction::CallAddInSituFilenameModule |
+                    &Instruction::CallClauseToEvacuable |
+                    &Instruction::CallScopedClauseToEvacuable |
+                    &Instruction::CallConcludeLoad |
+                    &Instruction::CallDeclareModule |
+                    &Instruction::CallLoadCompiledLibrary |
+                    &Instruction::CallLoadContextSource |
+                    &Instruction::CallLoadContextFile |
+                    &Instruction::CallLoadContextDirectory |
+                    &Instruction::CallLoadContextModule |
+                    &Instruction::CallLoadContextStream |
+                    &Instruction::CallPopLoadContext |
+                    &Instruction::CallPopLoadStatePayload |
+                    &Instruction::CallPushLoadContext |
+                    &Instruction::CallPushLoadStatePayload |
+                    &Instruction::CallUseModule |
+                    &Instruction::CallBuiltInProperty |
+                    &Instruction::CallMetaPredicateProperty |
+                    &Instruction::CallMultifileProperty |
+                    &Instruction::CallDiscontiguousProperty |
+                    &Instruction::CallDynamicProperty |
+                    &Instruction::CallAbolishClause |
+                    &Instruction::CallAsserta |
+                    &Instruction::CallAssertz |
+                    &Instruction::CallRetract |
+                    &Instruction::CallIsConsistentWithTermQueue |
+                    &Instruction::CallFlushTermQueue |
+                    &Instruction::CallRemoveModuleExports |
+                    &Instruction::CallAddNonCountedBacktracking |
+                    &Instruction::CallPopCount => {
                         let (name, arity) = self.to_name_and_arity();
                         functor!(atom!("call"), [atom(name), fixnum(arity)])
                     }
                     //
-                    &Instruction::ExecuteAtomChars(_) |
-                    &Instruction::ExecuteAtomCodes(_) |
-                    &Instruction::ExecuteAtomLength(_) |
-                    &Instruction::ExecuteBindFromRegister(_) |
-                    &Instruction::ExecuteContinuation(_) |
-                    &Instruction::ExecuteCharCode(_) |
-                    &Instruction::ExecuteCharType(_) |
-                    &Instruction::ExecuteCharsToNumber(_) |
-                    &Instruction::ExecuteCodesToNumber(_) |
-                    &Instruction::ExecuteCopyTermWithoutAttrVars(_) |
-                    &Instruction::ExecuteCheckCutPoint(_) |
-                    &Instruction::ExecuteClose(_) |
-                    &Instruction::ExecuteCopyToLiftedHeap(_) |
-                    &Instruction::ExecuteCreatePartialString(_) |
-                    &Instruction::ExecuteCurrentHostname(_) |
-                    &Instruction::ExecuteCurrentInput(_) |
-                    &Instruction::ExecuteCurrentOutput(_) |
-                    &Instruction::ExecuteDirectoryFiles(_) |
-                    &Instruction::ExecuteFileSize(_) |
-                    &Instruction::ExecuteFileExists(_) |
-                    &Instruction::ExecuteDirectoryExists(_) |
-                    &Instruction::ExecuteDirectorySeparator(_) |
-                    &Instruction::ExecuteMakeDirectory(_) |
-                    &Instruction::ExecuteMakeDirectoryPath(_) |
-                    &Instruction::ExecuteDeleteFile(_) |
-                    &Instruction::ExecuteRenameFile(_) |
-                    &Instruction::ExecuteWorkingDirectory(_) |
-                    &Instruction::ExecuteDeleteDirectory(_) |
-                    &Instruction::ExecutePathCanonical(_) |
-                    &Instruction::ExecuteFileTime(_) |
-                    &Instruction::ExecuteDeleteAttribute(_) |
-                    &Instruction::ExecuteDeleteHeadAttribute(_) |
+                    &Instruction::ExecuteAtomChars |
+                    &Instruction::ExecuteAtomCodes |
+                    &Instruction::ExecuteAtomLength |
+                    &Instruction::ExecuteBindFromRegister |
+                    &Instruction::ExecuteContinuation |
+                    &Instruction::ExecuteCharCode |
+                    &Instruction::ExecuteCharType |
+                    &Instruction::ExecuteCharsToNumber |
+                    &Instruction::ExecuteCodesToNumber |
+                    &Instruction::ExecuteCopyTermWithoutAttrVars |
+                    &Instruction::ExecuteCheckCutPoint |
+                    &Instruction::ExecuteClose |
+                    &Instruction::ExecuteCopyToLiftedHeap |
+                    &Instruction::ExecuteCreatePartialString |
+                    &Instruction::ExecuteCurrentHostname |
+                    &Instruction::ExecuteCurrentInput |
+                    &Instruction::ExecuteCurrentOutput |
+                    &Instruction::ExecuteDirectoryFiles |
+                    &Instruction::ExecuteFileSize |
+                    &Instruction::ExecuteFileExists |
+                    &Instruction::ExecuteDirectoryExists |
+                    &Instruction::ExecuteDirectorySeparator |
+                    &Instruction::ExecuteMakeDirectory |
+                    &Instruction::ExecuteMakeDirectoryPath |
+                    &Instruction::ExecuteDeleteFile |
+                    &Instruction::ExecuteRenameFile |
+		            &Instruction::ExecuteFileCopy |
+                    &Instruction::ExecuteWorkingDirectory |
+                    &Instruction::ExecuteDeleteDirectory |
+                    &Instruction::ExecutePathCanonical |
+                    &Instruction::ExecuteFileTime |
                     &Instruction::ExecuteDynamicModuleResolution(..) |
                     &Instruction::ExecutePrepareCallClause(..) |
-                    &Instruction::ExecuteCompileInlineOrExpandedGoal(..) |
-                    &Instruction::ExecuteIsExpandedOrInlined(_) |
-                    &Instruction::ExecuteEnqueueAttributedVar(_) |
-                    &Instruction::ExecuteFetchGlobalVar(_) |
-                    &Instruction::ExecuteFirstStream(_) |
-                    &Instruction::ExecuteFlushOutput(_) |
-                    &Instruction::ExecuteGetByte(_) |
-                    &Instruction::ExecuteGetChar(_) |
-                    &Instruction::ExecuteGetNChars(_) |
-                    &Instruction::ExecuteGetCode(_) |
-                    &Instruction::ExecuteGetSingleChar(_) |
-                    &Instruction::ExecuteResetAttrVarState(_) |
-                    &Instruction::ExecuteTruncateIfNoLiftedHeapGrowthDiff(_) |
-                    &Instruction::ExecuteTruncateIfNoLiftedHeapGrowth(_) |
-                    &Instruction::ExecuteGetAttributedVariableList(_) |
-                    &Instruction::ExecuteGetAttrVarQueueDelimiter(_) |
-                    &Instruction::ExecuteGetAttrVarQueueBeyond(_) |
-                    &Instruction::ExecuteGetBValue(_) |
-                    &Instruction::ExecuteGetContinuationChunk(_) |
-                    &Instruction::ExecuteGetNextDBRef(_) |
-                    &Instruction::ExecuteGetNextOpDBRef(_) |
-                    &Instruction::ExecuteIsPartialString(_) |
-                    &Instruction::ExecuteHalt(_) |
-                    &Instruction::ExecuteGetLiftedHeapFromOffset(_) |
-                    &Instruction::ExecuteGetLiftedHeapFromOffsetDiff(_) |
-                    &Instruction::ExecuteGetSCCCleaner(_) |
-                    &Instruction::ExecuteHeadIsDynamic(_) |
-                    &Instruction::ExecuteInstallSCCCleaner(_) |
-                    &Instruction::ExecuteInstallInferenceCounter(_) |
-                    &Instruction::ExecuteLiftedHeapLength(_) |
-                    &Instruction::ExecuteLoadLibraryAsStream(_) |
-                    &Instruction::ExecuteModuleExists(_) |
-                    &Instruction::ExecuteNextEP(_) |
-                    &Instruction::ExecuteNoSuchPredicate(_) |
-                    &Instruction::ExecuteNumberToChars(_) |
-                    &Instruction::ExecuteNumberToCodes(_) |
-                    &Instruction::ExecuteOpDeclaration(_) |
-                    &Instruction::ExecuteOpen(_) |
-                    &Instruction::ExecuteSetStreamOptions(_) |
-                    &Instruction::ExecuteNextStream(_) |
-                    &Instruction::ExecutePartialStringTail(_) |
-                    &Instruction::ExecutePeekByte(_) |
-                    &Instruction::ExecutePeekChar(_) |
-                    &Instruction::ExecutePeekCode(_) |
-                    &Instruction::ExecutePointsToContinuationResetMarker(_) |
-                    &Instruction::ExecutePutByte(_) |
-                    &Instruction::ExecutePutChar(_) |
-                    &Instruction::ExecutePutChars(_) |
-                    &Instruction::ExecutePutCode(_) |
-                    &Instruction::ExecuteReadQueryTerm(_) |
-                    &Instruction::ExecuteReadTerm(_) |
-                    &Instruction::ExecuteRedoAttrVarBinding(_) |
-                    &Instruction::ExecuteRemoveCallPolicyCheck(_) |
-                    &Instruction::ExecuteRemoveInferenceCounter(_) |
-                    &Instruction::ExecuteResetContinuationMarker(_) |
-                    &Instruction::ExecuteRestoreCutPolicy(_) |
-                    &Instruction::ExecuteSetCutPoint(_, _) |
-                    &Instruction::ExecuteSetInput(_) |
-                    &Instruction::ExecuteSetOutput(_) |
-                    &Instruction::ExecuteStoreBacktrackableGlobalVar(_) |
-                    &Instruction::ExecuteStoreGlobalVar(_) |
-                    &Instruction::ExecuteStreamProperty(_) |
-                    &Instruction::ExecuteSetStreamPosition(_) |
-                    &Instruction::ExecuteInferenceLevel(_) |
-                    &Instruction::ExecuteCleanUpBlock(_) |
-                    &Instruction::ExecuteFail(_) |
-                    &Instruction::ExecuteGetBall(_) |
-                    &Instruction::ExecuteGetCurrentBlock(_) |
-                    &Instruction::ExecuteGetCutPoint(_) |
-                    &Instruction::ExecuteGetStaggeredCutPoint(_) |
-                    &Instruction::ExecuteGetDoubleQuotes(_) |
-                    &Instruction::ExecuteInstallNewBlock(_) |
-                    &Instruction::ExecuteMaybe(_) |
-                    &Instruction::ExecuteCpuNow(_) |
-                    &Instruction::ExecuteDeterministicLengthRundown(_) |
-                    &Instruction::ExecuteHttpOpen(_) |
-                    &Instruction::ExecuteHttpListen(_) |
-                    &Instruction::ExecuteHttpAccept(_) |
-                    &Instruction::ExecuteHttpAnswer(_) |
-                    &Instruction::ExecutePredicateDefined(_) |
-                    &Instruction::ExecuteStripModule(_) |
-                    &Instruction::ExecuteCurrentTime(_) |
-                    &Instruction::ExecuteQuotedToken(_) |
-                    &Instruction::ExecuteReadTermFromChars(_) |
-                    &Instruction::ExecuteResetBlock(_) |
-                    &Instruction::ExecuteReturnFromVerifyAttr(_) |
-                    &Instruction::ExecuteSetBall(_) |
-                    &Instruction::ExecutePushBallStack(_) |
-                    &Instruction::ExecutePopBallStack(_) |
-                    &Instruction::ExecutePopFromBallStack(_) |
-                    &Instruction::ExecuteSetCutPointByDefault(_, _) |
-                    &Instruction::ExecuteSetDoubleQuotes(_) |
-                    &Instruction::ExecuteSetSeed(_) |
-                    &Instruction::ExecuteSkipMaxList(_) |
-                    &Instruction::ExecuteSleep(_) |
-                    &Instruction::ExecuteSocketClientOpen(_) |
-                    &Instruction::ExecuteSocketServerOpen(_) |
-                    &Instruction::ExecuteSocketServerAccept(_) |
-                    &Instruction::ExecuteSocketServerClose(_) |
-                    &Instruction::ExecuteTLSAcceptClient(_) |
-                    &Instruction::ExecuteTLSClientConnect(_) |
-                    &Instruction::ExecuteSucceed(_) |
-                    &Instruction::ExecuteTermAttributedVariables(_) |
-                    &Instruction::ExecuteTermVariables(_) |
-                    &Instruction::ExecuteTermVariablesUnderMaxDepth(_) |
-                    &Instruction::ExecuteTruncateLiftedHeapTo(_) |
-                    &Instruction::ExecuteUnifyWithOccursCheck(_) |
-                    &Instruction::ExecuteUnwindEnvironments(_) |
-                    &Instruction::ExecuteUnwindStack(_) |
-                    &Instruction::ExecuteWAMInstructions(_) |
-                    &Instruction::ExecuteWriteTerm(_) |
-                    &Instruction::ExecuteWriteTermToChars(_) |
-                    &Instruction::ExecuteScryerPrologVersion(_) |
-                    &Instruction::ExecuteCryptoRandomByte(_) |
-                    &Instruction::ExecuteCryptoDataHash(_) |
-                    &Instruction::ExecuteCryptoDataHKDF(_) |
-                    &Instruction::ExecuteCryptoPasswordHash(_) |
-                    &Instruction::ExecuteCryptoDataEncrypt(_) |
-                    &Instruction::ExecuteCryptoDataDecrypt(_) |
-                    &Instruction::ExecuteCryptoCurveScalarMult(_) |
-                    &Instruction::ExecuteEd25519Sign(_) |
-                    &Instruction::ExecuteEd25519Verify(_) |
-                    &Instruction::ExecuteEd25519NewKeyPair(_) |
-                    &Instruction::ExecuteEd25519KeyPairPublicKey(_) |
-                    &Instruction::ExecuteCurve25519ScalarMult(_) |
-                    &Instruction::ExecuteFirstNonOctet(_) |
-                    &Instruction::ExecuteLoadHTML(_) |
-                    &Instruction::ExecuteLoadXML(_) |
-                    &Instruction::ExecuteGetEnv(_) |
-                    &Instruction::ExecuteSetEnv(_) |
-                    &Instruction::ExecuteUnsetEnv(_) |
-                    &Instruction::ExecuteShell(_) |
-                    &Instruction::ExecutePID(_) |
-                    &Instruction::ExecuteCharsBase64(_) |
-                    &Instruction::ExecuteDevourWhitespace(_) |
-                    &Instruction::ExecuteIsSTOEnabled(_) |
-                    &Instruction::ExecuteSetSTOAsUnify(_) |
-                    &Instruction::ExecuteSetNSTOAsUnify(_) |
-                    &Instruction::ExecuteSetSTOWithErrorAsUnify(_) |
-                    &Instruction::ExecuteHomeDirectory(_) |
-                    &Instruction::ExecuteDebugHook(_) |
-                    &Instruction::ExecuteAddDiscontiguousPredicate(_) |
-                    &Instruction::ExecuteAddDynamicPredicate(_) |
-                    &Instruction::ExecuteAddMultifilePredicate(_) |
-                    &Instruction::ExecuteAddGoalExpansionClause(_) |
-                    &Instruction::ExecuteAddTermExpansionClause(_) |
-                    &Instruction::ExecuteAddInSituFilenameModule(_) |
-                    &Instruction::ExecuteClauseToEvacuable(_) |
-                    &Instruction::ExecuteScopedClauseToEvacuable(_) |
-                    &Instruction::ExecuteConcludeLoad(_) |
-                    &Instruction::ExecuteDeclareModule(_) |
-                    &Instruction::ExecuteLoadCompiledLibrary(_) |
-                    &Instruction::ExecuteLoadContextSource(_) |
-                    &Instruction::ExecuteLoadContextFile(_) |
-                    &Instruction::ExecuteLoadContextDirectory(_) |
-                    &Instruction::ExecuteLoadContextModule(_) |
-                    &Instruction::ExecuteLoadContextStream(_) |
-                    &Instruction::ExecutePopLoadContext(_) |
-                    &Instruction::ExecutePopLoadStatePayload(_) |
-                    &Instruction::ExecutePushLoadContext(_) |
-                    &Instruction::ExecutePushLoadStatePayload(_) |
-                    &Instruction::ExecuteUseModule(_) |
-                    &Instruction::ExecuteBuiltInProperty(_) |
-                    &Instruction::ExecuteMetaPredicateProperty(_) |
-                    &Instruction::ExecuteMultifileProperty(_) |
-                    &Instruction::ExecuteDiscontiguousProperty(_) |
-                    &Instruction::ExecuteDynamicProperty(_) |
-                    &Instruction::ExecuteAbolishClause(_) |
-                    &Instruction::ExecuteAsserta(_) |
-                    &Instruction::ExecuteAssertz(_) |
-                    &Instruction::ExecuteRetract(_) |
-                    &Instruction::ExecuteIsConsistentWithTermQueue(_) |
-                    &Instruction::ExecuteFlushTermQueue(_) |
-                    &Instruction::ExecuteRemoveModuleExports(_) |
-                    &Instruction::ExecuteAddNonCountedBacktracking(_) |
-                    &Instruction::ExecutePopCount(_) => {
+                    &Instruction::ExecuteCompileInlineOrExpandedGoal |
+                    &Instruction::ExecuteIsExpandedOrInlined |
+                    &Instruction::ExecuteGetClauseP |
+                    &Instruction::ExecuteInvokeClauseAtP |
+                    &Instruction::ExecuteGetFromAttributedVarList |
+                    &Instruction::ExecutePutToAttributedVarList |
+                    &Instruction::ExecuteDeleteFromAttributedVarList |
+                    &Instruction::ExecuteDeleteAllAttributesFromVar |
+                    &Instruction::ExecuteUnattributedVar |
+                    &Instruction::ExecuteGetDBRefs |
+                    &Instruction::ExecuteKeySortWithConstantVarOrdering |
+                    &Instruction::ExecuteFetchGlobalVar |
+                    &Instruction::ExecuteFirstStream |
+                    &Instruction::ExecuteFlushOutput |
+                    &Instruction::ExecuteGetByte |
+                    &Instruction::ExecuteGetChar |
+                    &Instruction::ExecuteGetNChars |
+                    &Instruction::ExecuteGetCode |
+                    &Instruction::ExecuteGetSingleChar |
+                    &Instruction::ExecuteTruncateIfNoLiftedHeapGrowthDiff |
+                    &Instruction::ExecuteTruncateIfNoLiftedHeapGrowth |
+                    &Instruction::ExecuteGetAttributedVariableList |
+                    &Instruction::ExecuteGetAttrVarQueueDelimiter |
+                    &Instruction::ExecuteGetAttrVarQueueBeyond |
+                    &Instruction::ExecuteGetBValue |
+                    &Instruction::ExecuteGetContinuationChunk |
+                    &Instruction::ExecuteGetNextOpDBRef |
+                    &Instruction::ExecuteLookupDBRef |
+                    &Instruction::ExecuteIsPartialString |
+                    &Instruction::ExecuteHalt |
+                    &Instruction::ExecuteGetLiftedHeapFromOffset |
+                    &Instruction::ExecuteGetLiftedHeapFromOffsetDiff |
+                    &Instruction::ExecuteGetSCCCleaner |
+                    &Instruction::ExecuteHeadIsDynamic |
+                    &Instruction::ExecuteInstallSCCCleaner |
+                    &Instruction::ExecuteInstallInferenceCounter |
+                    &Instruction::ExecuteLiftedHeapLength |
+                    &Instruction::ExecuteLoadLibraryAsStream |
+                    &Instruction::ExecuteModuleExists |
+                    &Instruction::ExecuteNextEP |
+                    &Instruction::ExecuteNoSuchPredicate |
+                    &Instruction::ExecuteNumberToChars |
+                    &Instruction::ExecuteNumberToCodes |
+                    &Instruction::ExecuteOpDeclaration |
+                    &Instruction::ExecuteOpen |
+                    &Instruction::ExecuteSetStreamOptions |
+                    &Instruction::ExecuteNextStream |
+                    &Instruction::ExecutePartialStringTail |
+                    &Instruction::ExecutePeekByte |
+                    &Instruction::ExecutePeekChar |
+                    &Instruction::ExecutePeekCode |
+                    &Instruction::ExecutePointsToContinuationResetMarker |
+                    &Instruction::ExecutePutByte |
+                    &Instruction::ExecutePutChar |
+                    &Instruction::ExecutePutChars |
+                    &Instruction::ExecutePutCode |
+                    &Instruction::ExecuteReadQueryTerm |
+                    &Instruction::ExecuteReadTerm |
+                    &Instruction::ExecuteRedoAttrVarBinding |
+                    &Instruction::ExecuteRemoveCallPolicyCheck |
+                    &Instruction::ExecuteRemoveInferenceCounter |
+                    &Instruction::ExecuteResetContinuationMarker |
+                    &Instruction::ExecuteRestoreCutPolicy |
+                    &Instruction::ExecuteSetCutPoint(_) |
+                    &Instruction::ExecuteSetInput |
+                    &Instruction::ExecuteSetOutput |
+                    &Instruction::ExecuteStoreBacktrackableGlobalVar |
+                    &Instruction::ExecuteStoreGlobalVar |
+                    &Instruction::ExecuteStreamProperty |
+                    &Instruction::ExecuteSetStreamPosition |
+                    &Instruction::ExecuteInferenceLevel |
+                    &Instruction::ExecuteCleanUpBlock |
+                    &Instruction::ExecuteFail |
+                    &Instruction::ExecuteGetBall |
+                    &Instruction::ExecuteGetCurrentBlock |
+                    &Instruction::ExecuteGetCurrentSCCBlock |
+                    &Instruction::ExecuteGetCutPoint |
+                    &Instruction::ExecuteGetDoubleQuotes |
+                    &Instruction::ExecuteGetUnknown |
+                    &Instruction::ExecuteInstallNewBlock |
+                    &Instruction::ExecuteMaybe |
+                    &Instruction::ExecuteCpuNow |
+                    &Instruction::ExecuteDeterministicLengthRundown |
+                    &Instruction::ExecuteHttpOpen |
+                    &Instruction::ExecuteHttpListen |
+                    &Instruction::ExecuteHttpAccept |
+                    &Instruction::ExecuteHttpAnswer |
+		            &Instruction::ExecuteLoadForeignLib |
+		            &Instruction::ExecuteForeignCall |
+		            &Instruction::ExecuteDefineForeignStruct |
+                    &Instruction::ExecutePredicateDefined |
+                    &Instruction::ExecuteStripModule |
+                    &Instruction::ExecuteCurrentTime |
+                    &Instruction::ExecuteQuotedToken |
+                    &Instruction::ExecuteReadFromChars |
+                    &Instruction::ExecuteReadTermFromChars |
+                    &Instruction::ExecuteResetBlock |
+                    &Instruction::ExecuteResetSCCBlock |
+                    &Instruction::ExecuteReturnFromVerifyAttr |
+                    &Instruction::ExecuteSetBall |
+                    &Instruction::ExecutePushBallStack |
+                    &Instruction::ExecutePopBallStack |
+                    &Instruction::ExecutePopFromBallStack |
+                    &Instruction::ExecuteSetCutPointByDefault(_) |
+                    &Instruction::ExecuteSetDoubleQuotes |
+                    &Instruction::ExecuteSetUnknown |
+                    &Instruction::ExecuteSetSeed |
+                    &Instruction::ExecuteSkipMaxList |
+                    &Instruction::ExecuteSleep |
+                    &Instruction::ExecuteSocketClientOpen |
+                    &Instruction::ExecuteSocketServerOpen |
+                    &Instruction::ExecuteSocketServerAccept |
+                    &Instruction::ExecuteSocketServerClose |
+                    &Instruction::ExecuteTLSAcceptClient |
+                    &Instruction::ExecuteTLSClientConnect |
+                    &Instruction::ExecuteSucceed |
+                    &Instruction::ExecuteTermAttributedVariables |
+                    &Instruction::ExecuteTermVariables |
+                    &Instruction::ExecuteTermVariablesUnderMaxDepth |
+                    &Instruction::ExecuteTruncateLiftedHeapTo |
+                    &Instruction::ExecuteUnifyWithOccursCheck |
+                    &Instruction::ExecuteUnwindEnvironments |
+                    &Instruction::ExecuteUnwindStack |
+                    &Instruction::ExecuteWAMInstructions |
+                    &Instruction::ExecuteInlinedInstructions |
+                    &Instruction::ExecuteWriteTerm |
+                    &Instruction::ExecuteWriteTermToChars |
+                    &Instruction::ExecuteScryerPrologVersion |
+                    &Instruction::ExecuteCryptoRandomByte |
+                    &Instruction::ExecuteCryptoDataHash |
+                    &Instruction::ExecuteCryptoDataHKDF |
+                    &Instruction::ExecuteCryptoPasswordHash |
+                    &Instruction::ExecuteCryptoDataEncrypt |
+                    &Instruction::ExecuteCryptoDataDecrypt |
+                    &Instruction::ExecuteCryptoCurveScalarMult |
+                    &Instruction::ExecuteEd25519Sign |
+                    &Instruction::ExecuteEd25519Verify |
+                    &Instruction::ExecuteEd25519NewKeyPair |
+                    &Instruction::ExecuteEd25519KeyPairPublicKey |
+                    &Instruction::ExecuteCurve25519ScalarMult |
+                    &Instruction::ExecuteFirstNonOctet |
+                    &Instruction::ExecuteLoadHTML |
+                    &Instruction::ExecuteLoadXML |
+                    &Instruction::ExecuteGetEnv |
+                    &Instruction::ExecuteSetEnv |
+                    &Instruction::ExecuteUnsetEnv |
+                    &Instruction::ExecuteShell |
+                    &Instruction::ExecutePID |
+                    &Instruction::ExecuteCharsBase64 |
+                    &Instruction::ExecuteDevourWhitespace |
+                    &Instruction::ExecuteIsSTOEnabled |
+                    &Instruction::ExecuteSetSTOAsUnify |
+                    &Instruction::ExecuteSetNSTOAsUnify |
+                    &Instruction::ExecuteSetSTOWithErrorAsUnify |
+                    &Instruction::ExecuteHomeDirectory |
+                    &Instruction::ExecuteDebugHook |
+                    &Instruction::ExecuteAddDiscontiguousPredicate |
+                    &Instruction::ExecuteAddDynamicPredicate |
+                    &Instruction::ExecuteAddMultifilePredicate |
+                    &Instruction::ExecuteAddGoalExpansionClause |
+                    &Instruction::ExecuteAddTermExpansionClause |
+                    &Instruction::ExecuteAddInSituFilenameModule |
+                    &Instruction::ExecuteClauseToEvacuable |
+                    &Instruction::ExecuteScopedClauseToEvacuable |
+                    &Instruction::ExecuteConcludeLoad |
+                    &Instruction::ExecuteDeclareModule |
+                    &Instruction::ExecuteLoadCompiledLibrary |
+                    &Instruction::ExecuteLoadContextSource |
+                    &Instruction::ExecuteLoadContextFile |
+                    &Instruction::ExecuteLoadContextDirectory |
+                    &Instruction::ExecuteLoadContextModule |
+                    &Instruction::ExecuteLoadContextStream |
+                    &Instruction::ExecutePopLoadContext |
+                    &Instruction::ExecutePopLoadStatePayload |
+                    &Instruction::ExecutePushLoadContext |
+                    &Instruction::ExecutePushLoadStatePayload |
+                    &Instruction::ExecuteUseModule |
+                    &Instruction::ExecuteBuiltInProperty |
+                    &Instruction::ExecuteMetaPredicateProperty |
+                    &Instruction::ExecuteMultifileProperty |
+                    &Instruction::ExecuteDiscontiguousProperty |
+                    &Instruction::ExecuteDynamicProperty |
+                    &Instruction::ExecuteAbolishClause |
+                    &Instruction::ExecuteAsserta |
+                    &Instruction::ExecuteAssertz |
+                    &Instruction::ExecuteRetract |
+                    &Instruction::ExecuteIsConsistentWithTermQueue |
+                    &Instruction::ExecuteFlushTermQueue |
+                    &Instruction::ExecuteRemoveModuleExports |
+                    &Instruction::ExecuteAddNonCountedBacktracking |
+                    &Instruction::ExecutePopCount => {
                         let (name, arity) = self.to_name_and_arity();
                         functor!(atom!("execute"), [atom(name), fixnum(arity)])
                     }
@@ -2016,11 +2116,8 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::Deallocate => {
                         functor!(atom!("deallocate"))
                     }
-                    &Instruction::JmpByCall(_, offset, ..) => {
+                    &Instruction::JmpByCall(offset) => {
                         functor!(atom!("jmp_by_call"), [fixnum(offset)])
-                    }
-                    &Instruction::JmpByExecute(_, offset, ..) => {
-                        functor!(atom!("jmp_by_execute"), [fixnum(offset)])
                     }
                     &Instruction::RevJmpBy(offset) => {
                         functor!(atom!("rev_jmp_by"), [fixnum(offset)])
@@ -2063,13 +2160,14 @@ fn generate_instruction_preface() -> TokenStream {
                             [lvl_stub, rt_stub]
                         )
                     }
-                    &Instruction::GetStructure(name, arity, r) => {
+                    &Instruction::GetStructure(lvl, name, arity, r) => {
+                        let lvl_stub = lvl.into_functor();
                         let rt_stub = reg_type_into_functor(r);
 
                         functor!(
                             atom!("get_structure"),
-                            [atom(name), fixnum(arity), str(h, 0)],
-                            [rt_stub]
+                            [str(h, 0), atom(name), fixnum(arity), str(h, 1)],
+                            [lvl_stub, rt_stub]
                         )
                     }
                     &Instruction::GetValue(r, arg) => {
@@ -2216,6 +2314,11 @@ pub fn generate_instructions_rs() -> TokenStream {
     let mut clause_type_to_instr_arms = vec![];
     let mut clause_type_name_arms = vec![];
     let mut is_inbuilt_arms = vec![];
+    let mut is_inlined_arms = vec![];
+
+    is_inbuilt_arms.push(quote! {
+        (atom!(":-"), 1 | 2) => true
+    });
 
     for (name, arity, variant) in instr_data.compare_number_variants {
         let ident = variant.ident.clone();
@@ -2267,11 +2370,17 @@ pub fn generate_instructions_rs() -> TokenStream {
             quote! {
                 ClauseType::Inlined(
                     InlinedClauseType::CompareNumber(CompareNumber::#ident(#(#placeholder_ids),*))
-                ) => Instruction::#instr_ident(#(#placeholder_ids),*, 0)
+                ) => Instruction::#instr_ident(#(*#placeholder_ids),*)
             }
         );
 
         is_inbuilt_arms.push(
+            quote! {
+                (atom!(#name), #arity) => true
+            }
+        );
+
+        is_inlined_arms.push(
             quote! {
                 (atom!(#name), #arity) => true
             }
@@ -2302,7 +2411,7 @@ pub fn generate_instructions_rs() -> TokenStream {
             quote! {
                 ClauseType::BuiltIn(
                     BuiltInClauseType::CompareTerm(CompareTerm::#ident)
-                ) => Instruction::#instr_ident(0)
+                ) => Instruction::#instr_ident
             }
         );
 
@@ -2363,13 +2472,13 @@ pub fn generate_instructions_rs() -> TokenStream {
             quote! {
                 ClauseType::BuiltIn(
                     BuiltInClauseType::#ident(#(#placeholder_ids),*)
-                ) => Instruction::#instr_ident(#(#placeholder_ids),*,0)
+                ) => Instruction::#instr_ident(#(*#placeholder_ids),*)
             }
         } else {
             quote! {
                 ClauseType::BuiltIn(
                     BuiltInClauseType::#ident
-                ) => Instruction::#instr_ident(0)
+                ) => Instruction::#instr_ident
             }
         });
 
@@ -2434,11 +2543,17 @@ pub fn generate_instructions_rs() -> TokenStream {
             quote! {
                 ClauseType::Inlined(
                     InlinedClauseType::#ident(#(#placeholder_ids),*)
-                ) => Instruction::#instr_ident(#(#placeholder_ids),*,0)
+                ) => Instruction::#instr_ident(*#(#placeholder_ids),*)
             }
         );
 
         is_inbuilt_arms.push(
+            quote! {
+                (atom!(#name), #arity) => true
+            }
+        );
+
+        is_inlined_arms.push(
             quote! {
                 (atom!(#name), #arity) => true
             }
@@ -2524,13 +2639,13 @@ pub fn generate_instructions_rs() -> TokenStream {
             quote! {
                 ClauseType::System(
                     SystemClauseType::#ident(#(#placeholder_ids),*)
-                ) => Instruction::#instr_ident(#(#placeholder_ids),*,0)
+                ) => Instruction::#instr_ident(#(*#placeholder_ids),*)
             }
         } else {
             quote! {
                 ClauseType::System(
                     SystemClauseType::#ident
-                ) => Instruction::#instr_ident(0)
+                ) => Instruction::#instr_ident
             }
         });
 
@@ -2601,13 +2716,13 @@ pub fn generate_instructions_rs() -> TokenStream {
             quote! {
                 ClauseType::System(SystemClauseType::REPL(
                     REPLCodePtr::#ident(#(#placeholder_ids),*)
-                )) => Instruction::#instr_ident(#(#placeholder_ids),*,0)
+                )) => Instruction::#instr_ident(#(*#placeholder_ids),*)
             }
         } else {
             quote! {
                 ClauseType::System(SystemClauseType::REPL(
                     REPLCodePtr::#ident
-                )) => Instruction::#instr_ident(0)
+                )) => Instruction::#instr_ident
             }
         });
 
@@ -2627,7 +2742,7 @@ pub fn generate_instructions_rs() -> TokenStream {
             });
 
             clause_type_to_instr_arms.push(quote! {
-                ClauseType::Named(arity, name, idx) => Instruction::CallNamed(arity, name, idx, 0)
+                ClauseType::Named(arity, name, idx) => Instruction::CallNamed(*arity, *name, *idx)
             });
 
             clause_type_name_arms.push(quote! {
@@ -2678,11 +2793,11 @@ pub fn generate_instructions_rs() -> TokenStream {
         clause_type_to_instr_arms.push(if !variant_fields.is_empty() {
             quote! {
                 ClauseType::#ident(#(#placeholder_ids),*) =>
-                    Instruction::#ident(#(#placeholder_ids),*,0)
+                    Instruction::#ident(#(*#placeholder_ids),*)
             }
         } else {
             quote! {
-                ClauseType::#ident => Instruction::#ident(0)
+                ClauseType::#ident => Instruction::#ident
             }
         });
 
@@ -2738,11 +2853,6 @@ pub fn generate_instructions_rs() -> TokenStream {
                         Instruction::#variant_ident(#(#placeholder_ids),*) =>
                             Instruction::#execute_ident(#(#placeholder_ids),*)
                     }
-                })
-            } else if variant_string == "JmpByCall" {
-                Some(quote! {
-                    Instruction::JmpByCall(#(#placeholder_ids),*) =>
-                        Instruction::JmpByExecute(#(#placeholder_ids),*)
                 })
             } else {
                 None
@@ -2807,52 +2917,27 @@ pub fn generate_instructions_rs() -> TokenStream {
                 let enum_arity = if let Fields::Unnamed(fields) = &variant.fields {
                     fields.unnamed.len()
                 } else {
-                    unreachable!()
+                    0
                 };
 
                 let placeholder_ids: Vec<_> = (0 .. enum_arity)
                     .map(|n| format_ident!("f_{}", n))
                     .collect();
 
-                Some(quote! {
-                    Instruction::#variant_ident(#(#placeholder_ids),*) =>
-                        Instruction::#def_variant_ident(#(#placeholder_ids),*)
+                Some(if enum_arity == 0 {
+                    quote! {
+                        Instruction::#variant_ident =>
+                            Instruction::#def_variant_ident
+                    }
+                } else {
+                    quote! {
+                        Instruction::#variant_ident(#(#placeholder_ids),*) =>
+                            Instruction::#def_variant_ident(#(#placeholder_ids),*)
+                    }
                 })
             } else {
                 None
             }
-        })
-        .collect();
-
-    let perm_vars_mut_arms: Vec<_> = instr_data.instr_variants
-        .iter()
-        .cloned()
-        .filter_map(|(_, _, _, variant)| {
-            if !is_callable(&variant.ident) && !is_jmp(&variant.ident) {
-                return None;
-            }
-
-            let variant_ident = variant.ident.clone();
-            let enum_arity = if let Fields::Unnamed(fields) = &variant.fields {
-                fields.unnamed.len()
-            } else {
-                0
-            };
-
-            let placeholder_ids: Vec<_> = (1 .. enum_arity)
-                .map(|_| format_ident!("_"))
-                .collect();
-
-            Some(if enum_arity == 1 {
-                quote! {
-                    Instruction::#variant_ident(ref mut perm_vars) => Some(perm_vars)
-                }
-            } else {
-                quote! {
-                    Instruction::#variant_ident(#(#placeholder_ids),*, ref mut perm_vars) =>
-                        Some(perm_vars)
-                }
-            })
         })
         .collect();
 
@@ -2864,10 +2949,22 @@ pub fn generate_instructions_rs() -> TokenStream {
                 return None;
             }
 
+            let enum_arity = if let Fields::Unnamed(fields) = &variant.fields {
+                fields.unnamed.len()
+            } else {
+                0
+            };
+
             let variant_ident = variant.ident.clone();
 
-            Some(quote! {
-                Instruction::#variant_ident(..) => true
+            Some(if enum_arity == 0 {
+                quote! {
+                    Instruction::#variant_ident => true
+                }
+            } else {
+                quote! {
+                    Instruction::#variant_ident(..) => true
+                }
             })
         })
         .collect();
@@ -2885,27 +2982,59 @@ pub fn generate_instructions_rs() -> TokenStream {
             };
 
             Some(if variant_string.starts_with("Execute") {
-                quote! {
-                    (#name, execute, $($args:expr),*) => {
-                        Instruction::#variant_ident($($args),*)
+                if arity == 0 {
+                    quote! {
+                        (#name, execute) => {
+                            Instruction::#variant_ident
+                        }
+                    }
+                } else {
+                    quote! {
+                        (#name, execute, $($args:expr),*) => {
+                            Instruction::#variant_ident($($args),*)
+                        }
                     }
                 }
             } else if variant_string.starts_with("Call") {
-                quote! {
-                    (#name, $($args:expr),*) => {
-                        Instruction::#variant_ident($($args),*)
+                if arity == 0 {
+                    quote! {
+                        (#name) => {
+                            Instruction::#variant_ident
+                        }
+                    }
+                } else {
+                    quote! {
+                        (#name, $($args:expr),*) => {
+                            Instruction::#variant_ident($($args),*)
+                        }
                     }
                 }
             } else if variant_string.starts_with("DefaultExecute") {
-                quote! {
-                    (#name, execute, default, $($args:expr),*) => {
-                        Instruction::#variant_ident($($args),*)
+                if arity == 0 {
+                    quote! {
+                        (#name, execute, default) => {
+                            Instruction::#variant_ident
+                        }
+                    }
+                } else {
+                    quote! {
+                        (#name, execute, default, $($args:expr),*) => {
+                            Instruction::#variant_ident($($args),*)
+                        }
                     }
                 }
             } else if variant_string.starts_with("DefaultCall") {
-                quote! {
-                    (#name, default, $($args:expr),*) => {
-                        Instruction::#variant_ident($($args),*)
+                if arity == 0 {
+                    quote! {
+                        (#name, default) => {
+                            Instruction::#variant_ident
+                        }
+                    }
+                } else {
+                    quote! {
+                        (#name, default, $($args:expr),*) => {
+                            Instruction::#variant_ident($($args),*)
+                        }
                     }
                 }
             } else {
@@ -3033,7 +3162,7 @@ pub fn generate_instructions_rs() -> TokenStream {
                 }
             }
 
-            pub fn to_instr(self) -> Instruction {
+            pub fn to_instr(&self) -> Instruction {
                 match self {
                     #(
                         #clause_type_to_instr_arms,
@@ -3055,6 +3184,15 @@ pub fn generate_instructions_rs() -> TokenStream {
                     #(
                         #clause_type_name_arms,
                     )*
+                }
+            }
+
+            pub fn is_inlined(name: Atom, arity: usize) -> bool {
+                match (name, arity) {
+                    #(
+                        #is_inlined_arms,
+                    )*
+                    _ => false,
                 }
             }
         }
@@ -3099,15 +3237,6 @@ pub fn generate_instructions_rs() -> TokenStream {
                         #is_execute_arms,
                     )*
                     _ => false,
-                }
-            }
-
-            pub fn perm_vars_mut(&mut self) -> Option<&mut usize> {
-                match self {
-                    #(
-                        #perm_vars_mut_arms,
-                    )*
-                    _ => None,
                 }
             }
 
@@ -3173,41 +3302,6 @@ fn is_jmp(id: &Ident) -> bool {
 }
 
 fn create_instr_variant(id: Ident, mut variant: Variant) -> Variant {
-    use proc_macro2::Span;
-    use syn::punctuated::Punctuated;
-    use syn::token::Paren;
-
-    // add the perm_vars usize field to the variant.
-
-    if is_callable(&id) || is_jmp(&id) {
-        let field = Field {
-            attrs: vec![],
-            vis: Visibility::Inherited,
-            ident: None,
-            colon_token: None,
-            ty: parse_quote! { usize },
-        };
-
-        match &mut variant.fields {
-            Fields::Unnamed(ref mut fields) => {
-                fields.unnamed.push(field);
-            }
-            Fields::Unit => {
-                variant.fields = Fields::Unnamed(FieldsUnnamed {
-                    paren_token: Paren(Span::call_site()),
-                    unnamed: {
-                        let mut fields_seq = Punctuated::new();
-                        fields_seq.push(field);
-                        fields_seq
-                    }
-                });
-            }
-            _ => {
-                unreachable!();
-            }
-        }
-    }
-
     variant.ident = id;
     variant.attrs.clear();
 

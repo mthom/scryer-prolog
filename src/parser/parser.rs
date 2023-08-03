@@ -1,14 +1,16 @@
+use dashu::Integer;
+use dashu::Rational;
+
 use crate::arena::*;
 use crate::atom_table::*;
 use crate::parser::ast::*;
 use crate::parser::char_reader::*;
 use crate::parser::lexer::*;
 
-use crate::parser::rug::ops::NegAssign;
 
 use std::cell::Cell;
 use std::mem;
-use std::rc::Rc;
+use std::ops::Neg;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum TokenType {
@@ -23,6 +25,16 @@ enum TokenType {
     CloseList,  // ']'
     CloseCurly, // '}'
     End,
+}
+
+/*
+Specifies whether the token sequence should be read from the lexer or
+provided via the Provided variant.
+*/
+#[derive(Debug)]
+pub enum Tokens {
+    Default,
+    Provided(Vec<Token>),
 }
 
 impl TokenType {
@@ -266,7 +278,7 @@ fn read_tokens<R: CharRead>(lexer: &mut Lexer<R>) -> Result<Vec<Token>, ParserEr
                     break;
                 }
             }
-            Err(ParserError::UnexpectedEOF) if !tokens.is_empty() => {
+            Err(e) if e.is_unexpected_eof() && !tokens.is_empty() => {
                 return Err(ParserError::IncompleteReduction(
                     lexer.line_num,
                     lexer.col_num,
@@ -303,8 +315,17 @@ impl<'a, R: CharRead> Parser<'a, R> {
         Parser {
             lexer: Lexer::new(stream, machine_st),
             tokens: vec![],
-            stack: Vec::new(),
-            terms: Vec::new(),
+            stack: vec![],
+            terms: vec![],
+        }
+    }
+
+    pub fn from_lexer(lexer: Lexer<'a, R>) -> Self {
+        Parser {
+            lexer,
+            tokens: vec![],
+            stack: vec![],
+            terms: vec![],
         }
     }
 
@@ -427,7 +448,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
                 if v.trim() == "_" {
                     self.terms.push(Term::AnonVar);
                 } else {
-                    self.terms.push(Term::Var(Cell::default(), Rc::new(v)));
+                    self.terms.push(Term::Var(Cell::default(), VarPtr::from(v)));
                 }
 
                 TokenType::Term
@@ -600,11 +621,6 @@ impl<'a, R: CharRead> Parser<'a, R> {
         }
 
         false
-    }
-
-    pub fn devour_whitespace(&mut self) -> Result<(), ParserError> {
-        self.lexer.scan_for_layout()?;
-        Ok(())
     }
 
     pub fn reset(&mut self) {
@@ -828,6 +844,10 @@ impl<'a, R: CharRead> Parser<'a, R> {
             return false;
         }
 
+        if let Some(TokenType::Open | TokenType::OpenCT) = self.stack.last().map(|token| token.tt) {
+            return false;
+        }
+
         let idx = self.stack.len() - 2;
         let td = self.stack.remove(idx);
 
@@ -861,7 +881,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
         }) = get_op_desc(name, op_dir)
         {
             if (pre > 0 && inf + post > 0) || is_negate!(spec) {
-                match self.tokens.last().ok_or(ParserError::UnexpectedEOF)? {
+                match self.tokens.last().ok_or(ParserError::unexpected_eof())? {
                     // do this when layout hasn't been inserted,
                     // ie. why we don't match on Token::Open.
                     Token::OpenCT => {
@@ -906,7 +926,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
 
     fn negate_number<N, Negator, ToLiteral>(&mut self, n: N, negator: Negator, constr: ToLiteral)
     where
-        Negator: Fn(N) -> N,
+        Negator: Fn(N, &mut Arena) -> N,
         ToLiteral: Fn(N, &mut Arena) -> Literal,
     {
         if let Some(desc) = self.stack.last().cloned() {
@@ -918,7 +938,9 @@ impl<'a, R: CharRead> Parser<'a, R> {
                         self.stack.pop();
                         self.terms.pop();
 
-                        let literal = constr(negator(n), &mut self.lexer.machine_st.arena);
+                        let arena = &mut self.lexer.machine_st.arena;
+                        let literal = constr(negator(n, arena), arena);
+
                         self.shift(Token::Literal(literal), 0, TERM);
 
                         return;
@@ -933,24 +955,31 @@ impl<'a, R: CharRead> Parser<'a, R> {
     }
 
     fn shift_token(&mut self, token: Token, op_dir: &CompositeOpDir) -> Result<(), ParserError> {
-        fn negate_rc<T: NegAssign>(mut t: TypedArenaPtr<T>) -> TypedArenaPtr<T> {
-            (&mut t).neg_assign();
-            t
+        fn negate_int_rc(t: TypedArenaPtr<Integer>, arena: &mut Arena) -> TypedArenaPtr<Integer> {
+            let i: Integer = (*t).clone();
+            let data = i.neg();
+            arena_alloc!(data, arena)
+        }
+
+        fn negate_rat_rc(t: TypedArenaPtr<Rational>, arena: &mut Arena) -> TypedArenaPtr<Rational> {
+            let r: Rational = (*t).clone();
+            let data = r.neg();
+            arena_alloc!(data, arena)
         }
 
         match token {
             Token::Literal(Literal::Fixnum(n)) => {
-                self.negate_number(n, |n| -n, |n, _| Literal::Fixnum(n))
+                self.negate_number(n, |n, _| -n, |n, _| Literal::Fixnum(n))
             }
             Token::Literal(Literal::Integer(n)) => {
-                self.negate_number(n, negate_rc, |n, _| Literal::Integer(n))
+                self.negate_number(n, negate_int_rc, |n, _| Literal::Integer(n))
             }
             Token::Literal(Literal::Rational(n)) => {
-                self.negate_number(n, negate_rc, |r, _| Literal::Rational(r))
+                self.negate_number(n, negate_rat_rc, |r, _| Literal::Rational(r))
             }
             Token::Literal(Literal::Float(n)) => self.negate_number(
                 **n.as_ptr(),
-                |n| -n,
+                |n, _| -n,
                 |n, arena| Literal::from(float_alloc!(n, arena)),
             ),
             Token::Literal(c) => {
@@ -1030,11 +1059,6 @@ impl<'a, R: CharRead> Parser<'a, R> {
     }
 
     #[inline]
-    pub fn eof(&mut self) -> Result<bool, ParserError> {
-        self.lexer.eof()
-    }
-
-    #[inline]
     pub fn add_lines_read(&mut self, lines_read: usize) {
         self.lexer.line_num += lines_read;
     }
@@ -1045,8 +1069,11 @@ impl<'a, R: CharRead> Parser<'a, R> {
     }
 
     // on success, returns the parsed term and the number of lines read.
-    pub fn read_term(&mut self, op_dir: &CompositeOpDir) -> Result<Term, ParserError> {
-        self.tokens = read_tokens(&mut self.lexer)?;
+    pub fn read_term(&mut self, op_dir: &CompositeOpDir, tokens: Tokens) -> Result<Term, ParserError> {
+        self.tokens = match tokens {
+            Tokens::Default => read_tokens(&mut self.lexer)?,
+            Tokens::Provided(tokens) => tokens,
+        };
 
         while let Some(token) = self.tokens.pop() {
             self.shift_token(token, op_dir)?;

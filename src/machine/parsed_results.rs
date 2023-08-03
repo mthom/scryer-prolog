@@ -1,6 +1,6 @@
 use crate::atom_table::*;
 use ordered_float::OrderedFloat;
-use rug::*;
+use dashu::*;
 use std::collections::BTreeMap;
 use regex::Regex;
 use std::collections::HashMap;

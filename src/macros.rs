@@ -15,7 +15,7 @@ macro_rules! char_as_cell {
 
 macro_rules! fixnum_as_cell {
     ($n: expr) => {
-        HeapCellValue::from_bytes($n.into_bytes()) //HeapCellValueTag::Fixnum, $n.get_num() as u64)
+        HeapCellValue::from_bytes($n.into_bytes())
     };
 }
 
@@ -378,6 +378,21 @@ macro_rules! read_heap_cell_pat_body {
         #[allow(unused_braces)]
         $code
     });
+    ($cell:ident, CutPoint, $value:ident, $code:expr) => ({
+        let $value = Fixnum::from_bytes($cell.into_bytes());
+        #[allow(unused_braces)]
+        $code
+    });
+    ($cell:ident, Fixnum | CutPoint, $value:ident, $code:expr) => ({
+        let $value = Fixnum::from_bytes($cell.into_bytes());
+        #[allow(unused_braces)]
+        $code
+    });
+    ($cell:ident, CutPoint | Fixnum, $value:ident, $code:expr) => ({
+        let $value = Fixnum::from_bytes($cell.into_bytes());
+        #[allow(unused_braces)]
+        $code
+    });
     ($cell:ident, Char, $value:ident, $code:expr) => ({
         let $value = unsafe { char::from_u32_unchecked($cell.get_value() as u32) };
         #[allow(unused_braces)]
@@ -540,23 +555,7 @@ macro_rules! functor_term {
 macro_rules! compare_number_instr {
     ($cmp: expr, $at_1: expr, $at_2: expr) => {{
         $cmp.set_terms($at_1, $at_2);
-        call_clause!(ClauseType::Inlined(InlinedClauseType::CompareNumber($cmp)), 0)
-    }};
-}
-
-macro_rules! call_clause {
-    ($clause_type:expr, $pvs:expr) => {{
-        let mut instr = $clause_type.to_instr();
-        instr.perm_vars_mut().map(|pvs| *pvs = $pvs);
-        instr
-    }};
-}
-
-macro_rules! call_clause_by_default {
-    ($clause_type:expr, $pvs:expr) => {{
-        let mut instr = $clause_type.to_instr().to_default();
-        instr.perm_vars_mut().map(|pvs| *pvs = $pvs);
-        instr
+        ClauseType::Inlined(InlinedClauseType::CompareNumber($cmp)).to_instr()
     }};
 }
 
@@ -590,6 +589,7 @@ macro_rules! index_store {
             extensible_predicates: ExtensiblePredicates::with_hasher(FxBuildHasher::default()),
             local_extensible_predicates: LocalExtensiblePredicates::with_hasher(FxBuildHasher::default()),
             global_variables: GlobalVarDir::with_hasher(FxBuildHasher::default()),
+            goal_expansion_indices: GoalExpansionIndices::with_hasher(FxBuildHasher::default()),
             meta_predicates: MetaPredicateDir::with_hasher(FxBuildHasher::default()),
             modules: $modules,
             op_dir: $op_dir,
@@ -625,6 +625,12 @@ macro_rules! compare_term_test {
         $machine_st.pdl.push($e2);
         $machine_st.pdl.push($e1);
 
-        $machine_st.compare_term_test()
+        $machine_st.compare_term_test(VarComparison::Distinct)
+    }};
+    ($machine_st:expr, $e1:expr, $e2:expr, $var_comparison:expr) => {{
+        $machine_st.pdl.push($e2);
+        $machine_st.pdl.push($e1);
+
+        $machine_st.compare_term_test($var_comparison)
     }};
 }

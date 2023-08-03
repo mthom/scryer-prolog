@@ -43,6 +43,7 @@
 	  ]).
 
 :- use_module(library(atts)).
+:- use_module(library(dcgs)).
 :- use_module(library(lists)).
 :- use_module(library(iso_ext)).
 :- use_module(library(terms)).
@@ -52,6 +53,9 @@
 :- attribute trie_table_link/1.
 
 verify_attributes(_, _, []).
+
+attribute_goals(X) -->
+    { put_atts(X, -trie_table_link(_)) }.
 
 % This file defines a call pattern trie.
 %

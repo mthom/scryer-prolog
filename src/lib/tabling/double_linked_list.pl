@@ -49,8 +49,14 @@
 	  ]).
 
 :- use_module(library(atts)).
+:- use_module(library(dcgs)).
 
 :- attribute dll_element/1, dll_next/1, dll_prev/1.
+
+attribute_goals(X) -->
+     { put_atts(X, -dll_element(_)),
+       put_atts(X, -dll_next(_)),
+       put_atts(X, -dll_prev(_)) }.
 
 % A circular double linked list
 % =============================

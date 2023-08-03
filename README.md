@@ -6,14 +6,17 @@ source industrial strength production environment that is also a
 testbed for bleeding edge research in logic and constraint
 programming, which is itself written in a high-level language.
 
+As of July 2023, **Scryer Prolog passes all [syntactic conformity&nbsp;tests](https://www.complang.tuwien.ac.at/ulrich/iso-prolog/conformity_testing)**.
+
+The homepage of the project is: [**https://www.scryer.pl**](https://www.scryer.pl)
+
 ![Scryer Logo: Cryer](logo/scryer.png)
 
 ## Phase 1
 
 Produce an implementation of the Warren Abstract Machine in Rust, done
 according to the progression of languages in [Warren's Abstract
-Machine: A Tutorial
-Reconstruction](http://wambook.sourceforge.net/wambook.pdf).
+Machine: A Tutorial Reconstruction](https://github.com/mthom/scryer-prolog/blob/master/wambook/wambook.pdf).
 
 Phase 1 has been completed in that Scryer Prolog implements in some form
 all of the WAM book, including lists, cuts, Debray allocation, first
@@ -44,7 +47,7 @@ Extend Scryer Prolog to include the following, among other features:
   - [x] Support for `attribute_goals/2` and `project_attributes/2`
   - [x] `call_residue_vars/2`
 - [x] `if_/3` and related predicates, following the developments of the
-      paper "Indexing `dif/2`".
+      paper "[Indexing `dif/2`](https://arxiv.org/abs/1607.01590)".
 - [x] All-solutions predicates (`findall/{3,4}`, `bagof/3`, `setof/3`, `forall/2`).
 - [x] Clause creation and destruction (`asserta/1`, `assertz/1`,
       `retract/1`, `abolish/1`) with logical update semantics.
@@ -52,24 +55,24 @@ Extend Scryer Prolog to include the following, among other features:
       `bb_put/2` (non-backtrackable) and `bb_b_put/2`
       (backtrackable).
 - [x] Delimited continuations based on reset/3, shift/1 (documented in
-      "Delimited Continuations for Prolog").
+      "[Delimited Continuations for Prolog](https://biblio.ugent.be/publication/5646080/file/5646081)").
 - [x] Tabling library based on delimited continuations
-      (documented in "Tabling as a Library with Delimited Control").
+      (documented in "[Tabling as a Library with Delimited Control](https://biblio.ugent.be/publication/6880648/file/6885145.pdf)").
 - [x] A _redone_ representation of strings as difference lists of
       characters, using a packed internal representation.
 - [x] clp(B) and clp(ℤ) as builtin libraries.
 - [x] Streams and predicates for stream control.
-  - [x] A simple sockets library representing TCP connections as streams.  
+  - [x] A simple sockets library representing TCP connections as streams.
 - [x] Incremental compilation and loading process, newly written,
       primarily in Prolog.
 - [ ] Improvements to the WAM compiler and heap representation:
   - [ ] Replacing choice points pivoting on inlined semi-deterministic predicates
         (`atom`, `var`, etc) with if/else ladders. (_in progress_)
   - [ ] Inlining all built-ins and system call instructions.
-  - [ ] Greatly reducing the number of instructions used to compile disjunctives.
+  - [x] Greatly reducing the number of instructions used to compile disjunctives.
   - [ ] Storing short atoms to heap cells without writing them to the atom table.
 - [ ] A compacting garbage collector satisfying the five properties of
-      "Precise Garbage Collection in Prolog." (_in progress_)
+      "[Precise Garbage Collection in Prolog](https://www.complang.tuwien.ac.at/ulrich/papers/PDF/2008-ciclops.pdf)." (_in progress_)
 - [ ] Mode declarations.
 
 ## Phase 3
@@ -88,12 +91,12 @@ nice to have in the future. They'd make a good project for anyone wanting
 to contribute code to Scryer Prolog.
 
 1. Implement the global analysis techniques described in Peter van
-Roy's thesis, "Can Logic Programming Execute as Fast as Imperative
-Programming?"
+Roy's thesis, "[Can Logic Programming Execute as Fast as Imperative
+Programming?](https://www.info.ucl.ac.be/~pvr/Peter.thesis/Peter.thesis.html)"
 
 2. Add unum representation and arithmetic, using either an existing
 unum implementation or an ad hoc one. Unums are described in
-Gustafson's book "The End of Error."
+Gustafson's book "[The End of Error](http://www.johngustafson.net/unums.html)."
 
 3. Add concurrent tables to manage shared references to atoms and
 strings.
@@ -114,19 +117,23 @@ distribution should be uninstalled from your system before rustup is
 used.
 
 Currently the only way to install the latest version of Scryer is to
-clone directly from this git repository, which can be done as follows:
+clone directly from this git repository, and compile the system. This
+can be done as follows:
 
 ```
 $> git clone https://github.com/mthom/scryer-prolog
 $> cd scryer-prolog
-$> cargo run [--release]
+$> cargo build --release
 ```
 
-The optional `--release` flag will perform various optimizations,
-producing a faster executable.
+The `--release` flag performs various optimizations, producing a
+faster executable.
+
+After compilation, the executable `scryer-prolog` is available in the
+directory&nbsp;`target/release` and can be invoked to run the system.
 
 On Windows, Scryer Prolog is easier to build inside a [MSYS2](https://www.msys2.org/)
-environment as some crates may require native C compilation. However, 
+environment as some crates may require native C compilation. However,
 the resulting binary does not need MSYS2 to run. When executing Scryer in a shell, it is recommended to use a more advanced shell than mintty (the default MSYS2 shell). The [Windows Terminal](https://github.com/microsoft/terminal) works correctly.
 
 To build a Windows Installer, you'll need first Scryer Prolog compiled in release mode, then, with WiX Toolset installed, execute:
@@ -136,7 +143,7 @@ light.exe scryer-prolog.wixobj
 ```
 It will generate a very basic MSI file which installs the main executable and a shortcut in the Start Menu. It can be installed with a double-click. To uninstall, go to the Control Panel and uninstall as usual.
 
-Scryer Prolog must be built with **Rust 1.57 and up**.
+Scryer Prolog must be built with **Rust 1.63 and up**.
 
 ### Docker Install
 
@@ -673,10 +680,32 @@ not need additional tools and formalisms for its application, and
 further, it encourages declarative reasoning that can in principle
 also be performed automatically.
 
+## Applications
+
+Scryer Prolog's strong commitment to the Prolog ISO standard makes it
+ideally suited for use in corporations and government&nbsp;agencies
+that are subject to strict regulations pertaining to interoperability,
+standards&nbsp;compliance and warranty.
+
+Successful existing applications of Scryer Prolog include the
+[DocLog](https://github.com/aarroyoc/doclog)&nbsp;system which
+generates Scryer's own documentation and homepage, [Symbolic
+Analysis of Grants](https://www.brz.gv.at/en/BRZ-Tech-Blog/Tech-Blog-7-Symbolic-Analysis-of-Grants.html)
+by the Austrian Federal Computing Center, and parts of the
+[precautionary](https://github.com/dcnorris/precautionary/tree/main/exec/prolog)
+package for the analysis of dose-escalation trials in the
+safety-critical and highly regulated domain of oncology
+trial&nbsp;design.
+
+Scryer Prolog is also very well suited for teaching and learning
+Prolog, and for testing syntactic conformance and hence portability of
+existing Prolog&nbsp;programs.
+
 ## Support and discussions
 
 If Scryer Prolog crashes or yields unexpected errors, consider filing
 an&nbsp;[issue](https://github.com/mthom/scryer-prolog/issues).
 
 To get in touch with the Scryer Prolog community, participate in
-[discussions](https://github.com/mthom/scryer-prolog/discussions)!
+[discussions](https://github.com/mthom/scryer-prolog/discussions)
+or visit our #scryer IRC channel on [Libera](https://libera.chat)!

@@ -17,6 +17,7 @@ use fxhash::FxBuildHasher;
 
 use indexmap::IndexSet;
 use rustyline::error::ReadlineError;
+use rustyline::history::DefaultHistory;
 use rustyline::{Config, Editor};
 
 use std::collections::VecDeque;
@@ -24,19 +25,38 @@ use std::io::{Cursor, Error, ErrorKind, Read};
 
 type SubtermDeque = VecDeque<(usize, usize)>;
 
-impl MachineState {
-    pub(crate) fn devour_whitespace(
-        &mut self,
-        mut inner: Stream,
-    ) -> Result<bool, ParserError> {
-        let mut parser = Parser::new(inner, self);
+pub(crate) fn devour_whitespace<'a, R: CharRead>(parser: &mut Parser<'a, R>) -> Result<bool, ParserError> {
+    match parser.lexer.scan_for_layout() {
+        Err(e) if e.is_unexpected_eof() => {
+            Ok(true)
+        }
+        Err(e) => Err(e),
+        Ok(_) => {
+            Ok(false)
+        }
+    }
+}
 
-        parser.devour_whitespace()?;
-        inner.add_lines_read(parser.lines_read());
+pub(crate) fn error_after_read_term<R>(
+    err: ParserError,
+    prior_num_lines_read: usize,
+    parser: &Parser<R>,
+) -> CompilationError {
+    if err.is_unexpected_eof() {
+        let line_num = parser.lexer.line_num;
+        let col_num = parser.lexer.col_num;
 
-        parser.eof()
+        // rough overlap with errors 8.14.1.3 k) & l) of the ISO standard here
+        if !(line_num == prior_num_lines_read && col_num == 0) {
+            return CompilationError::from(ParserError::IncompleteReduction(line_num, col_num));
+        }
     }
 
+    CompilationError::from(err)
+}
+
+
+impl MachineState {
     pub(crate) fn read(
         &mut self,
         mut inner: Stream,
@@ -45,11 +65,12 @@ impl MachineState {
         let (term, num_lines_read) = {
             let prior_num_lines_read = inner.lines_read();
             let mut parser = Parser::new(inner, self);
+            let op_dir = CompositeOpDir::new(op_dir, None);
 
             parser.add_lines_read(prior_num_lines_read);
 
-            let term = parser.read_term(&CompositeOpDir::new(op_dir, None))
-                .map_err(CompilationError::from)?;
+            let term = parser.read_term(&op_dir, Tokens::Default)
+                .map_err(|err| error_after_read_term(err, prior_num_lines_read, &parser))?; // CompilationError::from
 
             (term, parser.lines_read() - prior_num_lines_read)
         };
@@ -60,7 +81,6 @@ impl MachineState {
 }
 
 static mut PROMPT: bool = false;
-
 const HISTORY_FILE: &'static str = ".scryer_history";
 
 pub(crate) fn set_prompt(value: bool) {
@@ -82,18 +102,21 @@ fn get_prompt() -> &'static str {
 
 #[derive(Debug)]
 pub struct ReadlineStream {
-    rl: Editor<Helper>,
-    pending_input: Cursor<String>,
+    rl: Editor<Helper, DefaultHistory>,
+    pending_input: CharReader<Cursor<String>>,
     add_history: bool,
 }
 
 impl ReadlineStream {
     #[inline]
     pub fn new(pending_input: &str, add_history: bool) -> Self {
-        let config = Config::builder().check_cursor_position(true).build();
+        let config = Config::builder()
+            .check_cursor_position(true)
+            .build();
+
         let helper = Helper::new();
 
-        let mut rl = Editor::with_config(config);
+        let mut rl = Editor::with_config(config).unwrap();
         rl.set_helper(Some(helper));
 
         if let Some(mut path) = dirs_next::home_dir() {
@@ -103,11 +126,9 @@ impl ReadlineStream {
             }
         }
 
-        // rl.bind_sequence(KeyEvent::from('\t'), Cmd::Insert(1, "\t".to_string()));
-
         ReadlineStream {
             rl,
-            pending_input: Cursor::new(pending_input.to_owned()),
+            pending_input: CharReader::new(Cursor::new(pending_input.to_owned())),
             add_history: add_history,
         }
     }
@@ -119,31 +140,37 @@ impl ReadlineStream {
 
     #[inline]
     pub fn reset(&mut self) {
-        self.pending_input.get_mut().clear();
-        self.pending_input.set_position(0);
+        self.pending_input.reset_buffer();
+
+        let pending_input = self.pending_input.get_mut();
+
+        pending_input.get_mut().clear();
+        pending_input.set_position(0);
     }
 
     fn call_readline(&mut self) -> std::io::Result<usize> {
         match self.rl.readline(get_prompt()) {
             Ok(text) => {
-                *self.pending_input.get_mut() = text;
-                self.pending_input.set_position(0);
+                self.pending_input.reset_buffer();
+
+                *self.pending_input.get_mut().get_mut() = text;
+                self.pending_input.get_mut().set_position(0);
 
                 unsafe {
                     if PROMPT {
-                        self.rl.history_mut().add(self.pending_input.get_ref());
+                        self.rl.add_history_entry(self.pending_input.get_ref().get_ref()).unwrap();
                         self.save_history();
                         PROMPT = false;
                     }
+
+                    if self.pending_input.get_ref().get_ref().chars().last() != Some('\n') {
+                        *self.pending_input.get_mut().get_mut() += "\n";
+                    }
                 }
 
-                if self.pending_input.get_ref().chars().last() != Some('\n') {
-                    *self.pending_input.get_mut() += "\n";
-                }
-
-                Ok(self.pending_input.get_ref().len())
+                Ok(self.pending_input.get_ref().get_ref().len())
             }
-            Err(ReadlineError::Eof) => Ok(0),
+            Err(ReadlineError::Eof) => Err(Error::from(ErrorKind::UnexpectedEof)),
             Err(e) => Err(Error::new(ErrorKind::InvalidInput, e)),
         }
     }
@@ -164,22 +191,19 @@ impl ReadlineStream {
         }
     }
 
+    #[inline]
     pub(crate) fn peek_byte(&mut self) -> std::io::Result<u8> {
+        let bytes = self.pending_input.refresh_buffer()?;
+        let byte = bytes.iter().next().cloned();
+
         loop {
-            match self.pending_input.get_ref().bytes().next() {
-                Some(0) => {
-                    return Ok(0);
-                }
+            match byte {
                 Some(b) => {
                     return Ok(b);
                 }
                 None => match self.call_readline() {
                     Err(e) => {
                         return Err(e);
-                    }
-                    Ok(0) => {
-                        self.pending_input.get_mut().push('\u{0}');
-                        return Ok(0);
                     }
                     _ => {
                         set_prompt(false);
@@ -203,25 +227,17 @@ impl Read for ReadlineStream {
 }
 
 impl CharRead for ReadlineStream {
+    #[inline]
     fn peek_char(&mut self) -> Option<std::io::Result<char>> {
         loop {
-            let pos = self.pending_input.position() as usize;
-
-            match self.pending_input.get_ref()[pos ..].chars().next() {
-                Some('\u{0}') => {
-                    return Some(Ok('\u{0}'));
-                }
-                Some(c) => {
+            match self.pending_input.peek_char() {
+                Some(Ok(c)) => {
                     return Some(Ok(c));
                 }
-                None => {
+                _ => {
                     match self.call_readline() {
                         Err(e) => {
                             return Some(Err(e));
-                        }
-                        Ok(0) => {
-                            self.pending_input.get_mut().push('\u{0}');
-                            return Some(Ok('\u{0}'));
                         }
                         _ => {
                             set_prompt(false);
@@ -232,21 +248,21 @@ impl CharRead for ReadlineStream {
         }
     }
 
+    #[inline]
     fn consume(&mut self, nread: usize) {
-        let offset = self.pending_input.position() as usize;
-        self.pending_input.set_position((offset + nread) as u64);
+        self.pending_input.consume(nread);
     }
 
+    #[inline]
     fn put_back_char(&mut self, c: char) {
-        let offset = self.pending_input.position() as usize;
-        self.pending_input.set_position((offset - c.len_utf8()) as u64);
+        self.pending_input.put_back_char(c);
     }
 }
 
 #[inline]
-pub(crate) fn write_term_to_heap(
-    term: &Term,
-    heap: &mut Heap,
+pub(crate) fn write_term_to_heap<'a, 'b>(
+    term: &'a Term,
+    heap: &'b mut Heap,
     atom_tbl: &mut AtomTable,
 ) -> Result<TermWriteResult, CompilationError> {
     let term_writer = TermWriter::new(heap, atom_tbl);
@@ -279,7 +295,7 @@ impl<'a, 'b> TermWriter<'a, 'b> {
     }
 
     #[inline]
-    fn modify_head_of_queue(&mut self, term: &TermRef<'a>, h: usize) {
+    fn modify_head_of_queue(&mut self, term: &TermRef, h: usize) {
         if let Some((arity, site_h)) = self.queue.pop_front() {
             self.heap[site_h] = self.term_as_addr(term, h);
 
@@ -295,7 +311,7 @@ impl<'a, 'b> TermWriter<'a, 'b> {
         self.heap.push(heap_loc_as_cell!(h));
     }
 
-    fn term_as_addr(&mut self, term: &TermRef<'a>, h: usize) -> HeapCellValue {
+    fn term_as_addr(&mut self, term: &TermRef, h: usize) -> HeapCellValue {
         match term {
             &TermRef::Cons(..) => list_loc_as_cell!(h),
             &TermRef::AnonVar(_) | &TermRef::Var(..) => heap_loc_as_cell!(h),
@@ -314,10 +330,10 @@ impl<'a, 'b> TermWriter<'a, 'b> {
         }
     }
 
-    fn write_term_to_heap(mut self, term: &'a Term) -> Result<TermWriteResult, CompilationError> {
+    fn write_term_to_heap(mut self, term: &Term) -> Result<TermWriteResult, CompilationError> {
         let heap_loc = self.heap.len();
 
-        for term in breadth_first_iter(term, true) {
+        for term in breadth_first_iter(term, RootIterationPolicy::Iterated) {
             let h = self.heap.len();
 
             match &term {
@@ -368,17 +384,19 @@ impl<'a, 'b> TermWriter<'a, 'b> {
                         self.push_stub_addr();
                     }
                 }
-                &TermRef::AnonVar(Level::Root) | &TermRef::Literal(Level::Root, ..) => {
+                &TermRef::AnonVar(Level::Root) | TermRef::Literal(Level::Root, ..) => {
                     let addr = self.term_as_addr(&term, h);
                     self.heap.push(addr);
                 }
-                &TermRef::Var(Level::Root, _, ref var) => {
+                &TermRef::Var(Level::Root, _, ref var_ptr) => {
                     let addr = self.term_as_addr(&term, h);
-                    self.var_dict.insert(var.clone(), heap_loc_as_cell!(h));
+                    self.var_dict.insert(VarKey::VarPtr(var_ptr.clone()), addr);
                     self.heap.push(addr);
                 }
                 &TermRef::AnonVar(_) => {
                     if let Some((arity, site_h)) = self.queue.pop_front() {
+                        self.var_dict.insert(VarKey::AnonVar(h), heap_loc_as_cell!(site_h));
+
                         if arity > 1 {
                             self.queue.push_front((arity - 1, site_h + 1));
                         }
@@ -405,12 +423,14 @@ impl<'a, 'b> TermWriter<'a, 'b> {
                         continue;
                     }
                 }
-                &TermRef::Var(_, _, ref var) => {
+                &TermRef::Var(.., ref var) => {
                     if let Some((arity, site_h)) = self.queue.pop_front() {
-                        if let Some(addr) = self.var_dict.get(var).cloned() {
+                        let var_key = VarKey::VarPtr(var.clone());
+
+                        if let Some(addr) = self.var_dict.get(&var_key).cloned() {
                             self.heap[site_h] = addr;
                         } else {
-                            self.var_dict.insert(var.clone(), heap_loc_as_cell!(site_h));
+                            self.var_dict.insert(var_key, heap_loc_as_cell!(site_h));
                         }
 
                         if arity > 1 {

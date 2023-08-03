@@ -5,24 +5,10 @@ use crate::atom_table::*;
 pub use crate::machine::machine_state::*;
 use crate::parser::ast::*;
 use crate::parser::char_reader::*;
-use crate::parser::rug::Integer;
+use crate::parser::dashu::Integer;
 
 use std::convert::TryFrom;
 use std::fmt;
-
-macro_rules! is_not_eof {
-    ($parser:expr, $c:expr) => {
-        match $c {
-            Ok('\u{0}') => {
-                $parser.consume('\u{0}'.len_utf8());
-                return Ok(true);
-            }
-            Ok(c) => c,
-            Err($crate::parser::ast::ParserError::UnexpectedEOF) => return Ok(true),
-            Err(e) => return Err(e),
-        }
-    };
-}
 
 macro_rules! consume_chars_with {
     ($token:expr, $e:expr) => {
@@ -35,6 +21,12 @@ macro_rules! consume_chars_with {
             }
         }
     };
+}
+
+#[derive(Debug, Default)]
+struct LayoutInfo {
+    inserted: bool,
+    more: bool,
 }
 
 #[derive(Debug, PartialEq)]
@@ -94,14 +86,14 @@ impl<'a, R: CharRead> Lexer<'a, R> {
     pub fn lookahead_char(&mut self) -> Result<char, ParserError> {
         match self.reader.peek_char() {
             Some(Ok(c)) => Ok(c),
-            _ => Err(ParserError::UnexpectedEOF)
+            _ => Err(ParserError::unexpected_eof())
         }
     }
 
     pub fn read_char(&mut self) -> Result<char, ParserError> {
         match self.reader.read_char() {
             Some(Ok(c)) => Ok(c),
-            _ => Err(ParserError::UnexpectedEOF)
+            _ => Err(ParserError::unexpected_eof())
         }
     }
 
@@ -110,7 +102,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
         self.reader.put_back_char(c);
     }
 
-    fn skip_char(&mut self, c: char) {
+    pub fn skip_char(&mut self, c: char) {
         self.reader.consume(c.len_utf8());
 
         if new_line_char!(c) {
@@ -119,18 +111,6 @@ impl<'a, R: CharRead> Lexer<'a, R> {
         } else {
             self.col_num += 1;
         }
-    }
-
-    pub fn eof(&mut self) -> Result<bool, ParserError> {
-        let mut c = is_not_eof!(self.reader, self.lookahead_char());
-
-        while layout_char!(c) {
-            self.skip_char(c);
-
-            c = is_not_eof!(self.reader, self.lookahead_char());
-        }
-
-        Ok(false)
     }
 
     fn single_line_comment(&mut self) -> Result<(), ParserError> {
@@ -168,17 +148,32 @@ impl<'a, R: CharRead> Lexer<'a, R> {
 
             let mut c = self.lookahead_char()?;
 
-            loop {
-                while !comment_2_char!(c) {
+            let mut comment_loop = || -> Result<(), ParserError> {
+                loop {
+                    while !comment_2_char!(c) {
+                        self.skip_char(c);
+                        c = self.lookahead_char()?;
+                    }
+
                     self.skip_char(c);
                     c = self.lookahead_char()?;
+
+                    if comment_1_char!(c) {
+                        break;
+                    }
                 }
 
-                self.skip_char(c);
-                c = self.lookahead_char()?;
+                Ok(())
+            };
 
-                if comment_1_char!(c) {
-                    break;
+            match comment_loop() {
+                Err(e) if e.is_unexpected_eof() => {
+                    return Err(ParserError::IncompleteReduction(self.line_num, self.col_num));
+                }
+                Err(e) => {
+                    return Err(e);
+                }
+                Ok(_) => {
                 }
             }
 
@@ -859,7 +854,13 @@ impl<'a, R: CharRead> Lexer<'a, R> {
 
                     self.get_single_quoted_char()
                         .map(|c| Token::Literal(Literal::Fixnum(Fixnum::build_with(c as i64))))
-                        .or_else(|_| {
+                        .or_else(|err| {
+                            match err {
+                                ParserError::UnexpectedChar('\'', ..) => {
+                                }
+                                err => return Err(err),
+                            }
+
                             self.return_char(c);
 
                             i64::from_str_radix(&token, 10)
@@ -908,38 +909,57 @@ impl<'a, R: CharRead> Lexer<'a, R> {
         }
     }
 
-    pub fn scan_for_layout(&mut self) -> Result<bool, ParserError> {
-        let mut layout_inserted = false;
-        let mut more_layout = true;
-
-        loop {
-            let cr = self.lookahead_char();
-
-            match cr {
-                Ok(c) if layout_char!(c) => {
-                    self.skip_char(c);
-                    layout_inserted = true;
+    fn consume_layout(
+        &mut self,
+        c: Option<char>,
+        layout_info: &mut LayoutInfo,
+    ) -> Result<(), ParserError> {
+        match c {
+            Some(c) if layout_char!(c) => {
+                self.skip_char(c);
+                layout_info.inserted = true;
+            }
+            Some(c) if end_line_comment_char!(c) => {
+                self.single_line_comment()?;
+                layout_info.inserted = true;
+            }
+            Some(c) if comment_1_char!(c) => {
+                if self.bracketed_comment()? {
+                    layout_info.inserted = true;
+                } else {
+                    layout_info.more = false;
                 }
-                Ok(c) if end_line_comment_char!(c) => {
-                    self.single_line_comment()?;
-                    layout_inserted = true;
-                }
-                Ok(c) if comment_1_char!(c) => {
-                    if self.bracketed_comment()? {
-                        layout_inserted = true;
-                    } else {
-                        more_layout = false;
-                    }
-                }
-                _ => more_layout = false,
-            };
-
-            if !more_layout {
-                break;
+            }
+            _ => {
+                layout_info.more = false;
             }
         }
 
-        Ok(layout_inserted)
+        Ok(())
+    }
+
+    pub fn scan_for_layout(&mut self) -> Result<bool, ParserError> {
+        match self.lookahead_char() {
+            Err(e) => {
+                Err(e)
+            }
+            Ok(c) => {
+                let mut layout_info = LayoutInfo { inserted: false, more: true };
+                let mut cr = Some(c);
+
+                loop {
+                    self.consume_layout(cr, &mut layout_info)?;
+
+                    if !layout_info.more {
+                        break;
+                    }
+
+                    cr = self.lookahead_char().ok();
+                }
+
+                Ok(layout_info.inserted)
+            }
+        }
     }
 
     pub fn next_token(&mut self) -> Result<Token, ParserError> {
@@ -982,7 +1002,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
 
                             return Ok(Token::End);
                         }
-                        Err(ParserError::UnexpectedEOF) => {
+                        Err(e) if e.is_unexpected_eof() => {
                             return Ok(Token::End);
                         }
                         _ => {
@@ -1034,7 +1054,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                 }
 
                 if c == '\u{0}' {
-                    return Err(ParserError::UnexpectedEOF);
+                    return Err(ParserError::unexpected_eof())
                 }
 
                 self.name_token(c)

@@ -9,6 +9,7 @@ use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
 use crate::machine::machine_state::*;
 use crate::types::*;
+use crate::http::HttpResponse;
 
 pub use modular_bitfield::prelude::*;
 
@@ -26,7 +27,6 @@ use std::ops::{Deref, DerefMut};
 use std::ptr;
 
 use native_tls::TlsStream;
-use hyper::body::{Bytes, Sender};
 
 #[derive(Debug, BitfieldSpecifier, Clone, Copy, PartialEq, Eq, Hash)]
 #[bits = 1]
@@ -101,6 +101,13 @@ impl EOFAction {
 
 #[derive(Debug)]
 pub struct ByteStream(Cursor<Vec<u8>>);
+
+impl ByteStream {
+    #[inline(always)]
+    pub fn from_string(string: String) -> Self {
+        ByteStream(Cursor::new(string.into()))
+    }
+}
 
 impl Read for ByteStream {
     #[inline]
@@ -269,28 +276,42 @@ impl Read for HttpReadStream {
 }
 
 pub struct HttpWriteStream {
-    body_writer: Sender,
+    status_code: u16,
+    headers: hyper::HeaderMap,
+    response: TypedArenaPtr<HttpResponse>,
+    buffer: Vec<u8>,
 }
 
 impl Debug for HttpWriteStream {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-	write!(f, "Http Write Stream")
+	    write!(f, "Http Write Stream")
     }
 }
 
 impl Write for HttpWriteStream {
     #[inline]
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-	let bytes = Bytes::copy_from_slice(buf);
-	let len = bytes.len();
-	match self.body_writer.try_send_data(bytes) {
-	    Ok(()) => Ok(len),
-	    Err(_) => Err(std::io::Error::from(ErrorKind::Interrupted))
-	}
+	self.buffer.extend_from_slice(buf);
+	Ok(buf.len())
     }
 
     #[inline]
     fn flush(&mut self) -> std::io::Result<()> {
+	let (ready, response, cvar) = &**self.response;
+
+	let mut ready = ready.lock().unwrap();
+	{
+	    let mut response = response.lock().unwrap();
+	
+	    let bytes = bytes::Bytes::copy_from_slice(&self.buffer);
+	    let mut response_ = hyper::Response::builder()
+	        .status(self.status_code);
+	    *response_.headers_mut().unwrap() = self.headers.clone();
+	    *response = Some(response_.body(http_body_util::Full::new(bytes)).unwrap());
+	}
+	*ready = true;
+	cvar.notify_one();
+
 	Ok(())
     }
 }
@@ -505,7 +526,7 @@ impl Stream {
             ArenaHeaderTag::NamedTcpStream => Stream::NamedTcp(TypedArenaPtr::new(ptr as *mut _)),
             ArenaHeaderTag::NamedTlsStream => Stream::NamedTls(TypedArenaPtr::new(ptr as *mut _)),
             ArenaHeaderTag::HttpReadStream => Stream::HttpRead(TypedArenaPtr::new(ptr as *mut _)),
-	    ArenaHeaderTag::HttpWriteStream => Stream::HttpWrite(TypedArenaPtr::new(ptr as *mut _)),
+	        ArenaHeaderTag::HttpWriteStream => Stream::HttpWrite(TypedArenaPtr::new(ptr as *mut _)),
             ArenaHeaderTag::ReadlineStream => Stream::Readline(TypedArenaPtr::new(ptr as *mut _)),
             ArenaHeaderTag::StaticStringStream => {
                 Stream::StaticString(TypedArenaPtr::new(ptr as *mut _))
@@ -559,7 +580,7 @@ impl Stream {
             Stream::NamedTcp(ptr) => ptr.header_ptr(),
             Stream::NamedTls(ptr) => ptr.header_ptr(),
             Stream::HttpRead(ptr) => ptr.header_ptr(),
-	    Stream::HttpWrite(ptr) => ptr.header_ptr(),
+	        Stream::HttpWrite(ptr) => ptr.header_ptr(),
             Stream::Null(_) => ptr::null(),
             Stream::Readline(ptr) => ptr.header_ptr(),
             Stream::StandardOutput(ptr) => ptr.header_ptr(),
@@ -576,7 +597,7 @@ impl Stream {
             Stream::NamedTcp(ref ptr) => &ptr.options,
             Stream::NamedTls(ref ptr) => &ptr.options,
             Stream::HttpRead(ref ptr) => &ptr.options,
-	    Stream::HttpWrite(ref ptr) => &ptr.options,
+	        Stream::HttpWrite(ref ptr) => &ptr.options,
             Stream::Null(ref options) => options,
             Stream::Readline(ref ptr) => &ptr.options,
             Stream::StandardOutput(ref ptr) => &ptr.options,
@@ -593,7 +614,7 @@ impl Stream {
             Stream::NamedTcp(ref mut ptr) => &mut ptr.options,
             Stream::NamedTls(ref mut ptr) => &mut ptr.options,
             Stream::HttpRead(ref mut ptr) => &mut ptr.options,
-            Stream::HttpWrite(ref mut ptr) => &mut ptr.options,	    
+            Stream::HttpWrite(ref mut ptr) => &mut ptr.options,
             Stream::Null(ref mut options) => options,
             Stream::Readline(ref mut ptr) => &mut ptr.options,
             Stream::StandardOutput(ref mut ptr) => &mut ptr.options,
@@ -611,7 +632,7 @@ impl Stream {
             Stream::NamedTcp(ptr) => ptr.lines_read += incr_num_lines_read,
             Stream::NamedTls(ptr) => ptr.lines_read += incr_num_lines_read,
             Stream::HttpRead(ptr) => ptr.lines_read += incr_num_lines_read,
-            Stream::HttpWrite(_) => {}	 
+            Stream::HttpWrite(_) => {}
             Stream::Null(_) => {}
             Stream::Readline(ptr) => ptr.lines_read += incr_num_lines_read,
             Stream::StandardOutput(ptr) => ptr.lines_read += incr_num_lines_read,
@@ -629,7 +650,7 @@ impl Stream {
             Stream::NamedTcp(ptr) => ptr.lines_read = value,
             Stream::NamedTls(ptr) => ptr.lines_read = value,
             Stream::HttpRead(ptr) => ptr.lines_read = value,
-            Stream::HttpWrite(_) => {}	    
+            Stream::HttpWrite(_) => {}
             Stream::Null(_) => {}
             Stream::Readline(ptr) => ptr.lines_read = value,
             Stream::StandardOutput(ptr) => ptr.lines_read = value,
@@ -647,7 +668,7 @@ impl Stream {
             Stream::NamedTcp(ptr) => ptr.lines_read,
             Stream::NamedTls(ptr) => ptr.lines_read,
             Stream::HttpRead(ptr) => ptr.lines_read,
-            Stream::HttpWrite(_) => 0,	  
+            Stream::HttpWrite(_) => 0,
             Stream::Null(_) => 0,
             Stream::Readline(ptr) => ptr.lines_read,
             Stream::StandardOutput(ptr) => ptr.lines_read,
@@ -669,7 +690,7 @@ impl CharRead for Stream {
             Stream::OutputFile(_) |
             Stream::StandardError(_) |
             Stream::StandardOutput(_) |
-	    Stream::HttpWrite(_) |
+	        Stream::HttpWrite(_) |
             Stream::Null(_) => Some(Err(std::io::Error::new(
                 ErrorKind::PermissionDenied,
                 StreamError::ReadFromOutputStream,
@@ -689,7 +710,7 @@ impl CharRead for Stream {
             Stream::OutputFile(_) |
             Stream::StandardError(_) |
             Stream::StandardOutput(_) |
-	    Stream::HttpWrite(_) |
+	        Stream::HttpWrite(_) |
             Stream::Null(_) => Some(Err(std::io::Error::new(
                 ErrorKind::PermissionDenied,
                 StreamError::ReadFromOutputStream,
@@ -709,7 +730,7 @@ impl CharRead for Stream {
             Stream::OutputFile(_) |
             Stream::StandardError(_) |
             Stream::StandardOutput(_) |
-	    Stream::HttpWrite(_) |
+	        Stream::HttpWrite(_) |
             Stream::Null(_) => {}
         }
     }
@@ -726,7 +747,7 @@ impl CharRead for Stream {
             Stream::OutputFile(_) |
             Stream::StandardError(_) |
             Stream::StandardOutput(_) |
-	    Stream::HttpWrite(_) |
+	        Stream::HttpWrite(_) |
             Stream::Null(_) => {}
         }
     }
@@ -744,13 +765,13 @@ impl Read for Stream {
             Stream::StaticString(src) => (*src).read(buf),
             Stream::Byte(cursor) => (*cursor).read(buf),
             Stream::OutputFile(_)
-            | Stream::StandardError(_)
-	    | Stream::StandardOutput(_)
-	    | Stream::HttpWrite(_)
-            | Stream::Null(_) => Err(std::io::Error::new(
-                ErrorKind::PermissionDenied,
-                StreamError::ReadFromOutputStream,
-            )),
+                | Stream::StandardError(_)
+	            | Stream::StandardOutput(_)
+	            | Stream::HttpWrite(_)
+                | Stream::Null(_) => Err(std::io::Error::new(
+                    ErrorKind::PermissionDenied,
+                    StreamError::ReadFromOutputStream,
+                )),
         };
 
         bytes_read
@@ -766,7 +787,7 @@ impl Write for Stream {
             Stream::Byte(ref mut cursor) => cursor.get_mut().write(buf),
             Stream::StandardOutput(stream) => stream.write(buf),
             Stream::StandardError(stream) => stream.write(buf),
-	    Stream::HttpWrite(ref mut stream) => stream.get_mut().write(buf),
+	        Stream::HttpWrite(ref mut stream) => stream.get_mut().write(buf),
             Stream::HttpRead(_) |
             Stream::StaticString(_) |
             Stream::Readline(_) |
@@ -786,7 +807,7 @@ impl Write for Stream {
             Stream::Byte(ref mut cursor) => cursor.stream.get_mut().flush(),
             Stream::StandardError(stream) => stream.stream.flush(),
             Stream::StandardOutput(stream) => stream.stream.flush(),
-	    Stream::HttpWrite(ref mut stream) => stream.stream.get_mut().flush(),
+	        Stream::HttpWrite(ref mut stream) => stream.stream.get_mut().flush(),
             Stream::HttpRead(_) |
             Stream::StaticString(_) |
             Stream::Readline(_) |
@@ -863,19 +884,38 @@ impl PartialEq for Stream {
 
 impl Eq for Stream {}
 
+fn cursor_position<T>(past_end_of_stream: &mut bool, cursor: &Cursor<T>, cursor_len: u64) -> AtEndOfStream {
+    let position = cursor.position();
+
+    let at_end_of_stream = match position.cmp(&cursor_len) {
+        Ordering::Equal => AtEndOfStream::At,
+        Ordering::Greater => {
+            *past_end_of_stream = true;
+            AtEndOfStream::Past
+        }
+        Ordering::Less => AtEndOfStream::Not,
+    };
+
+    at_end_of_stream
+}
+
 impl Stream {
     #[inline]
     pub(crate) fn position(&mut self) -> Option<(u64, usize)> {
         // returns lines_read, position.
         let result = match self {
+            Stream::Byte(byte_stream_layout) => {
+                Some(byte_stream_layout.stream.get_ref().0.position())
+            }
+            Stream::StaticString(string_stream_layout) => {
+                Some(string_stream_layout.stream.stream.position())
+            }
             Stream::InputFile(file_stream) => {
                 file_stream.position()
             }
-            Stream::NamedTcp(..)
-            | Stream::NamedTls(..)
-            | Stream::Readline(..)
-            | Stream::StaticString(..)
-            | Stream::Byte(..) => Some(0),
+            Stream::NamedTcp(..) | Stream::NamedTls(..) | Stream::Readline(..) => {
+                Some(0)
+            }
             _ => None,
         };
 
@@ -913,7 +953,7 @@ impl Stream {
             Stream::NamedTcp(stream) => stream.past_end_of_stream,
             Stream::NamedTls(stream) => stream.past_end_of_stream,
             Stream::HttpRead(stream) => stream.past_end_of_stream,
-            Stream::HttpWrite(stream) => stream.past_end_of_stream,	    
+            Stream::HttpWrite(stream) => stream.past_end_of_stream,
             Stream::Null(_) => false,
             Stream::Readline(stream) => stream.past_end_of_stream,
             Stream::StandardOutput(stream) => stream.past_end_of_stream,
@@ -936,7 +976,7 @@ impl Stream {
             Stream::NamedTcp(stream) => stream.past_end_of_stream = value,
             Stream::NamedTls(stream) => stream.past_end_of_stream = value,
             Stream::HttpRead(stream) => stream.past_end_of_stream = value,
-            Stream::HttpWrite(stream) => stream.past_end_of_stream = value,	    
+            Stream::HttpWrite(stream) => stream.past_end_of_stream = value,
             Stream::Null(_) => {}
             Stream::Readline(stream) => stream.past_end_of_stream = value,
             Stream::StandardOutput(stream) => stream.past_end_of_stream = value,
@@ -950,38 +990,61 @@ impl Stream {
             return AtEndOfStream::Past;
         }
 
-        if let Stream::InputFile(stream_layout) = self {
-            let position = stream_layout.position();
+        match self {
+            Stream::Byte(stream_layout) => {
+                let StreamLayout {
+                    past_end_of_stream,
+                    stream,
+                    ..
+                } = &mut **stream_layout;
 
-            let StreamLayout {
-                past_end_of_stream,
-                stream,
-                ..
-            } = &mut **stream_layout;
+                let cursor_len = stream.get_ref().0.get_ref().len() as u64;
+                cursor_position(past_end_of_stream, &stream.get_ref().0, cursor_len)
+            }
+            Stream::StaticString(stream_layout) => {
+                let StreamLayout {
+                    past_end_of_stream,
+                    stream,
+                    ..
+                } = &mut **stream_layout;
 
-            match stream.get_ref().file.metadata() {
-                Ok(metadata) => {
-                    if let Some(position) = position {
-                        return match position.cmp(&metadata.len()) {
-                            Ordering::Equal => AtEndOfStream::At,
-                            Ordering::Less => AtEndOfStream::Not,
-                            Ordering::Greater => {
-                                *past_end_of_stream = true;
-                                AtEndOfStream::Past
+                let cursor_len = stream.stream.get_ref().len() as u64;
+                cursor_position(past_end_of_stream, &stream.stream, cursor_len)
+            }
+            Stream::InputFile(stream_layout) => {
+                let position = stream_layout.position();
+
+                let StreamLayout {
+                    past_end_of_stream,
+                    stream,
+                    ..
+                } = &mut **stream_layout;
+
+                match stream.get_ref().file.metadata() {
+                    Ok(metadata) => {
+                        if let Some(position) = position {
+                            match position.cmp(&metadata.len()) {
+                                Ordering::Equal => AtEndOfStream::At,
+                                Ordering::Less => AtEndOfStream::Not,
+                                Ordering::Greater => {
+                                    *past_end_of_stream = true;
+                                    AtEndOfStream::Past
+                                }
                             }
-                        };
-                    } else {
+                        } else {
+                            *past_end_of_stream = true;
+                            AtEndOfStream::Past
+                        }
+                    }
+                    _ => {
                         *past_end_of_stream = true;
                         AtEndOfStream::Past
                     }
                 }
-                _ => {
-                    *past_end_of_stream = true;
-                    AtEndOfStream::Past
-                }
             }
-        } else {
-            AtEndOfStream::Not
+            _ => {
+                AtEndOfStream::Not
+            }
         }
     }
 
@@ -1000,10 +1063,10 @@ impl Stream {
     pub(crate) fn mode(&self) -> Atom {
         match self {
             Stream::Byte(_)
-            | Stream::Readline(_)
-            | Stream::StaticString(_)
-            | Stream::HttpRead(_)
-            | Stream::InputFile(..) => atom!("read"),
+                | Stream::Readline(_)
+                | Stream::StaticString(_)
+                | Stream::HttpRead(_)
+                | Stream::InputFile(..) => atom!("read"),
             Stream::NamedTcp(..) | Stream::NamedTls(..) => atom!("read_append"),
             Stream::OutputFile(file) if file.is_append => atom!("append"),
             Stream::OutputFile(_) | Stream::StandardError(_) | Stream::StandardOutput(_) | Stream::HttpWrite(_) => atom!("write"),
@@ -1077,12 +1140,17 @@ impl Stream {
 
     #[inline]
     pub(crate) fn from_http_sender(
-	body_writer: Sender,
+	response: TypedArenaPtr<HttpResponse>,
+	status_code: u16,
+	headers: hyper::HeaderMap,
 	arena: &mut Arena,
     ) -> Self {
 	Stream::HttpWrite(arena_alloc!(
 	    StreamLayout::new(CharReader::new(HttpWriteStream {
-		body_writer
+		response,
+		status_code,
+		headers,
+		buffer: Vec::new(),
 	    })),
 	    arena
 	))
@@ -1135,11 +1203,11 @@ impl Stream {
 	    Stream::HttpWrite(ref mut http_stream) => {
                 unsafe {
                     http_stream.set_tag(ArenaHeaderTag::Dropped);
-                    std::ptr::drop_in_place(&mut http_stream.inner_mut().body_writer as *mut _);
+                    std::ptr::drop_in_place(&mut http_stream.inner_mut().buffer as *mut _);
                 }
 
                 Ok(())
-	    }
+	        }
             Stream::InputFile(mut file_stream) => {
                 // close the stream by dropping the inner File.
                 unsafe {
@@ -1175,12 +1243,12 @@ impl Stream {
     pub(crate) fn is_input_stream(&self) -> bool {
         match self {
             Stream::NamedTcp(..)
-            | Stream::NamedTls(..)
-            | Stream::HttpRead(..)
-            | Stream::Byte(_)
-            | Stream::Readline(_)
-            | Stream::StaticString(_)
-            | Stream::InputFile(..) => true,
+                | Stream::NamedTls(..)
+                | Stream::HttpRead(..)
+                | Stream::Byte(_)
+                | Stream::Readline(_)
+                | Stream::StaticString(_)
+                | Stream::InputFile(..) => true,
             _ => false,
         }
     }
@@ -1189,12 +1257,12 @@ impl Stream {
     pub(crate) fn is_output_stream(&self) -> bool {
         match self {
             Stream::StandardError(_)
-            | Stream::StandardOutput(_)
-            | Stream::NamedTcp(..)
-	    | Stream::NamedTls(..)
-	    | Stream::HttpWrite(..)	
-            | Stream::Byte(_)
-            | Stream::OutputFile(..) => true,
+                | Stream::StandardOutput(_)
+                | Stream::NamedTcp(..)
+	            | Stream::NamedTls(..)
+	            | Stream::HttpWrite(..)
+                | Stream::Byte(_)
+                | Stream::OutputFile(..) => true,
             _ => false,
         }
     }
@@ -1242,12 +1310,9 @@ impl Stream {
                 }
             }
             Stream::InputFile(ref mut file) => {
-                let mut b = [0u8; 1];
-
-                match file.read(&mut b)? {
-                    1 => {
-                        file.stream.get_mut().file.seek(SeekFrom::Current(-1))?;
-                        Ok(b[0])
+                match file.peek_byte() {
+                    Some(result) => {
+                        Ok(result?)
                     }
                     _ => Err(std::io::Error::new(
                         ErrorKind::UnexpectedEof,
@@ -1283,7 +1348,7 @@ impl MachineState {
         match eof_action {
             EOFAction::Error => {
                 stream.set_past_end_of_stream(true);
-                return Err(self.open_past_eos_error(stream, caller, arity));
+                Err(self.open_past_eos_error(stream, caller, arity))
             }
             EOFAction::EOFCode => {
                 let end_of_stream = if stream.options().stream_type() == StreamType::Binary {
@@ -1313,101 +1378,101 @@ impl MachineState {
         stream_type: HeapCellValue,
     ) -> StreamOptions {
         let alias = read_heap_cell!(self.store(MachineState::deref(self, alias)),
-            (HeapCellValueTag::Atom, (name, arity)) => {
-                debug_assert_eq!(arity, 0);
+                                    (HeapCellValueTag::Atom, (name, arity)) => {
+                                        debug_assert_eq!(arity, 0);
 
-                if name != atom!("[]") {
-                    Some(name)
-                } else {
-                    None
-                }
-            }
-            (HeapCellValueTag::Str, s) => {
-                let (name, arity) = cell_as_atom_cell!(self.heap[s])
-                    .get_name_and_arity();
+                                        if name != atom!("[]") {
+                                            Some(name)
+                                        } else {
+                                            None
+                                        }
+                                    }
+                                    (HeapCellValueTag::Str, s) => {
+                                        let (name, arity) = cell_as_atom_cell!(self.heap[s])
+                                            .get_name_and_arity();
 
-                debug_assert_eq!(arity, 0);
+                                        debug_assert_eq!(arity, 0);
 
-                if name != atom!("[]") {
-                    Some(name)
-                } else {
-                    None
-                }
-            }
-            _ => {
-                None
-            }
+                                        if name != atom!("[]") {
+                                            Some(name)
+                                        } else {
+                                            None
+                                        }
+                                    }
+                                    _ => {
+                                        None
+                                    }
         );
 
         let eof_action = read_heap_cell!(self.store(MachineState::deref(self, eof_action)),
-            (HeapCellValueTag::Atom, (name, arity)) => {
-                debug_assert_eq!(arity, 0);
+                                         (HeapCellValueTag::Atom, (name, arity)) => {
+                                             debug_assert_eq!(arity, 0);
 
-                match name  {
-                    atom!("eof_code") => EOFAction::EOFCode,
-                    atom!("error") => EOFAction::Error,
-                    atom!("reset") => EOFAction::Reset,
-                    _ => unreachable!(),
-                }
-            }
-            (HeapCellValueTag::Str, s) => {
-                let (name, arity) = cell_as_atom_cell!(self.heap[s])
-                    .get_name_and_arity();
+                                             match name  {
+                                                 atom!("eof_code") => EOFAction::EOFCode,
+                                                 atom!("error") => EOFAction::Error,
+                                                 atom!("reset") => EOFAction::Reset,
+                                                 _ => unreachable!(),
+                                             }
+                                         }
+                                         (HeapCellValueTag::Str, s) => {
+                                             let (name, arity) = cell_as_atom_cell!(self.heap[s])
+                                                 .get_name_and_arity();
 
-                debug_assert_eq!(arity, 0);
+                                             debug_assert_eq!(arity, 0);
 
-                match name  {
-                    atom!("eof_code") => EOFAction::EOFCode,
-                    atom!("error") => EOFAction::Error,
-                    atom!("reset") => EOFAction::Reset,
-                    _ => unreachable!(),
-                }
-            }
-            _ => {
-                unreachable!()
-            }
+                                             match name  {
+                                                 atom!("eof_code") => EOFAction::EOFCode,
+                                                 atom!("error") => EOFAction::Error,
+                                                 atom!("reset") => EOFAction::Reset,
+                                                 _ => unreachable!(),
+                                             }
+                                         }
+                                         _ => {
+                                             unreachable!()
+                                         }
         );
 
         let reposition = read_heap_cell!(self.store(MachineState::deref(self, reposition)),
-            (HeapCellValueTag::Atom, (name, arity)) => {
-                debug_assert_eq!(arity, 0);
-                name == atom!("true")
-            }
-            (HeapCellValueTag::Str, s) => {
-                let (name, arity) = cell_as_atom_cell!(self.heap[s])
-                    .get_name_and_arity();
+                                         (HeapCellValueTag::Atom, (name, arity)) => {
+                                             debug_assert_eq!(arity, 0);
+                                             name == atom!("true")
+                                         }
+                                         (HeapCellValueTag::Str, s) => {
+                                             let (name, arity) = cell_as_atom_cell!(self.heap[s])
+                                                 .get_name_and_arity();
 
-                debug_assert_eq!(arity, 0);
-                name == atom!("true")
-            }
-            _ => {
-                unreachable!()
-            }
+                                             debug_assert_eq!(arity, 0);
+                                             name == atom!("true")
+                                         }
+                                         _ => {
+                                             unreachable!()
+                                         }
         );
 
         let stream_type = read_heap_cell!(self.store(MachineState::deref(self, stream_type)),
-            (HeapCellValueTag::Atom, (name, arity)) => {
-                debug_assert_eq!(arity, 0);
-                match name {
-                    atom!("text") => StreamType::Text,
-                    atom!("binary") => StreamType::Binary,
-                    _ => unreachable!(),
-                }
-            }
-            (HeapCellValueTag::Str, s) => {
-                let (name, arity) = cell_as_atom_cell!(self.heap[s])
-                    .get_name_and_arity();
+                                          (HeapCellValueTag::Atom, (name, arity)) => {
+                                              debug_assert_eq!(arity, 0);
+                                              match name {
+                                                  atom!("text") => StreamType::Text,
+                                                  atom!("binary") => StreamType::Binary,
+                                                  _ => unreachable!(),
+                                              }
+                                          }
+                                          (HeapCellValueTag::Str, s) => {
+                                              let (name, arity) = cell_as_atom_cell!(self.heap[s])
+                                                  .get_name_and_arity();
 
-                debug_assert_eq!(arity, 0);
-                match name {
-                    atom!("text") => StreamType::Text,
-                    atom!("binary") => StreamType::Binary,
-                    _ => unreachable!(),
-                }
-            }
-            _ => {
-                unreachable!()
-            }
+                                              debug_assert_eq!(arity, 0);
+                                              match name {
+                                                  atom!("text") => StreamType::Text,
+                                                  atom!("binary") => StreamType::Binary,
+                                                  _ => unreachable!(),
+                                              }
+                                          }
+                                          _ => {
+                                              unreachable!()
+                                          }
         );
 
         let mut options = StreamOptions::default();
@@ -1430,60 +1495,60 @@ impl MachineState {
         let addr = self.store(MachineState::deref(self, addr));
 
         read_heap_cell!(addr,
-            (HeapCellValueTag::Atom, (name, arity)) => {
-                debug_assert_eq!(arity, 0);
+                        (HeapCellValueTag::Atom, (name, arity)) => {
+                            debug_assert_eq!(arity, 0);
 
-                return match stream_aliases.get(&name) {
-                    Some(stream) if !stream.is_null_stream() => Ok(*stream),
-                    _ => {
-                        let stub = functor_stub(caller, arity);
-                        let addr = atom_as_cell!(name);
+                            return match stream_aliases.get(&name) {
+                                Some(stream) if !stream.is_null_stream() => Ok(*stream),
+                                _ => {
+                                    let stub = functor_stub(caller, arity);
+                                    let addr = atom_as_cell!(name);
 
-                        let existence_error = self.existence_error(ExistenceError::Stream(addr));
+                                    let existence_error = self.existence_error(ExistenceError::Stream(addr));
 
-                        Err(self.error_form(existence_error, stub))
-                    }
-                };
-            }
-            (HeapCellValueTag::Str, s) => {
-                let (name, arity) = cell_as_atom_cell!(self.heap[s])
-                    .get_name_and_arity();
+                                    Err(self.error_form(existence_error, stub))
+                                }
+                            };
+                        }
+                        (HeapCellValueTag::Str, s) => {
+                            let (name, arity) = cell_as_atom_cell!(self.heap[s])
+                                .get_name_and_arity();
 
-                debug_assert_eq!(arity, 0);
+                            debug_assert_eq!(arity, 0);
 
-                return match stream_aliases.get(&name) {
-                    Some(stream) if !stream.is_null_stream() => Ok(*stream),
-                    _ => {
-                        let stub = functor_stub(caller, arity);
-                        let addr = atom_as_cell!(name);
+                            return match stream_aliases.get(&name) {
+                                Some(stream) if !stream.is_null_stream() => Ok(*stream),
+                                _ => {
+                                    let stub = functor_stub(caller, arity);
+                                    let addr = atom_as_cell!(name);
 
-                        let existence_error = self.existence_error(ExistenceError::Stream(addr));
+                                    let existence_error = self.existence_error(ExistenceError::Stream(addr));
 
-                        Err(self.error_form(existence_error, stub))
-                    }
-                };
-            }
-            (HeapCellValueTag::Cons, ptr) => {
-                match_untyped_arena_ptr!(ptr,
-                     (ArenaHeaderTag::Stream, stream) => {
-                         return if stream.is_null_stream() {
-                             Err(self.open_permission_error(stream_as_cell!(stream), caller, arity))
-                         } else {
-                             Ok(stream)
-                         };
-                     }
-                     (ArenaHeaderTag::Dropped, _value) => {
-                         let stub = functor_stub(caller, arity);
-                         let err = self.existence_error(ExistenceError::Stream(addr));
+                                    Err(self.error_form(existence_error, stub))
+                                }
+                            };
+                        }
+                        (HeapCellValueTag::Cons, ptr) => {
+                            match_untyped_arena_ptr!(ptr,
+                                (ArenaHeaderTag::Stream, stream) => {
+                                    return if stream.is_null_stream() {
+                                        Err(self.open_permission_error(stream_as_cell!(stream), caller, arity))
+                                    } else {
+                                        Ok(stream)
+                                    };
+                                }
+                                (ArenaHeaderTag::Dropped, _value) => {
+                                    let stub = functor_stub(caller, arity);
+                                    let err = self.existence_error(ExistenceError::Stream(addr));
 
-                         return Err(self.error_form(err, stub));
-                     }
-                     _ => {
-                     }
-                );
-            }
-            _ => {
-            }
+                                    return Err(self.error_form(err, stub));
+                                }
+                                _ => {
+                                }
+                            );
+                        }
+                        _ => {
+                        }
         );
 
         let stub = functor_stub(caller, arity);
@@ -1497,20 +1562,10 @@ impl MachineState {
         }
     }
 
-    pub(crate) fn open_parsing_stream(
-        &mut self,
-        mut stream: Stream,
-        stub_name: Atom,
-        stub_arity: usize,
-    ) -> Result<Stream, MachineStub> {
+    pub(crate) fn open_parsing_stream(&mut self, mut stream: Stream) -> Result<Stream, ParserError> {
         match stream.peek_char() {
             None => Ok(stream), // empty stream is handled gracefully by Lexer::eof
-            Some(Err(e)) => {
-                let err = self.session_error(SessionError::from(e));
-                let stub = functor_stub(stub_name, stub_arity);
-
-                Err(self.error_form(err, stub))
-            }
+            Some(Err(e)) => Err(ParserError::IO(e)),
             Some(Ok(c)) => {
                 if c == '\u{feff}' {
                     // skip UTF-8 BOM
@@ -1531,7 +1586,15 @@ impl MachineState {
         arity: usize,
     ) -> MachineStub {
         let stub = functor_stub(caller, arity);
-        let err  = self.permission_error(perm, err_atom, stream_as_cell!(stream));
+        let err  = self.permission_error(
+            perm,
+            err_atom,
+            if let Some(alias) = stream.options().get_alias() {
+                atom_as_cell!(alias)
+            } else {
+                stream_as_cell!(stream)
+            },
+        );
 
         self.error_form(err, stub)
     }
@@ -1699,7 +1762,7 @@ impl MachineState {
                     }
                     ErrorKind::PermissionDenied => {
                         // 8.11.5.3k)
-                        return Err(self.open_permission_error(self[temp_v!(1)], atom!("open"), 4));
+                        return Err(self.open_permission_error(self.registers[1], atom!("open"), 4));
                     }
                     _ => {
                         let stub = functor_stub(atom!("open"), 4);

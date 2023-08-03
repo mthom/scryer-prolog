@@ -20,7 +20,7 @@ use std::str;
 
 pub struct CharReader<R> {
     inner: R,
-    buf: SmallVec<[u8;4]>,
+    buf: SmallVec<[u8;32]>,
     pos: usize,
 }
 
@@ -111,17 +111,15 @@ impl<R> CharReader<R> {
 }
 
 impl<R: Read> CharReader<R> {
-    fn refresh_buffer(&mut self) -> io::Result<&[u8]> {
+    pub fn refresh_buffer(&mut self) -> io::Result<&[u8]> {
         // If we've reached the end of our internal buffer then we need to fetch
         // some more data from the underlying reader.
         // Branch using `>=` instead of the more correct `==`
         // to tell the compiler that the pos..cap slice is always valid.
         if self.pos >= self.buf.len() {
-            debug_assert!(self.pos == self.buf.len());
-
             self.buf.clear();
 
-            let mut word = [0u8;4];
+            let mut word = [0u8; std::mem::size_of::<char>()];
             let nread = self.inner.read(&mut word)?;
 
             self.buf.extend_from_slice(&word[..nread]);
@@ -129,6 +127,19 @@ impl<R: Read> CharReader<R> {
         }
 
         Ok(&self.buf[self.pos..])
+    }
+
+    pub fn peek_byte(&mut self) -> Option<io::Result<u8>> {
+        match self.refresh_buffer() {
+            Ok(_buf) => {}
+            Err(e) => return Some(Err(e)),
+        }
+
+        return if let Some(b) = self.buf.get(0).cloned() {
+            Some(Ok(b))
+        } else {
+            None
+        };
     }
 }
 
@@ -187,7 +198,7 @@ impl<R: Read> CharRead for CharReader<R> {
                     if self.pos >= self.buf.len() {
                         return None;
                     } else if self.buf.len() - self.pos >= 4 {
-                        return match str::from_utf8(&self.buf[..e.valid_up_to()]) {
+                        return match str::from_utf8(&self.buf[self.pos .. e.valid_up_to()]) {
                             Ok(s) => {
                                 let mut chars = s.chars();
                                 let c = chars.next().unwrap();
@@ -195,7 +206,7 @@ impl<R: Read> CharRead for CharReader<R> {
                                 Some(Ok(c))
                             }
                             Err(e) => {
-                                let badbytes = self.buf[..e.valid_up_to()].to_vec();
+                                let badbytes = self.buf[self.pos .. e.valid_up_to()].to_vec();
 
                                 Some(Err(io::Error::new(io::ErrorKind::InvalidData,
                                                         BadUtf8Error { bytes: badbytes })))
@@ -234,10 +245,10 @@ impl<R: Read> CharRead for CharReader<R> {
     #[inline(always)]
     fn put_back_char(&mut self, c: char) {
         let src_len = self.buf.len() - self.pos;
-        debug_assert!(src_len <= 4);
+        debug_assert!(src_len <= self.buf.capacity());
 
         let c_len = c.len_utf8();
-        let mut shifted_slice = [0u8; 4];
+        let mut shifted_slice = [0u8; 32];
 
         shifted_slice[0..src_len].copy_from_slice(&self.buf[self.pos .. self.buf.len()]);
 

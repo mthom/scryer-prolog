@@ -133,7 +133,7 @@ pub(super) fn import_module_exports<'a, LS: LoadState<'a>>(
                     meta_predicates.insert(key, meta_specs.clone());
                 }
 
-                if let Some(src_code_index) = imported_module.code_dir.get(&key) {
+                if let Some(src_code_index) = imported_module.code_dir.get(&key).cloned() {
                     let arena = &mut LS::machine_st(payload).arena;
 
                     let target_code_index = code_dir
@@ -148,6 +148,10 @@ pub(super) fn import_module_exports<'a, LS: LoadState<'a>>(
                         target_code_index,
                         src_code_index.get(),
                     );
+
+                    if src_code_index.is_dynamic_undefined() {
+                        code_dir.insert(key, src_code_index);
+                    }
                 } else {
                     return Err(SessionError::ModuleDoesNotContainExport(
                         imported_module.module_decl.name,
@@ -441,13 +445,11 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         term: Term,
         preprocessor: &mut Preprocessor,
     ) -> Result<PredicateClause, SessionError> {
-        let tl = preprocessor.try_term_to_tl(self, term, CutContext::BlocksCuts)?;
+        let tl = preprocessor.try_term_to_tl(self, term)?;
 
         Ok(match tl {
-            TopLevel::Fact(fact) => PredicateClause::Fact(fact),
-            TopLevel::Rule(rule) => PredicateClause::Rule(rule),
-            TopLevel::Query(_) => return Err(SessionError::QueryCannotBeDefinedAsFact),
-            _ => unreachable!(),
+            TopLevel::Fact(fact, var_data) => PredicateClause::Fact(fact, var_data),
+            TopLevel::Rule(rule, var_data) => PredicateClause::Rule(rule, var_data),
         })
     }
 

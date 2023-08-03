@@ -1,24 +1,31 @@
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    Written in February 2021 by Adrián Arroyo (adrian.arroyocalle@gmail.com)
    Part of Scryer-Prolog
-   This library provides reasoning about UUID (only version 4 right now).
-   There are three predicates:
-    * uuidv4/1, to generate a new UUIDv4
-    * uuidv4_string/1, to generate a new UUIDv4 in string hex representation
-    * uuid_string/2, to converte between UUID list of bytes and UUID hex representation
-
-   Examples:
-   ?- uuidv4(X).
-      X = [42,147,248,242,117,196,79,2,129,159|...].
-   ?- uuidv4_string(X).
-      X = "428499fc-76e3-4240- ...".
-   ?- uuidv4(X), uuid_string(X, S).
-      X = [173,12,244,152,139,118,64,139,137,4|...], S = "ad0cf498-8b76-408b- ...".
-   ?- uuid_string(X, "61ae692e-eaf6-4199-8dd3-9f01db70a20b").
-      X = [97,174,105,46,234,246,65,153,141,211|...].
-
    I place this code in the public domain. Use it in any way you want.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+/**
+This library provides reasoning and working with [UUID](https://en.wikipedia.org/wiki/Universally_unique_identifier)
+(only version 4 right now).
+
+There are three predicates:
+
+ * `uuidv4/1`, to generate a new UUIDv4
+ * `uuidv4_string/1`, to generate a new UUIDv4 in string hex representation
+ * `uuid_string/2`, to converte between UUID list of bytes and UUID hex representation
+
+Examples:
+
+```
+?- uuidv4(X).
+   X = [42,147,248,242,117,196,79,2,129,159|...].
+?- uuidv4_string(X).
+   X = "428499fc-76e3-4240- ...".
+?- uuidv4(X), uuid_string(X, S).
+   X = [173,12,244,152,139,118,64,139,137,4|...], S = "ad0cf498-8b76-408b- ...".
+?- uuid_string(X, "61ae692e-eaf6-4199-8dd3-9f01db70a20b").
+   X = [97,174,105,46,234,246,65,153,141,211|...].
+*/
 
 :- module(uuid, [
     uuidv4/1,
@@ -39,6 +46,10 @@ clock_seq_hi_and_res_clock_seq_low - 2
 node - 6
 UUID v4 can be generated from a set of 16 random bytes: https://www.rfc-archive.org/getrfc.php?rfc=4122#gsc.tab=0 (section 4.4)
 */
+
+%% uuidv4(-Uuid).
+%
+% Generates a new UUID v4 (random). It unifies with a list of bytes.
 uuidv4(Uuid) :-
     crypto_n_random_bytes(16, Bytes),
     Bytes = [B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16],
@@ -52,8 +63,15 @@ uuidv4(Uuid) :-
     byte_bits(NewTimeHi, NewBitsTimeHi),
     Uuid = [B1, B2, B3, B4, B5, B6, NewTimeHi, B8, NewClockSeqHi0, B10, B11, B12, B13, B14, B15, B16].
 
+%% uuidv4_string(-UuidString).
+%
+% Generates a new UUID v4 (random). It unifies with a string representation of the UUID.
+% It is equivalent of calling `uuidv4/1` followed by `uuid_string/2`.
 uuidv4_string(String) :- uuidv4(Uuid), uuid_string(Uuid, String).
 
+%% uuid_string(?UuidBytes, ?UuidString).
+%
+% Translates between the bytes representation and the string representation of the same UUID.
 uuid_string(Uuid, String) :-
     Uuid = [B1, B2, B3, B4, B5, B6, B7, B8, B9, B10, B11, B12, B13, B14, B15, B16],
     phrase(uuid_([S1, S2, S3, S4, S5]), String),

@@ -2,21 +2,20 @@ use crate::parser::ast::*;
 
 use crate::arena::*;
 use crate::atom_table::*;
-use crate::fixtures::*;
 use crate::forms::*;
+use crate::machine::ClauseType;
 use crate::machine::loader::*;
 use crate::machine::machine_state::*;
 use crate::machine::streams::Stream;
 
 use fxhash::FxBuildHasher;
-use indexmap::IndexMap;
+use indexmap::{IndexMap, IndexSet};
 use modular_bitfield::{BitfieldSpecifier, bitfield};
 use modular_bitfield::specifiers::*;
 
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::ops::{Deref, DerefMut};
-use std::rc::Rc;
 
 use crate::types::*;
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -228,8 +227,32 @@ impl CodeIndex {
     }
 }
 
-pub(crate) type HeapVarDict = IndexMap<Rc<String>, HeapCellValue, FxBuildHasher>;
-pub(crate) type AllocVarDict = IndexMap<Rc<String>, VarData, FxBuildHasher>;
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum VarKey {
+    AnonVar(usize),
+    VarPtr(VarPtr),
+}
+
+impl VarKey {
+    #[inline]
+    pub(crate) fn to_string(&self) -> String {
+        match self {
+            VarKey::AnonVar(h) => format!("_{}", h),
+            VarKey::VarPtr(var) => var.borrow().to_string(),
+        }
+    }
+
+    #[inline(always)]
+    pub(crate) fn is_anon(&self) -> bool {
+        if let VarKey::AnonVar(_) = self {
+            true
+        } else {
+            false
+        }
+    }
+}
+
+pub(crate) type HeapVarDict = IndexMap<VarKey, HeapCellValue, FxBuildHasher>;
 
 pub(crate) type GlobalVarDir = IndexMap<Atom, (Ball, Option<HeapCellValue>), FxBuildHasher>;
 
@@ -245,12 +268,15 @@ pub(crate) type LocalExtensiblePredicates =
 
 pub(crate) type CodeDir = IndexMap<PredicateKey, CodeIndex, FxBuildHasher>;
 
+pub(crate) type GoalExpansionIndices = IndexSet<PredicateKey, FxBuildHasher>;
+
 #[derive(Debug)]
 pub struct IndexStore {
     pub(super) code_dir: CodeDir,
     pub(super) extensible_predicates: ExtensiblePredicates,
     pub(super) local_extensible_predicates: LocalExtensiblePredicates,
     pub(super) global_variables: GlobalVarDir,
+    pub(super) goal_expansion_indices: GoalExpansionIndices,
     pub(super) meta_predicates: MetaPredicateDir,
     pub(super) modules: ModuleDir,
     pub(super) op_dir: OpDir,
@@ -259,6 +285,23 @@ pub struct IndexStore {
 }
 
 impl IndexStore {
+    pub(crate) fn builtin_property(&self, key: PredicateKey) -> bool {
+        let (name, arity) = key;
+
+        if !ClauseType::is_inbuilt(name, arity) {
+            self.modules.get(&(atom!("builtins")))
+                .map(|module| module.code_dir.contains_key(&(name, arity)))
+                .unwrap_or(false)
+        } else {
+            true
+        }
+    }
+
+    #[inline(always)]
+    pub(crate) fn goal_expansion_defined(&self, key: PredicateKey) -> bool {
+        self.goal_expansion_indices.contains(&key)
+    }
+
     pub(crate) fn get_predicate_skeleton_mut(
         &mut self,
         compilation_target: &CompilationTarget,
@@ -371,22 +414,11 @@ impl IndexStore {
         module: Atom,
     ) -> Option<CodeIndex> {
         if module == atom!("user") {
-            /*match ClauseType::from(name, arity) {
-                ClauseType::Named(arity, name, _) => */
             self.code_dir.get(&(name, arity)).cloned()
-            /*    _ => None,
-            }*/
         } else {
             self.modules
                 .get(&module)
-                .and_then(|module|/* |module| match ClauseType::from(name, arity) {
-                    ClauseType::Named(arity, name, _) => { */
-                        module.code_dir.get(&(name, arity)).cloned()
-                    /*
-                    }
-                    _ => None,
-                } */
-                )
+                .and_then(|module| module.code_dir.get(&(name, arity)).cloned())
         }
     }
 

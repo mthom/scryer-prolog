@@ -61,6 +61,8 @@ impl MockWAM {
 
         let mut printer = HCPrinter::new(
             &mut self.machine_st.heap,
+            &mut self.machine_st.atom_tbl,
+            &mut self.machine_st.stack,
             &self.op_dir,
             PrinterOutputter::new(),
             heap_loc_as_cell!(term_write_result.heap_loc),
@@ -69,7 +71,12 @@ impl MockWAM {
         printer.var_names = term_write_result
             .var_dict
             .into_iter()
-            .map(|(var, cell)| (cell, var))
+            .map(|(var, cell)| {
+                match var {
+                    VarKey::VarPtr(var) => (cell, var.clone()),
+                    VarKey::AnonVar(_) => (cell, VarPtr::from(var.to_string()))
+                }
+            })
             .collect();
 
         Ok(printer.print().result())

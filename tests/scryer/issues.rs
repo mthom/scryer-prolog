@@ -1,4 +1,5 @@
 use crate::helper::{load_module_test, run_top_level_test_no_args, run_top_level_test_with_args};
+use scryer_prolog::machine::Machine;
 use serial_test::serial;
 
 // issue #857
@@ -54,10 +55,10 @@ fn handle_residual_goal() {
         true.\n   \
         true.\n   \
         false.\n   \
-        X = - X.\n   \
-        dif:dif(- X,X).\n   \
+        X = -X.\n   \
+        dif:dif(-X,X).\n   \
         false.\n   \
-        Vars = [X], dif:dif(- X,X).\n   \
+        Vars = [X], dif:dif(-X,X).\n   \
         true.\n   \
         true.\n   \
         true.\n\
@@ -128,10 +129,12 @@ fn compound_goal() {
 // issue #815
 #[test]
 fn no_stutter() {
-    run_top_level_test_no_args("write(a), write(b), false.\n\
+    run_top_level_test_no_args(
+        "write(a), write(b), false.\n\
                                 halt.\n\
                                 ",
-                               "ab   false.\n")
+        "ab   false.\n",
+    )
 }
 
 /*
@@ -167,4 +170,17 @@ fn call_0() {
         "tests-pl/issue831-call0.pl",
         "   error(existence_error(procedure,call/0),call/0).\n",
     );
+}
+
+// issue #1206
+#[serial]
+#[test]
+#[should_panic(expected = "Overwriting atom table base pointer")]
+fn atomtable_is_not_concurrency_safe() {
+    // this is basically the same test as scryer_prolog::atom_table::atomtable_is_not_concurrency_safe
+    // but for this integration test scryer_prolog is compiled with cfg!(not(test))  while for the unit test it is compiled with cfg!(test)
+    // as the atom table implementation differ between cfg!(test) and cfg!(not(test)) both test serve a pourpose
+    // Note: this integration test itself is compiled with cfg!(test) independent of scryer_prolog itself
+    let _machine_a = Machine::with_test_streams();
+    let _machine_b = Machine::with_test_streams();
 }

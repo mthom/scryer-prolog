@@ -1,10 +1,13 @@
+use crate::arena::*;
 use crate::atom_table::*;
 use crate::parser::ast::*;
 
+use crate::ffi::FFIError;
 use crate::forms::*;
 use crate::machine::heap::*;
 use crate::machine::loader::CompilationTarget;
 use crate::machine::machine_state::*;
+use crate::machine::streams::*;
 use crate::machine::system_calls::BrentAlgState;
 use crate::types::*;
 
@@ -157,9 +160,29 @@ impl PermissionError for HeapCellValue {
         index_atom: Atom,
         perm: Permission,
     ) -> MachineError {
+        let cell = read_heap_cell!(self,
+            (HeapCellValueTag::Cons, ptr) => {
+                match_untyped_arena_ptr!(ptr,
+                    (ArenaHeaderTag::Stream, stream) => {
+                        if let Some(alias) = stream.options().get_alias() {
+                            atom_as_cell!(alias)
+                        } else {
+                            self
+                        }
+                    }
+                    _ => {
+                        self
+                    }
+                )
+            }
+            _ => {
+                self
+            }
+        );
+
         let stub = functor!(
             atom!("permission_error"),
-            [atom(perm.as_atom()), atom(index_atom), cell(self)]
+            [atom(perm.as_atom()), atom(index_atom), cell(cell)]
         );
 
         MachineError {
@@ -419,7 +442,7 @@ impl MachineState {
             // SessionError::CannotOverwriteImport(pred_atom) => {
                 self.permission_error(
                     Permission::Modify,
-                    atom!("private_procedure"),
+                    atom!("static_procedure"),
                     functor_stub(key.0, key.1).into_iter().collect::<MachineStub>(),
                 )
             }
@@ -513,6 +536,24 @@ impl MachineState {
             location: None,
             from: ErrorProvenance::Received,
         }
+    }
+
+    pub(super) fn ffi_error(&mut self, err: FFIError) -> MachineError {
+	let error_atom = match err {
+	    FFIError::ValueCast => atom!("value_cast"),
+	    FFIError::ValueDontFit => atom!("value_dont_fit"),
+	    FFIError::InvalidFFIType => atom!("invalid_ffi_type"),
+	    FFIError::InvalidStructName => atom!("invalid_struct_name"),
+	    FFIError::FunctionNotFound => atom!("function_not_found"),
+	    FFIError::StructNotFound => atom!("struct_not_found"),
+	};
+	let stub = functor!(atom!("ffi_error"),[atom(error_atom)]);
+
+	MachineError {
+	    stub,
+	    location: None,
+	    from: ErrorProvenance::Constructed,
+	}
     }
 
     pub(super) fn error_form(&mut self, err: MachineError, src: FunctorStub) -> MachineStub {
@@ -661,7 +702,6 @@ impl CompilationError {
                 functor!(atom!("no_such_module"), [atom(module_name)])
             }
             &CompilationError::InvalidRuleHead => {
-                
                 functor!(atom!("invalid_head_of_rule")) // TODO: type_error(callable, _).
             }
             &CompilationError::InvalidUseModuleDecl => {
@@ -780,7 +820,7 @@ pub enum CycleSearchResult {
     NotList(usize, HeapCellValue), // the list length until the second argument in the heap
     PartialList(usize, Ref), // the list length (up to max), and an offset into the heap.
     ProperList(usize),       // the list length.
-    PStrLocation(usize, usize), // list length (up to max), the heap address of the PStrOffset
+    PStrLocation(usize, usize, usize), // list length (up to max), the heap address of the PStr, the offset
     UntouchedList(usize, usize),   // list length (up to max), the address of an uniterated Addr::Lis(address).
     UntouchedCStr(Atom, usize),
 }

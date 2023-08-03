@@ -1,4 +1,4 @@
-fn main() {
+fn main() -> std::process::ExitCode {
     use std::sync::atomic::Ordering;
     use scryer_prolog::*;
     use scryer_prolog::atom_table::Atom;
@@ -14,6 +14,6 @@ fn main() {
 
     runtime.block_on(async move {
         let mut wam = machine::Machine::new(Default::default());
-        wam.run_top_level(atom!("$toplevel"), (atom!("$repl"), 1));
-    });
+        wam.run_top_level(atom!("$toplevel"), (atom!("$repl"), 1))
+    })
 }

@@ -5,6 +5,7 @@ use crate::machine::loader::*;
 use crate::machine::machine_errors::*;
 use crate::parser::ast::*;
 use crate::parser::parser::*;
+use crate::read::devour_whitespace;
 
 use crate::predicate_queue;
 
@@ -52,14 +53,14 @@ impl<'a> TermStream for BootstrappingTermStream<'a> {
     fn next(&mut self, op_dir: &CompositeOpDir) -> Result<Term, CompilationError> {
         self.parser.reset();
         self.parser
-            .read_term(op_dir)
+            .read_term(op_dir, Tokens::Default)
             .map_err(CompilationError::from)
     }
 
     #[inline]
     fn eof(&mut self) -> Result<bool, CompilationError> {
-        self.parser.devour_whitespace()?; // eliminate dangling comments before checking for EOF.
-        Ok(self.parser.eof()?)
+        devour_whitespace(&mut self.parser) // eliminate dangling comments before checking for EOF.
+            .map_err(CompilationError::from)
     }
 
     #[inline]
@@ -111,7 +112,7 @@ impl TermStream for LiveTermStream {
 
     #[inline]
     fn eof(&mut self) -> Result<bool, CompilationError> {
-        return Ok(self.term_queue.is_empty());
+        Ok(self.term_queue.is_empty())
     }
 
     #[inline]
@@ -125,15 +126,15 @@ pub struct InlineTermStream {
 
 impl TermStream for InlineTermStream {
     fn next(&mut self, _: &CompositeOpDir) -> Result<Term, CompilationError> {
-	Err(CompilationError::from(ParserError::UnexpectedEOF))
+	    Err(CompilationError::from(ParserError::unexpected_eof()))
     }
 
     fn eof(&mut self) -> Result<bool, CompilationError> {
-	Ok(true)
+	    Ok(true)
     }
 
     fn listing_src(&self) -> &ListingSource {
-	&ListingSource::User
+	    &ListingSource::User
     }
 }
 

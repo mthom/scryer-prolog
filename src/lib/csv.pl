@@ -1,54 +1,67 @@
-/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-  Predicates for parsing CSV data
+/** Predicates for parsing CSV data
 
+## Read CSV files.
 
-  Read csv files
+Only two options with default values:
 
-  Only two options with default values :
-  - token_separator(',')
-  - with_header(true)
+- `token_separator(',')`
+- `with_header(true)`
 
-  Examples
+### Examples:
 
-  * parsing a csv string:
+Parsing a CSV string:
 
-  ?- use_module(library(csv)).
-  ?- use_module(library(dcgs)).
-  ?- phrase(parse_csv(Data), "col1,col2,col3,col4\none,2,,three").
-    Data = frame(["col1","col2","col3","col4"],[["one",2,[],"three"]]).
+```
+?- use_module(library(csv)).
+?- use_module(library(dcgs)).
+?- phrase(parse_csv(Data), "col1,col2,col3,col4\none,2,,three").
+   Data = frame(["col1","col2","col3","col4"],[["one",2,[],"three"]]).
+```
 
-  * with some options:
+With some options:
 
-  ?- phrase(parse_csv(Data, [with_header(false), token_separator(';')]), "one;2;;three").
-    Data = frame([],[["one",2,[],"three"]]).
+```
+?- phrase(parse_csv(Data, [with_header(false), token_separator(';')]), "one;2;;three").
+   Data = frame([],[["one",2,[],"three"]]).
+```
 
-  * parsing a csv file:
+Parsing a CSV file:
 
-  ?- use_module(library(csv)).
-  ?- use_module(library(pio)).
-  ?- phrase_from_file(parse_csv(frame(Header, Rows)), './test.csv').
+```
+?- use_module(library(csv)).
+?- use_module(library(pio)).
+?- phrase_from_file(parse_csv(frame(Header, Rows)), './test.csv').
+```
 
+## Write CSV files
 
-  Write csv files
+Four options with default values :
 
-  Four options with default values :
-  - line_separator('\n')
-  - token_separator(',')
-  - with_header(true)
-  - null_value(empty)
+- `line_separator('\n')`
+- `token_separator(',')`
+- `with_header(true)`
+- `null_value(empty)`
 
-  Examples
+### Examples
 
-  * writing a csv file:
+Writing a CSV file:
 
-  ?- use_module(library(csv)).
-  ?- write_csv('./test.csv', frame(["col1","col2","col3","col4"], [["one",2,[],"three"]])).
+```
+?- use_module(library(csv)).
+?- write_csv('./test.csv', frame(["col1","col2","col3","col4"], [["one",2,[],"three"]])).
+```
 
-  * with some options
+With some options
 
-  ?- use_module(library(csv)).
-  ?- write_csv('./test.csv', frame(["col1","col2","col3","col4"], [["one",2,[],"three"]]), [with_header(false), line_separator('\r\n'), token_separator(';'), null_value('\\N')]).
-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+```
+?- use_module(library(csv)).
+?- write_csv('./test.csv', frame(
+      ["col1","col2","col3","col4"],
+      [["one",2,[],"three"]]
+    ),
+    [with_header(false), line_separator('\r\n'), token_separator(';'), null_value('\\N')]).
+```
+*/
 
 :- module(csv, [
   parse_csv//1,

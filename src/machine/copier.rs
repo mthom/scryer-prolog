@@ -28,7 +28,10 @@ pub(crate) fn copy_term<T: CopierTarget>(
     attr_var_policy: AttrVarPolicy,
 ) {
     let mut copy_term_state = CopyTermState::new(target, attr_var_policy);
+
     copy_term_state.copy_term_impl(addr);
+    copy_term_state.copy_attr_var_lists();
+    copy_term_state.unwind_trail();
 }
 
 #[derive(Debug)]
@@ -38,6 +41,7 @@ struct CopyTermState<T: CopierTarget> {
     old_h: usize,
     target: T,
     attr_var_policy: AttrVarPolicy,
+    attr_var_list_locs: Vec<(usize, HeapCellValue)>,
 }
 
 impl<T: CopierTarget> CopyTermState<T> {
@@ -48,6 +52,7 @@ impl<T: CopierTarget> CopyTermState<T> {
             old_h: target.threshold(),
             target,
             attr_var_policy,
+            attr_var_list_locs: vec![],
         }
     }
 
@@ -86,16 +91,12 @@ impl<T: CopierTarget> CopyTermState<T> {
             self.target.push(hcv);
         }
 
-        let cdr = self
-            .target
-            .store(self.target.deref(heap_loc_as_cell!(addr + 1)));
+        let cdr = self.target.store(self.target.deref(heap_loc_as_cell!(addr + 1)));
 
         if !cdr.is_var() {
             self.trail_list_cell(addr + 1, threshold);
         } else {
-            let car = self
-                .target
-                .store(self.target.deref(heap_loc_as_cell!(addr)));
+            let car = self.target.store(self.target.deref(heap_loc_as_cell!(addr)));
 
             if !car.is_var() {
                 self.trail_list_cell(addr, threshold);
@@ -167,6 +168,51 @@ impl<T: CopierTarget> CopyTermState<T> {
         self.trail.push((Ref::heap_cell(pstr_loc), trail_item));
     }
 
+    fn copy_attr_var_lists(&mut self) {
+        while !self.attr_var_list_locs.is_empty() {
+            let iter = mem::replace(&mut self.attr_var_list_locs, vec![]);
+
+            for (threshold, list_loc) in iter {
+                self.target[threshold] = list_loc_as_cell!(self.target.threshold());
+                self.copy_attr_var_list(list_loc);
+            }
+        }
+    }
+
+    /*
+     * Attributed variable attribute lists adhere to a particular
+     * structure which is ensured by this function and not at all by
+     * the vanilla copier.
+     */
+    fn copy_attr_var_list(&mut self, mut list_addr: HeapCellValue) {
+        while let HeapCellValueTag::Lis = list_addr.get_tag() {
+            let threshold = self.target.threshold();
+            let heap_loc = list_addr.get_value();
+            let str_loc  = self.target[heap_loc].get_value();
+
+            self.target.push(heap_loc_as_cell!(threshold+2));
+            self.target.push(heap_loc_as_cell!(threshold+1));
+
+            read_heap_cell!(self.target[str_loc],
+                (HeapCellValueTag::Atom) => {
+                    self.target.push(self.target[str_loc]);
+                }
+                (HeapCellValueTag::Str) => {
+                    self.copy_term_impl(self.target[str_loc]);
+                }
+                _ => {
+                    unreachable!();
+                }
+            );
+
+            list_addr = self.target[heap_loc + 1];
+
+            if HeapCellValueTag::Lis == list_addr.get_tag() {
+                self.target[threshold + 1] = list_loc_as_cell!(self.target.threshold());
+            }
+        }
+    }
+
     fn reinstantiate_var(&mut self, addr: HeapCellValue, frontier: usize) {
         read_heap_cell!(addr,
             (HeapCellValueTag::Var, h) => {
@@ -195,9 +241,15 @@ impl<T: CopierTarget> CopyTermState<T> {
 
                 if let AttrVarPolicy::DeepCopy = self.attr_var_policy {
                     self.target.push(attr_var_as_cell!(threshold));
+                    self.target.push(heap_loc_as_cell!(threshold + 1));
 
-                    let list_val = self.target[h + 1];
-                    self.target.push(list_val);
+                    let old_list_link = self.target[h + 1];
+                    self.trail.push((Ref::heap_cell(h + 1), old_list_link));
+                    self.target[h + 1] = heap_loc_as_cell!(threshold + 1);
+
+                    if old_list_link.get_tag() == HeapCellValueTag::Lis {
+                        self.attr_var_list_locs.push((threshold + 1, old_list_link));
+                    }
                 }
             }
             _ => {
@@ -298,8 +350,6 @@ impl<T: CopierTarget> CopyTermState<T> {
                 }
             );
         }
-
-        self.unwind_trail();
     }
 
     fn unwind_trail(&mut self) {

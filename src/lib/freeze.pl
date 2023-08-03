@@ -1,5 +1,8 @@
 :- module(freeze, [freeze/2]).
 
+/** Provides the constraint `freeze/2`.
+*/
+
 :- use_module(library(atts)).
 :- use_module(library(dcgs)).
 
@@ -19,6 +22,15 @@ verify_attributes(Var, Other, Goals) :-
         ).
 verify_attributes(_, _, []).
 
+%% freeze(Var, Goal)
+%
+%  Schedules Goal to be executed when Var is instantiated. This can
+%  be useful to observe the exact moment a variable becomes bound to a
+%  more concrete term, for example when creating animations of search
+%  processes. Higher-level constructs such as `phrase_from_file/2` can
+%  also be implemented with `freeze/2`, by scheduling a goal that
+%  reads additional data from a file as soon as it is needed.
+
 freeze(X, Goal) :-
     put_atts(Fresh, frozen(Goal)),
     Fresh = X.
@@ -26,5 +38,5 @@ freeze(X, Goal) :-
 attribute_goals(Var) -->
     { get_atts(Var, frozen(Goals)),
       put_atts(Var, -frozen(_)) },
-    [freeze(Var, Goals)].
+    [freeze:freeze(Var, Goals)].
 

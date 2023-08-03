@@ -33,8 +33,8 @@ impl AttrVarInitializer {
     }
 
     #[inline]
-    pub(super) fn reset(&mut self) {
-        self.attr_var_queue.clear();
+    pub(super) fn reset(&mut self, len: usize) {
+        self.attr_var_queue.truncate(len);
         self.bindings.clear();
     }
 }
@@ -52,6 +52,7 @@ impl MachineState {
             self.cp = INSTALL_VERIFY_ATTR_INTERRUPT;
         }
 
+        debug_assert_eq!(self.heap[h].get_tag(), HeapCellValueTag::AttrVar);
         self.attr_var_init.bindings.push((h, addr));
     }
 
@@ -63,10 +64,9 @@ impl MachineState {
             .map(|(ref h, _)| attr_var_as_cell!(*h));
 
         let var_list_addr = heap_loc_as_cell!(iter_to_heap_list(&mut self.heap, iter));
-
         let iter = self.attr_var_init.bindings.drain(0..).map(|(_, ref v)| *v);
-
         let value_list_addr = heap_loc_as_cell!(iter_to_heap_list(&mut self.heap, iter));
+
         (var_list_addr, value_list_addr)
     }
 
@@ -136,7 +136,7 @@ impl MachineState {
         let mut seen_set = IndexSet::new();
         let mut seen_vars = vec![];
 
-        let mut iter = stackful_preorder_iter(&mut self.heap, cell);
+        let mut iter = stackful_preorder_iter(&mut self.heap, &mut self.stack, cell);
 
         while let Some(value) = iter.next() {
             read_heap_cell!(value,
@@ -146,6 +146,16 @@ impl MachineState {
                     }
 
                     let value = unmark_cell_bits!(value);
+
+                    if h != iter.focus().value() as usize {
+                        let deref_value = heap_bound_store(iter.heap, heap_bound_deref(iter.heap, value));
+
+                        if deref_value.is_compound(iter.heap) {
+                            // a cyclic structure is bound to the attributed variable at h.
+                            // it mustn't be included in seen_vars.
+                            continue;
+                        }
+                    }
 
                     seen_vars.push(value);
                     seen_set.insert(h);
@@ -157,7 +167,7 @@ impl MachineState {
                     loop {
                         read_heap_cell!(iter.heap[l],
                             (HeapCellValueTag::Lis) => {
-                                iter.push_stack(l);
+                                iter.push_stack(IterStackLoc::iterable_loc(l, HeapOrStackTag::Heap));
                                 // l = elem + 1;
                                 break;
                             }

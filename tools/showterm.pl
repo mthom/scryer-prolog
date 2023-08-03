@@ -75,7 +75,7 @@ dot(Term) :-
         dot(Term, []).
 
 dot(Term, NVs) :-
-        phrase(term_labels(Term, NVs, 'c'), Ls),
+        phrase(term_labels(Term, NVs, c), Ls),
         phrase(("graph G {\n",
                 dots(Ls),
                 "}\n"), DOT),

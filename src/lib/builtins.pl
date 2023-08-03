@@ -17,21 +17,39 @@
                      peek_char/1, peek_char/2, peek_code/1,
                      peek_code/2, put_byte/1, put_byte/2, put_code/1,
                      put_code/2, put_char/1, put_char/2, read/1,
-                     read_term/2, read_term/3, repeat/0, retract/1,
-                     retractall/1, set_prolog_flag/2, set_input/1,
-                     set_stream_position/2, set_output/1, setof/3,
-                     stream_property/2, sub_atom/5, subsumes_term/2,
-                     term_variables/2, throw/1, true/0,
-                     unify_with_occurs_check/2, write/1, write/2,
-                     write_canonical/1, write_canonical/2,
+                     read/2, read_term/2, read_term/3, repeat/0,
+                     retract/1, retractall/1, set_prolog_flag/2,
+                     set_input/1, set_stream_position/2, set_output/1,
+                     setof/3, stream_property/2, sub_atom/5,
+                     subsumes_term/2, term_variables/2, throw/1,
+                     true/0, unify_with_occurs_check/2, write/1,
+                     write/2, write_canonical/1, write_canonical/2,
                      write_term/2, write_term/3, writeq/1, writeq/2]).
+
+/** Builtin predicates
+
+This library, unlike the rest, is loaded by default and it exposes the most fundamental and general
+predicates of the Prolog system under the ISO standard. Basic operators, metaprogramming, exceptions,
+internal settings and basic I/O are all here.
+*/
 
 
 % unify.
+
+%% =(?X, ?Y)
+%
+% True if X and Y can be unified. This is the most basic operation of Prolog.
+% Unification also happens when doing head matching in a rule.
 X = X.
 
+%% true.
+%
+% Always true.
 true.
 
+%% false.
+%
+% Always false.
 false :- '$fail'.
 
 
@@ -39,22 +57,59 @@ false :- '$fail'.
 % Once Scryer is bootstrapped, each is replaced with a version that
 % uses expand_goal to pass the expanded goal along to '$call'.
 
+
+%% call(Goal).
+%
+% Execute the Goal. Typically used when the Goal is not known at compile time.
 call(_).
 
+%% call(Goal, ExtraArg1).
+%
+% Execute the Goal with ExtraArg1 appended to the argument list. For example:
+%
+%     ?- call(format("~s~n"), ["Alain Colmerauer"]).
+%     Alain Colmerauer
+%        true.
+%
+% Which is equivalent to: `format("~s~n", ["Alain Colmerauer"]).`
 call(_, _).
 
+%% call(Goal, ExtraArg1, ExtraArg2).
+%
+% Execute Goal with ExtraArg1 and ExtraArg2 appended to the argument list.
 call(_, _, _).
 
+%% call(Goal, ExtraArg1, ExtraArg2, ExtraArg3).
+%
+% Execute Goal with ExtraArg1, ExtraArg2 and ExtraArg3 appended to the argument list.
 call(_, _, _, _).
 
+%% call(Goal, ExtraArg1, ExtraArg2, ExtraArg3, ExtraArg4).
+%
+% Execute Goal with ExtraArg1, ExtraArg2, ExtraArg3 and ExtraArg4 appended to the argument list.
 call(_, _, _, _, _).
 
+%% call(Goal, ExtraArg1, ExtraArg2, ExtraArg3, ExtraArg4, ExtraArg5).
+%
+% Execute Goal with ExtraArg1, ExtraArg2, ExtraArg3, ExtraArg4 and ExtraArg5 appended to the argument list.
 call(_, _, _, _, _, _).
 
+%% call(Goal, ExtraArg1, ExtraArg2, ExtraArg3, ExtraArg4, ExtraArg5, ExtraArg6).
+%
+% Execute Goal with ExtraArg1, ExtraArg2, ExtraArg3, ExtraArg4, ExtraArg5 and ExtraArg6 appended
+% to the argument list.
 call(_, _, _, _, _, _, _).
 
+%% call(Goal, ExtraArg1, ExtraArg2, ExtraArg3, ExtraArg4, ExtraArg5, ExtraArg6, ExtraArg7).
+%
+% Execute Goal with ExtraArg1, ExtraArg2, ExtraArg3, ExtraArg4, ExtraArg5, ExtraArg6 and ExtraArg7
+% appended to the argument list.
 call(_, _, _, _, _, _, _, _).
 
+%% call(Goal, ExtraArg1, ExtraArg2, ExtraArg3, ExtraArg4, ExtraArg5, ExtraArg6, ExtraArg7, ExtraArg8).
+%
+% Execute Goal with ExtraArg1, ExtraArg2, ExtraArg3, ExtraArg4, ExtraArg5, ExtraArg6, ExtraArg7 and
+% ExtraArg8, appended to the argument list.
 call(_, _, _, _, _, _, _, _, _).
 
 
@@ -62,6 +117,33 @@ call(_, _, _, _, _, _, _, _, _).
 
 % flags.
 
+%% current_prolog_flag(Flag, Value)
+%
+% True iff Flag is a flag supported by the processor, and Value is the value currently associated with it.
+% A flag is a setting which value affects internal operation of the Prolog system. Some flags are read-only,
+% while others can be set with `set_prolog_flag/2`.
+%
+% The flags that Scryer Prolog support are:
+% 
+%  * `max_arity`: The max arity a predicate can have in Prolog. On Scryer is set to 1023. Read only.
+%  * `bounded`: `true` if integer arithmethic is bounded between some min/max values. On Scryer is always set
+%    to `false` since it supports unbounded integer arithmethic. Read only.
+%  * `integer_rounding_function`: Describes the rounding donde by `//` and `rem` functions. On Scryer is
+%    always set to `toward_zero`. Read only
+%  * `double_quotes`: Determines how double quoted strings are red by Prolog. Scryer uses `chars` by default
+%    which is a list of one-character atoms. Other values are codes (list of integers representing characters),
+%    and atom which creates a whole atom for the string value. Read and write.
+%  * `max_integer`: Maximum integer supported by the system. As Scryer Prolog has unbounded integer arithmethic,
+%    checking the value of this flag fails. Read only.
+%  * `min_integer`: Minimum integer supported by the system. As Scryer Prolog has unbounded integer arithmethic,
+%    checking the value of this flag fails. Read only.
+%  * `occurs_check`: Returns if the occurs check is enabled. The occurs check prevents the creation cyclic terms.
+%    Historically the Prolog unification algorithm didn't do that check so changing the value modifies how Prolog
+%    operates in the low-level. Possible values are `false`  (default), `true` (unification has this check
+%    enabled) and `error` which throws an exception when a cylic term is created. Read and write.
+%  * `unknown`: How undefined predicates are handled when called. Possible values are `error` (the default, an error is thrown),
+%    `fail` (the call silently fails) and `warn` (the call fails and a warning about the undefined predicate is printed).
+%
 current_prolog_flag(Flag, Value) :- Flag == max_arity, !, Value = 1023.
 current_prolog_flag(max_arity, 1023).
 current_prolog_flag(Flag, Value) :- Flag == bounded, !, Value = false.
@@ -70,6 +152,8 @@ current_prolog_flag(Flag, Value) :- Flag == integer_rounding_function, !, Value 
 current_prolog_flag(integer_rounding_function, toward_zero).
 current_prolog_flag(Flag, Value) :- Flag == double_quotes, !, '$get_double_quotes'(Value).
 current_prolog_flag(double_quotes, Value) :- '$get_double_quotes'(Value).
+current_prolog_flag(Flag, Value) :- Flag == unknown, !, '$get_unknown'(Value).
+current_prolog_flag(unknown, Value) :- '$get_unknown'(Value).
 current_prolog_flag(Flag, _) :- Flag == max_integer, !, '$fail'.
 current_prolog_flag(Flag, _) :- Flag == min_integer, !, '$fail'.
 current_prolog_flag(Flag, OccursCheckEnabled) :-
@@ -83,6 +167,10 @@ current_prolog_flag(Flag, _) :-
     nonvar(Flag),
     throw(error(type_error(atom, Flag), current_prolog_flag/2)). % 8.17.2.3 a
 
+%% set_prolog_flag(Flag, Value).
+%
+% Sets the internal value of the flag. To see the list of flags supported by Scryer Prolog,
+% check `current_prolog_flag/2`. The flags that are read only will fail if you try to change their values 
 set_prolog_flag(Flag, Value) :-
     (var(Flag) ; var(Value)),
     throw(error(instantiation_error, set_prolog_flag/2)). % 8.17.1.3 a, b
@@ -106,6 +194,12 @@ set_prolog_flag(double_quotes, atom) :-
     !, '$set_double_quotes'(atom). % 7.11.2.5, list of char codes (UTF8).
 set_prolog_flag(double_quotes, codes) :-
     !, '$set_double_quotes'(codes).
+set_prolog_flag(unknown, error) :-
+    !, '$set_unknown'(error).
+set_prolog_flag(unknown, warning) :-
+    !, '$set_unknown'(warning).
+set_prolog_flag(unknown, fail) :-
+    !, '$set_unknown'(fail).
 set_prolog_flag(occurs_check, true) :-
     !, '$set_sto_as_unify'.
 set_prolog_flag(occurs_check, false) :-
@@ -123,24 +217,38 @@ set_prolog_flag(Flag, _) :-
 
 % control operators.
 
+%% fail.
+%
+% A predicate that always fails. The more declarative `false/0` should be used instead.
 fail :- '$fail'.
 
 
 :- meta_predicate \+(0).
 
-\+ G :- call(G), !, false.
+%% \+(Goal)
+%
+% True iff Goal fails
+\+ G :- call(G), !, '$fail'.
 \+ _.
 
-
-X \= X :- !, false.
+%% \=(?X, ?Y)
+%
+% True iff X and Y can't be unified
+X \= X :- !, '$fail'.
 _ \= _.
 
 
 :- meta_predicate once(0).
 
+%% once(Goal)
+%
+% Execute Goal (like `call/1`) but exactly once, ignoring any kind of alternative solutions the original predicate
+% could have generated.
 once(G) :- call(G), !.
 
-
+%% repeat.
+%
+% This predicate succeeds arbitrarily often, generating choice points with that.
 repeat.
 repeat :- repeat.
 
@@ -151,51 +259,63 @@ repeat :- repeat.
 
 :- meta_predicate ->(0,0).
 
-
+%% ->(G1, G2)
+%
+% If-then and if-then-else constructs
 G1 -> G2 :- control_entry_point((G1 -> G2)).
 
 
 :- non_counted_backtracking staggered_if_then/2.
 
 staggered_if_then(G1, G2) :-
-    '$get_staggered_cp'(B),
     call(G1),
-    '$set_cp'(B),
+    !,
     call(G2).
 
+%% ;(G1, G2)
+%
+% Disjunction (or)
 G1 ; G2 :- control_entry_point((G1 ; G2)).
 
 
 :- non_counted_backtracking staggered_sc/2.
 
-staggered_sc(G, _) :- call(G).
+staggered_sc(G, _) :-
+    (  nonvar(G),
+       G = '$call'(builtins:staggered_if_then(G1, G2)) ->
+       call(G1),
+       !,
+       call(G2)
+    ;  call(G)
+    ).
 staggered_sc(_, G) :- call(G).
 
-
+%% !.
+%
+% Cut operator. Discards the choicepoints created since entering the prediacate in which the operator appears.
+% Using cut is not recommended as it introduces a non-declarative flow of programming and makes it more difficult
+% to reason about the programs. Also restricts the ability to run the program with alternative execution strategies
 !.
 
 :- non_counted_backtracking set_cp/1.
 
 set_cp(B) :- '$set_cp'(B).
 
+%% ,(G1, G2)
+%
+% Conjuction (and)
 ','(G1, G2) :- control_entry_point((G1, G2)).
+
 
 :- non_counted_backtracking control_entry_point/1.
 
 control_entry_point(G) :-
     functor(G, Name, Arity),
-    catch(builtins:control_entry_point_(G),
-          dispatch_prep_error,
-          builtins:throw(error(type_error(callable, G), Name/Arity))).
-
-
-:- non_counted_backtracking control_entry_point_/1.
-
-control_entry_point_(G) :-
     '$get_cp'(B),
-    dispatch_prep(G,B,Conts),
+    catch('$call'(builtins:dispatch_prep(G,B,Conts)),
+          dispatch_prep_error,
+          '$call'(builtins:throw(error(type_error(callable, G), Name/Arity)))),
     dispatch_call_list(Conts).
-
 
 :- non_counted_backtracking cont_list_to_goal/2.
 
@@ -203,49 +323,20 @@ cont_list_goal([Cont], Cont) :- !.
 cont_list_goal(Conts, '$call'(builtins:dispatch_call_list(Conts))).
 
 
-:- non_counted_backtracking module_qualified_cut/1.
-
-module_qualified_cut(Gs) :-
-    (  functor(Gs, call, 1) ->
-       arg(1, Gs, G1)
-    ;  Gs = G1
-    ),
-    functor(G1, (:), 2),
-    arg(2, G1, G2),
-    G2 == !.
-
-
 :- non_counted_backtracking dispatch_prep/3.
 
 dispatch_prep(Gs, B, [Cont|Conts]) :-
     (  callable(Gs) ->
-       (  functor(Gs, ',', 2) ->
-          arg(1, Gs, G1),
-          arg(2, Gs, G2),
-          dispatch_prep(G1, B, IConts1),
-          cont_list_goal(IConts1, Cont),
-          dispatch_prep(G2, B, Conts)
-       ;  functor(Gs, ';', 2) ->
-          arg(1, Gs, G1),
-          arg(2, Gs, G2),
-          dispatch_prep(G1, B, IConts0),
-          dispatch_prep(G2, B, IConts1),
-          cont_list_goal(IConts0, Cont0),
-          cont_list_goal(IConts1, Cont1),
-          Cont = '$call'(builtins:staggered_sc(Cont0, Cont1)),
-          Conts = []
-       ;  functor(Gs, ->, 2) ->
-          arg(1, Gs, G1),
-          arg(2, Gs, G2),
-          dispatch_prep(G1, B, IConts1),
-          dispatch_prep(G2, B, IConts2),
-          cont_list_goal(IConts1, Cont1),
-          cont_list_goal(IConts2, Cont2),
-          Cont = '$call'(builtins:staggered_if_then(Cont1, Cont2)),
-          Conts = []
-       ;  ( Gs == ! ; module_qualified_cut(Gs) ) ->
+       strip_module(Gs, M, Gs0),
+       (  nonvar(Gs0),
+          dispatch_prep_(Gs0, B, [Cont|Conts]) ->
+          true
+       ;  Gs0 == ! ->
           Cont = '$call'(builtins:set_cp(B)),
           Conts = []
+       ;  nonvar(Gs0),
+          \+ callable(Gs0) ->
+          throw(dispatch_prep_error)
        ;  Cont = Gs,
           Conts = []
        )
@@ -254,6 +345,28 @@ dispatch_prep(Gs, B, [Cont|Conts]) :-
        Conts = []
     ;  throw(dispatch_prep_error)
     ).
+
+
+:- non_counted_backtracking dispatch_prep_/3.
+
+dispatch_prep_((G1, G2), B, [Cont|Conts]) :-
+    dispatch_prep(G1, B, IConts1),
+    cont_list_goal(IConts1, Cont),
+    dispatch_prep(G2, B, Conts).
+dispatch_prep_((G1 ; G2), B, [Cont|Conts]) :-
+    dispatch_prep(G1, B, IConts0),
+    dispatch_prep(G2, B, IConts1),
+    cont_list_goal(IConts0, Cont0),
+    cont_list_goal(IConts1, Cont1),
+    Cont = '$call'(builtins:staggered_sc(Cont0, Cont1)),
+    Conts = [].
+dispatch_prep_((G1 -> G2), B, [Cont|Conts]) :-
+    dispatch_prep(G1, B, IConts1),
+    dispatch_prep(G2, B, IConts2),
+    cont_list_goal(IConts1, Cont1),
+    cont_list_goal(IConts2, Cont2),
+    Cont = '$call'(builtins:staggered_if_then(Cont1, Cont2)),
+    Conts = [].
 
 
 :- non_counted_backtracking dispatch_call_list/1.
@@ -350,6 +463,13 @@ univ_errors(Term, List, N) :-
 
 :- non_counted_backtracking (=..)/2.
 
+%% =..(Term, List)
+%
+% Univ operator. True iff Term is a term whose functor is the head of the List, and the rest of arguments of Term
+% are in tail of the List. Example:
+%
+%     ?- f(a, X) =.. List.
+%        List = [f,a,X].
 Term =.. List :-
     univ_errors(Term, List, N),
     univ_worker(Term, List, N).
@@ -414,30 +534,34 @@ parse_options_list(Options, Selector, DefaultPairs, OptionValues, Stub) :-
 
 
 parse_write_options(Options, OptionValues, Stub) :-
-    DefaultOptions = [ignore_ops-false, max_depth-0, numbervars-false,
+    DefaultOptions = [double_quotes-false, ignore_ops-false, max_depth-0, numbervars-false,
                       quoted-false, variable_names-[]],
     parse_options_list(Options, builtins:parse_write_options_, DefaultOptions, OptionValues, Stub).
 
+
+parse_write_options_(double_quotes(DoubleQuotes), double_quotes-DoubleQuotes) :-
+    (  nonvar(DoubleQuotes),
+       lists:member(DoubleQuotes, [true, false]),
+       !
+    ;  throw(error(domain_error(write_option, double_quotes(DoubleQuotes)), _))
+    ).
 parse_write_options_(ignore_ops(IgnoreOps), ignore_ops-IgnoreOps) :-
     (  nonvar(IgnoreOps),
        lists:member(IgnoreOps, [true, false]),
        !
-    ;
-       throw(error(domain_error(write_option, ignore_ops(IgnoreOps)), _))
+    ;  throw(error(domain_error(write_option, ignore_ops(IgnoreOps)), _))
     ).
 parse_write_options_(quoted(Quoted), quoted-Quoted) :-
     (  nonvar(Quoted),
        lists:member(Quoted, [true, false]),
        !
-    ;
-       throw(error(domain_error(write_option, quoted(Quoted)), _))
+    ;  throw(error(domain_error(write_option, quoted(Quoted)), _))
     ).
 parse_write_options_(numbervars(NumberVars), numbervars-NumberVars) :-
     (  nonvar(NumberVars),
        lists:member(NumberVars, [true, false]),
        !
-    ;
-       throw(error(domain_error(write_option, numbervars(NumberVars)), _))
+    ;  throw(error(domain_error(write_option, numbervars(NumberVars)), _))
     ).
 parse_write_options_(variable_names(VNNames), variable_names-VNNames) :-
     must_be_var_names_list(VNNames),
@@ -446,8 +570,7 @@ parse_write_options_(max_depth(MaxDepth), max_depth-MaxDepth) :-
     (  integer(MaxDepth),
        MaxDepth >= 0,
        !
-    ;
-       throw(error(domain_error(write_option, max_depth(MaxDepth)), _))
+    ;  throw(error(domain_error(write_option, max_depth(MaxDepth)), _))
     ).
 parse_write_options_(E, _) :-
     throw(error(domain_error(write_option, E), _)).
@@ -476,36 +599,71 @@ must_be_var_names_list_([VarName | VarNames], List) :-
     ;  throw(error(instantiation_error, write_term/2))
     ).
 
-
+%% write_term(+Term, +Options).
+%
+% Write Term to the current output stream according to some output syntax options.
+% Options are specified in detail in `write_term/3`.
 write_term(Term, Options) :-
     current_output(Stream),
     write_term(Stream, Term, Options).
 
+%% write_term(+Stream, +Term, +Options).
+%
+% Write Term to the stream Stream according to some output syntax options. The options avaibale are:
+%
+%  * `ignore_ops(+Boolean)` if `true`, the generic term representation is used everywhere. In `false`
+%    (default), operators do not use that generic term representation.
+%  * `max_depth(+N)` if the term is nested deeper than N, print the reminder as ellipses.
+%    If N = 0 (default), there's no limit.
+%  * `numbervars(+Boolean)` if true, replaces `$VAR(N)` variables with letters, in order. Default is false.
+%  * `quoted(+Boolean)` if true, strings and atoms that need quotes to be valid Prolog syntax, are quoted. Default is false.
+%  * `variable_names(+List)` assign names to variables in term. List should be a list of terms of format `Name=Var`.
+%  * `double_quotes(+Boolean)` if true, strings are printed in double quotes rather than with list notation. Default is false.
 write_term(Stream, Term, Options) :-
-    parse_write_options(Options, [IgnoreOps, MaxDepth, NumberVars, Quoted, VNNames], write_term/3),
-    '$write_term'(Stream, Term, IgnoreOps, NumberVars, Quoted, VNNames, MaxDepth).
+    parse_write_options(Options, [DoubleQuotes, IgnoreOps, MaxDepth, NumberVars, Quoted, VNNames], write_term/3),
+    '$write_term'(Stream, Term, IgnoreOps, NumberVars, Quoted, VNNames, MaxDepth, DoubleQuotes).
 
 
+%% write(+Term).
+%
+% Write Term to the current output stream using a syntax similar to Prolog
 write(Term) :-
     current_output(Stream),
-    '$write_term'(Stream, Term, false, true, false, [], 0).
+    '$write_term'(Stream, Term, false, true, false, [], 0, false).
 
+%% write(+Stream, +Term).
+%
+% Write Term to the stream Stream using a syntax similar to Prolog
 write(Stream, Term) :-
-    '$write_term'(Stream, Term, false, true, false, [], 0).
+    '$write_term'(Stream, Term, false, true, false, [], 0, false).
 
+%% write_canonical(+Term).
+%
+% Write Term to the current output stream using canonical Prolog syntax. Can be read back as Prolog terms.
 write_canonical(Term) :-
     current_output(Stream),
-    '$write_term'(Stream, Term, true, false, true, [], 0).
+    '$write_term'(Stream, Term, true, false, true, [], 0, false).
 
+%% write_canonical(+Stream, +Term).
+%
+% Write Term to the stream Stream using canonical Prolog syntax. Can be read back as Prolog terms.
 write_canonical(Stream, Term) :-
-    '$write_term'(Stream, Term, true, false, true, [], 0).
+    '$write_term'(Stream, Term, true, false, true, [], 0, false).
 
+%% writeq(+Term).
+%
+% Write Term to the current output stream using a syntax similar to `write/1` but quoting the atoms that need to be
+% quoted according to Prolog syntax.
 writeq(Term) :-
     current_output(Stream),
-    '$write_term'(Stream, Term, false, true, true, [], 0).
+    '$write_term'(Stream, Term, false, true, true, [], 0, false).
 
+%% writeq(+Stream, +Term).
+%
+% Write Term to the stream Stream using a syntax similar to `write/1` but quoting the atoms that need to be
+% quoted according to Prolog syntax.
 writeq(Stream, Term) :-
-    '$write_term'(Stream, Term, false, true, true, [], 0).
+    '$write_term'(Stream, Term, false, true, true, [], 0, false).
 
 select_rightmost_options([Option-Value | OptionPairs], OptionValues) :-
     (  pairs:same_key(Option, OptionPairs, OtherValues, _),
@@ -523,25 +681,62 @@ parse_read_term_options(Options, OptionValues, Stub) :-
     parse_options_list(Options, builtins:parse_read_term_options_, DefaultOptions, OptionValues, Stub).
 
 
-parse_read_term_options_(singletons(Vars), singletons-Vars) :- !.
-parse_read_term_options_(variables(Vars), variables-Vars) :- !.
-parse_read_term_options_(variable_names(Vars), variable_names-Vars) :- !.
+parse_read_term_options_(singletons(Vars), singletons-Vars) :-
+    (  ( var(Vars)
+       ; '$skip_max_list'(_, _, Vars, Rs),
+         Rs == []
+       ) ->
+       !
+    ;  throw(error(domain_error(read_option, singletons(Vars)), read_term/2))
+    ).
+parse_read_term_options_(variables(Vars), variables-Vars) :-
+    (  ( var(Vars)
+       ; '$skip_max_list'(_, _, Vars, Rs),
+         Rs == []
+       ) ->
+       !
+    ;  throw(error(domain_error(read_option, variables(Vars)), read_term/2))
+    ).
+parse_read_term_options_(variable_names(Vars), variable_names-Vars) :-
+    (  ( var(Vars)
+       ; '$skip_max_list'(_, _, Vars, Rs),
+         Rs == []
+       ) ->
+       !
+    ;  throw(error(domain_error(read_option, variable_names(Vars)), read_term/2))
+    ).
 parse_read_term_options_(E,_) :-
     throw(error(domain_error(read_option, E), _)).
 
 
-
+%% read_term(+Stream, -Term, +Options).
+%
+% Read Term from the stream Stream. It supports several options:
+%  * `variables(-Vars)` unifies Vars with a list of variables in the term. Similar to do `term_variables/2` with the new term.
+%  * `variable_names(-Vars)` unifies Vars with a list `Name=Var` with Name describing the variable name and Var the variable itself that appears in Term.
+%  * `singletons` similar to `variable_names` but only reports variables occurring only once in Term. 
 read_term(Stream, Term, Options) :-
     parse_read_term_options(Options, [Singletons, VariableNames, Variables], read_term/3),
     '$read_term'(Stream, Term, Singletons, Variables, VariableNames).
 
+%% read_term(-Term, +Options).
+%
+% Read Term from the current input stream. It supports several options described in more detail in `read_term/3`.
 read_term(Term, Options) :-
     current_input(Stream),
     read_term(Stream, Term, Options).
 
+%% read(-Term).
+%
+% Read Term from the current input stream with default options. **NOTE** This is not a general predicate
+% to read input from a file or the user. Use other predicates like `phrase_from_file/2` for that.
 read(Term) :-
     current_input(Stream),
-    read(Stream, Term).
+    read_term(Stream, Term, []).
+    % read(Stream, Term).
+
+read(Stream, Term) :-
+    read_term(Stream, Term, []).
 
 % ensures List is either a variable or a list.
 can_be_list(List, _)  :-
@@ -559,6 +754,13 @@ can_be_list(List, PI) :-
 
 % term_variables.
 
+%% term_variables(+Term, -Vars).
+%
+% True iff given a Term, Vars is a list of all the unique variables that appear in Term. The variables are sorted depth-first
+% and left-to-right.
+%
+%     ?- term_variables(f(X, Y, X, g(Z)), Vars).
+%        Vars = [X, Y, Z].
 term_variables(Term, Vars) :-
     can_be_list(Vars, term_variables/2),
     '$term_variables'(Term, Vars).
@@ -567,6 +769,15 @@ term_variables(Term, Vars) :-
 
 :- non_counted_backtracking catch/3.
 
+%% catch(Goal, Catcher, Recover).
+%
+% Calls Goal, but if it throws an exception that unifies with Catcher, Recover will be called instead
+% and the program will be resumed. Example:
+%
+% ```
+% ?- catch(number_chars(X, "not_a_number"), error(syntax_error(_), _), X = 0).
+%    X = 0.
+% ```
 catch(G,C,R) :-
     '$get_current_block'(Bb),
     catch(G,C,R,Bb).
@@ -591,7 +802,7 @@ catch(G,C,R,Bb) :-
 end_block(Bb, NBb) :-
     '$clean_up_block'(NBb),
     '$reset_block'(Bb).
-end_block(Bb, NBb) :-
+end_block(_Bb, NBb) :-
     '$reset_block'(NBb),
     '$fail'.
 
@@ -607,6 +818,17 @@ handle_ball(_, _, _) :-
 
 :- non_counted_backtracking throw/1.
 
+%% throw(+Exception).
+%
+% Raise the exception Exception. The system looks for the innermost `catch/3` for which Exception
+% unifies with Catcher. Example:
+%
+% ```
+% ?- throw(custom_error(42)).
+%    throw(custom_error(42)).
+% ?- catch(throw(custom_error(42)), custom_error(_), true).
+%    true.
+% ```
 throw(Ball) :-
     (   var(Ball) ->
         '$set_ball'(error(instantiation_error,throw/1))
@@ -638,6 +860,20 @@ findall_cleanup(LhLength, Error) :-
 
 :- non_counted_backtracking findall/3.
 
+%% findall(Template, Goal, Solutions).
+%
+% Unify Solutions with a list of all values that variables in Template can take in Goal.
+% `findall/3` is equivalent to `bagof/3` with all free variables scoped to the Goal (`^` operator)
+% except that `bagof/3` fails when no solutions are found and `findall/3` unifies with an empty list.
+% Example:
+%
+% ```
+% f(1,2).
+% f(1,3).
+% f(1,4).
+% ?- findall(X-Y, f(X, Y), Solutions).
+%    Solutions = [1-2,1-3,1-4].
+% ```
 findall(Template, Goal, Solutions) :-
     error:can_be(list, Solutions),
     '$lh_length'(LhLength),
@@ -661,6 +897,9 @@ findall(Template, Goal, Solutions) :-
 
 :- non_counted_backtracking findall/4.
 
+%% findall(Template, Goal, Solutions0, Solutions1)
+%
+% Similar to `findall/3` but returns the solutions as the difference list Solutions0-Solutions1.
 findall(Template, Goal, Solutions0, Solutions1) :-
     error:can_be(list, Solutions0),
     error:can_be(list, Solutions1),
@@ -682,12 +921,45 @@ set_difference([X|Xs], [Y|Ys], Zs) :-
 set_difference([], _, []) :- !.
 set_difference(Xs, [], Xs).
 
+
+% variant/2 checks whether X is a variant of Y per the definition in
+% 7.1.6.1 of the ISO standard.
+
+:- non_counted_backtracking variant/4.
+
+variant(X,Y,VPs,VPs0) :-
+    (  var(X) ->
+       var(Y),
+       VPs = [X-Y|VPs0]
+    ;  var(Y) ->
+       false
+    ;  X =.. [FX | XArgs],
+       Y =.. [FX | YArgs],
+       lists:foldl('$call'(builtins:variant), XArgs, YArgs, VPs, VPs0)
+    ).
+
+:- non_counted_backtracking variant/2.
+
+singleton([_]).
+
+variant(X, Y) :-
+    variant(X,Y, VPs, []),
+    keysort(VPs, SVPs),
+    pairs:group_pairs_by_key(SVPs, SVPKs),
+    pairs:pairs_values(SVPKs, Vals),
+    lists:maplist('$call'(builtins:term_variables), Vals, Vs),
+    lists:maplist('$call'(builtins:singleton), Vs),
+    term_variables(Vs, YVars),
+    lists:length(SVPKs, N),
+    lists:length(YVars, N).
+
+
 :- non_counted_backtracking group_by_variant/4.
 
 group_by_variant([V2-S2 | Pairs], V1-S1, [S2 | Solutions], Pairs0) :-
-    V1 = V2, % \+ \+ (V1 = V2), % (2) % iso_ext:variant(V1, V2), % (1)
+    variant(V1, V2),
     !,
-    % V1 = V2, % (3)
+    V1 = V2,
     group_by_variant(Pairs, V2-S2, Solutions, Pairs0).
 group_by_variant(Pairs, _, [], Pairs).
 
@@ -743,13 +1015,31 @@ findall_with_existential(Template, Goal, PairedSolutions, Witnesses0, Witnesses)
 
 :- non_counted_backtracking bagof/3.
 
+%% bagof(Template, Goal, Solution).
+%
+% Unify Solution with a list of alternatives of the variables in Template coming from calling Goal.
+% If Goal has no solutions, the predicate fails.
+% If free variables that are not in Template appear in Goal, the predicate will backtrack over
+% the alternatives of those free variables. However, you can use the syntax `Var^Goal` to not bind
+% Var in Goal and prevent that.
+%
+% Example:
+%
+% ```
+% f(1, 3).
+% f(2, 4).
+% ?- bagof(X, f(X, Y), Bag).
+%    Y = 3, Bag = [1],
+% ;  Y = 4, Bag = [2].
+% ?- bagof(X, Y^f(X, Y), Bag).
+%    Bag = [1,2].
+% ```
 bagof(Template, Goal, Solution) :-
     error:can_be(list, Solution),
-    term_variables(Template, TemplateVars0),
-    term_variables(Goal, GoalVars0),
-    sort(TemplateVars0, TemplateVars),
-    sort(GoalVars0, GoalVars),
-    set_difference(GoalVars, TemplateVars, Witnesses0),
+    term_variables(Template, TemplateVars),
+    term_variables(Goal, GoalVars),
+    term_variables(TemplateVars+GoalVars, TGVs),
+    lists:append(TemplateVars, Witnesses0, TGVs),
     findall_with_existential(Template, Goal, PairedSolutions0, Witnesses0, Witnesses),
     keysort(PairedSolutions0, PairedSolutions),
     group_by_variants(PairedSolutions, GroupedSolutions),
@@ -771,15 +1061,25 @@ iterate_variants_and_sort([_|GroupSolutions], Ws, Solution) :-
 
 :- non_counted_backtracking setof/3.
 
+%% setof(Template, Goal, Solution).
+%
+% Similar to `bagof/3` but Solution is sorted and duplicates are removed. Example:
+%
+% ```
+% f(1, 2).
+% f(1, 3).
+% f(2, 4).
+% ?- setof(X, Y^f(X, Y), Set).
+%    Set = [1, 2].
+% ```
 setof(Template, Goal, Solution) :-
     error:can_be(list, Solution),
-    term_variables(Template, TemplateVars0),
-    term_variables(Goal, GoalVars0),
-    sort(TemplateVars0, TemplateVars),
-    sort(GoalVars0, GoalVars),
-    set_difference(GoalVars, TemplateVars, Witnesses0),
+    term_variables(Template, TemplateVars),
+    term_variables(Goal, GoalVars),
+    term_variables(TemplateVars+GoalVars, TGVs),
+    lists:append(TemplateVars, Witnesses0, TGVs),
     findall_with_existential(Template, Goal, PairedSolutions0, Witnesses0, Witnesses),
-    keysort(PairedSolutions0, PairedSolutions),
+    '$keysort_with_constant_var_ordering'(PairedSolutions0, PairedSolutions), % see 7.2.1
     group_by_variants(PairedSolutions, GroupedSolutions),
     iterate_variants_and_sort(GroupedSolutions, Witnesses, Solution).
 
@@ -810,6 +1110,9 @@ setof(Template, Goal, Solution) :-
     ;  throw(error(type_error(callable, H), clause/2))
     ).
 
+%% clause(Head, Body).
+%
+% True iff Head can be unified with a clause head and Body with its corresponding clause body.
 clause(H, B) :-
     (  var(H) ->
        throw(error(instantiation_error, clause/2))
@@ -833,6 +1136,10 @@ clause(H, B) :-
 
 :- meta_predicate asserta(:).
 
+%% asserta(Clause).
+%
+% Asserts (inserts) a new clause (rule or fact) into the current module.
+% The clause will be inserted at the beginning of the module.
 asserta(Clause0) :-
     loader:strip_subst_module(Clause0, user, Module, Clause),
     iso_ext:asserta(Module, Clause).
@@ -840,6 +1147,10 @@ asserta(Clause0) :-
 
 :- meta_predicate assertz(:).
 
+%% assertz(Clause).
+%
+% Asserts (inserts) a new clause (rule or fact) into the current module.
+% The clase will be inserted at the end of the module.
 assertz(Clause0) :-
     loader:strip_subst_module(Clause0, user, Module, Clause),
     iso_ext:assertz(Module, Clause).
@@ -847,6 +1158,10 @@ assertz(Clause0) :-
 
 :- meta_predicate retract(:).
 
+%% retract(Clause)
+%
+% Retracts (deletes) a clause present in the current module.
+% It only affects dynamic predicates.
 retract(Clause0) :-
     loader:strip_module(Clause0, Module, Clause),
     (  Clause \= (_ :- _) ->
@@ -860,70 +1175,30 @@ retract(Clause0) :-
        retract_module_clause(Head, Body, Module)
     ).
 
-module_retract_clauses([Clause|Clauses0], Head, Body, Name, Arity, Module) :-
-    functor(VarHead, Name, Arity),
-    findall((VarHead :- VarBody), Module:'$clause'(VarHead, VarBody), Clauses1),
-    (  first_match_index(Clauses1, (Head :- Body), 0, N) ->
+retract_clauses([L-P | Ps], Head, Body, Name, Arity, Module) :-
+    '$invoke_clause_at_p'(Head, Body, L, P, N, Module),
+    (  integer(N) ->
        '$retract_clause'(Name, Arity, N, Module)
-    ;  Clause = (Head :- Body)
+    ;  true % the clause at index N has already been retracted in this
+            % case but unify (Head :- Body) anyway.
     ),
-    (  Clauses0 == [] -> !
+    (  Ps == [] -> !
     ;  true
     ).
+retract_clauses([_ | Ps], Head, Body, Name, Arity, Module) :-
+    retract_clauses(Ps, Head, Body, Name, Arity, Module).
 
-
-module_retract_clauses([_|Clauses0], Head, Body, Name, Arity, Module) :-
-    module_retract_clauses(Clauses0, Head, Body, Name, Arity, Module).
-
-
-call_module_retract(Head, Body, Name, Arity, Module) :-
-    findall((Head :- Body), Module:'$clause'(Head, Body), Clauses),
-    module_retract_clauses(Clauses, Head, Body, Name, Arity, Module).
-
-
-retract_module_clause(Head, Body, Module) :-
-    (  var(Head) ->
-       throw(error(instantiation_error, retract/1))
-    ;  callable(Head),
-       functor(Head, Name, Arity) ->
-       (  '$no_such_predicate'(Module, Head) ->
-          '$fail'
-       ;  '$head_is_dynamic'(Module, Head) ->
-          (  Module == user ->
-             call_retract(Head, Body, Name, Arity)
-          ;  call_module_retract(Head, Body, Name, Arity, Module)
-          )
-       ;  throw(error(permission_error(modify, static_procedure, Name/Arity), retract/1))
-       )
-    ;  throw(error(type_error(callable, Head), retract/1))
-    ).
-
-
-first_match_index([Clause | _], Clause, N, N) :-
-    !.
-first_match_index([_ | Clauses], Clause, N0, N) :-
-    N1 is N0 + 1,
-    first_match_index(Clauses, Clause, N1, N).
-
-
-retract_clauses([Clause | Clauses0], Head, Body, Name, Arity) :-
-    functor(VarHead, Name, Arity),
-    findall((VarHead :- VarBody), builtins:'$clause'(VarHead, VarBody), Clauses1),
-    (  first_match_index(Clauses1, (Head :- Body), 0, N) ->
-       '$retract_clause'(Name, Arity, N, user)
-    ;  Clause = (Head :- Body)
+call_retract_helper(Head, Body, P, Module) :-
+    (  Module == user ->
+       ClauseQualifier = builtins
+    ;  ClauseQualifier = Module
     ),
-    (  Clauses0 == [] -> !
-    ;  true
-    ).
-retract_clauses([_ | Clauses0], Head, Body, Name, Arity) :-
-    retract_clauses(Clauses0, Head, Body, Name, Arity).
+    ClauseQualifier:'$clause'(Head, Body),
+    '$get_clause_p'(Head, P, Module).
 
-
-call_retract(Head, Body, Name, Arity) :-
-    findall((Head :- Body), builtins:'$clause'(Head, Body), Clauses),
-    retract_clauses(Clauses, Head, Body, Name, Arity).
-
+call_retract(Head, Body, Name, Arity, Module) :-
+    findall(P, builtins:call_retract_helper(Head, Body, P, Module), Ps),
+    retract_clauses(Ps, Head, Body, Name, Arity, Module).
 
 retract_clause(Head, Body) :-
     (  var(Head) ->
@@ -938,15 +1213,32 @@ retract_clause(Head, Body) :-
        ;  '$no_such_predicate'(user, Head) ->
           '$fail'
        ;  '$head_is_dynamic'(user, Head) ->
-          call_retract(Head, Body, Name, Arity)
+          call_retract(Head, Body, Name, Arity, user)
        ;  throw(error(permission_error(modify, static_procedure, Name/Arity), retract/1))
        )
     ;  throw(error(type_error(callable, Head), retract/1))
     ).
 
+retract_module_clause(Head, Body, Module) :-
+    (  var(Head) ->
+       throw(error(instantiation_error, retract/1))
+    ;  callable(Head),
+       functor(Head, Name, Arity) ->
+       (  '$no_such_predicate'(Module, Head) ->
+          '$fail'
+       ;  '$head_is_dynamic'(Module, Head) ->
+          call_retract(Head, Body, Name, Arity, Module)
+       ;  throw(error(permission_error(modify, static_procedure, Name/Arity), retract/1))
+       )
+    ;  throw(error(type_error(callable, Head), retract/1))
+    ).
 
 :- meta_predicate retractall(:).
 
+%% retractall(Head)
+%
+% Retracts (deletes) all clauses that unify which head unifies with Head
+% It only affects dynamic predicates.
 retractall(Head) :-
    retract_clause(Head, _),
    false.
@@ -981,9 +1273,13 @@ module_abolish(Pred, Module) :-
     ;  throw(error(type_error(predicate_indicator, Module:Pred), abolish/1))
     ).
 
-
 :- meta_predicate abolish(:).
 
+%% abolish(Pred).
+%
+% Pred should satisfy: `Pred = Name/Arity`.
+% Deletes all clauses of a predicate with name Name and arity Arity.
+% It only affects dynamic predicates
 abolish(Pred) :-
     (  var(Pred) ->
        throw(error(instantiation_error, abolish/1))
@@ -1017,36 +1313,39 @@ abolish(Pred) :-
     ;  throw(error(type_error(predicate_indicator, Pred), abolish/1))
     ).
 
-
-'$iterate_db_refs'(Name, Arity, Name/Arity). % :-
-%   '$lookup_db_ref'(Ref, Name, Arity).
-'$iterate_db_refs'(RName, RArity, Name/Arity) :-
-    '$get_next_db_ref'(RName, RArity, RRName, RRArity),
-    '$iterate_db_refs'(RRName, RRArity, Name/Arity).
-
-
+%% current_predicate(Pred).
+%
+% Pred must satisfy: `Pred = Name/Arity`.
+% True iff there's a predicate Pred that is currently loaded at the moment.
+% It can be used to check for existence of a predicate or to enumerate all loaded predicates
 current_predicate(Pred) :-
     (  var(Pred) ->
-       '$get_next_db_ref'(RN, RA, _, _),
-       '$iterate_db_refs'(RN, RA, Pred)
-    ;  Pred \= _/_ ->
-       throw(error(type_error(predicate_indicator, Pred), current_predicate/1))
-    ;  Pred = Name/Arity,
-       (  nonvar(Name), \+ atom(Name)
-       ;  nonvar(Arity), \+ integer(Arity)
-       ;  integer(Arity), Arity < 0
-       ) ->
-       throw(error(type_error(predicate_indicator, Pred), current_predicate/1))
-    ;  '$get_next_db_ref'(RN, RA, _, _),
-       '$iterate_db_refs'(RN, RA, Pred)
+       '$get_db_refs'(_, _, _, PIs),
+       lists:member(Pred, PIs)
+    ;  '$strip_module'(Pred, Module, UnqualifiedPred),
+       (  var(Module),
+          \+ functor(Pred, (:), 2)
+       ;  atom(Module)
+       ),
+       UnqualifiedPred = Name/Arity ->
+       (  (  nonvar(Name), \+ atom(Name)
+          ;  nonvar(Arity), \+ integer(Arity)
+          ;  integer(Arity), Arity < 0
+          ) ->
+          throw(error(type_error(predicate_indicator, Pred), current_predicate/1))
+       ;  nonvar(Name),
+          nonvar(Arity) ->
+          '$lookup_db_ref'(Module, Name, Arity)
+       ;  '$get_db_refs'(Module, Name, Arity, PIs),
+          lists:member(UnqualifiedPred, PIs)
+       )
+    ;  throw(error(type_error(predicate_indicator, Pred), current_predicate/1))
     ).
-
 
 '$iterate_op_db_refs'(RPriority, RSpec, ROp, _, RPriority, RSpec, ROp).
 '$iterate_op_db_refs'(RPriority, RSpec, ROp, OssifiedOpDir, Priority, Spec, Op) :-
     '$get_next_op_db_ref'(RPriority, RSpec, ROp, OssifiedOpDir, RRPriority, RRSpec, RROp),
     '$iterate_op_db_refs'(RRPriority, RRSpec, RROp, OssifiedOpDir, Priority, Spec, Op).
-
 
 can_be_op_priority(Priority) :- var(Priority).
 can_be_op_priority(Priority) :- op_priority(Priority).
@@ -1055,6 +1354,10 @@ can_be_op_specifier(Spec) :- var(Spec).
 can_be_op_specifier(Spec) :- op_specifier(Spec).
 
 
+%% current_op(Priority, Spec, Op)
+%
+% True iff there's an operator defined with name Op, with spec Spec and priority Priority.
+% Can be used to find all operators currently defined.
 current_op(Priority, Spec, Op) :-
     (  can_be_op_priority(Priority),
        can_be_op_specifier(Spec),
@@ -1108,6 +1411,12 @@ op_(Priority, OpSpec, Op) :-
     '$op'(Priority, OpSpec, Op).
 
 
+%% op(Priority, Spec, Op)
+%
+% Declares an operated named Op, with priority Priority and a spec Spec.
+% The priority is an integer between 0 (null) and 1200.
+% Spec can be: `xf`, `yf`, `xfx`, `xfy`, `yfx`, `fy` and `fx` where f indicates the position of the
+% operator and x and y the arguments.
 op(Priority, OpSpec, Op) :-
     (  var(Priority) ->
        throw(error(instantiation_error, op/3)) % 8.14.3.3 a)
@@ -1129,9 +1438,15 @@ op(Priority, OpSpec, Op) :-
        !
     ;  throw(error(type_error(list, Op), op/3)) % 8.14.3.3 f)
     ).
-
+%% halt.
+%
+% Exits the Prolog system with exit code 0
 halt :- halt(0).
 
+
+%% halt(+ExitCode)
+%
+% Exits the Prolog system with exit code N
 halt(N) :-
     (   var(N) ->
         throw(error(instantiation_error, halt/1)) % 8.17.4.3 a)
@@ -1142,7 +1457,14 @@ halt(N) :-
     ;   throw(error(domain_error(exit_code, N), halt/1))
     ).
 
-
+%% atom_length(+Atom, -Length).
+%
+% True iff Atom is an atom of Length characters. Example:
+%
+% ```
+% ?- atom_length(marseille, N).
+%    N = 9.
+% ```
 atom_length(Atom, Length) :-
     (  var(Atom)  ->
        throw(error(instantiation_error, atom_length/2)) % 8.16.1.3 a)
@@ -1159,7 +1481,17 @@ atom_length(Atom, Length) :-
     ;  throw(error(type_error(atom, Atom), atom_length/2)) % 8.16.1.3 b)
     ).
 
-
+%% atom_chars(?Atom, ?Chars).
+%
+% Relates an atom with a string in chars representation. It can be used to convert
+% between atoms and strings. Examples:
+%
+% ```
+% ?- atom_chars(marseille, X).
+%    X = "marseille".
+% ?- atom_chars(X, "marseille").
+%    X = marseille.
+% ```
 atom_chars(Atom, List) :-
     '$skip_max_list'(_, _, List, Tail),
     (  ( Tail == [] ; var(Tail) ) ->
@@ -1180,6 +1512,18 @@ atom_chars(Atom, List) :-
     ;  throw(error(type_error(atom, Atom), atom_chars/2))
     ).
 
+%% atom_codes(?Atom, ?Codes).
+%
+% Relates an atom with a string in codes representation. It can be used to convert
+% between atoms and strings. However, codes is not the default representation of double quoutes
+% strings in Scryer Prolog. Examples:
+%
+% ```
+% ?- atom_codes(marseille, X).
+%    X = [109,97,114,115,101,105,108,108,101].
+% ?- atom_codes(X, [109,97,114,115,101,105,108,108,101]).
+%    X = marseille.
+% ```
 atom_codes(Atom, List) :-
     '$skip_max_list'(_, _, List, Tail),
     (  ( Tail == [] ; var(Tail) ) ->
@@ -1200,7 +1544,16 @@ atom_codes(Atom, List) :-
     ;  throw(error(type_error(atom, Atom), atom_codes/2))
     ).
 
-
+%% atom_concat(?A1, ?A2, ?A12)
+%
+% Similar to `append/3` but operating on atom characters.
+% If you find yourself using this predicate, consider using strings instead.
+% Example:
+%
+% ```
+% ?- atom_concat(a, X, ab).
+%    X = b.
+% ```
 atom_concat(Atom_1, Atom_2, Atom_12) :-
     error:can_be(atom, Atom_1),
     error:can_be(atom, Atom_2),
@@ -1209,9 +1562,14 @@ atom_concat(Atom_1, Atom_2, Atom_12) :-
        (  var(Atom_12) ->
           throw(error(instantiation_error, atom_concat/3))
        ;  atom_chars(Atom_12, Atom_12_Chars),
-          lists:append(BeforeChars, AfterChars, Atom_12_Chars),
-          atom_chars(Atom_1, BeforeChars),
-          atom_chars(Atom_2, AfterChars)
+          (  var(Atom_2) ->
+             lists:append(BeforeChars, AfterChars, Atom_12_Chars),
+             atom_chars(Atom_2, AfterChars)
+          ;  atom_chars(Atom_2, AfterChars),
+             lists:append(BeforeChars, AfterChars, Atom_12_Chars),
+             !
+          ),
+          atom_chars(Atom_1, BeforeChars)
        )
     ;  var(Atom_2) ->
        (  var(Atom_12) -> throw(error(instantiation_error, atom_concat/3))
@@ -1226,7 +1584,21 @@ atom_concat(Atom_1, Atom_2, Atom_12) :-
        atom_chars(Atom_12, Atom_12_Chars)
     ).
 
-
+%% sub_atom(+Atom, ?Before, ?Length, ?After, ?SubAtom).
+%
+% Relates an atom to a subatom inside with some key properties:
+% 
+%  * SubAtom starts at Before characters (0-based) from Atom
+%  * SubAtom has Length characters
+%  * After SubAtom there are After characters in Atom
+%
+% If you find yourself using this predicate, consider using strings.
+% Example:
+%
+% ```
+% ?- sub_atom(abcdefg, 2, 3, X, SubAtom).
+%    X = 2, SubAtom = cde.
+% ```
 sub_atom(Atom, Before, Length, After, Sub_atom) :-
     error:must_be(atom, Atom),
     error:can_be(atom, Sub_atom),
@@ -1248,7 +1620,14 @@ sub_atom(Atom, Before, Length, After, Sub_atom) :-
        atom_chars(Sub_atom, LengthChars)
     ).
 
-
+%% char_code(?Char, ?Code)
+%
+% Relates a Char to its Code (an integer). Example:
+%
+% ```
+% ?- char_code(a, X).
+%    X = 97.
+% ```
 char_code(Char, Code) :-
     (  var(Char) ->
        (  var(Code) ->
@@ -1269,11 +1648,19 @@ char_code(Char, Code) :-
     ;  throw(error(type_error(character, Char), char_code/2))
     ).
 
+%% get_char(-Char).
+%
+% From the current input stream, unify Char with the next character.
+% When there are no more characters to read, Char unifies with `end_of_file`.
 get_char(C) :-
     error:can_be(in_character, C),
     current_input(S),
     '$get_char'(S, C).
 
+%% get_char(+Stream, -Char).
+%
+% From the stream Stream, unify Char with the next character.
+% When there are no more characters to read, Char unifies with `end_of_file`.
 get_char(S, C) :-
     error:can_be(in_character, C),
     '$get_char'(S, C).
@@ -1330,7 +1717,20 @@ codes_or_vars([C|Cs], PI) :-
     ;  codes_or_vars(Cs, PI)
     ).
 
-
+%% number_chars(?N, ?Chars).
+%
+% Relates a number and its representation as list of chars (string).
+% Throws an error if Chars is not the representation of a number.
+% Examples:
+%
+% ```
+% ?- number_chars(42, X).
+%    X = "42".
+% ?- number_chars(X, "42").
+%    X = 42.
+% ?- number_chars(X, "not_a_number").
+%    error(syntax_error(cannot_parse_big_int),number_chars/2:0).
+% ```
 number_chars(N, Chs) :-
     (  ground(Chs) ->
        can_be_number(N, number_chars/2),
@@ -1352,7 +1752,20 @@ list_of_ints(Ns) :-
     error:must_be(list, Ns),
     lists:maplist(error:must_be(integer), Ns).
 
-
+%% number_codes(?N, ?Codes).
+%
+% Relates a number and its representation as list of codes.
+% Throws an error if Codes is not the representation of a number.
+% Examples:
+%
+% ```
+% ?- number_codes(42, X).
+%    X = [52,50].
+% ?- number_codes(X, [52,50]).
+%    X = 42.
+% ?- number_codes(X, [65]).
+%    error(syntax_error(cannot_parse_big_int),number_codes/2:0).
+% ```
 number_codes(N, Chs) :-
    (  ground(Chs) ->
       can_be_number(N, number_codes/2),
@@ -1369,7 +1782,18 @@ number_codes(N, Chs) :-
       '$number_to_codes'(N, Chs)
    ).
 
-
+%% subsumes_term(General, Specific)
+%
+% True iff General can be made equivalent to Specific by only binding variables
+% in Generic. The implementation unifies with occurs check always and ensures that
+% the variables of Specific did not change. Some examples:
+%
+% ```
+% ?- subsumes_term(f(A, A), f(2, 2)).
+%    true.
+% ?- subsumes_term(f(A, 2), f(2, A)).
+%    false.
+% ```
 subsumes_term(General, Specific) :-
    \+ \+ (
       term_variables(Specific, SVs1),
@@ -1378,21 +1802,42 @@ subsumes_term(General, Specific) :-
       SVs1 == SVs2
    ).
 
-
+%% unify_with_occurs_check(?X, ?Y).
+%
+% True iff X and Y unify with occurs check. The occurs check prevents the creation cyclic terms but is
+% computationally more expensive. The (=)/2 operator can also do occurs check if enabled
+% via `set_prolog_flag/2`. Example:
+%
+% ```
+% ?- A = f(A).
+%    A = f(A).
+% ?- unify_with_occurs_check(A, f(A)).
+%    false.
+% ```
 unify_with_occurs_check(X, Y) :- '$unify_with_occurs_check'(X, Y).
 
-
+%% current_input(-Stream).
+%
+% Unifies with the current input stream.
 current_input(S) :- '$current_input'(S).
 
+%% current_output(-Stream).
+%
+% Unifies with the current output stream.
 current_output(S) :- '$current_output'(S).
 
-
+%% set_input(+Stream).
+%
+% Sets the current input stream to Stream.
 set_input(S) :-
     (  var(S) ->
        throw(error(instantiation_error, set_input/1))
     ;  '$set_input'(S)
     ).
 
+%% set_output(Stream).
+%
+% Sets the current output stream to Stream.
 set_output(S) :-
     (  var(S) ->
        throw(error(instantiation_error, set_output/1))
@@ -1434,11 +1879,35 @@ parse_stream_options_(eof_action(Action), eof_action-Action) :-
 parse_stream_options_(E, _) :-
     throw(error(domain_error(stream_option, E), _)). % 8.11.5.3i)
 
-
+%% open(+File, +Mode, +Stream).
+%
+% Equivalent to `open(File, Mode, Stream, [])`.
 open(SourceSink, Mode, Stream) :-
     open(SourceSink, Mode, Stream, []).
 
-
+%% open(+File, +Mode, -Stream, +StreamOptions).
+%
+% Opens a file named File with a Mode and StreamOptions, and returns a Stream
+% that can be used by other predicates to read and write (depending on Mode).
+%
+% Mode can be: `read`, `write` or `append`. `read` creates a Stream
+% that is read-only, `write` is write-only and `append`
+% is write-only but at the end of the file.
+%
+% The following options are available:
+%
+%  * `alias(+Alias)`: Set an alias to the stream
+%  * `eof_action(+Action)`: Defined what happens if the end of the stream is reached. Values: `error`, `eof_code` and `reset`.
+%  * `reposition(+Boolean)`: Specifies whether repositioning is required for the stream. `false` is the default.
+%  * `type(+Type)`: Type can be `text` or `binary`. Defines the type of the stream, if it's optimized for plain text
+%    or just binary
+%
+% Example:
+%
+% ```
+% ?- open("README.md", read, S, []), get_n_chars(S, 20, C).
+%    S = '$stream'(0x55dece980218), C = "\n# Scryer Prolog\n\nS ..."
+% ```
 open(SourceSink, Mode, Stream, StreamOptions) :-
     (  var(SourceSink) ->
        throw(error(instantiation_error, open/4)) % 8.11.5.3a)
@@ -1476,84 +1945,145 @@ parse_close_options_(force(Force), force-Force) :-
 parse_close_options_(E, _) :-
     throw(error(domain_error(close_option, E), _)).
 
-
+%% close(+Stream, +CloseOptions).
+%
+% Closes a stream. It takes a CloseOptions list. The only option available is `force` which takes a `true`
+% or `false`.
 close(Stream, CloseOptions) :-
     parse_close_options(CloseOptions, [Force], close/2),
     '$close'(Stream, CloseOptions).
 
+%% close(+Stream).
+%
+% Closes a stream. Equivalent to `close(Stream, []).`.
 close(Stream) :-
     '$close'(Stream, []).
 
 
-
+%% flush_output(+Stream).
+%
+% Flushes the output of the stream Stream
 flush_output(S) :-
     '$flush_output'(S).
 
+%% flush_output.
+%
+% Flushes the output of the current output stream
 flush_output :-
     current_output(S),
     '$flush_output'(S).
 
-
+%% get_byte(+Stream, -Byte).
+%
+% From the stream Stream, unify Byte with the next byte (an integer between 0 and 255)
+% When there are no more bytes to read, Byte unifies with -1.
 get_byte(S, B) :-
     '$get_byte'(S, B).
 
+%% get_byte(-Byte).
+%
+% From the current input stream, unify Byte with the next byte (an integer between 0 and 255)
+% When there are no more bytes to read, Byte unifies with -1.
 get_byte(B) :-
     current_input(S),
     '$get_byte'(S, B).
 
-
+%% put_char(+Char).
+%
+% Writes to the current output stream the character Char.
 put_char(C) :-
     current_output(S),
     '$put_char'(S, C).
 
+%% put_char(+Stream, +Char).
+%
+% Writes to the stream Stream the character Char.
 put_char(S, C) :-
     '$put_char'(S, C).
 
-
+%% put_byte(+Byte).
+%
+% Writes to the current output stream the byte Byte (should be an integer between 0 and 255).
 put_byte(C) :-
     current_output(S),
     '$put_byte'(S, C).
 
+%% put_byte(+Stream, +Byte).
+%
+% Writes to the stream Stream the byte Byte (should be an integer between 0 and 255).
 put_byte(S, C) :-
     '$put_byte'(S, C).
 
-
+%% put_code(+Code).
+%
+% Writes to the current output stream the character represented by code Code
 put_code(C) :-
     current_output(S),
     '$put_code'(S, C).
 
+%% put_code(+Stream, +Code).
+%
+% Writes to the stream Stream the character represented by code Code
 put_code(S, C) :-
     '$put_code'(S, C).
 
-
+%% get_code(-Code).
+%
+% From the current input stream, unify Code with the character code of the next character.
+% When there are no more characters to read, Code unifies with -1.
 get_code(C) :-
     current_input(S),
     '$get_code'(S, C).
 
+%% get_code(+Stream, -Code).
+%
+% From the stream Stream, unify Code with the character code of the next character.
+% When there are no more characters to read, Code unifies with -1.
 get_code(S, C) :-
     '$get_code'(S, C).
 
-
+%% peek_byte(+Stream, -Byte).
+%
+% From the stream Stream, unify Byte with the next byte. However, it doesn't move the stream
+% position, allowing it to be read again.
 peek_byte(S, B) :-
     '$peek_byte'(S, B).
 
+%% peek_byte(-Byte).
+%
+% From the current input stream, unify Byte with the next byte. However, it doesn't move the stream
+% position, allowing it to be read again.
 peek_byte(B) :-
     current_input(S),
     '$peek_byte'(S, B).
 
-
+%% peek_code(-Code).
+%
+% From the current input stream, unify Code with the character code of the next character.
+% However, it doesn't move the stream position, allowing it to be read again.
 peek_code(C) :-
     current_input(S),
     '$peek_code'(S, C).
 
+%% peek_code(+Stream, -Code).
+%
+% From the stream Stream, unify Code with the character code of the next character.
+% However, it doesn't move the stream position, allowing it to be read again.
 peek_code(S, C) :-
     '$peek_code'(S, C).
 
-
+%% peek_char(-Char).
+%
+% From the current input stream, unify Char with the next character.
+% However, it doesn't move the stream position, allowing it to be read again.
 peek_char(C) :-
     current_input(S),
     '$peek_char'(S, C).
 
+%% peek_char(+Stream, -Char).
+%
+% From the stream Stream, unify Char with the next character.
+% However, it doesn't move the stream position, allowing it to be read again.
 peek_char(S, C) :-
     '$peek_char'(S, C).
 
@@ -1595,7 +2125,22 @@ stream_iter(S) :-
        stream_iter_(S0, S)
     ).
 
-
+%% stream_property(Stream, StreamProperty).
+%
+% For stream Stream, StreamProperty is a property that applies to that stream.
+% StreamProperty can be one of the following:
+%
+%  * `input` if stream is an input stream.
+%  * `output` if stream is an output stream.
+%  * `input_output` if stream is both an input and an output stream.
+%  * `alias(-Alias)` if the stream has an associated alias.
+%  * `file_name(-FileName)` if Stream is associated to a file, unifies with the name of the file
+%  * `mode(-Mode)`: Mode unifies with the mode of the stream: `read`, `write` or `append`.
+%  * `position(position_and_lines_read(P, L))` current position of the stream.
+%  * `end_of_stream(-X)` where X can be `not`, `at` or `past` depending if the stream has ended or not.
+%  * `eof_action(-X)` where X can be `error`, `eof_code` or `reset` depending on the action that will happen on the end of the file.
+%  * `reposition(-Boolean)` specifies if reposition has been enabled for this stream.
+%  * `type(-Type)` where Type can be `text` or `binary`.
 stream_property(S, P) :-
     (  nonvar(P), \+ check_stream_property(P, _, _) ->
        throw(error(domain_error(stream_property, P), stream_property/2))
@@ -1604,7 +2149,9 @@ stream_property(S, P) :-
        '$stream_property'(S, PropertyName, PropertyValue)
     ).
 
-
+%% at_end_of_stream(+Stream).
+%
+% True iff the stream Stream has ended
 at_end_of_stream(S_or_a) :-
     (  var(S_or_a) ->
        throw(error(instantiation_error, at_end_of_stream/1))
@@ -1615,13 +2162,18 @@ at_end_of_stream(S_or_a) :-
     stream_property(S, end_of_stream(E)),
     ( E = at -> true ; E = past ).
 
+%% at_end_of_stream.
+%
+% True iff the current input stream has ended
 at_end_of_stream :-
     current_input(S),
     stream_property(S, end_of_stream(E)),
     !,
     ( E = at ; E = past ).
 
-
+%% set_stream_position(+Stream, +Position).
+%
+% Sets the current position of the stream Stream to Position.
 set_stream_position(S_or_a, Position) :-
     (  var(Position) ->
        throw(error(instantiation_error, set_stream_position/2))
@@ -1631,18 +2183,30 @@ set_stream_position(S_or_a, Position) :-
     ;  throw(error(domain_error(stream_position, Position), set_stream_position/2))
     ).
 
+%% callable(X).
+%
+% True iff X is bound o an atom or a compund term.
 callable(X) :-
     (  nonvar(X), functor(X, F, _), atom(F) ->
        true
     ;  false
     ).
 
+%% nl.
+%
+% Writes a new line character to the current output stream.
 nl :-
     current_output(Stream),
     nl(Stream).
 
+%% nl(+Stream).
+%
+% Writes a new line character to the stream Stream.
 nl(Stream) :-
     put_char(Stream, '\n').
 
+%% error(ErrorTerm, ImpDef).
+%
+% Throws an exception of the following structure: `error(ErrorTerm, ImpDef)`.
 error(Error_term, Imp_def) :-
    throw(error(Error_term, Imp_def)).

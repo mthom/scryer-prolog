@@ -10,10 +10,9 @@ license = "BSD-3-Clause"
 keywords = ["prolog", "prolog-interpreter", "prolog-system"]
 categories = ["command-line-utilities"]
 build = "build/main.rs"
-rust-version = "1.61"
+rust-version = "1.63"
 
 [features]
-default = ["rug"]
 
 [build-dependencies]
 indexmap = "1.0.2"
@@ -27,6 +26,8 @@ to-syn-value_derive = "0.1.0"
 walkdir = "2"
 
 [dependencies]
+bit-set = "0.5.3"
+bitvec = "1"
 cpu-time = "1.0.0"
 crossterm = "0.20.0"
 dirs-next = "2.0.0"
@@ -41,35 +42,41 @@ libc = "0.2.62"
 modular-bitfield = "0.11.2"
 ctrlc = "3.2.2"
 ordered-float = "2.6.0"
-phf = { version = "0.9",  features = ["macros"] }
+phf = { version = "0.9", features = ["macros"] }
 ref_thread_local = "0.0.0"
-rug = { version = "1.15.0", optional = true }
-rustyline = "9.0.0"
+rustyline = "12.0.0"
 ring = "0.16.13"
 ripemd160 = "0.8.0"
 sha3 = "0.8.2"
 blake2 = "0.8.1"
-crrl ="0.2.0"
+crrl = "0.2.0"
 native-tls = "0.2.4"
 chrono = "0.4.11"
-select = "0.4.3"
+select = "0.6.0"
 roxmltree = "0.11.0"
 base64 = "0.12.3"
 smallvec = "1.8.0"
 sodiumoxide = "0.2.6"
 static_assertions = "1.1.0"
 ryu = "1.0.9"
-hyper = { version = "0.14", features = ["full"] }
-hyper-tls = "0.5.0"
-tokio = { version = "1", features = ["full"] }
+hyper = { version = "1.0.0-rc.3", features = ["full"] }
+tokio = { version = "1.28.2", features = ["full"] }
 futures = "0.3"
 regex = "1.9.1"
+libloading = "0.7"
+derive_deref = "1.1.1"
+http-body-util = "0.1.0-rc.2"
+bytes = "1"
+reqwest = { version = "0.11.18", features = ["blocking"] }
+dashu = { git = "https://github.com/coasys/dashu.git"  }
+libffi = { git = "https://github.com/coasys/libffi-rs.git", branch = "windows-space" }
+rand = "0.8.5"
 
 [dev-dependencies]
 assert_cmd = "1.0.3"
 predicates-core = "1.0.2"
-serial_test = "0.5.1"
 maplit = "1.0.2"
+serial_test = "2.0.0"
 
 [patch.crates-io]
 modular-bitfield = { git = "https://github.com/mthom/modular-bitfield" }

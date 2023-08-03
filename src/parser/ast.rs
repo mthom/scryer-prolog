@@ -4,15 +4,15 @@ use crate::machine::machine_indices::*;
 use crate::parser::char_reader::*;
 use crate::types::HeapCellValueTag;
 
-use std::cell::Cell;
+use std::cell::{Cell, Ref, RefCell, RefMut};
 use std::fmt;
-use std::hash::Hash;
-use std::io::{Error as IOError};
-use std::ops::Neg;
+use std::hash::{Hash, Hasher};
+use std::io::{Error as IOError, ErrorKind};
+use std::ops::{Deref, Neg};
 use std::rc::Rc;
 use std::vec::Vec;
 
-use crate::parser::rug::{Integer, Rational};
+use crate::parser::dashu::{Integer, Rational};
 
 use fxhash::FxBuildHasher;
 use indexmap::IndexMap;
@@ -227,7 +227,7 @@ macro_rules! perm_v {
     };
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum GenContext {
     Head,
     Mid(usize),
@@ -303,17 +303,19 @@ pub type OpDir = IndexMap<(Atom, Fixity), OpDesc, FxBuildHasher>;
 #[derive(Debug, Clone, Copy)]
 pub struct MachineFlags {
     pub double_quotes: DoubleQuotes,
+    pub unknown: Unknown,
 }
 
 impl Default for MachineFlags {
     fn default() -> Self {
         MachineFlags {
             double_quotes: DoubleQuotes::default(),
+            unknown: Unknown::default(),
         }
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq)]
 pub enum DoubleQuotes {
     Atom,
     Chars,
@@ -337,6 +339,34 @@ impl DoubleQuotes {
 impl Default for DoubleQuotes {
     fn default() -> Self {
         DoubleQuotes::Chars
+    }
+}
+
+#[derive(Debug, Clone, Copy)]
+pub enum Unknown {
+    Error,
+    Fail,
+    Warn,
+}
+
+impl Unknown {
+    pub fn is_error(self) -> bool {
+        matches!(self, Unknown::Error)
+    }
+
+    pub fn is_fail(self) -> bool {
+        matches!(self, Unknown::Fail)
+    }
+
+    pub fn is_warn(self) -> bool {
+        matches!(self, Unknown::Warn)
+    }
+}
+
+impl Default for Unknown {
+    #[inline]
+    fn default() -> Self {
+        Unknown::Error
     }
 }
 
@@ -380,7 +410,7 @@ pub enum ParserError {
     NonPrologChar(usize, usize),
     ParseBigInt(usize, usize),
     UnexpectedChar(char, usize, usize),
-    UnexpectedEOF,
+    // UnexpectedEOF,
     Utf8Error(usize, usize),
 }
 
@@ -403,14 +433,28 @@ impl ParserError {
             ParserError::BackQuotedString(..) => atom!("back_quoted_string"),
             ParserError::IncompleteReduction(..) => atom!("incomplete_reduction"),
             ParserError::InvalidSingleQuotedCharacter(..) => atom!("invalid_single_quoted_character"),
+            ParserError::IO(e) if e.kind() == ErrorKind::UnexpectedEof => atom!("unexpected_end_of_file"),
             ParserError::IO(_) => atom!("input_output_error"),
-            ParserError::LexicalError(_) => atom!("lexical_error"), // TODO: ?
+            ParserError::LexicalError(_) => atom!("lexical_error"),
             ParserError::MissingQuote(..) => atom!("missing_quote"),
             ParserError::NonPrologChar(..) => atom!("non_prolog_character"),
             ParserError::ParseBigInt(..) => atom!("cannot_parse_big_int"),
             ParserError::UnexpectedChar(..) => atom!("unexpected_char"),
-            ParserError::UnexpectedEOF => atom!("unexpected_end_of_file"),
             ParserError::Utf8Error(..) => atom!("utf8_conversion_error"),
+        }
+    }
+
+    #[inline]
+    pub fn unexpected_eof() -> Self {
+        ParserError::IO(std::io::Error::from(ErrorKind::UnexpectedEof))
+    }
+
+    #[inline]
+    pub fn is_unexpected_eof(&self) -> bool {
+        if let ParserError::IO(e) = self {
+            e.kind() == ErrorKind::UnexpectedEof
+        } else {
+            false
         }
     }
 }
@@ -494,6 +538,21 @@ impl Fixnum {
     }
 
     #[inline]
+    pub fn as_cutpoint(num: i64) -> Self {
+        Fixnum::new()
+            .with_num(u64::from_ne_bytes(num.to_ne_bytes()) & ((1 << 56) - 1))
+            .with_tag(HeapCellValueTag::CutPoint as u8)
+            .with_m(false)
+            .with_f(false)
+    }
+
+    #[inline]
+    pub fn get_tag(&self) -> HeapCellValueTag {
+        use modular_bitfield::Specifier;
+        HeapCellValueTag::from_bytes(self.tag()).unwrap()
+    }
+
+    #[inline]
     pub fn build_with_checked(num: i64) -> Result<Self, OutOfBounds> {
         const UPPER_BOUND: i64 = (1 << 55) - 1;
         const LOWER_BOUND: i64 = -(1 << 55);
@@ -572,6 +631,110 @@ impl Literal {
     }
 }
 
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct VarPtr(Rc<RefCell<Var>>);
+
+impl Hash for VarPtr {
+    #[inline(always)]
+    fn hash<H: Hasher>(&self, hasher: &mut H) {
+        self.borrow().hash(hasher)
+    }
+}
+
+impl Deref for VarPtr {
+    type Target = RefCell<Var>;
+
+    #[inline(always)]
+    fn deref(&self) -> &Self::Target {
+        self.0.deref()
+    }
+}
+
+impl VarPtr {
+    #[inline(always)]
+    pub(crate) fn borrow(&self) -> Ref<'_, Var> {
+        self.0.borrow()
+    }
+
+    #[inline(always)]
+    pub(crate) fn borrow_mut(&self) -> RefMut<'_, Var> {
+        self.0.borrow_mut()
+    }
+
+    pub(crate) fn to_var_num(&self) -> Option<usize> {
+        match *self.borrow() {
+            Var::Generated(var_num) => Some(var_num),
+            _ => None,
+        }
+    }
+
+    pub(crate) fn set(&self, var: Var) {
+        let mut var_ref = self.borrow_mut();
+        *var_ref = var;
+    }
+}
+
+impl From<Var> for VarPtr {
+    #[inline(always)]
+    fn from(value: Var) -> VarPtr {
+        VarPtr(Rc::new(RefCell::new(value)))
+    }
+}
+
+impl From<String> for VarPtr {
+    #[inline(always)]
+    fn from(value: String) -> VarPtr {
+        VarPtr::from(Var::from(value))
+    }
+}
+
+impl From<&str> for VarPtr {
+    #[inline(always)]
+    fn from(value: &str) -> VarPtr {
+        VarPtr::from(value.to_owned())
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Var {
+    Generated(usize),
+    InSitu(usize),
+    Named(String),
+}
+
+impl From<String> for Var {
+    #[inline(always)]
+    fn from(value: String) -> Var {
+        Var::Named(value)
+    }
+}
+
+impl From<&str> for Var {
+    #[inline(always)]
+    fn from(value: &str) -> Var {
+        Var::Named(value.to_owned())
+    }
+}
+
+impl Var {
+    #[inline(always)]
+    pub fn as_str(&self) -> Option<&str> {
+        match self {
+            Var::Named(value) => Some(&value),
+            _ => None,
+        }
+    }
+
+    #[inline(always)]
+    pub fn to_string(&self) -> String {
+        match self {
+            Var::InSitu(n) | Var::Generated(n) => format!("_{}", n),
+            Var::Named(value) => value.to_owned(),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum Term {
     AnonVar,
@@ -582,7 +745,7 @@ pub enum Term {
     // other PartialString variants in as_partial_string.
     PartialString(Cell<RegType>, String, Box<Term>),
     CompleteString(Cell<RegType>, Atom),
-    Var(Cell<VarReg>, Rc<String>),
+    Var(Cell<VarReg>, VarPtr),
 }
 
 impl Term {
@@ -626,8 +789,25 @@ impl Term {
     }
 }
 
+#[inline]
+pub fn source_arity(terms: &[Term]) -> usize {
+    if let Some(last_arg) = terms.last() {
+        if let Term::Literal(_, Literal::CodeIndex(_)) = last_arg {
+            return terms.len() - 1;
+        }
+    }
+
+    terms.len()
+}
+
 fn unfold_by_str_once(term: &mut Term, s: Atom) -> Option<(Term, Term)> {
     if let Term::Clause(_, ref name, ref mut subterms) = term {
+        if let Some(last_arg) = subterms.last() {
+            if let Term::Literal(_, Literal::CodeIndex(_)) = last_arg {
+                subterms.pop();
+            }
+        }
+
         if name == &s && subterms.len() == 2 {
             let snd = subterms.pop().unwrap();
             let fst = subterms.pop().unwrap();
@@ -650,3 +830,30 @@ pub fn unfold_by_str(mut term: Term, s: Atom) -> Vec<Term> {
     terms.push(term);
     terms
 }
+
+fn unfold_by_str_ref_once(term: &Term, s: Atom) -> Option<(&Term, &Term)> {
+    if let Term::Clause(_, ref name, ref subterms) = term {
+        if name == &s && subterms.len() == 2 {
+            let fst = &subterms[0];
+            let snd = &subterms[1];
+
+            return Some((fst, snd));
+        }
+    }
+
+    None
+}
+
+pub fn unfold_by_str_ref(mut term: &Term, s: Atom) -> Vec<&Term> {
+    let mut terms = vec![];
+
+    while let Some((fst, snd)) = unfold_by_str_ref_once(&term, s) {
+        terms.push(fst);
+        term = snd;
+    }
+
+    terms.push(term);
+    terms
+}
+
+

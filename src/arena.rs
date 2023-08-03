@@ -6,7 +6,7 @@ use crate::raw_block::*;
 use crate::read::*;
 
 use ordered_float::OrderedFloat;
-use crate::parser::rug::{Integer, Rational};
+use crate::parser::dashu::{Integer, Rational};
 
 use std::alloc;
 use std::fmt;
@@ -242,9 +242,11 @@ impl<T: fmt::Display> fmt::Display for TypedArenaPtr<T> {
 }
 
 impl<T: ?Sized + ArenaAllocated> TypedArenaPtr<T> {
+    // data must be allocated in the arena already.
     #[inline]
     pub const fn new(data: *mut T) -> Self {
-        unsafe { TypedArenaPtr(ptr::NonNull::new_unchecked(data)) }
+        let result = unsafe { TypedArenaPtr(ptr::NonNull::new_unchecked(data)) };
+        result
     }
 
     #[inline]
@@ -698,9 +700,9 @@ unsafe fn drop_slab_in_place(value: &mut AllocSlab) {
         ArenaHeaderTag::HttpReadStream => {
             ptr::drop_in_place(value.payload_offset::<StreamLayout<CharReader<HttpReadStream>>>());
         }
-	ArenaHeaderTag::HttpWriteStream => {
-	    ptr::drop_in_place(value.payload_offset::<StreamLayout<CharReader<HttpWriteStream>>>());
-	}
+	    ArenaHeaderTag::HttpWriteStream => {
+	        ptr::drop_in_place(value.payload_offset::<StreamLayout<CharReader<HttpWriteStream>>>());
+	    }
         ArenaHeaderTag::ReadlineStream => {
             ptr::drop_in_place(value.payload_offset::<StreamLayout<ReadlineStream>>());
         }
@@ -721,12 +723,12 @@ unsafe fn drop_slab_in_place(value: &mut AllocSlab) {
         ArenaHeaderTag::TcpListener => {
             ptr::drop_in_place(value.payload_offset::<TcpListener>());
         }
-	ArenaHeaderTag::HttpListener => {
-	    ptr::drop_in_place(value.payload_offset::<HttpListener>());
-	}
-	ArenaHeaderTag::HttpResponse => {
-	    ptr::drop_in_place(value.payload_offset::<HttpResponse>());
-	}
+	    ArenaHeaderTag::HttpListener => {
+	        ptr::drop_in_place(value.payload_offset::<HttpListener>());
+	    }
+	    ArenaHeaderTag::HttpResponse => {
+	        ptr::drop_in_place(value.payload_offset::<HttpResponse>());
+	    }
         ArenaHeaderTag::StandardOutputStream => {
             ptr::drop_in_place(value.payload_offset::<StreamLayout<StandardOutputStream>>());
         }
@@ -788,7 +790,7 @@ mod tests {
     use crate::machine::partial_string::*;
 
     use ordered_float::OrderedFloat;
-    use crate::parser::rug::{Integer, Rational};
+    use crate::parser::dashu::{Integer, Rational};
 
     #[test]
     fn float_ptr_cast() {
@@ -889,7 +891,7 @@ mod tests {
 
         // rational
 
-        let big_rat = 2 * Rational::from(1u64 << 63);
+        let big_rat = Rational::from(2) * Rational::from(1u64 << 63);
         let big_rat_ptr: TypedArenaPtr<Rational> = arena_alloc!(big_rat, &mut wam.machine_st.arena);
 
         assert!(!big_rat_ptr.as_ptr().is_null());
@@ -915,7 +917,7 @@ mod tests {
           (HeapCellValueTag::Cons, cons_ptr) => {
               match_untyped_arena_ptr!(cons_ptr,
                  (ArenaHeaderTag::Rational, n) => {
-                     assert_eq!(&*n, &(2 * Rational::from(1u64 << 63)));
+                     assert_eq!(&*n, &(Rational::from(2) * Rational::from(1u64 << 63)));
                  }
                  _ => unreachable!()
               )

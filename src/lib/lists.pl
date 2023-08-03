@@ -1,3 +1,7 @@
+/**
+List manipulation predicates
+*/
+
 :- module(lists, [member/2, select/3, append/2, append/3, foldl/4, foldl/5,
 		          memberchk/2, reverse/2, length/2, maplist/2,
 		          maplist/3, maplist/4, maplist/5, maplist/6,
@@ -57,6 +61,20 @@
 resource_error(Resource, Context) :-
    throw(error(resource_error(Resource), Context)).
 
+%% length(?Xs, ?N).
+%
+% Relates a list to its length (number of elements). It can be used to count the elements of a current list or
+% to create a list full of free variables with N length.
+%
+% ```
+% ?- length("abc", 3).
+%    true.
+% ?- length("abc", N).
+%    N = 3.
+% ?- length(Xs, 3).
+%    Xs = [_A,_B,_C].
+% ```
+
 length(Xs0, N) :-
    '$skip_max_list'(M, N, Xs0,Xs),
    !,
@@ -74,7 +92,7 @@ length(_, N) :-
 
 length_rundown(Xs, 0) :- !, Xs = [].
 length_rundown(Vs, N) :-
-    \+ \+ '$project_atts':copy_term(Vs,Vs,[]), % unconstrained
+    '$unattributed_var'(Vs), % unconstrained
     !,
     '$det_length_rundown'(Vs, N).
 length_rundown([_|Xs], N) :- % force unification
@@ -82,7 +100,7 @@ length_rundown([_|Xs], N) :- % force unification
     length(Xs, N1). % maybe some new info on Xs
 
 failingvarskip(Xs) :-
-    \+ \+ '$project_atts':copy_term(Xs,Xs,[]), % unconstrained
+    '$unattributed_var'(Xs), % unconstrained
     !.
 failingvarskip([_|Xs0]) :- % force unification
     '$skip_max_list'(_, _, Xs0,Xs),
@@ -95,28 +113,71 @@ length_addendum([_|Xs], N, M) :-
     M1 is M + 1,
     length_addendum(Xs, N, M1).
 
+%% member(?X, ?Xs).
+%
+% Succeeds when X unifies with an item of the list Xs, which can be at any position.
+%
+% ```
+% ?- member(X, "hello world").
+%    X = h
+% ;  ... .
+% ```
 
-member(X, [X|_]).
-member(X, [_|Xs]) :- member(X, Xs).
+member(X, [L|Ls]) :-
+        member_(Ls, L, X).
 
+member_(_, X, X).
+member_([L|Ls], _, X) :-
+        member_(Ls, L, X).
 
+%% select(X, Xs0, Xs1).
+%
+% Succeeds when the list Xs1 is the list Xs0 without the item X
+%
+% ```
+% ?- select(c, "abcd", X).
+%    X = "abd"
+% ;  false.
+% ```
 select(X, [X|Xs], Xs).
 select(X, [Y|Xs], [Y|Ys]) :- select(X, Xs, Ys).
 
-
+%% append(+XsXs, ?Xs).
+%
+% Concatenates a list of lists
+%
+% ```
+% ?- append([[1, 2], [3]], Xs).
+%    Xs = [1,2,3].
+% ```
 append([], []).
 append([L0|Ls0], Ls) :-
     append(L0, Rest, Ls),
     append(Ls0, Rest).
 
-
+%% append(Xs0, Xs1, Xs).
+%
+% List Xs is the concatenation of Xs0 and Xs1
+%
+% ```
+% ?- append([1,2,3], [4,5,6], Xs).
+%    Xs = [1,2,3,4,5,6].
+% ```
 append([], R, R).
 append([X|L], R, [X|S]) :- append(L, R, S).
 
-
+%% memberchk(?X, +Xs).
+%
+% This predicate is similar to `member/2`, but it only provides a single answer
 memberchk(X, Xs) :- member(X, Xs), !.
 
-
+%% reverse(?Xs, ?Ys).
+%
+% Xs is the Ys list in reverse order
+%
+%     ?- reverse([1,2,3], [3,2,1]).
+%        true.
+%
 reverse(Xs, Ys) :-
     (  nonvar(Xs) -> reverse(Xs, Ys, [], Xs)
     ;  reverse(Ys, Xs, [], Ys)
@@ -126,81 +187,141 @@ reverse([], [], YsRev, YsRev).
 reverse([_|Xs], [Y1|Ys], YsPreludeRev, Xss) :-
     reverse(Xs, Ys, [Y1|YsPreludeRev], Xss).
 
+%% maplist(+Predicate, ?Xs0).
+%
+% This is a metapredicate that applies predicate to each element of the list Xs0
+%
+% ```
+% ?- maplist(write, [1,2,3]).
+% 123   true.
+% ```
 maplist(_, []).
 maplist(Cont1, [E1|E1s]) :-
     call(Cont1, E1),
     maplist(Cont1, E1s).
 
+%% maplist(+Predicate, ?Xs0, ?Xs1).
+%
+% This is a metapredicate that applies predicate to each element of the lists Xs0 and Xs1.
+%
+% ```
+% ?- maplist(length, ["hello", "prolog", "marseille"], Xs1).
+%    Xs1 = [5,6,9].
+% ```
 maplist(_, [], []).
 maplist(Cont2, [E1|E1s], [E2|E2s]) :-
     call(Cont2, E1, E2),
     maplist(Cont2, E1s, E2s).
 
+%% maplist(+Predicate, ?Xs0, ?Xs1, ?Xs2).
+%
+% This is a metapredicate that applies predicate to each element of the lists Xs0, Xs1 and Xs2.
 maplist(_, [], [], []).
 maplist(Cont3, [E1|E1s], [E2|E2s], [E3|E3s]) :-
     call(Cont3, E1, E2, E3),
     maplist(Cont3, E1s, E2s, E3s).
 
+%% maplist(+Predicate, ?Xs0, ?Xs1, ?Xs2, ?Xs3).
+%
+% This is a metapredicate that applies predicate to each element of the lists Xs0, Xs1, Xs2 and Xs3.
 maplist(_, [], [], [], []).
 maplist(Cont, [E1|E1s], [E2|E2s], [E3|E3s], [E4|E4s]) :-
     call(Cont, E1, E2, E3, E4),
     maplist(Cont, E1s, E2s, E3s, E4s).
 
-
+%% maplist(+Predicate, ?Xs0, ?Xs1, ?Xs2, ?Xs3, ?Xs4).
+%
+% This is a metapredicate that applies predicate to each element of the lists Xs0, Xs1, Xs2, Xs3 and Xs4.
 maplist(_, [], [], [], [], []).
 maplist(Cont, [E1|E1s], [E2|E2s], [E3|E3s], [E4|E4s], [E5|E5s]) :-
     call(Cont, E1, E2, E3, E4, E5),
     maplist(Cont, E1s, E2s, E3s, E4s, E5s).
 
-
+%% maplist(+Predicate, ?Xs0, ?Xs1, ?Xs2, ?Xs3, ?Xs4, ?Xs5).
+%
+% This is a metapredicate that applies predicate to each element of the lists Xs0, Xs1, Xs2, Xs3, Xs4 and Xs5.
 maplist(_, [], [], [], [], [], []).
 maplist(Cont, [E1|E1s], [E2|E2s], [E3|E3s], [E4|E4s], [E5|E5s], [E6|E6s]) :-
     call(Cont, E1, E2, E3, E4, E5, E6),
     maplist(Cont, E1s, E2s, E3s, E4s, E5s, E6s).
 
-
+%% maplist(+Predicate, ?Xs0, ?Xs1, ?Xs2, ?Xs3, ?Xs4, ?Xs5, ?Xs6).
+%
+% This is a metapredicate that applies predicate to each element of the lists Xs0, Xs1, Xs2, Xs3, Xs4, Xs5 and Xs6.
 maplist(_, [], [], [], [], [], [], []).
 maplist(Cont, [E1|E1s], [E2|E2s], [E3|E3s], [E4|E4s], [E5|E5s], [E6|E6s], [E7|E7s]) :-
     call(Cont, E1, E2, E3, E4, E5, E6, E7),
     maplist(Cont, E1s, E2s, E3s, E4s, E5s, E6s, E7s).
 
-
+%% maplist(+Predicate, ?Xs0, ?Xs1, ?Xs2, ?Xs3, ?Xs4, ?Xs5, ?Xs6, ?Xs7).
+%
+% This is a metapredicate that applies predicate to each element of the lists Xs0, Xs1, Xs2, Xs3, Xs4, Xs5, Xs6 and Xs7.
 maplist(_, [], [], [], [], [], [], [], []).
 maplist(Cont, [E1|E1s], [E2|E2s], [E3|E3s], [E4|E4s], [E5|E5s], [E6|E6s], [E7|E7s], [E8|E8s]) :-
     call(Cont, E1, E2, E3, E4, E5, E6, E7, E8),
     maplist(Cont, E1s, E2s, E3s, E4s, E5s, E6s, E7s, E8s).
 
-
+%% sum_list(+Xs, -Sum).
+%
+% Takes a lists of numbers and unifies Sum with the result of summing all the elements of the list.
+%
+% ```
+% ?- sum_list([2,2,2], 6).
+%    true.
+% ```
 sum_list(Ls, S) :-
         foldl(lists:sum_, Ls, 0, S).
 
 sum_(L, S0, S) :- S is S0 + L.
 
 
-
+%% same_length(?Xs, ?Ys).
+%
+% Succeeds if Xs and Ys are lists of the same length
 same_length([], []).
 same_length([_|As], [_|Bs]) :-
         same_length(As, Bs).
 
+%% foldl(+Predicate, ?Ls, +A0, ?A).
+%
+% foldl, sometimes called reduce, is a metapredicate that takes a predicate, a list of items
+% and a starting value, and outputs a single value. The predicate _Predicate_ must be able to take the current
+% element of the list, the previous value of the computation and the next value of the computation.
+%
+% For example, if we define sum_ as:
+%
+% ```
+% sum_(L, S0, S) :- S is S0 + L.
+% ```
+%
+% Then we can define `sum_list/2` as the following:
+%
+% ```
+% sum_list(Ls, S) :- foldl(sum_, Ls, 0, S).
+% ```
 
-foldl(Goal_3, Ls, A0, A) :-
-        foldl_(Ls, Goal_3, A0, A).
-
-foldl_([], _, A, A).
-foldl_([L|Ls], G_3, A0, A) :-
+foldl(_, [], A, A).
+foldl(G_3, [L|Ls], A0, A) :-
         call(G_3, L, A0, A1),
-        foldl_(Ls, G_3, A1, A).
+        foldl(G_3, Ls, A1, A).
 
+%% foldl(+Predicate, ?Ls0, ?Ls1, +A0, ?A).
+%
+% Same as `foldl/4` but with an extra list
 
-foldl(Goal_4, Xs, Ys, A0, A) :-
-        foldl_(Xs, Ys, Goal_4, A0, A).
-
-
-foldl_([], [], _, A, A).
-foldl_([X|Xs], [Y|Ys], G_4, A0, A) :-
+foldl(_, [], [], A, A).
+foldl(G_4, [X|Xs], [Y|Ys], A0, A) :-
         call(G_4, X, Y, A0, A1),
-        foldl_(Xs, Ys, G_4, A1, A).
+        foldl(G_4, Xs, Ys, A1, A).
 
+%% transpose(?Ls, ?Ts).
+%
+% If Ls is a list of lists, Ts contains the transposition
+%
+% ```
+% ?- transpose([[1,1],[2,2]], Ts).
+%    Ts = [[1,2],[1,2]].
+% ```
 transpose(Ls, Ts) :-
         lists_transpose(Ls, Ts).
 
@@ -214,7 +335,14 @@ transpose_(_, Fs, Lists0, Lists) :-
 
 list_first_rest([L|Ls], L, Ls).
 
-
+%% list_to_set(+Ls0, -Set).
+%
+% Takes a list Ls0 and returns a list Set that doesn't contain any repeated element
+%
+% ```
+% ?- list_to_set([2,3,4,4,1,2], Set).
+%    Set = [2,3,4,1].
+% ```
 list_to_set(Ls0, Ls) :-
         maplist(lists:with_var, Ls0, LVs0),
         keysort(LVs0, LVs),
@@ -242,7 +370,14 @@ unify_same(E-V, Prev-Var, E-V) :-
         ;   true
         ).
 
-
+%% nth0(?N, ?Ls, ?E).
+%
+% Succeeds if in the N position of the list Ls, we found the element E. The elements start counting from zero.
+%
+% ```
+% ?- nth0(2, [1,2,3,4], 3).
+%    true.
+% ```
 nth0(N, Es0, E) :-
    nonvar(N),
    '$skip_max_list'(Skip, N, Es0,Es1),
@@ -261,7 +396,6 @@ nth0(N, Es0, E) :-
 
 skipn(N0, Es0,Es) :-
    N0>0,
-   !, % should not be necessary #1028
    N1 is N0-1,
    Es0 = [_|Es1],
    skipn(N1, Es1,Es).
@@ -277,6 +411,14 @@ nth0_el(N0,N, _,E, [E0|Es0]) :-
    N1 is N0+1,
    nth0_el(N1,N, E0,E, Es0).
 
+%% nth1(?N, ?Ls, ?E).
+%
+% Succeeds if in the N position of the list Ls, we found the element E. The elements start counting from one.
+%
+% ```
+% ?- nth1(2, [1,2,3,4], 2).
+%    true.
+% ```
 nth1(N, Es0, E) :-
    N \== 0,
    nth0(N, [_|Es0], E),
@@ -284,13 +426,20 @@ nth1(N, Es0, E) :-
 
 skipn(N0, Es0,Es, Xs0,Xs) :-
    N0>0,
-   !, % should not be necessary #1028
    N1 is N0-1,
    Es0 = [E|Es1],
    Xs0 = [E|Xs1],
    skipn(N1, Es1,Es, Xs1,Xs).
 skipn(0, Es,Es, Xs,Xs).
 
+%% nth0(?N, ?Ls, ?E, ?Rs).
+%
+% Succeeds if in the N position of the list Ls, we found the element E and the rest of the list is Rs. The elements start counting from zero.
+%
+% ```
+% ?- nth0(2, [1,2,3,4], 3, [1,2,4]).
+%    true.
+% ```
 nth0(N, Es0, E, Es) :-
    integer(N),
    N >= 0,
@@ -315,45 +464,58 @@ nth0_elx(N0,N, E0,E, [E1|Es0], [E0|Es]) :-
 
 % p.p.8.5
 
+%% nth1(?N, ?Ls, ?E, ?Rs).
+%
+% Succeeds if in the N position of the list Ls, we found the element E and the rest of the list is Rs. The elements start counting from one.
+%
+% ```
+% ?- nth1(2, [1,2,3,4], 2, [1,3,4]).
+%    true.
+% ```
 nth1(N, Es0, E, Es) :-
    N \== 0,
    nth0(N, [_|Es0], E, [_|Es]),
    N \== 0.
 
-
+%% list_max(+Xs, -Max).
+%
+% Takes a list Xs and unifies with the maximum value of the list
 list_max([N|Ns], Max) :-
     foldl(lists:list_max_, Ns, N, Max).
 
 list_max_(N, Max0, Max) :-
     Max is max(N, Max0).
 
+%% list_min(+Xs, -Min).
+%
+% Takes a list Xs and unifies with the minimum value of the list
 list_min([N|Ns], Min) :-
     foldl(lists:list_min_, Ns, N, Min).
 
 list_min_(N, Min0, Min) :-
     Min is min(N, Min0).
 
-%!  permutation(?Xs, ?Ys) is nondet.
+%% permutation(?Xs, ?Ys) is nondet.
 %
-%   True when Xs is a permutation of Ys. This can solve for Ys given
-%   Xs or Xs given Ys, or  even   enumerate  Xs and Ys together. The
-%   predicate  permutation/2  is  primarily   intended  to  generate
-%   permutations. Note that a list of  length N has N! permutations,
-%   and  unbounded  permutation  generation   becomes  prohibitively
-%   expensive, even for rather short lists (10! = 3,628,800).
+% True when Xs is a permutation of Ys. This can solve for Ys given
+% Xs or Xs given Ys, or  even   enumerate  Xs and Ys together. The
+% predicate  `permutation/2`  is  primarily   intended  to  generate
+% permutations. Note that a list of  length N has N! permutations,
+% and  unbounded  permutation  generation   becomes  prohibitively
+% expensive, even for rather short lists (10! = 3,628,800).
 %
-%   The example below illustrates that Xs   and Ys being proper lists
-%   is not a sufficient condition to use the above replacement.
+% The example below illustrates that Xs   and Ys being proper lists
+% is not a sufficient condition to use the above replacement.
 %
-%     ==
-%     ?- permutation([1,2], [X,Y]).
-%     X = 1, Y = 2 ;
-%     X = 2, Y = 1 ;
-%     false.
-%     ==
+% ```
+% ?- permutation([1,2], [X,Y]).
+%    X = 1, Y = 2
+% ;  X = 2, Y = 1
+% ;  false.
+% ```
 %
-%   @error  type_error(list, Arg) if either argument is not a proper
-%           or partial list.
+%   Throws `type_error(list, Arg)` if either argument is not a proper
+%   or partial list.
 
 permutation(Xs, Ys) :-
     '$skip_max_list'(Xlen, _, Xs, XTail),

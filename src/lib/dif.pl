@@ -1,3 +1,8 @@
+/**
+Provides predicate `dif/2`. `dif/2` is a constraint that is true only if both of its
+arguments are different terms.
+*/
+
 :- module(dif, [dif/2]).
 
 :- use_module(library(atts)).
@@ -35,25 +40,39 @@ verify_attributes(Var, Value, Goals) :-
     ;   Goals = []
     ).
 
-% Probably the world's worst dif/2 implementation. I'm open to
-% suggestions for improvement.
-
+%% dif(?X, ?Y).
+%
+% True iff X and Y are different terms. Unlike `\=/2`, `dif/2` is more declarative because if X and Y can
+% unify but they're not yet equal, the decision is delayed, and prevents X and Y to become equal later.
+% Examples:
+%
+% ```
+% ?- dif(a, a).
+%    false.
+% ?- dif(a, b).
+%    true.
+% ?- dif(X, b).
+%    dif:dif(X,b).
+% ?- dif(X, b), X = b.
+%    false.
+% ```
 dif(X, Y) :-
     X \== Y,
     (   X \= Y -> true
-    ;   (   term_variables(X, XVars),
-            term_variables(Y, YVars),
-            dif_set_variables(XVars, X, Y),
-            dif_set_variables(YVars, X, Y)
-        )
+    ;   term_variables(dif(X,Y), Vars),
+        dif_set_variables(Vars, X, Y)
     ).
 
-gather_dif_goals([]) --> [].
-gather_dif_goals([(X \== Y) | Goals]) -->
-    [dif:dif(X, Y)],
-    gather_dif_goals(Goals).
+gather_dif_goals(_, []) --> [].
+gather_dif_goals(V, [(X \== Y) | Goals]) -->
+    (  { term_variables(X-Y, [V0 | _]),
+         V == V0 } ->
+       [dif:dif(X, Y)]
+    ;  []
+    ),
+    gather_dif_goals(V, Goals).
 
 attribute_goals(X) -->
     { get_atts(X, +dif(Goals)) },
-    gather_dif_goals(Goals),
+    gather_dif_goals(X, Goals),
     { put_atts(X, -dif(_)) }.

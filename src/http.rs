@@ -1,25 +1,54 @@
-use std::sync::Arc;
-use std::convert::Infallible;
-
-use hyper::{Response, Request, Body};
-use tokio::sync::Mutex;
-use tokio::sync::mpsc::{channel, Receiver, Sender};
+use std::sync::{Arc, Mutex, Condvar};
+use std::future::Future;
+use std::pin::Pin;
+use http_body_util::Full;
+use bytes::Bytes;
+use hyper::service::Service;
+use hyper::{body::Incoming as IncomingBody, Request, Response};
 
 pub struct HttpListener {
-    pub incoming: Receiver<HttpRequest>
+    pub incoming: std::sync::mpsc::Receiver<HttpRequest>
 }
 
 #[derive(Debug)]
 pub struct HttpRequest {
-    pub request: Request<Body>,
+    pub request: Request<IncomingBody>,
     pub response: HttpResponse,
 }
 
-pub type HttpResponse = Sender<Response<Body>>;
+pub type HttpResponse = Arc<(Mutex<bool>, Mutex<Option<Response<Full<Bytes>>>>, Condvar)>;
 
-pub async fn serve_req(req: Request<Body>, tx: Arc<Mutex<Sender<HttpRequest>>>) -> Result<Response<Body>, Infallible> {
-    let (response_tx, mut rx) = channel(1);
-    let http_request = HttpRequest { request: req, response: response_tx };
-    tx.lock().await.send(http_request).await.unwrap();
-    Ok(rx.recv().await.unwrap())
+pub struct HttpService {
+    pub tx: std::sync::mpsc::SyncSender<HttpRequest>,
+}
+
+impl Service<Request<IncomingBody>> for HttpService {
+    type Response = Response<Full<Bytes>>;
+    type Error = hyper::Error;
+    type Future = Pin<Box<dyn Future<Output = Result<Self::Response, Self::Error>> + Send>>;
+
+    fn call(&mut self, req: Request<IncomingBody>) -> Self::Future {
+	// new connection!
+	// we send the Request info to Prolog
+	let response = Arc::new((Mutex::new(false), Mutex::new(None), Condvar::new()));
+	let http_request = HttpRequest { request: req, response: Arc::clone(&response) };
+	self.tx.send(http_request).unwrap();
+
+	// we wait for the Response info from Prolog
+	{
+	    let (ready, _response, cvar) = &*response;
+	    let mut ready = ready.lock().unwrap();
+	    while !*ready {
+		ready = cvar.wait(ready).unwrap();
+	    }
+	}
+	{
+	    let (_, response, _) = &*response;
+	    let response = response.lock().unwrap().take();
+	    let res = response.expect("Data race error in HTTP Server");
+	    Box::pin(async move {
+		Ok(res)
+	    })
+	}
+    }
 }

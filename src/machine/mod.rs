@@ -19,16 +19,19 @@ pub mod machine_state_impl;
 pub mod mock_wam;
 pub mod parsed_results;
 pub mod partial_string;
+pub mod disjuncts;
 pub mod preprocessor;
 pub mod stack;
 pub mod streams;
 pub mod system_calls;
 pub mod term_stream;
+pub mod unify;
 
 use crate::arena::*;
 use crate::arithmetic::*;
 use crate::atom_table::*;
 use crate::forms::*;
+use crate::ffi::ForeignFunctionTable;
 use crate::instructions::*;
 use crate::machine::args::*;
 use crate::machine::compile::*;
@@ -41,7 +44,7 @@ use crate::machine::machine_state::*;
 use crate::machine::stack::*;
 use crate::machine::streams::*;
 use crate::parser::ast::*;
-use crate::parser::rug::{Integer, Rational};
+use crate::parser::dashu::{Integer, Rational};
 use crate::types::*;
 
 use indexmap::IndexMap;
@@ -70,6 +73,7 @@ pub struct Machine {
     pub(super) user_output: Stream,
     pub(super) user_error: Stream,
     pub(super) load_contexts: Vec<LoadContext>,
+    pub(super) foreign_function_table: ForeignFunctionTable,
 }
 
 #[derive(Debug)]
@@ -205,7 +209,7 @@ impl Machine {
         self.machine_st.throw_exception(err);
     }
 
-    fn run_module_predicate(&mut self, module_name: Atom, key: PredicateKey) {
+    fn run_module_predicate(&mut self, module_name: Atom, key: PredicateKey) -> std::process::ExitCode {
         if let Some(module) = self.indices.modules.get(&module_name) {
             if let Some(ref code_index) = module.code_dir.get(&key) {
                 let p = code_index.local().unwrap();
@@ -255,31 +259,22 @@ impl Machine {
         let mut path_buf = current_dir();
         path_buf.push("machine/attributed_variables.pl");
 
-        bootstrapping_compile(
-            Stream::from_static_string(
-                include_str!("attributed_variables.pl"),
-                &mut self.machine_st.arena,
-            ),
-            self,
-            ListingSource::from_file_and_path(
-                atom!("attributed_variables"),
-                path_buf,
-            ),
-        )
-        .unwrap();
+        let stream = Stream::from_static_string(
+            include_str!("attributed_variables.pl"),
+            &mut self.machine_st.arena,
+        );
+
+        self.load_file(path_buf.to_str().unwrap(), stream);
 
         let mut path_buf = current_dir();
         path_buf.push("machine/project_attributes.pl");
 
-        bootstrapping_compile(
-            Stream::from_static_string(
-                include_str!("project_attributes.pl"),
-                &mut self.machine_st.arena,
-            ),
-            self,
-            ListingSource::from_file_and_path(atom!("project_attributes"), path_buf),
-        )
-        .unwrap();
+        let stream = Stream::from_static_string(
+            include_str!("project_attributes.pl"),
+            &mut self.machine_st.arena,
+        );
+
+        self.load_file(path_buf.to_str().unwrap(), stream);
 
         if let Some(module) = self.indices.modules.get(&atom!("$atts")) {
             if let Some(code_index) = module.code_dir.get(&(atom!("driver"), 2)) {
@@ -288,7 +283,7 @@ impl Machine {
         }
     }
 
-    pub fn run_top_level(&mut self, module_name: Atom, key: PredicateKey) {
+    pub fn run_top_level(&mut self, module_name: Atom, key: PredicateKey) -> std::process::ExitCode {
         let mut arg_pstrs = vec![];
 
         for arg in env::args() {
@@ -304,7 +299,7 @@ impl Machine {
             arg_pstrs.into_iter()
         ));
 
-        self.run_module_predicate(module_name, key);
+        self.run_module_predicate(module_name, key)
     }
 
     pub fn set_user_input(&mut self, input: String) {
@@ -380,46 +375,45 @@ impl Machine {
             Instruction::BreakFromDispatchLoop,
             Instruction::InstallVerifyAttr,
             Instruction::VerifyAttrInterrupt,
-            Instruction::ExecuteTermGreaterThan(0),
-            Instruction::ExecuteTermLessThan(0),
-            Instruction::ExecuteTermGreaterThanOrEqual(0),
-            Instruction::ExecuteTermLessThanOrEqual(0),
-            Instruction::ExecuteTermEqual(0),
-            Instruction::ExecuteTermNotEqual(0),
-            Instruction::ExecuteNumberGreaterThan(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2)), 0),
-            Instruction::ExecuteNumberLessThan(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2)), 0),
-            Instruction::ExecuteNumberGreaterThanOrEqual(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2)), 0),
-            Instruction::ExecuteNumberLessThanOrEqual(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2)), 0),
-            Instruction::ExecuteNumberEqual(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2)), 0),
-            Instruction::ExecuteNumberNotEqual(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2)), 0),
-            Instruction::ExecuteIs(temp_v!(1), ar_reg!(temp_v!(2)), 0),
-            Instruction::ExecuteAcyclicTerm(0),
-            Instruction::ExecuteArg(0),
-            Instruction::ExecuteCompare(0),
-            Instruction::ExecuteCopyTerm(0),
-            Instruction::ExecuteFunctor(0),
-            Instruction::ExecuteGround(0),
-            Instruction::ExecuteKeySort(0),
-            Instruction::ExecuteRead(0),
-            Instruction::ExecuteSort(0),
-            Instruction::ExecuteN(1, 0),
-            Instruction::ExecuteN(2, 0),
-            Instruction::ExecuteN(3, 0),
-            Instruction::ExecuteN(4, 0),
-            Instruction::ExecuteN(5, 0),
-            Instruction::ExecuteN(6, 0),
-            Instruction::ExecuteN(7, 0),
-            Instruction::ExecuteN(8, 0),
-            Instruction::ExecuteN(9, 0),
-            Instruction::ExecuteIsAtom(temp_v!(1), 0),
-            Instruction::ExecuteIsAtomic(temp_v!(1), 0),
-            Instruction::ExecuteIsCompound(temp_v!(1), 0),
-            Instruction::ExecuteIsInteger(temp_v!(1), 0),
-            Instruction::ExecuteIsNumber(temp_v!(1), 0),
-            Instruction::ExecuteIsRational(temp_v!(1), 0),
-            Instruction::ExecuteIsFloat(temp_v!(1), 0),
-            Instruction::ExecuteIsNonVar(temp_v!(1), 0),
-            Instruction::ExecuteIsVar(temp_v!(1), 0)
+            Instruction::ExecuteTermGreaterThan,
+            Instruction::ExecuteTermLessThan,
+            Instruction::ExecuteTermGreaterThanOrEqual,
+            Instruction::ExecuteTermLessThanOrEqual,
+            Instruction::ExecuteTermEqual,
+            Instruction::ExecuteTermNotEqual,
+            Instruction::ExecuteNumberGreaterThan(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
+            Instruction::ExecuteNumberLessThan(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
+            Instruction::ExecuteNumberGreaterThanOrEqual(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
+            Instruction::ExecuteNumberLessThanOrEqual(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
+            Instruction::ExecuteNumberEqual(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
+            Instruction::ExecuteNumberNotEqual(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
+            Instruction::ExecuteIs(temp_v!(1), ar_reg!(temp_v!(2))),
+            Instruction::ExecuteAcyclicTerm,
+            Instruction::ExecuteArg,
+            Instruction::ExecuteCompare,
+            Instruction::ExecuteCopyTerm,
+            Instruction::ExecuteFunctor,
+            Instruction::ExecuteGround,
+            Instruction::ExecuteKeySort,
+            Instruction::ExecuteSort,
+            Instruction::ExecuteN(1),
+            Instruction::ExecuteN(2),
+            Instruction::ExecuteN(3),
+            Instruction::ExecuteN(4),
+            Instruction::ExecuteN(5),
+            Instruction::ExecuteN(6),
+            Instruction::ExecuteN(7),
+            Instruction::ExecuteN(8),
+            Instruction::ExecuteN(9),
+            Instruction::ExecuteIsAtom(temp_v!(1)),
+            Instruction::ExecuteIsAtomic(temp_v!(1)),
+            Instruction::ExecuteIsCompound(temp_v!(1)),
+            Instruction::ExecuteIsInteger(temp_v!(1)),
+            Instruction::ExecuteIsNumber(temp_v!(1)),
+            Instruction::ExecuteIsRational(temp_v!(1)),
+            Instruction::ExecuteIsFloat(temp_v!(1)),
+            Instruction::ExecuteIsNonVar(temp_v!(1)),
+            Instruction::ExecuteIsVar(temp_v!(1))
         ].into_iter());
 
         for (p, instr) in self.code[impls_offset ..].iter().enumerate() {
@@ -458,6 +452,7 @@ impl Machine {
             user_output,
             user_error,
             load_contexts: vec![],
+	        foreign_function_table: Default::default(),
         };
 
         let mut lib_path = current_dir();
@@ -566,103 +561,436 @@ impl Machine {
         self.machine_st.verify_attr_interrupt(p, arity);
     }
 
+    fn next_clause_applicable(&mut self, mut offset: usize) -> bool {
+        loop {
+            match &self.code[offset] {
+                Instruction::IndexingCode(indexing_lines) => {
+                    let mut oip = 0;
+                    let mut cell = empty_list_as_cell!();
+
+                    loop {
+                        let indexing_code_ptr = match &indexing_lines[oip] {
+                            &IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(arg, v, c, l, s)) => {
+                                cell = self.deref_register(arg);
+                                self.machine_st.select_switch_on_term_index(cell, v, c, l, s)
+                            }
+                            IndexingLine::Indexing(IndexingInstruction::SwitchOnConstant(hm)) => {
+                                let lit = self.machine_st.constant_to_literal(cell);
+                                hm.get(&lit).cloned().unwrap_or(IndexingCodePtr::Fail)
+                            }
+                            IndexingLine::Indexing(IndexingInstruction::SwitchOnStructure(hm)) => {
+                                self.machine_st.select_switch_on_structure_index(cell, hm)
+                            }
+                            _ => {
+                                offset += 1;
+                                break;
+                            }
+                        };
+
+                        match indexing_code_ptr {
+                            IndexingCodePtr::External(_) | IndexingCodePtr::DynamicExternal(_) => {
+                                offset += 1;
+                                break;
+                            }
+                            IndexingCodePtr::Internal(i) => oip += i,
+                            IndexingCodePtr::Fail => return false,
+                        }
+                    }
+                }
+                &Instruction::GetConstant(Level::Shallow, lit, RegType::Temp(t)) => {
+                    let cell = self.deref_register(t);
+
+                    if cell.is_var() {
+                        offset += 1;
+                    } else if lit.get_tag() == HeapCellValueTag::CStr {
+                        read_heap_cell!(cell,
+                            (HeapCellValueTag::CStr) => {
+                                if cell == lit {
+                                    offset += 1;
+                                } else {
+                                    return false;
+                                }
+                            }
+                            (HeapCellValueTag::Lis | HeapCellValueTag::PStrLoc) => {
+                                offset += 1;
+                            }
+                            (HeapCellValueTag::Str, s) => {
+                                let (name, arity) = cell_as_atom_cell!(self.machine_st.heap[s])
+                                    .get_name_and_arity();
+
+                                if name == atom!(".") && arity == 2 {
+                                    offset += 1;
+                                } else {
+                                    return false;
+                                }
+                            }
+                            _ => {
+                                return false;
+                            }
+                        );
+                    } else {
+                        self.machine_st.write_literal_to_var(cell, lit);
+
+                        if self.machine_st.fail {
+                            self.machine_st.fail = false;
+                            return false;
+                        } else {
+                            offset += 1;
+                        }
+                    }
+                }
+                &Instruction::GetList(Level::Shallow, RegType::Temp(t)) => {
+                    let cell = self.deref_register(t);
+
+                    read_heap_cell!(cell,
+                        (HeapCellValueTag::Lis | HeapCellValueTag::PStrLoc | HeapCellValueTag::CStr) => {
+                            offset += 1;
+                        }
+                        (HeapCellValueTag::Str, s) => {
+                            let (name, arity) = cell_as_atom_cell!(self.machine_st.heap[s]).get_name_and_arity();
+
+                            if name == atom!(".") && arity == 2 {
+                                offset += 1;
+                            } else {
+                                return false;
+                            }
+                        }
+                        (HeapCellValueTag::AttrVar | HeapCellValueTag::Var | HeapCellValueTag::StackVar) => {
+                            offset += 1;
+                        }
+                        _ => {
+                            return false;
+                        }
+                    );
+                }
+                &Instruction::GetStructure(Level::Shallow, name, arity, RegType::Temp(t)) => {
+                    let cell = self.deref_register(t);
+
+                    read_heap_cell!(cell,
+                        (HeapCellValueTag::Str, s) => {
+                            if (name, arity) == cell_as_atom_cell!(self.machine_st.heap[s]).get_name_and_arity() {
+                                offset += 1;
+                            } else {
+                                return false;
+                            }
+                        }
+                        (HeapCellValueTag::AttrVar | HeapCellValueTag::Var | HeapCellValueTag::StackVar) => {
+                            offset += 1;
+                        }
+                        _ => {
+                            return false;
+                        }
+                    );
+                }
+                &Instruction::GetPartialString(Level::Shallow, string, RegType::Temp(t), has_tail) => {
+                    let cell = self.deref_register(t);
+
+                    read_heap_cell!(cell,
+                        (HeapCellValueTag::CStr, cstr) => {
+                            if !has_tail && string != cstr {
+                                return false;
+                            }
+
+                            offset += 1;
+                        }
+                        (HeapCellValueTag::Lis | HeapCellValueTag::PStrLoc) => {
+                            offset += 1;
+                        }
+                        (HeapCellValueTag::Str, s) => {
+                            let (name, arity) = cell_as_atom_cell!(self.machine_st.heap[s]).get_name_and_arity();
+
+                            if name == atom!(".") && arity == 2 {
+                                offset += 1;
+                            } else {
+                                return false;
+                            }
+                        }
+                        (HeapCellValueTag::AttrVar | HeapCellValueTag::Var | HeapCellValueTag::StackVar) => {
+                            offset += 1;
+                        }
+                        _ => {
+                            return false;
+                        }
+                    );
+                }
+                Instruction::GetConstant(..) |
+                Instruction::GetList(..) |
+                Instruction::GetStructure(..) |
+                Instruction::GetPartialString(..) |
+                &Instruction::UnifyVoid(..) |
+                &Instruction::UnifyConstant(..) |
+                &Instruction::GetVariable(..) |
+                &Instruction::GetValue(..) |
+                &Instruction::UnifyVariable(..) |
+                &Instruction::UnifyValue(..) |
+                &Instruction::UnifyLocalValue(..)  => {
+                    offset += 1;
+                }
+                _ => {
+                    break;
+                }
+            }
+        }
+
+        true
+    }
+
+    fn next_applicable_clause(&mut self, mut offset: usize) -> Option<usize> {
+        while !self.next_clause_applicable(self.machine_st.p + offset + 1) {
+            match &self.code[self.machine_st.p + offset] {
+                &Instruction::DefaultRetryMeElse(o) | &Instruction::RetryMeElse(o) |
+                &Instruction::DynamicElse(.., NextOrFail::Next(o)) |
+                &Instruction::DynamicInternalElse(.., NextOrFail::Next(o)) => offset += o,
+                _ => {
+                    return None;
+                }
+            }
+        }
+
+        Some(offset)
+    }
+
+    fn next_inner_applicable_clause(&mut self) -> Option<u32> {
+        let mut inner_offset = 1u32;
+
+        loop {
+            match &self.code[self.machine_st.p] {
+                Instruction::IndexingCode(indexing_lines) => {
+                    match &indexing_lines[self.machine_st.oip as usize] {
+                        IndexingLine::IndexedChoice(indexed_choice) => {
+                            match &indexed_choice[(self.machine_st.iip + inner_offset) as usize] {
+                                &IndexedChoiceInstruction::Retry(o) => {
+                                    if self.next_clause_applicable(self.machine_st.p + o) {
+                                        return Some(inner_offset);
+                                    }
+
+                                    inner_offset += 1;
+                                }
+                                &IndexedChoiceInstruction::Trust(o) => {
+                                    return if self.next_clause_applicable(self.machine_st.p + o) {
+                                        Some(inner_offset)
+                                    } else {
+                                        None
+                                    };
+                                }
+                                _ => unreachable!(),
+                            }
+                        }
+                        IndexingLine::DynamicIndexedChoice(indexed_choice) => {
+                            let idx = (self.machine_st.iip + inner_offset) as usize;
+                            let o = indexed_choice[idx];
+
+                            if idx + 1 == indexed_choice.len() {
+                                return if self.next_clause_applicable(self.machine_st.p + o) {
+                                    Some(inner_offset)
+                                } else {
+                                    None
+                                };
+                            } else {
+                                if self.next_clause_applicable(self.machine_st.p + o) {
+                                    return Some(inner_offset);
+                                }
+
+                                inner_offset += 1;
+                            }
+                        }
+                        _ => unreachable!(),
+                    }
+                }
+                _ => unreachable!(),
+            }
+        }
+    }
+
+    #[inline(always)]
+    pub(super) fn try_me_else(&mut self, offset: usize) {
+        if let Some(offset) = self.next_applicable_clause(offset) {
+            let n = self.machine_st.num_of_args;
+            let b = self.machine_st.stack.allocate_or_frame(n);
+            let or_frame = self.machine_st.stack.index_or_frame_mut(b);
+
+            or_frame.prelude.num_cells = n;
+            or_frame.prelude.e = self.machine_st.e;
+            or_frame.prelude.cp = self.machine_st.cp;
+            or_frame.prelude.b = self.machine_st.b;
+            or_frame.prelude.bp = self.machine_st.p + offset;
+            or_frame.prelude.boip = 0;
+            or_frame.prelude.biip = 0;
+            or_frame.prelude.tr = self.machine_st.tr;
+            or_frame.prelude.h = self.machine_st.heap.len();
+            or_frame.prelude.b0 = self.machine_st.b0;
+            or_frame.prelude.attr_var_queue_len = self.machine_st.attr_var_init.attr_var_queue.len();
+
+            self.machine_st.b = b;
+
+            for i in 0..n {
+                or_frame[i] = self.machine_st.registers[i+1];
+            }
+
+            self.machine_st.hb = self.machine_st.heap.len();
+        }
+
+        self.machine_st.p += 1;
+    }
+
+    #[inline(always)]
+    pub(super) fn indexed_try(&mut self, offset: usize) {
+        if let Some(iip_offset) = self.next_inner_applicable_clause() {
+            let n = self.machine_st.num_of_args;
+            let b = self.machine_st.stack.allocate_or_frame(n);
+            let or_frame = self.machine_st.stack.index_or_frame_mut(b);
+
+            or_frame.prelude.num_cells = n;
+            or_frame.prelude.e = self.machine_st.e;
+            or_frame.prelude.cp = self.machine_st.cp;
+            or_frame.prelude.b = self.machine_st.b;
+            or_frame.prelude.bp = self.machine_st.p;
+            or_frame.prelude.boip = self.machine_st.oip;
+            or_frame.prelude.biip = self.machine_st.iip + iip_offset; // 1
+            or_frame.prelude.tr = self.machine_st.tr;
+            or_frame.prelude.h = self.machine_st.heap.len();
+            or_frame.prelude.b0 = self.machine_st.b0;
+            or_frame.prelude.attr_var_queue_len = self.machine_st.attr_var_init.attr_var_queue.len();
+
+            self.machine_st.b = b;
+
+            for i in 0..n {
+                or_frame[i] = self.machine_st.registers[i+1];
+            }
+
+            self.machine_st.hb = self.machine_st.heap.len();
+
+            self.machine_st.oip = 0;
+            self.machine_st.iip = 0;
+        }
+
+        self.machine_st.p += offset;
+    }
+
     #[inline(always)]
     fn retry_me_else(&mut self, offset: usize) {
         let b = self.machine_st.b;
         let or_frame = self.machine_st.stack.index_or_frame_mut(b);
-        let n = or_frame.prelude.univ_prelude.num_cells;
+        let n = or_frame.prelude.num_cells;
+
+        let old_tr = or_frame.prelude.tr;
+        let curr_tr = self.machine_st.tr;
 
         for i in 0..n {
             self.machine_st.registers[i + 1] = or_frame[i];
         }
 
-        self.machine_st.num_of_args = n;
-        self.machine_st.e = or_frame.prelude.e;
-        self.machine_st.cp = or_frame.prelude.cp;
-
-        or_frame.prelude.bp = self.machine_st.p + offset;
-
-        let old_tr = or_frame.prelude.tr;
-        let curr_tr = self.machine_st.tr;
-        let target_h = or_frame.prelude.h;
-
-        self.machine_st.tr = or_frame.prelude.tr;
-
-        self.reset_attr_var_state();
-        self.machine_st.hb = target_h;
-
         self.unwind_trail(old_tr, curr_tr);
 
-        self.machine_st.trail.truncate(self.machine_st.tr);
-        self.machine_st.heap.truncate(target_h);
+        if let Some(offset) = self.next_applicable_clause(offset) {
+            let or_frame = self.machine_st.stack.index_or_frame_mut(b);
 
-        self.machine_st.p += 1;
+            self.machine_st.num_of_args = n;
+            self.machine_st.e = or_frame.prelude.e;
+            self.machine_st.cp = or_frame.prelude.cp;
+
+            or_frame.prelude.bp = self.machine_st.p + offset;
+
+            let target_h = or_frame.prelude.h;
+            let attr_var_queue_len = or_frame.prelude.attr_var_queue_len;
+
+            self.machine_st.tr = or_frame.prelude.tr;
+            self.reset_attr_var_state(attr_var_queue_len);
+
+            self.machine_st.hb = target_h;
+
+            self.machine_st.trail.truncate(self.machine_st.tr);
+            self.machine_st.heap.truncate(target_h);
+
+            self.machine_st.p += 1;
+        } else {
+            self.trust_me_epilogue();
+        }
     }
 
     #[inline(always)]
     fn retry(&mut self, offset: usize) {
         let b = self.machine_st.b;
         let or_frame = self.machine_st.stack.index_or_frame_mut(b);
-        let n = or_frame.prelude.univ_prelude.num_cells;
+        let n = or_frame.prelude.num_cells;
+
+        let old_tr = or_frame.prelude.tr;
+        let curr_tr = self.machine_st.tr;
 
         for i in 0..n {
             self.machine_st.registers[i+1] = or_frame[i];
         }
 
-        self.machine_st.num_of_args = n;
-        self.machine_st.e = or_frame.prelude.e;
-        self.machine_st.cp = or_frame.prelude.cp;
-
-        or_frame.prelude.biip += 1;
-
-        let old_tr = or_frame.prelude.tr;
-        let curr_tr = self.machine_st.tr;
-        let target_h = or_frame.prelude.h;
-
-        self.machine_st.tr = or_frame.prelude.tr;
-        self.reset_attr_var_state();
-
-        self.machine_st.hb = target_h;
-        self.machine_st.p = self.machine_st.p + offset;
-
         self.unwind_trail(old_tr, curr_tr);
 
-        self.machine_st.trail.truncate(self.machine_st.tr);
-        self.machine_st.heap.truncate(target_h);
+        if let Some(iip_offset) = self.next_inner_applicable_clause() {
+            let or_frame = self.machine_st.stack.index_or_frame_mut(b);
 
-        self.machine_st.oip = 0;
-        self.machine_st.iip = 0;
+            self.machine_st.num_of_args = n;
+            self.machine_st.e = or_frame.prelude.e;
+            self.machine_st.cp = or_frame.prelude.cp;
+
+            or_frame.prelude.biip += iip_offset;
+
+            let target_h = or_frame.prelude.h;
+            let attr_var_queue_len = or_frame.prelude.attr_var_queue_len;
+
+            self.machine_st.tr = or_frame.prelude.tr;
+            self.machine_st.trail.truncate(self.machine_st.tr);
+
+            self.reset_attr_var_state(attr_var_queue_len);
+
+            self.machine_st.hb = target_h;
+            self.machine_st.p += offset;
+
+            self.machine_st.heap.truncate(target_h);
+
+            self.machine_st.oip = 0;
+            self.machine_st.iip = 0;
+        } else {
+            self.trust_epilogue(offset);
+        }
     }
 
     #[inline(always)]
     fn trust(&mut self, offset: usize) {
         let b = self.machine_st.b;
         let or_frame = self.machine_st.stack.index_or_frame(b);
-        let n = or_frame.prelude.univ_prelude.num_cells;
+        let n = or_frame.prelude.num_cells;
+
+        let old_tr = or_frame.prelude.tr;
+        let curr_tr = self.machine_st.tr;
 
         for i in 0..n {
             self.machine_st.registers[i+1] = or_frame[i];
         }
 
+        self.unwind_trail(old_tr, curr_tr);
+        self.trust_epilogue(offset);
+    }
+
+    #[inline(always)]
+    fn trust_epilogue(&mut self, offset: usize) {
+        let b = self.machine_st.b;
+        let or_frame = self.machine_st.stack.index_or_frame(b);
+        let n = or_frame.prelude.num_cells;
+
         self.machine_st.num_of_args = n;
         self.machine_st.e = or_frame.prelude.e;
         self.machine_st.cp = or_frame.prelude.cp;
 
-        let old_tr = or_frame.prelude.tr;
-        let curr_tr = self.machine_st.tr;
         let target_h = or_frame.prelude.h;
 
         self.machine_st.tr = or_frame.prelude.tr;
+        self.machine_st.trail.truncate(self.machine_st.tr);
+
         self.machine_st.b = or_frame.prelude.b;
 
-        self.reset_attr_var_state();
+        self.reset_attr_var_state(or_frame.prelude.attr_var_queue_len);
 
         self.machine_st.hb = target_h;
         self.machine_st.p = self.machine_st.p + offset;
 
-        self.unwind_trail(old_tr, curr_tr);
-
-        self.machine_st.trail.truncate(self.machine_st.tr);
         self.machine_st.stack.truncate(b);
         self.machine_st.heap.truncate(target_h);
 
@@ -674,33 +1002,61 @@ impl Machine {
     fn trust_me(&mut self) {
         let b = self.machine_st.b;
         let or_frame = self.machine_st.stack.index_or_frame(b);
-        let n = or_frame.prelude.univ_prelude.num_cells;
+        let n = or_frame.prelude.num_cells;
 
         for i in 0..n {
             self.machine_st.registers[i+1] = or_frame[i];
         }
 
+        let old_tr = or_frame.prelude.tr;
+        let curr_tr = self.machine_st.tr;
+
+        self.unwind_trail(old_tr, curr_tr);
+
+        self.trust_me_epilogue();
+    }
+
+    #[inline(always)]
+    fn trust_me_epilogue(&mut self) {
+        let b = self.machine_st.b;
+        let or_frame = self.machine_st.stack.index_or_frame(b);
+        let n = or_frame.prelude.num_cells;
+
         self.machine_st.num_of_args = n;
         self.machine_st.e = or_frame.prelude.e;
         self.machine_st.cp = or_frame.prelude.cp;
 
-        let old_tr = or_frame.prelude.tr;
-        let curr_tr = self.machine_st.tr;
         let target_h = or_frame.prelude.h;
 
         self.machine_st.tr = or_frame.prelude.tr;
         self.machine_st.b = or_frame.prelude.b;
 
-        self.reset_attr_var_state();
+        self.reset_attr_var_state(or_frame.prelude.attr_var_queue_len);
 
         self.machine_st.hb = target_h;
         self.machine_st.p += 1;
 
-        self.unwind_trail(old_tr, curr_tr);
-
         self.machine_st.trail.truncate(self.machine_st.tr);
         self.machine_st.stack.truncate(b);
         self.machine_st.heap.truncate(target_h);
+    }
+
+    #[inline(always)]
+    fn undefined_procedure(&mut self, name: Atom, arity: usize) -> CallResult {
+        match self.machine_st.flags.unknown {
+            Unknown::Error => {
+                Err(self.machine_st.throw_undefined_error(name, arity))
+            }
+            Unknown::Fail => {
+                self.machine_st.fail = true;
+                Ok(())
+            }
+            Unknown::Warn => {
+                println!("warning: predicate {}/{} is undefined", name.as_str(), arity);
+                self.machine_st.fail = true;
+                Ok(())
+            }
+        }
     }
 
     #[inline(always)]
@@ -712,7 +1068,7 @@ impl Machine {
                 self.machine_st.fail = true;
             }
             IndexPtrTag::Undefined => {
-                return Err(self.machine_st.throw_undefined_error(name, arity));
+                return self.undefined_procedure(name, arity);
             }
             IndexPtrTag::DynamicIndex => {
                 self.machine_st.dynamic_mode = FirstOrNext::First;
@@ -735,7 +1091,7 @@ impl Machine {
                 self.machine_st.fail = true;
             }
             IndexPtrTag::Undefined => {
-                return Err(self.machine_st.throw_undefined_error(name, arity));
+                return self.undefined_procedure(name, arity);
             }
             IndexPtrTag::DynamicIndex => {
                 self.machine_st.dynamic_mode = FirstOrNext::First;
@@ -764,7 +1120,7 @@ impl Machine {
                 if let Some(idx) = module.code_dir.get(&(name, arity)).cloned() {
                     self.try_call(name, arity, idx.get())
                 } else {
-                    Err(self.machine_st.throw_undefined_error(name, arity))
+                    self.undefined_procedure(name, arity)
                 }
             } else {
                 let stub = functor_stub(name, arity);
@@ -783,14 +1139,14 @@ impl Machine {
             if let Some(idx) = self.indices.code_dir.get(&(name, arity)).cloned() {
                 self.try_execute(name, arity, idx.get())
             } else {
-                Err(self.machine_st.throw_undefined_error(name, arity))
+                self.undefined_procedure(name, arity)
             }
         } else {
             if let Some(module) = self.indices.modules.get(&module_name) {
                 if let Some(idx) = module.code_dir.get(&(name, arity)).cloned() {
                     self.try_execute(name, arity, idx.get())
                 } else {
-                    Err(self.machine_st.throw_undefined_error(name, arity))
+                    self.undefined_procedure(name, arity)
                 }
             } else {
                 let stub = functor_stub(name, arity);
@@ -841,7 +1197,7 @@ impl Machine {
 
         if let Some(&(_, b_cutoff, prev_block)) = self.machine_st.cont_pts.last() {
             if self.machine_st.b < b_cutoff {
-                let (idx, arity) = if self.machine_st.block > prev_block {
+                let (idx, arity) = if self.machine_st.effective_block() > prev_block {
                     (r_c_w_h, 0)
                 } else {
                     self.machine_st.registers[1] = fixnum_as_cell!(
@@ -876,14 +1232,22 @@ impl Machine {
                 TrailEntryTag::TrailedAttrVar => {
                     self.machine_st.heap[h] = attr_var_as_cell!(h);
                 }
-                TrailEntryTag::TrailedAttrVarHeapLink => {
-                    self.machine_st.heap[h] = heap_loc_as_cell!(h);
-                }
                 TrailEntryTag::TrailedAttrVarListLink => {
                     let l = self.machine_st.trail[i + 1].get_value() as usize;
 
                     if l < self.machine_st.hb {
-                        self.machine_st.heap[h] = list_loc_as_cell!(l);
+                        if h == l {
+                            self.machine_st.heap[h] = heap_loc_as_cell!(h);
+                        } else {
+                            read_heap_cell!(self.machine_st.heap[l],
+                                (HeapCellValueTag::Var) => {
+                                    self.machine_st.heap[h] = list_loc_as_cell!(l);
+                                }
+                                _ => {
+                                    self.machine_st.heap[h] = heap_loc_as_cell!(l);
+                                }
+                            );
+                        }
                     } else {
                         self.machine_st.heap[h] = heap_loc_as_cell!(h);
                     }

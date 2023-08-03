@@ -1,0 +1,166 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+    tags:
+      - "v**"
+  pull_request:
+  schedule:
+    - cron: '0 0 * * 3' # At 12:00 AM, only on Wednesday
+  workflow_dispatch:
+
+jobs:
+  build-test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - { os: windows-latest, rust-version: stable,  shell: 'msys2 {0}' }
+          - { os: macos-11,       rust-version: stable,  shell: bash }
+          - { os: ubuntu-20.04,   rust-version: stable,  shell: bash, extra: true }
+          - { os: ubuntu-20.04,   rust-version: 1.65,    shell: bash }
+          - { os: ubuntu-20.04,   rust-version: beta,    shell: bash }
+          - { os: ubuntu-20.04,   rust-version: nightly, shell: bash }
+    defaults:
+      run:
+        shell: ${{ matrix.shell }}
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@master
+        if: "!contains(matrix.os,'windows')"
+        id: toolchain
+        with:
+          toolchain: ${{ matrix.rust-version }}
+          components: clippy, rustfmt
+      - uses: msys2/setup-msys2@v2
+        if: contains(matrix.os,'windows')
+        with:
+          update: true
+          install: >-
+            base-devel
+            mingw-w64-x86_64-rust
+      - uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: ${{ matrix.os }}_rustc-${{ steps.toolchain.outputs.cachekey }}_cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      # Build and test.
+      - name: Build library
+        run: cargo rustc --verbose --lib -- -D warnings
+      - name: Test
+        if: "!matrix.extra"
+        run: cargo test --all --verbose
+
+      # Extra steps only run once to avoid duplication, when matrix.extra is true
+      - name: Test and report
+        if: matrix.extra
+        run: |
+          cargo install cargo2junit --force
+          RUSTC_BOOTSTRAP=1 cargo test --all -- -Z unstable-options --format json --report-time | cargo2junit > cargo_test_results.xml
+      - name: Publish cargo test results artifact
+        if: matrix.extra
+        uses: actions/upload-artifact@v3
+        with:
+          name: cargo-test-results
+          path: cargo_test_results.xml
+      - name: Publish cargo test summary
+        if: matrix.extra
+        uses: EnricoMi/publish-unit-test-result-action/composite@master
+        with:
+          check_name: Cargo test summary
+          files: cargo_test_results.xml
+          fail_on: nothing
+          comment_mode: off
+      - name: Check formatting
+        if: matrix.extra
+        run: cargo fmt --check || echo "::warning ::cargo fmt found some formatting changes that may improve readability"
+      - name: Check clippy
+        if: matrix.extra
+        run: cargo clippy --no-deps || echo "::warning ::cargo clippy found some code style changes that may be more idiomatic"
+
+      # On stable rust builds, build a binary and publish as a github actions
+      # artifact. These binaries could be useful for testing the pipeline but
+      # are only retained by github for 90 days.
+      - name: Build release binary
+        if: contains(matrix.rust-version,'stable')
+        run: |
+          cargo rustc --verbose --bin scryer-prolog --release -- -D warnings
+          echo "$PWD/target/release" >> $GITHUB_PATH
+      - name: Publish release binary artifact
+        if: contains(matrix.rust-version,'stable')
+        uses: actions/upload-artifact@v3
+        with:
+          path: target/release/scryer-prolog*
+          name: scryer-prolog_${{ matrix.os }}
+
+  logtalk-test:
+    runs-on: ubuntu-20.04
+    needs: [build-test]
+    steps:
+      # Download prebuilt ubuntu binary from build-test job, setup logtalk
+      - uses: actions/download-artifact@v3
+        with:
+          name: scryer-prolog_ubuntu-20.04
+      - run: |
+          chmod +x scryer-prolog
+          echo "$PWD" >> "$GITHUB_PATH"
+      - name: Install Logtalk
+        uses: logtalk-actions/setup-logtalk@master
+        with:
+          logtalk-version: git
+          logtalk-tool-dependencies: false
+
+      # Run logtalk  tests.
+      - name: Run Logtalk's prolog compliance test suite
+        working-directory: ${{ env.LOGTALKUSER }}/tests/prolog/
+        run: |
+          pwd
+          scryerlgt -g '{ack(tester)},halt.'
+          logtalk_tester -p scryer -g "set_logtalk_flag(clean,off)" -w -t 360 \
+            -f xunit \
+            -s "$LOGTALKUSER/tests/prolog" \
+            || echo "::warning ::logtalk compliance suite failed"
+            # -u "https://github.com/LogtalkDotOrg/logtalk3/tree/$LOGTALK_GIT_HASH/tests/prolog/" \
+      - name: Publish Logtalk test logs
+        uses: actions/upload-artifact@v3
+        with:
+          name: logtalk-test-logs
+          path: '${{ env.LOGTALKUSER }}/tests/prolog/logtalk_tester_logs'
+      - name: Publish Logtalk test results artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: logtalk-test-results
+          path: '${{ env.LOGTALKUSER }}/tests/prolog/**/*.xml'
+      - name: Publish Logtalk test summary
+        uses: EnricoMi/publish-unit-test-result-action/composite@master
+        with:
+          check_name: Logtalk test summary
+          files: '${{ env.LOGTALKUSER }}/tests/prolog/**/*.xml'
+          fail_on: nothing
+          comment_mode: off
+
+  # Publish binaries when building for a tag
+  release:
+    runs-on: ubuntu-20.04
+    needs: [build-test]
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - uses: actions/download-artifact@v3
+      - name: Zip binaries for release
+        run: |
+          zip scryer-prolog_macos-11.zip ./scryer-prolog_macos-11/scryer-prolog
+          zip scryer-prolog_ubuntu-20.04.zip ./scryer-prolog_ubuntu-20.04/scryer-prolog
+          zip scryer-prolog_windows-latest.zip ./scryer-prolog_windows-latest/scryer-prolog.exe
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            scryer-prolog_macos-11.zip
+            scryer-prolog_ubuntu-20.04.zip
+            scryer-prolog_windows-latest.zip
