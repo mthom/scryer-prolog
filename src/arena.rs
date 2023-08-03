@@ -242,9 +242,11 @@ impl<T: fmt::Display> fmt::Display for TypedArenaPtr<T> {
 }
 
 impl<T: ?Sized + ArenaAllocated> TypedArenaPtr<T> {
+    // data must be allocated in the arena already.
     #[inline]
     pub const fn new(data: *mut T) -> Self {
-        unsafe { TypedArenaPtr(ptr::NonNull::new_unchecked(data)) }
+        let result = unsafe { TypedArenaPtr(ptr::NonNull::new_unchecked(data)) };
+        result
     }
 
     #[inline]

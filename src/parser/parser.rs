@@ -926,7 +926,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
 
     fn negate_number<N, Negator, ToLiteral>(&mut self, n: N, negator: Negator, constr: ToLiteral)
     where
-        Negator: Fn(N) -> N,
+        Negator: Fn(N, &mut Arena) -> N,
         ToLiteral: Fn(N, &mut Arena) -> Literal,
     {
         if let Some(desc) = self.stack.last().cloned() {
@@ -938,7 +938,9 @@ impl<'a, R: CharRead> Parser<'a, R> {
                         self.stack.pop();
                         self.terms.pop();
 
-                        let literal = constr(negator(n), &mut self.lexer.machine_st.arena);
+                        let arena = &mut self.lexer.machine_st.arena;
+                        let literal = constr(negator(n, arena), arena);
+
                         self.shift(Token::Literal(literal), 0, TERM);
 
                         return;
@@ -953,21 +955,21 @@ impl<'a, R: CharRead> Parser<'a, R> {
     }
 
     fn shift_token(&mut self, token: Token, op_dir: &CompositeOpDir) -> Result<(), ParserError> {
-        fn negate_int_rc(t: TypedArenaPtr<Integer>) -> TypedArenaPtr<Integer> {
+        fn negate_int_rc(t: TypedArenaPtr<Integer>, arena: &mut Arena) -> TypedArenaPtr<Integer> {
             let i: Integer = (*t).clone();
-            let mut data = i.neg();
-            TypedArenaPtr::new(&mut data)
+            let data = i.neg();
+            arena_alloc!(data, arena)
         }
 
-        fn negate_rat_rc(t: TypedArenaPtr<Rational>) -> TypedArenaPtr<Rational> {
+        fn negate_rat_rc(t: TypedArenaPtr<Rational>, arena: &mut Arena) -> TypedArenaPtr<Rational> {
             let r: Rational = (*t).clone();
-            let mut data = r.neg();
-            TypedArenaPtr::new(&mut data)
+            let data = r.neg();
+            arena_alloc!(data, arena)
         }
 
         match token {
             Token::Literal(Literal::Fixnum(n)) => {
-                self.negate_number(n, |n| -n, |n, _| Literal::Fixnum(n))
+                self.negate_number(n, |n, _| -n, |n, _| Literal::Fixnum(n))
             }
             Token::Literal(Literal::Integer(n)) => {
                 self.negate_number(n, negate_int_rc, |n, _| Literal::Integer(n))
@@ -977,7 +979,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
             }
             Token::Literal(Literal::Float(n)) => self.negate_number(
                 **n.as_ptr(),
-                |n| -n,
+                |n, _| -n,
                 |n, arena| Literal::from(float_alloc!(n, arena)),
             ),
             Token::Literal(c) => {
