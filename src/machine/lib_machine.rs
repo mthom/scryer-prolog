@@ -230,4 +230,52 @@ mod tests {
         );
 
     }
+
+    #[tokio::test]
+    async fn stress_integration_test() {
+        let mut machine = Machine::new_lib();
+
+        // File with test commands, i.e. program code to consult and queries to run
+        let code = include_str!("./lib_integration_test_commands.txt");
+
+        // Split the code into blocks
+        let blocks = code.split("=====");
+
+        let mut i = 0;
+        // Iterate over the blocks
+        for block in blocks {
+            // Trim the block to remove any leading or trailing whitespace
+            let block = block.trim();
+
+            // Skip empty blocks
+            if block.is_empty() {
+                continue;
+            }
+
+            // Check if the block is a query
+            if block.starts_with("query") {
+                // Extract the query from the block
+                let query = &block[5..];
+
+                i += 1;
+                println!("query #{}: {}", i, query);
+                // Parse and execute the query
+                let result = machine.run_query(query.to_string());
+
+                assert!(result.is_ok());
+
+                // Print the result
+                println!("{:?}", result);
+            } else if block.starts_with("consult") {
+                // Extract the code from the block
+                let code = &block[7..];
+
+                println!("load code: {}", code);
+
+                // Load the code into the machine
+                machine.consult_module_string("facts", code.to_string());
+            }
+        }
+
+    }
 }
