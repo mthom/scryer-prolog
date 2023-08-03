@@ -493,7 +493,7 @@ The modules that ship with Scryer&nbsp;Prolog are also called
   "si" stands for *sufficiently instantiated*, and also for
   *sound&nbsp;inference*.
 * [`debug`](src/lib/debug.pl)
-  Various predicates that allow for declarative debugging.
+  Various operators that allow for declarative debugging.
 * [`pio`](src/lib/pio.pl)
   `phrase_from_file/2` applies a DCG nonterminal to the contents of a
   file, reading lazily only as much as is needed. Due to the compact
