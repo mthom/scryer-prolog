@@ -53,7 +53,6 @@ use std::env;
 use std::io::Read;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
-use tokio::runtime::Runtime;
 
 use self::config::MachineConfig;
 use self::parsed_results::*;
@@ -71,7 +70,6 @@ pub struct Machine {
     pub(super) user_output: Stream,
     pub(super) user_error: Stream,
     pub(super) load_contexts: Vec<LoadContext>,
-    pub(super) runtime: Runtime,
 }
 
 #[derive(Debug)]
@@ -452,8 +450,6 @@ impl Machine {
             ),
         };
 
-        let runtime = tokio::runtime::Runtime::new().unwrap();
-
         let mut wam = Machine {
             machine_st,
             indices: IndexStore::new(),
@@ -462,7 +458,6 @@ impl Machine {
             user_output,
             user_error,
             load_contexts: vec![],
-            runtime,
         };
 
         let mut lib_path = current_dir();

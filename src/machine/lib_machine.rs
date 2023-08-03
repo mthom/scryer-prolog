@@ -69,8 +69,8 @@ mod tests {
     use super::*;
     use crate::machine::{QueryMatch, Value, QueryResolution};
 
-    #[test]
-    fn programatic_query() {
+    #[tokio::test]
+    async fn programatic_query() {
         let mut machine = Machine::new_lib();
 
         machine.load_module_string(
@@ -108,8 +108,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn failing_query() {
+    #[tokio::test]
+    async fn failing_query() {
         let mut machine = Machine::new_lib();
         let query = String::from(r#"triple("a",P,"b")."#);
         let output = machine.run_query(query);
@@ -119,8 +119,8 @@ mod tests {
         );
     }
 
-    #[test]
-    fn complex_results() {
+    #[tokio::test]
+    async fn complex_results() {
         let mut machine = Machine::new_lib();
         machine.load_module_string(
             "facts",
@@ -172,8 +172,8 @@ mod tests {
     }
 
 
-    #[test]
-    fn consult() {
+    #[tokio::test]
+    async fn consult() {
         let mut machine = Machine::new_lib();
 
         machine.consult_module_string(
