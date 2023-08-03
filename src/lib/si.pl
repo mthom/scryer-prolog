@@ -36,6 +36,7 @@
                integer_si/1,
                atomic_si/1,
                list_si/1,
+               character_si/1,
                chars_si/1,
                dif_si/2]).
 
@@ -62,9 +63,15 @@ list_si(L0) :-
    ;  throw(error(instantiation_error, list_si/1))
    ).
 
-chars_si(Cs) :-
-   list_si(Cs),
-   '$is_partial_string'(Cs).
+character_si(Ch) :-
+   functor(Ch,Ch,0),
+   atom(Ch),
+   atom_length(Ch,1).
+
+chars_si(Chs) :-
+   \+ \+ length(Chs,_),
+   \+ ( once(length(Chs,_)), member(Ch,Chs), nonvar(Ch), \+ character_si(Ch) ),
+   \+ ( member(Ch,Chs), \+ character_si(Ch) ). % for the instantiation error
 
 dif_si(X, Y) :-
    X \== Y,
