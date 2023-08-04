@@ -68,10 +68,24 @@ character_si(Ch) :-
    atom(Ch),
    atom_length(Ch,1).
 
-chars_si(Chs) :-
-   \+ \+ length(Chs,_),
-   \+ ( once(length(Chs,_)), member(Ch,Chs), nonvar(Ch), \+ character_si(Ch) ),
-   \+ ( member(Ch,Chs), \+ character_si(Ch) ). % for the instantiation error
+chars_si(Chs0) :-
+   '$skip_max_list'(_,_, Chs0,Chs),
+   ( nonvar(Chs) -> Chs == [] ; true ), % fails for infinite lists too
+   failnochars(Chs0, Uninstantiated),
+   (  nonvar(Uninstantiated)
+   -> throw(error(instantiation_error, chars_si/1))
+   ;  true
+   ).
+
+failnochars(Chs0, U) :-
+   (  var(Chs0) -> U = true
+   ;  Chs0 == [] -> true
+   ;  Chs0 = [Ch|Chs1],
+      (  nonvar(Ch) -> atom(Ch), atom_length(Ch,1)
+      ;  U = true
+      ),
+      failnochars(Chs1, U)
+   ).
 
 dif_si(X, Y) :-
    X \== Y,
