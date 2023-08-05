@@ -32,8 +32,7 @@ use std::ops::{Deref, DerefMut};
  * loader.pl does a few high-level things more easily handled from
  * Prolog that are not supported (or needed) during bootstrapping:
  * term and goal expansion, loading modules from different streams,
- * verifying certain kinds of declarations, perhaps (in the future?)
- * compiling inline disjunctions.
+ * and verifying certain kinds of declarations.
  *
  * Since the loader can operate incrementally, it uses an intermittent
  * structure to rebuild the loader between invocations. Preprocessor
@@ -1279,6 +1278,17 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         name: Atom,
         arity: usize,
     ) -> Result<(), SessionError> {
+        let key = (name, arity);
+
+        let predicate_info = self
+            .wam_prelude
+            .indices
+            .get_predicate_skeleton(&self.payload.predicates.compilation_target, &key)
+            .map(|skeleton| skeleton.predicate_info())
+            .unwrap_or_default();
+
+        self.retract_local_clauses(&key, predicate_info.is_dynamic);
+
         self.add_extensible_predicate_declaration(
             compilation_target,
             name,
