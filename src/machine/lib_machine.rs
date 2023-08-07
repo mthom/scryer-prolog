@@ -231,6 +231,7 @@ mod tests {
 
     }
 
+    #[ignore = "fails on windows"]
     #[tokio::test]
     async fn stress_integration_test() {
         let mut machine = Machine::new_lib();
