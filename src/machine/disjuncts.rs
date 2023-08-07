@@ -530,7 +530,36 @@ impl VariableClassifier {
                         }
                     };
 
+                    let mut add_chunk = |classifier: &mut Self, name: Atom, terms: Vec<Term>| {
+                        if update_chunk_data(classifier, name, terms.len()) {
+                            build_stack.add_chunk();
+                        }
+
+                        for (arg_c, term) in terms.iter().enumerate() {
+                            classifier.probe_body_term(arg_c + 1, terms.len(), term);
+                        }
+
+                        build_stack.push_chunk_term(
+                            clause_to_query_term(
+                                loader,
+                                name,
+                                terms,
+                                classifier.call_policy,
+                            ),
+                        );
+                    };
+
                     match term {
+                        Term::Clause(_, name @ (atom!("->") | atom!(";") | atom!(",")), mut terms) if terms.len() == 3 => {
+                            if let Some(last_arg) = terms.last() {
+                                if let Term::Literal(_, Literal::CodeIndex(_)) = last_arg {
+                                    terms.pop();
+                                    state_stack.push(TraversalState::Term(Term::Clause(Cell::default(), name, terms)));
+                                } else {
+                                    add_chunk(self, name, terms);
+                                }
+                            }
+                        }
                         Term::Clause(_, atom!(","), mut terms) if terms.len() == 2 => {
                             let tail = terms.pop().unwrap();
                             let head = terms.pop().unwrap();
@@ -700,22 +729,7 @@ impl VariableClassifier {
                             self.call_policy = CallPolicy::Counted;
                         }
                         Term::Clause(_, name, terms) => {
-                            if update_chunk_data(self, name, terms.len()) {
-                                build_stack.add_chunk();
-                            }
-
-                            for (arg_c, term) in terms.iter().enumerate() {
-                                self.probe_body_term(arg_c + 1, terms.len(), term);
-                            }
-
-                            build_stack.push_chunk_term(
-                                clause_to_query_term(
-                                    loader,
-                                    name,
-                                    terms,
-                                    self.call_policy,
-                                ),
-                            );
+                            add_chunk(self, name, terms);
                         }
                         var @ Term::Var(..) => {
                             if update_chunk_data(self, atom!("call"), 1) {

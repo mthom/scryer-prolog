@@ -1258,7 +1258,7 @@ fn print_overwrite_warning(
         _ => {}
     }
 
-    println!("Warning: overwriting {}/{}", key.0.as_str(), key.1);
+    println!("Warning: overwriting {}/{} because the clauses are discontiguous", key.0.as_str(), key.1);
 }
 
 impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
@@ -2220,7 +2220,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
 
         let payload_compilation_target = self.payload.compilation_target;
 
-        let local_predicate_info = self
+        let mut local_predicate_info = self
             .wam_prelude
             .indices
             .get_local_predicate_skeleton(
@@ -2241,6 +2241,8 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
 
         let is_cross_module_clause =
             payload_compilation_target != self.payload.predicates.compilation_target;
+
+        local_predicate_info.is_discontiguous = predicate_info.is_discontiguous;
 
         if local_predicate_info.must_retract_local_clauses(is_cross_module_clause) {
             self.retract_local_clauses(&key, predicate_info.is_dynamic);

@@ -36,6 +36,7 @@
                integer_si/1,
                atomic_si/1,
                list_si/1,
+               character_si/1,
                chars_si/1,
                dif_si/2]).
 
@@ -62,9 +63,29 @@ list_si(L0) :-
    ;  throw(error(instantiation_error, list_si/1))
    ).
 
-chars_si(Cs) :-
-   list_si(Cs),
-   '$is_partial_string'(Cs).
+character_si(Ch) :-
+   functor(Ch,Ch,0),
+   atom(Ch),
+   atom_length(Ch,1).
+
+chars_si(Chs0) :-
+   '$skip_max_list'(_,_, Chs0,Chs),
+   ( nonvar(Chs) -> Chs == [] ; true ), % fails for infinite lists too
+   failnochars(Chs0, Uninstantiated),
+   (  nonvar(Uninstantiated)
+   -> throw(error(instantiation_error, chars_si/1))
+   ;  true
+   ).
+
+failnochars(Chs0, U) :-
+   (  var(Chs0) -> U = true
+   ;  Chs0 == [] -> true
+   ;  Chs0 = [Ch|Chs1],
+      (  nonvar(Ch) -> atom(Ch), atom_length(Ch,1)
+      ;  U = true
+      ),
+      failnochars(Chs1, U)
+   ).
 
 dif_si(X, Y) :-
    X \== Y,

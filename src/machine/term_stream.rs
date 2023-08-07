@@ -9,6 +9,7 @@ use crate::read::devour_whitespace;
 
 use crate::predicate_queue;
 
+use fxhash::FxBuildHasher;
 use indexmap::IndexSet;
 
 use std::collections::VecDeque;
@@ -19,7 +20,7 @@ pub struct LoadStatePayload<TS> {
     pub(super) compilation_target: CompilationTarget,
     pub(super) retraction_info: RetractionInfo,
     pub(super) module_op_exports: ModuleOpExports,
-    pub(super) non_counted_bt_preds: IndexSet<PredicateKey>,
+    pub(super) non_counted_bt_preds: IndexSet<PredicateKey, FxBuildHasher>,
     pub(super) predicates: PredicateQueue,
     pub(super) clause_clauses: Vec<(Term, Term)>,
 }
@@ -97,10 +98,10 @@ impl<TS> LoadStatePayload<TS> {
             compilation_target: CompilationTarget::default(),
             retraction_info: RetractionInfo::new(code_repo_len),
             module_op_exports: vec![],
-            non_counted_bt_preds: IndexSet::new(),
+            non_counted_bt_preds: IndexSet::with_hasher(FxBuildHasher::default()),
             predicates: predicate_queue![],
             clause_clauses: vec![],
-        }
+         }
     }
 }
 
