@@ -60,9 +60,9 @@ write_goal(G, VarList, MaxDepth) :-
        write(' = '),
        (  needs_bracketing(Value, (=)) ->
           write('('),
-          write_term(Value, [quoted(true), variable_names(NewVarList), max_depth(MaxDepth)]),
+          write_term(Value, [quoted(true), variable_names(NewVarList), max_depth(MaxDepth), double_quotes(true)]),
           write(')')
-       ;  write_term(Value, [quoted(true), variable_names(NewVarList), max_depth(MaxDepth)])
+       ;  write_term(Value, [quoted(true), variable_names(NewVarList), max_depth(MaxDepth), double_quotes(true)])
        )
     ;  G == [] ->
        write('true')
@@ -80,9 +80,9 @@ write_last_goal(G, VarList, MaxDepth) :-
        write(' = '),
        (  needs_bracketing(Value, (=)) ->
           write('('),
-          write_term(Value, [quoted(true), variable_names(NewVarList), max_depth(MaxDepth)]),
+          write_term(Value, [quoted(true), variable_names(NewVarList), max_depth(MaxDepth), double_quotes(true)]),
           write(')')
-       ;  write_term(Value, [quoted(true), variable_names(NewVarList), max_depth(MaxDepth)]),
+       ;  write_term(Value, [quoted(true), variable_names(NewVarList), max_depth(MaxDepth), double_quotes(true)]),
           (  trailing_period_is_ambiguous(Value) ->
              write(' ')
           ;  true
