@@ -88,6 +88,7 @@ use hyper::{HeaderMap, Method};
 use http_body_util::BodyExt;
 use bytes::Buf;
 use reqwest::Url;
+use hyper_util::rt::TokioIo;
 
 pub(crate) fn get_key() -> KeyEvent {
     let key;
@@ -4349,14 +4350,16 @@ impl Machine {
 		    let (stream, _) = listener.accept().await.unwrap();
 
 		    tokio::task::spawn(async move {
-			if let Err(err) = http1::Builder::new()
-			    .serve_connection(stream, HttpService {
-				tx
-			    })
-			    .await
-			{
-			    eprintln!("Error serving connection: {:?}", err);
-			}
+                let io = TokioIo::new(stream);
+
+                if let Err(err) = http1::Builder::new()
+                    .serve_connection(io, HttpService {
+                    tx
+                    })
+                    .await
+                {
+                    eprintln!("Error serving connection: {:?}", err);
+                }
 		    });
 		}
 	    });

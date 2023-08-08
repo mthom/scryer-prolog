@@ -59,7 +59,8 @@ smallvec = "1.8.0"
 sodiumoxide = "0.2.6"
 static_assertions = "1.1.0"
 ryu = "1.0.9"
-hyper = { version = "1.0.0-rc.3", features = ["full"] }
+hyper = { version = "1.0.0-rc.4", features = ["full"] }
+hyper-util = { git = "https://github.com/hyperium/hyper-util.git" }
 tokio = { version = "1.28.2", features = ["full"] }
 futures = "0.3"
 regex = "1.9.1"
@@ -69,7 +70,7 @@ http-body-util = "0.1.0-rc.2"
 bytes = "1"
 reqwest = { version = "0.11.18", features = ["blocking"] }
 dashu = { git = "https://github.com/coasys/dashu.git"  }
-libffi = { git = "https://github.com/coasys/libffi-rs.git", branch = "windows-space" }
+libffi = { path = "../libffi-rs/libffi-rs" }
 rand = "0.8.5"
 
 [dev-dependencies]
