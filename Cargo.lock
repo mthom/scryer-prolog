@@ -1144,6 +1144,7 @@ checksum = "b4668fb0ea861c1df094127ac5f1da3409a82116a4ba74fca2e58ef927159bb3"
 [[package]]
 name = "libffi"
 version = "3.2.0"
+source = "git+https://github.com/coasys/libffi-rs.git?branch=windows-space#f6e9e50efde0aa4e940dd6f709a59bb426875362"
 dependencies = [
  "libc",
  "libffi-sys",
@@ -1152,6 +1153,7 @@ dependencies = [
 [[package]]
 name = "libffi-sys"
 version = "2.3.0"
+source = "git+https://github.com/coasys/libffi-rs.git?branch=windows-space#f6e9e50efde0aa4e940dd6f709a59bb426875362"
 dependencies = [
  "cc",
 ]

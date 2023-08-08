@@ -70,7 +70,7 @@ http-body-util = "0.1.0-rc.2"
 bytes = "1"
 reqwest = { version = "0.11.18", features = ["blocking"] }
 dashu = { git = "https://github.com/coasys/dashu.git"  }
-libffi = { path = "../libffi-rs/libffi-rs" }
+libffi = { git = "https://github.com/coasys/libffi-rs.git", branch = "windows-space" }
 rand = "0.8.5"
 
 [dev-dependencies]
