@@ -121,11 +121,11 @@ bb_get(Key, Value) :-
 succ(I, S) :-
     can_be(not_less_than_zero, I),
     can_be(not_less_than_zero, S),
-    (   integer(I) ->
-        S is I+1
-    ;   integer(S) ->
+    (   integer(S) ->
         S > 0,
         I is S-1
+    ;   integer(I) ->
+        S is I+1
     ;   instantiation_error(succ/2)
     ).
 
