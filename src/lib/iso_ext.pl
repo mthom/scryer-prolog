@@ -14,6 +14,7 @@ but they're not part of the ISO Prolog standard at the moment.
                     partial_string/3,
                     partial_string_tail/2,
                     setup_call_cleanup/3,
+                    succ/2,
                     call_nth/2,
                     countall/2,
                     copy_term_nat/2,
@@ -109,6 +110,23 @@ bb_get(Key, Value) :-
     (  atom(Key) ->
        '$fetch_global_var'(Key, Value)
     ;  type_error(atom, Key, bb_get/2)
+    ).
+
+
+%% succ(?I, ?S).
+%
+% True iff S is the successor of the non-negative integer I.
+% At least one of the arguments must be instantiated.
+
+succ(I, S) :-
+    can_be(not_less_than_zero, I),
+    can_be(not_less_than_zero, S),
+    (   integer(S) ->
+        S > 0,
+        I is S-1
+    ;   integer(I) ->
+        S is I+1
+    ;   instantiation_error(succ/2)
     ).
 
 
