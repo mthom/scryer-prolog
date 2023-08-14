@@ -7488,9 +7488,15 @@ zcompare(Order, A, B) :-
             propagator_init_trigger([A,B], pzcompare(Order, A, B))
         ).
 
-zcompare_(=, A, B) :- #A #= #B.
-zcompare_(<, A, B) :- #A #< #B.
-zcompare_(>, A, B) :- #A #> #B.
+zcompare_(O, A, B) :-
+        (   member(O, "<=>") -> true
+        ;   domain_error(order, O, zcompare/3)
+        ),
+        zcompare__(O, A, B).
+
+zcompare__(=, A, B) :- #A #= #B.
+zcompare__(<, A, B) :- #A #< #B.
+zcompare__(>, A, B) :- #A #> #B.
 
 %% chain(+Relation, +Zs)
 %
