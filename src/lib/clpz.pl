@@ -2643,8 +2643,12 @@ parse_goal(p(Prop)) -->
 parse_init([], _)     --> [].
 parse_init([V|Vs], P) --> [init_propagator(V, P)], parse_init(Vs, P).
 
-%?- set_prolog_flag(answer_write_options, [portray(true)]),
-%   clpz:parse_clpz_clauses(Clauses), maplist(portray_clause, Clauses).
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+?- use_module(library(lists)),
+   use_module(library(format)),
+   clpz:parse_clpz_clauses(Clauses),
+   maplist(portray_clause, Clauses).
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
