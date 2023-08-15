@@ -119,7 +119,7 @@
 :- use_module(library(iso_ext)).
 :- use_module(library(dcgs)).
 :- use_module(library(terms)).
-:- use_module(library(error), [domain_error/3, type_error/3]).
+:- use_module(library(error), [domain_error/3, type_error/3, can_be/2]).
 :- use_module(library(si)).
 :- use_module(library(freeze)).
 :- use_module(library(arithmetic)).
@@ -1745,11 +1745,7 @@ clpz_in(V, D) :-
         drep_to_domain(D, Dom),
         domain(V, Dom).
 
-fd_variable(V) :-
-        (   var(V) -> true
-        ;   integer(V) -> true
-        ;   type_error(integer, V)
-        ).
+fd_variable(V) :- can_be(integer, V).
 
 %% ins(+Vars, +Domain)
 %
