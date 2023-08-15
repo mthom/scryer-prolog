@@ -2672,35 +2672,40 @@ propagator_init_trigger(Vs, P) -->
 
 variables_same_queue(Vs0) :-
         include(var, Vs0, Vs),
-        new_queue(Q),
-        maplist(variable_queue, Vs, Qs),
-        phrase((collect_goal(Qs),
-                collect_fast(Qs),
-                collect_slow(Qs)), [Q], [Q]),
-        maplist(clear_queue, Qs),
-        maplist(=(Q), Qs).
+        (   Vs == [] -> true
+        ;   maplist(variable_queue, Vs, Qs0),
+            sort(Qs0, [Q|Qs]),
+            Q =.. [_|Args],
+            append_queues_(Qs, Args, [append,append,append,ignore]),
+            maplist(clear_queue, Qs),
+            maplist(=(Q), Qs)
+        ).
+
+append_queues_([], _, _).
+append_queues_([Q|Qs], Args0, Is) :-
+        Q =.. [_|Args],
+        maplist(append_queue, Is, Args0, Args),
+        append_queues_(Qs, Args, Is).
+
+append_queue(ignore, _, _).
+append_queue(append, Q0, Q) :-
+        (   get_atts(Q0, queue(Ls0,Ls)) ->
+            (   get_atts(Q, queue(Ms0,Ms)) ->
+                Ls = Ms0,
+                put_atts(Q0, queue(Ls0,Ms))
+            ;   true
+            )
+        ;   (   get_atts(Q, queue(Ms0,Ms)) ->
+                put_atts(Q0, queue(Ms0,Ms))
+            ;   true
+            )
+        ).
 
 clear_queue(queue(Goals,Fast,Slow,Aux)) :-
         put_atts(Goals, -queue(_,_)),
         put_atts(Fast, -queue(_,_)),
         put_atts(Slow, -queue(_,_)),
         put_atts(Aux, -disabled).
-
-collect_goal(Qs) --> collect_arg(Qs, 1).
-collect_fast(Qs) --> collect_arg(Qs, 2).
-collect_slow(Qs) --> collect_arg(Qs, 3).
-
-collect_arg([], _) --> [].
-collect_arg([Q|Qs], Which) -->
-        collect_all_(Q, Which),
-        collect_arg(Qs, Which).
-
-collect_all_(Q, Which) -->
-        (   { queue_get_arg_(Q, Which, Element) } ->
-            insert_queue(Element, Which),
-            collect_all_(Q, Which)
-        ;   []
-        ).
 
 variable_queue(Var, Q) :-
         get_attr(Var, clpz, Attr),
