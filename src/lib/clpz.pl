@@ -2819,7 +2819,7 @@ matches([
          %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
          m(var(X) #\= integer(Y))             => [g(neq_num(X, Y))],
-         m(var(X) #\= var(Y))                 => [g(neq(X,Y))],
+         m(var(X) #\= var(Y))                 => [p(pneq(X,Y))],
          m(var(X) #\= var(Y) + var(Z))        => [p(x_neq_y_plus_z(X, Y, Z))],
          m(var(X) #\= var(Y) - var(Z))        => [p(x_neq_y_plus_z(Y, X, Z))],
          m(var(X) #\= var(Y)*var(Z))          => [p(ptimes(Y,Z,P)), g(neq(X,P))],
