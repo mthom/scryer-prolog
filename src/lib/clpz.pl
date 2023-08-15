@@ -2246,7 +2246,8 @@ all_distinct(Ls) :-
         maplist(fd_variable, Ls),
         make_propagator(pdistinct(Ls), Prop),
         new_queue(Q0),
-        phrase((distinct_attach(Ls, Prop, []),trigger_prop(Prop),do_queue), [Q0], _).
+        phrase((distinct_attach(Ls, Prop, []),trigger_prop(Prop),do_queue), [Q0], _),
+        variables_same_queue(Ls).
 
 %% nvalue(?N, +Vars).
 %
@@ -2906,7 +2907,8 @@ match_goal(p(Prop), _) -->
         [make_propagator(Prop, P)],
         { term_variables(Prop, Vs) },
         parse_init(Vs, P),
-        [trigger_once(P)].
+        [variables_same_queue(Vs),
+         trigger_once(P)].
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -4348,7 +4350,9 @@ tuples_in(Tuples, Relation) :-
         must_be(list(list), Tuples),
         maplist(maplist(fd_variable), Tuples),
         must_be(list(list(integer)), Relation),
-        maplist(relation_tuple(Relation), Tuples).
+        maplist(relation_tuple(Relation), Tuples),
+        append(Tuples, Vs),
+        variables_same_queue(Vs).
 
 relation_tuple(Relation, Tuple) :-
         relation_unifiable(Relation, Tuple, Us, _, _),
