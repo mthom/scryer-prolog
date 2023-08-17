@@ -526,7 +526,7 @@ var_name(V, Name=V, Num0, Num) :-
         Num is Num0 + 1.
 
 literal(Lit, VNs) -->
-        { write_term_to_chars(Lit, [quoted(true),variable_names(VNs)], Ls) },
+        { write_term_to_chars(Lit, [quoted(true),variable_names(VNs),double_quotes(true)], Ls) },
         seq(Ls).
 
 portray_(Var, VNs) --> { var(Var) }, !, literal(Var, VNs).
