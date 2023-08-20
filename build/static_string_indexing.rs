@@ -150,7 +150,7 @@ pub fn index_static_strings(instruction_rs_path: &std::path::Path) -> TokenStrea
         Err(_) => {}
     }
 
-    let indices = (0..visitor.static_strs.len()).map(|i| i << 3);
+    let indices = (0..visitor.static_strs.len()).map(|i| (i << 3) as u64);
     let indices_iter = indices.clone();
 
     let static_strs_len = visitor.static_strs.len();

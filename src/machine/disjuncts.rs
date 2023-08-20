@@ -27,7 +27,7 @@ pub struct BranchNumber {
 impl Default for BranchNumber {
     fn default() -> Self {
         Self {
-            branch_num: Rational::from(1usize << 63),
+            branch_num: Rational::from(1u64 << 63),
             delta: Rational::from(1),
         }
     }
