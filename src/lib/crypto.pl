@@ -711,6 +711,8 @@ curve25519_scalar_mult(Scalar, Point, Result) :-
             must_be_bytes(ScalarBytes, curve25519_scalar_mult/3),
             length(ScalarBytes, 32)
         ),
+        must_be(chars, Point),
+        length(Point, 32),
         maplist(char_code, Point, PointBytes),
         '$curve25519_scalar_mult'(ScalarBytes, PointBytes, Result).
 
