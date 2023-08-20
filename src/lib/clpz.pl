@@ -3967,7 +3967,7 @@ insert_queue(Element, Which) -->
               Tail0 = [Element|Tail]
           ;   Head = [Element|Tail]
           ),
-          put_atts(Arg, +queue(Head,Tail)) }.
+          put_atts(Arg, queue(Head,Tail)) }.
 
 
 domain_spread(Dom, Spread) :-
@@ -4199,9 +4199,9 @@ ignore(Goal) :- ( Goal -> true ; true ).
 
 print_queue -->
         state(queue(Goal,Fast,Slow,_)),
-        { ignore(get_atts(Goal, +queue(GHs,_))),
-          ignore(get_atts(Fast, +queue(FHs,_))),
-          ignore(get_atts(Slow, +queue(SHs,_))),
+        { ignore(get_atts(Goal, queue(GHs,_))),
+          ignore(get_atts(Fast, queue(FHs,_))),
+          ignore(get_atts(Slow, queue(SHs,_))),
           format("Current queue:~n   goal: ~q~n   fast: ~q~n   slow: ~q~n~n", [GHs,FHs,SHs]) }.
 
 
@@ -4216,14 +4216,14 @@ queue_get_arg(Which, Element) -->
 
 queue_get_arg_(Queue, Which, Element) :-
         arg(Which, Queue, Arg),
-        get_atts(Arg, +queue([Element|Elements],Tail)),
+        get_atts(Arg, queue([Element|Elements],Tail)),
         (   var(Elements) ->
             put_atts(Arg, -queue(_,_))
-        ;   put_atts(Arg, +queue(Elements,Tail))
+        ;   put_atts(Arg, queue(Elements,Tail))
         ).
 
 queue_enabled --> state(queue(_,_,_,Aux)), { \+ get_atts(Aux, disabled) }.
-disable_queue --> state(queue(_,_,_,Aux)), { put_atts(Aux, +disabled) }.
+disable_queue --> state(queue(_,_,_,Aux)), { put_atts(Aux, disabled) }.
 enable_queue --> state(queue(_,_,_,Aux)), { put_atts(Aux, -disabled) }.
 
 portray_propagator(propagator(P,_), F) :- functor(P, F, _).
