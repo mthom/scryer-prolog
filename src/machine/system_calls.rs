@@ -72,9 +72,7 @@ use ring::{
 use ripemd160::{Digest, Ripemd160};
 use sha3::{Sha3_224, Sha3_256, Sha3_384, Sha3_512};
 
-use crrl::secp256k1;
-
-use sodiumoxide::crypto::scalarmult::curve25519::*;
+use crrl::{secp256k1, x25519};
 
 use native_tls::{TlsConnector,TlsAcceptor,Identity};
 
@@ -7298,13 +7296,11 @@ impl Machine {
     pub(crate) fn curve25519_scalar_mult(&mut self) {
         let stub1_gen = || functor_stub(atom!("curve25519_scalar_mult"), 3);
         let scalar_bytes = self.machine_st.integers_to_bytevec(self.machine_st.registers[1], stub1_gen);
-        let scalar = Scalar(<[u8; 32]>::try_from(&scalar_bytes[..]).unwrap());
-
         let stub2_gen = || functor_stub(atom!("curve25519_scalar_mult"), 3);
         let point_bytes = self.machine_st.integers_to_bytevec(self.machine_st.registers[2], stub2_gen);
-        let point = GroupElement(<[u8; 32]>::try_from(&point_bytes[..]).unwrap());
 
-        let result = scalarmult(&scalar, &point).unwrap();
+        let result = x25519::x25519(&<[u8; 32]>::try_from(&point_bytes[..]).unwrap(),
+                                    &<[u8; 32]>::try_from(&scalar_bytes[..]).unwrap());
 
         let string = self.u8s_to_string(&result[..]);
 

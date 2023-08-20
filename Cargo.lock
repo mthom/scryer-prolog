@@ -310,13 +310,14 @@ dependencies = [
 
 [[package]]
 name = "crrl"
-version = "0.2.0"
+version = "0.6.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2db40892a506901e4e8281f00e42687df82d1d3448cb0289ae9183a60cb42ec1"
+checksum = "b083214486dae00f49a2f21f32fc8bbc333d6048601bc89203a8ab92bfa691f0"
 dependencies = [
  "blake2 0.10.6",
  "rand_core",
  "sha2",
+ "sha3 0.10.8",
 ]
 
 [[package]]
@@ -498,15 +499,6 @@ name = "doc-comment"
 version = "0.3.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "fea41bba32d969b513997752735605054bc0dfa92b4c56bf1189f2e174be7a10"
-
-[[package]]
-name = "ed25519"
-version = "1.5.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "91cff35c70bba8a626e3185d8cd48cc11b5437e1a5bcd15b9b5fa3c64b6dfee7"
-dependencies = [
- "signature",
-]
 
 [[package]]
 name = "either"
@@ -1140,18 +1132,6 @@ checksum = "b67380fd3b2fbe7527a606e18729d21c6f3951633d0500574c4dc22d2d638b9f"
 dependencies = [
  "cfg-if",
  "winapi",
-]
-
-[[package]]
-name = "libsodium-sys"
-version = "0.2.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6b779387cd56adfbc02ea4a668e704f729be8d6a6abd2c27ca5ee537849a92fd"
-dependencies = [
- "cc",
- "libc",
- "pkg-config",
- "walkdir",
 ]
 
 [[package]]
@@ -1991,9 +1971,8 @@ dependencies = [
  "ryu",
  "select",
  "serial_test",
- "sha3",
+ "sha3 0.8.2",
  "smallvec",
- "sodiumoxide",
  "static_assertions",
  "strum",
  "strum_macros",
@@ -2117,6 +2096,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "sha3"
+version = "0.10.8"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "75872d278a8f37ef87fa0ddbda7802605cb18344497949862c0d4dcb291eba60"
+dependencies = [
+ "digest 0.10.7",
+ "keccak",
+]
+
+[[package]]
 name = "signal-hook"
 version = "0.3.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2147,12 +2136,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "signature"
-version = "1.6.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "74233d3b3b2f6d4b006dc19dee745e73e2a6bfb6f93607cd3b02bd5b00797d7c"
-
-[[package]]
 name = "siphasher"
 version = "0.3.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2181,18 +2164,6 @@ checksum = "64a4a911eed85daf18834cfaa86a79b7d266ff93ff5ba14005426219480ed662"
 dependencies = [
  "libc",
  "winapi",
-]
-
-[[package]]
-name = "sodiumoxide"
-version = "0.2.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e26be3acb6c2d9a7aac28482586a7856436af4cfe7100031d219de2d2ecb0028"
-dependencies = [
- "ed25519",
- "libc",
- "libsodium-sys",
- "serde",
 ]
 
 [[package]]
