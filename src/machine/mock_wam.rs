@@ -244,6 +244,7 @@ impl Machine {
             user_error,
             load_contexts: vec![],
             runtime,
+            #[cfg(feature = "ffi")]
 	        foreign_function_table: Default::default(),
         };
 

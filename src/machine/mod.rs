@@ -28,6 +28,7 @@ use crate::arena::*;
 use crate::arithmetic::*;
 use crate::atom_table::*;
 use crate::forms::*;
+#[cfg(feature = "ffi")]
 use crate::ffi::ForeignFunctionTable;
 use crate::instructions::*;
 use crate::machine::args::*;
@@ -68,6 +69,7 @@ pub struct Machine {
     pub(super) user_error: Stream,
     pub(super) load_contexts: Vec<LoadContext>,
     pub(super) runtime: Runtime,
+    #[cfg(feature = "ffi")]
     pub(super) foreign_function_table: ForeignFunctionTable,
 }
 
@@ -425,7 +427,13 @@ impl Machine {
         let user_output = Stream::stdout(&mut machine_st.arena);
         let user_error = Stream::stderr(&mut machine_st.arena);
 
+        #[cfg(not(target_os = "wasi"))]
         let runtime = tokio::runtime::Runtime::new()
+            .unwrap();
+        #[cfg(target_os = "wasi")]
+        let runtime = tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
             .unwrap();
 
         let mut wam = Machine {
@@ -437,6 +445,7 @@ impl Machine {
             user_error,
             load_contexts: vec![],
             runtime,
+            #[cfg(feature = "ffi")]
 	        foreign_function_table: Default::default(),
         };
 

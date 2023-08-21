@@ -10,14 +10,19 @@ use crate::machine::machine_indices::*;
 use crate::machine::machine_state::MachineState;
 use crate::machine::streams::*;
 use crate::parser::char_reader::*;
+#[cfg(feature = "repl")]
 use crate::repl_helper::Helper;
 use crate::types::*;
 
 use fxhash::FxBuildHasher;
 
 use indexmap::IndexSet;
+
+#[cfg(feature = "repl")]
 use rustyline::error::ReadlineError;
+#[cfg(feature = "repl")]
 use rustyline::history::DefaultHistory;
+#[cfg(feature = "repl")]
 use rustyline::{Config, Editor};
 
 use std::collections::VecDeque;
@@ -102,12 +107,14 @@ fn get_prompt() -> &'static str {
 
 #[derive(Debug)]
 pub struct ReadlineStream {
+    #[cfg(feature = "repl")]
     rl: Editor<Helper, DefaultHistory>,
     pending_input: CharReader<Cursor<String>>,
     add_history: bool,
 }
 
 impl ReadlineStream {
+    #[cfg(feature = "repl")]
     #[inline]
     pub fn new(pending_input: &str, add_history: bool) -> Self {
         let config = Config::builder()
@@ -133,9 +140,23 @@ impl ReadlineStream {
         }
     }
 
+    #[cfg(not(feature = "repl"))]
+    #[inline]
+    pub fn new(pending_input: &str, add_history: bool) -> Self {
+        ReadlineStream {
+            pending_input: CharReader::new(Cursor::new(pending_input.to_owned())),
+            add_history: add_history,
+        }
+    }
+
+    #[cfg(feature = "repl")]
     pub fn set_atoms_for_completion(&mut self, atoms: *const IndexSet<Atom>) {
         let helper = self.rl.helper_mut().unwrap();
         helper.atoms = atoms;
+    }
+
+    #[cfg(not(feature = "repl"))]
+    pub fn set_atoms_for_completion(&mut self, atoms: *const IndexSet<Atom>) {
     }
 
     #[inline]
@@ -148,6 +169,7 @@ impl ReadlineStream {
         pending_input.set_position(0);
     }
 
+    #[cfg(feature = "repl")]
     fn call_readline(&mut self) -> std::io::Result<usize> {
         match self.rl.readline(get_prompt()) {
             Ok(text) => {
@@ -175,6 +197,12 @@ impl ReadlineStream {
         }
     }
 
+    #[cfg(not(feature = "repl"))]
+    fn call_readline(&mut self) -> std::io::Result<usize> {
+        Ok(0)
+    }
+
+    #[cfg(feature = "repl")]
     fn save_history(&mut self) {
         if !self.add_history {
             return;
@@ -189,6 +217,10 @@ impl ReadlineStream {
                 println!("Warning: couldn't save history (new file)");
             }
         }
+    }
+
+    #[cfg(not(feature = "repl"))]
+    fn save_history(&mut self) {
     }
 
     #[inline]

@@ -742,8 +742,10 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "be4136b2a15dd319360be1c07d9933517ccf0be8f16bf62a3bee4f0d618df427"
 dependencies = [
  "cfg-if",
+ "js-sys",
  "libc",
  "wasi 0.11.0+wasi-snapshot-preview1",
+ "wasm-bindgen",
 ]
 
 [[package]]
@@ -1812,6 +1814,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "ring-wasi"
+version = "0.16.25"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "db1418b2535ed5e71a9fc73d3fede8596792fd7cb4b4a0f8ecf412cfddaaedd4"
+dependencies = [
+ "cc",
+ "getrandom",
+ "libc",
+ "once_cell",
+ "spin",
+ "untrusted",
+ "web-sys",
+ "winapi",
+]
+
+[[package]]
 name = "ripemd160"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1944,6 +1962,7 @@ dependencies = [
  "divrem",
  "futures",
  "fxhash",
+ "getrandom",
  "git-version",
  "hostname",
  "http-body-util",
@@ -1965,6 +1984,7 @@ dependencies = [
  "ref_thread_local",
  "reqwest",
  "ring",
+ "ring-wasi",
  "ripemd160",
  "roxmltree",
  "rustyline",
