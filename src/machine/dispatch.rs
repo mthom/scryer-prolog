@@ -4242,58 +4242,72 @@ impl Machine {
                     step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                 }
                 &Instruction::CallHttpOpen => {
+                    #[cfg(feature = "http")]
                     try_or_throw!(self.machine_st, self.http_open());
                     step_or_fail!(self, self.machine_st.p += 1);
                 }
                 &Instruction::ExecuteHttpOpen => {
+                    #[cfg(feature = "http")]
                     try_or_throw!(self.machine_st, self.http_open());
                     step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                 }
 		&Instruction::CallHttpListen => {
+            #[cfg(feature = "http")]
 		    try_or_throw!(self.machine_st, self.http_listen());
 		    step_or_fail!(self, self.machine_st.p += 1);
 		}
 		&Instruction::ExecuteHttpListen => {
+            #[cfg(feature = "http")]
 		    try_or_throw!(self.machine_st, self.http_listen());
 		    step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
 		}
 		&Instruction::CallHttpAccept => {
+            #[cfg(feature = "http")]
 		    try_or_throw!(self.machine_st, self.http_accept());
 		    step_or_fail!(self, self.machine_st.p += 1);
 		}
 		&Instruction::ExecuteHttpAccept => {
+            #[cfg(feature = "http")]
 		    try_or_throw!(self.machine_st, self.http_accept());
 		    step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
 		}
 		&Instruction::CallHttpAnswer => {
+            #[cfg(feature = "http")]
 		    try_or_throw!(self.machine_st, self.http_answer());
 		    step_or_fail!(self, self.machine_st.p += 1);
 		}
 		&Instruction::ExecuteHttpAnswer => {
+            #[cfg(feature = "http")]
 		    try_or_throw!(self.machine_st, self.http_answer());
 		    step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
 		}
 		&Instruction::CallLoadForeignLib => {
+            #[cfg(feature = "ffi")]
 		    try_or_throw!(self.machine_st, self.load_foreign_lib());
 		    step_or_fail!(self, self.machine_st.p += 1);
 		}
 		&Instruction::ExecuteLoadForeignLib => {
+            #[cfg(feature = "ffi")]
 		    try_or_throw!(self.machine_st, self.load_foreign_lib());
 		    step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
 		}
 		&Instruction::CallForeignCall => {
+            #[cfg(feature = "ffi")]
 		    try_or_throw!(self.machine_st, self.foreign_call());
 		    step_or_fail!(self, self.machine_st.p += 1);
 		}
 		&Instruction::ExecuteForeignCall => {
+            #[cfg(feature = "ffi")]
 		    try_or_throw!(self.machine_st, self.foreign_call());
 		    step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
 		}
 		&Instruction::CallDefineForeignStruct => {
+            #[cfg(feature = "ffi")]
 		    try_or_throw!(self.machine_st, self.define_foreign_struct());
 		    step_or_fail!(self, self.machine_st.p += 1);
 		}
 		&Instruction::ExecuteDefineForeignStruct => {
+            #[cfg(feature = "ffi")]
 		    try_or_throw!(self.machine_st, self.define_foreign_struct());
 		    step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
 		}
@@ -4462,18 +4476,22 @@ impl Machine {
                     self.machine_st.p = self.machine_st.cp;
                 }
                 &Instruction::CallTLSAcceptClient => {
+                    #[cfg(feature = "tls")]
                     try_or_throw!(self.machine_st, self.tls_accept_client());
                     step_or_fail!(self, self.machine_st.p += 1);
                 }
                 &Instruction::ExecuteTLSAcceptClient => {
+                    #[cfg(feature = "tls")]
                     try_or_throw!(self.machine_st, self.tls_accept_client());
                     step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                 }
                 &Instruction::CallTLSClientConnect => {
+                    #[cfg(feature = "tls")]
                     try_or_throw!(self.machine_st, self.tls_client_connect());
                     step_or_fail!(self, self.machine_st.p += 1);
                 }
                 &Instruction::ExecuteTLSClientConnect => {
+                    #[cfg(feature = "tls")]
                     try_or_throw!(self.machine_st, self.tls_client_connect());
                     step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                 }

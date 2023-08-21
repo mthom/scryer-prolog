@@ -2,6 +2,7 @@ fn main() -> std::process::ExitCode {
     use std::sync::atomic::Ordering;
     use scryer_prolog::*;
 
+    #[cfg(feature = "repl")]
     ctrlc::set_handler(move || {
         scryer_prolog::machine::INTERRUPT.store(true, Ordering::Relaxed);
     }).unwrap();

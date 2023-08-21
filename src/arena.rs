@@ -1,3 +1,4 @@
+#[cfg(feature = "http")]
 use crate::http::{HttpListener, HttpResponse};
 use crate::machine::loader::LiveLoadState;
 use crate::machine::machine_indices::*;
@@ -566,6 +567,7 @@ impl ArenaAllocated for TcpListener {
     }
 }
 
+#[cfg(feature = "http")]
 impl ArenaAllocated for HttpListener {
     type PtrToAllocated = TypedArenaPtr<HttpListener>;
 
@@ -588,6 +590,7 @@ impl ArenaAllocated for HttpListener {
     }
 }
 
+#[cfg(feature = "http")]
 impl ArenaAllocated for HttpResponse {
     type PtrToAllocated = TypedArenaPtr<HttpResponse>;
 
@@ -695,12 +698,15 @@ unsafe fn drop_slab_in_place(value: &mut AllocSlab) {
             ptr::drop_in_place(value.payload_offset::<StreamLayout<CharReader<NamedTcpStream>>>());
         }
         ArenaHeaderTag::NamedTlsStream => {
+            #[cfg(feature = "tls")]
             ptr::drop_in_place(value.payload_offset::<StreamLayout<CharReader<NamedTlsStream>>>());
         }
         ArenaHeaderTag::HttpReadStream => {
+            #[cfg(feature = "http")]
             ptr::drop_in_place(value.payload_offset::<StreamLayout<CharReader<HttpReadStream>>>());
         }
 	    ArenaHeaderTag::HttpWriteStream => {
+            #[cfg(feature = "http")]
 	        ptr::drop_in_place(value.payload_offset::<StreamLayout<CharReader<HttpWriteStream>>>());
 	    }
         ArenaHeaderTag::ReadlineStream => {
@@ -724,9 +730,11 @@ unsafe fn drop_slab_in_place(value: &mut AllocSlab) {
             ptr::drop_in_place(value.payload_offset::<TcpListener>());
         }
 	    ArenaHeaderTag::HttpListener => {
+            #[cfg(feature = "http")]
 	        ptr::drop_in_place(value.payload_offset::<HttpListener>());
 	    }
 	    ArenaHeaderTag::HttpResponse => {
+            #[cfg(feature = "http")]
 	        ptr::drop_in_place(value.payload_offset::<HttpResponse>());
 	    }
         ArenaHeaderTag::StandardOutputStream => {

@@ -7,9 +7,11 @@ use lazy_static::lazy_static;
 use crate::arena::*;
 use crate::atom_table::*;
 use crate::forms::*;
+#[cfg(feature = "ffi")]
 use crate::ffi::*;
 use crate::heap_iter::*;
 use crate::heap_print::*;
+#[cfg(feature = "http")]
 use crate::http::{HttpService, HttpListener, HttpResponse};
 use crate::instructions::*;
 use crate::machine;
@@ -44,6 +46,7 @@ use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::convert::TryFrom;
 use std::env;
+#[cfg(feature = "ffi")]
 use std::ffi::CString;
 use std::fs;
 use std::hash::{BuildHasher, BuildHasherDefault};
@@ -57,10 +60,13 @@ use std::process;
 use std::str::FromStr;
 
 use chrono::{offset::Local, DateTime};
+#[cfg(not(target_os = "wasi"))]
 use cpu_time::ProcessTime;
 use std::time::{Duration, SystemTime};
 
+#[cfg(feature = "repl")]
 use crossterm::event::{read, Event, KeyCode, KeyEvent, KeyModifiers};
+#[cfg(feature = "repl")]
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 
 use blake2::{Blake2b, Blake2s};
@@ -74,19 +80,25 @@ use sha3::{Sha3_224, Sha3_256, Sha3_384, Sha3_512};
 
 use crrl::{secp256k1, x25519};
 
+#[cfg(feature = "tls")]
 use native_tls::{TlsConnector,TlsAcceptor,Identity};
 
 use base64;
 use roxmltree;
 use select;
 
+#[cfg(feature = "http")]
 use hyper::server::conn::http1;
+#[cfg(feature = "http")]
 use hyper::header::{HeaderValue, HeaderName};
+#[cfg(feature = "http")]
 use hyper::{HeaderMap, Method};
 use http_body_util::BodyExt;
 use bytes::Buf;
+#[cfg(feature = "http")]
 use reqwest::Url;
 
+#[cfg(feature = "repl")]
 pub(crate) fn get_key() -> KeyEvent {
     let key;
     enable_raw_mode().expect("failed to enable raw mode");
@@ -741,7 +753,7 @@ impl MachineState {
             };
 
             if let Some(max_steps) = max_steps_n {
-                if max_steps.abs() as usize <= 1 << 63 {
+                if max_steps.abs() as u64 <= 1 << 63 {
                     if max_steps >= 0 {
                         max_old = max_steps;
                     } else {
@@ -1764,6 +1776,7 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn current_hostname(&mut self) {
+        #[cfg(feature = "hostname")]
         match hostname::get().ok() {
             Some(host) => match host.to_str() {
                 Some(host) => {
@@ -3679,6 +3692,7 @@ impl Machine {
         Ok(())
     }
 
+    #[cfg(feature = "repl")]
     #[inline(always)]
     pub(crate) fn get_single_char(&mut self) -> CallResult {
         let ctrl_c = KeyEvent {
@@ -3702,7 +3716,28 @@ impl Machine {
             KeyCode::Char(c) => c,
             _ => unreachable!(),
         };
+        let a1 = self.deref_register(1);
+        self.machine_st.unify_char(
+            c,
+            a1,
+        );
 
+        Ok(())
+    }
+
+    #[cfg(not(feature = "repl"))]
+    #[inline(always)]
+    pub(crate) fn get_single_char(&mut self) -> CallResult {
+        let mut buffer = [0; 1];
+        // is there a better way?
+        if std::io::stdin().read(&mut buffer).is_err() {
+            let stub = functor_stub(atom!("get_single_char"), 1);
+            let err = self.machine_st.interrupt_error();
+            let err = self.machine_st.error_form(err, stub);
+
+            return Err(err);
+        }
+        let c = buffer[0] as char;
         let a1 = self.deref_register(1);
         self.machine_st.unify_char(
             c,
@@ -4158,12 +4193,19 @@ impl Machine {
         self.machine_st.fail = result;
     }
 
+    #[cfg(not(target_os = "wasi"))]
     #[inline(always)]
     pub(crate) fn cpu_now(&mut self) {
         let secs = ProcessTime::now().as_duration().as_secs_f64();
         let secs = float_alloc!(secs, self.machine_st.arena);
 
         self.machine_st.unify_f64(secs, self.machine_st.registers[1]);
+    }
+
+    #[cfg(target_os = "wasi")]
+    #[inline(always)]
+    pub(crate) fn cpu_now(&mut self) {
+        // TODO
     }
 
     #[inline(always)]
@@ -4198,6 +4240,7 @@ impl Machine {
         Ok(())
     }
 
+    #[cfg(feature = "http")]
     #[inline(always)]
     pub(crate) fn http_open(&mut self) -> CallResult {
         let address_sink = self.deref_register(1);
@@ -4316,6 +4359,7 @@ impl Machine {
         Ok(())
     }
 
+    #[cfg(feature = "http")]
     #[inline(always)]
     pub(crate) fn http_listen(&mut self) -> CallResult {
         let address_sink = self.deref_register(1);
@@ -4364,6 +4408,7 @@ impl Machine {
 	Ok(())
     }
 
+    #[cfg(feature = "http")]
     #[inline(always)]
     pub(crate) fn http_accept(&mut self) -> CallResult {
 	let culprit = self.deref_register(1);
@@ -4447,6 +4492,7 @@ impl Machine {
 	Ok(())
     }
 
+    #[cfg(feature = "http")]
     #[inline(always)]
     pub(crate) fn http_answer(&mut self) -> CallResult {
 	let culprit = self.deref_register(1);
@@ -4513,6 +4559,7 @@ impl Machine {
 	Ok(())
     }
 
+    #[cfg(feature = "ffi")]
     #[inline(always)]
     pub(crate) fn load_foreign_lib(&mut self) -> CallResult {
 	let library_name = self.deref_register(1);
@@ -4559,6 +4606,7 @@ impl Machine {
 	Ok(())
     }
 
+    #[cfg(feature = "ffi")]
     #[inline(always)]
     pub(crate) fn foreign_call(&mut self) -> CallResult {
 	let function_name = self.deref_register(1);
@@ -4634,6 +4682,7 @@ impl Machine {
 	Ok(())
     }
 
+    #[cfg(feature = "ffi")]
     fn build_struct(&mut self, name: &str, mut args: Vec<Value>) -> HeapCellValue {
 	args.insert(0, Value::CString(CString::new(name).unwrap()));
 	let cells: Vec<_> = args.into_iter()
@@ -4654,6 +4703,7 @@ impl Machine {
         )
     }
 
+    #[cfg(feature = "ffi")]
     #[inline(always)]
     pub(crate) fn define_foreign_struct(&mut self) -> CallResult {
 	let struct_name = self.deref_register(1);
@@ -6233,6 +6283,7 @@ impl Machine {
         Ok(())
     }
 
+    #[cfg(feature = "tls")]
     #[inline(always)]
     pub(crate) fn tls_client_connect(&mut self) -> CallResult {
         if let Some(hostname) = self.machine_st.value_to_str_like(self.machine_st.registers[1]) {
@@ -6270,6 +6321,7 @@ impl Machine {
         }
     }
 
+    #[cfg(feature = "tls")]
     #[inline(always)]
     pub(crate) fn tls_accept_client(&mut self) -> CallResult {
         let pkcs12 = self.string_encoding_bytes(self.machine_st.registers[1], atom!("octet"));
