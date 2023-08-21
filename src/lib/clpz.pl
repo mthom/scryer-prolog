@@ -2215,14 +2215,14 @@ all_different(Ls) :-
         fd_must_be_list(Ls, all_different(Ls)-1),
         maplist(fd_variable, Ls),
         Orig = original_goal(_, all_different(Ls)),
-        all_different(Ls, [], Orig),
-        do_queue.
+        new_queue(Q0),
+        phrase((all_different(Ls, [], Orig),do_queue), [Q0], _).
 
-all_different([], _, _).
-all_different([X|Right], Left, Orig) :-
-        (   var(X) ->
-            make_propagator(pdifferent(Left,Right,X,Orig), Prop),
-            init_propagator(X, Prop),
+all_different([], _, _) --> [].
+all_different([X|Right], Left, Orig) -->
+        (   { var(X) } ->
+            { make_propagator(pdifferent(Left,Right,X,Orig), Prop) },
+            init_propagator_([X], Prop),
             trigger_prop(Prop)
         ;   exclude_fire(Left, Right, X)
         ),
@@ -2636,13 +2636,12 @@ parse_goals([G|Gs]) --> parse_goal(G), parse_goals(Gs).
 
 parse_goal(g(Goal)) --> [Goal].
 parse_goal(p(Prop)) -->
-        [make_propagator(Prop, P)],
         { term_variables(Prop, Vs) },
-        parse_init(Vs, P),
-        [trigger_once(P)].
-
-parse_init([], _)     --> [].
-parse_init([V|Vs], P) --> [init_propagator(V, P)], parse_init(Vs, P).
+        [make_propagator(Prop, P),
+         new_queue(Q0),
+         phrase(init_propagator_(Vs, P), [Q0], [Q]),
+         variables_same_queue(Vs),
+         trigger_once_(P, Q)].
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ?- use_module(library(lists)),
@@ -2656,6 +2655,9 @@ parse_init([V|Vs], P) --> [init_propagator(V, P)], parse_init(Vs, P).
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 trigger_once(Prop) :-
         new_queue(Q),
+        trigger_once_(Prop, Q).
+
+trigger_once_(Prop, Q) :-
         phrase((trigger_prop(Prop),do_queue), [Q], _).
 
 neq(A, B) :- propagator_init_trigger(pneq(A, B)).
@@ -2667,9 +2669,10 @@ propagator_init_trigger(P) -->
 propagator_init_trigger(Vs, P) -->
         [p(Prop)],
         { make_propagator(P, Prop),
-          maplist(prop_init(Prop), Vs),
+          new_queue(Q0),
+          phrase(init_propagator_(Vs, Prop), [Q0], [Q]),
           variables_same_queue(Vs),
-          trigger_once(Prop) }.
+          trigger_once_(Prop, Q) }.
 
 variables_same_queue(Vs0) :-
         include(var, Vs0, Vs),
@@ -2904,11 +2907,12 @@ match_goal(r(X,Y), F)  --> { G =.. [F,X,Y] }, [G].
 match_goal(d(X,Y), _)  --> [parse_clpz(X, Y)].
 match_goal(g(Goal), _) --> [Goal].
 match_goal(p(Prop), _) -->
-        [make_propagator(Prop, P)],
         { term_variables(Prop, Vs) },
-        parse_init(Vs, P),
-        [variables_same_queue(Vs),
-         trigger_once(P)].
+        [make_propagator(Prop, P),
+         new_queue(Q0),
+         phrase(init_propagator_(Vs, P), [Q0], [Q]),
+         variables_same_queue(Vs),
+         trigger_once_(P, Q)].
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -3760,8 +3764,10 @@ kill_reified_tuples([B|Bs], Ps, All) -->
 relation_tuple_b_prop(Relation, Tuple, B, p(Prop)) :-
         put_attr(R, clpz_relation, Relation),
         make_propagator(reified_tuple_in(Tuple, R, B), Prop),
-        tuple_freeze_(Tuple, Prop),
-        init_propagator(B, Prop).
+        new_queue(Q0),
+        phrase((tuple_freeze_(Tuple, Prop),
+                init_propagator_([B], Prop),
+                do_queue), [Q0], _).
 
 
 tuples_in_conjunction(Tuples, Relation, Conj) :-
@@ -4228,6 +4234,15 @@ enable_queue --> state(queue(_,_,_,Aux)), { put_atts(Aux, -disabled) }.
 
 portray_propagator(propagator(P,_), F) :- functor(P, F, _).
 
+init_propagator_([], _) --> [].
+init_propagator_([V|Vs], Prop) -->
+        (   { fd_get(V, Dom, Ps0) } ->
+            { insert_propagator(Prop, Ps0, Ps) },
+            fd_put(V, Dom, Ps)
+        ;   []
+        ),
+        init_propagator_(Vs, Prop).
+
 init_propagator(Var, Prop) :-
         (   fd_get(Var, Dom, Ps0) ->
             insert_propagator(Prop, Ps0, Ps),
@@ -4350,19 +4365,22 @@ tuples_in(Tuples, Relation) :-
         must_be(list(list), Tuples),
         maplist(maplist(fd_variable), Tuples),
         must_be(list(list(integer)), Relation),
-        maplist(relation_tuple(Relation), Tuples),
+        new_queue(Q0),
+        phrase(tuples_relation(Tuples, Relation), [Q0], [Q]),
         append(Tuples, Vs),
-        variables_same_queue(Vs).
+        variables_same_queue(Vs),
+        phrase(do_queue, [Q], _).
 
-relation_tuple(Relation, Tuple) :-
-        relation_unifiable(Relation, Tuple, Us, _, _),
-        (   ground(Tuple) -> memberchk(Tuple, Relation)
-        ;   new_queue(Q),
-            phrase((tuple_domain(Tuple, Us),do_queue), [Q], _),
+tuples_relation([], _) --> [].
+tuples_relation([Tuple|Tuples], Relation) -->
+        { relation_unifiable(Relation, Tuple, Us, _, _) },
+        (   ground(Tuple) -> { memberchk(Tuple, Relation) }
+        ;   tuple_domain(Tuple, Us),
             (   Tuple = [_,_|_] -> tuple_freeze(Tuple, Us)
-            ;   true
+            ;   []
             )
-        ).
+        ),
+        tuples_relation(Tuples, Relation).
 
 list_first_rest([L|Ls], L, Ls).
 
@@ -4380,19 +4398,19 @@ tuple_domain([T|Ts], Relation0) -->
         ),
         tuple_domain(Ts, Relation1).
 
-tuple_freeze(Tuple, Relation) :-
-        (   ground(Tuple) -> memberchk(Tuple, Relation)
-        ;   put_attr(R, clpz_relation, Relation),
-            make_propagator(rel_tuple(R, Tuple), Prop),
+tuple_freeze(Tuple, Relation) -->
+        (   ground(Tuple) -> { memberchk(Tuple, Relation) }
+        ;   { put_attr(R, clpz_relation, Relation),
+              make_propagator(rel_tuple(R, Tuple), Prop) },
             tuple_freeze_(Tuple, Prop)
         ).
 
-tuple_freeze_([], _).
-tuple_freeze_([T|Ts], Prop) :-
+tuple_freeze_([], _) --> [].
+tuple_freeze_([T|Ts], Prop) -->
         (   var(T) ->
-            init_propagator(T, Prop),
+            init_propagator_([T], Prop),
             trigger_prop(Prop)
-        ;   true
+        ;   []
         ),
         tuple_freeze_(Ts, Prop).
 
@@ -6002,9 +6020,9 @@ max_factor(L1, U1, L2, U2, Max) :-
 distinct_attach([], _, _) --> [].
 distinct_attach([X|Xs], Prop, Right) -->
         (   var(X) ->
-            { init_propagator(X, Prop),
-              make_propagator(pexclude(Xs,Right,X), P1),
-              init_propagator(X, P1) },
+            init_propagator_([X], Prop),
+            { make_propagator(pexclude(Xs,Right,X), P1) },
+            init_propagator_([X], P1),
             trigger_prop(P1)
         ;   exclude_fire(Xs, Right, X)
         ),
