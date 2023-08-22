@@ -171,6 +171,26 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn list_results() {
+        let mut machine = Machine::new_lib();
+        machine.load_module_string(
+            "facts",
+                r#"
+                list([1,2,3]).
+            "#.to_string());
+
+        let result = machine.run_query(String::from("list(X)."));
+        assert_eq!(
+            result,
+            Ok(QueryResolution::Matches(vec![
+                QueryMatch::from(btreemap! {
+                    "X" => Value::List(Vec::from([Value::from("1"), Value::from("2"), Value::from("3")]))
+                }),
+            ]))
+        );
+    }
+
 
     #[tokio::test]
     async fn consult() {

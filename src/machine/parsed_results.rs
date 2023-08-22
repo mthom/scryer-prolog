@@ -120,7 +120,7 @@ impl From<Vec<QueryResolutionLine>> for QueryResolution {
 fn parse_prolog_response(input: &str) -> HashMap<String, String> {
     let mut map: HashMap<String, String> = HashMap::new();
     // Use regex to match strings including commas inside them
-    let re = Regex::new(r"(\w+)\s=\s([^,]*'[^']*'[^,]*|[^,]*)").unwrap();
+    let re = Regex::new(r"(\w+)\s=\s((?:[^,\[]|\[[^\]]*\])*)").unwrap();
     
     for cap in re.captures_iter(input) {
         let key = cap[1].to_string();
