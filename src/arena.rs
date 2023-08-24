@@ -307,12 +307,16 @@ pub trait ArenaAllocated: Sized {
     fn copy_to_arena(self, dst: *mut Self) -> Self::PtrToAllocated;
 
     fn header_offset_from_payload() -> usize {
-        mem::size_of::<*const ArenaHeader>()
+        mem::size_of::<ArenaHeader>()
     }
 
     unsafe fn alloc(arena: &mut Arena, value: Self) -> Self::PtrToAllocated {
         let size = value.size() + mem::size_of::<AllocSlab>();
 
+        #[cfg(target_pointer_width="32")]
+        let align = mem::align_of::<AllocSlab>() * 2;
+
+        #[cfg(target_pointer_width="64")]
         let align = mem::align_of::<AllocSlab>();
         let layout = alloc::Layout::from_size_align_unchecked(size, align);
 
@@ -656,9 +660,12 @@ impl ArenaAllocated for IndexPtr {
     }
 }
 
+#[repr(C)]
 #[derive(Clone, Copy, Debug)]
 struct AllocSlab {
     next: *mut AllocSlab,
+    #[cfg(target_pointer_width="32")]
+    _padding: u32,
     header: ArenaHeader,
 }
 
@@ -827,6 +834,12 @@ mod tests {
     #[test]
     fn heap_cell_value_const_cast() {
         let mut wam = MockWAM::new();
+        #[cfg(target_pointer_width="32")]
+        let const_value = HeapCellValue::from(ConsPtr::build_with(
+            0x0000_0431 as *const _,
+            ConsPtrMaskTag::Cons,
+        ));
+        #[cfg(target_pointer_width="64")]
         let const_value = HeapCellValue::from(ConsPtr::build_with(
             0x0000_5555_ff00_0431 as *const _,
             ConsPtrMaskTag::Cons,
@@ -834,7 +847,7 @@ mod tests {
 
         match const_value.to_untyped_arena_ptr() {
             Some(arena_ptr) => {
-                assert_eq!(arena_ptr.into_bytes(), const_value.into_bytes());
+                assert_eq!(arena_ptr.into_bytes(), const_value.to_untyped_arena_ptr_bytes());
             }
             None => {
                 assert!(false);
@@ -847,7 +860,7 @@ mod tests {
 
         match stream_cell.to_untyped_arena_ptr() {
             Some(arena_ptr) => {
-                assert_eq!(arena_ptr.into_bytes(), stream_cell.into_bytes());
+                assert_eq!(arena_ptr.into_bytes(), stream_cell.to_untyped_arena_ptr_bytes());
             }
             None => {
                 assert!(false);
@@ -1101,7 +1114,7 @@ mod tests {
 
         read_heap_cell!(cell,
             (HeapCellValueTag::Atom, (el, _arity)) => {
-                assert_eq!(el.flat_index() as usize, empty_list_as_cell!().get_value());
+                assert_eq!(el.flat_index(), empty_list_as_cell!().get_value());
                 assert_eq!(el.as_str(), "[]");
             }
             _ => { unreachable!() }

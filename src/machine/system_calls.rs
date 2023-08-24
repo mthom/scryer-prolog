@@ -988,7 +988,7 @@ impl MachineState {
     pub(crate) fn call_continuation_chunk(&mut self, chunk: HeapCellValue, return_p: usize) -> usize {
         let chunk = self.store(self.deref(chunk));
 
-        let s = chunk.get_value();
+        let s = chunk.get_value() as usize;
         let arity = cell_as_atom_cell!(self.heap[s]).get_arity();
 
         let num_cells = arity - 1;
@@ -1169,7 +1169,7 @@ impl Machine {
         let attr_var = self.deref_register(1);
 
         if let HeapCellValueTag::AttrVar = attr_var.get_tag() {
-            let attr_var_loc = attr_var.get_value();
+            let attr_var_loc = attr_var.get_value() as usize;
             self.machine_st.heap[attr_var_loc] = heap_loc_as_cell!(attr_var_loc);
             self.machine_st.trail(TrailRef::Ref(Ref::attr_var(attr_var_loc)));
         }
@@ -1355,7 +1355,7 @@ impl Machine {
             } else {
                 if is_internal_call {
                     debug_assert_eq!(goal.get_tag(), HeapCellValueTag::Str);
-                    goal = self.machine_st.heap[goal.get_value()+1];
+                    goal = self.machine_st.heap[goal.get_value() as usize+1];
                     (module_name, goal) = self.machine_st.strip_module(goal, module_name);
 
                     if let Some((inner_name, inner_arity)) = self.machine_st.name_and_arity_from_heap(goal) {
@@ -1585,7 +1585,7 @@ impl Machine {
         );
 
         if HeapCellValueTag::Str == qualified_goal.get_tag() {
-            let s = qualified_goal.get_value();
+            let s = qualified_goal.get_value() as usize;
             let (name, arity) = cell_as_atom_cell!(self.machine_st.heap[s])
                 .get_name_and_arity();
 
@@ -4896,7 +4896,7 @@ impl Machine {
             Some(AttrListMatch { match_site: MatchSite::Match(match_site), .. }) => {
                 let list_head = self.machine_st.heap[match_site];
 
-                if list_head.get_value() == match_site {
+                if list_head.get_value() as usize == match_site {
                     // at the end of the list, no match found in this case.
                     self.machine_st.fail = true;
                 } else {
@@ -4969,7 +4969,7 @@ impl Machine {
                     prev_tail
                 } else {
                     if self.machine_st.heap[match_site + 1].is_var() {
-                        let h = attr_var.get_value();
+                        let h = attr_var.get_value() as usize;
 
                         self.machine_st.heap[h] = heap_loc_as_cell!(h);
                         self.machine_st.trail(TrailRef::Ref(Ref::attr_var(h)));
@@ -5044,13 +5044,13 @@ impl Machine {
                     }
                     MatchSite::Match(match_site) => {
                         let l = self.machine_st.heap[match_site].get_value();
-                        self.machine_st.heap[match_site].set_value(h);
+                        self.machine_st.heap[match_site].set_value(h as u64);
 
                         (match_site, l)
                     }
                 };
 
-                self.machine_st.trail(TrailRef::AttrVarListLink(match_site, l));
+                self.machine_st.trail(TrailRef::AttrVarListLink(match_site, l as usize));
             }
             None => {
                 // the list is empty.
@@ -5080,7 +5080,7 @@ impl Machine {
         let mut prev_tail = None;
 
         while let HeapCellValueTag::Lis = attrs_list.get_tag() {
-            let mut list_head = self.machine_st.heap[attrs_list.get_value()];
+            let mut list_head = self.machine_st.heap[attrs_list.get_value() as usize];
 
             loop {
                 read_heap_cell!(list_head,
@@ -5100,7 +5100,7 @@ impl Machine {
 
                         if module == module_loc && name == t_name && arity == t_arity {
                             return Some(AttrListMatch {
-                                match_site: MatchSite::Match(attrs_list.get_value()),
+                                match_site: MatchSite::Match(attrs_list.get_value() as usize),
                                 prev_tail,
                             });
                         }
@@ -5113,7 +5113,7 @@ impl Machine {
                 );
             }
 
-            let tail_loc = attrs_list.get_value() + 1;
+            let tail_loc = attrs_list.get_value() as usize + 1;
             prev_tail = Some(tail_loc);
 
             // do the work of self.store(self.deref(...)) but inline it
@@ -5458,7 +5458,7 @@ impl Machine {
         let value = self.deref_register(2);
 
         debug_assert_eq!(HeapCellValueTag::AttrVar, var.get_tag());
-        self.machine_st.heap[var.get_value()] = value;
+        self.machine_st.heap[var.get_value() as usize] = value;
     }
 
     #[inline(always)]

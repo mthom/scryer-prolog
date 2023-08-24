@@ -1247,7 +1247,7 @@ impl Machine {
                     }
                 }
                 TrailEntryTag::TrailedBlackboardEntry => {
-                    let key = Atom::from(h);
+                    let key = Atom::from(h as u64);
 
                     match self.indices.global_variables.get_mut(&key) {
                         Some((_, ref mut loc)) => *loc = None,
@@ -1255,7 +1255,7 @@ impl Machine {
                     }
                 }
                 TrailEntryTag::TrailedBlackboardOffset => {
-                    let key = Atom::from(h);
+                    let key = Atom::from(h as u64);
                     let value_cell = HeapCellValue::from(u64::from(self.machine_st.trail[i + 1]));
 
                     match self.indices.global_variables.get_mut(&key) {

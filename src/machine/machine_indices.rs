@@ -143,6 +143,10 @@ impl IndexPtr {
 #[derive(Debug, Clone, Copy, Ord, Hash, PartialOrd, Eq, PartialEq)]
 pub struct CodeIndex(TypedArenaPtr<IndexPtr>);
 
+#[cfg(target_pointer_width="32")]
+const_assert!(std::mem::align_of::<CodeIndex>() == 4);
+
+#[cfg(target_pointer_width="64")]
 const_assert!(std::mem::align_of::<CodeIndex>() == 8);
 
 impl Deref for CodeIndex {
@@ -164,7 +168,7 @@ impl DerefMut for CodeIndex {
 impl From<CodeIndex> for UntypedArenaPtr {
     #[inline(always)]
     fn from(ptr: CodeIndex) -> UntypedArenaPtr {
-        unsafe { std::mem::transmute(ptr.0.as_ptr()) }
+        UntypedArenaPtr::build_with(ptr.0.as_ptr() as usize)
     }
 }
 
