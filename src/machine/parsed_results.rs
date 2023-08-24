@@ -164,10 +164,8 @@ impl TryFrom<String> for Value {
         let trimmed = string.trim();
 
         if let Ok(float_value) = string.parse::<f64>() {
-            println!("float value: {} -> {}", string, float_value);
             Ok(Value::Float(OrderedFloat(float_value)))
         } else if let Ok(int_value) = string.parse::<i128>() {
-            println!("int value: {} -> {}", string, int_value);
             Ok(Value::Integer(int_value.into()))
         } else if trimmed.starts_with("'") && trimmed.ends_with("'") {
             Ok(Value::String(trimmed[1..trimmed.len() - 1].into()))
