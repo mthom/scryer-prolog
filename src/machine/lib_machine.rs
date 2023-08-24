@@ -52,7 +52,7 @@ impl Machine {
                 .iter()
                 // 4. Trim and remove empty lines
                 .map(|s| s.trim())
-                .map(|s| s.replace(".", ""))
+                .map(|s| if s.ends_with(".") { s[..s.len()-1].to_string() } else { s.to_string() })
                 .filter(|s| !s.is_empty())
                 // 5. Parse into QueryResolutionLine
                 .map(QueryResolutionLine::try_from)
