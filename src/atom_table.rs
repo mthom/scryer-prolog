@@ -40,11 +40,17 @@ impl From<bool> for Atom {
 const ATOM_TABLE_INIT_SIZE: usize = 1 << 16;
 const ATOM_TABLE_ALIGN: usize = 8;
 
+#[cfg(test)]
 thread_local! {
    static ATOM_TABLE_BUF_BASE: std::cell::RefCell<*const u8> = std::cell::RefCell::new(ptr::null_mut());
 }
 
+#[cfg(not(test))]
+static ATOM_TABLE_BUF_BASE: std::sync::atomic::AtomicPtr<u8> =
+    std::sync::atomic::AtomicPtr::new(ptr::null_mut());
+
 fn set_atom_tbl_buf_base(old_ptr: *const u8, new_ptr: *const u8) -> Result<(), *const u8> {
+#[cfg(test)]
     {
     ATOM_TABLE_BUF_BASE.with(|atom_table_buf_base| {
         let mut borrow = atom_table_buf_base.borrow_mut();
@@ -56,11 +62,29 @@ fn set_atom_tbl_buf_base(old_ptr: *const u8, new_ptr: *const u8) -> Result<(), *
             }
         })?;
     };
+    #[cfg(not(test))]
+    {
+        ATOM_TABLE_BUF_BASE
+            .compare_exchange(
+                old_ptr.cast_mut(),
+                new_ptr.cast_mut(),
+                std::sync::atomic::Ordering::Relaxed,
+                std::sync::atomic::Ordering::Relaxed,
+            )
+            .map_err(|ptr| ptr.cast_const())
+    }?;
     Ok(())
 }
 
 pub(crate) fn get_atom_tbl_buf_base() -> *const u8 {
+    #[cfg(test)]
+    {
     ATOM_TABLE_BUF_BASE.with(|atom_table_buf_base| *atom_table_buf_base.borrow())
+}
+#[cfg(not(test))]
+    {
+        ATOM_TABLE_BUF_BASE.load(std::sync::atomic::Ordering::Relaxed)
+    }
 }
 
 #[test]
