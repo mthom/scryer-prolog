@@ -13,6 +13,7 @@ build = "build/main.rs"
 rust-version = "1.63"
 
 [features]
+multi_thread = []
 
 [build-dependencies]
 indexmap = "1.0.2"
