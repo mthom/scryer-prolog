@@ -409,7 +409,7 @@ mod tests {
         let pstr_var_cell = put_partial_string(
             &mut wam.machine_st.heap,
             "abc ",
-            &mut wam.machine_st.atom_tbl,
+            &mut wam.machine_st.atom_tbl.blocking_write(),
         );
         let pstr_cell = wam.machine_st.heap[pstr_var_cell.get_value() as usize];
 
@@ -419,7 +419,7 @@ mod tests {
         let pstr_second_var_cell = put_partial_string(
             &mut wam.machine_st.heap,
             "def",
-            &mut wam.machine_st.atom_tbl,
+            &mut wam.machine_st.atom_tbl.blocking_write(),
         );
         let pstr_second_cell = wam.machine_st.heap[pstr_second_var_cell.get_value() as usize];
 

@@ -11,6 +11,8 @@ pub use crate::parser::ast::*;
 use crate::read::*;
 pub use crate::types::*;
 
+use std::sync::Arc;
+
 #[cfg(test)]
 use crate::machine::copier::CopierTarget;
 
@@ -61,7 +63,7 @@ impl MockWAM {
 
         let mut printer = HCPrinter::new(
             &mut self.machine_st.heap,
-            &mut self.machine_st.atom_tbl,
+            Arc::clone(&self.machine_st.atom_tbl),
             &mut self.machine_st.stack,
             &self.op_dir,
             PrinterOutputter::new(),

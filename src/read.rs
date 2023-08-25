@@ -16,7 +16,9 @@ use crate::types::*;
 
 use fxhash::FxBuildHasher;
 
-use indexmap::IndexSet;
+use tokio::sync::RwLock;
+
+use std::sync::Arc;
 
 #[cfg(feature = "repl")]
 use rustyline::error::ReadlineError;
@@ -79,7 +81,7 @@ impl MachineState {
         };
 
         inner.add_lines_read(num_lines_read);
-        write_term_to_heap(&term, &mut self.heap, &mut self.atom_tbl)
+        write_term_to_heap(&term, &mut self.heap, &mut self.atom_tbl.blocking_write())
     }
 }
 
@@ -112,47 +114,47 @@ pub struct ReadlineStream {
 }
 
 impl ReadlineStream {
-    #[cfg(feature = "repl")]
     #[inline]
     pub fn new(pending_input: &str, add_history: bool) -> Self {
-        let config = Config::builder().check_cursor_position(true).build();
+        #[cfg(feature = "repl")]
+        {
+            let config = Config::builder().check_cursor_position(true).build();
 
-        let helper = Helper::new();
+            let helper = Helper::new();
 
-        let mut rl = Editor::with_config(config).unwrap();
-        rl.set_helper(Some(helper));
+            let mut rl = Editor::with_config(config).unwrap();
+            rl.set_helper(Some(helper));
 
-        if let Some(mut path) = dirs_next::home_dir() {
-            path.push(HISTORY_FILE);
-            if path.exists() && rl.load_history(&path).is_err() {
-                println!("Warning: loading history failed");
+            if let Some(mut path) = dirs_next::home_dir() {
+                path.push(HISTORY_FILE);
+                if path.exists() && rl.load_history(&path).is_err() {
+                    println!("Warning: loading history failed");
+                }
+            }
+
+            ReadlineStream {
+                rl,
+                pending_input: CharReader::new(Cursor::new(pending_input.to_owned())),
+                add_history: add_history,
             }
         }
 
-        ReadlineStream {
-            rl,
-            pending_input: CharReader::new(Cursor::new(pending_input.to_owned())),
-            add_history: add_history,
+        #[cfg(not(feature = "repl"))]
+        {
+            ReadlineStream {
+                pending_input: CharReader::new(Cursor::new(pending_input.to_owned())),
+                add_history: add_history,
+            }
         }
     }
 
-    #[cfg(not(feature = "repl"))]
-    #[inline]
-    pub fn new(pending_input: &str, add_history: bool) -> Self {
-        ReadlineStream {
-            pending_input: CharReader::new(Cursor::new(pending_input.to_owned())),
-            add_history: add_history,
+    pub fn set_atoms_for_completion(&mut self, atoms: &Arc<RwLock<AtomTable>>) {
+        #[cfg(feature = "repl")]
+        {
+            let helper = self.rl.helper_mut().unwrap();
+            helper.atoms = Arc::downgrade(atoms);
         }
     }
-
-    #[cfg(feature = "repl")]
-    pub fn set_atoms_for_completion(&mut self, atoms: *const IndexSet<Atom>) {
-        let helper = self.rl.helper_mut().unwrap();
-        helper.atoms = atoms;
-    }
-
-    #[cfg(not(feature = "repl"))]
-    pub fn set_atoms_for_completion(&mut self, atoms: *const IndexSet<Atom>) {}
 
     #[inline]
     pub fn reset(&mut self) {
@@ -433,7 +435,7 @@ impl<'a, 'b> TermWriter<'a, 'b> {
                     continue;
                 }
                 &TermRef::CompleteString(_, _, ref src) => {
-                    put_complete_string(self.heap, src.as_str(), self.atom_tbl);
+                    put_complete_string(self.heap, &src.as_str(), self.atom_tbl);
                 }
                 &TermRef::PartialString(lvl, _, ref src, _) => {
                     if let Level::Root = lvl {

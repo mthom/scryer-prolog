@@ -107,7 +107,7 @@ pub(crate) fn as_partial_string(
                 tail_ref = tail;
             }
             Term::CompleteString(_, cstr) => {
-                string += cstr.as_str();
+                string += &*cstr.as_str();
                 tail = Term::Literal(Cell::default(), Literal::Atom(atom!("[]")));
                 break;
             }
@@ -122,7 +122,7 @@ pub(crate) fn as_partial_string(
         Term::AnonVar | Term::Var(..) => Ok((string, Some(Box::new(tail)))),
         Term::Literal(_, Literal::Atom(atom!("[]"))) => Ok((string, None)),
         Term::Literal(_, Literal::String(tail)) => {
-            string += tail.as_str();
+            string += &*tail.as_str();
             Ok((string, None))
         }
         _ => Ok((string, Some(Box::new(tail)))),
@@ -568,16 +568,19 @@ impl<'a, R: CharRead> Parser<'a, R> {
         let idx = self.terms.len() - arity;
 
         if TokenType::Term == self.stack[stack_len].tt {
-            if atomize_term(&mut self.lexer.machine_st.atom_tbl, &self.terms[idx - 1]).is_some() {
+            if atomize_term(
+                &mut self.lexer.machine_st.atom_tbl.blocking_write(),
+                &self.terms[idx - 1],
+            )
+            .is_some()
+            {
                 self.stack.truncate(stack_len + 1);
 
                 let mut subterms: Vec<_> = self.terms.drain(idx..).collect();
 
-                if let Some(name) = self
-                    .terms
-                    .pop()
-                    .and_then(|t| atomize_term(&mut self.lexer.machine_st.atom_tbl, &t))
-                {
+                if let Some(name) = self.terms.pop().and_then(|t| {
+                    atomize_term(&mut self.lexer.machine_st.atom_tbl.blocking_write(), &t)
+                }) {
                     // reduce the '.' functor to a cons cell if it applies.
                     if name == atom!(".") && subterms.len() == 2 {
                         let tail = subterms.pop().unwrap();
@@ -588,7 +591,12 @@ impl<'a, R: CharRead> Parser<'a, R> {
                                 Term::PartialString(Cell::default(), string_buf, tail)
                             }
                             Ok((string_buf, None)) => {
-                                let atom = self.lexer.machine_st.atom_tbl.build_with(&string_buf);
+                                let atom = self
+                                    .lexer
+                                    .machine_st
+                                    .atom_tbl
+                                    .blocking_write()
+                                    .build_with(&string_buf);
                                 Term::CompleteString(Cell::default(), atom)
                             }
                             Err(term) => term,
@@ -755,7 +763,12 @@ impl<'a, R: CharRead> Parser<'a, R> {
                     Term::PartialString(Cell::default(), string_buf, tail)
                 }
                 Ok((string_buf, None)) => {
-                    let atom = self.lexer.machine_st.atom_tbl.build_with(&string_buf);
+                    let atom = self
+                        .lexer
+                        .machine_st
+                        .atom_tbl
+                        .blocking_write()
+                        .build_with(&string_buf);
                     Term::CompleteString(Cell::default(), atom)
                 }
                 Err(term) => term,
@@ -971,7 +984,9 @@ impl<'a, R: CharRead> Parser<'a, R> {
                 |n, arena| Literal::from(float_alloc!(n, arena)),
             ),
             Token::Literal(c) => {
-                if let Some(name) = atomize_constant(&mut self.lexer.machine_st.atom_tbl, c) {
+                let atomized =
+                    atomize_constant(&mut self.lexer.machine_st.atom_tbl.blocking_write(), c);
+                if let Some(name) = atomized {
                     if !self.shift_op(name, op_dir)? {
                         self.shift(Token::Literal(c), 0, TERM);
                     }

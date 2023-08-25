@@ -55,8 +55,8 @@ impl PartialString {
     }
 
     #[inline(always)]
-    pub(crate) fn as_str_from(&self, n: usize) -> &str {
-        &self.0.as_str()[n..]
+    pub(crate) fn as_str_from(&self, n: usize) -> AtomString {
+        self.0.as_str().map(|str| &str[n..])
     }
 }
 
@@ -155,7 +155,7 @@ impl<'a> HeapPStrIter<'a> {
                     let s = &s[result.prefix_len..];
 
                     if s.len() >= t.len() {
-                        if s.starts_with(t) {
+                        if (&*s).starts_with(&*t) {
                             result.prefix_len += t.len();
                             result.offset += t.len();
                         } else {
@@ -229,7 +229,7 @@ impl<'a> HeapPStrIter<'a> {
                 }
                 PStrIteratee::PStrSegment(_, pstr_atom, n) => {
                     let pstr = PartialString::from(pstr_atom);
-                    buf += pstr.as_str_from(n);
+                    buf += &*pstr.as_str_from(n);
                 }
             }
         }
@@ -714,7 +714,7 @@ pub fn compare_pstr_prefixes<'a>(
                         let str2 = pstr2.as_str_from(n2);
 
                         match str1.len().cmp(&str2.len()) {
-                            Ordering::Equal if str1 == str2 => {
+                            Ordering::Equal if &*str1 == &*str2 => {
                                 cycle_detection_step(i1, i2, &step_1);
                                 let both_cyclic = cycle_detection_step(i2, i1, &step_2);
 
@@ -725,7 +725,7 @@ pub fn compare_pstr_prefixes<'a>(
                                     continue;
                                 }
                             }
-                            Ordering::Less if str2.starts_with(str1) => {
+                            Ordering::Less if str2.starts_with(&*str1) => {
                                 step_2.iteratee =
                                     PStrIteratee::PStrSegment(f2, pstr2_atom, n2 + str1.len());
                                 let c1_result = cycle_detection_step(i1, i2, &step_1);
@@ -735,7 +735,7 @@ pub fn compare_pstr_prefixes<'a>(
                                     continue;
                                 }
                             }
-                            Ordering::Greater if str1.starts_with(str2) => {
+                            Ordering::Greater if str1.starts_with(&*str2) => {
                                 step_1.iteratee =
                                     PStrIteratee::PStrSegment(f1, pstr1_atom, n1 + str2.len());
                                 let c2_result = cycle_detection_step(i2, i1, &step_2);
@@ -746,7 +746,7 @@ pub fn compare_pstr_prefixes<'a>(
                                 }
                             }
                             _ => {
-                                return PStrCmpResult::Ordered(str1.cmp(str2));
+                                return PStrCmpResult::Ordered(str1.cmp(&*str2));
                             }
                         }
                     }
@@ -808,7 +808,7 @@ mod test {
         let pstr_var_cell = put_partial_string(
             &mut wam.machine_st.heap,
             "abc ",
-            &mut wam.machine_st.atom_tbl,
+            &mut wam.machine_st.atom_tbl.blocking_write(),
         );
 
         let pstr_cell = wam.machine_st.heap[pstr_var_cell.get_value() as usize];
@@ -831,7 +831,7 @@ mod test {
         let pstr_second_var_cell = put_partial_string(
             &mut wam.machine_st.heap,
             "def",
-            &mut wam.machine_st.atom_tbl,
+            &mut wam.machine_st.atom_tbl.blocking_write(),
         );
 
         let pstr_second_cell = wam.machine_st.heap[pstr_second_var_cell.get_value() as usize];
@@ -913,13 +913,21 @@ mod test {
             // construct a structurally similar but different cyclic partial string
             // matching the one beginning at wam.machine_st.heap[0].
 
-            put_partial_string(&mut wam.machine_st.heap, "ab", &mut wam.machine_st.atom_tbl);
+            put_partial_string(
+                &mut wam.machine_st.heap,
+                "ab",
+                &mut wam.machine_st.atom_tbl.blocking_write(),
+            );
 
             wam.machine_st.heap.pop();
 
             wam.machine_st.heap.push(pstr_loc_as_cell!(second_h + 2));
 
-            put_partial_string(&mut wam.machine_st.heap, "c ", &mut wam.machine_st.atom_tbl);
+            put_partial_string(
+                &mut wam.machine_st.heap,
+                "c ",
+                &mut wam.machine_st.atom_tbl.blocking_write(),
+            );
 
             wam.machine_st.heap.pop();
 
@@ -947,7 +955,7 @@ mod test {
         put_partial_string(
             &mut wam.machine_st.heap,
             "abc ",
-            &mut wam.machine_st.atom_tbl,
+            &mut wam.machine_st.atom_tbl.blocking_write(),
         );
 
         let pstr_cell = wam.machine_st.heap[0];
@@ -981,7 +989,7 @@ mod test {
         let cstr_var_cell = put_complete_string(
             &mut wam.machine_st.heap,
             "abc",
-            &mut wam.machine_st.atom_tbl,
+            &mut wam.machine_st.atom_tbl.blocking_write(),
         );
 
         wam.machine_st.heap.push(list_loc_as_cell!(2));
@@ -1010,7 +1018,7 @@ mod test {
         let cstr_var_cell = put_complete_string(
             &mut wam.machine_st.heap,
             "abc",
-            &mut wam.machine_st.atom_tbl,
+            &mut wam.machine_st.atom_tbl.blocking_write(),
         );
 
         wam.machine_st.heap.push(list_loc_as_cell!(2));
@@ -1040,8 +1048,11 @@ mod test {
 
         wam.machine_st.heap.clear();
 
-        let cstr_var_cell =
-            put_complete_string(&mut wam.machine_st.heap, "d", &mut wam.machine_st.atom_tbl);
+        let cstr_var_cell = put_complete_string(
+            &mut wam.machine_st.heap,
+            "d",
+            &mut wam.machine_st.atom_tbl.blocking_write(),
+        );
 
         wam.machine_st.heap.push(list_loc_as_cell!(2));
         wam.machine_st.heap.push(char_as_cell!('d'));
@@ -1058,7 +1069,7 @@ mod test {
         let cstr_var_cell = put_complete_string(
             &mut wam.machine_st.heap,
             "abc",
-            &mut wam.machine_st.atom_tbl,
+            &mut wam.machine_st.atom_tbl.blocking_write(),
         );
 
         wam.machine_st.heap.push(list_loc_as_cell!(2));
@@ -1089,7 +1100,7 @@ mod test {
         put_complete_string(
             &mut wam.machine_st.heap,
             "abcdef",
-            &mut wam.machine_st.atom_tbl,
+            &mut wam.machine_st.atom_tbl.blocking_write(),
         );
 
         wam.machine_st.heap.push(pstr_as_cell!(atom!("abc")));

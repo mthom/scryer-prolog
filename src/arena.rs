@@ -965,8 +965,8 @@ mod tests {
         let f_atom = atom!("f");
         let g_atom = atom!("g");
 
-        assert_eq!(f_atom.as_str(), "f");
-        assert_eq!(g_atom.as_str(), "g");
+        assert_eq!(&*f_atom.as_str(), "f");
+        assert_eq!(&*g_atom.as_str(), "g");
 
         let f_atom_cell = atom_as_cell!(f_atom);
         let g_atom_cell = atom_as_cell!(g_atom);
@@ -976,7 +976,7 @@ mod tests {
         match f_atom_cell.to_atom() {
             Some(atom) => {
                 assert_eq!(f_atom, atom);
-                assert_eq!(atom.as_str(), "f");
+                assert_eq!(&*atom.as_str(), "f");
             }
             None => {
                 assert!(false);
@@ -987,7 +987,7 @@ mod tests {
             (HeapCellValueTag::Atom, (atom, arity)) => {
                 assert_eq!(f_atom, atom);
                 assert_eq!(arity, 0);
-                assert_eq!(atom.as_str(), "f");
+                assert_eq!(&*atom.as_str(), "f");
             }
             _ => { unreachable!() }
         );
@@ -996,7 +996,7 @@ mod tests {
             (HeapCellValueTag::Atom, (atom, arity)) => {
                 assert_eq!(g_atom, atom);
                 assert_eq!(arity, 0);
-                assert_eq!(atom.as_str(), "g");
+                assert_eq!(&*atom.as_str(), "g");
             }
             _ => { unreachable!() }
         );
@@ -1006,7 +1006,7 @@ mod tests {
         let pstr_var_cell = put_partial_string(
             &mut wam.machine_st.heap,
             "ronan",
-            &mut wam.machine_st.atom_tbl,
+            &mut wam.machine_st.atom_tbl.blocking_write(),
         );
         let pstr_cell = wam.machine_st.heap[pstr_var_cell.get_value() as usize];
 
@@ -1014,7 +1014,7 @@ mod tests {
 
         match pstr_cell.to_pstr() {
             Some(pstr) => {
-                assert_eq!(pstr.as_str_from(0), "ronan");
+                assert_eq!(&*pstr.as_str_from(0), "ronan");
             }
             None => {
                 assert!(false);
@@ -1024,7 +1024,7 @@ mod tests {
         read_heap_cell!(pstr_cell,
             (HeapCellValueTag::PStr, pstr_atom) => {
                 let pstr = PartialString::from(pstr_atom);
-                assert_eq!(pstr.as_str_from(0), "ronan");
+                assert_eq!(&*pstr.as_str_from(0), "ronan");
             }
             _ => { unreachable!() }
         );
@@ -1133,7 +1133,7 @@ mod tests {
         read_heap_cell!(cell,
             (HeapCellValueTag::Atom, (el, _arity)) => {
                 assert_eq!(el.flat_index(), empty_list_as_cell!().get_value());
-                assert_eq!(el.as_str(), "[]");
+                assert_eq!(&*el.as_str(), "[]");
             }
             _ => { unreachable!() }
         );

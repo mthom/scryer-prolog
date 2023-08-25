@@ -1240,6 +1240,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     return Some(
                         LS::machine_st(&mut self.payload)
                             .atom_tbl
+                            .blocking_write()
                             .build_with(path_str),
                     );
                 }
@@ -1259,7 +1260,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         let clause = self.try_term_to_tl(term, &mut preprocessor)?;
         // let queue = preprocessor.parse_queue(self)?;
 
-        let mut cg = CodeGenerator::new(&mut LS::machine_st(&mut self.payload).atom_tbl, settings);
+        let mut cg = CodeGenerator::new(&LS::machine_st(&mut self.payload).atom_tbl, settings);
 
         let clause_code = cg.compile_predicate(vec![clause])?;
 
@@ -1289,7 +1290,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             clauses.push(self.try_term_to_tl(term, &mut preprocessor)?);
         }
 
-        let mut cg = CodeGenerator::new(&mut LS::machine_st(&mut self.payload).atom_tbl, settings);
+        let mut cg = CodeGenerator::new(&LS::machine_st(&mut self.payload).atom_tbl, settings);
 
         let mut code = cg.compile_predicate(clauses)?;
 

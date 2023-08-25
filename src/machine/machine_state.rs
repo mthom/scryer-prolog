@@ -18,10 +18,12 @@ use crate::types::*;
 use crate::parser::dashu::Integer;
 
 use indexmap::IndexMap;
+use tokio::sync::RwLock;
 
 use std::convert::TryFrom;
 use std::fmt;
 use std::ops::{Index, IndexMut};
+use std::sync::Arc;
 
 pub(crate) type Registers = [HeapCellValue; MAX_ARITY + 1];
 
@@ -57,7 +59,7 @@ pub enum OnEOF {
 }
 
 pub struct MachineState {
-    pub atom_tbl: AtomTable,
+    pub atom_tbl: Arc<RwLock<AtomTable>>,
     pub arena: Arena,
     pub(super) pdl: Vec<HeapCellValue>,
     pub(super) s: HeapPtr,
@@ -529,7 +531,7 @@ impl MachineState {
                     Some((var_name, var))
                 }
             }),
-            &mut self.atom_tbl,
+            &mut self.atom_tbl.blocking_write(),
         );
 
         let singleton_addr = self.registers[3];
@@ -615,7 +617,7 @@ impl MachineState {
                         false
                     }
                 }),
-            &mut self.atom_tbl,
+            &mut self.atom_tbl.blocking_write(),
         );
 
         for var in term_write_result.var_dict.values_mut() {
@@ -657,12 +659,10 @@ impl MachineState {
         stream: Stream,
         indices: &mut IndexStore,
     ) -> CallResult {
-        let atoms_ptr = (&self.atom_tbl.table) as *const indexmap::IndexSet<Atom>;
-
         if let Stream::Readline(ptr) = stream {
             unsafe {
                 let readline = ptr.as_ptr().as_mut().unwrap();
-                readline.set_atoms_for_completion(atoms_ptr);
+                readline.set_atoms_for_completion(&self.atom_tbl);
                 return self.read_term(
                     stream,
                     indices,
@@ -776,14 +776,14 @@ impl MachineState {
                                     }
                                     (HeapCellValueTag::Atom, (name, _arity)) => {
                                         debug_assert_eq!(_arity, 0);
-                                        var_names.insert(var, VarPtr::from(name.as_str()));
+                                        var_names.insert(var, VarPtr::from(&*name.as_str()));
                                     }
                                     (HeapCellValueTag::Str, s) => {
                                         let (name, arity) = cell_as_atom_cell!(self.heap[s])
                                             .get_name_and_arity();
 
                                         debug_assert_eq!(arity, 0);
-                                        var_names.insert(var, VarPtr::from(name.as_str()));
+                                        var_names.insert(var, VarPtr::from(&*name.as_str()));
                                     }
                                     _ => {
                                         unreachable!();
@@ -864,7 +864,7 @@ impl MachineState {
 
                 let mut printer = HCPrinter::new(
                     &mut self.heap,
-                    &mut self.atom_tbl,
+                    Arc::clone(&self.atom_tbl),
                     &mut self.stack,
                     op_dir,
                     PrinterOutputter::new(),

@@ -19,6 +19,7 @@ repl = ["dep:crossterm", "dep:ctrlc", "dep:rustyline"]
 hostname = ["dep:hostname"]
 tls = ["dep:native-tls"]
 http = ["dep:hyper", "dep:reqwest"]
+rust_beta_channel = []
 
 [build-dependencies]
 indexmap = "1.0.2"

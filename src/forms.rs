@@ -290,7 +290,7 @@ impl ClauseInfo for Term {
 
     fn arity(&self) -> usize {
         match self {
-            Term::Clause(_, name, terms) => match name.as_str() {
+            Term::Clause(_, name, terms) => match &*name.as_str() {
                 ":-" => match terms.len() {
                     1 => 0,
                     2 => terms[0].arity(),
@@ -489,11 +489,11 @@ impl AtomOrString {
     }
 
     #[inline]
-    pub fn as_str(&self) -> &str {
+    pub fn as_str(&self) -> AtomString<'_> {
         match self {
-            AtomOrString::Atom(atom) if atom == &atom!("[]") => "",
+            AtomOrString::Atom(atom) if atom == &atom!("[]") => AtomString::Static(""),
             AtomOrString::Atom(atom) => atom.as_str(),
-            AtomOrString::String(string) => string.as_str(),
+            AtomOrString::String(string) => AtomString::Static(string.as_str()),
         }
     }
 

@@ -1853,7 +1853,7 @@ impl MachineState {
             }
         };
 
-        let file = match open_options.open(file_spec.as_str()) {
+        let file = match open_options.open(&*file_spec.as_str()) {
             Ok(file) => file,
             Err(err) => {
                 match err.kind() {

@@ -1,23 +1,26 @@
-use indexmap::IndexSet;
-use rustyline::completion::{Candidate, Completer};
+use rustyline::completion::Completer;
 use rustyline::highlight::{Highlighter, MatchingBracketHighlighter};
 use rustyline::hint::Hinter;
 use rustyline::validate::Validator;
 use rustyline::{Context, Helper as RlHelper, Result};
 
-use crate::atom_table::{Atom, STATIC_ATOMS_MAP};
+use tokio::sync::RwLock;
+
+use std::sync::Weak;
+
+use crate::atom_table::{AtomString, AtomTable, STATIC_ATOMS_MAP};
 
 // TODO: Maybe add validation to the helper
 pub struct Helper {
     highligher: MatchingBracketHighlighter,
-    pub atoms: *const IndexSet<Atom>,
+    pub atoms: Weak<RwLock<AtomTable>>,
 }
 
 impl Helper {
     pub fn new() -> Self {
         Self {
             highligher: MatchingBracketHighlighter::new(),
-            atoms: std::ptr::null(),
+            atoms: Weak::new(),
         }
     }
 }
@@ -54,20 +57,8 @@ fn get_prefix(line: &str, pos: usize) -> Option<usize> {
     start_of_atom
 }
 
-pub struct StrPtr(*const str);
-
-impl Candidate for StrPtr {
-    fn display(&self) -> &str {
-        unsafe { self.0.as_ref().unwrap() }
-    }
-
-    fn replacement(&self) -> &str {
-        unsafe { self.0.as_ref().unwrap() }
-    }
-}
-
 impl Completer for Helper {
-    type Candidate = StrPtr;
+    type Candidate = AtomString<'static>;
 
     fn complete(
         &self,
@@ -78,17 +69,21 @@ impl Completer for Helper {
         let start_of_prefix = get_prefix(line, pos);
         if let Some(idx) = start_of_prefix {
             let sub_str = line.get(idx..pos).unwrap();
-            Ok((idx, unsafe {
-                let mut matching = (*self.atoms)
-                    .iter()
-                    .chain(STATIC_ATOMS_MAP.values())
-                    .filter(|a| a.as_str().starts_with(sub_str))
-                    .map(|s| StrPtr(s.as_str()))
-                    .collect::<Vec<_>>();
 
-                matching.sort_unstable_by(|a, b| Ord::cmp(&(*a.0).len(), &(*b.0).len()));
-                matching
-            }))
+            let guard = tokio::runtime::Handle::current()
+                .block_on(self.atoms.upgrade().unwrap().read_owned());
+
+            let mut matching = guard
+                .table
+                .iter()
+                .chain(STATIC_ATOMS_MAP.values())
+                .map(|a| a.as_str())
+                .filter(|a| a.starts_with(sub_str))
+                .collect::<Vec<_>>();
+
+            matching.sort_unstable_by(|a, b| Ord::cmp(&a.len(), &b.len()));
+
+            Ok((idx, matching))
         } else {
             Ok((0, vec![]))
         }

@@ -18,6 +18,8 @@ use crate::machine::machine_errors::*;
 use fxhash::FxBuildHasher;
 use indexmap::IndexSet;
 
+use tokio::sync::RwLock;
+
 use std::cell::Cell;
 use std::collections::VecDeque;
 
@@ -262,7 +264,7 @@ impl CodeGenSettings {
 
 #[derive(Debug)]
 pub(crate) struct CodeGenerator<'a> {
-    pub(crate) atom_tbl: &'a mut AtomTable,
+    pub(crate) atom_tbl: &'a RwLock<AtomTable>,
     marker: DebrayAllocator,
     settings: CodeGenSettings,
     pub(crate) skeleton: PredicateSkeleton,
@@ -362,7 +364,7 @@ fn structure_cell(term: &Term) -> Option<&Cell<RegType>> {
 }
 
 impl<'b> CodeGenerator<'b> {
-    pub(crate) fn new(atom_tbl: &'b mut AtomTable, settings: CodeGenSettings) -> Self {
+    pub(crate) fn new(atom_tbl: &'b RwLock<AtomTable>, settings: CodeGenSettings) -> Self {
         CodeGenerator {
             atom_tbl,
             marker: DebrayAllocator::new(),
@@ -509,7 +511,7 @@ impl<'b> CodeGenerator<'b> {
                 TermRef::PartialString(lvl, cell, string, tail) => {
                     self.marker
                         .mark_non_var::<Target>(lvl, term_loc, cell, &mut target);
-                    let atom = self.atom_tbl.build_with(&string);
+                    let atom = self.atom_tbl.blocking_write().build_with(&string);
 
                     target.push_back(Target::to_pstr(lvl, atom, cell.get(), true));
                     self.subterm_to_instr::<Target>(tail, term_loc, &mut target);
@@ -1240,7 +1242,12 @@ impl<'b> CodeGenerator<'b> {
                 let index = code.len();
 
                 if clauses_len > 1 || self.settings.is_extensible {
-                    code_offsets.index_term(arg, index, &mut clause_index_info, self.atom_tbl);
+                    code_offsets.index_term(
+                        arg,
+                        index,
+                        &mut clause_index_info,
+                        &mut self.atom_tbl.blocking_write(),
+                    );
                 }
             }
 

@@ -101,7 +101,7 @@ impl ForeignFunctionTable {
                 atom!("ptr") => &mut types::pointer,
                 atom!("f32") => &mut types::float,
                 atom!("f64") => &mut types::double,
-                struct_name => match self.structs.get_mut(struct_name.as_str()) {
+                struct_name => match self.structs.get_mut(&*struct_name.as_str()) {
                     Some(ref mut struct_type) => &mut struct_type.ffi_type,
                     None => unreachable!(),
                 },
@@ -437,11 +437,11 @@ impl ForeignFunctionTable {
                         let substruct = struct_type.atom_fields[i].as_str();
                         let struct_type = self
                             .structs
-                            .get(substruct)
+                            .get(&*substruct)
                             .ok_or(FFIError::StructNotFound)?;
                         field_ptr = field_ptr
                             .add(field_ptr.align_offset(struct_type.ffi_type.alignment as usize));
-                        let struct_val = self.read_struct(field_ptr, substruct, struct_type);
+                        let struct_val = self.read_struct(field_ptr, &*substruct, struct_type);
                         returns.push(struct_val?);
                         field_ptr = field_ptr.add(struct_type.ffi_type.size);
                     }

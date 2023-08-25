@@ -1150,7 +1150,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
     pub(crate) fn use_module(&mut self, module_src: ModuleSource) -> Result<(), SessionError> {
         let (stream, listing_src) = match module_src {
             ModuleSource::File(filename) => {
-                let mut path_buf = PathBuf::from(filename.as_str());
+                let mut path_buf = PathBuf::from(&*filename.as_str());
                 path_buf.set_extension("pl");
 
                 let file = File::open(&path_buf)?;
@@ -1164,7 +1164,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     ListingSource::File(filename, path_buf),
                 )
             }
-            ModuleSource::Library(library) => match LIBRARIES.borrow().get(library.as_str()) {
+            ModuleSource::Library(library) => match LIBRARIES.borrow().get(&*library.as_str()) {
                 Some(code) => {
                     if let Some(ref module) = self.wam_prelude.indices.modules.get(&library) {
                         if let ListingSource::DynamicallyGenerated = &module.listing_src {
@@ -1232,7 +1232,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
     ) -> Result<(), SessionError> {
         let (stream, listing_src) = match module_src {
             ModuleSource::File(filename) => {
-                let mut path_buf = PathBuf::from(filename.as_str());
+                let mut path_buf = PathBuf::from(&*filename.as_str());
                 path_buf.set_extension("pl");
                 let file = File::open(&path_buf)?;
 
@@ -1245,7 +1245,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     ListingSource::File(filename, path_buf),
                 )
             }
-            ModuleSource::Library(library) => match LIBRARIES.borrow().get(library.as_str()) {
+            ModuleSource::Library(library) => match LIBRARIES.borrow().get(&*library.as_str()) {
                 Some(code) => {
                     if self.wam_prelude.indices.modules.contains_key(&library) {
                         return self.import_qualified_module(library, exports);

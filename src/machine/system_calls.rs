@@ -1529,7 +1529,7 @@ impl Machine {
                 }
             }
             (HeapCellValueTag::Char, c) => {
-                let name = self.machine_st.atom_tbl.build_with(&c.to_string());
+                let name = self.machine_st.atom_tbl.blocking_write().build_with(&c.to_string());
 
                 let h = self.machine_st.heap.len();
                 self.machine_st.heap.push(atom_as_cell!(name));
@@ -1804,7 +1804,7 @@ impl Machine {
         match hostname::get().ok() {
             Some(host) => match host.to_str() {
                 Some(host) => {
-                    let hostname = self.machine_st.atom_tbl.build_with(host);
+                    let hostname = self.machine_st.atom_tbl.blocking_write().build_with(host);
 
                     let a1 = self.deref_register(1);
                     self.machine_st.unify_atom(hostname, a1);
@@ -1895,14 +1895,15 @@ impl Machine {
             .machine_st
             .value_to_str_like(self.machine_st.registers[1])
         {
-            let path = std::path::Path::new(dir.as_str());
+            let str = dir.as_str();
+            let path = std::path::Path::new(&*str);
             let mut files = Vec::new();
 
             if let Ok(entries) = fs::read_dir(path) {
                 for entry in entries {
                     if let Ok(entry) = entry {
                         if let Some(name) = entry.file_name().to_str() {
-                            let name = self.machine_st.atom_tbl.build_with(name);
+                            let name = self.machine_st.atom_tbl.blocking_write().build_with(name);
                             files.push(atom_as_cstr_cell!(name));
 
                             continue;
@@ -1937,7 +1938,7 @@ impl Machine {
             .value_to_str_like(self.machine_st.registers[1])
         {
             let len = Number::arena_from(
-                fs::metadata(file.as_str()).unwrap().len(),
+                fs::metadata(&*file.as_str()).unwrap().len(),
                 &mut self.machine_st.arena,
             );
 
@@ -1963,8 +1964,8 @@ impl Machine {
         {
             let file_str = file.as_str();
 
-            if !std::path::Path::new(file_str).exists()
-                || !fs::metadata(file_str).unwrap().is_file()
+            if !std::path::Path::new(&*file_str).exists()
+                || !fs::metadata(&*file_str).unwrap().is_file()
             {
                 self.machine_st.fail = true;
             }
@@ -1981,7 +1982,9 @@ impl Machine {
         {
             let dir_str = dir.as_str();
 
-            if !std::path::Path::new(dir_str).exists() || !fs::metadata(dir_str).unwrap().is_dir() {
+            if !std::path::Path::new(&*dir_str).exists()
+                || !fs::metadata(&*dir_str).unwrap().is_dir()
+            {
                 self.machine_st.fail = true;
             }
         } else {
@@ -1997,7 +2000,7 @@ impl Machine {
         {
             let which = cell_as_atom!(self.deref_register(2));
 
-            if let Ok(md) = fs::metadata(file.as_str()) {
+            if let Ok(md) = fs::metadata(&*file.as_str()) {
                 if let Ok(time) = match which {
                     atom!("modification") => md.modified(),
                     atom!("access") => md.accessed(),
@@ -2031,7 +2034,7 @@ impl Machine {
             .machine_st
             .value_to_str_like(self.machine_st.registers[1])
         {
-            match fs::create_dir(dir.as_str()) {
+            match fs::create_dir(&*dir.as_str()) {
                 Ok(_) => {}
                 _ => {
                     self.machine_st.fail = true;
@@ -2048,7 +2051,7 @@ impl Machine {
             .machine_st
             .value_to_str_like(self.machine_st.registers[1])
         {
-            match fs::create_dir_all(dir.as_str()) {
+            match fs::create_dir_all(&*dir.as_str()) {
                 Ok(_) => {}
                 _ => {
                     self.machine_st.fail = true;
@@ -2065,7 +2068,7 @@ impl Machine {
             .machine_st
             .value_to_str_like(self.machine_st.registers[1])
         {
-            match fs::remove_file(file.as_str()) {
+            match fs::remove_file(&*file.as_str()) {
                 Ok(_) => {}
                 _ => {
                     self.machine_st.fail = true;
@@ -2084,7 +2087,7 @@ impl Machine {
                 .machine_st
                 .value_to_str_like(self.machine_st.registers[2])
             {
-                if fs::rename(file.as_str(), renamed.as_str()).is_ok() {
+                if fs::rename(&*file.as_str(), &*renamed.as_str()).is_ok() {
                     return;
                 }
             }
@@ -2103,7 +2106,7 @@ impl Machine {
                 .machine_st
                 .value_to_str_like(self.machine_st.registers[2])
             {
-                if fs::copy(file.as_str(), copied.as_str()).is_ok() {
+                if fs::copy(&*file.as_str(), &*copied.as_str()).is_ok() {
                     return;
                 }
             }
@@ -2118,7 +2121,7 @@ impl Machine {
             .machine_st
             .value_to_str_like(self.machine_st.registers[1])
         {
-            match fs::remove_dir(dir.as_str()) {
+            match fs::remove_dir(&*dir.as_str()) {
                 Ok(_) => {}
                 _ => {
                     self.machine_st.fail = true;
@@ -2141,7 +2144,11 @@ impl Machine {
                 }
             };
 
-            let current_atom = self.machine_st.atom_tbl.build_with(&current);
+            let current_atom = self
+                .machine_st
+                .atom_tbl
+                .blocking_write()
+                .build_with(&current);
 
             let a1 = self.deref_register(1);
             self.machine_st.unify_complete_string(current_atom, a1);
@@ -2153,7 +2160,7 @@ impl Machine {
             let target = self.deref_register(2);
 
             if let Some(next) = self.machine_st.value_to_str_like(target) {
-                if env::set_current_dir(std::path::Path::new(next.as_str())).is_ok() {
+                if env::set_current_dir(std::path::Path::new(&*next.as_str())).is_ok() {
                     return Ok(());
                 }
             }
@@ -2169,7 +2176,7 @@ impl Machine {
             .machine_st
             .value_to_str_like(self.machine_st.registers[1])
         {
-            match fs::canonicalize(path.as_str()) {
+            match fs::canonicalize(&*path.as_str()) {
                 Ok(canonical) => {
                     let cs = match canonical.to_str() {
                         Some(s) => s,
@@ -2182,7 +2189,7 @@ impl Machine {
                         }
                     };
 
-                    let canonical_atom = self.machine_st.atom_tbl.build_with(cs);
+                    let canonical_atom = self.machine_st.atom_tbl.blocking_write().build_with(cs);
 
                     let a2 = self.deref_register(2);
                     self.machine_st.unify_complete_string(canonical_atom, a2);
@@ -2241,13 +2248,13 @@ impl Machine {
                     let atom_cell = match str_like {
                         AtomOrString::Atom(atom) => {
                             atom_as_cell!(if atom == atom!("[]") {
-                                self.machine_st.atom_tbl.build_with("")
+                                self.machine_st.atom_tbl.blocking_write().build_with("")
                             } else {
                                 atom
                             })
                         }
                         AtomOrString::String(string) => {
-                            atom_as_cell!(self.machine_st.atom_tbl.build_with(&string))
+                            atom_as_cell!(self.machine_st.atom_tbl.blocking_write().build_with(&string))
                         }
                     };
 
@@ -2278,6 +2285,7 @@ impl Machine {
             }
             (HeapCellValueTag::Atom, (name, arity)) => {
                 if arity == 0 {
+                    let name = name.as_str();
                     let iter = name.chars()
                         .map(|c| fixnum_as_cell!(Fixnum::build_with(c as i64)));
 
@@ -2292,6 +2300,7 @@ impl Machine {
                     .get_name_and_arity();
 
                 if arity == 0 {
+                    let name = name.as_str();
                     let iter = name.chars()
                         .map(|c| fixnum_as_cell!(Fixnum::build_with(c as i64)));
 
@@ -2307,7 +2316,7 @@ impl Machine {
                 match self.machine_st.try_from_list(self.machine_st.registers[2], stub_gen) {
                     Ok(addrs) => {
                         let string = self.machine_st.codes_to_string(addrs.into_iter(), stub_gen)?;
-                        let atom = self.machine_st.atom_tbl.build_with(&string);
+                        let atom = self.machine_st.atom_tbl.blocking_write().build_with(&string);
 
                         self.machine_st.bind(a1.as_var().unwrap(), atom_as_cell!(atom));
                     }
@@ -2334,7 +2343,7 @@ impl Machine {
                     .get_name_and_arity();
 
                 if arity == 0 {
-                    name.chars().count() as i64
+                    name.as_str().chars().count() as i64
                 } else {
                     self.machine_st.fail = true;
                     return;
@@ -2342,7 +2351,7 @@ impl Machine {
             }
             (HeapCellValueTag::Atom, (name, arity)) => {
                 if arity == 0 {
-                    name.chars().count() as i64
+                    name.as_str().chars().count() as i64
                 } else {
                     self.machine_st.fail = true;
                     return;
@@ -2392,7 +2401,7 @@ impl Machine {
         let atom_or_string = self.machine_st.value_to_str_like(a1).unwrap();
 
         self.machine_st
-            .parse_number_from_string(atom_or_string.as_str(), &self.indices, stub_gen)
+            .parse_number_from_string(&*atom_or_string.as_str(), &self.indices, stub_gen)
     }
 
     #[inline(always)]
@@ -2801,7 +2810,11 @@ impl Machine {
             }
         };
 
-        let chars_atom = self.machine_st.atom_tbl.build_with(&string.trim());
+        let chars_atom = self
+            .machine_st
+            .atom_tbl
+            .blocking_write()
+            .build_with(&string.trim());
         self.machine_st.unify_complete_string(chars_atom, chs);
     }
 
@@ -3027,14 +3040,14 @@ impl Machine {
             match (name, arity) {
                 (atom!("to_upper"), 1) => {
                 let reg = self.machine_st.deref(self.machine_st.heap[s+1]);
-                let atom = self.machine_st.atom_tbl.build_with(&c.to_uppercase().to_string());
+                let atom = self.machine_st.atom_tbl.blocking_write().build_with(&c.to_uppercase().to_string());
                 let upper_str = string_as_cstr_cell!(atom);
                 unify!(self.machine_st, reg, upper_str);
                 self.machine_st.fail = false;
                 }
                 (atom!("to_lower"), 1) => {
                 let reg = self.machine_st.deref(self.machine_st.heap[s+1]);
-                let atom = self.machine_st.atom_tbl.build_with(&c.to_lowercase().to_string());
+                let atom = self.machine_st.atom_tbl.blocking_write().build_with(&c.to_lowercase().to_string());
                 let lower_str = string_as_cstr_cell!(atom);
                 unify!(self.machine_st, reg, lower_str);
                 self.machine_st.fail = false;
@@ -3557,7 +3570,11 @@ impl Machine {
         };
 
         let output = self.deref_register(3);
-        let atom = self.machine_st.atom_tbl.build_with(&string);
+        let atom = self
+            .machine_st
+            .atom_tbl
+            .blocking_write()
+            .build_with(&string);
 
         self.machine_st.unify_complete_string(atom, output);
         Ok(())
@@ -4052,7 +4069,7 @@ impl Machine {
                         cell_as_atom!(self.machine_st.heap[s])
                     }
                     (HeapCellValueTag::Char, c) => {
-                        self.machine_st.atom_tbl.build_with(&c.to_string())
+                        self.machine_st.atom_tbl.blocking_write().build_with(&c.to_string())
                     }
                     _ => {
                         unreachable!()
@@ -4374,7 +4391,7 @@ impl Machine {
                         (HeapCellValueTag::Str, s) => {
                             let name = cell_as_atom_cell!(self.machine_st.heap[s]).get_name();
                             let value = self.machine_st.value_to_str_like(self.machine_st.heap[s + 1]).unwrap();
-                            header_map.insert(HeaderName::from_str(name.as_str()).unwrap(), HeaderValue::from_str(value.as_str()).unwrap());
+                            header_map.insert(HeaderName::from_str(&*name.as_str()).unwrap(), HeaderValue::from_str(&*value.as_str()).unwrap());
                         }
                         _ => {
                             unreachable!()
@@ -4414,10 +4431,14 @@ impl Machine {
                             let h = self.machine_st.heap.len();
 
                             let header_term = functor!(
-                                self.machine_st.atom_tbl.build_with(header_name.as_str()),
+                                self.machine_st
+                                    .atom_tbl
+                                    .blocking_write()
+                                    .build_with(header_name.as_str()),
                                 [cell(string_as_cstr_cell!(self
                                     .machine_st
                                     .atom_tbl
+                                    .blocking_write()
                                     .build_with(header_value.to_str().unwrap())))]
                             );
 
@@ -4437,7 +4458,10 @@ impl Machine {
                     let reader = resp.bytes().unwrap().reader();
 
                     let mut stream = Stream::from_http_stream(
-                        self.machine_st.atom_tbl.build_with(&address_string),
+                        self.machine_st
+                            .atom_tbl
+                            .blocking_write()
+                            .build_with(&address_string),
                         Box::new(reader),
                         &mut self.machine_st.arena,
                     );
@@ -4554,14 +4578,14 @@ impl Machine {
                         Method::HEAD => atom!("head"),
                         _ => unreachable!(),
                     };
-                    let path_atom = self.machine_st.atom_tbl.build_with(request.request.uri().path());
+                    let path_atom = self.machine_st.atom_tbl.blocking_write().build_with(request.request.uri().path());
                     let path_cell = atom_as_cstr_cell!(path_atom);
                     let headers: Vec<HeapCellValue> = request.request.headers().iter().map(|(header_name, header_value)| {
                         let h = self.machine_st.heap.len();
 
                         let header_term = functor!(
-                            self.machine_st.atom_tbl.build_with(header_name.as_str()),
-                        [cell(string_as_cstr_cell!(self.machine_st.atom_tbl.build_with(header_value.to_str().unwrap())))]
+                            self.machine_st.atom_tbl.blocking_write().build_with(header_name.as_str()),
+                        [cell(string_as_cstr_cell!(self.machine_st.atom_tbl.blocking_write().build_with(header_value.to_str().unwrap())))]
                         );
 
                         self.machine_st.heap.extend(header_term.into_iter());
@@ -4571,7 +4595,7 @@ impl Machine {
                     let headers_list = iter_to_heap_list(&mut self.machine_st.heap, headers.into_iter());
 
                     let query_str = request.request.uri().query().unwrap_or("");
-                    let query_atom = self.machine_st.atom_tbl.build_with(query_str);
+                    let query_atom = self.machine_st.atom_tbl.blocking_write().build_with(query_str);
                     let query_cell = string_as_cstr_cell!(query_atom);
 
                     let hyper_req = request.request;
@@ -4642,7 +4666,7 @@ impl Machine {
                         (HeapCellValueTag::Str, s) => {
                             let name = cell_as_atom_cell!(self.machine_st.heap[s]).get_name();
                             let value = self.machine_st.value_to_str_like(self.machine_st.heap[s + 1]).unwrap();
-                            header_map.insert(HeaderName::from_str(name.as_str()).unwrap(), HeaderValue::from_str(value.as_str()).unwrap());
+                            header_map.insert(HeaderName::from_str(&*name.as_str()).unwrap(), HeaderValue::from_str(&*value.as_str()).unwrap());
                         }
                         _ => {
                             unreachable!()
@@ -4722,7 +4746,7 @@ impl Machine {
                     }
                     if let Ok(_) = self
                         .foreign_function_table
-                        .load_library(library_name.as_str(), &functions)
+                        .load_library(&*library_name.as_str(), &functions)
                     {
                         return Ok(());
                     }
@@ -4752,7 +4776,7 @@ impl Machine {
                     _ => {
                         let stub_gen = || functor_stub(atom!("foreign_call"), 3);
                         if let Some(string) = machine_st.value_to_str_like(source) {
-                            Value::CString(CString::new(string.as_str()).unwrap())
+                            Value::CString(CString::new(&*string.as_str()).unwrap())
                         } else {
                             match machine_st.try_from_list(source, stub_gen) {
                                 Ok(args) => {
@@ -4785,7 +4809,7 @@ impl Machine {
                         .collect();
                     match self
                         .foreign_function_table
-                        .exec(function_name.as_str(), args)
+                        .exec(&*function_name.as_str(), args)
                     {
                         Ok(result) => {
                             match result {
@@ -4801,8 +4825,11 @@ impl Machine {
                                     unify!(self.machine_st, return_value, struct_value);
                                 }
                                 Value::CString(cstr) => {
-                                    let cstr =
-                                        self.machine_st.atom_tbl.build_with(cstr.to_str().unwrap());
+                                    let cstr = self
+                                        .machine_st
+                                        .atom_tbl
+                                        .blocking_write()
+                                        .build_with(cstr.to_str().unwrap());
                                     self.machine_st.unify_complete_string(cstr, return_value);
                                 }
                             }
@@ -4834,6 +4861,7 @@ impl Machine {
                 Value::CString(cstr) => atom_as_cell!(self
                     .machine_st
                     .atom_tbl
+                    .blocking_write()
                     .build_with(&cstr.into_string().unwrap())),
                 Value::Struct(name, struct_args) => self.build_struct(&name, struct_args),
             })
@@ -4863,7 +4891,7 @@ impl Machine {
                 Err(e) => return Err(e),
             };
             self.foreign_function_table
-                .define_struct(struct_name.as_str(), fields);
+                .define_struct(&*struct_name.as_str(), fields);
             return Ok(());
         }
         self.machine_st.fail = true;
@@ -4890,7 +4918,7 @@ impl Machine {
         let src_sink = self.deref_register(1);
 
         if let Some(file_spec) = self.machine_st.value_to_str_like(src_sink) {
-            let file_spec = file_spec.as_atom(&mut self.machine_st.atom_tbl);
+            let file_spec = file_spec.as_atom(&mut self.machine_st.atom_tbl.blocking_write());
 
             let mut stream =
                 self.machine_st
@@ -4933,7 +4961,7 @@ impl Machine {
 
         let op = read_heap_cell!(self.deref_register(3),
             (HeapCellValueTag::Char, c) => {
-                self.machine_st.atom_tbl.build_with(&c.to_string())
+                self.machine_st.atom_tbl.blocking_write().build_with(&c.to_string())
             }
             (HeapCellValueTag::Atom, (name, _arity)) => {
                 name
@@ -6103,7 +6131,7 @@ impl Machine {
                 write_term_to_heap(
                     &term,
                     &mut self.machine_st.heap,
-                    &mut self.machine_st.atom_tbl,
+                    &mut self.machine_st.atom_tbl.blocking_write(),
                 )
             });
 
@@ -6268,7 +6296,7 @@ impl Machine {
                 name
             }
             _ => {
-                self.machine_st.atom_tbl.build_with(&match Number::try_from(port) {
+                self.machine_st.atom_tbl.blocking_write().build_with(&match Number::try_from(port) {
                     Ok(Number::Fixnum(n)) => n.get_num().to_string(),
                     Ok(Number::Integer(n)) => n.to_string(),
                     _ => {
@@ -6282,7 +6310,10 @@ impl Machine {
             atom!("127.0.0.1:80")
         } else {
             let buffer = format!("{}:{}", socket_atom.as_str(), port.as_str());
-            self.machine_st.atom_tbl.build_with(&buffer)
+            self.machine_st
+                .atom_tbl
+                .blocking_write()
+                .build_with(&buffer)
         };
 
         let alias = self.machine_st.registers[4];
@@ -6310,7 +6341,7 @@ impl Machine {
             }
         }
 
-        let stream = match TcpStream::connect(socket_addr.as_str()).map_err(|e| e.kind()) {
+        let stream = match TcpStream::connect(&*socket_addr.as_str()).map_err(|e| e.kind()) {
             Ok(tcp_stream) => {
                 let mut stream =
                     Stream::from_tcp_stream(socket_addr, tcp_stream, &mut self.machine_st.arena);
@@ -6464,7 +6495,7 @@ impl Machine {
                      (ArenaHeaderTag::TcpListener, tcp_listener) => {
                          match tcp_listener.accept().ok() {
                              Some((tcp_stream, socket_addr)) => {
-                                 let client = self.machine_st.atom_tbl.build_with(&socket_addr.to_string());
+                                 let client = self.machine_st.atom_tbl.blocking_write().build_with(&socket_addr.to_string());
 
                                  let mut tcp_stream = Stream::from_tcp_stream(
                                      client,
@@ -6520,7 +6551,7 @@ impl Machine {
             )?;
 
             let connector = TlsConnector::new().unwrap();
-            let stream = match connector.connect(hostname.as_str(), stream0) {
+            let stream = match connector.connect(&*hostname.as_str(), stream0) {
                 Ok(tls_stream) => tls_stream,
                 Err(_) => {
                     return Err(self.machine_st.open_permission_error(
@@ -6555,7 +6586,7 @@ impl Machine {
             .machine_st
             .value_to_str_like(self.machine_st.registers[2])
         {
-            let identity = match Identity::from_pkcs12(&pkcs12, password.as_str()) {
+            let identity = match Identity::from_pkcs12(&pkcs12, &*password.as_str()) {
                 Ok(identity) => identity,
                 Err(_) => {
                     return Err(self.machine_st.open_permission_error(
@@ -7088,7 +7119,7 @@ impl Machine {
         let chars = put_complete_string(
             &mut self.machine_st.heap,
             &result,
-            &mut self.machine_st.atom_tbl,
+            &mut self.machine_st.atom_tbl.blocking_write(),
         );
 
         let result_addr = self.deref_register(1);
@@ -7107,7 +7138,7 @@ impl Machine {
         use git_version::git_version;
 
         let buffer = git_version!(cargo_prefix = "cargo:", fallback = "unknown");
-        let buffer_atom = self.machine_st.atom_tbl.build_with(buffer);
+        let buffer_atom = self.machine_st.atom_tbl.blocking_write().build_with(buffer);
 
         let a1 = self.deref_register(1);
         self.machine_st.unify_complete_string(buffer_atom, a1);
@@ -7472,7 +7503,11 @@ impl Machine {
             if buffer.len() == 0 {
                 empty_list_as_cell!()
             } else {
-                atom_as_cstr_cell!(self.machine_st.atom_tbl.build_with(&buffer))
+                atom_as_cstr_cell!(self
+                    .machine_st
+                    .atom_tbl
+                    .blocking_write()
+                    .build_with(&buffer))
             }
         };
 
@@ -7609,7 +7644,11 @@ impl Machine {
         if let Some(string) = self.machine_st.value_to_str_like(addr) {
             for c in string.as_str().chars() {
                 if c as u32 > 255 {
-                    let non_octet = self.machine_st.atom_tbl.build_with(&c.to_string());
+                    let non_octet = self
+                        .machine_st
+                        .atom_tbl
+                        .blocking_write()
+                        .build_with(&c.to_string());
                     self.machine_st
                         .unify_atom(non_octet, self.machine_st.registers[2]);
                     return;
@@ -7641,7 +7680,7 @@ impl Machine {
             .machine_st
             .value_to_str_like(self.machine_st.registers[1])
         {
-            match roxmltree::Document::parse(string.as_str()) {
+            match roxmltree::Document::parse(&*string.as_str()) {
                 Ok(doc) => {
                     let result = self.xml_node_to_term(doc.root_element());
                     unify!(self.machine_st, self.machine_st.registers[2], result);
@@ -7661,12 +7700,12 @@ impl Machine {
             .machine_st
             .value_to_str_like(self.machine_st.registers[1])
         {
-            match env::var(key.as_str()) {
+            match env::var(&*key.as_str()) {
                 Ok(value) => {
                     let cstr = put_complete_string(
                         &mut self.machine_st.heap,
                         &value,
-                        &mut self.machine_st.atom_tbl,
+                        &mut self.machine_st.atom_tbl.blocking_write(),
                     );
 
                     unify!(self.machine_st, self.machine_st.registers[2], cstr);
@@ -7691,7 +7730,7 @@ impl Machine {
             .value_to_str_like(self.machine_st.registers[2])
             .unwrap();
 
-        env::set_var(key.as_str(), value.as_str());
+        env::set_var(&*key.as_str(), &*value.as_str());
     }
 
     #[inline(always)]
@@ -7700,7 +7739,7 @@ impl Machine {
             .machine_st
             .value_to_str_like(self.machine_st.registers[1])
             .unwrap();
-        env::remove_var(key.as_str());
+        env::remove_var(&*key.as_str());
     }
 
     #[inline(always)]
@@ -7756,7 +7795,7 @@ impl Machine {
             Ok(value) => {
                 let command = process::Command::new(&value)
                     .arg("-c")
-                    .arg(command.as_str())
+                    .arg(&*command.as_str())
                     .status();
                 command_result(&mut self.machine_st, command);
             }
@@ -7764,7 +7803,7 @@ impl Machine {
                 Ok(value) => {
                     let command = process::Command::new(&value)
                         .arg("/C")
-                        .arg(command.as_str())
+                        .arg(&*command.as_str())
                         .status();
                     command_result(&mut self.machine_st, command);
                 }
@@ -7799,7 +7838,7 @@ impl Machine {
                 .machine_st
                 .value_to_str_like(self.machine_st.registers[2])
                 .unwrap();
-            let bytes = base64::decode_config(b64.as_str(), config);
+            let bytes = base64::decode_config(&*b64.as_str(), config);
 
             match bytes {
                 Ok(bs) => {
@@ -7839,7 +7878,7 @@ impl Machine {
 
         use crate::machine::LIBRARIES;
 
-        match LIBRARIES.borrow().get(library_name.as_str()) {
+        match LIBRARIES.borrow().get(&*library_name.as_str()) {
             Some(library) => {
                 let lib_stream = Stream::from_static_string(library, &mut self.machine_st.arena);
                 unify!(
@@ -7851,10 +7890,14 @@ impl Machine {
                 let mut path_buf = machine::current_dir();
 
                 path_buf.push("/lib");
-                path_buf.push(library_name.as_str());
+                path_buf.push(&*library_name.as_str());
 
                 let library_path_str = path_buf.to_str().unwrap();
-                let library_path = self.machine_st.atom_tbl.build_with(library_path_str);
+                let library_path = self
+                    .machine_st
+                    .atom_tbl
+                    .blocking_write()
+                    .build_with(library_path_str);
 
                 self.machine_st
                     .unify_atom(library_path, self.machine_st.registers[3]);
@@ -7954,7 +7997,7 @@ impl Machine {
                 let path_string = put_complete_string(
                     &mut self.machine_st.heap,
                     path,
-                    &mut self.machine_st.atom_tbl,
+                    &mut self.machine_st.atom_tbl.blocking_write(),
                 );
 
                 unify!(self.machine_st, self.machine_st.registers[1], path_string);
@@ -8001,7 +8044,7 @@ impl Machine {
         fstr.push_str("finis].");
         let s = datetime.format(&fstr).to_string();
 
-        self.machine_st.atom_tbl.build_with(&s)
+        self.machine_st.atom_tbl.blocking_write().build_with(&s)
     }
 
     pub(super) fn string_encoding_bytes(
@@ -8025,17 +8068,21 @@ impl Machine {
             put_complete_string(
                 &mut self.machine_st.heap,
                 node.text().unwrap(),
-                &mut self.machine_st.atom_tbl,
+                &mut self.machine_st.atom_tbl.blocking_write(),
             )
         } else {
             let mut avec = Vec::new();
 
             for attr in node.attributes() {
-                let name = self.machine_st.atom_tbl.build_with(attr.name());
+                let name = self
+                    .machine_st
+                    .atom_tbl
+                    .blocking_write()
+                    .build_with(attr.name());
                 let value = put_complete_string(
                     &mut self.machine_st.heap,
                     &attr.value(),
-                    &mut self.machine_st.atom_tbl,
+                    &mut self.machine_st.atom_tbl.blocking_write(),
                 );
 
                 avec.push(str_loc_as_cell!(self.machine_st.heap.len()));
@@ -8061,7 +8108,11 @@ impl Machine {
                 cvec.into_iter()
             ));
 
-            let tag = self.machine_st.atom_tbl.build_with(node.tag_name().name());
+            let tag = self
+                .machine_st
+                .atom_tbl
+                .blocking_write()
+                .build_with(node.tag_name().name());
 
             let result = str_loc_as_cell!(self.machine_st.heap.len());
 
@@ -8081,17 +8132,17 @@ impl Machine {
             None => put_complete_string(
                 &mut self.machine_st.heap,
                 &node.text(),
-                &mut self.machine_st.atom_tbl,
+                &mut self.machine_st.atom_tbl.blocking_write(),
             ),
             Some(name) => {
                 let mut avec = Vec::new();
 
                 for attr in node.attrs() {
-                    let name = self.machine_st.atom_tbl.build_with(attr.0);
+                    let name = self.machine_st.atom_tbl.blocking_write().build_with(attr.0);
                     let value = put_complete_string(
                         &mut self.machine_st.heap,
                         &attr.1,
-                        &mut self.machine_st.atom_tbl,
+                        &mut self.machine_st.atom_tbl.blocking_write(),
                     );
 
                     avec.push(str_loc_as_cell!(self.machine_st.heap.len()));
@@ -8117,7 +8168,7 @@ impl Machine {
                     cvec.into_iter()
                 ));
 
-                let tag = self.machine_st.atom_tbl.build_with(name);
+                let tag = self.machine_st.atom_tbl.blocking_write().build_with(name);
                 let result = str_loc_as_cell!(self.machine_st.heap.len());
 
                 self.machine_st
@@ -8138,7 +8189,11 @@ impl Machine {
         if buffer.len() == 0 {
             empty_list_as_cell!()
         } else {
-            atom_as_cstr_cell!(self.machine_st.atom_tbl.build_with(&buffer))
+            atom_as_cstr_cell!(self
+                .machine_st
+                .atom_tbl
+                .blocking_write()
+                .build_with(&buffer))
         }
     }
 }

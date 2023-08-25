@@ -503,7 +503,7 @@ impl MachineState {
                                     } else {
                                         self.pdl.clear();
                                         return Some(
-                                            n1.chars().next().cmp(&Some(c2))
+                                            n1.as_str().chars().next().cmp(&Some(c2))
                                               .then(Ordering::Greater)
                                         );
                                     }
@@ -533,7 +533,7 @@ impl MachineState {
                                     } else {
                                         self.pdl.clear();
                                         return Some(
-                                            Some(c1).cmp(&n2.chars().next())
+                                            Some(c1).cmp(&n2.as_str().chars().next())
                                                     .then(Ordering::Less)
                                         );
                                     }
@@ -556,7 +556,7 @@ impl MachineState {
                                     } else {
                                         self.pdl.clear();
                                         return Some(
-                                            Some(c1).cmp(&n2.chars().next())
+                                            Some(c1).cmp(&n2.as_str().chars().next())
                                                     .then(Ordering::Less)
                                         );
                                     }
@@ -586,7 +586,7 @@ impl MachineState {
                                     } else {
                                         self.pdl.clear();
                                         return Some(
-                                            n1.chars().next().cmp(&Some(c2))
+                                            n1.as_str().chars().next().cmp(&Some(c2))
                                               .then(Ordering::Greater)
                                         );
                                     }
@@ -896,7 +896,7 @@ impl MachineState {
 
         let s = string.as_str();
 
-        match heap_pstr_iter.compare_pstr_to_string(s) {
+        match heap_pstr_iter.compare_pstr_to_string(&*s) {
             Some(PStrPrefixCmpResult {
                 focus,
                 offset,
@@ -1003,9 +1003,9 @@ impl MachineState {
             self.s_offset = 0;
             self.mode = MachineMode::Read;
 
-            put_partial_string(&mut self.heap, pstr, &mut self.atom_tbl)
+            put_partial_string(&mut self.heap, pstr, &mut self.atom_tbl.blocking_write())
         } else {
-            put_complete_string(&mut self.heap, pstr, &mut self.atom_tbl)
+            put_complete_string(&mut self.heap, pstr, &mut self.atom_tbl.blocking_write())
         }
     }
 
@@ -1097,7 +1097,7 @@ impl MachineState {
                 (name, 0, 0)
             }
             (HeapCellValueTag::Char, c) => {
-                (self.atom_tbl.build_with(&c.to_string()), 0, 0)
+                (self.atom_tbl.blocking_write().build_with(&c.to_string()), 0, 0)
             }
             (HeapCellValueTag::Var | HeapCellValueTag::AttrVar | HeapCellValueTag::StackVar) => {
                 let stub = functor_stub(atom!("call"), arity + 1);
@@ -1436,7 +1436,7 @@ impl MachineState {
                         }
                     }
                     (HeapCellValueTag::Char, c) => {
-                        let c = self.atom_tbl.build_with(&c.to_string());
+                        let c = self.atom_tbl.blocking_write().build_with(&c.to_string());
 
                         self.try_functor_fabricate_struct(
                             c,

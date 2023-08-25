@@ -638,7 +638,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
             Ok(Token::Literal(Literal::Atom(atom!("[]"))))
         } else {
             Ok(Token::Literal(Literal::Atom(
-                self.machine_st.atom_tbl.build_with(&token),
+                self.machine_st.atom_tbl.blocking_write().build_with(&token),
             )))
         }
     }
@@ -1083,7 +1083,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
 
                 if c == '"' {
                     let s = self.char_code_list_token(c)?;
-                    let atom = self.machine_st.atom_tbl.build_with(&s);
+                    let atom = self.machine_st.atom_tbl.blocking_write().build_with(&s);
 
                     return if let DoubleQuotes::Atom = self.machine_st.flags.double_quotes {
                         Ok(Token::Literal(Literal::Atom(atom)))

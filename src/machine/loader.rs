@@ -1076,7 +1076,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
 
         let export_list = machine_st.read_term_from_heap(cell)?;
         let atom_tbl = &mut LS::machine_st(&mut self.payload).atom_tbl;
-        let export_list = setup_module_export_list(export_list, atom_tbl)?;
+        let export_list = setup_module_export_list(export_list, &mut atom_tbl.blocking_write())?;
 
         Ok(export_list.into_iter().collect())
     }
@@ -1420,7 +1420,7 @@ impl MachineState {
                             term_stack.push(Term::PartialString(Cell::default(), string, tail));
                         }
                         Ok((string, None)) => {
-                            let atom = self.atom_tbl.build_with(&string);
+                            let atom = self.atom_tbl.blocking_write().build_with(&string);
                             term_stack.push(Term::CompleteString(Cell::default(), atom));
                         }
                         Err(cons_term) => term_stack.push(cons_term),
@@ -1855,7 +1855,7 @@ impl Machine {
             .store(self.machine_st.deref(self.machine_st.registers[2])));
 
         self.load_contexts
-            .push(LoadContext::new(path.as_str(), stream));
+            .push(LoadContext::new(&*path.as_str(), stream));
         Ok(())
     }
 
@@ -1917,7 +1917,11 @@ impl Machine {
     pub(crate) fn load_context_source(&mut self) {
         if let Some(load_context) = self.load_contexts.last() {
             let path_str = load_context.path.to_str().unwrap();
-            let path_atom = self.machine_st.atom_tbl.build_with(path_str);
+            let path_atom = self
+                .machine_st
+                .atom_tbl
+                .blocking_write()
+                .build_with(path_str);
 
             self.machine_st
                 .unify_atom(path_atom, self.machine_st.registers[1]);
@@ -1931,7 +1935,11 @@ impl Machine {
             match load_context.path.file_name() {
                 Some(file_name) if load_context.path.is_file() => {
                     let file_name_str = file_name.to_str().unwrap();
-                    let file_name_atom = self.machine_st.atom_tbl.build_with(file_name_str);
+                    let file_name_atom = self
+                        .machine_st
+                        .atom_tbl
+                        .blocking_write()
+                        .build_with(file_name_str);
 
                     self.machine_st
                         .unify_atom(file_name_atom, self.machine_st.registers[1]);
@@ -1950,7 +1958,11 @@ impl Machine {
         if let Some(load_context) = self.load_contexts.last() {
             if let Some(directory) = load_context.path.parent() {
                 let directory_str = directory.to_str().unwrap();
-                let directory_atom = self.machine_st.atom_tbl.build_with(directory_str);
+                let directory_atom = self
+                    .machine_st
+                    .atom_tbl
+                    .blocking_write()
+                    .build_with(directory_str);
 
                 self.machine_st
                     .unify_atom(directory_atom, self.machine_st.registers[1]);
