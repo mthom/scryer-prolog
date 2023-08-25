@@ -258,7 +258,8 @@ impl GenContext {
 pub struct OpDesc {
     prec: B11,
     spec: B8,
-    #[allow(unused)] padding: B13,
+    #[allow(unused)]
+    padding: B13,
 }
 
 impl OpDesc {
@@ -417,13 +418,13 @@ pub enum ParserError {
 impl ParserError {
     pub fn line_and_col_num(&self) -> Option<(usize, usize)> {
         match self {
-            &ParserError::BackQuotedString(line_num, col_num) |
-            &ParserError::IncompleteReduction(line_num, col_num) |
-            &ParserError::MissingQuote(line_num, col_num) |
-            &ParserError::NonPrologChar(line_num, col_num) |
-            &ParserError::ParseBigInt(line_num, col_num) |
-            &ParserError::UnexpectedChar(_, line_num, col_num) |
-            &ParserError::Utf8Error(line_num, col_num) => Some((line_num, col_num)),
+            &ParserError::BackQuotedString(line_num, col_num)
+            | &ParserError::IncompleteReduction(line_num, col_num)
+            | &ParserError::MissingQuote(line_num, col_num)
+            | &ParserError::NonPrologChar(line_num, col_num)
+            | &ParserError::ParseBigInt(line_num, col_num)
+            | &ParserError::UnexpectedChar(_, line_num, col_num)
+            | &ParserError::Utf8Error(line_num, col_num) => Some((line_num, col_num)),
             _ => None,
         }
     }
@@ -432,8 +433,12 @@ impl ParserError {
         match self {
             ParserError::BackQuotedString(..) => atom!("back_quoted_string"),
             ParserError::IncompleteReduction(..) => atom!("incomplete_reduction"),
-            ParserError::InvalidSingleQuotedCharacter(..) => atom!("invalid_single_quoted_character"),
-            ParserError::IO(e) if e.kind() == ErrorKind::UnexpectedEof => atom!("unexpected_end_of_file"),
+            ParserError::InvalidSingleQuotedCharacter(..) => {
+                atom!("invalid_single_quoted_character")
+            }
+            ParserError::IO(e) if e.kind() == ErrorKind::UnexpectedEof => {
+                atom!("unexpected_end_of_file")
+            }
             ParserError::IO(_) => atom!("input_output_error"),
             ParserError::LexicalError(_) => atom!("lexical_error"),
             ParserError::MissingQuote(..) => atom!("missing_quote"),
@@ -522,9 +527,12 @@ pub enum Fixity {
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 pub struct Fixnum {
     num: B56,
-    #[allow(unused)] f: bool,
-    #[allow(unused)] m: bool,
-    #[allow(unused)] tag: B6,
+    #[allow(unused)]
+    f: bool,
+    #[allow(unused)]
+    m: bool,
+    #[allow(unused)]
+    tag: B6,
 }
 
 impl Fixnum {
@@ -630,7 +638,6 @@ impl Literal {
         }
     }
 }
-
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VarPtr(Rc<RefCell<Var>>);

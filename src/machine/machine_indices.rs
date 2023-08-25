@@ -3,15 +3,15 @@ use crate::parser::ast::*;
 use crate::arena::*;
 use crate::atom_table::*;
 use crate::forms::*;
-use crate::machine::ClauseType;
 use crate::machine::loader::*;
 use crate::machine::machine_state::*;
 use crate::machine::streams::Stream;
+use crate::machine::ClauseType;
 
 use fxhash::FxBuildHasher;
 use indexmap::{IndexMap, IndexSet};
-use modular_bitfield::{BitfieldSpecifier, bitfield};
 use modular_bitfield::specifiers::*;
+use modular_bitfield::{bitfield, BitfieldSpecifier};
 
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
@@ -86,7 +86,8 @@ pub enum IndexPtrTag {
 #[derive(Debug, Clone, Copy, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct IndexPtr {
     pub p: B56,
-    #[allow(unused)] m: bool,
+    #[allow(unused)]
+    m: bool,
     pub tag: IndexPtrTag,
 }
 
@@ -143,10 +144,10 @@ impl IndexPtr {
 #[derive(Debug, Clone, Copy, Ord, Hash, PartialOrd, Eq, PartialEq)]
 pub struct CodeIndex(TypedArenaPtr<IndexPtr>);
 
-#[cfg(target_pointer_width="32")]
+#[cfg(target_pointer_width = "32")]
 const_assert!(std::mem::align_of::<CodeIndex>() == 4);
 
-#[cfg(target_pointer_width="64")]
+#[cfg(target_pointer_width = "64")]
 const_assert!(std::mem::align_of::<CodeIndex>() == 8);
 
 impl Deref for CodeIndex {
@@ -293,7 +294,8 @@ impl IndexStore {
         let (name, arity) = key;
 
         if !ClauseType::is_inbuilt(name, arity) {
-            self.modules.get(&(atom!("builtins")))
+            self.modules
+                .get(&(atom!("builtins")))
                 .map(|module| module.code_dir.contains_key(&(name, arity)))
                 .unwrap_or(false)
         } else {
@@ -444,11 +446,7 @@ impl IndexStore {
         }
     }
 
-    pub(crate) fn is_dynamic_predicate(
-        &self,
-        module_name: Atom,
-        key: PredicateKey,
-    ) -> bool {
+    pub(crate) fn is_dynamic_predicate(&self, module_name: Atom, key: PredicateKey) -> bool {
         match module_name {
             atom!("user") => self
                 .extensible_predicates

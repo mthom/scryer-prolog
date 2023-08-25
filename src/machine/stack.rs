@@ -290,7 +290,7 @@ mod tests {
 
         assert_eq!(
             e,
-            0// 10 * mem::size_of::<HeapCellValue>() + prelude_size::<AndFrame>()
+            0 // 10 * mem::size_of::<HeapCellValue>() + prelude_size::<AndFrame>()
         );
 
         assert_eq!(and_frame.prelude.num_cells, 10);
@@ -315,7 +315,10 @@ mod tests {
         let and_frame = wam.machine_st.stack.index_and_frame_mut(next_e);
 
         for idx in 0..9 {
-            assert_eq!(and_frame[idx + 1], stack_loc_as_cell!(AndFrame, next_e, idx + 1));
+            assert_eq!(
+                and_frame[idx + 1],
+                stack_loc_as_cell!(AndFrame, next_e, idx + 1)
+            );
         }
 
         let and_frame = wam.machine_st.stack.index_and_frame(e);

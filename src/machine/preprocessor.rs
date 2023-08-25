@@ -12,11 +12,7 @@ use indexmap::IndexSet;
 use std::cell::Cell;
 use std::convert::TryFrom;
 
-pub(crate) fn to_op_decl(
-    prec: u16,
-    spec: Atom,
-    name: Atom,
-) -> Result<OpDecl, CompilationError> {
+pub(crate) fn to_op_decl(prec: u16, spec: Atom, name: Atom) -> Result<OpDecl, CompilationError> {
     match spec {
         atom!("xfx") => Ok(OpDecl::new(OpDesc::build_with(prec, XFX as u8), name)),
         atom!("xfy") => Ok(OpDecl::new(OpDesc::build_with(prec, XFY as u8), name)),
@@ -68,12 +64,14 @@ fn setup_predicate_indicator(term: &mut Term) -> Result<PredicateKey, Compilatio
                 Term::Literal(_, Literal::Integer(n)) => n.to_usize(),
                 Term::Literal(_, Literal::Fixnum(n)) => usize::try_from(n.get_num()).ok(),
                 _ => None,
-            }.ok_or(CompilationError::InvalidModuleExport)?;
+            }
+            .ok_or(CompilationError::InvalidModuleExport)?;
 
             let name = match name {
                 Term::Literal(_, Literal::Atom(name)) => Some(name),
                 _ => None,
-            }.ok_or(CompilationError::InvalidModuleExport)?;
+            }
+            .ok_or(CompilationError::InvalidModuleExport)?;
 
             if *slash == atom!("/") {
                 Ok((name, arity))
@@ -141,7 +139,8 @@ fn setup_module_decl(
     let name = match name {
         Term::Literal(_, Literal::Atom(name)) => Some(name),
         _ => None,
-    }.ok_or(CompilationError::InvalidModuleDecl)?;
+    }
+    .ok_or(CompilationError::InvalidModuleDecl)?;
 
     let exports = setup_module_export_list(export_list, atom_tbl)?;
 
@@ -150,9 +149,7 @@ fn setup_module_decl(
 
 fn setup_use_module_decl(mut terms: Vec<Term>) -> Result<ModuleSource, CompilationError> {
     match terms.pop().unwrap() {
-        Term::Clause(_, name, mut terms)
-            if name == atom!("library") && terms.len() == 1 =>
-        {
+        Term::Clause(_, name, mut terms) if name == atom!("library") && terms.len() == 1 => {
             match terms.pop().unwrap() {
                 Term::Literal(_, Literal::Atom(name)) => Ok(ModuleSource::Library(name)),
                 _ => Err(CompilationError::InvalidModuleDecl),
@@ -171,9 +168,7 @@ fn setup_qualified_import(
 ) -> Result<UseModuleExport, CompilationError> {
     let mut export_list = terms.pop().unwrap();
     let module_src = match terms.pop().unwrap() {
-        Term::Clause(_, name, mut terms)
-            if name == atom!("library") && terms.len() == 1 =>
-        {
+        Term::Clause(_, name, mut terms) if name == atom!("library") && terms.len() == 1 => {
             match terms.pop().unwrap() {
                 Term::Literal(_, Literal::Atom(name)) => Ok(ModuleSource::Library(name)),
                 _ => Err(CompilationError::InvalidModuleDecl),
@@ -381,19 +376,28 @@ fn build_meta_predicate_clause<'a, LS: LoadState<'a>>(
                 }
 
                 fn tag_with_module_name(module_name: Atom, term: Term) -> Term {
-                    Term::Clause(Cell::default(), atom!(":"), vec![
-                        Term::Literal(Cell::default(), Literal::Atom(module_name)),
-                        term
-                    ])
+                    Term::Clause(
+                        Cell::default(),
+                        atom!(":"),
+                        vec![
+                            Term::Literal(Cell::default(), Literal::Atom(module_name)),
+                            term,
+                        ],
+                    )
                 }
 
                 let process_term: fn(Atom, Term) -> Term;
 
                 let (module_name, key, term) = match term {
                     Term::Clause(cell, atom!(":"), mut terms) if terms.len() == 2 => {
-                        if let Some((module_name, name)) = get_qualified_name(&terms[0], &terms[1]) {
+                        if let Some((module_name, name)) = get_qualified_name(&terms[0], &terms[1])
+                        {
                             process_term = tag_with_module_name;
-                            (module_name, (name, terms[1].arity() + supp_args), terms.pop().unwrap())
+                            (
+                                module_name,
+                                (name, terms[1].arity() + supp_args),
+                                terms.pop().unwrap(),
+                            )
                         } else {
                             arg_terms.push(Term::Clause(cell, atom!(":"), terms));
                             continue;
@@ -408,10 +412,8 @@ fn build_meta_predicate_clause<'a, LS: LoadState<'a>>(
                 let term = match term {
                     Term::Clause(cell, name, mut terms) => {
                         if let Some(Term::Literal(_, Literal::CodeIndex(_))) = terms.last() {
-                            arg_terms.push(process_term(
-                                module_name,
-                                Term::Clause(cell, name, terms),
-                            ));
+                            arg_terms
+                                .push(process_term(module_name, Term::Clause(cell, name, terms)));
 
                             continue;
                         }
@@ -424,11 +426,14 @@ fn build_meta_predicate_clause<'a, LS: LoadState<'a>>(
                     Term::Literal(cell, Literal::Atom(name)) => {
                         let idx = loader.get_or_insert_qualified_code_index(module_name, key);
 
-                        process_term(module_name, Term::Clause(
-                            cell,
-                            name,
-                            vec![Term::Literal(Cell::default(), Literal::CodeIndex(idx))],
-                        ))
+                        process_term(
+                            module_name,
+                            Term::Clause(
+                                cell,
+                                name,
+                                vec![Term::Literal(Cell::default(), Literal::CodeIndex(idx))],
+                            ),
+                        )
                     }
                     term => term,
                 };
@@ -462,12 +467,7 @@ pub(super) fn clause_to_query_term<'a, LS: LoadState<'a>>(
     if let ClauseType::Named(arity, name, idx) = ct {
         if let Some(meta_specs) = loader.get_meta_specs(name, arity).cloned() {
             let module_name = loader.payload.compilation_target.module_name();
-            let terms = build_meta_predicate_clause(
-                loader,
-                module_name,
-                terms,
-                meta_specs,
-            );
+            let terms = build_meta_predicate_clause(loader, module_name, terms, meta_specs);
 
             return QueryTerm::Clause(
                 Cell::default(),
@@ -501,12 +501,7 @@ pub(super) fn qualified_clause_to_query_term<'a, LS: LoadState<'a>>(
 
     if let ClauseType::Named(arity, name, idx) = ct {
         if let Some(meta_specs) = loader.get_meta_specs(name, arity).cloned() {
-            let terms = build_meta_predicate_clause(
-                loader,
-                module_name,
-                terms,
-                meta_specs,
-            );
+            let terms = build_meta_predicate_clause(loader, module_name, terms, meta_specs);
 
             return QueryTerm::Clause(
                 Cell::default(),
@@ -529,17 +524,13 @@ pub(crate) struct Preprocessor {
 
 impl Preprocessor {
     pub(super) fn new(settings: CodeGenSettings) -> Self {
-        Preprocessor {
-            settings,
-        }
+        Preprocessor { settings }
     }
 
     fn setup_fact(&mut self, term: Term) -> Result<(Fact, VarData), CompilationError> {
         match term {
             Term::Clause(..) | Term::Literal(_, Literal::Atom(..)) => {
-                let classifier = VariableClassifier::new(
-                    self.settings.default_call_policy(),
-                );
+                let classifier = VariableClassifier::new(self.settings.default_call_policy());
 
                 let (head, var_data) = classifier.classify_fact(term)?;
                 Ok((Fact { head }, var_data))
@@ -554,21 +545,25 @@ impl Preprocessor {
         head: Term,
         body: Term,
     ) -> Result<(Rule, VarData), CompilationError> {
-        let classifier = VariableClassifier::new(
-            self.settings.default_call_policy(),
-        );
+        let classifier = VariableClassifier::new(self.settings.default_call_policy());
 
         let (head, clauses, var_data) = classifier.classify_rule(loader, head, body)?;
 
         match head {
-            Term::Clause(_, name, terms) => Ok((Rule {
-                head: (name, terms),
-                clauses,
-            }, var_data)),
-            Term::Literal(_, Literal::Atom(name)) => Ok((Rule {
-                head: (name, vec![]),
-                clauses,
-            }, var_data)),
+            Term::Clause(_, name, terms) => Ok((
+                Rule {
+                    head: (name, terms),
+                    clauses,
+                },
+                var_data,
+            )),
+            Term::Literal(_, Literal::Atom(name)) => Ok((
+                Rule {
+                    head: (name, vec![]),
+                    clauses,
+                },
+                var_data,
+            )),
             _ => Err(CompilationError::InvalidRuleHead),
         }
     }

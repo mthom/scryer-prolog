@@ -1,7 +1,7 @@
 use proc_macro2::TokenStream;
-use syn::*;
 use syn::parse::*;
 use syn::visit::*;
+use syn::*;
 
 use indexmap::IndexSet;
 
@@ -11,7 +11,9 @@ struct StaticStrVisitor {
 
 impl StaticStrVisitor {
     fn new() -> Self {
-        Self { static_strs: IndexSet::new() }
+        Self {
+            static_strs: IndexSet::new(),
+        }
     }
 }
 

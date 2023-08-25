@@ -46,7 +46,7 @@ impl DirectedOp {
     }
 
     #[inline]
-    fn is_prefix(&self )-> bool {
+    fn is_prefix(&self) -> bool {
         match self {
             &DirectedOp::Left(_name, cell) | &DirectedOp::Right(_name, cell) => {
                 is_prefix!(cell.get_spec() as u32)
@@ -178,16 +178,16 @@ fn char_to_string(is_quoted: bool, c: char) -> String {
         '\u{08}' if is_quoted => "\\b".to_string(), // UTF-8 backspace
         '\u{07}' if is_quoted => "\\a".to_string(), // UTF-8 alert
         '\\' if is_quoted => "\\\\".to_string(),
-        ' ' | '\'' | '\n' | '\r' | '\t' | '\u{0b}' | '\u{0c}' | '\u{08}' | '\u{07}' | '"' | '\\' => {
-            c.to_string()
-        }
-        _ =>
+        ' ' | '\'' | '\n' | '\r' | '\t' | '\u{0b}' | '\u{0c}' | '\u{08}' | '\u{07}' | '"'
+        | '\\' => c.to_string(),
+        _ => {
             if c.is_whitespace() || c.is_control() {
                 // print all other control and whitespace characters in hex.
                 format!("\\x{:x}\\", c as u32)
             } else {
                 c.to_string()
             }
+        }
     }
 }
 
@@ -217,7 +217,8 @@ enum TokenOrRedirect {
     CompositeRedirect(usize, DirectedOp),
     CurlyBracketRedirect(usize),
     FunctorRedirect(usize),
-    #[allow(unused)] IpAddr(IpAddr),
+    #[allow(unused)]
+    IpAddr(IpAddr),
     NumberFocus(usize, NumberFocus, Option<DirectedOp>),
     Open,
     Close,
@@ -467,8 +468,8 @@ pub fn fmt_float(mut fl: f64) -> String {
      */
 
     if let Some(e_index) = fl_str.find('e') {
-        if !fl_str[0 .. e_index].contains('.') {
-            return fl_str[0 .. e_index].to_string() + ".0" + &fl_str[e_index ..];
+        if !fl_str[0..e_index].contains('.') {
+            return fl_str[0..e_index].to_string() + ".0" + &fl_str[e_index..];
         }
     }
 
@@ -625,7 +626,8 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             } else {
                 let op = DirectedOp::Left(name, spec);
 
-                self.state_stack.push(TokenOrRedirect::CompositeRedirect(max_depth, op));
+                self.state_stack
+                    .push(TokenOrRedirect::CompositeRedirect(max_depth, op));
                 self.state_stack.push(TokenOrRedirect::Op(name, spec));
             }
         } else {
@@ -653,9 +655,15 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 let left_directed_op = DirectedOp::Left(name, spec);
                 let right_directed_op = DirectedOp::Right(name, spec);
 
-                self.state_stack.push(TokenOrRedirect::CompositeRedirect(max_depth, left_directed_op));
+                self.state_stack.push(TokenOrRedirect::CompositeRedirect(
+                    max_depth,
+                    left_directed_op,
+                ));
                 self.state_stack.push(TokenOrRedirect::Op(name, spec));
-                self.state_stack.push(TokenOrRedirect::CompositeRedirect(max_depth, right_directed_op));
+                self.state_stack.push(TokenOrRedirect::CompositeRedirect(
+                    max_depth,
+                    right_directed_op,
+                ));
             }
         }
     }
@@ -681,7 +689,8 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             self.state_stack.push(TokenOrRedirect::Close);
 
             for _ in 0..arity {
-                self.state_stack.push(TokenOrRedirect::FunctorRedirect(max_depth));
+                self.state_stack
+                    .push(TokenOrRedirect::FunctorRedirect(max_depth));
                 self.state_stack.push(TokenOrRedirect::Comma);
             }
 
@@ -738,9 +747,9 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             return false;
         }
 
-
         self.state_stack.push(TokenOrRedirect::RightCurly);
-        self.state_stack.push(TokenOrRedirect::CurlyBracketRedirect(max_depth));
+        self.state_stack
+            .push(TokenOrRedirect::CurlyBracketRedirect(max_depth));
         self.state_stack.push(TokenOrRedirect::LeftCurly);
 
         true
@@ -750,10 +759,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         let h = self.iter.stack_last().unwrap();
 
         let cell = self.iter.read_cell(h);
-        let cell = heap_bound_store(
-            &self.iter.heap,
-            heap_bound_deref(&self.iter.heap, cell),
-        );
+        let cell = heap_bound_store(&self.iter.heap, heap_bound_deref(&self.iter.heap, cell));
 
         // 7.10.4
         if let Some(var) = numbervar(&self.numbervars_offset, cell) {
@@ -835,10 +841,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         if let Some(cell) = self.iter.next() {
             let is_cyclic = cell.get_forwarding_bit();
 
-            let cell = heap_bound_store(
-                self.iter.heap,
-                heap_bound_deref(self.iter.heap, cell),
-            );
+            let cell = heap_bound_store(self.iter.heap, heap_bound_deref(self.iter.heap, cell));
             let cell = unmark_cell_bits!(cell);
 
             match self.var_names.get(&cell).cloned() {
@@ -1050,7 +1053,8 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                         NumberFocus::Denominator(r),
                         left_directed_op,
                     ));
-                    self.state_stack.push(TokenOrRedirect::Op(rdiv_ct, *op_desc));
+                    self.state_stack
+                        .push(TokenOrRedirect::Op(rdiv_ct, *op_desc));
                     self.state_stack.push(TokenOrRedirect::NumberFocus(
                         max_depth,
                         NumberFocus::Numerator(r),
@@ -1157,8 +1161,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             HeapCellValueTag::PStr | HeapCellValueTag::PStrOffset => {
                 self.iter.pop_stack();
             }
-            HeapCellValueTag::CStr => {
-            }
+            HeapCellValueTag::CStr => {}
             _ => {
                 unreachable!();
             }
@@ -1203,8 +1206,10 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                         append_str!(self, "[]");
                     }
                 } else {
-                    self.state_stack.push(TokenOrRedirect::FunctorRedirect(max_depth));
-                    self.iter.push_stack(IterStackLoc::iterable_loc(end_h, HeapOrStackTag::Heap));
+                    self.state_stack
+                        .push(TokenOrRedirect::FunctorRedirect(max_depth));
+                    self.iter
+                        .push_stack(IterStackLoc::iterable_loc(end_h, HeapOrStackTag::Heap));
                 }
             }
         } else {
@@ -1298,7 +1303,8 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             }
         }
 
-        self.state_stack.push(TokenOrRedirect::CloseList(switch.clone()));
+        self.state_stack
+            .push(TokenOrRedirect::CloseList(switch.clone()));
         Some(switch)
     }
 
@@ -1335,9 +1341,11 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
         let switch = self.close_list(cell);
 
-        self.state_stack.push(TokenOrRedirect::FunctorRedirect(max_depth));
+        self.state_stack
+            .push(TokenOrRedirect::FunctorRedirect(max_depth));
         self.state_stack.push(TokenOrRedirect::HeadTailSeparator); // bar
-        self.state_stack.push(TokenOrRedirect::FunctorRedirect(max_depth+1));
+        self.state_stack
+            .push(TokenOrRedirect::FunctorRedirect(max_depth + 1));
 
         self.open_list(switch);
     }
@@ -1353,8 +1361,8 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         max_depth: usize,
     ) {
         let add_brackets = if !self.ignore_ops {
-            negated_operand ||
-                if let Some(ref op) = op {
+            negated_operand
+                || if let Some(ref op) = op {
                     if self.numbervars && arity == 1 && name == atom!("$VAR") {
                         !self.iter.immediate_leaf_has_property(|addr| {
                             match Number::try_from(addr) {
@@ -1381,7 +1389,8 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             self.state_stack.push(TokenOrRedirect::Open);
 
             if !self.outputter.ends_with(" ") {
-                let parent_op = self.parent_of_first_op
+                let parent_op = self
+                    .parent_of_first_op
                     .and_then(|(parent_op, last_item_idx)| {
                         // if parent_op isn't printed to the output string
                         // already, then it doesn't border the present op
@@ -1395,7 +1404,9 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
                 for op in &[op, parent_op] {
                     if let Some(ref op) = &op {
-                        if op.is_left() && (op.is_prefix() || requires_space(op.as_atom().as_str(), "(")) {
+                        if op.is_left()
+                            && (op.is_prefix() || requires_space(op.as_atom().as_str(), "("))
+                        {
                             self.state_stack.push(TokenOrRedirect::Space);
                             return;
                         }
@@ -1529,7 +1540,11 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 if let Some(ref op) = op {
                     let op_is_prefix = op.is_prefix() && op.is_left();
 
-                    if op_is_prefix || printer.outputter.ends_with(&format!(" {}", op.as_atom().as_str())) {
+                    if op_is_prefix
+                        || printer
+                            .outputter
+                            .ends_with(&format!(" {}", op.as_atom().as_str()))
+                    {
                         result.push(' ');
                     }
 
@@ -1557,7 +1572,10 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             None => return,
         };
 
-        if !addr.is_var() && !addr.is_compound(&self.iter.heap) && self.max_depth_exhausted(max_depth) {
+        if !addr.is_var()
+            && !addr.is_compound(&self.iter.heap)
+            && self.max_depth_exhausted(max_depth)
+        {
             self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
             return;
         }
@@ -1737,7 +1755,9 @@ mod tests {
         let b_atom = atom!("b");
         let c_atom = atom!("c");
 
-        wam.machine_st.heap.extend(functor!(f_atom, [atom(a_atom), atom(b_atom)]));
+        wam.machine_st
+            .heap
+            .extend(functor!(f_atom, [atom(a_atom), atom(b_atom)]));
 
         {
             let printer = HCPrinter::new(
@@ -1746,7 +1766,7 @@ mod tests {
                 &mut wam.machine_st.stack,
                 &wam.op_dir,
                 PrinterOutputter::new(),
-                heap_loc_as_cell!(0)
+                heap_loc_as_cell!(0),
             );
 
             let output = printer.print();
@@ -1775,7 +1795,7 @@ mod tests {
                 &mut wam.machine_st.stack,
                 &wam.op_dir,
                 PrinterOutputter::new(),
-                heap_loc_as_cell!(0)
+                heap_loc_as_cell!(0),
             );
 
             let output = printer.print();
@@ -1799,7 +1819,7 @@ mod tests {
                 &mut wam.machine_st.stack,
                 &wam.op_dir,
                 PrinterOutputter::new(),
-                heap_loc_as_cell!(0)
+                heap_loc_as_cell!(0),
             );
 
             let output = printer.print();
@@ -1812,10 +1832,12 @@ mod tests {
                 &mut wam.machine_st.stack,
                 &wam.op_dir,
                 PrinterOutputter::new(),
-                heap_loc_as_cell!(0)
+                heap_loc_as_cell!(0),
             );
 
-            printer.var_names.insert(list_loc_as_cell!(1), VarPtr::from("L"));
+            printer
+                .var_names
+                .insert(list_loc_as_cell!(1), VarPtr::from("L"));
 
             let output = printer.print();
 
@@ -1879,10 +1901,12 @@ mod tests {
                 &mut wam.machine_st.stack,
                 &wam.op_dir,
                 PrinterOutputter::new(),
-                heap_loc_as_cell!(0)
+                heap_loc_as_cell!(0),
             );
 
-            printer.var_names.insert(list_loc_as_cell!(1), VarPtr::from("L"));
+            printer
+                .var_names
+                .insert(list_loc_as_cell!(1), VarPtr::from("L"));
 
             let output = printer.print();
 
@@ -1909,7 +1933,7 @@ mod tests {
                 &mut wam.machine_st.stack,
                 &wam.op_dir,
                 PrinterOutputter::new(),
-                heap_loc_as_cell!(0)
+                heap_loc_as_cell!(0),
             );
 
             printer.max_depth = 5;
@@ -1923,7 +1947,11 @@ mod tests {
 
         wam.machine_st.heap.clear();
 
-        put_partial_string(&mut wam.machine_st.heap, "abc", &mut wam.machine_st.atom_tbl);
+        put_partial_string(
+            &mut wam.machine_st.heap,
+            "abc",
+            &mut wam.machine_st.atom_tbl,
+        );
 
         {
             let printer = HCPrinter::new(
@@ -1932,7 +1960,7 @@ mod tests {
                 &mut wam.machine_st.stack,
                 &wam.op_dir,
                 PrinterOutputter::new(),
-                pstr_loc_as_cell!(0)
+                pstr_loc_as_cell!(0),
             );
 
             let output = printer.print();
@@ -2000,35 +2028,39 @@ mod tests {
 
         all_cells_unmarked(&wam.machine_st.heap);
 
-        wam.op_dir.insert(
-            (atom!("+"), Fixity::In),
-            OpDesc::build_with(500, YFX as u8),
-        );
-        wam.op_dir.insert(
-            (atom!("*"), Fixity::In),
-            OpDesc::build_with(400, YFX as u8),
-        );
+        wam.op_dir
+            .insert((atom!("+"), Fixity::In), OpDesc::build_with(500, YFX as u8));
+        wam.op_dir
+            .insert((atom!("*"), Fixity::In), OpDesc::build_with(400, YFX as u8));
 
-        assert_eq!(&wam.parse_and_print_term("[a|[] + b].").unwrap(), "[a|[]+b]");
+        assert_eq!(
+            &wam.parse_and_print_term("[a|[] + b].").unwrap(),
+            "[a|[]+b]"
+        );
 
         all_cells_unmarked(&wam.machine_st.heap);
 
-        assert_eq!(&wam.parse_and_print_term("[a|[b|c]*d].").unwrap(), "[a|[b|c]*d]");
+        assert_eq!(
+            &wam.parse_and_print_term("[a|[b|c]*d].").unwrap(),
+            "[a|[b|c]*d]"
+        );
 
         all_cells_unmarked(&wam.machine_st.heap);
 
-        wam.op_dir.insert(
-            (atom!("fy"), Fixity::Pre),
-            OpDesc::build_with(9, FY as u8),
+        wam.op_dir
+            .insert((atom!("fy"), Fixity::Pre), OpDesc::build_with(9, FY as u8));
+
+        wam.op_dir
+            .insert((atom!("yf"), Fixity::Post), OpDesc::build_with(9, YF as u8));
+
+        assert_eq!(
+            &wam.parse_and_print_term("(fy (fy 1)yf)yf.").unwrap(),
+            "(fy (fy 1)yf)yf"
         );
 
-        wam.op_dir.insert(
-            (atom!("yf"), Fixity::Post),
-            OpDesc::build_with(9, YF as u8),
+        assert_eq!(
+            &wam.parse_and_print_term("fy(fy(yf(fy(1)))).").unwrap(),
+            "fy fy (fy 1)yf"
         );
-
-        assert_eq!(&wam.parse_and_print_term("(fy (fy 1)yf)yf.").unwrap(), "(fy (fy 1)yf)yf");
-
-        assert_eq!(&wam.parse_and_print_term("fy(fy(yf(fy(1)))).").unwrap(), "fy fy (fy 1)yf");
     }
 }

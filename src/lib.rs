@@ -17,13 +17,13 @@ pub mod codegen;
 mod debray_allocator;
 #[cfg(feature = "ffi")]
 mod ffi;
-mod variable_records;
 mod forms;
 mod heap_iter;
 pub mod heap_print;
 #[cfg(feature = "http")]
 mod http;
 mod indexing;
+mod variable_records;
 #[macro_use]
 pub mod instructions {
     include!(concat!(env!("OUT_DIR"), "/instructions.rs"));

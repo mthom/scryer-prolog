@@ -33,7 +33,11 @@ impl<'a> From<&'a Atom> for Atom {
 impl From<bool> for Atom {
     #[inline]
     fn from(value: bool) -> Self {
-        if value { atom!("true") } else { atom!("false") }
+        if value {
+            atom!("true")
+        } else {
+            atom!("false")
+        }
     }
 }
 
@@ -50,10 +54,10 @@ static ATOM_TABLE_BUF_BASE: std::sync::atomic::AtomicPtr<u8> =
     std::sync::atomic::AtomicPtr::new(ptr::null_mut());
 
 fn set_atom_tbl_buf_base(old_ptr: *const u8, new_ptr: *const u8) -> Result<(), *const u8> {
-#[cfg(test)]
+    #[cfg(test)]
     {
-    ATOM_TABLE_BUF_BASE.with(|atom_table_buf_base| {
-        let mut borrow = atom_table_buf_base.borrow_mut();
+        ATOM_TABLE_BUF_BASE.with(|atom_table_buf_base| {
+            let mut borrow = atom_table_buf_base.borrow_mut();
             if *borrow != old_ptr {
                 Err(*borrow)
             } else {
@@ -79,9 +83,9 @@ fn set_atom_tbl_buf_base(old_ptr: *const u8, new_ptr: *const u8) -> Result<(), *
 pub(crate) fn get_atom_tbl_buf_base() -> *const u8 {
     #[cfg(test)]
     {
-    ATOM_TABLE_BUF_BASE.with(|atom_table_buf_base| *atom_table_buf_base.borrow())
-}
-#[cfg(not(test))]
+        ATOM_TABLE_BUF_BASE.with(|atom_table_buf_base| *atom_table_buf_base.borrow())
+    }
+    #[cfg(not(test))]
     {
         ATOM_TABLE_BUF_BASE.load(std::sync::atomic::Ordering::Relaxed)
     }
@@ -109,9 +113,11 @@ impl RawBlockTraits for AtomTable {
 #[bitfield]
 #[derive(Copy, Clone, Debug)]
 struct AtomHeader {
-    #[allow(unused)] m: bool,
+    #[allow(unused)]
+    m: bool,
     len: B50,
-    #[allow(unused)] padding: B13,
+    #[allow(unused)]
+    padding: B13,
 }
 
 impl AtomHeader {
@@ -164,7 +170,8 @@ impl Atom {
         if self.is_static() {
             ptr::null()
         } else {
-            (get_atom_tbl_buf_base() as usize + (self.index as usize) - (STRINGS.len() << 3)) as *const u8
+            (get_atom_tbl_buf_base() as usize + (self.index as usize) - (STRINGS.len() << 3))
+                as *const u8
         }
     }
 
@@ -194,7 +201,11 @@ impl Atom {
         let c1 = it.next();
         let c2 = it.next();
 
-        if c2.is_none() { c1 } else { None }
+        if c2.is_none() {
+            c1
+        } else {
+            None
+        }
     }
 
     #[inline]
@@ -301,7 +312,10 @@ impl AtomTable {
 
     #[inline(always)]
     fn lookup_str(&self, string: &str) -> Option<Atom> {
-        STATIC_ATOMS_MAP.get(string).or_else(|| self.table.get(string)).cloned()
+        STATIC_ATOMS_MAP
+            .get(string)
+            .or_else(|| self.table.get(string))
+            .cloned()
     }
 
     pub fn build_with(&mut self, string: &str) -> Atom {
@@ -355,9 +369,12 @@ impl AtomTable {
 pub struct AtomCell {
     name: B46,
     arity: B10,
-    #[allow(unused)] f: bool,
-    #[allow(unused)] m: bool,
-    #[allow(unused)] tag: B6,
+    #[allow(unused)]
+    f: bool,
+    #[allow(unused)]
+    m: bool,
+    #[allow(unused)]
+    tag: B6,
 }
 
 impl AtomCell {

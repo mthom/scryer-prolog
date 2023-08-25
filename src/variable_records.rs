@@ -56,8 +56,10 @@ impl VarSafetyStatus {
 
 #[derive(Debug, Clone, Copy)]
 pub enum PermVarAllocation {
-    Done { shallow_safety: VarSafetyStatus,
-           deep_safety: VarSafetyStatus },
+    Done {
+        shallow_safety: VarSafetyStatus,
+        deep_safety: VarSafetyStatus,
+    },
     Pending,
 }
 
@@ -81,11 +83,13 @@ impl PermVarAllocation {
 
 #[derive(Debug, Clone)]
 pub enum VarAlloc {
-    Temp { term_loc: GenContext,
-           temp_reg: usize,
-           temp_var_data: TempVarData,
-           safety: VarSafetyStatus,
-           to_perm_var_num: Option<usize> },
+    Temp {
+        term_loc: GenContext,
+        temp_reg: usize,
+        temp_var_data: TempVarData,
+        safety: VarSafetyStatus,
+        to_perm_var_num: Option<usize>,
+    },
     Perm(usize, PermVarAllocation), // stack offset, allocation info
 }
 
@@ -102,7 +106,9 @@ impl VarAlloc {
     pub(crate) fn set_register(&mut self, reg_num: usize) {
         match self {
             VarAlloc::Perm(ref mut p, _) => *p = reg_num,
-            VarAlloc::Temp { ref mut temp_reg, .. } => *temp_reg = reg_num,
+            VarAlloc::Temp {
+                ref mut temp_reg, ..
+            } => *temp_reg = reg_num,
         };
     }
 }
@@ -191,7 +197,8 @@ impl VariableRecords {
         // Compute the conflict set of u.
 
         // 1.
-        let mut use_sets: IndexMap<usize, IndexSet<(GenContext, usize), FxBuildHasher>> = IndexMap::new();
+        let mut use_sets: IndexMap<usize, IndexSet<(GenContext, usize), FxBuildHasher>> =
+            IndexMap::new();
 
         for (var_gen_index, record) in self.0.iter_mut().enumerate() {
             match &mut record.allocation {
@@ -203,8 +210,7 @@ impl VariableRecords {
 
                     use_sets.insert(var_gen_index, use_set);
                 }
-                _ => {
-                }
+                _ => {}
             }
         }
 
@@ -214,7 +220,11 @@ impl VariableRecords {
                 if let GenContext::Last(cn_u) = term_loc {
                     for (var_gen_index, record) in self.0.iter_mut().enumerate() {
                         match &mut record.allocation {
-                            VarAlloc::Temp { term_loc, temp_var_data, .. } => {
+                            VarAlloc::Temp {
+                                term_loc,
+                                temp_var_data,
+                                ..
+                            } => {
                                 if cn_u == term_loc.chunk_num() && u != var_gen_index {
                                     if !temp_var_data.uses_reg(reg) {
                                         temp_var_data.no_use_set.insert(reg);
@@ -228,7 +238,7 @@ impl VariableRecords {
             }
 
             // 3.
-            if let VarAlloc::Temp{ temp_var_data, .. } = &mut self[u].allocation {
+            if let VarAlloc::Temp { temp_var_data, .. } = &mut self[u].allocation {
                 temp_var_data.use_set = use_set;
                 temp_var_data.populate_conflict_set();
             }

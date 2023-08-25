@@ -30,15 +30,13 @@ use std::io::{Cursor, Error, ErrorKind, Read};
 
 type SubtermDeque = VecDeque<(usize, usize)>;
 
-pub(crate) fn devour_whitespace<'a, R: CharRead>(parser: &mut Parser<'a, R>) -> Result<bool, ParserError> {
+pub(crate) fn devour_whitespace<'a, R: CharRead>(
+    parser: &mut Parser<'a, R>,
+) -> Result<bool, ParserError> {
     match parser.lexer.scan_for_layout() {
-        Err(e) if e.is_unexpected_eof() => {
-            Ok(true)
-        }
+        Err(e) if e.is_unexpected_eof() => Ok(true),
         Err(e) => Err(e),
-        Ok(_) => {
-            Ok(false)
-        }
+        Ok(_) => Ok(false),
     }
 }
 
@@ -60,7 +58,6 @@ pub(crate) fn error_after_read_term<R>(
     CompilationError::from(err)
 }
 
-
 impl MachineState {
     pub(crate) fn read(
         &mut self,
@@ -74,7 +71,8 @@ impl MachineState {
 
             parser.add_lines_read(prior_num_lines_read);
 
-            let term = parser.read_term(&op_dir, Tokens::Default)
+            let term = parser
+                .read_term(&op_dir, Tokens::Default)
                 .map_err(|err| error_after_read_term(err, prior_num_lines_read, &parser))?; // CompilationError::from
 
             (term, parser.lines_read() - prior_num_lines_read)
@@ -117,9 +115,7 @@ impl ReadlineStream {
     #[cfg(feature = "repl")]
     #[inline]
     pub fn new(pending_input: &str, add_history: bool) -> Self {
-        let config = Config::builder()
-            .check_cursor_position(true)
-            .build();
+        let config = Config::builder().check_cursor_position(true).build();
 
         let helper = Helper::new();
 
@@ -156,8 +152,7 @@ impl ReadlineStream {
     }
 
     #[cfg(not(feature = "repl"))]
-    pub fn set_atoms_for_completion(&mut self, atoms: *const IndexSet<Atom>) {
-    }
+    pub fn set_atoms_for_completion(&mut self, atoms: *const IndexSet<Atom>) {}
 
     #[inline]
     pub fn reset(&mut self) {
@@ -180,7 +175,9 @@ impl ReadlineStream {
 
                 unsafe {
                     if PROMPT {
-                        self.rl.add_history_entry(self.pending_input.get_ref().get_ref()).unwrap();
+                        self.rl
+                            .add_history_entry(self.pending_input.get_ref().get_ref())
+                            .unwrap();
                         self.save_history();
                         PROMPT = false;
                     }
@@ -220,8 +217,7 @@ impl ReadlineStream {
     }
 
     #[cfg(not(feature = "repl"))]
-    fn save_history(&mut self) {
-    }
+    fn save_history(&mut self) {}
 
     #[inline]
     pub(crate) fn peek_byte(&mut self) -> std::io::Result<u8> {
@@ -253,7 +249,7 @@ impl Read for ReadlineStream {
                 self.call_readline()?;
                 self.pending_input.read(buf)
             }
-            result => result
+            result => result,
         }
     }
 }
@@ -266,16 +262,14 @@ impl CharRead for ReadlineStream {
                 Some(Ok(c)) => {
                     return Some(Ok(c));
                 }
-                _ => {
-                    match self.call_readline() {
-                        Err(e) => {
-                            return Some(Err(e));
-                        }
-                        _ => {
-                            set_prompt(false);
-                        }
+                _ => match self.call_readline() {
+                    Err(e) => {
+                        return Some(Err(e));
                     }
-                }
+                    _ => {
+                        set_prompt(false);
+                    }
+                },
             }
         }
     }
@@ -347,17 +341,18 @@ impl<'a, 'b> TermWriter<'a, 'b> {
         match term {
             &TermRef::Cons(..) => list_loc_as_cell!(h),
             &TermRef::AnonVar(_) | &TermRef::Var(..) => heap_loc_as_cell!(h),
-            &TermRef::CompleteString(_, _, ref src) =>
+            &TermRef::CompleteString(_, _, ref src) => {
                 if src.as_str().is_empty() {
                     empty_list_as_cell!()
                 } else if self.heap[h].get_tag() == HeapCellValueTag::CStr {
                     heap_loc_as_cell!(h)
                 } else {
                     pstr_loc_as_cell!(h)
-                },
+                }
+            }
             &TermRef::PartialString(..) => pstr_loc_as_cell!(h),
             &TermRef::Literal(_, _, literal) => HeapCellValue::from(*literal),
-            &TermRef::Clause(_,_,_,subterms) if subterms.len() == 0 => heap_loc_as_cell!(h),
+            &TermRef::Clause(_, _, _, subterms) if subterms.len() == 0 => heap_loc_as_cell!(h),
             &TermRef::Clause(..) => str_loc_as_cell!(h),
         }
     }
@@ -427,7 +422,8 @@ impl<'a, 'b> TermWriter<'a, 'b> {
                 }
                 &TermRef::AnonVar(_) => {
                     if let Some((arity, site_h)) = self.queue.pop_front() {
-                        self.var_dict.insert(VarKey::AnonVar(h), heap_loc_as_cell!(site_h));
+                        self.var_dict
+                            .insert(VarKey::AnonVar(h), heap_loc_as_cell!(site_h));
 
                         if arity > 1 {
                             self.queue.push_front((arity - 1, site_h + 1));

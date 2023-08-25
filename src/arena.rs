@@ -6,8 +6,8 @@ use crate::machine::streams::*;
 use crate::raw_block::*;
 use crate::read::*;
 
-use ordered_float::OrderedFloat;
 use crate::parser::dashu::{Integer, Rational};
+use ordered_float::OrderedFloat;
 
 use std::alloc;
 use std::fmt;
@@ -22,7 +22,9 @@ macro_rules! arena_alloc {
     ($e:expr, $arena:expr) => {{
         let result = $e;
         #[allow(unused_unsafe)]
-        unsafe { ArenaAllocated::alloc($arena, result) }
+        unsafe {
+            ArenaAllocated::alloc($arena, result)
+        }
     }};
 }
 
@@ -31,7 +33,9 @@ macro_rules! float_alloc {
     ($e:expr, $arena:expr) => {{
         let result = $e;
         #[allow(unused_unsafe)]
-        unsafe { $arena.f64_tbl.build_with(result) }
+        unsafe {
+            $arena.f64_tbl.build_with(result)
+        }
     }};
 }
 
@@ -105,7 +109,9 @@ pub fn lookup_float(offset: usize) -> *mut OrderedFloat<f64> {
 impl F64Table {
     #[inline]
     pub fn new() -> Self {
-        let table = Self { block: RawBlock::new() };
+        let table = Self {
+            block: RawBlock::new(),
+        };
         set_f64_tbl_buf_base(table.block.base);
         table
     }
@@ -141,7 +147,7 @@ pub enum ArenaHeaderTag {
     OutputFileStream = 0b10100,
     NamedTcpStream = 0b011100,
     NamedTlsStream = 0b100000,
-    HttpReadStream =  0b100001,
+    HttpReadStream = 0b100001,
     HttpWriteStream = 0b100010,
     ReadlineStream = 0b110000,
     StaticStringStream = 0b110100,
@@ -276,7 +282,9 @@ impl<T: ?Sized + ArenaAllocated> TypedArenaPtr<T> {
 
     #[inline]
     pub fn set_tag(&mut self, tag: ArenaHeaderTag) {
-        unsafe { (*self.header_ptr_mut()).set_tag(tag); }
+        unsafe {
+            (*self.header_ptr_mut()).set_tag(tag);
+        }
     }
 
     #[inline]
@@ -313,10 +321,10 @@ pub trait ArenaAllocated: Sized {
     unsafe fn alloc(arena: &mut Arena, value: Self) -> Self::PtrToAllocated {
         let size = value.size() + mem::size_of::<AllocSlab>();
 
-        #[cfg(target_pointer_width="32")]
+        #[cfg(target_pointer_width = "32")]
         let align = mem::align_of::<AllocSlab>() * 2;
 
-        #[cfg(target_pointer_width="64")]
+        #[cfg(target_pointer_width = "64")]
         let align = mem::align_of::<AllocSlab>();
         let layout = alloc::Layout::from_size_align_unchecked(size, align);
 
@@ -389,9 +397,7 @@ impl DerefMut for F64Ptr {
 impl F64Ptr {
     #[inline(always)]
     pub fn from_offset(offset: usize) -> Self {
-        unsafe {
-            F64Ptr(ptr::NonNull::new_unchecked(lookup_float(offset)))
-        }
+        unsafe { F64Ptr(ptr::NonNull::new_unchecked(lookup_float(offset))) }
     }
 
     #[inline(always)]
@@ -577,20 +583,20 @@ impl ArenaAllocated for HttpListener {
 
     #[inline]
     fn tag() -> ArenaHeaderTag {
-	ArenaHeaderTag::HttpListener
+        ArenaHeaderTag::HttpListener
     }
 
     #[inline]
     fn size(&self) -> usize {
-	mem::size_of::<Self>()
+        mem::size_of::<Self>()
     }
 
     #[inline]
     fn copy_to_arena(self, dst: *mut Self) -> Self::PtrToAllocated {
-	unsafe {
-	    ptr::write(dst, self);
-	    TypedArenaPtr::new(dst as *mut Self)
-	}
+        unsafe {
+            ptr::write(dst, self);
+            TypedArenaPtr::new(dst as *mut Self)
+        }
     }
 }
 
@@ -600,20 +606,20 @@ impl ArenaAllocated for HttpResponse {
 
     #[inline]
     fn tag() -> ArenaHeaderTag {
-	ArenaHeaderTag::HttpResponse
+        ArenaHeaderTag::HttpResponse
     }
 
     #[inline]
     fn size(&self) -> usize {
-	mem::size_of::<Self>()
+        mem::size_of::<Self>()
     }
 
     #[inline]
     fn copy_to_arena(self, dst: *mut Self) -> Self::PtrToAllocated {
-	unsafe {
-	    ptr::write(dst, self);
-	    TypedArenaPtr::new(dst as *mut Self)
-	}
+        unsafe {
+            ptr::write(dst, self);
+            TypedArenaPtr::new(dst as *mut Self)
+        }
     }
 }
 
@@ -664,7 +670,7 @@ impl ArenaAllocated for IndexPtr {
 #[derive(Clone, Copy, Debug)]
 struct AllocSlab {
     next: *mut AllocSlab,
-    #[cfg(target_pointer_width="32")]
+    #[cfg(target_pointer_width = "32")]
     _padding: u32,
     header: ArenaHeader,
 }
@@ -681,7 +687,10 @@ unsafe impl Sync for Arena {}
 impl Arena {
     #[inline]
     pub fn new() -> Self {
-        Arena { base: ptr::null_mut(), f64_tbl: F64Table::new() }
+        Arena {
+            base: ptr::null_mut(),
+            f64_tbl: F64Table::new(),
+        }
     }
 }
 
@@ -712,10 +721,10 @@ unsafe fn drop_slab_in_place(value: &mut AllocSlab) {
             #[cfg(feature = "http")]
             ptr::drop_in_place(value.payload_offset::<StreamLayout<CharReader<HttpReadStream>>>());
         }
-	    ArenaHeaderTag::HttpWriteStream => {
+        ArenaHeaderTag::HttpWriteStream => {
             #[cfg(feature = "http")]
-	        ptr::drop_in_place(value.payload_offset::<StreamLayout<CharReader<HttpWriteStream>>>());
-	    }
+            ptr::drop_in_place(value.payload_offset::<StreamLayout<CharReader<HttpWriteStream>>>());
+        }
         ArenaHeaderTag::ReadlineStream => {
             ptr::drop_in_place(value.payload_offset::<StreamLayout<ReadlineStream>>());
         }
@@ -731,29 +740,29 @@ unsafe fn drop_slab_in_place(value: &mut AllocSlab) {
         ArenaHeaderTag::LiveLoadState | ArenaHeaderTag::InactiveLoadState => {
             ptr::drop_in_place(value.payload_offset::<LiveLoadState>());
         }
-        ArenaHeaderTag::Dropped => {
-        }
+        ArenaHeaderTag::Dropped => {}
         ArenaHeaderTag::TcpListener => {
             ptr::drop_in_place(value.payload_offset::<TcpListener>());
         }
-	    ArenaHeaderTag::HttpListener => {
+        ArenaHeaderTag::HttpListener => {
             #[cfg(feature = "http")]
-	        ptr::drop_in_place(value.payload_offset::<HttpListener>());
-	    }
-	    ArenaHeaderTag::HttpResponse => {
+            ptr::drop_in_place(value.payload_offset::<HttpListener>());
+        }
+        ArenaHeaderTag::HttpResponse => {
             #[cfg(feature = "http")]
-	        ptr::drop_in_place(value.payload_offset::<HttpResponse>());
-	    }
+            ptr::drop_in_place(value.payload_offset::<HttpResponse>());
+        }
         ArenaHeaderTag::StandardOutputStream => {
             ptr::drop_in_place(value.payload_offset::<StreamLayout<StandardOutputStream>>());
         }
         ArenaHeaderTag::StandardErrorStream => {
             ptr::drop_in_place(value.payload_offset::<StreamLayout<StandardErrorStream>>());
         }
-        ArenaHeaderTag::NullStream | ArenaHeaderTag::IndexPtrUndefined |
-        ArenaHeaderTag::IndexPtrDynamicUndefined | ArenaHeaderTag::IndexPtrDynamicIndex |
-        ArenaHeaderTag::IndexPtrIndex => {
-        }
+        ArenaHeaderTag::NullStream
+        | ArenaHeaderTag::IndexPtrUndefined
+        | ArenaHeaderTag::IndexPtrDynamicUndefined
+        | ArenaHeaderTag::IndexPtrDynamicIndex
+        | ArenaHeaderTag::IndexPtrIndex => {}
     }
 }
 
@@ -804,8 +813,8 @@ mod tests {
     use crate::machine::mock_wam::*;
     use crate::machine::partial_string::*;
 
-    use ordered_float::OrderedFloat;
     use crate::parser::dashu::{Integer, Rational};
+    use ordered_float::OrderedFloat;
 
     #[test]
     fn float_ptr_cast() {
@@ -834,12 +843,12 @@ mod tests {
     #[test]
     fn heap_cell_value_const_cast() {
         let mut wam = MockWAM::new();
-        #[cfg(target_pointer_width="32")]
+        #[cfg(target_pointer_width = "32")]
         let const_value = HeapCellValue::from(ConsPtr::build_with(
             0x0000_0431 as *const _,
             ConsPtrMaskTag::Cons,
         ));
-        #[cfg(target_pointer_width="64")]
+        #[cfg(target_pointer_width = "64")]
         let const_value = HeapCellValue::from(ConsPtr::build_with(
             0x0000_5555_ff00_0431 as *const _,
             ConsPtrMaskTag::Cons,
@@ -847,7 +856,10 @@ mod tests {
 
         match const_value.to_untyped_arena_ptr() {
             Some(arena_ptr) => {
-                assert_eq!(arena_ptr.into_bytes(), const_value.to_untyped_arena_ptr_bytes());
+                assert_eq!(
+                    arena_ptr.into_bytes(),
+                    const_value.to_untyped_arena_ptr_bytes()
+                );
             }
             None => {
                 assert!(false);
@@ -860,7 +872,10 @@ mod tests {
 
         match stream_cell.to_untyped_arena_ptr() {
             Some(arena_ptr) => {
-                assert_eq!(arena_ptr.into_bytes(), stream_cell.to_untyped_arena_ptr_bytes());
+                assert_eq!(
+                    arena_ptr.into_bytes(),
+                    stream_cell.to_untyped_arena_ptr_bytes()
+                );
             }
             None => {
                 assert!(false);
@@ -875,8 +890,7 @@ mod tests {
         // integer
 
         let big_int: Integer = 2 * Integer::from(1u64 << 63);
-        let big_int_ptr: TypedArenaPtr<Integer> =
-            arena_alloc!(big_int, &mut wam.machine_st.arena);
+        let big_int_ptr: TypedArenaPtr<Integer> = arena_alloc!(big_int, &mut wam.machine_st.arena);
 
         assert!(!big_int_ptr.as_ptr().is_null());
 
@@ -989,7 +1003,11 @@ mod tests {
 
         // complete string
 
-        let pstr_var_cell = put_partial_string(&mut wam.machine_st.heap, "ronan", &mut wam.machine_st.atom_tbl);
+        let pstr_var_cell = put_partial_string(
+            &mut wam.machine_st.heap,
+            "ronan",
+            &mut wam.machine_st.atom_tbl,
+        );
         let pstr_cell = wam.machine_st.heap[pstr_var_cell.get_value() as usize];
 
         assert_eq!(pstr_cell.get_tag(), HeapCellValueTag::PStr);

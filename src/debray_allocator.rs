@@ -76,11 +76,16 @@ impl BranchStack {
         }
     }
 
-    fn safety_unneeded_in_branch(&self, safety: &VarSafetyStatus, branch: &BranchDesignator) -> bool {
+    fn safety_unneeded_in_branch(
+        &self,
+        safety: &VarSafetyStatus,
+        branch: &BranchDesignator,
+    ) -> bool {
         match safety {
             VarSafetyStatus::Needed => false,
-            VarSafetyStatus::LocallyUnneeded(planter_branch) =>
-                self.branch_subsumes(planter_branch, branch),
+            VarSafetyStatus::LocallyUnneeded(planter_branch) => {
+                self.branch_subsumes(planter_branch, branch)
+            }
             VarSafetyStatus::GloballyUnneeded => true,
         }
     }
@@ -91,7 +96,9 @@ impl BranchStack {
 
             let num_branches = occurrences.num_branches;
 
-            let entry = occurrences.hits.entry(var_num)
+            let entry = occurrences
+                .hits
+                .entry(var_num)
                 .or_insert_with(|| BitVec::repeat(false, num_branches));
 
             entry.set(occurrences.current_branch, true);
@@ -105,11 +112,15 @@ impl BranchStack {
 
     pub(crate) fn current_branch_designator(&self) -> BranchDesignator {
         let branch_stack_num = self.len();
-        let branch_num = self.last()
+        let branch_num = self
+            .last()
             .map(|occurrences| occurrences.current_branch)
             .unwrap_or(0);
 
-        BranchDesignator { branch_stack_num, branch_num }
+        BranchDesignator {
+            branch_stack_num,
+            branch_num,
+        }
     }
 
     #[inline]
@@ -121,7 +132,7 @@ impl BranchStack {
     #[inline]
     pub(crate) fn drain_branches(&mut self, depth: usize) -> std::vec::Drain<BranchOccurrences> {
         let start_idx = self.len() - depth;
-        self.drain(start_idx ..)
+        self.drain(start_idx..)
     }
 }
 
@@ -156,13 +167,23 @@ impl DebrayAllocator {
             match &mut self.var_data.records[var_num].allocation {
                 VarAlloc::Perm(_, ref mut allocation) => {
                     match allocation {
-                        PermVarAllocation::Done { shallow_safety, deep_safety, .. } => {
-                            if !self.branch_stack.safety_unneeded_in_branch(shallow_safety, &branch_designator) {
+                        PermVarAllocation::Done {
+                            shallow_safety,
+                            deep_safety,
+                            ..
+                        } => {
+                            if !self
+                                .branch_stack
+                                .safety_unneeded_in_branch(shallow_safety, &branch_designator)
+                            {
                                 let branch_occurrences = self.branch_stack.last_mut().unwrap();
                                 branch_occurrences.shallow_safety.insert(var_num);
                             }
 
-                            if !self.branch_stack.safety_unneeded_in_branch(deep_safety, &branch_designator) {
+                            if !self
+                                .branch_stack
+                                .safety_unneeded_in_branch(deep_safety, &branch_designator)
+                            {
                                 let branch_occurrences = self.branch_stack.last_mut().unwrap();
                                 branch_occurrences.deep_safety.insert(var_num);
                             }
@@ -182,15 +203,15 @@ impl DebrayAllocator {
     pub(crate) fn pop_branch(&mut self, depth: usize, subsumed_hits: SubsumedBranchHits) {
         let removed_branches = self.branch_stack.drain_branches(depth);
 
-        let (deep_safety, shallow_safety) = removed_branches
-            .into_iter()
-            .fold((BitSet::default(), BitSet::default()),
-                  |(mut deep_safety, mut shallow_safety), branch_occurrences| {
-                      deep_safety.union_with(&branch_occurrences.deep_safety);
-                      shallow_safety.union_with(&branch_occurrences.shallow_safety);
+        let (deep_safety, shallow_safety) = removed_branches.into_iter().fold(
+            (BitSet::default(), BitSet::default()),
+            |(mut deep_safety, mut shallow_safety), branch_occurrences| {
+                deep_safety.union_with(&branch_occurrences.deep_safety);
+                shallow_safety.union_with(&branch_occurrences.shallow_safety);
 
-                      (deep_safety, shallow_safety)
-                  });
+                (deep_safety, shallow_safety)
+            },
+        );
 
         let branch_designator = self.branch_stack.current_branch_designator();
 
@@ -201,7 +222,7 @@ impl DebrayAllocator {
 
                 (&latest_branch.deep_safety, &latest_branch.shallow_safety)
             }
-            None => (&deep_safety, &shallow_safety)
+            None => (&deep_safety, &shallow_safety),
         };
 
         for var_num in subsumed_hits.iter().cloned() {
@@ -221,10 +242,13 @@ impl DebrayAllocator {
                     );
 
                     if running_count < num_occurrences {
-                        *allocation = PermVarAllocation::Done { shallow_safety, deep_safety };
+                        *allocation = PermVarAllocation::Done {
+                            shallow_safety,
+                            deep_safety,
+                        };
                     }
                 }
-                _ => unreachable!()
+                _ => unreachable!(),
             }
         }
 
@@ -244,9 +268,11 @@ impl DebrayAllocator {
 
     fn occurs_shallowly_in_head(&self, var_num: usize, r: usize) -> bool {
         match &self.var_data.records[var_num].allocation {
-            VarAlloc::Temp { temp_var_data, term_loc: GenContext::Head, .. } => {
-                temp_var_data.use_set.contains(&(GenContext::Head, r))
-            }
+            VarAlloc::Temp {
+                temp_var_data,
+                term_loc: GenContext::Head,
+                ..
+            } => temp_var_data.use_set.contains(&(GenContext::Head, r)),
             _ => false,
         }
     }
@@ -325,12 +351,14 @@ impl DebrayAllocator {
 
                 match &self.var_data.records[t_var].allocation {
                     VarAlloc::Temp { temp_var_data, .. } => {
-                        if !temp_var_data.use_set.contains(&(GenContext::Last(chunk_num), k)) {
+                        if !temp_var_data
+                            .use_set
+                            .contains(&(GenContext::Last(chunk_num), k))
+                        {
                             return Some((t_var, self.alloc_with_ca(t_var)));
                         }
                     }
-                    _ => {
-                    }
+                    _ => {}
                 }
 
                 None
@@ -356,7 +384,9 @@ impl DebrayAllocator {
                     self.shallow_temp_mappings.swap_remove(&k);
                     self.shallow_temp_mappings.insert(r.reg_num(), var_num);
 
-                    self.var_data.records[var_num].allocation.set_register(r.reg_num());
+                    self.var_data.records[var_num]
+                        .allocation
+                        .set_register(r.reg_num());
                     self.in_use.insert(r.reg_num());
                 }
             }
@@ -417,12 +447,9 @@ impl DebrayAllocator {
     fn in_place(&self, var_num: usize, term_loc: GenContext, r: RegType, k: usize) -> bool {
         match term_loc {
             GenContext::Head if !r.is_perm() => r.reg_num() == k,
-            _ => {
-                match &self.var_data.records[var_num].allocation {
-                    &VarAlloc::Temp { temp_reg, .. } if r.reg_num() == k =>
-                        temp_reg == k,
-                    _ => false,
-                }
+            _ => match &self.var_data.records[var_num].allocation {
+                &VarAlloc::Temp { temp_reg, .. } if r.reg_num() == k => temp_reg == k,
+                _ => false,
             },
         }
     }
@@ -483,8 +510,7 @@ impl DebrayAllocator {
                     VarAlloc::Perm(p, PermVarAllocation::Pending) if *p > 0 => {
                         return Some(std::mem::replace(p, 0));
                     }
-                    _ => {
-                    }
+                    _ => {}
                 }
             } else {
                 return None;
@@ -500,8 +526,7 @@ impl DebrayAllocator {
                 *allocation = PermVarAllocation::Pending;
                 self.add_perm_to_free_list(chunk_num, var_num);
             }
-            _ => {
-            }
+            _ => {}
         }
     }
 
@@ -509,7 +534,14 @@ impl DebrayAllocator {
         let branch_designator = self.branch_stack.current_branch_designator();
 
         match &mut self.var_data.records[var_num].allocation {
-            VarAlloc::Perm(_, PermVarAllocation::Done { deep_safety, shallow_safety, .. }) => {
+            VarAlloc::Perm(
+                _,
+                PermVarAllocation::Done {
+                    deep_safety,
+                    shallow_safety,
+                    ..
+                },
+            ) => {
                 *deep_safety = VarSafetyStatus::unneeded(branch_designator);
                 *shallow_safety = VarSafetyStatus::unneeded(branch_designator);
             }
@@ -524,7 +556,14 @@ impl DebrayAllocator {
         let branch_designator = self.branch_stack.current_branch_designator();
 
         match &mut self.var_data.records[var_num].allocation {
-            VarAlloc::Perm(_, PermVarAllocation::Done { deep_safety, shallow_safety, .. }) => {
+            VarAlloc::Perm(
+                _,
+                PermVarAllocation::Done {
+                    deep_safety,
+                    shallow_safety,
+                    ..
+                },
+            ) => {
                 // GetVariable in head chunk is considered safe.
                 if lvl == Level::Deep {
                     *deep_safety = VarSafetyStatus::unneeded(branch_designator);
@@ -532,12 +571,16 @@ impl DebrayAllocator {
                 } else if term_loc == GenContext::Head {
                     *shallow_safety = VarSafetyStatus::GloballyUnneeded;
                 } else {
-                    if let Some(temp_var_num) = self.shallow_temp_mappings.get(&self.arg_c).cloned() {
+                    if let Some(temp_var_num) = self.shallow_temp_mappings.get(&self.arg_c).cloned()
+                    {
                         match &mut self.var_data.records[temp_var_num].allocation {
-                            VarAlloc::Temp { ref mut to_perm_var_num, .. } => {
+                            VarAlloc::Temp {
+                                ref mut to_perm_var_num,
+                                ..
+                            } => {
                                 *to_perm_var_num = Some(var_num);
                             }
-                            _ => unreachable!()
+                            _ => unreachable!(),
                         }
                     }
                 }
@@ -560,8 +603,18 @@ impl DebrayAllocator {
         let branch_designator = self.branch_stack.current_branch_designator();
 
         match &mut self.var_data.records[var_num].allocation {
-            VarAlloc::Perm(_, PermVarAllocation::Done { ref mut shallow_safety, .. }) => {
-                if !self.in_tail_position || self.branch_stack.safety_unneeded_in_branch(shallow_safety, &branch_designator) {
+            VarAlloc::Perm(
+                _,
+                PermVarAllocation::Done {
+                    ref mut shallow_safety,
+                    ..
+                },
+            ) => {
+                if !self.in_tail_position
+                    || self
+                        .branch_stack
+                        .safety_unneeded_in_branch(shallow_safety, &branch_designator)
+                {
                     Target::argument_to_value(r, arg_c)
                 } else {
                     *shallow_safety = VarSafetyStatus::unneeded(branch_designator);
@@ -569,7 +622,10 @@ impl DebrayAllocator {
                 }
             }
             VarAlloc::Temp { ref mut safety, .. } => {
-                if self.branch_stack.safety_unneeded_in_branch(safety, &branch_designator) {
+                if self
+                    .branch_stack
+                    .safety_unneeded_in_branch(safety, &branch_designator)
+                {
                     Target::argument_to_value(r, arg_c)
                 } else {
                     *safety = VarSafetyStatus::GloballyUnneeded;
@@ -590,8 +646,17 @@ impl DebrayAllocator {
         let branch_designator = self.branch_stack.current_branch_designator();
 
         match &mut self.var_data.records[var_num].allocation {
-            VarAlloc::Perm(_, PermVarAllocation::Done { ref mut deep_safety, .. }) => {
-                if self.branch_stack.safety_unneeded_in_branch(deep_safety, &branch_designator) {
+            VarAlloc::Perm(
+                _,
+                PermVarAllocation::Done {
+                    ref mut deep_safety,
+                    ..
+                },
+            ) => {
+                if self
+                    .branch_stack
+                    .safety_unneeded_in_branch(deep_safety, &branch_designator)
+                {
                     Target::subterm_to_value(r)
                 } else {
                     *deep_safety = VarSafetyStatus::unneeded(branch_designator);
@@ -599,7 +664,10 @@ impl DebrayAllocator {
                 }
             }
             VarAlloc::Temp { ref mut safety, .. } => {
-                if self.branch_stack.safety_unneeded_in_branch(safety, &branch_designator) {
+                if self
+                    .branch_stack
+                    .safety_unneeded_in_branch(safety, &branch_designator)
+                {
                     Target::subterm_to_value(r)
                 } else {
                     *safety = VarSafetyStatus::unneeded(branch_designator);
@@ -626,7 +694,7 @@ impl Allocator for DebrayAllocator {
             in_use: BitSet::default(),
             temp_free_list: vec![],
             perm_free_list: VecDeque::new(),
-            branch_stack: BranchStack { stack: vec![] }
+            branch_stack: BranchStack { stack: vec![] },
         }
     }
 
@@ -705,12 +773,14 @@ impl Allocator for DebrayAllocator {
             }
             r @ RegType::Perm(_) => {
                 let is_new_var = match &mut self.var_data.records[var_num].allocation {
-                    VarAlloc::Perm(_, allocation) => if allocation.pending() {
-                        *allocation = PermVarAllocation::done();
-                        true
-                    } else {
-                        false
-                    },
+                    VarAlloc::Perm(_, allocation) => {
+                        if allocation.pending() {
+                            *allocation = PermVarAllocation::done();
+                            true
+                        } else {
+                            false
+                        }
+                    }
                     _ => unreachable!(),
                 };
 
@@ -828,7 +898,9 @@ impl Allocator for DebrayAllocator {
                 if !r.is_perm() && r.reg_num() == 0 {
                     self.in_use.insert(idx + 1);
                     self.shallow_temp_mappings.insert(idx + 1, var_num);
-                    self.var_data.records[var_num].allocation.set_register(idx + 1);
+                    self.var_data.records[var_num]
+                        .allocation
+                        .set_register(idx + 1);
                 }
             }
         }

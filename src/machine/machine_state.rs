@@ -3,7 +3,6 @@ use crate::atom_table::*;
 use crate::forms::*;
 use crate::heap_iter::*;
 use crate::heap_print::*;
-use crate::machine::Machine;
 use crate::machine::attributed_variables::*;
 use crate::machine::copier::*;
 use crate::machine::heap::*;
@@ -11,6 +10,7 @@ use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
 use crate::machine::stack::*;
 use crate::machine::streams::*;
+use crate::machine::Machine;
 use crate::parser::ast::*;
 use crate::read::TermWriteResult;
 use crate::types::*;
@@ -64,7 +64,7 @@ pub struct MachineState {
     pub(super) s_offset: usize,
     pub(super) p: usize,
     pub(super) oip: u32, // first internal code ptr
-    pub(super) iip : u32, // second internal code ptr
+    pub(super) iip: u32, // second internal code ptr
     pub(super) b: usize,
     pub(super) b0: usize,
     pub(super) e: usize,
@@ -79,7 +79,7 @@ pub struct MachineState {
     pub(super) trail: Vec<TrailEntry>,
     pub(super) tr: usize,
     pub(super) hb: usize,
-    pub(super) block: usize, // an offset into the OR stack.
+    pub(super) block: usize,     // an offset into the OR stack.
     pub(super) scc_block: usize, // an offset into the OR stack for setup_call_cleanup/3.
     pub(super) ball: Ball,
     pub(super) ball_stack: Vec<Ball>, // save current ball before jumping via, e.g., verify_attr interrupt.
@@ -243,9 +243,11 @@ impl Ball {
     pub(super) fn copy_and_align(&self, h: usize) -> Heap {
         let diff = self.boundary as i64 - h as i64;
 
-        self.stub.iter().cloned().map(|heap_value| {
-            heap_value - diff
-        }).collect()
+        self.stub
+            .iter()
+            .cloned()
+            .map(|heap_value| heap_value - diff)
+            .collect()
     }
 }
 
@@ -418,9 +420,7 @@ impl MachineState {
             if self.cwil.count == *limit {
                 self.cwil.inference_limit_exceeded = true;
 
-                return Err(
-                    functor!(atom!("inference_limit_exceeded"), [fixnum(bp)])
-                );
+                return Err(functor!(atom!("inference_limit_exceeded"), [fixnum(bp)]));
             } else {
                 self.cwil.count += 1;
             }
@@ -430,7 +430,10 @@ impl MachineState {
     }
 
     #[allow(dead_code)]
-    pub(super) fn try_char_list(&mut self, addrs: Vec<HeapCellValue>) -> Result<String, MachineError> {
+    pub(super) fn try_char_list(
+        &mut self,
+        addrs: Vec<HeapCellValue>,
+    ) -> Result<String, MachineError> {
         let mut chars = String::new();
 
         for addr in addrs {
@@ -515,18 +518,25 @@ impl MachineState {
         mut var_list: Vec<(VarKey, HeapCellValue, usize)>,
         singleton_var_list: Vec<HeapCellValue>,
     ) -> CallResult {
-        var_list.sort_by(|(_,_,idx_1),(_,_,idx_2)| idx_1.cmp(idx_2));
+        var_list.sort_by(|(_, _, idx_1), (_, _, idx_2)| idx_1.cmp(idx_2));
 
         let list_of_var_eqs = push_var_eq_functors(
             &mut self.heap,
-            var_list.iter().filter_map(|(var_name, var,_)| if var_name.is_anon() { None } else { Some((var_name,var)) }),
+            var_list.iter().filter_map(|(var_name, var, _)| {
+                if var_name.is_anon() {
+                    None
+                } else {
+                    Some((var_name, var))
+                }
+            }),
             &mut self.atom_tbl,
         );
 
         let singleton_addr = self.registers[3];
-        let singletons_offset = heap_loc_as_cell!(
-            iter_to_heap_list(&mut self.heap, singleton_var_list.into_iter())
-        );
+        let singletons_offset = heap_loc_as_cell!(iter_to_heap_list(
+            &mut self.heap,
+            singleton_var_list.into_iter()
+        ));
 
         unify_fn!(*self, singletons_offset, singleton_addr);
 
@@ -535,9 +545,10 @@ impl MachineState {
         }
 
         let vars_addr = self.registers[4];
-        let vars_offset = heap_loc_as_cell!(
-            iter_to_heap_list(&mut self.heap, var_list.into_iter().map(|(_,cell,_)| cell))
-        );
+        let vars_offset = heap_loc_as_cell!(iter_to_heap_list(
+            &mut self.heap,
+            var_list.into_iter().map(|(_, cell, _)| cell)
+        ));
 
         unify_fn!(*self, vars_offset, vars_addr);
 
@@ -546,9 +557,10 @@ impl MachineState {
         }
 
         let var_names_addr = self.registers[5];
-        let var_names_offset = heap_loc_as_cell!(
-            iter_to_heap_list(&mut self.heap, list_of_var_eqs.into_iter())
-        );
+        let var_names_offset = heap_loc_as_cell!(iter_to_heap_list(
+            &mut self.heap,
+            list_of_var_eqs.into_iter()
+        ));
 
         Ok(unify_fn!(*self, var_names_offset, var_names_addr))
     }
@@ -589,17 +601,20 @@ impl MachineState {
 
         let singleton_var_list = push_var_eq_functors(
             &mut self.heap,
-            term_write_result.var_dict.iter().filter(|(var_name, binding)| {
-                if var_name.is_anon() {
-                    return false;
-                }
+            term_write_result
+                .var_dict
+                .iter()
+                .filter(|(var_name, binding)| {
+                    if var_name.is_anon() {
+                        return false;
+                    }
 
-                if let Some(r) = binding.as_var() {
-                    *singleton_var_set.get(&r).unwrap_or(&false)
-                } else {
-                    false
-                }
-            }),
+                    if let Some(r) = binding.as_var() {
+                        *singleton_var_set.get(&r).unwrap_or(&false)
+                    } else {
+                        false
+                    }
+                }),
             &mut self.atom_tbl,
         );
 
@@ -620,13 +635,11 @@ impl MachineState {
         self.write_read_term_options(var_list, singleton_var_list)
     }
 
-    pub fn read_term_from_user_input_eof_handler(&mut self, stream: Stream) -> Result<OnEOF, MachineStub> {
-        self.eof_action(
-            self.registers[2],
-            stream,
-            atom!("read_term"),
-            3,
-        )?;
+    pub fn read_term_from_user_input_eof_handler(
+        &mut self,
+        stream: Stream,
+    ) -> Result<OnEOF, MachineStub> {
+        self.eof_action(self.registers[2], stream, atom!("read_term"), 3)?;
 
         if stream.options().eof_action() == EOFAction::Reset {
             if self.fail == false {
@@ -639,7 +652,11 @@ impl MachineState {
 
     // Safety: the atom_tbl lives for the lifetime of the machine, as does the helper, so the ptr
     // will always be valid.
-    pub fn read_term_from_user_input(&mut self, stream: Stream, indices: &mut IndexStore) -> CallResult {
+    pub fn read_term_from_user_input(
+        &mut self,
+        stream: Stream,
+        indices: &mut IndexStore,
+    ) -> CallResult {
         let atoms_ptr = (&self.atom_tbl.table) as *const indexmap::IndexSet<Atom>;
 
         if let Stream::Readline(ptr) = stream {
@@ -663,12 +680,7 @@ impl MachineState {
             stream.set_past_end_of_stream(true);
             return Ok(OnEOF::Return);
         } else if stream.past_end_of_stream() {
-            self.eof_action(
-                self.registers[2],
-                stream,
-                atom!("read_term"),
-                3,
-            )?;
+            self.eof_action(self.registers[2], stream, atom!("read_term"), 3)?;
 
             if stream.options().eof_action() == EOFAction::Reset {
                 if self.fail == false {
@@ -709,7 +721,9 @@ impl MachineState {
                     match &err {
                         CompilationError::ParserError(e) if e.is_unexpected_eof() => {
                             match eof_handler(self, stream)? {
-                                OnEOF::Return => return self.write_read_term_options(vec![], vec![]),
+                                OnEOF::Return => {
+                                    return self.write_read_term_options(vec![], vec![])
+                                }
                                 OnEOF::Continue => continue,
                             }
                         }
@@ -896,7 +910,11 @@ impl MachineState {
         Ok(Some(printer))
     }
 
-    pub(super) fn read_predicate_key(&self, name: HeapCellValue, arity: HeapCellValue) -> (Atom, usize) {
+    pub(super) fn read_predicate_key(
+        &self,
+        name: HeapCellValue,
+        arity: HeapCellValue,
+    ) -> (Atom, usize) {
         let name = cell_as_atom!(self.store(self.deref(name)));
         let arity = cell_as_fixnum!(self.store(self.deref(arity)));
 
