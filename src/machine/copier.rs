@@ -187,8 +187,8 @@ impl<T: CopierTarget> CopyTermState<T> {
     fn copy_attr_var_list(&mut self, mut list_addr: HeapCellValue) {
         while let HeapCellValueTag::Lis = list_addr.get_tag() {
             let threshold = self.target.threshold();
-            let heap_loc = list_addr.get_value();
-            let str_loc  = self.target[heap_loc].get_value();
+            let heap_loc = list_addr.get_value() as usize;
+            let str_loc  = self.target[heap_loc].get_value() as usize;
 
             self.target.push(heap_loc_as_cell!(threshold+2));
             self.target.push(heap_loc_as_cell!(threshold+1));

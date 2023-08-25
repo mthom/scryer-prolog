@@ -73,9 +73,9 @@ macro_rules! cell_as_string {
 macro_rules! cell_as_atom {
     ($cell:expr) => {{
         let cell = AtomCell::from_bytes($cell.into_bytes());
-        let name = cell.get_index() << 3;
+        let name = (cell.get_index() as u64) << 3;
 
-        Atom::from(name as usize)
+        Atom::from(name)
     }};
 }
 
@@ -87,14 +87,14 @@ macro_rules! cell_as_atom_cell {
 
 macro_rules! cell_as_f64_ptr {
     ($cell:expr) => {{
-        let offset = $cell.get_value();
+        let offset = $cell.get_value() as usize;
         F64Ptr::from_offset(offset)
     }};
 }
 
 macro_rules! cell_as_untyped_arena_ptr {
     ($cell:expr) => {
-        UntypedArenaPtr::from(u64::from($cell) as *const ArenaHeader)
+        UntypedArenaPtr::from_bytes($cell.to_untyped_arena_ptr_bytes())
     };
 }
 
@@ -173,7 +173,14 @@ macro_rules! attr_var_loc_as_cell {
 
 macro_rules! typed_arena_ptr_as_cell {
     ($ptr:expr) => {
-        untyped_arena_ptr_as_cell!($ptr.header_ptr())
+        raw_ptr_as_cell!($ptr.header_ptr())
+    };
+}
+
+macro_rules! raw_ptr_as_cell {
+    ($ptr:expr) => {
+        // Cell is 64-bit, but raw ptr is 32-bit in 32-bit systems
+        HeapCellValue::from_raw_ptr_bytes(unsafe { std::mem::transmute($ptr) })
     };
 }
 
@@ -217,7 +224,7 @@ macro_rules! string_as_pstr_cell {
 
 macro_rules! stream_as_cell {
     ($ptr:expr) => {
-        untyped_arena_ptr_as_cell!($ptr.as_ptr())
+        raw_ptr_as_cell!($ptr.as_ptr())
     };
 }
 
@@ -250,13 +257,15 @@ macro_rules! match_untyped_arena_ptr_pat_body {
         #[allow(unused_braces)]
         $code
     }};
-    ($cell:ident, OssifiedOpDir, $n:ident, $code:expr) => {{
-        let $n = cell_as_ossified_op_dir!($cell);
+    ($ptr:ident, OssifiedOpDir, $n:ident, $code:expr) => {{
+        let payload_ptr = unsafe { std::mem::transmute::<_, *mut OssifiedOpDir>($ptr.payload_offset()) };
+        let $n = TypedArenaPtr::new(payload_ptr);
         #[allow(unused_braces)]
         $code
     }};
-    ($cell:ident, LiveLoadState, $n:ident, $code:expr) => {{
-        let $n = cell_as_load_state_payload!($cell);
+    ($ptr:ident, LiveLoadState, $n:ident, $code:expr) => {{
+        let payload_ptr = unsafe { std::mem::transmute::<_, *mut LiveLoadState>($ptr.payload_offset()) };
+        let $n = TypedArenaPtr::new(payload_ptr);
         #[allow(unused_braces)]
         $code
     }};

@@ -169,8 +169,8 @@ impl Atom {
     }
 
     #[inline(always)]
-    pub fn from(index: usize) -> Self {
-        Self { index: index as u64 }
+    pub fn from(index: u64) -> Self {
+        Self { index }
     }
 
     #[inline(always)]
@@ -386,7 +386,7 @@ impl AtomCell {
 
     #[inline]
     pub fn get_name(self) -> Atom {
-        Atom::from(self.get_index() << 3)
+        Atom::from((self.get_index() as u64) << 3)
     }
 
     #[inline]
@@ -396,6 +396,6 @@ impl AtomCell {
 
     #[inline]
     pub fn get_name_and_arity(self) -> (Atom, usize) {
-        (Atom::from(self.get_index() << 3), self.get_arity())
+        (Atom::from((self.get_index() as u64) << 3), self.get_arity())
     }
 }

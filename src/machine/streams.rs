@@ -372,7 +372,7 @@ impl StreamOptions {
     #[inline]
     pub fn get_alias(self) -> Option<Atom> {
         if self.has_alias() {
-            Some(Atom::from((self.alias() << 3) as usize))
+            Some(Atom::from((self.alias() as u64) << 3))
         } else {
             None
         }
