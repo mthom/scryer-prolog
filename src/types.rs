@@ -680,7 +680,7 @@ const_assert!(mem::size_of::<HeapCellValue>() == 8);
 #[repr(u64)]
 #[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
 pub struct UntypedArenaPtr {
-    ptr: B61,
+    #[allow(unused)] ptr: B61,
     m: bool,
     #[allow(unused)] padding: B2,
 }
