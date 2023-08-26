@@ -60,7 +60,7 @@ use std::process;
 use std::str::FromStr;
 
 use chrono::{offset::Local, DateTime};
-#[cfg(not(target_os = "wasi"))]
+#[cfg(not(target_arch = "wasm32"))]
 use cpu_time::ProcessTime;
 use std::time::{Duration, SystemTime};
 
@@ -4193,7 +4193,7 @@ impl Machine {
         self.machine_st.fail = result;
     }
 
-    #[cfg(not(target_os = "wasi"))]
+    #[cfg(not(target_arch = "wasm32"))]
     #[inline(always)]
     pub(crate) fn cpu_now(&mut self) {
         let secs = ProcessTime::now().as_duration().as_secs_f64();
@@ -4202,7 +4202,7 @@ impl Machine {
         self.machine_st.unify_f64(secs, self.machine_st.registers[1]);
     }
 
-    #[cfg(target_os = "wasi")]
+    #[cfg(target_arch = "wasm32")]
     #[inline(always)]
     pub(crate) fn cpu_now(&mut self) {
         // TODO

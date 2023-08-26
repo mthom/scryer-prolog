@@ -12,8 +12,12 @@ categories = ["command-line-utilities"]
 build = "build/main.rs"
 rust-version = "1.63"
 
+[lib]
+crate-type = ["cdylib", "rlib"]
+
 [features]
-default = ["ffi", "repl", "hostname", "tls", "http"]
+#default = ["ffi", "repl", "hostname", "tls", "http"]
+default = []
 ffi = ["dep:libffi"]
 repl = ["dep:crossterm", "dep:ctrlc", "dep:rustyline"]
 hostname = ["dep:hostname"]
@@ -79,7 +83,19 @@ tokio = { version = "1.28.2", features = ["full"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 getrandom = { version = "0.2.10", features = ["js"] }
-tokio = { version = "1.28.2", features = ["sync", "macros", "io-util", "rt", "time"] }
+tokio = { version = "1.28.2", features = ["sync", "macros", "io-util", "rt"] }
+
+[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
+console_error_panic_hook = "0.1"
+console_log = "1.0"
+wasm-bindgen = "0.2.87"
+wasm-bindgen-futures = "0.4"
+serde-wasm-bindgen = "0.5"
+web-sys = { version = "0.3", features = [
+    "Document",
+    "Window",
+    "Element",
+]}
 
 [target.'cfg(target_os = "wasi")'.dependencies]
 ring-wasi = { version = "0.16.25" }
@@ -97,3 +113,9 @@ modular-bitfield = { git = "https://github.com/mthom/modular-bitfield" }
 
 [profile.release]
 debug = true
+
+[profile.dev]
+#opt-level = 1
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false
