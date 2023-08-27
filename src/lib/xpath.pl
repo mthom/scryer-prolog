@@ -95,7 +95,8 @@
             op(200, fy, @)
           ]).
 
-:- use_module(library(lists),[member/2,memberchk/2]).
+:- use_module(library(lists),[member/2,memberchk/2,reverse/2]).
+:- use_module(library(charsio)).
 :- use_module(library(error)).
 :- use_module(library(dcgs)).
 :- use_module(library(si)).
@@ -636,5 +637,16 @@ text_of_1([C|Cs]) --> seq([C|Cs]).
 xsd_number_chars(Number, Chars) :-
         number_chars(Number, Chars).
 
-normalize_space(Text0, Text) :-
-        Text0 = Text.           % no conversion for the moment.
+normalize_space(Cs0, Cs) :-
+        must_be(chars, Cs0),
+        no_leading_whitespace(Cs0, Cs1),
+        reverse(Cs1, Cs2),
+        no_leading_whitespace(Cs2, Cs3),
+        reverse(Cs3, Cs).
+
+no_leading_whitespace([], []).
+no_leading_whitespace([C0|Cs0], Cs) :-
+        (   char_type(C0, whitespace) ->
+            no_leading_whitespace(Cs0, Cs)
+        ;   Cs = [C0|Cs0]
+        ).
