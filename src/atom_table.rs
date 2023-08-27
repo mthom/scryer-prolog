@@ -388,6 +388,8 @@ impl AtomTable {
 
     pub fn build_with(atom_table: &RwLock<AtomTable>, string: &str) -> Atom {
         let mut atom_table = loop {
+            // we can't just use blocking_write as tokio's RwLock is fair
+            // and we can't block readers here as otherwise we will deadlock, see the guard downgrade below
             if let Ok(guard) = atom_table.try_write() {
                 break guard;
             }
