@@ -642,11 +642,22 @@ normalize_space(Cs0, Cs) :-
         no_leading_whitespace(Cs0, Cs1),
         reverse(Cs1, Cs2),
         no_leading_whitespace(Cs2, Cs3),
-        reverse(Cs3, Cs).
+        reverse(Cs3, Cs4),
+        single_intermediate_space(Cs4, Cs).
 
 no_leading_whitespace([], []).
 no_leading_whitespace([C0|Cs0], Cs) :-
         (   char_type(C0, whitespace) ->
             no_leading_whitespace(Cs0, Cs)
         ;   Cs = [C0|Cs0]
+        ).
+
+single_intermediate_space([], []).
+single_intermediate_space([C0|Cs0], [C|Cs]) :-
+        (   char_type(C0, whitespace) ->
+            no_leading_whitespace(Cs0, Cs1),
+            C = ' ',
+            single_intermediate_space(Cs1, Cs)
+        ;   C = C0,
+            single_intermediate_space(Cs0, Cs)
         ).
