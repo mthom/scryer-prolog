@@ -71,7 +71,6 @@ impl Completer for Helper {
             let sub_str = line.get(idx..pos).unwrap();
 
             let atom_table = self.atoms.upgrade().unwrap();
-            println!("locking atom table to load completions");
             let guard = atom_table.blocking_read();
 
             let mut matching = guard
