@@ -7846,7 +7846,9 @@ impl Machine {
 
         use crate::machine::LIBRARIES;
 
-        match LIBRARIES.borrow().get(&*library_name.as_str()) {
+        let lib_ref = LIBRARIES.borrow();
+        let lib = lib_ref.get(&*library_name.as_str());
+        match lib {
             Some(library) => {
                 let lib_stream = Stream::from_static_string(library, &mut self.machine_st.arena);
                 unify!(
