@@ -60,7 +60,7 @@ fn global_atom_table() -> &'static RwLock<Weak<RwLock<AtomTable>>> {
     {
         // const Weak::new will be stabilized in 1.73 which is currently in beta,
         // till then we need a OnceLock for initialization
-        static GLOBAL_ATOM_TABLE: RwLock<Weak<RwLock<AtomTable>>> = RwLock::new(Weak::new());
+        static GLOBAL_ATOM_TABLE: RwLock<Weak<RwLock<AtomTable>>> = RwLock::const_new(Weak::new());
         &GLOBAL_ATOM_TABLE
     }
     #[cfg(not(feature = "rust_beta_channel"))]
