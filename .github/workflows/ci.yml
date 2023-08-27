@@ -20,7 +20,7 @@ jobs:
           - { os: macos-11,       rust-version: stable,  shell: bash, target: 'x86_64-apple-darwin' }
           - { os: ubuntu-20.04,   rust-version: stable,  shell: bash, extra: true, target: 'x86_64-unknown-linux-gnu' }
           - { os: ubuntu-20.04,   rust-version: stable,  shell: bash, target: 'i686-unknown-linux-gnu' }
-          - { os: ubuntu-20.04,   rust-version: 1.65,    shell: bash, target: 'x86_64-unknown-linux-gnu'}
+          - { os: ubuntu-20.04,   rust-version: "1.70",    shell: bash, target: 'x86_64-unknown-linux-gnu'}
           - { os: ubuntu-20.04,   rust-version: beta,    shell: bash, target: 'x86_64-unknown-linux-gnu'}
           - { os: ubuntu-20.04,   rust-version: nightly, shell: bash, target: 'x86_64-unknown-linux-gnu'}
     defaults:
