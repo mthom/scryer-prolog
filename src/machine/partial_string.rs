@@ -1,5 +1,3 @@
-use tokio::sync::RwLock;
-
 use crate::atom_table::*;
 use crate::parser::ast::*;
 
@@ -45,7 +43,7 @@ impl Into<Atom> for PartialString {
 
 impl PartialString {
     #[inline]
-    pub(super) fn new<'a>(src: &'a str, atom_tbl: &RwLock<AtomTable>) -> Option<(Self, &'a str)> {
+    pub(super) fn new<'a>(src: &'a str, atom_tbl: &AtomTable) -> Option<(Self, &'a str)> {
         let terminator_idx = scan_for_terminator(src.chars());
         let pstr = PartialString(AtomTable::build_with(&atom_tbl, &src[..terminator_idx]));
         Some(if terminator_idx < src.as_bytes().len() {

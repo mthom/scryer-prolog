@@ -30,12 +30,6 @@ pub struct Stack {
     _marker: PhantomData<HeapCellValue>,
 }
 
-impl Drop for Stack {
-    fn drop(&mut self) {
-        self.buf.deallocate();
-    }
-}
-
 #[derive(Debug)]
 pub(crate) struct AndFramePrelude {
     pub(crate) num_cells: usize,
@@ -189,7 +183,7 @@ impl Stack {
         let frame_size = AndFrame::size_of(num_cells);
 
         unsafe {
-            let e = self.buf.ptr as usize - self.buf.base as usize;
+            let e = (*self.buf.ptr.get_mut()) as usize - self.buf.base as usize;
             let new_ptr = self.alloc(frame_size);
             let mut offset = prelude_size::<AndFramePrelude>();
 
@@ -213,7 +207,7 @@ impl Stack {
         let frame_size = OrFrame::size_of(num_cells);
 
         unsafe {
-            let b = self.buf.ptr as usize - self.buf.base as usize;
+            let b = (*self.buf.ptr.get_mut()) as usize - self.buf.base as usize;
             let new_ptr = self.alloc(frame_size);
             let mut offset = prelude_size::<OrFramePrelude>();
 
@@ -269,8 +263,8 @@ impl Stack {
     pub(crate) fn truncate(&mut self, b: usize) {
         let base = self.buf.base as usize + b;
 
-        if base < self.buf.ptr as usize {
-            self.buf.ptr = base as *mut _;
+        if base < (*self.buf.ptr.get_mut()) as usize {
+            *self.buf.ptr.get_mut() = base as *mut _;
         }
     }
 }

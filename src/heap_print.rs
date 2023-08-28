@@ -24,8 +24,6 @@ use ordered_float::OrderedFloat;
 
 use indexmap::IndexMap;
 
-use tokio::sync::RwLock;
-
 use std::cell::Cell;
 use std::convert::TryFrom;
 use std::iter::once;
@@ -483,7 +481,7 @@ pub fn fmt_float(mut fl: f64) -> String {
 pub struct HCPrinter<'a, Outputter> {
     outputter: Outputter,
     iter: StackfulPreOrderHeapIter<'a>,
-    atom_tbl: Arc<RwLock<AtomTable>>,
+    atom_tbl: Arc<AtomTable>,
     op_dir: &'a OpDir,
     state_stack: Vec<TokenOrRedirect>,
     toplevel_spec: Option<DirectedOp>,
@@ -552,7 +550,7 @@ pub(crate) fn numbervar(offset: &Integer, addr: HeapCellValue) -> Option<String>
 impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
     pub fn new(
         heap: &'a mut Heap,
-        atom_tbl: Arc<RwLock<AtomTable>>,
+        atom_tbl: Arc<AtomTable>,
         stack: &'a mut Stack,
         op_dir: &'a OpDir,
         output: Outputter,

@@ -7,16 +7,16 @@ use std::hash::{Hash, Hasher};
 use std::mem;
 use std::ops::Deref;
 use std::ptr;
+use std::ptr::NonNull;
 use std::slice;
 use std::str;
 use std::sync::Arc;
+use std::sync::Mutex;
 use std::sync::Weak;
 
 use indexmap::IndexSet;
 
 use modular_bitfield::prelude::*;
-use tokio::runtime::Handle;
-use tokio::sync::OwnedRwLockReadGuard;
 use tokio::sync::RwLock;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
@@ -46,45 +46,35 @@ impl From<bool> for Atom {
     }
 }
 
-impl indexmap::Equivalent<Atom> for LookupKey<'_, '_> {
+impl indexmap::Equivalent<Atom> for str {
     fn equivalent(&self, key: &Atom) -> bool {
-        &*key.as_str_with_table(self.0) == self.1
+        &*key.as_str() == self
     }
 }
 
 const ATOM_TABLE_INIT_SIZE: usize = 1 << 16;
 const ATOM_TABLE_ALIGN: usize = 8;
 
-fn global_atom_table() -> &'static RwLock<Weak<RwLock<AtomTable>>> {
+#[inline(always)]
+fn global_atom_table() -> &'static RwLock<Weak<AtomTable>> {
     #[cfg(feature = "rust_beta_channel")]
     {
         // const Weak::new will be stabilized in 1.73 which is currently in beta,
         // till then we need a OnceLock for initialization
-        static GLOBAL_ATOM_TABLE: RwLock<Weak<RwLock<AtomTable>>> = RwLock::const_new(Weak::new());
+        static GLOBAL_ATOM_TABLE: RwLock<Weak<AtomTable>> = RwLock::const_new(Weak::new());
         &GLOBAL_ATOM_TABLE
     }
     #[cfg(not(feature = "rust_beta_channel"))]
     {
         use std::sync::OnceLock;
-        static GLOBAL_ATOM_TABLE: OnceLock<RwLock<Weak<RwLock<AtomTable>>>> = OnceLock::new();
+        static GLOBAL_ATOM_TABLE: OnceLock<RwLock<Weak<AtomTable>>> = OnceLock::new();
         GLOBAL_ATOM_TABLE.get_or_init(|| RwLock::new(Weak::new()))
     }
 }
 
-fn owned_atom_table_read_guard() -> Option<OwnedRwLockReadGuard<AtomTable>> {
-    let atom_table = global_atom_table().blocking_read().upgrade()?;
-
-    let guard = {
-        // some test don't start a Runtime
-        if let Ok(handle) = Handle::try_current() {
-            handle.block_on(atom_table.read_owned())
-        } else {
-            tokio::runtime::Runtime::new()
-                .unwrap()
-                .block_on(atom_table.read_owned())
-        }
-    };
-    Some(guard)
+#[inline(always)]
+fn arc_atom_table() -> Option<Arc<AtomTable>> {
+    global_atom_table().blocking_read().upgrade()
 }
 
 impl RawBlockTraits for AtomTable {
@@ -132,7 +122,7 @@ macro_rules! is_char {
 
 pub enum AtomString<'a> {
     Static(&'a str),
-    Dynamic(OwnedRwLockReadGuard<AtomTable, str>),
+    Dynamic(AtomTableRef<str>),
 }
 
 impl AtomString<'_> {
@@ -142,7 +132,7 @@ impl AtomString<'_> {
     {
         match self {
             Self::Static(reference) => Self::Static(f(reference)),
-            Self::Dynamic(guard) => Self::Dynamic(OwnedRwLockReadGuard::map(guard, f)),
+            Self::Dynamic(guard) => Self::Dynamic(AtomTableRef::map(guard, f)),
         }
     }
 }
@@ -180,48 +170,25 @@ impl rustyline::completion::Candidate for AtomString<'_> {
 }
 
 impl Atom {
-    #[inline]
-    pub fn buf(self) -> Option<OwnedRwLockReadGuard<AtomTable, u8>> {
-        if let Some(guard) = self.as_ptr() {
-            Some(OwnedRwLockReadGuard::map(guard, |ptr| unsafe {
-                (ptr as *const u8)
-                    .offset(mem::size_of::<AtomHeader>() as isize)
-                    .as_ref()
-                    .unwrap()
-            }))
-        } else {
-            None
-        }
-    }
-
     #[inline(always)]
     pub fn is_static(self) -> bool {
         (self.index as usize) < STRINGS.len() << 3
     }
 
     #[inline(always)]
-    pub fn as_ptr_with_table<'at>(&self, atom_table: &'at AtomTable) -> Option<&'at u8> {
+    pub fn as_ptr(self) -> Option<AtomTableRef<u8>> {
         if self.is_static() {
             None
         } else {
+            let atom_table =
+                arc_atom_table().expect("We should only have an Atom while there is an AtomTable");
             unsafe {
-                atom_table
-                    .buf()
-                    .offset(((self.index as usize) - (STRINGS.len() << 3)) as isize)
-                    .as_ref()
+                AtomTableRef::try_map(atom_table.buf(), |buf| {
+                    (buf as *const u8)
+                        .offset(((self.index as usize) - (STRINGS.len() << 3)) as isize)
+                        .as_ref()
+                })
             }
-        }
-    }
-
-    #[inline(always)]
-    pub fn as_ptr(self) -> Option<OwnedRwLockReadGuard<AtomTable, u8>> {
-        if self.is_static() {
-            None
-        } else {
-            let guard = owned_atom_table_read_guard()
-                .expect("We should only have an Atom while there is an AtomTable");
-            OwnedRwLockReadGuard::try_map(guard, |atom_table| self.as_ptr_with_table(atom_table))
-                .ok()
         }
     }
 
@@ -260,35 +227,29 @@ impl Atom {
         }
     }
 
-    #[inline(always)]
-    pub fn as_str_with_table<'at>(&self, atom_table: &'at AtomTable) -> &'at str {
-        if let Some(ptr) = self.as_ptr_with_table(atom_table) {
-            let header = unsafe { ptr::read::<AtomHeader>(ptr as *const u8 as *const AtomHeader) };
-            let len = header.len() as usize;
-            let buf = (unsafe { (ptr as *const u8).offset(mem::size_of::<AtomHeader>() as isize) })
-                as *mut u8;
-
-            unsafe { str::from_utf8_unchecked(slice::from_raw_parts(buf, len)) }
-        } else {
-            &STRINGS[(self.index >> 3) as usize]
-        }
-    }
-
-    #[track_caller]
     #[inline]
     pub fn as_str(&self) -> AtomString<'static> {
         if self.is_static() {
             AtomString::Static(STRINGS[(self.index >> 3) as usize])
         } else {
-            let guard = owned_atom_table_read_guard()
-                .expect("We should only have an Atom while there is an AtomTable");
-            AtomString::Dynamic(OwnedRwLockReadGuard::map(guard, |atom_table| {
-                self.as_str_with_table(atom_table)
-            }))
+            if let Some(ptr) = self.as_ptr() {
+                AtomString::Dynamic(AtomTableRef::map(ptr, |ptr| {
+                    let header =
+                        unsafe { ptr::read::<AtomHeader>(ptr as *const u8 as *const AtomHeader) };
+                    let len = header.len() as usize;
+                    let buf = (unsafe {
+                        (ptr as *const u8).offset(mem::size_of::<AtomHeader>() as isize)
+                    }) as *mut u8;
+
+                    unsafe { str::from_utf8_unchecked(slice::from_raw_parts(buf, len)) }
+                }))
+            } else {
+                AtomString::Static(&STRINGS[(self.index >> 3) as usize])
+            }
         }
     }
 
-    pub fn defrock_brackets(&self, atom_tbl: &Arc<RwLock<AtomTable>>) -> Self {
+    pub fn defrock_brackets(&self, atom_tbl: &AtomTable) -> Self {
         let s = self.as_str();
 
         let sub_str = if s.starts_with('(') && s.ends_with(')') {
@@ -297,9 +258,7 @@ impl Atom {
             return *self;
         };
 
-        let val = sub_str.to_string();
-        drop(s); // wee need to drop s as it holds a read lock on the AtomTable and build_with may need to acquire a write lock
-        AtomTable::build_with(&atom_tbl, &val)
+        AtomTable::build_with(&atom_tbl, &sub_str)
     }
 }
 
@@ -323,29 +282,80 @@ impl Ord for Atom {
     }
 }
 
+pub struct AtomTableRef<M>
+where
+    M: ?Sized,
+{
+    arc: Arc<InnerAtomTable>,
+    data: NonNull<M>,
+}
+
+impl<M> Clone for AtomTableRef<M> {
+    fn clone(&self) -> Self {
+        Self {
+            arc: Arc::clone(&self.arc),
+            data: self.data,
+        }
+    }
+}
+
+impl<M: ?Sized> AtomTableRef<M> {
+    pub fn map<N: ?Sized, F: for<'a> FnOnce(&'a M) -> &'a N>(
+        referece: Self,
+        f: F,
+    ) -> AtomTableRef<N> {
+        AtomTableRef {
+            arc: referece.arc,
+            data: f(unsafe { referece.data.as_ref() }).into(),
+        }
+    }
+
+    pub fn try_map<N, F: for<'a> FnOnce(&'a M) -> Option<&'a N>>(
+        referece: Self,
+        f: F,
+    ) -> Option<AtomTableRef<N>> {
+        let val = f(unsafe { referece.data.as_ref() })?;
+        Some(AtomTableRef {
+            arc: Arc::clone(&referece.arc),
+            data: val.into(),
+        })
+    }
+}
+
+impl<M: ?Sized> Deref for AtomTableRef<M> {
+    type Target = M;
+
+    fn deref(&self) -> &Self::Target {
+        unsafe { self.data.as_ref() }
+    }
+}
+
 #[derive(Debug)]
-pub struct AtomTable {
+pub struct InnerAtomTable {
     block: RawBlock<AtomTable>,
     pub table: RwLock<IndexSet<Atom>>,
 }
 
-impl Drop for AtomTable {
-    fn drop(&mut self) {
-        self.block.deallocate();
-    }
+#[derive(Debug)]
+pub struct AtomTable {
+    inner: RwLock<Arc<InnerAtomTable>>,
+    // this lock is taking during resizing
+    update: Mutex<()>,
 }
 
-struct LookupKey<'table, 'key>(&'table AtomTable, &'key str);
-
-impl Hash for LookupKey<'_, '_> {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        self.1.hash(state);
+impl InnerAtomTable {
+    #[inline(always)]
+    fn lookup_str(self: &InnerAtomTable, string: &str) -> Option<Atom> {
+        STATIC_ATOMS_MAP
+            .get(string)
+            .cloned()
+            .or_else(|| self.table.blocking_read().get(string).cloned())
     }
 }
 
 impl AtomTable {
     #[inline]
-    pub fn new() -> Arc<RwLock<Self>> {
+    pub fn new() -> Arc<Self> {
         let upgraded = global_atom_table().blocking_read().upgrade();
         // don't inline upgraded, otherwise temporary will be dropped too late in case of None
         if let Some(atom_table) = upgraded {
@@ -356,84 +366,89 @@ impl AtomTable {
             if let Some(atom_table) = guard.upgrade() {
                 atom_table
             } else {
-                let atom_table = Arc::new(RwLock::new(Self {
-                    block: RawBlock::new(),
-                    table: RwLock::new(IndexSet::new()),
-                }));
+                let atom_table = Arc::new(Self {
+                    inner: RwLock::new(Arc::new(InnerAtomTable {
+                        block: RawBlock::new(),
+                        table: RwLock::new(IndexSet::new()),
+                    })),
+                    update: Mutex::new(()),
+                });
                 *guard = Arc::downgrade(&atom_table);
                 atom_table
             }
         }
     }
 
-    #[inline]
-    pub fn buf(&self) -> *const u8 {
-        self.block.base as *const u8
+    pub fn active_epoch(&self) -> AtomTableRef<InnerAtomTable> {
+        let arc = Arc::clone(&self.inner.blocking_read());
+        AtomTableRef {
+            data: arc.deref().into(),
+            arc,
+        }
     }
 
     #[inline]
-    pub fn top(&self) -> *const u8 {
-        self.block.top
-    }
-
-    #[inline(always)]
-    fn lookup_str(self: &AtomTable, string: &str) -> Option<Atom> {
-        STATIC_ATOMS_MAP.get(string).cloned().or_else(|| {
-            self.table
-                .blocking_read()
-                .get(&LookupKey(self, string))
-                .cloned()
+    pub fn buf(&self) -> AtomTableRef<u8> {
+        AtomTableRef::<InnerAtomTable>::map(self.active_epoch(), |inner| {
+            unsafe { inner.block.base.as_ref() }.unwrap()
         })
     }
 
-    pub fn build_with(atom_table: &RwLock<AtomTable>, string: &str) -> Atom {
-        let mut atom_table = loop {
-            // we can't just use blocking_write as tokio's RwLock is fair
-            // and we can't block readers here as otherwise we will deadlock, see the guard downgrade below
-            if let Ok(guard) = atom_table.try_write() {
-                break guard;
+    pub fn build_with(atom_table: &AtomTable, string: &str) -> Atom {
+        loop {
+            let mut epoch = atom_table.active_epoch();
+            let count = epoch.table.blocking_read().len();
+
+            if let Some(atom) = epoch.lookup_str(string) {
+                return atom;
             }
-        };
 
-        if let Some(atom) = atom_table.lookup_str(string) {
-            return atom;
-        }
+            let update_guard = atom_table.update.lock().unwrap();
 
-        unsafe {
+            let is_same_allocation = Arc::ptr_eq(&epoch.arc, &atom_table.active_epoch().arc);
+            let is_same_atom_count = count == epoch.table.blocking_read().len();
+
+            if !(is_same_allocation && is_same_atom_count) {
+                // some other thread raced us between our lookup and us aquring the update lock, try again
+                continue;
+            }
+
             let size = mem::size_of::<AtomHeader>() + string.len();
             let align_offset = 8 * mem::align_of::<AtomHeader>();
             let size = (size & !(align_offset - 1)) + align_offset;
 
-            let len_ptr = loop {
-                let ptr = atom_table.block.alloc(size);
+            unsafe {
+                let len_ptr = loop {
+                    let ptr = epoch.block.alloc(size);
 
-                if ptr.is_null() {
-                    atom_table.block.grow();
-                } else {
-                    break ptr;
-                }
-            };
+                    if ptr.is_null() {
+                        let new_block = epoch.block.grow_new().unwrap();
+                        let new_table = RwLock::new(epoch.table.blocking_read().clone());
+                        let new_alloc = Arc::new(InnerAtomTable {
+                            block: new_block,
+                            table: new_table,
+                        });
+                        *atom_table.inner.blocking_write() = new_alloc;
+                        epoch = atom_table.active_epoch();
+                    } else {
+                        break ptr;
+                    }
+                };
 
-            let ptr_base = atom_table.block.base as usize;
+                let ptr_base = epoch.block.base as usize;
 
-            write_to_ptr(string, len_ptr);
+                write_to_ptr(string, len_ptr);
 
-            let atom = Atom {
-                index: ((STRINGS.len() << 3) + len_ptr as usize - ptr_base) as u64,
-            };
+                let atom = Atom {
+                    index: ((STRINGS.len() << 3) + len_ptr as usize - ptr_base) as u64,
+                };
 
-            // we need to downgrade to a read so that Atom::hash can read from the AtomTable,
-            // so that it can calculate the hash for inserting the atom
-            // we can't just drop the guard as otherwise another thread could race us with another atom insertion
-            let atom_table = atom_table.downgrade();
+                epoch.table.blocking_write().insert(atom);
 
-            // NOTE: there is no race between downgrade and blocking write as table is only accessed writable in this function
-            // and only after the write lock is acquired as we have the guard and just convert it from a write to a read guard no writer can race us
-            atom_table.table.blocking_write().insert(atom);
+                drop(update_guard);
 
-            drop(atom_table); // we need to keep the guard around till after the insert
-
-            atom
+                return atom;
+            }
         }
     }
 }

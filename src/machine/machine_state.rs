@@ -18,7 +18,6 @@ use crate::types::*;
 use crate::parser::dashu::Integer;
 
 use indexmap::IndexMap;
-use tokio::sync::RwLock;
 
 use std::convert::TryFrom;
 use std::fmt;
@@ -59,7 +58,7 @@ pub enum OnEOF {
 }
 
 pub struct MachineState {
-    pub atom_tbl: Arc<RwLock<AtomTable>>,
+    pub atom_tbl: Arc<AtomTable>,
     pub arena: Arena,
     pub(super) pdl: Vec<HeapCellValue>,
     pub(super) s: HeapPtr,
@@ -205,7 +204,7 @@ pub fn pstr_loc_and_offset(heap: &[HeapCellValue], index: usize) -> (usize, Fixn
 fn push_var_eq_functors<'a>(
     heap: &mut Heap,
     iter: impl Iterator<Item = (&'a VarKey, &'a HeapCellValue)>,
-    atom_tbl: &RwLock<AtomTable>,
+    atom_tbl: &AtomTable,
 ) -> Vec<HeapCellValue> {
     let mut list_of_var_eqs = vec![];
 

@@ -16,10 +16,6 @@ use crate::types::*;
 
 use fxhash::FxBuildHasher;
 
-use tokio::sync::RwLock;
-
-use std::sync::Arc;
-
 #[cfg(feature = "repl")]
 use rustyline::error::ReadlineError;
 #[cfg(feature = "repl")]
@@ -29,6 +25,7 @@ use rustyline::{Config, Editor};
 
 use std::collections::VecDeque;
 use std::io::{Cursor, Error, ErrorKind, Read};
+use std::sync::Arc;
 
 type SubtermDeque = VecDeque<(usize, usize)>;
 
@@ -148,7 +145,7 @@ impl ReadlineStream {
         }
     }
 
-    pub fn set_atoms_for_completion(&mut self, atoms: &Arc<RwLock<AtomTable>>) {
+    pub fn set_atoms_for_completion(&mut self, atoms: &Arc<AtomTable>) {
         #[cfg(feature = "repl")]
         {
             let helper = self.rl.helper_mut().unwrap();
@@ -291,7 +288,7 @@ impl CharRead for ReadlineStream {
 pub(crate) fn write_term_to_heap<'a, 'b>(
     term: &'a Term,
     heap: &'b mut Heap,
-    atom_tbl: &RwLock<AtomTable>,
+    atom_tbl: &AtomTable,
 ) -> Result<TermWriteResult, CompilationError> {
     let term_writer = TermWriter::new(heap, atom_tbl);
     term_writer.write_term_to_heap(term)
@@ -300,7 +297,7 @@ pub(crate) fn write_term_to_heap<'a, 'b>(
 #[derive(Debug)]
 struct TermWriter<'a, 'b> {
     heap: &'a mut Heap,
-    atom_tbl: &'b RwLock<AtomTable>,
+    atom_tbl: &'b AtomTable,
     queue: SubtermDeque,
     var_dict: HeapVarDict,
 }
@@ -313,7 +310,7 @@ pub struct TermWriteResult {
 
 impl<'a, 'b> TermWriter<'a, 'b> {
     #[inline]
-    fn new(heap: &'a mut Heap, atom_tbl: &'b RwLock<AtomTable>) -> Self {
+    fn new(heap: &'a mut Heap, atom_tbl: &'b AtomTable) -> Self {
         TermWriter {
             heap,
             atom_tbl,

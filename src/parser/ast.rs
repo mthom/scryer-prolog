@@ -19,7 +19,6 @@ use fxhash::FxBuildHasher;
 use indexmap::IndexMap;
 use modular_bitfield::error::OutOfBounds;
 use modular_bitfield::prelude::*;
-use tokio::sync::RwLock;
 
 pub type Specifier = u32;
 
@@ -633,7 +632,7 @@ impl fmt::Display for Literal {
 }
 
 impl Literal {
-    pub fn to_atom(&self, atom_tbl: &Arc<RwLock<AtomTable>>) -> Option<Atom> {
+    pub fn to_atom(&self, atom_tbl: &Arc<AtomTable>) -> Option<Atom> {
         match self {
             Literal::Atom(atom) => Some(atom.defrock_brackets(atom_tbl)),
             _ => None,

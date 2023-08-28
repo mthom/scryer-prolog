@@ -1,6 +1,7 @@
 use core::marker::PhantomData;
 
 use std::alloc;
+use std::cell::UnsafeCell;
 use std::ptr;
 
 pub trait RawBlockTraits {
@@ -12,7 +13,7 @@ pub trait RawBlockTraits {
 pub struct RawBlock<T: RawBlockTraits> {
     pub base: *const u8,
     pub top: *const u8,
-    pub ptr: *mut u8,
+    pub ptr: UnsafeCell<*mut u8>,
     _marker: PhantomData<T>,
 }
 
@@ -22,7 +23,7 @@ impl<T: RawBlockTraits> RawBlock<T> {
         RawBlock {
             base: ptr::null(),
             top: ptr::null(),
-            ptr: ptr::null_mut(),
+            ptr: UnsafeCell::new(ptr::null_mut()),
             _marker: PhantomData,
         }
     }
@@ -42,7 +43,7 @@ impl<T: RawBlockTraits> RawBlock<T> {
 
         self.base = alloc::alloc(layout) as *const _;
         self.top = (self.base as usize + cap) as *const _;
-        self.ptr = self.base as *mut _;
+        *self.ptr.get_mut() = self.base as *mut _;
     }
 
     pub unsafe fn grow(&mut self) {
@@ -54,7 +55,25 @@ impl<T: RawBlockTraits> RawBlock<T> {
 
             self.base = alloc::realloc(self.base as *mut _, layout, size * 2) as *const _;
             self.top = (self.base as usize + size * 2) as *const _;
-            self.ptr = (self.base as usize + size) as *mut _;
+            *self.ptr.get_mut() = (self.base as usize + size) as *mut _;
+        }
+    }
+
+    pub unsafe fn grow_new(&self) -> Option<Self> {
+        if self.base.is_null() {
+            Some(Self::new())
+        } else {
+            let mut new_block = Self::empty_block();
+            new_block.init_at_size(self.size() * 2);
+            if new_block.base.is_null() {
+                // allocation failed
+                None
+            } else {
+                let allocated = (*self.ptr.get()) as usize - self.base as usize;
+                self.base.copy_to(new_block.base.cast_mut(), allocated);
+                *new_block.ptr.get_mut() = new_block.base.offset(allocated as isize).cast_mut();
+                Some(new_block)
+            }
         }
     }
 
@@ -64,35 +83,39 @@ impl<T: RawBlockTraits> RawBlock<T> {
     }
 
     #[inline(always)]
-    fn free_space(&self) -> usize {
+    unsafe fn free_space(&self) -> usize {
         debug_assert!(
-            self.ptr as *const _ >= self.base,
+            *self.ptr.get() as *const _ >= self.base,
             "self.ptr = {:?} < {:?} = self.base",
-            self.ptr,
+            *self.ptr.get(),
             self.base
         );
 
-        self.top as usize - self.ptr as usize
+        self.top as usize - (*self.ptr.get()) as usize
     }
 
-    pub unsafe fn alloc(&mut self, size: usize) -> *mut u8 {
+    pub unsafe fn alloc(&self, size: usize) -> *mut u8 {
         if self.free_space() >= size {
-            let ptr = self.ptr;
-            self.ptr = (self.ptr as usize + size) as *mut _;
+            let ptr = *self.ptr.get();
+            *self.ptr.get() = (ptr as usize + size) as *mut _;
             ptr
         } else {
             ptr::null_mut()
         }
     }
+}
 
-    pub fn deallocate(&mut self) {
-        unsafe {
-            let layout = alloc::Layout::from_size_align_unchecked(self.size(), T::align());
-            alloc::dealloc(self.base as *mut _, layout);
+impl<T: RawBlockTraits> Drop for RawBlock<T> {
+    fn drop(&mut self) {
+        if !self.base.is_null() {
+            unsafe {
+                let layout = alloc::Layout::from_size_align_unchecked(self.size(), T::align());
+                alloc::dealloc(self.base as *mut _, layout);
+            }
 
             self.top = ptr::null();
             self.base = ptr::null();
-            self.ptr = ptr::null_mut();
+            *self.ptr.get_mut() = ptr::null_mut();
         }
     }
 }

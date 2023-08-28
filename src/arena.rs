@@ -70,12 +70,6 @@ pub struct F64Table {
     block: RawBlock<F64Table>,
 }
 
-impl Drop for F64Table {
-    fn drop(&mut self) {
-        self.block.deallocate();
-    }
-}
-
 #[cfg(test)]
 fn set_f64_tbl_buf_base(ptr: *const u8) {
     F64_TABLE_BUF_BASE.with(|f64_table_buf_base| {

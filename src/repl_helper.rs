@@ -4,8 +4,6 @@ use rustyline::hint::Hinter;
 use rustyline::validate::Validator;
 use rustyline::{Context, Helper as RlHelper, Result};
 
-use tokio::sync::RwLock;
-
 use std::sync::Weak;
 
 use crate::atom_table::{AtomString, AtomTable, STATIC_ATOMS_MAP};
@@ -13,7 +11,7 @@ use crate::atom_table::{AtomString, AtomTable, STATIC_ATOMS_MAP};
 // TODO: Maybe add validation to the helper
 pub struct Helper {
     highligher: MatchingBracketHighlighter,
-    pub atoms: Weak<RwLock<AtomTable>>,
+    pub atoms: Weak<AtomTable>,
 }
 
 impl Helper {
@@ -71,11 +69,10 @@ impl Completer for Helper {
             let sub_str = line.get(idx..pos).unwrap();
 
             let atom_table = self.atoms.upgrade().unwrap();
-            let guard = atom_table.blocking_read();
 
-            let mut matching = guard
-                .table
-                .blocking_read()
+            let index_set = atom_table.active_epoch().table.blocking_read().clone();
+
+            let mut matching = index_set
                 .iter()
                 .chain(STATIC_ATOMS_MAP.values())
                 .map(|a| a.as_str())

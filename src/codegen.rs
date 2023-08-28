@@ -18,8 +18,6 @@ use crate::machine::machine_errors::*;
 use fxhash::FxBuildHasher;
 use indexmap::IndexSet;
 
-use tokio::sync::RwLock;
-
 use std::cell::Cell;
 use std::collections::VecDeque;
 
@@ -264,7 +262,7 @@ impl CodeGenSettings {
 
 #[derive(Debug)]
 pub(crate) struct CodeGenerator<'a> {
-    pub(crate) atom_tbl: &'a RwLock<AtomTable>,
+    pub(crate) atom_tbl: &'a AtomTable,
     marker: DebrayAllocator,
     settings: CodeGenSettings,
     pub(crate) skeleton: PredicateSkeleton,
@@ -364,7 +362,7 @@ fn structure_cell(term: &Term) -> Option<&Cell<RegType>> {
 }
 
 impl<'b> CodeGenerator<'b> {
-    pub(crate) fn new(atom_tbl: &'b RwLock<AtomTable>, settings: CodeGenSettings) -> Self {
+    pub(crate) fn new(atom_tbl: &'b AtomTable, settings: CodeGenSettings) -> Self {
         CodeGenerator {
             atom_tbl,
             marker: DebrayAllocator::new(),

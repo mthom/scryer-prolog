@@ -16,8 +16,6 @@ use fxhash::FxBuildHasher;
 use indexmap::{IndexMap, IndexSet};
 use ordered_float::OrderedFloat;
 
-use tokio::sync::RwLock;
-
 use std::cell::Cell;
 use std::collections::VecDeque;
 use std::convert::TryFrom;
@@ -483,7 +481,7 @@ pub enum AtomOrString {
 
 impl AtomOrString {
     #[inline]
-    pub fn as_atom(&self, atom_tbl: &RwLock<AtomTable>) -> Atom {
+    pub fn as_atom(&self, atom_tbl: &AtomTable) -> Atom {
         match self {
             &AtomOrString::Atom(atom) => atom,
             AtomOrString::String(string) => AtomTable::build_with(atom_tbl, &string),

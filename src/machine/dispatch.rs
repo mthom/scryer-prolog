@@ -3000,7 +3000,7 @@ impl Machine {
                              HeapCellValueTag::StackVar |
                              HeapCellValueTag::Var) => {
                                 let target_cell = self.machine_st.push_str_to_heap(
-                                    string.as_str(),
+                                    &string.as_str(),
                                     has_tail,
                                 );
 

@@ -1,6 +1,5 @@
 use dashu::Integer;
 use dashu::Rational;
-use tokio::sync::RwLock;
 
 use crate::arena::*;
 use crate::atom_table::*;
@@ -286,14 +285,14 @@ fn read_tokens<R: CharRead>(lexer: &mut Lexer<R>) -> Result<Vec<Token>, ParserEr
     Ok(tokens)
 }
 
-fn atomize_term(atom_tbl: &RwLock<AtomTable>, term: &Term) -> Option<Atom> {
+fn atomize_term(atom_tbl: &AtomTable, term: &Term) -> Option<Atom> {
     match term {
         Term::Literal(_, ref c) => atomize_constant(atom_tbl, *c),
         _ => None,
     }
 }
 
-fn atomize_constant(atom_tbl: &RwLock<AtomTable>, c: Literal) -> Option<Atom> {
+fn atomize_constant(atom_tbl: &AtomTable, c: Literal) -> Option<Atom> {
     match c {
         Literal::Atom(ref name) => Some(*name),
         Literal::Char(c) => Some(AtomTable::build_with(atom_tbl, &c.to_string())),

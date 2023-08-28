@@ -6,7 +6,6 @@ use crate::instructions::*;
 
 use fxhash::FxBuildHasher;
 use indexmap::IndexMap;
-use tokio::sync::RwLock;
 
 use std::collections::VecDeque;
 use std::hash::Hash;
@@ -1094,7 +1093,7 @@ fn uncap_choice_seq_with_try(prelude: &mut [IndexedChoiceInstruction]) {
 
 pub(crate) fn constant_key_alternatives(
     constant: Literal,
-    atom_tbl: &RwLock<AtomTable>,
+    atom_tbl: &AtomTable,
     // arena: &mut Arena,
 ) -> Vec<Literal> {
     let mut constants = vec![];
@@ -1455,7 +1454,7 @@ impl<I: Indexer> CodeOffsets<I> {
 
     fn index_constant(
         &mut self,
-        atom_tbl: &RwLock<AtomTable>,
+        atom_tbl: &AtomTable,
         constant: Literal,
         index: usize,
     ) -> Vec<Literal> {
@@ -1512,7 +1511,7 @@ impl<I: Indexer> CodeOffsets<I> {
         optimal_arg: &Term,
         index: usize,
         clause_index_info: &mut ClauseIndexInfo,
-        atom_tbl: &RwLock<AtomTable>,
+        atom_tbl: &AtomTable,
     ) {
         match optimal_arg {
             &Term::Clause(_, atom!("."), ref terms) if terms.len() == 2 => {

@@ -8,7 +8,6 @@ use crate::machine::machine_errors::*;
 use crate::parser::ast::*;
 
 use indexmap::IndexSet;
-use tokio::sync::RwLock;
 
 use std::cell::Cell;
 use std::convert::TryFrom;
@@ -26,10 +25,7 @@ pub(crate) fn to_op_decl(prec: u16, spec: Atom, name: Atom) -> Result<OpDecl, Co
     }
 }
 
-fn setup_op_decl(
-    mut terms: Vec<Term>,
-    atom_tbl: &RwLock<AtomTable>,
-) -> Result<OpDecl, CompilationError> {
+fn setup_op_decl(mut terms: Vec<Term>, atom_tbl: &AtomTable) -> Result<OpDecl, CompilationError> {
     let name = match terms.pop().unwrap() {
         Term::Literal(_, Literal::Atom(name)) => name,
         Term::Literal(_, Literal::Char(c)) => AtomTable::build_with(atom_tbl, &c.to_string()),
@@ -86,7 +82,7 @@ fn setup_predicate_indicator(term: &mut Term) -> Result<PredicateKey, Compilatio
 
 fn setup_module_export(
     mut term: Term,
-    atom_tbl: &RwLock<AtomTable>,
+    atom_tbl: &AtomTable,
 ) -> Result<ModuleExport, CompilationError> {
     setup_predicate_indicator(&mut term)
         .map(ModuleExport::PredicateKey)
@@ -112,7 +108,7 @@ pub(crate) fn build_rule_body(vars: &[Term], body_term: Term) -> Term {
 
 pub(super) fn setup_module_export_list(
     mut export_list: Term,
-    atom_tbl: &RwLock<AtomTable>,
+    atom_tbl: &AtomTable,
 ) -> Result<Vec<ModuleExport>, CompilationError> {
     let mut exports = vec![];
 
@@ -132,7 +128,7 @@ pub(super) fn setup_module_export_list(
 
 fn setup_module_decl(
     mut terms: Vec<Term>,
-    atom_tbl: &RwLock<AtomTable>,
+    atom_tbl: &AtomTable,
 ) -> Result<ModuleDecl, CompilationError> {
     let export_list = terms.pop().unwrap();
     let name = terms.pop().unwrap();
@@ -165,7 +161,7 @@ type UseModuleExport = (ModuleSource, IndexSet<ModuleExport>);
 
 fn setup_qualified_import(
     mut terms: Vec<Term>,
-    atom_tbl: &RwLock<AtomTable>,
+    atom_tbl: &AtomTable,
 ) -> Result<UseModuleExport, CompilationError> {
     let mut export_list = terms.pop().unwrap();
     let module_src = match terms.pop().unwrap() {
