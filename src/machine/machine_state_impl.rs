@@ -1003,9 +1003,9 @@ impl MachineState {
             self.s_offset = 0;
             self.mode = MachineMode::Read;
 
-            put_partial_string(&mut self.heap, pstr, &mut self.atom_tbl.blocking_write())
+            put_partial_string(&mut self.heap, pstr, &self.atom_tbl)
         } else {
-            put_complete_string(&mut self.heap, pstr, &mut self.atom_tbl.blocking_write())
+            put_complete_string(&mut self.heap, pstr, &self.atom_tbl)
         }
     }
 
@@ -1097,7 +1097,7 @@ impl MachineState {
                 (name, 0, 0)
             }
             (HeapCellValueTag::Char, c) => {
-                (self.atom_tbl.blocking_write().build_with(&c.to_string()), 0, 0)
+                (AtomTable::build_with(&self.atom_tbl, &c.to_string()), 0, 0)
             }
             (HeapCellValueTag::Var | HeapCellValueTag::AttrVar | HeapCellValueTag::StackVar) => {
                 let stub = functor_stub(atom!("call"), arity + 1);
@@ -1436,7 +1436,7 @@ impl MachineState {
                         }
                     }
                     (HeapCellValueTag::Char, c) => {
-                        let c = self.atom_tbl.blocking_write().build_with(&c.to_string());
+                        let c = AtomTable::build_with(&self.atom_tbl, &c.to_string());
 
                         self.try_functor_fabricate_struct(
                             c,

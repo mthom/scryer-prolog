@@ -1237,12 +1237,10 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
 
             if let Some(path_str) = load_context.path.to_str() {
                 if !path_str.is_empty() {
-                    return Some(
-                        LS::machine_st(&mut self.payload)
-                            .atom_tbl
-                            .blocking_write()
-                            .build_with(path_str),
-                    );
+                    return Some(AtomTable::build_with(
+                        &LS::machine_st(&mut self.payload).atom_tbl,
+                        path_str,
+                    ));
                 }
             }
         }

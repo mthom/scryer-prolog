@@ -511,7 +511,7 @@ impl<'b> CodeGenerator<'b> {
                 TermRef::PartialString(lvl, cell, string, tail) => {
                     self.marker
                         .mark_non_var::<Target>(lvl, term_loc, cell, &mut target);
-                    let atom = self.atom_tbl.blocking_write().build_with(&string);
+                    let atom = AtomTable::build_with(&self.atom_tbl, &string);
 
                     target.push_back(Target::to_pstr(lvl, atom, cell.get(), true));
                     self.subterm_to_instr::<Target>(tail, term_loc, &mut target);
@@ -1242,12 +1242,7 @@ impl<'b> CodeGenerator<'b> {
                 let index = code.len();
 
                 if clauses_len > 1 || self.settings.is_extensible {
-                    code_offsets.index_term(
-                        arg,
-                        index,
-                        &mut clause_index_info,
-                        &mut self.atom_tbl.blocking_write(),
-                    );
+                    code_offsets.index_term(arg, index, &mut clause_index_info, self.atom_tbl);
                 }
             }
 

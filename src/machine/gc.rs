@@ -644,11 +644,8 @@ mod tests {
         // two-part complete string, then a three-part cyclic string
         // involving an uncompacted list of chars.
 
-        let pstr_var_cell = put_partial_string(
-            &mut wam.machine_st.heap,
-            "abc ",
-            &mut wam.machine_st.atom_tbl.blocking_write(),
-        );
+        let pstr_var_cell =
+            put_partial_string(&mut wam.machine_st.heap, "abc ", &wam.machine_st.atom_tbl);
         let pstr_cell = wam.machine_st.heap[pstr_var_cell.get_value() as usize];
 
         mark_cells(&mut wam.machine_st.heap, pstr_loc_as_cell!(0));
@@ -669,11 +666,8 @@ mod tests {
 
         wam.machine_st.heap.push(pstr_loc_as_cell!(2));
 
-        let pstr_second_var_cell = put_partial_string(
-            &mut wam.machine_st.heap,
-            "def",
-            &mut wam.machine_st.atom_tbl.blocking_write(),
-        );
+        let pstr_second_var_cell =
+            put_partial_string(&mut wam.machine_st.heap, "def", &wam.machine_st.atom_tbl);
         let pstr_second_cell = wam.machine_st.heap[pstr_second_var_cell.get_value() as usize];
 
         mark_cells(&mut wam.machine_st.heap, pstr_loc_as_cell!(0));

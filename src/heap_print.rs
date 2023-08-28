@@ -1588,7 +1588,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 print_struct(self, name, arity);
             }
             (HeapCellValueTag::Char, c) => {
-                let name = self.atom_tbl.blocking_write().build_with(&String::from(c));
+                let name = AtomTable::build_with(&self.atom_tbl, &String::from(c));
                 print_struct(self, name, 0);
             }
             (HeapCellValueTag::Str, s) => {
@@ -1950,11 +1950,7 @@ mod tests {
 
         wam.machine_st.heap.clear();
 
-        put_partial_string(
-            &mut wam.machine_st.heap,
-            "abc",
-            &mut wam.machine_st.atom_tbl.blocking_write(),
-        );
+        put_partial_string(&mut wam.machine_st.heap, "abc", &wam.machine_st.atom_tbl);
 
         {
             let printer = HCPrinter::new(

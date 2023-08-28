@@ -1,5 +1,6 @@
 use dashu::Integer;
 use dashu::Rational;
+use tokio::sync::RwLock;
 
 use crate::arena::*;
 use crate::atom_table::*;
@@ -285,17 +286,17 @@ fn read_tokens<R: CharRead>(lexer: &mut Lexer<R>) -> Result<Vec<Token>, ParserEr
     Ok(tokens)
 }
 
-fn atomize_term(atom_tbl: &mut AtomTable, term: &Term) -> Option<Atom> {
+fn atomize_term(atom_tbl: &RwLock<AtomTable>, term: &Term) -> Option<Atom> {
     match term {
         Term::Literal(_, ref c) => atomize_constant(atom_tbl, *c),
         _ => None,
     }
 }
 
-fn atomize_constant(atom_tbl: &mut AtomTable, c: Literal) -> Option<Atom> {
+fn atomize_constant(atom_tbl: &RwLock<AtomTable>, c: Literal) -> Option<Atom> {
     match c {
         Literal::Atom(ref name) => Some(*name),
-        Literal::Char(c) => Some(atom_tbl.build_with(&c.to_string())),
+        Literal::Char(c) => Some(AtomTable::build_with(atom_tbl, &c.to_string())),
         _ => None,
     }
 }
@@ -568,19 +569,16 @@ impl<'a, R: CharRead> Parser<'a, R> {
         let idx = self.terms.len() - arity;
 
         if TokenType::Term == self.stack[stack_len].tt {
-            if atomize_term(
-                &mut self.lexer.machine_st.atom_tbl.blocking_write(),
-                &self.terms[idx - 1],
-            )
-            .is_some()
-            {
+            if atomize_term(&self.lexer.machine_st.atom_tbl, &self.terms[idx - 1]).is_some() {
                 self.stack.truncate(stack_len + 1);
 
                 let mut subterms: Vec<_> = self.terms.drain(idx..).collect();
 
-                if let Some(name) = self.terms.pop().and_then(|t| {
-                    atomize_term(&mut self.lexer.machine_st.atom_tbl.blocking_write(), &t)
-                }) {
+                if let Some(name) = self
+                    .terms
+                    .pop()
+                    .and_then(|t| atomize_term(&self.lexer.machine_st.atom_tbl, &t))
+                {
                     // reduce the '.' functor to a cons cell if it applies.
                     if name == atom!(".") && subterms.len() == 2 {
                         let tail = subterms.pop().unwrap();
@@ -591,12 +589,10 @@ impl<'a, R: CharRead> Parser<'a, R> {
                                 Term::PartialString(Cell::default(), string_buf, tail)
                             }
                             Ok((string_buf, None)) => {
-                                let atom = self
-                                    .lexer
-                                    .machine_st
-                                    .atom_tbl
-                                    .blocking_write()
-                                    .build_with(&string_buf);
+                                let atom = AtomTable::build_with(
+                                    &self.lexer.machine_st.atom_tbl,
+                                    &string_buf,
+                                );
                                 Term::CompleteString(Cell::default(), atom)
                             }
                             Err(term) => term,
@@ -763,12 +759,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
                     Term::PartialString(Cell::default(), string_buf, tail)
                 }
                 Ok((string_buf, None)) => {
-                    let atom = self
-                        .lexer
-                        .machine_st
-                        .atom_tbl
-                        .blocking_write()
-                        .build_with(&string_buf);
+                    let atom = AtomTable::build_with(&self.lexer.machine_st.atom_tbl, &string_buf);
                     Term::CompleteString(Cell::default(), atom)
                 }
                 Err(term) => term,
@@ -984,8 +975,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
                 |n, arena| Literal::from(float_alloc!(n, arena)),
             ),
             Token::Literal(c) => {
-                let atomized =
-                    atomize_constant(&mut self.lexer.machine_st.atom_tbl.blocking_write(), c);
+                let atomized = atomize_constant(&self.lexer.machine_st.atom_tbl, c);
                 if let Some(name) = atomized {
                     if !self.shift_op(name, op_dir)? {
                         self.shift(Token::Literal(c), 0, TERM);

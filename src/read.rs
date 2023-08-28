@@ -81,7 +81,7 @@ impl MachineState {
         };
 
         inner.add_lines_read(num_lines_read);
-        write_term_to_heap(&term, &mut self.heap, &mut self.atom_tbl.blocking_write())
+        write_term_to_heap(&term, &mut self.heap, &self.atom_tbl)
     }
 }
 
@@ -291,7 +291,7 @@ impl CharRead for ReadlineStream {
 pub(crate) fn write_term_to_heap<'a, 'b>(
     term: &'a Term,
     heap: &'b mut Heap,
-    atom_tbl: &mut AtomTable,
+    atom_tbl: &RwLock<AtomTable>,
 ) -> Result<TermWriteResult, CompilationError> {
     let term_writer = TermWriter::new(heap, atom_tbl);
     term_writer.write_term_to_heap(term)
@@ -300,7 +300,7 @@ pub(crate) fn write_term_to_heap<'a, 'b>(
 #[derive(Debug)]
 struct TermWriter<'a, 'b> {
     heap: &'a mut Heap,
-    atom_tbl: &'b mut AtomTable,
+    atom_tbl: &'b RwLock<AtomTable>,
     queue: SubtermDeque,
     var_dict: HeapVarDict,
 }
@@ -313,7 +313,7 @@ pub struct TermWriteResult {
 
 impl<'a, 'b> TermWriter<'a, 'b> {
     #[inline]
-    fn new(heap: &'a mut Heap, atom_tbl: &'b mut AtomTable) -> Self {
+    fn new(heap: &'a mut Heap, atom_tbl: &'b RwLock<AtomTable>) -> Self {
         TermWriter {
             heap,
             atom_tbl,
@@ -435,7 +435,8 @@ impl<'a, 'b> TermWriter<'a, 'b> {
                     continue;
                 }
                 &TermRef::CompleteString(_, _, ref src) => {
-                    put_complete_string(self.heap, &src.as_str(), self.atom_tbl);
+                    let src = src.as_str().to_owned();
+                    put_complete_string(self.heap, &src, self.atom_tbl);
                 }
                 &TermRef::PartialString(lvl, _, ref src, _) => {
                     if let Level::Root = lvl {

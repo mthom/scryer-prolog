@@ -1,3 +1,5 @@
+use tokio::sync::RwLock;
+
 use crate::atom_table::*;
 use crate::parser::ast::*;
 
@@ -43,10 +45,9 @@ impl Into<Atom> for PartialString {
 
 impl PartialString {
     #[inline]
-    pub(super) fn new<'a>(src: &'a str, atom_tbl: &mut AtomTable) -> Option<(Self, &'a str)> {
+    pub(super) fn new<'a>(src: &'a str, atom_tbl: &RwLock<AtomTable>) -> Option<(Self, &'a str)> {
         let terminator_idx = scan_for_terminator(src.chars());
-        let pstr = PartialString(atom_tbl.build_with(&src[..terminator_idx]));
-
+        let pstr = PartialString(AtomTable::build_with(&atom_tbl, &src[..terminator_idx]));
         Some(if terminator_idx < src.as_bytes().len() {
             (pstr, &src[terminator_idx + 1..])
         } else {
@@ -805,11 +806,8 @@ mod test {
     fn pstr_iter_tests() {
         let mut wam = MockWAM::new();
 
-        let pstr_var_cell = put_partial_string(
-            &mut wam.machine_st.heap,
-            "abc ",
-            &mut wam.machine_st.atom_tbl.blocking_write(),
-        );
+        let pstr_var_cell =
+            put_partial_string(&mut wam.machine_st.heap, "abc ", &wam.machine_st.atom_tbl);
 
         let pstr_cell = wam.machine_st.heap[pstr_var_cell.get_value() as usize];
 
@@ -828,11 +826,8 @@ mod test {
         wam.machine_st.heap.pop();
         wam.machine_st.heap.push(pstr_loc_as_cell!(2));
 
-        let pstr_second_var_cell = put_partial_string(
-            &mut wam.machine_st.heap,
-            "def",
-            &mut wam.machine_st.atom_tbl.blocking_write(),
-        );
+        let pstr_second_var_cell =
+            put_partial_string(&mut wam.machine_st.heap, "def", &wam.machine_st.atom_tbl);
 
         let pstr_second_cell = wam.machine_st.heap[pstr_second_var_cell.get_value() as usize];
 
@@ -913,21 +908,13 @@ mod test {
             // construct a structurally similar but different cyclic partial string
             // matching the one beginning at wam.machine_st.heap[0].
 
-            put_partial_string(
-                &mut wam.machine_st.heap,
-                "ab",
-                &mut wam.machine_st.atom_tbl.blocking_write(),
-            );
+            put_partial_string(&mut wam.machine_st.heap, "ab", &wam.machine_st.atom_tbl);
 
             wam.machine_st.heap.pop();
 
             wam.machine_st.heap.push(pstr_loc_as_cell!(second_h + 2));
 
-            put_partial_string(
-                &mut wam.machine_st.heap,
-                "c ",
-                &mut wam.machine_st.atom_tbl.blocking_write(),
-            );
+            put_partial_string(&mut wam.machine_st.heap, "c ", &wam.machine_st.atom_tbl);
 
             wam.machine_st.heap.pop();
 
@@ -952,11 +939,7 @@ mod test {
 
         wam.machine_st.heap.clear();
 
-        put_partial_string(
-            &mut wam.machine_st.heap,
-            "abc ",
-            &mut wam.machine_st.atom_tbl.blocking_write(),
-        );
+        put_partial_string(&mut wam.machine_st.heap, "abc ", &wam.machine_st.atom_tbl);
 
         let pstr_cell = wam.machine_st.heap[0];
 
@@ -986,11 +969,8 @@ mod test {
 
         wam.machine_st.heap.clear();
 
-        let cstr_var_cell = put_complete_string(
-            &mut wam.machine_st.heap,
-            "abc",
-            &mut wam.machine_st.atom_tbl.blocking_write(),
-        );
+        let cstr_var_cell =
+            put_complete_string(&mut wam.machine_st.heap, "abc", &wam.machine_st.atom_tbl);
 
         wam.machine_st.heap.push(list_loc_as_cell!(2));
         wam.machine_st.heap.push(heap_loc_as_cell!(2));
@@ -1015,11 +995,8 @@ mod test {
 
         wam.machine_st.heap.clear();
 
-        let cstr_var_cell = put_complete_string(
-            &mut wam.machine_st.heap,
-            "abc",
-            &mut wam.machine_st.atom_tbl.blocking_write(),
-        );
+        let cstr_var_cell =
+            put_complete_string(&mut wam.machine_st.heap, "abc", &wam.machine_st.atom_tbl);
 
         wam.machine_st.heap.push(list_loc_as_cell!(2));
         wam.machine_st.heap.push(heap_loc_as_cell!(2)); // X
@@ -1048,11 +1025,8 @@ mod test {
 
         wam.machine_st.heap.clear();
 
-        let cstr_var_cell = put_complete_string(
-            &mut wam.machine_st.heap,
-            "d",
-            &mut wam.machine_st.atom_tbl.blocking_write(),
-        );
+        let cstr_var_cell =
+            put_complete_string(&mut wam.machine_st.heap, "d", &wam.machine_st.atom_tbl);
 
         wam.machine_st.heap.push(list_loc_as_cell!(2));
         wam.machine_st.heap.push(char_as_cell!('d'));
@@ -1066,11 +1040,8 @@ mod test {
 
         wam.machine_st.heap.clear();
 
-        let cstr_var_cell = put_complete_string(
-            &mut wam.machine_st.heap,
-            "abc",
-            &mut wam.machine_st.atom_tbl.blocking_write(),
-        );
+        let cstr_var_cell =
+            put_complete_string(&mut wam.machine_st.heap, "abc", &wam.machine_st.atom_tbl);
 
         wam.machine_st.heap.push(list_loc_as_cell!(2));
         wam.machine_st.heap.push(heap_loc_as_cell!(2));
@@ -1097,11 +1068,7 @@ mod test {
 
         wam.machine_st.heap.clear();
 
-        put_complete_string(
-            &mut wam.machine_st.heap,
-            "abcdef",
-            &mut wam.machine_st.atom_tbl.blocking_write(),
-        );
+        put_complete_string(&mut wam.machine_st.heap, "abcdef", &wam.machine_st.atom_tbl);
 
         wam.machine_st.heap.push(pstr_as_cell!(atom!("abc")));
         wam.machine_st.heap.push(heap_loc_as_cell!(2));

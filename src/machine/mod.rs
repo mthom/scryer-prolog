@@ -231,7 +231,7 @@ impl Machine {
     pub fn load_file(&mut self, path: &str, stream: Stream) {
         self.machine_st.registers[1] = stream_as_cell!(stream);
         self.machine_st.registers[2] =
-            atom_as_cell!(self.machine_st.atom_tbl.blocking_write().build_with(path));
+            atom_as_cell!(AtomTable::build_with(&self.machine_st.atom_tbl, path));
 
         self.run_module_predicate(atom!("loader"), (atom!("file_load"), 2));
     }
@@ -296,7 +296,7 @@ impl Machine {
             arg_pstrs.push(put_complete_string(
                 &mut self.machine_st.heap,
                 &arg,
-                &mut self.machine_st.atom_tbl.blocking_write(),
+                &self.machine_st.atom_tbl,
             ));
         }
 

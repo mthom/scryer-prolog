@@ -10,6 +10,7 @@ use std::hash::{Hash, Hasher};
 use std::io::{Error as IOError, ErrorKind};
 use std::ops::{Deref, Neg};
 use std::rc::Rc;
+use std::sync::Arc;
 use std::vec::Vec;
 
 use crate::parser::dashu::{Integer, Rational};
@@ -18,6 +19,7 @@ use fxhash::FxBuildHasher;
 use indexmap::IndexMap;
 use modular_bitfield::error::OutOfBounds;
 use modular_bitfield::prelude::*;
+use tokio::sync::RwLock;
 
 pub type Specifier = u32;
 
@@ -631,7 +633,7 @@ impl fmt::Display for Literal {
 }
 
 impl Literal {
-    pub fn to_atom(&self, atom_tbl: &mut AtomTable) -> Option<Atom> {
+    pub fn to_atom(&self, atom_tbl: &Arc<RwLock<AtomTable>>) -> Option<Atom> {
         match self {
             Literal::Atom(atom) => Some(atom.defrock_brackets(atom_tbl)),
             _ => None,

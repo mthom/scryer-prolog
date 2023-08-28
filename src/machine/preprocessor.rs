@@ -8,6 +8,7 @@ use crate::machine::machine_errors::*;
 use crate::parser::ast::*;
 
 use indexmap::IndexSet;
+use tokio::sync::RwLock;
 
 use std::cell::Cell;
 use std::convert::TryFrom;
@@ -27,17 +28,17 @@ pub(crate) fn to_op_decl(prec: u16, spec: Atom, name: Atom) -> Result<OpDecl, Co
 
 fn setup_op_decl(
     mut terms: Vec<Term>,
-    atom_tbl: &mut AtomTable,
+    atom_tbl: &RwLock<AtomTable>,
 ) -> Result<OpDecl, CompilationError> {
     let name = match terms.pop().unwrap() {
         Term::Literal(_, Literal::Atom(name)) => name,
-        Term::Literal(_, Literal::Char(c)) => atom_tbl.build_with(&c.to_string()),
+        Term::Literal(_, Literal::Char(c)) => AtomTable::build_with(atom_tbl, &c.to_string()),
         _ => return Err(CompilationError::InconsistentEntry),
     };
 
     let spec = match terms.pop().unwrap() {
         Term::Literal(_, Literal::Atom(name)) => name,
-        Term::Literal(_, Literal::Char(c)) => atom_tbl.build_with(&c.to_string()),
+        Term::Literal(_, Literal::Char(c)) => AtomTable::build_with(atom_tbl, &c.to_string()),
         _ => return Err(CompilationError::InconsistentEntry),
     };
 
@@ -85,7 +86,7 @@ fn setup_predicate_indicator(term: &mut Term) -> Result<PredicateKey, Compilatio
 
 fn setup_module_export(
     mut term: Term,
-    atom_tbl: &mut AtomTable,
+    atom_tbl: &RwLock<AtomTable>,
 ) -> Result<ModuleExport, CompilationError> {
     setup_predicate_indicator(&mut term)
         .map(ModuleExport::PredicateKey)
@@ -111,7 +112,7 @@ pub(crate) fn build_rule_body(vars: &[Term], body_term: Term) -> Term {
 
 pub(super) fn setup_module_export_list(
     mut export_list: Term,
-    atom_tbl: &mut AtomTable,
+    atom_tbl: &RwLock<AtomTable>,
 ) -> Result<Vec<ModuleExport>, CompilationError> {
     let mut exports = vec![];
 
@@ -131,7 +132,7 @@ pub(super) fn setup_module_export_list(
 
 fn setup_module_decl(
     mut terms: Vec<Term>,
-    atom_tbl: &mut AtomTable,
+    atom_tbl: &RwLock<AtomTable>,
 ) -> Result<ModuleDecl, CompilationError> {
     let export_list = terms.pop().unwrap();
     let name = terms.pop().unwrap();
@@ -164,7 +165,7 @@ type UseModuleExport = (ModuleSource, IndexSet<ModuleExport>);
 
 fn setup_qualified_import(
     mut terms: Vec<Term>,
-    atom_tbl: &mut AtomTable,
+    atom_tbl: &RwLock<AtomTable>,
 ) -> Result<UseModuleExport, CompilationError> {
     let mut export_list = terms.pop().unwrap();
     let module_src = match terms.pop().unwrap() {
@@ -313,17 +314,11 @@ pub(super) fn setup_declaration<'a, LS: LoadState<'a>>(
             }
             (atom!("module"), 2) => {
                 let atom_tbl = &mut LS::machine_st(&mut loader.payload).atom_tbl;
-                Ok(Declaration::Module(setup_module_decl(
-                    terms,
-                    &mut atom_tbl.blocking_write(),
-                )?))
+                Ok(Declaration::Module(setup_module_decl(terms, &atom_tbl)?))
             }
             (atom!("op"), 3) => {
                 let atom_tbl = &mut LS::machine_st(&mut loader.payload).atom_tbl;
-                Ok(Declaration::Op(setup_op_decl(
-                    terms,
-                    &mut atom_tbl.blocking_write(),
-                )?))
+                Ok(Declaration::Op(setup_op_decl(terms, &atom_tbl)?))
             }
             (atom!("non_counted_backtracking"), 1) => {
                 let (name, arity) = setup_predicate_indicator(&mut terms.pop().unwrap())?;
@@ -332,8 +327,7 @@ pub(super) fn setup_declaration<'a, LS: LoadState<'a>>(
             (atom!("use_module"), 1) => Ok(Declaration::UseModule(setup_use_module_decl(terms)?)),
             (atom!("use_module"), 2) => {
                 let atom_tbl = &mut LS::machine_st(&mut loader.payload).atom_tbl;
-                let (name, exports) =
-                    setup_qualified_import(terms, &mut atom_tbl.blocking_write())?;
+                let (name, exports) = setup_qualified_import(terms, &atom_tbl)?;
 
                 Ok(Declaration::UseQualifiedModule(name, exports))
             }

@@ -70,11 +70,13 @@ impl Completer for Helper {
         if let Some(idx) = start_of_prefix {
             let sub_str = line.get(idx..pos).unwrap();
 
-            let guard = tokio::runtime::Handle::current()
-                .block_on(self.atoms.upgrade().unwrap().read_owned());
+            let atom_table = self.atoms.upgrade().unwrap();
+            println!("locking atom table to load completions");
+            let guard = atom_table.blocking_read();
 
             let mut matching = guard
                 .table
+                .blocking_read()
                 .iter()
                 .chain(STATIC_ATOMS_MAP.values())
                 .map(|a| a.as_str())

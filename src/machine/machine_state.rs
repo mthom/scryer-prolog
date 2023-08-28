@@ -205,12 +205,12 @@ pub fn pstr_loc_and_offset(heap: &[HeapCellValue], index: usize) -> (usize, Fixn
 fn push_var_eq_functors<'a>(
     heap: &mut Heap,
     iter: impl Iterator<Item = (&'a VarKey, &'a HeapCellValue)>,
-    atom_tbl: &mut AtomTable,
+    atom_tbl: &RwLock<AtomTable>,
 ) -> Vec<HeapCellValue> {
     let mut list_of_var_eqs = vec![];
 
     for (var, binding) in iter {
-        let var_atom = atom_tbl.build_with(&var.to_string());
+        let var_atom = AtomTable::build_with(atom_tbl, &var.to_string());
         let h = heap.len();
 
         heap.push(atom_as_cell!(atom!("="), 2));
@@ -531,7 +531,7 @@ impl MachineState {
                     Some((var_name, var))
                 }
             }),
-            &mut self.atom_tbl.blocking_write(),
+            &self.atom_tbl,
         );
 
         let singleton_addr = self.registers[3];
@@ -617,7 +617,7 @@ impl MachineState {
                         false
                     }
                 }),
-            &mut self.atom_tbl.blocking_write(),
+            &self.atom_tbl,
         );
 
         for var in term_write_result.var_dict.values_mut() {

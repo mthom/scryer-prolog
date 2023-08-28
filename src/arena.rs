@@ -1003,11 +1003,8 @@ mod tests {
 
         // complete string
 
-        let pstr_var_cell = put_partial_string(
-            &mut wam.machine_st.heap,
-            "ronan",
-            &mut wam.machine_st.atom_tbl.blocking_write(),
-        );
+        let pstr_var_cell =
+            put_partial_string(&mut wam.machine_st.heap, "ronan", &wam.machine_st.atom_tbl);
         let pstr_cell = wam.machine_st.heap[pstr_var_cell.get_value() as usize];
 
         assert_eq!(pstr_cell.get_tag(), HeapCellValueTag::PStr);

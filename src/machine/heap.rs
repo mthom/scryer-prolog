@@ -1,3 +1,5 @@
+use tokio::sync::RwLock;
+
 use crate::arena::*;
 use crate::atom_table::*;
 use crate::forms::*;
@@ -133,7 +135,7 @@ pub fn print_heap_terms<'a, I: Iterator<Item = &'a HeapCellValue>>(heap: I, h: u
 pub(crate) fn put_complete_string(
     heap: &mut Heap,
     s: &str,
-    atom_tbl: &mut AtomTable,
+    atom_tbl: &RwLock<AtomTable>,
 ) -> HeapCellValue {
     match allocate_pstr(heap, s, atom_tbl) {
         Some(h) => {
@@ -160,7 +162,7 @@ pub(crate) fn put_complete_string(
 pub(crate) fn put_partial_string(
     heap: &mut Heap,
     s: &str,
-    atom_tbl: &mut AtomTable,
+    atom_tbl: &RwLock<AtomTable>,
 ) -> HeapCellValue {
     match allocate_pstr(heap, s, atom_tbl) {
         Some(h) => {
@@ -176,7 +178,7 @@ pub(crate) fn put_partial_string(
 pub(crate) fn allocate_pstr(
     heap: &mut Heap,
     mut src: &str,
-    atom_tbl: &mut AtomTable,
+    atom_tbl: &RwLock<AtomTable>,
 ) -> Option<usize> {
     let orig_h = heap.len();
 
