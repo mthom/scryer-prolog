@@ -99,6 +99,8 @@ enum BuiltInClauseType {
     Ground,
     #[strum_discriminants(strum(props(Arity = "2", Name = "is")))]
     Is(RegType, ArithmeticTerm),
+    #[strum_discriminants(strum(props(Arity = "1", Name = "$get_number")))]
+    GetNumber(ArithmeticTerm),
     #[strum_discriminants(strum(props(Arity = "2", Name = "keysort")))]
     KeySort,
     #[strum_discriminants(strum(props(Arity = "2", Name = "sort")))]
@@ -1553,7 +1555,8 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallFunctor |
                     &Instruction::CallGround |
                     &Instruction::CallKeySort |
-                    &Instruction::CallSort => {
+                    &Instruction::CallSort |
+                    &Instruction::CallGetNumber(_) => {
                         let (name, arity) = self.to_name_and_arity();
                         functor!(atom!("call"), [atom(name), fixnum(arity)])
                     }
@@ -1578,7 +1581,8 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteGround |
                     &Instruction::ExecuteIs(..) |
                     &Instruction::ExecuteKeySort |
-                    &Instruction::ExecuteSort => {
+                    &Instruction::ExecuteSort |
+                    &Instruction::ExecuteGetNumber(_) => {
                         let (name, arity) = self.to_name_and_arity();
                         functor!(atom!("execute"), [atom(name), fixnum(arity)])
                     }
@@ -1603,7 +1607,8 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::DefaultCallGround |
                     &Instruction::DefaultCallIs(..) |
                     &Instruction::DefaultCallKeySort |
-                    &Instruction::DefaultCallSort => {
+                    &Instruction::DefaultCallSort |
+                    &Instruction::DefaultCallGetNumber(_) => {
                         let (name, arity) = self.to_name_and_arity();
                         functor!(atom!("call_default"), [atom(name), fixnum(arity)])
                     }
@@ -1628,7 +1633,8 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::DefaultExecuteGround |
                     &Instruction::DefaultExecuteIs(..) |
                     &Instruction::DefaultExecuteKeySort |
-                    &Instruction::DefaultExecuteSort => {
+                    &Instruction::DefaultExecuteSort |
+                    &Instruction::DefaultExecuteGetNumber(_) => {
                         let (name, arity) = self.to_name_and_arity();
                         functor!(atom!("execute_default"), [atom(name), fixnum(arity)])
                     }

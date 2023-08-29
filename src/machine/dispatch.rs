@@ -1497,6 +1497,14 @@ impl Machine {
                     try_or_throw!(self.machine_st, self.machine_st.is(r, at));
                     step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                 }
+                Instruction::DefaultCallGetNumber(at) => {
+                    try_or_throw!(self.machine_st, self.machine_st.get_number(at));
+                    step_or_fail!(self, self.machine_st.p += 1);
+                }
+                Instruction::DefaultExecuteGetNumber(at) => {
+                    try_or_throw!(self.machine_st, self.machine_st.get_number(at));
+                    step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+                }
                 &Instruction::CallAcyclicTerm => {
                     let addr = self.machine_st.registers[1];
 
@@ -1953,6 +1961,34 @@ impl Machine {
                 }
                 &Instruction::ExecuteIs(r, at) => {
                     try_or_throw!(self.machine_st, self.machine_st.is(r, at));
+
+                    if self.machine_st.fail {
+                        self.machine_st.backtrack();
+                    } else {
+                        try_or_throw!(
+                            self.machine_st,
+                            (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
+                        );
+
+                        self.machine_st.p = self.machine_st.cp;
+                    }
+                }
+                Instruction::CallGetNumber(at) => {
+                    try_or_throw!(self.machine_st, self.machine_st.get_number(at));
+
+                    if self.machine_st.fail {
+                        self.machine_st.backtrack();
+                    } else {
+                        try_or_throw!(
+                            self.machine_st,
+                            (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
+                        );
+
+                        self.machine_st.p += 1;
+                    }
+                }
+                Instruction::ExecuteGetNumber(at) => {
+                    try_or_throw!(self.machine_st, self.machine_st.get_number(at));
 
                     if self.machine_st.fail {
                         self.machine_st.backtrack();
