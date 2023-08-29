@@ -804,15 +804,27 @@ impl<'b> CodeGenerator<'b> {
             &Term::Var(ref vr, ref name) => {
                 let var_num = name.to_var_num().unwrap();
 
-                self.marker.mark_var::<QueryInstruction>(
-                    var_num,
-                    Level::Shallow,
-                    vr,
-                    term_loc,
-                    code,
-                );
+                if self.marker.var_data.records[var_num].num_occurrences > 1 {
+                    self.marker.mark_var::<QueryInstruction>(
+                        var_num,
+                        Level::Shallow,
+                        vr,
+                        term_loc,
+                        code,
+                    );
 
-                self.marker.mark_safe_var_unconditionally(var_num);
+                    self.marker.mark_safe_var_unconditionally(var_num);
+                } else {
+                    if self.marker.in_tail_position {
+                        if self.marker.var_data.allocates {
+                            code.push_back(instr!("deallocate"));
+                        }
+
+                        code.push_back(instr!("proceed"));
+                    }
+
+                    return Ok(());
+                }
 
                 compile_expr!(self, &terms[1], term_loc, code)
             }
