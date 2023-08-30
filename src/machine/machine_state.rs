@@ -746,6 +746,7 @@ impl MachineState {
         let term_to_be_printed = self.store(self.deref(self.registers[2]));
         let stub_gen = || functor_stub(atom!("write_term"), 2);
 
+        println!("Register 6: {:?}", self.registers[6]);
         let printer = match self.try_from_list(self.registers[6], stub_gen) {
             Ok(addrs) => {
                 let mut var_names: IndexMap<HeapCellValue, VarPtr> = IndexMap::new();
