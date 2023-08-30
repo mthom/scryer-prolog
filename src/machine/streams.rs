@@ -9,6 +9,7 @@ use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
 use crate::machine::machine_state::*;
 use crate::types::*;
+#[cfg(feature = "http")]
 use crate::http::HttpResponse;
 
 pub use modular_bitfield::prelude::*;
@@ -26,6 +27,7 @@ use std::net::{TcpStream, Shutdown};
 use std::ops::{Deref, DerefMut};
 use std::ptr;
 
+#[cfg(feature = "tls")]
 use native_tls::TlsStream;
 
 #[derive(Debug, BitfieldSpecifier, Clone, Copy, PartialEq, Eq, Hash)]
@@ -232,12 +234,14 @@ impl Write for NamedTcpStream {
     }
 }
 
+#[cfg(feature = "tls")]
 #[derive(Debug)]
 pub struct NamedTlsStream {
     address: Atom,
     tls_stream: TlsStream<Stream>,
 }
 
+#[cfg(feature = "tls")]
 impl Read for NamedTlsStream {
     #[inline]
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
@@ -245,6 +249,7 @@ impl Read for NamedTlsStream {
     }
 }
 
+#[cfg(feature = "tls")]
 impl Write for NamedTlsStream {
     #[inline]
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
@@ -257,17 +262,20 @@ impl Write for NamedTlsStream {
     }
 }
 
+#[cfg(feature = "http")]
 pub struct HttpReadStream {
     url: Atom,
     body_reader: Box<dyn BufRead>,
 }
 
+#[cfg(feature = "http")]
 impl Debug for HttpReadStream {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Http Read Stream [{}]", self.url.as_str())
     }
 }
 
+#[cfg(feature = "http")]
 impl Read for HttpReadStream {
     #[inline]
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
@@ -275,6 +283,7 @@ impl Read for HttpReadStream {
     }
 }
 
+#[cfg(feature = "http")]
 pub struct HttpWriteStream {
     status_code: u16,
     headers: hyper::HeaderMap,
@@ -282,12 +291,14 @@ pub struct HttpWriteStream {
     buffer: Vec<u8>,
 }
 
+#[cfg(feature = "http")]
 impl Debug for HttpWriteStream {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
 	    write!(f, "Http Write Stream")
     }
 }
 
+#[cfg(feature = "http")]
 impl Write for HttpWriteStream {
     #[inline]
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
@@ -361,7 +372,7 @@ impl StreamOptions {
     #[inline]
     pub fn get_alias(self) -> Option<Atom> {
         if self.has_alias() {
-            Some(Atom::from((self.alias() << 3) as usize))
+            Some(Atom::from((self.alias() as u64) << 3))
         } else {
             None
         }
@@ -453,8 +464,11 @@ arena_allocated_impl_for_stream!(CharReader<ByteStream>, ByteStream);
 arena_allocated_impl_for_stream!(CharReader<InputFileStream>, InputFileStream);
 arena_allocated_impl_for_stream!(OutputFileStream, OutputFileStream);
 arena_allocated_impl_for_stream!(CharReader<NamedTcpStream>, NamedTcpStream);
+#[cfg(feature = "tls")]
 arena_allocated_impl_for_stream!(CharReader<NamedTlsStream>, NamedTlsStream);
+#[cfg(feature = "http")]
 arena_allocated_impl_for_stream!(CharReader<HttpReadStream>, HttpReadStream);
+#[cfg(feature = "http")]
 arena_allocated_impl_for_stream!(CharReader<HttpWriteStream>, HttpWriteStream);
 arena_allocated_impl_for_stream!(ReadlineStream, ReadlineStream);
 arena_allocated_impl_for_stream!(StaticStringStream, StaticStringStream);
@@ -468,8 +482,11 @@ pub enum Stream {
     OutputFile(TypedArenaPtr<StreamLayout<OutputFileStream>>),
     StaticString(TypedArenaPtr<StreamLayout<StaticStringStream>>),
     NamedTcp(TypedArenaPtr<StreamLayout<CharReader<NamedTcpStream>>>),
+    #[cfg(feature = "tls")]
     NamedTls(TypedArenaPtr<StreamLayout<CharReader<NamedTlsStream>>>),
+    #[cfg(feature = "http")]
     HttpRead(TypedArenaPtr<StreamLayout<CharReader<HttpReadStream>>>),
+    #[cfg(feature = "http")]
     HttpWrite(TypedArenaPtr<StreamLayout<CharReader<HttpWriteStream>>>),
     Null(StreamOptions),
     Readline(TypedArenaPtr<StreamLayout<ReadlineStream>>),
@@ -524,8 +541,11 @@ impl Stream {
                 Stream::OutputFile(TypedArenaPtr::new(ptr as *mut _))
             }
             ArenaHeaderTag::NamedTcpStream => Stream::NamedTcp(TypedArenaPtr::new(ptr as *mut _)),
+            #[cfg(feature = "tls")]
             ArenaHeaderTag::NamedTlsStream => Stream::NamedTls(TypedArenaPtr::new(ptr as *mut _)),
+            #[cfg(feature = "http")]
             ArenaHeaderTag::HttpReadStream => Stream::HttpRead(TypedArenaPtr::new(ptr as *mut _)),
+            #[cfg(feature = "http")]
 	        ArenaHeaderTag::HttpWriteStream => Stream::HttpWrite(TypedArenaPtr::new(ptr as *mut _)),
             ArenaHeaderTag::ReadlineStream => Stream::Readline(TypedArenaPtr::new(ptr as *mut _)),
             ArenaHeaderTag::StaticStringStream => {
@@ -578,8 +598,11 @@ impl Stream {
             Stream::OutputFile(ptr) => ptr.header_ptr(),
             Stream::StaticString(ptr) => ptr.header_ptr(),
             Stream::NamedTcp(ptr) => ptr.header_ptr(),
+            #[cfg(feature = "tls")]
             Stream::NamedTls(ptr) => ptr.header_ptr(),
+            #[cfg(feature = "http")]
             Stream::HttpRead(ptr) => ptr.header_ptr(),
+            #[cfg(feature = "http")]
 	        Stream::HttpWrite(ptr) => ptr.header_ptr(),
             Stream::Null(_) => ptr::null(),
             Stream::Readline(ptr) => ptr.header_ptr(),
@@ -595,9 +618,12 @@ impl Stream {
             Stream::OutputFile(ref ptr) => &ptr.options,
             Stream::StaticString(ref ptr) => &ptr.options,
             Stream::NamedTcp(ref ptr) => &ptr.options,
+            #[cfg(feature = "tls")]
             Stream::NamedTls(ref ptr) => &ptr.options,
+            #[cfg(feature = "http")]
             Stream::HttpRead(ref ptr) => &ptr.options,
-	        Stream::HttpWrite(ref ptr) => &ptr.options,
+            #[cfg(feature = "http")]
+            Stream::HttpWrite(ref ptr) => &ptr.options,
             Stream::Null(ref options) => options,
             Stream::Readline(ref ptr) => &ptr.options,
             Stream::StandardOutput(ref ptr) => &ptr.options,
@@ -612,8 +638,11 @@ impl Stream {
             Stream::OutputFile(ref mut ptr) => &mut ptr.options,
             Stream::StaticString(ref mut ptr) => &mut ptr.options,
             Stream::NamedTcp(ref mut ptr) => &mut ptr.options,
+            #[cfg(feature = "tls")]
             Stream::NamedTls(ref mut ptr) => &mut ptr.options,
+            #[cfg(feature = "http")]
             Stream::HttpRead(ref mut ptr) => &mut ptr.options,
+            #[cfg(feature = "http")]
             Stream::HttpWrite(ref mut ptr) => &mut ptr.options,
             Stream::Null(ref mut options) => options,
             Stream::Readline(ref mut ptr) => &mut ptr.options,
@@ -630,8 +659,11 @@ impl Stream {
             Stream::OutputFile(ptr) => ptr.lines_read += incr_num_lines_read,
             Stream::StaticString(ptr) => ptr.lines_read += incr_num_lines_read,
             Stream::NamedTcp(ptr) => ptr.lines_read += incr_num_lines_read,
+            #[cfg(feature = "tls")]
             Stream::NamedTls(ptr) => ptr.lines_read += incr_num_lines_read,
+            #[cfg(feature = "http")]
             Stream::HttpRead(ptr) => ptr.lines_read += incr_num_lines_read,
+            #[cfg(feature = "http")]
             Stream::HttpWrite(_) => {}
             Stream::Null(_) => {}
             Stream::Readline(ptr) => ptr.lines_read += incr_num_lines_read,
@@ -648,8 +680,11 @@ impl Stream {
             Stream::OutputFile(ptr) => ptr.lines_read = value,
             Stream::StaticString(ptr) => ptr.lines_read = value,
             Stream::NamedTcp(ptr) => ptr.lines_read = value,
+            #[cfg(feature = "tls")]
             Stream::NamedTls(ptr) => ptr.lines_read = value,
+            #[cfg(feature = "http")]
             Stream::HttpRead(ptr) => ptr.lines_read = value,
+            #[cfg(feature = "http")]
             Stream::HttpWrite(_) => {}
             Stream::Null(_) => {}
             Stream::Readline(ptr) => ptr.lines_read = value,
@@ -666,8 +701,11 @@ impl Stream {
             Stream::OutputFile(ptr) => ptr.lines_read,
             Stream::StaticString(ptr) => ptr.lines_read,
             Stream::NamedTcp(ptr) => ptr.lines_read,
+            #[cfg(feature = "tls")]
             Stream::NamedTls(ptr) => ptr.lines_read,
+            #[cfg(feature = "http")]
             Stream::HttpRead(ptr) => ptr.lines_read,
+            #[cfg(feature = "http")]
             Stream::HttpWrite(_) => 0,
             Stream::Null(_) => 0,
             Stream::Readline(ptr) => ptr.lines_read,
@@ -682,15 +720,21 @@ impl CharRead for Stream {
         match self {
             Stream::InputFile(file) => (*file).peek_char(),
             Stream::NamedTcp(tcp_stream) => (*tcp_stream).peek_char(),
+            #[cfg(feature = "tls")]
             Stream::NamedTls(tls_stream) => (*tls_stream).peek_char(),
+            #[cfg(feature = "http")]
             Stream::HttpRead(http_stream) => (*http_stream).peek_char(),
             Stream::Readline(rl_stream) => (*rl_stream).peek_char(),
             Stream::StaticString(src) => (*src).peek_char(),
             Stream::Byte(cursor) => (*cursor).peek_char(),
+            #[cfg(feature = "http")]
+	        Stream::HttpWrite(_) => Some(Err(std::io::Error::new(
+                ErrorKind::PermissionDenied,
+                StreamError::ReadFromOutputStream,
+            ))),
             Stream::OutputFile(_) |
             Stream::StandardError(_) |
             Stream::StandardOutput(_) |
-	        Stream::HttpWrite(_) |
             Stream::Null(_) => Some(Err(std::io::Error::new(
                 ErrorKind::PermissionDenied,
                 StreamError::ReadFromOutputStream,
@@ -702,15 +746,21 @@ impl CharRead for Stream {
         match self {
             Stream::InputFile(file) => (*file).read_char(),
             Stream::NamedTcp(tcp_stream) => (*tcp_stream).read_char(),
+            #[cfg(feature = "tls")]
             Stream::NamedTls(tls_stream) => (*tls_stream).read_char(),
+            #[cfg(feature = "http")]
             Stream::HttpRead(http_stream) => (*http_stream).read_char(),
             Stream::Readline(rl_stream) => (*rl_stream).read_char(),
             Stream::StaticString(src) => (*src).read_char(),
             Stream::Byte(cursor) => (*cursor).read_char(),
+            #[cfg(feature = "http")]
+	        Stream::HttpWrite(_) => Some(Err(std::io::Error::new(
+                ErrorKind::PermissionDenied,
+                StreamError::ReadFromOutputStream,
+            ))),
             Stream::OutputFile(_) |
             Stream::StandardError(_) |
             Stream::StandardOutput(_) |
-	        Stream::HttpWrite(_) |
             Stream::Null(_) => Some(Err(std::io::Error::new(
                 ErrorKind::PermissionDenied,
                 StreamError::ReadFromOutputStream,
@@ -722,15 +772,18 @@ impl CharRead for Stream {
         match self {
             Stream::InputFile(file) => file.put_back_char(c),
             Stream::NamedTcp(tcp_stream) => tcp_stream.put_back_char(c),
+            #[cfg(feature = "tls")]
             Stream::NamedTls(tls_stream) => tls_stream.put_back_char(c),
+            #[cfg(feature = "http")]
             Stream::HttpRead(http_stream) => http_stream.put_back_char(c),
             Stream::Readline(rl_stream) => rl_stream.put_back_char(c),
             Stream::StaticString(src) => src.put_back_char(c),
             Stream::Byte(cursor) => cursor.put_back_char(c),
+            #[cfg(feature = "http")]
+	        Stream::HttpWrite(_) => {}
             Stream::OutputFile(_) |
             Stream::StandardError(_) |
             Stream::StandardOutput(_) |
-	        Stream::HttpWrite(_) |
             Stream::Null(_) => {}
         }
     }
@@ -739,15 +792,18 @@ impl CharRead for Stream {
         match self {
             Stream::InputFile(ref mut file) => file.consume(nread),
             Stream::NamedTcp(ref mut tcp_stream) => tcp_stream.consume(nread),
+            #[cfg(feature = "tls")]
             Stream::NamedTls(ref mut tls_stream) => tls_stream.consume(nread),
+            #[cfg(feature = "http")]
             Stream::HttpRead(ref mut http_stream) => http_stream.consume(nread),
             Stream::Readline(ref mut rl_stream) => rl_stream.consume(nread),
             Stream::StaticString(ref mut src) => src.consume(nread),
             Stream::Byte(ref mut cursor) => cursor.consume(nread),
+            #[cfg(feature = "http")]
+	        Stream::HttpWrite(_) => {}
             Stream::OutputFile(_) |
             Stream::StandardError(_) |
             Stream::StandardOutput(_) |
-	        Stream::HttpWrite(_) |
             Stream::Null(_) => {}
         }
     }
@@ -759,15 +815,21 @@ impl Read for Stream {
         let bytes_read = match self {
             Stream::InputFile(file) => (*file).read(buf),
             Stream::NamedTcp(tcp_stream) => (*tcp_stream).read(buf),
+            #[cfg(feature = "tls")]
             Stream::NamedTls(tls_stream) => (*tls_stream).read(buf),
+            #[cfg(feature = "http")]
             Stream::HttpRead(http_stream) => (*http_stream).read(buf),
             Stream::Readline(rl_stream) => (*rl_stream).read(buf),
             Stream::StaticString(src) => (*src).read(buf),
             Stream::Byte(cursor) => (*cursor).read(buf),
+            #[cfg(feature = "http")]
+	        Stream::HttpWrite(_) => Err(std::io::Error::new(
+                ErrorKind::PermissionDenied,
+                StreamError::ReadFromOutputStream,
+            )),
             Stream::OutputFile(_)
                 | Stream::StandardError(_)
 	            | Stream::StandardOutput(_)
-	            | Stream::HttpWrite(_)
                 | Stream::Null(_) => Err(std::io::Error::new(
                     ErrorKind::PermissionDenied,
                     StreamError::ReadFromOutputStream,
@@ -783,12 +845,18 @@ impl Write for Stream {
         match self {
             Stream::OutputFile(ref mut file) => file.write(buf),
             Stream::NamedTcp(ref mut tcp_stream) => tcp_stream.get_mut().write(buf),
+            #[cfg(feature = "tls")]
             Stream::NamedTls(ref mut tls_stream) => tls_stream.get_mut().write(buf),
             Stream::Byte(ref mut cursor) => cursor.get_mut().write(buf),
             Stream::StandardOutput(stream) => stream.write(buf),
             Stream::StandardError(stream) => stream.write(buf),
+            #[cfg(feature = "http")]
 	        Stream::HttpWrite(ref mut stream) => stream.get_mut().write(buf),
-            Stream::HttpRead(_) |
+            #[cfg(feature = "http")]
+            Stream::HttpRead(_) => Err(std::io::Error::new(
+                ErrorKind::PermissionDenied,
+                StreamError::WriteToInputStream,
+            )),
             Stream::StaticString(_) |
             Stream::Readline(_) |
             Stream::InputFile(..) |
@@ -803,12 +871,18 @@ impl Write for Stream {
         match self {
             Stream::OutputFile(ref mut file) => file.stream.flush(),
             Stream::NamedTcp(ref mut tcp_stream) => tcp_stream.stream.get_mut().flush(),
+            #[cfg(feature = "tls")]
             Stream::NamedTls(ref mut tls_stream) => tls_stream.stream.get_mut().flush(),
             Stream::Byte(ref mut cursor) => cursor.stream.get_mut().flush(),
             Stream::StandardError(stream) => stream.stream.flush(),
             Stream::StandardOutput(stream) => stream.stream.flush(),
+            #[cfg(feature = "http")]
 	        Stream::HttpWrite(ref mut stream) => stream.stream.get_mut().flush(),
-            Stream::HttpRead(_) |
+            #[cfg(feature = "http")] 
+            Stream::HttpRead(_) => Err(std::io::Error::new(
+                ErrorKind::PermissionDenied,
+                StreamError::FlushToInputStream,
+            )),
             Stream::StaticString(_) |
             Stream::Readline(_) |
             Stream::InputFile(_) |
@@ -913,7 +987,12 @@ impl Stream {
             Stream::InputFile(file_stream) => {
                 file_stream.position()
             }
-            Stream::NamedTcp(..) | Stream::NamedTls(..) | Stream::Readline(..) => {
+            #[cfg(feature = "tls")]
+            Stream::NamedTls(..) => {
+                Some(0)
+            }
+            Stream::NamedTcp(..) 
+            | Stream::Readline(..) => {
                 Some(0)
             }
             _ => None,
@@ -951,8 +1030,11 @@ impl Stream {
             Stream::OutputFile(stream) => stream.past_end_of_stream,
             Stream::StaticString(stream) => stream.past_end_of_stream,
             Stream::NamedTcp(stream) => stream.past_end_of_stream,
+            #[cfg(feature = "tls")]
             Stream::NamedTls(stream) => stream.past_end_of_stream,
+            #[cfg(feature = "http")]
             Stream::HttpRead(stream) => stream.past_end_of_stream,
+            #[cfg(feature = "http")]
             Stream::HttpWrite(stream) => stream.past_end_of_stream,
             Stream::Null(_) => false,
             Stream::Readline(stream) => stream.past_end_of_stream,
@@ -974,8 +1056,11 @@ impl Stream {
             Stream::OutputFile(stream) => stream.past_end_of_stream = value,
             Stream::StaticString(stream) => stream.past_end_of_stream = value,
             Stream::NamedTcp(stream) => stream.past_end_of_stream = value,
+            #[cfg(feature = "tls")]
             Stream::NamedTls(stream) => stream.past_end_of_stream = value,
+            #[cfg(feature = "http")]
             Stream::HttpRead(stream) => stream.past_end_of_stream = value,
+            #[cfg(feature = "http")]
             Stream::HttpWrite(stream) => stream.past_end_of_stream = value,
             Stream::Null(_) => {}
             Stream::Readline(stream) => stream.past_end_of_stream = value,
@@ -1054,6 +1139,7 @@ impl Stream {
             Stream::InputFile(file) => Some(file.stream.get_ref().file_name),
             Stream::OutputFile(file) => Some(file.stream.file_name),
             Stream::NamedTcp(tcp) => Some(tcp.stream.get_ref().address),
+            #[cfg(feature = "tls")]
             Stream::NamedTls(tls) => Some(tls.stream.get_ref().address),
             _ => None,
         }
@@ -1062,14 +1148,19 @@ impl Stream {
     #[inline]
     pub(crate) fn mode(&self) -> Atom {
         match self {
+            #[cfg(feature = "http")]
+            Stream::HttpRead(_) => atom!("read"),
+            #[cfg(feature = "tls")]
+            Stream::NamedTls(..) => atom!("read_append"),
             Stream::Byte(_)
                 | Stream::Readline(_)
                 | Stream::StaticString(_)
-                | Stream::HttpRead(_)
                 | Stream::InputFile(..) => atom!("read"),
-            Stream::NamedTcp(..) | Stream::NamedTls(..) => atom!("read_append"),
+            Stream::NamedTcp(..) => atom!("read_append"),
             Stream::OutputFile(file) if file.is_append => atom!("append"),
-            Stream::OutputFile(_) | Stream::StandardError(_) | Stream::StandardOutput(_) | Stream::HttpWrite(_) => atom!("write"),
+            #[cfg(feature = "http")]
+            Stream::HttpWrite(_) => atom!("write"),
+            Stream::OutputFile(_) | Stream::StandardError(_) | Stream::StandardOutput(_) => atom!("write"),
             Stream::Null(_) => atom!(""),
         }
     }
@@ -1108,6 +1199,7 @@ impl Stream {
         ))
     }
 
+    #[cfg(feature = "tls")]
     #[inline]
     pub(crate) fn from_tls_stream(
         address: Atom,
@@ -1123,6 +1215,7 @@ impl Stream {
         ))
     }
 
+    #[cfg(feature = "http")]
     #[inline]
     pub(crate) fn from_http_stream(
         url: Atom,
@@ -1138,6 +1231,7 @@ impl Stream {
         ))
     }
 
+    #[cfg(feature = "http")]
     #[inline]
     pub(crate) fn from_http_sender(
 	response: TypedArenaPtr<HttpResponse>,
@@ -1189,9 +1283,11 @@ impl Stream {
             Stream::NamedTcp(ref mut tcp_stream) => {
                 tcp_stream.inner_mut().tcp_stream.shutdown(Shutdown::Both)
             },
+            #[cfg(feature = "tls")]
             Stream::NamedTls(ref mut tls_stream) => {
                 tls_stream.inner_mut().tls_stream.shutdown()
             }
+            #[cfg(feature = "http")]
             Stream::HttpRead(ref mut http_stream) => {
                 unsafe {
                     http_stream.set_tag(ArenaHeaderTag::Dropped);
@@ -1200,7 +1296,8 @@ impl Stream {
 
                 Ok(())
             }
-	    Stream::HttpWrite(ref mut http_stream) => {
+            #[cfg(feature = "http")]
+	        Stream::HttpWrite(ref mut http_stream) => {
                 unsafe {
                     http_stream.set_tag(ArenaHeaderTag::Dropped);
                     std::ptr::drop_in_place(&mut http_stream.inner_mut().buffer as *mut _);
@@ -1242,9 +1339,11 @@ impl Stream {
     #[inline]
     pub(crate) fn is_input_stream(&self) -> bool {
         match self {
+            #[cfg(feature = "tls")]
+            Stream::NamedTls(..) => true,
+            #[cfg(feature = "http")]
+            Stream::HttpRead(..) => true,
             Stream::NamedTcp(..)
-                | Stream::NamedTls(..)
-                | Stream::HttpRead(..)
                 | Stream::Byte(_)
                 | Stream::Readline(_)
                 | Stream::StaticString(_)
@@ -1256,11 +1355,13 @@ impl Stream {
     #[inline]
     pub(crate) fn is_output_stream(&self) -> bool {
         match self {
+            #[cfg(feature = "tls")]
+            Stream::NamedTls(..) => true,
+            #[cfg(feature = "http")]
+            Stream::HttpWrite(..) => true,
             Stream::StandardError(_)
                 | Stream::StandardOutput(_)
                 | Stream::NamedTcp(..)
-	            | Stream::NamedTls(..)
-	            | Stream::HttpWrite(..)
                 | Stream::Byte(_)
                 | Stream::OutputFile(..) => true,
             _ => false,

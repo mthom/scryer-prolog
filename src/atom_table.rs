@@ -16,7 +16,7 @@ use modular_bitfield::prelude::*;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Atom {
-    pub index: usize,
+    pub index: u64,
 }
 
 const_assert!(mem::size_of::<Atom>() == 8);
@@ -156,7 +156,7 @@ impl Atom {
 
     #[inline(always)]
     pub fn is_static(self) -> bool {
-        self.index < STRINGS.len() << 3
+        (self.index as usize) < STRINGS.len() << 3
     }
 
     #[inline(always)]
@@ -164,19 +164,19 @@ impl Atom {
         if self.is_static() {
             ptr::null()
         } else {
-            (get_atom_tbl_buf_base() as usize + self.index - (STRINGS.len() << 3)) as *const u8
+            (get_atom_tbl_buf_base() as usize + (self.index as usize) - (STRINGS.len() << 3)) as *const u8
         }
     }
 
     #[inline(always)]
-    pub fn from(index: usize) -> Self {
+    pub fn from(index: u64) -> Self {
         Self { index }
     }
 
     #[inline(always)]
     pub fn len(self) -> usize {
         if self.is_static() {
-            STRINGS[self.index >> 3].len()
+            STRINGS[(self.index >> 3) as usize].len()
         } else {
             unsafe { ptr::read(self.as_ptr() as *const AtomHeader).len() as _ }
         }
@@ -208,7 +208,7 @@ impl Atom {
             let ptr = self.as_ptr();
 
             if ptr.is_null() {
-                return STRINGS[self.index >> 3];
+                return STRINGS[(self.index >> 3) as usize];
             }
 
             let header = ptr::read::<AtomHeader>(ptr as *const _);
@@ -339,7 +339,7 @@ impl AtomTable {
             write_to_ptr(string, len_ptr);
 
             let atom = Atom {
-                index: (STRINGS.len() << 3) + len_ptr as usize - ptr_base,
+                index: ((STRINGS.len() << 3) + len_ptr as usize - ptr_base) as u64,
             };
 
             self.table.insert(atom);
@@ -386,7 +386,7 @@ impl AtomCell {
 
     #[inline]
     pub fn get_name(self) -> Atom {
-        Atom::from(self.get_index() << 3)
+        Atom::from((self.get_index() as u64) << 3)
     }
 
     #[inline]
@@ -396,6 +396,6 @@ impl AtomCell {
 
     #[inline]
     pub fn get_name_and_arity(self) -> (Atom, usize) {
-        (Atom::from(self.get_index() << 3), self.get_arity())
+        (Atom::from((self.get_index() as u64) << 3), self.get_arity())
     }
 }

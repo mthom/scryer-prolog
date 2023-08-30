@@ -31,6 +31,7 @@ use crate::arena::*;
 use crate::arithmetic::*;
 use crate::atom_table::*;
 use crate::forms::*;
+#[cfg(feature = "ffi")]
 use crate::ffi::ForeignFunctionTable;
 use crate::instructions::*;
 use crate::machine::args::*;
@@ -73,6 +74,7 @@ pub struct Machine {
     pub(super) user_output: Stream,
     pub(super) user_error: Stream,
     pub(super) load_contexts: Vec<LoadContext>,
+    #[cfg(feature = "ffi")]
     pub(super) foreign_function_table: ForeignFunctionTable,
 }
 
@@ -452,6 +454,7 @@ impl Machine {
             user_output,
             user_error,
             load_contexts: vec![],
+            #[cfg(feature = "ffi")]
 	        foreign_function_table: Default::default(),
         };
 
@@ -1253,7 +1256,7 @@ impl Machine {
                     }
                 }
                 TrailEntryTag::TrailedBlackboardEntry => {
-                    let key = Atom::from(h);
+                    let key = Atom::from(h as u64);
 
                     match self.indices.global_variables.get_mut(&key) {
                         Some((_, ref mut loc)) => *loc = None,
@@ -1261,7 +1264,7 @@ impl Machine {
                     }
                 }
                 TrailEntryTag::TrailedBlackboardOffset => {
-                    let key = Atom::from(h);
+                    let key = Atom::from(h as u64);
                     let value_cell = HeapCellValue::from(u64::from(self.machine_st.trail[i + 1]));
 
                     match self.indices.global_variables.get_mut(&key) {

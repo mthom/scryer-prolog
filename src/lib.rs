@@ -17,11 +17,13 @@ mod allocator;
 mod arithmetic;
 pub mod codegen;
 mod debray_allocator;
+#[cfg(feature = "ffi")]
 mod ffi;
 mod variable_records;
 mod forms;
 mod heap_iter;
 pub mod heap_print;
+#[cfg(feature = "http")]
 mod http;
 mod indexing;
 #[macro_use]
@@ -32,6 +34,7 @@ mod iterators;
 pub mod machine;
 mod raw_block;
 pub mod read;
+#[cfg(feature = "repl")]
 mod repl_helper;
 mod targets;
 pub mod types;

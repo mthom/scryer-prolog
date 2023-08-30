@@ -7,9 +7,11 @@ use lazy_static::lazy_static;
 use crate::arena::*;
 use crate::atom_table::*;
 use crate::forms::*;
+#[cfg(feature = "ffi")]
 use crate::ffi::*;
 use crate::heap_iter::*;
 use crate::heap_print::*;
+#[cfg(feature = "http")]
 use crate::http::{HttpService, HttpListener, HttpResponse};
 use crate::instructions::*;
 use crate::machine;
@@ -44,6 +46,7 @@ use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::convert::TryFrom;
 use std::env;
+#[cfg(feature = "ffi")]
 use std::ffi::CString;
 use std::fs;
 use std::hash::{BuildHasher, BuildHasherDefault};
@@ -57,10 +60,13 @@ use std::process;
 use std::str::FromStr;
 
 use chrono::{offset::Local, DateTime};
+#[cfg(not(target_os = "wasi"))]
 use cpu_time::ProcessTime;
 use std::time::{Duration, SystemTime};
 
+#[cfg(feature = "repl")]
 use crossterm::event::{read, Event, KeyCode, KeyEvent, KeyModifiers};
+#[cfg(feature = "repl")]
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 
 use blake2::{Blake2b, Blake2s};
@@ -72,24 +78,28 @@ use ring::{
 use ripemd160::{Digest, Ripemd160};
 use sha3::{Sha3_224, Sha3_256, Sha3_384, Sha3_512};
 
-use crrl::secp256k1;
+use crrl::{secp256k1, x25519};
 
-use sodiumoxide::crypto::scalarmult::curve25519::*;
-
+#[cfg(feature = "tls")]
 use native_tls::{TlsConnector,TlsAcceptor,Identity};
 
 use base64;
 use roxmltree;
 use select;
 
+#[cfg(feature = "http")]
 use hyper::server::conn::http1;
+#[cfg(feature = "http")]
 use hyper::header::{HeaderValue, HeaderName};
+#[cfg(feature = "http")]
 use hyper::{HeaderMap, Method};
 use http_body_util::BodyExt;
 use bytes::Buf;
+#[cfg(feature = "http")]
 use reqwest::Url;
 use hyper_util::rt::TokioIo;
 
+#[cfg(feature = "repl")]
 pub(crate) fn get_key() -> KeyEvent {
     let key;
     enable_raw_mode().expect("failed to enable raw mode");
@@ -744,7 +754,7 @@ impl MachineState {
             };
 
             if let Some(max_steps) = max_steps_n {
-                if max_steps.abs() as usize <= 1 << 63 {
+                if max_steps.abs() as u64 <= 1 << 63 {
                     if max_steps >= 0 {
                         max_old = max_steps;
                     } else {
@@ -979,7 +989,7 @@ impl MachineState {
     pub(crate) fn call_continuation_chunk(&mut self, chunk: HeapCellValue, return_p: usize) -> usize {
         let chunk = self.store(self.deref(chunk));
 
-        let s = chunk.get_value();
+        let s = chunk.get_value() as usize;
         let arity = cell_as_atom_cell!(self.heap[s]).get_arity();
 
         let num_cells = arity - 1;
@@ -1160,7 +1170,7 @@ impl Machine {
         let attr_var = self.deref_register(1);
 
         if let HeapCellValueTag::AttrVar = attr_var.get_tag() {
-            let attr_var_loc = attr_var.get_value();
+            let attr_var_loc = attr_var.get_value() as usize;
             self.machine_st.heap[attr_var_loc] = heap_loc_as_cell!(attr_var_loc);
             self.machine_st.trail(TrailRef::Ref(Ref::attr_var(attr_var_loc)));
         }
@@ -1346,7 +1356,7 @@ impl Machine {
             } else {
                 if is_internal_call {
                     debug_assert_eq!(goal.get_tag(), HeapCellValueTag::Str);
-                    goal = self.machine_st.heap[goal.get_value()+1];
+                    goal = self.machine_st.heap[goal.get_value() as usize+1];
                     (module_name, goal) = self.machine_st.strip_module(goal, module_name);
 
                     if let Some((inner_name, inner_arity)) = self.machine_st.name_and_arity_from_heap(goal) {
@@ -1576,7 +1586,7 @@ impl Machine {
         );
 
         if HeapCellValueTag::Str == qualified_goal.get_tag() {
-            let s = qualified_goal.get_value();
+            let s = qualified_goal.get_value() as usize;
             let (name, arity) = cell_as_atom_cell!(self.machine_st.heap[s])
                 .get_name_and_arity();
 
@@ -1767,6 +1777,7 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn current_hostname(&mut self) {
+        #[cfg(feature = "hostname")]
         match hostname::get().ok() {
             Some(host) => match host.to_str() {
                 Some(host) => {
@@ -3682,6 +3693,7 @@ impl Machine {
         Ok(())
     }
 
+    #[cfg(feature = "repl")]
     #[inline(always)]
     pub(crate) fn get_single_char(&mut self) -> CallResult {
         let ctrl_c = KeyEvent {
@@ -3705,7 +3717,28 @@ impl Machine {
             KeyCode::Char(c) => c,
             _ => unreachable!(),
         };
+        let a1 = self.deref_register(1);
+        self.machine_st.unify_char(
+            c,
+            a1,
+        );
 
+        Ok(())
+    }
+
+    #[cfg(not(feature = "repl"))]
+    #[inline(always)]
+    pub(crate) fn get_single_char(&mut self) -> CallResult {
+        let mut buffer = [0; 1];
+        // is there a better way?
+        if std::io::stdin().read(&mut buffer).is_err() {
+            let stub = functor_stub(atom!("get_single_char"), 1);
+            let err = self.machine_st.interrupt_error();
+            let err = self.machine_st.error_form(err, stub);
+
+            return Err(err);
+        }
+        let c = buffer[0] as char;
         let a1 = self.deref_register(1);
         self.machine_st.unify_char(
             c,
@@ -4161,12 +4194,19 @@ impl Machine {
         self.machine_st.fail = result;
     }
 
+    #[cfg(not(target_os = "wasi"))]
     #[inline(always)]
     pub(crate) fn cpu_now(&mut self) {
         let secs = ProcessTime::now().as_duration().as_secs_f64();
         let secs = float_alloc!(secs, self.machine_st.arena);
 
         self.machine_st.unify_f64(secs, self.machine_st.registers[1]);
+    }
+
+    #[cfg(target_os = "wasi")]
+    #[inline(always)]
+    pub(crate) fn cpu_now(&mut self) {
+        // TODO
     }
 
     #[inline(always)]
@@ -4201,6 +4241,7 @@ impl Machine {
         Ok(())
     }
 
+    #[cfg(feature = "http")]
     #[inline(always)]
     pub(crate) fn http_open(&mut self) -> CallResult {
         let address_sink = self.deref_register(1);
@@ -4319,6 +4360,7 @@ impl Machine {
         Ok(())
     }
 
+    #[cfg(feature = "http")]
     #[inline(always)]
     pub(crate) fn http_listen(&mut self) -> CallResult {
         let address_sink = self.deref_register(1);
@@ -4371,6 +4413,7 @@ impl Machine {
 	Ok(())
     }
 
+    #[cfg(feature = "http")]
     #[inline(always)]
     pub(crate) fn http_accept(&mut self) -> CallResult {
 	let culprit = self.deref_register(1);
@@ -4455,6 +4498,7 @@ impl Machine {
 	Ok(())
     }
 
+    #[cfg(feature = "http")]
     #[inline(always)]
     pub(crate) fn http_answer(&mut self) -> CallResult {
 	let culprit = self.deref_register(1);
@@ -4521,6 +4565,7 @@ impl Machine {
 	Ok(())
     }
 
+    #[cfg(feature = "ffi")]
     #[inline(always)]
     pub(crate) fn load_foreign_lib(&mut self) -> CallResult {
 	let library_name = self.deref_register(1);
@@ -4567,6 +4612,7 @@ impl Machine {
 	Ok(())
     }
 
+    #[cfg(feature = "ffi")]
     #[inline(always)]
     pub(crate) fn foreign_call(&mut self) -> CallResult {
 	let function_name = self.deref_register(1);
@@ -4642,6 +4688,7 @@ impl Machine {
 	Ok(())
     }
 
+    #[cfg(feature = "ffi")]
     fn build_struct(&mut self, name: &str, mut args: Vec<Value>) -> HeapCellValue {
 	args.insert(0, Value::CString(CString::new(name).unwrap()));
 	let cells: Vec<_> = args.into_iter()
@@ -4662,6 +4709,7 @@ impl Machine {
         )
     }
 
+    #[cfg(feature = "ffi")]
     #[inline(always)]
     pub(crate) fn define_foreign_struct(&mut self) -> CallResult {
 	let struct_name = self.deref_register(1);
@@ -4854,7 +4902,7 @@ impl Machine {
             Some(AttrListMatch { match_site: MatchSite::Match(match_site), .. }) => {
                 let list_head = self.machine_st.heap[match_site];
 
-                if list_head.get_value() == match_site {
+                if list_head.get_value() as usize == match_site {
                     // at the end of the list, no match found in this case.
                     self.machine_st.fail = true;
                 } else {
@@ -4927,7 +4975,7 @@ impl Machine {
                     prev_tail
                 } else {
                     if self.machine_st.heap[match_site + 1].is_var() {
-                        let h = attr_var.get_value();
+                        let h = attr_var.get_value() as usize;
 
                         self.machine_st.heap[h] = heap_loc_as_cell!(h);
                         self.machine_st.trail(TrailRef::Ref(Ref::attr_var(h)));
@@ -5002,13 +5050,13 @@ impl Machine {
                     }
                     MatchSite::Match(match_site) => {
                         let l = self.machine_st.heap[match_site].get_value();
-                        self.machine_st.heap[match_site].set_value(h);
+                        self.machine_st.heap[match_site].set_value(h as u64);
 
                         (match_site, l)
                     }
                 };
 
-                self.machine_st.trail(TrailRef::AttrVarListLink(match_site, l));
+                self.machine_st.trail(TrailRef::AttrVarListLink(match_site, l as usize));
             }
             None => {
                 // the list is empty.
@@ -5038,7 +5086,7 @@ impl Machine {
         let mut prev_tail = None;
 
         while let HeapCellValueTag::Lis = attrs_list.get_tag() {
-            let mut list_head = self.machine_st.heap[attrs_list.get_value()];
+            let mut list_head = self.machine_st.heap[attrs_list.get_value() as usize];
 
             loop {
                 read_heap_cell!(list_head,
@@ -5058,7 +5106,7 @@ impl Machine {
 
                         if module == module_loc && name == t_name && arity == t_arity {
                             return Some(AttrListMatch {
-                                match_site: MatchSite::Match(attrs_list.get_value()),
+                                match_site: MatchSite::Match(attrs_list.get_value() as usize),
                                 prev_tail,
                             });
                         }
@@ -5071,7 +5119,7 @@ impl Machine {
                 );
             }
 
-            let tail_loc = attrs_list.get_value() + 1;
+            let tail_loc = attrs_list.get_value() as usize + 1;
             prev_tail = Some(tail_loc);
 
             // do the work of self.store(self.deref(...)) but inline it
@@ -5416,7 +5464,7 @@ impl Machine {
         let value = self.deref_register(2);
 
         debug_assert_eq!(HeapCellValueTag::AttrVar, var.get_tag());
-        self.machine_st.heap[var.get_value()] = value;
+        self.machine_st.heap[var.get_value() as usize] = value;
     }
 
     #[inline(always)]
@@ -6241,6 +6289,7 @@ impl Machine {
         Ok(())
     }
 
+    #[cfg(feature = "tls")]
     #[inline(always)]
     pub(crate) fn tls_client_connect(&mut self) -> CallResult {
         if let Some(hostname) = self.machine_st.value_to_str_like(self.machine_st.registers[1]) {
@@ -6278,6 +6327,7 @@ impl Machine {
         }
     }
 
+    #[cfg(feature = "tls")]
     #[inline(always)]
     pub(crate) fn tls_accept_client(&mut self) -> CallResult {
         let pkcs12 = self.string_encoding_bytes(self.machine_st.registers[1], atom!("octet"));
@@ -7304,13 +7354,11 @@ impl Machine {
     pub(crate) fn curve25519_scalar_mult(&mut self) {
         let stub1_gen = || functor_stub(atom!("curve25519_scalar_mult"), 3);
         let scalar_bytes = self.machine_st.integers_to_bytevec(self.machine_st.registers[1], stub1_gen);
-        let scalar = Scalar(<[u8; 32]>::try_from(&scalar_bytes[..]).unwrap());
-
         let stub2_gen = || functor_stub(atom!("curve25519_scalar_mult"), 3);
         let point_bytes = self.machine_st.integers_to_bytevec(self.machine_st.registers[2], stub2_gen);
-        let point = GroupElement(<[u8; 32]>::try_from(&point_bytes[..]).unwrap());
 
-        let result = scalarmult(&scalar, &point).unwrap();
+        let result = x25519::x25519(&<[u8; 32]>::try_from(&point_bytes[..]).unwrap(),
+                                    &<[u8; 32]>::try_from(&scalar_bytes[..]).unwrap());
 
         let string = self.u8s_to_string(&result[..]);
 

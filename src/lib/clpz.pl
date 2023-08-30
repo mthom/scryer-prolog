@@ -119,7 +119,7 @@
 :- use_module(library(iso_ext)).
 :- use_module(library(dcgs)).
 :- use_module(library(terms)).
-:- use_module(library(error), [domain_error/3, type_error/3]).
+:- use_module(library(error), [domain_error/3, type_error/3, can_be/2]).
 :- use_module(library(si)).
 :- use_module(library(freeze)).
 :- use_module(library(arithmetic)).
@@ -838,12 +838,12 @@ Using suitable labeling strategies, we can easily find solutions with
 
 ```
 ?- n_queens(80, Qs), labeling([ff], Qs).
-   Qs = [1,3,5,44,42,4,50,7,68,57,76,61,6,39,30,40,8,54,36,41,...]
+   Qs = [1,3,5,44,42,4,50,7,68,57,76,61,6,39,30,40,8,54,36,41|...]
 ;  ... .
 
 ?- time((n_queens(90, Qs), labeling([ff], Qs))).
-   % CPU time: 31.351s
-   Qs = [1,3,5,50,42,4,49,7,59,48,46,63,6,55,47,64,8,70,58,67,...]
+   % CPU time: 2.382s
+   Qs = [1,3,5,50,42,4,49,7,59,48,46,63,6,55,47,64,8,70,58,67|...]
 ;  ... .
 ```
 
@@ -1745,11 +1745,7 @@ clpz_in(V, D) :-
         drep_to_domain(D, Dom),
         domain(V, Dom).
 
-fd_variable(V) :-
-        (   var(V) -> true
-        ;   integer(V) -> true
-        ;   type_error(integer, V)
-        ).
+fd_variable(V) :- can_be(integer, V).
 
 %% ins(+Vars, +Domain)
 %
@@ -2219,14 +2215,14 @@ all_different(Ls) :-
         fd_must_be_list(Ls, all_different(Ls)-1),
         maplist(fd_variable, Ls),
         Orig = original_goal(_, all_different(Ls)),
-        all_different(Ls, [], Orig),
-        do_queue.
+        new_queue(Q0),
+        phrase((all_different(Ls, [], Orig),do_queue), [Q0], _).
 
-all_different([], _, _).
-all_different([X|Right], Left, Orig) :-
-        (   var(X) ->
-            make_propagator(pdifferent(Left,Right,X,Orig), Prop),
-            init_propagator(X, Prop),
+all_different([], _, _) --> [].
+all_different([X|Right], Left, Orig) -->
+        (   { var(X) } ->
+            { make_propagator(pdifferent(Left,Right,X,Orig), Prop) },
+            init_propagator_([X], Prop),
             trigger_prop(Prop)
         ;   exclude_fire(Left, Right, X)
         ),
@@ -2250,7 +2246,8 @@ all_distinct(Ls) :-
         maplist(fd_variable, Ls),
         make_propagator(pdistinct(Ls), Prop),
         new_queue(Q0),
-        phrase((distinct_attach(Ls, Prop, []),trigger_prop(Prop),do_queue), [Q0], _).
+        phrase((distinct_attach(Ls, Prop, []),trigger_prop(Prop),do_queue), [Q0], _),
+        variables_same_queue(Ls).
 
 %% nvalue(?N, +Vars).
 %
@@ -2639,22 +2636,28 @@ parse_goals([G|Gs]) --> parse_goal(G), parse_goals(Gs).
 
 parse_goal(g(Goal)) --> [Goal].
 parse_goal(p(Prop)) -->
-        [make_propagator(Prop, P)],
         { term_variables(Prop, Vs) },
-        parse_init(Vs, P),
-        [trigger_once(P)].
+        [make_propagator(Prop, P),
+         new_queue(Q0),
+         phrase(init_propagator_(Vs, P), [Q0], [Q]),
+         variables_same_queue(Vs),
+         trigger_once_(P, Q)].
 
-parse_init([], _)     --> [].
-parse_init([V|Vs], P) --> [init_propagator(V, P)], parse_init(Vs, P).
-
-%?- set_prolog_flag(answer_write_options, [portray(true)]),
-%   clpz:parse_clpz_clauses(Clauses), maplist(portray_clause, Clauses).
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+?- use_module(library(lists)),
+   use_module(library(format)),
+   clpz:parse_clpz_clauses(Clauses),
+   maplist(portray_clause, Clauses).
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 trigger_once(Prop) :-
         new_queue(Q),
+        trigger_once_(Prop, Q).
+
+trigger_once_(Prop, Q) :-
         phrase((trigger_prop(Prop),do_queue), [Q], _).
 
 neq(A, B) :- propagator_init_trigger(pneq(A, B)).
@@ -2666,41 +2669,47 @@ propagator_init_trigger(P) -->
 propagator_init_trigger(Vs, P) -->
         [p(Prop)],
         { make_propagator(P, Prop),
-          maplist(prop_init(Prop), Vs),
+          new_queue(Q0),
+          phrase(init_propagator_(Vs, Prop), [Q0], [Q]),
           variables_same_queue(Vs),
-          trigger_once(Prop) }.
+          trigger_once_(Prop, Q) }.
 
 variables_same_queue(Vs0) :-
         include(var, Vs0, Vs),
-        new_queue(Q),
-        maplist(variable_queue, Vs, Qs),
-        phrase((collect_goal(Qs),
-                collect_fast(Qs),
-                collect_slow(Qs)), [Q], [Q]),
-        maplist(clear_queue, Qs),
-        maplist(=(Q), Qs).
+        (   Vs == [] -> true
+        ;   maplist(variable_queue, Vs, Qs0),
+            sort(Qs0, [Q|Qs]),
+            Q =.. [_|Args],
+            append_queues_(Qs, Args, [append,append,append,ignore]),
+            maplist(clear_queue, Qs),
+            maplist(=(Q), Qs)
+        ).
+
+append_queues_([], _, _).
+append_queues_([Q|Qs], Args0, Is) :-
+        Q =.. [_|Args],
+        maplist(append_queue, Is, Args0, Args),
+        append_queues_(Qs, Args, Is).
+
+append_queue(ignore, _, _).
+append_queue(append, Q0, Q) :-
+        (   get_atts(Q0, queue(Ls0,Ls)) ->
+            (   get_atts(Q, queue(Ms0,Ms)) ->
+                Ls = Ms0,
+                put_atts(Q0, queue(Ls0,Ms))
+            ;   true
+            )
+        ;   (   get_atts(Q, queue(Ms0,Ms)) ->
+                put_atts(Q0, queue(Ms0,Ms))
+            ;   true
+            )
+        ).
 
 clear_queue(queue(Goals,Fast,Slow,Aux)) :-
         put_atts(Goals, -queue(_,_)),
         put_atts(Fast, -queue(_,_)),
         put_atts(Slow, -queue(_,_)),
         put_atts(Aux, -disabled).
-
-collect_goal(Qs) --> collect_arg(Qs, 1).
-collect_fast(Qs) --> collect_arg(Qs, 2).
-collect_slow(Qs) --> collect_arg(Qs, 3).
-
-collect_arg([], _) --> [].
-collect_arg([Q|Qs], Which) -->
-        collect_all_(Q, Which),
-        collect_arg(Qs, Which).
-
-collect_all_(Q, Which) -->
-        (   { queue_get_arg_(Q, Which, Element) } ->
-            insert_queue(Element, Which),
-            collect_all_(Q, Which)
-        ;   []
-        ).
 
 variable_queue(Var, Q) :-
         get_attr(Var, clpz, Attr),
@@ -2813,7 +2822,7 @@ matches([
          %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
          m(var(X) #\= integer(Y))             => [g(neq_num(X, Y))],
-         m(var(X) #\= var(Y))                 => [g(neq(X,Y))],
+         m(var(X) #\= var(Y))                 => [p(pneq(X,Y))],
          m(var(X) #\= var(Y) + var(Z))        => [p(x_neq_y_plus_z(X, Y, Z))],
          m(var(X) #\= var(Y) - var(Z))        => [p(x_neq_y_plus_z(Y, X, Z))],
          m(var(X) #\= var(Y)*var(Z))          => [p(ptimes(Y,Z,P)), g(neq(X,P))],
@@ -2898,10 +2907,12 @@ match_goal(r(X,Y), F)  --> { G =.. [F,X,Y] }, [G].
 match_goal(d(X,Y), _)  --> [parse_clpz(X, Y)].
 match_goal(g(Goal), _) --> [Goal].
 match_goal(p(Prop), _) -->
-        [make_propagator(Prop, P)],
         { term_variables(Prop, Vs) },
-        parse_init(Vs, P),
-        [trigger_once(P)].
+        [make_propagator(Prop, P),
+         new_queue(Q0),
+         phrase(init_propagator_(Vs, P), [Q0], [Q]),
+         variables_same_queue(Vs),
+         trigger_once_(P, Q)].
 
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -3753,8 +3764,10 @@ kill_reified_tuples([B|Bs], Ps, All) -->
 relation_tuple_b_prop(Relation, Tuple, B, p(Prop)) :-
         put_attr(R, clpz_relation, Relation),
         make_propagator(reified_tuple_in(Tuple, R, B), Prop),
-        tuple_freeze_(Tuple, Prop),
-        init_propagator(B, Prop).
+        new_queue(Q0),
+        phrase((tuple_freeze_(Tuple, Prop),
+                init_propagator_([B], Prop),
+                do_queue), [Q0], _).
 
 
 tuples_in_conjunction(Tuples, Relation, Conj) :-
@@ -3960,7 +3973,7 @@ insert_queue(Element, Which) -->
               Tail0 = [Element|Tail]
           ;   Head = [Element|Tail]
           ),
-          put_atts(Arg, +queue(Head,Tail)) }.
+          put_atts(Arg, queue(Head,Tail)) }.
 
 
 domain_spread(Dom, Spread) :-
@@ -4192,9 +4205,9 @@ ignore(Goal) :- ( Goal -> true ; true ).
 
 print_queue -->
         state(queue(Goal,Fast,Slow,_)),
-        { ignore(get_atts(Goal, +queue(GHs,_))),
-          ignore(get_atts(Fast, +queue(FHs,_))),
-          ignore(get_atts(Slow, +queue(SHs,_))),
+        { ignore(get_atts(Goal, queue(GHs,_))),
+          ignore(get_atts(Fast, queue(FHs,_))),
+          ignore(get_atts(Slow, queue(SHs,_))),
           format("Current queue:~n   goal: ~q~n   fast: ~q~n   slow: ~q~n~n", [GHs,FHs,SHs]) }.
 
 
@@ -4209,17 +4222,26 @@ queue_get_arg(Which, Element) -->
 
 queue_get_arg_(Queue, Which, Element) :-
         arg(Which, Queue, Arg),
-        get_atts(Arg, +queue([Element|Elements],Tail)),
+        get_atts(Arg, queue([Element|Elements],Tail)),
         (   var(Elements) ->
             put_atts(Arg, -queue(_,_))
-        ;   put_atts(Arg, +queue(Elements,Tail))
+        ;   put_atts(Arg, queue(Elements,Tail))
         ).
 
 queue_enabled --> state(queue(_,_,_,Aux)), { \+ get_atts(Aux, disabled) }.
-disable_queue --> state(queue(_,_,_,Aux)), { put_atts(Aux, +disabled) }.
+disable_queue --> state(queue(_,_,_,Aux)), { put_atts(Aux, disabled) }.
 enable_queue --> state(queue(_,_,_,Aux)), { put_atts(Aux, -disabled) }.
 
 portray_propagator(propagator(P,_), F) :- functor(P, F, _).
+
+init_propagator_([], _) --> [].
+init_propagator_([V|Vs], Prop) -->
+        (   { fd_get(V, Dom, Ps0) } ->
+            { insert_propagator(Prop, Ps0, Ps) },
+            fd_put(V, Dom, Ps)
+        ;   []
+        ),
+        init_propagator_(Vs, Prop).
 
 init_propagator(Var, Prop) :-
         (   fd_get(Var, Dom, Ps0) ->
@@ -4343,17 +4365,22 @@ tuples_in(Tuples, Relation) :-
         must_be(list(list), Tuples),
         maplist(maplist(fd_variable), Tuples),
         must_be(list(list(integer)), Relation),
-        maplist(relation_tuple(Relation), Tuples).
+        new_queue(Q0),
+        phrase(tuples_relation(Tuples, Relation), [Q0], [Q]),
+        append(Tuples, Vs),
+        variables_same_queue(Vs),
+        phrase(do_queue, [Q], _).
 
-relation_tuple(Relation, Tuple) :-
-        relation_unifiable(Relation, Tuple, Us, _, _),
-        (   ground(Tuple) -> memberchk(Tuple, Relation)
-        ;   new_queue(Q),
-            phrase((tuple_domain(Tuple, Us),do_queue), [Q], _),
+tuples_relation([], _) --> [].
+tuples_relation([Tuple|Tuples], Relation) -->
+        { relation_unifiable(Relation, Tuple, Us, _, _) },
+        (   ground(Tuple) -> { memberchk(Tuple, Relation) }
+        ;   tuple_domain(Tuple, Us),
             (   Tuple = [_,_|_] -> tuple_freeze(Tuple, Us)
-            ;   true
+            ;   []
             )
-        ).
+        ),
+        tuples_relation(Tuples, Relation).
 
 list_first_rest([L|Ls], L, Ls).
 
@@ -4371,19 +4398,19 @@ tuple_domain([T|Ts], Relation0) -->
         ),
         tuple_domain(Ts, Relation1).
 
-tuple_freeze(Tuple, Relation) :-
-        (   ground(Tuple) -> memberchk(Tuple, Relation)
-        ;   put_attr(R, clpz_relation, Relation),
-            make_propagator(rel_tuple(R, Tuple), Prop),
+tuple_freeze(Tuple, Relation) -->
+        (   ground(Tuple) -> { memberchk(Tuple, Relation) }
+        ;   { put_attr(R, clpz_relation, Relation),
+              make_propagator(rel_tuple(R, Tuple), Prop) },
             tuple_freeze_(Tuple, Prop)
         ).
 
-tuple_freeze_([], _).
-tuple_freeze_([T|Ts], Prop) :-
+tuple_freeze_([], _) --> [].
+tuple_freeze_([T|Ts], Prop) -->
         (   var(T) ->
-            init_propagator(T, Prop),
+            init_propagator_([T], Prop),
             trigger_prop(Prop)
-        ;   true
+        ;   []
         ),
         tuple_freeze_(Ts, Prop).
 
@@ -5993,9 +6020,9 @@ max_factor(L1, U1, L2, U2, Max) :-
 distinct_attach([], _, _) --> [].
 distinct_attach([X|Xs], Prop, Right) -->
         (   var(X) ->
-            { init_propagator(X, Prop),
-              make_propagator(pexclude(Xs,Right,X), P1),
-              init_propagator(X, P1) },
+            init_propagator_([X], Prop),
+            { make_propagator(pexclude(Xs,Right,X), P1) },
+            init_propagator_([X], P1),
             trigger_prop(P1)
         ;   exclude_fire(Xs, Right, X)
         ),
@@ -7488,9 +7515,15 @@ zcompare(Order, A, B) :-
             propagator_init_trigger([A,B], pzcompare(Order, A, B))
         ).
 
-zcompare_(=, A, B) :- #A #= #B.
-zcompare_(<, A, B) :- #A #< #B.
-zcompare_(>, A, B) :- #A #> #B.
+zcompare_(O, A, B) :-
+        (   member(O, "<=>") -> true
+        ;   domain_error(order, O, zcompare/3)
+        ),
+        zcompare__(O, A, B).
+
+zcompare__(=, A, B) :- #A #= #B.
+zcompare__(<, A, B) :- #A #< #B.
+zcompare__(>, A, B) :- #A #> #B.
 
 %% chain(+Relation, +Zs)
 %

@@ -1,3 +1,4 @@
+#[cfg(feature = "http")]
 use crate::http::{HttpListener, HttpResponse};
 use crate::machine::loader::LiveLoadState;
 use crate::machine::machine_indices::*;
@@ -306,12 +307,16 @@ pub trait ArenaAllocated: Sized {
     fn copy_to_arena(self, dst: *mut Self) -> Self::PtrToAllocated;
 
     fn header_offset_from_payload() -> usize {
-        mem::size_of::<*const ArenaHeader>()
+        mem::size_of::<ArenaHeader>()
     }
 
     unsafe fn alloc(arena: &mut Arena, value: Self) -> Self::PtrToAllocated {
         let size = value.size() + mem::size_of::<AllocSlab>();
 
+        #[cfg(target_pointer_width="32")]
+        let align = mem::align_of::<AllocSlab>() * 2;
+
+        #[cfg(target_pointer_width="64")]
         let align = mem::align_of::<AllocSlab>();
         let layout = alloc::Layout::from_size_align_unchecked(size, align);
 
@@ -566,6 +571,7 @@ impl ArenaAllocated for TcpListener {
     }
 }
 
+#[cfg(feature = "http")]
 impl ArenaAllocated for HttpListener {
     type PtrToAllocated = TypedArenaPtr<HttpListener>;
 
@@ -588,6 +594,7 @@ impl ArenaAllocated for HttpListener {
     }
 }
 
+#[cfg(feature = "http")]
 impl ArenaAllocated for HttpResponse {
     type PtrToAllocated = TypedArenaPtr<HttpResponse>;
 
@@ -653,9 +660,12 @@ impl ArenaAllocated for IndexPtr {
     }
 }
 
+#[repr(C)]
 #[derive(Clone, Copy, Debug)]
 struct AllocSlab {
     next: *mut AllocSlab,
+    #[cfg(target_pointer_width="32")]
+    _padding: u32,
     header: ArenaHeader,
 }
 
@@ -695,12 +705,15 @@ unsafe fn drop_slab_in_place(value: &mut AllocSlab) {
             ptr::drop_in_place(value.payload_offset::<StreamLayout<CharReader<NamedTcpStream>>>());
         }
         ArenaHeaderTag::NamedTlsStream => {
+            #[cfg(feature = "tls")]
             ptr::drop_in_place(value.payload_offset::<StreamLayout<CharReader<NamedTlsStream>>>());
         }
         ArenaHeaderTag::HttpReadStream => {
+            #[cfg(feature = "http")]
             ptr::drop_in_place(value.payload_offset::<StreamLayout<CharReader<HttpReadStream>>>());
         }
 	    ArenaHeaderTag::HttpWriteStream => {
+            #[cfg(feature = "http")]
 	        ptr::drop_in_place(value.payload_offset::<StreamLayout<CharReader<HttpWriteStream>>>());
 	    }
         ArenaHeaderTag::ReadlineStream => {
@@ -724,9 +737,11 @@ unsafe fn drop_slab_in_place(value: &mut AllocSlab) {
             ptr::drop_in_place(value.payload_offset::<TcpListener>());
         }
 	    ArenaHeaderTag::HttpListener => {
+            #[cfg(feature = "http")]
 	        ptr::drop_in_place(value.payload_offset::<HttpListener>());
 	    }
 	    ArenaHeaderTag::HttpResponse => {
+            #[cfg(feature = "http")]
 	        ptr::drop_in_place(value.payload_offset::<HttpResponse>());
 	    }
         ArenaHeaderTag::StandardOutputStream => {
@@ -819,6 +834,12 @@ mod tests {
     #[test]
     fn heap_cell_value_const_cast() {
         let mut wam = MockWAM::new();
+        #[cfg(target_pointer_width="32")]
+        let const_value = HeapCellValue::from(ConsPtr::build_with(
+            0x0000_0431 as *const _,
+            ConsPtrMaskTag::Cons,
+        ));
+        #[cfg(target_pointer_width="64")]
         let const_value = HeapCellValue::from(ConsPtr::build_with(
             0x0000_5555_ff00_0431 as *const _,
             ConsPtrMaskTag::Cons,
@@ -826,7 +847,7 @@ mod tests {
 
         match const_value.to_untyped_arena_ptr() {
             Some(arena_ptr) => {
-                assert_eq!(arena_ptr.into_bytes(), const_value.into_bytes());
+                assert_eq!(arena_ptr.into_bytes(), const_value.to_untyped_arena_ptr_bytes());
             }
             None => {
                 assert!(false);
@@ -839,7 +860,7 @@ mod tests {
 
         match stream_cell.to_untyped_arena_ptr() {
             Some(arena_ptr) => {
-                assert_eq!(arena_ptr.into_bytes(), stream_cell.into_bytes());
+                assert_eq!(arena_ptr.into_bytes(), stream_cell.to_untyped_arena_ptr_bytes());
             }
             None => {
                 assert!(false);
@@ -1093,7 +1114,7 @@ mod tests {
 
         read_heap_cell!(cell,
             (HeapCellValueTag::Atom, (el, _arity)) => {
-                assert_eq!(el.flat_index() as usize, empty_list_as_cell!().get_value());
+                assert_eq!(el.flat_index(), empty_list_as_cell!().get_value());
                 assert_eq!(el.as_str(), "[]");
             }
             _ => { unreachable!() }

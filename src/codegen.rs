@@ -804,17 +804,44 @@ impl<'b> CodeGenerator<'b> {
             &Term::Var(ref vr, ref name) => {
                 let var_num = name.to_var_num().unwrap();
 
-                self.marker.mark_var::<QueryInstruction>(
-                    var_num,
-                    Level::Shallow,
-                    vr,
-                    term_loc,
-                    code,
-                );
+                if self.marker.var_data.records[var_num].num_occurrences > 1 {
+                    self.marker.mark_var::<QueryInstruction>(
+                        var_num,
+                        Level::Shallow,
+                        vr,
+                        term_loc,
+                        code,
+                    );
 
-                self.marker.mark_safe_var_unconditionally(var_num);
+                    self.marker.mark_safe_var_unconditionally(var_num);
+                    compile_expr!(self, &terms[1], term_loc, code)
+                } else {
+                    if let Term::Var(ref vr, ref var) = &terms[1] {
+                        let var_num = var.to_var_num().unwrap();
 
-                compile_expr!(self, &terms[1], term_loc, code)
+                        // if var is an anonymous variable, insert
+                        // is/2 call so that an instantiation error is
+                        // thrown when the predicate is run.
+                        if self.marker.var_data.records[var_num].num_occurrences > 1 {
+                            self.marker.mark_var::<QueryInstruction>(
+                                var_num,
+                                Level::Shallow,
+                                vr,
+                                term_loc,
+                                code,
+                            );
+
+                            self.marker.mark_safe_var_unconditionally(var_num);
+
+                            let at = ArithmeticTerm::Reg(vr.get().norm());
+                            self.add_call(code, instr!("$get_number", at), call_policy);
+
+                            return Ok(());
+                        }
+                    }
+
+                    compile_expr!(self, &terms[1], term_loc, code)
+                }
             }
             &Term::Literal(_, c @ Literal::Integer(_) |
                               c @ Literal::Float(_) |

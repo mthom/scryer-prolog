@@ -2,6 +2,7 @@ use crate::arena::*;
 use crate::atom_table::*;
 use crate::parser::ast::*;
 
+#[cfg(feature = "ffi")]
 use crate::ffi::FFIError;
 use crate::forms::*;
 use crate::machine::heap::*;
@@ -538,6 +539,7 @@ impl MachineState {
         }
     }
 
+    #[cfg(feature = "ffi")]
     pub(super) fn ffi_error(&mut self, err: FFIError) -> MachineError {
 	let error_atom = match err {
 	    FFIError::ValueCast => atom!("value_cast"),

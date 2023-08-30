@@ -68,7 +68,7 @@ pub(crate) struct StacklessPreOrderHeapIter<'a, UMP: UnmarkPolicy> {
     orig_heap_len: usize,
     start: usize,
     current: usize,
-    next: usize,
+    next: u64,
     _marker: PhantomData<UMP>,
 }
 
@@ -153,14 +153,14 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
     }
 
     fn forward_var(&mut self) -> Option<HeapCellValue> {
-        if self.heap[self.next].get_forwarding_bit() {
+        if self.heap[self.next as usize].get_forwarding_bit() {
             return self.backward_and_return();
         }
 
-        let temp = self.heap[self.next].get_value();
+        let temp = self.heap[self.next as usize].get_value();
 
-        self.heap[self.next].set_value(self.current);
-        self.current = self.next;
+        self.heap[self.next as usize].set_value(self.current as u64);
+        self.current = self.next as usize;
         self.next = temp;
 
         None
@@ -175,23 +175,23 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
                     HeapCellValueTag::AttrVar => {
                         if let Some(cell) = UMP::forward_attr_var(self) { return Some(cell); }
 
-                        if self.heap[self.next].get_mark_bit() {
+                        if self.heap[self.next as usize].get_mark_bit() {
                             return Some(attr_var_as_cell!(self.current));
                         }
                     }
                     HeapCellValueTag::Var => {
                         if let Some(cell) = self.forward_var() { return Some(cell); }
 
-                        if self.heap[self.next].get_mark_bit() {
+                        if self.heap[self.next as usize].get_mark_bit() {
                             return Some(heap_loc_as_cell!(self.current));
                         }
                     }
                     HeapCellValueTag::Str => {
-                        if self.heap[self.next + 1].get_forwarding_bit() {
+                        if self.heap[self.next as usize + 1].get_forwarding_bit() {
                             return self.backward_and_return();
                         }
 
-                        let h = self.next;
+                        let h = self.next as usize;
                         let cell = self.heap[h];
 
                         let arity = cell_as_atom_cell!(self.heap[h]).get_arity();
@@ -203,13 +203,13 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
                         let last_cell_loc = h + arity;
 
                         self.next = self.heap[last_cell_loc].get_value();
-                        self.heap[last_cell_loc].set_value(self.current);
+                        self.heap[last_cell_loc].set_value(self.current as u64);
                         self.current = last_cell_loc;
 
                         return Some(cell);
                     }
                     HeapCellValueTag::Lis => {
-                        let last_cell_loc = self.next + 1;
+                        let last_cell_loc = self.next as usize + 1;
 
                         if self.heap[last_cell_loc].get_forwarding_bit() {
                             return self.backward_and_return();
@@ -218,13 +218,13 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
                         self.heap[last_cell_loc].set_forwarding_bit(true);
 
                         self.next = self.heap[last_cell_loc].get_value();
-                        self.heap[last_cell_loc].set_value(self.current);
+                        self.heap[last_cell_loc].set_value(self.current as u64);
                         self.current = last_cell_loc;
 
                         return Some(list_loc_as_cell!(last_cell_loc - 1));
                     }
                     HeapCellValueTag::PStrLoc => {
-                        let h = self.next;
+                        let h = self.next as usize;
                         let cell = self.heap[h];
 
                         if self.heap[h+1].get_forwarding_bit() {
@@ -236,13 +236,13 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
                             self.heap[last_cell_loc].set_forwarding_bit(true);
 
                             self.next = self.heap[last_cell_loc].get_value();
-                            self.heap[last_cell_loc].set_value(self.current);
+                            self.heap[last_cell_loc].set_value(self.current as u64);
                             self.current = last_cell_loc;
                         } else {
                             debug_assert!(self.heap[h].get_tag() == HeapCellValueTag::PStrOffset);
 
                             self.next = self.heap[h].get_value();
-                            self.heap[h].set_value(self.current);
+                            self.heap[h].set_value(self.current as u64);
                             self.current = h;
 
                             if self.heap[h].get_mark_bit() {
@@ -253,7 +253,7 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
                         return Some(cell);
                     }
                     HeapCellValueTag::PStrOffset => {
-                        let h = self.next;
+                        let h = self.next as usize;
                         let cell = self.heap[h];
 
                         // mark the Fixnum offset.
@@ -269,20 +269,20 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
                             self.heap[last_cell_loc].set_forwarding_bit(true);
 
                             self.next = self.heap[last_cell_loc].get_value();
-                            self.heap[last_cell_loc].set_value(self.current);
+                            self.heap[last_cell_loc].set_value(self.current as u64);
                             self.current = last_cell_loc;
                         } else {
                             debug_assert!(self.heap[h].get_tag() == HeapCellValueTag::CStr);
 
                             self.next = self.heap[h].get_value();
-                            self.heap[h].set_value(self.current);
+                            self.heap[h].set_value(self.current as u64);
                             self.current = h;
                         }
 
                         return Some(cell);
                     }
                     tag @ HeapCellValueTag::Atom => {
-                        let cell = HeapCellValue::build_with(tag, self.next as u64);
+                        let cell = HeapCellValue::build_with(tag, self.next);
                         let arity = AtomCell::from_bytes(cell.into_bytes()).get_arity();
 
                         if arity == 0 {
@@ -315,8 +315,8 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
             UMP::unmark(self.heap, self.current);
 
             self.heap[self.current].set_value(self.next);
-            self.next = self.current;
-            self.current = temp;
+            self.next = self.current as u64;
+            self.current = temp as usize;
         }
 
         self.heap[self.current].set_forwarding_bit(false);
