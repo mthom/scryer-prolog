@@ -189,8 +189,12 @@ impl<T: ?Sized, M: ?Sized> RcuRef<T, M> {
         })
     }
 
-    pub fn same_epoch(this: &Self, other: &Self) -> bool {
+    pub fn same_epoch<M2>(this: &Self, other: &RcuRef<T, M2>) -> bool {
         Arc::ptr_eq(&this.arc, &other.arc)
+    }
+
+    pub fn ptr_eq(this: &Self, other: &Self) -> bool {
+        this.data == other.data
     }
 
     pub fn clone(this: &Self) -> Self {
@@ -198,6 +202,10 @@ impl<T: ?Sized, M: ?Sized> RcuRef<T, M> {
             arc: Arc::clone(&this.arc),
             data: this.data,
         }
+    }
+
+    pub fn get_root(this: &Self) -> &T {
+        &this.arc
     }
 }
 

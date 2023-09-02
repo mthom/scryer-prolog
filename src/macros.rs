@@ -88,7 +88,7 @@ macro_rules! cell_as_atom_cell {
 macro_rules! cell_as_f64_ptr {
     ($cell:expr) => {{
         let offset = $cell.get_value() as usize;
-        F64Ptr::from_offset(offset)
+        F64Ptr::from_offset(F64Offset::new(offset))
     }};
 }
 

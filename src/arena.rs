@@ -4,12 +4,16 @@ use crate::machine::loader::LiveLoadState;
 use crate::machine::machine_indices::*;
 use crate::machine::streams::*;
 use crate::raw_block::*;
+use crate::rcu::Rcu;
+use crate::rcu::RcuRef;
 use crate::read::*;
 
 use crate::parser::dashu::{Integer, Rational};
 use ordered_float::OrderedFloat;
+use tokio::sync::RwLock;
 
 use std::alloc;
+use std::cell::UnsafeCell;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::mem;
@@ -34,24 +38,34 @@ macro_rules! float_alloc {
         let result = $e;
         #[allow(unused_unsafe)]
         unsafe {
-            $arena.f64_tbl.build_with(result)
+            $arena.f64_tbl.build_with(result).as_ptr()
         }
     }};
 }
 
-#[cfg(test)]
-use std::cell::RefCell;
+use std::sync::Arc;
+use std::sync::Mutex;
+use std::sync::Weak;
 
 const F64_TABLE_INIT_SIZE: usize = 1 << 16;
 const F64_TABLE_ALIGN: usize = 8;
 
-#[cfg(test)]
-thread_local! {
-    static F64_TABLE_BUF_BASE: RefCell<*const u8> = RefCell::new(ptr::null_mut());
+#[inline(always)]
+fn global_f64table() -> &'static RwLock<Weak<F64Table>> {
+    #[cfg(feature = "rust_beta_channel")]
+    {
+        // const Weak::new will be stabilized in 1.73 which is currently in beta,
+        // till then we need a OnceLock for initialization
+        static GLOBAL_ATOM_TABLE: RwLock<Weak<F64Table>> = RwLock::const_new(Weak::new());
+        &GLOBAL_ATOM_TABLE
+    }
+    #[cfg(not(feature = "rust_beta_channel"))]
+    {
+        use std::sync::OnceLock;
+        static GLOBAL_ATOM_TABLE: OnceLock<RwLock<Weak<F64Table>>> = OnceLock::new();
+        GLOBAL_ATOM_TABLE.get_or_init(|| RwLock::new(Weak::new()))
+    }
 }
-
-#[cfg(not(test))]
-static mut F64_TABLE_BUF_BASE: *const u8 = ptr::null_mut();
 
 impl RawBlockTraits for F64Table {
     #[inline]
@@ -67,65 +81,86 @@ impl RawBlockTraits for F64Table {
 
 #[derive(Debug)]
 pub struct F64Table {
-    block: RawBlock<F64Table>,
-}
-
-#[cfg(test)]
-fn set_f64_tbl_buf_base(ptr: *const u8) {
-    F64_TABLE_BUF_BASE.with(|f64_table_buf_base| {
-        *f64_table_buf_base.borrow_mut() = ptr;
-    });
-}
-
-#[cfg(test)]
-pub(crate) fn get_f64_tbl_buf_base() -> *const u8 {
-    F64_TABLE_BUF_BASE.with(|f64_table_buf_base| *f64_table_buf_base.borrow())
-}
-
-#[cfg(not(test))]
-fn set_f64_tbl_buf_base(ptr: *const u8) {
-    unsafe {
-        F64_TABLE_BUF_BASE = ptr;
-    }
-}
-
-#[cfg(not(test))]
-pub(crate) fn get_f64_tbl_buf_base() -> *const u8 {
-    unsafe { F64_TABLE_BUF_BASE }
+    block: Rcu<RawBlock<F64Table>>,
+    update: Mutex<()>,
 }
 
 #[inline(always)]
-pub fn lookup_float(offset: usize) -> *mut OrderedFloat<f64> {
-    let base = get_f64_tbl_buf_base() as usize;
-    (base + offset) as *mut _
+pub fn lookup_float(
+    offset: F64Offset,
+) -> RcuRef<RawBlock<F64Table>, UnsafeCell<OrderedFloat<f64>>> {
+    let f64table = global_f64table()
+        .blocking_read()
+        .upgrade()
+        .expect("We should only be looking up floats while there is a float table");
+
+    RcuRef::try_map(f64table.block.active_epoch(), |raw_block| unsafe {
+        raw_block
+            .base
+            .offset(offset.0 as isize)
+            .cast_mut()
+            .cast::<UnsafeCell<OrderedFloat<f64>>>()
+            .as_ref()
+    })
+    .expect("The offset should result in a non-null pointer")
 }
 
 impl F64Table {
     #[inline]
-    pub fn new() -> Self {
-        let table = Self {
-            block: RawBlock::new(),
-        };
-        set_f64_tbl_buf_base(table.block.base);
-        table
+    pub fn new() -> Arc<Self> {
+        let upgraded = global_f64table().blocking_read().upgrade();
+        // don't inline upgraded, otherwise temporary will be dropped too late in case of None
+        if let Some(atom_table) = upgraded {
+            atom_table
+        } else {
+            let mut guard = global_f64table().blocking_write();
+            // try to upgrade again in case we lost the race on the write lock
+            if let Some(atom_table) = guard.upgrade() {
+                atom_table
+            } else {
+                let atom_table = Arc::new(Self {
+                    block: Rcu::new(RawBlock::new()),
+                    update: Mutex::new(()),
+                });
+                *guard = Arc::downgrade(&atom_table);
+                atom_table
+            }
+        }
     }
 
-    pub unsafe fn build_with(&mut self, value: f64) -> F64Ptr {
+    pub unsafe fn build_with(&self, value: f64) -> F64Offset {
+        let update_guard = self.update.lock();
+
+        // we don't have an index table for lookups as AtomTable does so
+        // just get the epoch after we take the upgrade lock
+        let mut block_epoch = self.block.active_epoch();
+
         let mut ptr;
 
         loop {
-            ptr = self.block.alloc(mem::size_of::<f64>());
+            ptr = block_epoch.alloc(mem::size_of::<f64>());
 
             if ptr.is_null() {
-                self.block.grow();
-                set_f64_tbl_buf_base(self.block.base);
+                let new_block = block_epoch.grow_new().unwrap();
+                self.block.replace(new_block);
+                block_epoch = self.block.active_epoch();
             } else {
                 break;
             }
         }
 
         ptr::write(ptr as *mut OrderedFloat<f64>, OrderedFloat(value));
-        F64Ptr(ptr::NonNull::new_unchecked(ptr as *mut _))
+
+        let float = F64Offset {
+            0: ptr as usize - block_epoch.base as usize,
+        };
+
+        // atometable would have to update the index table at this point
+
+        // expicit drop to ensure we don't accidentally drop it early
+        drop(update_guard);
+
+        float
     }
 }
 
@@ -336,12 +371,18 @@ pub trait ArenaAllocated: Sized {
     }
 }
 
-#[derive(Copy, Clone, Debug)]
-pub struct F64Ptr(pub ptr::NonNull<OrderedFloat<f64>>);
+#[derive(Debug)]
+pub struct F64Ptr(RcuRef<RawBlock<F64Table>, UnsafeCell<OrderedFloat<f64>>>);
+
+impl Clone for F64Ptr {
+    fn clone(&self) -> Self {
+        Self(RcuRef::clone(&self.0))
+    }
+}
 
 impl PartialEq for F64Ptr {
     fn eq(&self, other: &F64Ptr) -> bool {
-        self.0 == other.0 || &**self == &**other
+        RcuRef::ptr_eq(&self.0, &other.0) || self.deref() == other.deref()
     }
 }
 
@@ -377,26 +418,26 @@ impl Deref for F64Ptr {
 
     #[inline]
     fn deref(&self) -> &Self::Target {
-        unsafe { &*self.0.as_ptr() }
+        unsafe { &*self.0.get().as_ref().unwrap() }
     }
 }
 
 impl DerefMut for F64Ptr {
     #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
-        unsafe { &mut *self.0.as_ptr() }
+        unsafe { &mut *self.0.get().as_mut().unwrap() }
     }
 }
 
 impl F64Ptr {
     #[inline(always)]
-    pub fn from_offset(offset: usize) -> Self {
-        unsafe { F64Ptr(ptr::NonNull::new_unchecked(lookup_float(offset))) }
+    pub fn from_offset(offset: F64Offset) -> Self {
+        Self(lookup_float(offset))
     }
 
     #[inline(always)]
     pub fn as_offset(&self) -> F64Offset {
-        F64Offset(self.0.as_ptr() as usize - get_f64_tbl_buf_base() as usize)
+        F64Offset(self.0.get() as usize - RcuRef::get_root(&self.0).base as usize)
     }
 }
 
@@ -416,7 +457,7 @@ impl F64Offset {
 
     #[inline(always)]
     pub fn as_ptr(self) -> F64Ptr {
-        F64Ptr::from_offset(self.0)
+        F64Ptr::from_offset(self)
     }
 
     #[inline(always)]
@@ -672,7 +713,7 @@ struct AllocSlab {
 #[derive(Debug)]
 pub struct Arena {
     base: *mut AllocSlab,
-    pub f64_tbl: F64Table,
+    pub f64_tbl: Arc<F64Table>,
 }
 
 unsafe impl Send for Arena {}
@@ -804,6 +845,8 @@ const_assert!(mem::size_of::<OrderedFloat<f64>>() == 8);
 
 #[cfg(test)]
 mod tests {
+    use std::ops::Deref;
+
     use crate::machine::mock_wam::*;
     use crate::machine::partial_string::*;
 
@@ -812,15 +855,15 @@ mod tests {
 
     #[test]
     fn float_ptr_cast() {
-        let mut wam = MockWAM::new();
+        let wam = MockWAM::new();
 
         let f = 0f64;
         let fp = float_alloc!(f, wam.machine_st.arena);
-        let mut cell = HeapCellValue::from(fp);
+        let mut cell = HeapCellValue::from(fp.clone());
 
         assert_eq!(cell.get_tag(), HeapCellValueTag::F64);
         assert_eq!(cell.get_mark_bit(), false);
-        assert_eq!(*fp, OrderedFloat(f));
+        assert_eq!(fp.deref(), &OrderedFloat(f));
 
         cell.set_mark_bit(true);
 
