@@ -70,7 +70,7 @@ impl Completer for Helper {
 
             let atom_table = self.atoms.upgrade().unwrap();
 
-            let index_set = atom_table.active_epoch().table.blocking_read().clone();
+            let index_set = atom_table.active_table();
 
             let mut matching = index_set
                 .iter()

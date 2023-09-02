@@ -1,5 +1,6 @@
 use crate::parser::ast::MAX_ARITY;
 use crate::raw_block::*;
+use crate::rcu::{Rcu, RcuRef};
 use crate::types::*;
 
 use std::cmp::Ordering;
@@ -7,7 +8,6 @@ use std::hash::{Hash, Hasher};
 use std::mem;
 use std::ops::Deref;
 use std::ptr;
-use std::ptr::NonNull;
 use std::slice;
 use std::str;
 use std::sync::Arc;
@@ -237,9 +237,8 @@ impl Atom {
                     let header =
                         unsafe { ptr::read::<AtomHeader>(ptr as *const u8 as *const AtomHeader) };
                     let len = header.len() as usize;
-                    let buf = (unsafe {
-                        (ptr as *const u8).offset(mem::size_of::<AtomHeader>() as isize)
-                    }) as *mut u8;
+                    let buf =
+                        unsafe { (ptr as *const u8).offset(mem::size_of::<AtomHeader>() as isize) };
 
                     unsafe { str::from_utf8_unchecked(slice::from_raw_parts(buf, len)) }
                 }))
@@ -282,66 +281,20 @@ impl Ord for Atom {
     }
 }
 
-pub struct AtomTableRef<M>
-where
-    M: ?Sized,
-{
-    arc: Arc<InnerAtomTable>,
-    data: NonNull<M>,
-}
-
-impl<M> Clone for AtomTableRef<M> {
-    fn clone(&self) -> Self {
-        Self {
-            arc: Arc::clone(&self.arc),
-            data: self.data,
-        }
-    }
-}
-
-impl<M: ?Sized> AtomTableRef<M> {
-    pub fn map<N: ?Sized, F: for<'a> FnOnce(&'a M) -> &'a N>(
-        referece: Self,
-        f: F,
-    ) -> AtomTableRef<N> {
-        AtomTableRef {
-            arc: referece.arc,
-            data: f(unsafe { referece.data.as_ref() }).into(),
-        }
-    }
-
-    pub fn try_map<N, F: for<'a> FnOnce(&'a M) -> Option<&'a N>>(
-        referece: Self,
-        f: F,
-    ) -> Option<AtomTableRef<N>> {
-        let val = f(unsafe { referece.data.as_ref() })?;
-        Some(AtomTableRef {
-            arc: Arc::clone(&referece.arc),
-            data: val.into(),
-        })
-    }
-}
-
-impl<M: ?Sized> Deref for AtomTableRef<M> {
-    type Target = M;
-
-    fn deref(&self) -> &Self::Target {
-        unsafe { self.data.as_ref() }
-    }
-}
-
 #[derive(Debug)]
 pub struct InnerAtomTable {
     block: RawBlock<AtomTable>,
-    pub table: RwLock<IndexSet<Atom>>,
+    pub table: Rcu<IndexSet<Atom>>,
 }
 
 #[derive(Debug)]
 pub struct AtomTable {
-    inner: RwLock<Arc<InnerAtomTable>>,
+    inner: Rcu<InnerAtomTable>,
     // this lock is taking during resizing
     update: Mutex<()>,
 }
+
+pub type AtomTableRef<M> = RcuRef<InnerAtomTable, M>;
 
 impl InnerAtomTable {
     #[inline(always)]
@@ -349,7 +302,7 @@ impl InnerAtomTable {
         STATIC_ATOMS_MAP
             .get(string)
             .cloned()
-            .or_else(|| self.table.blocking_read().get(string).cloned())
+            .or_else(|| self.table.active_epoch().get(string).cloned())
     }
 }
 
@@ -367,10 +320,10 @@ impl AtomTable {
                 atom_table
             } else {
                 let atom_table = Arc::new(Self {
-                    inner: RwLock::new(Arc::new(InnerAtomTable {
+                    inner: Rcu::new(InnerAtomTable {
                         block: RawBlock::new(),
-                        table: RwLock::new(IndexSet::new()),
-                    })),
+                        table: Rcu::new(IndexSet::new()),
+                    }),
                     update: Mutex::new(()),
                 });
                 *guard = Arc::downgrade(&atom_table);
@@ -379,37 +332,38 @@ impl AtomTable {
         }
     }
 
-    pub fn active_epoch(&self) -> AtomTableRef<InnerAtomTable> {
-        let arc = Arc::clone(&self.inner.blocking_read());
-        AtomTableRef {
-            data: arc.deref().into(),
-            arc,
-        }
-    }
-
     #[inline]
     pub fn buf(&self) -> AtomTableRef<u8> {
-        AtomTableRef::<InnerAtomTable>::map(self.active_epoch(), |inner| {
+        AtomTableRef::<InnerAtomTable>::map(self.inner.active_epoch(), |inner| {
             unsafe { inner.block.base.as_ref() }.unwrap()
         })
     }
 
+    pub fn active_table(&self) -> RcuRef<IndexSet<Atom>, IndexSet<Atom>> {
+        self.inner.active_epoch().table.active_epoch()
+    }
+
     pub fn build_with(atom_table: &AtomTable, string: &str) -> Atom {
         loop {
-            let mut epoch = atom_table.active_epoch();
-            let count = epoch.table.blocking_read().len();
+            let mut block_epoch = atom_table.inner.active_epoch();
+            let mut table_epoch = block_epoch.table.active_epoch();
 
-            if let Some(atom) = epoch.lookup_str(string) {
+            if let Some(atom) = block_epoch.lookup_str(string) {
                 return atom;
             }
 
+            // take a lock to prevent concurrent updates
             let update_guard = atom_table.update.lock().unwrap();
 
-            let is_same_allocation = Arc::ptr_eq(&epoch.arc, &atom_table.active_epoch().arc);
-            let is_same_atom_count = count == epoch.table.blocking_read().len();
+            let is_same_allocation =
+                RcuRef::same_epoch(&block_epoch, &atom_table.inner.active_epoch());
+            let is_same_atom_list =
+                RcuRef::same_epoch(&table_epoch, &block_epoch.table.active_epoch());
 
-            if !(is_same_allocation && is_same_atom_count) {
-                // some other thread raced us between our lookup and us aquring the update lock, try again
+            if !(is_same_allocation && is_same_atom_list) {
+                // some other thread raced us between our lookup and
+                // us aquring the update lock,
+                // try again
                 continue;
             }
 
@@ -419,23 +373,25 @@ impl AtomTable {
 
             unsafe {
                 let len_ptr = loop {
-                    let ptr = epoch.block.alloc(size);
+                    let ptr = block_epoch.block.alloc(size);
 
                     if ptr.is_null() {
-                        let new_block = epoch.block.grow_new().unwrap();
-                        let new_table = RwLock::new(epoch.table.blocking_read().clone());
-                        let new_alloc = Arc::new(InnerAtomTable {
+                        // garbage collection would go here
+                        let new_block = block_epoch.block.grow_new().unwrap();
+                        let new_table = Rcu::new(table_epoch.clone());
+                        let new_alloc = InnerAtomTable {
                             block: new_block,
                             table: new_table,
-                        });
-                        *atom_table.inner.blocking_write() = new_alloc;
-                        epoch = atom_table.active_epoch();
+                        };
+                        atom_table.inner.replace(new_alloc);
+                        block_epoch = atom_table.inner.active_epoch();
+                        table_epoch = block_epoch.table.active_epoch();
                     } else {
                         break ptr;
                     }
                 };
 
-                let ptr_base = epoch.block.base as usize;
+                let ptr_base = block_epoch.block.base as usize;
 
                 write_to_ptr(string, len_ptr);
 
@@ -443,8 +399,11 @@ impl AtomTable {
                     index: ((STRINGS.len() << 3) + len_ptr as usize - ptr_base) as u64,
                 };
 
-                epoch.table.blocking_write().insert(atom);
+                let mut table = table_epoch.clone();
+                table.insert(atom);
+                block_epoch.table.replace(table);
 
+                // expicit drop to ensure we don't accidentally drop it early
                 drop(update_guard);
 
                 return atom;
