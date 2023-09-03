@@ -17,8 +17,8 @@
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 :- module(clpb, [op(300, fy, ~),
-		         op(500, yfx, #),
-		         sat/1,
+                 op(500, yfx, #),
+                 sat/1,
                  taut/2,
                  labeling/1,
                  sat_count/2,
