@@ -1657,6 +1657,10 @@ attribute_goals(Var) -->
         ;   boolean(Var)  % the variable may have occurred only in taut/2
         ).
 attribute_goals(Var) -->
+        { get_atts(Var, clpb_max(_)),
+          !,
+          put_atts(Var, -clpb_max(_)) }.
+attribute_goals(Var) -->
         { get_atts(Var, clpb_bdd(BDD)),
           ground(BDD),
           put_atts(Var, -clpb_bdd(_)) }.
