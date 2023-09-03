@@ -1513,8 +1513,7 @@ random_bindings(VNum, Node) -->
 %
 % ```
 % ?- sat(A#B), weighted_maximum([1,2,1], [A,B,C], Maximum).
-%    A = 0, B = 1, C = 1, Maximum = 3
-% ;  false.
+%    A = 0, B = 1, C = 1, Maximum = 3.
 % ```
 
 weighted_maximum(Ws, Vars, Max) :-
