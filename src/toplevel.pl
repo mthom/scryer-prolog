@@ -235,8 +235,12 @@ double_quotes_option(DQ) :-
     ;   DQ = false
     ).
 
+answer_write_options(Os) :-
+    current_prolog_flag(answer_write_options, Os).
+
 write_goal(G, VarList, MaxDepth) :-
     double_quotes_option(DQ),
+    answer_write_options(Os),
     (  G = (Var = Value) ->
        (  var(Value) ->
           select((Var = _), VarList, NewVarList)
@@ -246,17 +250,18 @@ write_goal(G, VarList, MaxDepth) :-
        write(' = '),
        (  needs_bracketing(Value, =) ->
           write('('),
-          write_term(Value, [quoted(true), variable_names(NewVarList), max_depth(MaxDepth), double_quotes(DQ)]),
+          write_term(Value, [quoted(true), variable_names(NewVarList), max_depth(MaxDepth), double_quotes(DQ)|Os]),
           write(')')
-       ;  write_term(Value, [quoted(true), variable_names(NewVarList), max_depth(MaxDepth), double_quotes(DQ)])
+       ;  write_term(Value, [quoted(true), variable_names(NewVarList), max_depth(MaxDepth), double_quotes(DQ)|Os])
        )
     ;  G == [] ->
        write('true')
-    ;  write_term(G, [quoted(true), variable_names(VarList), max_depth(MaxDepth), double_quotes(DQ)])
+    ;  write_term(G, [quoted(true), variable_names(VarList), max_depth(MaxDepth), double_quotes(DQ)|Os])
     ).
 
 write_last_goal(G, VarList, MaxDepth) :-
     double_quotes_option(DQ),
+    answer_write_options(Os),
     (  G = (Var = Value) ->
        (  var(Value) ->
           select((Var = _), VarList, NewVarList)
@@ -266,9 +271,9 @@ write_last_goal(G, VarList, MaxDepth) :-
        write(' = '),
        (  needs_bracketing(Value, =) ->
           write('('),
-          write_term(Value, [quoted(true), variable_names(NewVarList), max_depth(MaxDepth), double_quotes(DQ)]),
+          write_term(Value, [quoted(true), variable_names(NewVarList), max_depth(MaxDepth), double_quotes(DQ)|Os]),
           write(')')
-       ;  write_term(Value, [quoted(true), variable_names(NewVarList), max_depth(MaxDepth), double_quotes(DQ)]),
+       ;  write_term(Value, [quoted(true), variable_names(NewVarList), max_depth(MaxDepth), double_quotes(DQ)|Os]),
           (  trailing_period_is_ambiguous(Value) ->
              write(' ')
           ;  true
@@ -276,7 +281,7 @@ write_last_goal(G, VarList, MaxDepth) :-
        )
     ;  G == [] ->
        write('true')
-    ;  write_term(G, [quoted(true), variable_names(VarList), max_depth(MaxDepth), double_quotes(DQ)])
+    ;  write_term(G, [quoted(true), variable_names(VarList), max_depth(MaxDepth), double_quotes(DQ)|Os])
     ).
 
 write_eq((G1, G2), VarList, MaxDepth) :-
