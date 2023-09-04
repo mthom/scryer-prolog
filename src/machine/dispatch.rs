@@ -3190,6 +3190,9 @@ impl Machine {
                                         (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
                                     );
                                 }
+                                &IndexedChoiceInstruction::DefaultRetry(l) => {
+                                    self.retry(l);
+                                }
                                 &IndexedChoiceInstruction::Trust(l) => {
                                     self.trust(l);
 
@@ -3197,6 +3200,9 @@ impl Machine {
                                         self.machine_st,
                                         (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
                                     );
+                                }
+                                &IndexedChoiceInstruction::DefaultTrust(l) => {
+                                    self.trust(l);
                                 }
                             }
                         }
@@ -5192,11 +5198,6 @@ impl Machine {
 
                     if self.machine_st.fail {
                         self.machine_st.backtrack();
-                    } else {
-                        try_or_throw!(
-                            self.machine_st,
-                            (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                        );
                     }
                 }
                 &Instruction::ExecuteFastCallN(arity) => {
@@ -5208,11 +5209,6 @@ impl Machine {
 
                     if self.machine_st.fail {
                         self.machine_st.backtrack();
-                    } else {
-                        try_or_throw!(
-                            self.machine_st,
-                            (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                        );
                     }
                 }
                 &Instruction::CallGetClauseP => {

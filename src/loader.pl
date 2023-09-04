@@ -35,9 +35,9 @@ write_error(Error) :-
     ),
     write('.').
 
-% '$print_message_and_fail'(inference_limit_exceeded(B)) :-
-%     integer(B),
-%     throw(inference_limit_exceeded(B)).
+
+:- non_counted_backtracking '$print_message_and_fail'/1.
+
 '$print_message_and_fail'(Error) :-
     write_error(Error),
     nl,
@@ -70,6 +70,8 @@ term_expansion_list([Term|Terms], ExpandedTermsHead, ExpandedTermsTail) :-
     ).
 
 
+:- non_counted_backtracking goal_expansion/3.
+
 goal_expansion(Goal, Module, ExpandedGoal) :-
     (  atom(Module),
        '$predicate_defined'(Module, goal_expansion, 2),
@@ -82,7 +84,6 @@ goal_expansion(Goal, Module, ExpandedGoal) :-
        )
     ;  Goal = ExpandedGoal
     ).
-
 
 
 create_file_load_context(Stream, Path, Evacuable) :-
@@ -587,6 +588,8 @@ use_module(Module, Exports, Evacuable) :-
     ).
 
 
+:- non_counted_backtracking check_predicate_property/5.
+
 check_predicate_property(meta_predicate, Module, Name, Arity, MetaPredicateTerm) :-
     '$meta_predicate_property'(Module, Name, Arity, MetaPredicateTerm).
 check_predicate_property(built_in, _, Name, Arity, built_in) :-
@@ -599,6 +602,7 @@ check_predicate_property(discontiguous, Module, Name, Arity, discontiguous) :-
     '$discontiguous_property'(Module, Name, Arity).
 
 
+:- non_counted_backtracking extract_predicate_property/2.
 
 extract_predicate_property(Property, PropertyType) :-
     (  var(Property) ->
@@ -606,11 +610,15 @@ extract_predicate_property(Property, PropertyType) :-
     ;  functor(Property, PropertyType, _)
     ).
 
+:- non_counted_backtracking load_context/1.
+
 load_context(Module) :-
     (  prolog_load_context(module, Module) ->
        true
     ;  Module = user
     ).
+
+:- non_counted_backtracking predicate_property/2.
 
 predicate_property(Callable, Property) :-
     (  var(Callable) ->
@@ -648,8 +656,6 @@ strip_subst_module(Goal, M1, M2, G) :-
     ;  true
     ).
 
-:- non_counted_backtracking subgoal_expansion/3.
-
 /*
  * subgoal_expansion differs from goal_expansion only in that it fails
  * unconditionally after catching an(y) exception, aborting the
@@ -657,9 +663,13 @@ strip_subst_module(Goal, M1, M2, G) :-
  * when expand_goal is later invoked at runtime.
  */
 
+:- non_counted_backtracking subgoal_expansion_fail/1.
+
 subgoal_expansion_fail(B) :-
     builtins:set_cp(B),
     fail.
+
+:- non_counted_backtracking subgoal_expansion/3.
 
 subgoal_expansion(Goal, Module, ExpandedGoal) :-
     '$get_cp'(B),
@@ -890,7 +900,6 @@ thread_goals(Goals0, Goals1, Hole, Functor) :-
 % n_call_clause(N, Clauses) :-
 %     length(Args, N),
 %     Head =.. [call, G | Args],
-%     CallNHead =.. [call, '$call'(G) | Args],
 %     N1 is N + 1,
 %     StripModule =.. ['$strip_module', G, M1, G1],
 %     FastCall =.. ['$fast_call', G | Args],
@@ -903,7 +912,7 @@ thread_goals(Goals0, Goals1, Hole, Functor) :-
 %                         PrepareCallClause,
 %                         expand_call_goal(G2, M1, G3),
 %                         strip_subst_module(G3, M1, M2, G4),
-%                         '$call_with_inference_counting'(ModuleCall))].
+%                         ModuleCall)].
 %
 % generate_call_forms :-
 %     between(1, 64, N),
@@ -930,7 +939,7 @@ call(G0) :-
     '$strip_module'(G0, M0, G1),
     expand_call_goal(G1, M0, G2),
     strip_subst_module(G2, M0, M1, G3),
-    '$call_with_inference_counting'('$module_call'(M1, G3)).
+    '$module_call'(M1, G3).
 
 :-non_counted_backtracking call/2.
 call(A,B) :-
@@ -943,7 +952,7 @@ call(A,B) :-
    '$prepare_call_clause'(E,D,B),
    expand_call_goal(E,C,F),
    strip_subst_module(F,C,G,H),
-   '$call_with_inference_counting'('$module_call'(G,H)).
+   '$module_call'(G,H).
 
 :-non_counted_backtracking call/3.
 call(A,B,C) :-
@@ -956,7 +965,7 @@ call(A,B,C) :-
    '$prepare_call_clause'(F,E,B,C),
    expand_call_goal(F,D,G),
    strip_subst_module(G,D,H,I),
-   '$call_with_inference_counting'('$module_call'(H,I)).
+   '$module_call'(H,I).
 
 :-non_counted_backtracking call/4.
 call(A,B,C,D) :-
@@ -969,7 +978,7 @@ call(A,B,C,D) :-
    '$prepare_call_clause'(G,F,B,C,D),
    expand_call_goal(G,E,H),
    strip_subst_module(H,E,I,J),
-   '$call_with_inference_counting'('$module_call'(I,J)).
+   '$module_call'(I,J).
 
 :-non_counted_backtracking call/5.
 call(A,B,C,D,E) :-
@@ -982,7 +991,7 @@ call(A,B,C,D,E) :-
    '$prepare_call_clause'(H,G,B,C,D,E),
    expand_call_goal(H,F,I),
    strip_subst_module(I,F,J,K),
-   '$call_with_inference_counting'('$module_call'(J,K)).
+   '$module_call'(J,K).
 
 :-non_counted_backtracking call/6.
 call(A,B,C,D,E,F) :-
@@ -995,7 +1004,7 @@ call(A,B,C,D,E,F) :-
    '$prepare_call_clause'(I,H,B,C,D,E,F),
    expand_call_goal(I,G,J),
    strip_subst_module(J,G,K,L),
-   '$call_with_inference_counting'('$module_call'(K,L)).
+   '$module_call'(K,L).
 
 :-non_counted_backtracking call/7.
 call(A,B,C,D,E,F,G) :-
@@ -1008,7 +1017,7 @@ call(A,B,C,D,E,F,G) :-
    '$prepare_call_clause'(J,I,B,C,D,E,F,G),
    expand_call_goal(J,H,K),
    strip_subst_module(K,H,L,M),
-   '$call_with_inference_counting'('$module_call'(L,M)).
+   '$module_call'(L,M).
 
 :-non_counted_backtracking call/8.
 call(A,B,C,D,E,F,G,H) :-
@@ -1021,7 +1030,7 @@ call(A,B,C,D,E,F,G,H) :-
    '$prepare_call_clause'(K,J,B,C,D,E,F,G,H),
    expand_call_goal(K,I,L),
    strip_subst_module(L,I,M,N),
-   '$call_with_inference_counting'('$module_call'(M,N)).
+   '$module_call'(M,N).
 
 :-non_counted_backtracking call/9.
 call(A,B,C,D,E,F,G,H,I) :-
@@ -1034,7 +1043,7 @@ call(A,B,C,D,E,F,G,H,I) :-
    '$prepare_call_clause'(L,K,B,C,D,E,F,G,H,I),
    expand_call_goal(L,J,M),
    strip_subst_module(M,J,N,O),
-   '$call_with_inference_counting'('$module_call'(N,O)).
+   '$module_call'(N,O).
 
 :-non_counted_backtracking call/10.
 call(A,B,C,D,E,F,G,H,I,J) :-
@@ -1047,7 +1056,7 @@ call(A,B,C,D,E,F,G,H,I,J) :-
    '$prepare_call_clause'(M,L,B,C,D,E,F,G,H,I,J),
    expand_call_goal(M,K,N),
    strip_subst_module(N,K,O,P),
-   '$call_with_inference_counting'('$module_call'(O,P)).
+   '$module_call'(O,P).
 
 :-non_counted_backtracking call/11.
 call(A,B,C,D,E,F,G,H,I,J,K) :-
@@ -1060,7 +1069,7 @@ call(A,B,C,D,E,F,G,H,I,J,K) :-
    '$prepare_call_clause'(N,M,B,C,D,E,F,G,H,I,J,K),
    expand_call_goal(N,L,O),
    strip_subst_module(O,L,P,Q),
-   '$call_with_inference_counting'('$module_call'(P,Q)).
+   '$module_call'(P,Q).
 
 :-non_counted_backtracking call/12.
 call(A,B,C,D,E,F,G,H,I,J,K,L) :-
@@ -1073,7 +1082,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L) :-
    '$prepare_call_clause'(O,N,B,C,D,E,F,G,H,I,J,K,L),
    expand_call_goal(O,M,P),
    strip_subst_module(P,M,Q,R),
-   '$call_with_inference_counting'('$module_call'(Q,R)).
+   '$module_call'(Q,R).
 
 :-non_counted_backtracking call/13.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M) :-
@@ -1086,7 +1095,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M) :-
    '$prepare_call_clause'(P,O,B,C,D,E,F,G,H,I,J,K,L,M),
    expand_call_goal(P,N,Q),
    strip_subst_module(Q,N,R,S),
-   '$call_with_inference_counting'('$module_call'(R,S)).
+   '$module_call'(R,S).
 
 :-non_counted_backtracking call/14.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N) :-
@@ -1099,7 +1108,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N) :-
    '$prepare_call_clause'(Q,P,B,C,D,E,F,G,H,I,J,K,L,M,N),
    expand_call_goal(Q,O,R),
    strip_subst_module(R,O,S,T),
-   '$call_with_inference_counting'('$module_call'(S,T)).
+   '$module_call'(S,T).
 
 :-non_counted_backtracking call/15.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O) :-
@@ -1112,7 +1121,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O) :-
    '$prepare_call_clause'(R,Q,B,C,D,E,F,G,H,I,J,K,L,M,N,O),
    expand_call_goal(R,P,S),
    strip_subst_module(S,P,T,U),
-   '$call_with_inference_counting'('$module_call'(T,U)).
+   '$module_call'(T,U).
 
 :-non_counted_backtracking call/16.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P) :-
@@ -1125,7 +1134,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P) :-
    '$prepare_call_clause'(S,R,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P),
    expand_call_goal(S,Q,T),
    strip_subst_module(T,Q,U,V),
-   '$call_with_inference_counting'('$module_call'(U,V)).
+   '$module_call'(U,V).
 
 :-non_counted_backtracking call/17.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q) :-
@@ -1138,7 +1147,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q) :-
    '$prepare_call_clause'(T,S,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q),
    expand_call_goal(T,R,U),
    strip_subst_module(U,R,V,W),
-   '$call_with_inference_counting'('$module_call'(V,W)).
+   '$module_call'(V,W).
 
 :-non_counted_backtracking call/18.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R) :-
@@ -1151,7 +1160,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R) :-
    '$prepare_call_clause'(U,T,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R),
    expand_call_goal(U,S,V),
    strip_subst_module(V,S,W,X),
-   '$call_with_inference_counting'('$module_call'(W,X)).
+   '$module_call'(W,X).
 
 :-non_counted_backtracking call/19.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S) :-
@@ -1164,7 +1173,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S) :-
    '$prepare_call_clause'(V,U,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S),
    expand_call_goal(V,T,W),
    strip_subst_module(W,T,X,Y),
-   '$call_with_inference_counting'('$module_call'(X,Y)).
+   '$module_call'(X,Y).
 
 :-non_counted_backtracking call/20.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T) :-
@@ -1177,7 +1186,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T) :-
    '$prepare_call_clause'(W,V,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T),
    expand_call_goal(W,U,X),
    strip_subst_module(X,U,Y,Z),
-   '$call_with_inference_counting'('$module_call'(Y,Z)).
+   '$module_call'(Y,Z).
 
 :-non_counted_backtracking call/21.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U) :-
@@ -1190,7 +1199,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U) :-
    '$prepare_call_clause'(X,W,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U),
    expand_call_goal(X,V,Y),
    strip_subst_module(Y,V,Z,A1),
-   '$call_with_inference_counting'('$module_call'(Z,A1)).
+   '$module_call'(Z,A1).
 
 :-non_counted_backtracking call/22.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V) :-
@@ -1203,7 +1212,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V) :-
    '$prepare_call_clause'(Y,X,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V),
    expand_call_goal(Y,W,Z),
    strip_subst_module(Z,W,A1,B1),
-   '$call_with_inference_counting'('$module_call'(A1,B1)).
+   '$module_call'(A1,B1).
 
 :-non_counted_backtracking call/23.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W) :-
@@ -1216,7 +1225,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W) :-
    '$prepare_call_clause'(Z,Y,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W),
    expand_call_goal(Z,X,A1),
    strip_subst_module(A1,X,B1,C1),
-   '$call_with_inference_counting'('$module_call'(B1,C1)).
+   '$module_call'(B1,C1).
 
 :-non_counted_backtracking call/24.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X) :-
@@ -1229,7 +1238,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X) :-
    '$prepare_call_clause'(A1,Z,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X),
    expand_call_goal(A1,Y,B1),
    strip_subst_module(B1,Y,C1,D1),
-   '$call_with_inference_counting'('$module_call'(C1,D1)).
+   '$module_call'(C1,D1).
 
 :-non_counted_backtracking call/25.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y) :-
@@ -1242,7 +1251,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y) :-
    '$prepare_call_clause'(B1,A1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y),
    expand_call_goal(B1,Z,C1),
    strip_subst_module(C1,Z,D1,E1),
-   '$call_with_inference_counting'('$module_call'(D1,E1)).
+   '$module_call'(D1,E1).
 
 :-non_counted_backtracking call/26.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z) :-
@@ -1255,7 +1264,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z) :-
    '$prepare_call_clause'(C1,B1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z),
    expand_call_goal(C1,A1,D1),
    strip_subst_module(D1,A1,E1,F1),
-   '$call_with_inference_counting'('$module_call'(E1,F1)).
+   '$module_call'(E1,F1).
 
 :-non_counted_backtracking call/27.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1) :-
@@ -1268,7 +1277,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1) :-
    '$prepare_call_clause'(D1,C1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1),
    expand_call_goal(D1,B1,E1),
    strip_subst_module(E1,B1,F1,G1),
-   '$call_with_inference_counting'('$module_call'(F1,G1)).
+   '$module_call'(F1,G1).
 
 :-non_counted_backtracking call/28.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1) :-
@@ -1281,7 +1290,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1) :-
    '$prepare_call_clause'(E1,D1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1),
    expand_call_goal(E1,C1,F1),
    strip_subst_module(F1,C1,G1,H1),
-   '$call_with_inference_counting'('$module_call'(G1,H1)).
+   '$module_call'(G1,H1).
 
 :-non_counted_backtracking call/29.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1) :-
@@ -1294,7 +1303,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1) :-
    '$prepare_call_clause'(F1,E1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1),
    expand_call_goal(F1,D1,G1),
    strip_subst_module(G1,D1,H1,I1),
-   '$call_with_inference_counting'('$module_call'(H1,I1)).
+   '$module_call'(H1,I1).
 
 :-non_counted_backtracking call/30.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1) :-
@@ -1307,7 +1316,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1) :-
    '$prepare_call_clause'(G1,F1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1),
    expand_call_goal(G1,E1,H1),
    strip_subst_module(H1,E1,I1,J1),
-   '$call_with_inference_counting'('$module_call'(I1,J1)).
+   '$module_call'(I1,J1).
 
 :-non_counted_backtracking call/31.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1) :-
@@ -1320,7 +1329,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1) :-
    '$prepare_call_clause'(H1,G1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1),
    expand_call_goal(H1,F1,I1),
    strip_subst_module(I1,F1,J1,K1),
-   '$call_with_inference_counting'('$module_call'(J1,K1)).
+   '$module_call'(J1,K1).
 
 :-non_counted_backtracking call/32.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1) :-
@@ -1333,7 +1342,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1) :-
    '$prepare_call_clause'(I1,H1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1),
    expand_call_goal(I1,G1,J1),
    strip_subst_module(J1,G1,K1,L1),
-   '$call_with_inference_counting'('$module_call'(K1,L1)).
+   '$module_call'(K1,L1).
 
 :-non_counted_backtracking call/33.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1) :-
@@ -1346,7 +1355,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1) :
    '$prepare_call_clause'(J1,I1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1),
    expand_call_goal(J1,H1,K1),
    strip_subst_module(K1,H1,L1,M1),
-   '$call_with_inference_counting'('$module_call'(L1,M1)).
+   '$module_call'(L1,M1).
 
 :-non_counted_backtracking call/34.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1) :-
@@ -1359,7 +1368,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
    '$prepare_call_clause'(K1,J1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1),
    expand_call_goal(K1,I1,L1),
    strip_subst_module(L1,I1,M1,N1),
-   '$call_with_inference_counting'('$module_call'(M1,N1)).
+   '$module_call'(M1,N1).
 
 :-non_counted_backtracking call/35.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1) :-
@@ -1372,7 +1381,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
    '$prepare_call_clause'(L1,K1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1),
    expand_call_goal(L1,J1,M1),
    strip_subst_module(M1,J1,N1,O1),
-   '$call_with_inference_counting'('$module_call'(N1,O1)).
+   '$module_call'(N1,O1).
 
 :-non_counted_backtracking call/36.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1) :-
@@ -1385,7 +1394,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
    '$prepare_call_clause'(M1,L1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1),
    expand_call_goal(M1,K1,N1),
    strip_subst_module(N1,K1,O1,P1),
-   '$call_with_inference_counting'('$module_call'(O1,P1)).
+   '$module_call'(O1,P1).
 
 :-non_counted_backtracking call/37.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1) :-
@@ -1398,7 +1407,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
    '$prepare_call_clause'(N1,M1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1),
    expand_call_goal(N1,L1,O1),
    strip_subst_module(O1,L1,P1,Q1),
-   '$call_with_inference_counting'('$module_call'(P1,Q1)).
+   '$module_call'(P1,Q1).
 
 :-non_counted_backtracking call/38.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1) :-
@@ -1411,7 +1420,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
    '$prepare_call_clause'(O1,N1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1),
    expand_call_goal(O1,M1,P1),
    strip_subst_module(P1,M1,Q1,R1),
-   '$call_with_inference_counting'('$module_call'(Q1,R1)).
+   '$module_call'(Q1,R1).
 
 :-non_counted_backtracking call/39.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1) :-
@@ -1424,7 +1433,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
    '$prepare_call_clause'(P1,O1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1),
    expand_call_goal(P1,N1,Q1),
    strip_subst_module(Q1,N1,R1,S1),
-   '$call_with_inference_counting'('$module_call'(R1,S1)).
+   '$module_call'(R1,S1).
 
 :-non_counted_backtracking call/40.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1) :-
@@ -1437,7 +1446,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
    '$prepare_call_clause'(Q1,P1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1),
    expand_call_goal(Q1,O1,R1),
    strip_subst_module(R1,O1,S1,T1),
-   '$call_with_inference_counting'('$module_call'(S1,T1)).
+   '$module_call'(S1,T1).
 
 :-non_counted_backtracking call/41.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1) :-
@@ -1450,7 +1459,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
    '$prepare_call_clause'(R1,Q1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1),
    expand_call_goal(R1,P1,S1),
    strip_subst_module(S1,P1,T1,U1),
-   '$call_with_inference_counting'('$module_call'(T1,U1)).
+   '$module_call'(T1,U1).
 
 :-non_counted_backtracking call/42.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1) :-
@@ -1463,7 +1472,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
    '$prepare_call_clause'(S1,R1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1),
    expand_call_goal(S1,Q1,T1),
    strip_subst_module(T1,Q1,U1,V1),
-   '$call_with_inference_counting'('$module_call'(U1,V1)).
+   '$module_call'(U1,V1).
 
 :-non_counted_backtracking call/43.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1) :-
@@ -1476,7 +1485,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
    '$prepare_call_clause'(T1,S1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1),
    expand_call_goal(T1,R1,U1),
    strip_subst_module(U1,R1,V1,W1),
-   '$call_with_inference_counting'('$module_call'(V1,W1)).
+   '$module_call'(V1,W1).
 
 :-non_counted_backtracking call/44.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1) :-
@@ -1489,7 +1498,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
    '$prepare_call_clause'(U1,T1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1),
    expand_call_goal(U1,S1,V1),
    strip_subst_module(V1,S1,W1,X1),
-   '$call_with_inference_counting'('$module_call'(W1,X1)).
+   '$module_call'(W1,X1).
 
 :-non_counted_backtracking call/45.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1) :-
@@ -1502,7 +1511,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
    '$prepare_call_clause'(V1,U1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1),
    expand_call_goal(V1,T1,W1),
    strip_subst_module(W1,T1,X1,Y1),
-   '$call_with_inference_counting'('$module_call'(X1,Y1)).
+   '$module_call'(X1,Y1).
 
 :-non_counted_backtracking call/46.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1) :-
@@ -1515,7 +1524,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
    '$prepare_call_clause'(W1,V1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1),
    expand_call_goal(W1,U1,X1),
    strip_subst_module(X1,U1,Y1,Z1),
-   '$call_with_inference_counting'('$module_call'(Y1,Z1)).
+   '$module_call'(Y1,Z1).
 
 :-non_counted_backtracking call/47.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1) :-
@@ -1528,7 +1537,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
    '$prepare_call_clause'(X1,W1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1),
    expand_call_goal(X1,V1,Y1),
    strip_subst_module(Y1,V1,Z1,A2),
-   '$call_with_inference_counting'('$module_call'(Z1,A2)).
+   '$module_call'(Z1,A2).
 
 :-non_counted_backtracking call/48.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1) :-
@@ -1541,7 +1550,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
    '$prepare_call_clause'(Y1,X1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1),
    expand_call_goal(Y1,W1,Z1),
    strip_subst_module(Z1,W1,A2,B2),
-   '$call_with_inference_counting'('$module_call'(A2,B2)).
+   '$module_call'(A2,B2).
 
 :-non_counted_backtracking call/49.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1) :-
@@ -1554,7 +1563,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
    '$prepare_call_clause'(Z1,Y1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1),
    expand_call_goal(Z1,X1,A2),
    strip_subst_module(A2,X1,B2,C2),
-   '$call_with_inference_counting'('$module_call'(B2,C2)).
+   '$module_call'(B2,C2).
 
 :-non_counted_backtracking call/50.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1) :-
@@ -1567,7 +1576,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
    '$prepare_call_clause'(A2,Z1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1),
    expand_call_goal(A2,Y1,B2),
    strip_subst_module(B2,Y1,C2,D2),
-   '$call_with_inference_counting'('$module_call'(C2,D2)).
+   '$module_call'(C2,D2).
 
 :-non_counted_backtracking call/51.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1) :-
@@ -1580,7 +1589,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
    '$prepare_call_clause'(B2,A2,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1),
    expand_call_goal(B2,Z1,C2),
    strip_subst_module(C2,Z1,D2,E2),
-   '$call_with_inference_counting'('$module_call'(D2,E2)).
+   '$module_call'(D2,E2).
 
 :-non_counted_backtracking call/52.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1) :-
@@ -1593,7 +1602,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
    '$prepare_call_clause'(C2,B2,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1),
    expand_call_goal(C2,A2,D2),
    strip_subst_module(D2,A2,E2,F2),
-   '$call_with_inference_counting'('$module_call'(E2,F2)).
+   '$module_call'(E2,F2).
 
 :-non_counted_backtracking call/53.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2) :-
@@ -1606,7 +1615,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
    '$prepare_call_clause'(D2,C2,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2),
    expand_call_goal(D2,B2,E2),
    strip_subst_module(E2,B2,F2,G2),
-   '$call_with_inference_counting'('$module_call'(F2,G2)).
+   '$module_call'(F2,G2).
 
 :-non_counted_backtracking call/54.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2) :-
@@ -1619,7 +1628,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
    '$prepare_call_clause'(E2,D2,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2),
    expand_call_goal(E2,C2,F2),
    strip_subst_module(F2,C2,G2,H2),
-   '$call_with_inference_counting'('$module_call'(G2,H2)).
+   '$module_call'(G2,H2).
 
 :-non_counted_backtracking call/55.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2) :-
@@ -1632,7 +1641,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
    '$prepare_call_clause'(F2,E2,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2),
    expand_call_goal(F2,D2,G2),
    strip_subst_module(G2,D2,H2,I2),
-   '$call_with_inference_counting'('$module_call'(H2,I2)).
+   '$module_call'(H2,I2).
 
 :-non_counted_backtracking call/56.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2) :-
@@ -1645,7 +1654,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
    '$prepare_call_clause'(G2,F2,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2),
    expand_call_goal(G2,E2,H2),
    strip_subst_module(H2,E2,I2,J2),
-   '$call_with_inference_counting'('$module_call'(I2,J2)).
+   '$module_call'(I2,J2).
 
 :-non_counted_backtracking call/57.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2) :-
@@ -1658,7 +1667,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
    '$prepare_call_clause'(H2,G2,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2),
    expand_call_goal(H2,F2,I2),
    strip_subst_module(I2,F2,J2,K2),
-   '$call_with_inference_counting'('$module_call'(J2,K2)).
+   '$module_call'(J2,K2).
 
 :-non_counted_backtracking call/58.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2) :-
@@ -1671,7 +1680,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
    '$prepare_call_clause'(I2,H2,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2),
    expand_call_goal(I2,G2,J2),
    strip_subst_module(J2,G2,K2,L2),
-   '$call_with_inference_counting'('$module_call'(K2,L2)).
+   '$module_call'(K2,L2).
 
 :-non_counted_backtracking call/59.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2) :-
@@ -1684,7 +1693,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
    '$prepare_call_clause'(J2,I2,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2),
    expand_call_goal(J2,H2,K2),
    strip_subst_module(K2,H2,L2,M2),
-   '$call_with_inference_counting'('$module_call'(L2,M2)).
+   '$module_call'(L2,M2).
 
 :-non_counted_backtracking call/60.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2) :-
@@ -1697,7 +1706,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
    '$prepare_call_clause'(K2,J2,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2),
    expand_call_goal(K2,I2,L2),
    strip_subst_module(L2,I2,M2,N2),
-   '$call_with_inference_counting'('$module_call'(M2,N2)).
+   '$module_call'(M2,N2).
 
 :-non_counted_backtracking call/61.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2) :-
@@ -1710,7 +1719,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
    '$prepare_call_clause'(L2,K2,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2),
    expand_call_goal(L2,J2,M2),
    strip_subst_module(M2,J2,N2,O2),
-   '$call_with_inference_counting'('$module_call'(N2,O2)).
+   '$module_call'(N2,O2).
 
 :-non_counted_backtracking call/62.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2,J2) :-
@@ -1723,7 +1732,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
    '$prepare_call_clause'(M2,L2,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2,J2),
    expand_call_goal(M2,K2,N2),
    strip_subst_module(N2,K2,O2,P2),
-   '$call_with_inference_counting'('$module_call'(O2,P2)).
+   '$module_call'(O2,P2).
 
 :-non_counted_backtracking call/63.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2,J2,K2) :-
@@ -1736,7 +1745,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
    '$prepare_call_clause'(N2,M2,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2,J2,K2),
    expand_call_goal(N2,L2,O2),
    strip_subst_module(O2,L2,P2,Q2),
-   '$call_with_inference_counting'('$module_call'(P2,Q2)).
+   '$module_call'(P2,Q2).
 
 :-non_counted_backtracking call/64.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2,J2,K2,L2) :-
@@ -1749,7 +1758,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
    '$prepare_call_clause'(O2,N2,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2,J2,K2,L2),
    expand_call_goal(O2,M2,P2),
    strip_subst_module(P2,M2,Q2,R2),
-   '$call_with_inference_counting'('$module_call'(Q2,R2)).
+   '$module_call'(Q2,R2).
 
 :-non_counted_backtracking call/65.
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2,J2,K2,L2,M2) :-
@@ -1762,4 +1771,4 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
    '$prepare_call_clause'(P2,O2,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2,J2,K2,L2,M2),
    expand_call_goal(P2,N2,Q2),
    strip_subst_module(Q2,N2,R2,S2),
-   '$call_with_inference_counting'('$module_call'(R2,S2)).
+   '$module_call'(R2,S2).

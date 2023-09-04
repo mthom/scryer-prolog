@@ -948,7 +948,9 @@ fn generate_instruction_preface() -> TokenStream {
         #[derive(Clone, Copy, Debug)]
         pub enum IndexedChoiceInstruction {
             Retry(usize),
+            DefaultRetry(usize),
             Trust(usize),
+            DefaultTrust(usize),
             Try(usize),
         }
 
@@ -958,6 +960,8 @@ fn generate_instruction_preface() -> TokenStream {
                     &IndexedChoiceInstruction::Retry(offset) => offset,
                     &IndexedChoiceInstruction::Trust(offset) => offset,
                     &IndexedChoiceInstruction::Try(offset) => offset,
+                    &IndexedChoiceInstruction::DefaultRetry(offset) => offset,
+                    &IndexedChoiceInstruction::DefaultTrust(offset) => offset,
                 }
             }
 
@@ -971,6 +975,12 @@ fn generate_instruction_preface() -> TokenStream {
                     }
                     &IndexedChoiceInstruction::Retry(offset) => {
                         functor!(atom!("retry"), [fixnum(offset)])
+                    }
+                    &IndexedChoiceInstruction::DefaultTrust(offset) => {
+                        functor!(atom!("default_trust"), [fixnum(offset)])
+                    }
+                    &IndexedChoiceInstruction::DefaultRetry(offset) => {
+                        functor!(atom!("default_retry"), [fixnum(offset)])
                     }
                 }
             }

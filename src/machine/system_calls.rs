@@ -1205,11 +1205,13 @@ impl Machine {
 
                             match &indexed_choice[p] {
                                 &IndexedChoiceInstruction::Try(offset) |
-                                &IndexedChoiceInstruction::Retry(offset) => {
+                                &IndexedChoiceInstruction::Retry(offset) |
+                                &IndexedChoiceInstruction::DefaultRetry(offset) => {
                                     let clause_clause_loc = skeleton.core.clause_clause_locs[p];
                                     (clause_clause_loc, bp + offset)
                                 }
-                                &IndexedChoiceInstruction::Trust(_) => {
+                                &IndexedChoiceInstruction::Trust(_) |
+                                &IndexedChoiceInstruction::DefaultTrust(_) => {
                                     unreachable!()
                                 }
                             }

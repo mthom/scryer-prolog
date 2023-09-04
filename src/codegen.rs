@@ -1129,7 +1129,11 @@ impl<'b> CodeGenerator<'b> {
         optimal_index: usize,
     ) -> Result<Code, CompilationError> {
         let mut code = VecDeque::new();
-        let mut code_offsets = CodeOffsets::new(I::new(), optimal_index + 1);
+        let mut code_offsets = CodeOffsets::new(
+            I::new(),
+            optimal_index + 1,
+            self.settings.non_counted_bt,
+        );
 
         let mut skip_stub_try_me_else = false;
         let clauses_len = clauses.len();

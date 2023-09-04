@@ -753,14 +753,16 @@ impl Machine {
                     match &indexing_lines[self.machine_st.oip as usize] {
                         IndexingLine::IndexedChoice(indexed_choice) => {
                             match &indexed_choice[(self.machine_st.iip + inner_offset) as usize] {
-                                &IndexedChoiceInstruction::Retry(o) => {
+                                &IndexedChoiceInstruction::Retry(o) |
+                                &IndexedChoiceInstruction::DefaultRetry(o) => {
                                     if self.next_clause_applicable(self.machine_st.p + o) {
                                         return Some(inner_offset);
                                     }
 
                                     inner_offset += 1;
                                 }
-                                &IndexedChoiceInstruction::Trust(o) => {
+                                &IndexedChoiceInstruction::Trust(o) |
+                                &IndexedChoiceInstruction::DefaultTrust(o) => {
                                     return if self.next_clause_applicable(self.machine_st.p + o) {
                                         Some(inner_offset)
                                     } else {

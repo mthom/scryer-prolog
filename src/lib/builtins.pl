@@ -287,6 +287,9 @@ repeat :- repeat.
 %% ->(G1, G2)
 %
 % If-then and if-then-else constructs
+
+:- non_counted_backtracking (->)/2.
+
 G1 -> G2 :- control_entry_point((G1 -> G2)).
 
 
@@ -300,6 +303,9 @@ staggered_if_then(G1, G2) :-
 %% ;(G1, G2)
 %
 % Disjunction (or)
+
+:- non_counted_backtracking (;)/2.
+
 G1 ; G2 :- control_entry_point((G1 ; G2)).
 
 
@@ -329,6 +335,9 @@ set_cp(B) :- '$set_cp'(B).
 %% ,(G1, G2)
 %
 % Conjuction (and)
+
+:- non_counted_backtracking (',')/2.
+
 ','(G1, G2) :- control_entry_point((G1, G2)).
 
 
@@ -813,7 +822,7 @@ catch(G,C,R) :-
 
 catch(G,C,R,Bb) :-
     '$install_new_block'(NBb),
-    '$call_with_inference_counting'(call(G)),
+    call(G),
     end_block(Bb, NBb).
 catch(G,C,R,Bb) :-
     '$reset_block'(Bb),
@@ -2211,6 +2220,9 @@ set_stream_position(S_or_a, Position) :-
 %% callable(X).
 %
 % True iff X is bound o an atom or a compund term.
+
+:- non_counted_backtracking callable/1.
+
 callable(X) :-
     (  nonvar(X), functor(X, F, _), atom(F) ->
        true

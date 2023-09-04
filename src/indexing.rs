@@ -1061,8 +1061,14 @@ fn cap_choice_seq(prelude: &mut [IndexedChoiceInstruction]) {
 #[inline]
 fn cap_choice_seq_with_trust(prelude: &mut [IndexedChoiceInstruction]) {
     prelude.last_mut().map(|instr| {
-        if let IndexedChoiceInstruction::Retry(i) = instr {
-            *instr = IndexedChoiceInstruction::Trust(*i);
+        match instr {
+            IndexedChoiceInstruction::Retry(i) => {
+                *instr = IndexedChoiceInstruction::Trust(*i);
+            }
+            IndexedChoiceInstruction::DefaultRetry(i) => {
+                *instr = IndexedChoiceInstruction::DefaultTrust(*i);
+            }
+            _ => {}
         }
     });
 }
@@ -1070,8 +1076,14 @@ fn cap_choice_seq_with_trust(prelude: &mut [IndexedChoiceInstruction]) {
 #[inline]
 fn uncap_choice_seq_with_trust(prelude: &mut [IndexedChoiceInstruction]) {
     prelude.last_mut().map(|instr| {
-        if let IndexedChoiceInstruction::Trust(i) = instr {
-            *instr = IndexedChoiceInstruction::Retry(*i);
+        match instr {
+            IndexedChoiceInstruction::Trust(i) => {
+                *instr = IndexedChoiceInstruction::Retry(*i);
+            }
+            IndexedChoiceInstruction::DefaultTrust(i) => {
+                *instr = IndexedChoiceInstruction::DefaultRetry(*i);
+            }
+            _ => {}
         }
     });
 }
@@ -1151,7 +1163,7 @@ pub(crate) trait Indexer {
     fn lists(&mut self) -> &mut VecDeque<Self::ThirdLevelIndex>;
     fn structures(&mut self) -> &mut IndexMap<(Atom, usize), VecDeque<Self::ThirdLevelIndex>, FxBuildHasher>;
 
-    fn compute_index(is_initial_index: bool, index: usize) -> Self::ThirdLevelIndex;
+    fn compute_index(is_initial_index: bool, index: usize, non_counted_bt: bool) -> Self::ThirdLevelIndex;
 
     fn second_level_index<IndexKey: Eq + Hash>(
         indices: IndexMap<IndexKey, VecDeque<Self::ThirdLevelIndex>, FxBuildHasher>,
@@ -1201,9 +1213,11 @@ impl Indexer for StaticCodeIndices {
         &mut self.structures
     }
 
-    fn compute_index(is_initial_index: bool, index: usize) -> IndexedChoiceInstruction {
+    fn compute_index(is_initial_index: bool, index: usize, non_counted_bt: bool) -> IndexedChoiceInstruction {
         if is_initial_index {
             IndexedChoiceInstruction::Try(index + 1)
+        } else if non_counted_bt {
+            IndexedChoiceInstruction::DefaultRetry(index + 1)
         } else {
             IndexedChoiceInstruction::Retry(index + 1)
         }
@@ -1318,7 +1332,7 @@ impl Indexer for DynamicCodeIndices {
     }
 
     #[inline]
-    fn compute_index(_: bool, index: usize) -> usize {
+    fn compute_index(_: bool, index: usize, _: bool) -> usize {
         index + 1
     }
 
@@ -1400,19 +1414,21 @@ impl Indexer for DynamicCodeIndices {
 pub(crate) struct CodeOffsets<I: Indexer> {
     indices: I,
     optimal_index: usize,
+    non_counted_bt: bool,
 }
 
 impl<I: Indexer> CodeOffsets<I> {
-    pub(crate) fn new(indices: I, optimal_index: usize) -> Self {
+    pub(crate) fn new(indices: I, optimal_index: usize, non_counted_bt: bool) -> Self {
         CodeOffsets {
             indices,
             optimal_index,
+            non_counted_bt,
         }
     }
 
     fn index_list(&mut self, index: usize) {
         let is_initial_index = self.indices.lists().is_empty();
-        let index = I::compute_index(is_initial_index, index);
+        let index = I::compute_index(is_initial_index, index, self.non_counted_bt);
         self.indices.lists().push_back(index);
     }
 
@@ -1426,7 +1442,7 @@ impl<I: Indexer> CodeOffsets<I> {
         let code = self.indices.constants().entry(constant).or_insert(VecDeque::new());
 
         let is_initial_index = code.is_empty();
-        code.push_back(I::compute_index(is_initial_index, index));
+        code.push_back(I::compute_index(is_initial_index, index, self.non_counted_bt));
 
         for constant in &overlapping_constants {
             let code = self
@@ -1436,7 +1452,7 @@ impl<I: Indexer> CodeOffsets<I> {
                 .or_insert(VecDeque::new());
 
             let is_initial_index = code.is_empty();
-            let index = I::compute_index(is_initial_index, index);
+            let index = I::compute_index(is_initial_index, index, self.non_counted_bt);
 
             code.push_back(index);
         }
@@ -1454,7 +1470,7 @@ impl<I: Indexer> CodeOffsets<I> {
         let code_len = code.len();
         let is_initial_index = code.is_empty();
 
-        code.push_back(I::compute_index(is_initial_index, index));
+        code.push_back(I::compute_index(is_initial_index, index, self.non_counted_bt));
         code_len
     }
 
