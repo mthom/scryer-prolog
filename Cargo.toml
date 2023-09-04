@@ -63,7 +63,8 @@ libloading = "0.7"
 derive_deref = "1.1.1"
 http-body-util = "0.1.0-rc.2"
 bytes = "1"
-dashu = { git = "https://github.com/coasys/dashu.git", version = "0.3.1"  }
+dashu = { version = "0.3.1", git = "https://github.com/cmpute/dashu.git"  }
+num-order = { version = "1.2.0" }
 rand = "0.8.5"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
