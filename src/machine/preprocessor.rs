@@ -65,7 +65,10 @@ fn setup_predicate_indicator(term: &mut Term) -> Result<PredicateKey, Compilatio
             let name = terms.pop().unwrap();
 
             let arity = match arity {
-                Term::Literal(_, Literal::Integer(n)) => n.to_usize(),
+                Term::Literal(_, Literal::Integer(n)) => {
+                    let value: usize = n.value().try_into().unwrap();
+                    Some(value)
+                },
                 Term::Literal(_, Literal::Fixnum(n)) => usize::try_from(n.get_num()).ok(),
                 _ => None,
             }.ok_or(CompilationError::InvalidModuleExport)?;
