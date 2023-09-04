@@ -19,7 +19,7 @@ use std::error::Error;
 use std::fmt;
 use std::fmt::Debug;
 use std::fs::{File, OpenOptions};
-use std::hash::{Hash};
+use std::hash::Hash;
 use std::io;
 use std::io::{BufRead, Cursor, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::mem;
