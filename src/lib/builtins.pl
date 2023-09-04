@@ -161,18 +161,25 @@ current_prolog_flag(Flag, OccursCheckEnabled) :-
     Flag == occurs_check,
     !,
     '$is_sto_enabled'(OccursCheckEnabled).
+current_prolog_flag(occurs_check, OccursCheckEnabled) :-
+    '$is_sto_enabled'(OccursCheckEnabled).
 current_prolog_flag(Flag, Value) :-
     Flag == answer_write_options,
     !,
-    (   iso_ext:bb_get('$answer_write_options', Value) -> true
-    ;   Value = []
-    ).
+    answer_write_options(Value).
+current_prolog_flag(answer_write_options, Value) :-
+    answer_write_options(Value).
 current_prolog_flag(Flag, _) :-
     atom(Flag),
     throw(error(domain_error(prolog_flag, Flag), current_prolog_flag/2)). % 8.17.2.3 b
 current_prolog_flag(Flag, _) :-
     nonvar(Flag),
     throw(error(type_error(atom, Flag), current_prolog_flag/2)). % 8.17.2.3 a
+
+answer_write_options(Value) :-
+    (   iso_ext:bb_get('$answer_write_options', Value) -> true
+    ;   Value = []
+    ).
 
 %% set_prolog_flag(Flag, Value).
 %
