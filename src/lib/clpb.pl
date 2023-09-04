@@ -17,8 +17,8 @@
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 :- module(clpb, [op(300, fy, ~),
-		         op(500, yfx, #),
-		         sat/1,
+                 op(500, yfx, #),
+                 sat/1,
                  taut/2,
                  labeling/1,
                  sat_count/2,
@@ -1513,8 +1513,7 @@ random_bindings(VNum, Node) -->
 %
 % ```
 % ?- sat(A#B), weighted_maximum([1,2,1], [A,B,C], Maximum).
-%    A = 0, B = 1, C = 1, Maximum = 3
-% ;  false.
+%    A = 0, B = 1, C = 1, Maximum = 3.
 % ```
 
 weighted_maximum(Ws, Vars, Max) :-
@@ -1656,6 +1655,10 @@ attribute_goals(Var) -->
             booleans(RestVs)
         ;   boolean(Var)  % the variable may have occurred only in taut/2
         ).
+attribute_goals(Var) -->
+        { get_atts(Var, clpb_max(_)),
+          !,
+          put_atts(Var, -clpb_max(_)) }.
 attribute_goals(Var) -->
         { get_atts(Var, clpb_bdd(BDD)),
           ground(BDD),
