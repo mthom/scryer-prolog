@@ -29,7 +29,7 @@ fn do_not_duplicate_path_components() {
         ['tests-pl/issue852-throw_e.pl'].\n\
         halt.\n\
         ",
-        "   throw(e).\n   false.\n   throw(e).\n   false.\n",
+        "   throw(e).\n   throw(e).\n",
     );
 }
 

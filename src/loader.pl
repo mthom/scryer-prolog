@@ -135,9 +135,15 @@ file_load_init(Stream, Evacuable) :-
     run_initialization_goals.
 
 file_load_cleanup(Evacuable, Error) :-
+    load_context(Module),
+    abolish(Module:'$initialization_goals'/1),
     unload_evacuable(Evacuable),
-    '$print_message_and_fail'(Error),
-	throw(Error).
+    (  clause('$toplevel':argv(_), _) ->
+       % let the toplevel call loader:write_error/1
+       throw(Error)
+    ;  '$print_message_and_fail'(Error)
+    ;  throw(file_load_error)
+    ).
 
 file_load(Stream, Path, Evacuable) :-
     create_file_load_context(Stream, Path, Evacuable),
@@ -505,7 +511,9 @@ consult(Item) :-
 
 use_module(Module) :-
     '$push_load_state_payload'(Evacuable),
-    use_module(Module, [], Evacuable).
+    catch('$call'(loader:use_module(Module, [], Evacuable)),
+          file_load_error,
+          '$call'(builtins:false)).
 
 use_module(Module, Exports) :-
     '$push_load_state_payload'(Evacuable),
