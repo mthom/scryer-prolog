@@ -358,10 +358,10 @@ call_nth_nesting(C, ID) :-
     bb_put(ID, 0),
     bb_put(i_call_nth_counter, C).
 
-%% countall(Goal, N).
+%% countall(G_0, N).
 %
-% countall(Goal, N) counts all solutions of Goal and unifies N with
-% this number of solutions. This predicate always succeeds once.
+% countall(G_0, N) is true iff N unifies with the total number of
+% answers of call(G_0).
 
 :- meta_predicate(countall(0, ?)).
 
