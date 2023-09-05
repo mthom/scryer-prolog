@@ -5499,6 +5499,17 @@ impl Machine {
                     if interruption {
                         self.machine_st.throw_interrupt_exception();
                         self.machine_st.backtrack();
+
+		        #[cfg(not(target_arch = "wasm32"))]
+			let runtime = tokio::runtime::Runtime::new().unwrap();
+			#[cfg(target_arch = "wasm32")]
+			let runtime = tokio::runtime::Builder::new_current_thread()
+			    .enable_all()
+			    .build()
+			    .unwrap();
+
+			let old_runtime = std::mem::replace(&mut self.runtime, runtime);
+			old_runtime.shutdown_background();
                     }
                 }
                 Err(_) => unreachable!(),
