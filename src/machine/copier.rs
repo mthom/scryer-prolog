@@ -91,12 +91,16 @@ impl<T: CopierTarget> CopyTermState<T> {
             self.target.push(hcv);
         }
 
-        let cdr = self.target.store(self.target.deref(heap_loc_as_cell!(addr + 1)));
+        let cdr = self
+            .target
+            .store(self.target.deref(heap_loc_as_cell!(addr + 1)));
 
         if !cdr.is_var() {
             self.trail_list_cell(addr + 1, threshold);
         } else {
-            let car = self.target.store(self.target.deref(heap_loc_as_cell!(addr)));
+            let car = self
+                .target
+                .store(self.target.deref(heap_loc_as_cell!(addr)));
 
             if !car.is_var() {
                 self.trail_list_cell(addr, threshold);
@@ -188,10 +192,10 @@ impl<T: CopierTarget> CopyTermState<T> {
         while let HeapCellValueTag::Lis = list_addr.get_tag() {
             let threshold = self.target.threshold();
             let heap_loc = list_addr.get_value() as usize;
-            let str_loc  = self.target[heap_loc].get_value() as usize;
+            let str_loc = self.target[heap_loc].get_value() as usize;
 
-            self.target.push(heap_loc_as_cell!(threshold+2));
-            self.target.push(heap_loc_as_cell!(threshold+1));
+            self.target.push(heap_loc_as_cell!(threshold + 2));
+            self.target.push(heap_loc_as_cell!(threshold + 1));
 
             read_heap_cell!(self.target[str_loc],
                 (HeapCellValueTag::Atom) => {
@@ -377,8 +381,9 @@ mod tests {
         let a_atom = atom!("a");
         let b_atom = atom!("b");
 
-        wam.machine_st.heap
-           .extend(functor!(f_atom, [atom(a_atom), atom(b_atom)]));
+        wam.machine_st
+            .heap
+            .extend(functor!(f_atom, [atom(a_atom), atom(b_atom)]));
 
         assert_eq!(wam.machine_st.heap[0], atom_as_cell!(f_atom, 2));
         assert_eq!(wam.machine_st.heap[1], atom_as_cell!(a_atom));
@@ -401,20 +406,26 @@ mod tests {
 
         wam.machine_st.heap.clear();
 
-        let pstr_var_cell = put_partial_string(&mut wam.machine_st.heap, "abc ", &mut wam.machine_st.atom_tbl);
+        let pstr_var_cell =
+            put_partial_string(&mut wam.machine_st.heap, "abc ", &wam.machine_st.atom_tbl);
         let pstr_cell = wam.machine_st.heap[pstr_var_cell.get_value() as usize];
 
         wam.machine_st.heap.pop();
         wam.machine_st.heap.push(pstr_loc_as_cell!(2));
 
-        let pstr_second_var_cell = put_partial_string(&mut wam.machine_st.heap, "def", &mut wam.machine_st.atom_tbl);
+        let pstr_second_var_cell =
+            put_partial_string(&mut wam.machine_st.heap, "def", &wam.machine_st.atom_tbl);
         let pstr_second_cell = wam.machine_st.heap[pstr_second_var_cell.get_value() as usize];
 
         wam.machine_st.heap.pop();
-        wam.machine_st.heap.push(pstr_loc_as_cell!(wam.machine_st.heap.len() + 1));
+        wam.machine_st
+            .heap
+            .push(pstr_loc_as_cell!(wam.machine_st.heap.len() + 1));
 
         wam.machine_st.heap.push(pstr_offset_as_cell!(0));
-        wam.machine_st.heap.push(fixnum_as_cell!(Fixnum::build_with(0i64)));
+        wam.machine_st
+            .heap
+            .push(fixnum_as_cell!(Fixnum::build_with(0i64)));
 
         {
             let wam = TermCopyingMockWAM { wam: &mut wam };
@@ -428,14 +439,20 @@ mod tests {
         assert_eq!(wam.machine_st.heap[2], pstr_second_cell);
         assert_eq!(wam.machine_st.heap[3], pstr_loc_as_cell!(4));
         assert_eq!(wam.machine_st.heap[4], pstr_offset_as_cell!(0));
-        assert_eq!(wam.machine_st.heap[5], fixnum_as_cell!(Fixnum::build_with(0i64)));
+        assert_eq!(
+            wam.machine_st.heap[5],
+            fixnum_as_cell!(Fixnum::build_with(0i64))
+        );
 
         assert_eq!(wam.machine_st.heap[7], pstr_cell);
         assert_eq!(wam.machine_st.heap[8], pstr_loc_as_cell!(9));
         assert_eq!(wam.machine_st.heap[9], pstr_second_cell);
         assert_eq!(wam.machine_st.heap[10], pstr_loc_as_cell!(11));
         assert_eq!(wam.machine_st.heap[11], pstr_offset_as_cell!(7));
-        assert_eq!(wam.machine_st.heap[12], fixnum_as_cell!(Fixnum::build_with(0i64)));
+        assert_eq!(
+            wam.machine_st.heap[12],
+            fixnum_as_cell!(Fixnum::build_with(0i64))
+        );
 
         wam.machine_st.heap.clear();
 

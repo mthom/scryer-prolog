@@ -10,7 +10,7 @@ license = "BSD-3-Clause"
 keywords = ["prolog", "prolog-interpreter", "prolog-system"]
 categories = ["command-line-utilities"]
 build = "build/main.rs"
-rust-version = "1.63"
+rust-version = "1.70"
 
 [features]
 default = ["ffi", "repl", "hostname", "tls", "http"]
@@ -19,6 +19,7 @@ repl = ["dep:crossterm", "dep:ctrlc", "dep:rustyline"]
 hostname = ["dep:hostname"]
 tls = ["dep:native-tls"]
 http = ["dep:hyper", "dep:reqwest"]
+rust_beta_channel = []
 
 [build-dependencies]
 indexmap = "1.0.2"

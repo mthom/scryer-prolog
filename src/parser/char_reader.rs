@@ -20,7 +20,7 @@ use std::str;
 
 pub struct CharReader<R> {
     inner: R,
-    buf: SmallVec<[u8;32]>,
+    buf: SmallVec<[u8; 32]>,
     pos: usize,
 }
 
@@ -78,7 +78,7 @@ pub trait CharRead {
                 self.consume(c.len_utf8());
                 Some(Ok(c))
             }
-            result => result
+            result => result,
         }
     }
 
@@ -161,9 +161,7 @@ impl<R: Read> CharRead for CharReader<R> {
 
                         return Some(Ok(c));
                     }
-                    Err(e) => {
-                        e
-                    }
+                    Err(e) => e,
                 };
 
                 if buf.len() - e.valid_up_to() >= 4 {
@@ -192,13 +190,15 @@ impl<R: Read> CharRead for CharReader<R> {
                     // the buffer, it will be returned on the next
                     // loop.
 
-                    return Some(Err(io::Error::new(io::ErrorKind::InvalidData,
-                                                   BadUtf8Error { bytes: badbytes })));
+                    return Some(Err(io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        BadUtf8Error { bytes: badbytes },
+                    )));
                 } else {
                     if self.pos >= self.buf.len() {
                         return None;
                     } else if self.buf.len() - self.pos >= 4 {
-                        return match str::from_utf8(&self.buf[self.pos .. e.valid_up_to()]) {
+                        return match str::from_utf8(&self.buf[self.pos..e.valid_up_to()]) {
                             Ok(s) => {
                                 let mut chars = s.chars();
                                 let c = chars.next().unwrap();
@@ -206,10 +206,12 @@ impl<R: Read> CharRead for CharReader<R> {
                                 Some(Ok(c))
                             }
                             Err(e) => {
-                                let badbytes = self.buf[self.pos .. e.valid_up_to()].to_vec();
+                                let badbytes = self.buf[self.pos..e.valid_up_to()].to_vec();
 
-                                Some(Err(io::Error::new(io::ErrorKind::InvalidData,
-                                                        BadUtf8Error { bytes: badbytes })))
+                                Some(Err(io::Error::new(
+                                    io::ErrorKind::InvalidData,
+                                    BadUtf8Error { bytes: badbytes },
+                                )))
                             }
                         };
                     } else {
@@ -223,7 +225,7 @@ impl<R: Read> CharRead for CharReader<R> {
 
                         let buf_len = self.buf.len();
 
-                        let mut word = [0u8;4];
+                        let mut word = [0u8; 4];
                         let word_slice = &mut word[buf_len..4];
 
                         match self.inner.read(word_slice) {
@@ -250,7 +252,7 @@ impl<R: Read> CharRead for CharReader<R> {
         let c_len = c.len_utf8();
         let mut shifted_slice = [0u8; 32];
 
-        shifted_slice[0..src_len].copy_from_slice(&self.buf[self.pos .. self.buf.len()]);
+        shifted_slice[0..src_len].copy_from_slice(&self.buf[self.pos..self.buf.len()]);
 
         self.buf.resize(c_len, 0);
         self.buf.extend_from_slice(&shifted_slice[0..src_len]);
@@ -311,7 +313,10 @@ impl<R: Read> Read for CharReader<R> {
         }
 
         if !buf.is_empty() {
-            Err(io::Error::new(ErrorKind::UnexpectedEof, "failed to fill whole buffer"))
+            Err(io::Error::new(
+                ErrorKind::UnexpectedEof,
+                "failed to fill whole buffer",
+            ))
         } else {
             Ok(())
         }
@@ -364,11 +369,13 @@ where
     fn fmt(&self, fmt: &mut fmt::Formatter<'_>) -> fmt::Result {
         fmt.debug_struct("CharReader")
             .field("reader", &self.inner)
-            .field("buf", &format_args!("{}/{}", self.buf.capacity() - self.pos, self.buf.len()))
+            .field(
+                "buf",
+                &format_args!("{}/{}", self.buf.capacity() - self.pos, self.buf.len()),
+            )
             .finish()
     }
 }
-
 
 #[cfg(test)]
 mod tests {

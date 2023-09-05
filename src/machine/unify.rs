@@ -1,9 +1,9 @@
 use crate::arena::*;
 use crate::forms::*;
 use crate::heap_iter::stackful_preorder_iter;
-use crate::machine::*;
 use crate::machine::machine_state::*;
 use crate::machine::partial_string::*;
+use crate::machine::*;
 use crate::types::*;
 
 use std::cmp::Ordering;
@@ -190,8 +190,8 @@ pub(crate) trait Unifier: DerefMut<Target = MachineState> {
                     machine_st.pdl.push(pstr_iter1.focus);
                 }
             }
-            continuable @ PStrCmpResult::FirstIterContinuable(iteratee) |
-            continuable @ PStrCmpResult::SecondIterContinuable(iteratee) => {
+            continuable @ PStrCmpResult::FirstIterContinuable(iteratee)
+            | continuable @ PStrCmpResult::SecondIterContinuable(iteratee) => {
                 if continuable.is_second_iter() {
                     std::mem::swap(&mut pstr_iter1, &mut pstr_iter2);
                 }
@@ -439,10 +439,8 @@ pub(crate) trait Unifier: DerefMut<Target = MachineState> {
     }
 
     fn unify_big_num<N>(&mut self, n1: TypedArenaPtr<N>, value: HeapCellValue)
-        where N: PartialEq<Rational>
-               + PartialEq<Integer>
-               + PartialEq<i64>
-               + ArenaAllocated
+    where
+        N: PartialEq<Rational> + PartialEq<Integer> + PartialEq<i64> + ArenaAllocated,
     {
         if let Some(r) = value.as_var() {
             Self::bind(self, r, typed_arena_ptr_as_cell!(n1));
