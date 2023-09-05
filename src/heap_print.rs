@@ -580,7 +580,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
     fn ambiguity_check(&self, atom: &str) -> bool {
         let tail = &self.outputter.as_str()[self.last_item_idx..];
 
-        if !self.quoted || non_quoted_token(atom.chars()) {
+        if atom == "," || !self.quoted || non_quoted_token(atom.chars()) {
             requires_space(tail, atom)
         } else {
             requires_space(tail, "'")
