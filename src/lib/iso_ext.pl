@@ -226,8 +226,9 @@ end_block(B, _Bb, NBb, L) :-
 
 :- non_counted_backtracking handle_ile/3.
 
-handle_ile(B, inference_limit_exceeded(B), inference_limit_exceeded) :-
+handle_ile(B, inference_limit_exceeded(B), R) :-
     !,
+    R = inference_limit_exceeded,
     '$pop_ball_stack'.
 handle_ile(B, _, _) :-
     '$remove_call_policy_check'(B),
