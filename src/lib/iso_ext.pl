@@ -370,7 +370,7 @@ countall(Goal, N) :-
     (   integer(N) ->
         (   N < 0 ->
             domain_error(not_less_than_zero, N, countall/2)
-        ;   N > 0
+        ;   true
         )
     ;   true
     ),
