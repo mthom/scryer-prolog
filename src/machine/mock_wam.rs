@@ -332,6 +332,19 @@ impl Machine {
         self.load_file(file.into(), stream);
         self.user_output.bytes().map(|b| b.unwrap()).collect()
     }
+
+    pub fn test_load_string(&mut self, code: &str) -> Vec<u8> {
+        use std::io::Read;
+
+        let stream = Stream::from_owned_string(
+            code.to_owned(),
+            &mut self.machine_st.arena,
+        );
+
+        self.load_file("<stdin>".into(), stream);
+        self.user_output.bytes().map(|b| b.unwrap()).collect()
+    }
+
 }
 
 #[cfg(test)]

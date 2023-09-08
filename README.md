@@ -152,6 +152,77 @@ It will generate a very basic MSI file which installs the main executable and a 
 
 Scryer Prolog must be built with **Rust 1.63 and up**.
 
+### Building WebAssembly
+
+Scryer Prolog has basic WebAssembly support. You can follow `wasm-pack`'s [official instructions](https://rustwasm.github.io/docs/wasm-pack/quickstart.html) to install `wasm-pack` and build it in any way you like.
+
+However, none of the [default features](https://doc.rust-lang.org/cargo/reference/features.html#the-default-feature) are currently supported. The preferred way of disabling them is passing [extra options](https://rustwasm.github.io/wasm-pack/book/commands/build.html#extra-options) to `wasm-pack`.
+
+For example, if you want a minimal working package without using any bundler like `webpack`, you can do this:
+```
+wasm-pack build --target web -- --no-default-features
+```
+Then a `pkg` directory will be created, containing everything you need for a webapp. You can test whether the package is successfully built by creating an html file, adapted from `wasm-bindgen`'s [official example](https://rustwasm.github.io/wasm-bindgen/examples/without-a-bundler.html) like this:
+
+```html
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta charset="UTF-8" />
+        <title>Scryer Prolog - Sudoku Solver Example</title>
+        <script type="module">
+        import init, { eval_code } from './pkg/scryer_prolog.js';
+
+        const run = async () => {
+            await init("./pkg/scryer_prolog_bg.wasm");
+            let code = `
+            :- use_module(library(format)).
+            :- use_module(library(clpz)).
+            :- use_module(library(lists)).
+            
+            sudoku(Rows) :-
+            length(Rows, 9), maplist(same_length(Rows), Rows),
+            append(Rows, Vs), Vs ins 1..9,
+            maplist(all_distinct, Rows),
+            transpose(Rows, Columns),
+            maplist(all_distinct, Columns),
+            Rows = [As,Bs,Cs,Ds,Es,Fs,Gs,Hs,Is],
+            blocks(As, Bs, Cs),
+            blocks(Ds, Es, Fs),
+            blocks(Gs, Hs, Is).
+            
+            blocks([], [], []).
+            blocks([N1,N2,N3|Ns1], [N4,N5,N6|Ns2], [N7,N8,N9|Ns3]) :-
+            all_distinct([N1,N2,N3,N4,N5,N6,N7,N8,N9]),
+            blocks(Ns1, Ns2, Ns3).
+            
+            problem(1, [[_,_,_,_,_,_,_,_,_],
+                        [_,_,_,_,_,3,_,8,5],
+                        [_,_,1,_,2,_,_,_,_],
+                        [_,_,_,5,_,7,_,_,_],
+                        [_,_,4,_,_,_,1,_,_],
+                        [_,9,_,_,_,_,_,_,_],
+                        [5,_,_,_,_,_,_,7,3],
+                        [_,_,2,_,1,_,_,_,_],
+                        [_,_,_,_,4,_,_,_,9]]).
+            
+            main :-
+            problem(1, Rows), sudoku(Rows), maplist(portray_clause, Rows).
+            
+            :- initialization(main).
+            `;
+            const result = eval_code(code);
+            document.write(`<p>Sudoku solver returns:</p><pre>${result}</pre>`);
+        }
+        run();
+        </script>    
+    </head>
+    <body></body>
+</html>
+```
+
+Then you can serve it with your favorite http server like `python -m http.server` or `npx serve`, and access the page with your browser.
+
 ### Docker Install
 
 First, install [Docker](https://docs.docker.com/get-docker/) on Linux,
