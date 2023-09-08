@@ -1949,29 +1949,21 @@ Compatibility predicates.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 
-include(Goal, List, Is) :-
-        include_(List, Goal, Is).
-
-include_([], _, []).
-include_([X1|Xs1], P, Is) :-
-        (   call(P, X1)
-        ->  Is = [X1|Is1]
-        ;   Is = Is1
+include(_, [], []).
+include(Goal, [L|Ls0], Ls) :-
+        (   call(Goal, L) ->
+            Ls = [L|Rest]
+        ;   Ls = Rest
         ),
-        include_(Xs1, P, Is1).
+        include(Goal, Ls0, Rest).
 
-
-exclude(Goal, List, Is) :-
-        exclude_(List, Goal, Is).
-
-exclude_([], _, []).
-exclude_([X1|Xs1], P, Is) :-
-        (   call(P, X1)
-        ->  Is = Is1
-        ;   Is = [X1|Is1]
+exclude(_, [], []).
+exclude(Goal, [L|Ls0], Ls) :-
+        (   call(Goal, L) ->
+            Ls = Rest
+        ;   Ls = [L|Rest]
         ),
-        exclude_(Xs1, P, Is1).
-
+        exclude(Goal, Ls0, Rest).
 
 partition(Pred, List, Less, Equal, Greater) :-
     partition_(List, Pred, Less, Equal, Greater).
