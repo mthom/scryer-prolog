@@ -1729,7 +1729,8 @@ attribute_goals(Var) -->
 
 del_clpb(Var) :-
         del_attr(Var, clpb),
-        del_attr(Var, clpb_hash).
+        del_attr(Var, clpb_hash),
+        del_attr(Var, clpb_atom).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    To make residual projection work with recorded constraints, the
@@ -1883,7 +1884,8 @@ booleans([B|Bs]) --> boolean(B), booleans(Bs).
 
 boolean(Var) -->
         { del_clpb(Var) },
-        (   { get_attr(Var, clpb_omit_boolean, true) } -> []
+        (   { get_attr(Var, clpb_omit_boolean, true) } ->
+            { put_atts(Var, -clpb_omit_boolean(_)) }
         ;   [clpb:sat(Var =:= Var)]
         ).
 
