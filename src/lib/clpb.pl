@@ -1949,6 +1949,8 @@ Compatibility predicates.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 
+:- meta_predicate(include(1, ?, ?)).
+
 include(_, [], []).
 include(Goal, [L|Ls0], Ls) :-
         (   call(Goal, L) ->
@@ -1956,6 +1958,8 @@ include(Goal, [L|Ls0], Ls) :-
         ;   Ls = Rest
         ),
         include(Goal, Ls0, Rest).
+
+:- meta_predicate(exclude(1, ?, ?)).
 
 exclude(_, [], []).
 exclude(Goal, [L|Ls0], Ls) :-
