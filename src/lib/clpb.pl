@@ -110,6 +110,46 @@ domain_error(Expectation, Term) :-
 type_error(Expectation, Term) :-
         type_error(Expectation, Term, unknown(Term)-1).
 
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+Compatibility predicates.
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+:- meta_predicate(include(1, ?, ?)).
+
+include(_, [], []).
+include(Goal, [L|Ls0], Ls) :-
+        (   call(Goal, L) ->
+            Ls = [L|Rest]
+        ;   Ls = Rest
+        ),
+        include(Goal, Ls0, Rest).
+
+:- meta_predicate(exclude(1, ?, ?)).
+
+exclude(_, [], []).
+exclude(Goal, [L|Ls0], Ls) :-
+        (   call(Goal, L) ->
+            Ls = Rest
+        ;   Ls = [L|Rest]
+        ),
+        exclude(Goal, Ls0, Rest).
+
+:- meta_predicate(partition(2,?,?,?,?)).
+
+partition(_, [], [], [], []).
+partition(Pred, [H|T], L, E, G) :-
+    call(Pred, H, Diff),
+    partition_(Diff, H, Pred, T, L, E, G).
+
+partition_(<, H, Pred, T, [H|Rest], E, G) :-
+    partition(Pred, T, Rest, E, G).
+partition_(=, H, Pred, T, L, [H|Rest], G) :-
+    partition(Pred, T, L, Rest, G).
+partition_(>, H, Pred, T, L, E, [H|Rest]) :-
+    partition(Pred, T, L, E, Rest).
+
+:- meta_predicate(partition(1,?,?,?)).
+
 partition(Pred, Ls0, As, Bs) :-
         include(Pred, Ls0, As),
         exclude(Pred, Ls0, Bs).
@@ -465,6 +505,10 @@ non_monotonic(X) :-
             instantiation_error(X)
         ;   true
         ).
+
+:- meta_predicate(bdd_nodes(1, ?, ?)).
+:- meta_predicate(bdd_nodes_(1, ?, ?, ?)).
+:- meta_predicate(with_aux(1, ?)).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    Rewriting to canonical expressions.
@@ -1941,44 +1985,3 @@ clpb_atom_var(Atom, Var) :-
             put_assoc(Atom, A0, Var, A),
             b_setval('$clpb_atoms', A)
         ).
-
-
-
-/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-Compatibility predicates.
-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
-
-
-:- meta_predicate(include(1, ?, ?)).
-
-include(_, [], []).
-include(Goal, [L|Ls0], Ls) :-
-        (   call(Goal, L) ->
-            Ls = [L|Rest]
-        ;   Ls = Rest
-        ),
-        include(Goal, Ls0, Rest).
-
-:- meta_predicate(exclude(1, ?, ?)).
-
-exclude(_, [], []).
-exclude(Goal, [L|Ls0], Ls) :-
-        (   call(Goal, L) ->
-            Ls = Rest
-        ;   Ls = [L|Rest]
-        ),
-        exclude(Goal, Ls0, Rest).
-
-:- meta_predicate(partition(2,?,?,?,?)).
-
-partition(_, [], [], [], []).
-partition(Pred, [H|T], L, E, G) :-
-    call(Pred, H, Diff),
-    partition_(Diff, H, Pred, T, L, E, G).
-
-partition_(<, H, Pred, T, [H|Rest], E, G) :-
-    partition(Pred, T, Rest, E, G).
-partition_(=, H, Pred, T, L, [H|Rest], G) :-
-    partition(Pred, T, L, Rest, G).
-partition_(>, H, Pred, T, L, E, [H|Rest]) :-
-    partition(Pred, T, L, E, Rest).
