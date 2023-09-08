@@ -363,14 +363,14 @@ innovations of Scryer Prolog. This means that terms which appear as
 lists of characters to Prolog programs are stored in packed
 UTF-8&nbsp;encoding by the engine.
 
-Without this innovation, storing a list of characters in memory
-would use one memory&nbsp;cell per character, one memory&nbsp;cell per
-list constructor, and one memory&nbsp;cell for each tail that occurs
-in the list. Since one memory&nbsp;cell takes 8&nbsp;bytes on 64-bit
-machines, the packed representation used by Scryer&nbsp;Prolog yields
-an up&nbsp;to **24-fold&nbsp;reduction** of memory usage, and
-corresponding reduction of memory&nbsp;accesses when creating and
-processing strings.
+Without this innovation, storing a list of characters in memory would
+use one WAM memory&nbsp;cell per character, one cell per list
+constructor, and one cell for each tail that occurs in the list. Since
+one cell takes 8&nbsp;bytes in the WAM as implemented by
+Scryer&nbsp;Prolog, the packed representation yields an up&nbsp;to
+**24-fold&nbsp;reduction** of memory usage, and corresponding
+reduction of memory&nbsp;accesses when creating and processing
+strings.
 
 Scryer Prolog's compact internal string representation makes it
 ideally suited for the use case Prolog was originally developed for:
