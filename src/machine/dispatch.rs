@@ -4742,18 +4742,22 @@ impl Machine {
                         self.crypto_password_hash();
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                     }
+                    #[cfg(feature = "crypto-full")]
                     &Instruction::CallCryptoDataEncrypt => {
                         self.crypto_data_encrypt();
                         step_or_fail!(self, self.machine_st.p += 1);
                     }
+                    #[cfg(feature = "crypto-full")]
                     &Instruction::ExecuteCryptoDataEncrypt => {
                         self.crypto_data_encrypt();
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                     }
+                    #[cfg(feature = "crypto-full")]
                     &Instruction::CallCryptoDataDecrypt => {
                         self.crypto_data_decrypt();
                         step_or_fail!(self, self.machine_st.p += 1);
                     }
+                    #[cfg(feature = "crypto-full")]
                     &Instruction::ExecuteCryptoDataDecrypt => {
                         self.crypto_data_decrypt();
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
@@ -4766,34 +4770,42 @@ impl Machine {
                         self.crypto_curve_scalar_mult();
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                     }
+                    #[cfg(feature = "crypto-full")]
                     &Instruction::CallEd25519Sign => {
                         self.ed25519_sign();
                         step_or_fail!(self, self.machine_st.p += 1);
                     }
+                    #[cfg(feature = "crypto-full")]
                     &Instruction::ExecuteEd25519Sign => {
                         self.ed25519_sign();
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                     }
+                    #[cfg(feature = "crypto-full")]
                     &Instruction::CallEd25519Verify => {
                         self.ed25519_verify();
                         step_or_fail!(self, self.machine_st.p += 1);
                     }
+                    #[cfg(feature = "crypto-full")]
                     &Instruction::ExecuteEd25519Verify => {
                         self.ed25519_verify();
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                     }
+                    #[cfg(feature = "crypto-full")]
                     &Instruction::CallEd25519NewKeyPair => {
                         self.ed25519_new_key_pair();
                         step_or_fail!(self, self.machine_st.p += 1);
                     }
+                    #[cfg(feature = "crypto-full")]
                     &Instruction::ExecuteEd25519NewKeyPair => {
                         self.ed25519_new_key_pair();
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                     }
+                    #[cfg(feature = "crypto-full")]
                     &Instruction::CallEd25519KeyPairPublicKey => {
                         self.ed25519_key_pair_public_key();
                         step_or_fail!(self, self.machine_st.p += 1);
                     }
+                    #[cfg(feature = "crypto-full")]
                     &Instruction::ExecuteEd25519KeyPairPublicKey => {
                         self.ed25519_key_pair_public_key();
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);

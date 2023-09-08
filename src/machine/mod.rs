@@ -453,9 +453,9 @@ impl Machine {
         let user_output = Stream::stdout(&mut machine_st.arena);
         let user_error = Stream::stderr(&mut machine_st.arena);
 
-        #[cfg(not(target_os = "wasi"))]
+        #[cfg(not(target_arch = "wasm32"))]
         let runtime = tokio::runtime::Runtime::new().unwrap();
-        #[cfg(target_os = "wasi")]
+        #[cfg(target_arch = "wasm32")]
         let runtime = tokio::runtime::Builder::new_current_thread()
             .enable_all()
             .build()

@@ -60,7 +60,7 @@ use std::process;
 use std::str::FromStr;
 
 use chrono::{offset::Local, DateTime};
-#[cfg(not(target_os = "wasi"))]
+#[cfg(not(target_arch = "wasm32"))]
 use cpu_time::ProcessTime;
 use std::time::{Duration, SystemTime};
 
@@ -71,8 +71,11 @@ use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 
 use blake2::{Blake2b, Blake2s};
 use ring::rand::{SecureRandom, SystemRandom};
+use ring::{digest, hkdf, pbkdf2};
+
+#[cfg(feature = "crypto-full")]
 use ring::{
-    aead, digest, hkdf, pbkdf2,
+    aead, 
     signature::{self, KeyPair},
 };
 use ripemd160::{Digest, Ripemd160};
@@ -4290,7 +4293,7 @@ impl Machine {
         self.machine_st.fail = result;
     }
 
-    #[cfg(not(target_os = "wasi"))]
+    #[cfg(not(target_arch = "wasm32"))]
     #[inline(always)]
     pub(crate) fn cpu_now(&mut self) {
         let secs = ProcessTime::now().as_duration().as_secs_f64();
@@ -4300,7 +4303,7 @@ impl Machine {
             .unify_f64(secs, self.machine_st.registers[1]);
     }
 
-    #[cfg(target_os = "wasi")]
+    #[cfg(target_arch = "wasm32")]
     #[inline(always)]
     pub(crate) fn cpu_now(&mut self) {
         // TODO
@@ -7382,6 +7385,7 @@ impl Machine {
         unify!(self.machine_st, self.machine_st.registers[4], ints_list);
     }
 
+    #[cfg(feature = "crypto-full")]
     #[inline(always)]
     pub(crate) fn crypto_data_encrypt(&mut self) {
         let encoding = cell_as_atom!(self.deref_register(3));
@@ -7430,6 +7434,7 @@ impl Machine {
         );
     }
 
+    #[cfg(feature = "crypto-full")]
     #[inline(always)]
     pub(crate) fn crypto_data_decrypt(&mut self) {
         let data = self.string_encoding_bytes(self.machine_st.registers[1], atom!("octet"));
@@ -7508,6 +7513,7 @@ impl Machine {
         unify!(self.machine_st, self.machine_st.registers[4], uncompressed);
     }
 
+    #[cfg(feature = "crypto-full")]
     #[inline(always)]
     pub(crate) fn ed25519_new_key_pair(&mut self) {
         let pkcs8_bytes = signature::Ed25519KeyPair::generate_pkcs8(rng()).unwrap();
@@ -7520,6 +7526,7 @@ impl Machine {
         )
     }
 
+    #[cfg(feature = "crypto-full")]
     #[inline(always)]
     pub(crate) fn ed25519_key_pair_public_key(&mut self) {
         let bytes = self.string_encoding_bytes(self.machine_st.registers[1], atom!("octet"));
@@ -7541,6 +7548,7 @@ impl Machine {
         );
     }
 
+    #[cfg(feature = "crypto-full")]
     #[inline(always)]
     pub(crate) fn ed25519_sign(&mut self) {
         let key = self.string_encoding_bytes(self.machine_st.registers[1], atom!("octet"));
@@ -7567,6 +7575,7 @@ impl Machine {
         unify!(self.machine_st, self.machine_st.registers[4], sig_list);
     }
 
+    #[cfg(feature = "crypto-full")]
     #[inline(always)]
     pub(crate) fn ed25519_verify(&mut self) {
         let key = self.string_encoding_bytes(self.machine_st.registers[1], atom!("octet"));

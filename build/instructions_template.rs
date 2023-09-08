@@ -496,22 +496,28 @@ enum SystemClauseType {
     CryptoDataHKDF,
     #[strum_discriminants(strum(props(Arity = "4", Name = "$crypto_password_hash")))]
     CryptoPasswordHash,
-    #[strum_discriminants(strum(props(Arity = "7", Name = "$crypto_data_encrypt")))]
-    CryptoDataEncrypt,
-    #[strum_discriminants(strum(props(Arity = "6", Name = "$crypto_data_decrypt")))]
-    CryptoDataDecrypt,
     #[strum_discriminants(strum(props(Arity = "4", Name = "$crypto_curve_scalar_mult")))]
     CryptoCurveScalarMult,
-    #[strum_discriminants(strum(props(Arity = "4", Name = "$ed25519_sign")))]
-    Ed25519Sign,
-    #[strum_discriminants(strum(props(Arity = "4", Name = "$ed25519_verify")))]
-    Ed25519Verify,
-    #[strum_discriminants(strum(props(Arity = "1", Name = "$ed25519_new_keypair")))]
-    Ed25519NewKeyPair,
-    #[strum_discriminants(strum(props(Arity = "2", Name = "$ed25519_keypair_public_key")))]
-    Ed25519KeyPairPublicKey,
     #[strum_discriminants(strum(props(Arity = "3", Name = "$curve25519_scalar_mult")))]
     Curve25519ScalarMult,
+    #[cfg(feature = "crypto-full")]
+    #[strum_discriminants(strum(props(Arity = "7", Name = "$crypto_data_encrypt")))]
+    CryptoDataEncrypt,
+    #[cfg(feature = "crypto-full")]
+    #[strum_discriminants(strum(props(Arity = "6", Name = "$crypto_data_decrypt")))]
+    CryptoDataDecrypt,
+    #[cfg(feature = "crypto-full")]
+    #[strum_discriminants(strum(props(Arity = "4", Name = "$ed25519_sign")))]
+    Ed25519Sign,
+    #[cfg(feature = "crypto-full")]
+    #[strum_discriminants(strum(props(Arity = "4", Name = "$ed25519_verify")))]
+    Ed25519Verify,
+    #[cfg(feature = "crypto-full")]
+    #[strum_discriminants(strum(props(Arity = "1", Name = "$ed25519_new_keypair")))]
+    Ed25519NewKeyPair,
+    #[cfg(feature = "crypto-full")]
+    #[strum_discriminants(strum(props(Arity = "2", Name = "$ed25519_keypair_public_key")))]
+    Ed25519KeyPairPublicKey,
     #[strum_discriminants(strum(props(Arity = "2", Name = "$first_non_octet")))]
     FirstNonOctet,
     #[strum_discriminants(strum(props(Arity = "3", Name = "$load_html")))]
@@ -1842,13 +1848,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallCryptoDataHash |
                     &Instruction::CallCryptoDataHKDF |
                     &Instruction::CallCryptoPasswordHash |
-                    &Instruction::CallCryptoDataEncrypt |
-                    &Instruction::CallCryptoDataDecrypt |
                     &Instruction::CallCryptoCurveScalarMult |
-                    &Instruction::CallEd25519Sign |
-                    &Instruction::CallEd25519Verify |
-                    &Instruction::CallEd25519NewKeyPair |
-                    &Instruction::CallEd25519KeyPairPublicKey |
                     &Instruction::CallCurve25519ScalarMult |
                     &Instruction::CallFirstNonOctet |
                     &Instruction::CallLoadHTML |
@@ -1901,6 +1901,17 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallRemoveModuleExports |
                     &Instruction::CallAddNonCountedBacktracking |
                     &Instruction::CallPopCount => {
+                        let (name, arity) = self.to_name_and_arity();
+                        functor!(atom!("call"), [atom(name), fixnum(arity)])
+                    }
+                    //
+                    #[cfg(feature = "crypto-full")]
+                    &Instruction::CallCryptoDataEncrypt |
+                    &Instruction::CallCryptoDataDecrypt |
+                    &Instruction::CallEd25519Sign |
+                    &Instruction::CallEd25519Verify |
+                    &Instruction::CallEd25519NewKeyPair |
+                    &Instruction::CallEd25519KeyPairPublicKey => {
                         let (name, arity) = self.to_name_and_arity();
                         functor!(atom!("call"), [atom(name), fixnum(arity)])
                     }
@@ -2070,13 +2081,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteCryptoDataHash |
                     &Instruction::ExecuteCryptoDataHKDF |
                     &Instruction::ExecuteCryptoPasswordHash |
-                    &Instruction::ExecuteCryptoDataEncrypt |
-                    &Instruction::ExecuteCryptoDataDecrypt |
                     &Instruction::ExecuteCryptoCurveScalarMult |
-                    &Instruction::ExecuteEd25519Sign |
-                    &Instruction::ExecuteEd25519Verify |
-                    &Instruction::ExecuteEd25519NewKeyPair |
-                    &Instruction::ExecuteEd25519KeyPairPublicKey |
                     &Instruction::ExecuteCurve25519ScalarMult |
                     &Instruction::ExecuteFirstNonOctet |
                     &Instruction::ExecuteLoadHTML |
@@ -2129,6 +2134,17 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteRemoveModuleExports |
                     &Instruction::ExecuteAddNonCountedBacktracking |
                     &Instruction::ExecutePopCount => {
+                        let (name, arity) = self.to_name_and_arity();
+                        functor!(atom!("execute"), [atom(name), fixnum(arity)])
+                    }
+                    //
+                    #[cfg(feature = "crypto-full")]
+                    &Instruction::ExecuteCryptoDataEncrypt |
+                    &Instruction::ExecuteCryptoDataDecrypt |
+                    &Instruction::ExecuteEd25519Sign |
+                    &Instruction::ExecuteEd25519Verify |
+                    &Instruction::ExecuteEd25519NewKeyPair |
+                    &Instruction::ExecuteEd25519KeyPairPublicKey => {
                         let (name, arity) = self.to_name_and_arity();
                         functor!(atom!("execute"), [atom(name), fixnum(arity)])
                     }
