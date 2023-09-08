@@ -1969,17 +1969,16 @@ exclude(Goal, [L|Ls0], Ls) :-
         ),
         exclude(Goal, Ls0, Rest).
 
-partition(Pred, List, Less, Equal, Greater) :-
-    partition_(List, Pred, Less, Equal, Greater).
+:- meta_predicate(partition(2,?,?,?,?)).
 
-partition_([], _, [], [], []).
-partition_([H|T], Pred, L, E, G) :-
+partition(_, [], [], [], []).
+partition(Pred, [H|T], L, E, G) :-
     call(Pred, H, Diff),
     partition_(Diff, H, Pred, T, L, E, G).
 
 partition_(<, H, Pred, T, [H|Rest], E, G) :-
-    partition_(T, Pred, Rest, E, G).
+    partition(Pred, T, Rest, E, G).
 partition_(=, H, Pred, T, L, [H|Rest], G) :-
-    partition_(T, Pred, L, Rest, G).
+    partition(Pred, T, L, Rest, G).
 partition_(>, H, Pred, T, L, E, [H|Rest]) :-
-    partition_(T, Pred, L, E, Rest).
+    partition(Pred, T, L, E, Rest).
