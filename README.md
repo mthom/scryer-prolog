@@ -150,7 +150,7 @@ light.exe scryer-prolog.wixobj
 ```
 It will generate a very basic MSI file which installs the main executable and a shortcut in the Start Menu. It can be installed with a double-click. To uninstall, go to the Control Panel and uninstall as usual.
 
-Scryer Prolog must be built with **Rust 1.63 and up**.
+Scryer Prolog must be built with **Rust 1.70 and up**.
 
 ### Building WebAssembly
 
