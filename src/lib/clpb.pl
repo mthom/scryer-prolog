@@ -1,10 +1,29 @@
 /*  CLP(B): Constraint Logic Programming over Boolean Variables
 
-    Copyright (C): 2019-2023 Markus Triska
-    All rights reserved.
-
+    Author:        Markus Triska
     E-mail:        triska@metalevel.at
-    WWW:           http://www.metalevel.at
+    WWW:           https://www.metalevel.at
+    Copyright (C): 2019-2023 Markus Triska
+
+    Permission is hereby granted, free of charge, to any person
+    obtaining a copy of this software and associated documentation
+    files (the "Software"), to deal in the Software without
+    restriction, including without limitation the rights to use, copy,
+    modify, merge, publish, distribute, sublicense, and/or sell copies
+    of the Software, and to permit persons to whom the Software is
+    furnished to do so, subject to the following conditions:
+
+    The above copyright notice and this permission notice shall be
+    included in all copies or substantial portions of the Software.
+
+    THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+    EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+    MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+    NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+    HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY,
+    WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+    OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER
+    DEALINGS IN THE SOFTWARE.
 
 */
 
@@ -90,6 +109,46 @@ domain_error(Expectation, Term) :-
 
 type_error(Expectation, Term) :-
         type_error(Expectation, Term, unknown(Term)-1).
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+Compatibility predicates.
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+:- meta_predicate(include(1, ?, ?)).
+
+include(_, [], []).
+include(Goal, [L|Ls0], Ls) :-
+        (   call(Goal, L) ->
+            Ls = [L|Rest]
+        ;   Ls = Rest
+        ),
+        include(Goal, Ls0, Rest).
+
+:- meta_predicate(exclude(1, ?, ?)).
+
+exclude(_, [], []).
+exclude(Goal, [L|Ls0], Ls) :-
+        (   call(Goal, L) ->
+            Ls = Rest
+        ;   Ls = [L|Rest]
+        ),
+        exclude(Goal, Ls0, Rest).
+
+:- meta_predicate(partition(2,?,?,?,?)).
+
+partition(_, [], [], [], []).
+partition(Pred, [H|T], L, E, G) :-
+    call(Pred, H, Diff),
+    partition_(Diff, H, Pred, T, L, E, G).
+
+partition_(<, H, Pred, T, [H|Rest], E, G) :-
+    partition(Pred, T, Rest, E, G).
+partition_(=, H, Pred, T, L, [H|Rest], G) :-
+    partition(Pred, T, L, Rest, G).
+partition_(>, H, Pred, T, L, E, [H|Rest]) :-
+    partition(Pred, T, L, E, Rest).
+
+:- meta_predicate(partition(1,?,?,?)).
 
 partition(Pred, Ls0, As, Bs) :-
         include(Pred, Ls0, As),
@@ -446,6 +505,10 @@ non_monotonic(X) :-
             instantiation_error(X)
         ;   true
         ).
+
+:- meta_predicate(bdd_nodes(1, ?, ?)).
+:- meta_predicate(bdd_nodes_(1, ?, ?, ?)).
+:- meta_predicate(with_aux(1, ?)).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    Rewriting to canonical expressions.
@@ -1634,8 +1697,7 @@ attribute_goals(Var) -->
                 { bdd_nodes(BDD, Nodes),
                   phrase(nodes(Nodes), Ns) },
                 [clpb:'$clpb_bdd'(Ns)]
-            ;   { prepare_global_variables(BDD),
-                  phrase(sat_ands(Formula), Ands0),
+            ;   { phrase(sat_ands(Formula), Ands0),
                   ands_fusion(Ands0, Ands),
                   maplist(formula_anf, Ands, ANFs0),
                   sort(ANFs0, ANFs1),
@@ -1666,35 +1728,12 @@ attribute_goals(Var) -->
 
 del_clpb(Var) :-
         del_attr(Var, clpb),
-        del_attr(Var, clpb_hash).
-
-/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   To make residual projection work with recorded constraints, the
-   global counters must be adjusted so that new variables and nodes
-   also get new IDs. Also, clpb_next_id/2 is used to actually create
-   these counters, because creating them with b_setval/2 would make
-   them [] on backtracking, which is quite unfortunate in itself.
-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+        del_attr(Var, clpb_hash),
+        del_attr(Var, clpb_atom).
 
 b_setval(K, T) :- bb_b_put(K, T).
 nb_setval(K, T) :- bb_put(K, T).
 b_getval(K, T) :- bb_get(K, T).
-
-prepare_global_variables(BDD) :-
-        clpb_next_id('$clpb_next_var', V0),
-        clpb_next_id('$clpb_next_node', N0),
-        bdd_nodes(BDD, Nodes),
-        foldl(max_variable_node, Nodes, V0-N0, MaxV0-MaxN0),
-        MaxV is MaxV0 + 1,
-        MaxN is MaxN0 + 1,
-        b_setval('$clpb_next_var', MaxV),
-        b_setval('$clpb_next_node', MaxN).
-
-max_variable_node(Node, V0-N0, V-N) :-
-        node_id(Node, N1),
-        node_varindex(Node, V1),
-        N is max(N0,N1),
-        V is max(V0,V1).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    Fuse formulas that share the same variables into single conjunctions.
@@ -1820,7 +1859,8 @@ booleans([B|Bs]) --> boolean(B), booleans(Bs).
 
 boolean(Var) -->
         { del_clpb(Var) },
-        (   { get_attr(Var, clpb_omit_boolean, true) } -> []
+        (   { get_attr(Var, clpb_omit_boolean, true) } ->
+            { put_atts(Var, -clpb_omit_boolean(_)) }
         ;   [clpb:sat(Var =:= Var)]
         ).
 
@@ -1922,49 +1962,3 @@ clpb_atom_var(Atom, Var) :-
             put_assoc(Atom, A0, Var, A),
             b_setval('$clpb_atoms', A)
         ).
-
-
-
-/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-Compatibility predicates.
-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
-
-
-include(Goal, List, Is) :-
-        include_(List, Goal, Is).
-
-include_([], _, []).
-include_([X1|Xs1], P, Is) :-
-        (   call(P, X1)
-        ->  Is = [X1|Is1]
-        ;   Is = Is1
-        ),
-        include_(Xs1, P, Is1).
-
-
-exclude(Goal, List, Is) :-
-        exclude_(List, Goal, Is).
-
-exclude_([], _, []).
-exclude_([X1|Xs1], P, Is) :-
-        (   call(P, X1)
-        ->  Is = Is1
-        ;   Is = [X1|Is1]
-        ),
-        exclude_(Xs1, P, Is1).
-
-
-partition(Pred, List, Less, Equal, Greater) :-
-    partition_(List, Pred, Less, Equal, Greater).
-
-partition_([], _, [], [], []).
-partition_([H|T], Pred, L, E, G) :-
-    call(Pred, H, Diff),
-    partition_(Diff, H, Pred, T, L, E, G).
-
-partition_(<, H, Pred, T, [H|Rest], E, G) :-
-    partition_(T, Pred, Rest, E, G).
-partition_(=, H, Pred, T, L, [H|Rest], G) :-
-    partition_(T, Pred, L, Rest, G).
-partition_(>, H, Pred, T, L, E, [H|Rest]) :-
-    partition_(T, Pred, L, E, Rest).
