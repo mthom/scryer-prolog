@@ -474,8 +474,8 @@ pub(crate) trait Unifier: DerefMut<Target = MachineState> {
         match Number::try_from(value) {
             Ok(n2) => match n2 {
                 Number::Fixnum(n2) if (*n1).num_eq(&n2.get_num()) => {}
-                Number::Integer(n2) if (*n1).num_eq(&n2.value()) => {}
-                Number::Rational(n2) if (*n2).num_eq(&n1.value()) => {}
+                Number::Integer(n2) if (*n1).num_eq(&*n2) => {}
+                Number::Rational(n2) if (*n2).num_eq(&*n1) => {}
                 _ => {
                     self.fail = true;
                 }
@@ -495,7 +495,7 @@ pub(crate) trait Unifier: DerefMut<Target = MachineState> {
         match Number::try_from(value) {
             Ok(n2) => match n2 {
                 Number::Fixnum(n2) if (*n1).num_eq(&Integer::from(n2.get_num())) => {}
-                Number::Integer(n2) if (*n1).num_eq(&n2.value()) => {}
+                Number::Integer(n2) if (*n1).num_eq(&*n2) => {}
                 Number::Rational(n2) if n1 == n2 => {}
                 _ => {
                     self.fail = true;

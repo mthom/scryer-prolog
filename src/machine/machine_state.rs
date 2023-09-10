@@ -872,7 +872,7 @@ impl MachineState {
                         }
                     }
                     Ok(Number::Integer(n)) => {
-                        let result = n.value().try_into();
+                        let result = (&*n).try_into();
 
                         if let Ok(value) = result {
                             printer.max_depth = value;

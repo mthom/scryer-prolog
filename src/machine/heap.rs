@@ -259,7 +259,7 @@ pub(crate) fn to_local_code_ptr(heap: &Heap, addr: HeapCellValue) -> Option<usiz
         match Number::try_from(heap[s]) {
             Ok(Number::Fixnum(n)) => usize::try_from(n.get_num()).ok(),
             Ok(Number::Integer(n)) => {
-                let value: usize = n.value().try_into().unwrap();
+                let value: usize = (&*n).try_into().unwrap();
                 Some(value)
             },
             _ => None,

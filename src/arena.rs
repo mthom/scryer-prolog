@@ -187,12 +187,6 @@ impl ArenaHeader {
 #[derive(Debug)]
 pub struct TypedArenaPtr<T: ?Sized>(ptr::NonNull<T>);
 
-impl TypedArenaPtr<Integer> {
-    pub fn value(&self) -> Integer {
-        unsafe { self.0.as_ref().clone() }
-    }
-}
-
 impl<T: ?Sized + PartialOrd> PartialOrd for TypedArenaPtr<T> {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         (**self).partial_cmp(&**other)

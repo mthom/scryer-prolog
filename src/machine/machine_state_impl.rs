@@ -1183,7 +1183,7 @@ impl MachineState {
                 let n = match n {
                     Number::Fixnum(n) => n.get_num() as usize,
                     Number::Integer(n) if (*n).num_ge(&0) && (*n).num_le(&std::usize::MAX) => {
-                        let value: usize = n.value().try_into().unwrap();
+                        let value: usize = (&*n).try_into().unwrap();
                         value
                     },
                     _ => {
@@ -1408,7 +1408,7 @@ impl MachineState {
                     },
                     Ok(Number::Fixnum(n)) => n.get_num(),
                     Ok(Number::Integer(n)) => {
-                        let value: i64 = n.value().try_into().unwrap();
+                        let value: i64 = (&*n).try_into().unwrap();
                         value
                     },
                     Err(_) => {
@@ -1691,7 +1691,7 @@ impl MachineState {
                             Err(_) => {}
                         },
                         Ok(Number::Integer(n)) => {
-                            let b: u8 = n.value().try_into().unwrap();
+                            let b: u8 = (&*n).try_into().unwrap();
                             
                             bytes.push(b);
                         }

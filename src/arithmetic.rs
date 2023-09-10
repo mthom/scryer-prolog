@@ -372,7 +372,7 @@ impl<'a> ArithmeticEvaluator<'a> {
 pub(crate) fn rnd_i<'a>(n: &'a Number, arena: &mut Arena) -> Number {
     match n {
         &Number::Integer(i) => {
-            let result = i.value().try_into();
+            let result = (&*i).try_into();
             if let Ok(value) = result{
                 fixnum!(Number, value, arena)
             } else {

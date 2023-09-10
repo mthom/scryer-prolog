@@ -1116,7 +1116,7 @@ pub(crate) fn constant_key_alternatives(
         }
         */
         Literal::Integer(ref n) => {
-            let result = n.value().try_into();
+            let result = (&**n).try_into();
             if let Ok(value) = result {
                 Fixnum::build_with_checked(value).map(|n| {
                     constants.push(Literal::Fixnum(n));

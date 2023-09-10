@@ -614,7 +614,7 @@ pub(crate) fn idiv(n1: Number, n2: Number, arena: &mut Arena) -> Result<Number, 
                 Err(zero_divisor_eval_error(stub_gen))
             } else {
                 Ok(Number::arena_from(
-                    <(Integer, Integer)>::from(n1.value().div_rem(&*n2)).0,
+                    <(Integer, Integer)>::from((&*n1).div_rem(&*n2)).0,
                     arena,
                 ))
             }
@@ -668,7 +668,7 @@ pub(crate) fn shr(n1: Number, n2: Number, arena: &mut Arena) -> Result<Number, M
         (Number::Fixnum(n1), Number::Integer(n2)) => {
             let n1 = Integer::from(n1.get_num());
 
-            let result: Result<usize, _> = n2.value().try_into();
+            let result: Result<usize, _> = (&*n2).try_into();
 
             match result {
                 Ok(n2) => {
@@ -686,7 +686,7 @@ pub(crate) fn shr(n1: Number, n2: Number, arena: &mut Arena) -> Result<Number, M
 	        },
         },
         (Number::Integer(n1), Number::Integer(n2)) => {
-            let result: Result<usize, _> = n2.value().try_into();
+            let result: Result<usize, _> = (&*n2).try_into();
 
             match result {
                 Ok(n2) => {
@@ -729,7 +729,7 @@ pub(crate) fn shl(n1: Number, n2: Number, arena: &mut Arena) -> Result<Number, M
         (Number::Fixnum(n1), Number::Integer(n2)) => {
             let n1 = Integer::from(n1.get_num());
 
-            match n2.value().try_into() as Result<u32, _> {
+            match (&*n2).try_into() as Result<u32, _> {
                 Ok(n2) => {
                     let n1: u64 = n1.try_into().unwrap();
                     Ok(Number::arena_from(n1 << n2, arena))
@@ -745,9 +745,9 @@ pub(crate) fn shl(n1: Number, n2: Number, arena: &mut Arena) -> Result<Number, M
 		        Ok(Number::arena_from(Integer::from(&*n1 << usize::max_value()),arena))
 		    }
         },
-        (Number::Integer(n1), Number::Integer(n2)) => match n2.value().try_into() as Result<u32, _> {
+        (Number::Integer(n1), Number::Integer(n2)) => match (&*n2).try_into() as Result<u32, _> {
             Ok(n2) => {
-                let n1: u64 = n1.value().try_into().unwrap();
+                let n1: u64 = (&*n1).try_into().unwrap();
                 Ok(Number::arena_from(Integer::from(n1 << n2), arena))
             },
             _ => {
@@ -881,7 +881,7 @@ pub(crate) fn modulus(x: Number, y: Number, arena: &mut Arena) -> Result<Number,
             } else {
                 let n2 = Integer::from(n2_i);
                 Ok(Number::arena_from(
-                    <(Integer, Integer)>::from(n1.value().div_rem(&n2)).1,
+                    <(Integer, Integer)>::from((&*n1).div_rem(&n2)).1,
                     arena,
                 ))
             }
@@ -891,7 +891,7 @@ pub(crate) fn modulus(x: Number, y: Number, arena: &mut Arena) -> Result<Number,
                 Err(zero_divisor_eval_error(stub_gen))
             } else {
                 Ok(Number::arena_from(
-                    <(Integer, Integer)>::from(x.value().div_rem(&*y)).1,
+                    <(Integer, Integer)>::from((&*x).div_rem(&*y)).1,
                     arena,
                 ))
             }
@@ -980,7 +980,7 @@ pub(crate) fn gcd(n1: Number, n2: Number, arena: &mut Arena) -> Result<Number, M
         }
         (Number::Integer(n1), Number::Integer(n2)) => {
             let n1_clone: Integer = (*n1).clone();
-            let n2: isize = n2.value().try_into().unwrap();
+            let n2: isize = (&*n2).try_into().unwrap();
             Ok(Number::arena_from(Integer::from(n1_clone.gcd(&Integer::from(n2))) as IBig, arena))
         }
         (Number::Float(f), _) | (_, Number::Float(f)) => {

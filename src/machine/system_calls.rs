@@ -751,7 +751,7 @@ impl MachineState {
             let max_steps_n = match max_steps {
                 Ok(Number::Fixnum(n)) => Some(n.get_num()),
                 Ok(Number::Integer(n)) => {
-                    let value: i64 = n.value().try_into().unwrap();
+                    let value: i64 = (&*n).try_into().unwrap();
 
                     Some(value)
                 },
@@ -1116,7 +1116,7 @@ impl MachineState {
                     }
                 }
                 Ok(Number::Integer(n)) => {
-                    let n: u32 = n.value().try_into().unwrap();
+                    let n: u32 = (&*n).try_into().unwrap();
                     if let Some(c) = std::char::from_u32(n) {
                         string.push(c);
                         continue;
@@ -1763,7 +1763,7 @@ impl Machine {
         let n = match Number::try_from(reg) {
             Ok(Number::Fixnum(n)) => usize::try_from(n.get_num()).ok(),
             Ok(Number::Integer(n)) => {
-                let value: usize = n.value().try_into().unwrap();
+                let value: usize = (&*n).try_into().unwrap();
                 Some(value)
             },
             _ => {
@@ -2478,7 +2478,7 @@ impl Machine {
             addr if addr.is_var() => addr,
             addr => match Number::try_from(addr) {
                 Ok(Number::Integer(n)) => {
-                    let result: Result<u8, _> = n.value().try_into();
+                    let result: Result<u8, _> = (&*n).try_into();
                     if let Ok(value) = result {
                         fixnum_as_cell!(Fixnum::build_with(value as i64))
                     } else {
@@ -2676,7 +2676,7 @@ impl Machine {
             _ => {
                 match Number::try_from(a2) {
                     Ok(Number::Integer(n)) => {
-                        let n: u32 = n.value().try_into().unwrap();
+                        let n: u32 = (&*n).try_into().unwrap();
 
                         let n = std::char::from_u32(n).and_then(|_| Some(n));
 
@@ -2846,7 +2846,7 @@ impl Machine {
             _ => {
                 match Number::try_from(a2) {
                     Ok(Number::Integer(n)) => {
-                        let n: u32 = n.value().try_into().unwrap();
+                        let n: u32 = (&*n).try_into().unwrap();
                         let n = std::char::from_u32(n);
                         let c = match n {
                             Some(c) => c,
@@ -3083,7 +3083,7 @@ impl Machine {
         } else {
             match Number::try_from(addr) {
                 Ok(Number::Integer(n)) => {
-                    let n: u32 = n.value().try_into().unwrap();
+                    let n: u32 = (&*n).try_into().unwrap();
                     let n = char::try_from(n);
                     if let Some(c) = n.ok() {
                         write!(&mut stream, "{}", c).unwrap();
@@ -3222,7 +3222,7 @@ impl Machine {
         } else {
             match Number::try_from(addr) {
                 Ok(Number::Integer(n)) => {
-                    let n: u8 = n.value().try_into().unwrap();
+                    let n: u8 = (&*n).try_into().unwrap();
                     
                     match n {
                         nb => {
@@ -3307,7 +3307,7 @@ impl Machine {
                     fixnum_as_cell!(Fixnum::build_with(-1))
                 }
                 Ok(Number::Integer(n)) => {
-                    let n: Result<u8, _> = n.value().try_into();
+                    let n: Result<u8, _> = (&*n).try_into();
 
                     if let Ok(value) = n {
                         fixnum_as_cell!(Fixnum::build_with(value as i64))
@@ -3463,7 +3463,7 @@ impl Machine {
 
         let num = match Number::try_from(self.deref_register(2)) {
             Ok(Number::Fixnum(n)) => usize::try_from(n.get_num()).unwrap(),
-            Ok(Number::Integer(n)) => match n.value().try_into() as Result<usize, _> {
+            Ok(Number::Integer(n)) => match (&*n).try_into() as Result<usize, _> {
                 Ok(u) => {
                     u
                 }
@@ -3563,7 +3563,7 @@ impl Machine {
         } else {
             match Number::try_from(addr) {
                 Ok(Number::Integer(n)) => {
-                    let n: u32 = n.value().try_into().unwrap();
+                    let n: u32 = (&*n).try_into().unwrap();
                     let n = std::char::from_u32(n);
 
                     if let Some(n) = n {
@@ -3914,7 +3914,7 @@ impl Machine {
             let arity = match Number::try_from(arity) {
                 Ok(Number::Fixnum(n)) => Some(n.get_num() as usize),
                 Ok(Number::Integer(n)) => {
-                    let value: usize = n.value().try_into().unwrap();
+                    let value: usize = (&*n).try_into().unwrap();
                     Some(value)
                 },
                 _ => None,
@@ -4240,7 +4240,7 @@ impl Machine {
 
         let n = match Number::try_from(len) {
             Ok(Number::Fixnum(n)) => n.get_num() as usize,
-            Ok(Number::Integer(n)) => match n.value().try_into() as Result<usize, _> {
+            Ok(Number::Integer(n)) => match (&*n).try_into() as Result<usize, _> {
                 Ok(n) => n,
                 Err(_) => {
                     let err = self.machine_st.resource_error(len);
@@ -4525,7 +4525,7 @@ impl Machine {
 	let status_code: u16 = match Number::try_from(status_code) {
 	    Ok(Number::Fixnum(n)) => n.get_num() as u16,
 	    Ok(Number::Integer(n)) => {
-            let n: Result<u16, _> = n.value().try_into();
+            let n: Result<u16, _> = (&*n).try_into();
             
             if let Ok(value) = n {
                 value
@@ -4806,7 +4806,7 @@ impl Machine {
 
         let priority = match Number::try_from(priority) {
             Ok(Number::Integer(n)) => {
-                let n: u16 = n.value().try_into().unwrap();
+                let n: u16 = (&*n).try_into().unwrap();
                 n
             },
             Ok(Number::Fixnum(n)) => u16::try_from(n.get_num()).unwrap(),
@@ -4959,7 +4959,7 @@ impl Machine {
 
         let b = match Number::try_from(addr) {
             Ok(Number::Integer(n)) => {
-                let value: usize = n.value().try_into().unwrap();
+                let value: usize = (&*n).try_into().unwrap();
                 Some(value)
             },
             Ok(Number::Fixnum(n)) => usize::try_from(n.get_num()).ok(),
@@ -5331,7 +5331,7 @@ impl Machine {
         let code = match Number::try_from(code) {
             Ok(Number::Fixnum(n)) => u8::try_from(n.get_num()).unwrap(),
             Ok(Number::Integer(n)) => {
-                let n: u8 = n.value().try_into().unwrap();
+                let n: u8 = (&*n).try_into().unwrap();
                 n
             },
             Ok(Number::Rational(r)) => {
@@ -5370,7 +5370,7 @@ impl Machine {
         let n = match Number::try_from(a2) {
             Ok(Number::Fixnum(bp)) => bp.get_num() as usize,
             Ok(Number::Integer(n)) => {
-                let value: usize = n.value().try_into().unwrap();
+                let value: usize = (&*n).try_into().unwrap();
                 value
             },
             _ => {
@@ -5417,7 +5417,7 @@ impl Machine {
         let arity = match Number::try_from(a3) {
             Ok(Number::Fixnum(n))  => n.get_num() as usize,
             Ok(Number::Integer(n)) => {
-                let result = n.value().try_into();
+                let result = (&*n).try_into();
 
                 if let Ok(value) = result {
                     value
@@ -6065,7 +6065,7 @@ impl Machine {
                 let _: StdRng = SeedableRng::seed_from_u64(n);
             },
             Ok(Number::Integer(n)) => {
-                let n: u64 = n.value().try_into().unwrap();
+                let n: u64 = (&*n).try_into().unwrap();
                 let _: StdRng = SeedableRng::seed_from_u64(n);
             },
             Ok(Number::Rational(n)) => {
@@ -6476,7 +6476,7 @@ impl Machine {
         let position = match Number::try_from(position) {
             Ok(Number::Fixnum(n)) => n.get_num() as u64,
             Ok(Number::Integer(n)) => {
-                let n: Result<u64, _> = n.value().try_into();
+                let n: Result<u64, _> = (&*n).try_into();
                 if let Ok(n) = n {
                     n
                 } else {
@@ -6754,7 +6754,7 @@ impl Machine {
         let arity = match Number::try_from(arity) {
             Ok(Number::Fixnum(n)) => n.get_num() as usize,
             Ok(Number::Integer(n)) => {
-                let value: usize = n.value().try_into().unwrap();
+                let value: usize = (&*n).try_into().unwrap();
                 value
             },
             _ => {
@@ -6812,7 +6812,7 @@ impl Machine {
         let index_ptr = match Number::try_from(index_ptr) {
             Ok(Number::Fixnum(n)) => n.get_num() as usize,
             Ok(Number::Integer(n)) => {
-                let value: usize = n.value().try_into().unwrap();
+                let value: usize = (&*n).try_into().unwrap();
                 value
             },
             _ => {
@@ -7116,7 +7116,7 @@ impl Machine {
 
         let length = match Number::try_from(length) {
             Ok(Number::Fixnum(n)) => usize::try_from(n.get_num()).unwrap(),
-            Ok(Number::Integer(n)) => match n.value().try_into() as Result<usize, _> {
+            Ok(Number::Integer(n)) => match (&*n).try_into() as Result<usize, _> {
                 Ok(u) => u,
                 _ => {
                     self.machine_st.fail = true;
@@ -7179,7 +7179,7 @@ impl Machine {
         let iterations = match Number::try_from(iterations) {
             Ok(Number::Fixnum(n)) => u64::try_from(n.get_num()).unwrap(),
             Ok(Number::Integer(n)) => {
-                let n: Result<u64, _> = n.value().try_into(); 
+                let n: Result<u64, _> = (&*n).try_into(); 
                 match n {
                     Ok(i) => i,
                     _ => {
@@ -7754,7 +7754,7 @@ impl Machine {
             }
             Ok(Number::Integer(n)) => {
                 let value: usize = if n.sign() == Sign::Positive {
-                    UBig::from(n.value().into_parts().1).count_ones()
+                    UBig::from((&*n).clone().into_parts().1).count_ones()
                 } else { 0 };
                 Number::arena_from(value, &mut self.machine_st.arena)
             }
