@@ -160,13 +160,13 @@ fn push_literal(interm: &mut Vec<ArithmeticTerm>, c: &Literal) -> Result<(), Ari
         Literal::Float(n) => interm.push(ArithmeticTerm::Number(Number::Float(*n.as_ptr()))),
         Literal::Rational(n) => interm.push(ArithmeticTerm::Number(Number::Rational(*n))),
         Literal::Atom(name) if name == &atom!("e") => interm.push(ArithmeticTerm::Number(
-            Number::Float(OrderedFloat(std::f64::consts::E))
+            Number::Float(OrderedFloat(std::f64::consts::E)),
         )),
         Literal::Atom(name) if name == &atom!("pi") => interm.push(ArithmeticTerm::Number(
-            Number::Float(OrderedFloat(std::f64::consts::PI))
+            Number::Float(OrderedFloat(std::f64::consts::PI)),
         )),
         Literal::Atom(name) if name == &atom!("epsilon") => interm.push(ArithmeticTerm::Number(
-            Number::Float(OrderedFloat(std::f64::EPSILON))
+            Number::Float(OrderedFloat(std::f64::EPSILON)),
         )),
         _ => return Err(ArithmeticError::NonEvaluableFunctor(*c, 0)),
     }
@@ -328,23 +328,14 @@ impl<'a> ArithmeticEvaluator<'a> {
                     let var_num = name.to_var_num().unwrap();
 
                     let r = if lvl == Level::Shallow {
-                        self.marker.mark_non_callable(
-                            var_num,
-                            arg,
-                            term_loc,
-                            cell,
-                            &mut code,
-                        )
+                        self.marker
+                            .mark_non_callable(var_num, arg, term_loc, cell, &mut code)
                     } else if term_loc.is_last() || cell.get().norm().reg_num() == 0 {
                         let r = self.marker.get_binding(var_num);
 
                         if r.reg_num() == 0 {
                             self.marker.mark_var::<QueryInstruction>(
-                                var_num,
-                                lvl,
-                                cell,
-                                term_loc,
-                                &mut code,
+                                var_num, lvl, cell, term_loc, &mut code,
                             );
                             cell.get().norm()
                         } else {
@@ -438,7 +429,7 @@ fn classify_float(f: f64) -> Result<f64, EvalError> {
             }
         }
         FpCategory::Nan => Err(EvalError::Undefined),
-        _ => Ok(f)
+        _ => Ok(f),
     }
 }
 
@@ -553,8 +544,12 @@ impl PartialEq for Number {
             (&Number::Fixnum(n1), &Number::Float(n2)) => OrderedFloat(n1.get_num() as f64).eq(&n2),
             (&Number::Float(n1), &Number::Fixnum(n2)) => n1.eq(&OrderedFloat(n2.get_num() as f64)),
             (&Number::Integer(ref n1), &Number::Integer(ref n2)) => n1.eq(n2),
-            (&Number::Integer(ref n1), Number::Float(n2)) => OrderedFloat(n1.to_f64().value()).eq(n2),
-            (&Number::Float(n1), &Number::Integer(ref n2)) => n1.eq(&OrderedFloat(n2.to_f64().value())),
+            (&Number::Integer(ref n1), Number::Float(n2)) => {
+                OrderedFloat(n1.to_f64().value()).eq(n2)
+            }
+            (&Number::Float(n1), &Number::Integer(ref n2)) => {
+                n1.eq(&OrderedFloat(n2.to_f64().value()))
+            }
             (&Number::Integer(ref n1), &Number::Rational(ref n2)) => {
                 #[cfg(feature = "num")]
                 {
@@ -575,8 +570,12 @@ impl PartialEq for Number {
                     (&**n1).num_eq(&**n2)
                 }
             }
-            (&Number::Rational(ref n1), &Number::Float(n2)) => OrderedFloat(n1.to_f64().value()).eq(&n2),
-            (&Number::Float(n1), &Number::Rational(ref n2)) => n1.eq(&OrderedFloat(n2.to_f64().value())),
+            (&Number::Rational(ref n1), &Number::Float(n2)) => {
+                OrderedFloat(n1.to_f64().value()).eq(&n2)
+            }
+            (&Number::Float(n1), &Number::Rational(ref n2)) => {
+                n1.eq(&OrderedFloat(n2.to_f64().value()))
+            }
             (&Number::Float(f1), &Number::Float(f2)) => f1.eq(&f2),
             (&Number::Rational(ref r1), &Number::Rational(ref r2)) => r1.eq(&r2),
         }
@@ -645,7 +644,9 @@ impl Ord for Number {
             (&Number::Float(n1), &Number::Fixnum(n2)) => n1.cmp(&OrderedFloat(n2.get_num() as f64)),
             (&Number::Integer(n1), &Number::Integer(n2)) => (*n1).cmp(&*n2),
             (&Number::Integer(n1), Number::Float(n2)) => OrderedFloat(n1.to_f64().value()).cmp(n2),
-            (&Number::Float(n1), &Number::Integer(ref n2)) => n1.cmp(&OrderedFloat(n2.to_f64().value())),
+            (&Number::Float(n1), &Number::Integer(ref n2)) => {
+                n1.cmp(&OrderedFloat(n2.to_f64().value()))
+            }
             (&Number::Integer(n1), &Number::Rational(n2)) => {
                 #[cfg(feature = "num")]
                 {
@@ -666,8 +667,12 @@ impl Ord for Number {
                     (&*n1).num_partial_cmp(&*n2).unwrap_or(Ordering::Less)
                 }
             }
-            (&Number::Rational(n1), &Number::Float(n2)) => OrderedFloat(n1.to_f64().value()).cmp(&n2),
-            (&Number::Float(n1), &Number::Rational(n2)) => n1.cmp(&OrderedFloat(n2.to_f64().value())),
+            (&Number::Rational(n1), &Number::Float(n2)) => {
+                OrderedFloat(n1.to_f64().value()).cmp(&n2)
+            }
+            (&Number::Float(n1), &Number::Rational(n2)) => {
+                n1.cmp(&OrderedFloat(n2.to_f64().value()))
+            }
             (&Number::Float(f1), &Number::Float(f2)) => f1.cmp(&f2),
             (&Number::Rational(r1), &Number::Rational(r2)) => (*r1).cmp(&*r2),
         }

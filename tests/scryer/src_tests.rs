@@ -73,8 +73,5 @@ fn clpz_load() {
 #[serial]
 #[test]
 fn iso_conformity_tests() {
-    load_module_test(
-        "tests-pl/iso-conformity-tests.pl",
-        "All tests passed",
-    );
+    load_module_test("tests-pl/iso-conformity-tests.pl", "All tests passed");
 }

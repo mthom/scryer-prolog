@@ -52,9 +52,7 @@ macro_rules! drop_iter_on_err {
     };
 }
 
-fn zero_divisor_eval_error(
-    stub_gen: impl Fn() -> FunctorStub + 'static,
-) -> MachineStubGen {
+fn zero_divisor_eval_error(stub_gen: impl Fn() -> FunctorStub + 'static) -> MachineStubGen {
     Box::new(move |machine_st| {
         let eval_error = machine_st.evaluation_error(EvalError::ZeroDivisor);
         let stub = stub_gen();
@@ -63,9 +61,7 @@ fn zero_divisor_eval_error(
     })
 }
 
-fn undefined_eval_error(
-    stub_gen: impl Fn() -> FunctorStub + 'static,
-) -> MachineStubGen {
+fn undefined_eval_error(stub_gen: impl Fn() -> FunctorStub + 'static) -> MachineStubGen {
     Box::new(move |machine_st| {
         let eval_error = machine_st.evaluation_error(EvalError::Undefined);
         let stub = stub_gen();
@@ -171,9 +167,7 @@ pub(crate) fn add(lhs: Number, rhs: Number, arena: &mut Arena) -> Result<Number,
             Ok(Number::Float(add_f(float_i_to_f(&n1)?, n2)?))
         }
         (Number::Integer(n1), Number::Rational(n2))
-        | (Number::Rational(n2), Number::Integer(n1)) => {
-            Ok(Number::arena_from(&*n1 + &*n2, arena))
-        }
+        | (Number::Rational(n2), Number::Integer(n1)) => Ok(Number::arena_from(&*n1 + &*n2, arena)),
         (Number::Rational(n1), Number::Float(OrderedFloat(n2)))
         | (Number::Float(OrderedFloat(n2)), Number::Rational(n1)) => {
             Ok(Number::Float(add_f(float_r_to_f(&n1)?, n2)?))
@@ -181,9 +175,7 @@ pub(crate) fn add(lhs: Number, rhs: Number, arena: &mut Arena) -> Result<Number,
         (Number::Float(OrderedFloat(f1)), Number::Float(OrderedFloat(f2))) => {
             Ok(Number::Float(add_f(f1, f2)?))
         }
-        (Number::Rational(r1), Number::Rational(r2)) => {
-            Ok(Number::arena_from(&*r1 + &*r2, arena))
-        }
+        (Number::Rational(r1), Number::Rational(r2)) => Ok(Number::arena_from(&*r1 + &*r2, arena)),
     }
 }
 
@@ -199,12 +191,12 @@ pub(crate) fn neg(n: Number, arena: &mut Arena) -> Number {
         Number::Integer(n) => {
             let n_clone: Integer = (*n).clone();
             Number::arena_from(-Integer::from(n_clone), arena)
-        },
+        }
         Number::Float(OrderedFloat(f)) => Number::Float(OrderedFloat(-f)),
         Number::Rational(r) => {
             let r_clone: Rational = (*r).clone();
             Number::arena_from(-Rational::from(r_clone), arena)
-        },
+        }
     }
 }
 
@@ -221,12 +213,12 @@ pub(crate) fn abs(n: Number, arena: &mut Arena) -> Number {
         Number::Integer(n) => {
             let n_clone: Integer = (*n).clone();
             Number::arena_from(Integer::from(n_clone.abs()), arena)
-        },
+        }
         Number::Float(f) => Number::Float(f.abs()),
         Number::Rational(r) => {
             let r_clone: Rational = (*r).clone();
             Number::arena_from(Rational::from(r_clone.abs()), arena)
-        },
+        }
     }
 }
 
@@ -370,7 +362,11 @@ pub(crate) fn int_pow(n1: Number, n2: Number, arena: &mut Arena) -> Result<Numbe
         (Number::Integer(n1), Number::Fixnum(n2)) => {
             let n2_i = n2.get_num();
 
-            if !(&*n1 == &Integer::from(1) || &*n1 == &Integer::from(0) || &*n1 == &Integer::from(-1)) && n2_i < 0 {
+            if !(&*n1 == &Integer::from(1)
+                || &*n1 == &Integer::from(0)
+                || &*n1 == &Integer::from(-1))
+                && n2_i < 0
+            {
                 let n = Number::Integer(n1);
                 Err(numerical_type_error(ValidType::Float, n, stub_gen))
             } else {
@@ -379,7 +375,11 @@ pub(crate) fn int_pow(n1: Number, n2: Number, arena: &mut Arena) -> Result<Numbe
             }
         }
         (Number::Integer(n1), Number::Integer(n2)) => {
-            if !(&*n1 == &Integer::from(1) || &*n1 == &Integer::from(0) || &*n1 == &Integer::from(-1)) && &*n2 < &Integer::from(0) {
+            if !(&*n1 == &Integer::from(1)
+                || &*n1 == &Integer::from(0)
+                || &*n1 == &Integer::from(-1))
+                && &*n2 < &Integer::from(0)
+            {
                 let n = Number::Integer(n1);
                 Err(numerical_type_error(ValidType::Float, n, stub_gen))
             } else {
@@ -554,7 +554,7 @@ pub fn rational_from_number(
         Number::Integer(n) => {
             let n_clone: Integer = (*n).clone();
             Ok(arena_alloc!(Rational::from(n_clone), arena))
-        },
+        }
     }
 }
 
@@ -661,7 +661,7 @@ pub(crate) fn shr(n1: Number, n2: Number, arena: &mut Arena) -> Result<Number, M
 
             if let Ok(n2) = usize::try_from(n2_i) {
                 return Ok(Number::arena_from(n1 >> n2, arena));
-	        } else {
+            } else {
                 return Ok(Number::arena_from(n1 >> usize::max_value(), arena));
             }
         }
@@ -681,9 +681,10 @@ pub(crate) fn shr(n1: Number, n2: Number, arena: &mut Arena) -> Result<Number, M
         }
         (Number::Integer(n1), Number::Fixnum(n2)) => match usize::try_from(n2.get_num()) {
             Ok(n2) => Ok(Number::arena_from(Integer::from(&*n1 >> n2), arena)),
-            _ => {
-		        Ok(Number::arena_from(Integer::from(&*n1 >> usize::max_value()),arena))
-	        },
+            _ => Ok(Number::arena_from(
+                Integer::from(&*n1 >> usize::max_value()),
+                arena,
+            )),
         },
         (Number::Integer(n1), Number::Integer(n2)) => {
             let result: Result<usize, _> = (&*n2).try_into();
@@ -722,7 +723,7 @@ pub(crate) fn shl(n1: Number, n2: Number, arena: &mut Arena) -> Result<Number, M
 
             if let Ok(n2) = usize::try_from(n2_i) {
                 return Ok(Number::arena_from(n1 << n2, arena));
-	        } else {
+            } else {
                 return Ok(Number::arena_from(n1 << usize::max_value(), arena));
             }
         }
@@ -741,9 +742,10 @@ pub(crate) fn shl(n1: Number, n2: Number, arena: &mut Arena) -> Result<Number, M
         }
         (Number::Integer(n1), Number::Fixnum(n2)) => match usize::try_from(n2.get_num()) {
             Ok(n2) => Ok(Number::arena_from(Integer::from(&*n1 << n2), arena)),
-            _ => {
-		        Ok(Number::arena_from(Integer::from(&*n1 << usize::max_value()),arena))
-		    }
+            _ => Ok(Number::arena_from(
+                Integer::from(&*n1 << usize::max_value()),
+                arena,
+            )),
         },
         (Number::Integer(n1), Number::Integer(n2)) => match (&*n2).try_into() as Result<u32, _> {
             Ok(n2) => {
@@ -967,10 +969,7 @@ pub(crate) fn gcd(n1: Number, n2: Number, arena: &mut Arena) -> Result<Number, M
                 Ok(Number::arena_from(result, arena))
             } else {
                 let value: IBig = Integer::from(n1_i).gcd(&Integer::from(n2_i)).into();
-                Ok(Number::arena_from(
-                    value,
-                    arena,
-                ))
+                Ok(Number::arena_from(value, arena))
             }
         }
         (Number::Fixnum(n1), Number::Integer(n2)) | (Number::Integer(n2), Number::Fixnum(n1)) => {
@@ -1069,12 +1068,14 @@ pub(crate) fn atanh(n1: Number) -> Result<f64, MachineStubGen> {
 
     let f1 = try_numeric_result!(result_f(&n1), stub_gen)?;
 
-    try_numeric_result!(if f1 == 1.0 || f1 == -1.0 {
-        Err(EvalError::Undefined)
-    } else {
-        result_f(&Number::Float(OrderedFloat(f1.atanh())))
-    },
-    stub_gen)
+    try_numeric_result!(
+        if f1 == 1.0 || f1 == -1.0 {
+            Err(EvalError::Undefined)
+        } else {
+            result_f(&Number::Float(OrderedFloat(f1.atanh())))
+        },
+        stub_gen
+    )
 }
 
 #[inline]
@@ -1125,7 +1126,6 @@ pub(crate) fn sqrt(n1: Number) -> Result<f64, MachineStubGen> {
 pub(crate) fn floor(n1: Number, arena: &mut Arena) -> Number {
     rnd_i(&n1, arena)
 }
-
 
 #[inline]
 pub(crate) fn ceiling(n1: Number, arena: &mut Arena) -> Number {
@@ -1179,16 +1179,17 @@ impl MachineState {
     pub fn get_number(&mut self, at: &ArithmeticTerm) -> Result<Number, MachineStub> {
         match at {
             &ArithmeticTerm::Reg(r) => {
-		        let value = self.store(self.deref(self[r]));
+                let value = self.store(self.deref(self[r]));
 
                 match Number::try_from(value) {
                     Ok(n) => Ok(n),
                     Err(_) => self.arith_eval_by_metacall(value),
                 }
             }
-            &ArithmeticTerm::Interm(i) => {
-                Ok(mem::replace(&mut self.interms[i - 1], Number::Fixnum(Fixnum::build_with(0))))
-            }
+            &ArithmeticTerm::Interm(i) => Ok(mem::replace(
+                &mut self.interms[i - 1],
+                Number::Fixnum(Fixnum::build_with(0)),
+            )),
             &ArithmeticTerm::Number(n) => Ok(n),
         }
     }
@@ -1202,11 +1203,14 @@ impl MachineState {
 
         match rational_from_number(n, caller, &mut self.arena) {
             Ok(r) => Ok(r),
-            Err(e_gen) => Err(e_gen(self))
+            Err(e_gen) => Err(e_gen(self)),
         }
     }
 
-    pub(crate) fn arith_eval_by_metacall(&mut self, value: HeapCellValue) -> Result<Number, MachineStub> {
+    pub(crate) fn arith_eval_by_metacall(
+        &mut self,
+        value: HeapCellValue,
+    ) -> Result<Number, MachineStub> {
         let stub_gen = || functor_stub(atom!("is"), 2);
         let mut iter = stackful_post_order_iter(&mut self.heap, &mut self.stack, value);
 
@@ -1512,26 +1516,11 @@ mod tests {
         let mut wam = MachineState::new();
         let mut op_dir = default_op_dir();
 
-        op_dir.insert(
-            (atom!("+"), Fixity::In),
-            OpDesc::build_with(500, YFX as u8),
-        );
-        op_dir.insert(
-            (atom!("-"), Fixity::In),
-            OpDesc::build_with(500, YFX as u8),
-        );
-        op_dir.insert(
-            (atom!("-"), Fixity::Pre),
-            OpDesc::build_with(200, FY as u8),
-        );
-        op_dir.insert(
-            (atom!("*"), Fixity::In),
-            OpDesc::build_with(400, YFX as u8),
-        );
-        op_dir.insert(
-            (atom!("/"), Fixity::In),
-            OpDesc::build_with(400, YFX as u8),
-        );
+        op_dir.insert((atom!("+"), Fixity::In), OpDesc::build_with(500, YFX as u8));
+        op_dir.insert((atom!("-"), Fixity::In), OpDesc::build_with(500, YFX as u8));
+        op_dir.insert((atom!("-"), Fixity::Pre), OpDesc::build_with(200, FY as u8));
+        op_dir.insert((atom!("*"), Fixity::In), OpDesc::build_with(400, YFX as u8));
+        op_dir.insert((atom!("/"), Fixity::In), OpDesc::build_with(400, YFX as u8));
 
         let term_write_result =
             parse_and_write_parsed_term_to_heap(&mut wam, "3 + 4 - 1 + 2.", &op_dir).unwrap();

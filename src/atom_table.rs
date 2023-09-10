@@ -1,18 +1,23 @@
 use crate::parser::ast::MAX_ARITY;
 use crate::raw_block::*;
+use crate::rcu::{Rcu, RcuRef};
 use crate::types::*;
 
-use std::borrow::Borrow;
 use std::cmp::Ordering;
 use std::hash::{Hash, Hasher};
 use std::mem;
+use std::ops::Deref;
 use std::ptr;
 use std::slice;
 use std::str;
+use std::sync::Arc;
+use std::sync::Mutex;
+use std::sync::Weak;
 
 use indexmap::IndexSet;
 
 use modular_bitfield::prelude::*;
+use tokio::sync::RwLock;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Atom {
@@ -33,65 +38,43 @@ impl<'a> From<&'a Atom> for Atom {
 impl From<bool> for Atom {
     #[inline]
     fn from(value: bool) -> Self {
-        if value { atom!("true") } else { atom!("false") }
+        if value {
+            atom!("true")
+        } else {
+            atom!("false")
+        }
+    }
+}
+
+impl indexmap::Equivalent<Atom> for str {
+    fn equivalent(&self, key: &Atom) -> bool {
+        &*key.as_str() == self
     }
 }
 
 const ATOM_TABLE_INIT_SIZE: usize = 1 << 16;
 const ATOM_TABLE_ALIGN: usize = 8;
 
-#[cfg(test)]
-thread_local! {
-   static ATOM_TABLE_BUF_BASE: std::cell::RefCell<*const u8> = std::cell::RefCell::new(ptr::null_mut());
-}
-
-#[cfg(not(test))]
-static ATOM_TABLE_BUF_BASE: std::sync::atomic::AtomicPtr<u8> =
-    std::sync::atomic::AtomicPtr::new(ptr::null_mut());
-
-fn set_atom_tbl_buf_base(old_ptr: *const u8, new_ptr: *const u8) -> Result<(), *const u8> {
-#[cfg(test)]
+#[inline(always)]
+fn global_atom_table() -> &'static RwLock<Weak<AtomTable>> {
+    #[cfg(feature = "rust_beta_channel")]
     {
-    ATOM_TABLE_BUF_BASE.with(|atom_table_buf_base| {
-        let mut borrow = atom_table_buf_base.borrow_mut();
-            if *borrow != old_ptr {
-                Err(*borrow)
-            } else {
-                *borrow = new_ptr;
-                Ok(())
-            }
-        })?;
-    };
-    #[cfg(not(test))]
+        // const Weak::new will be stabilized in 1.73 which is currently in beta,
+        // till then we need a OnceLock for initialization
+        static GLOBAL_ATOM_TABLE: RwLock<Weak<AtomTable>> = RwLock::const_new(Weak::new());
+        &GLOBAL_ATOM_TABLE
+    }
+    #[cfg(not(feature = "rust_beta_channel"))]
     {
-        ATOM_TABLE_BUF_BASE
-            .compare_exchange(
-                old_ptr.cast_mut(),
-                new_ptr.cast_mut(),
-                std::sync::atomic::Ordering::Relaxed,
-                std::sync::atomic::Ordering::Relaxed,
-            )
-            .map_err(|ptr| ptr.cast_const())
-    }?;
-    Ok(())
-}
-
-pub(crate) fn get_atom_tbl_buf_base() -> *const u8 {
-    #[cfg(test)]
-    {
-    ATOM_TABLE_BUF_BASE.with(|atom_table_buf_base| *atom_table_buf_base.borrow())
-}
-#[cfg(not(test))]
-    {
-        ATOM_TABLE_BUF_BASE.load(std::sync::atomic::Ordering::Relaxed)
+        use std::sync::OnceLock;
+        static GLOBAL_ATOM_TABLE: OnceLock<RwLock<Weak<AtomTable>>> = OnceLock::new();
+        GLOBAL_ATOM_TABLE.get_or_init(|| RwLock::new(Weak::new()))
     }
 }
 
-#[test]
-#[should_panic(expected = "Overwriting atom table base pointer")]
-fn atomtable_is_not_concurrency_safe() {
-    let _table_a = AtomTable::new();
-    let _table_b = AtomTable::new();
+#[inline(always)]
+fn arc_atom_table() -> Option<Arc<AtomTable>> {
+    global_atom_table().blocking_read().upgrade()
 }
 
 impl RawBlockTraits for AtomTable {
@@ -109,21 +92,16 @@ impl RawBlockTraits for AtomTable {
 #[bitfield]
 #[derive(Copy, Clone, Debug)]
 struct AtomHeader {
-    #[allow(unused)] m: bool,
+    #[allow(unused)]
+    m: bool,
     len: B50,
-    #[allow(unused)] padding: B13,
+    #[allow(unused)]
+    padding: B13,
 }
 
 impl AtomHeader {
     fn build_with(len: u64) -> Self {
         AtomHeader::new().with_len(len).with_m(false)
-    }
-}
-
-impl Borrow<str> for Atom {
-    #[inline]
-    fn borrow(&self) -> &str {
-        self.as_str()
     }
 }
 
@@ -142,29 +120,76 @@ macro_rules! is_char {
     };
 }
 
-impl Atom {
-    #[inline]
-    pub fn buf(self) -> *const u8 {
-        let ptr = self.as_ptr();
+pub enum AtomString<'a> {
+    Static(&'a str),
+    Dynamic(AtomTableRef<str>),
+}
 
-        if ptr.is_null() {
-            return ptr::null();
+impl AtomString<'_> {
+    pub fn map<F>(self, f: F) -> Self
+    where
+        for<'a> F: FnOnce(&'a str) -> &'a str,
+    {
+        match self {
+            Self::Static(reference) => Self::Static(f(reference)),
+            Self::Dynamic(guard) => Self::Dynamic(AtomTableRef::map(guard, f)),
         }
+    }
+}
 
-        (ptr as usize + mem::size_of::<AtomHeader>()) as *const u8
+impl std::fmt::Debug for AtomString<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        std::fmt::Debug::fmt(self.deref(), f)
+    }
+}
+
+impl std::fmt::Display for AtomString<'_> {
+    fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result {
+        std::fmt::Display::fmt(self.deref(), f)
+    }
+}
+
+impl std::ops::Deref for AtomString<'_> {
+    type Target = str;
+    fn deref(&self) -> &Self::Target {
+        match self {
+            Self::Static(reference) => reference,
+            Self::Dynamic(guard) => guard.deref(),
+        }
+    }
+}
+
+#[cfg(feature = "repl")]
+impl rustyline::completion::Candidate for AtomString<'_> {
+    fn display(&self) -> &str {
+        self.deref()
     }
 
+    fn replacement(&self) -> &str {
+        self.deref()
+    }
+}
+
+impl Atom {
     #[inline(always)]
     pub fn is_static(self) -> bool {
         (self.index as usize) < STRINGS.len() << 3
     }
 
     #[inline(always)]
-    pub fn as_ptr(self) -> *const u8 {
+    pub fn as_ptr(self) -> Option<AtomTableRef<u8>> {
         if self.is_static() {
-            ptr::null()
+            None
         } else {
-            (get_atom_tbl_buf_base() as usize + (self.index as usize) - (STRINGS.len() << 3)) as *const u8
+            let atom_table =
+                arc_atom_table().expect("We should only have an Atom while there is an AtomTable");
+            unsafe {
+                AtomTableRef::try_map(atom_table.buf(), |buf| {
+                    (buf as *const u8)
+                        .offset(((self.index as usize) - (STRINGS.len() << 3)) as isize)
+                        .as_ref()
+                })
+            }
         }
     }
 
@@ -178,7 +203,9 @@ impl Atom {
         if self.is_static() {
             STRINGS[(self.index >> 3) as usize].len()
         } else {
-            unsafe { ptr::read(self.as_ptr() as *const AtomHeader).len() as _ }
+            let ptr = self.as_ptr().unwrap();
+            let ptr = ptr.deref() as *const u8 as *const AtomHeader;
+            unsafe { ptr::read(ptr) }.len() as _
         }
     }
 
@@ -194,41 +221,44 @@ impl Atom {
         let c1 = it.next();
         let c2 = it.next();
 
-        if c2.is_none() { c1 } else { None }
-    }
-
-    #[inline]
-    pub fn chars(&self) -> str::Chars {
-        self.as_str().chars()
-    }
-
-    #[inline]
-    pub fn as_str(&self) -> &str {
-        unsafe {
-            let ptr = self.as_ptr();
-
-            if ptr.is_null() {
-                return STRINGS[(self.index >> 3) as usize];
-            }
-
-            let header = ptr::read::<AtomHeader>(ptr as *const _);
-            let len = header.len() as usize;
-            let buf = (ptr as usize + mem::size_of::<AtomHeader>()) as *mut u8;
-
-            str::from_utf8_unchecked(slice::from_raw_parts(buf, len))
+        if c2.is_none() {
+            c1
+        } else {
+            None
         }
     }
 
-    pub fn defrock_brackets(&self, atom_tbl: &mut AtomTable) -> Self {
+    #[inline]
+    pub fn as_str(&self) -> AtomString<'static> {
+        if self.is_static() {
+            AtomString::Static(STRINGS[(self.index >> 3) as usize])
+        } else {
+            if let Some(ptr) = self.as_ptr() {
+                AtomString::Dynamic(AtomTableRef::map(ptr, |ptr| {
+                    let header =
+                        unsafe { ptr::read::<AtomHeader>(ptr as *const u8 as *const AtomHeader) };
+                    let len = header.len() as usize;
+                    let buf =
+                        unsafe { (ptr as *const u8).offset(mem::size_of::<AtomHeader>() as isize) };
+
+                    unsafe { str::from_utf8_unchecked(slice::from_raw_parts(buf, len)) }
+                }))
+            } else {
+                AtomString::Static(&STRINGS[(self.index >> 3) as usize])
+            }
+        }
+    }
+
+    pub fn defrock_brackets(&self, atom_tbl: &AtomTable) -> Self {
         let s = self.as_str();
 
-        let s = if s.starts_with('(') && s.ends_with(')') {
+        let sub_str = if s.starts_with('(') && s.ends_with(')') {
             &s['('.len_utf8()..s.len() - ')'.len_utf8()]
         } else {
             return *self;
         };
 
-        atom_tbl.build_with(s)
+        AtomTable::build_with(&atom_tbl, &sub_str)
     }
 }
 
@@ -248,106 +278,143 @@ impl PartialOrd for Atom {
 impl Ord for Atom {
     #[inline]
     fn cmp(&self, other: &Atom) -> Ordering {
-        self.as_str().cmp(other.as_str())
+        self.as_str().cmp(&*other.as_str())
     }
 }
 
 #[derive(Debug)]
-pub struct AtomTable {
+pub struct InnerAtomTable {
     block: RawBlock<AtomTable>,
-    pub table: IndexSet<Atom>,
+    pub table: Rcu<IndexSet<Atom>>,
 }
 
-#[cold]
-fn atom_table_base_pointer_mismatch(expected: *const u8, got: *const u8) -> ! {
-    assert_eq!(expected, got, "Overwriting atom table base pointer, expected old value to be {expected:p}, but found {got:p}");
-    unreachable!("This should only be called in a case of a mismatch as such the assert_eq should have failed!")
+#[derive(Debug)]
+pub struct AtomTable {
+    inner: Rcu<InnerAtomTable>,
+    // this lock is taking during resizing
+    update: Mutex<()>,
 }
 
-impl Drop for AtomTable {
-    fn drop(&mut self) {
-        if let Err(got) = set_atom_tbl_buf_base(self.block.base, ptr::null()) {
-            atom_table_base_pointer_mismatch(self.block.base, got);
-        }
-        self.block.deallocate();
+pub type AtomTableRef<M> = RcuRef<InnerAtomTable, M>;
+
+impl InnerAtomTable {
+    #[inline(always)]
+    fn lookup_str(self: &InnerAtomTable, string: &str) -> Option<Atom> {
+        STATIC_ATOMS_MAP
+            .get(string)
+            .cloned()
+            .or_else(|| self.table.active_epoch().get(string).cloned())
     }
 }
 
 impl AtomTable {
     #[inline]
-    pub fn new() -> Self {
-        let mut block = RawBlock::new();
-
-        if let Err(got) = set_atom_tbl_buf_base(ptr::null(), block.base) {
-            block.deallocate();
-            atom_table_base_pointer_mismatch(ptr::null(), got);
-        }
-
-        Self {
-            block,
-            table: IndexSet::new(),
+    pub fn new() -> Arc<Self> {
+        let upgraded = global_atom_table().blocking_read().upgrade();
+        // don't inline upgraded, otherwise temporary will be dropped too late in case of None
+        if let Some(atom_table) = upgraded {
+            atom_table
+        } else {
+            let mut guard = global_atom_table().blocking_write();
+            // try to upgrade again in case we lost the race on the write lock
+            if let Some(atom_table) = guard.upgrade() {
+                atom_table
+            } else {
+                let atom_table = Arc::new(Self {
+                    inner: Rcu::new(InnerAtomTable {
+                        block: RawBlock::new(),
+                        table: Rcu::new(IndexSet::new()),
+                    }),
+                    update: Mutex::new(()),
+                });
+                *guard = Arc::downgrade(&atom_table);
+                atom_table
+            }
         }
     }
 
     #[inline]
-    pub fn buf(&self) -> *const u8 {
-        self.block.base as *const u8
+    pub fn buf(&self) -> AtomTableRef<u8> {
+        AtomTableRef::<InnerAtomTable>::map(self.inner.active_epoch(), |inner| {
+            unsafe { inner.block.base.as_ref() }.unwrap()
+        })
     }
 
-    #[inline]
-    pub fn top(&self) -> *const u8 {
-        self.block.top
+    pub fn active_table(&self) -> RcuRef<IndexSet<Atom>, IndexSet<Atom>> {
+        self.inner.active_epoch().table.active_epoch()
     }
 
-    #[inline(always)]
-    fn lookup_str(&self, string: &str) -> Option<Atom> {
-        STATIC_ATOMS_MAP.get(string).or_else(|| self.table.get(string)).cloned()
-    }
+    pub fn build_with(atom_table: &AtomTable, string: &str) -> Atom {
+        loop {
+            let mut block_epoch = atom_table.inner.active_epoch();
+            let mut table_epoch = block_epoch.table.active_epoch();
 
-    pub fn build_with(&mut self, string: &str) -> Atom {
-        if let Some(atom) = self.lookup_str(string) {
-            return atom;
-        }
+            if let Some(atom) = block_epoch.lookup_str(string) {
+                return atom;
+            }
 
-        unsafe {
+            // take a lock to prevent concurrent updates
+            let update_guard = atom_table.update.lock().unwrap();
+
+            let is_same_allocation =
+                RcuRef::same_epoch(&block_epoch, &atom_table.inner.active_epoch());
+            let is_same_atom_list =
+                RcuRef::same_epoch(&table_epoch, &block_epoch.table.active_epoch());
+
+            if !(is_same_allocation && is_same_atom_list) {
+                // some other thread raced us between our lookup and
+                // us aquring the update lock,
+                // try again
+                continue;
+            }
+
             let size = mem::size_of::<AtomHeader>() + string.len();
             let align_offset = 8 * mem::align_of::<AtomHeader>();
             let size = (size & !(align_offset - 1)) + align_offset;
 
-            let len_ptr = {
-                let mut ptr;
-
-                loop {
-                    ptr = self.block.alloc(size);
+            unsafe {
+                let len_ptr = loop {
+                    let ptr = block_epoch.block.alloc(size);
 
                     if ptr.is_null() {
-                        let old_base = self.block.base;
-                        self.block.grow();
-                        if let Err(got) = set_atom_tbl_buf_base(old_base, self.block.base) {
-                            atom_table_base_pointer_mismatch(old_base, got);
-                        }
+                        // garbage collection would go here
+                        let new_block = block_epoch.block.grow_new().unwrap();
+                        let new_table = Rcu::new(table_epoch.clone());
+                        let new_alloc = InnerAtomTable {
+                            block: new_block,
+                            table: new_table,
+                        };
+                        atom_table.inner.replace(new_alloc);
+                        block_epoch = atom_table.inner.active_epoch();
+                        table_epoch = block_epoch.table.active_epoch();
                     } else {
-                        break;
+                        break ptr;
                     }
-                }
+                };
 
-                ptr
-            };
+                let ptr_base = block_epoch.block.base as usize;
 
-            let ptr_base = self.block.base as usize;
+                write_to_ptr(string, len_ptr);
 
-            write_to_ptr(string, len_ptr);
+                let atom = Atom {
+                    index: ((STRINGS.len() << 3) + len_ptr as usize - ptr_base) as u64,
+                };
 
-            let atom = Atom {
-                index: ((STRINGS.len() << 3) + len_ptr as usize - ptr_base) as u64,
-            };
+                let mut table = table_epoch.clone();
+                table.insert(atom);
+                block_epoch.table.replace(table);
 
-            self.table.insert(atom);
+                // expicit drop to ensure we don't accidentally drop it early
+                drop(update_guard);
 
-            atom
+                return atom;
+            }
         }
     }
 }
+
+unsafe impl Send for AtomTable {}
+unsafe impl Sync for AtomTable {}
 
 #[bitfield]
 #[repr(u64)]
@@ -355,9 +422,12 @@ impl AtomTable {
 pub struct AtomCell {
     name: B46,
     arity: B10,
-    #[allow(unused)] f: bool,
-    #[allow(unused)] m: bool,
-    #[allow(unused)] tag: B6,
+    #[allow(unused)]
+    f: bool,
+    #[allow(unused)]
+    m: bool,
+    #[allow(unused)]
+    tag: B6,
 }
 
 impl AtomCell {

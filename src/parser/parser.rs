@@ -7,7 +7,6 @@ use crate::parser::ast::*;
 use crate::parser::char_reader::*;
 use crate::parser::lexer::*;
 
-
 use std::cell::Cell;
 use std::mem;
 use std::ops::Neg;
@@ -108,7 +107,7 @@ pub(crate) fn as_partial_string(
                 tail_ref = tail;
             }
             Term::CompleteString(_, cstr) => {
-                string += cstr.as_str();
+                string += &*cstr.as_str();
                 tail = Term::Literal(Cell::default(), Literal::Atom(atom!("[]")));
                 break;
             }
@@ -120,26 +119,17 @@ pub(crate) fn as_partial_string(
     }
 
     match &tail {
-        Term::AnonVar | Term::Var(..) => {
-            Ok((string, Some(Box::new(tail))))
-        }
-        Term::Literal(_, Literal::Atom(atom!("[]"))) => {
-            Ok((string, None))
-        }
+        Term::AnonVar | Term::Var(..) => Ok((string, Some(Box::new(tail)))),
+        Term::Literal(_, Literal::Atom(atom!("[]"))) => Ok((string, None)),
         Term::Literal(_, Literal::String(tail)) => {
-            string += tail.as_str();
+            string += &*tail.as_str();
             Ok((string, None))
         }
-        _ => {
-            Ok((string, Some(Box::new(tail))))
-        }
+        _ => Ok((string, Some(Box::new(tail)))),
     }
 }
 
-pub fn get_op_desc(
-    name: Atom,
-    op_dir: &CompositeOpDir,
-) -> Option<CompositeOpDesc> {
+pub fn get_op_desc(name: Atom, op_dir: &CompositeOpDir) -> Option<CompositeOpDesc> {
     let mut op_desc = CompositeOpDesc {
         pre: 0,
         inf: 0,
@@ -295,17 +285,17 @@ fn read_tokens<R: CharRead>(lexer: &mut Lexer<R>) -> Result<Vec<Token>, ParserEr
     Ok(tokens)
 }
 
-fn atomize_term(atom_tbl: &mut AtomTable, term: &Term) -> Option<Atom> {
+fn atomize_term(atom_tbl: &AtomTable, term: &Term) -> Option<Atom> {
     match term {
         Term::Literal(_, ref c) => atomize_constant(atom_tbl, *c),
         _ => None,
     }
 }
 
-fn atomize_constant(atom_tbl: &mut AtomTable, c: Literal) -> Option<Atom> {
+fn atomize_constant(atom_tbl: &AtomTable, c: Literal) -> Option<Atom> {
     match c {
         Literal::Atom(ref name) => Some(*name),
-        Literal::Char(c) => Some(atom_tbl.build_with(&c.to_string())),
+        Literal::Char(c) => Some(AtomTable::build_with(atom_tbl, &c.to_string())),
         _ => None,
     }
 }
@@ -409,7 +399,8 @@ impl<'a, R: CharRead> Parser<'a, R> {
     }
 
     fn promote_atom_op(&mut self, atom: Atom, priority: usize, assoc: u32) {
-        self.terms.push(Term::Literal(Cell::default(), Literal::Atom(atom)));
+        self.terms
+            .push(Term::Literal(Cell::default(), Literal::Atom(atom)));
         self.stack.push(TokenDesc {
             tt: TokenType::Term,
             priority,
@@ -419,7 +410,9 @@ impl<'a, R: CharRead> Parser<'a, R> {
 
     fn shift(&mut self, token: Token, priority: usize, spec: Specifier) {
         let tt = match token {
-            Token::Literal(Literal::String(s)) if self.lexer.machine_st.flags.double_quotes.is_codes() => {
+            Token::Literal(Literal::String(s))
+                if self.lexer.machine_st.flags.double_quotes.is_codes() =>
+            {
                 let mut list = Term::Literal(Cell::default(), Literal::Atom(atom!("[]")));
 
                 for c in s.as_str().chars().rev() {
@@ -436,7 +429,9 @@ impl<'a, R: CharRead> Parser<'a, R> {
                 self.terms.push(list);
                 TokenType::Term
             }
-            Token::Literal(Literal::String(s)) if self.lexer.machine_st.flags.double_quotes.is_chars() => {
+            Token::Literal(Literal::String(s))
+                if self.lexer.machine_st.flags.double_quotes.is_chars() =>
+            {
                 self.terms.push(Term::CompleteString(Cell::default(), s));
                 TokenType::Term
             }
@@ -573,7 +568,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
         let idx = self.terms.len() - arity;
 
         if TokenType::Term == self.stack[stack_len].tt {
-            if atomize_term(&mut self.lexer.machine_st.atom_tbl, &self.terms[idx - 1]).is_some() {
+            if atomize_term(&self.lexer.machine_st.atom_tbl, &self.terms[idx - 1]).is_some() {
                 self.stack.truncate(stack_len + 1);
 
                 let mut subterms: Vec<_> = self.terms.drain(idx..).collect();
@@ -581,27 +576,29 @@ impl<'a, R: CharRead> Parser<'a, R> {
                 if let Some(name) = self
                     .terms
                     .pop()
-                    .and_then(|t| atomize_term(&mut self.lexer.machine_st.atom_tbl, &t))
+                    .and_then(|t| atomize_term(&self.lexer.machine_st.atom_tbl, &t))
                 {
                     // reduce the '.' functor to a cons cell if it applies.
                     if name == atom!(".") && subterms.len() == 2 {
                         let tail = subterms.pop().unwrap();
                         let head = subterms.pop().unwrap();
 
-                        self.terms.push(
-                            match as_partial_string(head, tail) {
-                                Ok((string_buf, Some(tail))) => {
-                                    Term::PartialString(Cell::default(), string_buf, tail)
-                                }
-                                Ok((string_buf, None)) => {
-                                    let atom = self.lexer.machine_st.atom_tbl.build_with(&string_buf);
-                                    Term::CompleteString(Cell::default(), atom)
-                                }
-                                Err(term) => term,
-                            },
-                        );
+                        self.terms.push(match as_partial_string(head, tail) {
+                            Ok((string_buf, Some(tail))) => {
+                                Term::PartialString(Cell::default(), string_buf, tail)
+                            }
+                            Ok((string_buf, None)) => {
+                                let atom = AtomTable::build_with(
+                                    &self.lexer.machine_st.atom_tbl,
+                                    &string_buf,
+                                );
+                                Term::CompleteString(Cell::default(), atom)
+                            }
+                            Err(term) => term,
+                        });
                     } else {
-                        self.terms.push(Term::Clause(Cell::default(), name, subterms));
+                        self.terms
+                            .push(Term::Clause(Cell::default(), name, subterms));
                     }
 
                     if let Some(&mut TokenDesc {
@@ -695,7 +692,8 @@ impl<'a, R: CharRead> Parser<'a, R> {
                 td.tt = TokenType::Term;
                 td.priority = 0;
 
-                self.terms.push(Term::Literal(Cell::default(), Literal::Atom(atom!("[]"))));
+                self.terms
+                    .push(Term::Literal(Cell::default(), Literal::Atom(atom!("[]"))));
                 return Ok(true);
             }
         }
@@ -736,8 +734,8 @@ impl<'a, R: CharRead> Parser<'a, R> {
         if arity > self.terms.len() {
             return Err(ParserError::IncompleteReduction(
                 self.lexer.line_num,
-                self.lexer.col_num
-            ))
+                self.lexer.col_num,
+            ));
         }
 
         let idx = self.terms.len() - arity;
@@ -755,18 +753,16 @@ impl<'a, R: CharRead> Parser<'a, R> {
         });
 
         self.terms.push(match list {
-            Term::Cons(_, head, tail) => {
-                match as_partial_string(*head, *tail) {
-                    Ok((string_buf, Some(tail))) => {
-                        Term::PartialString(Cell::default(), string_buf, tail)
-                    }
-                    Ok((string_buf, None)) => {
-                        let atom = self.lexer.machine_st.atom_tbl.build_with(&string_buf);
-                        Term::CompleteString(Cell::default(), atom)
-                    }
-                    Err(term) => term,
+            Term::Cons(_, head, tail) => match as_partial_string(*head, *tail) {
+                Ok((string_buf, Some(tail))) => {
+                    Term::PartialString(Cell::default(), string_buf, tail)
                 }
-            }
+                Ok((string_buf, None)) => {
+                    let atom = AtomTable::build_with(&self.lexer.machine_st.atom_tbl, &string_buf);
+                    Term::CompleteString(Cell::default(), atom)
+                }
+                Err(term) => term,
+            },
             term => term,
         });
 
@@ -784,10 +780,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
                 td.priority = 0;
                 td.spec = TERM;
 
-                let term = Term::Literal(
-                    Cell::default(),
-                    Literal::Atom(atom!("{}")),
-                );
+                let term = Term::Literal(Cell::default(), Literal::Atom(atom!("{}")));
 
                 self.terms.push(term);
                 return Ok(true);
@@ -818,11 +811,8 @@ impl<'a, R: CharRead> Parser<'a, R> {
                             }
                         };
 
-                        self.terms.push(Term::Clause(
-                            Cell::default(),
-                            atom!("{}"),
-                            vec![term],
-                        ));
+                        self.terms
+                            .push(Term::Clause(Cell::default(), atom!("{}"), vec![term]));
 
                         return Ok(true);
                     }
@@ -933,7 +923,8 @@ impl<'a, R: CharRead> Parser<'a, R> {
             if let Some(term) = self.terms.last().cloned() {
                 match term {
                     Term::Literal(_, Literal::Atom(name))
-                        if name == atom!("-") && (is_prefix!(desc.spec) || is_negate!(desc.spec)) =>
+                        if name == atom!("-")
+                            && (is_prefix!(desc.spec) || is_negate!(desc.spec)) =>
                     {
                         self.stack.pop();
                         self.terms.pop();
@@ -983,7 +974,8 @@ impl<'a, R: CharRead> Parser<'a, R> {
                 |n, arena| Literal::from(float_alloc!(n, arena)),
             ),
             Token::Literal(c) => {
-                if let Some(name) = atomize_constant(&mut self.lexer.machine_st.atom_tbl, c) {
+                let atomized = atomize_constant(&self.lexer.machine_st.atom_tbl, c);
+                if let Some(name) = atomized {
                     if !self.shift_op(name, op_dir)? {
                         self.shift(Token::Literal(c), 0, TERM);
                     }
@@ -1069,7 +1061,11 @@ impl<'a, R: CharRead> Parser<'a, R> {
     }
 
     // on success, returns the parsed term and the number of lines read.
-    pub fn read_term(&mut self, op_dir: &CompositeOpDir, tokens: Tokens) -> Result<Term, ParserError> {
+    pub fn read_term(
+        &mut self,
+        op_dir: &CompositeOpDir,
+        tokens: Tokens,
+    ) -> Result<Term, ParserError> {
         self.tokens = match tokens {
             Tokens::Default => read_tokens(&mut self.lexer)?,
             Tokens::Provided(tokens) => tokens,

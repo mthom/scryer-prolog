@@ -7,8 +7,8 @@ use crate::machine::loader::PredicateQueue;
 use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
 use crate::parser::ast::*;
-use crate::parser::parser::CompositeOpDesc;
 use crate::parser::dashu::{Integer, Rational};
+use crate::parser::parser::CompositeOpDesc;
 use crate::types::*;
 
 use fxhash::FxBuildHasher;
@@ -58,7 +58,7 @@ impl AppendOrPrepend {
 #[derive(Debug, Clone, Copy)]
 pub enum VarComparison {
     Indistinct,
-    Distinct
+    Distinct,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -153,11 +153,14 @@ impl DerefMut for ChunkedTermVec {
 impl ChunkedTermVec {
     #[inline]
     pub fn new() -> Self {
-        Self { chunk_vec: VecDeque::new() }
+        Self {
+            chunk_vec: VecDeque::new(),
+        }
     }
 
     pub fn reserve_branch(&mut self, capacity: usize) {
-        self.chunk_vec.push_back(ChunkedTerms::Branch(Vec::with_capacity(capacity)));
+        self.chunk_vec
+            .push_back(ChunkedTerms::Branch(Vec::with_capacity(capacity)));
     }
 
     pub fn push_branch_arm(&mut self, branch: VecDeque<ChunkedTerms>) {
@@ -173,19 +176,22 @@ impl ChunkedTermVec {
 
     #[inline]
     pub fn add_chunk(&mut self) {
-        self.chunk_vec.push_back(ChunkedTerms::Chunk(VecDeque::from(vec![])));
+        self.chunk_vec
+            .push_back(ChunkedTerms::Chunk(VecDeque::from(vec![])));
     }
 
     pub fn push_chunk_term(&mut self, term: QueryTerm) {
         match self.chunk_vec.back_mut() {
             Some(ChunkedTerms::Branch(_)) => {
-                self.chunk_vec.push_back(ChunkedTerms::Chunk(VecDeque::from(vec![term])));
+                self.chunk_vec
+                    .push_back(ChunkedTerms::Chunk(VecDeque::from(vec![term])));
             }
             Some(ChunkedTerms::Chunk(chunk)) => {
                 chunk.push_back(term);
             }
             None => {
-                self.chunk_vec.push_back(ChunkedTerms::Chunk(VecDeque::from(vec![term])));
+                self.chunk_vec
+                    .push_back(ChunkedTerms::Chunk(VecDeque::from(vec![term])));
             }
         }
     }
@@ -196,7 +202,7 @@ pub enum QueryTerm {
     // register, clause type, subterms, clause call policy.
     Clause(Cell<RegType>, ClauseType, Vec<Term>, CallPolicy),
     Fail,
-    LocalCut(usize), // var_num
+    LocalCut(usize),  // var_num
     GlobalCut(usize), // var_num
     GetCutPoint { var_num: usize, prev_b: bool },
     GetLevel(usize), // var_num
@@ -266,11 +272,10 @@ impl ClauseInfo for Term {
     fn name(&self) -> Option<Atom> {
         match self {
             Term::Clause(_, name, terms) => {
-
                 match name {
                     atom!(":-") => {
                         match terms.len() {
-                            1 => None,            // a declaration.
+                            1 => None, // a declaration.
                             2 => terms[0].name(),
                             _ => Some(*name),
                         }
@@ -285,7 +290,7 @@ impl ClauseInfo for Term {
 
     fn arity(&self) -> usize {
         match self {
-            Term::Clause(_, name, terms) => match name.as_str() {
+            Term::Clause(_, name, terms) => match &*name.as_str() {
                 ":-" => match terms.len() {
                     1 => 0,
                     2 => terms[0].arity(),
@@ -410,7 +415,6 @@ pub(crate) fn fixity(spec: u32) -> Fixity {
     }
 }
 
-
 impl OpDecl {
     #[inline]
     pub(crate) fn new(op_desc: OpDesc, name: Atom) -> Self {
@@ -477,35 +481,27 @@ pub enum AtomOrString {
 
 impl AtomOrString {
     #[inline]
-    pub fn as_atom(&self, atom_tbl: &mut AtomTable) -> Atom {
+    pub fn as_atom(&self, atom_tbl: &AtomTable) -> Atom {
         match self {
-            &AtomOrString::Atom(atom) => {
-                atom
-            }
-            AtomOrString::String(string) => {
-                atom_tbl.build_with(&string)
-            }
+            &AtomOrString::Atom(atom) => atom,
+            AtomOrString::String(string) => AtomTable::build_with(atom_tbl, &string),
         }
     }
 
     #[inline]
-    pub fn as_str(&self) -> &str {
+    pub fn as_str(&self) -> AtomString<'_> {
         match self {
-            AtomOrString::Atom(atom) if atom == &atom!("[]") => "",
+            AtomOrString::Atom(atom) if atom == &atom!("[]") => AtomString::Static(""),
             AtomOrString::Atom(atom) => atom.as_str(),
-            AtomOrString::String(string) => string.as_str(),
+            AtomOrString::String(string) => AtomString::Static(string.as_str()),
         }
     }
 
     #[inline]
     pub fn to_string(self) -> String {
         match self {
-            AtomOrString::Atom(atom) => {
-                atom.as_str().to_owned()
-            }
-            AtomOrString::String(string) => {
-                string
-            }
+            AtomOrString::Atom(atom) => atom.as_str().to_owned(),
+            AtomOrString::String(string) => string,
         }
     }
 }
@@ -561,9 +557,7 @@ pub(crate) fn fetch_op_spec(name: Atom, arity: usize, op_dir: &OpDir) -> Option<
                 }
             })
         }
-        0 => {
-            fetch_atom_op_spec(name, None, op_dir)
-        }
+        0 => fetch_atom_op_spec(name, None, op_dir),
         _ => None,
     }
 }
@@ -595,10 +589,7 @@ pub struct Module {
 
 // Module's and related types are defined in forms.
 impl Module {
-    pub(crate) fn new(
-        module_decl: ModuleDecl,
-        listing_src: ListingSource,
-    ) -> Self {
+    pub(crate) fn new(module_decl: ModuleDecl, listing_src: ListingSource) -> Self {
         Module {
             module_decl,
             code_dir: CodeDir::with_hasher(FxBuildHasher::default()),
@@ -620,7 +611,7 @@ impl Module {
             meta_predicates: MetaPredicateDir::with_hasher(FxBuildHasher::default()),
             extensible_predicates: ExtensiblePredicates::with_hasher(FxBuildHasher::default()),
             local_extensible_predicates: LocalExtensiblePredicates::with_hasher(
-                FxBuildHasher::default()
+                FxBuildHasher::default(),
             ),
             listing_src: ListingSource::DynamicallyGenerated,
         }
@@ -923,8 +914,10 @@ impl PredicateInfo {
 
     #[inline]
     pub(crate) fn must_retract_local_clauses(&self, is_cross_module_clause: bool) -> bool {
-        self.is_extensible && self.has_clauses && !self.is_discontiguous &&
-            !(self.is_multifile && is_cross_module_clause)
+        self.is_extensible
+            && self.has_clauses
+            && !self.is_discontiguous
+            && !(self.is_multifile && is_cross_module_clause)
     }
 }
 
@@ -1013,19 +1006,17 @@ impl PredicateSkeleton {
         &mut self,
         clause_clause_loc: usize,
     ) -> Option<usize> {
-        let search_result = self.core.clause_clause_locs
-            .make_contiguous()[0..self.core.clause_assert_margin]
+        let search_result = self.core.clause_clause_locs.make_contiguous()
+            [0..self.core.clause_assert_margin]
             .binary_search_by(|loc| clause_clause_loc.cmp(&loc));
 
         match search_result {
             Ok(loc) => Some(loc),
-            Err(_) => {
-                self.core.clause_clause_locs
-                    .make_contiguous()[self.core.clause_assert_margin..]
-                    .binary_search_by(|loc| loc.cmp(&clause_clause_loc))
-                    .map(|loc| loc + self.core.clause_assert_margin)
-                    .ok()
-            }
+            Err(_) => self.core.clause_clause_locs.make_contiguous()
+                [self.core.clause_assert_margin..]
+                .binary_search_by(|loc| loc.cmp(&clause_clause_loc))
+                .map(|loc| loc + self.core.clause_assert_margin)
+                .ok(),
         }
     }
 }

@@ -10,15 +10,20 @@ license = "BSD-3-Clause"
 keywords = ["prolog", "prolog-interpreter", "prolog-system"]
 categories = ["command-line-utilities"]
 build = "build/main.rs"
-rust-version = "1.63"
+rust-version = "1.70"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
 
 [features]
-default = ["ffi", "repl", "hostname", "tls", "http"]
+default = ["ffi", "repl", "hostname", "tls", "http", "crypto-full"]
 ffi = ["dep:libffi"]
 repl = ["dep:crossterm", "dep:ctrlc", "dep:rustyline"]
 hostname = ["dep:hostname"]
 tls = ["dep:native-tls"]
 http = ["dep:hyper", "dep:reqwest"]
+rust_beta_channel = []
+crypto-full = []
 
 [build-dependencies]
 indexmap = "1.0.2"
@@ -80,7 +85,19 @@ tokio = { version = "1.28.2", features = ["full"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 getrandom = { version = "0.2.10", features = ["js"] }
-tokio = { version = "1.28.2", features = ["sync", "macros", "io-util", "rt", "time"] }
+tokio = { version = "1.28.2", features = ["sync", "macros", "io-util", "rt"] }
+
+[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
+console_error_panic_hook = "0.1"
+console_log = "1.0"
+wasm-bindgen = "0.2.87"
+wasm-bindgen-futures = "0.4"
+serde-wasm-bindgen = "0.5"
+web-sys = { version = "0.3", features = [
+    "Document",
+    "Window",
+    "Element",
+]}
 
 [target.'cfg(target_os = "wasi")'.dependencies]
 ring-wasi = { version = "0.16.25" }
