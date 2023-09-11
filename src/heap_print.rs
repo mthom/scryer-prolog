@@ -1024,7 +1024,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
         match self.op_dir.get(&(atom!("rdiv"), Fixity::In)) {
             Some(op_desc) => {
-                if r.is_integer() {
+                if r.denominator().is_one() {
                     let output_str = format!("{}", r);
 
                     push_space_if_amb!(self, &output_str, {
@@ -1370,7 +1370,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                                 Ok(Number::Integer(n)) => &*n >= &Integer::from(0),
                                 Ok(Number::Fixnum(n)) => n.get_num() >= 0,
                                 Ok(Number::Float(f)) => f >= OrderedFloat(0f64),
-                                Ok(Number::Rational(r)) => &*r >= &Integer::from(0),
+                                Ok(Number::Rational(r)) => &*r >= &Rational::from(0),
                                 _ => false,
                             }
                         }) && needs_bracketing(op_desc, op)

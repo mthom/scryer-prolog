@@ -16,6 +16,7 @@ use crate::parser::dashu::{Integer, Rational};
 use crate::types::*;
 
 use indexmap::IndexSet;
+use num_order::NumOrd;
 
 use std::cmp::Ordering;
 use std::convert::TryFrom;
@@ -294,12 +295,12 @@ impl MachineState {
 
     pub fn unify_big_int(&mut self, n1: TypedArenaPtr<Integer>, value: HeapCellValue) {
         let mut unifier = DefaultUnifier::from(self);
-        unifier.unify_big_num(n1, value);
+        unifier.unify_big_integer(n1, value);
     }
 
     pub fn unify_rational(&mut self, n1: TypedArenaPtr<Rational>, value: HeapCellValue) {
         let mut unifier = DefaultUnifier::from(self);
-        unifier.unify_big_num(n1, value);
+        unifier.unify_big_rational(n1, value);
     }
 
     pub fn unify_f64(&mut self, f1: F64Ptr, value: HeapCellValue) {
@@ -1182,7 +1183,10 @@ impl MachineState {
 
                 let n = match n {
                     Number::Fixnum(n) => n.get_num() as usize,
-                    Number::Integer(n) if *n >= 0 && *n <= std::usize::MAX => n.to_usize().unwrap(),
+                    Number::Integer(n) if (*n).num_ge(&0) && (*n).num_le(&std::usize::MAX) => {
+                        let value: usize = (&*n).try_into().unwrap();
+                        value
+                    },
                     _ => {
                         self.fail = true;
                         return Ok(());
@@ -1399,9 +1403,15 @@ impl MachineState {
                         let err = self.domain_error(DomainErrorType::NotLessThanZero, n);
                         return Err(self.error_form(err, stub_gen()));
                     }
-                    Ok(Number::Rational(n)) => n.numerator().to_i64().unwrap(),
+                    Ok(Number::Rational(n)) => {
+                        let value: i64 = n.numerator().try_into().unwrap();
+                        value
+                    },
                     Ok(Number::Fixnum(n)) => n.get_num(),
-                    Ok(Number::Integer(n)) => n.to_i64().unwrap(),
+                    Ok(Number::Integer(n)) => {
+                        let value: i64 = (&*n).try_into().unwrap();
+                        value
+                    },
                     Err(_) => {
                         return type_error(arity);
                     }
@@ -1678,9 +1688,9 @@ impl MachineState {
                             Err(_) => {}
                         },
                         Ok(Number::Integer(n)) => {
-                            if let Some(b) = n.to_u8() {
-                                bytes.push(b);
-                            }
+                            let b: u8 = (&*n).try_into().unwrap();
+                            
+                            bytes.push(b);
                         }
                         _ => {}
                     }

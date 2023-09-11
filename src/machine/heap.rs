@@ -246,7 +246,10 @@ pub(crate) fn to_local_code_ptr(heap: &Heap, addr: HeapCellValue) -> Option<usiz
     let extract_integer = |s: usize| -> Option<usize> {
         match Number::try_from(heap[s]) {
             Ok(Number::Fixnum(n)) => usize::try_from(n.get_num()).ok(),
-            Ok(Number::Integer(n)) => n.to_usize(),
+            Ok(Number::Integer(n)) => {
+                let value: usize = (&*n).try_into().unwrap();
+                Some(value)
+            },
             _ => None,
         }
     };

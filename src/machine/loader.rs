@@ -1636,11 +1636,10 @@ impl Machine {
 
         let arity = self.deref_register(3);
         let arity = match Number::try_from(arity) {
-            Ok(Number::Integer(n))
-                if &*n >= &Integer::from(0) && &*n <= &Integer::from(MAX_ARITY) =>
-            {
-                Ok(n.to_usize().unwrap())
-            }
+            Ok(Number::Integer(n)) if &*n >= &Integer::from(0) && &*n <= &Integer::from(MAX_ARITY) => {
+                let value: usize = (&*n).try_into().unwrap();
+                Ok(value)
+            },
             Ok(Number::Fixnum(n)) if n.get_num() >= 0 && n.get_num() <= MAX_ARITY as i64 => {
                 Ok(usize::try_from(n.get_num()).unwrap())
             }
@@ -2202,7 +2201,10 @@ impl Machine {
             .store(self.machine_st.deref(self.machine_st[temp_v!(3)]));
 
         let target_pos = match Number::try_from(target_pos) {
-            Ok(Number::Integer(n)) => n.to_usize().unwrap(),
+            Ok(Number::Integer(n)) => {
+                let value: usize = (&*n).try_into().unwrap();
+                value
+            },
             Ok(Number::Fixnum(n)) => usize::try_from(n.get_num()).unwrap(),
             _ => unreachable!(),
         };

@@ -12,6 +12,7 @@ use std::ops::{Deref, DerefMut};
 use derive_deref::*;
 use fxhash::FxBuildHasher;
 use indexmap::IndexSet;
+use num_order::NumOrd;
 
 pub(crate) trait Unifier: DerefMut<Target = MachineState> {
     fn unify_structure(&mut self, s1: usize, value: HeapCellValue) {
@@ -426,8 +427,8 @@ pub(crate) trait Unifier: DerefMut<Target = MachineState> {
         match Number::try_from(value) {
             Ok(n2) => match n2 {
                 Number::Fixnum(n2) if n1.get_num() == n2.get_num() => {}
-                Number::Integer(n2) if n1.get_num() == *n2 => {}
-                Number::Rational(n2) if n1.get_num() == *n2 => {}
+                Number::Integer(n2) if (*n2).num_eq(&n1.get_num()) => {}
+                Number::Rational(n2) if (*n2).num_eq(&Integer::from(n1.get_num())) => {}
                 _ => {
                     self.fail = true;
                 }
@@ -452,6 +453,48 @@ pub(crate) trait Unifier: DerefMut<Target = MachineState> {
                 Number::Fixnum(n2) if *n1 == n2.get_num() => {}
                 Number::Integer(n2) if *n1 == *n2 => {}
                 Number::Rational(n2) if *n1 == *n2 => {}
+                _ => {
+                    self.fail = true;
+                }
+            },
+            Err(_) => {
+                self.fail = true;
+            }
+        }
+    }
+
+    fn unify_big_integer(&mut self, n1: TypedArenaPtr<Integer>, value: HeapCellValue) {
+        if let Some(r) = value.as_var() {
+            Self::bind(self, r, typed_arena_ptr_as_cell!(n1));
+            return;
+        }
+
+        match Number::try_from(value) {
+            Ok(n2) => match n2 {
+                Number::Fixnum(n2) if (*n1).num_eq(&n2.get_num()) => {}
+                Number::Integer(n2) if (*n1).num_eq(&*n2) => {}
+                Number::Rational(n2) if (*n2).num_eq(&*n1) => {}
+                _ => {
+                    self.fail = true;
+                }
+            },
+            Err(_) => {
+                self.fail = true;
+            }
+        }
+    }
+
+    fn unify_big_rational(&mut self, n1: TypedArenaPtr<Rational>, value: HeapCellValue) {
+        if let Some(r) = value.as_var() {
+            Self::bind(self, r, typed_arena_ptr_as_cell!(n1));
+            return;
+        }
+
+        match Number::try_from(value) {
+            Ok(n2) => match n2 {
+                Number::Fixnum(n2) if (*n1).num_eq(&Integer::from(n2.get_num())) => {}
+                Number::Integer(n2) if (*n1).num_eq(&*n2) => {}
+                Number::Rational(n2) if n1 == n2 => {}
                 _ => {
                     self.fail = true;
                 }
@@ -487,10 +530,10 @@ pub(crate) trait Unifier: DerefMut<Target = MachineState> {
 
         match_untyped_arena_ptr!(ptr,
              (ArenaHeaderTag::Integer, int_ptr) => {
-                 Self::unify_big_num(self, int_ptr, value);
+                 Self::unify_big_integer(self, int_ptr, value);
              }
              (ArenaHeaderTag::Rational, rat_ptr) => {
-                 Self::unify_big_num(self, rat_ptr, value);
+                 Self::unify_big_rational(self, rat_ptr, value);
              }
              (ArenaHeaderTag::Stream, stream) => {
                  read_heap_cell!(value,

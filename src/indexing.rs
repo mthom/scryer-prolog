@@ -1122,12 +1122,11 @@ pub(crate) fn constant_key_alternatives(
         }
         */
         Literal::Integer(ref n) => {
-            if let Some(n) = n.to_isize() {
-                Fixnum::build_with_checked(n as i64)
-                    .map(|n| {
-                        constants.push(Literal::Fixnum(n));
-                    })
-                    .unwrap();
+            let result = (&**n).try_into();
+            if let Ok(value) = result {
+                Fixnum::build_with_checked(value).map(|n| {
+                    constants.push(Literal::Fixnum(n));
+                }).unwrap();
             }
         }
         _ => {}

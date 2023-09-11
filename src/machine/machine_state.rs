@@ -885,8 +885,10 @@ impl MachineState {
                         }
                     }
                     Ok(Number::Integer(n)) => {
-                        if let Some(n) = n.to_usize() {
-                            printer.max_depth = n;
+                        let result = (&*n).try_into();
+
+                        if let Ok(value) = result {
+                            printer.max_depth = value;
                         } else {
                             self.fail = true;
                             return Ok(None);

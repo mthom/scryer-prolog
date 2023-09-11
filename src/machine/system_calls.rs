@@ -1,8 +1,10 @@
 use crate::parser::ast::*;
 use crate::parser::parser::*;
 
+use dashu::integer::Sign;
 use dashu::integer::UBig;
 use lazy_static::lazy_static;
+use num_order::NumOrd;
 
 use crate::arena::*;
 use crate::atom_table::*;
@@ -759,7 +761,11 @@ impl MachineState {
 
             let max_steps_n = match max_steps {
                 Ok(Number::Fixnum(n)) => Some(n.get_num()),
-                Ok(Number::Integer(n)) => n.to_i64(),
+                Ok(Number::Integer(n)) => {
+                    let value: i64 = (&*n).try_into().unwrap();
+
+                    Some(value)
+                },
                 _ => None,
             };
 
@@ -1119,7 +1125,8 @@ impl MachineState {
                     _ => {}
                 },
                 Ok(Number::Integer(n)) => {
-                    if let Some(c) = n.to_u32().and_then(std::char::from_u32) {
+                    let n: u32 = (&*n).try_into().unwrap();
+                    if let Some(c) = std::char::from_u32(n) {
                         string.push(c);
                         continue;
                     }
@@ -1782,7 +1789,10 @@ impl Machine {
         let reg = self.deref_register(2);
         let n = match Number::try_from(reg) {
             Ok(Number::Fixnum(n)) => usize::try_from(n.get_num()).ok(),
-            Ok(Number::Integer(n)) => n.to_usize(),
+            Ok(Number::Integer(n)) => {
+                let value: usize = (&*n).try_into().unwrap();
+                Some(value)
+            },
             _ => {
                 unreachable!()
             }
@@ -2530,8 +2540,9 @@ impl Machine {
             addr if addr.is_var() => addr,
             addr => match Number::try_from(addr) {
                 Ok(Number::Integer(n)) => {
-                    if let Some(nb) = n.to_u8() {
-                        fixnum_as_cell!(Fixnum::build_with(nb as i64))
+                    let result: Result<u8, _> = (&*n).try_into();
+                    if let Ok(value) = result {
+                        fixnum_as_cell!(Fixnum::build_with(value as i64))
                     } else {
                         let err = self.machine_st.type_error(ValidType::InByte, addr);
                         return Err(self.machine_st.error_form(err, stub_gen()));
@@ -2725,9 +2736,9 @@ impl Machine {
             _ => {
                 match Number::try_from(a2) {
                     Ok(Number::Integer(n)) => {
-                        let n = n
-                            .to_u32()
-                            .and_then(|n| std::char::from_u32(n).and_then(|_| Some(n)));
+                        let n: u32 = (&*n).try_into().unwrap();
+
+                        let n = std::char::from_u32(n).and_then(|_| Some(n));
 
                         if let Some(n) = n {
                             fixnum_as_cell!(Fixnum::build_with(n as i64))
@@ -2901,7 +2912,9 @@ impl Machine {
             _ => {
                 match Number::try_from(a2) {
                     Ok(Number::Integer(n)) => {
-                        let c = match n.to_u32().and_then(std::char::from_u32) {
+                        let n: u32 = (&*n).try_into().unwrap();
+                        let n = std::char::from_u32(n);
+                        let c = match n {
                             Some(c) => c,
                             _ => {
                                 let err = self.machine_st.representation_error(RepFlag::CharacterCode);
@@ -3136,7 +3149,9 @@ impl Machine {
         } else {
             match Number::try_from(addr) {
                 Ok(Number::Integer(n)) => {
-                    if let Some(c) = n.to_u32().and_then(|c| char::try_from(c).ok()) {
+                    let n: u32 = (&*n).try_into().unwrap();
+                    let n = char::try_from(n);
+                    if let Some(c) = n.ok() {
                         write!(&mut stream, "{}", c).unwrap();
                         return Ok(());
                     }
@@ -3279,17 +3294,21 @@ impl Machine {
         } else {
             match Number::try_from(addr) {
                 Ok(Number::Integer(n)) => {
-                    if let Some(nb) = n.to_u8() {
-                        match stream.write(&mut [nb]) {
-                            Ok(1) => {
-                                return Ok(());
-                            }
-                            _ => {
-                                let err = self.machine_st.existence_error(ExistenceError::Stream(
-                                    stream_as_cell!(stream),
-                                ));
+                    let n: u8 = (&*n).try_into().unwrap();
+                    
+                    match n {
+                        nb => {
+                            match stream.write(&mut [nb]) {
+                                Ok(1) => {
+                                    return Ok(());
+                                }
+                                _ => {
+                                    let err = self.machine_st.existence_error(
+                                        ExistenceError::Stream(stream_as_cell!(stream))
+                                    );
 
-                                return Err(self.machine_st.error_form(err, stub_gen()));
+                                    return Err(self.machine_st.error_form(err, stub_gen()));
+                                }
                             }
                         }
                     }
@@ -3359,15 +3378,17 @@ impl Machine {
             addr
         } else {
             match Number::try_from(addr) {
-                Ok(Number::Integer(ref n)) if **n == -1_i64 => {
+                Ok(Number::Integer(ref n)) if (**n).num_eq(&1_i64) => {
                     fixnum_as_cell!(Fixnum::build_with(-1))
                 }
                 Ok(Number::Fixnum(n)) if n.get_num() == -1_i64 => {
                     fixnum_as_cell!(Fixnum::build_with(-1))
                 }
                 Ok(Number::Integer(n)) => {
-                    if let Some(nb) = n.to_u8() {
-                        fixnum_as_cell!(Fixnum::build_with(nb as i64))
+                    let n: Result<u8, _> = (&*n).try_into();
+
+                    if let Ok(value) = n {
+                        fixnum_as_cell!(Fixnum::build_with(value as i64))
                     } else {
                         let err = self.machine_st.type_error(ValidType::InByte, addr);
                         return Err(self.machine_st.error_form(err, stub_gen()));
@@ -3519,8 +3540,10 @@ impl Machine {
 
         let num = match Number::try_from(self.deref_register(2)) {
             Ok(Number::Fixnum(n)) => usize::try_from(n.get_num()).unwrap(),
-            Ok(Number::Integer(n)) => match n.to_usize() {
-                Some(u) => u,
+            Ok(Number::Integer(n)) => match (&*n).try_into() as Result<usize, _> {
+                Ok(u) => {
+                    u
+                }
                 _ => {
                     self.machine_st.fail = true;
                     return Ok(());
@@ -3613,7 +3636,8 @@ impl Machine {
         } else {
             match Number::try_from(addr) {
                 Ok(Number::Integer(n)) => {
-                    let n = n.to_u32().and_then(|n| std::char::from_u32(n));
+                    let n: u32 = (&*n).try_into().unwrap();
+                    let n = std::char::from_u32(n);
 
                     if let Some(n) = n {
                         fixnum_as_cell!(Fixnum::build_with(n as i64))
@@ -3965,7 +3989,10 @@ impl Machine {
 
             let arity = match Number::try_from(arity) {
                 Ok(Number::Fixnum(n)) => Some(n.get_num() as usize),
-                Ok(Number::Integer(n)) => n.to_usize(),
+                Ok(Number::Integer(n)) => {
+                    let value: usize = (&*n).try_into().unwrap();
+                    Some(value)
+                },
                 _ => None,
             };
 
@@ -4316,9 +4343,9 @@ impl Machine {
 
         let n = match Number::try_from(len) {
             Ok(Number::Fixnum(n)) => n.get_num() as usize,
-            Ok(Number::Integer(n)) => match n.to_usize() {
-                Some(n) => n,
-                None => {
+            Ok(Number::Integer(n)) => match (&*n).try_into() as Result<usize, _> {
+                Ok(n) => n,
+                Err(_) => {
                     let err = self.machine_st.resource_error(len);
                     return Err(self.machine_st.error_form(err, stub_gen()));
                 }
@@ -4628,24 +4655,24 @@ impl Machine {
     #[cfg(feature = "http")]
     #[inline(always)]
     pub(crate) fn http_answer(&mut self) -> CallResult {
-        let culprit = self.deref_register(1);
-        let status_code = self.deref_register(2);
-        let status_code: u16 = match Number::try_from(status_code) {
-            Ok(Number::Fixnum(n)) => n.get_num() as u16,
-            Ok(Number::Integer(n)) => match n.to_u16() {
-                Some(u) => u,
-                _ => {
-                    self.machine_st.fail = true;
-                    return Ok(());
-                }
-            },
-            _ => unreachable!(),
-        };
-        let stub_gen = || functor_stub(atom!("http_listen"), 2);
-        let headers = match self
-            .machine_st
-            .try_from_list(self.machine_st.registers[3], stub_gen)
-        {
+	let culprit = self.deref_register(1);
+	let status_code = self.deref_register(2);
+	let status_code: u16 = match Number::try_from(status_code) {
+	    Ok(Number::Fixnum(n)) => n.get_num() as u16,
+	    Ok(Number::Integer(n)) => {
+            let n: Result<u16, _> = (&*n).try_into();
+            
+            if let Ok(value) = n {
+                value
+            } else {
+                self.machine_st.fail = true;
+                return Ok(());
+            }
+        }
+	    _ => unreachable!()
+	};
+	let stub_gen = || functor_stub(atom!("http_listen"), 2);
+	let headers = match self.machine_st.try_from_list(self.machine_st.registers[3], stub_gen) {
             Ok(addrs) => {
                 let mut header_map = HeaderMap::new();
                 for heap_cell in addrs {
@@ -4937,7 +4964,10 @@ impl Machine {
         let specifier = cell_as_atom_cell!(self.deref_register(2)).get_name();
 
         let priority = match Number::try_from(priority) {
-            Ok(Number::Integer(n)) => n.to_u16().unwrap(),
+            Ok(Number::Integer(n)) => {
+                let n: u16 = (&*n).try_into().unwrap();
+                n
+            },
             Ok(Number::Fixnum(n)) => u16::try_from(n.get_num()).unwrap(),
             _ => {
                 unreachable!();
@@ -5094,7 +5124,10 @@ impl Machine {
         let addr = self.deref_register(1);
 
         let b = match Number::try_from(addr) {
-            Ok(Number::Integer(n)) => n.to_usize(),
+            Ok(Number::Integer(n)) => {
+                let value: usize = (&*n).try_into().unwrap();
+                Some(value)
+            },
             Ok(Number::Fixnum(n)) => usize::try_from(n.get_num()).ok(),
             _ => {
                 self.machine_st.fail = true;
@@ -5477,12 +5510,16 @@ impl Machine {
 
         let code = match Number::try_from(code) {
             Ok(Number::Fixnum(n)) => u8::try_from(n.get_num()).unwrap(),
-            Ok(Number::Integer(n)) => n.to_u8().unwrap(),
+            Ok(Number::Integer(n)) => {
+                let n: u8 = (&*n).try_into().unwrap();
+                n
+            },
             Ok(Number::Rational(r)) => {
                 // n has already been confirmed as an integer, and
                 // internally, Rational is assumed reduced, so its
                 // denominator must be 1.
-                r.numerator().to_u8().unwrap()
+                let r = r.numerator().try_into().unwrap();
+                r
             }
             _ => {
                 unreachable!()
@@ -5512,7 +5549,10 @@ impl Machine {
 
         let n = match Number::try_from(a2) {
             Ok(Number::Fixnum(bp)) => bp.get_num() as usize,
-            Ok(Number::Integer(n)) => n.to_usize().unwrap(),
+            Ok(Number::Integer(n)) => {
+                let value: usize = (&*n).try_into().unwrap();
+                value
+            },
             _ => {
                 let stub = functor_stub(atom!("call_with_inference_limit"), 3);
 
@@ -5525,8 +5565,9 @@ impl Machine {
         let a3 = self.deref_register(3);
         let count = self.machine_st.cwil.add_limit(n, bp);
 
-        if let Some(count) = count.to_i64() {
-            self.machine_st.unify_fixnum(Fixnum::build_with(count), a3);
+        let result = count.try_into();
+        if let Ok(value) = result{
+            self.machine_st.unify_fixnum(Fixnum::build_with(value), a3);
         } else {
             let count = arena_alloc!(count.clone(), &mut self.machine_st.arena);
             self.machine_st.unify_big_int(count, a3);
@@ -5553,8 +5594,10 @@ impl Machine {
         let arity = match Number::try_from(a3) {
             Ok(Number::Fixnum(n)) => n.get_num() as usize,
             Ok(Number::Integer(n)) => {
-                if let Some(n) = n.to_usize() {
-                    n
+                let result = (&*n).try_into();
+
+                if let Ok(value) = result {
+                    value
                 } else {
                     return false;
                 }
@@ -5677,8 +5720,9 @@ impl Machine {
 
         let count = self.machine_st.cwil.remove_limit(bp).clone();
 
-        if let Some(count) = count.to_i64() {
-            self.machine_st.unify_fixnum(Fixnum::build_with(count), a2);
+        let result = count.clone().try_into();
+        if let Ok(value) = result{
+            self.machine_st.unify_fixnum(Fixnum::build_with(value), a2);
         } else {
             let count = arena_alloc!(count.clone(), &mut self.machine_st.arena);
             self.machine_st.unify_big_int(count, a2);
@@ -6222,14 +6266,17 @@ impl Machine {
 
         match Number::try_from(seed) {
             Ok(Number::Fixnum(n)) => {
-                let _: StdRng = SeedableRng::seed_from_u64(Integer::from(n).to_u64().unwrap());
-            }
+                let n: u64 = Integer::from(n).try_into().unwrap();
+                let _: StdRng = SeedableRng::seed_from_u64(n);
+            },
             Ok(Number::Integer(n)) => {
-                let _: StdRng = SeedableRng::seed_from_u64(n.to_u64().unwrap());
-            }
+                let n: u64 = (&*n).try_into().unwrap();
+                let _: StdRng = SeedableRng::seed_from_u64(n);
+            },
             Ok(Number::Rational(n)) => {
                 if n.denominator() == &UBig::from(1 as u32) {
-                    let _: StdRng = SeedableRng::seed_from_u64(n.numerator().to_u64().unwrap());
+                    let n: u64 = n.numerator().try_into().unwrap();
+                    let _: StdRng = SeedableRng::seed_from_u64(n);
                 }
             }
             _ => {
@@ -6664,7 +6711,8 @@ impl Machine {
         let position = match Number::try_from(position) {
             Ok(Number::Fixnum(n)) => n.get_num() as u64,
             Ok(Number::Integer(n)) => {
-                if let Some(n) = n.to_u64() {
+                let n: Result<u64, _> = (&*n).try_into();
+                if let Ok(n) = n {
                     n
                 } else {
                     self.machine_st.fail = true;
@@ -6947,7 +6995,10 @@ impl Machine {
 
         let arity = match Number::try_from(arity) {
             Ok(Number::Fixnum(n)) => n.get_num() as usize,
-            Ok(Number::Integer(n)) => n.to_usize().unwrap(),
+            Ok(Number::Integer(n)) => {
+                let value: usize = (&*n).try_into().unwrap();
+                value
+            },
             _ => {
                 unreachable!()
             }
@@ -7000,7 +7051,10 @@ impl Machine {
         let index_ptr = self.deref_register(1);
         let index_ptr = match Number::try_from(index_ptr) {
             Ok(Number::Fixnum(n)) => n.get_num() as usize,
-            Ok(Number::Integer(n)) => n.to_usize().unwrap(),
+            Ok(Number::Integer(n)) => {
+                let value: usize = (&*n).try_into().unwrap();
+                value
+            },
             _ => {
                 unreachable!()
             }
@@ -7287,8 +7341,8 @@ impl Machine {
 
         let length = match Number::try_from(length) {
             Ok(Number::Fixnum(n)) => usize::try_from(n.get_num()).unwrap(),
-            Ok(Number::Integer(n)) => match n.to_usize() {
-                Some(u) => u,
+            Ok(Number::Integer(n)) => match (&*n).try_into() as Result<usize, _> {
+                Ok(u) => u,
                 _ => {
                     self.machine_st.fail = true;
                     return;
@@ -7351,11 +7405,14 @@ impl Machine {
 
         let iterations = match Number::try_from(iterations) {
             Ok(Number::Fixnum(n)) => u64::try_from(n.get_num()).unwrap(),
-            Ok(Number::Integer(n)) => match n.to_u64() {
-                Some(i) => i,
-                None => {
-                    self.machine_st.fail = true;
-                    return;
+            Ok(Number::Integer(n)) => {
+                let n: Result<u64, _> = (&*n).try_into(); 
+                match n {
+                    Ok(i) => i,
+                    _ => {
+                        self.machine_st.fail = true;
+                        return;
+                    }
                 }
             },
             _ => {
@@ -7991,7 +8048,10 @@ impl Machine {
                 Number::Fixnum(Fixnum::build_with(n.get_num().count_ones() as i64))
             }
             Ok(Number::Integer(n)) => {
-                Number::arena_from(n.count_ones(), &mut self.machine_st.arena)
+                let value: usize = if n.sign() == Sign::Positive {
+                    UBig::from((&*n).clone().into_parts().1).count_ones()
+                } else { 0 };
+                Number::arena_from(value, &mut self.machine_st.arena)
             }
             _ => {
                 unreachable!()

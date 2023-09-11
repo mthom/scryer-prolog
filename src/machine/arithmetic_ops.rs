@@ -1,7 +1,9 @@
 use dashu::base::Abs;
+use dashu::base::DivRem;
 use dashu::base::Gcd;
 use dashu::integer::IBig;
 use divrem::*;
+use num_order::NumOrd;
 
 use crate::arena::*;
 use crate::arithmetic::*;
@@ -454,14 +456,14 @@ pub(crate) fn max(n1: Number, n2: Number) -> Result<Number, MachineStubGen> {
             }
         }
         (Number::Fixnum(n1), Number::Integer(n2)) => {
-            if &*n2 > &n1.get_num() {
+            if (&*n2).num_gt(&n1.get_num()) {
                 Ok(Number::Integer(n2))
             } else {
                 Ok(Number::Fixnum(n1))
             }
         }
         (Number::Integer(n1), Number::Fixnum(n2)) => {
-            if &*n1 > &n2.get_num() {
+            if (&*n1).num_gt(&n2.get_num()) {
                 Ok(Number::Integer(n1))
             } else {
                 Ok(Number::Fixnum(n2))
@@ -498,14 +500,14 @@ pub(crate) fn min(n1: Number, n2: Number) -> Result<Number, MachineStubGen> {
             }
         }
         (Number::Fixnum(n1), Number::Integer(n2)) => {
-            if &*n2 < &n1.get_num() {
+            if (&*n2).num_lt(&n1.get_num()) {
                 Ok(Number::Integer(n2))
             } else {
                 Ok(Number::Fixnum(n1))
             }
         }
         (Number::Integer(n1), Number::Fixnum(n2)) => {
-            if &*n1 < &n2.get_num() {
+            if (&*n1).num_lt(&n2.get_num()) {
                 Ok(Number::Integer(n1))
             } else {
                 Ok(Number::Fixnum(n2))
@@ -560,7 +562,7 @@ pub(crate) fn rdiv(
     r1: TypedArenaPtr<Rational>,
     r2: TypedArenaPtr<Rational>,
 ) -> Result<Rational, MachineStubGen> {
-    if &*r2 == &0 {
+    if &*r2 == &Rational::from(0) {
         let stub_gen = || {
             let rdiv_atom = atom!("rdiv");
             functor_stub(rdiv_atom, 2)
@@ -594,7 +596,7 @@ pub(crate) fn idiv(n1: Number, n2: Number, arena: &mut Arena) -> Result<Number, 
             }
         }
         (Number::Fixnum(n1), Number::Integer(n2)) => {
-            if &*n2 == &0 {
+            if (&*n2).num_eq(&0) {
                 Err(zero_divisor_eval_error(stub_gen))
             } else {
                 Ok(Number::arena_from(Integer::from(n1) / &*n2, arena))
@@ -608,11 +610,11 @@ pub(crate) fn idiv(n1: Number, n2: Number, arena: &mut Arena) -> Result<Number, 
             }
         }
         (Number::Integer(n1), Number::Integer(n2)) => {
-            if &*n2 == &0 {
+            if (&*n2).num_eq(&0) {
                 Err(zero_divisor_eval_error(stub_gen))
             } else {
                 Ok(Number::arena_from(
-                    <(Integer, Integer)>::from(n1.div_rem_floor_ref(&*n2)).0,
+                    <(Integer, Integer)>::from((&*n1).div_rem(&*n2)).0,
                     arena,
                 ))
             }
@@ -666,9 +668,15 @@ pub(crate) fn shr(n1: Number, n2: Number, arena: &mut Arena) -> Result<Number, M
         (Number::Fixnum(n1), Number::Integer(n2)) => {
             let n1 = Integer::from(n1.get_num());
 
-            match n2.to_usize() {
-                Some(n2) => Ok(Number::arena_from(n1 >> n2, arena)),
-                _ => Ok(Number::arena_from(n1 >> usize::max_value(), arena)),
+            let result: Result<usize, _> = (&*n2).try_into();
+
+            match result {
+                Ok(n2) => {
+                    Ok(Number::arena_from(n1 >> n2, arena))
+                }
+                Err(_) => {
+                    Ok(Number::arena_from(n1 >> usize::max_value(), arena))
+                }
             }
         }
         (Number::Integer(n1), Number::Fixnum(n2)) => match usize::try_from(n2.get_num()) {
@@ -678,12 +686,17 @@ pub(crate) fn shr(n1: Number, n2: Number, arena: &mut Arena) -> Result<Number, M
                 arena,
             )),
         },
-        (Number::Integer(n1), Number::Integer(n2)) => match n2.to_usize() {
-            Some(n2) => Ok(Number::arena_from(Integer::from(&*n1 >> n2), arena)),
-            _ => Ok(Number::arena_from(
-                Integer::from(&*n1 >> usize::max_value()),
-                arena,
-            )),
+        (Number::Integer(n1), Number::Integer(n2)) => {
+            let result: Result<usize, _> = (&*n2).try_into();
+
+            match result {
+                Ok(n2) => {
+                    Ok(Number::arena_from(Integer::from(&*n1 >> n2), arena))
+                }
+                Err(_) => {
+                    Ok(Number::arena_from(Integer::from(&*n1 >> usize::max_value()), arena))
+                }
+            }
         },
         (Number::Integer(_), n2) => Err(numerical_type_error(ValidType::Integer, n2, stub_gen)),
         (Number::Fixnum(_), n2) => Err(numerical_type_error(ValidType::Integer, n2, stub_gen)),
@@ -717,9 +730,14 @@ pub(crate) fn shl(n1: Number, n2: Number, arena: &mut Arena) -> Result<Number, M
         (Number::Fixnum(n1), Number::Integer(n2)) => {
             let n1 = Integer::from(n1.get_num());
 
-            match n2.to_u32() {
-                Some(n2) => Ok(Number::arena_from(n1.to_u64().unwrap() << n2, arena)),
-                _ => Ok(Number::arena_from(n1 << usize::max_value(), arena)),
+            match (&*n2).try_into() as Result<u32, _> {
+                Ok(n2) => {
+                    let n1: u64 = n1.try_into().unwrap();
+                    Ok(Number::arena_from(n1 << n2, arena))
+                },
+                _ => {
+			        Ok(Number::arena_from(n1 << usize::max_value(), arena))
+		        }
             }
         }
         (Number::Integer(n1), Number::Fixnum(n2)) => match usize::try_from(n2.get_num()) {
@@ -729,15 +747,14 @@ pub(crate) fn shl(n1: Number, n2: Number, arena: &mut Arena) -> Result<Number, M
                 arena,
             )),
         },
-        (Number::Integer(n1), Number::Integer(n2)) => match n2.to_u32() {
-            Some(n2) => Ok(Number::arena_from(
-                Integer::from(n1.to_u64().unwrap() << n2),
-                arena,
-            )),
-            _ => Ok(Number::arena_from(
-                Integer::from(&*n1 << usize::max_value()),
-                arena,
-            )),
+        (Number::Integer(n1), Number::Integer(n2)) => match (&*n2).try_into() as Result<u32, _> {
+            Ok(n2) => {
+                let n1: u64 = (&*n1).try_into().unwrap();
+                Ok(Number::arena_from(Integer::from(n1 << n2), arena))
+            },
+            _ => {
+		        Ok(Number::arena_from(Integer::from(&*n1 << usize::max_value()),arena))
+	        }
         },
         (Number::Integer(_), n2) => Err(numerical_type_error(ValidType::Integer, n2, stub_gen)),
         (Number::Fixnum(_), n2) => Err(numerical_type_error(ValidType::Integer, n2, stub_gen)),
@@ -848,12 +865,12 @@ pub(crate) fn modulus(x: Number, y: Number, arena: &mut Arena) -> Result<Number,
             }
         }
         (Number::Fixnum(n1), Number::Integer(n2)) => {
-            if &*n2 == &0 {
+            if (&*n2).num_eq(&0) {
                 Err(zero_divisor_eval_error(stub_gen))
             } else {
                 let n1 = Integer::from(n1.get_num());
                 Ok(Number::arena_from(
-                    <(Integer, Integer)>::from(n1.div_rem_floor_ref(&*n2)).1,
+                    <(Integer, Integer)>::from(n1.div_rem(&*n2)).1,
                     arena,
                 ))
             }
@@ -866,17 +883,17 @@ pub(crate) fn modulus(x: Number, y: Number, arena: &mut Arena) -> Result<Number,
             } else {
                 let n2 = Integer::from(n2_i);
                 Ok(Number::arena_from(
-                    <(Integer, Integer)>::from(n1.div_rem_floor_ref(&n2)).1,
+                    <(Integer, Integer)>::from((&*n1).div_rem(&n2)).1,
                     arena,
                 ))
             }
         }
         (Number::Integer(x), Number::Integer(y)) => {
-            if &*y == &0 {
+            if (&*y).num_eq(&0) {
                 Err(zero_divisor_eval_error(stub_gen))
             } else {
                 Ok(Number::arena_from(
-                    <(Integer, Integer)>::from(x.div_rem_floor_ref(&*y)).1,
+                    <(Integer, Integer)>::from((&*x).div_rem(&*y)).1,
                     arena,
                 ))
             }
@@ -906,7 +923,7 @@ pub(crate) fn remainder(x: Number, y: Number, arena: &mut Arena) -> Result<Numbe
             }
         }
         (Number::Fixnum(n1), Number::Integer(n2)) => {
-            if &*n2 == &0 {
+            if (&*n2).num_eq(&0) {
                 Err(zero_divisor_eval_error(stub_gen))
             } else {
                 let n1 = Integer::from(n1.get_num());
@@ -924,7 +941,7 @@ pub(crate) fn remainder(x: Number, y: Number, arena: &mut Arena) -> Result<Numbe
             }
         }
         (Number::Integer(n1), Number::Integer(n2)) => {
-            if &*n2 == &0 {
+            if (&*n2).num_eq(&0) {
                 Err(zero_divisor_eval_error(stub_gen))
             } else {
                 Ok(Number::arena_from(Integer::from(&*n1 % &*n2), arena))
@@ -962,10 +979,8 @@ pub(crate) fn gcd(n1: Number, n2: Number, arena: &mut Arena) -> Result<Number, M
         }
         (Number::Integer(n1), Number::Integer(n2)) => {
             let n1_clone: Integer = (*n1).clone();
-            Ok(Number::arena_from(
-                Integer::from(n1_clone.gcd(&Integer::from(n2.to_isize().unwrap()))) as IBig,
-                arena,
-            ))
+            let n2: isize = (&*n2).try_into().unwrap();
+            Ok(Number::arena_from(Integer::from(n1_clone.gcd(&Integer::from(n2))) as IBig, arena))
         }
         (Number::Float(f), _) | (_, Number::Float(f)) => {
             let n = Number::Float(f);
