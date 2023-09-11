@@ -872,37 +872,6 @@ impl MachineState {
         );
     }
 
-    pub(crate) fn get_next_db_ref(&self, indices: &IndexStore, db_ref: &DBRef) -> Option<DBRef> {
-        match db_ref {
-            DBRef::NamedPred(name, arity) => {
-                let key = (*name, *arity);
-
-                if let Some((last_idx, _, _)) = indices.code_dir.get_full(&key) {
-                    for idx in last_idx + 1..indices.code_dir.len() {
-                        let ((name, arity), idx) = indices.code_dir.get_index(idx).unwrap();
-
-                        if idx.is_undefined() {
-                            return None;
-                        }
-
-                        return Some(DBRef::NamedPred(*name, *arity));
-                    }
-                }
-            }
-            DBRef::Op(name, fixity, op_dir) => {
-                let key = (*name, *fixity);
-
-                if let Some((last_idx, _, _)) = op_dir.get_full(&key) {
-                    if let Some(((name, fixity), _)) = op_dir.get_index(last_idx + 1) {
-                        return Some(DBRef::Op(*name, *fixity, *op_dir));
-                    }
-                }
-            }
-        }
-
-        None
-    }
-
     pub(crate) fn parse_number_from_string(
         &mut self,
         string: &str,
@@ -4059,10 +4028,51 @@ impl Machine {
     pub(crate) fn get_next_op_db_ref(&mut self) {
         let prec = self.deref_register(1);
 
-        if let Some(prec_var) = prec.as_var() {
+        fn get_spec(op_spec: u8) -> Atom {
+            match op_spec as u32 {
+                XFX => atom!("xfx"),
+                XFY => atom!("xfy"),
+                YFX => atom!("yfx"),
+                FX => atom!("fx"),
+                FY => atom!("fy"),
+                XF => atom!("xf"),
+                YF => atom!("yf"),
+                _ => unreachable!(),
+            }
+        }
+
+        let h = self.machine_st.heap.len();
+
+        fn write_op_functors_to_heap(
+            heap: &mut Heap,
+            op_descs: impl Iterator<Item = (Atom, OpDesc)>,
+        ) -> usize {
+            let mut num_functors = 0;
+
+            for (name, op_desc) in op_descs {
+                let prec = op_desc.get_prec();
+
+                if prec == 0 {
+                    // 8.14.4, note 2
+                    continue;
+                }
+
+                let spec_atom = get_spec(op_desc.get_spec());
+
+                heap.extend(functor!(
+                    atom!("op"),
+                    [fixnum(prec), cell(atom_as_cell!(spec_atom)), cell(atom_as_cell!(name))]
+                ));
+
+                num_functors += 1;
+            }
+
+            num_functors
+        }
+
+        if prec.is_var() {
             let spec = self.deref_register(2);
-            let op = self.deref_register(3);
-            let orig_op = self.deref_register(7);
+            let orig_op = self.deref_register(3);
 
             let spec_num = if spec.get_tag() == HeapCellValueTag::Atom {
                 (match cell_as_atom!(spec) {
@@ -4078,7 +4088,7 @@ impl Machine {
                 0
             };
 
-            let unossified_op_dir = if !orig_op.is_var() {
+            let num_functors = if !orig_op.is_var() {
                 let orig_op = read_heap_cell!(orig_op,
                     (HeapCellValueTag::Atom, (name, _arity)) => {
                         name
@@ -4095,146 +4105,79 @@ impl Machine {
                 );
 
                 let op_descs = [
-                    self.indices.op_dir.get_key_value(&(orig_op, Fixity::In)),
-                    self.indices.op_dir.get_key_value(&(orig_op, Fixity::Pre)),
-                    self.indices.op_dir.get_key_value(&(orig_op, Fixity::Post)),
+                    self.indices.op_dir.get(&(orig_op, Fixity::In)),
+                    self.indices.op_dir.get(&(orig_op, Fixity::Pre)),
+                    self.indices.op_dir.get(&(orig_op, Fixity::Post)),
                 ];
 
                 let number_of_keys = op_descs[0].is_some() as usize
                     + op_descs[1].is_some() as usize
                     + op_descs[2].is_some() as usize;
 
-                match number_of_keys {
-                    0 => {
-                        self.machine_st.fail = true;
-                        return;
-                    }
-                    1 => {
-                        for op_desc in op_descs {
-                            if let Some((_, op_desc)) = op_desc {
-                                let (op_prec, op_spec) = (op_desc.get_prec(), op_desc.get_spec());
+                let op_descs = op_descs.into_iter().filter_map(|op_desc| {
+                    op_desc.map(|op_desc| (orig_op, *op_desc))
+                });
 
-                                if op_prec == 0 {
-                                    // 8.14.4, note 2
-                                    self.machine_st.fail = true;
-                                    return;
-                                }
+                if number_of_keys == 0 {
+                    self.machine_st.fail = true;
+                } else {
+                    let num_functors = write_op_functors_to_heap(
+                        &mut self.machine_st.heap,
+                        op_descs,
+                    );
 
-                                let op_spec = match op_spec as u32 {
-                                    XFX => atom!("xfx"),
-                                    XFY => atom!("xfy"),
-                                    YFX => atom!("yfx"),
-                                    FX => atom!("fx"),
-                                    FY => atom!("fy"),
-                                    XF => atom!("xf"),
-                                    YF => atom!("yf"),
-                                    _ => unreachable!(),
-                                };
+                    let h = iter_to_heap_list(
+                        &mut self.machine_st.heap,
+                        (0..num_functors).map(|i| str_loc_as_cell!(h + 4 * i)),
+                    );
 
-                                let op_prec = Fixnum::build_with(op_prec as i64);
-
-                                self.machine_st.unify_fixnum(op_prec, prec);
-                                self.machine_st.unify_atom(op_spec, spec);
-                            }
-                        }
-
-                        return;
-                    }
-                    _ => {
-                        let mut unossified_op_dir = OssifiedOpDir::new();
-
-                        for op_desc in op_descs {
-                            if let Some((key, op_desc)) = op_desc {
-                                let (prec, spec) = (op_desc.get_prec(), op_desc.get_spec());
-
-                                if prec == 0 {
-                                    // 8.14.4, note 2
-                                    continue;
-                                }
-
-                                unossified_op_dir.insert(*key, (prec as usize, spec as Specifier));
-                            }
-                        }
-
-                        unossified_op_dir
-                    }
+                    unify!(
+                        self.machine_st,
+                        heap_loc_as_cell!(h),
+                        self.machine_st.registers[4]
+                    );
                 }
+
+                return;
             } else {
-                let mut unossified_op_dir = OssifiedOpDir::new();
+                let op_descs = self.indices.op_dir.iter().filter_map(|(key, op_desc)| {
+                    let (other_prec, other_spec) = (op_desc.get_prec(), op_desc.get_spec());
+                    let name = key.0;
 
-                unossified_op_dir.extend(self.indices.op_dir.iter().filter_map(
-                    |(key, op_desc)| {
-                        let (other_prec, other_spec) = (op_desc.get_prec(), op_desc.get_spec());
-                        let name = key.0;
+                    if other_prec == 0 {
+                        // 8.14.4, note 2
+                        return None;
+                    }
 
-                        if other_prec == 0 {
-                            // 8.14.4, note 2
-                            return None;
-                        }
+                    if (!orig_op.is_var() && atom_as_cell!(name) != orig_op)
+                        || (!spec.is_var() && other_spec != spec_num)
+                    {
+                        return None;
+                    }
 
-                        if (!orig_op.is_var() && atom_as_cell!(name) != orig_op)
-                            || (!spec.is_var() && other_spec != spec_num)
-                        {
-                            return None;
-                        }
+                    Some((key.0, *op_desc))
+                });
 
-                        Some((*key, (other_prec as usize, other_spec as Specifier)))
-                    },
-                ));
-
-                unossified_op_dir
+                write_op_functors_to_heap(&mut self.machine_st.heap, op_descs)
             };
 
-            let ossified_op_dir = arena_alloc!(unossified_op_dir, &mut self.machine_st.arena);
+            if num_functors > 0 {
+                let h = iter_to_heap_list(
+                    &mut self.machine_st.heap,
+                    (0..num_functors).map(|i| str_loc_as_cell!(h + 4 * i)),
+                );
 
-            match ossified_op_dir.iter().next() {
-                Some(((op_atom, _), (op_prec, op_spec))) => {
-                    let ossified_op_dir_var = self.deref_register(4).as_var().unwrap();
-
-                    let spec_atom = match *op_spec {
-                        FX => atom!("fx"),
-                        FY => atom!("fy"),
-                        XF => atom!("xf"),
-                        YF => atom!("yf"),
-                        XFX => atom!("xfx"),
-                        XFY => atom!("xfy"),
-                        YFX => atom!("yfx"),
-                        _ => {
-                            self.machine_st.fail = true;
-                            return;
-                        }
-                    };
-
-                    let spec_var = spec.as_var().unwrap();
-                    let op_var = op.as_var().unwrap();
-
-                    self.machine_st.bind(
-                        prec_var,
-                        fixnum_as_cell!(Fixnum::build_with(*op_prec as i64)),
-                    );
-                    self.machine_st.bind(spec_var, atom_as_cell!(spec_atom));
-                    self.machine_st.bind(op_var, atom_as_cell!(op_atom));
-                    self.machine_st.bind(
-                        ossified_op_dir_var,
-                        typed_arena_ptr_as_cell!(ossified_op_dir),
-                    );
-                }
-                None => {
-                    self.machine_st.fail = true;
-                    return;
-                }
+                unify!(
+                    self.machine_st,
+                    heap_loc_as_cell!(h),
+                    self.machine_st.registers[4]
+                );
+            } else {
+                self.machine_st.fail = true;
             }
         } else {
             let spec = cell_as_atom!(self.deref_register(2));
             let op_atom = cell_as_atom!(self.deref_register(3));
-            let ossified_op_dir_cell = self.deref_register(4);
-
-            if ossified_op_dir_cell.is_var() {
-                self.machine_st.fail = true;
-                return;
-            }
-
-            let ossified_op_dir = cell_as_ossified_op_dir!(ossified_op_dir_cell);
 
             let fixity = match spec {
                 atom!("xfy") | atom!("yfx") | atom!("xfx") => Fixity::In,
@@ -4246,51 +4189,25 @@ impl Machine {
                 }
             };
 
-            match self
-                .machine_st
-                .get_next_db_ref(&self.indices, &DBRef::Op(op_atom, fixity, ossified_op_dir))
-            {
-                Some(DBRef::Op(op_atom, fixity, ossified_op_dir)) => {
-                    let (prec, spec) = ossified_op_dir.get(&(op_atom, fixity)).unwrap();
+            match self.indices.op_dir.get(&(op_atom, fixity)).cloned() {
+                Some(op_desc) => {
+                    let num_functors = write_op_functors_to_heap(
+                        &mut self.machine_st.heap,
+                        std::iter::once((op_atom, op_desc)),
+                    );
 
-                    let prec_var = self
-                        .machine_st
-                        .deref(self.machine_st.registers[5])
-                        .as_var()
-                        .unwrap();
+                    let h = iter_to_heap_list(
+                        &mut self.machine_st.heap,
+                        (0..num_functors).map(|i| str_loc_as_cell!(h + 4 * i)),
+                    );
 
-                    let spec_var = self
-                        .machine_st
-                        .deref(self.machine_st.registers[6])
-                        .as_var()
-                        .unwrap();
-
-                    let op_var = self
-                        .machine_st
-                        .deref(self.machine_st.registers[7])
-                        .as_var()
-                        .unwrap();
-
-                    let spec_atom = match *spec {
-                        FX => atom!("fx"),
-                        FY => atom!("fy"),
-                        XF => atom!("xf"),
-                        YF => atom!("yf"),
-                        XFX => atom!("xfx"),
-                        XFY => atom!("xfy"),
-                        YFX => atom!("yfx"),
-                        _ => {
-                            self.machine_st.fail = true;
-                            return;
-                        }
-                    };
-
-                    self.machine_st
-                        .bind(prec_var, fixnum_as_cell!(Fixnum::build_with(*prec as i64)));
-                    self.machine_st.bind(spec_var, atom_as_cell!(spec_atom));
-                    self.machine_st.bind(op_var, atom_as_cell!(op_atom));
+                    unify!(
+                        self.machine_st,
+                        heap_loc_as_cell!(h),
+                        self.machine_st.registers[4]
+                    );
                 }
-                Some(DBRef::NamedPred(..)) | None => {
+                _ => {
                     self.machine_st.fail = true;
                 }
             }

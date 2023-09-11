@@ -1376,11 +1376,6 @@ current_predicate(Pred) :-
     ;  throw(error(type_error(predicate_indicator, Pred), current_predicate/1))
     ).
 
-'$iterate_op_db_refs'(RPriority, RSpec, ROp, _, RPriority, RSpec, ROp).
-'$iterate_op_db_refs'(RPriority, RSpec, ROp, OssifiedOpDir, Priority, Spec, Op) :-
-    '$get_next_op_db_ref'(RPriority, RSpec, ROp, OssifiedOpDir, RRPriority, RRSpec, RROp),
-    '$iterate_op_db_refs'(RRPriority, RRSpec, RROp, OssifiedOpDir, Priority, Spec, Op).
-
 can_be_op_priority(Priority) :- var(Priority).
 can_be_op_priority(Priority) :- op_priority(Priority).
 
@@ -1396,8 +1391,8 @@ current_op(Priority, Spec, Op) :-
     (  can_be_op_priority(Priority),
        can_be_op_specifier(Spec),
        error:can_be(atom, Op) ->
-       '$get_next_op_db_ref'(RPriority, RSpec, ROp, OssifiedOpDir, _, _, Op),
-       '$iterate_op_db_refs'(RPriority, RSpec, ROp, OssifiedOpDir, Priority, Spec, Op)
+       '$get_next_op_db_ref'(Priority, Spec, Op, ListOfOps),
+       lists:member(op(Priority, Spec, Op), ListOfOps)
     ).
 
 list_of_op_atoms(Var) :-

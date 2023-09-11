@@ -169,7 +169,6 @@ impl F64Table {
 pub enum ArenaHeaderTag {
     Integer = 0b10,
     Rational = 0b11,
-    OssifiedOpDir = 0b0000100,
     LiveLoadState = 0b0001000,
     InactiveLoadState = 0b1011000,
     InputFileStream = 0b10000,
@@ -546,28 +545,6 @@ impl ArenaAllocated for Rational {
     }
 }
 
-impl ArenaAllocated for OssifiedOpDir {
-    type PtrToAllocated = TypedArenaPtr<OssifiedOpDir>;
-
-    #[inline]
-    fn tag() -> ArenaHeaderTag {
-        ArenaHeaderTag::OssifiedOpDir
-    }
-
-    #[inline]
-    fn size(&self) -> usize {
-        mem::size_of::<Self>()
-    }
-
-    #[inline]
-    fn copy_to_arena(self, dst: *mut Self) -> Self::PtrToAllocated {
-        unsafe {
-            ptr::write(dst, self);
-            TypedArenaPtr::new(dst as *mut Self)
-        }
-    }
-}
-
 impl ArenaAllocated for LiveLoadState {
     type PtrToAllocated = TypedArenaPtr<LiveLoadState>;
 
@@ -768,9 +745,6 @@ unsafe fn drop_slab_in_place(value: &mut AllocSlab) {
         }
         ArenaHeaderTag::ByteStream => {
             ptr::drop_in_place(value.payload_offset::<StreamLayout<CharReader<ByteStream>>>());
-        }
-        ArenaHeaderTag::OssifiedOpDir => {
-            ptr::drop_in_place(value.payload_offset::<OssifiedOpDir>());
         }
         ArenaHeaderTag::LiveLoadState | ArenaHeaderTag::InactiveLoadState => {
             ptr::drop_in_place(value.payload_offset::<LiveLoadState>());

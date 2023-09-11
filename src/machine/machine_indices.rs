@@ -21,14 +21,6 @@ use crate::types::*;
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub(crate) struct OrderedOpDirKey(pub(crate) Atom, pub(crate) Fixity);
 
-pub(crate) type OssifiedOpDir = IndexMap<(Atom, Fixity), (usize, Specifier)>;
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum DBRef {
-    NamedPred(Atom, usize),
-    Op(Atom, Fixity, TypedArenaPtr<OssifiedOpDir>),
-}
-
 // 7.2
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
 pub enum TermOrderCategory {

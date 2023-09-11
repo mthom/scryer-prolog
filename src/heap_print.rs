@@ -1646,9 +1646,6 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                    (ArenaHeaderTag::Stream, stream) => {
                        self.print_stream(stream, max_depth);
                    }
-                   (ArenaHeaderTag::OssifiedOpDir, _op_dir) => {
-                       self.print_impromptu_atom(atom!("$ossified_op_dir"));
-                   }
                    (ArenaHeaderTag::Dropped, _value) => {
                        self.print_impromptu_atom(atom!("$dropped_value"));
                    }

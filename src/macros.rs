@@ -57,13 +57,6 @@ macro_rules! atom_as_cell {
     };
 }
 
-macro_rules! cell_as_ossified_op_dir {
-    ($cell:expr) => {{
-        let ptr_u64 = cell_as_untyped_arena_ptr!($cell);
-        TypedArenaPtr::new(ptr_u64.payload_offset() as *mut OssifiedOpDir)
-    }};
-}
-
 macro_rules! cell_as_string {
     ($cell:expr) => {
         PartialString::from(cell_as_atom!($cell))
