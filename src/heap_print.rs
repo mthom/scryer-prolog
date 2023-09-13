@@ -1,7 +1,9 @@
 use crate::arena::*;
 use crate::atom_table::*;
 use crate::parser::ast::*;
-use crate::parser::dashu::{Integer, Rational};
+use crate::parser::dashu::{ibig, Integer, Rational};
+use crate::parser::dashu::base::RemEuclid;
+use crate::parser::dashu::integer::Sign;
 use crate::{
     alpha_numeric_char, capital_letter_char, cut_char, decimal_digit_char, graphic_token_char,
     is_fx, is_infix, is_postfix, is_prefix, is_xf, is_xfx, is_xfy, is_yfx, semicolon_char,
@@ -18,8 +20,6 @@ use crate::machine::stack::*;
 use crate::machine::streams::*;
 use crate::types::*;
 
-use dashu::base::DivRem;
-use dashu::base::DivRemEuclid;
 use ordered_float::OrderedFloat;
 
 use indexmap::IndexMap;
@@ -515,13 +515,10 @@ pub(crate) fn numbervar(offset: &Integer, addr: HeapCellValue) -> Option<String>
             'R', 'S', 'T', 'U', 'V', 'W', 'X', 'Y', 'Z',
         ];
 
-        let n_clone: Integer = n.clone();
+        let i: usize = (&n).rem_euclid(ibig!(26)).try_into().unwrap();
+        let j = n / ibig!(26);
 
-        let i = n.div_rem_euclid(Integer::from(26)).1.to_f32().value() as usize;
-        let j = n_clone.div_rem(Integer::from(26));
-        let j = <(Integer, Integer)>::from(j).0;
-
-        if j == Integer::from(0) {
+        if j.is_zero() {
             CHAR_CODES[i].to_string()
         } else {
             format!("{}{}", CHAR_CODES[i], j)
@@ -1024,7 +1021,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
         match self.op_dir.get(&(atom!("rdiv"), Fixity::In)) {
             Some(op_desc) => {
-                if r.denominator().is_one() {
+                if r.is_int() {
                     let output_str = format!("{}", r);
 
                     push_space_if_amb!(self, &output_str, {
@@ -1367,10 +1364,10 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                     if self.numbervars && arity == 1 && name == atom!("$VAR") {
                         !self.iter.immediate_leaf_has_property(|addr| {
                             match Number::try_from(addr) {
-                                Ok(Number::Integer(n)) => &*n >= &Integer::from(0),
+                                Ok(Number::Integer(n)) => (*n).sign() == Sign::Positive,
                                 Ok(Number::Fixnum(n)) => n.get_num() >= 0,
                                 Ok(Number::Float(f)) => f >= OrderedFloat(0f64),
-                                Ok(Number::Rational(r)) => &*r >= &Rational::from(0),
+                                Ok(Number::Rational(r)) => (*r).sign() == Sign::Positive,
                                 _ => false,
                             }
                         }) && needs_bracketing(op_desc, op)

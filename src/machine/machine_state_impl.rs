@@ -16,7 +16,6 @@ use crate::parser::dashu::{Integer, Rational};
 use crate::types::*;
 
 use indexmap::IndexSet;
-use num_order::NumOrd;
 
 use std::cmp::Ordering;
 use std::convert::TryFrom;
@@ -1183,10 +1182,7 @@ impl MachineState {
 
                 let n = match n {
                     Number::Fixnum(n) => n.get_num() as usize,
-                    Number::Integer(n) if (*n).num_ge(&0) && (*n).num_le(&std::usize::MAX) => {
-                        let value: usize = (&*n).try_into().unwrap();
-                        value
-                    },
+                    Number::Integer(n) if usize::try_from(&*n).is_ok() => (&*n).try_into().unwrap(),
                     _ => {
                         self.fail = true;
                         return Ok(());

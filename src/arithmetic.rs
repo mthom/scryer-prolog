@@ -386,8 +386,7 @@ pub(crate) fn rnd_i<'a>(n: &'a Number, arena: &mut Arena) -> Number {
         &Number::Rational(ref r) => {
             let (_, floor) = (r.fract(), r.floor());
 
-            let result = floor.clone().try_into();
-            if let Ok(value) = result{
+            if let Ok(value) = (&floor).try_into() {
                 fixnum!(Number, value, arena)
             } else {
                 Number::Integer(arena_alloc!(floor, arena))
@@ -713,13 +712,13 @@ impl TryFrom<HeapCellValue> for Number {
 
 // Computes n ^ power. Ignores the sign of power.
 pub(crate) fn binary_pow(mut n: Integer, power: &Integer) -> Integer {
-    let mut power = Integer::from(power.abs());
+    let mut power = power.abs();
 
-    if power.num_eq(&0) {
-        return Integer::from(1);
+    if power.is_zero() {
+        return Integer::ONE;
     }
 
-    let mut oddand = Integer::from(1);
+    let mut oddand = Integer::ONE;
 
     while power.num_gt(&1) {
         if power.bit(0) {
