@@ -3,6 +3,7 @@ use std::collections::BTreeSet;
 use crate::machine::BREAK_FROM_DISPATCH_LOOP_LOC;
 use crate::machine::mock_wam::{CompositeOpDir, Term};
 use crate::parser::parser::{Parser, Tokens};
+use crate::read::write_term_to_heap;
 
 use super::{
     Machine, MachineConfig, QueryResult, QueryResolutionLine, 
@@ -66,12 +67,6 @@ impl Machine {
         //let input = format!("{}", query);
         //println!("Running query: {}", input);
 
-        // Create a new Stream from the user input
-        let stream = Stream::from_owned_string(query.clone(), &mut self.machine_st.arena);
-        // Read the term from the user input
-        let _result = self.machine_st.read_term_from_user_input(stream, &mut self.indices);
-
-
         // Parse the query so we can analyze and then call the term
         let mut parser = Parser::new(
             Stream::from_owned_string(query, &mut self.machine_st.arena),
@@ -80,35 +75,31 @@ impl Machine {
         let op_dir = CompositeOpDir::new(&self.indices.op_dir, None);
         let term = parser.read_term(&op_dir, Tokens::Default).expect("Failed to parse query");
 
-        // ... trying to understand what's going on here
-        print_term(&term);
+        // Write parsed term to heap
+        let term_write_result = write_term_to_heap(&term, &mut self.machine_st.heap, &mut self.machine_st.atom_tbl).expect("couldn't write term to heap");
 
-        // Extract the atom from the term which we need to find the code index
-        let term_atom = if let Term::Clause(_, atom, _) = term {
-            atom
-        } else {
-            panic!("Expected a clause");
-        };
-        println!("term_atom: {:?}", term_atom.as_str());
-        //println!("code_dir: {:?}", self.indices.code_dir);
-        let code_index = self.indices.code_dir.get(&(term_atom, term.arity()));
-        println!("code_index: {:?}", code_index);
-
-        // Ok, we have a code_index, so we can set the program counter to the code index:
-
+        // Set up registers
+        self.machine_st.registers[1] = self.machine_st.heap[term_write_result.heap_loc];
         self.machine_st.cp = BREAK_FROM_DISPATCH_LOOP_LOC;
-        self.machine_st.p = code_index.expect("couldn't get code index").local().unwrap();
+        self.machine_st.p = self.indices.code_dir.get(&(atom!("$call"), 1)).expect("couldn't get code index").local().unwrap();
+
+        // If we don't set this register, we get an error in write_term.
+        // It seems to be the register that holds max_depth
+        self.machine_st.registers[7] = 50.into();
+        // Not setting this will cause:
+        // thread 'machine::lib_machine::tests::programatic_query' panicked at 'index out of bounds: the len is 10 but the index is 295', src/machine/machine_state_impl.rs:1479:56
+        self.machine_st.registers[6] = 9.into();
+
 
         println!("running dispatch loop");
         self.dispatch_loop();
         println!("done");
 
-        // If we don't set this register, we get an error in write_term.
-        // It seems to be the register that holds max_depth
-        self.machine_st.registers[7] = 50.into();
-
         let op_dir = &self.indices.op_dir;
-        let printer = self.machine_st.write_term(op_dir)
+        let write_term_result = self.machine_st.write_term(op_dir);
+        println!("write_term_result: {:?}", write_term_result);
+        // => Err([HeapCellValue { tag: Atom, name: "error", arity: 2, m: false, f: false }, HeapCellValue { tag: Str, value: 13, m: false, f: false }, HeapCellValue { tag: Str, value: 16, m: false, f: false }, HeapCellValue { tag: Atom, name: "type_error", arity: 2, m: false, f: false }, HeapCellValue { tag: Atom, name: "list", arity: 0, m: false, f: false }, HeapCellValue { tag: Cons, ptr: 9, m: false, f: false }, HeapCellValue { tag: Atom, name: "/", arity: 2, m: false, f: false }, HeapCellValue { tag: Atom, name: "write_term", arity: 0, m: false, f: false }, HeapCellValue { tag: Fixnum, value: 2, m: false, f: false }])
+        let printer = write_term_result
             .expect("Couldn't get printer from write_term")
             .expect("Couldn't get printer from write_term");
 
