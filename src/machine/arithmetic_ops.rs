@@ -1,7 +1,5 @@
 use dashu::base::Abs;
-use dashu::base::DivRem;
 use dashu::base::Gcd;
-use dashu::integer::IBig;
 use divrem::*;
 use num_order::NumOrd;
 
@@ -562,7 +560,7 @@ pub(crate) fn rdiv(
     r1: TypedArenaPtr<Rational>,
     r2: TypedArenaPtr<Rational>,
 ) -> Result<Rational, MachineStubGen> {
-    if &*r2 == &Rational::from(0) {
+    if r2.is_zero() {
         let stub_gen = || {
             let rdiv_atom = atom!("rdiv");
             functor_stub(rdiv_atom, 2)
@@ -596,7 +594,7 @@ pub(crate) fn idiv(n1: Number, n2: Number, arena: &mut Arena) -> Result<Number, 
             }
         }
         (Number::Fixnum(n1), Number::Integer(n2)) => {
-            if (&*n2).num_eq(&0) {
+            if n2.is_zero() {
                 Err(zero_divisor_eval_error(stub_gen))
             } else {
                 Ok(Number::arena_from(Integer::from(n1) / &*n2, arena))
@@ -610,13 +608,10 @@ pub(crate) fn idiv(n1: Number, n2: Number, arena: &mut Arena) -> Result<Number, 
             }
         }
         (Number::Integer(n1), Number::Integer(n2)) => {
-            if (&*n2).num_eq(&0) {
+            if n2.is_zero() {
                 Err(zero_divisor_eval_error(stub_gen))
             } else {
-                Ok(Number::arena_from(
-                    <(Integer, Integer)>::from((&*n1).div_rem(&*n2)).0,
-                    arena,
-                ))
+                Ok(Number::arena_from(&*n1 / &*n2, arena))
             }
         }
         (Number::Fixnum(_), n2) | (Number::Integer(_), n2) => {
@@ -853,6 +848,16 @@ pub(crate) fn modulus(x: Number, y: Number, arena: &mut Arena) -> Result<Number,
         functor_stub(mod_atom, 2)
     };
 
+    fn ibig_rem_floor(n1: &Integer, n2: &Integer) -> Integer {
+        if n1 > &Integer::ZERO && n2 < &Integer::ZERO {
+            ((n1 - Integer::ONE) / n2) - Integer::ONE
+        } else if n1 < &Integer::ZERO && n2 > &Integer::ZERO {
+            ((n1 + Integer::ONE) / n2) - Integer::ONE
+        } else {
+            n1 / n2
+        }
+    }
+
     match (x, y) {
         (Number::Fixnum(n1), Number::Fixnum(n2)) => {
             let n2_i = n2.get_num();
@@ -865,14 +870,11 @@ pub(crate) fn modulus(x: Number, y: Number, arena: &mut Arena) -> Result<Number,
             }
         }
         (Number::Fixnum(n1), Number::Integer(n2)) => {
-            if (&*n2).num_eq(&0) {
+            if n2.is_zero() {
                 Err(zero_divisor_eval_error(stub_gen))
             } else {
                 let n1 = Integer::from(n1.get_num());
-                Ok(Number::arena_from(
-                    <(Integer, Integer)>::from(n1.div_rem(&*n2)).1,
-                    arena,
-                ))
+                Ok(Number::arena_from(ibig_rem_floor(&n1, &*n2), arena))
             }
         }
         (Number::Integer(n1), Number::Fixnum(n2)) => {
@@ -882,20 +884,14 @@ pub(crate) fn modulus(x: Number, y: Number, arena: &mut Arena) -> Result<Number,
                 Err(zero_divisor_eval_error(stub_gen))
             } else {
                 let n2 = Integer::from(n2_i);
-                Ok(Number::arena_from(
-                    <(Integer, Integer)>::from((&*n1).div_rem(&n2)).1,
-                    arena,
-                ))
+                Ok(Number::arena_from(ibig_rem_floor(&*n1, &n2), arena))
             }
         }
-        (Number::Integer(x), Number::Integer(y)) => {
-            if (&*y).num_eq(&0) {
+        (Number::Integer(n1), Number::Integer(n2)) => {
+            if n2.is_zero() {
                 Err(zero_divisor_eval_error(stub_gen))
             } else {
-                Ok(Number::arena_from(
-                    <(Integer, Integer)>::from((&*x).div_rem(&*y)).1,
-                    arena,
-                ))
+                Ok(Number::arena_from(ibig_rem_floor(&*n1, &*n2), arena))
             }
         }
         (Number::Integer(_), n2) | (Number::Fixnum(_), n2) => {
@@ -923,7 +919,7 @@ pub(crate) fn remainder(x: Number, y: Number, arena: &mut Arena) -> Result<Numbe
             }
         }
         (Number::Fixnum(n1), Number::Integer(n2)) => {
-            if (&*n2).num_eq(&0) {
+            if n2.is_zero() {
                 Err(zero_divisor_eval_error(stub_gen))
             } else {
                 let n1 = Integer::from(n1.get_num());
@@ -941,7 +937,7 @@ pub(crate) fn remainder(x: Number, y: Number, arena: &mut Arena) -> Result<Numbe
             }
         }
         (Number::Integer(n1), Number::Integer(n2)) => {
-            if (&*n2).num_eq(&0) {
+            if n2.is_zero() {
                 Err(zero_divisor_eval_error(stub_gen))
             } else {
                 Ok(Number::arena_from(Integer::from(&*n1 % &*n2), arena))
@@ -968,7 +964,7 @@ pub(crate) fn gcd(n1: Number, n2: Number, arena: &mut Arena) -> Result<Number, M
             if let Some(result) = isize_gcd(n1_i, n2_i) {
                 Ok(Number::arena_from(result, arena))
             } else {
-                let value: IBig = Integer::from(n1_i).gcd(&Integer::from(n2_i)).into();
+                let value: Integer = Integer::from(n1_i).gcd(&Integer::from(n2_i)).into();
                 Ok(Number::arena_from(value, arena))
             }
         }
@@ -978,9 +974,9 @@ pub(crate) fn gcd(n1: Number, n2: Number, arena: &mut Arena) -> Result<Number, M
             Ok(Number::arena_from(Integer::from(n2_clone.gcd(&n1)), arena))
         }
         (Number::Integer(n1), Number::Integer(n2)) => {
-            let n1_clone: Integer = (*n1).clone();
             let n2: isize = (&*n2).try_into().unwrap();
-            Ok(Number::arena_from(Integer::from(n1_clone.gcd(&Integer::from(n2))) as IBig, arena))
+            let value: Integer = (&*n1).gcd(&Integer::from(n2)).into();
+            Ok(Number::arena_from(value, arena))
         }
         (Number::Float(f), _) | (_, Number::Float(f)) => {
             let n = Number::Float(f);

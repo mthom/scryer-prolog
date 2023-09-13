@@ -1636,7 +1636,7 @@ impl Machine {
 
         let arity = self.deref_register(3);
         let arity = match Number::try_from(arity) {
-            Ok(Number::Integer(n)) if &*n >= &Integer::from(0) && &*n <= &Integer::from(MAX_ARITY) => {
+            Ok(Number::Integer(n)) if &*n >= &Integer::ZERO && &*n <= &Integer::from(MAX_ARITY) => {
                 let value: usize = (&*n).try_into().unwrap();
                 Ok(value)
             },
