@@ -147,8 +147,8 @@ mod tests {
     use super::*;
     use crate::machine::{QueryMatch, Value, QueryResolution};
 
-    #[tokio::test]
-    async fn programatic_query() {
+    #[test]
+    fn programatic_query() {
         let mut machine = Machine::new_lib();
 
         machine.load_module_string(
@@ -186,8 +186,8 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn failing_query() {
+    #[test]
+    fn failing_query() {
         let mut machine = Machine::new_lib();
         let query = String::from(r#"triple("a",P,"b")."#);
         let output = machine.run_query(query);
@@ -197,8 +197,8 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn complex_results() {
+    #[test]
+    fn complex_results() {
         let mut machine = Machine::new_lib();
         machine.load_module_string(
             "facts",
@@ -249,8 +249,8 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn list_results() {
+    #[test]
+    fn list_results() {
         let mut machine = Machine::new_lib();
         machine.load_module_string(
             "facts",
@@ -270,8 +270,8 @@ mod tests {
     }
 
 
-    #[tokio::test]
-    async fn consult() {
+    #[test]
+    fn consult() {
         let mut machine = Machine::new_lib();
 
         machine.consult_module_string(
@@ -330,8 +330,8 @@ mod tests {
     }
 
     #[ignore = "fails on windows"]
-    #[tokio::test]
-    async fn stress_integration_test() {
+    #[test]
+    fn stress_integration_test() {
         let mut machine = Machine::new_lib();
 
         // File with test commands, i.e. program code to consult and queries to run
