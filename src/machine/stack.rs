@@ -30,12 +30,6 @@ pub struct Stack {
     _marker: PhantomData<HeapCellValue>,
 }
 
-impl Drop for Stack {
-    fn drop(&mut self) {
-        self.buf.deallocate();
-    }
-}
-
 #[derive(Debug)]
 pub(crate) struct AndFramePrelude {
     pub(crate) num_cells: usize,
@@ -189,7 +183,7 @@ impl Stack {
         let frame_size = AndFrame::size_of(num_cells);
 
         unsafe {
-            let e = self.buf.ptr as usize - self.buf.base as usize;
+            let e = (*self.buf.ptr.get_mut()) as usize - self.buf.base as usize;
             let new_ptr = self.alloc(frame_size);
             let mut offset = prelude_size::<AndFramePrelude>();
 
@@ -213,7 +207,7 @@ impl Stack {
         let frame_size = OrFrame::size_of(num_cells);
 
         unsafe {
-            let b = self.buf.ptr as usize - self.buf.base as usize;
+            let b = (*self.buf.ptr.get_mut()) as usize - self.buf.base as usize;
             let new_ptr = self.alloc(frame_size);
             let mut offset = prelude_size::<OrFramePrelude>();
 
@@ -269,8 +263,8 @@ impl Stack {
     pub(crate) fn truncate(&mut self, b: usize) {
         let base = self.buf.base as usize + b;
 
-        if base < self.buf.ptr as usize {
-            self.buf.ptr = base as *mut _;
+        if base < (*self.buf.ptr.get_mut()) as usize {
+            *self.buf.ptr.get_mut() = base as *mut _;
         }
     }
 }
@@ -290,7 +284,7 @@ mod tests {
 
         assert_eq!(
             e,
-            0// 10 * mem::size_of::<HeapCellValue>() + prelude_size::<AndFrame>()
+            0 // 10 * mem::size_of::<HeapCellValue>() + prelude_size::<AndFrame>()
         );
 
         assert_eq!(and_frame.prelude.num_cells, 10);
@@ -315,7 +309,10 @@ mod tests {
         let and_frame = wam.machine_st.stack.index_and_frame_mut(next_e);
 
         for idx in 0..9 {
-            assert_eq!(and_frame[idx + 1], stack_loc_as_cell!(AndFrame, next_e, idx + 1));
+            assert_eq!(
+                and_frame[idx + 1],
+                stack_loc_as_cell!(AndFrame, next_e, idx + 1)
+            );
         }
 
         let and_frame = wam.machine_st.stack.index_and_frame(e);

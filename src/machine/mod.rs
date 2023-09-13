@@ -7,6 +7,7 @@ pub mod loader;
 pub mod compile;
 pub mod config;
 pub mod copier;
+pub mod disjuncts;
 pub mod dispatch;
 pub mod gc;
 pub mod heap;
@@ -19,7 +20,6 @@ pub mod machine_state_impl;
 pub mod mock_wam;
 pub mod parsed_results;
 pub mod partial_string;
-pub mod disjuncts;
 pub mod preprocessor;
 pub mod stack;
 pub mod streams;
@@ -30,9 +30,9 @@ pub mod unify;
 use crate::arena::*;
 use crate::arithmetic::*;
 use crate::atom_table::*;
-use crate::forms::*;
 #[cfg(feature = "ffi")]
 use crate::ffi::ForeignFunctionTable;
+use crate::forms::*;
 use crate::instructions::*;
 use crate::machine::args::*;
 use crate::machine::compile::*;
@@ -168,7 +168,10 @@ pub(crate) fn import_builtin_impls(code_dir: &CodeDir, builtins: &mut Module) {
     for key in keys {
         let idx = code_dir.get(&key).unwrap();
         builtins.code_dir.insert(key, idx.clone());
-        builtins.module_decl.exports.push(ModuleExport::PredicateKey(key));
+        builtins
+            .module_decl
+            .exports
+            .push(ModuleExport::PredicateKey(key));
     }
 }
 
@@ -199,7 +202,7 @@ impl Machine {
                 code: &mut self.code,
                 load_contexts: &mut self.load_contexts,
             },
-            &mut self.machine_st
+            &mut self.machine_st,
         )
     }
 
@@ -211,7 +214,11 @@ impl Machine {
         self.machine_st.throw_exception(err);
     }
 
-    fn run_module_predicate(&mut self, module_name: Atom, key: PredicateKey) -> std::process::ExitCode {
+    fn run_module_predicate(
+        &mut self,
+        module_name: Atom,
+        key: PredicateKey,
+    ) -> std::process::ExitCode {
         if let Some(module) = self.indices.modules.get(&module_name) {
             if let Some(ref code_index) = module.code_dir.get(&key) {
                 let p = code_index.local().unwrap();
@@ -228,7 +235,8 @@ impl Machine {
 
     pub fn load_file(&mut self, path: &str, stream: Stream) {
         self.machine_st.registers[1] = stream_as_cell!(stream);
-        self.machine_st.registers[2] = atom_as_cell!(self.machine_st.atom_tbl.build_with(path));
+        self.machine_st.registers[2] =
+            atom_as_cell!(AtomTable::build_with(&self.machine_st.atom_tbl, path));
 
         self.run_module_predicate(atom!("loader"), (atom!("file_load"), 2));
     }
@@ -239,7 +247,9 @@ impl Machine {
         path_buf.push("src/toplevel.pl");
 
         let path = path_buf.to_str().unwrap();
-        let toplevel_stream = Stream::from_static_string(program, &mut self.machine_st.arena);
+        let toplevel_stream = 
+            Stream::from_static_string(program, &mut self.machine_st.arena);
+
 
         self.load_file(path, toplevel_stream);
 
@@ -292,7 +302,7 @@ impl Machine {
             arg_pstrs.push(put_complete_string(
                 &mut self.machine_st.heap,
                 &arg,
-                &mut self.machine_st.atom_tbl,
+                &self.machine_st.atom_tbl,
             ));
         }
 
@@ -314,7 +324,11 @@ impl Machine {
     }
 
     pub(crate) fn configure_modules(&mut self) {
-        fn update_call_n_indices(loader: &Module, target_code_dir: &mut CodeDir, arena: &mut Arena) {
+        fn update_call_n_indices(
+            loader: &Module,
+            target_code_dir: &mut CodeDir,
+            arena: &mut Arena,
+        ) {
             for arity in 1..66 {
                 let key = (atom!("call"), arity);
 
@@ -359,10 +373,18 @@ impl Machine {
             }
 
             for (_, target_module) in self.indices.modules.iter_mut() {
-                update_call_n_indices(&loader, &mut target_module.code_dir, &mut self.machine_st.arena);
+                update_call_n_indices(
+                    &loader,
+                    &mut target_module.code_dir,
+                    &mut self.machine_st.arena,
+                );
             }
 
-            update_call_n_indices(&loader, &mut self.indices.code_dir, &mut self.machine_st.arena);
+            update_call_n_indices(
+                &loader,
+                &mut self.indices.code_dir,
+                &mut self.machine_st.arena,
+            );
 
             self.indices.modules.insert(atom!("loader"), loader);
         } else {
@@ -373,56 +395,65 @@ impl Machine {
     pub(crate) fn add_impls_to_indices(&mut self) {
         let impls_offset = self.code.len() + 3;
 
-        self.code.extend(vec![
-            Instruction::BreakFromDispatchLoop,
-            Instruction::InstallVerifyAttr,
-            Instruction::VerifyAttrInterrupt,
-            Instruction::ExecuteTermGreaterThan,
-            Instruction::ExecuteTermLessThan,
-            Instruction::ExecuteTermGreaterThanOrEqual,
-            Instruction::ExecuteTermLessThanOrEqual,
-            Instruction::ExecuteTermEqual,
-            Instruction::ExecuteTermNotEqual,
-            Instruction::ExecuteNumberGreaterThan(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
-            Instruction::ExecuteNumberLessThan(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
-            Instruction::ExecuteNumberGreaterThanOrEqual(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
-            Instruction::ExecuteNumberLessThanOrEqual(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
-            Instruction::ExecuteNumberEqual(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
-            Instruction::ExecuteNumberNotEqual(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
-            Instruction::ExecuteIs(temp_v!(1), ar_reg!(temp_v!(2))),
-            Instruction::ExecuteAcyclicTerm,
-            Instruction::ExecuteArg,
-            Instruction::ExecuteCompare,
-            Instruction::ExecuteCopyTerm,
-            Instruction::ExecuteFunctor,
-            Instruction::ExecuteGround,
-            Instruction::ExecuteKeySort,
-            Instruction::ExecuteSort,
-            Instruction::ExecuteN(1),
-            Instruction::ExecuteN(2),
-            Instruction::ExecuteN(3),
-            Instruction::ExecuteN(4),
-            Instruction::ExecuteN(5),
-            Instruction::ExecuteN(6),
-            Instruction::ExecuteN(7),
-            Instruction::ExecuteN(8),
-            Instruction::ExecuteN(9),
-            Instruction::ExecuteIsAtom(temp_v!(1)),
-            Instruction::ExecuteIsAtomic(temp_v!(1)),
-            Instruction::ExecuteIsCompound(temp_v!(1)),
-            Instruction::ExecuteIsInteger(temp_v!(1)),
-            Instruction::ExecuteIsNumber(temp_v!(1)),
-            Instruction::ExecuteIsRational(temp_v!(1)),
-            Instruction::ExecuteIsFloat(temp_v!(1)),
-            Instruction::ExecuteIsNonVar(temp_v!(1)),
-            Instruction::ExecuteIsVar(temp_v!(1))
-        ].into_iter());
+        self.code.extend(
+            vec![
+                Instruction::BreakFromDispatchLoop,
+                Instruction::InstallVerifyAttr,
+                Instruction::VerifyAttrInterrupt,
+                Instruction::ExecuteTermGreaterThan,
+                Instruction::ExecuteTermLessThan,
+                Instruction::ExecuteTermGreaterThanOrEqual,
+                Instruction::ExecuteTermLessThanOrEqual,
+                Instruction::ExecuteTermEqual,
+                Instruction::ExecuteTermNotEqual,
+                Instruction::ExecuteNumberGreaterThan(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
+                Instruction::ExecuteNumberLessThan(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
+                Instruction::ExecuteNumberGreaterThanOrEqual(
+                    ar_reg!(temp_v!(1)),
+                    ar_reg!(temp_v!(2)),
+                ),
+                Instruction::ExecuteNumberLessThanOrEqual(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
+                Instruction::ExecuteNumberEqual(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
+                Instruction::ExecuteNumberNotEqual(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
+                Instruction::ExecuteIs(temp_v!(1), ar_reg!(temp_v!(2))),
+                Instruction::ExecuteAcyclicTerm,
+                Instruction::ExecuteArg,
+                Instruction::ExecuteCompare,
+                Instruction::ExecuteCopyTerm,
+                Instruction::ExecuteFunctor,
+                Instruction::ExecuteGround,
+                Instruction::ExecuteKeySort,
+                Instruction::ExecuteSort,
+                Instruction::ExecuteN(1),
+                Instruction::ExecuteN(2),
+                Instruction::ExecuteN(3),
+                Instruction::ExecuteN(4),
+                Instruction::ExecuteN(5),
+                Instruction::ExecuteN(6),
+                Instruction::ExecuteN(7),
+                Instruction::ExecuteN(8),
+                Instruction::ExecuteN(9),
+                Instruction::ExecuteIsAtom(temp_v!(1)),
+                Instruction::ExecuteIsAtomic(temp_v!(1)),
+                Instruction::ExecuteIsCompound(temp_v!(1)),
+                Instruction::ExecuteIsInteger(temp_v!(1)),
+                Instruction::ExecuteIsNumber(temp_v!(1)),
+                Instruction::ExecuteIsRational(temp_v!(1)),
+                Instruction::ExecuteIsFloat(temp_v!(1)),
+                Instruction::ExecuteIsNonVar(temp_v!(1)),
+                Instruction::ExecuteIsVar(temp_v!(1)),
+            ]
+            .into_iter(),
+        );
 
-        for (p, instr) in self.code[impls_offset ..].iter().enumerate() {
+        for (p, instr) in self.code[impls_offset..].iter().enumerate() {
             let key = instr.to_name_and_arity();
             self.indices.code_dir.insert(
                 key,
-                CodeIndex::new(IndexPtr::index(p + impls_offset), &mut self.machine_st.arena),
+                CodeIndex::new(
+                    IndexPtr::index(p + impls_offset),
+                    &mut self.machine_st.arena,
+                ),
             );
         }
     }
@@ -455,7 +486,7 @@ impl Machine {
             user_error,
             load_contexts: vec![],
             #[cfg(feature = "ffi")]
-	        foreign_function_table: Default::default(),
+            foreign_function_table: Default::default(),
         };
 
         let mut lib_path = current_dir();
@@ -479,10 +510,7 @@ impl Machine {
         .unwrap();
 
         bootstrapping_compile(
-            Stream::from_static_string(
-                LIBRARIES.borrow()["builtins"],
-                &mut wam.machine_st.arena,
-            ),
+            Stream::from_static_string(LIBRARIES.borrow()["builtins"], &mut wam.machine_st.arena),
             &mut wam,
             ListingSource::from_file_and_path(atom!("builtins.pl"), lib_path.clone()),
         )
@@ -535,7 +563,9 @@ impl Machine {
     }
 
     pub(crate) fn configure_streams(&mut self) {
-        self.user_input.options_mut().set_alias_to_atom_opt(Some(atom!("user_input")));
+        self.user_input
+            .options_mut()
+            .set_alias_to_atom_opt(Some(atom!("user_input")));
 
         self.indices
             .stream_aliases
@@ -543,7 +573,9 @@ impl Machine {
 
         self.indices.streams.insert(self.user_input);
 
-        self.user_output.options_mut().set_alias_to_atom_opt(Some(atom!("user_output")));
+        self.user_output
+            .options_mut()
+            .set_alias_to_atom_opt(Some(atom!("user_output")));
 
         self.indices
             .stream_aliases
@@ -573,9 +605,16 @@ impl Machine {
 
                     loop {
                         let indexing_code_ptr = match &indexing_lines[oip] {
-                            &IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(arg, v, c, l, s)) => {
+                            &IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(
+                                arg,
+                                v,
+                                c,
+                                l,
+                                s,
+                            )) => {
                                 cell = self.deref_register(arg);
-                                self.machine_st.select_switch_on_term_index(cell, v, c, l, s)
+                                self.machine_st
+                                    .select_switch_on_term_index(cell, v, c, l, s)
                             }
                             IndexingLine::Indexing(IndexingInstruction::SwitchOnConstant(hm)) => {
                                 let lit = self.machine_st.constant_to_literal(cell);
@@ -685,7 +724,12 @@ impl Machine {
                         }
                     );
                 }
-                &Instruction::GetPartialString(Level::Shallow, string, RegType::Temp(t), has_tail) => {
+                &Instruction::GetPartialString(
+                    Level::Shallow,
+                    string,
+                    RegType::Temp(t),
+                    has_tail,
+                ) => {
                     let cell = self.deref_register(t);
 
                     read_heap_cell!(cell,
@@ -716,17 +760,17 @@ impl Machine {
                         }
                     );
                 }
-                Instruction::GetConstant(..) |
-                Instruction::GetList(..) |
-                Instruction::GetStructure(..) |
-                Instruction::GetPartialString(..) |
-                &Instruction::UnifyVoid(..) |
-                &Instruction::UnifyConstant(..) |
-                &Instruction::GetVariable(..) |
-                &Instruction::GetValue(..) |
-                &Instruction::UnifyVariable(..) |
-                &Instruction::UnifyValue(..) |
-                &Instruction::UnifyLocalValue(..)  => {
+                Instruction::GetConstant(..)
+                | Instruction::GetList(..)
+                | Instruction::GetStructure(..)
+                | Instruction::GetPartialString(..)
+                | &Instruction::UnifyVoid(..)
+                | &Instruction::UnifyConstant(..)
+                | &Instruction::GetVariable(..)
+                | &Instruction::GetValue(..)
+                | &Instruction::UnifyVariable(..)
+                | &Instruction::UnifyValue(..)
+                | &Instruction::UnifyLocalValue(..) => {
                     offset += 1;
                 }
                 _ => {
@@ -741,9 +785,10 @@ impl Machine {
     fn next_applicable_clause(&mut self, mut offset: usize) -> Option<usize> {
         while !self.next_clause_applicable(self.machine_st.p + offset + 1) {
             match &self.code[self.machine_st.p + offset] {
-                &Instruction::DefaultRetryMeElse(o) | &Instruction::RetryMeElse(o) |
-                &Instruction::DynamicElse(.., NextOrFail::Next(o)) |
-                &Instruction::DynamicInternalElse(.., NextOrFail::Next(o)) => offset += o,
+                &Instruction::DefaultRetryMeElse(o)
+                | &Instruction::RetryMeElse(o)
+                | &Instruction::DynamicElse(.., NextOrFail::Next(o))
+                | &Instruction::DynamicInternalElse(.., NextOrFail::Next(o)) => offset += o,
                 _ => {
                     return None;
                 }
@@ -762,14 +807,16 @@ impl Machine {
                     match &indexing_lines[self.machine_st.oip as usize] {
                         IndexingLine::IndexedChoice(indexed_choice) => {
                             match &indexed_choice[(self.machine_st.iip + inner_offset) as usize] {
-                                &IndexedChoiceInstruction::Retry(o) => {
+                                &IndexedChoiceInstruction::Retry(o)
+                                | &IndexedChoiceInstruction::DefaultRetry(o) => {
                                     if self.next_clause_applicable(self.machine_st.p + o) {
                                         return Some(inner_offset);
                                     }
 
                                     inner_offset += 1;
                                 }
-                                &IndexedChoiceInstruction::Trust(o) => {
+                                &IndexedChoiceInstruction::Trust(o)
+                                | &IndexedChoiceInstruction::DefaultTrust(o) => {
                                     return if self.next_clause_applicable(self.machine_st.p + o) {
                                         Some(inner_offset)
                                     } else {
@@ -822,12 +869,13 @@ impl Machine {
             or_frame.prelude.tr = self.machine_st.tr;
             or_frame.prelude.h = self.machine_st.heap.len();
             or_frame.prelude.b0 = self.machine_st.b0;
-            or_frame.prelude.attr_var_queue_len = self.machine_st.attr_var_init.attr_var_queue.len();
+            or_frame.prelude.attr_var_queue_len =
+                self.machine_st.attr_var_init.attr_var_queue.len();
 
             self.machine_st.b = b;
 
             for i in 0..n {
-                or_frame[i] = self.machine_st.registers[i+1];
+                or_frame[i] = self.machine_st.registers[i + 1];
             }
 
             self.machine_st.hb = self.machine_st.heap.len();
@@ -853,12 +901,13 @@ impl Machine {
             or_frame.prelude.tr = self.machine_st.tr;
             or_frame.prelude.h = self.machine_st.heap.len();
             or_frame.prelude.b0 = self.machine_st.b0;
-            or_frame.prelude.attr_var_queue_len = self.machine_st.attr_var_init.attr_var_queue.len();
+            or_frame.prelude.attr_var_queue_len =
+                self.machine_st.attr_var_init.attr_var_queue.len();
 
             self.machine_st.b = b;
 
             for i in 0..n {
-                or_frame[i] = self.machine_st.registers[i+1];
+                or_frame[i] = self.machine_st.registers[i + 1];
             }
 
             self.machine_st.hb = self.machine_st.heap.len();
@@ -921,7 +970,7 @@ impl Machine {
         let curr_tr = self.machine_st.tr;
 
         for i in 0..n {
-            self.machine_st.registers[i+1] = or_frame[i];
+            self.machine_st.registers[i + 1] = or_frame[i];
         }
 
         self.unwind_trail(old_tr, curr_tr);
@@ -965,7 +1014,7 @@ impl Machine {
         let curr_tr = self.machine_st.tr;
 
         for i in 0..n {
-            self.machine_st.registers[i+1] = or_frame[i];
+            self.machine_st.registers[i + 1] = or_frame[i];
         }
 
         self.unwind_trail(old_tr, curr_tr);
@@ -1008,7 +1057,7 @@ impl Machine {
         let n = or_frame.prelude.num_cells;
 
         for i in 0..n {
-            self.machine_st.registers[i+1] = or_frame[i];
+            self.machine_st.registers[i + 1] = or_frame[i];
         }
 
         let old_tr = or_frame.prelude.tr;
@@ -1047,15 +1096,17 @@ impl Machine {
     #[inline(always)]
     fn undefined_procedure(&mut self, name: Atom, arity: usize) -> CallResult {
         match self.machine_st.flags.unknown {
-            Unknown::Error => {
-                Err(self.machine_st.throw_undefined_error(name, arity))
-            }
+            Unknown::Error => Err(self.machine_st.throw_undefined_error(name, arity)),
             Unknown::Fail => {
                 self.machine_st.fail = true;
                 Ok(())
             }
             Unknown::Warn => {
-                println!("warning: predicate {}/{} is undefined", name.as_str(), arity);
+                println!(
+                    "warning: predicate {}/{} is undefined",
+                    name.as_str(),
+                    arity
+                );
                 self.machine_st.fail = true;
                 Ok(())
             }
@@ -1100,9 +1151,7 @@ impl Machine {
                 self.machine_st.dynamic_mode = FirstOrNext::First;
                 self.machine_st.execute_at_index(arity, compiled_tl_index);
             }
-            IndexPtrTag::Index => {
-                self.machine_st.execute_at_index(arity, compiled_tl_index)
-            }
+            IndexPtrTag::Index => self.machine_st.execute_at_index(arity, compiled_tl_index),
         }
 
         Ok(())
@@ -1127,7 +1176,9 @@ impl Machine {
                 }
             } else {
                 let stub = functor_stub(name, arity);
-                let err = self.machine_st.module_resolution_error(module_name, name, arity);
+                let err = self
+                    .machine_st
+                    .module_resolution_error(module_name, name, arity);
 
                 Err(self.machine_st.error_form(err, stub))
             }
@@ -1153,7 +1204,9 @@ impl Machine {
                 }
             } else {
                 let stub = functor_stub(name, arity);
-                let err = self.machine_st.module_resolution_error(module_name, name, arity);
+                let err = self
+                    .machine_st
+                    .module_resolution_error(module_name, name, arity);
 
                 Err(self.machine_st.error_form(err, stub))
             }
@@ -1187,12 +1240,16 @@ impl Machine {
                 let r_c_wo_h_atom = atom!("run_cleaners_without_handling");
                 let iso_ext = atom!("iso_ext");
 
-                RCWH = self.indices.get_predicate_code_index(r_c_w_h_atom, 0, iso_ext)
-                           .and_then(|item| item.local())
-                           .unwrap();
-                RCWOH = self.indices.get_predicate_code_index(r_c_wo_h_atom, 1, iso_ext)
-                            .and_then(|item| item.local())
-                            .unwrap();
+                RCWH = self
+                    .indices
+                    .get_predicate_code_index(r_c_w_h_atom, 0, iso_ext)
+                    .and_then(|item| item.local())
+                    .unwrap();
+                RCWOH = self
+                    .indices
+                    .get_predicate_code_index(r_c_wo_h_atom, 1, iso_ext)
+                    .and_then(|item| item.local())
+                    .unwrap();
             });
 
             (RCWH, RCWOH)
@@ -1203,9 +1260,8 @@ impl Machine {
                 let (idx, arity) = if self.machine_st.effective_block() > prev_block {
                     (r_c_w_h, 0)
                 } else {
-                    self.machine_st.registers[1] = fixnum_as_cell!(
-                        Fixnum::build_with(b_cutoff as i64)
-                    );
+                    self.machine_st.registers[1] =
+                        fixnum_as_cell!(Fixnum::build_with(b_cutoff as i64));
 
                     (r_c_wo_h, 1)
                 };
@@ -1272,8 +1328,7 @@ impl Machine {
                         None => unreachable!(),
                     }
                 }
-                TrailEntryTag::TrailedAttachedValue => {
-                }
+                TrailEntryTag::TrailedAttachedValue => {}
             }
         }
     }

@@ -20,7 +20,7 @@ jobs:
           - { os: macos-11,       rust-version: stable,  shell: bash, target: 'x86_64-apple-darwin' }
           - { os: ubuntu-20.04,   rust-version: stable,  shell: bash, extra: true, target: 'x86_64-unknown-linux-gnu' }
           - { os: ubuntu-20.04,   rust-version: stable,  shell: bash, target: 'i686-unknown-linux-gnu' }
-          - { os: ubuntu-20.04,   rust-version: 1.65,    shell: bash, target: 'x86_64-unknown-linux-gnu'}
+          - { os: ubuntu-20.04,   rust-version: "1.70",    shell: bash, target: 'x86_64-unknown-linux-gnu'}
           - { os: ubuntu-20.04,   rust-version: beta,    shell: bash, target: 'x86_64-unknown-linux-gnu'}
           - { os: ubuntu-20.04,   rust-version: nightly, shell: bash, target: 'x86_64-unknown-linux-gnu'}
     defaults:
@@ -54,6 +54,9 @@ jobs:
             ~/.cargo/git/db/
             target/
           key: ${{ matrix.os }}_${{ matrix.target }}_rustc-${{ steps.toolchain.outputs.cachekey }}_cargo-${{ hashFiles('**/Cargo.lock') }}
+      - name: Install wasm-pack
+        if: matrix.extra
+        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
       # Build and test.
       - name: Build library
@@ -97,12 +100,22 @@ jobs:
         run: |
           cargo rustc --target ${{ matrix.target }} --verbose --bin scryer-prolog --release -- -D warnings
           echo "$PWD/target/release" >> $GITHUB_PATH
+      - name: Build wasm
+        if: matrix.extra
+        run: |
+          wasm-pack build --target web -- --no-default-features
       - name: Publish release binary artifact
         if: contains(matrix.rust-version,'stable')
         uses: actions/upload-artifact@v3
         with:
           path: target/${{ matrix.target }}/release/scryer-prolog*
           name: scryer-prolog_${{ matrix.os }}_${{ matrix.target }}
+      - name: Publish wasm artifact
+        if: matrix.extra
+        uses: actions/upload-artifact@v3
+        with:
+          path: pkg/*
+          name: scryer-prolog_unknown_wasm32
 
   logtalk-test:
     runs-on: ubuntu-20.04
@@ -162,6 +175,7 @@ jobs:
           zip scryer-prolog_macos-11.zip ./scryer-prolog_macos-11_x86_64-apple-darwin/scryer-prolog
           zip scryer-prolog_ubuntu-20.04.zip ./scryer-prolog_ubuntu-20.04_x86_64-unknown-linux-gnu/scryer-prolog
           zip scryer-prolog_windows-latest.zip ./scryer-prolog_windows-latest_x86_64-pc-windows-gnu/scryer-prolog.exe
+          zip -r scryer-prolog_unknown-wasm32.zip ./scryer-prolog_unknown_wasm32
       - name: Release
         uses: softprops/action-gh-release@v1
         with:
@@ -169,3 +183,4 @@ jobs:
             scryer-prolog_macos-11.zip
             scryer-prolog_ubuntu-20.04.zip
             scryer-prolog_windows-latest.zip
+            scryer-prolog_unknown-wasm32.zip

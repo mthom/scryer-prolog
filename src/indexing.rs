@@ -150,17 +150,20 @@ impl<'a> IndexingCodeMergingPtr<'a> {
         let third_level_index = if self.append_or_prepend.is_append() {
             vec![
                 IndexedChoiceInstruction::Try(external),
-                IndexedChoiceInstruction::Trust(index)
-            ].into()
+                IndexedChoiceInstruction::Trust(index),
+            ]
+            .into()
         } else {
             vec![
                 IndexedChoiceInstruction::Try(index),
-                IndexedChoiceInstruction::Trust(external)
-            ].into()
+                IndexedChoiceInstruction::Trust(external),
+            ]
+            .into()
         };
 
         let indexing_code_len = self.indexing_code.len();
-        self.indexing_code.push(IndexingLine::IndexedChoice(third_level_index));
+        self.indexing_code
+            .push(IndexingLine::IndexedChoice(third_level_index));
 
         match &mut self.indexing_code[self.offset] {
             IndexingLine::Indexing(IndexingInstruction::SwitchOnConstant(ref mut constants)) => {
@@ -188,7 +191,8 @@ impl<'a> IndexingCodeMergingPtr<'a> {
         };
 
         let indexing_code_len = self.indexing_code.len();
-        self.indexing_code.push(IndexingLine::DynamicIndexedChoice(third_level_index));
+        self.indexing_code
+            .push(IndexingLine::DynamicIndexedChoice(third_level_index));
 
         match &mut self.indexing_code[self.offset] {
             IndexingLine::Indexing(IndexingInstruction::SwitchOnConstant(ref mut constants)) => {
@@ -275,10 +279,8 @@ impl<'a> IndexingCodeMergingPtr<'a> {
                             );
                         }
                         None | Some(IndexingCodePtr::Fail) => {
-                            constants.insert(
-                                overlapping_constant,
-                                IndexingCodePtr::External(index),
-                            );
+                            constants
+                                .insert(overlapping_constant, IndexingCodePtr::External(index));
                         }
                         Some(IndexingCodePtr::DynamicExternal(o)) => {
                             self.add_dynamic_indexed_choice_for_constant(
@@ -345,16 +347,10 @@ impl<'a> IndexingCodeMergingPtr<'a> {
                 IndexingLine::Indexing(IndexingInstruction::SwitchOnConstant(constants)) => {
                     match constants.get(&constant).cloned() {
                         None | Some(IndexingCodePtr::Fail) if self.is_dynamic => {
-                            constants.insert(
-                                constant,
-                                IndexingCodePtr::DynamicExternal(index),
-                            );
+                            constants.insert(constant, IndexingCodePtr::DynamicExternal(index));
                         }
                         None | Some(IndexingCodePtr::Fail) => {
-                            constants.insert(
-                                constant,
-                                IndexingCodePtr::External(index),
-                            );
+                            constants.insert(constant, IndexingCodePtr::External(index));
                         }
                         Some(IndexingCodePtr::DynamicExternal(o)) => {
                             self.add_dynamic_indexed_choice_for_constant(o, constant, index);
@@ -432,17 +428,20 @@ impl<'a> IndexingCodeMergingPtr<'a> {
         let third_level_index = if self.append_or_prepend.is_append() {
             vec![
                 IndexedChoiceInstruction::Try(external),
-                IndexedChoiceInstruction::Trust(index)
-            ].into()
+                IndexedChoiceInstruction::Trust(index),
+            ]
+            .into()
         } else {
             vec![
                 IndexedChoiceInstruction::Try(index),
-                IndexedChoiceInstruction::Trust(external)
-            ].into()
+                IndexedChoiceInstruction::Trust(external),
+            ]
+            .into()
         };
 
         let indexing_code_len = self.indexing_code.len();
-        self.indexing_code.push(IndexingLine::IndexedChoice(third_level_index));
+        self.indexing_code
+            .push(IndexingLine::IndexedChoice(third_level_index));
 
         match &mut self.indexing_code[self.offset] {
             IndexingLine::Indexing(IndexingInstruction::SwitchOnStructure(ref mut structures)) => {
@@ -470,7 +469,8 @@ impl<'a> IndexingCodeMergingPtr<'a> {
         };
 
         let indexing_code_len = self.indexing_code.len();
-        self.indexing_code.push(IndexingLine::DynamicIndexedChoice(third_level_index));
+        self.indexing_code
+            .push(IndexingLine::DynamicIndexedChoice(third_level_index));
 
         match &mut self.indexing_code[self.offset] {
             IndexingLine::Indexing(IndexingInstruction::SwitchOnStructure(ref mut structures)) => {
@@ -584,13 +584,15 @@ impl<'a> IndexingCodeMergingPtr<'a> {
                         let third_level_index = if self.append_or_prepend.is_append() {
                             vec![
                                 IndexedChoiceInstruction::Try(o),
-                                IndexedChoiceInstruction::Trust(index)
-                            ].into()
+                                IndexedChoiceInstruction::Trust(index),
+                            ]
+                            .into()
                         } else {
                             vec![
                                 IndexedChoiceInstruction::Try(index),
-                                IndexedChoiceInstruction::Trust(o)
-                            ].into()
+                                IndexedChoiceInstruction::Trust(o),
+                            ]
+                            .into()
                         };
 
                         self.indexing_code
@@ -613,7 +615,7 @@ pub(crate) fn merge_clause_index(
     target_indexing_code: &mut Vec<IndexingLine>,
     skeleton: &mut [ClauseIndexInfo], // the clause to be merged is the last element in the skeleton.
     retracted_clauses: &Option<Vec<ClauseIndexInfo>>,
-    new_clause_loc: usize,            // the absolute location of the new clause in the code vector.
+    new_clause_loc: usize, // the absolute location of the new clause in the code vector.
     append_or_prepend: AppendOrPrepend,
 ) {
     let opt_arg_index_key = match append_or_prepend {
@@ -636,11 +638,7 @@ pub(crate) fn merge_clause_index(
             for overlapping_constant in overlapping_constants {
                 merging_ptr.offset = 0;
 
-                merging_ptr.index_overlapping_constant(
-                    *constant,
-                    *overlapping_constant,
-                    offset,
-                );
+                merging_ptr.index_overlapping_constant(*constant, *overlapping_constant, offset);
             }
         }
         OptArgIndexKey::Structure(_, index_loc, name, arity) => {
@@ -1060,19 +1058,27 @@ fn cap_choice_seq(prelude: &mut [IndexedChoiceInstruction]) {
 
 #[inline]
 fn cap_choice_seq_with_trust(prelude: &mut [IndexedChoiceInstruction]) {
-    prelude.last_mut().map(|instr| {
-        if let IndexedChoiceInstruction::Retry(i) = instr {
+    prelude.last_mut().map(|instr| match instr {
+        IndexedChoiceInstruction::Retry(i) => {
             *instr = IndexedChoiceInstruction::Trust(*i);
         }
+        IndexedChoiceInstruction::DefaultRetry(i) => {
+            *instr = IndexedChoiceInstruction::DefaultTrust(*i);
+        }
+        _ => {}
     });
 }
 
 #[inline]
 fn uncap_choice_seq_with_trust(prelude: &mut [IndexedChoiceInstruction]) {
-    prelude.last_mut().map(|instr| {
-        if let IndexedChoiceInstruction::Trust(i) = instr {
+    prelude.last_mut().map(|instr| match instr {
+        IndexedChoiceInstruction::Trust(i) => {
             *instr = IndexedChoiceInstruction::Retry(*i);
         }
+        IndexedChoiceInstruction::DefaultTrust(i) => {
+            *instr = IndexedChoiceInstruction::DefaultRetry(*i);
+        }
+        _ => {}
     });
 }
 
@@ -1087,7 +1093,7 @@ fn uncap_choice_seq_with_try(prelude: &mut [IndexedChoiceInstruction]) {
 
 pub(crate) fn constant_key_alternatives(
     constant: Literal,
-    atom_tbl: &mut AtomTable,
+    atom_tbl: &AtomTable,
     // arena: &mut Arena,
 ) -> Vec<Literal> {
     let mut constants = vec![];
@@ -1099,7 +1105,7 @@ pub(crate) fn constant_key_alternatives(
             }
         }
         Literal::Char(c) => {
-            let atom = atom_tbl.build_with(&c.to_string());
+            let atom = AtomTable::build_with(&atom_tbl, &c.to_string());
             constants.push(Literal::Atom(atom));
         }
         /*
@@ -1116,8 +1122,9 @@ pub(crate) fn constant_key_alternatives(
         }
         */
         Literal::Integer(ref n) => {
-            if let Some(n) = n.to_isize() {
-                Fixnum::build_with_checked(n as i64).map(|n| {
+            let result = (&**n).try_into();
+            if let Ok(value) = result {
+                Fixnum::build_with_checked(value).map(|n| {
                     constants.push(Literal::Fixnum(n));
                 }).unwrap();
             }
@@ -1147,11 +1154,19 @@ pub(crate) trait Indexer {
 
     fn new() -> Self;
 
-    fn constants(&mut self) -> &mut IndexMap<Literal, VecDeque<Self::ThirdLevelIndex>, FxBuildHasher>;
+    fn constants(
+        &mut self,
+    ) -> &mut IndexMap<Literal, VecDeque<Self::ThirdLevelIndex>, FxBuildHasher>;
     fn lists(&mut self) -> &mut VecDeque<Self::ThirdLevelIndex>;
-    fn structures(&mut self) -> &mut IndexMap<(Atom, usize), VecDeque<Self::ThirdLevelIndex>, FxBuildHasher>;
+    fn structures(
+        &mut self,
+    ) -> &mut IndexMap<(Atom, usize), VecDeque<Self::ThirdLevelIndex>, FxBuildHasher>;
 
-    fn compute_index(is_initial_index: bool, index: usize) -> Self::ThirdLevelIndex;
+    fn compute_index(
+        is_initial_index: bool,
+        index: usize,
+        non_counted_bt: bool,
+    ) -> Self::ThirdLevelIndex;
 
     fn second_level_index<IndexKey: Eq + Hash>(
         indices: IndexMap<IndexKey, VecDeque<Self::ThirdLevelIndex>, FxBuildHasher>,
@@ -1187,7 +1202,9 @@ impl Indexer for StaticCodeIndices {
     }
 
     #[inline]
-    fn constants(&mut self) -> &mut IndexMap<Literal, VecDeque<IndexedChoiceInstruction>, FxBuildHasher> {
+    fn constants(
+        &mut self,
+    ) -> &mut IndexMap<Literal, VecDeque<IndexedChoiceInstruction>, FxBuildHasher> {
         &mut self.constants
     }
 
@@ -1197,13 +1214,21 @@ impl Indexer for StaticCodeIndices {
     }
 
     #[inline]
-    fn structures(&mut self) -> &mut IndexMap<(Atom, usize), VecDeque<IndexedChoiceInstruction>, FxBuildHasher> {
+    fn structures(
+        &mut self,
+    ) -> &mut IndexMap<(Atom, usize), VecDeque<IndexedChoiceInstruction>, FxBuildHasher> {
         &mut self.structures
     }
 
-    fn compute_index(is_initial_index: bool, index: usize) -> IndexedChoiceInstruction {
+    fn compute_index(
+        is_initial_index: bool,
+        index: usize,
+        non_counted_bt: bool,
+    ) -> IndexedChoiceInstruction {
         if is_initial_index {
             IndexedChoiceInstruction::Try(index + 1)
+        } else if non_counted_bt {
+            IndexedChoiceInstruction::DefaultRetry(index + 1)
         } else {
             IndexedChoiceInstruction::Retry(index + 1)
         }
@@ -1231,7 +1256,9 @@ impl Indexer for StaticCodeIndices {
     }
 
     fn switch_on<IndexKey: Eq + Hash>(
-        mut instr_fn: impl FnMut(IndexMap<IndexKey, IndexingCodePtr, FxBuildHasher>) -> IndexingInstruction,
+        mut instr_fn: impl FnMut(
+            IndexMap<IndexKey, IndexingCodePtr, FxBuildHasher>,
+        ) -> IndexingInstruction,
         index: &mut IndexMap<IndexKey, VecDeque<IndexedChoiceInstruction>, FxBuildHasher>,
         prelude: &mut VecDeque<IndexingLine>,
     ) -> IndexingCodePtr {
@@ -1318,7 +1345,7 @@ impl Indexer for DynamicCodeIndices {
     }
 
     #[inline]
-    fn compute_index(_: bool, index: usize) -> usize {
+    fn compute_index(_: bool, index: usize, _: bool) -> usize {
         index + 1
     }
 
@@ -1331,7 +1358,9 @@ impl Indexer for DynamicCodeIndices {
         for (key, code) in indices.into_iter() {
             if code.len() > 1 {
                 index_locs.insert(key, IndexingCodePtr::Internal(prelude.len() + 1));
-                prelude.push_back(IndexingLine::DynamicIndexedChoice(code.into_iter().collect()));
+                prelude.push_back(IndexingLine::DynamicIndexedChoice(
+                    code.into_iter().collect(),
+                ));
             } else {
                 code.front().map(|i| {
                     index_locs.insert(key, IndexingCodePtr::DynamicExternal(*i));
@@ -1343,7 +1372,9 @@ impl Indexer for DynamicCodeIndices {
     }
 
     fn switch_on<IndexKey: Eq + Hash>(
-        mut instr_fn: impl FnMut(IndexMap<IndexKey, IndexingCodePtr, FxBuildHasher>) -> IndexingInstruction,
+        mut instr_fn: impl FnMut(
+            IndexMap<IndexKey, IndexingCodePtr, FxBuildHasher>,
+        ) -> IndexingInstruction,
         index: &mut IndexMap<IndexKey, VecDeque<usize>, FxBuildHasher>,
         prelude: &mut VecDeque<IndexingLine>,
     ) -> IndexingCodePtr {
@@ -1370,7 +1401,9 @@ impl Indexer for DynamicCodeIndices {
     ) -> IndexingCodePtr {
         if lists.len() > 1 {
             let lists = mem::replace(lists, VecDeque::new());
-            prelude.push_back(IndexingLine::DynamicIndexedChoice(lists.into_iter().collect()));
+            prelude.push_back(IndexingLine::DynamicIndexedChoice(
+                lists.into_iter().collect(),
+            ));
             IndexingCodePtr::Internal(1)
         } else {
             lists
@@ -1400,33 +1433,43 @@ impl Indexer for DynamicCodeIndices {
 pub(crate) struct CodeOffsets<I: Indexer> {
     indices: I,
     optimal_index: usize,
+    non_counted_bt: bool,
 }
 
 impl<I: Indexer> CodeOffsets<I> {
-    pub(crate) fn new(indices: I, optimal_index: usize) -> Self {
+    pub(crate) fn new(indices: I, optimal_index: usize, non_counted_bt: bool) -> Self {
         CodeOffsets {
             indices,
             optimal_index,
+            non_counted_bt,
         }
     }
 
     fn index_list(&mut self, index: usize) {
         let is_initial_index = self.indices.lists().is_empty();
-        let index = I::compute_index(is_initial_index, index);
+        let index = I::compute_index(is_initial_index, index, self.non_counted_bt);
         self.indices.lists().push_back(index);
     }
 
     fn index_constant(
         &mut self,
-        atom_tbl: &mut AtomTable,
+        atom_tbl: &AtomTable,
         constant: Literal,
         index: usize,
     ) -> Vec<Literal> {
         let overlapping_constants = constant_key_alternatives(constant, atom_tbl);
-        let code = self.indices.constants().entry(constant).or_insert(VecDeque::new());
+        let code = self
+            .indices
+            .constants()
+            .entry(constant)
+            .or_insert(VecDeque::new());
 
         let is_initial_index = code.is_empty();
-        code.push_back(I::compute_index(is_initial_index, index));
+        code.push_back(I::compute_index(
+            is_initial_index,
+            index,
+            self.non_counted_bt,
+        ));
 
         for constant in &overlapping_constants {
             let code = self
@@ -1436,7 +1479,7 @@ impl<I: Indexer> CodeOffsets<I> {
                 .or_insert(VecDeque::new());
 
             let is_initial_index = code.is_empty();
-            let index = I::compute_index(is_initial_index, index);
+            let index = I::compute_index(is_initial_index, index, self.non_counted_bt);
 
             code.push_back(index);
         }
@@ -1454,7 +1497,11 @@ impl<I: Indexer> CodeOffsets<I> {
         let code_len = code.len();
         let is_initial_index = code.is_empty();
 
-        code.push_back(I::compute_index(is_initial_index, index));
+        code.push_back(I::compute_index(
+            is_initial_index,
+            index,
+            self.non_counted_bt,
+        ));
         code_len
     }
 
@@ -1463,7 +1510,7 @@ impl<I: Indexer> CodeOffsets<I> {
         optimal_arg: &Term,
         index: usize,
         clause_index_info: &mut ClauseIndexInfo,
-        atom_tbl: &mut AtomTable,
+        atom_tbl: &AtomTable,
     ) {
         match optimal_arg {
             &Term::Clause(_, atom!("."), ref terms) if terms.len() == 2 => {

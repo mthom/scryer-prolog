@@ -1,12 +1,13 @@
 fn main() -> std::process::ExitCode {
-    use std::sync::atomic::Ordering;
     use scryer_prolog::*;
     use scryer_prolog::atom_table::Atom;
+    use std::sync::atomic::Ordering;
 
     #[cfg(feature = "repl")]
     ctrlc::set_handler(move || {
         scryer_prolog::machine::INTERRUPT.store(true, Ordering::Relaxed);
-    }).unwrap();
+    })
+    .unwrap();
 
     #[cfg(target_os = "wasi")]
     let runtime = tokio::runtime::Builder::new_current_thread()

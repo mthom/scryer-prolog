@@ -44,7 +44,8 @@ pub(crate) enum ValidType {
     InCharacter,
     Integer,
     List,
-    #[allow(unused)] Number,
+    #[allow(unused)]
+    Number,
     Pair,
     //    PredicateIndicator,
     //    Variable
@@ -254,9 +255,11 @@ pub(super) type FunctorStub = [HeapCellValue; 3];
 
 #[inline(always)]
 pub(super) fn functor_stub(name: Atom, arity: usize) -> FunctorStub {
-    [atom_as_cell!(atom!("/"), 2),
-     atom_as_cell!(name),
-     fixnum_as_cell!(Fixnum::build_with(arity as i64))]
+    [
+        atom_as_cell!(atom!("/"), 2),
+        atom_as_cell!(name),
+        fixnum_as_cell!(Fixnum::build_with(arity as i64)),
+    ]
 }
 
 impl MachineState {
@@ -440,11 +443,13 @@ impl MachineState {
     pub(super) fn session_error(&mut self, err: SessionError) -> MachineError {
         match err {
             SessionError::CannotOverwriteBuiltIn(key) => {
-            // SessionError::CannotOverwriteImport(pred_atom) => {
+                // SessionError::CannotOverwriteImport(pred_atom) => {
                 self.permission_error(
                     Permission::Modify,
                     atom!("static_procedure"),
-                    functor_stub(key.0, key.1).into_iter().collect::<MachineStub>(),
+                    functor_stub(key.0, key.1)
+                        .into_iter()
+                        .collect::<MachineStub>(),
                 )
             }
             SessionError::ExistenceError(err) => self.existence_error(err),
@@ -471,7 +476,11 @@ impl MachineState {
             }
             SessionError::NamelessEntry => {
                 let error_atom = atom!("nameless_procedure");
-                self.permission_error(Permission::Create, atom!("static_procedure"), functor!(error_atom))
+                self.permission_error(
+                    Permission::Create,
+                    atom!("static_procedure"),
+                    functor!(error_atom),
+                )
             }
             SessionError::OpIsInfixAndPostFix(op) => {
                 self.permission_error(Permission::Create, atom!("operator"), functor!(op))
@@ -541,21 +550,21 @@ impl MachineState {
 
     #[cfg(feature = "ffi")]
     pub(super) fn ffi_error(&mut self, err: FFIError) -> MachineError {
-	let error_atom = match err {
-	    FFIError::ValueCast => atom!("value_cast"),
-	    FFIError::ValueDontFit => atom!("value_dont_fit"),
-	    FFIError::InvalidFFIType => atom!("invalid_ffi_type"),
-	    FFIError::InvalidStructName => atom!("invalid_struct_name"),
-	    FFIError::FunctionNotFound => atom!("function_not_found"),
-	    FFIError::StructNotFound => atom!("struct_not_found"),
-	};
-	let stub = functor!(atom!("ffi_error"),[atom(error_atom)]);
+        let error_atom = match err {
+            FFIError::ValueCast => atom!("value_cast"),
+            FFIError::ValueDontFit => atom!("value_dont_fit"),
+            FFIError::InvalidFFIType => atom!("invalid_ffi_type"),
+            FFIError::InvalidStructName => atom!("invalid_struct_name"),
+            FFIError::FunctionNotFound => atom!("function_not_found"),
+            FFIError::StructNotFound => atom!("struct_not_found"),
+        };
+        let stub = functor!(atom!("ffi_error"), [atom(error_atom)]);
 
-	MachineError {
-	    stub,
-	    location: None,
-	    from: ErrorProvenance::Constructed,
-	}
+        MachineError {
+            stub,
+            location: None,
+            from: ErrorProvenance::Constructed,
+        }
     }
 
     pub(super) fn error_form(&mut self, err: MachineError, src: FunctorStub) -> MachineStub {
@@ -682,10 +691,12 @@ impl CompilationError {
             &CompilationError::ExpectedRel => {
                 functor!(atom!("expected_relation"))
             }
-            &CompilationError::InadmissibleFact => { // TODO: type_error(callable, _).
+            &CompilationError::InadmissibleFact => {
+                // TODO: type_error(callable, _).
                 functor!(atom!("inadmissible_fact"))
             }
-            &CompilationError::InadmissibleQueryTerm => { // TODO: type_error(callable, _).
+            &CompilationError::InadmissibleQueryTerm => {
+                // TODO: type_error(callable, _).
                 functor!(atom!("inadmissible_query_term"))
             }
             &CompilationError::InconsistentEntry => {
@@ -820,10 +831,10 @@ pub enum CycleSearchResult {
     Cyclic(usize),
     EmptyList,
     NotList(usize, HeapCellValue), // the list length until the second argument in the heap
-    PartialList(usize, Ref), // the list length (up to max), and an offset into the heap.
-    ProperList(usize),       // the list length.
+    PartialList(usize, Ref),       // the list length (up to max), and an offset into the heap.
+    ProperList(usize),             // the list length.
     PStrLocation(usize, usize, usize), // list length (up to max), the heap address of the PStr, the offset
-    UntouchedList(usize, usize),   // list length (up to max), the address of an uniterated Addr::Lis(address).
+    UntouchedList(usize, usize), // list length (up to max), the address of an uniterated Addr::Lis(address).
     UntouchedCStr(Atom, usize),
 }
 
@@ -838,7 +849,7 @@ impl MachineState {
         match BrentAlgState::detect_cycles(&self.heap, list) {
             CycleSearchResult::PartialList(..) => {
                 let err = self.instantiation_error();
-                return Err(self.error_form(err, stub_gen()))
+                return Err(self.error_form(err, stub_gen()));
             }
             CycleSearchResult::NotList(..) | CycleSearchResult::Cyclic(_) => {
                 let err = self.type_error(ValidType::List, list);

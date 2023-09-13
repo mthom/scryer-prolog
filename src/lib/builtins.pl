@@ -143,6 +143,7 @@ call(_, _, _, _, _, _, _, _, _).
 %    enabled) and `error` which throws an exception when a cylic term is created. Read and write.
 %  * `unknown`: How undefined predicates are handled when called. Possible values are `error` (the default, an error is thrown),
 %    `fail` (the call silently fails) and `warn` (the call fails and a warning about the undefined predicate is printed).
+%  * `answer_write_options`: Additional write options used by the top level for writing answers.
 %
 current_prolog_flag(Flag, Value) :- Flag == max_arity, !, Value = 1023.
 current_prolog_flag(max_arity, 1023).
@@ -160,12 +161,25 @@ current_prolog_flag(Flag, OccursCheckEnabled) :-
     Flag == occurs_check,
     !,
     '$is_sto_enabled'(OccursCheckEnabled).
+current_prolog_flag(occurs_check, OccursCheckEnabled) :-
+    '$is_sto_enabled'(OccursCheckEnabled).
+current_prolog_flag(Flag, Value) :-
+    Flag == answer_write_options,
+    !,
+    answer_write_options(Value).
+current_prolog_flag(answer_write_options, Value) :-
+    answer_write_options(Value).
 current_prolog_flag(Flag, _) :-
     atom(Flag),
     throw(error(domain_error(prolog_flag, Flag), current_prolog_flag/2)). % 8.17.2.3 b
 current_prolog_flag(Flag, _) :-
     nonvar(Flag),
     throw(error(type_error(atom, Flag), current_prolog_flag/2)). % 8.17.2.3 a
+
+answer_write_options(Value) :-
+    (   iso_ext:bb_get('$answer_write_options', Value) -> true
+    ;   Value = []
+    ).
 
 %% set_prolog_flag(Flag, Value).
 %
@@ -207,13 +221,24 @@ set_prolog_flag(occurs_check, false) :-
 set_prolog_flag(occurs_check, error) :-
     !, '$set_sto_with_error_as_unify'.
 set_prolog_flag(double_quotes, Value) :-
-    throw(error(domain_error(flag_value, double_quotes + Value),
-                set_prolog_flag/2)). % 8.17.1.3 e
+    flag_domain_error(double_quotes, Value).
+set_prolog_flag(answer_write_options, Options) :-
+    !,
+    catch(catch(builtins:parse_write_options(Options, _, set_prolog_flag/2),
+                error(domain_error(_,_), _),
+                throw(error(type_error(_,_), _))), % convert domain error to type error ....
+          error(type_error(_,_), _),               % ... to catch type and domain errors.
+          flag_domain_error(answer_write_options, Options)),
+    iso_ext:bb_put('$answer_write_options', Options).
 set_prolog_flag(Flag, _) :-
     atom(Flag),
     throw(error(domain_error(prolog_flag, Flag), set_prolog_flag/2)). % 8.17.1.3 d
 set_prolog_flag(Flag, _) :-
     throw(error(type_error(atom, Flag), set_prolog_flag/2)). % 8.17.1.3 c
+
+flag_domain_error(Flag, Value) :-
+    % domain error via 8.17.1.3 e: Value is inappropriate for Flag
+    throw(error(domain_error(flag_value, Flag + Value), set_prolog_flag/2)).
 
 % control operators.
 
@@ -262,6 +287,9 @@ repeat :- repeat.
 %% ->(G1, G2)
 %
 % If-then and if-then-else constructs
+
+:- non_counted_backtracking (->)/2.
+
 G1 -> G2 :- control_entry_point((G1 -> G2)).
 
 
@@ -275,6 +303,9 @@ staggered_if_then(G1, G2) :-
 %% ;(G1, G2)
 %
 % Disjunction (or)
+
+:- non_counted_backtracking (;)/2.
+
 G1 ; G2 :- control_entry_point((G1 ; G2)).
 
 
@@ -304,6 +335,9 @@ set_cp(B) :- '$set_cp'(B).
 %% ,(G1, G2)
 %
 % Conjuction (and)
+
+:- non_counted_backtracking (',')/2.
+
 ','(G1, G2) :- control_entry_point((G1, G2)).
 
 
@@ -788,7 +822,7 @@ catch(G,C,R) :-
 
 catch(G,C,R,Bb) :-
     '$install_new_block'(NBb),
-    '$call_with_inference_counting'(call(G)),
+    call(G),
     end_block(Bb, NBb).
 catch(G,C,R,Bb) :-
     '$reset_block'(Bb),
@@ -1342,11 +1376,6 @@ current_predicate(Pred) :-
     ;  throw(error(type_error(predicate_indicator, Pred), current_predicate/1))
     ).
 
-'$iterate_op_db_refs'(RPriority, RSpec, ROp, _, RPriority, RSpec, ROp).
-'$iterate_op_db_refs'(RPriority, RSpec, ROp, OssifiedOpDir, Priority, Spec, Op) :-
-    '$get_next_op_db_ref'(RPriority, RSpec, ROp, OssifiedOpDir, RRPriority, RRSpec, RROp),
-    '$iterate_op_db_refs'(RRPriority, RRSpec, RROp, OssifiedOpDir, Priority, Spec, Op).
-
 can_be_op_priority(Priority) :- var(Priority).
 can_be_op_priority(Priority) :- op_priority(Priority).
 
@@ -1362,8 +1391,8 @@ current_op(Priority, Spec, Op) :-
     (  can_be_op_priority(Priority),
        can_be_op_specifier(Spec),
        error:can_be(atom, Op) ->
-       '$get_next_op_db_ref'(RPriority, RSpec, ROp, OssifiedOpDir, _, _, Op),
-       '$iterate_op_db_refs'(RPriority, RSpec, ROp, OssifiedOpDir, Priority, Spec, Op)
+       '$get_next_op_db_ref'(Priority, Spec, Op, ListOfOps),
+       lists:member(op(Priority, Spec, Op), ListOfOps)
     ).
 
 list_of_op_atoms(Var) :-
@@ -2186,6 +2215,9 @@ set_stream_position(S_or_a, Position) :-
 %% callable(X).
 %
 % True iff X is bound o an atom or a compund term.
+
+:- non_counted_backtracking callable/1.
+
 callable(X) :-
     (  nonvar(X), functor(X, F, _), atom(F) ->
        true

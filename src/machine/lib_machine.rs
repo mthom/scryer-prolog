@@ -1,5 +1,6 @@
 use std::collections::BTreeSet;
 
+use crate::atom_table;
 use crate::machine::BREAK_FROM_DISPATCH_LOOP_LOC;
 use crate::machine::mock_wam::{CompositeOpDir, Term};
 use crate::parser::parser::{Parser, Tokens};
@@ -58,7 +59,7 @@ impl Machine {
     pub fn consult_module_string(&mut self, module_name: &str, program: String) {
         let stream = Stream::from_owned_string(program, &mut self.machine_st.arena);
         self.machine_st.registers[1] = stream_as_cell!(stream);
-        self.machine_st.registers[2] = atom_as_cell!(self.machine_st.atom_tbl.build_with(module_name));
+        self.machine_st.registers[2] = atom_as_cell!(&atom_table::AtomTable::build_with(&self.machine_st.atom_tbl, module_name));
 
         self.run_module_predicate(atom!("loader"), (atom!("consult_stream"), 2));
     }

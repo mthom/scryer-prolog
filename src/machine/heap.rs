@@ -130,11 +130,7 @@ pub fn print_heap_terms<'a, I: Iterator<Item = &'a HeapCellValue>>(heap: I, h: u
 }
 
 #[inline]
-pub(crate) fn put_complete_string(
-    heap: &mut Heap,
-    s: &str,
-    atom_tbl: &mut AtomTable,
-) -> HeapCellValue {
+pub(crate) fn put_complete_string(heap: &mut Heap, s: &str, atom_tbl: &AtomTable) -> HeapCellValue {
     match allocate_pstr(heap, s, atom_tbl) {
         Some(h) => {
             heap.pop(); // pop the trailing variable cell from the heap planted by allocate_pstr.
@@ -157,11 +153,7 @@ pub(crate) fn put_complete_string(
 }
 
 #[inline]
-pub(crate) fn put_partial_string(
-    heap: &mut Heap,
-    s: &str,
-    atom_tbl: &mut AtomTable,
-) -> HeapCellValue {
+pub(crate) fn put_partial_string(heap: &mut Heap, s: &str, atom_tbl: &AtomTable) -> HeapCellValue {
     match allocate_pstr(heap, s, atom_tbl) {
         Some(h) => {
             pstr_loc_as_cell!(h)
@@ -173,11 +165,7 @@ pub(crate) fn put_partial_string(
 }
 
 #[inline]
-pub(crate) fn allocate_pstr(
-    heap: &mut Heap,
-    mut src: &str,
-    atom_tbl: &mut AtomTable,
-) -> Option<usize> {
+pub(crate) fn allocate_pstr(heap: &mut Heap, mut src: &str, atom_tbl: &AtomTable) -> Option<usize> {
     let orig_h = heap.len();
 
     loop {
@@ -258,7 +246,10 @@ pub(crate) fn to_local_code_ptr(heap: &Heap, addr: HeapCellValue) -> Option<usiz
     let extract_integer = |s: usize| -> Option<usize> {
         match Number::try_from(heap[s]) {
             Ok(Number::Fixnum(n)) => usize::try_from(n.get_num()).ok(),
-            Ok(Number::Integer(n)) => n.to_usize(),
+            Ok(Number::Integer(n)) => {
+                let value: usize = (&*n).try_into().unwrap();
+                Some(value)
+            },
             _ => None,
         }
     };

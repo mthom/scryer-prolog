@@ -10,16 +10,20 @@ license = "BSD-3-Clause"
 keywords = ["prolog", "prolog-interpreter", "prolog-system"]
 categories = ["command-line-utilities"]
 build = "build/main.rs"
-rust-version = "1.63"
+rust-version = "1.70"
+
+[lib]
+crate-type = ["cdylib", "rlib"]
 
 [features]
-multi_thread = []
-default = ["ffi", "repl", "hostname", "tls", "http"]
+default = ["ffi", "repl", "hostname", "tls", "http", "crypto-full"]
 ffi = ["dep:libffi"]
 repl = ["dep:crossterm", "dep:ctrlc", "dep:rustyline"]
 hostname = ["dep:hostname"]
 tls = ["dep:native-tls"]
 http = ["dep:hyper", "dep:reqwest"]
+rust_beta_channel = []
+crypto-full = []
 
 [build-dependencies]
 indexmap = "1.0.2"
@@ -27,9 +31,9 @@ proc-macro2 = "1.0.36"
 quote = "1.0.15"
 strum = "0.23"
 strum_macros = "0.23"
-syn = { version = "1.0.88", features = ['full', 'visit', 'extra-traits'] }
-to-syn-value = "0.1.0"
-to-syn-value_derive = "0.1.0"
+syn = { version = "2.0.32", features = ['full', 'visit', 'extra-traits'] }
+to-syn-value = "0.1.1"
+to-syn-value_derive = "0.1.1"
 walkdir = "2"
 
 [dependencies]
@@ -65,7 +69,8 @@ libloading = "0.7"
 derive_deref = "1.1.1"
 http-body-util = "0.1.0-rc.2"
 bytes = "1"
-dashu = { git = "https://github.com/coasys/dashu.git", version = "0.3.1"  }
+dashu = { version = "0.3.1", git = "https://github.com/cmpute/dashu.git"  }
+num-order = { version = "1.2.0" }
 rand = "0.8.5"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
@@ -83,6 +88,18 @@ tokio = { version = "1.28.2", features = ["full"] }
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 getrandom = { version = "0.2.10", features = ["js"] }
 tokio = { version = "1.28.2", features = ["sync", "macros", "io-util", "rt", "time"] }
+
+[target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
+console_error_panic_hook = "0.1"
+console_log = "1.0"
+wasm-bindgen = "0.2.87"
+wasm-bindgen-futures = "0.4"
+serde-wasm-bindgen = "0.5"
+web-sys = { version = "0.3", features = [
+    "Document",
+    "Window",
+    "Element",
+]}
 
 [target.'cfg(target_os = "wasi")'.dependencies]
 ring-wasi = { version = "0.16.25" }

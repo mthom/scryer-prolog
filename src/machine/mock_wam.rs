@@ -2,14 +2,16 @@ pub use crate::arena::*;
 pub use crate::atom_table::*;
 use crate::heap_print::*;
 pub use crate::machine::heap::*;
-pub use crate::machine::*;
 pub use crate::machine::machine_state::*;
 pub use crate::machine::stack::*;
 pub use crate::machine::streams::*;
+pub use crate::machine::*;
 pub use crate::macros::*;
 pub use crate::parser::ast::*;
 use crate::read::*;
 pub use crate::types::*;
+
+use std::sync::Arc;
 
 #[cfg(test)]
 use crate::machine::copier::CopierTarget;
@@ -61,7 +63,7 @@ impl MockWAM {
 
         let mut printer = HCPrinter::new(
             &mut self.machine_st.heap,
-            &mut self.machine_st.atom_tbl,
+            Arc::clone(&self.machine_st.atom_tbl),
             &mut self.machine_st.stack,
             &self.op_dir,
             PrinterOutputter::new(),
@@ -71,11 +73,9 @@ impl MockWAM {
         printer.var_names = term_write_result
             .var_dict
             .into_iter()
-            .map(|(var, cell)| {
-                match var {
-                    VarKey::VarPtr(var) => (cell, var.clone()),
-                    VarKey::AnonVar(_) => (cell, VarPtr::from(var.to_string()))
-                }
+            .map(|(var, cell)| match var {
+                VarKey::VarPtr(var) => (cell, var.clone()),
+                VarKey::AnonVar(_) => (cell, VarPtr::from(var.to_string())),
             })
             .collect();
 
@@ -234,6 +234,17 @@ impl Machine {
         self.load_file(file.into(), stream);
         self.user_output.bytes().map(|b| b.unwrap()).collect()
     }
+
+    pub fn test_load_string(&mut self, code: &str) -> Vec<u8> {
+        let stream = Stream::from_owned_string(
+            code.to_owned(),
+            &mut self.machine_st.arena,
+        );
+
+        self.load_file("<stdin>".into(), stream);
+        self.user_output.bytes().map(|b| b.unwrap()).collect()
+    }
+
 }
 
 #[cfg(test)]
@@ -245,26 +256,11 @@ mod tests {
         let mut wam = MachineState::new();
         let mut op_dir = default_op_dir();
 
-        op_dir.insert(
-            (atom!("+"), Fixity::In),
-            OpDesc::build_with(500, YFX as u8),
-        );
-        op_dir.insert(
-            (atom!("-"), Fixity::In),
-            OpDesc::build_with(500, YFX as u8),
-        );
-        op_dir.insert(
-            (atom!("*"), Fixity::In),
-            OpDesc::build_with(500, YFX as u8),
-        );
-        op_dir.insert(
-            (atom!("/"), Fixity::In),
-            OpDesc::build_with(400, YFX as u8),
-        );
-        op_dir.insert(
-            (atom!("="), Fixity::In),
-            OpDesc::build_with(700, XFX as u8),
-        );
+        op_dir.insert((atom!("+"), Fixity::In), OpDesc::build_with(500, YFX as u8));
+        op_dir.insert((atom!("-"), Fixity::In), OpDesc::build_with(500, YFX as u8));
+        op_dir.insert((atom!("*"), Fixity::In), OpDesc::build_with(500, YFX as u8));
+        op_dir.insert((atom!("/"), Fixity::In), OpDesc::build_with(400, YFX as u8));
+        op_dir.insert((atom!("="), Fixity::In), OpDesc::build_with(700, XFX as u8));
 
         {
             parse_and_write_parsed_term_to_heap(&mut wam, "f(X,X).", &op_dir).unwrap();
@@ -481,22 +477,10 @@ mod tests {
         let mut wam = MachineState::new();
         let mut op_dir = default_op_dir();
 
-        op_dir.insert(
-            (atom!("+"), Fixity::In),
-            OpDesc::build_with(500, YFX as u8),
-        );
-        op_dir.insert(
-            (atom!("-"), Fixity::In),
-            OpDesc::build_with(500, YFX as u8),
-        );
-        op_dir.insert(
-            (atom!("*"), Fixity::In),
-            OpDesc::build_with(400, YFX as u8),
-        );
-        op_dir.insert(
-            (atom!("/"), Fixity::In),
-            OpDesc::build_with(400, YFX as u8),
-        );
+        op_dir.insert((atom!("+"), Fixity::In), OpDesc::build_with(500, YFX as u8));
+        op_dir.insert((atom!("-"), Fixity::In), OpDesc::build_with(500, YFX as u8));
+        op_dir.insert((atom!("*"), Fixity::In), OpDesc::build_with(400, YFX as u8));
+        op_dir.insert((atom!("/"), Fixity::In), OpDesc::build_with(400, YFX as u8));
 
         {
             parse_and_write_parsed_term_to_heap(&mut wam, "f(X,X).", &op_dir).unwrap();
@@ -587,20 +571,12 @@ mod tests {
         wam.heap.push(heap_loc_as_cell!(1));
 
         assert_eq!(
-            compare_term_test!(
-                wam,
-                heap_loc_as_cell!(0),
-                heap_loc_as_cell!(0)
-            ),
+            compare_term_test!(wam, heap_loc_as_cell!(0), heap_loc_as_cell!(0)),
             Some(Ordering::Equal)
         );
 
         assert_eq!(
-            compare_term_test!(
-                wam,
-                heap_loc_as_cell!(0),
-                atom_as_cell!(atom!("a"))
-            ),
+            compare_term_test!(wam, heap_loc_as_cell!(0), atom_as_cell!(atom!("a"))),
             Some(Ordering::Greater)
         );
 
@@ -623,29 +599,17 @@ mod tests {
         wam.heap.push(empty_list_as_cell!());
 
         assert_eq!(
-            compare_term_test!(
-                wam,
-                heap_loc_as_cell!(7),
-                heap_loc_as_cell!(7)
-            ),
+            compare_term_test!(wam, heap_loc_as_cell!(7), heap_loc_as_cell!(7)),
             Some(Ordering::Equal)
         );
 
         assert_eq!(
-            compare_term_test!(
-                wam,
-                heap_loc_as_cell!(0),
-                heap_loc_as_cell!(7)
-            ),
+            compare_term_test!(wam, heap_loc_as_cell!(0), heap_loc_as_cell!(7)),
             Some(Ordering::Greater)
         );
 
         assert_eq!(
-            compare_term_test!(
-                wam,
-                empty_list_as_cell!(),
-                heap_loc_as_cell!(7)
-            ),
+            compare_term_test!(wam, empty_list_as_cell!(), heap_loc_as_cell!(7)),
             Some(Ordering::Less)
         );
 
@@ -668,40 +632,24 @@ mod tests {
         );
 
         assert_eq!(
-            compare_term_test!(
-                wam,
-                empty_list_as_cell!(),
-                atom_as_cell!(atom!("atom"))
-            ),
+            compare_term_test!(wam, empty_list_as_cell!(), atom_as_cell!(atom!("atom"))),
             Some(Ordering::Less)
         );
 
         assert_eq!(
-            compare_term_test!(
-                wam,
-                atom_as_cell!(atom!("atom")),
-                empty_list_as_cell!()
-            ),
+            compare_term_test!(wam, atom_as_cell!(atom!("atom")), empty_list_as_cell!()),
             Some(Ordering::Greater)
         );
 
         let one_p_one = HeapCellValue::from(float_alloc!(1.1, &mut wam.arena));
 
         assert_eq!(
-            compare_term_test!(
-                wam,
-                one_p_one,
-                fixnum_as_cell!(Fixnum::build_with(1))
-            ),
+            compare_term_test!(wam, one_p_one, fixnum_as_cell!(Fixnum::build_with(1))),
             Some(Ordering::Less)
         );
 
         assert_eq!(
-            compare_term_test!(
-                wam,
-                fixnum_as_cell!(Fixnum::build_with(1)),
-                one_p_one
-            ),
+            compare_term_test!(wam, fixnum_as_cell!(Fixnum::build_with(1)), one_p_one),
             Some(Ordering::Greater)
         );
     }
@@ -720,7 +668,8 @@ mod tests {
         all_cells_unmarked(&wam.heap);
         wam.heap.clear();
 
-        wam.heap.extend(functor!(atom!("f"), [atom(atom!("a")), atom(atom!("b"))]));
+        wam.heap
+            .extend(functor!(atom!("f"), [atom(atom!("a")), atom(atom!("b"))]));
 
         assert!(!wam.is_cyclic_term(str_loc_as_cell!(0)));
 

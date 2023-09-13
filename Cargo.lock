@@ -261,6 +261,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "console_error_panic_hook"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a06aeb73f470f66dcdbf7223caeebb85984942f22f1adb2a088cf9668146bbbc"
+dependencies = [
+ "cfg-if",
+ "wasm-bindgen",
+]
+
+[[package]]
+name = "console_log"
+version = "1.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "be8aed40e4edbf4d3b4431ab260b63fdc40f5780a4766824329ea0f1eefe3c0f"
+dependencies = [
+ "log",
+ "web-sys",
+]
+
+[[package]]
 name = "core-foundation"
 version = "0.9.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -378,7 +398,7 @@ dependencies = [
 [[package]]
 name = "dashu"
 version = "0.3.1"
-source = "git+https://github.com/coasys/dashu.git#f9342190be9062630124e666b001077bb5f02f23"
+source = "git+https://github.com/cmpute/dashu.git#9d1ba4ac98a4675f294e2f2c072bf47f96d33e9b"
 dependencies = [
  "dashu-base",
  "dashu-float",
@@ -390,37 +410,36 @@ dependencies = [
 [[package]]
 name = "dashu-base"
 version = "0.3.1"
-source = "git+https://github.com/coasys/dashu.git#f9342190be9062630124e666b001077bb5f02f23"
+source = "git+https://github.com/cmpute/dashu.git#9d1ba4ac98a4675f294e2f2c072bf47f96d33e9b"
 
 [[package]]
 name = "dashu-float"
 version = "0.3.2"
-source = "git+https://github.com/coasys/dashu.git#f9342190be9062630124e666b001077bb5f02f23"
+source = "git+https://github.com/cmpute/dashu.git#9d1ba4ac98a4675f294e2f2c072bf47f96d33e9b"
 dependencies = [
  "dashu-base",
  "dashu-int",
+ "num-modular",
  "num-order",
- "num-traits",
  "static_assertions",
 ]
 
 [[package]]
 name = "dashu-int"
 version = "0.3.1"
-source = "git+https://github.com/coasys/dashu.git#f9342190be9062630124e666b001077bb5f02f23"
+source = "git+https://github.com/cmpute/dashu.git#9d1ba4ac98a4675f294e2f2c072bf47f96d33e9b"
 dependencies = [
  "cfg-if",
  "dashu-base",
- "num-modular 0.5.2",
+ "num-modular",
  "num-order",
- "num-traits",
  "static_assertions",
 ]
 
 [[package]]
 name = "dashu-macros"
 version = "0.3.1"
-source = "git+https://github.com/coasys/dashu.git#f9342190be9062630124e666b001077bb5f02f23"
+source = "git+https://github.com/cmpute/dashu.git#9d1ba4ac98a4675f294e2f2c072bf47f96d33e9b"
 dependencies = [
  "dashu-base",
  "dashu-float",
@@ -433,13 +452,13 @@ dependencies = [
 [[package]]
 name = "dashu-ratio"
 version = "0.3.2"
-source = "git+https://github.com/coasys/dashu.git#f9342190be9062630124e666b001077bb5f02f23"
+source = "git+https://github.com/cmpute/dashu.git#9d1ba4ac98a4675f294e2f2c072bf47f96d33e9b"
 dependencies = [
  "dashu-base",
  "dashu-float",
  "dashu-int",
+ "num-modular",
  "num-order",
- "num-traits",
 ]
 
 [[package]]
@@ -683,7 +702,7 @@ checksum = "89ca545a94061b6365f2c7355b4b32bd20df3ff95f02da9329b34ccc3bd6ee72"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.29",
+ "syn 2.0.32",
 ]
 
 [[package]]
@@ -1344,38 +1363,18 @@ dependencies = [
 ]
 
 [[package]]
-name = "num-integer"
-version = "0.1.45"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "225d3389fb3509a24c93f5c29eb6bde2586b98d9f016636dff58d7c6f7569cd9"
-dependencies = [
- "autocfg",
- "num-traits",
-]
-
-[[package]]
 name = "num-modular"
-version = "0.5.1"
+version = "0.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "64a5fe11d4135c3bcdf3a95b18b194afa9608a5f6ff034f5d857bc9a27fb0119"
-dependencies = [
- "num-integer",
- "num-traits",
-]
-
-[[package]]
-name = "num-modular"
-version = "0.5.2"
-source = "git+https://github.com/coasys/num-modular.git#1ae06248ec69390370def3a229b3bf4c209aa6c7"
+checksum = "17bb261bf36fa7d83f4c294f834e91256769097b3cb505d44831e0a179ac647f"
 
 [[package]]
 name = "num-order"
-version = "1.0.4"
+version = "1.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e81e321057a0370997b13e6638bba6bd7f6f426e1f8e9a2562490a28eb23e1bc"
+checksum = "537b596b97c40fcf8056d153049eb22f481c17ebce72a513ec9286e4986d1bb6"
 dependencies = [
- "num-modular 0.5.1",
- "num-traits",
+ "num-modular",
 ]
 
 [[package]]
@@ -1441,7 +1440,7 @@ checksum = "a948666b637a0f465e8564c73e89d4dde00d72d4d473cc972f390fc3dcee7d9c"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.29",
+ "syn 2.0.32",
 ]
 
 [[package]]
@@ -1624,7 +1623,7 @@ checksum = "4359fd9c9171ec6e8c62926d6faaf553a8dc3f64e1507e76da7911b4f6a04405"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.29",
+ "syn 2.0.32",
 ]
 
 [[package]]
@@ -2001,6 +2000,8 @@ dependencies = [
  "blake2 0.8.1",
  "bytes",
  "chrono",
+ "console_error_panic_hook",
+ "console_log",
  "cpu-time",
  "crossterm",
  "crrl",
@@ -2026,6 +2027,7 @@ dependencies = [
  "maplit",
  "modular-bitfield",
  "native-tls",
+ "num-order",
  "ordered-float",
  "phf 0.9.0",
  "predicates-core",
@@ -2042,17 +2044,21 @@ dependencies = [
  "rustyline",
  "ryu",
  "select",
+ "serde-wasm-bindgen",
  "serial_test",
  "sha3 0.8.2",
  "smallvec",
  "static_assertions",
  "strum",
  "strum_macros",
- "syn 1.0.109",
+ "syn 2.0.32",
  "to-syn-value",
  "to-syn-value_derive",
  "tokio",
  "walkdir",
+ "wasm-bindgen",
+ "wasm-bindgen-futures",
+ "web-sys",
 ]
 
 [[package]]
@@ -2099,6 +2105,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "serde-wasm-bindgen"
+version = "0.5.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f3b143e2833c57ab9ad3ea280d21fd34e285a42837aeb0ee301f4f41890fa00e"
+dependencies = [
+ "js-sys",
+ "serde",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "serde_derive"
 version = "1.0.188"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2106,7 +2123,7 @@ checksum = "4eca7ac642d82aa35b60049a6eccb4be6be75e599bd2e9adb5f875a737654af2"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.29",
+ "syn 2.0.32",
 ]
 
 [[package]]
@@ -2154,7 +2171,7 @@ checksum = "91d129178576168c589c9ec973feedf7d3126c01ac2bf08795109aa35b69fb8f"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.29",
+ "syn 2.0.32",
 ]
 
 [[package]]
@@ -2350,9 +2367,9 @@ dependencies = [
 
 [[package]]
 name = "syn"
-version = "2.0.29"
+version = "2.0.32"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c324c494eba9d92503e6f1ef2e6df781e78f6a7705a0202d9801b198807d518a"
+checksum = "239814284fd6f1a4ffe4ca893952cdd93c224b6a1571c9a9eadd670295c0c9e2"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2412,7 +2429,7 @@ checksum = "6bb623b56e39ab7dcd4b1b98bb6c8f8d907ed255b18de254088016b27a8ee19b"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.29",
+ "syn 2.0.32",
 ]
 
 [[package]]
@@ -2443,23 +2460,23 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "to-syn-value"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "45dcb7b4108a4793bdd74aa3714296c6eaf43663edf73fa8625d0d7621e68447"
+checksum = "dfcc684f2ceaec3b4e8689657c9e0944b07bf5e34563e0bd758c4d42c05c82ed"
 dependencies = [
- "syn 1.0.109",
+ "syn 2.0.32",
  "to-syn-value_derive",
 ]
 
 [[package]]
 name = "to-syn-value_derive"
-version = "0.1.0"
+version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cd4fdec6de01b568c1d3721c9d46a352623c536cd55a8a5acfefb63d1fccccbc"
+checksum = "3dfffda778de8443144ff3b042ddf14e8bc5445f0fd9fe937c3d252535dc9212"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 1.0.109",
+ "syn 2.0.32",
 ]
 
 [[package]]
@@ -2489,7 +2506,7 @@ checksum = "630bdcf245f78637c13ec01ffae6187cca34625e8c63150d424b59e55af2675e"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.29",
+ "syn 2.0.32",
 ]
 
 [[package]]
@@ -2712,7 +2729,7 @@ dependencies = [
  "once_cell",
  "proc-macro2",
  "quote",
- "syn 2.0.29",
+ "syn 2.0.32",
  "wasm-bindgen-shared",
 ]
 
@@ -2746,7 +2763,7 @@ checksum = "54681b18a46765f095758388f2d0cf16eb8d4169b639ab575a8f5693af210c7b"
 dependencies = [
  "proc-macro2",
  "quote",
- "syn 2.0.29",
+ "syn 2.0.32",
  "wasm-bindgen-backend",
  "wasm-bindgen-shared",
 ]

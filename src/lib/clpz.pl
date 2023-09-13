@@ -2142,16 +2142,17 @@ fds_sespsize([V|Vs], S0, S) :-
         fds_sespsize(Vs, S2, S).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   Optimisation uses destructive assignment to save the computed
-   extremum over backtracking. Failure is used to get rid of copies of
-   attributed variables that are created in intermediate steps. At
-   least that's the intention - it currently doesn't work in SWI:
+   Optimisation uses the clause database to save the computed extremum
+   over backtracking. Failure is used to get rid of copies of
+   attributed variables that are created in intermediate steps.
 
-   %?- X in 0..3, call_residue_vars(labeling([min(X)], [X]), Vs).
-   %@ X = 0,
-   %@ Vs = [_G6174, _G6177],
-   %@ _G6174 in 0..3
+   Example:
 
+     ?- X in 1..3, call_residue_vars(labeling([min(X)], [X]), Vs).
+     %@    X = 1, Vs = []
+     %@ ;  X = 2, Vs = []
+     %@ ;  X = 3, Vs = []
+     %@ ;  false.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 :- dynamic(extremum/1).

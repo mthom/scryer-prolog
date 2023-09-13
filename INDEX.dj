@@ -26,8 +26,12 @@ Some of the Scryer Prolog features are:
 * Compact string representation
 * Network libraries ([TCP sockets](/sockets.html), [HTTP server](/http/http_server.html), [HTTP client](/http/http_open.html), ...)
 * [Cryptographical predicates](/crypto.html)
+* [Foreign Function Interface](/ffi.html)
+* WebAssembly support
 * WAM based engine, cross-platform made in Rust
 * _and more..._
+
+Try Scryer Prolog without any installation! Use [Scryer Playground](https://play.scryer.pl), which uses the WASM version of Scryer Prolog.
 
 ## What is Prolog?
 
@@ -57,9 +61,13 @@ the builtin Prolog modules and libraries in Scryer, check the documentation site
 
 ## Downloads
 
-The latest version of Scryer Prolog is *0.9.1*. And it's already useful for lots of tasks.
+The latest version of Scryer Prolog is *0.9.2*. And it's already useful for lots of tasks.
 
-Scryer Prolog can be compiled from source, instructions are on the [GitHub README](https://github.com/mthom/scryer-prolog). It runs on Linux, macOS and Windows. Other operating systems may work but they're not regularly tested.
+| Windows | [Download](https://github.com/mthom/scryer-prolog/releases/download/v0.9.2/scryer-prolog_windows-latest.zip) |
+| macOS (Intel) | [Download](https://github.com/mthom/scryer-prolog/releases/download/v0.9.2/scryer-prolog_macos-11.zip) |
+| Linux | [Download](https://github.com/mthom/scryer-prolog/releases/download/v0.9.2/scryer-prolog_ubuntu-20.04.zip) |
+
+Scryer Prolog can also be compiled from source, instructions are on the [GitHub README](https://github.com/mthom/scryer-prolog). It runs on Linux, macOS and Windows. Other operating systems may work but they're not regularly tested.
 
 If you're in Linux, maybe your distribution already has an Scryer Prolog package.
 

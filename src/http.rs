@@ -1,13 +1,13 @@
-use std::sync::{Arc, Mutex, Condvar};
-use std::future::Future;
-use std::pin::Pin;
-use http_body_util::Full;
 use bytes::Bytes;
+use http_body_util::Full;
 use hyper::service::Service;
 use hyper::{body::Incoming as IncomingBody, Request, Response};
+use std::future::Future;
+use std::pin::Pin;
+use std::sync::{Arc, Condvar, Mutex};
 
 pub struct HttpListener {
-    pub incoming: std::sync::mpsc::Receiver<HttpRequest>
+    pub incoming: std::sync::mpsc::Receiver<HttpRequest>,
 }
 
 #[derive(Debug)]
@@ -31,7 +31,10 @@ impl Service<Request<IncomingBody>> for HttpService {
 		// new connection!
 		// we send the Request info to Prolog
 		let response = Arc::new((Mutex::new(false), Mutex::new(None), Condvar::new()));
-		let http_request = HttpRequest { request: req, response: Arc::clone(&response) };
+		let http_request = HttpRequest { 
+            request: req, 
+            response: Arc::clone(&response) 
+        };
 		self.tx.send(http_request).unwrap();
 
 		// we wait for the Response info from Prolog
@@ -39,7 +42,7 @@ impl Service<Request<IncomingBody>> for HttpService {
 			let (ready, _response, cvar) = &*response;
 			let mut ready = ready.lock().unwrap();
 			while !*ready {
-			ready = cvar.wait(ready).unwrap();
+			    ready = cvar.wait(ready).unwrap();
 			}
 		}
 		{
