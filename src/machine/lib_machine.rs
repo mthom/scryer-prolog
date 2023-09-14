@@ -1,8 +1,10 @@
 use std::collections::BTreeSet;
+use std::sync::Arc;
 
 use crate::atom_table;
+use crate::heap_print::{HCPrinter, HCValueOutputter, PrinterOutputter};
 use crate::machine::BREAK_FROM_DISPATCH_LOOP_LOC;
-use crate::machine::mock_wam::{CompositeOpDir, Term};
+use crate::machine::mock_wam::{CompositeOpDir, Term, Fixnum};
 use crate::parser::parser::{Parser, Tokens};
 use crate::read::write_term_to_heap;
 
@@ -65,9 +67,6 @@ impl Machine {
     }
 
     pub fn run_query(&mut self, query: String) -> QueryResult {
-        //let input = format!("{}", query);
-        //println!("Running query: {}", input);
-
         // Parse the query so we can analyze and then call the term
         let mut parser = Parser::new(
             Stream::from_owned_string(query, &mut self.machine_st.arena),
@@ -79,33 +78,39 @@ impl Machine {
         // Write parsed term to heap
         let term_write_result = write_term_to_heap(&term, &mut self.machine_st.heap, &mut self.machine_st.atom_tbl).expect("couldn't write term to heap");
 
-        // Set up registers
+        // Write term to heap
         self.machine_st.registers[1] = self.machine_st.heap[term_write_result.heap_loc];
+        // Call the term
         self.machine_st.cp = BREAK_FROM_DISPATCH_LOOP_LOC;
-        self.machine_st.p = self.indices.code_dir.get(&(atom!("$call"), 1)).expect("couldn't get code index").local().unwrap();
-
-        // If we don't set this register, we get an error in write_term.
-        // It seems to be the register that holds max_depth
-        self.machine_st.registers[7] = 50.into();
-        // Not setting this will cause:
-        // thread 'machine::lib_machine::tests::programatic_query' panicked at 'index out of bounds: the len is 10 but the index is 295', src/machine/machine_state_impl.rs:1479:56
-        self.machine_st.registers[6] = 9.into();
-
-
-        println!("running dispatch loop");
+        self.machine_st.p = self.indices.code_dir.get(&(atom!("call"), 1)).expect("couldn't get code index").local().unwrap();
         self.dispatch_loop();
-        println!("done");
+        
 
-        let op_dir = &self.indices.op_dir;
-        let write_term_result = self.machine_st.write_term(op_dir);
-        println!("write_term_result: {:?}", write_term_result);
-        // => Err([HeapCellValue { tag: Atom, name: "error", arity: 2, m: false, f: false }, HeapCellValue { tag: Str, value: 13, m: false, f: false }, HeapCellValue { tag: Str, value: 16, m: false, f: false }, HeapCellValue { tag: Atom, name: "type_error", arity: 2, m: false, f: false }, HeapCellValue { tag: Atom, name: "list", arity: 0, m: false, f: false }, HeapCellValue { tag: Cons, ptr: 9, m: false, f: false }, HeapCellValue { tag: Atom, name: "/", arity: 2, m: false, f: false }, HeapCellValue { tag: Atom, name: "write_term", arity: 0, m: false, f: false }, HeapCellValue { tag: Fixnum, value: 2, m: false, f: false }])
-        let printer = write_term_result
-            .expect("Couldn't get printer from write_term")
-            .expect("Couldn't get printer from write_term");
+        // NOTE: mimic writeq settings here (see arguments of '$write_term'/8 at builtins.pl:693)
+        self.machine_st.registers[8] = atom_as_cell!(atom!("false"));
+        self.machine_st.registers[7] = fixnum_as_cell!(Fixnum::build_with(10));
+        self.machine_st.registers[6] = empty_list_as_cell!();
+        self.machine_st.registers[5] = atom_as_cell!(atom!("true"));
+        self.machine_st.registers[4] = atom_as_cell!(atom!("true"));
+        self.machine_st.registers[3] = atom_as_cell!(atom!("false"));
+  
+        let term_to_be_printed = self.machine_st.store(self.machine_st.deref(self.machine_st.registers[2]));
+
+        let mut printer = HCPrinter::new(
+            &mut self.machine_st.heap,
+            Arc::clone(&self.machine_st.atom_tbl),
+            &mut self.machine_st.stack,
+            &self.indices.op_dir,
+            PrinterOutputter::new(),
+            term_to_be_printed,
+        ); 
 
         println!("Varnames: {:?}", printer.var_names);
-        println!("Printer: {:?}", printer);
+        printer.max_depth = 1000;
+        let output = printer.print();
+        println!("Print: {:?}", output);
+        println!("Result: {:?}", output.result());
+
 
         Err("not implementend".to_string())
     }
