@@ -2331,7 +2331,7 @@ impl Machine {
             let mut loader: Loader<'_, InlineLoadState<'_>> =
                 Loader::new(self, InlineTermStream {});
 
-            let term = loader.read_term_from_heap(term_loc)?;
+            let term = loader.read_term_from_heap(term_loc);
             let clause = build_rule_body(vars, term);
 
             let settings = CodeGenSettings {

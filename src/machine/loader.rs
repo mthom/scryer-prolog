@@ -483,7 +483,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         }
     }
 
-    pub(crate) fn read_term_from_heap(&mut self, r: RegType) -> Result<Term, SessionError> {
+    pub(crate) fn read_term_from_heap(&mut self, r: RegType) -> Term {
         let machine_st = LS::machine_st(&mut self.payload);
         let cell = machine_st[r];
 
@@ -1074,7 +1074,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         let machine_st = LS::machine_st(&mut self.payload);
         let cell = machine_st[r];
 
-        let export_list = machine_st.read_term_from_heap(cell)?;
+        let export_list = machine_st.read_term_from_heap(cell);
         let atom_tbl = &mut LS::machine_st(&mut self.payload).atom_tbl;
         let export_list = setup_module_export_list(export_list, &atom_tbl)?;
 
@@ -1401,7 +1401,7 @@ impl MachineState {
     pub(super) fn read_term_from_heap(
         &mut self,
         term_addr: HeapCellValue,
-    ) -> Result<Term, SessionError> {
+    ) -> Term {
         let mut term_stack = vec![];
         let mut iter = stackful_post_order_iter(&mut self.heap, &mut self.stack, term_addr);
 
@@ -1494,7 +1494,7 @@ impl MachineState {
         }
 
         debug_assert!(term_stack.len() == 1);
-        Ok(term_stack.pop().unwrap())
+        term_stack.pop().unwrap()
     }
 }
 
@@ -1661,7 +1661,7 @@ impl Machine {
         let mut loader = self.loader_from_heap_evacuable(temp_v!(2));
 
         let add_clause = || {
-            let term = loader.read_term_from_heap(temp_v!(1))?;
+            let term = loader.read_term_from_heap(temp_v!(1));
 
             loader.incremental_compile_clause(
                 (atom!("term_expansion"), 2),
@@ -1691,7 +1691,7 @@ impl Machine {
         };
 
         let add_clause = || {
-            let term = loader.read_term_from_heap(temp_v!(2))?;
+            let term = loader.read_term_from_heap(temp_v!(2));
 
             let indexing_arg = match term.name() {
                 Some(atom!(":-")) => term.first_arg().and_then(Term::first_arg),
@@ -2008,7 +2008,7 @@ impl Machine {
             loader.payload.compilation_target = compilation_target;
 
             let head = LiveLoadAndMachineState::machine_st(&mut loader.payload)
-                .read_term_from_heap(head)?;
+                .read_term_from_heap(head);
 
             let name = if let Some(name) = head.name() {
                 name
@@ -2044,7 +2044,7 @@ impl Machine {
                 return LiveLoadAndMachineState::evacuate(loader);
             }
 
-            let body = loader.read_term_from_heap(temp_v!(3))?;
+            let body = loader.read_term_from_heap(temp_v!(3));
 
             let asserted_clause = Term::Clause(
                 Cell::default(),
@@ -2482,7 +2482,7 @@ impl<'a> Loader<'a, LiveLoadAndMachineState<'a>> {
             self.payload.predicates.compilation_target = compilation_target;
         }
 
-        let term = self.read_term_from_heap(term_reg)?;
+        let term = self.read_term_from_heap(term_reg);
 
         self.add_clause_clause_if_dynamic(&term)?;
         self.payload.term_stream.term_queue.push_back(term);
