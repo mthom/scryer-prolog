@@ -1,10 +1,10 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeSet, BTreeMap};
 use std::sync::Arc;
 
 use crate::atom_table;
 use crate::heap_print::{HCPrinter, HCValueOutputter, PrinterOutputter};
 use crate::machine::BREAK_FROM_DISPATCH_LOOP_LOC;
-use crate::machine::mock_wam::{CompositeOpDir, Term, Fixnum};
+use crate::machine::mock_wam::{CompositeOpDir, Term};
 use crate::parser::parser::{Parser, Tokens};
 use crate::read::write_term_to_heap;
 use crate::machine::machine_indices::VarKey;
@@ -13,7 +13,7 @@ use indexmap::IndexMap;
 
 use super::{
     Machine, MachineConfig, QueryResult, QueryResolutionLine, 
-    Atom, AtomCell, HeapCellValue, HeapCellValueTag,
+    Atom, AtomCell, HeapCellValue, HeapCellValueTag, Value, QueryMatch, QueryResolution,
     streams::Stream
 };
 use ref_thread_local::__Deref;
@@ -70,6 +70,7 @@ impl Machine {
     }
 
     pub fn run_query(&mut self, query: String) -> QueryResult {
+        println!("Query: {}", query);
         // Parse the query so we can analyze and then call the term
         let mut parser = Parser::new(
             Stream::from_owned_string(query, &mut self.machine_st.arena),
@@ -97,6 +98,7 @@ impl Machine {
             })
             .collect();
 
+        let mut matches: Vec<QueryResolutionLine> = Vec::new();
         // Call the term
         loop {
             self.dispatch_loop();
@@ -104,10 +106,17 @@ impl Machine {
             if self.machine_st.fail {
                 // NOTE: only print results on success
                 self.machine_st.fail = false;
+                println!("false");
+                matches.push(QueryResolutionLine::False);
                 break;
             }
 
+            let mut bindings: BTreeMap<String, Value> = BTreeMap::new();
+            
             for (var_key, term_to_be_printed) in &term_write_result.var_dict {
+                if var_key.to_string().starts_with("_") {
+                    continue;
+                }
                 let mut printer = HCPrinter::new(
                     &mut self.machine_st.heap,
                     Arc::clone(&self.machine_st.atom_tbl),
@@ -117,36 +126,37 @@ impl Machine {
                     *term_to_be_printed,
                 );
 
-                // NOTE: I've converted the former register settings
-                // for '$write_term'/8 to printer settings. Registers
-                // are not read by the printer.
                 printer.ignore_ops = false;
                 printer.numbervars = true;
                 printer.quoted = true;
                 printer.max_depth = 1000; // NOTE: set this to 0 for unbounded depth
-                printer.double_quotes = false;
+                printer.double_quotes = true;
                 printer.var_names = var_names.clone();
 
-                println!("Varnames: {:?}", printer.var_names);
-
-                let output = printer.print();
-
-                println!("Print: {:?}", output);
-                println!("Result: {} = {}", var_key.to_string(), output.result());
+                let outputter = printer.print();
+                
+                let output: String = outputter.result();
+                println!("Result: {} = {}", var_key.to_string(), output);
+                
+                bindings.insert(var_key.to_string(), Value::try_from(output).expect("asdfs"));
             }
 
+            matches.push(QueryResolutionLine::Match(bindings));
+
             if self.machine_st.b > 0 {
+                println!("b: {}", self.machine_st.b);
                 // NOTE: there are outstanding choicepoints, backtrack
                 // through them for further solutions.
                 self.machine_st.backtrack();
             } else {
+                println!("breaking");
                 // NOTE: out of choicepoints to backtrack through, no
                 // more solutions to gather.
                 break;
             }
         }
 
-        Err("not implementend".to_string())
+        Ok(QueryResolution::from(matches))
     }
 
     pub fn parse_output(&self) -> QueryResult {
@@ -183,6 +193,8 @@ impl Machine {
 
 #[cfg(test)]
 mod tests {
+    use ordered_float::OrderedFloat;
+
     use super::*;
     use crate::machine::{QueryMatch, Value, QueryResolution};
 
@@ -279,10 +291,10 @@ mod tests {
             result,
             Ok(QueryResolution::Matches(vec![
                 QueryMatch::from(btreemap! {
-                    "Class" => Value::from("Recipe")
+                    "Class" => Value::from("Todo")
                 }),
                 QueryMatch::from(btreemap! {
-                    "Class" => Value::from("Todo")
+                    "Class" => Value::from("Recipe")
                 }),
             ]))
         );
@@ -302,7 +314,11 @@ mod tests {
             result,
             Ok(QueryResolution::Matches(vec![
                 QueryMatch::from(btreemap! {
-                    "X" => Value::List(Vec::from([Value::from("1"), Value::from("2"), Value::from("3")]))
+                    "X" => Value::List(Vec::from([
+                        Value::Float(OrderedFloat(1.0)),
+                        Value::Float(OrderedFloat(2.0)),
+                        Value::Float(OrderedFloat(3.0)),
+                        ]))
                 }),
             ]))
         );
