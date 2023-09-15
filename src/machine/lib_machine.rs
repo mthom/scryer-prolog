@@ -19,7 +19,7 @@ use super::{
 
 impl Machine {
     pub fn new_lib() -> Self {
-        Machine::new(MachineConfig::in_memory().with_toplevel(include_str!("../lib_toplevel.pl")))
+        Machine::new(MachineConfig::in_memory())
     }
 
     pub fn load_module_string(&mut self, module_name: &str, program: String) {
