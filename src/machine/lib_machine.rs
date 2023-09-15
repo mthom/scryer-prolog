@@ -1,10 +1,10 @@
-use std::collections::{BTreeSet, BTreeMap};
+use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use crate::atom_table;
 use crate::heap_print::{HCPrinter, HCValueOutputter, PrinterOutputter};
 use crate::machine::BREAK_FROM_DISPATCH_LOOP_LOC;
-use crate::machine::mock_wam::{CompositeOpDir, Term};
+use crate::machine::mock_wam::CompositeOpDir;
 use crate::parser::parser::{Parser, Tokens};
 use crate::read::write_term_to_heap;
 use crate::machine::machine_indices::VarKey;
@@ -13,43 +13,9 @@ use indexmap::IndexMap;
 
 use super::{
     Machine, MachineConfig, QueryResult, QueryResolutionLine, 
-    Atom, AtomCell, HeapCellValue, HeapCellValueTag, Value, QueryMatch, QueryResolution,
+    Atom, AtomCell, HeapCellValue, HeapCellValueTag, Value, QueryResolution,
     streams::Stream
 };
-use ref_thread_local::__Deref;
-fn print_term(term: &Term) {
-    match term {
-        Term::Clause(clause, atom, terms) => {
-            println!("clause: {:?}", clause);
-            println!("atom: {:?}", atom.as_str());
-            println!("terms: {:?}", terms);
-
-            for term in terms {
-               print_term(term);
-            }
-        },
-        Term::Cons(cons, term1, term2) => {
-            println!("constant: {:?}", cons);
-            println!("term1: {:?}", term1);
-            println!("term2: {:?}", term2);
-        },
-        Term::Literal(cell, literal) => {
-            println!("Cell: {:?}", cell);
-            println!("Literal: {:?}", literal);
-        },
-        Term::Var(var_reg, var_ptr) => {
-            println!("Var: {:?}, {:?}", var_reg.get(), var_ptr.deref());
-        },
-        Term::CompleteString(cell, atom) => {
-            println!("Cell: {:?}", cell);
-            println!("Atom: {:?}", atom.as_str());
-        },
-        _ => {
-            println!("Parsed query: {:?}", term);
-        }
-    }
-    
-}
 
 impl Machine {
     pub fn new_lib() -> Self {
@@ -157,37 +123,6 @@ impl Machine {
         }
 
         Ok(QueryResolution::from(matches))
-    }
-
-    pub fn parse_output(&self) -> QueryResult {
-        let output = self.get_user_output().trim().to_string();
-        //println!("Output: {}", output);
-        if output.starts_with("error(") {
-            Err(output)
-        } else {
-            // Remove duplicate lines
-            Ok(output
-                // 1. Split into disjunct matches
-                .split(";")
-                .map(|s| s.trim())
-                // 2. Dedupe through Set
-                .collect::<BTreeSet<&str>>()
-                .iter()
-                .cloned()
-                // 3. Back to Vec
-                .collect::<Vec<&str>>()
-                .iter()
-                // 4. Trim and remove empty lines
-                .map(|s| s.trim())
-                .map(|s| if s.ends_with(".") { s[..s.len()-1].to_string() } else { s.to_string() })
-                .filter(|s| !s.is_empty())
-                // 5. Parse into QueryResolutionLine
-                .map(QueryResolutionLine::try_from)
-                // 6. Remove lines that couldn't be parsed, so we still keep the ones they did
-                .filter_map(Result::ok)
-                .collect::<Vec<QueryResolutionLine>>()
-                .into())
-        }
     }
 }
 
