@@ -7,6 +7,9 @@ use crate::machine::BREAK_FROM_DISPATCH_LOOP_LOC;
 use crate::machine::mock_wam::{CompositeOpDir, Term, Fixnum};
 use crate::parser::parser::{Parser, Tokens};
 use crate::read::write_term_to_heap;
+use crate::machine::machine_indices::VarKey;
+use crate::parser::ast::{Var, VarPtr};
+use indexmap::IndexMap;
 
 use super::{
     Machine, MachineConfig, QueryResult, QueryResolutionLine, 
@@ -80,37 +83,68 @@ impl Machine {
 
         // Write term to heap
         self.machine_st.registers[1] = self.machine_st.heap[term_write_result.heap_loc];
-        // Call the term
+
         self.machine_st.cp = BREAK_FROM_DISPATCH_LOOP_LOC;
         self.machine_st.p = self.indices.code_dir.get(&(atom!("call"), 1)).expect("couldn't get code index").local().unwrap();
-        self.dispatch_loop();
-        
 
-        // NOTE: mimic writeq settings here (see arguments of '$write_term'/8 at builtins.pl:693)
-        self.machine_st.registers[8] = atom_as_cell!(atom!("false"));
-        self.machine_st.registers[7] = fixnum_as_cell!(Fixnum::build_with(10));
-        self.machine_st.registers[6] = empty_list_as_cell!();
-        self.machine_st.registers[5] = atom_as_cell!(atom!("true"));
-        self.machine_st.registers[4] = atom_as_cell!(atom!("true"));
-        self.machine_st.registers[3] = atom_as_cell!(atom!("false"));
-  
-        let term_to_be_printed = self.machine_st.store(self.machine_st.deref(self.machine_st.registers[2]));
+        let var_names: IndexMap<_, _> = term_write_result.var_dict.iter()
+            .map(|(var_key, cell)| match var_key {
+                // NOTE: not the intention behind Var::InSitu here but
+                // we can hijack it to store anonymous variables
+                // without creating problems.
+                VarKey::AnonVar(h) => (*cell, VarPtr::from(Var::InSitu(*h))),
+                VarKey::VarPtr(var_ptr) => (*cell, var_ptr.clone()),
+            })
+            .collect();
 
-        let mut printer = HCPrinter::new(
-            &mut self.machine_st.heap,
-            Arc::clone(&self.machine_st.atom_tbl),
-            &mut self.machine_st.stack,
-            &self.indices.op_dir,
-            PrinterOutputter::new(),
-            term_to_be_printed,
-        ); 
+        // Call the term
+        loop {
+            self.dispatch_loop();
 
-        println!("Varnames: {:?}", printer.var_names);
-        printer.max_depth = 1000;
-        let output = printer.print();
-        println!("Print: {:?}", output);
-        println!("Result: {:?}", output.result());
+            if self.machine_st.fail {
+                // NOTE: only print results on success
+                self.machine_st.fail = false;
+                break;
+            }
 
+            for (var_key, term_to_be_printed) in &term_write_result.var_dict {
+                let mut printer = HCPrinter::new(
+                    &mut self.machine_st.heap,
+                    Arc::clone(&self.machine_st.atom_tbl),
+                    &mut self.machine_st.stack,
+                    &self.indices.op_dir,
+                    PrinterOutputter::new(),
+                    *term_to_be_printed,
+                );
+
+                // NOTE: I've converted the former register settings
+                // for '$write_term'/8 to printer settings. Registers
+                // are not read by the printer.
+                printer.ignore_ops = false;
+                printer.numbervars = true;
+                printer.quoted = true;
+                printer.max_depth = 1000; // NOTE: set this to 0 for unbounded depth
+                printer.double_quotes = false;
+                printer.var_names = var_names.clone();
+
+                println!("Varnames: {:?}", printer.var_names);
+
+                let output = printer.print();
+
+                println!("Print: {:?}", output);
+                println!("Result: {} = {}", var_key.to_string(), output.result());
+            }
+
+            if self.machine_st.b > 0 {
+                // NOTE: there are outstanding choicepoints, backtrack
+                // through them for further solutions.
+                self.machine_st.backtrack();
+            } else {
+                // NOTE: out of choicepoints to backtrack through, no
+                // more solutions to gather.
+                break;
+            }
+        }
 
         Err("not implementend".to_string())
     }
