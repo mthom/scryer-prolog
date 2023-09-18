@@ -35,6 +35,28 @@ impl Machine {
         self.run_module_predicate(atom!("loader"), (atom!("consult_stream"), 2));
     }
 
+    fn allocate_stub_choice_point(&mut self) {
+        // NOTE: create a choice point to terminate the dispatch_loop
+        // if an exception is thrown. since the and/or stack is presumed empty,
+
+        let stub_b = self.machine_st.stack.allocate_or_frame(0);
+        let or_frame = self.machine_st.stack.index_or_frame_mut(0);
+
+        or_frame.prelude.num_cells = 0;
+        or_frame.prelude.e = 0;
+        or_frame.prelude.cp = 0;
+        or_frame.prelude.b = 0;
+        or_frame.prelude.bp = BREAK_FROM_DISPATCH_LOOP_LOC;
+        or_frame.prelude.boip = 0;
+        or_frame.prelude.biip = 0;
+        or_frame.prelude.tr = 0;
+        or_frame.prelude.h = 0;
+        or_frame.prelude.b0 = 0;
+        or_frame.prelude.attr_var_queue_len = 0;
+
+        self.machine_st.b = stub_b;
+    }
+
     pub fn run_query(&mut self, query: String) -> QueryResult {
         println!("Query: {}", query);
         // Parse the query so we can analyze and then call the term
@@ -64,6 +86,10 @@ impl Machine {
             })
             .collect();
 
+        self.allocate_stub_choice_point();
+
+        let stub_b = self.machine_st.b;
+
         let mut matches: Vec<QueryResolutionLine> = Vec::new();
         // Call the term
         loop {
@@ -75,10 +101,18 @@ impl Machine {
                 println!("false");
                 matches.push(QueryResolutionLine::False);
                 break;
+            } else if self.machine_st.ball.stub.len() != 0 {
+                // NOTE: this means an exception was thrown, at which
+                // point we backtracked to the stub choice point.
+                // this should halt the search for solutions as it
+                // does in the Scryer top-level. the exception term is
+                // contained in self.machine_st.ball.
+                println!("exception thrown");
+                break;
             }
 
             let mut bindings: BTreeMap<String, Value> = BTreeMap::new();
-            
+
             for (var_key, term_to_be_printed) in &term_write_result.var_dict {
                 if var_key.to_string().starts_with("_") {
                     continue;
@@ -100,26 +134,34 @@ impl Machine {
                 printer.var_names = var_names.clone();
 
                 let outputter = printer.print();
-                
+
                 let output: String = outputter.result();
                 println!("Result: {} = {}", var_key.to_string(), output);
-                
+
                 bindings.insert(var_key.to_string(), Value::try_from(output).expect("asdfs"));
             }
 
             matches.push(QueryResolutionLine::Match(bindings));
 
-            if self.machine_st.b > 0 {
+            // NOTE: there are outstanding choicepoints, backtrack
+            // through them for further solutions. if
+            // self.machine_st.b == stub_b we've backtracked to the stub
+            // choice point, so we should break.
+            self.machine_st.backtrack();
+
+            if self.machine_st.b > stub_b {
                 println!("b: {}", self.machine_st.b);
-                // NOTE: there are outstanding choicepoints, backtrack
-                // through them for further solutions.
-                self.machine_st.backtrack();
             } else {
                 println!("breaking");
                 // NOTE: out of choicepoints to backtrack through, no
                 // more solutions to gather.
                 break;
             }
+        }
+
+        // NOTE: deallocate stub choice point
+        if self.machine_st.b == stub_b {
+            self.trust_me();
         }
 
         Ok(QueryResolution::from(matches))
