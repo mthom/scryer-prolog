@@ -168,10 +168,7 @@ impl Machine {
             // choice point, so we should break.
             self.machine_st.backtrack();
 
-            if self.machine_st.b > stub_b {
-                println!("b: {}", self.machine_st.b);
-            } else {
-                println!("breaking");
+            if self.machine_st.b <= stub_b {
                 // NOTE: out of choicepoints to backtrack through, no
                 // more solutions to gather.
                 break;
