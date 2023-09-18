@@ -107,8 +107,27 @@ impl Machine {
                 // this should halt the search for solutions as it
                 // does in the Scryer top-level. the exception term is
                 // contained in self.machine_st.ball.
-                println!("exception thrown");
-                break;
+                let error_string = self.machine_st.ball.stub
+                    .iter()
+                    .filter(|h| match h.get_tag() {
+                        HeapCellValueTag::Atom => true,
+                        HeapCellValueTag::Fixnum => true,
+                        _ => false,
+                    })
+                    .map(|h| match h.get_tag() {
+                        HeapCellValueTag::Atom => {
+                            let (name, _) = cell_as_atom_cell!(h).get_name_and_arity();
+                            name.as_str().to_string()
+                        }
+                        HeapCellValueTag::Fixnum => {
+                            h.get_value().clone().to_string()
+                        },
+                        _ => unreachable!(),
+                    })
+                    .collect::<Vec<String>>() 
+                    .join(" ");
+                
+                return Err(error_string);
             }
 
             let mut bindings: BTreeMap<String, Value> = BTreeMap::new();
@@ -221,7 +240,7 @@ mod tests {
         let output = machine.run_query(query);
         assert_eq!(
             output,
-            Err(String::from("error(existence_error(procedure,triple/3),triple/3)."))
+            Err(String::from("error existence_error procedure / triple 3 / triple 3"))
         );
     }
 
