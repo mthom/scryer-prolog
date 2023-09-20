@@ -54,6 +54,8 @@ use std::env;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use tokio::runtime::Runtime;
+use rand::rngs::StdRng;
+use rand::SeedableRng;
 
 lazy_static! {
     pub static ref INTERRUPT: AtomicBool = AtomicBool::new(false);
@@ -71,6 +73,7 @@ pub struct Machine {
     pub(super) runtime: Runtime,
     #[cfg(feature = "ffi")]
     pub(super) foreign_function_table: ForeignFunctionTable,
+    pub(super) rng: StdRng,
 }
 
 #[derive(Debug)]
@@ -472,6 +475,7 @@ impl Machine {
             runtime,
             #[cfg(feature = "ffi")]
             foreign_function_table: Default::default(),
+	    rng: StdRng::from_entropy(),
         };
 
         let mut lib_path = current_dir();

@@ -42,7 +42,6 @@ use indexmap::IndexSet;
 
 pub(crate) use ref_thread_local::RefThreadLocal;
 
-use std::borrow::BorrowMut;
 use std::cell::Cell;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
@@ -4216,15 +4215,13 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn maybe(&mut self) {
-        fn generate_random_bits(num_bits: usize) -> u64 {
-            let mut rng = rand::thread_rng();
-            let rand = rng.borrow_mut();
+        fn generate_random_bits(rng: &mut rand::rngs::StdRng, num_bits: usize) -> u64 {
             let mut random_bits: u64 = 0;
 
             for _ in 0..num_bits {
                 random_bits <<= 1;
 
-                if rand.gen_bool(0.5) {
+                if rng.gen_bool(0.5) {
                     random_bits |= 1;
                 }
             }
@@ -4232,7 +4229,7 @@ impl Machine {
             random_bits
         }
 
-        let result = { generate_random_bits(1) == 0 };
+        let result = { generate_random_bits(&mut self.rng, 1) == 0 };
 
         self.machine_st.fail = result;
     }
@@ -6184,16 +6181,19 @@ impl Machine {
         match Number::try_from(seed) {
             Ok(Number::Fixnum(n)) => {
                 let n: u64 = Integer::from(n).try_into().unwrap();
-                let _: StdRng = SeedableRng::seed_from_u64(n);
+                let rng: StdRng = SeedableRng::seed_from_u64(n);
+		self.rng = rng;
             },
             Ok(Number::Integer(n)) => {
                 let n: u64 = (&*n).try_into().unwrap();
-                let _: StdRng = SeedableRng::seed_from_u64(n);
+                let rng: StdRng = SeedableRng::seed_from_u64(n);
+		self.rng = rng;
             },
             Ok(Number::Rational(n)) => {
                 if n.denominator() == &UBig::from(1 as u32) {
                     let n: u64 = n.numerator().try_into().unwrap();
-                    let _: StdRng = SeedableRng::seed_from_u64(n);
+                    let rng: StdRng = SeedableRng::seed_from_u64(n);
+		    self.rng = rng;
                 }
             }
             _ => {
