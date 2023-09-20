@@ -7,7 +7,7 @@ arguments are different terms.
 
 :- use_module(library(atts)).
 :- use_module(library(dcgs)).
-:- use_module(library(lists), [append/3]).
+:- use_module(library(lists), [append/3, maplist/3]).
 
 :- attribute dif/1.
 
@@ -23,6 +23,29 @@ dif_set_variables([Var|Vars], X, Y) :-
     put_dif_att(Var, X, Y),
     dif_set_variables(Vars, X, Y).
 
+remove_goal([], _, []).
+remove_goal([G0|G0s], Goal0, Goals) :-
+    (   G0 == Goal0 ->
+        remove_goal(G0s, Goal0, Goals)
+    ;   Goals = [G0|Goals1],
+        remove_goal(G0s, Goal0, Goals1)
+    ).
+
+vars_remove_goal([], _).
+vars_remove_goal([Var|Vars], Goal0) :-
+    get_atts(Var, +dif(Goals0)),
+    remove_goal(Goals0, Goal0, Goals),
+    put_atts(Var, +dif(Goals)),
+    vars_remove_goal(Vars, Goal0).
+
+reinforce_goal(Goal0, Goal) :-
+    Goal = (
+        term_variables(Goal0, Vars),
+        dif:vars_remove_goal(Vars, Goal0),
+        Goal0 = (L \== R),
+        dif(L, R)
+    ).
+
 append_goals([], _).
 append_goals([Var|Vars], Goals) :-
     (   get_atts(Var, +dif(VarGoals)) ->
@@ -34,9 +57,10 @@ append_goals([Var|Vars], Goals) :-
     append_goals(Vars, Goals).
 
 verify_attributes(Var, Value, Goals) :-
-    (   get_atts(Var, +dif(Goals)) ->
+    (   get_atts(Var, +dif(Goals0)) ->
 	    term_variables(Value, ValueVars),
-	    append_goals(ValueVars, Goals)
+	    append_goals(ValueVars, Goals0),
+        maplist(reinforce_goal, Goals0, Goals)
     ;   Goals = []
     ).
 
