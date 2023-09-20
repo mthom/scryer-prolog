@@ -475,7 +475,7 @@ impl Machine {
             runtime,
             #[cfg(feature = "ffi")]
             foreign_function_table: Default::default(),
-	    rng: StdRng::from_entropy(),
+            rng: StdRng::from_entropy(),
         };
 
         let mut lib_path = current_dir();

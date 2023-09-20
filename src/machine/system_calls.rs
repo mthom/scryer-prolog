@@ -76,7 +76,7 @@ use ring::{digest, hkdf, pbkdf2};
 
 #[cfg(feature = "crypto-full")]
 use ring::{
-    aead, 
+    aead,
     signature::{self, KeyPair},
 };
 use ripemd160::{Digest, Ripemd160};
@@ -3263,7 +3263,7 @@ impl Machine {
             match Number::try_from(addr) {
                 Ok(Number::Integer(n)) => {
                     let n: u8 = (&*n).try_into().unwrap();
-                    
+
                     match n {
                         nb => {
                             match stream.write(&mut [nb]) {
@@ -4215,23 +4215,7 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn maybe(&mut self) {
-        fn generate_random_bits(rng: &mut rand::rngs::StdRng, num_bits: usize) -> u64 {
-            let mut random_bits: u64 = 0;
-
-            for _ in 0..num_bits {
-                random_bits <<= 1;
-
-                if rng.gen_bool(0.5) {
-                    random_bits |= 1;
-                }
-            }
-
-            random_bits
-        }
-
-        let result = { generate_random_bits(&mut self.rng, 1) == 0 };
-
-        self.machine_st.fail = result;
+        self.machine_st.fail = self.rng.gen();
     }
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -4575,7 +4559,7 @@ impl Machine {
 	    Ok(Number::Fixnum(n)) => n.get_num() as u16,
 	    Ok(Number::Integer(n)) => {
             let n: Result<u16, _> = (&*n).try_into();
-            
+
             if let Ok(value) = n {
                 value
             } else {
@@ -6182,18 +6166,18 @@ impl Machine {
             Ok(Number::Fixnum(n)) => {
                 let n: u64 = Integer::from(n).try_into().unwrap();
                 let rng: StdRng = SeedableRng::seed_from_u64(n);
-		self.rng = rng;
+                self.rng = rng;
             },
             Ok(Number::Integer(n)) => {
                 let n: u64 = (&*n).try_into().unwrap();
                 let rng: StdRng = SeedableRng::seed_from_u64(n);
-		self.rng = rng;
+                self.rng = rng;
             },
             Ok(Number::Rational(n)) => {
                 if n.denominator() == &UBig::from(1 as u32) {
                     let n: u64 = n.numerator().try_into().unwrap();
                     let rng: StdRng = SeedableRng::seed_from_u64(n);
-		    self.rng = rng;
+                    self.rng = rng;
                 }
             }
             _ => {
@@ -7323,7 +7307,7 @@ impl Machine {
         let iterations = match Number::try_from(iterations) {
             Ok(Number::Fixnum(n)) => u64::try_from(n.get_num()).unwrap(),
             Ok(Number::Integer(n)) => {
-                let n: Result<u64, _> = (&*n).try_into(); 
+                let n: Result<u64, _> = (&*n).try_into();
                 match n {
                     Ok(i) => i,
                     _ => {
