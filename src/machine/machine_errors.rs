@@ -77,6 +77,12 @@ impl ValidType {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum ResourceError {
+    FiniteMemory(HeapCellValue),
+    OutOfFiles
+}
+
 pub(crate) trait TypeError {
     fn type_error(self, machine_st: &mut MachineState, valid_type: ValidType) -> MachineError;
 }
@@ -284,11 +290,21 @@ impl MachineState {
         }
     }
 
-    pub(super) fn resource_error(&mut self, value: HeapCellValue) -> MachineError {
-        let stub = functor!(
-            atom!("resource_error"),
-            [atom(atom!("finite_memory")), cell(value)]
-        );
+    pub(super) fn resource_error(&mut self, err: ResourceError) -> MachineError {
+        let stub = match err {
+            ResourceError::FiniteMemory(size_requested) => {
+                functor!(
+                    atom!("resource_error"),
+                    [atom(atom!("finite_memory")), cell(size_requested)]
+                )
+            }
+            ResourceError::OutOfFiles => {
+                functor!(
+                    atom!("resource_atom"),
+                    [atom(atom!("out_of_files"))]
+                )
+            }
+        };
 
         MachineError {
             stub,

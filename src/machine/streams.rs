@@ -1804,7 +1804,7 @@ impl MachineState {
     ) -> Result<Stream, MachineStub> {
         if file_spec == atom!("") {
             let stub = functor_stub(atom!("open"), 4);
-            let err = self.domain_error(DomainErrorType::SourceSink, self[temp_v!(1)]);
+            let err = self.domain_error(DomainErrorType::SourceSink, self.registers[1]);
 
             return Err(self.error_form(err, stub));
         }
@@ -1816,9 +1816,7 @@ impl MachineState {
             }
         }
 
-        let mode = MachineState::deref(self, self[temp_v!(2)]);
-        let mode = cell_as_atom!(self.store(mode));
-
+        let mode = cell_as_atom!(self.store(MachineState::deref(self, self.registers[2])));
         let mut open_options = OpenOptions::new();
 
         let (is_input_file, in_append_mode) = match mode {
@@ -1875,8 +1873,9 @@ impl MachineState {
                         ));
                     }
                     _ => {
+                        // assume the OS is out of file descriptors.
                         let stub = functor_stub(atom!("open"), 4);
-                        let err = self.syntax_error(ParserError::IO(err));
+                        let err = self.resource_error(ResourceError::OutOfFiles);
 
                         return Err(self.error_form(err, stub));
                     }

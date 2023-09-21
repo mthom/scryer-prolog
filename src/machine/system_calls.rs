@@ -4244,7 +4244,7 @@ impl Machine {
             Ok(Number::Integer(n)) => match (&*n).try_into() as Result<usize, _> {
                 Ok(n) => n,
                 Err(_) => {
-                    let err = self.machine_st.resource_error(len);
+                    let err = self.machine_st.resource_error(ResourceError::FiniteMemory(len));
                     return Err(self.machine_st.error_form(err, stub_gen()));
                 }
             },
