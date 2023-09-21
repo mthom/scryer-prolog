@@ -774,7 +774,7 @@ test_175 :- T = t(0b1,0o1,0x1),
 test_176 :- X is 0b1mod 2,
             X == 1.
 
-test_217_181_290 :-
+test_217_181_290_317 :-
      setup_call_cleanup((  current_op(P, xfy, '|') ->
                            true
                         ;  P = 0
@@ -785,7 +785,10 @@ test_217_181_290 :-
                            C0 == "a-->b,c | d",
                            read_from_chars("[(a|b)].", T1),
                            writeq_term_to_chars(T1, C1),
-                           C1 == "[(a | b)]"
+                           C1 == "[(a | b)]",
+                           read_from_chars("[a,(b,c)|[]].", T2),
+                           writeq_term_to_chars(T2, C2),
+                           C2 == "[a,(b,c)]"
                         ),
                         op(P, xfy, '|')).
 
