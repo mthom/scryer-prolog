@@ -195,6 +195,15 @@ main :-
     show_failed(Failed),
     halt.
 
+main_quiet :-
+    findall(test(Name, Goal), test(Name, Goal), Tests),
+    run_tests_quiet(Tests, Failed),
+    (   Failed = [] ->
+        format("All tests passed", [])
+    ;   format("Some tests failed", [])
+    ),
+    halt.
+
 portray_failed_([]) --> [].
 portray_failed_([F|Fs]) -->
     "\"", F, "\"",  "\n", portray_failed_(Fs).
@@ -216,6 +225,14 @@ run_tests([test(Name, Goal)|Tests], Failed) :-
         Failed = [Name|Failed1]
     ),
     run_tests(Tests, Failed1).
+
+run_tests_quiet([], []).
+run_tests_quiet([test(Name, Goal)|Tests], Failed) :-
+    (   call(Goal) ->
+        Failed = Failed1
+    ;   Failed = [Name|Failed1]
+    ),
+    run_tests_quiet(Tests, Failed1).
 
 assert_p(A, B) :-
     phrase(portray_clause_(A), Portrayed),
