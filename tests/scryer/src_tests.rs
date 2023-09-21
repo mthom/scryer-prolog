@@ -75,3 +75,12 @@ fn clpz_load() {
 fn iso_conformity_tests() {
     load_module_test("tests-pl/iso-conformity-tests.pl", "All tests passed");
 }
+
+#[test]
+fn dif_tests() {
+    run_top_level_test_with_args(
+        &["src/tests/dif.pl", "-f", "-g", "main_quiet"],
+        "",
+        "All tests passed",
+    );
+}
