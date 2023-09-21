@@ -379,6 +379,29 @@ remove_module(Module, Evacuable) :-
     ;  domain_error(module_specifier, Module, use_module/2)
     ).
 
+:- meta_predicate add_predicate_declaration(3, ?).
+
+add_predicate_declaration(Handler, Name/Arity) :-
+    must_be(atom, Name),
+    must_be(integer, Arity),
+    prolog_load_context(module, Module),
+    call(Handler, Module, Name, Arity).
+add_predicate_declaration(Handler, Module:Name/Arity) :-
+    must_be(atom, Module),
+    must_be(atom, Name),
+    must_be(integer, Arity),
+    call(Handler, Module, Name, Arity).
+add_predicate_declaration(Handler, [PI|PIs]) :-
+    maplist(loader:add_predicate_declaration(Handler), [PI|PIs]).
+
+add_dynamic_predicate(Evacuable, Module, Name, Arity) :-
+    '$add_dynamic_predicate'(Module, Name, Arity, Evacuable).
+
+add_multifile_predicate(Evacuable, Module, Name, Arity) :-
+    '$add_multifile_predicate'(Module, Name, Arity, Evacuable).
+
+add_discontiguous_predicate(Evacuable, Module, Name, Arity) :-
+    '$add_discontiguous_predicate'(Module, Name, Arity, Evacuable).
 
 compile_declaration(use_module(Module), Evacuable) :-
     use_module(Module, [], Evacuable).
@@ -392,39 +415,12 @@ compile_declaration(module(Module, Exports), Evacuable) :-
        '$declare_module'(Module, Exports, Evacuable)
     ;  type_error(atom, Module, load/1)
     ).
-compile_declaration(dynamic(Module:Name/Arity), Evacuable) :-
-    !,
-    must_be(atom, Module),
-    must_be(atom, Name),
-    must_be(integer, Arity),
-    '$add_dynamic_predicate'(Module, Name, Arity, Evacuable).
-compile_declaration(dynamic(Name/Arity), Evacuable) :-
-    must_be(atom, Name),
-    must_be(integer, Arity),
-    prolog_load_context(module, Module),
-    '$add_dynamic_predicate'(Module, Name, Arity, Evacuable).
-compile_declaration(multifile(Module:Name/Arity), Evacuable) :-
-    !,
-    must_be(atom, Module),
-    must_be(atom, Name),
-    must_be(integer, Arity),
-    '$add_multifile_predicate'(Module, Name, Arity, Evacuable).
-compile_declaration(multifile(Name/Arity), Evacuable) :-
-    must_be(atom, Name),
-    must_be(integer, Arity),
-    prolog_load_context(module, Module),
-    '$add_multifile_predicate'(Module, Name, Arity, Evacuable).
-compile_declaration(discontiguous(Module:Name/Arity), Evacuable) :-
-    !,
-    must_be(atom, Module),
-    must_be(atom, Name),
-    must_be(integer, Arity),
-    '$add_discontiguous_predicate'(Module, Name, Arity, Evacuable).
-compile_declaration(discontiguous(Name/Arity), Evacuable) :-
-    must_be(atom, Name),
-    must_be(integer, Arity),
-    prolog_load_context(module, Module),
-    '$add_discontiguous_predicate'(Module, Name, Arity, Evacuable).
+compile_declaration(dynamic(PIs), Evacuable) :-
+    add_predicate_declaration(loader:add_dynamic_predicate(Evacuable), PIs).
+compile_declaration(multifile(PIs), Evacuable) :-
+    add_predicate_declaration(loader:add_multifile_predicate(Evacuable), PIs).
+compile_declaration(discontiguous(PIs), Evacuable) :-
+    add_predicate_declaration(loader:add_discontiguous_predicate(Evacuable), PIs).
 compile_declaration(initialization(Goal), Evacuable) :-
     prolog_load_context(module, Module),
     assertz(Module:'$initialization_goals'(Goal)).
