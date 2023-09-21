@@ -189,6 +189,13 @@ test("dif#12 but with multiple variables in the residuals",(
     Res = []
 )).
 
+% https://github.com/mthom/scryer-prolog/issues/1956
+test("scryer-prolog#1956",(
+    call_residue_vars((dif(a-a,X-_),X=b), Res),
+    X == b,
+    Res = []
+)).
+
 main :-
     findall(test(Name, Goal), test(Name, Goal), Tests),
     run_tests(Tests, Failed),

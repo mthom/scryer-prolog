@@ -35,7 +35,10 @@ vars_remove_goal([], _).
 vars_remove_goal([Var|Vars], Goal0) :-
     get_atts(Var, +dif(Goals0)),
     remove_goal(Goals0, Goal0, Goals),
-    put_atts(Var, +dif(Goals)),
+    (   Goals = [] ->
+        put_atts(Var, -dif(_))
+    ;   put_atts(Var, +dif(Goals))
+    ),
     vars_remove_goal(Vars, Goal0).
 
 reinforce_goal(Goal0, Goal) :-
