@@ -9,6 +9,7 @@
 
 :- module(pio, [phrase_from_file/2,
                 phrase_from_file/3,
+                phrase_from_stream/2,
                 phrase_to_file/2,
                 phrase_to_file/3,
                 phrase_to_stream/2
@@ -17,15 +18,29 @@
 :- use_module(library(dcgs)).
 :- use_module(library(error)).
 :- use_module(library(freeze)).
-:- use_module(library(iso_ext), [setup_call_cleanup/3, partial_string/3]).
-:- use_module(library(lists), [member/2, maplist/2]).
+:- use_module(library(gensym)).
+:- use_module(library(iso_ext), [
+    bb_get/2, bb_put/2, setup_call_cleanup/3, partial_string/3, partial_string_tail/2
+]).
+:- use_module(library(lists), [length/2, member/2, maplist/2]).
 :- use_module(library(charsio), [get_n_chars/3]).
 
 :- meta_predicate(phrase_from_file(2, ?)).
 :- meta_predicate(phrase_from_file(2, ?, ?)).
+:- meta_predicate(phrase_from_stream(2, ?)).
 :- meta_predicate(phrase_to_file(2, ?)).
 :- meta_predicate(phrase_to_file(2, ?, ?)).
 :- meta_predicate(phrase_to_stream(2, ?)).
+
+
+%% phrase_from_stream(+GRBody, +Stream)
+%
+%  True if grammar rule body GRBody covers the contents of the stream,
+%  represented as a list of characters.
+
+phrase_from_stream(GRBody, Stream) :-
+    stream_to_lazy_list(Stream, Ls),
+    phrase(GRBody, Ls).
 
 %% phrase_from_file(+GRBody, +File)
 %
@@ -49,24 +64,147 @@ phrase_from_file(NT, File, Options) :-
         ;   Type = text
         ),
         setup_call_cleanup(open(File, read, Stream, [reposition(true)|Options]),
-                           (   stream_to_lazy_list(Stream, Xs),
-                               phrase(NT, Xs) ),
+                           phrase_from_stream(NT, Stream),
                            close(Stream))
-   ).
-
+    ).
 
 stream_to_lazy_list(Stream, Xs) :-
-        stream_property(Stream, position(Pos)),
-        freeze(Xs, reader_step(Stream, Pos, Xs)).
+    stream_property(Stream, reposition(Rep)),
+    (   Rep = true ->
+        stream_to_lazy_list_repositionable(Stream, Xs)
+    ;   stream_to_lazy_list_buffer(Stream, Xs)
+    ).
 
-reader_step(Stream, Pos, Xs0) :-
-        set_stream_position(Stream, Pos),
-        (   at_end_of_stream(Stream)
-        ->  Xs0 = []
-        ;   get_n_chars(Stream, 4096, Cs),
-            partial_string(Cs, Xs0, Xs),
-            stream_to_lazy_list(Stream, Xs)
-        ).
+stream_to_lazy_list_repositionable(Stream, Xs) :-
+    stream_property(Stream, position(Pos)),
+    freeze(Xs, reader_step_repositionable(Stream, Pos, Xs)).
+
+reader_step_repositionable(Stream, Pos, Xs0) :-
+    set_stream_position(Stream, Pos),
+    (   at_end_of_stream(Stream)
+    ->  Xs0 = []
+    ;   get_n_chars(Stream, 4096, Cs),
+        partial_string(Cs, Xs0, Xs),
+        stream_to_lazy_list_repositionable(Stream, Xs)
+    ).
+
+stream_to_lazy_list_buffer(Stream, Ls) :-
+    get_stream_buffer_position(Stream, Pos),
+    freeze(Ls, render_step_buffer(Stream, Pos, Ls)).
+
+render_step_buffer(Stream, Pos, Ls) :-
+    set_stream_buffer_position(Stream, Pos),
+    (   buffer_at_end_of_stream(Stream) ->
+        Ls = []
+    ;   buffer_get_n_chars(Stream, 4096, Chars),
+        partial_string(Chars, Ls, Ls0),
+        stream_to_lazy_list_buffer(Stream, Ls0)
+    ).
+
+buffer_at_end_of_stream(Stream) :-
+    stream_bufferids(Stream, _, BufferPosId, _),
+    bb_get(BufferPosId, Pos),
+    Pos = eof.
+
+get_stream_buffer_position(Stream, Pos) :-
+    stream_bufferids(Stream, _, BufferPosId, _),
+    bb_get(BufferPosId, Pos).
+
+set_stream_buffer_position(Stream, Pos) :-
+    stream_bufferids(Stream, _, BufferPosId, _),
+    bb_put(BufferPosId, Pos).
+
+buffer_get_n_chars(Stream, N, Chars) :-
+    stream_bufferids(Stream, BufferId, BufferPosId, BufferLenId),
+    buffer_prepare_for_n(Stream, BufferId, BufferPosId, BufferLenId, N),
+    bb_get(BufferId, Buffer),
+    bb_get(BufferPosId, BufferPos),
+    (   BufferPos = eof ->
+        Chars = []
+    ;   string_get_n_chars(Buffer, BufferPos, N, Chars),
+        length(Chars, NChars),
+        (   NChars = 0 ->
+            BufferPos1 = eof
+        ;   BufferPos1 is BufferPos + NChars
+        ),
+        bb_put(BufferPosId, BufferPos1)
+    ).
+
+buffer_prepare_for_n(Stream, BufferId, BufferPosId, BufferLenId, N) :-
+    bb_get(BufferPosId, BufferPos),
+    bb_get(BufferLenId, BufferLen),
+    (   BufferLen < BufferPos + N ->
+        bb_get(BufferId, Buffer),
+        (
+            (   var(Buffer) ->
+                BufferTail = Buffer
+            ;   partial_string_last_tail(Buffer, BufferTail)
+            ) ->
+            (   at_end_of_stream(Stream) ->
+                BufferTail = [],
+                bb_put(BufferId, Buffer)
+            ;   get_n_chars(Stream, 4096, Chars),
+                length(Chars, NChars),
+                partial_string(Chars, BufferTail, _),
+                bb_put(BufferId, Buffer),
+                BufferLen1 is BufferLen + NChars,
+                bb_put(BufferLenId, BufferLen1),
+                buffer_prepare_for_n(Stream, BufferId, BufferPosId, BufferLenId, N)
+            )
+        ;   true
+        )
+    ;   true
+    ).
+
+partial_string_last_tail(PartialString, PartialStringTail) :-
+    partial_string_tail(PartialString, PartialStringTail0),
+    (   var(PartialStringTail0) ->
+        PartialStringTail = PartialStringTail0
+    ;   partial_string_last_tail(PartialStringTail0, PartialStringTail)
+    ).
+
+string_get_n_chars([], _, _, []).
+string_get_n_chars([S|Ss], BufferPos, N, Chars) :-
+    (   BufferPos = 0 ->
+        string_get_n_chars_([S|Ss], N, Chars)
+    ;   BufferPos1 is BufferPos - 1,
+        string_get_n_chars(Ss, BufferPos1, N, Chars)
+    ).
+
+string_get_n_chars_([], _, []).
+string_get_n_chars_([S|Ss], N, Chars) :-
+    (   N = 0 ->
+        Chars = []
+    ;   N = 1 ->
+        % This case is needed to not break the tail of the partial string
+        Chars = [S]
+    ;   Chars = [S|Cs],
+        N1 is N - 1,
+        string_get_n_chars_(Ss, N1, Cs)
+    ).
+
+stream_bufferids(Stream, BufferId, BufferPosId, BufferLenId) :-
+    (   bb_get(streams_buffers, _) ->
+        true
+    ;   bb_put(streams_buffers, [])
+    ),
+    bb_get(streams_buffers, StreamsBuffers),
+    (   member(
+            stream_buffer(Stream, BufferId, BufferPosId, BufferLenId),
+            StreamsBuffers
+        ) ->
+        true
+    ;   gensym(buffer, BufferId),
+        gensym(buffer_pos, BufferPosId),
+        gensym(buffer_len, BufferLenId),
+        bb_put(
+            streams_buffers,
+            [stream_buffer(Stream, BufferId, BufferPosId, BufferLenId)|StreamsBuffers]
+        ),
+        bb_put(BufferId, _),
+        bb_put(BufferPosId, 0),
+        bb_put(BufferLenId, 0)
+    ).
 
 %% phrase_to_stream(+GRBody, +Stream)
 %
