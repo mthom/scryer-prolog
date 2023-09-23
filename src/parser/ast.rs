@@ -808,7 +808,7 @@ pub fn source_arity(terms: &[Term]) -> usize {
     terms.len()
 }
 
-fn unfold_by_str_once(term: &mut Term, s: Atom) -> Option<(Term, Term)> {
+pub(crate) fn unfold_by_str_once(term: &mut Term, s: Atom) -> Option<(Term, Term)> {
     if let Term::Clause(_, ref name, ref mut subterms) = term {
         if let Some(last_arg) = subterms.last() {
             if let Term::Literal(_, Literal::CodeIndex(_)) = last_arg {
