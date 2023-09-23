@@ -68,6 +68,9 @@ phrase_from_file(NT, File, Options) :-
                            close(Stream))
     ).
 
+% How many chars to read from stream and buffer in each step
+chars_to_read(4096).
+
 stream_to_lazy_list(Stream, Xs) :-
     stream_property(Stream, reposition(Rep)),
     (   Rep = true ->
@@ -83,7 +86,8 @@ reader_step_repositionable(Stream, Pos, Xs0) :-
     set_stream_position(Stream, Pos),
     (   at_end_of_stream(Stream)
     ->  Xs0 = []
-    ;   get_n_chars(Stream, 4096, Cs),
+    ;   chars_to_read(CharsToRead),
+        get_n_chars(Stream, CharsToRead, Cs),
         partial_string(Cs, Xs0, Xs),
         stream_to_lazy_list_repositionable(Stream, Xs)
     ).
@@ -96,7 +100,8 @@ render_step_buffer(Stream, Pos, Ls) :-
     set_stream_buffer_position(Stream, Pos),
     (   buffer_at_end_of_stream(Stream) ->
         Ls = []
-    ;   buffer_get_n_chars(Stream, 4096, Chars),
+    ;   chars_to_read(CharsToRead),
+        buffer_get_n_chars(Stream, CharsToRead, Chars),
         partial_string(Chars, Ls, Ls0),
         stream_to_lazy_list_buffer(Stream, Ls0)
     ).
@@ -143,7 +148,8 @@ buffer_prepare_for_n(Stream, BufferId, BufferPosId, BufferLenId, N) :-
             (   at_end_of_stream(Stream) ->
                 BufferTail = [],
                 bb_put(BufferId, Buffer)
-            ;   get_n_chars(Stream, 4096, Chars),
+            ;   chars_to_read(CharsToRead),
+                get_n_chars(Stream, CharsToRead, Chars),
                 length(Chars, NChars),
                 partial_string(Chars, BufferTail, _),
                 bb_put(BufferId, Buffer),
@@ -163,13 +169,16 @@ partial_string_last_tail(PartialString, PartialStringTail) :-
     ;   partial_string_last_tail(PartialStringTail0, PartialStringTail)
     ).
 
-string_get_n_chars([], _, _, []).
-string_get_n_chars([S|Ss], BufferPos, N, Chars) :-
-    (   BufferPos = 0 ->
-        string_get_n_chars_([S|Ss], N, Chars)
-    ;   BufferPos1 is BufferPos - 1,
-        string_get_n_chars(Ss, BufferPos1, N, Chars)
-    ).
+string_get_n_chars(String, Pos, N, Chars) :-
+    chars_to_read(CharsToRead),
+    (   CharsToRead < Pos -> 
+        % I have absolutely no idea why this is needed (maybe it's a bug?),
+        % but hey, it works.
+        '$skip_max_list'(_, Pos, String, String0),
+        '$skip_max_list'(_, CharsToRead, String0, String1)
+    ;   '$skip_max_list'(_, Pos, String, String1)
+    ),
+    string_get_n_chars_(String1, N, Chars).
 
 string_get_n_chars_([], _, []).
 string_get_n_chars_([S|Ss], N, Chars) :-
