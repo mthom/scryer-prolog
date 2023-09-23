@@ -34,6 +34,7 @@ pub const FY: u32 = 0x0080;
 pub const DELIMITER: u32 = 0x0100;
 pub const TERM: u32 = 0x1000;
 pub const LTERM: u32 = 0x3000;
+pub const BTERM: u32 = 0x11000;
 
 pub const NEGATIVE_SIGN: u32 = 0x0200;
 

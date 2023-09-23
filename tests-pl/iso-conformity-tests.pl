@@ -467,13 +467,14 @@ test_195_205_196_197 :-
     setup_call_cleanup(op(100,xf,''),
                        (  read_from_chars("(0 '') = ''(X).", T0),
                           call(T0),
-                          T0 = (_ = ('')(0)),
+                          writeq_term_to_chars(T0, C0),
+                          C0 == "0 ''=0 ''",
                           read_from_chars("0 ''.", T1),
-                          writeq_term_to_chars(T1, C0),
-                          C0 == "0 ''",
+                          writeq_term_to_chars(T1, C1),
+                          C1 == "0 ''",
                           read_from_chars("0''.", T2),
-                          writeq_term_to_chars(T2, C1),
-                          C1 == "0 ''" ),
+                          writeq_term_to_chars(T2, C2),
+                          C2 == "0 ''" ),
                        op(0,xf,'')).
 
 test_118_119_120 :-

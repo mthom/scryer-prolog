@@ -612,6 +612,10 @@ impl<'a, R: CharRead> Parser<'a, R> {
                         ref mut unfold_bounds,
                     }) = self.stack.last_mut()
                     {
+                        if *spec == BTERM {
+                            return false;
+                        }
+
                         *tt = TokenType::Term;
                         *priority = 0;
                         *spec = TERM;
@@ -878,7 +882,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
                         .push(Term::Literal(Cell::default(), Literal::Atom(atom)));
                 }
 
-                self.stack[idx].spec = TERM;
+                self.stack[idx].spec = if self.stack[idx].priority > 0 { TERM } else { BTERM };
                 self.stack[idx].tt = TokenType::Term;
                 self.stack[idx].priority = 0;
 
