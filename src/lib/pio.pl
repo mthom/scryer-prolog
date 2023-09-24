@@ -22,7 +22,7 @@
 :- use_module(library(iso_ext), [
     bb_get/2, bb_put/2, setup_call_cleanup/3, partial_string/3, partial_string_tail/2
 ]).
-:- use_module(library(lists), [length/2, member/2, maplist/2]).
+:- use_module(library(lists), [append/3, length/2, member/2, maplist/2]).
 :- use_module(library(charsio), [get_n_chars/3]).
 
 :- meta_predicate(phrase_from_file(2, ?)).
@@ -71,39 +71,18 @@ phrase_from_file(NT, File, Options) :-
 % How many chars to read from stream and buffer in each step
 chars_to_read(4096).
 
-stream_to_lazy_list(Stream, Xs) :-
-    stream_property(Stream, reposition(Rep)),
-    (   Rep = true ->
-        stream_to_lazy_list_repositionable(Stream, Xs)
-    ;   stream_to_lazy_list_buffer(Stream, Xs)
-    ).
-
-stream_to_lazy_list_repositionable(Stream, Xs) :-
-    stream_property(Stream, position(Pos)),
-    freeze(Xs, reader_step_repositionable(Stream, Pos, Xs)).
-
-reader_step_repositionable(Stream, Pos, Xs0) :-
-    set_stream_position(Stream, Pos),
-    (   at_end_of_stream(Stream)
-    ->  Xs0 = []
-    ;   chars_to_read(CharsToRead),
-        get_n_chars(Stream, CharsToRead, Cs),
-        partial_string(Cs, Xs0, Xs),
-        stream_to_lazy_list_repositionable(Stream, Xs)
-    ).
-
-stream_to_lazy_list_buffer(Stream, Ls) :-
+stream_to_lazy_list(Stream, Ls) :-
     get_stream_buffer_position(Stream, Pos),
-    freeze(Ls, render_step_buffer(Stream, Pos, Ls)).
+    freeze(Ls, render_step(Stream, Pos, Ls)).
 
-render_step_buffer(Stream, Pos, Ls) :-
+render_step(Stream, Pos, Ls) :-
     set_stream_buffer_position(Stream, Pos),
     (   buffer_at_end_of_stream(Stream) ->
         Ls = []
     ;   chars_to_read(CharsToRead),
         buffer_get_n_chars(Stream, CharsToRead, Chars),
         partial_string(Chars, Ls, Ls0),
-        stream_to_lazy_list_buffer(Stream, Ls0)
+        stream_to_lazy_list(Stream, Ls1)
     ).
 
 buffer_at_end_of_stream(Stream) :-
@@ -173,17 +152,10 @@ string_get_n_chars(String, Pos, N, Chars) :-
     '$skip_max_list'(_, Pos, String, String1),
     string_get_n_chars_(String1, N, Chars).
 
-string_get_n_chars_([], _, []).
-string_get_n_chars_([S|Ss], N, Chars) :-
-    (   N = 0 ->
-        Chars = []
-    ;   N = 1 ->
-        % This case is needed to not break the tail of the partial string
-        Chars = [S]
-    ;   Chars = [S|Cs],
-        N1 is N - 1,
-        string_get_n_chars_(Ss, N1, Cs)
-    ).
+string_get_n_chars_(String, N, Chars) :-
+    '$skip_max_list'(N1, N, String, _),
+    length(Chars, N1),
+    append(Chars, _, String).
 
 stream_bufferids(Stream, BufferId, BufferPosId, BufferLenId) :-
     (   bb_get(streams_buffers, _) ->
