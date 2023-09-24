@@ -82,7 +82,7 @@ render_step(Stream, Pos, Ls) :-
     ;   chars_to_read(CharsToRead),
         buffer_get_n_chars(Stream, CharsToRead, Chars),
         partial_string(Chars, Ls, Ls0),
-        stream_to_lazy_list(Stream, Ls1)
+        stream_to_lazy_list(Stream, Ls0)
     ).
 
 buffer_at_end_of_stream(Stream) :-
@@ -150,12 +150,9 @@ partial_string_last_tail(PartialString, PartialStringTail) :-
 
 string_get_n_chars(String, Pos, N, Chars) :-
     '$skip_max_list'(_, Pos, String, String1),
-    string_get_n_chars_(String1, N, Chars).
-
-string_get_n_chars_(String, N, Chars) :-
-    '$skip_max_list'(N1, N, String, _),
+    '$skip_max_list'(N1, N, String1, _),
     length(Chars, N1),
-    append(Chars, _, String).
+    append(Chars, _, String1).
 
 stream_bufferids(Stream, BufferId, BufferPosId, BufferLenId) :-
     (   bb_get(streams_buffers, _) ->
