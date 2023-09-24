@@ -170,14 +170,7 @@ partial_string_last_tail(PartialString, PartialStringTail) :-
     ).
 
 string_get_n_chars(String, Pos, N, Chars) :-
-    chars_to_read(CharsToRead),
-    (   CharsToRead < Pos -> 
-        % I have absolutely no idea why this is needed (maybe it's a bug?),
-        % but hey, it works.
-        '$skip_max_list'(_, Pos, String, String0),
-        '$skip_max_list'(_, CharsToRead, String0, String1)
-    ;   '$skip_max_list'(_, Pos, String, String1)
-    ),
+    '$skip_max_list'(_, Pos, String, String1),
     string_get_n_chars_(String1, N, Chars).
 
 string_get_n_chars_([], _, []).
