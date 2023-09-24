@@ -180,12 +180,6 @@ impl BrentAlgState {
     }
 
     pub fn to_result(mut self, heap: &[HeapCellValue]) -> CycleSearchResult {
-        /*
-        if let Some(var) = heap[self.hare].as_var() {
-            return CycleSearchResult::PartialList(self.num_steps(), var);
-        }
-        */
-
         loop {
             read_heap_cell!(heap[self.hare],
                 (HeapCellValueTag::PStrOffset) => {
@@ -248,7 +242,7 @@ impl BrentAlgState {
                 let cstr = PartialString::from(cstr_atom);
                 let num_chars = cstr.as_str_from(offset).chars().count();
 
-                if self.max_steps == -1 || self.num_steps() + num_chars < self.max_steps as usize {
+                if self.max_steps == -1 || self.num_steps() + num_chars <= self.max_steps as usize {
                     self.pstr_chars += num_chars;
                     Some(CycleSearchResult::ProperList(self.num_steps()))
                 } else {
@@ -261,7 +255,7 @@ impl BrentAlgState {
                 let pstr = PartialString::from(pstr_atom);
                 let num_chars = pstr.as_str_from(offset).chars().count();
 
-                if self.max_steps == -1 || self.num_steps() + num_chars < self.max_steps as usize {
+                if self.max_steps == -1 || self.num_steps() + num_chars <= self.max_steps as usize {
                     self.pstr_chars += num_chars - 1;
                     self.step(h+1)
                 } else {
