@@ -132,7 +132,7 @@ macro_rules! hexadecimal_digit_char {
 #[macro_export]
 macro_rules! layout_char {
     ($c: expr) => {
-        $crate::char_class!($c, [' ', '\n', '\t', '\u{0B}', '\u{0C}'])
+        $crate::char_class!($c, [' ', '\r', '\n', '\t', '\u{0B}', '\u{0C}'])
     };
 }
 
