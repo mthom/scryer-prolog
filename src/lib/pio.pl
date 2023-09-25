@@ -63,9 +63,11 @@ phrase_from_file(NT, File, Options) :-
             member(Type, [text,binary])
         ;   Type = text
         ),
-        setup_call_cleanup(open(File, read, Stream, [reposition(true)|Options]),
-                           phrase_from_stream(NT, Stream),
-                           close(Stream))
+        setup_call_cleanup(
+            open(File, read, Stream, Options),
+            phrase_from_stream(NT, Stream),
+            close(Stream)
+        )
     ).
 
 % How many chars to read from stream and buffer in each step
