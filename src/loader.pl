@@ -393,6 +393,9 @@ add_predicate_declaration(Handler, Module:Name/Arity) :-
     call(Handler, Module, Name, Arity).
 add_predicate_declaration(Handler, [PI|PIs]) :-
     maplist(loader:add_predicate_declaration(Handler), [PI|PIs]).
+add_predicate_declaration(Handler, (PI, PIs)) :-
+    add_predicate_declaration(Handler, PI),
+    add_predicate_declaration(Handler, PIs).
 
 add_dynamic_predicate(Evacuable, Module, Name, Arity) :-
     '$add_dynamic_predicate'(Module, Name, Arity, Evacuable).
