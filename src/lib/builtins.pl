@@ -574,26 +574,30 @@ parse_write_options(Options, OptionValues, Stub) :-
 
 
 parse_write_options_(double_quotes(DoubleQuotes), double_quotes-DoubleQuotes) :-
-    (  nonvar(DoubleQuotes),
-       lists:member(DoubleQuotes, [true, false]),
+    (  var(DoubleQuotes) ->
+       throw(error(instantiation_error, _))
+    ;  lists:member(DoubleQuotes, [true, false]),
        !
     ;  throw(error(domain_error(write_option, double_quotes(DoubleQuotes)), _))
     ).
 parse_write_options_(ignore_ops(IgnoreOps), ignore_ops-IgnoreOps) :-
-    (  nonvar(IgnoreOps),
-       lists:member(IgnoreOps, [true, false]),
+    (  var(IgnoreOps) ->
+       throw(error(instantiation_error, _))
+    ;  lists:member(IgnoreOps, [true, false]),
        !
     ;  throw(error(domain_error(write_option, ignore_ops(IgnoreOps)), _))
     ).
 parse_write_options_(quoted(Quoted), quoted-Quoted) :-
-    (  nonvar(Quoted),
-       lists:member(Quoted, [true, false]),
+    (  var(Quoted) ->
+       throw(error(instantiation_error, _))
+    ;  lists:member(Quoted, [true, false]),
        !
     ;  throw(error(domain_error(write_option, quoted(Quoted)), _))
     ).
 parse_write_options_(numbervars(NumberVars), numbervars-NumberVars) :-
-    (  nonvar(NumberVars),
-       lists:member(NumberVars, [true, false]),
+    (  var(NumberVars) ->
+       throw(error(instantiation_error, _))
+    ;  lists:member(NumberVars, [true, false]),
        !
     ;  throw(error(domain_error(write_option, numbervars(NumberVars)), _))
     ).
@@ -601,7 +605,9 @@ parse_write_options_(variable_names(VNNames), variable_names-VNNames) :-
     must_be_var_names_list(VNNames),
     !.
 parse_write_options_(max_depth(MaxDepth), max_depth-MaxDepth) :-
-    (  integer(MaxDepth),
+    (  var(MaxDepth) ->
+       throw(error(instantiation_error, _))
+    ;  integer(MaxDepth),
        MaxDepth >= 0,
        !
     ;  throw(error(domain_error(write_option, max_depth(MaxDepth)), _))
