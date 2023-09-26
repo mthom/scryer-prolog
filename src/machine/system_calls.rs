@@ -3908,6 +3908,11 @@ impl Machine {
             }
         );
 
+        if self.indices.builtin_property((name, arity)) {
+            self.machine_st.fail = true;
+            return;
+        }
+
         self.machine_st.fail = self
             .indices
             .get_predicate_code_index(name, arity, module_name)
@@ -3987,6 +3992,10 @@ impl Machine {
         };
 
         for (name, arity) in code_dir.keys() {
+            if self.indices.builtin_property((*name, *arity)) {
+                continue;
+            }
+
             if name_match(pred_atom, *name) && arity_match(pred_arity, *arity) {
                 self.machine_st.heap.extend(functor!(
                     atom!("/"),
