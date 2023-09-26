@@ -320,8 +320,8 @@ impl MachineState {
             }
             ResourceError::OutOfFiles => {
                 functor!(
-                    atom!("resource_atom"),
-                    [atom(atom!("out_of_files"))]
+                    atom!("resource_error"),
+                    [atom(atom!("file_descriptors"))]
                 )
             }
         };
