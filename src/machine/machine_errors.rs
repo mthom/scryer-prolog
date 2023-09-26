@@ -341,26 +341,6 @@ impl MachineState {
         culprit.type_error(self, valid_type)
     }
 
-    pub(super) fn module_resolution_error(
-        &mut self,
-        mod_name: Atom,
-        name: Atom,
-        arity: usize,
-    ) -> MachineError {
-        let h = self.heap.len();
-
-        let res_stub = functor!(atom!(":"), [atom(mod_name), atom(name)]);
-        let ind_stub = functor!(atom!("/"), [str(h + 2, 0), fixnum(arity)], [res_stub]);
-
-        let stub = functor!(atom!("evaluation_error"), [str(h, 0)], [ind_stub]);
-
-        MachineError {
-            stub,
-            location: None,
-            from: ErrorProvenance::Constructed,
-        }
-    }
-
     pub(super) fn existence_error(&mut self, err: ExistenceError) -> MachineError {
         match err {
             ExistenceError::Module(name) => {
@@ -373,6 +353,20 @@ impl MachineState {
                     stub,
                     location: None,
                     from: ErrorProvenance::Received,
+                }
+            }
+            ExistenceError::QualifiedProcedure { module_name, name, arity } => {
+                let h = self.heap.len();
+
+                let ind_stub = functor!(atom!("/"), [atom(name), fixnum(arity)]);
+                let res_stub = functor!(atom!(":"), [atom(module_name), str(h + 3, 0)], [ind_stub]);
+
+                let stub = functor!(atom!("existence_error"), [atom(atom!("procedure")), str(h, 0)], [res_stub]);
+
+                MachineError {
+                    stub,
+                    location: None,
+                    from: ErrorProvenance::Constructed,
                 }
             }
             ExistenceError::Procedure(name, arity) => {
@@ -992,6 +986,7 @@ pub enum ExistenceError {
     Module(Atom),
     ModuleSource(ModuleSource),
     Procedure(Atom, usize),
+    QualifiedProcedure { module_name: Atom, name: Atom, arity: usize },
     SourceSink(HeapCellValue),
     Stream(HeapCellValue),
 }

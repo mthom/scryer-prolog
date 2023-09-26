@@ -1167,7 +1167,7 @@ impl Machine {
                 let stub = functor_stub(name, arity);
                 let err = self
                     .machine_st
-                    .module_resolution_error(module_name, name, arity);
+                    .existence_error(ExistenceError::QualifiedProcedure { module_name, name, arity });
 
                 Err(self.machine_st.error_form(err, stub))
             }
@@ -1195,7 +1195,7 @@ impl Machine {
                 let stub = functor_stub(name, arity);
                 let err = self
                     .machine_st
-                    .module_resolution_error(module_name, name, arity);
+                    .existence_error(ExistenceError::QualifiedProcedure { module_name, name, arity });
 
                 Err(self.machine_st.error_form(err, stub))
             }
