@@ -379,23 +379,50 @@ remove_module(Module, Evacuable) :-
     ;  domain_error(module_specifier, Module, use_module/2)
     ).
 
+
+predicate_indicator(PI) :-
+    (  var(PI) ->
+       throw(error(instantiation_error, _))
+    ;  PI = Name/Arity,
+       must_be(atom, Name),
+       must_be(integer, Arity),
+       Arity >= 0
+    ).
+
+predicate_indicator_sequence(PI_Seq) :-
+    (  var(PI_Seq) ->
+       throw(error(instantiation_error, load/1))
+    ;  PI_Seq = (PI, PIs),
+       predicate_indicator(PI),
+       (  predicate_indicator(PIs) ->
+          true
+       ;  predicate_indicator_sequence(PIs)
+       )
+    ).
+
 :- meta_predicate add_predicate_declaration(3, ?).
 
 add_predicate_declaration(Handler, Name/Arity) :-
-    must_be(atom, Name),
-    must_be(integer, Arity),
+    predicate_indicator(Name/Arity),
     prolog_load_context(module, Module),
     call(Handler, Module, Name, Arity).
 add_predicate_declaration(Handler, Module:Name/Arity) :-
     must_be(atom, Module),
-    must_be(atom, Name),
-    must_be(integer, Arity),
+    predicate_indicator(Name/Arity),
     call(Handler, Module, Name, Arity).
 add_predicate_declaration(Handler, [PI|PIs]) :-
-    maplist(loader:add_predicate_declaration(Handler), [PI|PIs]).
+    '$skip_max_list'(_, -1, PIs, Tail),
+    (  Tail == [],
+       maplist(loader:predicate_indicator, PIs) ->
+       maplist(loader:add_predicate_declaration(Handler), [PI|PIs])
+    ;  throw(error(type_error(predicate_indicator_list, [PI|PIs]), load/1))
+    ).
 add_predicate_declaration(Handler, (PI, PIs)) :-
-    add_predicate_declaration(Handler, PI),
-    add_predicate_declaration(Handler, PIs).
+    (  predicate_indicator_sequence((PI, PIs)) ->
+       add_predicate_declaration(Handler, PI),
+       add_predicate_declaration(Handler, PIs)
+    ;  throw(error(type_error(predicate_indicator_sequence, (PI, PIs)), load/1))
+    ).
 
 add_dynamic_predicate(Evacuable, Module, Name, Arity) :-
     '$add_dynamic_predicate'(Module, Name, Arity, Evacuable).
