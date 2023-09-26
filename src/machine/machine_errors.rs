@@ -161,6 +161,26 @@ pub(crate) trait PermissionError {
     ) -> MachineError;
 }
 
+impl PermissionError for Atom {
+    fn permission_error(
+        self,
+        _machine_st: &mut MachineState,
+        index_atom: Atom,
+        perm: Permission,
+    ) -> MachineError {
+        let stub = functor!(
+            atom!("permission_error"),
+            [atom(perm.as_atom()), atom(index_atom), cell(atom_as_cell!(self))]
+        );
+
+        MachineError {
+            stub,
+            location: None,
+            from: ErrorProvenance::Received,
+        }
+    }
+}
+
 impl PermissionError for HeapCellValue {
     fn permission_error(
         self,
@@ -459,7 +479,6 @@ impl MachineState {
     pub(super) fn session_error(&mut self, err: SessionError) -> MachineError {
         match err {
             SessionError::CannotOverwriteBuiltIn(key) => {
-                // SessionError::CannotOverwriteImport(pred_atom) => {
                 self.permission_error(
                     Permission::Modify,
                     atom!("static_procedure"),
@@ -468,10 +487,14 @@ impl MachineState {
                         .collect::<MachineStub>(),
                 )
             }
+            SessionError::CannotOverwriteBuiltInModule(module) => {
+                self.permission_error(
+                    Permission::Modify,
+                    atom!("static_module"),
+                    module,
+                )
+            }
             SessionError::ExistenceError(err) => self.existence_error(err),
-            // SessionError::InvalidFileName(filename) => {
-            //     Self::existence_error(h, ExistenceError::Module(filename))
-            // }
             SessionError::ModuleDoesNotContainExport(..) => {
                 let error_atom = atom!("module_does_not_contain_claimed_export");
 
@@ -977,6 +1000,7 @@ pub enum ExistenceError {
 pub enum SessionError {
     CompilationError(CompilationError),
     CannotOverwriteBuiltIn(PredicateKey),
+    CannotOverwriteBuiltInModule(Atom),
     ExistenceError(ExistenceError),
     ModuleDoesNotContainExport(Atom, PredicateKey),
     ModuleCannotImportSelf(Atom),
