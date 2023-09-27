@@ -411,7 +411,7 @@ add_predicate_declaration(Handler, Module:Name/Arity) :-
     predicate_indicator(Name/Arity),
     call(Handler, Module, Name, Arity).
 add_predicate_declaration(Handler, [PI|PIs]) :-
-    '$skip_max_list'(_, -1, PIs, Tail),
+    '$skip_max_list'(_, _, PIs, Tail),
     (  Tail == [],
        maplist(loader:predicate_indicator, PIs) ->
        maplist(loader:add_predicate_declaration(Handler), [PI|PIs])
