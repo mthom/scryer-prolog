@@ -111,6 +111,3 @@ serial_test = "2.0.0"
 
 [patch.crates-io]
 modular-bitfield = { git = "https://github.com/mthom/modular-bitfield" }
-
-[profile.release]
-debug = true
