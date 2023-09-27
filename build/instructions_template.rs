@@ -558,7 +558,7 @@ enum SystemClauseType {
     DeterministicLengthRundown,
     #[strum_discriminants(strum(props(Arity = "7", Name = "$http_open")))]
     HttpOpen,
-    #[strum_discriminants(strum(props(Arity = "2", Name = "$http_listen")))]
+    #[strum_discriminants(strum(props(Arity = "5", Name = "$http_listen")))]
     HttpListen,
     #[strum_discriminants(strum(props(Arity = "7", Name = "$http_accept")))]
     HttpAccept,

@@ -624,7 +624,7 @@ The modules that ship with Scryer&nbsp;Prolog are also called
   Probabilistic predicates and random number generators.
 * [`http/http_open`](src/lib/http/http_open.pl) Open a stream to
   read answers from web&nbsp;servers. HTTPS is also supported.
-* [`http/http_server`](src/lib/http/http_server.pl) Runs a HTTP/1.1 and HTTP/2.0 web server. Uses [Hyper](https://hyper.rs) as a backend. Supports some query and form handling.
+* [`http/http_server`](src/lib/http/http_server.pl) Runs a HTTP/1.1 and HTTP/2.0 web server. Uses [Warp](https://github.com/seanmonstar/warp) as a backend. Supports some query and form handling.
 * [`sgml`](src/lib/sgml.pl)
   `load_html/3` and `load_xml/3` represent HTML and XML&nbsp;documents
   as Prolog&nbsp;terms for convenient and efficient reasoning. Use
