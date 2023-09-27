@@ -17,7 +17,7 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: windows-latest, rust-version: stable,  shell: 'msys2 {0}', target: 'x86_64-pc-windows-gnu'}
+          - { os: windows-latest, rust-version: stable,  shell: bash, target: 'x86_64-pc-windows-msvc'}
           - { os: macos-11,       rust-version: stable,  shell: bash, target: 'x86_64-apple-darwin' }
           - { os: ubuntu-22.04,   rust-version: stable,  shell: bash, target: 'x86_64-unknown-linux-gnu' }
           - { os: ubuntu-20.04,   rust-version: stable,  shell: bash, target: 'x86_64-unknown-linux-gnu', extra: true }
@@ -31,7 +31,6 @@ jobs:
     steps:
       - uses: actions/checkout@v3
       - uses: dtolnay/rust-toolchain@master
-        if: "!contains(matrix.os,'windows')"
         id: toolchain
         with:
           toolchain: ${{ matrix.rust-version }}
@@ -40,13 +39,6 @@ jobs:
       - name: Install i686 dependencies
         if: "contains(matrix.target,'i686')"
         run: sudo dpkg --add-architecture i386 && sudo apt-get update && sudo apt-get install libssl-dev:i386 gcc-multilib clang -y && echo "CC=clang" >> $GITHUB_ENV && echo "PKG_CONFIG_SYSROOT_DIR=/" >> $GITHUB_ENV
-      - uses: msys2/setup-msys2@v2
-        if: contains(matrix.os,'windows')
-        with:
-          update: true
-          install: >-
-            base-devel
-            mingw-w64-x86_64-rust
       - uses: actions/cache@v3
         with:
           path: |
@@ -177,7 +169,7 @@ jobs:
           zip scryer-prolog_macos-11.zip ./scryer-prolog_macos-11_x86_64-apple-darwin/scryer-prolog
           zip scryer-prolog_ubuntu-20.04.zip ./scryer-prolog_ubuntu-20.04_x86_64-unknown-linux-gnu/scryer-prolog
           zip scryer-prolog_ubuntu-22.04.zip ./scryer-prolog_ubuntu-22.04_x86_64-unknown-linux-gnu/scryer-prolog
-          zip scryer-prolog_windows-latest.zip ./scryer-prolog_windows-latest_x86_64-pc-windows-gnu/scryer-prolog.exe
+          zip scryer-prolog_windows-latest.zip ./scryer-prolog_windows-latest_x86_64-pc-windows-msvc/scryer-prolog.exe
           zip -r scryer-prolog_unknown-wasm32.zip ./scryer-prolog_unknown_wasm32
       - name: Release
         uses: softprops/action-gh-release@v1
