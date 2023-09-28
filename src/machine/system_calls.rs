@@ -5659,7 +5659,9 @@ impl Machine {
     }
     #[inline(always)]
     pub(crate) fn redo_attr_var_binding(&mut self) {
-        let var = self.deref_register(1);
+        // registers[1] MUST NOT be dereferenced here. the original
+        // AttrVar binding site must be preserved.
+        let var = self.machine_st.registers[1];
         let value = self.deref_register(2);
 
         debug_assert_eq!(HeapCellValueTag::AttrVar, var.get_tag());
