@@ -1521,10 +1521,13 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
         let print_struct = |printer: &mut Self, name: Atom, arity: usize| {
             if name == atom!("[]") && arity == 0 {
-                if let Some(TokenOrRedirect::CloseList(_)) = printer.state_stack.last() {
-                    if printer.at_cdr("") {
-                        return;
+                match printer.state_stack.last() {
+                    Some(TokenOrRedirect::CloseList(_) | TokenOrRedirect::ChildCloseList) => {
+                        if printer.at_cdr("") {
+                            return;
+                        }
                     }
+                    _ => {}
                 }
 
                 append_str!(printer, "[]");
