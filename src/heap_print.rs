@@ -208,6 +208,15 @@ impl NumberFocus {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+struct CommaSeparatedCharList {
+    pstr: PartialString,
+    offset: usize,
+    max_depth: usize,
+    end_cell: HeapCellValue,
+    end_h: Option<usize>,
+}
+
 #[derive(Debug, Clone)]
 enum TokenOrRedirect {
     Atom(Atom),
@@ -234,7 +243,7 @@ enum TokenOrRedirect {
     CloseList(Rc<Cell<(bool, usize)>>),
     HeadTailSeparator,
     StackPop,
-    CommaSeparatedCharList { pstr: PartialString, offset: usize, num_chars: usize },
+    CommaSeparatedCharList(CommaSeparatedCharList),
 }
 
 pub(crate) fn requires_space(atom: &str, op: &str) -> bool {
@@ -1115,10 +1124,19 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
     }
 
     // returns true if max_depth limit is reached and ellipsis is printed.
-    fn print_string_as_functor(&mut self, focus: usize, max_depth: usize) -> bool {
+    fn print_string_as_functor(&mut self, focus: usize, max_depth: &mut usize) -> bool {
         let iter = HeapPStrIter::new(self.iter.heap, focus);
 
         for (char_count, c) in iter.chars().enumerate() {
+            if self.check_max_depth(max_depth) {
+                if char_count > 0 {
+                    self.state_stack.push(TokenOrRedirect::Close);
+                }
+
+                self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
+                return true;
+            }
+
             append_str!(self, "'.'");
             push_char!(self, '(');
 
@@ -1126,16 +1144,13 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             push_char!(self, ',');
 
             self.state_stack.push(TokenOrRedirect::Close);
-
-            if max_depth >= char_count + 1 {
-                self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
-                return true;
-            }
         }
 
         false
     }
 
+    // proper strings are terminal so there's no need for max_depth to
+    // be a mutable ref here.
     fn print_proper_string(&mut self, focus: usize, max_depth: usize) {
         push_char!(self, '"');
 
@@ -1223,16 +1238,14 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             self.at_cdr(",");
             self.remove_list_children(focus.value() as usize);
 
-            if !self.print_string_as_functor(focus.value() as usize, max_depth) {
+            if !self.print_string_as_functor(focus.value() as usize, &mut max_depth) {
                 if end_cell == empty_list_as_cell!() {
                     if !self.at_cdr("") {
                         append_str!(self, "[]");
                     }
                 } else {
-                    self.state_stack
-                        .push(TokenOrRedirect::FunctorRedirect(max_depth));
-                    self.iter
-                        .push_stack(IterStackLoc::iterable_loc(end_h, HeapOrStackTag::Heap));
+                    self.state_stack.push(TokenOrRedirect::FunctorRedirect(max_depth));
+                    self.iter.push_stack(IterStackLoc::iterable_loc(end_h, HeapOrStackTag::Heap));
                 }
             }
         } else {
@@ -1250,63 +1263,27 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                     let switch = self.close_list(switch);
 
                     let (h, offset) = pstr_loc_and_offset(self.iter.heap, focus.value() as usize);
-                    let pstr = cell_as_string!(self.iter.heap[h]);
 
                     let offset = offset.get_num() as usize;
-                    let pstr = pstr.as_str_from(offset);
                     let tag = value.get_tag();
 
-                    if tag == HeapCellValueTag::PStrOffset {
+                    let end_h = if tag == HeapCellValueTag::PStrOffset {
                         // remove the fixnum offset from the iterator stack so we don't
                         // print an extraneous number. pstr offset value cells are never
                         // used by the iterator to mark cyclic terms so the removal is safe.
                         self.iter.pop_stack();
-                    }
-
-                    let non_trivial_end_cell = end_cell != empty_list_as_cell!();
-                    let non_trivial_end_cell_offset = non_trivial_end_cell as usize;
-
-                    let list_depth = pstr.chars().count() + non_trivial_end_cell_offset;
-
-                    if self.max_depth > 0 && list_depth >= max_depth {
-                        if tag != HeapCellValueTag::PStrOffset && tag != HeapCellValueTag::CStr {
-                            self.iter.pop_stack();
-                        }
-
-                        if list_depth > max_depth {
-                            self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
-
-                            if !self.max_depth_exhausted(max_depth) {
-                                self.state_stack.push(TokenOrRedirect::HeadTailSeparator);
-                            }
-                        } else if non_trivial_end_cell {
-                            self.iter.push_stack(IterStackLoc::iterable_loc(end_h, HeapOrStackTag::Heap));
-
-                            self.state_stack.push(TokenOrRedirect::FunctorRedirect(1));
-                            self.state_stack.push(TokenOrRedirect::HeadTailSeparator);
-                        }
-                    } else if non_trivial_end_cell {
-                        if tag == HeapCellValueTag::PStrOffset {
-                            self.iter.push_stack(IterStackLoc::iterable_loc(end_h, HeapOrStackTag::Heap));
-                        }
-
-                        self.state_stack.push(TokenOrRedirect::FunctorRedirect(max_depth.saturating_sub(list_depth - 1)));
-                        self.state_stack.push(TokenOrRedirect::HeadTailSeparator);
-                    }
+                        Some(end_h)
+                    } else {
+                        None
+                    };
 
                     if !self.max_depth_exhausted(max_depth) {
-                        let mut num_chars = 0;
-
-                        for (char_count, _c) in pstr.chars().enumerate() {
-                            num_chars += 1;
-
-                            if self.max_depth > 0 && char_count + 1 >= max_depth {
-                                break;
-                            }
-                        }
-
                         let pstr = cell_as_string!(self.iter.heap[h]);
-                        self.state_stack.push(TokenOrRedirect::CommaSeparatedCharList { pstr, offset, num_chars });
+                        self.state_stack.push(TokenOrRedirect::CommaSeparatedCharList(CommaSeparatedCharList {
+                            pstr, offset, max_depth, end_cell, end_h,
+                        }));
+                    } else {
+                        self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
                     }
 
                     self.open_list(switch);
@@ -1535,6 +1512,46 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 self.state_stack.push(TokenOrRedirect::Open);
                 self.state_stack.push(stream_root);
             }
+        }
+    }
+
+    fn print_comma_separated_char_list(&mut self, char_list: CommaSeparatedCharList) {
+        let CommaSeparatedCharList { pstr, offset, max_depth, end_cell, end_h } = char_list;
+        let pstr_str = pstr.as_str_from(offset);
+
+        if let Some(c) = pstr_str.chars().next() {
+            let offset = offset + c.len_utf8();
+
+            if !self.max_depth_exhausted(max_depth) {
+                self.state_stack.push(TokenOrRedirect::CommaSeparatedCharList(CommaSeparatedCharList {
+                    pstr,
+                    offset,
+                    max_depth: max_depth.saturating_sub(1),
+                    end_cell,
+                    end_h,
+                }));
+
+                let max_depth_allows = self.max_depth == 0 || max_depth > 1;
+
+                if max_depth_allows && pstr_str.chars().skip(1).next().is_some() {
+                    self.state_stack.push(TokenOrRedirect::Comma);
+                }
+
+                self.state_stack.push(TokenOrRedirect::Char(c));
+            } else {
+                self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
+                self.state_stack.push(TokenOrRedirect::HeadTailSeparator);
+            }
+        } else if self.max_depth_exhausted(max_depth) {
+            self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
+            self.state_stack.push(TokenOrRedirect::HeadTailSeparator);
+        } else if end_cell != empty_list_as_cell!() {
+            if let Some(end_h) = end_h {
+                self.iter.push_stack(IterStackLoc::iterable_loc(end_h, HeapOrStackTag::Heap));
+            }
+
+            self.state_stack.push(TokenOrRedirect::FunctorRedirect(max_depth + 1));
+            self.state_stack.push(TokenOrRedirect::HeadTailSeparator);
         }
     }
 
@@ -1777,24 +1794,8 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                     self.iter.pop_stack();
                     self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
                 }
-                TokenOrRedirect::CommaSeparatedCharList { pstr, offset, num_chars } => {
-                    let pstr_str = pstr.as_str_from(offset);
-
-                    if let Some(c) = pstr_str.chars().next() {
-                        let offset = offset + c.len_utf8();
-
-                        if num_chars > 1 {
-                            self.state_stack.push(TokenOrRedirect::CommaSeparatedCharList {
-                                pstr,
-                                offset: offset,
-                                num_chars: num_chars - 1,
-                            });
-
-                            self.state_stack.push(TokenOrRedirect::Comma);
-                        }
-
-                        self.state_stack.push(TokenOrRedirect::Char(c));
-                    }
+                TokenOrRedirect::CommaSeparatedCharList(char_list) => {
+                    self.print_comma_separated_char_list(char_list);
                 }
             }
         }
