@@ -233,6 +233,8 @@ enum TokenOrRedirect {
     OpenList(Rc<Cell<(bool, usize)>>),
     CloseList(Rc<Cell<(bool, usize)>>),
     HeadTailSeparator,
+    StackPop,
+    CommaSeparatedCharList { pstr: PartialString, offset: usize, num_chars: usize },
 }
 
 pub(crate) fn requires_space(atom: &str, op: &str) -> bool {
@@ -643,12 +645,26 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
                 self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
             } else if self.check_max_depth(&mut max_depth) {
-                self.iter.pop_stack();
-                self.iter.pop_stack();
+                if is_xfy!(spec.get_spec()) {
+                    let left_directed_op = DirectedOp::Left(name, spec);
 
-                self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
-                self.state_stack.push(TokenOrRedirect::Op(name, spec));
-                self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
+                    self.state_stack.push(TokenOrRedirect::CompositeRedirect(
+                        0,
+                        left_directed_op,
+                    ));
+
+                    self.state_stack.push(TokenOrRedirect::Op(name, spec));
+                    self.state_stack.push(TokenOrRedirect::StackPop);
+                } else { // is_yfx!
+                    let right_directed_op = DirectedOp::Right(name, spec);
+
+                    self.state_stack.push(TokenOrRedirect::StackPop);
+                    self.state_stack.push(TokenOrRedirect::Op(name, spec));
+                    self.state_stack.push(TokenOrRedirect::CompositeRedirect(
+                        0,
+                        right_directed_op,
+                    ));
+                }
             } else {
                 let left_directed_op = DirectedOp::Left(name, spec);
                 let right_directed_op = DirectedOp::Right(name, spec);
@@ -657,6 +673,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                     max_depth,
                     left_directed_op,
                 ));
+
                 self.state_stack.push(TokenOrRedirect::Op(name, spec));
                 self.state_stack.push(TokenOrRedirect::CompositeRedirect(
                     max_depth,
@@ -835,7 +852,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         )
     }
 
-    fn check_for_seen(&mut self) -> Option<HeapCellValue> {
+    fn check_for_seen(&mut self, max_depth: usize) -> Option<HeapCellValue> {
         if let Some(cell) = self.iter.next() {
             let is_cyclic = cell.get_forwarding_bit();
 
@@ -872,10 +889,18 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                                 });
                             }
                             None => {
-                                // otherwise, contract it to an ellipsis.
-                                push_space_if_amb!(self, "...", {
-                                    append_str!(self, "...");
-                                });
+                                if self.max_depth == 0 || max_depth == 0 {
+                                    // otherwise, contract it to an ellipsis.
+                                    push_space_if_amb!(self, "...", {
+                                        append_str!(self, "...");
+                                    });
+                                } else {
+                                    debug_assert!(cell.is_ref());
+
+                                    let h = cell.get_value() as usize;
+                                    self.iter.push_stack(IterStackLoc::iterable_loc(h, HeapOrStackTag::Heap));
+                                    return self.iter.next();
+                                }
                             }
                         }
 
@@ -1227,7 +1252,8 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                     let (h, offset) = pstr_loc_and_offset(self.iter.heap, focus.value() as usize);
                     let pstr = cell_as_string!(self.iter.heap[h]);
 
-                    let pstr = pstr.as_str_from(offset.get_num() as usize);
+                    let offset = offset.get_num() as usize;
+                    let pstr = pstr.as_str_from(offset);
                     let tag = value.get_tag();
 
                     if tag == HeapCellValueTag::PStrOffset {
@@ -1253,35 +1279,36 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                             if !self.max_depth_exhausted(max_depth) {
                                 self.state_stack.push(TokenOrRedirect::HeadTailSeparator);
                             }
+                        } else if non_trivial_end_cell {
+                            self.iter.push_stack(IterStackLoc::iterable_loc(end_h, HeapOrStackTag::Heap));
+
+                            self.state_stack.push(TokenOrRedirect::FunctorRedirect(1));
+                            self.state_stack.push(TokenOrRedirect::HeadTailSeparator);
                         }
                     } else if non_trivial_end_cell {
                         if tag == HeapCellValueTag::PStrOffset {
                             self.iter.push_stack(IterStackLoc::iterable_loc(end_h, HeapOrStackTag::Heap));
                         }
 
-                        self.state_stack.push(TokenOrRedirect::FunctorRedirect(max_depth));
+                        self.state_stack.push(TokenOrRedirect::FunctorRedirect(max_depth.saturating_sub(list_depth - 1)));
                         self.state_stack.push(TokenOrRedirect::HeadTailSeparator);
                     }
 
-                    let state_stack_len = self.state_stack.len();
-
                     if !self.max_depth_exhausted(max_depth) {
-                        for (char_count, c) in pstr.chars().enumerate() {
-                            if self.max_depth > 0 && char_count + 1 + non_trivial_end_cell_offset >= max_depth {
-                                self.state_stack.push(TokenOrRedirect::Char(c));
+                        let mut num_chars = 0;
+
+                        for (char_count, _c) in pstr.chars().enumerate() {
+                            num_chars += 1;
+
+                            if self.max_depth > 0 && char_count + 1 >= max_depth {
                                 break;
-                            } else {
-                                self.state_stack.push(TokenOrRedirect::Char(c));
-                                self.state_stack.push(TokenOrRedirect::Comma);
                             }
                         }
+
+                        let pstr = cell_as_string!(self.iter.heap[h]);
+                        self.state_stack.push(TokenOrRedirect::CommaSeparatedCharList { pstr, offset, num_chars });
                     }
 
-                    if let Some(TokenOrRedirect::Comma) = self.state_stack.last() {
-                         self.state_stack.pop();
-                    }
-
-                    self.state_stack[state_stack_len ..].reverse();
                     self.open_list(switch);
                 }
             );
@@ -1580,7 +1607,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             }
         };
 
-        let addr = match self.check_for_seen() {
+        let addr = match self.check_for_seen(max_depth) {
             Some(addr) => addr,
             None => return,
         };
@@ -1746,6 +1773,29 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 TokenOrRedirect::Space => push_char!(self, ' '),
                 TokenOrRedirect::LeftCurly => push_char!(self, '{'),
                 TokenOrRedirect::RightCurly => push_char!(self, '}'),
+                TokenOrRedirect::StackPop => {
+                    self.iter.pop_stack();
+                    self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
+                }
+                TokenOrRedirect::CommaSeparatedCharList { pstr, offset, num_chars } => {
+                    let pstr_str = pstr.as_str_from(offset);
+
+                    if let Some(c) = pstr_str.chars().next() {
+                        let offset = offset + c.len_utf8();
+
+                        if num_chars > 1 {
+                            self.state_stack.push(TokenOrRedirect::CommaSeparatedCharList {
+                                pstr,
+                                offset: offset,
+                                num_chars: num_chars - 1,
+                            });
+
+                            self.state_stack.push(TokenOrRedirect::Comma);
+                        }
+
+                        self.state_stack.push(TokenOrRedirect::Char(c));
+                    }
+                }
             }
         }
 
