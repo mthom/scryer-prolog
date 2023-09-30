@@ -1,6 +1,6 @@
 use crate::arena::*;
 use crate::forms::*;
-use crate::heap_iter::stackful_preorder_iter;
+use crate::heap_iter::{NonListElider, stackful_preorder_iter};
 use crate::machine::machine_state::*;
 use crate::machine::partial_string::*;
 use crate::machine::*;
@@ -717,7 +717,7 @@ fn bind_with_occurs_check<U: Unifier>(unifier: &mut U, r: Ref, value: HeapCellVa
     if !value.is_constant() {
         let machine_st: &mut MachineState = unifier.deref_mut();
 
-        for cell in stackful_preorder_iter(&mut machine_st.heap, &mut machine_st.stack, value) {
+        for cell in stackful_preorder_iter::<NonListElider>(&mut machine_st.heap, &mut machine_st.stack, value) {
             let cell = unmark_cell_bits!(cell);
 
             if let Some(inner_r) = cell.as_var() {

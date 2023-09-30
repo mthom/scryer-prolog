@@ -583,7 +583,7 @@ impl MachineState {
         seen_set: &mut IndexSet<HeapCellValue, S>,
         value: HeapCellValue,
     ) {
-        let mut iter = stackful_preorder_iter(&mut self.heap, &mut self.stack, value);
+        let mut iter = stackful_preorder_iter::<NonListElider>(&mut self.heap, &mut self.stack, value);
 
         while let Some(value) = iter.next() {
             let value = unmark_cell_bits!(value);
@@ -793,7 +793,7 @@ impl MachineState {
         let mut seen_set = IndexSet::new();
 
         {
-            let mut iter = stackful_post_order_iter(&mut self.heap, &mut self.stack, term);
+            let mut iter = stackful_post_order_iter::<NonListElider>(&mut self.heap, &mut self.stack, term);
 
             while let Some(value) = iter.next() {
                 if iter.parent_stack_len() >= max_depth {

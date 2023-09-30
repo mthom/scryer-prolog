@@ -1208,7 +1208,8 @@ impl MachineState {
         value: HeapCellValue,
     ) -> Result<Number, MachineStub> {
         let stub_gen = || functor_stub(atom!("is"), 2);
-        let mut iter = stackful_post_order_iter(&mut self.heap, &mut self.stack, value);
+        let mut iter = stackful_post_order_iter::<NonListElider>
+            (&mut self.heap, &mut self.stack, value);
 
         while let Some(value) = iter.next() {
             if value.get_forwarding_bit() {

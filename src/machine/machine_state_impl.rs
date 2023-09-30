@@ -1135,7 +1135,8 @@ impl MachineState {
             return false;
         }
 
-        let mut iter = stackful_preorder_iter(&mut self.heap, &mut self.stack, value);
+        let mut iter = stackful_preorder_iter::<NonListElider>
+            (&mut self.heap, &mut self.stack, value);
 
         while let Some(value) = iter.next() {
             if value.get_forwarding_bit() {
@@ -1633,7 +1634,7 @@ impl MachineState {
         }
 
         let mut visited = IndexSet::with_hasher(FxBuildHasher::default());
-        let mut iter = stackful_preorder_iter(&mut self.heap, &mut self.stack, value);
+        let mut iter = stackful_preorder_iter::<NonListElider>(&mut self.heap, &mut self.stack, value);
         let mut stack_len = 0;
 
         while let Some(value) = iter.next() {

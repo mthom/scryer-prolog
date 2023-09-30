@@ -1418,7 +1418,8 @@ impl MachineState {
         term_addr: HeapCellValue,
     ) -> Term {
         let mut term_stack = vec![];
-        let mut iter = stackful_post_order_iter(&mut self.heap, &mut self.stack, term_addr);
+        let mut iter = stackful_post_order_iter::<NonListElider>
+            (&mut self.heap, &mut self.stack, term_addr);
 
         while let Some(addr) = iter.next() {
             let addr = unmark_cell_bits!(addr);

@@ -133,7 +133,8 @@ impl MachineState {
         let mut seen_set = IndexSet::new();
         let mut seen_vars = vec![];
 
-        let mut iter = stackful_preorder_iter(&mut self.heap, &mut self.stack, cell);
+        let mut iter = stackful_preorder_iter::<NonListElider>
+            (&mut self.heap, &mut self.stack, cell);
 
         while let Some(value) = iter.next() {
             read_heap_cell!(value,

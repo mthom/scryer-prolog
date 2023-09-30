@@ -104,7 +104,7 @@ fn needs_bracketing(child_desc: OpDesc, op: &DirectedOp) -> bool {
     }
 }
 
-impl<'a> StackfulPreOrderHeapIter<'a> {
+impl<'a, ElideLists> StackfulPreOrderHeapIter<'a, ElideLists> {
     /*
      * descend into the subtree where the iterator is currently parked
      * and check that the leftmost leaf is a number, with every node
@@ -407,7 +407,7 @@ fn is_numbered_var(name: Atom, arity: usize) -> bool {
 
 #[inline]
 fn negated_op_needs_bracketing(
-    iter: &StackfulPreOrderHeapIter,
+    iter: &StackfulPreOrderHeapIter<ListElider>,
     op_dir: &OpDir,
     op: &Option<DirectedOp>,
 ) -> bool {
@@ -491,7 +491,7 @@ pub fn fmt_float(mut fl: f64) -> String {
 #[derive(Debug)]
 pub struct HCPrinter<'a, Outputter> {
     outputter: Outputter,
-    iter: StackfulPreOrderHeapIter<'a>,
+    iter: StackfulPreOrderHeapIter<'a, ListElider>,
     atom_tbl: Arc<AtomTable>,
     op_dir: &'a OpDir,
     state_stack: Vec<TokenOrRedirect>,

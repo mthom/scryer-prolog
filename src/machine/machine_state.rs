@@ -588,7 +588,7 @@ impl MachineState {
 
         let mut singleton_var_set: IndexMap<Ref, bool> = IndexMap::new();
 
-        for cell in stackful_preorder_iter(&mut self.heap, &mut self.stack, heap_loc) {
+        for cell in stackful_preorder_iter::<NonListElider>(&mut self.heap, &mut self.stack, heap_loc) {
             let cell = unmark_cell_bits!(cell);
 
             if let Some(var) = cell.as_var() {
