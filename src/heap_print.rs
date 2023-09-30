@@ -1355,11 +1355,9 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
         let switch = self.close_list(cell);
 
-        self.state_stack
-            .push(TokenOrRedirect::FunctorRedirect(max_depth));
+        self.state_stack.push(TokenOrRedirect::FunctorRedirect(max_depth));
         self.state_stack.push(TokenOrRedirect::HeadTailSeparator); // bar
-        self.state_stack
-            .push(TokenOrRedirect::FunctorRedirect(max_depth + 1));
+        self.state_stack.push(TokenOrRedirect::FunctorRedirect(max_depth));
 
         self.open_list(switch);
     }
