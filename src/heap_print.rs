@@ -862,61 +862,67 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
     }
 
     fn check_for_seen(&mut self, max_depth: usize) -> Option<HeapCellValue> {
-        if let Some(cell) = self.iter.next() {
-            let is_cyclic = cell.get_forwarding_bit();
+        if let Some(mut orig_cell) = self.iter.next() {
+            loop {
+                let is_cyclic = orig_cell.get_forwarding_bit();
 
-            let cell = heap_bound_store(self.iter.heap, heap_bound_deref(self.iter.heap, cell));
-            let cell = unmark_cell_bits!(cell);
+                let cell = heap_bound_store(self.iter.heap, heap_bound_deref(self.iter.heap, orig_cell));
+                let cell = unmark_cell_bits!(cell);
 
-            match self.var_names.get(&cell).cloned() {
-                Some(var) if cell.is_var() => {
-                    // If cell is an unbound variable and maps to
-                    // a name via heap_locs, append the name to
-                    // the current output, and return None. None
-                    // short-circuits handle_heap_term.
-                    // self.iter.pop_stack();
+                match self.var_names.get(&cell).cloned() {
+                    Some(var) if cell.is_var() => {
+                        // If cell is an unbound variable and maps to
+                        // a name via heap_locs, append the name to
+                        // the current output, and return None. None
+                        // short-circuits handle_heap_term.
+                        // self.iter.pop_stack();
 
-                    let var_str = var.borrow().to_string();
+                        let var_str = var.borrow().to_string();
 
-                    push_space_if_amb!(self, &var_str, {
-                        append_str!(self, &var_str);
-                    });
-
-                    None
-                }
-                var_opt => {
-                    if is_cyclic && cell.is_compound(self.iter.heap) {
-                        // self-referential variables are marked "cyclic".
-                        match var_opt {
-                            Some(var) => {
-                                // If the term is bound to a named variable,
-                                // print the variable's name to output.
-                                let var_str = var.borrow().to_string();
-
-                                push_space_if_amb!(self, &var_str, {
-                                    append_str!(self, &var_str);
-                                });
-                            }
-                            None => {
-                                if self.max_depth == 0 || max_depth == 0 {
-                                    // otherwise, contract it to an ellipsis.
-                                    push_space_if_amb!(self, "...", {
-                                        append_str!(self, "...");
-                                    });
-                                } else {
-                                    debug_assert!(cell.is_ref());
-
-                                    let h = cell.get_value() as usize;
-                                    self.iter.push_stack(IterStackLoc::iterable_loc(h, HeapOrStackTag::Heap));
-                                    return self.iter.next();
-                                }
-                            }
-                        }
+                        push_space_if_amb!(self, &var_str, {
+                            append_str!(self, &var_str);
+                        });
 
                         return None;
                     }
+                    var_opt => {
+                        if is_cyclic && cell.is_compound(self.iter.heap) {
+                            // self-referential variables are marked "cyclic".
+                            match var_opt {
+                                Some(var) => {
+                                    // If the term is bound to a named variable,
+                                    // print the variable's name to output.
+                                    let var_str = var.borrow().to_string();
 
-                    Some(cell)
+                                    push_space_if_amb!(self, &var_str, {
+                                        append_str!(self, &var_str);
+                                    });
+                                }
+                                None => {
+                                    if self.max_depth == 0 || max_depth == 0 {
+                                        // otherwise, contract it to an ellipsis.
+                                        push_space_if_amb!(self, "...", {
+                                            append_str!(self, "...");
+                                        });
+                                    } else {
+                                        debug_assert!(cell.is_ref());
+
+                                        let h = cell.get_value() as usize;
+                                        self.iter.push_stack(IterStackLoc::iterable_loc(h, HeapOrStackTag::Heap));
+
+                                        if let Some(cell) = self.iter.next() {
+                                            orig_cell = cell;
+                                            continue;
+                                        }
+                                    }
+                                }
+                            }
+
+                            return None;
+                        }
+
+                        return Some(cell);
+                    }
                 }
             }
         } else {
