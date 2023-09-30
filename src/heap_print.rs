@@ -861,7 +861,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         )
     }
 
-    fn check_for_seen(&mut self, max_depth: usize) -> Option<HeapCellValue> {
+    fn check_for_seen(&mut self, max_depth: &mut usize) -> Option<HeapCellValue> {
         if let Some(mut orig_cell) = self.iter.next() {
             loop {
                 let is_cyclic = orig_cell.get_forwarding_bit();
@@ -899,13 +899,25 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                                     });
                                 }
                                 None => {
-                                    if self.max_depth == 0 || max_depth == 0 {
+                                    if self.max_depth == 0 || *max_depth == 0 {
                                         // otherwise, contract it to an ellipsis.
                                         push_space_if_amb!(self, "...", {
                                             append_str!(self, "...");
                                         });
                                     } else {
                                         debug_assert!(cell.is_ref());
+
+                                        // as usual, the WAM's
+                                        // optimization of the Lis tag
+                                        // (conflating the location of
+                                        // the list and that of its
+                                        // first element) needs
+                                        // special consideration here
+                                        // lest we find ourselves in
+                                        // an infinite loop.
+                                        if cell.get_tag() == HeapCellValueTag::Lis {
+                                            *max_depth -= 1;
+                                        }
 
                                         let h = cell.get_value() as usize;
                                         self.iter.push_stack(IterStackLoc::iterable_loc(h, HeapOrStackTag::Heap));
@@ -1363,7 +1375,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
         self.state_stack.push(TokenOrRedirect::FunctorRedirect(max_depth));
         self.state_stack.push(TokenOrRedirect::HeadTailSeparator); // bar
-        self.state_stack.push(TokenOrRedirect::FunctorRedirect(max_depth));
+        self.state_stack.push(TokenOrRedirect::FunctorRedirect(max_depth + 1));
 
         self.open_list(switch);
     }
@@ -1563,9 +1575,14 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         &mut self,
         op: Option<DirectedOp>,
         is_functor_redirect: bool,
-        max_depth: usize,
+        mut max_depth: usize,
     ) {
         let negated_operand = negated_op_needs_bracketing(&self.iter, self.op_dir, &op);
+
+        let addr = match self.check_for_seen(&mut max_depth) {
+            Some(addr) => addr,
+            None => return,
+        };
 
         let print_struct = |printer: &mut Self, name: Atom, arity: usize| {
             if name == atom!("[]") && arity == 0 {
@@ -1626,11 +1643,6 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                     printer.print_impromptu_atom(name);
                 });
             }
-        };
-
-        let addr = match self.check_for_seen(max_depth) {
-            Some(addr) => addr,
-            None => return,
         };
 
         if !addr.is_var()
