@@ -127,9 +127,15 @@ impl<'a> StackfulPreOrderHeapIter<'a> {
 
     #[inline]
     fn forward_if_referent_marked(&mut self, loc: IterStackLoc) {
-        read_heap_cell!(self.read_cell(loc),
+        let cell = self.read_cell(loc);
+
+        read_heap_cell!(cell,
+            (HeapCellValueTag::Lis, vh) => {
+                if cell.get_mark_bit() && self.heap[vh].get_mark_bit() {
+                    self.read_cell_mut(loc).set_forwarding_bit(true);
+                }
+            }
             (HeapCellValueTag::Str |
-             HeapCellValueTag::Lis |
              HeapCellValueTag::AttrVar |
              HeapCellValueTag::Var |
              HeapCellValueTag::PStrLoc, vh) => {
@@ -260,28 +266,27 @@ impl<'a> StackfulPreOrderHeapIter<'a> {
                (HeapCellValueTag::Lis, vh) => {
                    let loc = IterStackLoc::iterable_loc(vh, HeapOrStackTag::Heap);
 
+                   self.forward_if_referent_marked(loc);
                    self.push_if_unmarked(loc);
 
                    self.stack.push(IterStackLoc::pending_mark_loc(vh + 1, HeapOrStackTag::Heap));
                    self.stack.push(IterStackLoc::mark_loc(vh, HeapOrStackTag::Heap));
-
-                   self.forward_if_referent_marked(loc);
 
                    return Some(self.read_cell(h));
                }
                (HeapCellValueTag::AttrVar | HeapCellValueTag::Var, vh) => {
                    let loc = IterStackLoc::iterable_loc(vh, HeapOrStackTag::Heap);
 
+                   self.forward_if_referent_marked(loc);
                    self.push_if_unmarked(loc);
                    self.stack.push(IterStackLoc::mark_loc(vh, HeapOrStackTag::Heap));
-                   self.forward_if_referent_marked(loc);
                }
                (HeapCellValueTag::StackVar, vs) => {
                    let loc = IterStackLoc::iterable_loc(vs, HeapOrStackTag::Stack);
 
+                   self.forward_if_referent_marked(loc);
                    self.push_if_unmarked(loc);
                    self.stack.push(IterStackLoc::mark_loc(vs, HeapOrStackTag::Stack));
-                   self.forward_if_referent_marked(loc);
                }
                (HeapCellValueTag::PStrOffset, offset) => {
                    self.push_if_unmarked(IterStackLoc::iterable_loc(offset, HeapOrStackTag::Heap));
@@ -2057,6 +2062,10 @@ mod tests {
                 unmark_cell_bits!(iter.next().unwrap()),
                 list_loc_as_cell!(1)
             );
+            assert_eq!(iter.next().unwrap(), cyclic_link);
+
+            assert_eq!(iter.next().unwrap(), cyclic_link);
+
             assert_eq!(iter.next().unwrap(), cyclic_link);
 
             assert_eq!(iter.next(), None);
