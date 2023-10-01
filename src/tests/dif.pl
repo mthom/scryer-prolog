@@ -196,6 +196,17 @@ test("scryer-prolog#1956",(
     Res = []
 )).
 
+% https://github.com/mthom/scryer-prolog/issues/2056
+test("scryer-prolog#2056",(
+    set_prolog_flag(occurs_check, false),
+    C=[D|E],
+    D=[C],
+    A=[A],
+    dif(A,[D]),
+
+    \+ E=[]
+)).
+
 main :-
     findall(test(Name, Goal), test(Name, Goal), Tests),
     run_tests(Tests, Failed),
