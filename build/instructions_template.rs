@@ -574,7 +574,7 @@ enum SystemClauseType {
     PredicateDefined,
     #[strum_discriminants(strum(props(Arity = "3", Name = "$strip_module")))]
     StripModule,
-    #[strum_discriminants(strum(props(Arity = "4", Name = "$compile_inline_or_expanded_goal")))]
+    #[strum_discriminants(strum(props(Arity = "5", Name = "$compile_inline_or_expanded_goal")))]
     CompileInlineOrExpandedGoal,
     #[strum_discriminants(strum(props(Arity = "arity", Name = "$fast_call")))]
     FastCallN(usize),

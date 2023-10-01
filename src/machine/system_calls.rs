@@ -1411,7 +1411,6 @@ impl Machine {
             is_simple_goal: bool,
             goal: HeapCellValue,
             key: PredicateKey,
-            expanded_vars: IndexSet<HeapCellValue, BuildHasherDefault<FxHasher>>,
             supp_vars: IndexSet<HeapCellValue, BuildHasherDefault<FxHasher>>,
         }
 
@@ -1436,7 +1435,7 @@ impl Machine {
                     // insertion as well as the previous
                     // supp_vars.len() argument's variables being
                     // disjoint from them. if they are not, the
-                    // expanded goal are not simple.
+                    // expanded goal is not simple.
 
                     let post_supp_args = self.machine_st.heap[s+arity-supp_vars.len()+1 .. s+arity+1]
                         .iter()
@@ -1482,7 +1481,6 @@ impl Machine {
                     is_simple_goal,
                     goal,
                     key: (name, arity),
-                    expanded_vars,
                     supp_vars
                 }
             }
@@ -1496,7 +1494,6 @@ impl Machine {
                     is_simple_goal: true,
                     goal: str_loc_as_cell!(h),
                     key: (name, 0),
-                    expanded_vars: IndexSet::with_hasher(FxBuildHasher::default()),
                     supp_vars,
                 }
             }
@@ -1510,7 +1507,6 @@ impl Machine {
                     is_simple_goal: true,
                     goal: str_loc_as_cell!(h),
                     key: (name, 0),
-                    expanded_vars: IndexSet::with_hasher(FxBuildHasher::default()),
                     supp_vars,
                 }
             }
@@ -1532,9 +1528,12 @@ impl Machine {
                 .push(untyped_arena_ptr_as_cell!(UntypedArenaPtr::from(idx)));
             result.goal
         } else {
+            let mut unexpanded_vars = IndexSet::with_hasher(FxBuildHasher::default());
+            self.machine_st.variable_set(&mut unexpanded_vars, self.machine_st.registers[5]);
+
             // all supp_vars must appear later!
             let vars = IndexSet::<HeapCellValue, BuildHasherDefault<FxHasher>>::from_iter(
-                result.expanded_vars.difference(&result.supp_vars).cloned(),
+                unexpanded_vars.difference(&result.supp_vars).cloned(),
             );
 
             let vars: Vec<_> = vars
@@ -1556,7 +1555,7 @@ impl Machine {
 
                     self.machine_st.heap.push(atom_as_cell!(atom!("$aux"), 0));
 
-                    for value in result.expanded_vars.difference(&result.supp_vars).cloned() {
+                    for value in unexpanded_vars.difference(&result.supp_vars).cloned() {
                         self.machine_st.heap.push(value);
                     }
 

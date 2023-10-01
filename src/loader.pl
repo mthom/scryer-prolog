@@ -739,7 +739,7 @@ expand_subgoal(UnexpandedGoals, MS, M, ExpandedGoals, HeadVars) :-
        expand_module_names(UnexpandedGoals4, MetaSpecs, Module1, ExpandedGoals0, HeadVars)
     ;  ExpandedGoals0 = UnexpandedGoals4
     ),
-    '$compile_inline_or_expanded_goal'(ExpandedGoals0, SuppArgs, ExpandedGoals1, Module1),
+    '$compile_inline_or_expanded_goal'(ExpandedGoals0, SuppArgs, ExpandedGoals1, Module1, UnexpandedGoals0),
     expand_module_name(ExpandedGoals1, MS, Module1, ExpandedGoals).
 
 
