@@ -5695,7 +5695,7 @@ impl Machine {
 
         if bp == self.machine_st.b && self.machine_st.cwil.is_empty() {
             self.machine_st.cwil.reset();
-            self.machine_st.increment_call_count_fn = |_| Ok(());
+            self.machine_st.increment_call_count_fn = |_| true;
         }
     }
 
@@ -5704,11 +5704,10 @@ impl Machine {
         let a1 = self.deref_register(1);
         let a2 = self.deref_register(2);
 
-        let bp = cell_as_fixnum!(a1).get_num() as usize;
-
-        let count = self.machine_st.cwil.remove_limit(bp).clone();
-
+        let block = cell_as_fixnum!(a1).get_num() as usize;
+        let count = self.machine_st.cwil.remove_limit(block).clone();
         let result = count.clone().try_into();
+
         if let Ok(value) = result{
             self.machine_st.unify_fixnum(Fixnum::build_with(value), a2);
         } else {
@@ -5873,6 +5872,11 @@ impl Machine {
         } else {
             self.machine_st.unify_atom(atom!("true"), a1);
         }
+    }
+
+    #[inline(always)]
+    pub(crate) fn inference_limit_exceeded(&mut self) {
+        self.machine_st.fail = !self.machine_st.cwil.inference_limit_exceeded;
     }
 
     #[inline(always)]

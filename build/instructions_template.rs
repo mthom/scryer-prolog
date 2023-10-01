@@ -601,6 +601,8 @@ enum SystemClauseType {
         Name = "$keysort_with_constant_var_ordering"
     )))]
     KeySortWithConstantVarOrdering,
+    #[strum_discriminants(strum(props(Arity = "0", Name = "$inference_limit_exceeded")))]
+    InferenceLimitExceeded,
     REPL(REPLCodePtr),
 }
 
@@ -1727,6 +1729,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallUnattributedVar |
                     &Instruction::CallGetDBRefs |
                     &Instruction::CallKeySortWithConstantVarOrdering |
+                    &Instruction::CallInferenceLimitExceeded |
                     &Instruction::CallFetchGlobalVar |
                     &Instruction::CallFirstStream |
                     &Instruction::CallFlushOutput |
@@ -1960,6 +1963,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteUnattributedVar |
                     &Instruction::ExecuteGetDBRefs |
                     &Instruction::ExecuteKeySortWithConstantVarOrdering |
+                    &Instruction::ExecuteInferenceLimitExceeded |
                     &Instruction::ExecuteFetchGlobalVar |
                     &Instruction::ExecuteFirstStream |
                     &Instruction::ExecuteFlushOutput |
