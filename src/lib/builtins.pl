@@ -2226,4 +2226,7 @@ nl(Stream) :-
 %
 % Throws an exception of the following structure: `error(ErrorTerm, ImpDef)`.
 error(Error_term, Imp_def) :-
-   throw(error(Error_term, Imp_def)).
+    (  var(Error_term) ->
+       throw(error(instantiation_error, error/2))
+    ;  throw(error(Error_term, Imp_def))
+    ).
