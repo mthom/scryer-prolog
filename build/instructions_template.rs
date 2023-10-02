@@ -1660,29 +1660,31 @@ fn generate_instruction_preface() -> TokenStream {
                         let (name, arity) = self.to_name_and_arity();
                         functor!(atom!("execute_default"), [atom(name), fixnum(arity)])
                     }
-                    &Instruction::CallIsAtom(_) |
-                    &Instruction::CallIsAtomic(_) |
-                    &Instruction::CallIsCompound(_) |
-                    &Instruction::CallIsInteger(_) |
-                    &Instruction::CallIsNumber(_) |
-                    &Instruction::CallIsRational(_) |
-                    &Instruction::CallIsFloat(_) |
-                    &Instruction::CallIsNonVar(_) |
-                    &Instruction::CallIsVar(_) => {
+                    &Instruction::CallIsAtom(r) |
+                    &Instruction::CallIsAtomic(r) |
+                    &Instruction::CallIsCompound(r) |
+                    &Instruction::CallIsInteger(r) |
+                    &Instruction::CallIsNumber(r) |
+                    &Instruction::CallIsRational(r) |
+                    &Instruction::CallIsFloat(r) |
+                    &Instruction::CallIsNonVar(r) |
+                    &Instruction::CallIsVar(r) => {
                         let (name, arity) = self.to_name_and_arity();
-                        functor!(atom!("call"), [atom(name), fixnum(arity)])
+                        let rt_stub = reg_type_into_functor(r);
+                        functor!(atom!("call"), [atom(name), fixnum(arity), str(h, 0)], [rt_stub])
                     }
-                    &Instruction::ExecuteIsAtom(_) |
-                    &Instruction::ExecuteIsAtomic(_) |
-                    &Instruction::ExecuteIsCompound(_) |
-                    &Instruction::ExecuteIsInteger(_) |
-                    &Instruction::ExecuteIsNumber(_) |
-                    &Instruction::ExecuteIsRational(_) |
-                    &Instruction::ExecuteIsFloat(_) |
-                    &Instruction::ExecuteIsNonVar(_) |
-                    &Instruction::ExecuteIsVar(_) => {
+                    &Instruction::ExecuteIsAtom(r) |
+                    &Instruction::ExecuteIsAtomic(r) |
+                    &Instruction::ExecuteIsCompound(r) |
+                    &Instruction::ExecuteIsInteger(r) |
+                    &Instruction::ExecuteIsNumber(r) |
+                    &Instruction::ExecuteIsRational(r) |
+                    &Instruction::ExecuteIsFloat(r) |
+                    &Instruction::ExecuteIsNonVar(r) |
+                    &Instruction::ExecuteIsVar(r) => {
                         let (name, arity) = self.to_name_and_arity();
-                        functor!(atom!("execute"), [atom(name), fixnum(arity)])
+                        let rt_stub = reg_type_into_functor(r);
+                        functor!(atom!("execute"), [atom(name), fixnum(arity), str(h, 0)], [rt_stub])
                     }
                     //
                     &Instruction::CallAtomChars |
