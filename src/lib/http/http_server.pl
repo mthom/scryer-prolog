@@ -300,25 +300,21 @@ http_query(http_request(_, _, Queries), Key, Value) :- member(Key-Value, Queries
 
 parse_queries([Key-Value|Queries]) -->
     string_without("=", Key0),
-    {
-        phrase(url_decode(Key), Key0)
-    },
     "=",
     string_without("&", Value0),
-    {
-        phrase(url_decode(Value), Value0)
-    },
     "&",
-    parse_queries(Queries).
+    parse_queries(Queries),
+    {
+	phrase(url_decode(Key), Key0),
+	phrase(url_decode(Value), Value0)
+    }.
 
 parse_queries([Key-Value]) -->
     string_without("=", Key0),
-    {
-        phrase(url_decode(Key), Key0)
-    },
     "=",
     string_without(" ", Value0),
     {
+	phrase(url_decode(Key), Key0),
         phrase(url_decode(Value), Value0)  
     }.
 
@@ -329,8 +325,12 @@ parse_queries([]) -->
 url_decode([Char|Chars]) -->
     [Char],
     {
-        Char \= '%'
+        Char \= '%',
+	Char \= (+)
     },
+    url_decode(Chars).
+url_decode([' '|Chars]) -->
+    "+",
     url_decode(Chars).
 url_decode([Char|Chars]) -->
     "%",
