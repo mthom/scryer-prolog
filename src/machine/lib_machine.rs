@@ -95,13 +95,11 @@ impl Machine {
         loop {
             self.dispatch_loop();
 
-            if self.machine_st.fail {
-                // NOTE: only print results on success
-                self.machine_st.fail = false;
-                println!("false");
-                matches.push(QueryResolutionLine::False);
-                break;
-            } else if self.machine_st.ball.stub.len() != 0 {
+            //println!("b: {}", self.machine_st.b);
+            //println!("stub_b: {}", stub_b);
+            //println!("fail: {}", self.machine_st.fail);
+
+            if self.machine_st.ball.stub.len() != 0 {
                 // NOTE: this means an exception was thrown, at which
                 // point we backtracked to the stub choice point.
                 // this should halt the search for solutions as it
@@ -128,7 +126,23 @@ impl Machine {
                     .join(" ");
                 
                 return Err(error_string);
-            }
+            } 
+            
+            if self.machine_st.fail {
+                // NOTE: only print results on success
+                self.machine_st.fail = false;
+                println!("fail!");
+                matches.push(QueryResolutionLine::False);
+                break;
+            }; 
+
+            if self.machine_st.b == stub_b && term_write_result.var_dict.len() == 0 {
+                // NOTE: only print results on success
+                self.machine_st.fail = false;
+                println!("b == stub_b");
+                matches.push(QueryResolutionLine::False);
+                break;
+            }; 
 
             let mut bindings: BTreeMap<String, Value> = BTreeMap::new();
 
