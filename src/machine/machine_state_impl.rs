@@ -1637,21 +1637,33 @@ impl MachineState {
         let mut iter = stackful_preorder_iter::<NonListElider>(&mut self.heap, &mut self.stack, value);
         let mut stack_len = 0;
 
-        while let Some(value) = iter.next() {
-            let mut value = unmark_cell_bits!(value);
+        let is_var = |heap: &Heap, value: HeapCellValue| -> bool {
+            let value = unmark_cell_bits!(value);
 
             if value.is_var() {
-                value = heap_bound_store(iter.heap, heap_bound_deref(iter.heap, value));
+                let value = heap_bound_store(heap, heap_bound_deref(heap, value));
 
                 if value.is_var() {
                     return true;
                 }
             }
 
+            false
+        };
+
+        while let Some(value) = iter.next() {
+            if is_var(iter.heap, value) {
+                return true;
+            }
+
             if value.is_ref() {
                 if visited.contains(&value) {
-                    for _ in stack_len..iter.stack_len() {
-                        iter.pop_stack();
+                    while iter.stack_len() > stack_len {
+                        if let Some(value) = iter.pop_stack() {
+                            if is_var(iter.heap, value) {
+                                return true;
+                            }
+                        }
                     }
                 } else {
                     visited.insert(value);
