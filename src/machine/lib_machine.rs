@@ -321,11 +321,13 @@ mod tests {
             result,
             Ok(QueryResolution::Matches(vec![
                 QueryMatch::from(btreemap! {
-                    "X" => Value::List(Vec::from([
-                        Value::Float(OrderedFloat(1.0)),
-                        Value::Float(OrderedFloat(2.0)),
-                        Value::Float(OrderedFloat(3.0)),
-                        ]))
+                    "X" => Value::List(
+                        Vec::from([
+                            Value::Float(OrderedFloat::from(1.0)), 
+                            Value::Float(OrderedFloat::from(2.0)), 
+                            Value::Float(OrderedFloat::from(3.0))
+                        ])
+                    )
                 }),
             ]))
         );
@@ -437,6 +439,39 @@ mod tests {
                 machine.consult_module_string("facts", code.to_string());
             }
         }
+    }
+
+    #[test]
+    fn findall() {
+        let mut machine = Machine::new_lib();
+
+        machine.consult_module_string(
+            "facts",
+            String::from(
+                r#"
+            triple("a", "p1", "b").
+            triple("a", "p2", "b").
+        "#,
+            ),
+        );
+
+        let query = String::from(r#"findall([Predicate, Target], triple(_,Predicate,Target), Result)."#);
+        let output = machine.run_query(query);
+        assert_eq!(
+            output,
+            Ok(QueryResolution::Matches(vec![
+                QueryMatch::from(btreemap! {
+                    "Predicate" => Value::from("Predicate"),
+                    "Result" => Value::List(
+                        Vec::from([
+                            Value::List([Value::from("p1"), Value::from("b")].into()), 
+                            Value::List([Value::from("p2"), Value::from("b")].into()), 
+                        ])
+                    ),
+                    "Target" => Value::from("Target"),
+                }),
+            ]))
+        );
 
     }
 }

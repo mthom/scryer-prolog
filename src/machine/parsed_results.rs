@@ -2,7 +2,6 @@ use crate::atom_table::*;
 use ordered_float::OrderedFloat;
 use dashu::*;
 use std::collections::BTreeMap;
-use regex::Regex;
 use std::collections::HashMap;
 
 pub type QueryResult = Result<QueryResolution, String>;
@@ -117,14 +116,56 @@ impl From<Vec<QueryResolutionLine>> for QueryResolution {
     }
 }
 
+fn split_response_string(input: &str) -> Vec<String> {
+    let mut level_bracket = 0;
+    let mut level_parenthesis = 0;
+    let mut in_double_quotes = false;
+    let mut in_single_quotes = false;
+    let mut start = 0;
+    let mut result = Vec::new();
+
+    for (i, c) in input.chars().enumerate() {
+        match c {
+            '[' => level_bracket += 1,
+            ']' => level_bracket -= 1,
+            '(' => level_parenthesis += 1,
+            ')' => level_parenthesis -= 1,
+            '"' => in_double_quotes = !in_double_quotes,
+            '\'' => in_single_quotes = !in_single_quotes,
+            ',' if level_bracket == 0 && level_parenthesis == 0 && !in_double_quotes && !in_single_quotes => {
+                result.push(input[start..i].trim().to_string());
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+
+    result.push(input[start..].trim().to_string());
+    result
+}
+
+fn split_key_value_pairs(input: &str) -> Vec<(String, String)> {
+    let items = split_response_string(input);
+    let mut result = Vec::new();
+
+    for item in items {
+        let parts: Vec<&str> = item.splitn(2, '=').collect();
+        if parts.len() == 2 {
+            let key = parts[0].trim().to_string();
+            let value = parts[1].trim().to_string();
+            result.push((key, value));
+        }
+    }
+
+    result
+}
+
 fn parse_prolog_response(input: &str) -> HashMap<String, String> {
     let mut map: HashMap<String, String> = HashMap::new();
     // Use regex to match strings including commas inside them
-    let re = Regex::new(r"(\w+)\s=\s((?:[^,\[]|\[[^\]]*\])*)").unwrap();
-    
-    for cap in re.captures_iter(input) {
-        let key = cap[1].to_string();
-        let value = cap[2].trim_end_matches(',').trim().to_string();
+    for result in split_key_value_pairs(input) {
+        let key = result.0;
+        let value = result.1;
         // cut off at given characters/strings:
         let value = value.split("\n").next().unwrap().to_string();
         let value = value.split("  ").next().unwrap().to_string();
@@ -158,6 +199,27 @@ impl TryFrom<String> for QueryResolutionLine {
     }
 }
 
+fn split_nested_list(input: &str) -> Vec<String> {
+    let mut level = 0;
+    let mut start = 0;
+    let mut result = Vec::new();
+
+    for (i, c) in input.chars().enumerate() {
+        match c {
+            '[' => level += 1,
+            ']' => level -= 1,
+            ',' if level == 0 => {
+                result.push(input[start..i].trim().to_string());
+                start = i + 1;
+            }
+            _ => {}
+        }
+    }
+
+    result.push(input[start..].trim().to_string());
+    result
+}
+
 impl TryFrom<String> for Value {
     type Error = ();
     fn try_from(string: String) -> Result<Self, Self::Error> {
@@ -172,13 +234,12 @@ impl TryFrom<String> for Value {
         } else if trimmed.starts_with("\"") && trimmed.ends_with("\"") {
             Ok(Value::String(trimmed[1..trimmed.len() - 1].into()))
         } else if trimmed.starts_with("[") && trimmed.ends_with("]") {
-            let mut iter = trimmed[1..trimmed.len() - 1].split(",");
-
-            let mut values = vec![];
-
-            while let Some(s) = iter.next() {
-                values.push(Value::try_from(s.to_string())?);
-            }
+            let split = split_nested_list(&trimmed[1..trimmed.len() - 1]);
+            
+            let values = split
+                .into_iter()
+                .map(Value::try_from)
+                .collect::<Result<Vec<_>, _>>()?;
 
             Ok(Value::List(values))
         } else if trimmed.starts_with("{") && trimmed.ends_with("}") {
