@@ -1648,7 +1648,7 @@ impl MachineState {
                 }
             }
 
-            if value.is_compound(iter.heap) {
+            if value.is_ref() {
                 if visited.contains(&value) {
                     for _ in stack_len..iter.stack_len() {
                         iter.pop_stack();
@@ -1686,7 +1686,7 @@ impl MachineState {
                         },
                         Ok(Number::Integer(n)) => {
                             let b: u8 = (&*n).try_into().unwrap();
-                            
+
                             bytes.push(b);
                         }
                         _ => {}
