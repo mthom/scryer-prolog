@@ -12,6 +12,112 @@ use modular_bitfield::prelude::*;
 use std::ops::Deref;
 use std::vec::Vec;
 
+/*
+ * Unlike StackfulPreOrderHeapIter, this iterator not only marks
+ * cyclic terms for the sake of skipping them at the second visit but
+ * leaves them marked until it is dropped. This makes for, e.g., more
+ * efficient ground/1 and term_variables/2 definitions.
+ */
+
+pub struct EagerStackfulPreOrderHeapIter<'a> {
+    iter_stack: Vec<HeapCellValue>,
+    mark_stack: Vec<usize>,
+    heap: &'a mut Heap,
+}
+
+impl<'a> Drop for EagerStackfulPreOrderHeapIter<'a> {
+    fn drop(&mut self) {
+        while let Some(h) = self.mark_stack.pop() {
+            self.heap[h].set_mark_bit(false);
+        }
+    }
+}
+
+impl<'a> EagerStackfulPreOrderHeapIter<'a> {
+    pub fn new(heap: &'a mut Heap, value: HeapCellValue) -> Self {
+        Self {
+            iter_stack: vec![value],
+            mark_stack: vec![],
+            heap,
+        }
+    }
+
+    fn follow(&mut self) -> Option<HeapCellValue> {
+        while let Some(value) = self.iter_stack.pop() {
+            if value.get_mark_bit() {
+                continue;
+            }
+
+            read_heap_cell!(value,
+                (HeapCellValueTag::Str, s) => {
+                    if self.heap[s].get_mark_bit() {
+                        continue;
+                    }
+
+                    let arity = cell_as_atom_cell!(self.heap[s]).get_arity();
+
+                    self.heap[s].set_mark_bit(true);
+                    self.mark_stack.push(s);
+
+                    for idx in (s + 1 .. s + arity + 1).rev() {
+                        self.iter_stack.push(self.heap[idx]);
+                    }
+                }
+                (HeapCellValueTag::Lis, l) => {
+                    self.iter_stack.push(self.heap[l+1]);
+                    self.iter_stack.push(self.heap[l]);
+
+                    self.heap[l].set_mark_bit(true);
+                    self.mark_stack.push(l);
+
+                    self.heap[l+1].set_mark_bit(true);
+                    self.mark_stack.push(l+1);
+                }
+                (HeapCellValueTag::AttrVar | HeapCellValueTag::Var, h) => {
+                    let var_value = self.heap[h];
+
+                    if !(var_value.is_var() && var_value.get_value() as usize == h) {
+                        self.iter_stack.push(self.heap[h]);
+                        continue;
+                    }
+                }
+                (HeapCellValueTag::PStrLoc, h) => {
+                    let h = if self.heap[h].get_tag() == HeapCellValueTag::PStr {
+                        h
+                    } else {
+                        debug_assert_eq!(self.heap[h].get_tag(), HeapCellValueTag::PStrOffset);
+                        self.heap[h].get_value() as usize
+                    };
+
+                    if self.heap[h].get_mark_bit() {
+                        continue;
+                    }
+
+                    self.heap[h].set_mark_bit(true);
+
+                    self.iter_stack.push(self.heap[h+1]);
+                    self.mark_stack.push(h);
+                }
+                _ => {
+                }
+            );
+
+            return Some(value);
+        }
+
+        None
+    }
+}
+
+impl<'a> Iterator for EagerStackfulPreOrderHeapIter<'a> {
+    type Item = HeapCellValue;
+
+    #[inline]
+    fn next(&mut self) -> Option<Self::Item> {
+        self.follow()
+    }
+}
+
 #[derive(BitfieldSpecifier, Clone, Copy, Debug, PartialEq, Eq)]
 #[bits = 2]
 enum IterStackLocTag {
@@ -196,11 +302,6 @@ impl<'a, ElideLists> StackfulPreOrderHeapIter<'a, ElideLists> {
         }
 
         None
-    }
-
-    #[inline]
-    pub fn stack_len(&self) -> usize {
-        self.stack.len()
     }
 
     fn push_if_unmarked(&mut self, loc: IterStackLoc) {

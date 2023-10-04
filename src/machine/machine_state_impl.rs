@@ -1621,56 +1621,12 @@ impl MachineState {
 
     // returns true on failure.
     pub fn ground_test(&mut self) -> bool {
-        use fxhash::FxBuildHasher;
+        let iter = EagerStackfulPreOrderHeapIter::new(&mut self.heap, self.registers[1]);
 
-        if self.registers[1].is_constant() {
-            return false;
-        }
-
-        let value = self.store(self.deref(self.registers[1]));
-
-        if value.is_stack_var() {
-            return true;
-        }
-
-        let mut visited = IndexSet::with_hasher(FxBuildHasher::default());
-        let mut iter = stackful_preorder_iter::<NonListElider>(&mut self.heap, &mut self.stack, value);
-        let mut stack_len = 0;
-
-        let is_var = |heap: &Heap, value: HeapCellValue| -> bool {
-            let value = unmark_cell_bits!(value);
-
-            if value.is_var() {
-                let value = heap_bound_store(heap, heap_bound_deref(heap, value));
-
-                if value.is_var() {
-                    return true;
-                }
-            }
-
-            false
-        };
-
-        while let Some(value) = iter.next() {
-            if is_var(iter.heap, value) {
+        for term in iter {
+            if term.is_var() {
                 return true;
             }
-
-            if value.is_ref() {
-                if visited.contains(&value) {
-                    while iter.stack_len() > stack_len {
-                        if let Some(value) = iter.pop_stack() {
-                            if is_var(iter.heap, value) {
-                                return true;
-                            }
-                        }
-                    }
-                } else {
-                    visited.insert(value);
-                }
-            }
-
-            stack_len = iter.stack_len();
         }
 
         false
