@@ -236,17 +236,17 @@ impl<'a, ElideLists: ListElisionPolicy> StackfulPreOrderHeapIter<'a, ElideLists>
         let cell = self.read_cell(loc);
 
         read_heap_cell!(cell,
-            (HeapCellValueTag::Lis, vh) => {
+            (HeapCellValueTag::Lis |
+             HeapCellValueTag::Str |
+             HeapCellValueTag::PStrLoc, vh) => {
                 let forward = if ElideLists::elide_lists() { true } else { cell.get_mark_bit() };
 
                 if forward && self.heap[vh].get_mark_bit() {
                     self.read_cell_mut(loc).set_forwarding_bit(true);
                 }
             }
-            (HeapCellValueTag::Str |
-             HeapCellValueTag::AttrVar |
-             HeapCellValueTag::Var |
-             HeapCellValueTag::PStrLoc, vh) => {
+            (HeapCellValueTag::AttrVar |
+             HeapCellValueTag::Var, vh) => {
                 if self.heap[vh].get_mark_bit() {
                     self.read_cell_mut(loc).set_forwarding_bit(true);
                 }
