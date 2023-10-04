@@ -1621,7 +1621,7 @@ impl MachineState {
 
     // returns true on failure.
     pub fn ground_test(&mut self) -> bool {
-        let iter = EagerStackfulPreOrderHeapIter::new(&mut self.heap, self.registers[1]);
+        let iter = eager_stackful_preorder_iter(&mut self.heap, self.registers[1]);
 
         for term in iter {
             if term.is_var() {

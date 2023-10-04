@@ -583,20 +583,11 @@ impl MachineState {
         seen_set: &mut IndexSet<HeapCellValue, S>,
         value: HeapCellValue,
     ) {
-        let mut iter = stackful_preorder_iter::<NonListElider>(&mut self.heap, &mut self.stack, value);
+        let iter = eager_stackful_preorder_iter(&mut self.heap, value);
 
-        while let Some(value) = iter.next() {
-            let value = unmark_cell_bits!(value);
-
-            if value.is_var() {
-                let value = unmark_cell_bits!(heap_bound_store(
-                    iter.heap,
-                    heap_bound_deref(iter.heap, value)
-                ));
-
-                if value.is_var() {
-                    seen_set.insert(value);
-                }
+        for term in iter {
+            if term.is_var() {
+                seen_set.insert(term);
             }
         }
     }

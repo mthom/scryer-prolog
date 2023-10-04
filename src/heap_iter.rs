@@ -12,6 +12,14 @@ use modular_bitfield::prelude::*;
 use std::ops::Deref;
 use std::vec::Vec;
 
+#[inline(always)]
+pub fn eager_stackful_preorder_iter(
+    heap: &mut Heap,
+    value: HeapCellValue,
+) -> EagerStackfulPreOrderHeapIter {
+    EagerStackfulPreOrderHeapIter::new(heap, value)
+}
+
 /*
  * Unlike StackfulPreOrderHeapIter, this iterator not only marks
  * cyclic terms for the sake of skipping them at the second visit but
