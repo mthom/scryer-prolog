@@ -117,6 +117,7 @@ jobs:
           name: scryer-prolog_unknown_wasm32
 
   logtalk-test:
+    # if: false # uncomment to disable job
     runs-on: ubuntu-20.04
     needs: [build-test]
     steps:
@@ -130,7 +131,7 @@ jobs:
       - name: Install Logtalk
         uses: logtalk-actions/setup-logtalk@master
         with:
-          logtalk-version: git
+          logtalk-version: "3.70.0"
           logtalk-tool-dependencies: false
 
       # Run logtalk  tests.
