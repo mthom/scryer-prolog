@@ -5269,16 +5269,22 @@ impl Machine {
                         self.machine_st.throw_interrupt_exception();
                         self.machine_st.backtrack();
 
-		        #[cfg(not(target_arch = "wasm32"))]
-			let runtime = tokio::runtime::Runtime::new().unwrap();
-			#[cfg(target_arch = "wasm32")]
-			let runtime = tokio::runtime::Builder::new_current_thread()
-			    .enable_all()
-			    .build()
-			    .unwrap();
+                        // We have extracted controll over the Tokio runtime to the calling context for enabling library use case
+                        // (see https://github.com/mthom/scryer-prolog/pull/1880)
+                        // So we only have access to a runtime handle in here and can't shut it down.
+                        // Since I'm not aware of the consequences of deactivating this new code which came in while PR 1880
+                        // was not merged, I'm only deactivating it for now.
+                        
+                        //#[cfg(not(target_arch = "wasm32"))]
+                        //let runtime = tokio::runtime::Runtime::new().unwrap();
+                        //#[cfg(target_arch = "wasm32")]
+                        //let runtime = tokio::runtime::Builder::new_current_thread()
+                        //    .enable_all()
+                        //    .build()
+                        //    .unwrap();
 
-			let old_runtime = std::mem::replace(&mut self.runtime, runtime);
-			old_runtime.shutdown_background();
+                        //let old_runtime = tokio::runtime::Handle::current();
+                        //old_runtime.shutdown_background();
                     }
                 }
                 Err(_) => unreachable!(),

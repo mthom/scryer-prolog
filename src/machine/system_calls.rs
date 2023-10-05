@@ -100,6 +100,7 @@ use warp::hyper::{HeaderMap, Method};
 use warp::{Buf, Filter};
 #[cfg(feature = "http")]
 use reqwest::Url;
+//use hyper_util::rt::TokioIo;
 use futures::future;
 
 #[cfg(feature = "repl")]
@@ -4446,14 +4447,17 @@ impl Machine {
 	if let Some(address_str) = self.machine_st.value_to_str_like(address_sink) {
 	    let address_string = address_str.as_str();
 	    let addr: SocketAddr = match address_string.to_socket_addrs().ok().and_then(|mut s| s.next()) {
-		Some(addr) => addr,
-                _ => {
-                    self.machine_st.fail = true;
-                    return Ok(());
-                }
-            };
+		    Some(addr) => addr,
+            _ => {
+                self.machine_st.fail = true;
+                return Ok(());
+            }
+        };
 
-    	    let (tx, rx) = std::sync::mpsc::sync_channel(1024);
+        let (tx, rx) = std::sync::mpsc::sync_channel(1024);
+
+        let runtime = tokio::runtime::Handle::current();
+        let _guard = runtime.enter();
 
 	    fn get_reader(body: impl Buf + Send + 'static) -> Box<dyn BufRead + Send> {
 		Box::new(body.reader())
@@ -4502,7 +4506,7 @@ impl Machine {
 		    }
 		});
 
-	    self.runtime.spawn(async move {
+	    runtime.spawn(async move {
 		match ssl_server {
 		    Some((key, cert)) => {
 			warp::serve(serve).tls().key(key).cert(cert).run(addr).await
@@ -4515,11 +4519,12 @@ impl Machine {
 
 	    let http_listener = HttpListener { incoming: rx };
 	    let http_listener = arena_alloc!(http_listener, &mut self.machine_st.arena);
-            let addr = self.deref_register(2);
-            self.machine_st.bind(
-                addr.as_var().unwrap(),
-                typed_arena_ptr_as_cell!(http_listener),
-            );
+
+        let addr = self.deref_register(2);
+        self.machine_st.bind(
+            addr.as_var().unwrap(),
+            typed_arena_ptr_as_cell!(http_listener),
+        );
         }
         Ok(())
     }
@@ -4601,8 +4606,13 @@ impl Machine {
 					if interruption {
 					    self.machine_st.throw_interrupt_exception();
 					    self.machine_st.backtrack();
-					    let old_runtime = std::mem::replace(&mut self.runtime, tokio::runtime::Runtime::new().unwrap());
-					    old_runtime.shutdown_background();
+                        // We have extracted controll over the Tokio runtime to the calling context for enabling library use case
+                        // (see https://github.com/mthom/scryer-prolog/pull/1880)
+                        // So we only have access to a runtime handle in here and can't shut it down.
+                        // Since I'm not aware of the consequences of deactivating this new code which came in while PR 1880
+                        // was not merged, I'm only deactivating it for now.
+					    //let old_runtime = std::mem::replace(&mut self.runtime, tokio::runtime::Runtime::new().unwrap());
+					    //old_runtime.shutdown_background();
 					    break
 					}
 				    }

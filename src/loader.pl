@@ -621,6 +621,10 @@ use_module(Module, Exports, Evacuable) :-
        )
     ).
 
+consult_stream(Stream, PathFileName) :-
+   '$push_load_state_payload'(Evacuable),
+    file_load(Stream, PathFileName, Subevacuable),
+    '$use_module'(Evacuable, Subevacuable, _).
 
 :- non_counted_backtracking check_predicate_property/5.
 
