@@ -124,7 +124,7 @@ call(_, _, _, _, _, _, _, _, _).
 % while others can be set with `set_prolog_flag/2`.
 %
 % The flags that Scryer Prolog support are:
-% 
+%
 %  * `max_arity`: The max arity a predicate can have in Prolog. On Scryer is set to 1023. Read only.
 %  * `bounded`: `true` if integer arithmethic is bounded between some min/max values. On Scryer is always set
 %    to `false` since it supports unbounded integer arithmethic. Read only.
@@ -184,7 +184,7 @@ answer_write_options(Value) :-
 %% set_prolog_flag(Flag, Value).
 %
 % Sets the internal value of the flag. To see the list of flags supported by Scryer Prolog,
-% check `current_prolog_flag/2`. The flags that are read only will fail if you try to change their values 
+% check `current_prolog_flag/2`. The flags that are read only will fail if you try to change their values
 set_prolog_flag(Flag, Value) :-
     (var(Flag) ; var(Value)),
     throw(error(instantiation_error, set_prolog_flag/2)). % 8.17.1.3 a, b
@@ -574,26 +574,30 @@ parse_write_options(Options, OptionValues, Stub) :-
 
 
 parse_write_options_(double_quotes(DoubleQuotes), double_quotes-DoubleQuotes) :-
-    (  nonvar(DoubleQuotes),
-       lists:member(DoubleQuotes, [true, false]),
+    (  var(DoubleQuotes) ->
+       throw(error(instantiation_error, _))
+    ;  lists:member(DoubleQuotes, [true, false]),
        !
     ;  throw(error(domain_error(write_option, double_quotes(DoubleQuotes)), _))
     ).
 parse_write_options_(ignore_ops(IgnoreOps), ignore_ops-IgnoreOps) :-
-    (  nonvar(IgnoreOps),
-       lists:member(IgnoreOps, [true, false]),
+    (  var(IgnoreOps) ->
+       throw(error(instantiation_error, _))
+    ;  lists:member(IgnoreOps, [true, false]),
        !
     ;  throw(error(domain_error(write_option, ignore_ops(IgnoreOps)), _))
     ).
 parse_write_options_(quoted(Quoted), quoted-Quoted) :-
-    (  nonvar(Quoted),
-       lists:member(Quoted, [true, false]),
+    (  var(Quoted) ->
+       throw(error(instantiation_error, _))
+    ;  lists:member(Quoted, [true, false]),
        !
     ;  throw(error(domain_error(write_option, quoted(Quoted)), _))
     ).
 parse_write_options_(numbervars(NumberVars), numbervars-NumberVars) :-
-    (  nonvar(NumberVars),
-       lists:member(NumberVars, [true, false]),
+    (  var(NumberVars) ->
+       throw(error(instantiation_error, _))
+    ;  lists:member(NumberVars, [true, false]),
        !
     ;  throw(error(domain_error(write_option, numbervars(NumberVars)), _))
     ).
@@ -601,7 +605,9 @@ parse_write_options_(variable_names(VNNames), variable_names-VNNames) :-
     must_be_var_names_list(VNNames),
     !.
 parse_write_options_(max_depth(MaxDepth), max_depth-MaxDepth) :-
-    (  integer(MaxDepth),
+    (  var(MaxDepth) ->
+       throw(error(instantiation_error, _))
+    ;  integer(MaxDepth),
        MaxDepth >= 0,
        !
     ;  throw(error(domain_error(write_option, max_depth(MaxDepth)), _))
@@ -715,30 +721,9 @@ parse_read_term_options(Options, OptionValues, Stub) :-
     parse_options_list(Options, builtins:parse_read_term_options_, DefaultOptions, OptionValues, Stub).
 
 
-parse_read_term_options_(singletons(Vars), singletons-Vars) :-
-    (  ( var(Vars)
-       ; '$skip_max_list'(_, _, Vars, Rs),
-         Rs == []
-       ) ->
-       !
-    ;  throw(error(domain_error(read_option, singletons(Vars)), read_term/2))
-    ).
-parse_read_term_options_(variables(Vars), variables-Vars) :-
-    (  ( var(Vars)
-       ; '$skip_max_list'(_, _, Vars, Rs),
-         Rs == []
-       ) ->
-       !
-    ;  throw(error(domain_error(read_option, variables(Vars)), read_term/2))
-    ).
-parse_read_term_options_(variable_names(Vars), variable_names-Vars) :-
-    (  ( var(Vars)
-       ; '$skip_max_list'(_, _, Vars, Rs),
-         Rs == []
-       ) ->
-       !
-    ;  throw(error(domain_error(read_option, variable_names(Vars)), read_term/2))
-    ).
+parse_read_term_options_(singletons(Vars), singletons-Vars) :- !.
+parse_read_term_options_(variables(Vars), variables-Vars) :- !.
+parse_read_term_options_(variable_names(Vars), variable_names-Vars) :- !.
 parse_read_term_options_(E,_) :-
     throw(error(domain_error(read_option, E), _)).
 
@@ -748,7 +733,7 @@ parse_read_term_options_(E,_) :-
 % Read Term from the stream Stream. It supports several options:
 %  * `variables(-Vars)` unifies Vars with a list of variables in the term. Similar to do `term_variables/2` with the new term.
 %  * `variable_names(-Vars)` unifies Vars with a list `Name=Var` with Name describing the variable name and Var the variable itself that appears in Term.
-%  * `singletons` similar to `variable_names` but only reports variables occurring only once in Term. 
+%  * `singletons` similar to `variable_names` but only reports variables occurring only once in Term.
 read_term(Stream, Term, Options) :-
     parse_read_term_options(Options, [Singletons, VariableNames, Variables], read_term/3),
     '$read_term'(Stream, Term, Singletons, Variables, VariableNames).
@@ -1616,7 +1601,7 @@ atom_concat(Atom_1, Atom_2, Atom_12) :-
 %% sub_atom(+Atom, ?Before, ?Length, ?After, ?SubAtom).
 %
 % Relates an atom to a subatom inside with some key properties:
-% 
+%
 %  * SubAtom starts at Before characters (0-based) from Atom
 %  * SubAtom has Length characters
 %  * After SubAtom there are After characters in Atom
@@ -2241,4 +2226,7 @@ nl(Stream) :-
 %
 % Throws an exception of the following structure: `error(ErrorTerm, ImpDef)`.
 error(Error_term, Imp_def) :-
-   throw(error(Error_term, Imp_def)).
+    (  var(Error_term) ->
+       throw(error(instantiation_error, error/2))
+    ;  throw(error(Error_term, Imp_def))
+    ).

@@ -34,6 +34,7 @@ pub const FY: u32 = 0x0080;
 pub const DELIMITER: u32 = 0x0100;
 pub const TERM: u32 = 0x1000;
 pub const LTERM: u32 = 0x3000;
+pub const BTERM: u32 = 0x11000;
 
 pub const NEGATIVE_SIGN: u32 = 0x0200;
 
@@ -808,7 +809,7 @@ pub fn source_arity(terms: &[Term]) -> usize {
     terms.len()
 }
 
-fn unfold_by_str_once(term: &mut Term, s: Atom) -> Option<(Term, Term)> {
+pub(crate) fn unfold_by_str_once(term: &mut Term, s: Atom) -> Option<(Term, Term)> {
     if let Term::Clause(_, ref name, ref mut subterms) = term {
         if let Some(last_arg) = subterms.last() {
             if let Term::Literal(_, Literal::CodeIndex(_)) = last_arg {

@@ -467,13 +467,14 @@ test_195_205_196_197 :-
     setup_call_cleanup(op(100,xf,''),
                        (  read_from_chars("(0 '') = ''(X).", T0),
                           call(T0),
-                          T0 = (_ = ('')(0)),
+                          writeq_term_to_chars(T0, C0),
+                          C0 == "0 ''=0 ''",
                           read_from_chars("0 ''.", T1),
-                          writeq_term_to_chars(T1, C0),
-                          C0 == "0 ''",
+                          writeq_term_to_chars(T1, C1),
+                          C1 == "0 ''",
                           read_from_chars("0''.", T2),
-                          writeq_term_to_chars(T2, C1),
-                          C1 == "0 ''" ),
+                          writeq_term_to_chars(T2, C2),
+                          C2 == "0 ''" ),
                        op(0,xf,'')).
 
 test_118_119_120 :-
@@ -774,7 +775,7 @@ test_175 :- T = t(0b1,0o1,0x1),
 test_176 :- X is 0b1mod 2,
             X == 1.
 
-test_217_181_290 :-
+test_217_181_290_317 :-
      setup_call_cleanup((  current_op(P, xfy, '|') ->
                            true
                         ;  P = 0
@@ -785,7 +786,10 @@ test_217_181_290 :-
                            C0 == "a-->b,c | d",
                            read_from_chars("[(a|b)].", T1),
                            writeq_term_to_chars(T1, C1),
-                           C1 == "[(a | b)]"
+                           C1 == "[(a | b)]",
+                           read_from_chars("[a,(b,c)|[]].", T2),
+                           writeq_term_to_chars(T2, C2),
+                           C2 == "[a,(b,c)]"
                         ),
                         op(P, xfy, '|')).
 

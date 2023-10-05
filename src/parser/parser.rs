@@ -58,6 +58,7 @@ struct TokenDesc {
     tt: TokenType,
     priority: usize,
     spec: u32,
+    unfold_bounds: usize,
 }
 
 pub(crate) fn as_partial_string(
@@ -371,6 +372,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
                         tt: TokenType::Term,
                         priority: td.priority,
                         spec,
+                        unfold_bounds: 0,
                     });
                 }
             }
@@ -392,6 +394,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
                         tt: TokenType::Term,
                         priority: td.priority,
                         spec,
+                        unfold_bounds: 0,
                     });
                 }
             }
@@ -405,6 +408,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
             tt: TokenType::Term,
             priority,
             spec: assoc,
+            unfold_bounds: 0,
         });
     }
 
@@ -460,7 +464,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
             Token::End => TokenType::End,
         };
 
-        self.stack.push(TokenDesc { tt, priority, spec });
+        self.stack.push(TokenDesc { tt, priority, spec, unfold_bounds: 0, });
     }
 
     fn reduce_op(&mut self, priority: usize) {
@@ -602,14 +606,20 @@ impl<'a, R: CharRead> Parser<'a, R> {
                     }
 
                     if let Some(&mut TokenDesc {
+                        ref mut tt,
                         ref mut priority,
                         ref mut spec,
-                        ref mut tt,
+                        ref mut unfold_bounds,
                     }) = self.stack.last_mut()
                     {
+                        if *spec == BTERM {
+                            return false;
+                        }
+
                         *tt = TokenType::Term;
                         *priority = 0;
                         *spec = TERM;
+                        *unfold_bounds = 0;
                     }
 
                     return true;
@@ -625,8 +635,8 @@ impl<'a, R: CharRead> Parser<'a, R> {
     }
 
     fn expand_comma_compacted_terms(&mut self, index: usize) -> usize {
-        if let Some(term) = self.terms.pop() {
-            let op_desc = self.stack[index - 1];
+        if let Some(mut term) = self.terms.pop() {
+            let mut op_desc = self.stack[index - 1];
 
             if 0 < op_desc.priority && op_desc.priority < self.stack[index].priority {
                 /* '|' is a head-tail separator here, not
@@ -634,7 +644,26 @@ impl<'a, R: CharRead> Parser<'a, R> {
                  * terms it compacted out again. */
                 match (term.name(), term.arity()) {
                     (Some(name), 2) if name == atom!(",") => {
-                        let terms = unfold_by_str(term, name); // notice: name == "," here.
+                        let terms = if op_desc.unfold_bounds == 0 {
+                            unfold_by_str(term, atom!(","))
+                        } else {
+                            let mut terms = vec![];
+
+                            while let Some((fst, snd)) = unfold_by_str_once(&mut term, atom!(",")) {
+                                terms.push(fst);
+                                term = snd;
+
+                                op_desc.unfold_bounds -= 2;
+
+                                if op_desc.unfold_bounds == 0 {
+                                    break;
+                                }
+                            }
+
+                            terms.push(term);
+                            terms
+                        };
+
                         let arity = terms.len() - 1;
 
                         self.terms.extend(terms.into_iter());
@@ -750,6 +779,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
             tt: TokenType::Term,
             priority: 0,
             spec: TERM,
+            unfold_bounds: 0,
         });
 
         self.terms.push(match list {
@@ -852,7 +882,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
                         .push(Term::Literal(Cell::default(), Literal::Atom(atom)));
                 }
 
-                self.stack[idx].spec = TERM;
+                self.stack[idx].spec = if self.stack[idx].priority > 0 { TERM } else { BTERM };
                 self.stack[idx].tt = TokenType::Term;
                 self.stack[idx].priority = 0;
 
@@ -975,6 +1005,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
             ),
             Token::Literal(c) => {
                 let atomized = atomize_constant(&self.lexer.machine_st.atom_tbl, c);
+
                 if let Some(name) = atomized {
                     if !self.shift_op(name, op_dir)? {
                         self.shift(Token::Literal(c), 0, TERM);
@@ -1018,13 +1049,20 @@ impl<'a, R: CharRead> Parser<'a, R> {
                 /* '|' as an operator must have priority > 1000 and can only be infix.
                  * See: http://www.complang.tuwien.ac.at/ulrich/iso-prolog/dtc2#Res_A78
                  */
-                let bar_atom = atom!("|");
-
-                let (priority, spec) = get_op_desc(bar_atom, op_dir)
+                let (priority, spec) = get_op_desc(atom!("|"), op_dir)
                     .map(|CompositeOpDesc { inf, spec, .. }| (inf, spec))
                     .unwrap_or((1000, DELIMITER));
 
+                let old_stack_len = self.stack.len();
+
                 self.reduce_op(priority);
+
+                let new_stack_len = self.stack.len();
+
+                if let Some(term_desc) = self.stack.last_mut() {
+                    term_desc.unfold_bounds = old_stack_len - new_stack_len;
+                }
+
                 self.shift(Token::HeadTailSeparator, priority, spec);
             }
             Token::Comma => {

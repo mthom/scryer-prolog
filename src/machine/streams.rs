@@ -30,6 +30,9 @@ use std::ptr;
 #[cfg(feature = "tls")]
 use native_tls::TlsStream;
 
+#[cfg(feature = "http")]
+use warp::hyper;
+
 #[derive(Debug, BitfieldSpecifier, Clone, Copy, PartialEq, Eq, Hash)]
 #[bits = 1]
 pub enum StreamType {
@@ -290,9 +293,9 @@ impl Read for HttpReadStream {
 #[cfg(feature = "http")]
 pub struct HttpWriteStream {
     status_code: u16,
-    headers: hyper::HeaderMap,
+    headers: mem::ManuallyDrop<hyper::HeaderMap>,
     response: TypedArenaPtr<HttpResponse>,
-    buffer: Vec<u8>,
+    buffer: mem::ManuallyDrop<Vec<u8>>,
 }
 
 #[cfg(feature = "http")]
@@ -312,23 +315,32 @@ impl Write for HttpWriteStream {
 
     #[inline]
     fn flush(&mut self) -> std::io::Result<()> {
-        let (ready, response, cvar) = &**self.response;
-
-        let mut ready = ready.lock().unwrap();
-        {
-            let mut response = response.lock().unwrap();
-
-            let bytes = bytes::Bytes::copy_from_slice(&self.buffer);
-            let mut response_ = hyper::Response::builder().status(self.status_code);
-            *response_.headers_mut().unwrap() = self.headers.clone();
-            *response = Some(response_.body(http_body_util::Full::new(bytes)).unwrap());
-        }
-        *ready = true;
-        cvar.notify_one();
-
-        Ok(())
+	Ok(())
     }
 }
+
+#[cfg(feature = "http")]
+impl HttpWriteStream {
+    fn drop(&mut self) {
+	let headers = unsafe { mem::ManuallyDrop::take(&mut self.headers) };
+	let buffer = unsafe { mem::ManuallyDrop::take(&mut self.buffer) };
+	
+	let (ready, response, cvar) = &**self.response;
+
+	let mut ready = ready.lock().unwrap();
+	{
+	    let mut response = response.lock().unwrap();
+	
+	    let mut response_ = warp::http::Response::builder()
+	        .status(self.status_code);
+	    *response_.headers_mut().unwrap() = headers;
+	    *response = Some(response_.body(warp::hyper::Body::from(buffer)).unwrap());
+	}
+	*ready = true;
+	cvar.notify_one();
+    }
+}
+
 
 #[derive(Debug)]
 pub struct StandardOutputStream {}
@@ -1243,15 +1255,15 @@ impl Stream {
         headers: hyper::HeaderMap,
         arena: &mut Arena,
     ) -> Self {
-        Stream::HttpWrite(arena_alloc!(
-            StreamLayout::new(CharReader::new(HttpWriteStream {
-                response,
-                status_code,
-                headers,
-                buffer: Vec::new(),
-            })),
-            arena
-        ))
+	Stream::HttpWrite(arena_alloc!(
+	    StreamLayout::new(CharReader::new(HttpWriteStream {
+		response,
+		status_code,
+		headers: mem::ManuallyDrop::new(headers),
+		buffer: mem::ManuallyDrop::new(Vec::new()),
+	    })),
+	    arena
+	))
     }
 
     #[inline]
@@ -1299,7 +1311,8 @@ impl Stream {
                 Ok(())
             }
             #[cfg(feature = "http")]
-            Stream::HttpWrite(ref mut http_stream) => {
+	    Stream::HttpWrite(ref mut http_stream) => {
+		http_stream.inner_mut().drop();
                 unsafe {
                     http_stream.set_tag(ArenaHeaderTag::Dropped);
                     std::ptr::drop_in_place(&mut http_stream.inner_mut().buffer as *mut _);
@@ -1804,7 +1817,7 @@ impl MachineState {
     ) -> Result<Stream, MachineStub> {
         if file_spec == atom!("") {
             let stub = functor_stub(atom!("open"), 4);
-            let err = self.domain_error(DomainErrorType::SourceSink, self[temp_v!(1)]);
+            let err = self.domain_error(DomainErrorType::SourceSink, self.registers[1]);
 
             return Err(self.error_form(err, stub));
         }
@@ -1816,9 +1829,7 @@ impl MachineState {
             }
         }
 
-        let mode = MachineState::deref(self, self[temp_v!(2)]);
-        let mode = cell_as_atom!(self.store(mode));
-
+        let mode = cell_as_atom!(self.store(MachineState::deref(self, self.registers[2])));
         let mut open_options = OpenOptions::new();
 
         let (is_input_file, in_append_mode) = match mode {
@@ -1875,8 +1886,9 @@ impl MachineState {
                         ));
                     }
                     _ => {
+                        // assume the OS is out of file descriptors.
                         let stub = functor_stub(atom!("open"), 4);
-                        let err = self.syntax_error(ParserError::IO(err));
+                        let err = self.resource_error(ResourceError::OutOfFiles);
 
                         return Err(self.error_form(err, stub));
                     }

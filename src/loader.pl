@@ -380,6 +380,59 @@ remove_module(Module, Evacuable) :-
     ).
 
 
+predicate_indicator(PI) :-
+    (  var(PI) ->
+       throw(error(instantiation_error, _))
+    ;  PI = Name/Arity,
+       must_be(atom, Name),
+       must_be(integer, Arity),
+       Arity >= 0
+    ).
+
+predicate_indicator_sequence(PI_Seq) :-
+    (  var(PI_Seq) ->
+       throw(error(instantiation_error, load/1))
+    ;  PI_Seq = (PI, PIs),
+       predicate_indicator(PI),
+       (  predicate_indicator(PIs) ->
+          true
+       ;  predicate_indicator_sequence(PIs)
+       )
+    ).
+
+:- meta_predicate add_predicate_declaration(3, ?).
+
+add_predicate_declaration(Handler, Name/Arity) :-
+    predicate_indicator(Name/Arity),
+    prolog_load_context(module, Module),
+    call(Handler, Module, Name, Arity).
+add_predicate_declaration(Handler, Module:Name/Arity) :-
+    must_be(atom, Module),
+    predicate_indicator(Name/Arity),
+    call(Handler, Module, Name, Arity).
+add_predicate_declaration(Handler, [PI|PIs]) :-
+    '$skip_max_list'(_, _, PIs, Tail),
+    (  Tail == [],
+       maplist(loader:predicate_indicator, PIs) ->
+       maplist(loader:add_predicate_declaration(Handler), [PI|PIs])
+    ;  throw(error(type_error(predicate_indicator_list, [PI|PIs]), load/1))
+    ).
+add_predicate_declaration(Handler, (PI, PIs)) :-
+    (  predicate_indicator_sequence((PI, PIs)) ->
+       add_predicate_declaration(Handler, PI),
+       add_predicate_declaration(Handler, PIs)
+    ;  throw(error(type_error(predicate_indicator_sequence, (PI, PIs)), load/1))
+    ).
+
+add_dynamic_predicate(Evacuable, Module, Name, Arity) :-
+    '$add_dynamic_predicate'(Module, Name, Arity, Evacuable).
+
+add_multifile_predicate(Evacuable, Module, Name, Arity) :-
+    '$add_multifile_predicate'(Module, Name, Arity, Evacuable).
+
+add_discontiguous_predicate(Evacuable, Module, Name, Arity) :-
+    '$add_discontiguous_predicate'(Module, Name, Arity, Evacuable).
+
 compile_declaration(use_module(Module), Evacuable) :-
     use_module(Module, [], Evacuable).
 compile_declaration(use_module(Module, Exports), Evacuable) :-
@@ -392,39 +445,12 @@ compile_declaration(module(Module, Exports), Evacuable) :-
        '$declare_module'(Module, Exports, Evacuable)
     ;  type_error(atom, Module, load/1)
     ).
-compile_declaration(dynamic(Module:Name/Arity), Evacuable) :-
-    !,
-    must_be(atom, Module),
-    must_be(atom, Name),
-    must_be(integer, Arity),
-    '$add_dynamic_predicate'(Module, Name, Arity, Evacuable).
-compile_declaration(dynamic(Name/Arity), Evacuable) :-
-    must_be(atom, Name),
-    must_be(integer, Arity),
-    prolog_load_context(module, Module),
-    '$add_dynamic_predicate'(Module, Name, Arity, Evacuable).
-compile_declaration(multifile(Module:Name/Arity), Evacuable) :-
-    !,
-    must_be(atom, Module),
-    must_be(atom, Name),
-    must_be(integer, Arity),
-    '$add_multifile_predicate'(Module, Name, Arity, Evacuable).
-compile_declaration(multifile(Name/Arity), Evacuable) :-
-    must_be(atom, Name),
-    must_be(integer, Arity),
-    prolog_load_context(module, Module),
-    '$add_multifile_predicate'(Module, Name, Arity, Evacuable).
-compile_declaration(discontiguous(Module:Name/Arity), Evacuable) :-
-    !,
-    must_be(atom, Module),
-    must_be(atom, Name),
-    must_be(integer, Arity),
-    '$add_discontiguous_predicate'(Module, Name, Arity, Evacuable).
-compile_declaration(discontiguous(Name/Arity), Evacuable) :-
-    must_be(atom, Name),
-    must_be(integer, Arity),
-    prolog_load_context(module, Module),
-    '$add_discontiguous_predicate'(Module, Name, Arity, Evacuable).
+compile_declaration(dynamic(PIs), Evacuable) :-
+    add_predicate_declaration(loader:add_dynamic_predicate(Evacuable), PIs).
+compile_declaration(multifile(PIs), Evacuable) :-
+    add_predicate_declaration(loader:add_multifile_predicate(Evacuable), PIs).
+compile_declaration(discontiguous(PIs), Evacuable) :-
+    add_predicate_declaration(loader:add_discontiguous_predicate(Evacuable), PIs).
 compile_declaration(initialization(Goal), Evacuable) :-
     prolog_load_context(module, Module),
     assertz(Module:'$initialization_goals'(Goal)).
@@ -717,7 +743,7 @@ expand_subgoal(UnexpandedGoals, MS, M, ExpandedGoals, HeadVars) :-
        expand_module_names(UnexpandedGoals4, MetaSpecs, Module1, ExpandedGoals0, HeadVars)
     ;  ExpandedGoals0 = UnexpandedGoals4
     ),
-    '$compile_inline_or_expanded_goal'(ExpandedGoals0, SuppArgs, ExpandedGoals1, Module1),
+    '$compile_inline_or_expanded_goal'(ExpandedGoals0, SuppArgs, ExpandedGoals1, Module1, UnexpandedGoals0),
     expand_module_name(ExpandedGoals1, MS, Module1, ExpandedGoals).
 
 

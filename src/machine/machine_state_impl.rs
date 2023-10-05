@@ -16,7 +16,6 @@ use crate::parser::dashu::{Integer, Rational};
 use crate::types::*;
 
 use indexmap::IndexSet;
-use num_order::NumOrd;
 
 use std::cmp::Ordering;
 use std::convert::TryFrom;
@@ -61,7 +60,7 @@ impl MachineState {
             unify_fn: MachineState::unify,
             bind_fn: MachineState::bind,
             run_cleaners_fn: |_| false,
-            increment_call_count_fn: |_| Ok(()),
+            increment_call_count_fn: |_| true,
         }
     }
 
@@ -1136,7 +1135,8 @@ impl MachineState {
             return false;
         }
 
-        let mut iter = stackful_preorder_iter(&mut self.heap, &mut self.stack, value);
+        let mut iter = stackful_preorder_iter::<NonListElider>
+            (&mut self.heap, &mut self.stack, value);
 
         while let Some(value) = iter.next() {
             if value.get_forwarding_bit() {
@@ -1183,10 +1183,7 @@ impl MachineState {
 
                 let n = match n {
                     Number::Fixnum(n) => n.get_num() as usize,
-                    Number::Integer(n) if (*n).num_ge(&0) && (*n).num_le(&std::usize::MAX) => {
-                        let value: usize = (&*n).try_into().unwrap();
-                        value
-                    },
+                    Number::Integer(n) if usize::try_from(&*n).is_ok() => (&*n).try_into().unwrap(),
                     _ => {
                         self.fail = true;
                         return Ok(());
@@ -1637,24 +1634,36 @@ impl MachineState {
         }
 
         let mut visited = IndexSet::with_hasher(FxBuildHasher::default());
-        let mut iter = stackful_preorder_iter(&mut self.heap, &mut self.stack, value);
+        let mut iter = stackful_preorder_iter::<NonListElider>(&mut self.heap, &mut self.stack, value);
         let mut stack_len = 0;
 
-        while let Some(value) = iter.next() {
-            let mut value = unmark_cell_bits!(value);
+        let is_var = |heap: &Heap, value: HeapCellValue| -> bool {
+            let value = unmark_cell_bits!(value);
 
             if value.is_var() {
-                value = heap_bound_store(iter.heap, heap_bound_deref(iter.heap, value));
+                let value = heap_bound_store(heap, heap_bound_deref(heap, value));
 
                 if value.is_var() {
                     return true;
                 }
             }
 
-            if value.is_compound(iter.heap) {
+            false
+        };
+
+        while let Some(value) = iter.next() {
+            if is_var(iter.heap, value) {
+                return true;
+            }
+
+            if value.is_ref() {
                 if visited.contains(&value) {
-                    for _ in stack_len..iter.stack_len() {
-                        iter.pop_stack();
+                    while iter.stack_len() > stack_len {
+                        if let Some(value) = iter.pop_stack() {
+                            if is_var(iter.heap, value) {
+                                return true;
+                            }
+                        }
                     }
                 } else {
                     visited.insert(value);
@@ -1689,7 +1698,7 @@ impl MachineState {
                         },
                         Ok(Number::Integer(n)) => {
                             let b: u8 = (&*n).try_into().unwrap();
-                            
+
                             bytes.push(b);
                         }
                         _ => {}

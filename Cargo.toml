@@ -21,7 +21,7 @@ ffi = ["dep:libffi"]
 repl = ["dep:crossterm", "dep:ctrlc", "dep:rustyline"]
 hostname = ["dep:hostname"]
 tls = ["dep:native-tls"]
-http = ["dep:hyper", "dep:reqwest"]
+http = ["dep:warp", "dep:reqwest"]
 rust_beta_channel = []
 crypto-full = []
 
@@ -67,21 +67,21 @@ futures = "0.3"
 regex = "1.9.1"
 libloading = "0.7"
 derive_deref = "1.1.1"
-http-body-util = "0.1.0-rc.2"
 bytes = "1"
-dashu = { version = "0.3.1", git = "https://github.com/cmpute/dashu.git"  }
+dashu = "0.4.0"
 num-order = { version = "1.2.0" }
 rand = "0.8.5"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-libffi = { git = "https://github.com/coasys/libffi-rs.git", branch = "windows-space", optional = true, version = "3.2.0" }
+libffi = { version = "3.2.0", optional = true }
 hostname = { version = "0.3.1", optional = true }
 crossterm = { version = "0.20.0", optional = true }
 ctrlc = { version = "3.2.2", optional = true }
 rustyline = { version = "12.0.0", optional = true }
 native-tls = { version = "0.2.4", optional = true }
-hyper = { version = "=1.0.0-rc.4", features = ["full"], optional = true }
-hyper-util = { git = "https://github.com/hyperium/hyper-util.git" }
+#hyper = { version = "=1.0.0-rc.4", features = ["full"], optional = true }
+#hyper-util = { git = "https://github.com/hyperium/hyper-util.git" }
+warp = { version = "=0.3.5", features = ["tls"], optional = true }
 reqwest = { version = "0.11.18", features = ["blocking"], optional = true }
 tokio = { version = "1.28.2", features = ["full"] }
 
@@ -115,6 +115,3 @@ serial_test = "2.0.0"
 
 [patch.crates-io]
 modular-bitfield = { git = "https://github.com/mthom/modular-bitfield" }
-
-[profile.release]
-debug = true

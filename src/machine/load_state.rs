@@ -9,7 +9,7 @@ use crate::parser::ast::*;
 
 use fxhash::FxBuildHasher;
 use indexmap::IndexSet;
-use ref_thread_local::RefThreadLocal;
+pub use ref_thread_local::RefThreadLocal;
 
 use std::collections::VecDeque;
 use std::fs::File;
@@ -1004,9 +1004,21 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         }
     }
 
-    pub(crate) fn add_module(&mut self, module_decl: ModuleDecl, listing_src: ListingSource) {
-        self.reset_in_situ_module(module_decl.clone(), &listing_src);
+    pub(crate) fn add_module(
+        &mut self,
+        module_decl: ModuleDecl,
+        listing_src: ListingSource,
+    ) -> Result<(), SessionError> {
         let module_name = module_decl.name;
+
+        if let Some(module) = self.wam_prelude.indices.modules.get(&module_name) {
+            if let ListingSource::DynamicallyGenerated = module.listing_src {
+            } else {
+                LS::err_on_builtin_module_overwrite(module_name)?;
+            }
+        }
+
+        self.reset_in_situ_module(module_decl.clone(), &listing_src);
 
         let mut module = match self.wam_prelude.indices.modules.remove(&module_name) {
             Some(mut module) => {
@@ -1045,6 +1057,8 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         }
 
         self.wam_prelude.indices.modules.insert(module_name, module);
+
+        Ok(())
     }
 
     pub(super) fn import_module(&mut self, module_name: Atom) -> Result<(), SessionError> {

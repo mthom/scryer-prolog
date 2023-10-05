@@ -34,6 +34,15 @@ macro_rules! try_or_throw {
     }};
 }
 
+macro_rules! increment_call_count {
+    ($s:expr) => {{
+        if !($s.increment_call_count_fn)(&mut $s) {
+            $s.backtrack();
+            continue;
+        }
+    }};
+}
+
 macro_rules! try_or_throw_gen {
     ($s:expr, $e:expr) => {{
         match $e {
@@ -1096,12 +1105,7 @@ impl Machine {
                                             self.trust_me();
                                         }
 
-                                        try_or_throw!(
-                                            self.machine_st,
-                                            (self.machine_st.increment_call_count_fn)(
-                                                &mut self.machine_st
-                                            )
-                                        );
+                                        increment_call_count!(self.machine_st);
                                     }
                                 }
                             }
@@ -1174,12 +1178,7 @@ impl Machine {
                                             self.trust_me();
                                         }
 
-                                        try_or_throw!(
-                                            self.machine_st,
-                                            (self.machine_st.increment_call_count_fn)(
-                                                &mut self.machine_st
-                                            )
-                                        );
+                                        increment_call_count!(self.machine_st);
                                     }
                                 }
                             }
@@ -1205,19 +1204,11 @@ impl Machine {
                     }
                     &Instruction::RetryMeElse(offset) => {
                         self.retry_me_else(offset);
-
-                        try_or_throw!(
-                            self.machine_st,
-                            (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                        );
+                        increment_call_count!(self.machine_st);
                     }
                     &Instruction::TrustMe(_) => {
                         self.trust_me();
-
-                        try_or_throw!(
-                            self.machine_st,
-                            (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                        );
+                        increment_call_count!(self.machine_st);
                     }
                     &Instruction::NeckCut => {
                         self.machine_st.neck_cut();
@@ -1521,11 +1512,7 @@ impl Machine {
                         if self.machine_st.is_cyclic_term(addr) {
                             self.machine_st.backtrack();
                         } else {
-                            try_or_throw!(
-                                self.machine_st,
-                                (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                            );
-
+                            increment_call_count!(self.machine_st);
                             self.machine_st.p += 1;
                         }
                     }
@@ -1535,11 +1522,7 @@ impl Machine {
                         if self.machine_st.is_cyclic_term(addr) {
                             self.machine_st.backtrack();
                         } else {
-                            try_or_throw!(
-                                self.machine_st,
-                                (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                            );
-
+                            increment_call_count!(self.machine_st);
                             self.machine_st.p = self.machine_st.cp;
                         }
                     }
@@ -1549,11 +1532,7 @@ impl Machine {
                         if self.machine_st.fail {
                             self.machine_st.backtrack();
                         } else {
-                            try_or_throw!(
-                                self.machine_st,
-                                (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                            );
-
+                            increment_call_count!(self.machine_st);
                             self.machine_st.p += 1;
                         }
                     }
@@ -1563,11 +1542,7 @@ impl Machine {
                         if self.machine_st.fail {
                             self.machine_st.backtrack();
                         } else {
-                            try_or_throw!(
-                                self.machine_st,
-                                (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                            );
-
+                            increment_call_count!(self.machine_st);
                             self.machine_st.p = self.machine_st.cp;
                         }
                     }
@@ -1577,11 +1552,7 @@ impl Machine {
                         if self.machine_st.fail {
                             self.machine_st.backtrack();
                         } else {
-                            try_or_throw!(
-                                self.machine_st,
-                                (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                            );
-
+                            increment_call_count!(self.machine_st);
                             self.machine_st.p += 1;
                         }
                     }
@@ -1591,11 +1562,7 @@ impl Machine {
                         if self.machine_st.fail {
                             self.machine_st.backtrack();
                         } else {
-                            try_or_throw!(
-                                self.machine_st,
-                                (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                            );
-
+                            increment_call_count!(self.machine_st);
                             self.machine_st.p = self.machine_st.cp;
                         }
                     }
@@ -1605,11 +1572,7 @@ impl Machine {
 
                         if let Some(Ordering::Greater) = compare_term_test!(self.machine_st, a1, a2)
                         {
-                            try_or_throw!(
-                                self.machine_st,
-                                (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                            );
-
+                            increment_call_count!(self.machine_st);
                             self.machine_st.p += 1;
                         } else {
                             self.machine_st.backtrack();
@@ -1621,11 +1584,7 @@ impl Machine {
 
                         if let Some(Ordering::Greater) = compare_term_test!(self.machine_st, a1, a2)
                         {
-                            try_or_throw!(
-                                self.machine_st,
-                                (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                            );
-
+                            increment_call_count!(self.machine_st);
                             self.machine_st.p = self.machine_st.cp;
                         } else {
                             self.machine_st.backtrack();
@@ -1636,11 +1595,7 @@ impl Machine {
                         let a2 = self.machine_st.registers[2];
 
                         if let Some(Ordering::Less) = compare_term_test!(self.machine_st, a1, a2) {
-                            try_or_throw!(
-                                self.machine_st,
-                                (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                            );
-
+                            increment_call_count!(self.machine_st);
                             self.machine_st.p += 1;
                         } else {
                             self.machine_st.backtrack();
@@ -1651,11 +1606,7 @@ impl Machine {
                         let a2 = self.machine_st.registers[2];
 
                         if let Some(Ordering::Less) = compare_term_test!(self.machine_st, a1, a2) {
-                            try_or_throw!(
-                                self.machine_st,
-                                (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                            );
-
+                            increment_call_count!(self.machine_st);
                             self.machine_st.p = self.machine_st.cp;
                         } else {
                             self.machine_st.backtrack();
@@ -1667,11 +1618,7 @@ impl Machine {
 
                         match compare_term_test!(self.machine_st, a1, a2) {
                             Some(Ordering::Greater | Ordering::Equal) => {
-                                try_or_throw!(
-                                    self.machine_st,
-                                    (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                                );
-
+                                increment_call_count!(self.machine_st);
                                 self.machine_st.p += 1;
                             }
                             _ => {
@@ -1685,11 +1632,7 @@ impl Machine {
 
                         match compare_term_test!(self.machine_st, a1, a2) {
                             Some(Ordering::Greater | Ordering::Equal) => {
-                                try_or_throw!(
-                                    self.machine_st,
-                                    (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                                );
-
+                                increment_call_count!(self.machine_st);
                                 self.machine_st.p = self.machine_st.cp;
                             }
                             _ => {
@@ -1703,11 +1646,7 @@ impl Machine {
 
                         match compare_term_test!(self.machine_st, a1, a2) {
                             Some(Ordering::Less | Ordering::Equal) => {
-                                try_or_throw!(
-                                    self.machine_st,
-                                    (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                                );
-
+                                increment_call_count!(self.machine_st);
                                 self.machine_st.p += 1;
                             }
                             _ => {
@@ -1721,11 +1660,7 @@ impl Machine {
 
                         match compare_term_test!(self.machine_st, a1, a2) {
                             Some(Ordering::Less | Ordering::Equal) => {
-                                try_or_throw!(
-                                    self.machine_st,
-                                    (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                                );
-
+                                increment_call_count!(self.machine_st);
                                 self.machine_st.p = self.machine_st.cp;
                             }
                             _ => {
@@ -1739,11 +1674,7 @@ impl Machine {
                         if self.machine_st.fail {
                             self.machine_st.backtrack();
                         } else {
-                            try_or_throw!(
-                                self.machine_st,
-                                (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                            );
-
+                            increment_call_count!(self.machine_st);
                             self.machine_st.p += 1;
                         }
                     }
@@ -1753,11 +1684,7 @@ impl Machine {
                         if self.machine_st.fail {
                             self.machine_st.backtrack();
                         } else {
-                            try_or_throw!(
-                                self.machine_st,
-                                (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                            );
-
+                            increment_call_count!(self.machine_st);
                             self.machine_st.p = self.machine_st.cp;
                         }
                     }
@@ -1768,11 +1695,7 @@ impl Machine {
                         if self.machine_st.eq_test(a1, a2) {
                             self.machine_st.backtrack();
                         } else {
-                            try_or_throw!(
-                                self.machine_st,
-                                (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                            );
-
+                            increment_call_count!(self.machine_st);
                             self.machine_st.p += 1;
                         }
                     }
@@ -1783,11 +1706,7 @@ impl Machine {
                         if self.machine_st.eq_test(a1, a2) {
                             self.machine_st.backtrack();
                         } else {
-                            try_or_throw!(
-                                self.machine_st,
-                                (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                            );
-
+                            increment_call_count!(self.machine_st);
                             self.machine_st.p = self.machine_st.cp;
                         }
                     }
@@ -1795,11 +1714,7 @@ impl Machine {
                         if self.machine_st.ground_test() {
                             self.machine_st.backtrack();
                         } else {
-                            try_or_throw!(
-                                self.machine_st,
-                                (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                            );
-
+                            increment_call_count!(self.machine_st);
                             self.machine_st.p += 1;
                         }
                     }
@@ -1807,11 +1722,7 @@ impl Machine {
                         if self.machine_st.ground_test() {
                             self.machine_st.backtrack();
                         } else {
-                            try_or_throw!(
-                                self.machine_st,
-                                (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                            );
-
+                            increment_call_count!(self.machine_st);
                             self.machine_st.p = self.machine_st.cp;
                         }
                     }
@@ -1821,11 +1732,7 @@ impl Machine {
                         if self.machine_st.fail {
                             self.machine_st.backtrack();
                         } else {
-                            try_or_throw!(
-                                self.machine_st,
-                                (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                            );
-
+                            increment_call_count!(self.machine_st);
                             self.machine_st.p += 1;
                         }
                     }
@@ -1835,11 +1742,7 @@ impl Machine {
                         if self.machine_st.fail {
                             self.machine_st.backtrack();
                         } else {
-                            try_or_throw!(
-                                self.machine_st,
-                                (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                            );
-
+                            increment_call_count!(self.machine_st);
                             self.machine_st.p = self.machine_st.cp;
                         }
                     }
@@ -1850,11 +1753,7 @@ impl Machine {
                         if let Some(Ordering::Equal) = compare_term_test!(self.machine_st, a1, a2) {
                             self.machine_st.backtrack();
                         } else {
-                            try_or_throw!(
-                                self.machine_st,
-                                (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                            );
-
+                            increment_call_count!(self.machine_st);
                             self.machine_st.p += 1;
                         }
                     }
@@ -1865,11 +1764,7 @@ impl Machine {
                         if let Some(Ordering::Equal) = compare_term_test!(self.machine_st, a1, a2) {
                             self.machine_st.backtrack();
                         } else {
-                            try_or_throw!(
-                                self.machine_st,
-                                (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                            );
-
+                            increment_call_count!(self.machine_st);
                             self.machine_st.p = self.machine_st.cp;
                         }
                     }
@@ -1879,11 +1774,7 @@ impl Machine {
                         if self.machine_st.fail {
                             self.machine_st.backtrack();
                         } else {
-                            try_or_throw!(
-                                self.machine_st,
-                                (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                            );
-
+                            increment_call_count!(self.machine_st);
                             self.machine_st.p += 1;
                         }
                     }
@@ -1893,11 +1784,7 @@ impl Machine {
                         if self.machine_st.fail {
                             self.machine_st.backtrack();
                         } else {
-                            try_or_throw!(
-                                self.machine_st,
-                                (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                            );
-
+                            increment_call_count!(self.machine_st);
                             self.machine_st.p = self.machine_st.cp;
                         }
                     }
@@ -1910,11 +1797,7 @@ impl Machine {
                         if self.machine_st.fail {
                             self.machine_st.backtrack();
                         } else {
-                            try_or_throw!(
-                                self.machine_st,
-                                (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                            );
-
+                            increment_call_count!(self.machine_st);
                             self.machine_st.p += 1;
                         }
                     }
@@ -1927,11 +1810,7 @@ impl Machine {
                         if self.machine_st.fail {
                             self.machine_st.backtrack();
                         } else {
-                            try_or_throw!(
-                                self.machine_st,
-                                (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                            );
-
+                            increment_call_count!(self.machine_st);
                             self.machine_st.p = self.machine_st.cp;
                         }
                     }
@@ -1944,11 +1823,7 @@ impl Machine {
                         if self.machine_st.fail {
                             self.machine_st.backtrack();
                         } else {
-                            try_or_throw!(
-                                self.machine_st,
-                                (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                            );
-
+                            increment_call_count!(self.machine_st);
                             self.machine_st.p += 1;
                         }
                     }
@@ -1961,11 +1836,7 @@ impl Machine {
                         if self.machine_st.fail {
                             self.machine_st.backtrack();
                         } else {
-                            try_or_throw!(
-                                self.machine_st,
-                                (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                            );
-
+                            increment_call_count!(self.machine_st);
                             self.machine_st.p = self.machine_st.cp;
                         }
                     }
@@ -1975,11 +1846,7 @@ impl Machine {
                         if self.machine_st.fail {
                             self.machine_st.backtrack();
                         } else {
-                            try_or_throw!(
-                                self.machine_st,
-                                (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                            );
-
+                            increment_call_count!(self.machine_st);
                             self.machine_st.p += 1;
                         }
                     }
@@ -1989,11 +1856,7 @@ impl Machine {
                         if self.machine_st.fail {
                             self.machine_st.backtrack();
                         } else {
-                            try_or_throw!(
-                                self.machine_st,
-                                (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                            );
-
+                            increment_call_count!(self.machine_st);
                             self.machine_st.p = self.machine_st.cp;
                         }
                     }
@@ -2003,11 +1866,7 @@ impl Machine {
                         if self.machine_st.fail {
                             self.machine_st.backtrack();
                         } else {
-                            try_or_throw!(
-                                self.machine_st,
-                                (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                            );
-
+                            increment_call_count!(self.machine_st);
                             self.machine_st.p += 1;
                         }
                     }
@@ -2017,11 +1876,7 @@ impl Machine {
                         if self.machine_st.fail {
                             self.machine_st.backtrack();
                         } else {
-                            try_or_throw!(
-                                self.machine_st,
-                                (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                            );
-
+                            increment_call_count!(self.machine_st);
                             self.machine_st.p = self.machine_st.cp;
                         }
                     }
@@ -2039,10 +1894,7 @@ impl Machine {
                         if self.machine_st.fail {
                             self.machine_st.backtrack();
                         } else {
-                            try_or_throw!(
-                                self.machine_st,
-                                (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                            );
+                            increment_call_count!(self.machine_st);
                         }
                     }
                     &Instruction::ExecuteN(arity) => {
@@ -2059,10 +1911,7 @@ impl Machine {
                         if self.machine_st.fail {
                             self.machine_st.backtrack();
                         } else {
-                            try_or_throw!(
-                                self.machine_st,
-                                (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                            );
+                            increment_call_count!(self.machine_st);
                         }
                     }
                     &Instruction::DefaultCallN(arity) => {
@@ -2101,11 +1950,7 @@ impl Machine {
 
                         match n1.cmp(&n2) {
                             Ordering::Less | Ordering::Equal => {
-                                try_or_throw!(
-                                    self.machine_st,
-                                    (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                                );
-
+                                increment_call_count!(self.machine_st);
                                 self.machine_st.p += 1;
                             }
                             _ => {
@@ -2119,11 +1964,7 @@ impl Machine {
 
                         match n1.cmp(&n2) {
                             Ordering::Less | Ordering::Equal => {
-                                try_or_throw!(
-                                    self.machine_st,
-                                    (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                                );
-
+                                increment_call_count!(self.machine_st);
                                 self.machine_st.p = self.machine_st.cp;
                             }
                             _ => {
@@ -2137,11 +1978,7 @@ impl Machine {
 
                         match n1.cmp(&n2) {
                             Ordering::Equal => {
-                                try_or_throw!(
-                                    self.machine_st,
-                                    (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                                );
-
+                                increment_call_count!(self.machine_st);
                                 self.machine_st.p += 1;
                             }
                             _ => {
@@ -2155,11 +1992,7 @@ impl Machine {
 
                         match n1.cmp(&n2) {
                             Ordering::Equal => {
-                                try_or_throw!(
-                                    self.machine_st,
-                                    (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                                );
-
+                                increment_call_count!(self.machine_st);
                                 self.machine_st.p = self.machine_st.cp;
                             }
                             _ => {
@@ -2176,11 +2009,7 @@ impl Machine {
                                 self.machine_st.backtrack();
                             }
                             _ => {
-                                try_or_throw!(
-                                    self.machine_st,
-                                    (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                                );
-
+                                increment_call_count!(self.machine_st);
                                 self.machine_st.p += 1;
                             }
                         }
@@ -2194,11 +2023,7 @@ impl Machine {
                                 self.machine_st.backtrack();
                             }
                             _ => {
-                                try_or_throw!(
-                                    self.machine_st,
-                                    (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                                );
-
+                                increment_call_count!(self.machine_st);
                                 self.machine_st.p = self.machine_st.cp;
                             }
                         }
@@ -2209,11 +2034,7 @@ impl Machine {
 
                         match n1.cmp(&n2) {
                             Ordering::Greater | Ordering::Equal => {
-                                try_or_throw!(
-                                    self.machine_st,
-                                    (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                                );
-
+                                increment_call_count!(self.machine_st);
                                 self.machine_st.p += 1;
                             }
                             _ => {
@@ -2227,11 +2048,7 @@ impl Machine {
 
                         match n1.cmp(&n2) {
                             Ordering::Greater | Ordering::Equal => {
-                                try_or_throw!(
-                                    self.machine_st,
-                                    (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                                );
-
+                                increment_call_count!(self.machine_st);
                                 self.machine_st.p = self.machine_st.cp;
                             }
                             _ => {
@@ -2245,11 +2062,7 @@ impl Machine {
 
                         match n1.cmp(&n2) {
                             Ordering::Greater => {
-                                try_or_throw!(
-                                    self.machine_st,
-                                    (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                                );
-
+                                increment_call_count!(self.machine_st);
                                 self.machine_st.p += 1;
                             }
                             _ => {
@@ -2263,11 +2076,7 @@ impl Machine {
 
                         match n1.cmp(&n2) {
                             Ordering::Greater => {
-                                try_or_throw!(
-                                    self.machine_st,
-                                    (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                                );
-
+                                increment_call_count!(self.machine_st);
                                 self.machine_st.p = self.machine_st.cp;
                             }
                             _ => {
@@ -2281,11 +2090,7 @@ impl Machine {
 
                         match n1.cmp(&n2) {
                             Ordering::Less => {
-                                try_or_throw!(
-                                    self.machine_st,
-                                    (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                                );
-
+                                increment_call_count!(self.machine_st);
                                 self.machine_st.p += 1;
                             }
                             _ => {
@@ -2299,11 +2104,7 @@ impl Machine {
 
                         match n1.cmp(&n2) {
                             Ordering::Less => {
-                                try_or_throw!(
-                                    self.machine_st,
-                                    (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                                );
-
+                                increment_call_count!(self.machine_st);
                                 self.machine_st.p = self.machine_st.cp;
                             }
                             _ => {
@@ -2878,10 +2679,7 @@ impl Machine {
                         if self.machine_st.fail {
                             self.machine_st.backtrack();
                         } else {
-                            try_or_throw!(
-                                self.machine_st,
-                                (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                            );
+                            increment_call_count!(self.machine_st);
                         }
                     }
                     &Instruction::ExecuteNamed(arity, name, ref idx) => {
@@ -2892,10 +2690,7 @@ impl Machine {
                         if self.machine_st.fail {
                             self.machine_st.backtrack();
                         } else {
-                            try_or_throw!(
-                                self.machine_st,
-                                (self.machine_st.increment_call_count_fn)(&mut self.machine_st)
-                            );
+                            increment_call_count!(self.machine_st);
                         }
                     }
                     &Instruction::DefaultCallNamed(arity, name, ref idx) => {
@@ -3224,26 +3019,14 @@ impl Machine {
                                     }
                                     &IndexedChoiceInstruction::Retry(l) => {
                                         self.retry(l);
-
-                                        try_or_throw!(
-                                            self.machine_st,
-                                            (self.machine_st.increment_call_count_fn)(
-                                                &mut self.machine_st
-                                            )
-                                        );
+                                        increment_call_count!(self.machine_st);
                                     }
                                     &IndexedChoiceInstruction::DefaultRetry(l) => {
                                         self.retry(l);
                                     }
                                     &IndexedChoiceInstruction::Trust(l) => {
                                         self.trust(l);
-
-                                        try_or_throw!(
-                                            self.machine_st,
-                                            (self.machine_st.increment_call_count_fn)(
-                                                &mut self.machine_st
-                                            )
-                                        );
+                                        increment_call_count!(self.machine_st);
                                     }
                                     &IndexedChoiceInstruction::DefaultTrust(l) => {
                                         self.trust(l);
@@ -3318,38 +3101,16 @@ impl Machine {
                                                         // this is true iff ii + 1 < len.
                                                         Some(_) => {
                                                             self.retry(offset);
-
-                                                            try_or_throw!(
-                                                                self.machine_st,
-                                                                (self
-                                                                    .machine_st
-                                                                    .increment_call_count_fn)(
-                                                                    &mut self.machine_st
-                                                                )
-                                                            );
+                                                            increment_call_count!(self.machine_st);
                                                         }
                                                         _ => {
                                                             self.trust(offset);
-
-                                                            try_or_throw!(
-                                                                self.machine_st,
-                                                                (self
-                                                                    .machine_st
-                                                                    .increment_call_count_fn)(
-                                                                    &mut self.machine_st
-                                                                )
-                                                            );
+                                                            increment_call_count!(self.machine_st);
                                                         }
                                                     }
                                                 } else {
                                                     self.trust(offset);
-
-                                                    try_or_throw!(
-                                                        self.machine_st,
-                                                        (self.machine_st.increment_call_count_fn)(
-                                                            &mut self.machine_st
-                                                        )
-                                                    );
+                                                    increment_call_count!(self.machine_st);
                                                 }
                                             }
                                         }
@@ -5484,6 +5245,14 @@ impl Machine {
                         self.get_db_refs();
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                     }
+                    &Instruction::CallInferenceLimitExceeded => {
+                        self.inference_limit_exceeded();
+                        step_or_fail!(self, self.machine_st.p += 1);
+                    }
+                    &Instruction::ExecuteInferenceLimitExceeded => {
+                        self.inference_limit_exceeded();
+                        step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+                    }
                 }
             }
 
@@ -5499,6 +5268,17 @@ impl Machine {
                     if interruption {
                         self.machine_st.throw_interrupt_exception();
                         self.machine_st.backtrack();
+
+		        #[cfg(not(target_arch = "wasm32"))]
+			let runtime = tokio::runtime::Runtime::new().unwrap();
+			#[cfg(target_arch = "wasm32")]
+			let runtime = tokio::runtime::Builder::new_current_thread()
+			    .enable_all()
+			    .build()
+			    .unwrap();
+
+			let old_runtime = std::mem::replace(&mut self.runtime, runtime);
+			old_runtime.shutdown_background();
                     }
                 }
                 Err(_) => unreachable!(),

@@ -96,7 +96,7 @@ pub struct MachineState {
     pub(crate) unify_fn: fn(&mut MachineState),
     pub(crate) bind_fn: fn(&mut MachineState, Ref, HeapCellValue),
     pub(crate) run_cleaners_fn: fn(&mut Machine) -> bool,
-    pub(crate) increment_call_count_fn: fn(&mut MachineState) -> CallResult,
+    pub(crate) increment_call_count_fn: fn(&mut MachineState) -> bool,
 }
 
 impl fmt::Debug for MachineState {
@@ -412,22 +412,24 @@ impl MachineState {
         self.fail = false;
     }
 
-    pub(crate) fn increment_call_count(&mut self) -> CallResult {
+    pub(crate) fn increment_call_count(&mut self) -> bool {
         if self.cwil.inference_limit_exceeded || self.ball.stub.len() > 0 {
-            return Ok(());
+            return true;
         }
 
-        if let Some(&(ref limit, bp)) = self.cwil.limits.last() {
+        if let Some(&(ref limit, block)) = self.cwil.limits.last() {
             if self.cwil.count == *limit {
                 self.cwil.inference_limit_exceeded = true;
+                self.block = block;
+                self.unwind_stack();
 
-                return Err(functor!(atom!("inference_limit_exceeded"), [fixnum(bp)]));
+                return false;
             } else {
                 self.cwil.count += 1;
             }
         }
 
-        Ok(())
+        true
     }
 
     #[allow(dead_code)]
@@ -588,7 +590,7 @@ impl MachineState {
 
         let mut singleton_var_set: IndexMap<Ref, bool> = IndexMap::new();
 
-        for cell in stackful_preorder_iter(&mut self.heap, &mut self.stack, heap_loc) {
+        for cell in stackful_preorder_iter::<NonListElider>(&mut self.heap, &mut self.stack, heap_loc) {
             let cell = unmark_cell_bits!(cell);
 
             if let Some(var) = cell.as_var() {
@@ -953,7 +955,7 @@ impl MachineState {
 pub(crate) struct CWIL {
     count: Integer,
     limits: Vec<(Integer, usize)>,
-    inference_limit_exceeded: bool,
+    pub(crate) inference_limit_exceeded: bool,
 }
 
 impl CWIL {
@@ -965,22 +967,22 @@ impl CWIL {
         }
     }
 
-    pub(crate) fn add_limit(&mut self, limit: usize, b: usize) -> &Integer {
+    pub(crate) fn add_limit(&mut self, limit: usize, block: usize) -> &Integer {
         let mut limit = Integer::from(limit);
         limit += &self.count;
 
         match self.limits.last() {
             Some((ref inner_limit, _)) if *inner_limit <= limit => {}
-            _ => self.limits.push((limit, b)),
+            _ => self.limits.push((limit, block)),
         };
 
         &self.count
     }
 
     #[inline(always)]
-    pub(crate) fn remove_limit(&mut self, b: usize) -> &Integer {
-        if let Some((_, bp)) = self.limits.last() {
-            if bp == &b {
+    pub(crate) fn remove_limit(&mut self, block: usize) -> &Integer {
+        if let Some((_, bl)) = self.limits.last() {
+            if bl == &block {
                 self.limits.pop();
             }
         }

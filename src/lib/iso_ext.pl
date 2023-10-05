@@ -214,27 +214,6 @@ run_cleaners_without_handling(Cp) :-
 
 % call_with_inference_limit
 
-:- non_counted_backtracking end_block/4.
-
-end_block(_, Bb, NBb, _L) :-
-    '$clean_up_block'(NBb),
-    '$reset_block'(Bb).
-end_block(B, _Bb, NBb, L) :-
-    '$install_inference_counter'(B, L, _),
-    '$reset_block'(NBb),
-    '$fail'.
-
-:- non_counted_backtracking handle_ile/3.
-
-handle_ile(B, inference_limit_exceeded(B), R) :-
-    !,
-    R = inference_limit_exceeded,
-    '$pop_ball_stack'.
-handle_ile(B, _, _) :-
-    '$remove_call_policy_check'(B),
-    '$pop_from_ball_stack',
-    '$unwind_stack'.
-
 :- meta_predicate(call_with_inference_limit(0, ?, ?)).
 
 :- non_counted_backtracking call_with_inference_limit/3.
@@ -257,8 +236,6 @@ call_with_inference_limit(G, L, R) :-
     call_with_inference_limit(G, L, R, Bb, B),
     '$remove_call_policy_check'(B).
 
-install_inference_counter(B, L, Count0) :-
-    '$install_inference_counter'(B, L, Count0).
 
 :- meta_predicate(call_with_inference_limit(0,?,?,?,?)).
 
@@ -266,23 +243,34 @@ install_inference_counter(B, L, Count0) :-
 
 call_with_inference_limit(G, L, R, Bb, B) :-
     '$install_new_block'(NBb),
-    '$install_inference_counter'(B, L, Count0),
+    '$install_inference_counter'(NBb, L, Count0),
     '$call_with_inference_counting'(call(G)),
     '$inference_level'(R, B),
-    '$remove_inference_counter'(B, Count1),
+    '$remove_inference_counter'(NBb, Count1),
     Diff is L - (Count1 - Count0),
-    end_block(B, Bb, NBb, Diff).
+    (  '$clean_up_block'(NBb),
+       '$reset_block'(Bb)
+    ;  '$install_inference_counter'(NBb, Diff, _),
+       '$reset_block'(NBb),
+       '$fail'
+    ).
 call_with_inference_limit(_, _, R, Bb, B) :-
+    (  '$inference_limit_exceeded' ->
+       R = inference_limit_exceeded
+    ;  true
+    ),
+    '$get_current_block'(NBb),
+    '$remove_inference_counter'(NBb, _),
     '$reset_block'(Bb),
-    '$remove_inference_counter'(B, _),
-    (  '$get_ball'(Ball),
+    '$remove_call_policy_check'(B),
+    (  '$get_ball'(_),
        '$push_ball_stack',
        '$get_cp'(Cp),
-       '$set_cp_by_default'(Cp)
-    ;  '$remove_call_policy_check'(B),
-       '$fail'
-    ),
-    handle_ile(B, Ball, R).
+       '$set_cp_by_default'(Cp),
+       '$pop_from_ball_stack',
+       '$unwind_stack'
+    ;  nonvar(R)
+    ).
 
 %% partial_string(String, L, L0)
 %

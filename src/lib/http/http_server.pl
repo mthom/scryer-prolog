@@ -6,8 +6,8 @@
 */
 
 /** This library provides an starting point to build HTTP server based applications.
-It is based on [Hyper](https://hyper.rs/), which allows for HTTP/1.0, HTTP/1.1 and HTTP/2. However,
-some advanced features that Hyper provides are still not accesible.
+It is based on [Warp](https://github.com/seanmonstar/warp), which allows for HTTP/1.0, HTTP/1.1 and HTTP/2. However,
+some advanced features that Warp provides are still not accesible.
 
 ## Usage
 
@@ -46,7 +46,6 @@ recommeded to use the helper predicates, which are easier to understand and clea
 Some things that are still missing:
 
    - Read forms in multipart format
-   - HTTP Basic Auth
    - Session handling via cookies
    - HTML Templating (but you can use [Teruel](https://github.com/aarroyoc/teruel/), [Marquete](https://github.com/aarroyoc/marquete/) or [Djota](https://github.com/aarroyoc/djota) for that)
 */
@@ -54,14 +53,19 @@ Some things that are still missing:
 
 :- module(http_server, [
 	      http_listen/2,
+	      http_listen/3,
 	      http_headers/2,
 	      http_status_code/2,
 	      http_body/2,
 	      http_redirect/2,
-	      http_query/3
+	      http_query/3,
+	      http_basic_auth/4
 ]).
 
 :- meta_predicate http_listen(?, :).
+:- meta_predicate http_listen(?, :, ?).
+
+:- meta_predicate http_basic_auth(:, :, ?, ?).
 
 :- use_module(library(charsio)).
 :- use_module(library(crypto)).
@@ -74,24 +78,57 @@ Some things that are still missing:
 
 %% http_listen(+Port, +Handlers).
 %
-% Listens for HTTP connections on port Port. Each handler on the list Handlers should be of the form: `HttpVerb(PathUnification, Predicate)`.
-% For example: `get(user/User, get_info(User))` will match an HTTP request that is a GET, the path unifies with /user/User (where User is a variable)
-% and it will call `get_info` with three arguments: an `http_request` term, an `http_response` term and User. 
+% Equivalent to `http_listen(Port, Handlers, [])`.
 http_listen(Port, Module:Handlers0) :-
     must_be(integer, Port),
     must_be(list, Handlers0),
     maplist(module_qualification(Module), Handlers0, Handlers),
-    http_listen_(Port, Handlers).
+    http_listen_(Port, Handlers, []).
+
+%% http_listen(+Port, +Handlers, +Options).
+%
+% Listens for HTTP connections on port Port. Each handler on the list Handlers should be of the form: `HttpVerb(PathUnification, Predicate)`.
+% For example: `get(user/User, get_info(User))` will match an HTTP request that is a GET, the path unifies with /user/User (where User is a variable)
+% and it will call `get_info` with three arguments: an `http_request` term, an `http_response` term and User.
+%
+% The following options are supported:
+%
+% - `tls_key(+Key)` - a TLS key for HTTPS (string)
+% - `tls_cert(+Cert)` - a TLS cert for HTTPS (string)
+% - `content_length_limit(+Limit)` - maximum length (in bytes) for the incoming bodies. By default, 32KB.
+%
+% In order to have a HTTPS server (instead of plain HTTP), both `tls_key` and `tls_cert` options must be provided.
+http_listen(Port, Module:Handlers0, Options) :-
+    must_be(integer, Port),
+    must_be(list, Handlers0),
+    must_be(list, Options),
+    maplist(module_qualification(Module), Handlers0, Handlers),
+    http_listen_(Port, Handlers, Options).
 
 module_qualification(M, H0, H) :-
     H0 =.. [Method, Path, Goal],
     H =.. [Method, Path, M:Goal].
 
-http_listen_(Port, Handlers) :-
+http_listen_(Port, Handlers, Options) :-
+    parse_options(Options, TLSKey, TLSCert, ContentLengthLimit),
     phrase(format_("0.0.0.0:~d", [Port]), Addr),
-    '$http_listen'(Addr, HttpListener),!,
+    '$http_listen'(Addr, HttpListener, TLSKey, TLSCert, ContentLengthLimit),!,
     format("Listening at ~s\n", [Addr]),
     http_loop(HttpListener, Handlers).
+
+parse_options(Options, TLSKey, TLSCert, ContentLengthLimit) :-
+    member_option_default(tls_key, Options, "", TLSKey),
+    member_option_default(tls_cert, Options, "", TLSCert),
+    member_option_default(content_length_limit, Options, 32768, ContentLengthLimit),
+    must_be(integer, ContentLengthLimit).
+
+member_option_default(Key, List, _Default, Value) :-
+    X =.. [Key, Value],
+    member(X, List).
+member_option_default(Key, List, Default, Default) :-
+    X =.. [Key, _],
+    \+ member(X, List).
+	
 
 http_loop(HttpListener, Handlers) :-
     '$http_accept'(HttpListener, RequestMethod, RequestPath, RequestHeaders, RequestQuery, RequestStream, ResponseHandle),
@@ -114,7 +151,7 @@ http_loop(HttpListener, Handlers) :-
 	)
     ; (
 	'$http_answer'(ResponseHandle, 404, [], ResponseStream),
-	call_cleanup(format(ResponseStream, "Not Found"), close(ResponseStream)))
+	call_cleanup(format(ResponseStream, "Not Found", []), close(ResponseStream)))
     ),
     http_loop(HttpListener, Handlers).
 
@@ -263,25 +300,21 @@ http_query(http_request(_, _, Queries), Key, Value) :- member(Key-Value, Queries
 
 parse_queries([Key-Value|Queries]) -->
     string_without("=", Key0),
-    {
-        phrase(url_decode(Key), Key0)
-    },
     "=",
     string_without("&", Value0),
-    {
-        phrase(url_decode(Value), Value0)
-    },
     "&",
-    parse_queries(Queries).
+    parse_queries(Queries),
+    {
+	phrase(url_decode(Key), Key0),
+	phrase(url_decode(Value), Value0)
+    }.
 
 parse_queries([Key-Value]) -->
     string_without("=", Key0),
-    {
-        phrase(url_decode(Key), Key0)
-    },
     "=",
     string_without(" ", Value0),
     {
+	phrase(url_decode(Key), Key0),
         phrase(url_decode(Value), Value0)  
     }.
 
@@ -292,8 +325,12 @@ parse_queries([]) -->
 url_decode([Char|Chars]) -->
     [Char],
     {
-        Char \= '%'
+        Char \= '%',
+	Char \= (+)
     },
+    url_decode(Chars).
+url_decode([' '|Chars]) -->
+    "+",
     url_decode(Chars).
 url_decode([Char|Chars]) -->
     "%",
@@ -352,3 +389,49 @@ url_decode([Char|Chars]) -->
     url_decode(Chars).
 
 url_decode([]) --> [].
+
+%% http_basic_auth(+LoginPredicate, +Handler, +Request, -Response)
+%
+% Metapredicate that wraps an existing Handler with an HTTP Basic Auth flow.
+% Checks if a given user + password is authorized to execute that handler, returning 401
+% if it's not satisfied.
+% 
+% `LoginPredicate` must be a predicate of arity 2 that takes a User and a Password.
+% `Handler` will have, in addition to the Request and Response arguments, a User argument
+% containing the User given in the authentication.
+%
+% Example:
+%
+% ```
+% main :-
+%    http_listen(8800,[get('/', http_basic_auth(login, inside_handler("data")))]).
+%
+% login(User, Pass) :-
+%    User = "aarroyoc",
+%    Pass = "123456".
+%
+% inside_handler(Data, User, Request, Response) :-
+%    http_body(Response, text(User)).
+% ```
+http_basic_auth(LoginPredicate, Handler, Request, Response) :-
+    http_headers(Request, Headers),
+    member("authorization"-AuthorizationStr, Headers),
+    append("Basic ", Coded, AuthorizationStr),
+    chars_base64(UserPass, Coded, []),
+    append(User, [':'|Password], UserPass),
+    (
+	call(LoginPredicate, User, Password) ->
+	call(Handler, User, Request, Response)
+    ;   http_basic_auth_unauthorized_response(Response)
+    ).
+
+http_basic_auth(_LoginPredicate, _Handler, Request, Response) :-
+    http_headers(Request, Headers),
+    \+ member("authorization"-_, Headers),
+    http_basic_auth_unauthorized_response(Response).
+
+http_basic_auth_unauthorized_response(Response) :-
+    http_status_code(Response, 401),
+    http_headers(Response, ["www-authenticate"-"Basic realm=\"Scryer Prolog\", charset=\"UTF-8\""]),
+    http_body(Response, text("Unauthorized")).
+	

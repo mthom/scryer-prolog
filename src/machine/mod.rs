@@ -60,6 +60,9 @@ use std::sync::atomic::AtomicBool;
 
 use self::config::MachineConfig;
 use self::parsed_results::*;
+use tokio::runtime::Runtime;
+use rand::rngs::StdRng;
+use rand::SeedableRng;
 
 lazy_static! {
     pub static ref INTERRUPT: AtomicBool = AtomicBool::new(false);
@@ -76,6 +79,7 @@ pub struct Machine {
     pub(super) load_contexts: Vec<LoadContext>,
     #[cfg(feature = "ffi")]
     pub(super) foreign_function_table: ForeignFunctionTable,
+    pub(super) rng: StdRng,
 }
 
 #[derive(Debug)]
@@ -487,6 +491,7 @@ impl Machine {
             load_contexts: vec![],
             #[cfg(feature = "ffi")]
             foreign_function_table: Default::default(),
+            rng: StdRng::from_entropy(),
         };
 
         let mut lib_path = current_dir();
@@ -1178,7 +1183,7 @@ impl Machine {
                 let stub = functor_stub(name, arity);
                 let err = self
                     .machine_st
-                    .module_resolution_error(module_name, name, arity);
+                    .existence_error(ExistenceError::QualifiedProcedure { module_name, name, arity });
 
                 Err(self.machine_st.error_form(err, stub))
             }
@@ -1206,7 +1211,7 @@ impl Machine {
                 let stub = functor_stub(name, arity);
                 let err = self
                     .machine_st
-                    .module_resolution_error(module_name, name, arity);
+                    .existence_error(ExistenceError::QualifiedProcedure { module_name, name, arity });
 
                 Err(self.machine_st.error_form(err, stub))
             }

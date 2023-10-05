@@ -77,6 +77,12 @@ impl ValidType {
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub(crate) enum ResourceError {
+    FiniteMemory(HeapCellValue),
+    OutOfFiles
+}
+
 pub(crate) trait TypeError {
     fn type_error(self, machine_st: &mut MachineState, valid_type: ValidType) -> MachineError;
 }
@@ -153,6 +159,26 @@ pub(crate) trait PermissionError {
         index_atom: Atom,
         perm: Permission,
     ) -> MachineError;
+}
+
+impl PermissionError for Atom {
+    fn permission_error(
+        self,
+        _machine_st: &mut MachineState,
+        index_atom: Atom,
+        perm: Permission,
+    ) -> MachineError {
+        let stub = functor!(
+            atom!("permission_error"),
+            [atom(perm.as_atom()), atom(index_atom), cell(atom_as_cell!(self))]
+        );
+
+        MachineError {
+            stub,
+            location: None,
+            from: ErrorProvenance::Received,
+        }
+    }
 }
 
 impl PermissionError for HeapCellValue {
@@ -284,11 +310,21 @@ impl MachineState {
         }
     }
 
-    pub(super) fn resource_error(&mut self, value: HeapCellValue) -> MachineError {
-        let stub = functor!(
-            atom!("resource_error"),
-            [atom(atom!("finite_memory")), cell(value)]
-        );
+    pub(super) fn resource_error(&mut self, err: ResourceError) -> MachineError {
+        let stub = match err {
+            ResourceError::FiniteMemory(size_requested) => {
+                functor!(
+                    atom!("resource_error"),
+                    [atom(atom!("finite_memory")), cell(size_requested)]
+                )
+            }
+            ResourceError::OutOfFiles => {
+                functor!(
+                    atom!("resource_error"),
+                    [atom(atom!("file_descriptors"))]
+                )
+            }
+        };
 
         MachineError {
             stub,
@@ -305,26 +341,6 @@ impl MachineState {
         culprit.type_error(self, valid_type)
     }
 
-    pub(super) fn module_resolution_error(
-        &mut self,
-        mod_name: Atom,
-        name: Atom,
-        arity: usize,
-    ) -> MachineError {
-        let h = self.heap.len();
-
-        let res_stub = functor!(atom!(":"), [atom(mod_name), atom(name)]);
-        let ind_stub = functor!(atom!("/"), [str(h + 2, 0), fixnum(arity)], [res_stub]);
-
-        let stub = functor!(atom!("evaluation_error"), [str(h, 0)], [ind_stub]);
-
-        MachineError {
-            stub,
-            location: None,
-            from: ErrorProvenance::Constructed,
-        }
-    }
-
     pub(super) fn existence_error(&mut self, err: ExistenceError) -> MachineError {
         match err {
             ExistenceError::Module(name) => {
@@ -337,6 +353,20 @@ impl MachineState {
                     stub,
                     location: None,
                     from: ErrorProvenance::Received,
+                }
+            }
+            ExistenceError::QualifiedProcedure { module_name, name, arity } => {
+                let h = self.heap.len();
+
+                let ind_stub = functor!(atom!("/"), [atom(name), fixnum(arity)]);
+                let res_stub = functor!(atom!(":"), [atom(module_name), str(h + 3, 0)], [ind_stub]);
+
+                let stub = functor!(atom!("existence_error"), [atom(atom!("procedure")), str(h, 0)], [res_stub]);
+
+                MachineError {
+                    stub,
+                    location: None,
+                    from: ErrorProvenance::Constructed,
                 }
             }
             ExistenceError::Procedure(name, arity) => {
@@ -443,7 +473,6 @@ impl MachineState {
     pub(super) fn session_error(&mut self, err: SessionError) -> MachineError {
         match err {
             SessionError::CannotOverwriteBuiltIn(key) => {
-                // SessionError::CannotOverwriteImport(pred_atom) => {
                 self.permission_error(
                     Permission::Modify,
                     atom!("static_procedure"),
@@ -452,10 +481,14 @@ impl MachineState {
                         .collect::<MachineStub>(),
                 )
             }
+            SessionError::CannotOverwriteBuiltInModule(module) => {
+                self.permission_error(
+                    Permission::Modify,
+                    atom!("static_module"),
+                    module,
+                )
+            }
             SessionError::ExistenceError(err) => self.existence_error(err),
-            // SessionError::InvalidFileName(filename) => {
-            //     Self::existence_error(h, ExistenceError::Module(filename))
-            // }
             SessionError::ModuleDoesNotContainExport(..) => {
                 let error_atom = atom!("module_does_not_contain_claimed_export");
 
@@ -953,6 +986,7 @@ pub enum ExistenceError {
     Module(Atom),
     ModuleSource(ModuleSource),
     Procedure(Atom, usize),
+    QualifiedProcedure { module_name: Atom, name: Atom, arity: usize },
     SourceSink(HeapCellValue),
     Stream(HeapCellValue),
 }
@@ -961,6 +995,7 @@ pub enum ExistenceError {
 pub enum SessionError {
     CompilationError(CompilationError),
     CannotOverwriteBuiltIn(PredicateKey),
+    CannotOverwriteBuiltInModule(Atom),
     ExistenceError(ExistenceError),
     ModuleDoesNotContainExport(Atom, PredicateKey),
     ModuleCannotImportSelf(Atom),

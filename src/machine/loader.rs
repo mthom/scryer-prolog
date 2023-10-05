@@ -265,6 +265,10 @@ pub trait LoadState<'a>: Sized {
         loader: &Loader<'a, Self>,
         key: PredicateKey,
     ) -> Result<(), SessionError>;
+
+    fn err_on_builtin_module_overwrite(_module_name: Atom) -> Result<(), SessionError> {
+        Ok(())
+    }
 }
 
 pub struct LiveLoadAndMachineState<'a> {
@@ -352,6 +356,15 @@ impl<'a> LoadState<'a> for LiveLoadAndMachineState<'a> {
         }
 
         Ok(())
+    }
+
+    #[inline]
+    fn err_on_builtin_module_overwrite(module_name: Atom) -> Result<(), SessionError> {
+        if LIBRARIES.borrow().contains_key(&*module_name.as_str()) {
+            Err(SessionError::CannotOverwriteBuiltInModule(module_name))
+        } else {
+            Ok(())
+        }
     }
 }
 
@@ -483,7 +496,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         }
     }
 
-    pub(crate) fn read_term_from_heap(&mut self, r: RegType) -> Result<Term, SessionError> {
+    pub(crate) fn read_term_from_heap(&mut self, r: RegType) -> Term {
         let machine_st = LS::machine_st(&mut self.payload);
         let cell = machine_st[r];
 
@@ -533,11 +546,13 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                 self.add_meta_predicate_record(module_name, name, meta_specs);
             }
             Declaration::Module(module_decl) => {
-                self.payload.compilation_target = CompilationTarget::Module(module_decl.name);
+                let module_name = module_decl.name;
+
+                self.payload.compilation_target = CompilationTarget::Module(module_name);
                 self.payload.predicates.compilation_target = self.payload.compilation_target;
 
                 let listing_src = self.payload.term_stream.listing_src().clone();
-                self.add_module(module_decl, listing_src);
+                self.add_module(module_decl, listing_src)?;
             }
             Declaration::NonCountedBacktracking(name, arity) => {
                 self.payload.non_counted_bt_preds.insert((name, arity));
@@ -1074,7 +1089,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         let machine_st = LS::machine_st(&mut self.payload);
         let cell = machine_st[r];
 
-        let export_list = machine_st.read_term_from_heap(cell)?;
+        let export_list = machine_st.read_term_from_heap(cell);
         let atom_tbl = &mut LS::machine_st(&mut self.payload).atom_tbl;
         let export_list = setup_module_export_list(export_list, &atom_tbl)?;
 
@@ -1401,9 +1416,10 @@ impl MachineState {
     pub(super) fn read_term_from_heap(
         &mut self,
         term_addr: HeapCellValue,
-    ) -> Result<Term, SessionError> {
+    ) -> Term {
         let mut term_stack = vec![];
-        let mut iter = stackful_post_order_iter(&mut self.heap, &mut self.stack, term_addr);
+        let mut iter = stackful_post_order_iter::<NonListElider>
+            (&mut self.heap, &mut self.stack, term_addr);
 
         while let Some(addr) = iter.next() {
             let addr = unmark_cell_bits!(addr);
@@ -1494,7 +1510,7 @@ impl MachineState {
         }
 
         debug_assert!(term_stack.len() == 1);
-        Ok(term_stack.pop().unwrap())
+        term_stack.pop().unwrap()
     }
 }
 
@@ -1636,7 +1652,7 @@ impl Machine {
 
         let arity = self.deref_register(3);
         let arity = match Number::try_from(arity) {
-            Ok(Number::Integer(n)) if &*n >= &Integer::from(0) && &*n <= &Integer::from(MAX_ARITY) => {
+            Ok(Number::Integer(n)) if &*n >= &Integer::ZERO && &*n <= &Integer::from(MAX_ARITY) => {
                 let value: usize = (&*n).try_into().unwrap();
                 Ok(value)
             },
@@ -1661,7 +1677,7 @@ impl Machine {
         let mut loader = self.loader_from_heap_evacuable(temp_v!(2));
 
         let add_clause = || {
-            let term = loader.read_term_from_heap(temp_v!(1))?;
+            let term = loader.read_term_from_heap(temp_v!(1));
 
             loader.incremental_compile_clause(
                 (atom!("term_expansion"), 2),
@@ -1691,7 +1707,7 @@ impl Machine {
         };
 
         let add_clause = || {
-            let term = loader.read_term_from_heap(temp_v!(2))?;
+            let term = loader.read_term_from_heap(temp_v!(2));
 
             let indexing_arg = match term.name() {
                 Some(atom!(":-")) => term.first_arg().and_then(Term::first_arg),
@@ -1849,9 +1865,7 @@ impl Machine {
             2,
         )?;
 
-        let path = cell_as_atom!(self
-            .machine_st
-            .store(self.machine_st.deref(self.machine_st.registers[2])));
+        let path = cell_as_atom!(self.deref_register(2));
 
         self.load_contexts
             .push(LoadContext::new(&*path.as_str(), stream));
@@ -2008,7 +2022,7 @@ impl Machine {
             loader.payload.compilation_target = compilation_target;
 
             let head = LiveLoadAndMachineState::machine_st(&mut loader.payload)
-                .read_term_from_heap(head)?;
+                .read_term_from_heap(head);
 
             let name = if let Some(name) = head.name() {
                 name
@@ -2044,7 +2058,7 @@ impl Machine {
                 return LiveLoadAndMachineState::evacuate(loader);
             }
 
-            let body = loader.read_term_from_heap(temp_v!(3))?;
+            let body = loader.read_term_from_heap(temp_v!(3));
 
             let asserted_clause = Term::Clause(
                 Cell::default(),
@@ -2482,7 +2496,7 @@ impl<'a> Loader<'a, LiveLoadAndMachineState<'a>> {
             self.payload.predicates.compilation_target = compilation_target;
         }
 
-        let term = self.read_term_from_heap(term_reg)?;
+        let term = self.read_term_from_heap(term_reg);
 
         self.add_clause_clause_if_dynamic(&term)?;
         self.payload.term_stream.term_queue.push_back(term);

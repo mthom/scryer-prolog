@@ -6,6 +6,7 @@ use crate::machine::heap::*;
 use crate::machine::stack::*;
 use crate::types::*;
 
+use core::marker::PhantomData;
 use modular_bitfield::prelude::*;
 
 use std::ops::Deref;
@@ -79,15 +80,40 @@ impl IterStackLoc {
     }
 }
 
+pub trait ListElisionPolicy {
+    fn elide_lists() -> bool;
+}
+
 #[derive(Debug)]
-pub struct StackfulPreOrderHeapIter<'a> {
+pub struct ListElider {}
+
+impl ListElisionPolicy for ListElider {
+    #[inline(always)]
+    fn elide_lists() -> bool {
+        true
+    }
+}
+
+#[derive(Debug)]
+pub struct NonListElider {}
+
+impl ListElisionPolicy for NonListElider {
+    #[inline(always)]
+    fn elide_lists() -> bool {
+        false
+    }
+}
+
+#[derive(Debug)]
+pub struct StackfulPreOrderHeapIter<'a, ElideLists> {
     pub heap: &'a mut Vec<HeapCellValue>,
     pub machine_stack: &'a mut Stack,
     stack: Vec<IterStackLoc>,
     h: IterStackLoc,
+    _marker: PhantomData<ElideLists>,
 }
 
-impl<'a> Drop for StackfulPreOrderHeapIter<'a> {
+impl<'a, ElideLists> Drop for StackfulPreOrderHeapIter<'a, ElideLists> {
     fn drop(&mut self) {
         while let Some(h) = self.stack.pop() {
             let cell = self.read_cell_mut(h);
@@ -104,53 +130,14 @@ pub trait FocusedHeapIter: Iterator<Item = HeapCellValue> {
     fn focus(&self) -> IterStackLoc;
 }
 
-impl<'a> FocusedHeapIter for StackfulPreOrderHeapIter<'a> {
+impl<'a, ElideLists: ListElisionPolicy> FocusedHeapIter for StackfulPreOrderHeapIter<'a, ElideLists> {
     #[inline]
     fn focus(&self) -> IterStackLoc {
         self.h
     }
 }
 
-impl<'a> StackfulPreOrderHeapIter<'a> {
-    #[inline]
-    fn new(heap: &'a mut Vec<HeapCellValue>, stack: &'a mut Stack, cell: HeapCellValue) -> Self {
-        let h = IterStackLoc::iterable_loc(heap.len(), HeapOrStackTag::Heap);
-        heap.push(cell);
-
-        Self {
-            heap,
-            h,
-            machine_stack: stack,
-            stack: vec![h],
-        }
-    }
-
-    #[inline]
-    fn forward_if_referent_marked(&mut self, loc: IterStackLoc) {
-        read_heap_cell!(self.read_cell(loc),
-            (HeapCellValueTag::Str |
-             HeapCellValueTag::Lis |
-             HeapCellValueTag::AttrVar |
-             HeapCellValueTag::Var |
-             HeapCellValueTag::PStrLoc, vh) => {
-                if self.heap[vh].get_mark_bit() {
-                    self.read_cell_mut(loc).set_forwarding_bit(true);
-                }
-            }
-            (HeapCellValueTag::StackVar, vs) => {
-                if self.machine_stack[vs].get_mark_bit() {
-                    self.read_cell_mut(loc).set_forwarding_bit(true);
-                }
-            }
-            _ => {}
-        );
-    }
-
-    #[inline]
-    pub fn push_stack(&mut self, h: IterStackLoc) {
-        self.stack.push(h);
-    }
-
+impl<'a, ElideLists> StackfulPreOrderHeapIter<'a, ElideLists> {
     #[inline]
     pub fn read_cell_mut(&mut self, loc: IterStackLoc) -> &mut HeapCellValue {
         match loc.heap_or_stack() {
@@ -165,6 +152,11 @@ impl<'a> StackfulPreOrderHeapIter<'a> {
             HeapOrStackTag::Heap => self.heap[loc.value() as usize],
             HeapOrStackTag::Stack => self.machine_stack[loc.value() as usize],
         }
+    }
+
+    #[inline]
+    pub fn push_stack(&mut self, h: IterStackLoc) {
+        self.stack.push(h);
     }
 
     #[inline]
@@ -222,6 +214,51 @@ impl<'a> StackfulPreOrderHeapIter<'a> {
             ));
         }
     }
+}
+
+impl<'a, ElideLists: ListElisionPolicy> StackfulPreOrderHeapIter<'a, ElideLists> {
+    #[inline]
+    fn new(heap: &'a mut Vec<HeapCellValue>, stack: &'a mut Stack, cell: HeapCellValue) -> Self {
+        let h = IterStackLoc::iterable_loc(heap.len(), HeapOrStackTag::Heap);
+        heap.push(cell);
+
+        Self {
+            heap,
+            h,
+            machine_stack: stack,
+            stack: vec![h],
+            _marker: PhantomData,
+        }
+    }
+
+    #[inline]
+    fn forward_if_referent_marked(&mut self, loc: IterStackLoc) {
+        let cell = self.read_cell(loc);
+
+        read_heap_cell!(cell,
+            (HeapCellValueTag::Lis |
+             HeapCellValueTag::Str |
+             HeapCellValueTag::PStrLoc, vh) => {
+                let forward = if ElideLists::elide_lists() { true } else { cell.get_mark_bit() };
+
+                if forward && self.heap[vh].get_mark_bit() {
+                    self.read_cell_mut(loc).set_forwarding_bit(true);
+                }
+            }
+            (HeapCellValueTag::AttrVar |
+             HeapCellValueTag::Var, vh) => {
+                if self.heap[vh].get_mark_bit() {
+                    self.read_cell_mut(loc).set_forwarding_bit(true);
+                }
+            }
+            (HeapCellValueTag::StackVar, vs) => {
+                if self.machine_stack[vs].get_mark_bit() {
+                    self.read_cell_mut(loc).set_forwarding_bit(true);
+                }
+            }
+            _ => {}
+        );
+    }
 
     fn follow(&mut self) -> Option<HeapCellValue> {
         while let Some(h) = self.stack.pop() {
@@ -260,28 +297,27 @@ impl<'a> StackfulPreOrderHeapIter<'a> {
                (HeapCellValueTag::Lis, vh) => {
                    let loc = IterStackLoc::iterable_loc(vh, HeapOrStackTag::Heap);
 
+                   self.forward_if_referent_marked(loc);
                    self.push_if_unmarked(loc);
 
                    self.stack.push(IterStackLoc::pending_mark_loc(vh + 1, HeapOrStackTag::Heap));
                    self.stack.push(IterStackLoc::mark_loc(vh, HeapOrStackTag::Heap));
-
-                   self.forward_if_referent_marked(loc);
 
                    return Some(self.read_cell(h));
                }
                (HeapCellValueTag::AttrVar | HeapCellValueTag::Var, vh) => {
                    let loc = IterStackLoc::iterable_loc(vh, HeapOrStackTag::Heap);
 
+                   self.forward_if_referent_marked(loc);
                    self.push_if_unmarked(loc);
                    self.stack.push(IterStackLoc::mark_loc(vh, HeapOrStackTag::Heap));
-                   self.forward_if_referent_marked(loc);
                }
                (HeapCellValueTag::StackVar, vs) => {
                    let loc = IterStackLoc::iterable_loc(vs, HeapOrStackTag::Stack);
 
+                   self.forward_if_referent_marked(loc);
                    self.push_if_unmarked(loc);
                    self.stack.push(IterStackLoc::mark_loc(vs, HeapOrStackTag::Stack));
-                   self.forward_if_referent_marked(loc);
                }
                (HeapCellValueTag::PStrOffset, offset) => {
                    self.push_if_unmarked(IterStackLoc::iterable_loc(offset, HeapOrStackTag::Heap));
@@ -325,7 +361,7 @@ impl<'a> StackfulPreOrderHeapIter<'a> {
     }
 }
 
-impl<'a> Iterator for StackfulPreOrderHeapIter<'a> {
+impl<'a, ElideLists: ListElisionPolicy> Iterator for StackfulPreOrderHeapIter<'a, ElideLists> {
     type Item = HeapCellValue;
 
     #[inline]
@@ -344,11 +380,11 @@ pub(crate) fn stackless_preorder_iter(
 }
 
 #[inline(always)]
-pub(crate) fn stackful_preorder_iter<'a>(
+pub(crate) fn stackful_preorder_iter<'a, ElideLists: ListElisionPolicy>(
     heap: &'a mut Vec<HeapCellValue>,
     stack: &'a mut Stack,
     cell: HeapCellValue,
-) -> StackfulPreOrderHeapIter<'a> {
+) -> StackfulPreOrderHeapIter<'a, ElideLists> {
     StackfulPreOrderHeapIter::new(heap, stack, cell)
 }
 
@@ -455,9 +491,10 @@ impl<Iter: FocusedHeapIter> PostOrderIterator<Iter> {
     }
 }
 
-pub(crate) type LeftistPostOrderHeapIter<'a> = PostOrderIterator<StackfulPreOrderHeapIter<'a>>;
+pub(crate) type LeftistPostOrderHeapIter<'a, ElideLists> =
+    PostOrderIterator<StackfulPreOrderHeapIter<'a, ElideLists>>;
 
-impl<'a> LeftistPostOrderHeapIter<'a> {
+impl<'a, ElideLists: ListElisionPolicy> LeftistPostOrderHeapIter<'a, ElideLists> {
     #[inline]
     pub fn pop_stack(&mut self) {
         if let Some((child_count, ..)) = self.parent_stack.last() {
@@ -476,11 +513,11 @@ impl<'a> LeftistPostOrderHeapIter<'a> {
 }
 
 #[inline]
-pub(crate) fn stackful_post_order_iter<'a>(
+pub(crate) fn stackful_post_order_iter<'a, ElideLists: ListElisionPolicy>(
     heap: &'a mut Heap,
     stack: &'a mut Stack,
     cell: HeapCellValue,
-) -> LeftistPostOrderHeapIter<'a> {
+) -> LeftistPostOrderHeapIter<'a, ElideLists> {
     PostOrderIterator::new(StackfulPreOrderHeapIter::new(heap, stack, cell))
 }
 
@@ -1550,7 +1587,7 @@ mod tests {
             .extend(functor!(f_atom, [atom(a_atom), atom(b_atom)]));
 
         {
-            let mut iter = StackfulPreOrderHeapIter::new(
+            let mut iter = StackfulPreOrderHeapIter::<NonListElider>::new(
                 &mut wam.machine_st.heap,
                 &mut wam.machine_st.stack,
                 str_loc_as_cell!(0),
@@ -1585,7 +1622,7 @@ mod tests {
         ));
 
         for _ in 0..20 {
-            let mut iter = StackfulPreOrderHeapIter::new(
+            let mut iter = StackfulPreOrderHeapIter::<NonListElider>::new(
                 &mut wam.machine_st.heap,
                 &mut wam.machine_st.stack,
                 str_loc_as_cell!(0),
@@ -1617,7 +1654,7 @@ mod tests {
         {
             wam.machine_st.heap.push(heap_loc_as_cell!(0));
 
-            let mut iter = StackfulPreOrderHeapIter::new(
+            let mut iter = StackfulPreOrderHeapIter::<NonListElider>::new(
                 &mut wam.machine_st.heap,
                 &mut wam.machine_st.stack,
                 heap_loc_as_cell!(0),
@@ -1644,7 +1681,7 @@ mod tests {
             wam.machine_st.heap.push(heap_loc_as_cell!(1));
             wam.machine_st.heap.push(heap_loc_as_cell!(0));
 
-            let mut iter = StackfulPreOrderHeapIter::new(
+            let mut iter = StackfulPreOrderHeapIter::<NonListElider>::new(
                 &mut wam.machine_st.heap,
                 &mut wam.machine_st.stack,
                 heap_loc_as_cell!(0),
@@ -1668,7 +1705,7 @@ mod tests {
         wam.machine_st.heap.push(empty_list_as_cell!());
 
         {
-            let mut iter = StackfulPreOrderHeapIter::new(
+            let mut iter = StackfulPreOrderHeapIter::<NonListElider>::new(
                 &mut wam.machine_st.heap,
                 &mut wam.machine_st.stack,
                 heap_loc_as_cell!(0),
@@ -1704,7 +1741,7 @@ mod tests {
         wam.machine_st.heap.push(heap_loc_as_cell!(0));
 
         {
-            let mut iter = StackfulPreOrderHeapIter::new(
+            let mut iter = StackfulPreOrderHeapIter::<NonListElider>::new(
                 &mut wam.machine_st.heap,
                 &mut wam.machine_st.stack,
                 heap_loc_as_cell!(0),
@@ -1736,7 +1773,7 @@ mod tests {
         }
 
         {
-            let mut iter = StackfulPreOrderHeapIter::new(
+            let mut iter = StackfulPreOrderHeapIter::<NonListElider>::new(
                 &mut wam.machine_st.heap,
                 &mut wam.machine_st.stack,
                 heap_loc_as_cell!(0),
@@ -1775,7 +1812,7 @@ mod tests {
         let pstr_cell = wam.machine_st.heap[pstr_var_cell.get_value() as usize];
 
         {
-            let mut iter = StackfulPreOrderHeapIter::new(
+            let mut iter = StackfulPreOrderHeapIter::<NonListElider>::new(
                 &mut wam.machine_st.heap,
                 &mut wam.machine_st.stack,
                 heap_loc_as_cell!(0),
@@ -1800,7 +1837,7 @@ mod tests {
         let pstr_second_cell = wam.machine_st.heap[pstr_second_var_cell.get_value() as usize];
 
         {
-            let mut iter = stackful_preorder_iter(
+            let mut iter = stackful_preorder_iter::<NonListElider>(
                 &mut wam.machine_st.heap,
                 &mut wam.machine_st.stack,
                 heap_loc_as_cell!(0),
@@ -1827,7 +1864,7 @@ mod tests {
             .push(fixnum_as_cell!(Fixnum::build_with(0i64)));
 
         {
-            let mut iter = stackful_preorder_iter(
+            let mut iter = stackful_preorder_iter::<NonListElider>(
                 &mut wam.machine_st.heap,
                 &mut wam.machine_st.stack,
                 pstr_loc_as_cell!(0),
@@ -1862,7 +1899,7 @@ mod tests {
             .push(fixnum_as_cell!(Fixnum::build_with(1i64)));
 
         {
-            let mut iter = stackful_preorder_iter(
+            let mut iter = stackful_preorder_iter::<NonListElider>(
                 &mut wam.machine_st.heap,
                 &mut wam.machine_st.stack,
                 pstr_loc_as_cell!(0),
@@ -1906,7 +1943,7 @@ mod tests {
         wam.machine_st.heap.extend(functor);
 
         {
-            let mut iter = StackfulPreOrderHeapIter::new(
+            let mut iter = StackfulPreOrderHeapIter::<NonListElider>::new(
                 &mut wam.machine_st.heap,
                 &mut wam.machine_st.stack,
                 heap_loc_as_cell!(0),
@@ -1969,7 +2006,7 @@ mod tests {
         wam.machine_st.heap[4] = list_loc_as_cell!(1);
 
         {
-            let mut iter = stackful_preorder_iter(
+            let mut iter = stackful_preorder_iter::<NonListElider>(
                 &mut wam.machine_st.heap,
                 &mut wam.machine_st.stack,
                 heap_loc_as_cell!(0),
@@ -2038,7 +2075,7 @@ mod tests {
         wam.machine_st.heap.push(list_loc_as_cell!(1));
 
         {
-            let mut iter = StackfulPreOrderHeapIter::new(
+            let mut iter = StackfulPreOrderHeapIter::<NonListElider>::new(
                 &mut wam.machine_st.heap,
                 &mut wam.machine_st.stack,
                 heap_loc_as_cell!(0),
@@ -2059,6 +2096,10 @@ mod tests {
             );
             assert_eq!(iter.next().unwrap(), cyclic_link);
 
+            assert_eq!(iter.next().unwrap(), cyclic_link);
+
+            assert_eq!(iter.next().unwrap(), cyclic_link);
+
             assert_eq!(iter.next(), None);
         }
 
@@ -2070,7 +2111,7 @@ mod tests {
         wam.machine_st.heap.push(empty_list_as_cell!());
 
         {
-            let mut iter = stackful_preorder_iter(
+            let mut iter = stackful_preorder_iter::<NonListElider>(
                 &mut wam.machine_st.heap,
                 &mut wam.machine_st.stack,
                 heap_loc_as_cell!(0),
@@ -2102,7 +2143,7 @@ mod tests {
         wam.machine_st.heap.push(empty_list_as_cell!());
 
         {
-            let mut iter = stackful_preorder_iter(
+            let mut iter = stackful_preorder_iter::<NonListElider>(
                 &mut wam.machine_st.heap,
                 &mut wam.machine_st.stack,
                 heap_loc_as_cell!(0),
@@ -2140,7 +2181,7 @@ mod tests {
             .extend(functor!(f_atom, [atom(a_atom), atom(b_atom)]));
 
         {
-            let mut iter = stackful_post_order_iter(
+            let mut iter = stackful_post_order_iter::<NonListElider>(
                 &mut wam.machine_st.heap,
                 &mut wam.machine_st.stack,
                 str_loc_as_cell!(0),
@@ -2176,7 +2217,7 @@ mod tests {
 
         for _ in 0..20 {
             // 0000 {
-            let mut iter = stackful_post_order_iter(
+            let mut iter = stackful_post_order_iter::<NonListElider>(
                 &mut wam.machine_st.heap,
                 &mut wam.machine_st.stack,
                 str_loc_as_cell!(0),
@@ -2210,7 +2251,7 @@ mod tests {
         {
             wam.machine_st.heap.push(heap_loc_as_cell!(0));
 
-            let mut iter = stackful_post_order_iter(
+            let mut iter = stackful_post_order_iter::<NonListElider>(
                 &mut wam.machine_st.heap,
                 &mut wam.machine_st.stack,
                 heap_loc_as_cell!(0),
@@ -2237,7 +2278,7 @@ mod tests {
             wam.machine_st.heap.push(heap_loc_as_cell!(1));
             wam.machine_st.heap.push(heap_loc_as_cell!(0));
 
-            let mut iter = stackful_post_order_iter(
+            let mut iter = stackful_post_order_iter::<NonListElider>(
                 &mut wam.machine_st.heap,
                 &mut wam.machine_st.stack,
                 heap_loc_as_cell!(0),
@@ -2261,7 +2302,7 @@ mod tests {
         wam.machine_st.heap.push(empty_list_as_cell!());
 
         {
-            let mut iter = stackful_post_order_iter(
+            let mut iter = stackful_post_order_iter::<NonListElider>(
                 &mut wam.machine_st.heap,
                 &mut wam.machine_st.stack,
                 heap_loc_as_cell!(0),
@@ -2297,7 +2338,7 @@ mod tests {
         wam.machine_st.heap.push(heap_loc_as_cell!(0));
 
         {
-            let mut iter = stackful_post_order_iter(
+            let mut iter = stackful_post_order_iter::<NonListElider>(
                 &mut wam.machine_st.heap,
                 &mut wam.machine_st.stack,
                 heap_loc_as_cell!(0),
@@ -2329,7 +2370,7 @@ mod tests {
         }
 
         {
-            let mut iter = stackful_post_order_iter(
+            let mut iter = stackful_post_order_iter::<NonListElider>(
                 &mut wam.machine_st.heap,
                 &mut wam.machine_st.stack,
                 heap_loc_as_cell!(0),
@@ -2368,7 +2409,7 @@ mod tests {
         let pstr_cell = wam.machine_st.heap[pstr_var_cell.get_value() as usize];
 
         {
-            let mut iter = stackful_post_order_iter(
+            let mut iter = stackful_post_order_iter::<NonListElider>(
                 &mut wam.machine_st.heap,
                 &mut wam.machine_st.stack,
                 pstr_loc_as_cell!(0),
@@ -2392,7 +2433,7 @@ mod tests {
         let pstr_second_cell = wam.machine_st.heap[pstr_second_var_cell.get_value() as usize];
 
         {
-            let mut iter = stackful_post_order_iter(
+            let mut iter = stackful_post_order_iter::<NonListElider>(
                 &mut wam.machine_st.heap,
                 &mut wam.machine_st.stack,
                 pstr_loc_as_cell!(0),
@@ -2419,7 +2460,7 @@ mod tests {
             .push(fixnum_as_cell!(Fixnum::build_with(0i64)));
 
         {
-            let mut iter = stackful_post_order_iter(
+            let mut iter = stackful_post_order_iter::<NonListElider>(
                 &mut wam.machine_st.heap,
                 &mut wam.machine_st.stack,
                 pstr_loc_as_cell!(0),
@@ -2446,7 +2487,7 @@ mod tests {
             .push(fixnum_as_cell!(Fixnum::build_with(1i64)));
 
         {
-            let mut iter = stackful_post_order_iter(
+            let mut iter = stackful_post_order_iter::<NonListElider>(
                 &mut wam.machine_st.heap,
                 &mut wam.machine_st.stack,
                 pstr_loc_as_cell!(0),
@@ -2480,7 +2521,7 @@ mod tests {
         wam.machine_st.heap.extend(functor);
 
         {
-            let mut iter = stackful_post_order_iter(
+            let mut iter = stackful_post_order_iter::<NonListElider>(
                 &mut wam.machine_st.heap,
                 &mut wam.machine_st.stack,
                 heap_loc_as_cell!(0),
@@ -2544,7 +2585,7 @@ mod tests {
         wam.machine_st.heap[4] = list_loc_as_cell!(1);
 
         {
-            let mut iter = stackful_post_order_iter(
+            let mut iter = stackful_post_order_iter::<NonListElider>(
                 &mut wam.machine_st.heap,
                 &mut wam.machine_st.stack,
                 heap_loc_as_cell!(0),
