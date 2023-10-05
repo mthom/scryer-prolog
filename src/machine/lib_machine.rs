@@ -3,7 +3,7 @@ use std::sync::Arc;
 
 use crate::atom_table;
 use crate::heap_print::{HCPrinter, HCValueOutputter, PrinterOutputter};
-use crate::machine::BREAK_FROM_DISPATCH_LOOP_LOC;
+use crate::machine::{BREAK_FROM_DISPATCH_LOOP_LOC, LIB_QUERY_SUCCESS};
 use crate::machine::mock_wam::CompositeOpDir;
 use crate::parser::parser::{Parser, Tokens};
 use crate::read::write_term_to_heap;
@@ -12,7 +12,7 @@ use crate::parser::ast::{Var, VarPtr};
 use indexmap::IndexMap;
 
 use super::{
-    Machine, MachineConfig, QueryResult, QueryResolutionLine, 
+    Machine, MachineConfig, QueryResult, QueryResolutionLine,
     Atom, AtomCell, HeapCellValue, HeapCellValueTag, Value, QueryResolution,
     streams::Stream
 };
@@ -73,7 +73,7 @@ impl Machine {
         // Write term to heap
         self.machine_st.registers[1] = self.machine_st.heap[term_write_result.heap_loc];
 
-        self.machine_st.cp = BREAK_FROM_DISPATCH_LOOP_LOC;
+        self.machine_st.cp = LIB_QUERY_SUCCESS; // BREAK_FROM_DISPATCH_LOOP_LOC;
         self.machine_st.p = self.indices.code_dir.get(&(atom!("call"), 1)).expect("couldn't get code index").local().unwrap();
 
         let var_names: IndexMap<_, _> = term_write_result.var_dict.iter()
@@ -122,27 +122,34 @@ impl Machine {
                         },
                         _ => unreachable!(),
                     })
-                    .collect::<Vec<String>>() 
+                    .collect::<Vec<String>>()
                     .join(" ");
-                
+
                 return Err(error_string);
-            } 
-            
+            }
+
+            /*
             if self.machine_st.fail {
                 // NOTE: only print results on success
                 self.machine_st.fail = false;
                 println!("fail!");
                 matches.push(QueryResolutionLine::False);
                 break;
-            }; 
+            };
+            */
 
-            if self.machine_st.b == stub_b && term_write_result.var_dict.len() == 0 {
-                // NOTE: only print results on success
-                self.machine_st.fail = false;
-                println!("b == stub_b");
-                matches.push(QueryResolutionLine::False);
-                break;
-            }; 
+            if term_write_result.var_dict.is_empty() {
+                if self.machine_st.p == LIB_QUERY_SUCCESS {
+                    matches.push(QueryResolutionLine::True);
+                    break;
+                } else if self.machine_st.p == BREAK_FROM_DISPATCH_LOOP_LOC {
+                    // NOTE: only print results on success
+                    // self.machine_st.fail = false;
+                    // println!("b == stub_b");
+                    matches.push(QueryResolutionLine::False);
+                    break;
+                }
+            }
 
             let mut bindings: BTreeMap<String, Value> = BTreeMap::new();
 
@@ -323,8 +330,8 @@ mod tests {
                 QueryMatch::from(btreemap! {
                     "X" => Value::List(
                         Vec::from([
-                            Value::Float(OrderedFloat::from(1.0)), 
-                            Value::Float(OrderedFloat::from(2.0)), 
+                            Value::Float(OrderedFloat::from(1.0)),
+                            Value::Float(OrderedFloat::from(2.0)),
                             Value::Float(OrderedFloat::from(3.0))
                         ])
                     )
@@ -464,8 +471,8 @@ mod tests {
                     "Predicate" => Value::from("Predicate"),
                     "Result" => Value::List(
                         Vec::from([
-                            Value::List([Value::from("p1"), Value::from("b")].into()), 
-                            Value::List([Value::from("p2"), Value::from("b")].into()), 
+                            Value::List([Value::from("p1"), Value::from("b")].into()),
+                            Value::List([Value::from("p2"), Value::from("b")].into()),
                         ])
                     ),
                     "Target" => Value::from("Target"),
