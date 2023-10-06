@@ -28,64 +28,62 @@ pub fn eager_stackful_preorder_iter(
  */
 
 pub struct EagerStackfulPreOrderHeapIter<'a> {
+    start_value: HeapCellValue,
     iter_stack: Vec<HeapCellValue>,
-    mark_stack: Vec<usize>,
+    mark_phase: bool,
     heap: &'a mut Heap,
 }
 
 impl<'a> Drop for EagerStackfulPreOrderHeapIter<'a> {
     fn drop(&mut self) {
-        while let Some(h) = self.mark_stack.pop() {
-            self.heap[h].set_mark_bit(false);
-        }
+        self.mark_phase = false;
+
+        self.iter_stack.clear();
+        self.start_value.set_mark_bit(true);
+        self.iter_stack.push(self.start_value);
+
+        while let Some(_) = self.follow() {}
     }
 }
 
 impl<'a> EagerStackfulPreOrderHeapIter<'a> {
     pub fn new(heap: &'a mut Heap, value: HeapCellValue) -> Self {
         Self {
+            start_value: value,
             iter_stack: vec![value],
-            mark_stack: vec![],
+            mark_phase: true,
             heap,
         }
     }
 
     fn follow(&mut self) -> Option<HeapCellValue> {
         while let Some(value) = self.iter_stack.pop() {
-            if value.get_mark_bit() {
+            if value.get_mark_bit() == self.mark_phase {
                 continue;
             }
 
             read_heap_cell!(value,
                 (HeapCellValueTag::Str, s) => {
-                    if self.heap[s].get_mark_bit() {
-                        continue;
-                    }
-
                     let arity = cell_as_atom_cell!(self.heap[s]).get_arity();
-
-                    self.heap[s].set_mark_bit(true);
-                    self.mark_stack.push(s);
 
                     for idx in (s + 1 .. s + arity + 1).rev() {
                         self.iter_stack.push(self.heap[idx]);
+                        self.heap[idx].set_mark_bit(self.mark_phase);
                     }
                 }
                 (HeapCellValueTag::Lis, l) => {
                     self.iter_stack.push(self.heap[l+1]);
                     self.iter_stack.push(self.heap[l]);
 
-                    self.heap[l].set_mark_bit(true);
-                    self.mark_stack.push(l);
-
-                    self.heap[l+1].set_mark_bit(true);
-                    self.mark_stack.push(l+1);
+                    self.heap[l].set_mark_bit(self.mark_phase);
+                    self.heap[l+1].set_mark_bit(self.mark_phase);
                 }
                 (HeapCellValueTag::AttrVar | HeapCellValueTag::Var, h) => {
                     let var_value = self.heap[h];
 
                     if !(var_value.is_var() && var_value.get_value() as usize == h) {
-                        self.iter_stack.push(self.heap[h]);
+                        self.heap[h].set_mark_bit(self.mark_phase);
+                        self.iter_stack.push(var_value);
                         continue;
                     }
                 }
@@ -97,14 +95,12 @@ impl<'a> EagerStackfulPreOrderHeapIter<'a> {
                         self.heap[h].get_value() as usize
                     };
 
-                    if self.heap[h].get_mark_bit() {
+                    if self.heap[h].get_mark_bit() == self.mark_phase {
                         continue;
                     }
 
-                    self.heap[h].set_mark_bit(true);
-
+                    self.heap[h].set_mark_bit(self.mark_phase);
                     self.iter_stack.push(self.heap[h+1]);
-                    self.mark_stack.push(h);
                 }
                 _ => {
                 }
