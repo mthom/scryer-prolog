@@ -1030,8 +1030,8 @@ term_expansion(Term0, Term) :-
         once(duodcg_body(Body0, Body, As0, As, Bs0, Bs)).
 
 duodcg_body([], (As0=As,Bs0=Bs), As0, As, Bs0, Bs).
-duodcg_body(Xs+Ys, (phrase(list(Xs), As0, As),
-                       phrase(list(Ys), Bs0, Bs)), As0, As, Bs0, Bs).
+duodcg_body(Xs+Ys, (phrase(seq(Xs), As0, As),
+                       phrase(seq(Ys), Bs0, Bs)), As0, As, Bs0, Bs).
 duodcg_body({Goal}, call(Goal), As, As, Bs, Bs).
 duodcg_body((A0,B0), (A,B), As0, As, Bs0, Bs) :-
         duodcg_body(A0, A, As0, As1, Bs0, Bs1),
@@ -3698,7 +3698,7 @@ reify_(tuples_in(Tuples, Relation), B) -->
           #B #<==> And },
         propagator_init_trigger([B], tuples_not_in(Tuples, Relation, B)),
         kill_reified_tuples(Bs, Ps, Bs),
-        list(Ps),
+        seq(Ps),
         as([B|Bs]).
 reify_(finite_domain(V), B) -->
         propagator_init_trigger(reified_fd(V,B)),
@@ -3730,19 +3730,16 @@ arithmetic(L, R, B, Functor) -->
         { phrase((parse_reified_clpz(L, LR, LD),
                   parse_reified_clpz(R, RR, RD)), Ps),
           Prop =.. [Functor,LD,LR,RD,RR,Ps,B] },
-        list(Ps),
+        seq(Ps),
         propagator_init_trigger([LD,LR,RD,RR,B], Prop),
         a(B).
 
 boolean(L, R, B, Functor) -->
         { reify(L, LR, Ps1), reify(R, RR, Ps2),
           Prop =.. [Functor,LR,Ps1,RR,Ps2,B] },
-        list(Ps1), list(Ps2),
+        seq(Ps1), seq(Ps2),
         propagator_init_trigger([LR,RR,B], Prop),
         a(LR, RR, B).
-
-list([])     --> [].
-list([L|Ls]) --> [L], list(Ls).
 
 a(X,Y,B) -->
         (   nonvar(X) -> a(Y, B)
@@ -6056,7 +6053,7 @@ domain_to_list(Domain, List) :- phrase(domain_to_list(Domain), List).
 domain_to_list(split(_, Left, Right)) -->
         domain_to_list(Left), domain_to_list(Right).
 domain_to_list(empty)                 --> [].
-domain_to_list(from_to(n(F),n(T)))    --> { numlist(F, T, Ns) }, list(Ns).
+domain_to_list(from_to(n(F),n(T)))    --> { numlist(F, T, Ns) }, seq(Ns).
 
 difference_arcs([], []) --> [].
 difference_arcs([V|Vs], FL0) -->
@@ -7754,7 +7751,7 @@ attributes_goals([propagator(P, State)|As]) -->
               ;   maplist(unwrap_with(=), Gs, Gs1)
               ),
               maplist(with_clpz, Gs1, Gs2) },
-            list(Gs2)
+            seq(Gs2)
         ;   [P] % possibly user-defined constraint
         ),
         attributes_goals(As).
