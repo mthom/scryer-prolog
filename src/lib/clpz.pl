@@ -3521,7 +3521,8 @@ L #\ R :- (L #\/ R) #/\ #\ (L #/\ R).
    means that V is an auxiliary variable that was introduced while
    parsing a compound expression. a(X,V) means V is auxiliary unless
    it is ==/2 X, and a(X,Y,V) means V is auxiliary unless it is ==/2 X
-   or Y. l(L) means the literal L occurs in the described list.
+   or Y. l(L) means the literal L occurs in the described list,
+   and ls(Ls) means the literals Ls occur in the described list.
 
    When a constraint becomes entailed or subexpressions become
    undefined, created auxiliary constraints are killed, and the
@@ -3552,8 +3553,11 @@ parse_reified(E, R, D,
                m(A^B)        => [d(D), p(pexp(A,B,R)), a(A,B,R)],
                m(A/B)        => [d(D1), p(preified_slash(A,B,D2,R)),
                                  p(reified_and(D1,[],D2,[],D)),a(D2),a(A,B,R)],
+               m(A div B)    => [d(D1),
+                                 g(phrase(parse_reified_clpz(((A-(A mod B)) // B), R, D2), Ps)),
+                                 ls(Ps),
+                                 p(reified_and(D1,[],D2,[],D)),a(D2),a(A,B,R)],
                m(A//B)       => [skeleton(A,B,D,R,ptzdiv)],
-               m(A div B)    => [skeleton(A,B,D,R,pdiv)],
                m(A mod B)    => [skeleton(A,B,D,R,pmod)],
                m(A rem B)    => [skeleton(A,B,D,R,prem)],
                % bitwise operations
@@ -3644,6 +3648,7 @@ reified_goal(a(V), _)     --> [a(V)].
 reified_goal(a(X,V), _)   --> [a(X,V)].
 reified_goal(a(X,Y,V), _) --> [a(X,Y,V)].
 reified_goal(l(L), _)     --> [[L]].
+reified_goal(ls(Ls), _)   --> [seq(Ls)].
 
 parse_init_dcg([], _)     --> [].
 parse_init_dcg([V|Vs], P) --> [{init_propagator(V, P)}], parse_init_dcg(Vs, P).
@@ -4910,10 +4915,6 @@ run_propagator(ptimes(X,Y,Z), MState) -->
         ).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-
-% X div Y = Z
-run_propagator(pdiv(X,Y,Z), MState) -->
-        { kill(MState), Z #= (X-(X mod Y)) // Y }.
 
 % X // Y = Z (round towards zero)
 run_propagator(ptzdiv(X,Y,Z), MState) -->
