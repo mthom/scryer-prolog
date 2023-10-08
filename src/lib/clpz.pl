@@ -3625,7 +3625,8 @@ reified_goal(g(Goal), _) --> [{Goal}].
 reified_goal(p(Vs, Prop), _) -->
         [{make_propagator(Prop, P)}],
         parse_init_dcg(Vs, P),
-        [{trigger_once(P)}],
+        [{variables_same_queue(Vs),
+          trigger_once(P)}],
         [( { propagator_state(P, S), S == dead } -> [] ; [p(P)])].
 reified_goal(p(Prop), Ds) -->
         { term_variables(Prop, Vs) },
