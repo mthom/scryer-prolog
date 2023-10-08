@@ -7778,7 +7778,6 @@ attribute_goal_(x_eq_abs_plus_v(X,V))  --> [#X #= abs(#X) + #V].
 attribute_goal_(x_neq_y_plus_z(X,Y,Z)) --> [#X #\= #Y + #Z].
 attribute_goal_(x_leq_y_plus_c(X,Y,C)) --> [#X #=< #Y + C].
 attribute_goal_(ptzdiv(X,Y,Z))         --> [#X // #Y #= #Z].
-attribute_goal_(pdiv(X,Y,Z))           --> [#X div #Y #= #Z].
 attribute_goal_(pexp(X,Y,Z))           --> [#X ^ #Y #= #Z].
 attribute_goal_(psign(X,Y))            --> [#Y #= sign(#X)].
 attribute_goal_(pabs(X,Y))             --> [#Y #= abs(#X)].
