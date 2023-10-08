@@ -2636,13 +2636,25 @@ parse_goals([]) --> [].
 parse_goals([G|Gs]) --> parse_goal(G), parse_goals(Gs).
 
 parse_goal(g(Goal)) --> [Goal].
-parse_goal(p(Prop)) -->
-        { term_variables(Prop, Vs) },
+parse_goal(p(Prop0)) -->
+        { term_variables(Prop0, Vs),
+          morphing_propagator(Prop0, Prop, _) },
         [make_propagator(Prop, P),
          new_queue(Q0),
          phrase(init_propagator_(Vs, P), [Q0], [Q]),
          variables_same_queue(Vs),
          trigger_once_(P, Q)].
+
+morphing(pplus).
+morphing(ptimes).
+
+morphing_propagator(P0, P, Target) :-
+        P0 =.. [F|Args0],
+        (   morphing(F) ->
+            append(Args0, [Target], Args)
+        ;   Args = Args0
+        ),
+        P =.. [F|Args].
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ?- use_module(library(lists)),
@@ -2907,8 +2919,9 @@ match_goals([G|Gs], F) --> match_goal(G, F), match_goals(Gs, F).
 match_goal(r(X,Y), F)  --> { G =.. [F,X,Y] }, [G].
 match_goal(d(X,Y), _)  --> [parse_clpz(X, Y)].
 match_goal(g(Goal), _) --> [Goal].
-match_goal(p(Prop), _) -->
-        { term_variables(Prop, Vs) },
+match_goal(p(Prop0), _) -->
+        { term_variables(Prop0, Vs),
+          morphing_propagator(Prop0, Prop, _) },
         [make_propagator(Prop, P),
          new_queue(Q0),
          phrase(init_propagator_(Vs, P), [Q0], [Q]),
@@ -3632,8 +3645,14 @@ reified_goal(p(Vs, Prop), _) -->
         [{variables_same_queue(Vs),
           trigger_once(P)}],
         [( { propagator_state(P, S), S == dead } -> [] ; [p(P)])].
-reified_goal(p(Prop), Ds) -->
-        { term_variables(Prop, Vs) },
+reified_goal(p(Prop0), Ds) -->
+        { term_variables(Prop0, Vs),
+          morphing_propagator(Prop0, Prop, Target),
+          (   functor(Prop0, F, _), morphing(F) ->
+              Ts = [p(Target)]
+          ;   Ts = []
+          ) },
+        [Ts],
         reified_goal(p(Vs,Prop), Ds).
 reified_goal(function(D,Op,A,B,R), Ds) -->
         reified_goals([d(D),p(pfunction(Op,A,B,R)),a(A,B,R)], Ds).
@@ -4777,7 +4796,7 @@ run_propagator(scalar_product_eq(Cs0,Vs0,P0), MState) -->
           ) }.
 
 % X + Y = Z
-run_propagator(pplus(X,Y,Z), MState) -->
+run_propagator(pplus(X,Y,Z,Morph), MState) -->
         (   nonvar(X) ->
             (   X =:= 0 -> kill(MState), Y = Z
             ;   Y == Z -> kill(MState), X =:= 0
@@ -4796,7 +4815,7 @@ run_propagator(pplus(X,Y,Z), MState) -->
                 ;   []
                 )
             )
-        ;   nonvar(Y) -> run_propagator(pplus(Y,X,Z), MState)
+        ;   nonvar(Y) -> run_propagator(pplus(Y,X,Z,Morph), MState)
         ;   nonvar(Z) ->
             (   X == Y -> kill(MState), { even(Z), X is Z // 2 }
             ;   { fd_get(X, XD, _),
@@ -4813,7 +4832,10 @@ run_propagator(pplus(X,Y,Z), MState) -->
                 ;   []
                 )
             )
-        ;   (   X == Y -> { kill(MState), 2*X #= Z }
+        ;   (   X == Y ->
+                kill(MState),
+                { make_propagator(ptimes(2,X,Z,_), Morph) },
+                init_propagator_([X,Z], Morph)
             ;   X == Z -> kill(MState), Y = 0
             ;   Y == Z -> kill(MState), X = 0
             ;   { fd_get(X, XD, XL, XU, XPs),
@@ -4839,7 +4861,7 @@ run_propagator(pplus(X,Y,Z), MState) -->
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-run_propagator(ptimes(X,Y,Z), MState) -->
+run_propagator(ptimes(X,Y,Z,Morph), MState) -->
         (   nonvar(X) ->
             (   nonvar(Y) -> kill(MState), Z is X * Y
             ;   X =:= 0 -> kill(MState), Z = 0
@@ -4859,7 +4881,7 @@ run_propagator(ptimes(X,Y,Z), MState) -->
                     )
                 )
             )
-        ;   nonvar(Y) -> run_propagator(ptimes(Y,X,Z), MState)
+        ;   nonvar(Y) -> run_propagator(ptimes(Y,X,Z,Morph), MState)
         ;   nonvar(Z) ->
             (   X == Y ->
                 kill(MState),
@@ -4885,7 +4907,10 @@ run_propagator(ptimes(X,Y,Z), MState) -->
                 ;  neq_num(X, 0), neq_num(Y, 0)
                 )
             )
-        ;   (   X == Y -> kill(MState), { X^2 #= Z }
+        ;   (   X == Y ->
+                kill(MState),
+                { make_propagator(pexp(X,2,Z), Morph) },
+                init_propagator_([X,Z], Morph)
             ;   { fd_get(X, XD, XL, XU, XPs),
                   fd_get(Y, _, YL, YU, _),
                   fd_get(Z, ZD, ZL, ZU, _) },
@@ -7770,9 +7795,9 @@ bare_integer(V0, V)    :- ( integer(V0) -> V = V0 ; V = #V0 ).
 
 attribute_goal_(presidual(Goal))       --> [Goal].
 attribute_goal_(pgeq(A,B))             --> [#A #>= #B].
-attribute_goal_(pplus(X,Y,Z))          --> [#X + #Y #= #Z].
+attribute_goal_(pplus(X,Y,Z,_))        --> [#X + #Y #= #Z].
 attribute_goal_(pneq(A,B))             --> [#A #\= #B].
-attribute_goal_(ptimes(X,Y,Z))         --> [#X * #Y #= #Z].
+attribute_goal_(ptimes(X,Y,Z,_))       --> [#X * #Y #= #Z].
 attribute_goal_(absdiff_neq(X,Y,C))    --> [abs(#X - #Y) #\= C].
 attribute_goal_(x_eq_abs_plus_v(X,V))  --> [#X #= abs(#X) + #V].
 attribute_goal_(x_neq_y_plus_z(X,Y,Z)) --> [#X #\= #Y + #Z].
