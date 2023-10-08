@@ -1030,8 +1030,8 @@ term_expansion(Term0, Term) :-
         once(duodcg_body(Body0, Body, As0, As, Bs0, Bs)).
 
 duodcg_body([], (As0=As,Bs0=Bs), As0, As, Bs0, Bs).
-duodcg_body(Xs+Ys, (phrase(list(Xs), As0, As),
-                       phrase(list(Ys), Bs0, Bs)), As0, As, Bs0, Bs).
+duodcg_body(Xs+Ys, (phrase(seq(Xs), As0, As),
+                       phrase(seq(Ys), Bs0, Bs)), As0, As, Bs0, Bs).
 duodcg_body({Goal}, call(Goal), As, As, Bs, Bs).
 duodcg_body((A0,B0), (A,B), As0, As, Bs0, Bs) :-
         duodcg_body(A0, A, As0, As1, Bs0, Bs1),
@@ -2572,7 +2572,7 @@ parse_clpz(E, R,
              m(A mod B)        => [g(B #\= 0), p(pmod(A, B, R))],
              m(A rem B)        => [g(B #\= 0), p(prem(A, B, R))],
              m(abs(A))         => [g(#R #>= 0), p(pabs(A, R))],
-             m(A/B)            => [g(B #\= 0), p(prdiv(A, B, R))],
+             m(A/B)            => [g(B #\= 0), p(ptimes(R, B, A))],
              m(A//B)           => [g(B #\= 0), p(ptzdiv(A, B, R))],
              m(A div B)        => [g(#R #= (A - (A mod B)) // B)],
              m(A^B)            => [p(pexp(A, B, R))],
@@ -3521,7 +3521,8 @@ L #\ R :- (L #\/ R) #/\ #\ (L #/\ R).
    means that V is an auxiliary variable that was introduced while
    parsing a compound expression. a(X,V) means V is auxiliary unless
    it is ==/2 X, and a(X,Y,V) means V is auxiliary unless it is ==/2 X
-   or Y. l(L) means the literal L occurs in the described list.
+   or Y. l(L) means the literal L occurs in the described list,
+   and ls(Ls) means the literals Ls occur in the described list.
 
    When a constraint becomes entailed or subexpressions become
    undefined, created auxiliary constraints are killed, and the
@@ -3552,8 +3553,11 @@ parse_reified(E, R, D,
                m(A^B)        => [d(D), p(pexp(A,B,R)), a(A,B,R)],
                m(A/B)        => [d(D1), p(preified_slash(A,B,D2,R)),
                                  p(reified_and(D1,[],D2,[],D)),a(D2),a(A,B,R)],
+               m(A div B)    => [d(D1),
+                                 g(phrase(parse_reified_clpz(((A-(A mod B)) // B), R, D2), Ps)),
+                                 ls(Ps),
+                                 p(reified_and(D1,[],D2,[],D)),a(D2),a(A,B,R)],
                m(A//B)       => [skeleton(A,B,D,R,ptzdiv)],
-               m(A div B)    => [skeleton(A,B,D,R,pdiv)],
                m(A mod B)    => [skeleton(A,B,D,R,pmod)],
                m(A rem B)    => [skeleton(A,B,D,R,prem)],
                % bitwise operations
@@ -3625,7 +3629,8 @@ reified_goal(g(Goal), _) --> [{Goal}].
 reified_goal(p(Vs, Prop), _) -->
         [{make_propagator(Prop, P)}],
         parse_init_dcg(Vs, P),
-        [{trigger_once(P)}],
+        [{variables_same_queue(Vs),
+          trigger_once(P)}],
         [( { propagator_state(P, S), S == dead } -> [] ; [p(P)])].
 reified_goal(p(Prop), Ds) -->
         { term_variables(Prop, Vs) },
@@ -3643,12 +3648,17 @@ reified_goal(a(V), _)     --> [a(V)].
 reified_goal(a(X,V), _)   --> [a(X,V)].
 reified_goal(a(X,Y,V), _) --> [a(X,Y,V)].
 reified_goal(l(L), _)     --> [[L]].
+reified_goal(ls(Ls), _)   --> [seq(Ls)].
 
 parse_init_dcg([], _)     --> [].
 parse_init_dcg([V|Vs], P) --> [{init_propagator(V, P)}], parse_init_dcg(Vs, P).
 
-%?- set_prolog_flag(answer_write_options, [portray(true)]),
-%   clpz:parse_reified_clauses(Cs), maplist(portray_clause, Cs).
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+?- use_module(library(lists)),
+   use_module(library(format)),
+   clpz:parse_reified_clauses(Cs),
+   maplist(portray_clause, Cs).
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 reify(E, B) :- reify(E, B, _).
 
@@ -3693,7 +3703,7 @@ reify_(tuples_in(Tuples, Relation), B) -->
           #B #<==> And },
         propagator_init_trigger([B], tuples_not_in(Tuples, Relation, B)),
         kill_reified_tuples(Bs, Ps, Bs),
-        list(Ps),
+        seq(Ps),
         as([B|Bs]).
 reify_(finite_domain(V), B) -->
         propagator_init_trigger(reified_fd(V,B)),
@@ -3725,19 +3735,16 @@ arithmetic(L, R, B, Functor) -->
         { phrase((parse_reified_clpz(L, LR, LD),
                   parse_reified_clpz(R, RR, RD)), Ps),
           Prop =.. [Functor,LD,LR,RD,RR,Ps,B] },
-        list(Ps),
+        seq(Ps),
         propagator_init_trigger([LD,LR,RD,RR,B], Prop),
         a(B).
 
 boolean(L, R, B, Functor) -->
         { reify(L, LR, Ps1), reify(R, RR, Ps2),
           Prop =.. [Functor,LR,Ps1,RR,Ps2,B] },
-        list(Ps1), list(Ps2),
+        seq(Ps1), seq(Ps2),
         propagator_init_trigger([LR,RR,B], Prop),
         a(LR, RR, B).
-
-list([])     --> [].
-list([L|Ls]) --> [L], list(Ls).
 
 a(X,Y,B) -->
         (   nonvar(X) -> a(Y, B)
@@ -4909,15 +4916,6 @@ run_propagator(ptimes(X,Y,Z), MState) -->
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-% X div Y = Z
-run_propagator(pdiv(X,Y,Z), MState) -->
-        { kill(MState), Z #= (X-(X mod Y)) // Y }.
-
-% X rdiv Y = Z
-run_propagator(prdiv(X,Y,Z), MState) -->
-        { kill(MState), Z*Y #= X }.
-
-
 % X // Y = Z (round towards zero)
 run_propagator(ptzdiv(X,Y,Z), MState) -->
         (   nonvar(X) ->
@@ -6056,7 +6054,7 @@ domain_to_list(Domain, List) :- phrase(domain_to_list(Domain), List).
 domain_to_list(split(_, Left, Right)) -->
         domain_to_list(Left), domain_to_list(Right).
 domain_to_list(empty)                 --> [].
-domain_to_list(from_to(n(F),n(T)))    --> { numlist(F, T, Ns) }, list(Ns).
+domain_to_list(from_to(n(F),n(T)))    --> { numlist(F, T, Ns) }, seq(Ns).
 
 difference_arcs([], []) --> [].
 difference_arcs([V|Vs], FL0) -->
@@ -7754,7 +7752,7 @@ attributes_goals([propagator(P, State)|As]) -->
               ;   maplist(unwrap_with(=), Gs, Gs1)
               ),
               maplist(with_clpz, Gs1, Gs2) },
-            list(Gs2)
+            seq(Gs2)
         ;   [P] % possibly user-defined constraint
         ),
         attributes_goals(As).
@@ -7780,8 +7778,6 @@ attribute_goal_(x_eq_abs_plus_v(X,V))  --> [#X #= abs(#X) + #V].
 attribute_goal_(x_neq_y_plus_z(X,Y,Z)) --> [#X #\= #Y + #Z].
 attribute_goal_(x_leq_y_plus_c(X,Y,C)) --> [#X #=< #Y + C].
 attribute_goal_(ptzdiv(X,Y,Z))         --> [#X // #Y #= #Z].
-attribute_goal_(pdiv(X,Y,Z))           --> [#X div #Y #= #Z].
-attribute_goal_(prdiv(X,Y,Z))          --> [#X / #Y #= #Z].
 attribute_goal_(pexp(X,Y,Z))           --> [#X ^ #Y #= #Z].
 attribute_goal_(psign(X,Y))            --> [#Y #= sign(#X)].
 attribute_goal_(pabs(X,Y))             --> [#Y #= abs(#X)].
