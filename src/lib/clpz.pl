@@ -5498,7 +5498,9 @@ run_propagator(pexp(X,Y,Z), MState) -->
             )
         ;   nonvar(Y), Y > 0 ->
             (   { even(Y) } ->
-                { geq(Z, 0) }
+                { fd_get(Z, ZD0, ZPs0),
+                  domain_remove_smaller_than(ZD0, 0, ZDG0) },
+                fd_put(Z, ZDG0, ZPs0)
             ;   true
             ),
             (   { fd_get(X, XD, XL, XU, _), fd_get(Z, ZD, ZL, ZU, ZPs) } ->
