@@ -5443,7 +5443,7 @@ run_propagator(pexp(X,Y,Z,Morph), MState) -->
             kill(MState),
             queue_goal((Z in 0..1, Y #>= 0)),
             { make_propagator(reified_eq(1,Y,1,0,[],Z), Morph) },
-            init_propagator_([X,Z], Morph)
+            init_propagator_([Y,Z], Morph)
         ;   Y == 0 -> kill(MState), Z = 1
         ;   Y == 1 -> kill(MState), Z = X
         ;   nonvar(X) ->
