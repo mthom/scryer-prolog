@@ -2824,7 +2824,7 @@ matches([
          m(var(X) #= var(Y)+var(Z)) => [p(pplus(Y,Z,X))],
          m(var(X) #= var(Y)-var(Z)) => [p(pplus(X,Z,Y))],
          m(var(X) #= var(Y)*var(Z)) => [p(ptimes(Y,Z,X))],
-         m(var(X) #= -var(Z))       => [p(pplus(X,Z,0))],
+         m(var(X) #= -var(Y))       => [p(pplus(X,Y,0))],
          m_c(any(X) #= any(Y), left_right_linsum_const(X, Y, Cs, Vs, S)) =>
             [g(scalar_product_(#=, Cs, Vs, S))],
          m_c(var(X) #= abs(var(Y)) + any(V0), X == Y) => [d(V0,V),p(x_eq_abs_plus_v(X,V))],
