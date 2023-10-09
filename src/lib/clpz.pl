@@ -2647,6 +2647,7 @@ parse_goal(p(Prop0)) -->
 
 morphing(pplus).
 morphing(ptimes).
+morphing(pexp).
 
 morphing_propagator(P0, P, Target) :-
         P0 =.. [F|Args0],
@@ -4909,7 +4910,7 @@ run_propagator(ptimes(X,Y,Z,Morph), MState) -->
             )
         ;   (   X == Y ->
                 kill(MState),
-                { make_propagator(pexp(X,2,Z), Morph) },
+                { make_propagator(pexp(X,2,Z,_), Morph) },
                 init_propagator_([X,Z], Morph)
             ;   { fd_get(X, XD, XL, XU, XPs),
                   fd_get(Y, _, YL, YU, _),
@@ -5436,9 +5437,13 @@ run_propagator(pmin(X,Y,Z), MState) -->
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% % Z = X ^ Y
 
-run_propagator(pexp(X,Y,Z), MState) -->
+run_propagator(pexp(X,Y,Z,Morph), MState) -->
         (   X == 1 -> kill(MState), Z = 1
-        ;   X == 0 -> kill(MState), queue_goal((Z in 0..1, Y #>= 0, Z #<==> Y #= 0))
+        ;   X == 0 ->
+            kill(MState),
+            queue_goal((Z in 0..1, Y #>= 0)),
+            { make_propagator(reified_eq(1,Y,1,0,[],Z), Morph) },
+            init_propagator_([X,Z], Morph)
         ;   Y == 0 -> kill(MState), Z = 1
         ;   Y == 1 -> kill(MState), Z = X
         ;   nonvar(X) ->
@@ -7805,7 +7810,7 @@ attribute_goal_(x_eq_abs_plus_v(X,V))  --> [#X #= abs(#X) + #V].
 attribute_goal_(x_neq_y_plus_z(X,Y,Z)) --> [#X #\= #Y + #Z].
 attribute_goal_(x_leq_y_plus_c(X,Y,C)) --> [#X #=< #Y + C].
 attribute_goal_(ptzdiv(X,Y,Z))         --> [#X // #Y #= #Z].
-attribute_goal_(pexp(X,Y,Z))           --> [#X ^ #Y #= #Z].
+attribute_goal_(pexp(X,Y,Z,_))         --> [#X ^ #Y #= #Z].
 attribute_goal_(psign(X,Y))            --> [#Y #= sign(#X)].
 attribute_goal_(pabs(X,Y))             --> [#Y #= abs(#X)].
 attribute_goal_(pmod(X,M,K))           --> [#X mod #M #= #K].
