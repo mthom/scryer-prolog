@@ -6872,6 +6872,17 @@ impl Machine {
             return;
         }
 
+        let stored_v = if stored_v.is_stack_var() {
+            let h = self.machine_st.heap.len();
+
+            self.machine_st.heap.push(heap_loc_as_cell!(h));
+            self.machine_st.bind(Ref::heap_cell(h), stored_v);
+
+            heap_loc_as_cell!(h)
+        } else {
+            stored_v
+        };
+
         let mut seen_set = IndexSet::with_hasher(FxBuildHasher::default());
 
         self.machine_st.variable_set(&mut seen_set, stored_v);
