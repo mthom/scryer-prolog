@@ -3537,9 +3537,9 @@ L #\ R :- (L #\/ R) #/\ #\ (L #/\ R).
    d(D) that states D is 1 iff all subexpressions are defined. a(V)
    means that V is an auxiliary variable that was introduced while
    parsing a compound expression. a(X,V) means V is auxiliary unless
-   it is ==/2 X, and a(X,Y,V) means V is auxiliary unless it is ==/2 X
-   or Y. l(L) means the literal L occurs in the described list,
-   and ls(Ls) means the literals Ls occur in the described list.
+   it is (==)/2 X, and a(X,Y,V) means V is auxiliary unless it is
+   (==)/2 X or Y. l(L) means the literal L occurs in the described
+   list, and ls(Ls) means the literals Ls occur in the described list.
 
    When a constraint becomes entailed or subexpressions become
    undefined, created auxiliary constraints are killed, and the
