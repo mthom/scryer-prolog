@@ -2657,6 +2657,12 @@ morphing_propagator(P0, P, Target) :-
         ),
         P =.. [F|Args].
 
+morph_into_propagator(MState, Vs, Propagator, Morph) -->
+        kill(MState),
+        { make_propagator(Propagator, Morph) },
+        init_propagator_(Vs, Morph),
+        trigger_prop(Morph).
+
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ?- use_module(library(lists)),
    use_module(library(format)),
@@ -4834,9 +4840,7 @@ run_propagator(pplus(X,Y,Z,Morph), MState) -->
                 )
             )
         ;   (   X == Y ->
-                kill(MState),
-                { make_propagator(ptimes(2,X,Z,_), Morph) },
-                init_propagator_([X,Z], Morph)
+                morph_into_propagator(MState, [X,Z], ptimes(2,X,Z,_), Morph)
             ;   X == Z -> kill(MState), Y = 0
             ;   Y == Z -> kill(MState), X = 0
             ;   { fd_get(X, XD, XL, XU, XPs),
@@ -4909,9 +4913,7 @@ run_propagator(ptimes(X,Y,Z,Morph), MState) -->
                 )
             )
         ;   (   X == Y ->
-                kill(MState),
-                { make_propagator(pexp(X,2,Z,_), Morph) },
-                init_propagator_([X,Z], Morph)
+                morph_into_propagator(MState, [X,Z], pexp(X,2,Z,_), Morph)
             ;   { fd_get(X, XD, XL, XU, XPs),
                   fd_get(Y, _, YL, YU, _),
                   fd_get(Z, ZD, ZL, ZU, _) },
@@ -5440,10 +5442,8 @@ run_propagator(pmin(X,Y,Z), MState) -->
 run_propagator(pexp(X,Y,Z,Morph), MState) -->
         (   X == 1 -> kill(MState), Z = 1
         ;   X == 0 ->
-            kill(MState),
             queue_goal((Z in 0..1, Y #>= 0)),
-            { make_propagator(reified_eq(1,Y,1,0,[],Z), Morph) },
-            init_propagator_([Y,Z], Morph)
+            morph_into_propagator(MState, [Y,Z], reified_eq(1,Y,1,0,[],Z), Morph)
         ;   Y == 0 -> kill(MState), Z = 1
         ;   Y == 1 -> kill(MState), Z = X
         ;   nonvar(X) ->
