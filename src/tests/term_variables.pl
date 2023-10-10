@@ -38,6 +38,17 @@ test("term_variables#2063", (
     Vars = [C]
 )).
 
+test("term_variables#2097", (
+    termt(T), term_variables(T,Vs),
+    T = [[[A|B]|A]|A], Vs == [A,B]
+)).
+
+termt(T) :-
+   T = [T1|T2],
+   T1 = [T3|A],
+   T3 = [A|_],
+   T2 = A.
+
 main :-
     findall(test(Name, Goal), test(Name, Goal), Tests),
     run_tests(Tests, Failed),

@@ -59,6 +59,14 @@ impl<'a> EagerStackfulPreOrderHeapIter<'a> {
     fn follow(&mut self) -> Option<HeapCellValue> {
         while let Some(value) = self.iter_stack.pop() {
             if value.get_mark_bit() == self.mark_phase {
+                if value.is_var() {
+                    let h = value.get_value() as usize;
+
+                    if self.heap[h].is_var() && self.heap[h].get_value() as usize == h {
+                        return Some(unmark_cell_bits!(value));
+                    }
+                }
+
                 continue;
             }
 
