@@ -56,18 +56,29 @@ impl<'a> EagerStackfulPreOrderHeapIter<'a> {
         }
     }
 
+    #[inline]
+    fn is_self_ref_var(&self, value: HeapCellValue) -> bool {
+        if value.is_var() {
+            let h = value.get_value() as usize;
+
+            if self.heap[h].is_var() && self.heap[h].get_value() as usize == h {
+                return true;
+            }
+        }
+
+        false
+    }
+
     fn follow(&mut self) -> Option<HeapCellValue> {
         while let Some(value) = self.iter_stack.pop() {
             if value.get_mark_bit() == self.mark_phase {
-                if value.is_var() {
-                    let h = value.get_value() as usize;
-
-                    if self.heap[h].is_var() && self.heap[h].get_value() as usize == h {
-                        return Some(unmark_cell_bits!(value));
-                    }
+                // follow marked variables to their end. only marked
+                // non-variables are ignored.
+                if self.is_self_ref_var(value) {
+                    return Some(unmark_cell_bits!(value));
+                } else if !value.is_var() {
+                    continue;
                 }
-
-                continue;
             }
 
             read_heap_cell!(value,
@@ -75,22 +86,28 @@ impl<'a> EagerStackfulPreOrderHeapIter<'a> {
                     let arity = cell_as_atom_cell!(self.heap[s]).get_arity();
 
                     for idx in (s + 1 .. s + arity + 1).rev() {
-                        self.iter_stack.push(self.heap[idx]);
-                        self.heap[idx].set_mark_bit(self.mark_phase);
+			if self.heap[idx].get_mark_bit() != self.mark_phase {
+                            self.iter_stack.push(self.heap[idx]);
+                            self.heap[idx].set_mark_bit(self.mark_phase);
+			}
                     }
                 }
                 (HeapCellValueTag::Lis, l) => {
-                    self.iter_stack.push(self.heap[l+1]);
-                    self.iter_stack.push(self.heap[l]);
+		    if self.heap[l+1].get_mark_bit() != self.mark_phase {
+			self.iter_stack.push(self.heap[l+1]);
+			self.heap[l+1].set_mark_bit(self.mark_phase);
+		    }
 
-                    self.heap[l].set_mark_bit(self.mark_phase);
-                    self.heap[l+1].set_mark_bit(self.mark_phase);
+		    if self.heap[l].get_mark_bit() != self.mark_phase {
+			self.iter_stack.push(self.heap[l]);
+			self.heap[l].set_mark_bit(self.mark_phase);
+		    }
                 }
                 (HeapCellValueTag::AttrVar | HeapCellValueTag::Var, h) => {
                     let var_value = self.heap[h];
                     self.heap[h].set_mark_bit(self.mark_phase);
 
-                    if !(var_value.is_var() && var_value.get_value() as usize == h) {
+                    if !(self.heap[h].is_var() && self.heap[h].get_value() as usize == h) {
                         self.iter_stack.push(var_value);
                         continue;
                     }
