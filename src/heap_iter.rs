@@ -56,18 +56,29 @@ impl<'a> EagerStackfulPreOrderHeapIter<'a> {
         }
     }
 
+    #[inline]
+    fn is_self_ref_var(&self, value: HeapCellValue) -> bool {
+        if value.is_var() {
+            let h = value.get_value() as usize;
+
+            if self.heap[h].is_var() && self.heap[h].get_value() as usize == h {
+                return true;
+            }
+        }
+
+        false
+    }
+
     fn follow(&mut self) -> Option<HeapCellValue> {
         while let Some(value) = self.iter_stack.pop() {
             if value.get_mark_bit() == self.mark_phase {
-                if value.is_var() {
-                    let h = value.get_value() as usize;
-
-                    if self.heap[h].is_var() && self.heap[h].get_value() as usize == h {
-                        return Some(unmark_cell_bits!(value));
-                    }
+                // follow marked variables to their end. only marked
+                // non-variables are ignored.
+                if self.is_self_ref_var(value) {
+                    return Some(unmark_cell_bits!(value));
+                } else if !value.is_var() {
+                    continue;
                 }
-
-                continue;
             }
 
             read_heap_cell!(value,
@@ -90,7 +101,7 @@ impl<'a> EagerStackfulPreOrderHeapIter<'a> {
                     let var_value = self.heap[h];
                     self.heap[h].set_mark_bit(self.mark_phase);
 
-                    if !(var_value.is_var() && var_value.get_value() as usize == h) {
+                    if !(self.heap[h].is_var() && self.heap[h].get_value() as usize == h) {
                         self.iter_stack.push(var_value);
                         continue;
                     }
