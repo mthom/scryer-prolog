@@ -1957,7 +1957,6 @@ choice_order_variable(step, Order, Var, Vars, Vars0, Selection, Consistency) :-
         (   Var = Next,
             label(Vars, Selection, Order, step, Consistency)
         ;   neq_num(Var, Next),
-            do_queue,
             label(Vars0, Selection, Order, step, Consistency)
         ).
 choice_order_variable(enum, Order, Var, Vars, _, Selection, Consistency) :-
@@ -2657,6 +2656,12 @@ morphing_propagator(P0, P, Target) :-
         ),
         P =.. [F|Args].
 
+morph_into_propagator(MState, Vs, Propagator, Morph) -->
+        kill(MState),
+        { make_propagator(Propagator, Morph) },
+        init_propagator_(Vs, Morph),
+        trigger_prop(Morph).
+
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ?- use_module(library(lists)),
    use_module(library(format)),
@@ -2747,14 +2752,12 @@ geq(A, B) :-
                 )
             ;   (   AI cis_geq n(B) -> true
                 ;   domain_remove_smaller_than(AD, B, AD1),
-                    fd_put(A, AD1, APs),
-                    do_queue
+                    fd_put(A, AD1, APs)
                 )
             )
         ;   fd_get(B, BD, BPs) ->
             domain_remove_greater_than(BD, A, BD1),
-            fd_put(B, BD1, BPs),
-            do_queue
+            fd_put(B, BD1, BPs)
         ;   A >= B
         ).
 
@@ -3310,7 +3313,7 @@ integer_kroot_leq(L, U, N, K, R) :-
 % When reasoning over integers, replace (=\=)/2 by (#\=)/2 to obtain more
 % general relations.
 
-X #\= Y :- clpz_neq(X, Y), do_queue.
+X #\= Y :- clpz_neq(X, Y).
 
 % X #\= Y + Z
 
@@ -3373,7 +3376,7 @@ X #< Y  :- Y #> X.
 % X in inf.. -4\/1..9\/81..sup.
 % ```
 
-#\ Q       :- reify(Q, 0), do_queue.
+#\ Q       :- reify(Q, 0).
 
 %% #<==>(?P, ?Q)
 %
@@ -3411,7 +3414,7 @@ X #< Y  :- Y #> X.
 % Z = 2.
 % ```
 
-L #<==> R  :- reify(L, B), reify(R, B), do_queue.
+L #<==> R  :- reify(L, B), reify(R, B).
 
 %% #==>(?P, ?Q)
 %
@@ -3446,7 +3449,7 @@ L #<== R   :- R #==> L.
 %
 % P and Q hold.
 
-L #/\ R    :- reify(L, 1), reify(R, 1), do_queue.
+L #/\ R    :- reify(L, 1), reify(R, 1).
 
 conjunctive_neqs_var_drep(Eqs, Var, Drep) :-
         conjunctive_neqs_var(Eqs, Var),
@@ -3534,17 +3537,17 @@ L #\ R :- (L #\/ R) #/\ #\ (L #/\ R).
    d(D) that states D is 1 iff all subexpressions are defined. a(V)
    means that V is an auxiliary variable that was introduced while
    parsing a compound expression. a(X,V) means V is auxiliary unless
-   it is ==/2 X, and a(X,Y,V) means V is auxiliary unless it is ==/2 X
-   or Y. l(L) means the literal L occurs in the described list,
-   and ls(Ls) means the literals Ls occur in the described list.
+   it is (==)/2 X, and a(X,Y,V) means V is auxiliary unless it is
+   (==)/2 X or Y. l(L) means the literal L occurs in the described
+   list, and ls(Ls) means the literals Ls occur in the described list.
 
    When a constraint becomes entailed or subexpressions become
    undefined, created auxiliary constraints are killed, and the
    "clpz" attribute is removed from auxiliary variables.
 
-   For mod/2, div/2, rem/2 etc. we create a skeleton propagator and
-   remember it as an auxiliary constraint. The pskeleton propagator
-   can use the skeleton when the constraint is defined.
+   For (//)/2, (mod)/2 and (rem)/2, we create a skeleton propagator
+   and remember it as an auxiliary constraint. The pskeleton
+   propagator can use the skeleton when the constraint is defined.
 
    We cannot use a skeleton propagator for (/)/2, since (/)/2 can
    fail in cases such as 0 #==> X #= 1/2, where we expect success.
@@ -3900,7 +3903,6 @@ domain(V, Dom) :-
             domains_intersection(Dom, Dom0, Dom1),
             %format("intersected\n: ~w\n ~w\n==> ~w\n\n", [Dom,Dom0,Dom1]),
             fd_put(V, Dom1, VPs),
-            do_queue,
             reinforce(V)
         ;   domain_contains(Dom, V)
         ).
@@ -4215,7 +4217,6 @@ activate_propagator(propagator(P,State)) -->
 
 enable_queue  :- true. % NOP
 disable_queue :- true. % NOP
-do_queue.              % NOP
 
 %do_queue --> print_queue, { false }.
 do_queue -->
@@ -4834,9 +4835,7 @@ run_propagator(pplus(X,Y,Z,Morph), MState) -->
                 )
             )
         ;   (   X == Y ->
-                kill(MState),
-                { make_propagator(ptimes(2,X,Z,_), Morph) },
-                init_propagator_([X,Z], Morph)
+                morph_into_propagator(MState, [X,Z], ptimes(2,X,Z,_), Morph)
             ;   X == Z -> kill(MState), Y = 0
             ;   Y == Z -> kill(MState), X = 0
             ;   { fd_get(X, XD, XL, XU, XPs),
@@ -4909,9 +4908,7 @@ run_propagator(ptimes(X,Y,Z,Morph), MState) -->
                 )
             )
         ;   (   X == Y ->
-                kill(MState),
-                { make_propagator(pexp(X,2,Z,_), Morph) },
-                init_propagator_([X,Z], Morph)
+                morph_into_propagator(MState, [X,Z], pexp(X,2,Z,_), Morph)
             ;   { fd_get(X, XD, XL, XU, XPs),
                   fd_get(Y, _, YL, YU, _),
                   fd_get(Z, ZD, ZL, ZU, _) },
@@ -5440,10 +5437,8 @@ run_propagator(pmin(X,Y,Z), MState) -->
 run_propagator(pexp(X,Y,Z,Morph), MState) -->
         (   X == 1 -> kill(MState), Z = 1
         ;   X == 0 ->
-            kill(MState),
             queue_goal((Z in 0..1, Y #>= 0)),
-            { make_propagator(reified_eq(1,Y,1,0,[],Z), Morph) },
-            init_propagator_([Y,Z], Morph)
+            morph_into_propagator(MState, [Y,Z], reified_eq(1,Y,1,0,[],Z), Morph)
         ;   Y == 0 -> kill(MState), Z = 1
         ;   Y == 1 -> kill(MState), Z = X
         ;   nonvar(X) ->
@@ -6446,8 +6441,7 @@ num_infinite(Var, N0, N) :-
 weak_arc_all_distinct(Ls) :-
         must_be(list, Ls),
         Orig = original_goal(_, weak_arc_all_distinct(Ls)),
-        all_distinct(Ls, [], Orig),
-        do_queue.
+        all_distinct(Ls, [], Orig).
 
 all_distinct([], _, _).
 all_distinct([X|Right], Left, Orig) :-
@@ -6760,8 +6754,10 @@ gcc_pairs([Key-Num0|KNs], Vs, [Key-Num|Rest]) :-
 
 gcc_global(Vs, KNs) :-
         gcc_check(KNs),
-        % reach fix-point: all elements of clpz_gcc_vs must be variables
-        do_queue,
+        % previously: call do_queue/0 (now a NOP) here to reach a
+        % fix-point: all elements of clpz_gcc_vs must be variables. We
+        % must ensure this holds if gcc_check/1 is later rewritten to
+        % actually disable the queue.
         with_local_attributes(Vs,
               (gcc_arcs(KNs, S, Vals),
                variables_with_num_occurrences(Vs, VNs),
