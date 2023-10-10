@@ -3545,9 +3545,9 @@ L #\ R :- (L #\/ R) #/\ #\ (L #/\ R).
    undefined, created auxiliary constraints are killed, and the
    "clpz" attribute is removed from auxiliary variables.
 
-   For mod/2, div/2, rem/2 etc. we create a skeleton propagator and
-   remember it as an auxiliary constraint. The pskeleton propagator
-   can use the skeleton when the constraint is defined.
+   For (//)/2, (mod)/2 and (rem)/2, we create a skeleton propagator
+   and remember it as an auxiliary constraint. The pskeleton
+   propagator can use the skeleton when the constraint is defined.
 
    We cannot use a skeleton propagator for (/)/2, since (/)/2 can
    fail in cases such as 0 #==> X #= 1/2, where we expect success.
