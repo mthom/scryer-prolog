@@ -1957,7 +1957,6 @@ choice_order_variable(step, Order, Var, Vars, Vars0, Selection, Consistency) :-
         (   Var = Next,
             label(Vars, Selection, Order, step, Consistency)
         ;   neq_num(Var, Next),
-            do_queue,
             label(Vars0, Selection, Order, step, Consistency)
         ).
 choice_order_variable(enum, Order, Var, Vars, _, Selection, Consistency) :-
@@ -2753,14 +2752,12 @@ geq(A, B) :-
                 )
             ;   (   AI cis_geq n(B) -> true
                 ;   domain_remove_smaller_than(AD, B, AD1),
-                    fd_put(A, AD1, APs),
-                    do_queue
+                    fd_put(A, AD1, APs)
                 )
             )
         ;   fd_get(B, BD, BPs) ->
             domain_remove_greater_than(BD, A, BD1),
-            fd_put(B, BD1, BPs),
-            do_queue
+            fd_put(B, BD1, BPs)
         ;   A >= B
         ).
 
@@ -3316,7 +3313,7 @@ integer_kroot_leq(L, U, N, K, R) :-
 % When reasoning over integers, replace (=\=)/2 by (#\=)/2 to obtain more
 % general relations.
 
-X #\= Y :- clpz_neq(X, Y), do_queue.
+X #\= Y :- clpz_neq(X, Y).
 
 % X #\= Y + Z
 
@@ -3379,7 +3376,7 @@ X #< Y  :- Y #> X.
 % X in inf.. -4\/1..9\/81..sup.
 % ```
 
-#\ Q       :- reify(Q, 0), do_queue.
+#\ Q       :- reify(Q, 0).
 
 %% #<==>(?P, ?Q)
 %
@@ -3417,7 +3414,7 @@ X #< Y  :- Y #> X.
 % Z = 2.
 % ```
 
-L #<==> R  :- reify(L, B), reify(R, B), do_queue.
+L #<==> R  :- reify(L, B), reify(R, B).
 
 %% #==>(?P, ?Q)
 %
@@ -3452,7 +3449,7 @@ L #<== R   :- R #==> L.
 %
 % P and Q hold.
 
-L #/\ R    :- reify(L, 1), reify(R, 1), do_queue.
+L #/\ R    :- reify(L, 1), reify(R, 1).
 
 conjunctive_neqs_var_drep(Eqs, Var, Drep) :-
         conjunctive_neqs_var(Eqs, Var),
@@ -3906,7 +3903,6 @@ domain(V, Dom) :-
             domains_intersection(Dom, Dom0, Dom1),
             %format("intersected\n: ~w\n ~w\n==> ~w\n\n", [Dom,Dom0,Dom1]),
             fd_put(V, Dom1, VPs),
-            do_queue,
             reinforce(V)
         ;   domain_contains(Dom, V)
         ).
@@ -4221,7 +4217,6 @@ activate_propagator(propagator(P,State)) -->
 
 enable_queue  :- true. % NOP
 disable_queue :- true. % NOP
-do_queue.              % NOP
 
 %do_queue --> print_queue, { false }.
 do_queue -->
@@ -6446,8 +6441,7 @@ num_infinite(Var, N0, N) :-
 weak_arc_all_distinct(Ls) :-
         must_be(list, Ls),
         Orig = original_goal(_, weak_arc_all_distinct(Ls)),
-        all_distinct(Ls, [], Orig),
-        do_queue.
+        all_distinct(Ls, [], Orig).
 
 all_distinct([], _, _).
 all_distinct([X|Right], Left, Orig) :-
@@ -6760,8 +6754,10 @@ gcc_pairs([Key-Num0|KNs], Vs, [Key-Num|Rest]) :-
 
 gcc_global(Vs, KNs) :-
         gcc_check(KNs),
-        % reach fix-point: all elements of clpz_gcc_vs must be variables
-        do_queue,
+        % previously: call do_queue/0 (now a NOP) here to reach a
+        % fix-point: all elements of clpz_gcc_vs must be variables. We
+        % must ensure this holds if gcc_check/1 is later rewritten to
+        % actually disable the queue.
         with_local_attributes(Vs,
               (gcc_arcs(KNs, S, Vals),
                variables_with_num_occurrences(Vs, VNs),
