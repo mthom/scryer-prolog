@@ -86,22 +86,22 @@ impl<'a> EagerStackfulPreOrderHeapIter<'a> {
                     let arity = cell_as_atom_cell!(self.heap[s]).get_arity();
 
                     for idx in (s + 1 .. s + arity + 1).rev() {
-			if self.heap[idx].get_mark_bit() != self.mark_phase {
+			            if self.heap[idx].get_mark_bit() != self.mark_phase {
                             self.iter_stack.push(self.heap[idx]);
                             self.heap[idx].set_mark_bit(self.mark_phase);
-			}
+			            }
                     }
                 }
                 (HeapCellValueTag::Lis, l) => {
-		    if self.heap[l+1].get_mark_bit() != self.mark_phase {
-			self.iter_stack.push(self.heap[l+1]);
-			self.heap[l+1].set_mark_bit(self.mark_phase);
-		    }
+		            if self.heap[l+1].get_mark_bit() != self.mark_phase {
+			            self.iter_stack.push(self.heap[l+1]);
+			            self.heap[l+1].set_mark_bit(self.mark_phase);
+		            }
 
-		    if self.heap[l].get_mark_bit() != self.mark_phase {
-			self.iter_stack.push(self.heap[l]);
-			self.heap[l].set_mark_bit(self.mark_phase);
-		    }
+		            if self.heap[l].get_mark_bit() != self.mark_phase {
+			            self.iter_stack.push(self.heap[l]);
+			            self.heap[l].set_mark_bit(self.mark_phase);
+		            }
                 }
                 (HeapCellValueTag::AttrVar | HeapCellValueTag::Var, h) => {
                     let var_value = self.heap[h];
