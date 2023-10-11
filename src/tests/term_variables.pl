@@ -45,7 +45,7 @@ test("term_variables#2097", (
 
 test("term_variables#2100", (
     termt2(T), term_variables(T,Vs),
-    T = [[T|_B]|_A], Vs == [_A,_B]
+    T = [[T|A]|B], Vs == [A,B]
 )).
 
 test("term_variables#2101", (
