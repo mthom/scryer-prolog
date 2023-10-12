@@ -3647,16 +3647,16 @@ reified_goal(d(D), Ds) -->
         ;   { domain_error(one_or_two_element_list, Ds) }
         ).
 reified_goal(g(Goal), _) --> [{Goal}].
-reified_goal(p(Vs, Prop), _) -->
+reified_goal(p(Vs, Prop0), _) -->
+        { morphing_propagator(Prop0, Prop, Target) },
         [{make_propagator(Prop, P)}],
+        target_propagator(Target),
         parse_init_dcg(Vs, P),
         [{variables_same_queue(Vs),
           trigger_once(P)}],
         [( { propagator_state(P, S), S == dead } -> [] ; [p(P)])].
-reified_goal(p(Prop0), Ds) -->
-        { term_variables(Prop0, Vs),
-          morphing_propagator(Prop0, Prop, Target) },
-        target_propagator(Target),
+reified_goal(p(Prop), Ds) -->
+        { term_variables(Prop, Vs) },
         reified_goal(p(Vs,Prop), Ds).
 reified_goal(function(D,Op,A,B,R), Ds) -->
         reified_goals([d(D),p(pfunction(Op,A,B,R)),a(A,B,R)], Ds).
