@@ -12,7 +12,11 @@ pub(crate) trait UnmarkPolicy {
     fn invert_marker(iter: &mut StacklessPreOrderHeapIter<Self>) where Self: Sized;
     fn cycle_detected(&mut self) where Self: Sized;
     fn mark_phase(&self) -> bool;
-    fn report_list(&mut self, list_loc: usize);
+    fn list_head_cycle_detecting_backward(
+        iter: &mut StacklessPreOrderHeapIter<Self>,
+    ) -> bool where Self: Sized {
+        iter.backward()
+    }
 }
 
 pub(crate) struct IteratorUMP {
@@ -51,15 +55,11 @@ impl UnmarkPolicy for IteratorUMP {
     fn mark_phase(&self) -> bool {
         self.mark_phase
     }
-
-    #[inline(always)]
-    fn report_list(&mut self, _list_loc: usize) {}
 }
 
 pub(crate) struct CycleDetectorUMP {
     mark_phase: bool,
     cycle_detected: bool,
-    list_locs: Vec<usize>,
 }
 
 impl UnmarkPolicy for CycleDetectorUMP {
@@ -84,9 +84,14 @@ impl UnmarkPolicy for CycleDetectorUMP {
         self.mark_phase
     }
 
-    #[inline]
-    fn report_list(&mut self, list_loc: usize) {
-        self.list_locs.push(list_loc);
+    fn list_head_cycle_detecting_backward(
+        iter: &mut StacklessPreOrderHeapIter<Self>,
+    ) -> bool {
+        if !iter.iter_state.cycle_detected && iter.iter_state.mark_phase && iter.detect_list_cycle() {
+            iter.iter_state.cycle_detected = true;
+        }
+
+        iter.backward()
     }
 }
 
@@ -120,9 +125,6 @@ impl UnmarkPolicy for MarkerUMP {
 
     #[inline(always)]
     fn cycle_detected(&mut self) {}
-
-    #[inline(always)]
-    fn report_list(&mut self, _list_loc: usize) {}
 }
 
 #[derive(Debug)]
@@ -182,7 +184,6 @@ impl<'a> StacklessPreOrderHeapIter<'a, CycleDetectorUMP> {
             iter_state: CycleDetectorUMP {
                 mark_phase: true,
                 cycle_detected: false,
-                list_locs: vec![],
             },
         }
     }
@@ -192,13 +193,29 @@ impl<'a> StacklessPreOrderHeapIter<'a, CycleDetectorUMP> {
         self.iter_state.cycle_detected
     }
 
-    #[inline]
-    pub(crate) fn list_locs(mut self) -> Vec<usize> {
-        std::mem::replace(&mut self.iter_state.list_locs, vec![])
+    pub(crate) fn detect_list_cycle(&self) -> bool {
+        use crate::machine::system_calls::BrentAlgState;
+
+        let mut brent_alg_st = BrentAlgState::new(self.current);
+
+        while self.heap[brent_alg_st.hare].get_mark_bit() {
+            let temp = self.heap[brent_alg_st.hare].get_value() as usize;
+
+            if brent_alg_st.step(temp).is_some() || temp == self.current {
+                return true;
+            }
+
+            if temp == self.start {
+                break;
+            }
+        }
+
+        false
     }
 }
 
 impl<'a> StacklessPreOrderHeapIter<'a, IteratorUMP> {
+    #[cfg(test)]
     pub(crate) fn new(heap: &'a mut [HeapCellValue], start: usize) -> Self {
         heap[start].set_forwarding_bit(true);
         let next = heap[start].get_value();
@@ -253,8 +270,13 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
                 match self.heap[self.current].get_tag() {
                     HeapCellValueTag::AttrVar => {
                         let next = self.next;
+                        let current = self.current;
 
                         if let Some(cell) = UMP::forward_attr_var(self) {
+                            if current as u64 != next && self.heap[next as usize].is_ref() {
+                                self.iter_state.cycle_detected();
+                            }
+
                             return Some(cell);
                         }
 
@@ -265,8 +287,13 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
                     }
                     HeapCellValueTag::Var => {
                         let next = self.next;
+                        let current = self.current;
 
                         if let Some(cell) = self.forward_var() {
+                            if current as u64 != next && self.heap[next as usize].is_ref() {
+                                self.iter_state.cycle_detected();
+                            }
+
                             return Some(cell);
                         }
 
@@ -314,7 +341,15 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
 
                         if self.heap[last_cell_loc].get_mark_bit() == self.iter_state.mark_phase() {
                             if self.heap[last_cell_loc-1].get_mark_bit() == self.iter_state.mark_phase() {
-                                self.iter_state.report_list(last_cell_loc - 1);
+                                // the conjunction leading here is a necessary but not sufficient
+                                // condition of the presence of a cycle at the list head.
+                                self.backward();
+
+                                if UMP::list_head_cycle_detecting_backward(self) {
+                                    return None;
+                                }
+
+                                continue;
                             }
                         }
 
@@ -331,11 +366,12 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
                         let cell = self.heap[h];
 
                         let last_cell_loc = h + 1;
-                        self.heap[last_cell_loc].set_forwarding_bit(true);
 
                         self.next = self.heap[last_cell_loc].get_value();
                         self.heap[last_cell_loc].set_value(self.current as u64);
                         self.current = last_cell_loc;
+
+                        self.heap[last_cell_loc].set_forwarding_bit(true);
 
                         return Some(cell);
                     }
@@ -386,7 +422,11 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
                     }
                 }
             } else {
-                if self.backward() {
+                if self.heap[self.current].get_tag() == HeapCellValueTag::Lis {
+                    if UMP::list_head_cycle_detecting_backward(self) {
+                        return None;
+                    }
+                } else if self.backward() {
                     return None;
                 }
             }

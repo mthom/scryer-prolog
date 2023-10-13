@@ -1131,27 +1131,29 @@ impl MachineState {
 
     #[inline]
     pub fn is_cyclic_term(&mut self, value: HeapCellValue) -> bool {
-        if value.is_constant() {
+        let value = self.store(self.deref(value));
+
+        if value.is_constant() || value.is_stack_var() {
             return false;
         }
 
-        let mut iter = stackful_preorder_iter::<NonListElider>
-            (&mut self.heap, &mut self.stack, value);
+        let h = self.heap.len();
+        self.heap.push(value);
 
-        while let Some(value) = iter.next() {
-            if value.get_forwarding_bit() {
-                let value = unmark_cell_bits!(heap_bound_store(
-                    iter.heap,
-                    heap_bound_deref(iter.heap, value),
-                ));
+        let found_cycle = {
+            let mut iter = cycle_detecting_stackless_preorder_iter(&mut self.heap, h);
 
-                if value.is_compound(iter.heap) {
-                    return true;
+            while let Some(_) = iter.next() {
+                if iter.found_cycle() {
+                    break;
                 }
             }
-        }
 
-        false
+            iter.found_cycle()
+        };
+
+        self.heap.pop();
+        found_cycle
     }
 
     // arg(+N, +Term, ?Arg)
