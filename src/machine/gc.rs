@@ -17,6 +17,7 @@ pub(crate) trait UnmarkPolicy {
     ) -> bool where Self: Sized {
         iter.backward()
     }
+    fn detect_list_tail_cycle(_iter: &mut StacklessPreOrderHeapIter<Self>) where Self: Sized {}
 }
 
 pub(crate) struct IteratorUMP {
@@ -87,11 +88,17 @@ impl UnmarkPolicy for CycleDetectorUMP {
     fn list_head_cycle_detecting_backward(
         iter: &mut StacklessPreOrderHeapIter<Self>,
     ) -> bool {
-        if !iter.iter_state.cycle_detected && iter.iter_state.mark_phase && iter.detect_list_cycle() {
-            iter.iter_state.cycle_detected = true;
+        if !iter.iter_state.cycle_detected && iter.iter_state.mark_phase {
+            iter.iter_state.cycle_detected = iter.detect_list_cycle();
         }
 
         iter.backward()
+    }
+
+    fn detect_list_tail_cycle(iter: &mut StacklessPreOrderHeapIter<Self>) {
+        if iter.iter_state.mark_phase && !iter.iter_state.cycle_detected {
+            iter.iter_state.cycle_detected = iter.detect_list_cycle();
+        }
     }
 }
 
@@ -273,7 +280,7 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
                         let current = self.current;
 
                         if let Some(cell) = UMP::forward_attr_var(self) {
-                            if current as u64 != next && self.heap[next as usize].is_ref() {
+                            if current as u64 != next && self.heap[next as usize].is_compound(self.heap) {
                                 self.iter_state.cycle_detected();
                             }
 
@@ -292,7 +299,7 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
                         let current = self.current;
 
                         if let Some(cell) = self.forward_var() {
-                            if current as u64 != next && self.heap[next as usize].is_ref() {
+                            if current as u64 != next && self.heap[next as usize].is_compound(self.heap) {
                                 self.iter_state.cycle_detected();
                             }
 
@@ -347,6 +354,11 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
                             if self.heap[last_cell_loc-1].get_mark_bit() == self.iter_state.mark_phase() {
                                 // the conjunction leading here is a necessary but not sufficient
                                 // condition of the presence of a cycle at the list head.
+
+                                if last_cell_loc == self.current {
+                                    UMP::detect_list_tail_cycle(self);
+                                }
+
                                 self.backward();
 
                                 if UMP::list_head_cycle_detecting_backward(self) {
