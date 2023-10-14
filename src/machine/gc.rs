@@ -280,9 +280,11 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
                             return Some(cell);
                         }
 
-                        if self.heap[self.next as usize].get_mark_bit() == self.iter_state.mark_phase() {
-                            let tag = HeapCellValueTag::AttrVar;
-                            return Some(HeapCellValue::build_with(tag, next));
+                        if self.next < self.heap.len() as u64 {
+                            if self.heap[self.next as usize].get_mark_bit() == self.iter_state.mark_phase() {
+                                let tag = HeapCellValueTag::AttrVar;
+                                return Some(HeapCellValue::build_with(tag, next));
+                            }
                         }
                     }
                     HeapCellValueTag::Var => {
@@ -297,9 +299,11 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
                             return Some(cell);
                         }
 
-                        if self.heap[self.next as usize].get_mark_bit() == self.iter_state.mark_phase() {
-                            let tag = HeapCellValueTag::Var;
-                            return Some(HeapCellValue::build_with(tag, next));
+                        if self.next < self.heap.len() as u64 {
+                            if self.heap[self.next as usize].get_mark_bit() == self.iter_state.mark_phase() {
+                                let tag = HeapCellValueTag::Var;
+                                return Some(HeapCellValue::build_with(tag, next));
+                            }
                         }
                     }
                     HeapCellValueTag::Str => {
