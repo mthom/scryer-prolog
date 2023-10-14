@@ -269,6 +269,20 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
         None
     }
 
+    #[inline]
+    fn is_cyclic(&self, h: usize) -> bool {
+        if self.heap[h].is_var() {
+            self.heap[h].get_forwarding_bit()
+        } else if self.heap[h].is_ref() {
+            // the cell h in the second branch contains its original
+            // value whether h is marked or unmarked, meaning the
+            // is_compound check is well-founded in either case.
+            self.heap[h].get_forwarding_bit() || self.heap[h].is_compound(self.heap)
+        } else {
+            false
+        }
+    }
+
     fn forward(&mut self) -> Option<HeapCellValue> {
         loop {
             if self.heap[self.current].get_mark_bit() != self.iter_state.mark_phase() {
@@ -280,7 +294,7 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
                         let current = self.current;
 
                         if let Some(cell) = UMP::forward_attr_var(self) {
-                            if current as u64 != next && self.heap[next as usize].is_compound(self.heap) {
+                            if current as u64 != next && self.is_cyclic(next as usize) {
                                 self.iter_state.cycle_detected();
                             }
 
@@ -299,7 +313,7 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
                         let current = self.current;
 
                         if let Some(cell) = self.forward_var() {
-                            if current as u64 != next && self.heap[next as usize].is_compound(self.heap) {
+                            if current as u64 != next && self.is_cyclic(next as usize) {
                                 self.iter_state.cycle_detected();
                             }
 
