@@ -270,14 +270,14 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
     }
 
     #[inline]
-    fn is_cyclic(&self, h: usize) -> bool {
-        if self.heap[h].is_var() {
-            self.heap[h].get_forwarding_bit()
-        } else if self.heap[h].is_ref() {
-            // the cell h in the second branch contains its original
-            // value whether h is marked or unmarked, meaning the
+    fn is_cyclic(&self, var_current: usize, var_next: usize) -> bool {
+        if self.heap[var_next].is_var() {
+            var_current != var_next && self.current + 1 != var_current
+        } else if self.heap[var_next].is_ref() {
+            // the cell var_next in the second branch contains its original
+            // value whether var_next is marked or unmarked, meaning the
             // is_compound check is well-founded in either case.
-            self.heap[h].get_forwarding_bit() || self.heap[h].is_compound(self.heap)
+            self.heap[var_next].get_forwarding_bit()
         } else {
             false
         }
@@ -294,7 +294,7 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
                         let current = self.current;
 
                         if let Some(cell) = UMP::forward_attr_var(self) {
-                            if current as u64 != next && self.is_cyclic(next as usize) {
+                            if self.is_cyclic(current, next as usize) {
                                 self.iter_state.cycle_detected();
                             }
 
@@ -313,7 +313,7 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
                         let current = self.current;
 
                         if let Some(cell) = self.forward_var() {
-                            if current as u64 != next && self.is_cyclic(next as usize) {
+                            if self.is_cyclic(current, next as usize) {
                                 self.iter_state.cycle_detected();
                             }
 
