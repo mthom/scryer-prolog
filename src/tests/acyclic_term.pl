@@ -15,6 +15,10 @@ term3(A) :-
    D=[C|_E],
    A=[C|D].
 
+term4(A) :-
+   A=[B|C],
+   C=[C|B].
+
 test("acyclic_term_1", (
     L = [_Y,[M,B],B|M], acyclic_term(L)
 )).
@@ -123,6 +127,19 @@ test("acyclic_term_26", (
     T = [[T, _], 1], \+ acyclic_term(T)
 )).
 
+test("acyclic_term_27", (
+    T = str(A,A), acyclic_term(T)
+)).
+
+test("acyclic_term_28", (
+    T = str(A,A,A), acyclic_term(T)
+)).
+
+test("acyclic_term_29", (
+    A = s(B, d(Y)), Y = B, acyclic_term(A),
+    acyclic_term(B), acyclic_term(Y)
+)).
+
 test("acyclic_term#2111_1", (
     term1(A), \+ acyclic_term(A)
 )).
@@ -135,20 +152,16 @@ test("acyclic_term#2111_3", (
     term3(A), \+ acyclic_term(A)
 )).
 
+test("acyclic_term#2111_4", (
+    term4(A), \+ acyclic_term(A)
+)).
+
 test("acyclic_term#2113", (
     A=[]*B,B=[]*B, \+ acyclic_term(A)
 )).
 
 test("acyclic_term#2114", (
     A=B*B, acyclic_term(A)
-)).
-
-test("acyclic_term_27", (
-    T = str(A,A), acyclic_term(T)
-)).
-
-test("acyclic_term_28", (
-    T = str(A,A,A), acyclic_term(T)
 )).
 
 main :-
