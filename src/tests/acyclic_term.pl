@@ -19,6 +19,11 @@ term4(A) :-
    A=[B|C],
    C=[C|B].
 
+term5(A) :-
+   A=[_B|C],
+   D=[_E|C],
+   A=[C|D].
+
 test("acyclic_term_1", (
     L = [_Y,[M,B],B|M], acyclic_term(L)
 )).
@@ -156,6 +161,10 @@ test("acyclic_term#2111_4", (
     term4(A), \+ acyclic_term(A)
 )).
 
+test("acyclic_term#2111_5", (
+    term5(A), \+ acyclic_term(A)
+)).
+
 test("acyclic_term#2113", (
     A=[]*B,B=[]*B, \+ acyclic_term(A)
 )).
@@ -175,7 +184,7 @@ main_quiet :-
     run_tests_quiet(Tests, Failed),
     (   Failed = [] ->
         format("All tests passed", [])
-    ;   format("Some tests failed: ~w~n", [Failed])
+    ;   format("Some tests failed", [])
     ),
     halt.
 

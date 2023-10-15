@@ -213,7 +213,7 @@ impl<'a> StacklessPreOrderHeapIter<'a, CycleDetectorUMP> {
             }
 
             if temp == self.start {
-                break;
+                return self.heap[temp].get_value() == self.current as u64;
             }
         }
 
