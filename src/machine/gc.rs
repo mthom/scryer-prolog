@@ -12,12 +12,15 @@ pub(crate) trait UnmarkPolicy {
     fn invert_marker(iter: &mut StacklessPreOrderHeapIter<Self>) where Self: Sized;
     fn cycle_detected(&mut self) where Self: Sized;
     fn mark_phase(&self) -> bool;
+    fn var_rooted_cycle(_iter: &mut StacklessPreOrderHeapIter<Self>, _var_loc: usize, _next: usize)
+    where
+        Self: Sized {}
+    fn detect_list_tail_cycle(_iter: &mut StacklessPreOrderHeapIter<Self>) where Self: Sized {}
     fn list_head_cycle_detecting_backward(
         iter: &mut StacklessPreOrderHeapIter<Self>,
     ) -> bool where Self: Sized {
         iter.backward()
     }
-    fn detect_list_tail_cycle(_iter: &mut StacklessPreOrderHeapIter<Self>) where Self: Sized {}
 }
 
 pub(crate) struct IteratorUMP {
@@ -89,7 +92,7 @@ impl UnmarkPolicy for CycleDetectorUMP {
         iter: &mut StacklessPreOrderHeapIter<Self>,
     ) -> bool {
         if !iter.iter_state.cycle_detected && iter.iter_state.mark_phase {
-            iter.iter_state.cycle_detected = iter.detect_list_cycle();
+            iter.iter_state.cycle_detected = iter.detect_list_cycle(iter.current);
         }
 
         iter.backward()
@@ -97,7 +100,13 @@ impl UnmarkPolicy for CycleDetectorUMP {
 
     fn detect_list_tail_cycle(iter: &mut StacklessPreOrderHeapIter<Self>) {
         if iter.iter_state.mark_phase && !iter.iter_state.cycle_detected {
-            iter.iter_state.cycle_detected = iter.detect_list_cycle();
+            iter.iter_state.cycle_detected = iter.detect_list_cycle(iter.current);
+        }
+    }
+
+    fn var_rooted_cycle(iter: &mut StacklessPreOrderHeapIter<Self>, var_loc: usize, next: usize) {
+        if var_loc != next && iter.iter_state.mark_phase && !iter.iter_state.cycle_detected {
+            iter.iter_state.cycle_detected = iter.detect_list_cycle(next);
         }
     }
 }
@@ -200,7 +209,7 @@ impl<'a> StacklessPreOrderHeapIter<'a, CycleDetectorUMP> {
         self.iter_state.cycle_detected
     }
 
-    pub(crate) fn detect_list_cycle(&self) -> bool {
+    pub(crate) fn detect_list_cycle(&self, next: usize) -> bool {
         use crate::machine::system_calls::BrentAlgState;
 
         let mut brent_alg_st = BrentAlgState::new(self.current);
@@ -208,12 +217,12 @@ impl<'a> StacklessPreOrderHeapIter<'a, CycleDetectorUMP> {
         while self.heap[brent_alg_st.hare].get_mark_bit() {
             let temp = self.heap[brent_alg_st.hare].get_value() as usize;
 
-            if brent_alg_st.step(temp).is_some() || temp == self.current {
+            if brent_alg_st.step(temp).is_some() || temp == next {
                 return true;
             }
 
             if temp == self.start {
-                return self.heap[temp].get_value() == self.current as u64;
+                break;
             }
         }
 
@@ -272,7 +281,7 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
     #[inline]
     fn is_cyclic(&self, var_current: usize, var_next: usize) -> bool {
         if self.heap[var_next].is_var() {
-            !self.heap[var_next].get_forwarding_bit() && var_current != var_next
+            self.heap[var_next].get_mark_bit() && var_current != var_next
         } else if self.heap[var_next].is_ref() {
             self.heap[var_next].get_mark_bit()
         } else {
@@ -296,6 +305,8 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
                             }
 
                             return Some(cell);
+                        } else if self.heap[next as usize].get_mark_bit() == self.iter_state.mark_phase() {
+                            UMP::var_rooted_cycle(self, current, next as usize);
                         }
 
                         if self.next < self.heap.len() as u64 {
@@ -315,6 +326,8 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
                             }
 
                             return Some(cell);
+                        } else if self.heap[next as usize].get_mark_bit() == self.iter_state.mark_phase() {
+                            UMP::var_rooted_cycle(self, current, next as usize);
                         }
 
                         if self.next < self.heap.len() as u64 {
