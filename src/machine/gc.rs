@@ -273,8 +273,10 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
     fn is_cyclic(&self, var_current: usize, var_next: usize) -> bool {
         if self.heap[var_next].is_var() {
             !self.heap[var_next].get_forwarding_bit() && var_current != var_next
+        } else if self.heap[var_next].is_ref() {
+            self.heap[var_next].get_mark_bit()
         } else {
-            self.heap[var_next].is_ref()
+            false
         }
     }
 

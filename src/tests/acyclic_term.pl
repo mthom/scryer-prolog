@@ -173,6 +173,10 @@ test("acyclic_term#2114", (
     A=B*B, acyclic_term(A)
 )).
 
+test("acyclic_term#2116", (
+    A=B*B,B=[]*[], acyclic_term(A)
+)).
+
 main :-
     findall(test(Name, Goal), test(Name, Goal), Tests),
     run_tests(Tests, Failed),
