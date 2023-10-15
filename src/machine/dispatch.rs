@@ -4187,6 +4187,36 @@ impl Machine {
                         try_or_throw!(self.machine_st, self.define_foreign_struct());
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                     }
+                    &Instruction::CallAllocStructPtr => {
+                        #[cfg(feature = "ffi")]
+                        try_or_throw!(self.machine_st, self.alloc_struct_ptr());
+                        step_or_fail!(self, self.machine_st.p += 1);
+                    }
+                    &Instruction::ExecuteAllocStructPtr => {
+                        #[cfg(feature = "ffi")]
+                        try_or_throw!(self.machine_st, self.alloc_struct_ptr());
+                        step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+                    }
+                    &Instruction::CallUnfoldStructPtr => {
+                        #[cfg(feature = "ffi")]
+                        try_or_throw!(self.machine_st, self.unfold_struct_ptr());
+                        step_or_fail!(self, self.machine_st.p += 1);
+                    }
+                    &Instruction::ExecuteUnfoldStructPtr => {
+                        #[cfg(feature = "ffi")]
+                        try_or_throw!(self.machine_st, self.unfold_struct_ptr());
+                        step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+                    }
+                    &Instruction::CallDeallocStructPtr => {
+                        #[cfg(feature = "ffi")]
+                        try_or_throw!(self.machine_st, self.dealloc_struct_ptr());
+                        step_or_fail!(self, self.machine_st.p += 1);
+                    }
+                    &Instruction::ExecuteDeallocStructPtr => {
+                        #[cfg(feature = "ffi")]
+                        try_or_throw!(self.machine_st, self.dealloc_struct_ptr());
+                        step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+                    }
                     &Instruction::CallCurrentTime => {
                         self.current_time();
                         step_or_fail!(self, self.machine_st.p += 1);

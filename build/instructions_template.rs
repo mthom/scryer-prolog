@@ -570,6 +570,12 @@ enum SystemClauseType {
     ForeignCall,
     #[strum_discriminants(strum(props(Arity = "2", Name = "$define_foreign_struct")))]
     DefineForeignStruct,
+    #[strum_discriminants(strum(props(Arity = "2", Name = "$alloc_struct_ptr")))]
+    AllocStructPtr,
+    #[strum_discriminants(strum(props(Arity = "3", Name = "$unfold_struct_ptr")))]
+    UnfoldStructPtr,
+    #[strum_discriminants(strum(props(Arity = "2", Name = "$dealloc_struct_ptr")))]
+    DeallocStructPtr,
     #[strum_discriminants(strum(props(Arity = "3", Name = "$predicate_defined")))]
     PredicateDefined,
     #[strum_discriminants(strum(props(Arity = "3", Name = "$strip_module")))]
@@ -1811,6 +1817,9 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallLoadForeignLib |
                     &Instruction::CallForeignCall |
                     &Instruction::CallDefineForeignStruct |
+                    &Instruction::CallAllocStructPtr |
+                    &Instruction::CallUnfoldStructPtr |
+		    &Instruction::CallDeallocStructPtr |
                     &Instruction::CallPredicateDefined |
                     &Instruction::CallStripModule |
                     &Instruction::CallCurrentTime |
@@ -2045,6 +2054,9 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteLoadForeignLib |
                     &Instruction::ExecuteForeignCall |
                     &Instruction::ExecuteDefineForeignStruct |
+                    &Instruction::ExecuteAllocStructPtr |
+		    &Instruction::ExecuteUnfoldStructPtr |
+		    &Instruction::ExecuteDeallocStructPtr |
                     &Instruction::ExecutePredicateDefined |
                     &Instruction::ExecuteStripModule |
                     &Instruction::ExecuteCurrentTime |

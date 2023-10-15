@@ -21,7 +21,7 @@ and finally we add the pointer the size of what we've written.
 
 use crate::atom_table::Atom;
 
-use std::alloc::{alloc, Layout};
+use std::alloc::{alloc, dealloc, Layout};
 use std::any::Any;
 use std::collections::HashMap;
 use std::convert::TryFrom;
@@ -74,6 +74,9 @@ impl ForeignFunctionTable {
         let mut struct_type: ffi_type = Default::default();
         struct_type.type_ = type_tag::STRUCT;
         struct_type.elements = fields.as_mut_ptr();
+	unsafe {
+	    libffi::raw::ffi_get_struct_offsets(ffi_abi_FFI_DEFAULT_ABI, &mut struct_type, std::ptr::null_mut());
+	}
         self.structs.insert(
             name.to_string(),
             StructImpl {
@@ -82,6 +85,42 @@ impl ForeignFunctionTable {
                 atom_fields,
             },
         );
+    }
+
+    pub fn alloc_struct_ptr(&self, name: &str) -> *mut u8 {
+	match self.structs.get(name) {
+	    Some(struct_type) => {
+		unsafe {
+		    let align = struct_type.ffi_type.alignment as usize;
+		    let size = struct_type.ffi_type.size;
+		    let layout = Layout::from_size_align_unchecked(size, align);
+		    alloc(layout)
+		}
+	    }
+	    _ => unreachable!()
+	}
+    }
+
+    pub fn dealloc_struct_ptr(&self, name: &str, ptr: *mut u8) {
+	match self.structs.get(name) {
+	    Some(struct_type) => {
+		unsafe {
+		    let align = struct_type.ffi_type.alignment as usize;
+		    let size = struct_type.ffi_type.size;
+		    let layout = Layout::from_size_align_unchecked(size, align);
+		    dealloc(ptr, layout)
+		}
+	    }
+	    _ => unreachable!()
+	}	
+    }
+    pub fn unfold_struct_ptr(&self, name: &str, ptr: *mut u8) -> Result<Value, FFIError> {
+	match self.structs.get(name) {
+	    Some(struct_type) => {
+		self.read_struct(ptr as *mut c_void, name, struct_type)
+	    }
+	    _ => unreachable!()
+	}
     }
 
     fn map_type_ffi(&mut self, source: &Atom) -> *mut ffi_type {
@@ -203,8 +242,15 @@ impl ForeignFunctionTable {
                         _memory.push(box_value);
                     }
                     libffi::raw::FFI_TYPE_POINTER => {
-                        let ptr: *mut c_void = args[i].as_ptr()?;
-                        pointers.push(ptr);
+			match args[i] {
+			    Value::Int(_) => {
+				push_int!(u64);
+			    }
+			    _ => {
+				let ptr: *mut c_void = args[i].as_ptr()?;
+				pointers.push(ptr);
+			    }
+			}
                     }
                     libffi::raw::FFI_TYPE_STRUCT => {
                         let (mut ptr, _size, _align) =
@@ -343,7 +389,16 @@ impl ForeignFunctionTable {
                     ))
                 }
                 libffi::raw::FFI_TYPE_SINT64 => call_and_return!(i64),
-                libffi::raw::FFI_TYPE_POINTER => call_and_return!(*mut c_void),
+                libffi::raw::FFI_TYPE_POINTER => {
+		    let mut n: Box<*mut c_void> = Box::new(std::ptr::null_mut());
+		    libffi::raw::ffi_call(
+			&mut function_impl.cif,
+			Some(*function_impl.code_ptr.as_safe_fun()),
+			&mut *n as *mut _ as *mut c_void,
+			pointer_args.pointers.as_mut_ptr() as *mut *mut c_void
+		    );
+		    Ok(Value::Int(*n as i64))
+		},
                 libffi::raw::FFI_TYPE_FLOAT => {
                     let mut n: Box<f32> = Box::new(0.0);
                     libffi::raw::ffi_call(

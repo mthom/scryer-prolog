@@ -1,4 +1,4 @@
-:- module(ffi, [use_foreign_module/2, foreign_struct/2]).
+:- module(ffi, [use_foreign_module/2, foreign_struct/2, alloc_struct_ptr/2, unfold_struct_ptr/3, dealloc_struct_ptr/2]).
 
 /** Foreign Function Interface
 
@@ -102,3 +102,12 @@ assert_predicate(PredicateDefinition) :-
     ),
     Predicate = (Head:-Body),
     assertz(ffi:Predicate).
+
+alloc_struct_ptr(StructName, StructPtr) :-
+    '$alloc_struct_ptr'(StructName, StructPtr).
+
+unfold_struct_ptr(StructName, StructPtr, StructValue) :-
+    '$unfold_struct_ptr'(StructName, StructPtr, StructValue).
+
+dealloc_struct_ptr(StructName, StructPtr) :-
+    '$dealloc_struct_ptr'(StructName, StructPtr).

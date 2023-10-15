@@ -4886,6 +4886,61 @@ impl Machine {
         Ok(())
     }
 
+    #[cfg(feature = "ffi")]
+    #[inline(always)]
+    pub(crate) fn alloc_struct_ptr(&mut self) -> CallResult {
+	let struct_name = self.deref_register(1);
+
+	if let Some(struct_name) = self.machine_st.value_to_str_like(struct_name) {
+	    let ptr = self.foreign_function_table.alloc_struct_ptr(&*struct_name.as_str()) as i64;
+	    let value = Fixnum::build_with(ptr);
+	    self.machine_st.unify_fixnum(value, self.machine_st.registers[2]);
+	    return Ok(());
+	}
+	self.machine_st.fail = true;
+	Ok(())
+    }
+    
+    #[cfg(feature = "ffi")]
+    #[inline(always)]
+    pub(crate) fn dealloc_struct_ptr(&mut self) -> CallResult {
+	let struct_name = self.deref_register(1);
+	let struct_ptr = self.deref_register(2);
+	let struct_ptr = cell_as_fixnum!(struct_ptr).get_num() as i64 as *mut u8;
+
+	if let Some(struct_name) = self.machine_st.value_to_str_like(struct_name) {
+	    self.foreign_function_table.dealloc_struct_ptr(&*struct_name.as_str(), struct_ptr);
+	    return Ok(());
+	}
+	self.machine_st.fail = true;
+	Ok(())
+    }
+
+    #[cfg(feature = "ffi")]
+    #[inline(always)]
+    pub(crate) fn unfold_struct_ptr(&mut self) -> CallResult {
+	let struct_name = self.deref_register(1);
+	let struct_ptr = self.deref_register(2);
+	let struct_ptr = cell_as_fixnum!(struct_ptr).get_num() as i64 as *mut u8;
+	let return_value = self.deref_register(3);
+
+	if let Some(struct_name) = self.machine_st.value_to_str_like(struct_name) {
+	    match self.foreign_function_table.unfold_struct_ptr(&*struct_name.as_str(), struct_ptr) {
+		Ok(value) => match value {
+		    Value::Struct(name, args) => {
+			let struct_value = self.build_struct(&name, args);
+			unify!(self.machine_st, return_value, struct_value);
+			return Ok(());
+		    }
+		    _ => unreachable!()
+		}
+		_ => unreachable!()
+	    }
+	}
+	self.machine_st.fail = true;
+	Ok(())
+    }
+
     #[inline(always)]
     pub(crate) fn current_time(&mut self) {
         let timestamp = self.systemtime_to_timestamp(SystemTime::now());
