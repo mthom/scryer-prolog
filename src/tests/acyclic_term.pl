@@ -149,6 +149,11 @@ test("acyclic_term_29", (
     acyclic_term(B), acyclic_term(Y)
 )).
 
+test("acyclic_term_30", (
+    A=str(B,B,B), C=str(A,_D,B), acyclic_term(C),
+    acyclic_term(A), acyclic_term(B)
+)).
+
 test("acyclic_term#2111_1", (
     term1(A), \+ acyclic_term(A)
 )).
@@ -189,6 +194,11 @@ test("acyclic_term#2117", (
     A=[]*A,B=[]*A, \+ acyclic_term(B)
 )).
 
+test("acyclic_term#2121", (
+    A=B*B, C=A*B, acyclic_term(C),
+    acyclic_term(A), acyclic_term(B)
+)).
+
 main :-
     findall(test(Name, Goal), test(Name, Goal), Tests),
     run_tests(Tests, Failed),
@@ -200,7 +210,7 @@ main_quiet :-
     run_tests_quiet(Tests, Failed),
     (   Failed = [] ->
         format("All tests passed", [])
-    ;   format("Some tests failed: ~w~n", [Failed])
+    ;   format("Some tests failed", [])
     ),
     halt.
 
