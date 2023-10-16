@@ -1,5 +1,6 @@
-use dashu::base::Abs;
-use dashu::base::Gcd;
+use dashu::base::{Abs, Gcd, UnsignedAbs};
+use dashu::integer::IBig;
+use dashu::integer::fast_div::ConstDivisor;
 use divrem::*;
 use num_order::NumOrd;
 
@@ -854,7 +855,9 @@ pub(crate) fn modulus(x: Number, y: Number, arena: &mut Arena) -> Result<Number,
         } else if n1 < &Integer::ZERO && n2 > &Integer::ZERO {
             ((n1 + Integer::ONE) / n2) - Integer::ONE
         } else {
-            n1 / n2
+            let ring = ConstDivisor::new(n2.unsigned_abs());
+            let n1 = n1.clone();
+            IBig::from(ring.reduce(n1).residue())
         }
     }
 

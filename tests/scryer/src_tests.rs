@@ -84,3 +84,30 @@ fn dif_tests() {
         "All tests passed",
     );
 }
+
+#[test]
+fn ground_tests() {
+    run_top_level_test_with_args(
+        &["src/tests/ground.pl", "-f", "-g", "main_quiet"],
+        "",
+        "All tests passed",
+    );
+}
+
+#[test]
+fn term_variables_tests() {
+    run_top_level_test_with_args(
+        &["src/tests/term_variables.pl", "-f", "-g", "main_quiet"],
+        "",
+        "All tests passed",
+    );
+}
+
+#[test]
+fn acyclic_term_tests() {
+    run_top_level_test_with_args(
+        &["src/tests/acyclic_term.pl", "-f", "-g", "main_quiet"],
+        "",
+        "All tests passed",
+    );
+}

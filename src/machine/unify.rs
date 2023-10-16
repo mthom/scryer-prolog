@@ -691,6 +691,9 @@ pub(crate) trait Unifier: DerefMut<Target = MachineState> {
                     (HeapCellValueTag::Cons, ptr_1) => {
                         Self::unify_constant(self, ptr_1, d2);
                     }
+                    (HeapCellValueTag::CutPoint, n1) => {
+                        Self::unify_fixnum(self, n1, d2);
+                    }
                     _ => {
                         unreachable!();
                     }

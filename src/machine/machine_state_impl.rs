@@ -1131,27 +1131,29 @@ impl MachineState {
 
     #[inline]
     pub fn is_cyclic_term(&mut self, value: HeapCellValue) -> bool {
-        if value.is_constant() {
+        let value = self.store(self.deref(value));
+
+        if value.is_constant() || value.is_stack_var() {
             return false;
         }
 
-        let mut iter = stackful_preorder_iter::<NonListElider>
-            (&mut self.heap, &mut self.stack, value);
+        let h = self.heap.len();
+        self.heap.push(value);
 
-        while let Some(value) = iter.next() {
-            if value.get_forwarding_bit() {
-                let value = unmark_cell_bits!(heap_bound_store(
-                    iter.heap,
-                    heap_bound_deref(iter.heap, value),
-                ));
+        let found_cycle = {
+            let mut iter = cycle_detecting_stackless_preorder_iter(&mut self.heap, h);
 
-                if value.is_compound(iter.heap) {
-                    return true;
+            while let Some(_) = iter.next() {
+                if iter.found_cycle() {
+                    break;
                 }
             }
-        }
 
-        false
+            iter.found_cycle()
+        };
+
+        self.heap.pop();
+        found_cycle
     }
 
     // arg(+N, +Term, ?Arg)
@@ -1621,56 +1623,12 @@ impl MachineState {
 
     // returns true on failure.
     pub fn ground_test(&mut self) -> bool {
-        use fxhash::FxBuildHasher;
+        let iter = eager_stackful_preorder_iter(&mut self.heap, self.registers[1]);
 
-        if self.registers[1].is_constant() {
-            return false;
-        }
-
-        let value = self.store(self.deref(self.registers[1]));
-
-        if value.is_stack_var() {
-            return true;
-        }
-
-        let mut visited = IndexSet::with_hasher(FxBuildHasher::default());
-        let mut iter = stackful_preorder_iter::<NonListElider>(&mut self.heap, &mut self.stack, value);
-        let mut stack_len = 0;
-
-        let is_var = |heap: &Heap, value: HeapCellValue| -> bool {
-            let value = unmark_cell_bits!(value);
-
-            if value.is_var() {
-                let value = heap_bound_store(heap, heap_bound_deref(heap, value));
-
-                if value.is_var() {
-                    return true;
-                }
-            }
-
-            false
-        };
-
-        while let Some(value) = iter.next() {
-            if is_var(iter.heap, value) {
+        for term in iter {
+            if term.is_var() {
                 return true;
             }
-
-            if value.is_ref() {
-                if visited.contains(&value) {
-                    while iter.stack_len() > stack_len {
-                        if let Some(value) = iter.pop_stack() {
-                            if is_var(iter.heap, value) {
-                                return true;
-                            }
-                        }
-                    }
-                } else {
-                    visited.insert(value);
-                }
-            }
-
-            stack_len = iter.stack_len();
         }
 
         false

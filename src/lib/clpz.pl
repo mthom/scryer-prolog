@@ -1030,8 +1030,8 @@ term_expansion(Term0, Term) :-
         once(duodcg_body(Body0, Body, As0, As, Bs0, Bs)).
 
 duodcg_body([], (As0=As,Bs0=Bs), As0, As, Bs0, Bs).
-duodcg_body(Xs+Ys, (phrase(list(Xs), As0, As),
-                       phrase(list(Ys), Bs0, Bs)), As0, As, Bs0, Bs).
+duodcg_body(Xs+Ys, (phrase(seq(Xs), As0, As),
+                       phrase(seq(Ys), Bs0, Bs)), As0, As, Bs0, Bs).
 duodcg_body({Goal}, call(Goal), As, As, Bs, Bs).
 duodcg_body((A0,B0), (A,B), As0, As, Bs0, Bs) :-
         duodcg_body(A0, A, As0, As1, Bs0, Bs1),
@@ -1957,7 +1957,6 @@ choice_order_variable(step, Order, Var, Vars, Vars0, Selection, Consistency) :-
         (   Var = Next,
             label(Vars, Selection, Order, step, Consistency)
         ;   neq_num(Var, Next),
-            do_queue,
             label(Vars0, Selection, Order, step, Consistency)
         ).
 choice_order_variable(enum, Order, Var, Vars, _, Selection, Consistency) :-
@@ -2566,13 +2565,13 @@ parse_clpz(E, R,
              g(power_var_num(E, V, N)) => [p(pexp(V, N, R))],
              m(A*B)            => [p(ptimes(A, B, R))],
              m(A-B)            => [p(pplus(R,B,A))],
-             m(-A)             => [p(ptimes(-1,A,R))],
+             m(-A)             => [p(pplus(A,R,0))],
              m(max(A,B))       => [g(A #=< #R), g(B #=< R), p(pmax(A, B, R))],
              m(min(A,B))       => [g(A #>= #R), g(B #>= R), p(pmin(A, B, R))],
              m(A mod B)        => [g(B #\= 0), p(pmod(A, B, R))],
              m(A rem B)        => [g(B #\= 0), p(prem(A, B, R))],
              m(abs(A))         => [g(#R #>= 0), p(pabs(A, R))],
-             m(A/B)            => [g(B #\= 0), p(prdiv(A, B, R))],
+             m(A/B)            => [g(B #\= 0), p(ptimes(R, B, A))],
              m(A//B)           => [g(B #\= 0), p(ptzdiv(A, B, R))],
              m(A div B)        => [g(#R #= (A - (A mod B)) // B)],
              m(A^B)            => [p(pexp(A, B, R))],
@@ -2636,13 +2635,36 @@ parse_goals([]) --> [].
 parse_goals([G|Gs]) --> parse_goal(G), parse_goals(Gs).
 
 parse_goal(g(Goal)) --> [Goal].
-parse_goal(p(Prop)) -->
-        { term_variables(Prop, Vs) },
+parse_goal(p(Prop0)) -->
+        { term_variables(Prop0, Vs),
+          morphing_propagator(Prop0, Prop, _) },
         [make_propagator(Prop, P),
          new_queue(Q0),
          phrase(init_propagator_(Vs, P), [Q0], [Q]),
          variables_same_queue(Vs),
          trigger_once_(P, Q)].
+
+morphing(pplus).
+morphing(ptimes).
+morphing(pexp).
+morphing(ptzdiv).
+
+morphing_propagator(P0, P, Target) :-
+        P0 =.. [F|Args0],
+        (   morphing(F) ->
+            append(Args0, [Last], Args),
+            Target = p(Last)
+        ;   Args = Args0,
+            Target = none
+        ),
+        P =.. [F|Args].
+
+morph_into_propagator(MState, Vs, P0, Morph) -->
+        kill(MState),
+        { morphing_propagator(P0, P, _),
+          make_propagator(P, Morph) },
+        init_propagator_(Vs, Morph),
+        trigger_prop(Morph).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ?- use_module(library(lists)),
@@ -2734,14 +2756,12 @@ geq(A, B) :-
                 )
             ;   (   AI cis_geq n(B) -> true
                 ;   domain_remove_smaller_than(AD, B, AD1),
-                    fd_put(A, AD1, APs),
-                    do_queue
+                    fd_put(A, AD1, APs)
                 )
             )
         ;   fd_get(B, BD, BPs) ->
             domain_remove_greater_than(BD, A, BD1),
-            fd_put(B, BD1, BPs),
-            do_queue
+            fd_put(B, BD1, BPs)
         ;   A >= B
         ).
 
@@ -2811,7 +2831,7 @@ matches([
          m(var(X) #= var(Y)+var(Z)) => [p(pplus(Y,Z,X))],
          m(var(X) #= var(Y)-var(Z)) => [p(pplus(X,Z,Y))],
          m(var(X) #= var(Y)*var(Z)) => [p(ptimes(Y,Z,X))],
-         m(var(X) #= -var(Z))       => [p(ptimes(-1, Z, X))],
+         m(var(X) #= -var(Y))       => [p(pplus(X,Y,0))],
          m_c(any(X) #= any(Y), left_right_linsum_const(X, Y, Cs, Vs, S)) =>
             [g(scalar_product_(#=, Cs, Vs, S))],
          m_c(var(X) #= abs(var(Y)) + any(V0), X == Y) => [d(V0,V),p(x_eq_abs_plus_v(X,V))],
@@ -2907,8 +2927,9 @@ match_goals([G|Gs], F) --> match_goal(G, F), match_goals(Gs, F).
 match_goal(r(X,Y), F)  --> { G =.. [F,X,Y] }, [G].
 match_goal(d(X,Y), _)  --> [parse_clpz(X, Y)].
 match_goal(g(Goal), _) --> [Goal].
-match_goal(p(Prop), _) -->
-        { term_variables(Prop, Vs) },
+match_goal(p(Prop0), _) -->
+        { term_variables(Prop0, Vs),
+          morphing_propagator(Prop0, Prop, _) },
         [make_propagator(Prop, P),
          new_queue(Q0),
          phrase(init_propagator_(Vs, P), [Q0], [Q]),
@@ -3296,7 +3317,7 @@ integer_kroot_leq(L, U, N, K, R) :-
 % When reasoning over integers, replace (=\=)/2 by (#\=)/2 to obtain more
 % general relations.
 
-X #\= Y :- clpz_neq(X, Y), do_queue.
+X #\= Y :- clpz_neq(X, Y).
 
 % X #\= Y + Z
 
@@ -3359,7 +3380,7 @@ X #< Y  :- Y #> X.
 % X in inf.. -4\/1..9\/81..sup.
 % ```
 
-#\ Q       :- reify(Q, 0), do_queue.
+#\ Q       :- reify(Q, 0).
 
 %% #<==>(?P, ?Q)
 %
@@ -3397,7 +3418,7 @@ X #< Y  :- Y #> X.
 % Z = 2.
 % ```
 
-L #<==> R  :- reify(L, B), reify(R, B), do_queue.
+L #<==> R  :- reify(L, B), reify(R, B).
 
 %% #==>(?P, ?Q)
 %
@@ -3432,7 +3453,7 @@ L #<== R   :- R #==> L.
 %
 % P and Q hold.
 
-L #/\ R    :- reify(L, 1), reify(R, 1), do_queue.
+L #/\ R    :- reify(L, 1), reify(R, 1).
 
 conjunctive_neqs_var_drep(Eqs, Var, Drep) :-
         conjunctive_neqs_var(Eqs, Var),
@@ -3520,16 +3541,17 @@ L #\ R :- (L #\/ R) #/\ #\ (L #/\ R).
    d(D) that states D is 1 iff all subexpressions are defined. a(V)
    means that V is an auxiliary variable that was introduced while
    parsing a compound expression. a(X,V) means V is auxiliary unless
-   it is ==/2 X, and a(X,Y,V) means V is auxiliary unless it is ==/2 X
-   or Y. l(L) means the literal L occurs in the described list.
+   it is (==)/2 X, and a(X,Y,V) means V is auxiliary unless it is
+   (==)/2 X or Y. l(L) means the literal L occurs in the described
+   list, and ls(Ls) means the literals Ls occur in the described list.
 
    When a constraint becomes entailed or subexpressions become
    undefined, created auxiliary constraints are killed, and the
    "clpz" attribute is removed from auxiliary variables.
 
-   For mod/2, div/2, rem/2 etc. we create a skeleton propagator and
-   remember it as an auxiliary constraint. The pskeleton propagator
-   can use the skeleton when the constraint is defined.
+   For (//)/2, (mod)/2 and (rem)/2, we create a skeleton propagator
+   and remember it as an auxiliary constraint. The pskeleton
+   propagator can use the skeleton when the constraint is defined.
 
    We cannot use a skeleton propagator for (/)/2, since (/)/2 can
    fail in cases such as 0 #==> X #= 1/2, where we expect success.
@@ -3545,27 +3567,32 @@ parse_reified(E, R, D,
                m(A+B)        => [d(D), p(pplus(A,B,R)), a(A,B,R)],
                m(A*B)        => [d(D), p(ptimes(A,B,R)), a(A,B,R)],
                m(A-B)        => [d(D), p(pplus(R,B,A)), a(A,B,R)],
-               m(-A)         => [d(D), p(ptimes(-1,A,R)), a(R)],
+               m(-A)         => [d(D), p(pplus(A,R,0)), a(R)],
                m(max(A,B))   => [d(D), p(pgeq(R, A)), p(pgeq(R, B)), p(pmax(A,B,R)), a(A,B,R)],
                m(min(A,B))   => [d(D), p(pgeq(A, R)), p(pgeq(B, R)), p(pmin(A,B,R)), a(A,B,R)],
-               m(abs(A))     => [g(#R#>=0), d(D), p(pabs(A, R)), a(A,R)],
-               m(A/B)        => [p(preified_slash(A,B,D,R)), a(A,B,R)],
+               m(abs(A))     => [d(D), g(#R#>=0), p(pabs(A, R)), a(A,R)],
+               m(A^B)        => [d(D1), p(preified_exp(A,B,D2,R)),
+                                 p(reified_and(D1,[],D2,[],D)),a(D2),a(A,B,R)],
+               m(A/B)        => [d(D1), p(preified_slash(A,B,D2,R)),
+                                 p(reified_and(D1,[],D2,[],D)),a(D2),a(A,B,R)],
+               m(A div B)    => [d(D1),
+                                 g(phrase(parse_reified_clpz(((A-(A mod B)) // B), R, D2), Ps)),
+                                 ls(Ps),
+                                 p(reified_and(D1,[],D2,[],D)),a(D2),a(A,B,R)],
                m(A//B)       => [skeleton(A,B,D,R,ptzdiv)],
-               m(A div B)    => [skeleton(A,B,D,R,pdiv)],
                m(A mod B)    => [skeleton(A,B,D,R,pmod)],
                m(A rem B)    => [skeleton(A,B,D,R,prem)],
-               m(A^B)        => [d(D), p(pexp(A,B,R)), a(A,B,R)],
                % bitwise operations
                m(\A)         => [function(D,\,A,R)],
                m(msb(A))     => [g(#A#>0) ,function(D,msb,A,R)],
                m(lsb(A))     => [g(#A#>0), function(D,lsb,A,R)],
-               m(popcount(A)) => [function(D,popcount,A,R)],
-               m(sign(A))    => [function(D,sign,A,R)],
+               m(popcount(A)) => [d(D), p(ppopcount(A, R)), a(A,R)],
+               m(sign(A))    => [d(D), p(psign(A, R)), a(A,R)],
                m(A<<B)       => [function(D,<<,A,B,R)],
                m(A>>B)       => [function(D,>>,A,B,R)],
                m(A/\B)       => [function(D,/\,A,B,R)],
                m(A\/B)       => [function(D,\/,A,B,R)],
-               m(xor(A, B))  => [function(D,xor,A,B,R)],
+               m(xor(A, B))  => [skeleton(A,B,D,R,pxor)],
                g(true)       => [g(domain_error(clpz_expression, E))]]
              ).
 
@@ -3621,10 +3648,13 @@ reified_goal(d(D), Ds) -->
         ;   { domain_error(one_or_two_element_list, Ds) }
         ).
 reified_goal(g(Goal), _) --> [{Goal}].
-reified_goal(p(Vs, Prop), _) -->
+reified_goal(p(Vs, Prop0), _) -->
+        { morphing_propagator(Prop0, Prop, Target) },
         [{make_propagator(Prop, P)}],
+        target_propagator(Target),
         parse_init_dcg(Vs, P),
-        [{trigger_once(P)}],
+        [{variables_same_queue(Vs),
+          trigger_once(P)}],
         [( { propagator_state(P, S), S == dead } -> [] ; [p(P)])].
 reified_goal(p(Prop), Ds) -->
         { term_variables(Prop, Vs) },
@@ -3634,7 +3664,9 @@ reified_goal(function(D,Op,A,B,R), Ds) -->
 reified_goal(function(D,Op,A,R), Ds) -->
         reified_goals([d(D),p(pfunction(Op,A,R)),a(A,R)], Ds).
 reified_goal(skeleton(A,B,D,R,F), Ds) -->
-        { Prop =.. [F,X,Y,Z] },
+        { Prop0 =.. [F,X,Y,Z],
+          morphing_propagator(Prop0, Prop, Target) },
+        target_propagator(Target),
         reified_goals([d(D1),l(p(P)),g(make_propagator(Prop, P)),
                        p([A,B,D2,R], pskeleton(A,B,D2,[X,Y,Z]-P,R,F)),
                        p(reified_and(D1,[],D2,[],D)),a(D2),a(A,B,R)], Ds).
@@ -3642,12 +3674,20 @@ reified_goal(a(V), _)     --> [a(V)].
 reified_goal(a(X,V), _)   --> [a(X,V)].
 reified_goal(a(X,Y,V), _) --> [a(X,Y,V)].
 reified_goal(l(L), _)     --> [[L]].
+reified_goal(ls(Ls), _)   --> [Ls].
+
+target_propagator(p(Prop)) --> [[p(Prop)]].
+target_propagator(none)    --> [].
 
 parse_init_dcg([], _)     --> [].
 parse_init_dcg([V|Vs], P) --> [{init_propagator(V, P)}], parse_init_dcg(Vs, P).
 
-%?- set_prolog_flag(answer_write_options, [portray(true)]),
-%   clpz:parse_reified_clauses(Cs), maplist(portray_clause, Cs).
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+?- use_module(library(lists)),
+   use_module(library(format)),
+   clpz:parse_reified_clauses(Cs),
+   maplist(portray_clause, Cs).
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 reify(E, B) :- reify(E, B, _).
 
@@ -3692,7 +3732,7 @@ reify_(tuples_in(Tuples, Relation), B) -->
           #B #<==> And },
         propagator_init_trigger([B], tuples_not_in(Tuples, Relation, B)),
         kill_reified_tuples(Bs, Ps, Bs),
-        list(Ps),
+        seq(Ps),
         as([B|Bs]).
 reify_(finite_domain(V), B) -->
         propagator_init_trigger(reified_fd(V,B)),
@@ -3724,19 +3764,16 @@ arithmetic(L, R, B, Functor) -->
         { phrase((parse_reified_clpz(L, LR, LD),
                   parse_reified_clpz(R, RR, RD)), Ps),
           Prop =.. [Functor,LD,LR,RD,RR,Ps,B] },
-        list(Ps),
+        seq(Ps),
         propagator_init_trigger([LD,LR,RD,RR,B], Prop),
         a(B).
 
 boolean(L, R, B, Functor) -->
         { reify(L, LR, Ps1), reify(R, RR, Ps2),
           Prop =.. [Functor,LR,Ps1,RR,Ps2,B] },
-        list(Ps1), list(Ps2),
+        seq(Ps1), seq(Ps2),
         propagator_init_trigger([LR,RR,B], Prop),
         a(LR, RR, B).
-
-list([])     --> [].
-list([L|Ls]) --> [L], list(Ls).
 
 a(X,Y,B) -->
         (   nonvar(X) -> a(Y, B)
@@ -3872,7 +3909,6 @@ domain(V, Dom) :-
             domains_intersection(Dom, Dom0, Dom1),
             %format("intersected\n: ~w\n ~w\n==> ~w\n\n", [Dom,Dom0,Dom1]),
             fd_put(V, Dom1, VPs),
-            do_queue,
             reinforce(V)
         ;   domain_contains(Dom, V)
         ).
@@ -4187,7 +4223,6 @@ activate_propagator(propagator(P,State)) -->
 
 enable_queue  :- true. % NOP
 disable_queue :- true. % NOP
-do_queue.              % NOP
 
 %do_queue --> print_queue, { false }.
 do_queue -->
@@ -4769,7 +4804,7 @@ run_propagator(scalar_product_eq(Cs0,Vs0,P0), MState) -->
           ) }.
 
 % X + Y = Z
-run_propagator(pplus(X,Y,Z), MState) -->
+run_propagator(pplus(X,Y,Z,Morph), MState) -->
         (   nonvar(X) ->
             (   X =:= 0 -> kill(MState), Y = Z
             ;   Y == Z -> kill(MState), X =:= 0
@@ -4788,7 +4823,7 @@ run_propagator(pplus(X,Y,Z), MState) -->
                 ;   []
                 )
             )
-        ;   nonvar(Y) -> run_propagator(pplus(Y,X,Z), MState)
+        ;   nonvar(Y) -> run_propagator(pplus(Y,X,Z,Morph), MState)
         ;   nonvar(Z) ->
             (   X == Y -> kill(MState), { even(Z), X is Z // 2 }
             ;   { fd_get(X, XD, _),
@@ -4805,7 +4840,8 @@ run_propagator(pplus(X,Y,Z), MState) -->
                 ;   []
                 )
             )
-        ;   (   X == Y -> { kill(MState), 2*X #= Z }
+        ;   (   X == Y ->
+                morph_into_propagator(MState, [X,Z], ptimes(2,X,Z), Morph)
             ;   X == Z -> kill(MState), Y = 0
             ;   Y == Z -> kill(MState), X = 0
             ;   { fd_get(X, XD, XL, XU, XPs),
@@ -4831,7 +4867,7 @@ run_propagator(pplus(X,Y,Z), MState) -->
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-run_propagator(ptimes(X,Y,Z), MState) -->
+run_propagator(ptimes(X,Y,Z,Morph), MState) -->
         (   nonvar(X) ->
             (   nonvar(Y) -> kill(MState), Z is X * Y
             ;   X =:= 0 -> kill(MState), Z = 0
@@ -4851,7 +4887,7 @@ run_propagator(ptimes(X,Y,Z), MState) -->
                     )
                 )
             )
-        ;   nonvar(Y) -> run_propagator(ptimes(Y,X,Z), MState)
+        ;   nonvar(Y) -> run_propagator(ptimes(Y,X,Z,Morph), MState)
         ;   nonvar(Z) ->
             (   X == Y ->
                 kill(MState),
@@ -4877,7 +4913,8 @@ run_propagator(ptimes(X,Y,Z), MState) -->
                 ;  neq_num(X, 0), neq_num(Y, 0)
                 )
             )
-        ;   (   X == Y -> kill(MState), { X^2 #= Z }
+        ;   (   X == Y ->
+                morph_into_propagator(MState, [X,Z], pexp(X,2,Z), Morph)
             ;   { fd_get(X, XD, XL, XU, XPs),
                   fd_get(Y, _, YL, YU, _),
                   fd_get(Z, ZD, ZL, ZU, _) },
@@ -4908,17 +4945,8 @@ run_propagator(ptimes(X,Y,Z), MState) -->
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-% X div Y = Z
-run_propagator(pdiv(X,Y,Z), MState) -->
-        { kill(MState), Z #= (X-(X mod Y)) // Y }.
-
-% X rdiv Y = Z
-run_propagator(prdiv(X,Y,Z), MState) -->
-        { kill(MState), Z*Y #= X }.
-
-
 % X // Y = Z (round towards zero)
-run_propagator(ptzdiv(X,Y,Z), MState) -->
+run_propagator(ptzdiv(X,Y,Z,Morph), MState) -->
         (   nonvar(X) ->
             (   nonvar(Y) -> kill(MState), Y =\= 0, Z is X // Y
             ;   { fd_get(Y, YD, YL, YU, YPs) },
@@ -4962,7 +4990,8 @@ run_propagator(ptzdiv(X,Y,Z), MState) -->
         ;   nonvar(Y) ->
             Y =\= 0,
             (   Y =:= 1 -> kill(MState), X = Z
-            ;   Y =:= -1 -> kill(MState), { Z #= -X }
+            ;   Y =:= -1 ->
+                morph_into_propagator(MState, [X,Z], pplus(X,Z,0), Morph)
             ;   { fd_get(X, XD, XL, XU, XPs) },
                 (   nonvar(Z) ->
                     kill(MState),
@@ -5412,9 +5441,11 @@ run_propagator(pmin(X,Y,Z), MState) -->
 %% %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %% % Z = X ^ Y
 
-run_propagator(pexp(X,Y,Z), MState) -->
+run_propagator(pexp(X,Y,Z,Morph), MState) -->
         (   X == 1 -> kill(MState), Z = 1
-        ;   X == 0 -> kill(MState), queue_goal((Z in 0..1, Y #>= 0, Z #<==> Y #= 0))
+        ;   X == 0 ->
+            queue_goal((Z in 0..1, Y #>= 0)),
+            morph_into_propagator(MState, [Y,Z], reified_eq(1,Y,1,0,[],Z), Morph)
         ;   Y == 0 -> kill(MState), Z = 1
         ;   Y == 1 -> kill(MState), Z = X
         ;   nonvar(X) ->
@@ -5474,7 +5505,9 @@ run_propagator(pexp(X,Y,Z), MState) -->
             )
         ;   nonvar(Y), Y > 0 ->
             (   { even(Y) } ->
-                { geq(Z, 0) }
+                { fd_get(Z, ZD0, ZPs0),
+                  domain_remove_smaller_than(ZD0, 0, ZDG0) },
+                fd_put(Z, ZDG0, ZPs0)
             ;   true
             ),
             (   { fd_get(X, XD, XL, XU, _), fd_get(Z, ZD, ZL, ZU, ZPs) } ->
@@ -5908,6 +5941,35 @@ run_propagator(preified_slash(X, Y, D, R), MState) -->
         ).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+run_propagator(preified_exp(X, Y, D, R), MState) -->
+        (   X == 1 ->
+            kill(MState),
+            D = 1,
+            R = 1
+        ;   Y == 0 ->
+            kill(MState),
+            D = 1,
+            R = 1
+        ;   Y == 1 ->
+            kill(MState),
+            D = 1,
+            R = X
+        ;   nonvar(X),
+            nonvar(Y) ->
+            kill(MState),
+            (   ( abs(X) =:= 1 ; Y >= 0 ) ->
+                D = 1,
+                R is X^Y
+            ;   D = 0
+            )
+        ;   D == 1 ->
+            kill(MState),
+            queue_goal(X^Y #= R)
+        ;   []
+        ).
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 update_bounds(X, XD, XPs, XL, XU, NXL, NXU) -->
@@ -6055,7 +6117,7 @@ domain_to_list(Domain, List) :- phrase(domain_to_list(Domain), List).
 domain_to_list(split(_, Left, Right)) -->
         domain_to_list(Left), domain_to_list(Right).
 domain_to_list(empty)                 --> [].
-domain_to_list(from_to(n(F),n(T)))    --> { numlist(F, T, Ns) }, list(Ns).
+domain_to_list(from_to(n(F),n(T)))    --> { numlist(F, T, Ns) }, seq(Ns).
 
 difference_arcs([], []) --> [].
 difference_arcs([V|Vs], FL0) -->
@@ -6415,8 +6477,7 @@ num_infinite(Var, N0, N) :-
 weak_arc_all_distinct(Ls) :-
         must_be(list, Ls),
         Orig = original_goal(_, weak_arc_all_distinct(Ls)),
-        all_distinct(Ls, [], Orig),
-        do_queue.
+        all_distinct(Ls, [], Orig).
 
 all_distinct([], _, _).
 all_distinct([X|Right], Left, Orig) :-
@@ -6729,8 +6790,10 @@ gcc_pairs([Key-Num0|KNs], Vs, [Key-Num|Rest]) :-
 
 gcc_global(Vs, KNs) :-
         gcc_check(KNs),
-        % reach fix-point: all elements of clpz_gcc_vs must be variables
-        do_queue,
+        % previously: call do_queue/0 (now a NOP) here to reach a
+        % fix-point: all elements of clpz_gcc_vs must be variables. We
+        % must ensure this holds if gcc_check/1 is later rewritten to
+        % actually disable the queue.
         with_local_attributes(Vs,
               (gcc_arcs(KNs, S, Vals),
                variables_with_num_occurrences(Vs, VNs),
@@ -7753,7 +7816,7 @@ attributes_goals([propagator(P, State)|As]) -->
               ;   maplist(unwrap_with(=), Gs, Gs1)
               ),
               maplist(with_clpz, Gs1, Gs2) },
-            list(Gs2)
+            seq(Gs2)
         ;   [P] % possibly user-defined constraint
         ),
         attributes_goals(As).
@@ -7771,17 +7834,15 @@ bare_integer(V0, V)    :- ( integer(V0) -> V = V0 ; V = #V0 ).
 
 attribute_goal_(presidual(Goal))       --> [Goal].
 attribute_goal_(pgeq(A,B))             --> [#A #>= #B].
-attribute_goal_(pplus(X,Y,Z))          --> [#X + #Y #= #Z].
+attribute_goal_(pplus(X,Y,Z,_))        --> [#X + #Y #= #Z].
 attribute_goal_(pneq(A,B))             --> [#A #\= #B].
-attribute_goal_(ptimes(X,Y,Z))         --> [#X * #Y #= #Z].
+attribute_goal_(ptimes(X,Y,Z,_))       --> [#X * #Y #= #Z].
 attribute_goal_(absdiff_neq(X,Y,C))    --> [abs(#X - #Y) #\= C].
 attribute_goal_(x_eq_abs_plus_v(X,V))  --> [#X #= abs(#X) + #V].
 attribute_goal_(x_neq_y_plus_z(X,Y,Z)) --> [#X #\= #Y + #Z].
 attribute_goal_(x_leq_y_plus_c(X,Y,C)) --> [#X #=< #Y + C].
-attribute_goal_(ptzdiv(X,Y,Z))         --> [#X // #Y #= #Z].
-attribute_goal_(pdiv(X,Y,Z))           --> [#X div #Y #= #Z].
-attribute_goal_(prdiv(X,Y,Z))          --> [#X / #Y #= #Z].
-attribute_goal_(pexp(X,Y,Z))           --> [#X ^ #Y #= #Z].
+attribute_goal_(ptzdiv(X,Y,Z,_))       --> [#X // #Y #= #Z].
+attribute_goal_(pexp(X,Y,Z,_))         --> [#X ^ #Y #= #Z].
 attribute_goal_(psign(X,Y))            --> [#Y #= sign(#X)].
 attribute_goal_(pabs(X,Y))             --> [#Y #= abs(#X)].
 attribute_goal_(pmod(X,M,K))           --> [#X mod #M #= #K].
@@ -7841,6 +7902,7 @@ attribute_goal_(reified_and(X,_,Y,_,B))    --> [#X #/\ #Y #<==> #B].
 attribute_goal_(reified_or(X, _, Y, _, B)) --> [#X #\/ #Y #<==> #B].
 attribute_goal_(reified_not(X, Y))         --> [#\ #X #<==> #Y].
 attribute_goal_(preified_slash(X, Y, _, R)) --> [#X/ #Y #= R].
+attribute_goal_(preified_exp(X, Y, _, R))  --> [#X^ #Y #= R].
 attribute_goal_(pimpl(X, Y, _))            --> [#X #==> #Y].
 attribute_goal_(pfunction(Op, A, B, R)) -->
         { Expr =.. [Op,#A,#B] },

@@ -430,6 +430,7 @@ impl HeapCellValue {
             HeapCellValueTag::Cons
             | HeapCellValueTag::F64
             | HeapCellValueTag::Fixnum
+            | HeapCellValueTag::CutPoint
             | HeapCellValueTag::Char
             | HeapCellValueTag::CStr => true,
             HeapCellValueTag::Atom => cell_as_atom_cell!(self).get_arity() == 0,

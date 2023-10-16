@@ -584,20 +584,11 @@ impl MachineState {
         seen_set: &mut IndexSet<HeapCellValue, S>,
         value: HeapCellValue,
     ) {
-        let mut iter = stackful_preorder_iter::<NonListElider>(&mut self.heap, &mut self.stack, value);
+        let iter = eager_stackful_preorder_iter(&mut self.heap, value);
 
-        while let Some(value) = iter.next() {
-            let value = unmark_cell_bits!(value);
-
-            if value.is_var() {
-                let value = unmark_cell_bits!(heap_bound_store(
-                    iter.heap,
-                    heap_bound_deref(iter.heap, value)
-                ));
-
-                if value.is_var() {
-                    seen_set.insert(value);
-                }
+        for term in iter {
+            if term.is_var() {
+                seen_set.insert(term);
             }
         }
     }
@@ -6890,6 +6881,17 @@ impl Machine {
             self.machine_st.unify_atom(atom!("[]"), a2);
             return;
         }
+
+        let stored_v = if stored_v.is_stack_var() {
+            let h = self.machine_st.heap.len();
+
+            self.machine_st.heap.push(heap_loc_as_cell!(h));
+            self.machine_st.bind(Ref::heap_cell(h), stored_v);
+
+            heap_loc_as_cell!(h)
+        } else {
+            stored_v
+        };
 
         let mut seen_set = IndexSet::with_hasher(FxBuildHasher::default());
 

@@ -328,6 +328,9 @@ staggered_sc(_, G) :- call(G).
 % to reason about the programs. Also restricts the ability to run the program with alternative execution strategies
 !.
 
+:- non_counted_backtracking get_cp/1.
+get_cp(B) :- '$get_cp'(B).
+
 :- non_counted_backtracking set_cp/1.
 
 set_cp(B) :- '$set_cp'(B).
@@ -359,24 +362,21 @@ cont_list_goal(Conts, '$call'(builtins:dispatch_call_list(Conts))).
 
 :- non_counted_backtracking dispatch_prep/3.
 
-dispatch_prep(Gs, B, [Cont|Conts]) :-
+dispatch_prep(Gs, B, Conts) :-
     (  callable(Gs) ->
        strip_module(Gs, M, Gs0),
        (  nonvar(Gs0),
-          dispatch_prep_(Gs0, B, [Cont|Conts]) ->
+          dispatch_prep_(Gs0, B, Conts) ->
           true
        ;  Gs0 == ! ->
-          Cont = '$call'(builtins:set_cp(B)),
-          Conts = []
+          Conts = ['$call'(builtins:set_cp(B))]
        ;  nonvar(Gs0),
           \+ callable(Gs0) ->
           throw(dispatch_prep_error)
-       ;  Cont = Gs,
-          Conts = []
+       ;  Conts = [Gs]
        )
     ;  var(Gs) ->
-       Cont = Gs,
-       Conts = []
+       Conts = [Gs]
     ;  throw(dispatch_prep_error)
     ).
 
@@ -387,20 +387,32 @@ dispatch_prep_((G1, G2), B, [Cont|Conts]) :-
     dispatch_prep(G1, B, IConts1),
     cont_list_goal(IConts1, Cont),
     dispatch_prep(G2, B, Conts).
-dispatch_prep_((G1 ; G2), B, [Cont|Conts]) :-
-    dispatch_prep(G1, B, IConts0),
+dispatch_prep_((G1 ; G2), B, Conts) :-
+    (  nonvar(G1) ->
+       (  G1 = (G11 -> G12) ->
+          dispatch_prep(G11, B, IConts2),
+          dispatch_prep(G12, B, IConts3),
+          cont_list_goal(IConts2, Cont2),
+          cont_list_goal(IConts3, Cont3),
+          Cont0 = '$call'(builtins:staggered_if_then(Cont2, Cont3))
+       ;  dispatch_prep(G1, B, IConts0),
+          dispatch_prep(G2, B, IConts1),
+          cont_list_goal(IConts0, Cont0)
+       )
+    ;  dispatch_prep(G1, B1, IConts0),
+       cont_list_goal(IConts0, Cont0)
+    ),
     dispatch_prep(G2, B, IConts1),
     cont_list_goal(IConts0, Cont0),
     cont_list_goal(IConts1, Cont1),
-    Cont = '$call'(builtins:staggered_sc(Cont0, Cont1)),
-    Conts = [].
-dispatch_prep_((G1 -> G2), B, [Cont|Conts]) :-
-    dispatch_prep(G1, B, IConts1),
+    Conts = ['$call'(builtins:staggered_sc(Cont0, Cont1))].
+dispatch_prep_((G1 -> G2), B, Conts) :-
+    dispatch_prep(G1, B1, IConts1),
     dispatch_prep(G2, B, IConts2),
     cont_list_goal(IConts1, Cont1),
     cont_list_goal(IConts2, Cont2),
-    Cont = '$call'(builtins:staggered_if_then(Cont1, Cont2)),
-    Conts = [].
+    Conts = ['$call'(builtins:get_cp(B1)),
+             '$call'(builtins:staggered_if_then(Cont1, Cont2))].
 
 
 :- non_counted_backtracking dispatch_call_list/1.
