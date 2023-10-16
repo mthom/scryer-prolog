@@ -1,3 +1,4 @@
+:- use_module(library(dcgs)).
 :- use_module(library(format)).
 
 term1(A) :-
@@ -154,6 +155,17 @@ test("acyclic_term_30", (
     acyclic_term(A), acyclic_term(B)
 )).
 
+test("acyclic_term_31", (
+    A=B*C,A=[]*B*D*B, \+ acyclic_term(A),
+    \+ acyclic_term(B), \+ acyclic_term(C),
+    acyclic_term(D)
+)).
+
+test("acyclic_term_32", (
+    A=B*C,A=B*[]*B, \+ acyclic_term(A),
+    \+ acyclic_term(B), \+ acyclic_term(C)
+)).
+
 test("acyclic_term#2111_1", (
     term1(A), \+ acyclic_term(A)
 )).
@@ -199,6 +211,16 @@ test("acyclic_term#2121", (
     acyclic_term(A), acyclic_term(B)
 )).
 
+test("acyclic_term#2122", (
+    A=B*C,A=[]*B*B, \+ acyclic_term(A),
+    \+ acyclic_term(B), \+ acyclic_term(C)
+)).
+
+test("acyclic_term#2123", (
+    A=B*B,C=A*B,B=[]*[], acyclic_term(A),
+    acyclic_term(B), acyclic_term(C)
+)).
+
 main :-
     findall(test(Name, Goal), test(Name, Goal), Tests),
     run_tests(Tests, Failed),
@@ -231,3 +253,15 @@ run_tests_quiet([test(Name, Goal)|Tests], Failed) :-
     ;   Failed = [Name|Failed1]
     ),
     run_tests_quiet(Tests, Failed1).
+
+show_failed(Failed) :-
+    phrase(portray_failed(Failed), F),
+    format("~s", [F]).
+
+portray_failed_([]) --> [].
+portray_failed_([F|Fs]) -->
+    "\"", F, "\"",  "\n", portray_failed_(Fs).
+
+portray_failed([]) --> [].
+portray_failed([F|Fs]) -->
+    "\n", "Failed tests:", "\n", portray_failed_([F|Fs]).
