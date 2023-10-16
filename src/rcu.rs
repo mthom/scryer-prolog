@@ -6,11 +6,9 @@ use std::{
     ptr::NonNull,
     sync::{
         atomic::{AtomicPtr, AtomicU8},
-        Arc, Weak,
+        Arc, Weak, RwLock
     },
 };
-
-use tokio::sync::RwLock;
 
 // the epoch counters of all threads that have ever accessed an Rcu
 // threads that have finished will have a dangling Weak reference and can be cleand up
@@ -18,7 +16,7 @@ use tokio::sync::RwLock;
 // writes will be slower as more epoch counters need to be waited for
 // reads should be faster as a thread only needs to register itself once on the first read
 //
-static EPOCH_COUNTERS: RwLock<Vec<Weak<AtomicU8>>> = RwLock::const_new(Vec::new());
+static EPOCH_COUNTERS: RwLock<Vec<Weak<AtomicU8>>> = RwLock::new(Vec::new());
 
 thread_local! {
     // odd value means the current thread is about to access the active_epoch of an Rcu
@@ -53,7 +51,8 @@ impl<T> Rcu<T> {
                 let epoch_counter = Arc::new(AtomicU8::new(0));
                 // register the current threads epoch counter on init
                 EPOCH_COUNTERS
-                    .blocking_write()
+                    .write()
+		    .unwrap()
                     .push(Arc::downgrade(&epoch_counter));
                 epoch_counter
             });
@@ -113,7 +112,7 @@ impl<T> Rcu<T> {
         // - the Rcu itself holds one strong count
         let arc = unsafe { ManuallyDrop::new(Arc::from_raw(arc_ptr)) };
 
-        let epochs = EPOCH_COUNTERS.blocking_read().clone();
+        let epochs = EPOCH_COUNTERS.read().unwrap().clone();
         let mut epochs = epochs
             .into_iter()
             .flat_map(|elem| {

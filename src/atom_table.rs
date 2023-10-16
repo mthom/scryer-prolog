@@ -12,12 +12,12 @@ use std::slice;
 use std::str;
 use std::sync::Arc;
 use std::sync::Mutex;
+use std::sync::RwLock;
 use std::sync::Weak;
 
 use indexmap::IndexSet;
 
 use modular_bitfield::prelude::*;
-use tokio::sync::RwLock;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Atom {
@@ -74,7 +74,7 @@ fn global_atom_table() -> &'static RwLock<Weak<AtomTable>> {
 
 #[inline(always)]
 fn arc_atom_table() -> Option<Arc<AtomTable>> {
-    global_atom_table().blocking_read().upgrade()
+    global_atom_table().read().unwrap().upgrade()
 }
 
 impl RawBlockTraits for AtomTable {
@@ -310,12 +310,12 @@ impl InnerAtomTable {
 impl AtomTable {
     #[inline]
     pub fn new() -> Arc<Self> {
-        let upgraded = global_atom_table().blocking_read().upgrade();
+        let upgraded = global_atom_table().read().unwrap().upgrade();
         // don't inline upgraded, otherwise temporary will be dropped too late in case of None
         if let Some(atom_table) = upgraded {
             atom_table
         } else {
-            let mut guard = global_atom_table().blocking_write();
+            let mut guard = global_atom_table().write().unwrap();
             // try to upgrade again in case we lost the race on the write lock
             if let Some(atom_table) = guard.upgrade() {
                 atom_table
