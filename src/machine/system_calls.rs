@@ -51,14 +51,20 @@ use std::env;
 use std::ffi::CString;
 use std::fs;
 use std::hash::{BuildHasher, BuildHasherDefault};
-use std::io::{ErrorKind, Read, BufRead, Write};
+use std::io::{ErrorKind, Read, Write};
+#[cfg(feature = "http")]
+use std::io::BufRead;
 use std::iter::{once, FromIterator};
 use std::mem;
-use std::net::{SocketAddr, TcpListener, TcpStream, ToSocketAddrs};
+use std::net::{TcpListener, TcpStream};
+#[cfg(feature = "http")]
+use std::net::{SocketAddr, ToSocketAddrs};
 use std::num::NonZeroU32;
 use std::ops::Sub;
 use std::process;
+#[cfg(feature = "http")]
 use std::str::FromStr;
+#[cfg(feature = "http")]
 use std::sync::{Mutex, Arc, Condvar};
 
 use chrono::{offset::Local, DateTime};
@@ -100,7 +106,7 @@ use warp::hyper::{HeaderMap, Method};
 use warp::{Buf, Filter};
 #[cfg(feature = "http")]
 use reqwest::Url;
-//use hyper_util::rt::TokioIo;
+#[cfg(feature = "http")]
 use futures::future;
 
 #[cfg(feature = "repl")]

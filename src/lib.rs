@@ -49,7 +49,6 @@ use wasm_bindgen::prelude::*;
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
 pub fn eval_code(s: &str) -> String {
-    use web_sys::console;
     use machine::mock_wam::*;
 
     let mut wam = Machine::with_test_streams();

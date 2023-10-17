@@ -21,7 +21,9 @@ use std::fmt::Debug;
 use std::fs::{File, OpenOptions};
 use std::hash::Hash;
 use std::io;
-use std::io::{BufRead, Cursor, ErrorKind, Read, Seek, SeekFrom, Write};
+use std::io::{Cursor, ErrorKind, Read, Seek, SeekFrom, Write};
+#[cfg(feature = "http")]
+use std::io::BufRead;
 use std::mem;
 use std::net::{Shutdown, TcpStream};
 use std::ops::{Deref, DerefMut};
