@@ -70,6 +70,7 @@ bytes = "1"
 dashu = "0.4.0"
 num-order = { version = "1.2.0" }
 rand = "0.8.5"
+topo_sort = { version = "0.4.0" }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 libffi = { version = "3.2.0", optional = true }

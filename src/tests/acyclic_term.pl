@@ -81,87 +81,87 @@ test("acyclic_term_13", (
     A = [A|2], X = A, T=a(X, A), \+ acyclic_term(T)
 )).
 
-test("acyclic_term_13", (
+test("acyclic_term_14", (
     A = [T|2], X = A, T=a(X, A), \+ acyclic_term(T)
 )).
 
-test("acyclic_term_14", (
+test("acyclic_term_15", (
     T = [_A|T], \+ acyclic_term(T)
 )).
 
-test("acyclic_term_15", (
+test("acyclic_term_16", (
     T = [T|_L], \+ acyclic_term(T)
 )).
 
-test("acyclic_term_16", (
+test("acyclic_term_17", (
     A = [1|A], X = A, T=a(X, A), \+ acyclic_term(T)
 )).
 
-test("acyclic_term_17", (
+test("acyclic_term_18", (
     T = [_A| [[[[L|T]|[]]]]], acyclic_term(L)
 )).
 
-test("acyclic_term_18", (
+test("acyclic_term_19", (
     T = [A| [[[[_L|T]|[]]]]], acyclic_term(A)
 )).
 
-test("acyclic_term_19", (
+test("acyclic_term_20", (
     T = [_A| [[[[_L|T]|[]]]]], \+ acyclic_term(T)
 )).
 
-test("acyclic_term_20", (
+test("acyclic_term_21", (
     A = [_C|_B], X = A, T=a(t(X,A), A), acyclic_term(T)
 )).
 
-test("acyclic_term_21", (
+test("acyclic_term_22", (
     X = [a | Rest], Rest = [_Y | Rest], \+ acyclic_term(X)
 )).
 
-test("acyclic_term_22", (
+test("acyclic_term_23", (
     _X = [a | Rest], Rest = [_Y | Rest], \+ acyclic_term(Rest)
 )).
 
-test("acyclic_term_23", (
+test("acyclic_term_24", (
     T = [[_A, T]], G = [1|T], \+ acyclic_term(G)
 )).
 
-test("acyclic_term_24", (
+test("acyclic_term_25", (
     T = [[_A, T]], \+ acyclic_term(T)
 )).
 
-test("acyclic_term_25", (
+test("acyclic_term_26", (
     T = [[_, _], T], \+ acyclic_term(T)
 )).
 
-test("acyclic_term_26", (
+test("acyclic_term_27", (
     T = [[T, _], 1], \+ acyclic_term(T)
 )).
 
-test("acyclic_term_27", (
+test("acyclic_term_28", (
     T = str(A,A), acyclic_term(T)
 )).
 
-test("acyclic_term_28", (
+test("acyclic_term_29", (
     T = str(A,A,A), acyclic_term(T)
 )).
 
-test("acyclic_term_29", (
+test("acyclic_term_30", (
     A = s(B, d(Y)), Y = B, acyclic_term(A),
     acyclic_term(B), acyclic_term(Y)
 )).
 
-test("acyclic_term_30", (
+test("acyclic_term_31", (
     A=str(B,B,B), C=str(A,_D,B), acyclic_term(C),
     acyclic_term(A), acyclic_term(B)
 )).
 
-test("acyclic_term_31", (
+test("acyclic_term_32", (
     A=B*C,A=[]*B*D*B, \+ acyclic_term(A),
     \+ acyclic_term(B), \+ acyclic_term(C),
     acyclic_term(D)
 )).
 
-test("acyclic_term_32", (
+test("acyclic_term_33", (
     A=B*C,A=B*[]*B, \+ acyclic_term(A),
     \+ acyclic_term(B), \+ acyclic_term(C)
 )).
@@ -219,6 +219,20 @@ test("acyclic_term#2122", (
 test("acyclic_term#2123", (
     A=B*B,C=A*B,B=[]*[], acyclic_term(A),
     acyclic_term(B), acyclic_term(C)
+)).
+
+test("acyclic_term#2124", (
+    A=B*C,B=[]*C,C=[]*B, \+ acyclic_term(A),
+    \+ acyclic_term(B), \+ acyclic_term(C)
+)).
+
+test("acyclic_term#2125", (
+    A=B*[],
+    D=B*[],
+    A=B,
+    \+ acyclic_term(D),
+    \+ acyclic_term(A),
+    \+ acyclic_term(B)
 )).
 
 main :-
