@@ -1,6 +1,8 @@
-pub(crate) use crate::machine::gc::{CycleDetectorUMP, StacklessPreOrderHeapIter};
+#[cfg(test)]
+pub(crate) use crate::machine::gc::StacklessPreOrderHeapIter;
 
 use crate::atom_table::*;
+use crate::machine::cycle_detection::CycleDetectingIter;
 use crate::machine::heap::*;
 use crate::machine::stack::*;
 use crate::types::*;
@@ -504,11 +506,11 @@ impl<'a, ElideLists: ListElisionPolicy> Iterator for StackfulPreOrderHeapIter<'a
 }
 
 #[inline(always)]
-pub(crate) fn cycle_detecting_stackless_preorder_iter(
-    heap: &mut Vec<HeapCellValue>,
+pub(crate) fn cycle_detecting_stackless_preorder_iter<'a>(
+    heap: &'a mut [HeapCellValue],
     start: usize,
-) -> StacklessPreOrderHeapIter<CycleDetectorUMP> {
-    StacklessPreOrderHeapIter::<CycleDetectorUMP>::new(heap, start)
+) -> CycleDetectingIter<'a> {
+    CycleDetectingIter::new(heap, start)
 }
 
 #[inline(always)]

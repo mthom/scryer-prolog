@@ -55,39 +55,6 @@ impl UnmarkPolicy for IteratorUMP {
     }
 }
 
-pub(crate) struct CycleDetectorUMP {
-    mark_phase: bool,
-    focus: usize,
-}
-
-impl UnmarkPolicy for CycleDetectorUMP {
-    #[inline(always)]
-    fn forward_attr_var(iter: &mut StacklessPreOrderHeapIter<Self>) -> Option<HeapCellValue> {
-        iter.forward_var()
-    }
-
-    #[inline]
-    fn invert_marker(iter: &mut StacklessPreOrderHeapIter<Self>) {
-        iter.iter_state.mark_phase = false;
-        invert_marker(iter);
-    }
-
-    #[inline]
-    fn mark_phase(&self) -> bool {
-        self.mark_phase
-    }
-
-    #[inline(always)]
-    fn report_var_link(_iter: &StacklessPreOrderHeapIter<Self>) -> bool {
-        true
-    }
-
-    #[inline(always)]
-    fn record_focus(iter: &mut StacklessPreOrderHeapIter<Self>) {
-        iter.iter_state.focus = iter.current;
-    }
-}
-
 struct MarkerUMP {}
 
 impl UnmarkPolicy for MarkerUMP {
@@ -174,31 +141,6 @@ impl<'a> StacklessPreOrderHeapIter<'a, IteratorUMP> {
             next,
             iter_state: IteratorUMP { mark_phase: true,},
         }
-    }
-}
-
-impl<'a> StacklessPreOrderHeapIter<'a, CycleDetectorUMP> {
-    pub(crate) fn new(heap: &'a mut [HeapCellValue], start: usize) -> Self {
-        heap[start].set_forwarding_bit(true);
-        let next = heap[start].get_value();
-
-        Self {
-            heap,
-            start,
-            current: start,
-            next,
-            iter_state: CycleDetectorUMP { mark_phase: true, focus: 0 },
-        }
-    }
-
-    #[inline]
-    pub(crate) fn focus(&self) -> usize {
-        self.iter_state.focus
-    }
-
-    #[inline(always)]
-    pub(crate) fn current(&self) -> usize {
-        self.current
     }
 }
 

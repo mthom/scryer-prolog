@@ -1131,66 +1131,23 @@ impl MachineState {
 
     #[inline]
     pub fn is_cyclic_term(&mut self, value: HeapCellValue) -> bool {
-        use topo_sort::TopoSort;
-
         let value = self.store(self.deref(value));
 
-        if value.is_constant() || value.is_stack_var() {
+        if value.is_stack_var() || value.is_constant() {
             return false;
         }
 
         let h = self.heap.len();
         self.heap.push(value);
 
-        let found_cycle = (|| {
-            let mut topo_graph = TopoSort::new();
+        let cycle_found = {
             let mut iter = cycle_detecting_stackless_preorder_iter(&mut self.heap, h);
-
-            while let Some(cell) = iter.next() {
-                let focus = iter.focus();
-
-                read_heap_cell!(cell,
-                    (HeapCellValueTag::Atom, (_name, arity)) => {
-                        if arity > 0 {
-                            // focus is actually the location of Str(s) here.
-                            let s = iter.current() - arity;
-
-                            topo_graph.insert(focus, vec![s]);
-                            topo_graph.insert(s, (s + 1 .. s + arity + 1).collect::<Vec<_>>());
-                        }
-                    }
-                    (HeapCellValueTag::Str, s) => {
-                        topo_graph.insert(focus, vec![s]);
-                    }
-                    (HeapCellValueTag::Lis | HeapCellValueTag::PStrLoc | HeapCellValueTag::PStrOffset, l) => {
-                        if l <= focus && focus < l + 2 {
-                            // TopoSort doesn't consider focus ->
-                            // focus to induce a cycle so in this case
-                            // it must be checked manually.
-                            return true;
-                        }
-
-                        topo_graph.insert(focus, (l .. l + 2).collect::<Vec<_>>());
-                    }
-                    (HeapCellValueTag::AttrVar | HeapCellValueTag::Var, h) => {
-                        if focus != h {
-                            topo_graph.insert(focus, vec![h]);
-                        }
-                    }
-                    _ => {
-                    }
-                );
-
-                if topo_graph.cycle_detected() {
-                    break;
-                }
-            }
-
-            topo_graph.cycle_detected()
-        })();
+            while let Some(_) = iter.next() {}
+            iter.cycle_found()
+        };
 
         self.heap.pop();
-        found_cycle
+        cycle_found
     }
 
     // arg(+N, +Term, ?Arg)

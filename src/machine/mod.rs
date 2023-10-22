@@ -6,6 +6,7 @@ pub mod code_walker;
 pub mod loader;
 pub mod compile;
 pub mod copier;
+pub mod cycle_detection;
 pub mod disjuncts;
 pub mod dispatch;
 pub mod gc;
