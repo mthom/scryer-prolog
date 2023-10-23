@@ -105,18 +105,16 @@ impl<'a, const STOP_AT_CYCLES: bool> CycleDetectingIter<'a, STOP_AT_CYCLES> {
                         let next = self.next as usize;
 
                         if self.heap[next].get_forwarding_bit() {
-                            if self.current != next {
-                                return if self.cycle_detection_active() {
+                            return if self.current != next {
+                                if self.cycle_detection_active() {
                                     self.cycle_found = true;
                                     None
                                 } else {
                                     Some(self.backward_and_return())
-                                };
-                            } else if self.backward() {
-                                return None;
-                            }
-
-                            continue;
+                                }
+                            } else {
+                                Some(self.backward_and_return())
+                            };
                         } else if self.heap[next].get_mark_bit() == self.mark_phase {
                             return Some(self.backward_and_return());
                         }
@@ -130,9 +128,7 @@ impl<'a, const STOP_AT_CYCLES: bool> CycleDetectingIter<'a, STOP_AT_CYCLES> {
                         self.next = temp;
 
                         if self.next < self.heap.len() as u64 {
-                            if self.heap[self.next as usize].get_mark_bit() == self.mark_phase {
-                                return Some(HeapCellValue::build_with(tag, next as u64));
-                            }
+                            return Some(HeapCellValue::build_with(tag, next as u64));
                         }
                     }
                     HeapCellValueTag::Str => {
@@ -350,8 +346,8 @@ impl<'a, const STOP_AT_CYCLES: bool> CycleDetectingIter<'a, STOP_AT_CYCLES> {
                     self.heap[self.current].set_mark_bit(self.mark_phase);
 
                     if self.heap[self.current - 1].get_forwarding_bit() {
-                        self.next = self.current as u64 - 1;
                         self.heap[self.current].set_value(self.next);
+                        self.next = self.current as u64 - 1;
                         self.current = temp as usize;
 
                         true
