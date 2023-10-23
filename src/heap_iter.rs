@@ -2,7 +2,7 @@
 pub(crate) use crate::machine::gc::StacklessPreOrderHeapIter;
 
 use crate::atom_table::*;
-use crate::machine::cycle_detection::CycleDetectingIter;
+use crate::machine::cycle_detection::*;
 use crate::machine::heap::*;
 use crate::machine::stack::*;
 use crate::types::*;
@@ -509,7 +509,9 @@ impl<'a, ElideLists: ListElisionPolicy> Iterator for StackfulPreOrderHeapIter<'a
 pub(crate) fn cycle_detecting_stackless_preorder_iter<'a>(
     heap: &'a mut [HeapCellValue],
     start: usize,
-) -> CycleDetectingIter<'a> {
+) -> CycleDetectingIter<'a, true> {
+    // const generics argument of true so that cycle discovery stops
+    // the iterator.
     CycleDetectingIter::new(heap, start)
 }
 

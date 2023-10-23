@@ -21,7 +21,7 @@ use crate::types::*;
  */
 
 #[derive(Debug)]
-pub(crate) struct CycleDetectingIter<'a> {
+pub(crate) struct CycleDetectingIter<'a, const STOP_AT_CYCLES: bool> {
     pub(crate) heap: &'a mut [HeapCellValue],
     start: usize,
     current: usize,
@@ -30,7 +30,7 @@ pub(crate) struct CycleDetectingIter<'a> {
     mark_phase: bool,
 }
 
-impl<'a> CycleDetectingIter<'a> {
+impl<'a, const STOP_AT_CYCLES: bool> CycleDetectingIter<'a, STOP_AT_CYCLES> {
     pub(crate) fn new(heap: &'a mut [HeapCellValue], start: usize) -> Self {
         heap[start].set_forwarding_bit(true);
         let next = heap[start].get_value();
@@ -52,7 +52,7 @@ impl<'a> CycleDetectingIter<'a> {
 
     #[inline]
     fn cycle_detection_active(&self) -> bool {
-        self.mark_phase && !self.cycle_found
+        STOP_AT_CYCLES && self.mark_phase && !self.cycle_found
     }
 
     fn backward_and_return(&mut self) -> HeapCellValue {
@@ -401,7 +401,7 @@ impl<'a> CycleDetectingIter<'a> {
     }
 }
 
-impl<'a> Iterator for CycleDetectingIter<'a> {
+impl<'a, const STOP_AT_CYCLES: bool> Iterator for CycleDetectingIter<'a, STOP_AT_CYCLES> {
     type Item = HeapCellValue;
 
     #[inline]
@@ -411,7 +411,7 @@ impl<'a> Iterator for CycleDetectingIter<'a> {
 }
 
 
-impl<'a> Drop for CycleDetectingIter<'a> {
+impl<'a, const STOP_AT_CYCLES: bool> Drop for CycleDetectingIter<'a, STOP_AT_CYCLES> {
     fn drop(&mut self) {
         self.invert_marker();
 
