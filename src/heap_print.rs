@@ -888,6 +888,19 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                     var_opt => {
                         if is_cyclic && cell.is_compound(self.iter.heap) {
                             // self-referential variables are marked "cyclic".
+                            read_heap_cell!(cell,
+                                (HeapCellValueTag::Lis, vh) => {
+                                    if self.iter.heap[vh].get_forwarding_bit() {
+                                        self.iter.pop_stack();
+                                    }
+
+                                    if self.iter.heap[vh+1].get_forwarding_bit() {
+                                        self.iter.pop_stack();
+                                    }
+                                }
+                                _ => {}
+                            );
+
                             match var_opt {
                                 Some(var) => {
                                     // If the term is bound to a named variable,

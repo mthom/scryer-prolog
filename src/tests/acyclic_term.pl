@@ -255,6 +255,11 @@ test("acyclic_term#2130_2", (
     \+ acyclic_term(T)
 )).
 
+test("acyclic_term#2131", (
+    A=[B],C=[B],C=[A],
+    \+ acyclic_term(C)
+)).
+
 main :-
     findall(test(Name, Goal), test(Name, Goal), Tests),
     run_tests(Tests, Failed),

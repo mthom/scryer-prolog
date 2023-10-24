@@ -2257,9 +2257,7 @@ mod tests {
                 list_loc_as_cell!(1)
             );
             assert_eq!(iter.next().unwrap(), cyclic_link);
-
             assert_eq!(iter.next().unwrap(), cyclic_link);
-
             assert_eq!(iter.next().unwrap(), cyclic_link);
 
             assert_eq!(iter.next(), None);

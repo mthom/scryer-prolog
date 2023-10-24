@@ -175,6 +175,15 @@ impl<'a, const STOP_AT_CYCLES: bool> CycleDetectingIter<'a, STOP_AT_CYCLES> {
                             None => return None,
                         };
 
+                        if self.cycle_detection_active() {
+                            for idx in (self.next as usize .. last_cell_loc).rev() {
+                                if self.heap[idx].get_forwarding_bit() {
+                                    self.cycle_found = true;
+                                    return None;
+                                }
+                            }
+                        }
+
                         if (last_cell_loc + 1) as u64 == self.next {
                             if self.backward() {
                                 return None;
@@ -184,15 +193,6 @@ impl<'a, const STOP_AT_CYCLES: bool> CycleDetectingIter<'a, STOP_AT_CYCLES> {
                         } else if last_cell_loc as u64 == self.next {
                             // car cells of lists are both marked and forwarded.
                             self.heap[last_cell_loc].set_mark_bit(self.mark_phase);
-                        }
-
-                        if self.cycle_detection_active() {
-                            for idx in (self.next as usize .. last_cell_loc).rev() {
-                                if self.heap[idx].get_forwarding_bit() {
-                                    self.cycle_found = true;
-                                    return None;
-                                }
-                            }
                         }
 
                         self.heap[last_cell_loc].set_forwarding_bit(true);
