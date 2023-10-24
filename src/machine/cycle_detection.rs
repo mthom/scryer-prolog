@@ -186,6 +186,15 @@ impl<'a, const STOP_AT_CYCLES: bool> CycleDetectingIter<'a, STOP_AT_CYCLES> {
                             self.heap[last_cell_loc].set_mark_bit(self.mark_phase);
                         }
 
+                        if self.cycle_detection_active() {
+                            for idx in (self.next as usize .. last_cell_loc).rev() {
+                                if self.heap[idx].get_forwarding_bit() {
+                                    self.cycle_found = true;
+                                    return None;
+                                }
+                            }
+                        }
+
                         self.heap[last_cell_loc].set_forwarding_bit(true);
 
                         self.next = self.heap[last_cell_loc].get_value();

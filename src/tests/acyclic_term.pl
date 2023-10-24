@@ -29,6 +29,16 @@ term6(A) :-
    A=[B|B],
    B=[C|C].
 
+term7(A) :-
+   B=[C|D],
+   A=[D|C],
+   B=[B|D].
+
+term8(A) :-
+   B=C,
+   B=[C|_D],
+   A=[C|_E].
+
 test("acyclic_term_1", (
     L = [_Y,[M,B],B|M], acyclic_term(L)
 )).
@@ -233,6 +243,16 @@ test("acyclic_term#2125", (
     \+ acyclic_term(D),
     \+ acyclic_term(A),
     \+ acyclic_term(B)
+)).
+
+test("acyclic_term#2130_1", (
+    term7(T),
+    \+ acyclic_term(T)
+)).
+
+test("acyclic_term#2130_2", (
+    term8(T),
+    \+ acyclic_term(T)
 )).
 
 main :-
