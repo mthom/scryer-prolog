@@ -850,15 +850,9 @@ pub(crate) fn modulus(x: Number, y: Number, arena: &mut Arena) -> Result<Number,
     };
 
     fn ibig_rem_floor(n1: &Integer, n2: &Integer) -> Integer {
-        if n1 > &Integer::ZERO && n2 < &Integer::ZERO {
-            ((n1 - Integer::ONE) / n2) - Integer::ONE
-        } else if n1 < &Integer::ZERO && n2 > &Integer::ZERO {
-            ((n1 + Integer::ONE) / n2) - Integer::ONE
-        } else {
-            let ring = ConstDivisor::new(n2.unsigned_abs());
-            let n1 = n1.clone();
-            IBig::from(ring.reduce(n1).residue())
-        }
+        let ring = ConstDivisor::new(n2.unsigned_abs());
+        let n1 = n1.clone();
+        IBig::from(ring.reduce(n1).residue())
     }
 
     match (x, y) {
