@@ -2997,13 +2997,13 @@ impl Machine {
                     .get_name_and_arity();
 
                 match (name, arity) {
-                    (atom!("to_upper"), 1) => {
+                    (atom!("upper"), 1) => {
                         let reg = self.machine_st.deref(self.machine_st.heap[s+1]);
                         let atom = AtomTable::build_with(&self.machine_st.atom_tbl, &c.to_uppercase().to_string());
                         let upper_str = string_as_cstr_cell!(atom);
                         unify!(self.machine_st, reg, upper_str);
                     }
-                    (atom!("to_lower"), 1) => {
+                    (atom!("lower"), 1) => {
                         let reg = self.machine_st.deref(self.machine_st.heap[s+1]);
                         let atom = AtomTable::build_with(&self.machine_st.atom_tbl, &c.to_lowercase().to_string());
                         let lower_str = string_as_cstr_cell!(atom);
