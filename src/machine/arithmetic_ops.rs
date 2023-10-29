@@ -1,4 +1,4 @@
-use dashu::base::{Abs, Gcd, UnsignedAbs};
+use dashu::base::{Abs, Gcd, Signed, UnsignedAbs};
 use dashu::integer::IBig;
 use dashu::integer::fast_div::ConstDivisor;
 use divrem::*;
@@ -852,7 +852,18 @@ pub(crate) fn modulus(x: Number, y: Number, arena: &mut Arena) -> Result<Number,
     fn ibig_rem_floor(n1: &Integer, n2: &Integer) -> Integer {
         let ring = ConstDivisor::new(n2.unsigned_abs());
         let n1 = n1.clone();
-        IBig::from(ring.reduce(n1).residue())
+
+        if n2.is_negative() {
+            let unsigned_result = IBig::from(ring.reduce(n1).residue());
+
+            if unsigned_result.is_zero() {
+                unsigned_result
+            } else {
+                unsigned_result + n2
+            }
+        } else {
+            IBig::from(ring.reduce(n1).residue())
+        }
     }
 
     match (x, y) {
