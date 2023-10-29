@@ -764,20 +764,6 @@ enum InstructionTemplate {
     Neg(ArithmeticTerm, usize),
     #[strum_discriminants(strum(props(Arity = "1", Name = "plus")))]
     Plus(ArithmeticTerm, usize),
-    #[strum_discriminants(strum(props(Arity = "1", Name = "acosh")))]
-    ACosh(ArithmeticTerm, usize),
-    #[strum_discriminants(strum(props(Arity = "1", Name = "asinh")))]
-    ASinh(ArithmeticTerm, usize),
-    #[strum_discriminants(strum(props(Arity = "1", Name = "atanh")))]
-    ATanh(ArithmeticTerm, usize),
-    #[strum_discriminants(strum(props(Arity = "1", Name = "cosh")))]
-    Cosh(ArithmeticTerm, usize),
-    #[strum_discriminants(strum(props(Arity = "1", Name = "sinh")))]
-    Sinh(ArithmeticTerm, usize),
-    #[strum_discriminants(strum(props(Arity = "1", Name = "tanh")))]
-    Tanh(ArithmeticTerm, usize),
-    #[strum_discriminants(strum(props(Arity = "1", Name = "log10")))]
-    Log10(ArithmeticTerm, usize),
     #[strum_discriminants(strum(props(Arity = "1", Name = "bitwise_complement")))]
     BitwiseComplement(ArithmeticTerm, usize),
     // control instructions
@@ -1449,29 +1435,8 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ATan(ref at, t) => {
                         arith_instr_unary_functor(h, atom!("atan"), arena, at, t)
                     }
-                    &Instruction::ACosh(ref at, t) => {
-                        arith_instr_unary_functor(h, atom!("acosh"), arena, at, t)
-                    }
-                    &Instruction::ASinh(ref at, t) => {
-                        arith_instr_unary_functor(h, atom!("asinh"), arena, at, t)
-                    }
-                    &Instruction::ATanh(ref at, t) => {
-                        arith_instr_unary_functor(h, atom!("atanh"), arena, at, t)
-                    }
-                    &Instruction::Cosh(ref at, t) => {
-                        arith_instr_unary_functor(h, atom!("cosh"), arena, at, t)
-                    }
-                    &Instruction::Sinh(ref at, t) => {
-                        arith_instr_unary_functor(h, atom!("sinh"), arena, at, t)
-                    }
-                    &Instruction::Tanh(ref at, t) => {
-                        arith_instr_unary_functor(h, atom!("tanh"), arena, at, t)
-                    }
                     &Instruction::Sqrt(ref at, t) => {
                         arith_instr_unary_functor(h, atom!("sqrt"), arena, at, t)
-                    }
-                    &Instruction::Log10(ref at, t) => {
-                        arith_instr_unary_functor(h, atom!("log10"), arena, at, t)
                     }
                     &Instruction::Abs(ref at, t) => {
                         arith_instr_unary_functor(h, atom!("abs"), arena, at, t)
