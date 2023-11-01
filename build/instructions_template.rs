@@ -660,6 +660,8 @@ enum InstructionTemplate {
     // cut instruction
     #[strum_discriminants(strum(props(Arity = "1", Name = "cut")))]
     Cut(RegType),
+    #[strum_discriminants(strum(props(Arity = "1", Name = "cut_prev")))]
+    CutPrev(RegType),
     #[strum_discriminants(strum(props(Arity = "1", Name = "get_level")))]
     GetLevel(RegType),
     #[strum_discriminants(strum(props(Arity = "1", Name = "get_prev_level")))]
@@ -1332,6 +1334,10 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::Cut(r) => {
                         let rt_stub = reg_type_into_functor(r);
                         functor!(atom!("cut"), [str(h, 0)], [rt_stub])
+                    }
+                    &Instruction::CutPrev(r) => {
+                        let rt_stub = reg_type_into_functor(r);
+                        functor!(atom!("cut_prev"), [str(h, 0)], [rt_stub])
                     }
                     &Instruction::GetLevel(r) => {
                         let rt_stub = reg_type_into_functor(r);

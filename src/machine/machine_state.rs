@@ -941,6 +941,25 @@ impl MachineState {
             }
         );
     }
+
+    #[inline(always)]
+    pub(super) fn cut_prev_body(&mut self, value: HeapCellValue) {
+        let b = self.b;
+
+        read_heap_cell!(value,
+            (HeapCellValueTag::CutPoint, b0) => {
+                let b0 = b0.get_num() as usize;
+                let b0 = self.stack.index_or_frame(b0).prelude.b;
+
+                if b > b0 {
+                    self.b = b0;
+                }
+            }
+            _ => {
+                self.fail = true;
+            }
+        );
+    }
 }
 
 #[derive(Debug)]

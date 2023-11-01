@@ -950,10 +950,15 @@ impl<'b> CodeGenerator<'b> {
                                     code.push_back(instr!("proceed"));
                                 }
                             }
-                            &QueryTerm::LocalCut(var_num) => {
+                            &QueryTerm::LocalCut { var_num, cut_prev } => {
                                 let code = branch_code_stack.code(code);
                                 let r = self.marker.get_binding(var_num);
-                                code.push_back(instr!("cut", r));
+
+                                code.push_back(if cut_prev {
+                                    instr!("cut_prev", r)
+                                } else {
+                                    instr!("cut", r)
+                                });
 
                                 if self.marker.in_tail_position {
                                     if self.marker.var_data.allocates {

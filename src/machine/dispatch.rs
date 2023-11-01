@@ -1188,6 +1188,21 @@ impl Machine {
 
                         self.machine_st.p += 1;
                     }
+                    &Instruction::CutPrev(r) => {
+                        let value = self.machine_st[r];
+                        self.machine_st.cut_prev_body(value);
+
+                        if self.machine_st.fail {
+                            self.machine_st.backtrack();
+                            continue;
+                        }
+
+                        if (self.machine_st.run_cleaners_fn)(self) {
+                            continue;
+                        }
+
+                        self.machine_st.p += 1;
+                    }
                     &Instruction::Allocate(num_cells) => {
                         self.machine_st.allocate(num_cells);
                     }
