@@ -9,13 +9,13 @@ fn main() -> std::process::ExitCode {
     })
     .unwrap();
 
-    #[cfg(target_os = "wasi")]
+    #[cfg(target_arch = "wasm32")]
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
         .unwrap();
 
-    #[cfg(not(target_os = "wasi"))]
+    #[cfg(not(target_arch = "wasm32"))]
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()
