@@ -221,109 +221,10 @@ pub(crate) fn parse_and_write_parsed_term_to_heap(
 
 impl Machine {
     pub fn with_test_streams() -> Self {
-        use ref_thread_local::RefThreadLocal;
-
-        let mut machine_st = MachineState::new();
-
-        let user_input = Stream::Null(StreamOptions::default());
-        let user_output = Stream::from_owned_string("".to_owned(), &mut machine_st.arena);
-        let user_error = Stream::stderr(&mut machine_st.arena);
-
-        let runtime = tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()
-            .unwrap();
-
-        let mut wam = Machine {
-            machine_st,
-            indices: IndexStore::new(),
-            code: Code::new(),
-            user_input,
-            user_output,
-            user_error,
-            load_contexts: vec![],
-            runtime,
-            #[cfg(feature = "ffi")]
-            foreign_function_table: Default::default(),
-            rng: StdRng::from_entropy(),
-        };
-
-        let mut lib_path = current_dir();
-
-        lib_path.pop();
-        lib_path.push("lib");
-
-        wam.add_impls_to_indices();
-
-        bootstrapping_compile(
-            Stream::from_static_string(
-                LIBRARIES.borrow()["ops_and_meta_predicates"],
-                &mut wam.machine_st.arena,
-            ),
-            &mut wam,
-            ListingSource::from_file_and_path(
-                atom!("ops_and_meta_predicates.pl"),
-                lib_path.clone(),
-            ),
-        )
-        .unwrap();
-
-        bootstrapping_compile(
-            Stream::from_static_string(LIBRARIES.borrow()["builtins"], &mut wam.machine_st.arena),
-            &mut wam,
-            ListingSource::from_file_and_path(atom!("builtins.pl"), lib_path.clone()),
-        )
-        .unwrap();
-
-        if let Some(ref mut builtins) = wam.indices.modules.get_mut(&atom!("builtins")) {
-            load_module(
-                &mut wam.machine_st,
-                &mut wam.indices.code_dir,
-                &mut wam.indices.op_dir,
-                &mut wam.indices.meta_predicates,
-                &CompilationTarget::User,
-                builtins,
-            );
-
-            import_builtin_impls(&wam.indices.code_dir, builtins);
-        } else {
-            unreachable!()
-        }
-
-        lib_path.pop(); // remove the "lib" at the end
-
-        bootstrapping_compile(
-            Stream::from_static_string(include_str!("../loader.pl"), &mut wam.machine_st.arena),
-            &mut wam,
-            ListingSource::from_file_and_path(atom!("loader.pl"), lib_path.clone()),
-        )
-        .unwrap();
-
-        wam.configure_modules();
-
-        if let Some(loader) = wam.indices.modules.get(&atom!("loader")) {
-            load_module(
-                &mut wam.machine_st,
-                &mut wam.indices.code_dir,
-                &mut wam.indices.op_dir,
-                &mut wam.indices.meta_predicates,
-                &CompilationTarget::User,
-                loader,
-            );
-        } else {
-            unreachable!()
-        }
-
-        wam.load_special_forms();
-        wam.load_top_level();
-        wam.configure_streams();
-
-        wam
+        Machine::new(MachineConfig::in_memory())
     }
 
     pub fn test_load_file(&mut self, file: &str) -> Vec<u8> {
-        use std::io::Read;
-
         let stream = Stream::from_owned_string(
             std::fs::read_to_string(AsRef::<std::path::Path>::as_ref(file)).unwrap(),
             &mut self.machine_st.arena,
@@ -334,8 +235,6 @@ impl Machine {
     }
 
     pub fn test_load_string(&mut self, code: &str) -> Vec<u8> {
-        use std::io::Read;
-
         let stream = Stream::from_owned_string(
             code.to_owned(),
             &mut self.machine_st.arena,

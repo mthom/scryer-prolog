@@ -64,6 +64,7 @@ smallvec = "1.8.0"
 static_assertions = "1.1.0"
 ryu = "1.0.9"
 futures = "0.3"
+regex = "1.9.1"
 libloading = "0.7"
 derive_deref = "1.1.1"
 bytes = "1"
@@ -84,7 +85,7 @@ tokio = { version = "1.28.2", features = ["full"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 getrandom = { version = "0.2.10", features = ["js"] }
-tokio = { version = "1.28.2", features = ["sync", "macros", "io-util", "rt"] }
+tokio = { version = "1.28.2", features = ["sync", "macros", "io-util", "rt", "time"] }
 
 [target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
 console_error_panic_hook = "0.1"
@@ -107,6 +108,7 @@ ring = { version = "0.16.13" }
 [dev-dependencies]
 assert_cmd = "1.0.3"
 predicates-core = "1.0.2"
+maplit = "1.0.2"
 serial_test = "2.0.0"
 
 [patch.crates-io]

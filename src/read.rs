@@ -24,7 +24,9 @@ use rustyline::history::DefaultHistory;
 use rustyline::{Config, Editor};
 
 use std::collections::VecDeque;
-use std::io::{Cursor, Error, ErrorKind, Read};
+use std::io::{Cursor, Read};
+#[cfg(feature = "repl")]
+use std::io::{Error, ErrorKind};
 use std::sync::Arc;
 
 type SubtermDeque = VecDeque<(usize, usize)>;
@@ -83,6 +85,7 @@ impl MachineState {
 }
 
 static mut PROMPT: bool = false;
+#[cfg(feature = "repl")]
 const HISTORY_FILE: &'static str = ".scryer_history";
 
 pub(crate) fn set_prompt(value: bool) {
@@ -91,6 +94,7 @@ pub(crate) fn set_prompt(value: bool) {
     }
 }
 
+#[cfg(feature = "repl")]
 #[inline]
 fn get_prompt() -> &'static str {
     unsafe {
@@ -107,6 +111,7 @@ pub struct ReadlineStream {
     #[cfg(feature = "repl")]
     rl: Editor<Helper, DefaultHistory>,
     pending_input: CharReader<Cursor<String>>,
+    #[allow(dead_code)]
     add_history: bool,
 }
 
@@ -145,6 +150,7 @@ impl ReadlineStream {
         }
     }
 
+    #[allow(unused_variables)]
     pub fn set_atoms_for_completion(&mut self, atoms: &Arc<AtomTable>) {
         #[cfg(feature = "repl")]
         {
@@ -215,6 +221,7 @@ impl ReadlineStream {
         }
     }
 
+    #[allow(dead_code)]
     #[cfg(not(feature = "repl"))]
     fn save_history(&mut self) {}
 

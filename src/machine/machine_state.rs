@@ -672,6 +672,14 @@ impl MachineState {
             }
         }
 
+        if let Stream::Byte(_) = stream {
+            return self.read_term(
+                stream, 
+                indices, 
+                MachineState::read_term_from_user_input_eof_handler
+            )
+        }
+
         unreachable!("Stream must be a Stream::Readline(_)")
     }
 

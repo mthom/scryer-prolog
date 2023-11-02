@@ -1,0 +1,1018 @@
+=====consult
+:- discontiguous(triple/3).
+:- discontiguous(link/5).
+:- discontiguous(reachable/2).
+reachable(A,B) :- triple(A,_,B).
+reachable(A,B) :- triple(A,_,X), reachable(X,B).
+:- discontiguous(hiddenExpression/1).
+:- discontiguous(languageAddress/2).
+:- discontiguous(languageName/2).
+:- discontiguous(expressionAddress/2).
+:- discontiguous(register_sdna_flow/2).
+:- discontiguous(flowable/2).
+:- discontiguous(flow_state/3).
+:- discontiguous(start_action/2).
+:- discontiguous(action/4).
+:- discontiguous(subject_class/2).
+:- discontiguous(constructor/2).
+:- discontiguous(destructor/2).
+:- discontiguous(instance/2).
+:- discontiguous(property/2).
+:- discontiguous(property_getter/4).
+:- discontiguous(property_setter/3).
+:- discontiguous(property_resolve/2).
+:- discontiguous(property_resolve_language/3).
+:- discontiguous(property_named_option/4).
+:- discontiguous(collection/2).
+:- discontiguous(collection_getter/4).
+:- discontiguous(collection_setter/3).
+:- discontiguous(collection_remover/3).
+:- discontiguous(collection_adder/3).
+:- discontiguous(p3_class_icon/2).
+:- discontiguous(p3_class_color/2).
+:- discontiguous(p3_instance_color/3).
+=====query
+subject_class(X, _).
+=====consult
+:- discontiguous(triple/3).
+:- discontiguous(link/5).
+:- discontiguous(reachable/2).
+reachable(A,B) :- triple(A,_,B).
+reachable(A,B) :- triple(A,_,X), reachable(X,B).
+:- discontiguous(hiddenExpression/1).
+:- discontiguous(languageAddress/2).
+:- discontiguous(languageName/2).
+:- discontiguous(expressionAddress/2).
+:- discontiguous(register_sdna_flow/2).
+:- discontiguous(flowable/2).
+:- discontiguous(flow_state/3).
+:- discontiguous(start_action/2).
+:- discontiguous(action/4).
+:- discontiguous(subject_class/2).
+:- discontiguous(constructor/2).
+:- discontiguous(destructor/2).
+:- discontiguous(instance/2).
+:- discontiguous(property/2).
+:- discontiguous(property_getter/4).
+:- discontiguous(property_setter/3).
+:- discontiguous(property_resolve/2).
+:- discontiguous(property_resolve_language/3).
+:- discontiguous(property_named_option/4).
+:- discontiguous(collection/2).
+:- discontiguous(collection_getter/4).
+:- discontiguous(collection_setter/3).
+:- discontiguous(collection_remover/3).
+:- discontiguous(collection_adder/3).
+:- discontiguous(p3_class_icon/2).
+:- discontiguous(p3_class_color/2).
+:- discontiguous(p3_instance_color/3).
+subject_class("Todo", c).
+constructor(c, '[{action: "addLink", source: "this", predicate: "todo://state", target: "todo://ready"}]').
+instance(c, Base) :- triple(Base, "todo://state", _).
+
+destructor(c, '[{action: "removeLink", source: "this", predicate: "todo://state", target: "todo://ready"}]').
+
+property(c, "state").
+property_getter(c, Base, "state", Value) :- triple(Base, "todo://state", Value).
+property_setter(c, "state", '[{action: "setSingleTarget", source: "this", predicate: "todo://state", target: "value"}]').
+
+property(c, "title").
+property_resolve(c, "title").
+property_resolve_language(c, "title", "literal").
+property_getter(c, Base, "title", Value) :- triple(Base, "todo://has_title", Value).
+property_setter(c, "title", '[{action: "setSingleTarget", source: "this", predicate: "todo://has_title", target: "value"}]').
+
+property(c, "isLiked").
+property_getter(c, Base, "isLiked", Value) :- triple(Base, "flux://has_reaction", "flux://thumbsup"), Value = true.
+
+collection(c, "comments").
+collection_getter(c, Base, "comments", List) :- findall(C, triple(Base, "todo://comment", C), List).
+collection_adder(c, "commentss", '[{action: "addLink", source: "this", predicate: "todo://comment", target: "value"}]').
+collection_remover(c, "commentss", '[{action: "removeLink", source: "this", predicate: "todo://comment", target: "value"}]').
+collection_setter(c, "commentss", '[{action: "collectionSetter", source: "this", predicate: "todo://comment", target: "value"}]').
+
+collection(c, "entries").
+collection_getter(c, Base, "entries", List) :- findall(C, triple(Base, "flux://entry_type", C), List).
+collection_adder(c, "entriess", '[{action: "addLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_remover(c, "entriess", '[{action: "removeLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_setter(c, "entriess", '[{action: "collectionSetter", source: "this", predicate: "flux://entry_type", target: "value"}]').
+
+collection(c, "messages").
+collection_getter(c, Base, "messages", List) :- setof(Target, (triple(Base, "flux://entry_type", Target), instance(OtherClass, Target), subject_class("Message", OtherClass)), List).
+collection_adder(c, "messagess", '[{action: "addLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_remover(c, "messagess", '[{action: "removeLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_setter(c, "messagess", '[{action: "collectionSetter", source: "this", predicate: "flux://entry_type", target: "value"}]').
+
+collection(c, "likedMessages").
+collection_getter(c, Base, "likedMessages", List) :- setof(Target, (triple(Base, "flux://entry_type", Target), triple(Target, "flux://has_reaction", "flux://thumbsup")), List).
+collection_adder(c, "likedMessagess", '[{action: "addLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_remover(c, "likedMessagess", '[{action: "removeLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_setter(c, "likedMessagess", '[{action: "collectionSetter", source: "this", predicate: "flux://entry_type", target: "value"}]').
+
+=====query
+subject_class(X, _).
+=====query
+subject_class("Todo", C), constructor(C, Actions).
+=====consult
+:- discontiguous(triple/3).
+:- discontiguous(link/5).
+triple("literal://string:construct%20test", "todo://state", "todo://ready").
+link("literal://string:construct%20test", "todo://state", "todo://ready", 1691084130581, "did:key:z6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa").
+:- discontiguous(reachable/2).
+reachable(A,B) :- triple(A,_,B).
+reachable(A,B) :- triple(A,_,X), reachable(X,B).
+:- discontiguous(hiddenExpression/1).
+:- discontiguous(languageAddress/2).
+languageAddress("literal://string:construct%20test", "literal").
+:- discontiguous(languageName/2).
+languageName("literal://string:construct%20test", "literal").
+:- discontiguous(expressionAddress/2).
+expressionAddress("literal://string:construct%20test", "string:construct%20test").
+:- discontiguous(register_sdna_flow/2).
+:- discontiguous(flowable/2).
+:- discontiguous(flow_state/3).
+:- discontiguous(start_action/2).
+:- discontiguous(action/4).
+:- discontiguous(subject_class/2).
+:- discontiguous(constructor/2).
+:- discontiguous(destructor/2).
+:- discontiguous(instance/2).
+:- discontiguous(property/2).
+:- discontiguous(property_getter/4).
+:- discontiguous(property_setter/3).
+:- discontiguous(property_resolve/2).
+:- discontiguous(property_resolve_language/3).
+:- discontiguous(property_named_option/4).
+:- discontiguous(collection/2).
+:- discontiguous(collection_getter/4).
+:- discontiguous(collection_setter/3).
+:- discontiguous(collection_remover/3).
+:- discontiguous(collection_adder/3).
+:- discontiguous(p3_class_icon/2).
+:- discontiguous(p3_class_color/2).
+:- discontiguous(p3_instance_color/3).
+subject_class("Todo", c).
+constructor(c, '[{action: "addLink", source: "this", predicate: "todo://state", target: "todo://ready"}]').
+instance(c, Base) :- triple(Base, "todo://state", _).
+
+destructor(c, '[{action: "removeLink", source: "this", predicate: "todo://state", target: "todo://ready"}]').
+
+property(c, "state").
+property_getter(c, Base, "state", Value) :- triple(Base, "todo://state", Value).
+property_setter(c, "state", '[{action: "setSingleTarget", source: "this", predicate: "todo://state", target: "value"}]').
+
+property(c, "title").
+property_resolve(c, "title").
+property_resolve_language(c, "title", "literal").
+property_getter(c, Base, "title", Value) :- triple(Base, "todo://has_title", Value).
+property_setter(c, "title", '[{action: "setSingleTarget", source: "this", predicate: "todo://has_title", target: "value"}]').
+
+property(c, "isLiked").
+property_getter(c, Base, "isLiked", Value) :- triple(Base, "flux://has_reaction", "flux://thumbsup"), Value = true.
+
+collection(c, "comments").
+collection_getter(c, Base, "comments", List) :- findall(C, triple(Base, "todo://comment", C), List).
+collection_adder(c, "commentss", '[{action: "addLink", source: "this", predicate: "todo://comment", target: "value"}]').
+collection_remover(c, "commentss", '[{action: "removeLink", source: "this", predicate: "todo://comment", target: "value"}]').
+collection_setter(c, "commentss", '[{action: "collectionSetter", source: "this", predicate: "todo://comment", target: "value"}]').
+
+collection(c, "entries").
+collection_getter(c, Base, "entries", List) :- findall(C, triple(Base, "flux://entry_type", C), List).
+collection_adder(c, "entriess", '[{action: "addLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_remover(c, "entriess", '[{action: "removeLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_setter(c, "entriess", '[{action: "collectionSetter", source: "this", predicate: "flux://entry_type", target: "value"}]').
+
+collection(c, "messages").
+collection_getter(c, Base, "messages", List) :- setof(Target, (triple(Base, "flux://entry_type", Target), instance(OtherClass, Target), subject_class("Message", OtherClass)), List).
+collection_adder(c, "messagess", '[{action: "addLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_remover(c, "messagess", '[{action: "removeLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_setter(c, "messagess", '[{action: "collectionSetter", source: "this", predicate: "flux://entry_type", target: "value"}]').
+
+collection(c, "likedMessages").
+collection_getter(c, Base, "likedMessages", List) :- setof(Target, (triple(Base, "flux://entry_type", Target), triple(Target, "flux://has_reaction", "flux://thumbsup")), List).
+collection_adder(c, "likedMessagess", '[{action: "addLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_remover(c, "likedMessagess", '[{action: "removeLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_setter(c, "likedMessagess", '[{action: "collectionSetter", source: "this", predicate: "flux://entry_type", target: "value"}]').
+
+=====query
+subject_class("Todo", C), instance(C, "literal://string:construct%20test").
+=====query
+subject_class("Todo", C), instance(C, "literal://string:construct%20test").
+=====query
+subject_class("Todo", C), property(C, Property).
+=====query
+subject_class("Todo", C), property_resolve(C, "isLiked").
+=====query
+subject_class("Todo", C), property_resolve(C, "isLiked").
+=====query
+subject_class("Todo", C), property_resolve(C, "state").
+=====query
+subject_class("Todo", C), property_resolve(C, "title").
+=====query
+subject_class("Todo", C), property_setter(C, Property, Setter).
+=====query
+subject_class("Todo", C), property_resolve_language(C, "state", Language).
+=====query
+subject_class("Todo", C), property_resolve_language(C, "title", Language).
+=====query
+subject_class("Todo", C), property_resolve_language(C, "title", Language).
+=====query
+subject_class("Todo", C), collection(C, Collection).
+=====query
+subject_class("Todo", C), collection_adder(C, Collection, Adder).
+=====query
+subject_class("Todo", C), collection_remover(C, Collection, Remover).
+=====query
+subject_class("Todo", C), collection_setter(C, Collection, Setter).
+=====query
+subject_class("Todo", C), instance(C, "literal://string:construct%20test").
+=====query
+subject_class("Todo", C), constructor(C, Actions).
+=====consult
+:- discontiguous(triple/3).
+:- discontiguous(link/5).
+triple("literal://string:construct%20test", "todo://state", "todo://ready").
+triple("literal://string:get%20proxy%20test", "todo://state", "todo://ready").
+link("literal://string:construct%20test", "todo://state", "todo://ready", 1691084130581, "did:key:z6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa").
+link("literal://string:get%20proxy%20test", "todo://state", "todo://ready", 1691084130761, "did:key:z6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa").
+:- discontiguous(reachable/2).
+reachable(A,B) :- triple(A,_,B).
+reachable(A,B) :- triple(A,_,X), reachable(X,B).
+:- discontiguous(hiddenExpression/1).
+:- discontiguous(languageAddress/2).
+languageAddress("literal://string:construct%20test", "literal").
+languageAddress("literal://string:get%20proxy%20test", "literal").
+:- discontiguous(languageName/2).
+languageName("literal://string:construct%20test", "literal").
+languageName("literal://string:get%20proxy%20test", "literal").
+:- discontiguous(expressionAddress/2).
+expressionAddress("literal://string:construct%20test", "string:construct%20test").
+expressionAddress("literal://string:get%20proxy%20test", "string:get%20proxy%20test").
+:- discontiguous(register_sdna_flow/2).
+:- discontiguous(flowable/2).
+:- discontiguous(flow_state/3).
+:- discontiguous(start_action/2).
+:- discontiguous(action/4).
+:- discontiguous(subject_class/2).
+:- discontiguous(constructor/2).
+:- discontiguous(destructor/2).
+:- discontiguous(instance/2).
+:- discontiguous(property/2).
+:- discontiguous(property_getter/4).
+:- discontiguous(property_setter/3).
+:- discontiguous(property_resolve/2).
+:- discontiguous(property_resolve_language/3).
+:- discontiguous(property_named_option/4).
+:- discontiguous(collection/2).
+:- discontiguous(collection_getter/4).
+:- discontiguous(collection_setter/3).
+:- discontiguous(collection_remover/3).
+:- discontiguous(collection_adder/3).
+:- discontiguous(p3_class_icon/2).
+:- discontiguous(p3_class_color/2).
+:- discontiguous(p3_instance_color/3).
+subject_class("Todo", c).
+constructor(c, '[{action: "addLink", source: "this", predicate: "todo://state", target: "todo://ready"}]').
+instance(c, Base) :- triple(Base, "todo://state", _).
+
+destructor(c, '[{action: "removeLink", source: "this", predicate: "todo://state", target: "todo://ready"}]').
+
+property(c, "state").
+property_getter(c, Base, "state", Value) :- triple(Base, "todo://state", Value).
+property_setter(c, "state", '[{action: "setSingleTarget", source: "this", predicate: "todo://state", target: "value"}]').
+
+property(c, "title").
+property_resolve(c, "title").
+property_resolve_language(c, "title", "literal").
+property_getter(c, Base, "title", Value) :- triple(Base, "todo://has_title", Value).
+property_setter(c, "title", '[{action: "setSingleTarget", source: "this", predicate: "todo://has_title", target: "value"}]').
+
+property(c, "isLiked").
+property_getter(c, Base, "isLiked", Value) :- triple(Base, "flux://has_reaction", "flux://thumbsup"), Value = true.
+
+collection(c, "comments").
+collection_getter(c, Base, "comments", List) :- findall(C, triple(Base, "todo://comment", C), List).
+collection_adder(c, "commentss", '[{action: "addLink", source: "this", predicate: "todo://comment", target: "value"}]').
+collection_remover(c, "commentss", '[{action: "removeLink", source: "this", predicate: "todo://comment", target: "value"}]').
+collection_setter(c, "commentss", '[{action: "collectionSetter", source: "this", predicate: "todo://comment", target: "value"}]').
+
+collection(c, "entries").
+collection_getter(c, Base, "entries", List) :- findall(C, triple(Base, "flux://entry_type", C), List).
+collection_adder(c, "entriess", '[{action: "addLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_remover(c, "entriess", '[{action: "removeLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_setter(c, "entriess", '[{action: "collectionSetter", source: "this", predicate: "flux://entry_type", target: "value"}]').
+
+collection(c, "messages").
+collection_getter(c, Base, "messages", List) :- setof(Target, (triple(Base, "flux://entry_type", Target), instance(OtherClass, Target), subject_class("Message", OtherClass)), List).
+collection_adder(c, "messagess", '[{action: "addLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_remover(c, "messagess", '[{action: "removeLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_setter(c, "messagess", '[{action: "collectionSetter", source: "this", predicate: "flux://entry_type", target: "value"}]').
+
+collection(c, "likedMessages").
+collection_getter(c, Base, "likedMessages", List) :- setof(Target, (triple(Base, "flux://entry_type", Target), triple(Target, "flux://has_reaction", "flux://thumbsup")), List).
+collection_adder(c, "likedMessagess", '[{action: "addLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_remover(c, "likedMessagess", '[{action: "removeLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_setter(c, "likedMessagess", '[{action: "collectionSetter", source: "this", predicate: "flux://entry_type", target: "value"}]').
+
+=====query
+subject_class("Todo", C), instance(C, "literal://string:get%20proxy%20test").
+=====query
+subject_class("Todo", C), instance(C, "literal://string:get%20proxy%20test").
+=====query
+subject_class("Todo", C), property(C, Property).
+=====query
+subject_class("Todo", C), property_resolve(C, "isLiked").
+=====query
+subject_class("Todo", C), property_resolve(C, "isLiked").
+=====query
+subject_class("Todo", C), property_resolve(C, "state").
+=====query
+subject_class("Todo", C), property_resolve(C, "title").
+=====query
+subject_class("Todo", C), property_setter(C, Property, Setter).
+=====query
+subject_class("Todo", C), property_resolve_language(C, "state", Language).
+=====query
+subject_class("Todo", C), property_resolve_language(C, "title", Language).
+=====query
+subject_class("Todo", C), property_resolve_language(C, "title", Language).
+=====query
+subject_class("Todo", C), collection(C, Collection).
+=====query
+subject_class("Todo", C), collection_adder(C, Collection, Adder).
+=====query
+subject_class("Todo", C), collection_remover(C, Collection, Remover).
+=====query
+subject_class("Todo", C), collection_setter(C, Collection, Setter).
+=====query
+subject_class("Todo", C), instance(C, "literal://string:get%20proxy%20test").
+=====query
+subject_class("Todo", C), instance(C, "literal://string:get%20proxy%20test").
+=====query
+subject_class("Todo", C), property(C, Property).
+=====query
+subject_class("Todo", C), property_resolve(C, "isLiked").
+=====query
+subject_class("Todo", C), property_resolve(C, "isLiked").
+=====query
+subject_class("Todo", C), property_resolve(C, "state").
+=====query
+subject_class("Todo", C), property_resolve(C, "title").
+=====query
+subject_class("Todo", C), property_setter(C, Property, Setter).
+=====query
+subject_class("Todo", C), property_resolve_language(C, "state", Language).
+=====query
+subject_class("Todo", C), property_resolve_language(C, "title", Language).
+=====query
+subject_class("Todo", C), property_resolve_language(C, "title", Language).
+=====query
+subject_class("Todo", C), collection(C, Collection).
+=====query
+subject_class("Todo", C), collection_adder(C, Collection, Adder).
+=====query
+subject_class("Todo", C), collection_remover(C, Collection, Remover).
+=====query
+subject_class("Todo", C), collection_setter(C, Collection, Setter).
+=====query
+subject_class("Todo", C), property_getter(C, "literal://string:get%20proxy%20test", "state", Value).
+=====query
+subject_class("Todo", C), property_getter(C, "literal://string:get%20proxy%20test", "title", Value).
+=====query
+subject_class("Todo", C), constructor(C, Actions).
+=====consult
+:- discontiguous(triple/3).
+:- discontiguous(link/5).
+triple("literal://string:construct%20test", "todo://state", "todo://ready").
+triple("literal://string:get%20proxy%20test", "todo://state", "todo://ready").
+triple("literal://string:construct%20test", "todo://state", "todo://ready").
+link("literal://string:construct%20test", "todo://state", "todo://ready", 1691084130581, "did:key:z6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa").
+link("literal://string:get%20proxy%20test", "todo://state", "todo://ready", 1691084130761, "did:key:z6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa").
+link("literal://string:construct%20test", "todo://state", "todo://ready", 1691084131145, "did:key:z6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa").
+:- discontiguous(reachable/2).
+reachable(A,B) :- triple(A,_,B).
+reachable(A,B) :- triple(A,_,X), reachable(X,B).
+:- discontiguous(hiddenExpression/1).
+:- discontiguous(languageAddress/2).
+languageAddress("literal://string:construct%20test", "literal").
+languageAddress("literal://string:get%20proxy%20test", "literal").
+:- discontiguous(languageName/2).
+languageName("literal://string:construct%20test", "literal").
+languageName("literal://string:get%20proxy%20test", "literal").
+:- discontiguous(expressionAddress/2).
+expressionAddress("literal://string:construct%20test", "string:construct%20test").
+expressionAddress("literal://string:get%20proxy%20test", "string:get%20proxy%20test").
+:- discontiguous(register_sdna_flow/2).
+:- discontiguous(flowable/2).
+:- discontiguous(flow_state/3).
+:- discontiguous(start_action/2).
+:- discontiguous(action/4).
+:- discontiguous(subject_class/2).
+:- discontiguous(constructor/2).
+:- discontiguous(destructor/2).
+:- discontiguous(instance/2).
+:- discontiguous(property/2).
+:- discontiguous(property_getter/4).
+:- discontiguous(property_setter/3).
+:- discontiguous(property_resolve/2).
+:- discontiguous(property_resolve_language/3).
+:- discontiguous(property_named_option/4).
+:- discontiguous(collection/2).
+:- discontiguous(collection_getter/4).
+:- discontiguous(collection_setter/3).
+:- discontiguous(collection_remover/3).
+:- discontiguous(collection_adder/3).
+:- discontiguous(p3_class_icon/2).
+:- discontiguous(p3_class_color/2).
+:- discontiguous(p3_instance_color/3).
+subject_class("Todo", c).
+constructor(c, '[{action: "addLink", source: "this", predicate: "todo://state", target: "todo://ready"}]').
+instance(c, Base) :- triple(Base, "todo://state", _).
+
+destructor(c, '[{action: "removeLink", source: "this", predicate: "todo://state", target: "todo://ready"}]').
+
+property(c, "state").
+property_getter(c, Base, "state", Value) :- triple(Base, "todo://state", Value).
+property_setter(c, "state", '[{action: "setSingleTarget", source: "this", predicate: "todo://state", target: "value"}]').
+
+property(c, "title").
+property_resolve(c, "title").
+property_resolve_language(c, "title", "literal").
+property_getter(c, Base, "title", Value) :- triple(Base, "todo://has_title", Value).
+property_setter(c, "title", '[{action: "setSingleTarget", source: "this", predicate: "todo://has_title", target: "value"}]').
+
+property(c, "isLiked").
+property_getter(c, Base, "isLiked", Value) :- triple(Base, "flux://has_reaction", "flux://thumbsup"), Value = true.
+
+collection(c, "comments").
+collection_getter(c, Base, "comments", List) :- findall(C, triple(Base, "todo://comment", C), List).
+collection_adder(c, "commentss", '[{action: "addLink", source: "this", predicate: "todo://comment", target: "value"}]').
+collection_remover(c, "commentss", '[{action: "removeLink", source: "this", predicate: "todo://comment", target: "value"}]').
+collection_setter(c, "commentss", '[{action: "collectionSetter", source: "this", predicate: "todo://comment", target: "value"}]').
+
+collection(c, "entries").
+collection_getter(c, Base, "entries", List) :- findall(C, triple(Base, "flux://entry_type", C), List).
+collection_adder(c, "entriess", '[{action: "addLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_remover(c, "entriess", '[{action: "removeLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_setter(c, "entriess", '[{action: "collectionSetter", source: "this", predicate: "flux://entry_type", target: "value"}]').
+
+collection(c, "messages").
+collection_getter(c, Base, "messages", List) :- setof(Target, (triple(Base, "flux://entry_type", Target), instance(OtherClass, Target), subject_class("Message", OtherClass)), List).
+collection_adder(c, "messagess", '[{action: "addLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_remover(c, "messagess", '[{action: "removeLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_setter(c, "messagess", '[{action: "collectionSetter", source: "this", predicate: "flux://entry_type", target: "value"}]').
+
+collection(c, "likedMessages").
+collection_getter(c, Base, "likedMessages", List) :- setof(Target, (triple(Base, "flux://entry_type", Target), triple(Target, "flux://has_reaction", "flux://thumbsup")), List).
+collection_adder(c, "likedMessagess", '[{action: "addLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_remover(c, "likedMessagess", '[{action: "removeLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_setter(c, "likedMessagess", '[{action: "collectionSetter", source: "this", predicate: "flux://entry_type", target: "value"}]').
+
+=====query
+subject_class("Todo", C), instance(C, "literal://string:construct%20test").
+=====query
+subject_class("Todo", C), instance(C, "literal://string:construct%20test").
+=====query
+subject_class("Todo", C), property(C, Property).
+=====query
+subject_class("Todo", C), property_resolve(C, "isLiked").
+=====query
+subject_class("Todo", C), property_resolve(C, "isLiked").
+=====query
+subject_class("Todo", C), property_resolve(C, "state").
+=====query
+subject_class("Todo", C), property_resolve(C, "title").
+=====query
+subject_class("Todo", C), property_setter(C, Property, Setter).
+=====query
+subject_class("Todo", C), property_resolve_language(C, "state", Language).
+=====query
+subject_class("Todo", C), property_resolve_language(C, "title", Language).
+=====query
+subject_class("Todo", C), property_resolve_language(C, "title", Language).
+=====query
+subject_class("Todo", C), collection(C, Collection).
+=====query
+subject_class("Todo", C), collection_adder(C, Collection, Adder).
+=====query
+subject_class("Todo", C), collection_remover(C, Collection, Remover).
+=====query
+subject_class("Todo", C), collection_setter(C, Collection, Setter).
+=====query
+subject_class("Todo", C), property_getter(C, "literal://string:construct%20test", "state", Value).
+=====consult
+:- discontiguous(triple/3).
+:- discontiguous(link/5).
+triple("literal://string:get%20proxy%20test", "todo://state", "todo://ready").
+triple("literal://string:construct%20test", "todo://state", "todo://done").
+link("literal://string:get%20proxy%20test", "todo://state", "todo://ready", 1691084130761, "did:key:z6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa").
+link("literal://string:construct%20test", "todo://state", "todo://done", 1691084131359, "did:key:z6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa").
+:- discontiguous(reachable/2).
+reachable(A,B) :- triple(A,_,B).
+reachable(A,B) :- triple(A,_,X), reachable(X,B).
+:- discontiguous(hiddenExpression/1).
+:- discontiguous(languageAddress/2).
+languageAddress("literal://string:get%20proxy%20test", "literal").
+languageAddress("literal://string:construct%20test", "literal").
+:- discontiguous(languageName/2).
+languageName("literal://string:get%20proxy%20test", "literal").
+languageName("literal://string:construct%20test", "literal").
+:- discontiguous(expressionAddress/2).
+expressionAddress("literal://string:get%20proxy%20test", "string:get%20proxy%20test").
+expressionAddress("literal://string:construct%20test", "string:construct%20test").
+:- discontiguous(register_sdna_flow/2).
+:- discontiguous(flowable/2).
+:- discontiguous(flow_state/3).
+:- discontiguous(start_action/2).
+:- discontiguous(action/4).
+:- discontiguous(subject_class/2).
+:- discontiguous(constructor/2).
+:- discontiguous(destructor/2).
+:- discontiguous(instance/2).
+:- discontiguous(property/2).
+:- discontiguous(property_getter/4).
+:- discontiguous(property_setter/3).
+:- discontiguous(property_resolve/2).
+:- discontiguous(property_resolve_language/3).
+:- discontiguous(property_named_option/4).
+:- discontiguous(collection/2).
+:- discontiguous(collection_getter/4).
+:- discontiguous(collection_setter/3).
+:- discontiguous(collection_remover/3).
+:- discontiguous(collection_adder/3).
+:- discontiguous(p3_class_icon/2).
+:- discontiguous(p3_class_color/2).
+:- discontiguous(p3_instance_color/3).
+subject_class("Todo", c).
+constructor(c, '[{action: "addLink", source: "this", predicate: "todo://state", target: "todo://ready"}]').
+instance(c, Base) :- triple(Base, "todo://state", _).
+
+destructor(c, '[{action: "removeLink", source: "this", predicate: "todo://state", target: "todo://ready"}]').
+
+property(c, "state").
+property_getter(c, Base, "state", Value) :- triple(Base, "todo://state", Value).
+property_setter(c, "state", '[{action: "setSingleTarget", source: "this", predicate: "todo://state", target: "value"}]').
+
+property(c, "title").
+property_resolve(c, "title").
+property_resolve_language(c, "title", "literal").
+property_getter(c, Base, "title", Value) :- triple(Base, "todo://has_title", Value).
+property_setter(c, "title", '[{action: "setSingleTarget", source: "this", predicate: "todo://has_title", target: "value"}]').
+
+property(c, "isLiked").
+property_getter(c, Base, "isLiked", Value) :- triple(Base, "flux://has_reaction", "flux://thumbsup"), Value = true.
+
+collection(c, "comments").
+collection_getter(c, Base, "comments", List) :- findall(C, triple(Base, "todo://comment", C), List).
+collection_adder(c, "commentss", '[{action: "addLink", source: "this", predicate: "todo://comment", target: "value"}]').
+collection_remover(c, "commentss", '[{action: "removeLink", source: "this", predicate: "todo://comment", target: "value"}]').
+collection_setter(c, "commentss", '[{action: "collectionSetter", source: "this", predicate: "todo://comment", target: "value"}]').
+
+collection(c, "entries").
+collection_getter(c, Base, "entries", List) :- findall(C, triple(Base, "flux://entry_type", C), List).
+collection_adder(c, "entriess", '[{action: "addLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_remover(c, "entriess", '[{action: "removeLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_setter(c, "entriess", '[{action: "collectionSetter", source: "this", predicate: "flux://entry_type", target: "value"}]').
+
+collection(c, "messages").
+collection_getter(c, Base, "messages", List) :- setof(Target, (triple(Base, "flux://entry_type", Target), instance(OtherClass, Target), subject_class("Message", OtherClass)), List).
+collection_adder(c, "messagess", '[{action: "addLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_remover(c, "messagess", '[{action: "removeLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_setter(c, "messagess", '[{action: "collectionSetter", source: "this", predicate: "flux://entry_type", target: "value"}]').
+
+collection(c, "likedMessages").
+collection_getter(c, Base, "likedMessages", List) :- setof(Target, (triple(Base, "flux://entry_type", Target), triple(Target, "flux://has_reaction", "flux://thumbsup")), List).
+collection_adder(c, "likedMessagess", '[{action: "addLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_remover(c, "likedMessagess", '[{action: "removeLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_setter(c, "likedMessagess", '[{action: "collectionSetter", source: "this", predicate: "flux://entry_type", target: "value"}]').
+
+=====query
+subject_class("Todo", C), property_getter(C, "literal://string:construct%20test", "state", Value).
+=====query
+subject_class("Todo", C), property_getter(C, "literal://string:construct%20test", "title", Value).
+=====consult
+:- discontiguous(triple/3).
+:- discontiguous(link/5).
+triple("literal://string:get%20proxy%20test", "todo://state", "todo://ready").
+triple("literal://string:construct%20test", "todo://state", "todo://done").
+triple("literal://string:construct%20test", "todo://has_title", "literal://json:%7B%22author%22%3A%22did%3Akey%3Az6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%22%2C%22timestamp%22%3A%222023-08-03T17%3A35%3A31.405Z%22%2C%22data%22%3A%22test%20title%22%2C%22proof%22%3A%7B%22key%22%3A%22did%3Akey%3Az6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%23z6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%22%2C%22signature%22%3A%2253a6d498d7c19fed24000efe3339526b564d779f0906b71304c96b1016a09f0288b1f2c5718505f4e23933c95b7a7e68466330a824e01a80c6275d922030860c%22%2C%22valid%22%3Atrue%2C%22invalid%22%3Afalse%7D%7D").
+link("literal://string:get%20proxy%20test", "todo://state", "todo://ready", 1691084130761, "did:key:z6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa").
+link("literal://string:construct%20test", "todo://state", "todo://done", 1691084131359, "did:key:z6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa").
+link("literal://string:construct%20test", "todo://has_title", "literal://json:%7B%22author%22%3A%22did%3Akey%3Az6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%22%2C%22timestamp%22%3A%222023-08-03T17%3A35%3A31.405Z%22%2C%22data%22%3A%22test%20title%22%2C%22proof%22%3A%7B%22key%22%3A%22did%3Akey%3Az6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%23z6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%22%2C%22signature%22%3A%2253a6d498d7c19fed24000efe3339526b564d779f0906b71304c96b1016a09f0288b1f2c5718505f4e23933c95b7a7e68466330a824e01a80c6275d922030860c%22%2C%22valid%22%3Atrue%2C%22invalid%22%3Afalse%7D%7D", 1691084131416, "did:key:z6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa").
+:- discontiguous(reachable/2).
+reachable(A,B) :- triple(A,_,B).
+reachable(A,B) :- triple(A,_,X), reachable(X,B).
+:- discontiguous(hiddenExpression/1).
+:- discontiguous(languageAddress/2).
+languageAddress("literal://string:get%20proxy%20test", "literal").
+languageAddress("literal://string:construct%20test", "literal").
+languageAddress("literal://json:%7B%22author%22%3A%22did%3Akey%3Az6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%22%2C%22timestamp%22%3A%222023-08-03T17%3A35%3A31.405Z%22%2C%22data%22%3A%22test%20title%22%2C%22proof%22%3A%7B%22key%22%3A%22did%3Akey%3Az6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%23z6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%22%2C%22signature%22%3A%2253a6d498d7c19fed24000efe3339526b564d779f0906b71304c96b1016a09f0288b1f2c5718505f4e23933c95b7a7e68466330a824e01a80c6275d922030860c%22%2C%22valid%22%3Atrue%2C%22invalid%22%3Afalse%7D%7D", "literal").
+:- discontiguous(languageName/2).
+languageName("literal://string:get%20proxy%20test", "literal").
+languageName("literal://string:construct%20test", "literal").
+languageName("literal://json:%7B%22author%22%3A%22did%3Akey%3Az6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%22%2C%22timestamp%22%3A%222023-08-03T17%3A35%3A31.405Z%22%2C%22data%22%3A%22test%20title%22%2C%22proof%22%3A%7B%22key%22%3A%22did%3Akey%3Az6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%23z6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%22%2C%22signature%22%3A%2253a6d498d7c19fed24000efe3339526b564d779f0906b71304c96b1016a09f0288b1f2c5718505f4e23933c95b7a7e68466330a824e01a80c6275d922030860c%22%2C%22valid%22%3Atrue%2C%22invalid%22%3Afalse%7D%7D", "literal").
+:- discontiguous(expressionAddress/2).
+expressionAddress("literal://string:get%20proxy%20test", "string:get%20proxy%20test").
+expressionAddress("literal://string:construct%20test", "string:construct%20test").
+expressionAddress("literal://json:%7B%22author%22%3A%22did%3Akey%3Az6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%22%2C%22timestamp%22%3A%222023-08-03T17%3A35%3A31.405Z%22%2C%22data%22%3A%22test%20title%22%2C%22proof%22%3A%7B%22key%22%3A%22did%3Akey%3Az6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%23z6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%22%2C%22signature%22%3A%2253a6d498d7c19fed24000efe3339526b564d779f0906b71304c96b1016a09f0288b1f2c5718505f4e23933c95b7a7e68466330a824e01a80c6275d922030860c%22%2C%22valid%22%3Atrue%2C%22invalid%22%3Afalse%7D%7D", "json:%7B%22author%22%3A%22did%3Akey%3Az6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%22%2C%22timestamp%22%3A%222023-08-03T17%3A35%3A31.405Z%22%2C%22data%22%3A%22test%20title%22%2C%22proof%22%3A%7B%22key%22%3A%22did%3Akey%3Az6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%23z6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%22%2C%22signature%22%3A%2253a6d498d7c19fed24000efe3339526b564d779f0906b71304c96b1016a09f0288b1f2c5718505f4e23933c95b7a7e68466330a824e01a80c6275d922030860c%22%2C%22valid%22%3Atrue%2C%22invalid%22%3Afalse%7D%7D").
+:- discontiguous(register_sdna_flow/2).
+:- discontiguous(flowable/2).
+:- discontiguous(flow_state/3).
+:- discontiguous(start_action/2).
+:- discontiguous(action/4).
+:- discontiguous(subject_class/2).
+:- discontiguous(constructor/2).
+:- discontiguous(destructor/2).
+:- discontiguous(instance/2).
+:- discontiguous(property/2).
+:- discontiguous(property_getter/4).
+:- discontiguous(property_setter/3).
+:- discontiguous(property_resolve/2).
+:- discontiguous(property_resolve_language/3).
+:- discontiguous(property_named_option/4).
+:- discontiguous(collection/2).
+:- discontiguous(collection_getter/4).
+:- discontiguous(collection_setter/3).
+:- discontiguous(collection_remover/3).
+:- discontiguous(collection_adder/3).
+:- discontiguous(p3_class_icon/2).
+:- discontiguous(p3_class_color/2).
+:- discontiguous(p3_instance_color/3).
+subject_class("Todo", c).
+constructor(c, '[{action: "addLink", source: "this", predicate: "todo://state", target: "todo://ready"}]').
+instance(c, Base) :- triple(Base, "todo://state", _).
+
+destructor(c, '[{action: "removeLink", source: "this", predicate: "todo://state", target: "todo://ready"}]').
+
+property(c, "state").
+property_getter(c, Base, "state", Value) :- triple(Base, "todo://state", Value).
+property_setter(c, "state", '[{action: "setSingleTarget", source: "this", predicate: "todo://state", target: "value"}]').
+
+property(c, "title").
+property_resolve(c, "title").
+property_resolve_language(c, "title", "literal").
+property_getter(c, Base, "title", Value) :- triple(Base, "todo://has_title", Value).
+property_setter(c, "title", '[{action: "setSingleTarget", source: "this", predicate: "todo://has_title", target: "value"}]').
+
+property(c, "isLiked").
+property_getter(c, Base, "isLiked", Value) :- triple(Base, "flux://has_reaction", "flux://thumbsup"), Value = true.
+
+collection(c, "comments").
+collection_getter(c, Base, "comments", List) :- findall(C, triple(Base, "todo://comment", C), List).
+collection_adder(c, "commentss", '[{action: "addLink", source: "this", predicate: "todo://comment", target: "value"}]').
+collection_remover(c, "commentss", '[{action: "removeLink", source: "this", predicate: "todo://comment", target: "value"}]').
+collection_setter(c, "commentss", '[{action: "collectionSetter", source: "this", predicate: "todo://comment", target: "value"}]').
+
+collection(c, "entries").
+collection_getter(c, Base, "entries", List) :- findall(C, triple(Base, "flux://entry_type", C), List).
+collection_adder(c, "entriess", '[{action: "addLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_remover(c, "entriess", '[{action: "removeLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_setter(c, "entriess", '[{action: "collectionSetter", source: "this", predicate: "flux://entry_type", target: "value"}]').
+
+collection(c, "messages").
+collection_getter(c, Base, "messages", List) :- setof(Target, (triple(Base, "flux://entry_type", Target), instance(OtherClass, Target), subject_class("Message", OtherClass)), List).
+collection_adder(c, "messagess", '[{action: "addLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_remover(c, "messagess", '[{action: "removeLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_setter(c, "messagess", '[{action: "collectionSetter", source: "this", predicate: "flux://entry_type", target: "value"}]').
+
+collection(c, "likedMessages").
+collection_getter(c, Base, "likedMessages", List) :- setof(Target, (triple(Base, "flux://entry_type", Target), triple(Target, "flux://has_reaction", "flux://thumbsup")), List).
+collection_adder(c, "likedMessagess", '[{action: "addLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_remover(c, "likedMessagess", '[{action: "removeLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_setter(c, "likedMessagess", '[{action: "collectionSetter", source: "this", predicate: "flux://entry_type", target: "value"}]').
+
+=====query
+subject_class("Todo", C), property_getter(C, "literal://string:construct%20test", "title", Value).
+=====query
+subject_class("Todo", C), collection_getter(C, "literal://string:construct%20test", "comments", Value).
+=====query
+subject_class("Todo", C), collection_getter(C, "literal://string:construct%20test", "comments", Value).
+=====consult
+:- discontiguous(triple/3).
+:- discontiguous(link/5).
+triple("literal://string:get%20proxy%20test", "todo://state", "todo://ready").
+triple("literal://string:construct%20test", "todo://state", "todo://done").
+triple("literal://string:construct%20test", "todo://has_title", "literal://json:%7B%22author%22%3A%22did%3Akey%3Az6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%22%2C%22timestamp%22%3A%222023-08-03T17%3A35%3A31.405Z%22%2C%22data%22%3A%22test%20title%22%2C%22proof%22%3A%7B%22key%22%3A%22did%3Akey%3Az6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%23z6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%22%2C%22signature%22%3A%2253a6d498d7c19fed24000efe3339526b564d779f0906b71304c96b1016a09f0288b1f2c5718505f4e23933c95b7a7e68466330a824e01a80c6275d922030860c%22%2C%22valid%22%3Atrue%2C%22invalid%22%3Afalse%7D%7D").
+triple("literal://string:construct%20test", "todo://comment", "literal://string:comment%201").
+link("literal://string:get%20proxy%20test", "todo://state", "todo://ready", 1691084130761, "did:key:z6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa").
+link("literal://string:construct%20test", "todo://state", "todo://done", 1691084131359, "did:key:z6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa").
+link("literal://string:construct%20test", "todo://has_title", "literal://json:%7B%22author%22%3A%22did%3Akey%3Az6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%22%2C%22timestamp%22%3A%222023-08-03T17%3A35%3A31.405Z%22%2C%22data%22%3A%22test%20title%22%2C%22proof%22%3A%7B%22key%22%3A%22did%3Akey%3Az6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%23z6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%22%2C%22signature%22%3A%2253a6d498d7c19fed24000efe3339526b564d779f0906b71304c96b1016a09f0288b1f2c5718505f4e23933c95b7a7e68466330a824e01a80c6275d922030860c%22%2C%22valid%22%3Atrue%2C%22invalid%22%3Afalse%7D%7D", 1691084131416, "did:key:z6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa").
+link("literal://string:construct%20test", "todo://comment", "literal://string:comment%201", 1691084131473, "did:key:z6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa").
+:- discontiguous(reachable/2).
+reachable(A,B) :- triple(A,_,B).
+reachable(A,B) :- triple(A,_,X), reachable(X,B).
+:- discontiguous(hiddenExpression/1).
+:- discontiguous(languageAddress/2).
+languageAddress("literal://string:get%20proxy%20test", "literal").
+languageAddress("literal://string:construct%20test", "literal").
+languageAddress("literal://json:%7B%22author%22%3A%22did%3Akey%3Az6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%22%2C%22timestamp%22%3A%222023-08-03T17%3A35%3A31.405Z%22%2C%22data%22%3A%22test%20title%22%2C%22proof%22%3A%7B%22key%22%3A%22did%3Akey%3Az6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%23z6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%22%2C%22signature%22%3A%2253a6d498d7c19fed24000efe3339526b564d779f0906b71304c96b1016a09f0288b1f2c5718505f4e23933c95b7a7e68466330a824e01a80c6275d922030860c%22%2C%22valid%22%3Atrue%2C%22invalid%22%3Afalse%7D%7D", "literal").
+languageAddress("literal://string:comment%201", "literal").
+:- discontiguous(languageName/2).
+languageName("literal://string:get%20proxy%20test", "literal").
+languageName("literal://string:construct%20test", "literal").
+languageName("literal://json:%7B%22author%22%3A%22did%3Akey%3Az6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%22%2C%22timestamp%22%3A%222023-08-03T17%3A35%3A31.405Z%22%2C%22data%22%3A%22test%20title%22%2C%22proof%22%3A%7B%22key%22%3A%22did%3Akey%3Az6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%23z6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%22%2C%22signature%22%3A%2253a6d498d7c19fed24000efe3339526b564d779f0906b71304c96b1016a09f0288b1f2c5718505f4e23933c95b7a7e68466330a824e01a80c6275d922030860c%22%2C%22valid%22%3Atrue%2C%22invalid%22%3Afalse%7D%7D", "literal").
+languageName("literal://string:comment%201", "literal").
+:- discontiguous(expressionAddress/2).
+expressionAddress("literal://string:get%20proxy%20test", "string:get%20proxy%20test").
+expressionAddress("literal://string:construct%20test", "string:construct%20test").
+expressionAddress("literal://json:%7B%22author%22%3A%22did%3Akey%3Az6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%22%2C%22timestamp%22%3A%222023-08-03T17%3A35%3A31.405Z%22%2C%22data%22%3A%22test%20title%22%2C%22proof%22%3A%7B%22key%22%3A%22did%3Akey%3Az6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%23z6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%22%2C%22signature%22%3A%2253a6d498d7c19fed24000efe3339526b564d779f0906b71304c96b1016a09f0288b1f2c5718505f4e23933c95b7a7e68466330a824e01a80c6275d922030860c%22%2C%22valid%22%3Atrue%2C%22invalid%22%3Afalse%7D%7D", "json:%7B%22author%22%3A%22did%3Akey%3Az6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%22%2C%22timestamp%22%3A%222023-08-03T17%3A35%3A31.405Z%22%2C%22data%22%3A%22test%20title%22%2C%22proof%22%3A%7B%22key%22%3A%22did%3Akey%3Az6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%23z6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%22%2C%22signature%22%3A%2253a6d498d7c19fed24000efe3339526b564d779f0906b71304c96b1016a09f0288b1f2c5718505f4e23933c95b7a7e68466330a824e01a80c6275d922030860c%22%2C%22valid%22%3Atrue%2C%22invalid%22%3Afalse%7D%7D").
+expressionAddress("literal://string:comment%201", "string:comment%201").
+:- discontiguous(register_sdna_flow/2).
+:- discontiguous(flowable/2).
+:- discontiguous(flow_state/3).
+:- discontiguous(start_action/2).
+:- discontiguous(action/4).
+:- discontiguous(subject_class/2).
+:- discontiguous(constructor/2).
+:- discontiguous(destructor/2).
+:- discontiguous(instance/2).
+:- discontiguous(property/2).
+:- discontiguous(property_getter/4).
+:- discontiguous(property_setter/3).
+:- discontiguous(property_resolve/2).
+:- discontiguous(property_resolve_language/3).
+:- discontiguous(property_named_option/4).
+:- discontiguous(collection/2).
+:- discontiguous(collection_getter/4).
+:- discontiguous(collection_setter/3).
+:- discontiguous(collection_remover/3).
+:- discontiguous(collection_adder/3).
+:- discontiguous(p3_class_icon/2).
+:- discontiguous(p3_class_color/2).
+:- discontiguous(p3_instance_color/3).
+subject_class("Todo", c).
+constructor(c, '[{action: "addLink", source: "this", predicate: "todo://state", target: "todo://ready"}]').
+instance(c, Base) :- triple(Base, "todo://state", _).
+
+destructor(c, '[{action: "removeLink", source: "this", predicate: "todo://state", target: "todo://ready"}]').
+
+property(c, "state").
+property_getter(c, Base, "state", Value) :- triple(Base, "todo://state", Value).
+property_setter(c, "state", '[{action: "setSingleTarget", source: "this", predicate: "todo://state", target: "value"}]').
+
+property(c, "title").
+property_resolve(c, "title").
+property_resolve_language(c, "title", "literal").
+property_getter(c, Base, "title", Value) :- triple(Base, "todo://has_title", Value).
+property_setter(c, "title", '[{action: "setSingleTarget", source: "this", predicate: "todo://has_title", target: "value"}]').
+
+property(c, "isLiked").
+property_getter(c, Base, "isLiked", Value) :- triple(Base, "flux://has_reaction", "flux://thumbsup"), Value = true.
+
+collection(c, "comments").
+collection_getter(c, Base, "comments", List) :- findall(C, triple(Base, "todo://comment", C), List).
+collection_adder(c, "commentss", '[{action: "addLink", source: "this", predicate: "todo://comment", target: "value"}]').
+collection_remover(c, "commentss", '[{action: "removeLink", source: "this", predicate: "todo://comment", target: "value"}]').
+collection_setter(c, "commentss", '[{action: "collectionSetter", source: "this", predicate: "todo://comment", target: "value"}]').
+
+collection(c, "entries").
+collection_getter(c, Base, "entries", List) :- findall(C, triple(Base, "flux://entry_type", C), List).
+collection_adder(c, "entriess", '[{action: "addLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_remover(c, "entriess", '[{action: "removeLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_setter(c, "entriess", '[{action: "collectionSetter", source: "this", predicate: "flux://entry_type", target: "value"}]').
+
+collection(c, "messages").
+collection_getter(c, Base, "messages", List) :- setof(Target, (triple(Base, "flux://entry_type", Target), instance(OtherClass, Target), subject_class("Message", OtherClass)), List).
+collection_adder(c, "messagess", '[{action: "addLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_remover(c, "messagess", '[{action: "removeLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_setter(c, "messagess", '[{action: "collectionSetter", source: "this", predicate: "flux://entry_type", target: "value"}]').
+
+collection(c, "likedMessages").
+collection_getter(c, Base, "likedMessages", List) :- setof(Target, (triple(Base, "flux://entry_type", Target), triple(Target, "flux://has_reaction", "flux://thumbsup")), List).
+collection_adder(c, "likedMessagess", '[{action: "addLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_remover(c, "likedMessagess", '[{action: "removeLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_setter(c, "likedMessagess", '[{action: "collectionSetter", source: "this", predicate: "flux://entry_type", target: "value"}]').
+
+=====query
+subject_class("Todo", C), collection_getter(C, "literal://string:construct%20test", "comments", Value).
+=====consult
+:- discontiguous(triple/3).
+:- discontiguous(link/5).
+triple("literal://string:get%20proxy%20test", "todo://state", "todo://ready").
+triple("literal://string:construct%20test", "todo://state", "todo://done").
+triple("literal://string:construct%20test", "todo://has_title", "literal://json:%7B%22author%22%3A%22did%3Akey%3Az6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%22%2C%22timestamp%22%3A%222023-08-03T17%3A35%3A31.405Z%22%2C%22data%22%3A%22test%20title%22%2C%22proof%22%3A%7B%22key%22%3A%22did%3Akey%3Az6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%23z6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%22%2C%22signature%22%3A%2253a6d498d7c19fed24000efe3339526b564d779f0906b71304c96b1016a09f0288b1f2c5718505f4e23933c95b7a7e68466330a824e01a80c6275d922030860c%22%2C%22valid%22%3Atrue%2C%22invalid%22%3Afalse%7D%7D").
+link("literal://string:get%20proxy%20test", "todo://state", "todo://ready", 1691084130761, "did:key:z6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa").
+link("literal://string:construct%20test", "todo://state", "todo://done", 1691084131359, "did:key:z6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa").
+link("literal://string:construct%20test", "todo://has_title", "literal://json:%7B%22author%22%3A%22did%3Akey%3Az6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%22%2C%22timestamp%22%3A%222023-08-03T17%3A35%3A31.405Z%22%2C%22data%22%3A%22test%20title%22%2C%22proof%22%3A%7B%22key%22%3A%22did%3Akey%3Az6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%23z6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%22%2C%22signature%22%3A%2253a6d498d7c19fed24000efe3339526b564d779f0906b71304c96b1016a09f0288b1f2c5718505f4e23933c95b7a7e68466330a824e01a80c6275d922030860c%22%2C%22valid%22%3Atrue%2C%22invalid%22%3Afalse%7D%7D", 1691084131416, "did:key:z6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa").
+:- discontiguous(reachable/2).
+reachable(A,B) :- triple(A,_,B).
+reachable(A,B) :- triple(A,_,X), reachable(X,B).
+:- discontiguous(hiddenExpression/1).
+:- discontiguous(languageAddress/2).
+languageAddress("literal://string:get%20proxy%20test", "literal").
+languageAddress("literal://string:construct%20test", "literal").
+languageAddress("literal://json:%7B%22author%22%3A%22did%3Akey%3Az6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%22%2C%22timestamp%22%3A%222023-08-03T17%3A35%3A31.405Z%22%2C%22data%22%3A%22test%20title%22%2C%22proof%22%3A%7B%22key%22%3A%22did%3Akey%3Az6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%23z6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%22%2C%22signature%22%3A%2253a6d498d7c19fed24000efe3339526b564d779f0906b71304c96b1016a09f0288b1f2c5718505f4e23933c95b7a7e68466330a824e01a80c6275d922030860c%22%2C%22valid%22%3Atrue%2C%22invalid%22%3Afalse%7D%7D", "literal").
+:- discontiguous(languageName/2).
+languageName("literal://string:get%20proxy%20test", "literal").
+languageName("literal://string:construct%20test", "literal").
+languageName("literal://json:%7B%22author%22%3A%22did%3Akey%3Az6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%22%2C%22timestamp%22%3A%222023-08-03T17%3A35%3A31.405Z%22%2C%22data%22%3A%22test%20title%22%2C%22proof%22%3A%7B%22key%22%3A%22did%3Akey%3Az6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%23z6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%22%2C%22signature%22%3A%2253a6d498d7c19fed24000efe3339526b564d779f0906b71304c96b1016a09f0288b1f2c5718505f4e23933c95b7a7e68466330a824e01a80c6275d922030860c%22%2C%22valid%22%3Atrue%2C%22invalid%22%3Afalse%7D%7D", "literal").
+:- discontiguous(expressionAddress/2).
+expressionAddress("literal://string:get%20proxy%20test", "string:get%20proxy%20test").
+expressionAddress("literal://string:construct%20test", "string:construct%20test").
+expressionAddress("literal://json:%7B%22author%22%3A%22did%3Akey%3Az6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%22%2C%22timestamp%22%3A%222023-08-03T17%3A35%3A31.405Z%22%2C%22data%22%3A%22test%20title%22%2C%22proof%22%3A%7B%22key%22%3A%22did%3Akey%3Az6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%23z6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%22%2C%22signature%22%3A%2253a6d498d7c19fed24000efe3339526b564d779f0906b71304c96b1016a09f0288b1f2c5718505f4e23933c95b7a7e68466330a824e01a80c6275d922030860c%22%2C%22valid%22%3Atrue%2C%22invalid%22%3Afalse%7D%7D", "json:%7B%22author%22%3A%22did%3Akey%3Az6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%22%2C%22timestamp%22%3A%222023-08-03T17%3A35%3A31.405Z%22%2C%22data%22%3A%22test%20title%22%2C%22proof%22%3A%7B%22key%22%3A%22did%3Akey%3Az6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%23z6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%22%2C%22signature%22%3A%2253a6d498d7c19fed24000efe3339526b564d779f0906b71304c96b1016a09f0288b1f2c5718505f4e23933c95b7a7e68466330a824e01a80c6275d922030860c%22%2C%22valid%22%3Atrue%2C%22invalid%22%3Afalse%7D%7D").
+:- discontiguous(register_sdna_flow/2).
+:- discontiguous(flowable/2).
+:- discontiguous(flow_state/3).
+:- discontiguous(start_action/2).
+:- discontiguous(action/4).
+:- discontiguous(subject_class/2).
+:- discontiguous(constructor/2).
+:- discontiguous(destructor/2).
+:- discontiguous(instance/2).
+:- discontiguous(property/2).
+:- discontiguous(property_getter/4).
+:- discontiguous(property_setter/3).
+:- discontiguous(property_resolve/2).
+:- discontiguous(property_resolve_language/3).
+:- discontiguous(property_named_option/4).
+:- discontiguous(collection/2).
+:- discontiguous(collection_getter/4).
+:- discontiguous(collection_setter/3).
+:- discontiguous(collection_remover/3).
+:- discontiguous(collection_adder/3).
+:- discontiguous(p3_class_icon/2).
+:- discontiguous(p3_class_color/2).
+:- discontiguous(p3_instance_color/3).
+subject_class("Todo", c).
+constructor(c, '[{action: "addLink", source: "this", predicate: "todo://state", target: "todo://ready"}]').
+instance(c, Base) :- triple(Base, "todo://state", _).
+
+destructor(c, '[{action: "removeLink", source: "this", predicate: "todo://state", target: "todo://ready"}]').
+
+property(c, "state").
+property_getter(c, Base, "state", Value) :- triple(Base, "todo://state", Value).
+property_setter(c, "state", '[{action: "setSingleTarget", source: "this", predicate: "todo://state", target: "value"}]').
+
+property(c, "title").
+property_resolve(c, "title").
+property_resolve_language(c, "title", "literal").
+property_getter(c, Base, "title", Value) :- triple(Base, "todo://has_title", Value).
+property_setter(c, "title", '[{action: "setSingleTarget", source: "this", predicate: "todo://has_title", target: "value"}]').
+
+property(c, "isLiked").
+property_getter(c, Base, "isLiked", Value) :- triple(Base, "flux://has_reaction", "flux://thumbsup"), Value = true.
+
+collection(c, "comments").
+collection_getter(c, Base, "comments", List) :- findall(C, triple(Base, "todo://comment", C), List).
+collection_adder(c, "commentss", '[{action: "addLink", source: "this", predicate: "todo://comment", target: "value"}]').
+collection_remover(c, "commentss", '[{action: "removeLink", source: "this", predicate: "todo://comment", target: "value"}]').
+collection_setter(c, "commentss", '[{action: "collectionSetter", source: "this", predicate: "todo://comment", target: "value"}]').
+
+collection(c, "entries").
+collection_getter(c, Base, "entries", List) :- findall(C, triple(Base, "flux://entry_type", C), List).
+collection_adder(c, "entriess", '[{action: "addLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_remover(c, "entriess", '[{action: "removeLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_setter(c, "entriess", '[{action: "collectionSetter", source: "this", predicate: "flux://entry_type", target: "value"}]').
+
+collection(c, "messages").
+collection_getter(c, Base, "messages", List) :- setof(Target, (triple(Base, "flux://entry_type", Target), instance(OtherClass, Target), subject_class("Message", OtherClass)), List).
+collection_adder(c, "messagess", '[{action: "addLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_remover(c, "messagess", '[{action: "removeLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_setter(c, "messagess", '[{action: "collectionSetter", source: "this", predicate: "flux://entry_type", target: "value"}]').
+
+collection(c, "likedMessages").
+collection_getter(c, Base, "likedMessages", List) :- setof(Target, (triple(Base, "flux://entry_type", Target), triple(Target, "flux://has_reaction", "flux://thumbsup")), List).
+collection_adder(c, "likedMessagess", '[{action: "addLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_remover(c, "likedMessagess", '[{action: "removeLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_setter(c, "likedMessagess", '[{action: "collectionSetter", source: "this", predicate: "flux://entry_type", target: "value"}]').
+
+=====query
+subject_class("Todo", C), collection_getter(C, "literal://string:construct%20test", "comments", Value).
+=====consult
+:- discontiguous(triple/3).
+:- discontiguous(link/5).
+triple("literal://string:get%20proxy%20test", "todo://state", "todo://ready").
+triple("literal://string:construct%20test", "todo://state", "todo://done").
+triple("literal://string:construct%20test", "todo://has_title", "literal://json:%7B%22author%22%3A%22did%3Akey%3Az6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%22%2C%22timestamp%22%3A%222023-08-03T17%3A35%3A31.405Z%22%2C%22data%22%3A%22test%20title%22%2C%22proof%22%3A%7B%22key%22%3A%22did%3Akey%3Az6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%23z6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%22%2C%22signature%22%3A%2253a6d498d7c19fed24000efe3339526b564d779f0906b71304c96b1016a09f0288b1f2c5718505f4e23933c95b7a7e68466330a824e01a80c6275d922030860c%22%2C%22valid%22%3Atrue%2C%22invalid%22%3Afalse%7D%7D").
+triple("literal://string:construct%20test", "todo://comment", "literal://string:new%20comment%201").
+link("literal://string:get%20proxy%20test", "todo://state", "todo://ready", 1691084130761, "did:key:z6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa").
+link("literal://string:construct%20test", "todo://state", "todo://done", 1691084131359, "did:key:z6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa").
+link("literal://string:construct%20test", "todo://has_title", "literal://json:%7B%22author%22%3A%22did%3Akey%3Az6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%22%2C%22timestamp%22%3A%222023-08-03T17%3A35%3A31.405Z%22%2C%22data%22%3A%22test%20title%22%2C%22proof%22%3A%7B%22key%22%3A%22did%3Akey%3Az6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%23z6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%22%2C%22signature%22%3A%2253a6d498d7c19fed24000efe3339526b564d779f0906b71304c96b1016a09f0288b1f2c5718505f4e23933c95b7a7e68466330a824e01a80c6275d922030860c%22%2C%22valid%22%3Atrue%2C%22invalid%22%3Afalse%7D%7D", 1691084131416, "did:key:z6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa").
+link("literal://string:construct%20test", "todo://comment", "literal://string:new%20comment%201", 1691084131557, "did:key:z6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa").
+:- discontiguous(reachable/2).
+reachable(A,B) :- triple(A,_,B).
+reachable(A,B) :- triple(A,_,X), reachable(X,B).
+:- discontiguous(hiddenExpression/1).
+:- discontiguous(languageAddress/2).
+languageAddress("literal://string:get%20proxy%20test", "literal").
+languageAddress("literal://string:construct%20test", "literal").
+languageAddress("literal://json:%7B%22author%22%3A%22did%3Akey%3Az6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%22%2C%22timestamp%22%3A%222023-08-03T17%3A35%3A31.405Z%22%2C%22data%22%3A%22test%20title%22%2C%22proof%22%3A%7B%22key%22%3A%22did%3Akey%3Az6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%23z6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%22%2C%22signature%22%3A%2253a6d498d7c19fed24000efe3339526b564d779f0906b71304c96b1016a09f0288b1f2c5718505f4e23933c95b7a7e68466330a824e01a80c6275d922030860c%22%2C%22valid%22%3Atrue%2C%22invalid%22%3Afalse%7D%7D", "literal").
+languageAddress("literal://string:new%20comment%201", "literal").
+:- discontiguous(languageName/2).
+languageName("literal://string:get%20proxy%20test", "literal").
+languageName("literal://string:construct%20test", "literal").
+languageName("literal://json:%7B%22author%22%3A%22did%3Akey%3Az6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%22%2C%22timestamp%22%3A%222023-08-03T17%3A35%3A31.405Z%22%2C%22data%22%3A%22test%20title%22%2C%22proof%22%3A%7B%22key%22%3A%22did%3Akey%3Az6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%23z6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%22%2C%22signature%22%3A%2253a6d498d7c19fed24000efe3339526b564d779f0906b71304c96b1016a09f0288b1f2c5718505f4e23933c95b7a7e68466330a824e01a80c6275d922030860c%22%2C%22valid%22%3Atrue%2C%22invalid%22%3Afalse%7D%7D", "literal").
+languageName("literal://string:new%20comment%201", "literal").
+:- discontiguous(expressionAddress/2).
+expressionAddress("literal://string:get%20proxy%20test", "string:get%20proxy%20test").
+expressionAddress("literal://string:construct%20test", "string:construct%20test").
+expressionAddress("literal://json:%7B%22author%22%3A%22did%3Akey%3Az6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%22%2C%22timestamp%22%3A%222023-08-03T17%3A35%3A31.405Z%22%2C%22data%22%3A%22test%20title%22%2C%22proof%22%3A%7B%22key%22%3A%22did%3Akey%3Az6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%23z6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%22%2C%22signature%22%3A%2253a6d498d7c19fed24000efe3339526b564d779f0906b71304c96b1016a09f0288b1f2c5718505f4e23933c95b7a7e68466330a824e01a80c6275d922030860c%22%2C%22valid%22%3Atrue%2C%22invalid%22%3Afalse%7D%7D", "json:%7B%22author%22%3A%22did%3Akey%3Az6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%22%2C%22timestamp%22%3A%222023-08-03T17%3A35%3A31.405Z%22%2C%22data%22%3A%22test%20title%22%2C%22proof%22%3A%7B%22key%22%3A%22did%3Akey%3Az6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%23z6MkfMZgoaZc5CRUSMxrugjiJLufgkAmRZ72gctjRY4LfxRa%22%2C%22signature%22%3A%2253a6d498d7c19fed24000efe3339526b564d779f0906b71304c96b1016a09f0288b1f2c5718505f4e23933c95b7a7e68466330a824e01a80c6275d922030860c%22%2C%22valid%22%3Atrue%2C%22invalid%22%3Afalse%7D%7D").
+expressionAddress("literal://string:new%20comment%201", "string:new%20comment%201").
+:- discontiguous(register_sdna_flow/2).
+:- discontiguous(flowable/2).
+:- discontiguous(flow_state/3).
+:- discontiguous(start_action/2).
+:- discontiguous(action/4).
+:- discontiguous(subject_class/2).
+:- discontiguous(constructor/2).
+:- discontiguous(destructor/2).
+:- discontiguous(instance/2).
+:- discontiguous(property/2).
+:- discontiguous(property_getter/4).
+:- discontiguous(property_setter/3).
+:- discontiguous(property_resolve/2).
+:- discontiguous(property_resolve_language/3).
+:- discontiguous(property_named_option/4).
+:- discontiguous(collection/2).
+:- discontiguous(collection_getter/4).
+:- discontiguous(collection_setter/3).
+:- discontiguous(collection_remover/3).
+:- discontiguous(collection_adder/3).
+:- discontiguous(p3_class_icon/2).
+:- discontiguous(p3_class_color/2).
+:- discontiguous(p3_instance_color/3).
+subject_class("Todo", c).
+constructor(c, '[{action: "addLink", source: "this", predicate: "todo://state", target: "todo://ready"}]').
+instance(c, Base) :- triple(Base, "todo://state", _).
+
+destructor(c, '[{action: "removeLink", source: "this", predicate: "todo://state", target: "todo://ready"}]').
+
+property(c, "state").
+property_getter(c, Base, "state", Value) :- triple(Base, "todo://state", Value).
+property_setter(c, "state", '[{action: "setSingleTarget", source: "this", predicate: "todo://state", target: "value"}]').
+
+property(c, "title").
+property_resolve(c, "title").
+property_resolve_language(c, "title", "literal").
+property_getter(c, Base, "title", Value) :- triple(Base, "todo://has_title", Value).
+property_setter(c, "title", '[{action: "setSingleTarget", source: "this", predicate: "todo://has_title", target: "value"}]').
+
+property(c, "isLiked").
+property_getter(c, Base, "isLiked", Value) :- triple(Base, "flux://has_reaction", "flux://thumbsup"), Value = true.
+
+collection(c, "comments").
+collection_getter(c, Base, "comments", List) :- findall(C, triple(Base, "todo://comment", C), List).
+collection_adder(c, "commentss", '[{action: "addLink", source: "this", predicate: "todo://comment", target: "value"}]').
+collection_remover(c, "commentss", '[{action: "removeLink", source: "this", predicate: "todo://comment", target: "value"}]').
+collection_setter(c, "commentss", '[{action: "collectionSetter", source: "this", predicate: "todo://comment", target: "value"}]').
+
+collection(c, "entries").
+collection_getter(c, Base, "entries", List) :- findall(C, triple(Base, "flux://entry_type", C), List).
+collection_adder(c, "entriess", '[{action: "addLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_remover(c, "entriess", '[{action: "removeLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_setter(c, "entriess", '[{action: "collectionSetter", source: "this", predicate: "flux://entry_type", target: "value"}]').
+
+collection(c, "messages").
+collection_getter(c, Base, "messages", List) :- setof(Target, (triple(Base, "flux://entry_type", Target), instance(OtherClass, Target), subject_class("Message", OtherClass)), List).
+collection_adder(c, "messagess", '[{action: "addLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_remover(c, "messagess", '[{action: "removeLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_setter(c, "messagess", '[{action: "collectionSetter", source: "this", predicate: "flux://entry_type", target: "value"}]').
+
+collection(c, "likedMessages").
+collection_getter(c, Base, "likedMessages", List) :- setof(Target, (triple(Base, "flux://entry_type", Target), triple(Target, "flux://has_reaction", "flux://thumbsup")), List).
+collection_adder(c, "likedMessagess", '[{action: "addLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_remover(c, "likedMessagess", '[{action: "removeLink", source: "this", predicate: "flux://entry_type", target: "value"}]').
+collection_setter(c, "likedMessagess", '[{action: "collectionSetter", source: "this", predicate: "flux://entry_type", target: "value"}]').
+
+=====query
+subject_class("Todo", C), collection_getter(C, "literal://string:construct%20test", "comments", Value).
+=====query
+subject_class("Todo", C), instance(C, X).
+=====query
+subject_class("Todo", C), instance(C, "literal://string:construct%20test").
+=====query
+subject_class("Todo", C), instance(C, "literal://string:get%20proxy%20test").
+=====query
+subject_class("Todo", C), instance(C, "literal://string:construct%20test").
+=====query
+subject_class("Todo", C), instance(C, "literal://string:get%20proxy%20test").
+=====query
+subject_class("Todo", C), property(C, Property).
+=====query
+subject_class("Todo", C), property_resolve(C, "isLiked").
+=====query
+subject_class("Todo", C), property_resolve(C, "isLiked").
+=====query
+subject_class("Todo", C), property_resolve(C, "state").
+=====query
+subject_class("Todo", C), property_resolve(C, "title").
+=====query
+subject_class("Todo", C), property_setter(C, Property, Setter).
+=====query
+subject_class("Todo", C), property_resolve_language(C, "state", Language).
+=====query
+subject_class("Todo", C), property_resolve_language(C, "title", Language).
+=====query
+subject_class("Todo", C), property_resolve_language(C, "title", Language).
+=====query
+subject_class("Todo", C), collection(C, Collection).
+=====query
+subject_class("Todo", C), collection_adder(C, Collection, Adder).
+=====query
+subject_class("Todo", C), collection_remover(C, Collection, Remover).
+=====query
+subject_class("Todo", C), collection_setter(C, Collection, Setter).
+=====query
+subject_class("Todo", C), property_getter(C, "literal://string:get%20proxy%20test", "state", Value).
+=====query
+subject_class(Class, C), property(C, "state"), property(C, "title"), collection(C, "comments"), property_setter(C, "state", _), property_setter(C, "title", _), collection_adder(C, "commentss", _), collection_setter(C, "commentss", _).

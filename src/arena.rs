@@ -10,7 +10,6 @@ use crate::read::*;
 
 use crate::parser::dashu::{Integer, Rational};
 use ordered_float::OrderedFloat;
-use tokio::sync::RwLock;
 
 use std::alloc;
 use std::cell::UnsafeCell;
@@ -20,6 +19,7 @@ use std::mem;
 use std::net::TcpListener;
 use std::ops::{Deref, DerefMut};
 use std::ptr;
+use std::sync::RwLock;
 
 #[macro_export]
 macro_rules! arena_alloc {
@@ -90,7 +90,8 @@ pub fn lookup_float(
     offset: F64Offset,
 ) -> RcuRef<RawBlock<F64Table>, UnsafeCell<OrderedFloat<f64>>> {
     let f64table = global_f64table()
-        .blocking_read()
+        .read()
+	.unwrap()
         .upgrade()
         .expect("We should only be looking up floats while there is a float table");
 
@@ -108,12 +109,12 @@ pub fn lookup_float(
 impl F64Table {
     #[inline]
     pub fn new() -> Arc<Self> {
-        let upgraded = global_f64table().blocking_read().upgrade();
+        let upgraded = global_f64table().read().unwrap().upgrade();
         // don't inline upgraded, otherwise temporary will be dropped too late in case of None
         if let Some(atom_table) = upgraded {
             atom_table
         } else {
-            let mut guard = global_f64table().blocking_write();
+            let mut guard = global_f64table().write().unwrap();
             // try to upgrade again in case we lost the race on the write lock
             if let Some(atom_table) = guard.upgrade() {
                 atom_table
