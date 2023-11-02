@@ -202,7 +202,7 @@ pub enum QueryTerm {
     // register, clause type, subterms, clause call policy.
     Clause(Cell<RegType>, ClauseType, Vec<Term>, CallPolicy),
     Fail,
-    LocalCut(usize),  // var_num
+    LocalCut { var_num: usize, cut_prev: bool },  // var_num
     GlobalCut(usize), // var_num
     GetCutPoint { var_num: usize, prev_b: bool },
     GetLevel(usize), // var_num

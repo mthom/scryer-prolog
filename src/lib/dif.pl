@@ -46,7 +46,7 @@ reinforce_goal(Goal0, Goal) :-
         term_variables(Goal0, Vars),
         dif:vars_remove_goal(Vars, Goal0),
         Goal0 = (L \== R),
-        dif(L, R)
+        dif:dif(L, R)
     ).
 
 append_goals([], _).

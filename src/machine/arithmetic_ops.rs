@@ -1,4 +1,4 @@
-use dashu::base::{Abs, Gcd, UnsignedAbs};
+use dashu::base::{Abs, Gcd, Signed, UnsignedAbs};
 use dashu::integer::IBig;
 use dashu::integer::fast_div::ConstDivisor;
 use divrem::*;
@@ -850,13 +850,18 @@ pub(crate) fn modulus(x: Number, y: Number, arena: &mut Arena) -> Result<Number,
     };
 
     fn ibig_rem_floor(n1: &Integer, n2: &Integer) -> Integer {
-        if n1 > &Integer::ZERO && n2 < &Integer::ZERO {
-            ((n1 - Integer::ONE) / n2) - Integer::ONE
-        } else if n1 < &Integer::ZERO && n2 > &Integer::ZERO {
-            ((n1 + Integer::ONE) / n2) - Integer::ONE
+        let ring = ConstDivisor::new(n2.unsigned_abs());
+        let n1 = n1.clone();
+
+        if n2.is_negative() {
+            let unsigned_result = IBig::from(ring.reduce(n1).residue());
+
+            if unsigned_result.is_zero() {
+                unsigned_result
+            } else {
+                unsigned_result + n2
+            }
         } else {
-            let ring = ConstDivisor::new(n2.unsigned_abs());
-            let n1 = n1.clone();
             IBig::from(ring.reduce(n1).residue())
         }
     }
@@ -1046,55 +1051,6 @@ pub(crate) fn acos(n1: Number) -> Result<f64, MachineStubGen> {
 #[inline]
 pub(crate) fn atan(n1: Number) -> Result<f64, MachineStubGen> {
     unary_float_fn_template(n1, |f| f.atan())
-}
-
-#[inline]
-pub(crate) fn asinh(n1: Number) -> Result<f64, MachineStubGen> {
-    unary_float_fn_template(n1, |f| f.asinh())
-}
-
-#[inline]
-pub(crate) fn acosh(n1: Number) -> Result<f64, MachineStubGen> {
-    unary_float_fn_template(n1, |f| f.acosh())
-}
-
-#[inline]
-pub(crate) fn atanh(n1: Number) -> Result<f64, MachineStubGen> {
-    let stub_gen = || {
-        let is_atom = atom!("is");
-        functor_stub(is_atom, 2)
-    };
-
-    let f1 = try_numeric_result!(result_f(&n1), stub_gen)?;
-
-    try_numeric_result!(
-        if f1 == 1.0 || f1 == -1.0 {
-            Err(EvalError::Undefined)
-        } else {
-            result_f(&Number::Float(OrderedFloat(f1.atanh())))
-        },
-        stub_gen
-    )
-}
-
-#[inline]
-pub(crate) fn sinh(n1: Number) -> Result<f64, MachineStubGen> {
-    unary_float_fn_template(n1, |f| f.sinh())
-}
-
-#[inline]
-pub(crate) fn cosh(n1: Number) -> Result<f64, MachineStubGen> {
-    unary_float_fn_template(n1, |f| f.cosh())
-}
-
-#[inline]
-pub(crate) fn tanh(n1: Number) -> Result<f64, MachineStubGen> {
-    unary_float_fn_template(n1, |f| f.tanh())
-}
-
-#[inline]
-pub(crate) fn log10(n1: Number) -> Result<f64, MachineStubGen> {
-    unary_float_fn_template(n1, |f| f.log(10f64))
 }
 
 #[inline]
@@ -1360,27 +1316,6 @@ impl MachineState {
                             ))),
                             atom!("tan") => self.interms.push(Number::Float(OrderedFloat(
                                 drop_iter_on_err!(self, iter, tan(a1))
-                            ))),
-                            atom!("cosh") => self.interms.push(Number::Float(OrderedFloat(
-                                drop_iter_on_err!(self, iter, cosh(a1))
-                            ))),
-                            atom!("sinh") => self.interms.push(Number::Float(OrderedFloat(
-                                drop_iter_on_err!(self, iter, sinh(a1))
-                            ))),
-                            atom!("tanh") => self.interms.push(Number::Float(OrderedFloat(
-                                drop_iter_on_err!(self, iter, tanh(a1))
-                            ))),
-                            atom!("acosh") => self.interms.push(Number::Float(OrderedFloat(
-                                drop_iter_on_err!(self, iter, acosh(a1))
-                            ))),
-                            atom!("asinh") => self.interms.push(Number::Float(OrderedFloat(
-                                drop_iter_on_err!(self, iter, asinh(a1))
-                            ))),
-                            atom!("atanh") => self.interms.push(Number::Float(OrderedFloat(
-                                drop_iter_on_err!(self, iter, atanh(a1))
-                            ))),
-                            atom!("log10") => self.interms.push(Number::Float(OrderedFloat(
-                                drop_iter_on_err!(self, iter, log10(a1))
                             ))),
                             atom!("float_fractional_part") => self.interms.push(Number::Float(OrderedFloat(
                                 drop_iter_on_err!(self, iter, float_fractional_part(a1))

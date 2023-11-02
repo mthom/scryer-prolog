@@ -154,8 +154,11 @@ enum TraversalState {
     Fail,
     GetCutPoint { var_num: usize, prev_b: bool },
     Cut { var_num: usize, is_global: bool },
+    CutPrev(usize),
     ResetCallPolicy(CallPolicy),
     Term(Term),
+    OverrideGlobalCutVar(usize),
+    ResetGlobalCutVarOverride(Option<usize>),
     RemoveBranchNum,            // pop the current_branch_num and from the root set.
     AddBranchNum(BranchNumber), // set current_branch_num, add it to the root set
     RepBranchNum(BranchNumber), // replace current_branch_num and the latest in the root set
@@ -171,6 +174,7 @@ pub struct VariableClassifier {
     var_num: usize,
     root_set: RootSet,
     global_cut_var_num: Option<usize>,
+    global_cut_var_num_override: Option<usize>,
 }
 
 #[derive(Debug, Default)]
@@ -252,6 +256,7 @@ impl VariableClassifier {
             root_set: RootSet::new(),
             var_num: 0,
             global_cut_var_num: None,
+            global_cut_var_num_override: None,
         }
     }
 
@@ -517,6 +522,12 @@ impl VariableClassifier {
                     self.probe_in_situ_var(var_num);
                     build_stack.push_chunk_term(QueryTerm::GetCutPoint { var_num, prev_b });
                 }
+                TraversalState::OverrideGlobalCutVar(var_num) => {
+                    self.global_cut_var_num_override = Some(var_num);
+                }
+                TraversalState::ResetGlobalCutVarOverride(old_override) => {
+                    self.global_cut_var_num_override = old_override;
+                }
                 TraversalState::Cut { var_num, is_global } => {
                     if self.try_set_chunk_at_inlined_boundary() {
                         build_stack.add_chunk();
@@ -527,8 +538,17 @@ impl VariableClassifier {
                     build_stack.push_chunk_term(if is_global {
                         QueryTerm::GlobalCut(var_num)
                     } else {
-                        QueryTerm::LocalCut(var_num)
+                        QueryTerm::LocalCut { var_num, cut_prev: false }
                     });
+                }
+                TraversalState::CutPrev(var_num) => {
+                    if self.try_set_chunk_at_inlined_boundary() {
+                        build_stack.add_chunk();
+                    }
+
+                    self.probe_in_situ_var(var_num);
+
+                    build_stack.push_chunk_term(QueryTerm::LocalCut { var_num, cut_prev: true });
                 }
                 TraversalState::Fail => {
                     build_stack.push_chunk_term(QueryTerm::Fail);
@@ -684,14 +704,13 @@ impl VariableClassifier {
                             )));
                             state_stack.push(TraversalState::BuildDisjunct(build_stack_len));
                             state_stack.push(TraversalState::Fail);
-                            state_stack.push(TraversalState::Cut {
-                                var_num: self.var_num,
-                                is_global: false,
-                            });
+                            state_stack.push(TraversalState::CutPrev(self.var_num));
+                            state_stack.push(TraversalState::ResetGlobalCutVarOverride(self.global_cut_var_num_override));
                             state_stack.push(TraversalState::Term(not_term));
+                            state_stack.push(TraversalState::OverrideGlobalCutVar(self.var_num));
                             state_stack.push(TraversalState::GetCutPoint {
                                 var_num: self.var_num,
-                                prev_b: true,
+                                prev_b: false,
                             });
 
                             self.current_chunk_type = ChunkType::Mid;
@@ -786,17 +805,23 @@ impl VariableClassifier {
                             ));
                         }
                         Term::Literal(_, Literal::Atom(atom!("!")) | Literal::Char('!')) => {
-                            if self.global_cut_var_num.is_none() {
-                                self.global_cut_var_num = Some(self.var_num);
-                                self.var_num += 1;
-                            }
+                            let (var_num, is_global) =
+                                if let Some(var_num) = self.global_cut_var_num_override {
+                                    (var_num, false)
+                                } else if let Some(var_num) = self.global_cut_var_num {
+                                    (var_num, true)
+                                } else {
+                                    let var_num = self.var_num;
 
-                            self.probe_in_situ_var(self.global_cut_var_num.unwrap());
+                                    self.global_cut_var_num = Some(var_num);
+                                    self.var_num += 1;
 
-                            state_stack.push(TraversalState::Cut {
-                                var_num: self.global_cut_var_num.unwrap(),
-                                is_global: true,
-                            });
+                                    (var_num, true)
+                                };
+
+                            self.probe_in_situ_var(var_num);
+
+                            state_stack.push(TraversalState::Cut { var_num, is_global });
                         }
                         Term::Literal(_, Literal::Atom(name)) => {
                             if update_chunk_data(self, name, 0) {

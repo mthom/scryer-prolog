@@ -2936,95 +2936,92 @@ impl Machine {
             }
         );
 
-        self.machine_st.fail = true; // This predicate fails by default.
-
         read_heap_cell!(a2,
             (HeapCellValueTag::Atom, (chars, _arity)) => {
-                    macro_rules! macro_check {
-                ($id:ident, $name:expr) => {
-                if $id!(c) && chars == $name {
-                    self.machine_st.fail = false;
-                    return;
+                self.machine_st.fail = true; // This predicate fails by default.
+                macro_rules! macro_check {
+                    ($id:ident, $name:expr) => {
+                        if $id!(c) && chars == $name {
+                            self.machine_st.fail = false;
+                            return;
+                        }
+                    };
                 }
-                };
-            }
 
-            macro_rules! method_check {
-                ($id:ident, $name:expr) => {
-                if c.$id() && chars == $name {
-                    self.machine_st.fail = false;
-                    return;
+                macro_rules! method_check {
+                    ($id:ident, $name:expr) => {
+                        if c.$id() && chars == $name {
+                            self.machine_st.fail = false;
+                            return;
+                        }
+                    };
                 }
-                };
-            }
 
-            macro_check!(alpha_char, atom!("alpha"));
-            method_check!(is_alphabetic, atom!("alphabetic"));
-            method_check!(is_alphanumeric, atom!("alphanumeric"));
-            macro_check!(alpha_numeric_char, atom!("alnum"));
-            method_check!(is_ascii, atom!("ascii"));
-            method_check!(is_ascii_punctuation, atom!("ascii_punctuation"));
-            method_check!(is_ascii_graphic, atom!("ascii_graphic"));
-            // macro_check!(backslash_char, atom!("backslash"));
-            // macro_check!(back_quote_char, atom!("back_quote"));
-            macro_check!(binary_digit_char, atom!("binary_digit"));
-            // macro_check!(capital_letter_char, atom!("upper"));
-            // macro_check!(comment_1_char, "comment_1");
-            // macro_check!(comment_2_char, "comment_2");
-            method_check!(is_control, atom!("control"));
-            // macro_check!(cut_char, atom!("cut"));
-            macro_check!(decimal_digit_char, atom!("decimal_digit"));
-            // macro_check!(decimal_point_char, atom!("decimal_point"));
-            // macro_check!(double_quote_char, atom!("double_quote"));
-            macro_check!(exponent_char, atom!("exponent"));
-            macro_check!(graphic_char, atom!("graphic"));
-            macro_check!(graphic_token_char, atom!("graphic_token"));
-            macro_check!(hexadecimal_digit_char, atom!("hexadecimal_digit"));
-            macro_check!(layout_char, atom!("layout"));
-            method_check!(is_lowercase, atom!("lower"));
-            macro_check!(meta_char, atom!("meta"));
-            // macro_check!(new_line_char, atom!("new_line"));
-            method_check!(is_numeric, atom!("numeric"));
-            macro_check!(octal_digit_char, atom!("octal_digit"));
-            macro_check!(octet_char, atom!("octet"));
-            macro_check!(prolog_char, atom!("prolog"));
-            // macro_check!(semicolon_char, atom!("semicolon"));
-            macro_check!(sign_char, atom!("sign"));
-            // macro_check!(single_quote_char, atom!("single_quote"));
-            // macro_check!(small_letter_char, atom!("lower"));
-            macro_check!(solo_char, atom!("solo"));
-            // macro_check!(space_char, atom!("space"));
-            macro_check!(symbolic_hexadecimal_char, atom!("symbolic_hexadecimal"));
-            macro_check!(symbolic_control_char, atom!("symbolic_control"));
-            method_check!(is_uppercase, atom!("upper"));
-            // macro_check!(variable_indicator_char, atom!("variable_indicator"));
-            method_check!(is_whitespace, atom!("whitespace"));
+                macro_check!(alpha_char, atom!("alpha"));
+                method_check!(is_alphabetic, atom!("alphabetic"));
+                method_check!(is_alphanumeric, atom!("alphanumeric"));
+                macro_check!(alpha_numeric_char, atom!("alnum"));
+                method_check!(is_ascii, atom!("ascii"));
+                method_check!(is_ascii_punctuation, atom!("ascii_punctuation"));
+                method_check!(is_ascii_graphic, atom!("ascii_graphic"));
+                // macro_check!(backslash_char, atom!("backslash"));
+                // macro_check!(back_quote_char, atom!("back_quote"));
+                macro_check!(binary_digit_char, atom!("binary_digit"));
+                // macro_check!(capital_letter_char, atom!("upper"));
+                // macro_check!(comment_1_char, "comment_1");
+                // macro_check!(comment_2_char, "comment_2");
+                method_check!(is_control, atom!("control"));
+                // macro_check!(cut_char, atom!("cut"));
+                macro_check!(decimal_digit_char, atom!("decimal_digit"));
+                // macro_check!(decimal_point_char, atom!("decimal_point"));
+                // macro_check!(double_quote_char, atom!("double_quote"));
+                macro_check!(exponent_char, atom!("exponent"));
+                macro_check!(graphic_char, atom!("graphic"));
+                macro_check!(graphic_token_char, atom!("graphic_token"));
+                macro_check!(hexadecimal_digit_char, atom!("hexadecimal_digit"));
+                macro_check!(layout_char, atom!("layout"));
+                method_check!(is_lowercase, atom!("lower"));
+                macro_check!(meta_char, atom!("meta"));
+                // macro_check!(new_line_char, atom!("new_line"));
+                method_check!(is_numeric, atom!("numeric"));
+                macro_check!(octal_digit_char, atom!("octal_digit"));
+                macro_check!(octet_char, atom!("octet"));
+                macro_check!(prolog_char, atom!("prolog"));
+                // macro_check!(semicolon_char, atom!("semicolon"));
+                macro_check!(sign_char, atom!("sign"));
+                // macro_check!(single_quote_char, atom!("single_quote"));
+                // macro_check!(small_letter_char, atom!("lower"));
+                macro_check!(solo_char, atom!("solo"));
+                // macro_check!(space_char, atom!("space"));
+                macro_check!(symbolic_hexadecimal_char, atom!("symbolic_hexadecimal"));
+                macro_check!(symbolic_control_char, atom!("symbolic_control"));
+                method_check!(is_uppercase, atom!("upper"));
+                // macro_check!(variable_indicator_char, atom!("variable_indicator"));
+                method_check!(is_whitespace, atom!("whitespace"));
             }
-                (HeapCellValueTag::Str, s) => {
+            (HeapCellValueTag::Str, s) => {
                 let (name, arity) = cell_as_atom_cell!(self.machine_st.heap[s])
-                .get_name_and_arity();
+                    .get_name_and_arity();
 
-            match (name, arity) {
-                (atom!("to_upper"), 1) => {
-                let reg = self.machine_st.deref(self.machine_st.heap[s+1]);
-                let atom = AtomTable::build_with(&self.machine_st.atom_tbl, &c.to_uppercase().to_string());
-                let upper_str = string_as_cstr_cell!(atom);
-                unify!(self.machine_st, reg, upper_str);
-                self.machine_st.fail = false;
+                match (name, arity) {
+                    (atom!("upper"), 1) => {
+                        let reg = self.machine_st.deref(self.machine_st.heap[s+1]);
+                        let atom = AtomTable::build_with(&self.machine_st.atom_tbl, &c.to_uppercase().to_string());
+                        let upper_str = string_as_cstr_cell!(atom);
+                        unify!(self.machine_st, reg, upper_str);
+                    }
+                    (atom!("lower"), 1) => {
+                        let reg = self.machine_st.deref(self.machine_st.heap[s+1]);
+                        let atom = AtomTable::build_with(&self.machine_st.atom_tbl, &c.to_lowercase().to_string());
+                        let lower_str = string_as_cstr_cell!(atom);
+                        unify!(self.machine_st, reg, lower_str);
+                    }
+                    _ => {
+                        unreachable!()
+                    }
                 }
-                (atom!("to_lower"), 1) => {
-                let reg = self.machine_st.deref(self.machine_st.heap[s+1]);
-                let atom = AtomTable::build_with(&self.machine_st.atom_tbl, &c.to_lowercase().to_string());
-                let lower_str = string_as_cstr_cell!(atom);
-                unify!(self.machine_st, reg, lower_str);
-                self.machine_st.fail = false;
-                }
-                _ => {
-                unreachable!()
-                }
-            };
             }
-                _ => {
+            _ => {
                 unreachable!()
             }
         );

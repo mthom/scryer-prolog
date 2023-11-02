@@ -1,8 +1,8 @@
 #[cfg(test)]
-pub(crate) use crate::machine::gc::{IteratorUMP};
-pub(crate) use crate::machine::gc::{CycleDetectorUMP, StacklessPreOrderHeapIter};
+pub(crate) use crate::machine::gc::StacklessPreOrderHeapIter;
 
 use crate::atom_table::*;
+use crate::machine::cycle_detection::*;
 use crate::machine::heap::*;
 use crate::machine::stack::*;
 use crate::types::*;
@@ -505,23 +505,15 @@ impl<'a, ElideLists: ListElisionPolicy> Iterator for StackfulPreOrderHeapIter<'a
     }
 }
 
-#[cfg(test)]
 #[inline(always)]
-pub(crate) fn stackless_preorder_iter(
-    heap: &mut Vec<HeapCellValue>,
+pub(crate) fn cycle_detecting_stackless_preorder_iter<'a>(
+    heap: &'a mut [HeapCellValue],
     start: usize,
-) -> StacklessPreOrderHeapIter<IteratorUMP> {
-    StacklessPreOrderHeapIter::<IteratorUMP>::new(heap, start)
+) -> CycleDetectingIter<'a, true> {
+    // const generics argument of true so that cycle discovery stops
+    // the iterator.
+    CycleDetectingIter::new(heap, start)
 }
-
-
-pub(crate) fn cycle_detecting_stackless_preorder_iter(
-    heap: &mut Heap,
-    start: usize,
-) -> StacklessPreOrderHeapIter<CycleDetectorUMP> {
-    StacklessPreOrderHeapIter::<CycleDetectorUMP>::new(heap, start)
-}
-
 
 #[inline(always)]
 pub(crate) fn stackful_preorder_iter<'a, ElideLists: ListElisionPolicy>(
@@ -666,22 +658,29 @@ pub(crate) fn stackful_post_order_iter<'a, ElideLists: ListElisionPolicy>(
 }
 
 #[cfg(test)]
-pub(crate) type RightistPostOrderHeapIter<'a> =
-    PostOrderIterator<StacklessPreOrderHeapIter<'a, IteratorUMP>>;
-
-#[cfg(test)]
-#[inline]
-pub(crate) fn stackless_post_order_iter<'a>(
-    heap: &'a mut Heap,
-    start: usize,
-) -> RightistPostOrderHeapIter<'a> {
-    PostOrderIterator::new(stackless_preorder_iter(heap, start))
-}
-
-#[cfg(test)]
 mod tests {
     use super::*;
     use crate::machine::mock_wam::*;
+    use crate::machine::gc::{IteratorUMP};
+
+    pub(crate) type RightistPostOrderHeapIter<'a> =
+        PostOrderIterator<StacklessPreOrderHeapIter<'a, IteratorUMP>>;
+
+    #[inline(always)]
+    pub(crate) fn stackless_preorder_iter(
+        heap: &mut Vec<HeapCellValue>,
+        start: usize,
+    ) -> StacklessPreOrderHeapIter<IteratorUMP> {
+        StacklessPreOrderHeapIter::<IteratorUMP>::new(heap, start)
+    }
+
+    #[inline]
+    pub(crate) fn stackless_post_order_iter<'a>(
+        heap: &'a mut Heap,
+        start: usize,
+    ) -> RightistPostOrderHeapIter<'a> {
+        PostOrderIterator::new(stackless_preorder_iter(heap, start))
+    }
 
     #[test]
     fn heap_stackless_iter_tests() {
@@ -1263,6 +1262,10 @@ mod tests {
             let mut iter = stackless_preorder_iter(&mut wam.machine_st.heap, 0);
 
             assert_eq!(iter.next().unwrap(), list_loc_as_cell!(1));
+            assert_eq!(
+                unmark_cell_bits!(iter.next().unwrap()),
+                list_loc_as_cell!(1)
+            );
             assert_eq!(
                 unmark_cell_bits!(iter.next().unwrap()),
                 list_loc_as_cell!(1)
@@ -2254,9 +2257,7 @@ mod tests {
                 list_loc_as_cell!(1)
             );
             assert_eq!(iter.next().unwrap(), cyclic_link);
-
             assert_eq!(iter.next().unwrap(), cyclic_link);
-
             assert_eq!(iter.next().unwrap(), cyclic_link);
 
             assert_eq!(iter.next(), None);

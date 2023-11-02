@@ -6,7 +6,6 @@ pub use crate::machine::machine_state::*;
 pub use crate::machine::stack::*;
 pub use crate::machine::streams::*;
 pub use crate::machine::*;
-pub use crate::macros::*;
 pub use crate::parser::ast::*;
 use crate::read::*;
 pub use crate::types::*;

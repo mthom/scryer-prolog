@@ -1,3 +1,4 @@
+:- use_module(library(dcgs)).
 :- use_module(library(format)).
 
 term1(A) :-
@@ -27,6 +28,16 @@ term5(A) :-
 term6(A) :-
    A=[B|B],
    B=[C|C].
+
+term7(A) :-
+   B=[C|D],
+   A=[D|C],
+   B=[B|D].
+
+term8(A) :-
+   B=C,
+   B=[C|_D],
+   A=[C|_E].
 
 test("acyclic_term_1", (
     L = [_Y,[M,B],B|M], acyclic_term(L)
@@ -80,78 +91,89 @@ test("acyclic_term_13", (
     A = [A|2], X = A, T=a(X, A), \+ acyclic_term(T)
 )).
 
-test("acyclic_term_13", (
+test("acyclic_term_14", (
     A = [T|2], X = A, T=a(X, A), \+ acyclic_term(T)
 )).
 
-test("acyclic_term_14", (
+test("acyclic_term_15", (
     T = [_A|T], \+ acyclic_term(T)
 )).
 
-test("acyclic_term_15", (
+test("acyclic_term_16", (
     T = [T|_L], \+ acyclic_term(T)
 )).
 
-test("acyclic_term_16", (
+test("acyclic_term_17", (
     A = [1|A], X = A, T=a(X, A), \+ acyclic_term(T)
 )).
 
-test("acyclic_term_17", (
+test("acyclic_term_18", (
     T = [_A| [[[[L|T]|[]]]]], acyclic_term(L)
 )).
 
-test("acyclic_term_18", (
+test("acyclic_term_19", (
     T = [A| [[[[_L|T]|[]]]]], acyclic_term(A)
 )).
 
-test("acyclic_term_19", (
+test("acyclic_term_20", (
     T = [_A| [[[[_L|T]|[]]]]], \+ acyclic_term(T)
 )).
 
-test("acyclic_term_20", (
+test("acyclic_term_21", (
     A = [_C|_B], X = A, T=a(t(X,A), A), acyclic_term(T)
 )).
 
-test("acyclic_term_21", (
+test("acyclic_term_22", (
     X = [a | Rest], Rest = [_Y | Rest], \+ acyclic_term(X)
 )).
 
-test("acyclic_term_22", (
+test("acyclic_term_23", (
     _X = [a | Rest], Rest = [_Y | Rest], \+ acyclic_term(Rest)
 )).
 
-test("acyclic_term_23", (
+test("acyclic_term_24", (
     T = [[_A, T]], G = [1|T], \+ acyclic_term(G)
 )).
 
-test("acyclic_term_24", (
+test("acyclic_term_25", (
     T = [[_A, T]], \+ acyclic_term(T)
 )).
 
-test("acyclic_term_25", (
+test("acyclic_term_26", (
     T = [[_, _], T], \+ acyclic_term(T)
 )).
 
-test("acyclic_term_26", (
+test("acyclic_term_27", (
     T = [[T, _], 1], \+ acyclic_term(T)
 )).
 
-test("acyclic_term_27", (
+test("acyclic_term_28", (
     T = str(A,A), acyclic_term(T)
 )).
 
-test("acyclic_term_28", (
+test("acyclic_term_29", (
     T = str(A,A,A), acyclic_term(T)
 )).
 
-test("acyclic_term_29", (
+test("acyclic_term_30", (
     A = s(B, d(Y)), Y = B, acyclic_term(A),
     acyclic_term(B), acyclic_term(Y)
 )).
 
-test("acyclic_term_30", (
+test("acyclic_term_31", (
     A=str(B,B,B), C=str(A,_D,B), acyclic_term(C),
     acyclic_term(A), acyclic_term(B)
+)).
+
+test("acyclic_term_32", (
+    A=B*C,A=[]*B*D*B, \+ acyclic_term(A),
+    \+ acyclic_term(B), \+ acyclic_term(C),
+    acyclic_term(D)
+)).
+
+test("acyclic_term_33", (
+    A=B*C,A=B*[]*B, \+ acyclic_term(A),
+    \+ acyclic_term(B), \+ acyclic_term(C)
 )).
 
 test("acyclic_term#2111_1", (
@@ -199,6 +221,45 @@ test("acyclic_term#2121", (
     acyclic_term(A), acyclic_term(B)
 )).
 
+test("acyclic_term#2122", (
+    A=B*C,A=[]*B*B, \+ acyclic_term(A),
+    \+ acyclic_term(B), \+ acyclic_term(C)
+)).
+
+test("acyclic_term#2123", (
+    A=B*B,C=A*B,B=[]*[], acyclic_term(A),
+    acyclic_term(B), acyclic_term(C)
+)).
+
+test("acyclic_term#2124", (
+    A=B*C,B=[]*C,C=[]*B, \+ acyclic_term(A),
+    \+ acyclic_term(B), \+ acyclic_term(C)
+)).
+
+test("acyclic_term#2125", (
+    A=B*[],
+    D=B*[],
+    A=B,
+    \+ acyclic_term(D),
+    \+ acyclic_term(A),
+    \+ acyclic_term(B)
+)).
+
+test("acyclic_term#2130_1", (
+    term7(T),
+    \+ acyclic_term(T)
+)).
+
+test("acyclic_term#2130_2", (
+    term8(T),
+    \+ acyclic_term(T)
+)).
+
+test("acyclic_term#2131", (
+    A=[B],C=[B],C=[A],
+    \+ acyclic_term(C)
+)).
+
 main :-
     findall(test(Name, Goal), test(Name, Goal), Tests),
     run_tests(Tests, Failed),
@@ -231,3 +292,15 @@ run_tests_quiet([test(Name, Goal)|Tests], Failed) :-
     ;   Failed = [Name|Failed1]
     ),
     run_tests_quiet(Tests, Failed1).
+
+show_failed(Failed) :-
+    phrase(portray_failed(Failed), F),
+    format("~s", [F]).
+
+portray_failed_([]) --> [].
+portray_failed_([F|Fs]) -->
+    "\"", F, "\"",  "\n", portray_failed_(Fs).
+
+portray_failed([]) --> [].
+portray_failed([F|Fs]) -->
+    "\n", "Failed tests:", "\n", portray_failed_([F|Fs]).

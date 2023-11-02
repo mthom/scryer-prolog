@@ -10,16 +10,13 @@ pub(crate) trait UnmarkPolicy {
     where
         Self: Sized;
     fn invert_marker(iter: &mut StacklessPreOrderHeapIter<Self>) where Self: Sized;
-    fn cycle_detected(&mut self) where Self: Sized;
     fn mark_phase(&self) -> bool;
-    fn var_rooted_cycle(_iter: &mut StacklessPreOrderHeapIter<Self>, _next: usize)
-    where
-        Self: Sized {}
-    fn detect_list_tail_cycle(_iter: &mut StacklessPreOrderHeapIter<Self>) where Self: Sized {}
-    fn list_head_cycle_detecting_backward(
-        iter: &mut StacklessPreOrderHeapIter<Self>,
-    ) -> bool where Self: Sized {
-        iter.backward()
+    #[inline]
+    fn report_var_link(iter: &StacklessPreOrderHeapIter<Self>) -> bool where Self: Sized {
+        iter.heap[iter.next as usize].get_mark_bit() == iter.iter_state.mark_phase()
+    }
+    #[inline(always)]
+    fn record_focus(_iter: &mut StacklessPreOrderHeapIter<Self>) where Self: Sized {
     }
 }
 
@@ -52,62 +49,9 @@ impl UnmarkPolicy for IteratorUMP {
         invert_marker(iter);
     }
 
-    #[inline(always)]
-    fn cycle_detected(&mut self) {}
-
     #[inline]
     fn mark_phase(&self) -> bool {
         self.mark_phase
-    }
-}
-
-pub(crate) struct CycleDetectorUMP {
-    mark_phase: bool,
-    cycle_detected: bool,
-}
-
-impl UnmarkPolicy for CycleDetectorUMP {
-    #[inline(always)]
-    fn forward_attr_var(iter: &mut StacklessPreOrderHeapIter<Self>) -> Option<HeapCellValue> {
-        iter.forward_var()
-    }
-
-    #[inline]
-    fn invert_marker(iter: &mut StacklessPreOrderHeapIter<Self>) {
-        iter.iter_state.mark_phase = false;
-        invert_marker(iter);
-    }
-
-    #[inline]
-    fn cycle_detected(&mut self) {
-        self.cycle_detected = true;
-    }
-
-    #[inline(always)]
-    fn mark_phase(&self) -> bool {
-        self.mark_phase
-    }
-
-    fn list_head_cycle_detecting_backward(
-        iter: &mut StacklessPreOrderHeapIter<Self>,
-    ) -> bool {
-        if !iter.iter_state.cycle_detected && iter.iter_state.mark_phase {
-            iter.iter_state.cycle_detected = iter.detect_list_cycle(iter.current);
-        }
-
-        iter.backward()
-    }
-
-    fn detect_list_tail_cycle(iter: &mut StacklessPreOrderHeapIter<Self>) {
-        if iter.iter_state.mark_phase && !iter.iter_state.cycle_detected {
-            iter.iter_state.cycle_detected = iter.detect_list_cycle(iter.current);
-        }
-    }
-
-    fn var_rooted_cycle(iter: &mut StacklessPreOrderHeapIter<Self>, next: usize) {
-        if iter.current != next && iter.iter_state.mark_phase && !iter.iter_state.cycle_detected {
-            iter.iter_state.cycle_detected = iter.detect_list_cycle(next);
-        }
     }
 }
 
@@ -138,9 +82,6 @@ impl UnmarkPolicy for MarkerUMP {
     fn mark_phase(&self) -> bool {
         true
     }
-
-    #[inline(always)]
-    fn cycle_detected(&mut self) {}
 }
 
 #[derive(Debug)]
@@ -187,49 +128,6 @@ impl<'a> StacklessPreOrderHeapIter<'a, MarkerUMP> {
     }
 }
 
-impl<'a> StacklessPreOrderHeapIter<'a, CycleDetectorUMP> {
-    pub(crate) fn new(heap: &'a mut [HeapCellValue], start: usize) -> Self {
-        heap[start].set_forwarding_bit(true);
-        let next = heap[start].get_value();
-
-        Self {
-            heap,
-            start,
-            current: start,
-            next,
-            iter_state: CycleDetectorUMP {
-                mark_phase: true,
-                cycle_detected: false,
-            },
-        }
-    }
-
-    #[inline]
-    pub(crate) fn found_cycle(&self) -> bool {
-        self.iter_state.cycle_detected
-    }
-
-    pub(crate) fn detect_list_cycle(&self, next: usize) -> bool {
-        use crate::machine::system_calls::BrentAlgState;
-
-        let mut brent_alg_st = BrentAlgState::new(self.current);
-
-        while self.heap[brent_alg_st.hare].get_mark_bit() {
-            let temp = self.heap[brent_alg_st.hare].get_value() as usize;
-
-            if brent_alg_st.step(temp).is_some() || temp == next {
-                return true;
-            }
-
-            if temp == self.start {
-                break;
-            }
-        }
-
-        false
-    }
-}
-
 impl<'a> StacklessPreOrderHeapIter<'a, IteratorUMP> {
     #[cfg(test)]
     pub(crate) fn new(heap: &'a mut [HeapCellValue], start: usize) -> Self {
@@ -241,9 +139,7 @@ impl<'a> StacklessPreOrderHeapIter<'a, IteratorUMP> {
             start,
             current: start,
             next,
-            iter_state: IteratorUMP {
-                mark_phase: true,
-            },
+            iter_state: IteratorUMP { mark_phase: true,},
         }
     }
 }
@@ -278,78 +174,44 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
         None
     }
 
-    #[inline]
-    fn is_cyclic(&self, var_current: usize, var_next: usize, var_f: bool) -> bool {
-        if self.heap[var_next].is_var() {
-            // the third conjunct covers the case where var_current
-            // was just unforwarded by forward_var() and so
-            // self.current + 1 == var_current. see acyclic_term#2121
-            // & acyclic_term_30 for examples of how this occurs.
-            self.heap[var_next].get_mark_bit() && var_current != var_next && !var_f
-        } else if self.heap[var_next].is_ref() {
-            self.heap[var_next].get_mark_bit()
-        } else {
-            false
-        }
-    }
-
     fn forward(&mut self) -> Option<HeapCellValue> {
         loop {
             if self.heap[self.current].get_mark_bit() != self.iter_state.mark_phase() {
                 self.heap[self.current].set_mark_bit(self.iter_state.mark_phase());
 
+                UMP::record_focus(self);
+
                 match self.heap[self.current].get_tag() {
                     HeapCellValueTag::AttrVar => {
-                        let next = self.next;
-                        let current = self.current;
-                        let f = self.heap[self.current].get_forwarding_bit();
-
-                        if self.heap[next as usize].get_mark_bit() == self.iter_state.mark_phase() {
-                            UMP::var_rooted_cycle(self, next as usize);
-                        }
+                        let next = self.next as usize;
 
                         if let Some(cell) = UMP::forward_attr_var(self) {
-                            if self.is_cyclic(current, next as usize, f) {
-                                self.iter_state.cycle_detected();
-                            }
-
                             return Some(cell);
                         }
 
                         if self.next < self.heap.len() as u64 {
-                            if self.heap[self.next as usize].get_mark_bit() == self.iter_state.mark_phase() {
+                            if UMP::report_var_link(self) {
                                 let tag = HeapCellValueTag::AttrVar;
-                                return Some(HeapCellValue::build_with(tag, next));
+                                return Some(HeapCellValue::build_with(tag, next as u64));
                             }
                         }
                     }
                     HeapCellValueTag::Var => {
-                        let next = self.next;
-                        let current = self.current;
-                        let f = self.heap[self.current].get_forwarding_bit();
-
-                        if self.heap[next as usize].get_mark_bit() == self.iter_state.mark_phase() {
-                            UMP::var_rooted_cycle(self, next as usize);
-                        }
+                        let next = self.next as usize;
 
                         if let Some(cell) = self.forward_var() {
-                            if self.is_cyclic(current, next as usize, f) {
-                                self.iter_state.cycle_detected();
-                            }
-
                             return Some(cell);
                         }
 
                         if self.next < self.heap.len() as u64 {
-                            if self.heap[self.next as usize].get_mark_bit() == self.iter_state.mark_phase() {
+                            if UMP::report_var_link(self) {
                                 let tag = HeapCellValueTag::Var;
-                                return Some(HeapCellValue::build_with(tag, next));
+                                return Some(HeapCellValue::build_with(tag, next as u64));
                             }
                         }
                     }
                     HeapCellValueTag::Str => {
                         if self.heap[self.next as usize + 1].get_forwarding_bit() {
-                            self.iter_state.cycle_detected();
                             return Some(self.backward_and_return());
                         }
 
@@ -374,7 +236,6 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
                         let last_cell_loc = self.next as usize + 1;
 
                         if self.heap[last_cell_loc].get_forwarding_bit() {
-                            self.iter_state.cycle_detected();
                             return Some(self.backward_and_return());
                         }
 
@@ -384,32 +245,12 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
 
                         self.heap[last_cell_loc].set_forwarding_bit(true);
 
-                        if self.heap[last_cell_loc].get_mark_bit() == self.iter_state.mark_phase() {
-                            if self.heap[last_cell_loc-1].get_mark_bit() == self.iter_state.mark_phase() {
-                                // the conjunction leading here is a necessary but not sufficient
-                                // condition of the presence of a cycle at the list head.
-
-                                if last_cell_loc == self.current {
-                                    UMP::detect_list_tail_cycle(self);
-                                }
-
-                                self.backward();
-
-                                if UMP::list_head_cycle_detecting_backward(self) {
-                                    return None;
-                                }
-
-                                continue;
-                            }
-                        }
-
                         return Some(list_loc_as_cell!(last_cell_loc - 1));
                     }
                     HeapCellValueTag::PStrLoc => {
                         let h = self.next as usize;
 
                         if self.heap[h + 1].get_forwarding_bit() {
-                            self.iter_state.cycle_detected();
                             return Some(self.backward_and_return());
                         }
 
@@ -432,7 +273,6 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
                         let last_cell_loc = h + 1;
 
                         if self.heap[last_cell_loc].get_forwarding_bit() {
-                            self.iter_state.cycle_detected();
                             return Some(self.backward_and_return());
                         }
 

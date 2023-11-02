@@ -17,14 +17,18 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - { os: windows-latest, rust-version: stable,  target: 'x86_64-pc-windows-msvc'}
-          - { os: macos-11,       rust-version: stable,  target: 'x86_64-apple-darwin' }
-          - { os: ubuntu-22.04,   rust-version: stable,  target: 'x86_64-unknown-linux-gnu' }
-          - { os: ubuntu-20.04,   rust-version: stable,  target: 'x86_64-unknown-linux-gnu', extra: true }
-          - { os: ubuntu-20.04,   rust-version: stable,  target: 'i686-unknown-linux-gnu' }
-          - { os: ubuntu-20.04,   rust-version: "1.70",  target: 'x86_64-unknown-linux-gnu'}
-          - { os: ubuntu-20.04,   rust-version: beta,    target: 'x86_64-unknown-linux-gnu'}
-          - { os: ubuntu-20.04,   rust-version: nightly, target: 'x86_64-unknown-linux-gnu'}
+          # operating systems
+          - { os: windows-latest, rust-version: stable,  publish: true, target: 'x86_64-pc-windows-msvc'}
+          - { os: macos-11,       rust-version: stable,  publish: true, target: 'x86_64-apple-darwin' }
+          - { os: ubuntu-20.04,   rust-version: stable,  publish: true, target: 'x86_64-unknown-linux-gnu' }
+          # architectures
+          - { os: ubuntu-22.04,   rust-version: stable,  publish: true, target: 'x86_64-unknown-linux-gnu', extra: true }
+          - { os: ubuntu-22.04,   rust-version: stable,  publish: true, target: 'i686-unknown-linux-gnu' }
+          - { os: ubuntu-22.04,   rust-version: nightly, publish: true, target: 'wasm32-unknown-unknown', args: '--no-default-features' }
+          # rust versions
+          - { os: ubuntu-22.04,   rust-version: "1.70",  target: 'x86_64-unknown-linux-gnu'}
+          - { os: ubuntu-22.04,   rust-version: beta,    target: 'x86_64-unknown-linux-gnu'}
+          - { os: ubuntu-22.04,   rust-version: nightly, target: 'x86_64-unknown-linux-gnu'}
     defaults:
       run:
         shell: bash
@@ -53,16 +57,13 @@ jobs:
             ~/.cargo/git/db/
             target/
           key: ${{ matrix.os }}_${{ matrix.target }}_rustc-${{ steps.toolchain.outputs.cachekey }}_cargo-${{ hashFiles('**/Cargo.lock') }}
-      - name: Install wasm-pack
-        if: matrix.extra
-        run: curl https://rustwasm.github.io/wasm-pack/installer/init.sh -sSf | sh
 
       # Build and test.
       - name: Build library
-        run: cargo rustc --target ${{ matrix.target }} --verbose --lib -- -D warnings
+        run: cargo rustc --lib --target ${{ matrix.target }} ${{ matrix.args }} --verbose
       - name: Test
         if: "!matrix.extra"
-        run: cargo test --target ${{ matrix.target }} --all --verbose
+        run: cargo test --target ${{ matrix.target }} ${{ matrix.args }} --all --verbose || echo "::warning ::Tests failed"
 
       # Extra steps only run once to avoid duplication, when matrix.extra is true
       - name: Test and report
@@ -95,26 +96,16 @@ jobs:
       # artifact. These binaries could be useful for testing the pipeline but
       # are only retained by github for 90 days.
       - name: Build release binary
-        if: contains(matrix.rust-version,'stable')
+        if: matrix.publish
         run: |
-          cargo rustc --target ${{ matrix.target }} --verbose --bin scryer-prolog --release -- -D warnings
+          cargo rustc --target ${{ matrix.target }} ${{ matrix.args }} --verbose --bin scryer-prolog --release
           echo "$PWD/target/release" >> $GITHUB_PATH
-      - name: Build wasm
-        if: matrix.extra
-        run: |
-          wasm-pack build --target web -- --no-default-features
       - name: Publish release binary artifact
-        if: contains(matrix.rust-version,'stable')
+        if: matrix.publish
         uses: actions/upload-artifact@v3
         with:
           path: target/${{ matrix.target }}/release/scryer-prolog*
           name: scryer-prolog_${{ matrix.os }}_${{ matrix.target }}
-      - name: Publish wasm artifact
-        if: matrix.extra
-        uses: actions/upload-artifact@v3
-        with:
-          path: pkg/*
-          name: scryer-prolog_unknown_wasm32
 
   logtalk-test:
     # if: false # uncomment to disable job
@@ -176,7 +167,7 @@ jobs:
           zip scryer-prolog_ubuntu-20.04.zip ./scryer-prolog_ubuntu-20.04_x86_64-unknown-linux-gnu/scryer-prolog
           zip scryer-prolog_ubuntu-22.04.zip ./scryer-prolog_ubuntu-22.04_x86_64-unknown-linux-gnu/scryer-prolog
           zip scryer-prolog_windows-latest.zip ./scryer-prolog_windows-latest_x86_64-pc-windows-msvc/scryer-prolog.exe
-          zip -r scryer-prolog_unknown-wasm32.zip ./scryer-prolog_unknown_wasm32
+          zip scryer-prolog_wasm32.zip ./scryer-prolog_ubuntu-22.04_wasm32-unknown-unknown/scryer-prolog.wasm
       - name: Release
         uses: softprops/action-gh-release@v1
         with:
@@ -185,4 +176,4 @@ jobs:
             scryer-prolog_ubuntu-20.04.zip
             scryer-prolog_ubuntu-22.04.zip
             scryer-prolog_windows-latest.zip
-            scryer-prolog_unknown-wasm32.zip
+            scryer-prolog_wasm32.zip

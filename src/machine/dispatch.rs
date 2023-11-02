@@ -917,69 +917,6 @@ impl Machine {
 
                         self.machine_st.p += 1;
                     }
-                    &Instruction::ACosh(ref a1, t) => {
-                        let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
-
-                        self.machine_st.interms[t - 1] = Number::Float(OrderedFloat(
-                            try_or_throw_gen!(&mut self.machine_st, acosh(n1)),
-                        ));
-
-                        self.machine_st.p += 1;
-                    }
-                    &Instruction::ASinh(ref a1, t) => {
-                        let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
-
-                        self.machine_st.interms[t - 1] = Number::Float(OrderedFloat(
-                            try_or_throw_gen!(&mut self.machine_st, asinh(n1)),
-                        ));
-
-                        self.machine_st.p += 1;
-                    }
-                    &Instruction::ATanh(ref a1, t) => {
-                        let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
-
-                        self.machine_st.interms[t - 1] = Number::Float(OrderedFloat(
-                            try_or_throw_gen!(&mut self.machine_st, atanh(n1)),
-                        ));
-
-                        self.machine_st.p += 1;
-                    }
-                    &Instruction::Cosh(ref a1, t) => {
-                        let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
-
-                        self.machine_st.interms[t - 1] = Number::Float(OrderedFloat(
-                            try_or_throw_gen!(&mut self.machine_st, cosh(n1)),
-                        ));
-
-                        self.machine_st.p += 1;
-                    }
-                    &Instruction::Sinh(ref a1, t) => {
-                        let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
-
-                        self.machine_st.interms[t - 1] = Number::Float(OrderedFloat(
-                            try_or_throw_gen!(&mut self.machine_st, sinh(n1)),
-                        ));
-
-                        self.machine_st.p += 1;
-                    }
-                    &Instruction::Tanh(ref a1, t) => {
-                        let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
-
-                        self.machine_st.interms[t - 1] = Number::Float(OrderedFloat(
-                            try_or_throw_gen!(&mut self.machine_st, tanh(n1)),
-                        ));
-
-                        self.machine_st.p += 1;
-                    }
-                    &Instruction::Log10(ref a1, t) => {
-                        let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
-
-                        self.machine_st.interms[t - 1] = Number::Float(OrderedFloat(
-                            try_or_throw_gen!(&mut self.machine_st, log10(n1)),
-                        ));
-
-                        self.machine_st.p += 1;
-                    }
                     &Instruction::Float(ref a1, t) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(a1));
 
@@ -1239,6 +1176,21 @@ impl Machine {
                     &Instruction::Cut(r) => {
                         let value = self.machine_st[r];
                         self.machine_st.cut_body(value);
+
+                        if self.machine_st.fail {
+                            self.machine_st.backtrack();
+                            continue;
+                        }
+
+                        if (self.machine_st.run_cleaners_fn)(self) {
+                            continue;
+                        }
+
+                        self.machine_st.p += 1;
+                    }
+                    &Instruction::CutPrev(r) => {
+                        let value = self.machine_st[r];
+                        self.machine_st.cut_prev_body(value);
 
                         if self.machine_st.fail {
                             self.machine_st.backtrack();
