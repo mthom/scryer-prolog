@@ -11,6 +11,47 @@ on:
   workflow_dispatch:
 
 jobs:
+  style:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v3
+      - uses: dtolnay/rust-toolchain@master
+        id: toolchain
+        with:
+          toolchain: nightly
+          targets: x86_64-unknown-linux-gnu
+          components: clippy, rustfmt
+      - run: cargo install cargo2junit --force
+      - uses: actions/cache@v3
+        with:
+          path: |
+            ~/.cargo/bin/
+            ~/.cargo/registry/index/
+            ~/.cargo/registry/cache/
+            ~/.cargo/git/db/
+            target/
+          key: style_rustc-${{ steps.toolchain.outputs.cachekey }}_cargo-${{ hashFiles('**/Cargo.lock') }}
+
+      - name: Check formatting
+        run: cargo fmt --check
+      - name: Check clippy
+        run: cargo clippy --no-deps --all-targets
+      - name: Test and report
+        run: |
+          RUSTC_BOOTSTRAP=1 cargo test --all -- -Z unstable-options --format json --report-time | cargo2junit > cargo_test_results.xml
+      - name: Publish cargo test results artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: cargo-test-results
+          path: cargo_test_results.xml
+      - name: Publish cargo test summary
+        uses: EnricoMi/publish-unit-test-result-action/composite@master
+        with:
+          check_name: Cargo test summary
+          files: cargo_test_results.xml
+          fail_on: nothing
+          comment_mode: off
+
   build-test:
     runs-on: ${{ matrix.os }}
     strategy:
@@ -18,13 +59,13 @@ jobs:
       matrix:
         include:
           # operating systems
-          - { os: windows-latest, rust-version: stable,  publish: true, target: 'x86_64-pc-windows-msvc'}
-          - { os: macos-11,       rust-version: stable,  publish: true, target: 'x86_64-apple-darwin' }
-          - { os: ubuntu-20.04,   rust-version: stable,  publish: true, target: 'x86_64-unknown-linux-gnu' }
+          - { os: windows-latest, rust-version: stable,  target: 'x86_64-pc-windows-msvc',   publish: true }
+          - { os: macos-11,       rust-version: stable,  target: 'x86_64-apple-darwin',      publish: true }
+          - { os: ubuntu-20.04,   rust-version: stable,  target: 'x86_64-unknown-linux-gnu', publish: true }
           # architectures
-          - { os: ubuntu-22.04,   rust-version: stable,  publish: true, target: 'x86_64-unknown-linux-gnu', extra: true }
-          - { os: ubuntu-22.04,   rust-version: stable,  publish: true, target: 'i686-unknown-linux-gnu' }
-          - { os: ubuntu-22.04,   rust-version: nightly, publish: true, target: 'wasm32-unknown-unknown', args: '--no-default-features' }
+          - { os: ubuntu-22.04,   rust-version: stable,  target: 'x86_64-unknown-linux-gnu', publish: true }
+          - { os: ubuntu-22.04,   rust-version: stable,  target: 'i686-unknown-linux-gnu',   publish: true }
+          - { os: ubuntu-22.04,   rust-version: nightly, target: 'wasm32-unknown-unknown',   publish: true, args: '--no-default-features' }
           # rust versions
           - { os: ubuntu-22.04,   rust-version: "1.70",  target: 'x86_64-unknown-linux-gnu'}
           - { os: ubuntu-22.04,   rust-version: beta,    target: 'x86_64-unknown-linux-gnu'}
@@ -39,7 +80,6 @@ jobs:
         with:
           toolchain: ${{ matrix.rust-version }}
           targets: ${{ matrix.target }}
-          components: clippy, rustfmt
       - name: Install i686 dependencies
         if: "contains(matrix.target,'i686')"
         run: |
@@ -62,35 +102,7 @@ jobs:
       - name: Build library
         run: cargo rustc --lib --target ${{ matrix.target }} ${{ matrix.args }} --verbose
       - name: Test
-        if: "!matrix.extra"
         run: cargo test --target ${{ matrix.target }} ${{ matrix.args }} --all --verbose || echo "::warning ::Tests failed"
-
-      # Extra steps only run once to avoid duplication, when matrix.extra is true
-      - name: Test and report
-        if: matrix.extra
-        run: |
-          cargo install cargo2junit --force
-          RUSTC_BOOTSTRAP=1 cargo test --all -- -Z unstable-options --format json --report-time | cargo2junit > cargo_test_results.xml
-      - name: Publish cargo test results artifact
-        if: matrix.extra
-        uses: actions/upload-artifact@v3
-        with:
-          name: cargo-test-results
-          path: cargo_test_results.xml
-      - name: Publish cargo test summary
-        if: matrix.extra
-        uses: EnricoMi/publish-unit-test-result-action/composite@master
-        with:
-          check_name: Cargo test summary
-          files: cargo_test_results.xml
-          fail_on: nothing
-          comment_mode: off
-      - name: Check formatting
-        if: matrix.extra
-        run: cargo fmt --check || echo "::warning ::cargo fmt found some formatting changes that may improve readability"
-      - name: Check clippy
-        if: matrix.extra
-        run: cargo clippy --no-deps || echo "::warning ::cargo clippy found some code style changes that may be more idiomatic"
 
       # On stable rust builds, build a binary and publish as a github actions
       # artifact. These binaries could be useful for testing the pipeline but
