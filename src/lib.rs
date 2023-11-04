@@ -3,7 +3,8 @@
 #[macro_use]
 extern crate static_assertions;
 #[cfg(test)]
-#[macro_use] extern crate maplit;
+#[macro_use]
+extern crate maplit;
 
 #[macro_use]
 pub mod macros;
@@ -50,6 +51,7 @@ use wasm_bindgen::prelude::*;
 #[wasm_bindgen]
 pub fn eval_code(s: &str) -> String {
     use machine::mock_wam::*;
+    use web_sys::console;
 
     let mut wam = Machine::with_test_streams();
     let bytes = wam.test_load_string(s);

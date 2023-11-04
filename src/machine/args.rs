@@ -14,3 +14,9 @@ impl MachineArgs {
         }
     }
 }
+
+impl Default for MachineArgs {
+    fn default() -> Self {
+        Self::new()
+    }
+}

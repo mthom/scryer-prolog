@@ -295,11 +295,9 @@ impl DebrayAllocator {
                 let mut result = 0;
 
                 for reg in self.temp_lb.. {
-                    if !self.is_in_use(reg) {
-                        if !temp_var_data.no_use_set.contains(reg) {
-                            result = reg;
-                            break;
-                        }
+                    if !self.is_in_use(reg) && !temp_var_data.no_use_set.contains(reg) {
+                        result = reg;
+                        break;
                     }
                 }
 
@@ -321,13 +319,12 @@ impl DebrayAllocator {
                 let mut result = 0;
 
                 for reg in self.temp_lb.. {
-                    if !self.is_in_use(reg) {
-                        if !temp_var_data.no_use_set.contains(reg) {
-                            if !temp_var_data.conflict_set.contains(reg) {
-                                result = reg;
-                                break;
-                            }
-                        }
+                    if !self.is_in_use(reg)
+                        && !temp_var_data.no_use_set.contains(reg)
+                        && !temp_var_data.conflict_set.contains(reg)
+                    {
+                        result = reg;
+                        break;
                     }
                 }
 
@@ -349,16 +346,15 @@ impl DebrayAllocator {
                 // consider its use set. T == par_k iff
                 // (GenContext::Last(_), k) is in t_var.use_set.
 
-                match &self.var_data.records[t_var].allocation {
-                    VarAlloc::Temp { temp_var_data, .. } => {
-                        if !temp_var_data
-                            .use_set
-                            .contains(&(GenContext::Last(chunk_num), k))
-                        {
-                            return Some((t_var, self.alloc_with_ca(t_var)));
-                        }
+                if let VarAlloc::Temp { temp_var_data, .. } =
+                    &self.var_data.records[t_var].allocation
+                {
+                    if !temp_var_data
+                        .use_set
+                        .contains(&(GenContext::Last(chunk_num), k))
+                    {
+                        return Some((t_var, self.alloc_with_ca(t_var)));
                     }
-                    _ => {}
                 }
 
                 None
@@ -372,25 +368,22 @@ impl DebrayAllocator {
         chunk_num: usize,
         code: &mut CodeDeque,
     ) {
-        match self.alloc_in_last_goal_hint(chunk_num) {
-            Some((var_num, r)) => {
-                let k = self.arg_c;
+        if let Some((var_num, r)) = self.alloc_in_last_goal_hint(chunk_num) {
+            let k = self.arg_c;
 
-                if r != k {
-                    let r = RegType::Temp(r);
+            if r != k {
+                let r = RegType::Temp(r);
 
-                    code.push_back(Target::move_to_register(r, k));
+                code.push_back(Target::move_to_register(r, k));
 
-                    self.shallow_temp_mappings.swap_remove(&k);
-                    self.shallow_temp_mappings.insert(r.reg_num(), var_num);
+                self.shallow_temp_mappings.swap_remove(&k);
+                self.shallow_temp_mappings.insert(r.reg_num(), var_num);
 
-                    self.var_data.records[var_num]
-                        .allocation
-                        .set_register(r.reg_num());
-                    self.in_use.insert(r.reg_num());
-                }
+                self.var_data.records[var_num]
+                    .allocation
+                    .set_register(r.reg_num());
+                self.in_use.insert(r.reg_num());
             }
-            _ => {}
         };
     }
 
@@ -493,11 +486,8 @@ impl DebrayAllocator {
     }
 
     fn add_perm_to_free_list(&mut self, chunk_num: usize, var_num: usize) {
-        match &self.var_data.records[var_num].allocation {
-            VarAlloc::Perm(..) => {
-                self.perm_free_list.push_back((chunk_num, var_num));
-            }
-            _ => {}
+        if let VarAlloc::Perm(..) = &self.var_data.records[var_num].allocation {
+            self.perm_free_list.push_back((chunk_num, var_num));
         }
     }
 
@@ -521,12 +511,9 @@ impl DebrayAllocator {
     }
 
     pub(crate) fn free_var(&mut self, chunk_num: usize, var_num: usize) {
-        match &mut self.var_data.records[var_num].allocation {
-            VarAlloc::Perm(_, allocation) => {
-                *allocation = PermVarAllocation::Pending;
-                self.add_perm_to_free_list(chunk_num, var_num);
-            }
-            _ => {}
+        if let VarAlloc::Perm(_, allocation) = &mut self.var_data.records[var_num].allocation {
+            *allocation = PermVarAllocation::Pending;
+            self.add_perm_to_free_list(chunk_num, var_num);
         }
     }
 
@@ -570,18 +557,15 @@ impl DebrayAllocator {
                     *shallow_safety = VarSafetyStatus::unneeded(branch_designator);
                 } else if term_loc == GenContext::Head {
                     *shallow_safety = VarSafetyStatus::GloballyUnneeded;
-                } else {
-                    if let Some(temp_var_num) = self.shallow_temp_mappings.get(&self.arg_c).cloned()
-                    {
-                        match &mut self.var_data.records[temp_var_num].allocation {
-                            VarAlloc::Temp {
-                                ref mut to_perm_var_num,
-                                ..
-                            } => {
-                                *to_perm_var_num = Some(var_num);
-                            }
-                            _ => unreachable!(),
+                } else if let Some(&temp_var_num) = self.shallow_temp_mappings.get(&self.arg_c) {
+                    match &mut self.var_data.records[temp_var_num].allocation {
+                        VarAlloc::Temp {
+                            ref mut to_perm_var_num,
+                            ..
+                        } => {
+                            *to_perm_var_num = Some(var_num);
                         }
+                        _ => unreachable!(),
                     }
                 }
             }
@@ -886,12 +870,12 @@ impl Allocator for DebrayAllocator {
         self.arg_c += 1;
     }
 
-    fn reset_at_head(&mut self, args: &Vec<Term>) {
+    fn reset_at_head(&mut self, args: &[Term]) {
         self.reset_arg(args.len());
         self.arity = args.len();
 
         for (idx, arg) in args.iter().enumerate() {
-            if let &Term::Var(_, ref var) = arg {
+            if let Term::Var(_, ref var) = arg {
                 let var_num = var.to_var_num().unwrap();
                 let r = self.get_binding(var_num);
 

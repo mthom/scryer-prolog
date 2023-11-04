@@ -64,10 +64,7 @@ impl<'a> CompilationTarget<'a> for FactInstruction {
     }
 
     fn is_void_instr(instr: &Instruction) -> bool {
-        match instr {
-            &Instruction::UnifyVoid(_) => true,
-            _ => false,
-        }
+        matches!(instr, &Instruction::UnifyVoid(_))
     }
 
     fn to_pstr(lvl: Level, string: Atom, r: RegType, has_tail: bool) -> Instruction {
@@ -75,9 +72,8 @@ impl<'a> CompilationTarget<'a> for FactInstruction {
     }
 
     fn incr_void_instr(instr: &mut Instruction) {
-        match instr {
-            &mut Instruction::UnifyVoid(ref mut incr) => *incr += 1,
-            _ => {}
+        if let &mut Instruction::UnifyVoid(ref mut incr) = instr {
+            *incr += 1
         }
     }
 
@@ -146,16 +142,12 @@ impl<'a> CompilationTarget<'a> for QueryInstruction {
     }
 
     fn is_void_instr(instr: &Instruction) -> bool {
-        match instr {
-            &Instruction::SetVoid(_) => true,
-            _ => false,
-        }
+        matches!(instr, &Instruction::SetVoid(_))
     }
 
     fn incr_void_instr(instr: &mut Instruction) {
-        match instr {
-            &mut Instruction::SetVoid(ref mut incr) => *incr += 1,
-            _ => {}
+        if let &mut Instruction::SetVoid(ref mut incr) = instr {
+            *incr += 1
         }
     }
 

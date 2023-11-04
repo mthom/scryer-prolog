@@ -48,11 +48,7 @@ pub enum Token {
 impl Token {
     #[inline]
     pub(super) fn is_end(&self) -> bool {
-        if let Token::End = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, Token::End)
     }
 }
 
@@ -604,10 +600,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                     break;
                 }
             }
-        } else if cut_char!(c) {
-            self.skip_char(c);
-            token.push(c);
-        } else if semicolon_char!(c) {
+        } else if cut_char!(c) || semicolon_char!(c) {
             self.skip_char(c);
             token.push(c);
         } else if single_quote_char!(c) {
@@ -690,7 +683,8 @@ impl<'a, R: CharRead> Lexer<'a, R> {
             if self.reader.peek_char().is_none() {
                 self.return_char('.');
 
-                i64::from_str_radix(&token, 10)
+                token
+                    .parse::<i64>()
                     .map(|n| Token::Literal(fixnum!(Literal, n, &mut self.machine_st.arena)))
                     .or_else(|_| {
                         token
@@ -720,12 +714,12 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                     token.push(c);
 
                     let c = match self.lookahead_char() {
-                        Err(_) => return Ok(self.vacate_with_float(token)?),
+                        Err(_) => return self.vacate_with_float(token),
                         Ok(c) => c,
                     };
 
                     if !sign_char!(c) && !decimal_digit_char!(c) {
-                        return Ok(self.vacate_with_float(token)?);
+                        return self.vacate_with_float(token);
                     }
 
                     if sign_char!(c) {
@@ -735,14 +729,14 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                         let c = match self.lookahead_char() {
                             Err(_) => {
                                 self.return_char(token.pop().unwrap());
-                                return Ok(self.vacate_with_float(token)?);
+                                return self.vacate_with_float(token);
                             }
                             Ok(c) => c,
                         };
 
                         if !decimal_digit_char!(c) {
                             self.return_char(token.pop().unwrap());
-                            return Ok(self.vacate_with_float(token)?);
+                            return self.vacate_with_float(token);
                         }
                     }
 
@@ -769,7 +763,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                             self.machine_st.arena
                         ))))
                     } else {
-                        return Ok(self.vacate_with_float(token)?);
+                        return self.vacate_with_float(token);
                     }
                 } else {
                     let n = parse_lossy::<f64, _>(token.as_bytes())?;
@@ -781,7 +775,147 @@ impl<'a, R: CharRead> Lexer<'a, R> {
             } else {
                 self.return_char('.');
 
-                i64::from_str_radix(&token, 10)
+                token
+                    .parse::<i64>()
+                    .map(|n| Token::Literal(fixnum!(Literal, n, &mut self.machine_st.arena)))
+                    .or_else(|_| {
+                        token
+                            .parse::<Integer>()
+                            .map(|n| {
+                                Token::Literal(Literal::Integer(arena_alloc!(
+                                    n,
+                                    &mut self.machine_st.arena
+                                )))
+                            })
+                            .map_err(|_| ParserError::ParseBigInt(self.line_num, self.col_num))
+                    })
+            }
+        } else if token.starts_with('0') && token.len() == 1 {
+            if c == 'x' {
+                self.hexadecimal_constant(c).or_else(|e| {
+                    if let ParserError::ParseBigInt(..) = e {
+                        token
+                            .parse::<i64>()
+                            .map(|n| {
+                                Token::Literal(fixnum!(Literal, n, &mut self.machine_st.arena))
+                            })
+                            .or_else(|_| {
+                                token
+                                    .parse::<Integer>()
+                                    .map(|n| {
+                                        Token::Literal(Literal::Integer(arena_alloc!(
+                                            n,
+                                            &mut self.machine_st.arena
+                                        )))
+                                    })
+                                    .map_err(|_| {
+                                        ParserError::ParseBigInt(self.line_num, self.col_num)
+                                    })
+                            })
+                    } else {
+                        Err(e)
+                    }
+                })
+            } else if c == 'o' {
+                self.octal_constant(c).or_else(|e| {
+                    if let ParserError::ParseBigInt(..) = e {
+                        token
+                            .parse::<i64>()
+                            .map(|n| {
+                                Token::Literal(fixnum!(Literal, n, &mut self.machine_st.arena))
+                            })
+                            .or_else(|_| {
+                                token
+                                    .parse::<Integer>()
+                                    .map(|n| {
+                                        Token::Literal(Literal::Integer(arena_alloc!(
+                                            n,
+                                            &mut self.machine_st.arena
+                                        )))
+                                    })
+                                    .map_err(|_| {
+                                        ParserError::ParseBigInt(self.line_num, self.col_num)
+                                    })
+                            })
+                    } else {
+                        Err(e)
+                    }
+                })
+            } else if c == 'b' {
+                self.binary_constant(c).or_else(|e| {
+                    if let ParserError::ParseBigInt(..) = e {
+                        token
+                            .parse::<i64>()
+                            .map(|n| {
+                                Token::Literal(fixnum!(Literal, n, &mut self.machine_st.arena))
+                            })
+                            .or_else(|_| {
+                                token
+                                    .parse::<Integer>()
+                                    .map(|n| {
+                                        Token::Literal(Literal::Integer(arena_alloc!(
+                                            n,
+                                            &mut self.machine_st.arena
+                                        )))
+                                    })
+                                    .map_err(|_| {
+                                        ParserError::ParseBigInt(self.line_num, self.col_num)
+                                    })
+                            })
+                    } else {
+                        Err(e)
+                    }
+                })
+            } else if single_quote_char!(c) {
+                self.skip_char(c);
+                let c = self.lookahead_char()?;
+
+                if backslash_char!(c) {
+                    self.skip_char(c);
+                    let c = self.lookahead_char()?;
+
+                    if new_line_char!(c) {
+                        self.skip_char(c);
+                        self.return_char('\'');
+
+                        return Ok(Token::Literal(Literal::Fixnum(Fixnum::build_with(0))));
+                    } else {
+                        self.return_char('\\');
+                    }
+                }
+
+                self.get_single_quoted_char()
+                    .map(|c| Token::Literal(Literal::Fixnum(Fixnum::build_with(c as i64))))
+                    .or_else(|err| {
+                        match err {
+                            ParserError::UnexpectedChar('\'', ..) => {}
+                            err => return Err(err),
+                        }
+
+                        self.return_char(c);
+
+                        token
+                            .parse::<i64>()
+                            .map(|n| {
+                                Token::Literal(fixnum!(Literal, n, &mut self.machine_st.arena))
+                            })
+                            .or_else(|_| {
+                                token
+                                    .parse::<Integer>()
+                                    .map(|n| {
+                                        Token::Literal(Literal::Integer(arena_alloc!(
+                                            n,
+                                            &mut self.machine_st.arena
+                                        )))
+                                    })
+                                    .map_err(|_| {
+                                        ParserError::ParseBigInt(self.line_num, self.col_num)
+                                    })
+                            })
+                    })
+            } else {
+                token
+                    .parse::<i64>()
                     .map(|n| Token::Literal(fixnum!(Literal, n, &mut self.machine_st.arena)))
                     .or_else(|_| {
                         token
@@ -796,155 +930,20 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                     })
             }
         } else {
-            if token.starts_with('0') && token.len() == 1 {
-                if c == 'x' {
-                    self.hexadecimal_constant(c).or_else(|e| {
-                        if let ParserError::ParseBigInt(..) = e {
-                            i64::from_str_radix(&token, 10)
-                                .map(|n| {
-                                    Token::Literal(fixnum!(Literal, n, &mut self.machine_st.arena))
-                                })
-                                .or_else(|_| {
-                                    token
-                                        .parse::<Integer>()
-                                        .map(|n| {
-                                            Token::Literal(Literal::Integer(arena_alloc!(
-                                                n,
-                                                &mut self.machine_st.arena
-                                            )))
-                                        })
-                                        .map_err(|_| {
-                                            ParserError::ParseBigInt(self.line_num, self.col_num)
-                                        })
-                                })
-                        } else {
-                            Err(e)
-                        }
-                    })
-                } else if c == 'o' {
-                    self.octal_constant(c).or_else(|e| {
-                        if let ParserError::ParseBigInt(..) = e {
-                            i64::from_str_radix(&token, 10)
-                                .map(|n| {
-                                    Token::Literal(fixnum!(Literal, n, &mut self.machine_st.arena))
-                                })
-                                .or_else(|_| {
-                                    token
-                                        .parse::<Integer>()
-                                        .map(|n| {
-                                            Token::Literal(Literal::Integer(arena_alloc!(
-                                                n,
-                                                &mut self.machine_st.arena
-                                            )))
-                                        })
-                                        .map_err(|_| {
-                                            ParserError::ParseBigInt(self.line_num, self.col_num)
-                                        })
-                                })
-                        } else {
-                            Err(e)
-                        }
-                    })
-                } else if c == 'b' {
-                    self.binary_constant(c).or_else(|e| {
-                        if let ParserError::ParseBigInt(..) = e {
-                            i64::from_str_radix(&token, 10)
-                                .map(|n| {
-                                    Token::Literal(fixnum!(Literal, n, &mut self.machine_st.arena))
-                                })
-                                .or_else(|_| {
-                                    token
-                                        .parse::<Integer>()
-                                        .map(|n| {
-                                            Token::Literal(Literal::Integer(arena_alloc!(
-                                                n,
-                                                &mut self.machine_st.arena
-                                            )))
-                                        })
-                                        .map_err(|_| {
-                                            ParserError::ParseBigInt(self.line_num, self.col_num)
-                                        })
-                                })
-                        } else {
-                            Err(e)
-                        }
-                    })
-                } else if single_quote_char!(c) {
-                    self.skip_char(c);
-                    let c = self.lookahead_char()?;
-
-                    if backslash_char!(c) {
-                        self.skip_char(c);
-                        let c = self.lookahead_char()?;
-
-                        if new_line_char!(c) {
-                            self.skip_char(c);
-                            self.return_char('\'');
-
-                            return Ok(Token::Literal(Literal::Fixnum(Fixnum::build_with(0))));
-                        } else {
-                            self.return_char('\\');
-                        }
-                    }
-
-                    self.get_single_quoted_char()
-                        .map(|c| Token::Literal(Literal::Fixnum(Fixnum::build_with(c as i64))))
-                        .or_else(|err| {
-                            match err {
-                                ParserError::UnexpectedChar('\'', ..) => {}
-                                err => return Err(err),
-                            }
-
-                            self.return_char(c);
-
-                            i64::from_str_radix(&token, 10)
-                                .map(|n| {
-                                    Token::Literal(fixnum!(Literal, n, &mut self.machine_st.arena))
-                                })
-                                .or_else(|_| {
-                                    token
-                                        .parse::<Integer>()
-                                        .map(|n| {
-                                            Token::Literal(Literal::Integer(arena_alloc!(
-                                                n,
-                                                &mut self.machine_st.arena
-                                            )))
-                                        })
-                                        .map_err(|_| {
-                                            ParserError::ParseBigInt(self.line_num, self.col_num)
-                                        })
-                                })
+            token
+                .parse::<i64>()
+                .map(|n| Token::Literal(fixnum!(Literal, n, &mut self.machine_st.arena)))
+                .or_else(|_| {
+                    token
+                        .parse::<Integer>()
+                        .map(|n| {
+                            Token::Literal(Literal::Integer(arena_alloc!(
+                                n,
+                                &mut self.machine_st.arena
+                            )))
                         })
-                } else {
-                    i64::from_str_radix(&token, 10)
-                        .map(|n| Token::Literal(fixnum!(Literal, n, &mut self.machine_st.arena)))
-                        .or_else(|_| {
-                            token
-                                .parse::<Integer>()
-                                .map(|n| {
-                                    Token::Literal(Literal::Integer(arena_alloc!(
-                                        n,
-                                        &mut self.machine_st.arena
-                                    )))
-                                })
-                                .map_err(|_| ParserError::ParseBigInt(self.line_num, self.col_num))
-                        })
-                }
-            } else {
-                i64::from_str_radix(&token, 10)
-                    .map(|n| Token::Literal(fixnum!(Literal, n, &mut self.machine_st.arena)))
-                    .or_else(|_| {
-                        token
-                            .parse::<Integer>()
-                            .map(|n| {
-                                Token::Literal(Literal::Integer(arena_alloc!(
-                                    n,
-                                    &mut self.machine_st.arena
-                                )))
-                            })
-                            .map_err(|_| ParserError::ParseBigInt(self.line_num, self.col_num))
-                    })
-            }
+                        .map_err(|_| ParserError::ParseBigInt(self.line_num, self.col_num))
+                })
         }
     }
 
@@ -953,6 +952,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
         c: Option<char>,
         layout_info: &mut LayoutInfo,
     ) -> Result<(), ParserError> {
+        #[allow(clippy::redundant_guards)]
         match c {
             Some(c) if layout_char!(c) => {
                 self.skip_char(c);

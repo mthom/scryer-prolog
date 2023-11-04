@@ -19,7 +19,6 @@ use std::cell::Cell;
 use std::collections::VecDeque;
 use std::convert::TryFrom;
 use std::fmt;
-use std::mem;
 use std::ops::{Deref, DerefMut};
 
 /*
@@ -136,7 +135,7 @@ impl RetractionInfo {
 
         Self {
             orig_code_extent,
-            records: mem::replace(&mut self.records, vec![]),
+            records: std::mem::take(&mut self.records),
         }
     }
 }
@@ -207,8 +206,8 @@ impl PredicateQueue {
     #[inline]
     pub(super) fn take(&mut self) -> Self {
         Self {
-            predicates: mem::replace(&mut self.predicates, vec![]),
-            compilation_target: self.compilation_target.clone(),
+            predicates: std::mem::take(&mut self.predicates),
+            compilation_target: self.compilation_target,
         }
     }
 
@@ -404,7 +403,7 @@ impl<'a> LoadState<'a> for BootstrappingLoadState<'a> {
 
     #[inline(always)]
     fn machine_st(loader: &mut Self::LoaderFieldType) -> &mut MachineState {
-        &mut loader.term_stream.parser.lexer.machine_st
+        loader.term_stream.parser.lexer.machine_st
     }
 
     #[inline(always)]
@@ -467,7 +466,7 @@ impl<'a> LoadState<'a> for InlineLoadState<'a> {
 
     #[inline(always)]
     fn machine_st(load_state: &mut Self::LoaderFieldType) -> &mut MachineState {
-        &mut load_state.machine_st
+        load_state.machine_st
     }
 
     #[inline(always)]
@@ -639,22 +638,19 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                 RetractionRecord::AddedDiscontiguousPredicate(compilation_target, key) => {
                     match compilation_target {
                         CompilationTarget::User => {
-                            self.wam_prelude
-                                .indices
-                                .extensible_predicates
-                                .get_mut(&key)
-                                .map(|skeleton| {
-                                    skeleton.core.is_discontiguous = false;
-                                });
+                            if let Some(skeleton) =
+                                self.wam_prelude.indices.extensible_predicates.get_mut(&key)
+                            {
+                                skeleton.core.is_discontiguous = false;
+                            }
                         }
                         CompilationTarget::Module(module_name) => {
-                            match self.wam_prelude.indices.modules.get_mut(&module_name) {
-                                Some(ref mut module) => {
-                                    module.extensible_predicates.get_mut(&key).map(|skeleton| {
-                                        skeleton.core.is_discontiguous = false;
-                                    });
+                            if let Some(ref mut module) =
+                                self.wam_prelude.indices.modules.get_mut(&module_name)
+                            {
+                                if let Some(skeleton) = module.extensible_predicates.get_mut(&key) {
+                                    skeleton.core.is_discontiguous = false;
                                 }
-                                None => {}
                             }
                         }
                     }
@@ -662,23 +658,20 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                 RetractionRecord::AddedDynamicPredicate(compilation_target, key) => {
                     match compilation_target {
                         CompilationTarget::User => {
-                            self.wam_prelude
-                                .indices
-                                .extensible_predicates
-                                .get_mut(&key)
-                                .map(|skeleton| {
-                                    skeleton.core.is_dynamic = false;
-                                });
+                            if let Some(skeleton) =
+                                self.wam_prelude.indices.extensible_predicates.get_mut(&key)
+                            {
+                                skeleton.core.is_dynamic = false;
+                            }
                         }
                         CompilationTarget::Module(module_name) => {
-                            match self.wam_prelude.indices.modules.get_mut(&module_name) {
-                                Some(ref mut module) => {
-                                    module.extensible_predicates.get_mut(&key).map(|skeleton| {
-                                        skeleton.core.is_dynamic = false;
-                                        skeleton.core.retracted_dynamic_clauses = None;
-                                    });
-                                }
-                                None => {}
+                            if let Some(ref mut module) =
+                                self.wam_prelude.indices.modules.get_mut(&module_name)
+                            {
+                                if let Some(skeleton) = module.extensible_predicates.get_mut(&key) {
+                                    skeleton.core.is_dynamic = false;
+                                    skeleton.core.retracted_dynamic_clauses = None;
+                                };
                             }
                         }
                     }
@@ -686,60 +679,52 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                 RetractionRecord::AddedMultifilePredicate(compilation_target, key) => {
                     match compilation_target {
                         CompilationTarget::User => {
-                            self.wam_prelude
-                                .indices
-                                .extensible_predicates
-                                .get_mut(&key)
-                                .map(|skeleton| {
-                                    skeleton.core.is_multifile = false;
-                                });
+                            if let Some(skeleton) =
+                                self.wam_prelude.indices.extensible_predicates.get_mut(&key)
+                            {
+                                skeleton.core.is_multifile = false;
+                            }
                         }
                         CompilationTarget::Module(module_name) => {
-                            match self.wam_prelude.indices.modules.get_mut(&module_name) {
-                                Some(ref mut module) => {
-                                    module.extensible_predicates.get_mut(&key).map(|skeleton| {
-                                        skeleton.core.is_multifile = false;
-                                    });
+                            if let Some(ref mut module) =
+                                self.wam_prelude.indices.modules.get_mut(&module_name)
+                            {
+                                if let Some(skeleton) = module.extensible_predicates.get_mut(&key) {
+                                    skeleton.core.is_multifile = false;
                                 }
-                                None => {}
                             }
                         }
                     }
                 }
                 RetractionRecord::AddedModuleOp(module_name, mut op_decl) => {
-                    match self.wam_prelude.indices.modules.get_mut(&module_name) {
-                        Some(ref mut module) => {
-                            op_decl.remove(&mut module.op_dir);
-                        }
-                        None => {}
+                    if let Some(ref mut module) =
+                        self.wam_prelude.indices.modules.get_mut(&module_name)
+                    {
+                        op_decl.remove(&mut module.op_dir);
                     }
                 }
                 RetractionRecord::ReplacedModuleOp(module_name, mut op_decl, op_desc) => {
-                    match self.wam_prelude.indices.modules.get_mut(&module_name) {
-                        Some(ref mut module) => {
-                            op_decl.op_desc = op_desc;
-                            op_decl.insert_into_op_dir(&mut module.op_dir);
-                        }
-                        None => {}
+                    if let Some(ref mut module) =
+                        self.wam_prelude.indices.modules.get_mut(&module_name)
+                    {
+                        op_decl.op_desc = op_desc;
+                        op_decl.insert_into_op_dir(&mut module.op_dir);
                     }
                 }
                 RetractionRecord::AddedModulePredicate(module_name, key) => {
-                    match self.wam_prelude.indices.modules.get_mut(&module_name) {
-                        Some(ref mut module) => {
-                            module.code_dir.remove(&key);
-                        }
-                        None => {}
+                    if let Some(ref mut module) =
+                        self.wam_prelude.indices.modules.get_mut(&module_name)
+                    {
+                        module.code_dir.remove(&key);
                     }
                 }
                 RetractionRecord::ReplacedModulePredicate(module_name, key, old_code_idx) => {
-                    match self.wam_prelude.indices.modules.get_mut(&module_name) {
-                        Some(ref mut module) => {
-                            module
-                                .code_dir
-                                .get_mut(&key)
-                                .map(|code_idx| code_idx.set(old_code_idx));
+                    if let Some(ref mut module) =
+                        self.wam_prelude.indices.modules.get_mut(&module_name)
+                    {
+                        if let Some(code_idx) = module.code_dir.get_mut(&key) {
+                            code_idx.set(old_code_idx)
                         }
-                        None => {}
                     }
                 }
                 RetractionRecord::AddedExtensiblePredicate(compilation_target, key) => {
@@ -758,11 +743,9 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     self.wam_prelude.indices.code_dir.remove(&key);
                 }
                 RetractionRecord::ReplacedUserPredicate(key, old_code_idx) => {
-                    self.wam_prelude
-                        .indices
-                        .code_dir
-                        .get_mut(&key)
-                        .map(|code_idx| code_idx.set(old_code_idx));
+                    if let Some(code_idx) = self.wam_prelude.indices.code_dir.get_mut(&key) {
+                        code_idx.set(old_code_idx)
+                    }
                 }
                 RetractionRecord::AddedIndex(index_key, clause_loc) => {
                     if let Some(index_loc) = index_key.switch_on_term_loc() {
@@ -832,20 +815,17 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     };
                 }
                 RetractionRecord::ReplacedSwitchOnTermVarIndex(index_loc, old_v) => {
-                    match self.wam_prelude.code[index_loc] {
-                        Instruction::IndexingCode(ref mut indexing_code) => {
-                            match &mut indexing_code[0] {
-                                IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(
-                                    _,
-                                    ref mut v,
-                                    ..,
-                                )) => {
-                                    *v = old_v;
-                                }
-                                _ => {}
-                            }
+                    if let Instruction::IndexingCode(ref mut indexing_code) =
+                        self.wam_prelude.code[index_loc]
+                    {
+                        if let IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(
+                            _,
+                            ref mut v,
+                            ..,
+                        )) = &mut indexing_code[0]
+                        {
+                            *v = old_v;
                         }
-                        _ => {}
                     }
                 }
                 RetractionRecord::ModifiedTryMeElse(instr_loc, o) => {
@@ -858,30 +838,24 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     self.wam_prelude.code[instr_loc] = Instruction::RevJmpBy(o);
                 }
                 RetractionRecord::SkeletonClausePopBack(compilation_target, key) => {
-                    match self
+                    if let Some(skeleton) = self
                         .wam_prelude
                         .indices
                         .get_predicate_skeleton_mut(&compilation_target, &key)
                     {
-                        Some(skeleton) => {
-                            skeleton.clauses.pop_back();
-                            skeleton.core.clause_clause_locs.pop_back();
-                        }
-                        None => {}
+                        skeleton.clauses.pop_back();
+                        skeleton.core.clause_clause_locs.pop_back();
                     }
                 }
                 RetractionRecord::SkeletonClausePopFront(compilation_target, key) => {
-                    match self
+                    if let Some(skeleton) = self
                         .wam_prelude
                         .indices
                         .get_predicate_skeleton_mut(&compilation_target, &key)
                     {
-                        Some(skeleton) => {
-                            skeleton.clauses.pop_front();
-                            skeleton.core.clause_clause_locs.pop_front();
-                            skeleton.core.clause_assert_margin -= 1;
-                        }
-                        None => {}
+                        skeleton.clauses.pop_front();
+                        skeleton.core.clause_clause_locs.pop_front();
+                        skeleton.core.clause_assert_margin -= 1;
                     }
                 }
                 RetractionRecord::SkeletonLocalClauseClausePopFront(
@@ -891,16 +865,15 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                 ) => {
                     let listing_src_file_name = self.listing_src_file_name();
 
-                    match self.wam_prelude.indices.get_local_predicate_skeleton_mut(
-                        src_compilation_target,
-                        local_compilation_target,
-                        listing_src_file_name,
-                        key,
-                    ) {
-                        Some(skeleton) => {
-                            skeleton.clause_clause_locs.pop_front();
-                        }
-                        None => {}
+                    if let Some(skeleton) =
+                        self.wam_prelude.indices.get_local_predicate_skeleton_mut(
+                            src_compilation_target,
+                            local_compilation_target,
+                            listing_src_file_name,
+                            key,
+                        )
+                    {
+                        skeleton.clause_clause_locs.pop_front();
                     }
                 }
                 RetractionRecord::SkeletonLocalClauseClausePopBack(
@@ -910,16 +883,15 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                 ) => {
                     let listing_src_file_name = self.listing_src_file_name();
 
-                    match self.wam_prelude.indices.get_local_predicate_skeleton_mut(
-                        src_compilation_target,
-                        local_compilation_target,
-                        listing_src_file_name,
-                        key,
-                    ) {
-                        Some(skeleton) => {
-                            skeleton.clause_clause_locs.pop_back();
-                        }
-                        None => {}
+                    if let Some(skeleton) =
+                        self.wam_prelude.indices.get_local_predicate_skeleton_mut(
+                            src_compilation_target,
+                            local_compilation_target,
+                            listing_src_file_name,
+                            key,
+                        )
+                    {
+                        skeleton.clause_clause_locs.pop_back();
                     }
                 }
                 RetractionRecord::SkeletonLocalClauseTruncateBack(
@@ -930,29 +902,25 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                 ) => {
                     let listing_src_file_name = self.listing_src_file_name();
 
-                    match self.wam_prelude.indices.get_local_predicate_skeleton_mut(
-                        src_compilation_target,
-                        local_compilation_target,
-                        listing_src_file_name,
-                        key,
-                    ) {
-                        Some(skeleton) => {
-                            skeleton.clause_clause_locs.truncate(len);
-                        }
-                        None => {}
+                    if let Some(skeleton) =
+                        self.wam_prelude.indices.get_local_predicate_skeleton_mut(
+                            src_compilation_target,
+                            local_compilation_target,
+                            listing_src_file_name,
+                            key,
+                        )
+                    {
+                        skeleton.clause_clause_locs.truncate(len);
                     }
                 }
                 RetractionRecord::SkeletonClauseTruncateBack(compilation_target, key, len) => {
-                    match self
+                    if let Some(skeleton) = self
                         .wam_prelude
                         .indices
                         .get_predicate_skeleton_mut(&compilation_target, &key)
                     {
-                        Some(skeleton) => {
-                            skeleton.clauses.truncate(len);
-                            skeleton.core.clause_clause_locs.truncate(len);
-                        }
-                        None => {}
+                        skeleton.clauses.truncate(len);
+                        skeleton.core.clause_clause_locs.truncate(len);
                     }
                 }
                 RetractionRecord::SkeletonClauseStartReplaced(
@@ -961,15 +929,12 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     target_pos,
                     clause_start,
                 ) => {
-                    match self
+                    if let Some(skeleton) = self
                         .wam_prelude
                         .indices
                         .get_predicate_skeleton_mut(&compilation_target, &key)
                     {
-                        Some(skeleton) => {
-                            skeleton.clauses[target_pos].clause_start = clause_start;
-                        }
-                        None => {}
+                        skeleton.clauses[target_pos].clause_start = clause_start;
                     }
                 }
                 RetractionRecord::RemovedDynamicSkeletonClause(
@@ -978,26 +943,22 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     target_pos,
                     clause_clause_loc,
                 ) => {
-                    match self
+                    if let Some(skeleton) = self
                         .wam_prelude
                         .indices
                         .get_predicate_skeleton_mut(&compilation_target, &key)
                     {
-                        Some(skeleton) => {
-                            if let Some(removed_clauses) =
-                                &mut skeleton.core.retracted_dynamic_clauses
-                            {
-                                let clause_index_info = removed_clauses.pop().unwrap();
+                        if let Some(removed_clauses) = &mut skeleton.core.retracted_dynamic_clauses
+                        {
+                            let clause_index_info = removed_clauses.pop().unwrap();
 
-                                skeleton
-                                    .core
-                                    .clause_clause_locs
-                                    .insert(target_pos, clause_clause_loc);
+                            skeleton
+                                .core
+                                .clause_clause_locs
+                                .insert(target_pos, clause_clause_loc);
 
-                                skeleton.clauses.insert(target_pos, clause_index_info);
-                            }
+                            skeleton.clauses.insert(target_pos, clause_index_info);
                         }
-                        None => {}
                     }
                 }
                 RetractionRecord::RemovedSkeletonClause(
@@ -1007,19 +968,16 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     clause_index_info,
                     clause_clause_loc,
                 ) => {
-                    match self
+                    if let Some(skeleton) = self
                         .wam_prelude
                         .indices
                         .get_predicate_skeleton_mut(&compilation_target, &key)
                     {
-                        Some(skeleton) => {
-                            skeleton
-                                .core
-                                .clause_clause_locs
-                                .insert(target_pos, clause_clause_loc);
-                            skeleton.clauses.insert(target_pos, clause_index_info);
-                        }
-                        None => {}
+                        skeleton
+                            .core
+                            .clause_clause_locs
+                            .insert(target_pos, clause_clause_loc);
+                        skeleton.clauses.insert(target_pos, clause_index_info);
                     }
                 }
                 RetractionRecord::ReplacedIndexingLine(index_loc, indexing_code) => {
@@ -1033,14 +991,15 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                 ) => {
                     let listing_src_file_name = self.listing_src_file_name();
 
-                    match self.wam_prelude.indices.get_local_predicate_skeleton_mut(
-                        compilation_target,
-                        local_compilation_target,
-                        listing_src_file_name,
-                        key,
-                    ) {
-                        Some(skeleton) => skeleton.clause_clause_locs = clause_locs,
-                        None => {}
+                    if let Some(skeleton) =
+                        self.wam_prelude.indices.get_local_predicate_skeleton_mut(
+                            compilation_target,
+                            local_compilation_target,
+                            listing_src_file_name,
+                            key,
+                        )
+                    {
+                        skeleton.clause_clause_locs = clause_locs
                     }
                 }
                 RetractionRecord::RemovedSkeleton(compilation_target, key, skeleton) => {
@@ -1091,7 +1050,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
 
         let export_list = machine_st.read_term_from_heap(cell);
         let atom_tbl = &mut LS::machine_st(&mut self.payload).atom_tbl;
-        let export_list = setup_module_export_list(export_list, &atom_tbl)?;
+        let export_list = setup_module_export_list(export_list, atom_tbl)?;
 
         Ok(export_list.into_iter().collect())
     }
@@ -1363,7 +1322,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             *key,
         ) {
             Some(skeleton) if !skeleton.clause_clause_locs.is_empty() => {
-                mem::replace(&mut skeleton.clause_clause_locs, VecDeque::new())
+                std::mem::take(&mut skeleton.clause_clause_locs)
             }
             _ => return,
         };
@@ -1400,9 +1359,7 @@ impl<'a> MachinePreludeView<'a> {
             CompilationTarget::User => CompositeOpDir::new(&self.indices.op_dir, None),
             CompilationTarget::Module(ref module_name) => {
                 match self.indices.modules.get(module_name) {
-                    Some(ref module) => {
-                        CompositeOpDir::new(&self.indices.op_dir, Some(&module.op_dir))
-                    }
+                    Some(module) => CompositeOpDir::new(&self.indices.op_dir, Some(&module.op_dir)),
                     None => {
                         unreachable!()
                     }
@@ -1413,13 +1370,10 @@ impl<'a> MachinePreludeView<'a> {
 }
 
 impl MachineState {
-    pub(super) fn read_term_from_heap(
-        &mut self,
-        term_addr: HeapCellValue,
-    ) -> Term {
+    pub(super) fn read_term_from_heap(&mut self, term_addr: HeapCellValue) -> Term {
         let mut term_stack = vec![];
-        let mut iter = stackful_post_order_iter::<NonListElider>
-            (&mut self.heap, &mut self.stack, term_addr);
+        let mut iter =
+            stackful_post_order_iter::<NonListElider>(&mut self.heap, &mut self.stack, term_addr);
 
         while let Some(addr) = iter.next() {
             let addr = unmark_cell_bits!(addr);
@@ -1652,10 +1606,10 @@ impl Machine {
 
         let arity = self.deref_register(3);
         let arity = match Number::try_from(arity) {
-            Ok(Number::Integer(n)) if &*n >= &Integer::ZERO && &*n <= &Integer::from(MAX_ARITY) => {
+            Ok(Number::Integer(n)) if *n >= Integer::ZERO && *n <= Integer::from(MAX_ARITY) => {
                 let value: usize = (&*n).try_into().unwrap();
                 Ok(value)
-            },
+            }
             Ok(Number::Fixnum(n)) if n.get_num() >= 0 && n.get_num() <= MAX_ARITY as i64 => {
                 Ok(usize::try_from(n.get_num()).unwrap())
             }
@@ -1770,14 +1724,11 @@ impl Machine {
                         &ListingSource::DynamicallyGenerated,
                     );
 
-                    match loader.wam_prelude.indices.modules.get_mut(&module_name) {
-                        Some(module) => {
-                            for (key, value) in module.op_dir.drain(0..) {
-                                let mut op_decl = OpDecl::new(value, key.0);
-                                op_decl.remove(&mut loader.wam_prelude.indices.op_dir);
-                            }
+                    if let Some(module) = loader.wam_prelude.indices.modules.get_mut(&module_name) {
+                        for (key, value) in module.op_dir.drain(0..) {
+                            let mut op_decl = OpDecl::new(value, key.0);
+                            op_decl.remove(&mut loader.wam_prelude.indices.op_dir);
                         }
-                        None => {}
                     }
                 }
             }
@@ -1789,10 +1740,10 @@ impl Machine {
         self.restore_load_state_payload(result)
     }
 
-    pub(crate) fn loader_from_heap_evacuable<'a>(
-        &'a mut self,
+    pub(crate) fn loader_from_heap_evacuable(
+        &mut self,
         r: RegType,
-    ) -> Loader<'a, LiveLoadAndMachineState<'a>> {
+    ) -> Loader<'_, LiveLoadAndMachineState<'_>> {
         let mut load_state = cell_as_load_state_payload!(self
             .machine_st
             .store(self.machine_st.deref(self.machine_st[r])));
@@ -1868,7 +1819,7 @@ impl Machine {
         let path = cell_as_atom!(self.deref_register(2));
 
         self.load_contexts
-            .push(LoadContext::new(&*path.as_str(), stream));
+            .push(LoadContext::new(&path.as_str(), stream));
         Ok(())
     }
 
@@ -2021,8 +1972,8 @@ impl Machine {
 
             loader.payload.compilation_target = compilation_target;
 
-            let head = LiveLoadAndMachineState::machine_st(&mut loader.payload)
-                .read_term_from_heap(head);
+            let head =
+                LiveLoadAndMachineState::machine_st(&mut loader.payload).read_term_from_heap(head);
 
             let name = if let Some(name) = head.name() {
                 name
@@ -2218,7 +2169,7 @@ impl Machine {
             Ok(Number::Integer(n)) => {
                 let value: usize = (&*n).try_into().unwrap();
                 value
-            },
+            }
             Ok(Number::Fixnum(n)) => usize::try_from(n.get_num()).unwrap(),
             _ => unreachable!(),
         };
@@ -2520,7 +2471,7 @@ pub(super) fn load_module(
 
     import_module_exports::<LiveLoadAndMachineState>(
         &mut payload,
-        &compilation_target,
+        compilation_target,
         module,
         code_dir,
         op_dir,

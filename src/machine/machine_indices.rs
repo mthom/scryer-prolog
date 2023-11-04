@@ -118,18 +118,12 @@ impl IndexPtr {
 
     #[inline(always)]
     pub(crate) fn is_undefined(&self) -> bool {
-        match self.tag() {
-            IndexPtrTag::Undefined => true,
-            _ => false,
-        }
+        matches!(self.tag(), IndexPtrTag::Undefined)
     }
 
     #[inline(always)]
     pub(crate) fn is_dynamic_undefined(&self) -> bool {
-        match self.tag() {
-            IndexPtrTag::DynamicUndefined => true,
-            _ => false,
-        }
+        matches!(self.tag(), IndexPtrTag::DynamicUndefined)
     }
 }
 
@@ -231,6 +225,7 @@ pub enum VarKey {
 }
 
 impl VarKey {
+    #[allow(clippy::inherent_to_string)]
     #[inline]
     pub(crate) fn to_string(&self) -> String {
         match self {
@@ -241,11 +236,7 @@ impl VarKey {
 
     #[inline(always)]
     pub(crate) fn is_anon(&self) -> bool {
-        if let VarKey::AnonVar(_) = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, VarKey::AnonVar(_))
     }
 }
 
@@ -429,9 +420,9 @@ impl IndexStore {
         match compilation_target {
             CompilationTarget::User => self.meta_predicates.get(&(name, arity)),
             CompilationTarget::Module(ref module_name) => match self.modules.get(module_name) {
-                Some(ref module) => module
+                Some(module) => module
                     .meta_predicates
-                    .get(&(name.clone(), arity))
+                    .get(&(name, arity))
                     .or_else(|| self.meta_predicates.get(&(name, arity))),
                 None => self.meta_predicates.get(&(name, arity)),
             },
@@ -446,7 +437,7 @@ impl IndexStore {
                 .map(|skeleton| skeleton.core.is_dynamic)
                 .unwrap_or(false),
             _ => match self.modules.get(&module_name) {
-                Some(ref module) => module
+                Some(module) => module
                     .extensible_predicates
                     .get(&key)
                     .map(|skeleton| skeleton.core.is_dynamic)

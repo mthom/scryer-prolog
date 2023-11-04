@@ -53,6 +53,8 @@ use indexmap::IndexMap;
 use lazy_static::lazy_static;
 use ordered_float::OrderedFloat;
 
+use rand::rngs::StdRng;
+use rand::SeedableRng;
 use std::cmp::Ordering;
 use std::env;
 use std::io::Read;
@@ -61,8 +63,6 @@ use std::sync::atomic::AtomicBool;
 
 use self::config::MachineConfig;
 use self::parsed_results::*;
-use rand::rngs::StdRng;
-use rand::SeedableRng;
 
 lazy_static! {
     pub static ref INTERRUPT: AtomicBool = AtomicBool::new(false);
@@ -172,7 +172,7 @@ pub(crate) fn import_builtin_impls(code_dir: &CodeDir, builtins: &mut Module) {
 
     for key in keys {
         let idx = code_dir.get(&key).unwrap();
-        builtins.code_dir.insert(key, idx.clone());
+        builtins.code_dir.insert(key, *idx);
         builtins
             .module_decl
             .exports
@@ -225,7 +225,7 @@ impl Machine {
         key: PredicateKey,
     ) -> std::process::ExitCode {
         if let Some(module) = self.indices.modules.get(&module_name) {
-            if let Some(ref code_index) = module.code_dir.get(&key) {
+            if let Some(code_index) = module.code_dir.get(&key) {
                 let p = code_index.local().unwrap();
 
                 self.machine_st.cp = BREAK_FROM_DISPATCH_LOOP_LOC;
@@ -252,9 +252,7 @@ impl Machine {
         path_buf.push("src/toplevel.pl");
 
         let path = path_buf.to_str().unwrap();
-        let toplevel_stream = 
-            Stream::from_static_string(program, &mut self.machine_st.arena);
-
+        let toplevel_stream = Stream::from_static_string(program, &mut self.machine_st.arena);
 
         self.load_file(path, toplevel_stream);
 
@@ -300,7 +298,11 @@ impl Machine {
         }
     }
 
-    pub fn run_top_level(&mut self, module_name: Atom, key: PredicateKey) -> std::process::ExitCode {
+    pub fn run_top_level(
+        &mut self,
+        module_name: Atom,
+        key: PredicateKey,
+    ) -> std::process::ExitCode {
         let mut arg_pstrs = vec![];
 
         for arg in env::args() {
@@ -400,57 +402,51 @@ impl Machine {
     pub(crate) fn add_impls_to_indices(&mut self) {
         let impls_offset = self.code.len() + 4;
 
-        self.code.extend(
-            vec![
-                Instruction::BreakFromDispatchLoop,
-                Instruction::InstallVerifyAttr,
-                Instruction::VerifyAttrInterrupt,
-                Instruction::BreakFromDispatchLoop, // the location of LIB_QUERY_SUCCESS
-                Instruction::ExecuteTermGreaterThan,
-                Instruction::ExecuteTermLessThan,
-                Instruction::ExecuteTermGreaterThanOrEqual,
-                Instruction::ExecuteTermLessThanOrEqual,
-                Instruction::ExecuteTermEqual,
-                Instruction::ExecuteTermNotEqual,
-                Instruction::ExecuteNumberGreaterThan(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
-                Instruction::ExecuteNumberLessThan(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
-                Instruction::ExecuteNumberGreaterThanOrEqual(
-                    ar_reg!(temp_v!(1)),
-                    ar_reg!(temp_v!(2)),
-                ),
-                Instruction::ExecuteNumberLessThanOrEqual(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
-                Instruction::ExecuteNumberEqual(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
-                Instruction::ExecuteNumberNotEqual(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
-                Instruction::ExecuteIs(temp_v!(1), ar_reg!(temp_v!(2))),
-                Instruction::ExecuteAcyclicTerm,
-                Instruction::ExecuteArg,
-                Instruction::ExecuteCompare,
-                Instruction::ExecuteCopyTerm,
-                Instruction::ExecuteFunctor,
-                Instruction::ExecuteGround,
-                Instruction::ExecuteKeySort,
-                Instruction::ExecuteSort,
-                Instruction::ExecuteN(1),
-                Instruction::ExecuteN(2),
-                Instruction::ExecuteN(3),
-                Instruction::ExecuteN(4),
-                Instruction::ExecuteN(5),
-                Instruction::ExecuteN(6),
-                Instruction::ExecuteN(7),
-                Instruction::ExecuteN(8),
-                Instruction::ExecuteN(9),
-                Instruction::ExecuteIsAtom(temp_v!(1)),
-                Instruction::ExecuteIsAtomic(temp_v!(1)),
-                Instruction::ExecuteIsCompound(temp_v!(1)),
-                Instruction::ExecuteIsInteger(temp_v!(1)),
-                Instruction::ExecuteIsNumber(temp_v!(1)),
-                Instruction::ExecuteIsRational(temp_v!(1)),
-                Instruction::ExecuteIsFloat(temp_v!(1)),
-                Instruction::ExecuteIsNonVar(temp_v!(1)),
-                Instruction::ExecuteIsVar(temp_v!(1)),
-            ]
-            .into_iter(),
-        );
+        self.code.extend(vec![
+            Instruction::BreakFromDispatchLoop,
+            Instruction::InstallVerifyAttr,
+            Instruction::VerifyAttrInterrupt,
+            Instruction::BreakFromDispatchLoop, // the location of LIB_QUERY_SUCCESS
+            Instruction::ExecuteTermGreaterThan,
+            Instruction::ExecuteTermLessThan,
+            Instruction::ExecuteTermGreaterThanOrEqual,
+            Instruction::ExecuteTermLessThanOrEqual,
+            Instruction::ExecuteTermEqual,
+            Instruction::ExecuteTermNotEqual,
+            Instruction::ExecuteNumberGreaterThan(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
+            Instruction::ExecuteNumberLessThan(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
+            Instruction::ExecuteNumberGreaterThanOrEqual(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
+            Instruction::ExecuteNumberLessThanOrEqual(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
+            Instruction::ExecuteNumberEqual(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
+            Instruction::ExecuteNumberNotEqual(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
+            Instruction::ExecuteIs(temp_v!(1), ar_reg!(temp_v!(2))),
+            Instruction::ExecuteAcyclicTerm,
+            Instruction::ExecuteArg,
+            Instruction::ExecuteCompare,
+            Instruction::ExecuteCopyTerm,
+            Instruction::ExecuteFunctor,
+            Instruction::ExecuteGround,
+            Instruction::ExecuteKeySort,
+            Instruction::ExecuteSort,
+            Instruction::ExecuteN(1),
+            Instruction::ExecuteN(2),
+            Instruction::ExecuteN(3),
+            Instruction::ExecuteN(4),
+            Instruction::ExecuteN(5),
+            Instruction::ExecuteN(6),
+            Instruction::ExecuteN(7),
+            Instruction::ExecuteN(8),
+            Instruction::ExecuteN(9),
+            Instruction::ExecuteIsAtom(temp_v!(1)),
+            Instruction::ExecuteIsAtomic(temp_v!(1)),
+            Instruction::ExecuteIsCompound(temp_v!(1)),
+            Instruction::ExecuteIsInteger(temp_v!(1)),
+            Instruction::ExecuteIsNumber(temp_v!(1)),
+            Instruction::ExecuteIsRational(temp_v!(1)),
+            Instruction::ExecuteIsFloat(temp_v!(1)),
+            Instruction::ExecuteIsNonVar(temp_v!(1)),
+            Instruction::ExecuteIsVar(temp_v!(1)),
+        ]);
 
         for (p, instr) in self.code[impls_offset..].iter().enumerate() {
             let key = instr.to_name_and_arity();
@@ -464,6 +460,7 @@ impl Machine {
         }
     }
 
+    #[allow(clippy::new_without_default)]
     pub fn new(config: MachineConfig) -> Self {
         use ref_thread_local::RefThreadLocal;
 
@@ -1048,7 +1045,7 @@ impl Machine {
         self.reset_attr_var_state(or_frame.prelude.attr_var_queue_len);
 
         self.machine_st.hb = target_h;
-        self.machine_st.p = self.machine_st.p + offset;
+        self.machine_st.p += offset;
 
         self.machine_st.stack.truncate(b);
         self.machine_st.heap.truncate(target_h);
@@ -1174,21 +1171,23 @@ impl Machine {
             } else {
                 Err(self.machine_st.throw_undefined_error(name, arity))
             }
-        } else {
-            if let Some(module) = self.indices.modules.get(&module_name) {
-                if let Some(idx) = module.code_dir.get(&(name, arity)).cloned() {
-                    self.try_call(name, arity, idx.get())
-                } else {
-                    self.undefined_procedure(name, arity)
-                }
+        } else if let Some(module) = self.indices.modules.get(&module_name) {
+            if let Some(idx) = module.code_dir.get(&(name, arity)).cloned() {
+                self.try_call(name, arity, idx.get())
             } else {
-                let stub = functor_stub(name, arity);
-                let err = self
-                    .machine_st
-                    .existence_error(ExistenceError::QualifiedProcedure { module_name, name, arity });
-
-                Err(self.machine_st.error_form(err, stub))
+                self.undefined_procedure(name, arity)
             }
+        } else {
+            let stub = functor_stub(name, arity);
+            let err = self
+                .machine_st
+                .existence_error(ExistenceError::QualifiedProcedure {
+                    module_name,
+                    name,
+                    arity,
+                });
+
+            Err(self.machine_st.error_form(err, stub))
         }
     }
 
@@ -1202,21 +1201,23 @@ impl Machine {
             } else {
                 self.undefined_procedure(name, arity)
             }
-        } else {
-            if let Some(module) = self.indices.modules.get(&module_name) {
-                if let Some(idx) = module.code_dir.get(&(name, arity)).cloned() {
-                    self.try_execute(name, arity, idx.get())
-                } else {
-                    self.undefined_procedure(name, arity)
-                }
+        } else if let Some(module) = self.indices.modules.get(&module_name) {
+            if let Some(idx) = module.code_dir.get(&(name, arity)).cloned() {
+                self.try_execute(name, arity, idx.get())
             } else {
-                let stub = functor_stub(name, arity);
-                let err = self
-                    .machine_st
-                    .existence_error(ExistenceError::QualifiedProcedure { module_name, name, arity });
-
-                Err(self.machine_st.error_form(err, stub))
+                self.undefined_procedure(name, arity)
             }
+        } else {
+            let stub = functor_stub(name, arity);
+            let err = self
+                .machine_st
+                .existence_error(ExistenceError::QualifiedProcedure {
+                    module_name,
+                    name,
+                    arity,
+                });
+
+            Err(self.machine_st.error_form(err, stub))
         }
     }
 

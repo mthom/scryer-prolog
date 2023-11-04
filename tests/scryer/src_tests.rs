@@ -58,7 +58,7 @@ fn setup_call_cleanup_load() {
 #[test]
 fn setup_call_cleanup_process() {
     run_top_level_test_with_args(
-        &["src/tests/setup_call_cleanup.pl", "-f", "-g", "halt"],
+        ["src/tests/setup_call_cleanup.pl", "-f", "-g", "halt"],
         "",
         "1+21+31+2>A+B1+G1+2>41+2>B1+2>31+2>31+2>4ba",
     );
@@ -79,7 +79,7 @@ fn iso_conformity_tests() {
 #[test]
 fn dif_tests() {
     run_top_level_test_with_args(
-        &["src/tests/dif.pl", "-f", "-g", "main_quiet"],
+        ["src/tests/dif.pl", "-f", "-g", "main_quiet"],
         "",
         "All tests passed",
     );
@@ -88,7 +88,7 @@ fn dif_tests() {
 #[test]
 fn ground_tests() {
     run_top_level_test_with_args(
-        &["src/tests/ground.pl", "-f", "-g", "main_quiet"],
+        ["src/tests/ground.pl", "-f", "-g", "main_quiet"],
         "",
         "All tests passed",
     );
@@ -97,7 +97,7 @@ fn ground_tests() {
 #[test]
 fn term_variables_tests() {
     run_top_level_test_with_args(
-        &["src/tests/term_variables.pl", "-f", "-g", "main_quiet"],
+        ["src/tests/term_variables.pl", "-f", "-g", "main_quiet"],
         "",
         "All tests passed",
     );
@@ -106,7 +106,7 @@ fn term_variables_tests() {
 #[test]
 fn acyclic_term_tests() {
     run_top_level_test_with_args(
-        &["src/tests/acyclic_term.pl", "-f", "-g", "main_quiet"],
+        ["src/tests/acyclic_term.pl", "-f", "-g", "main_quiet"],
         "",
         "All tests passed",
     );

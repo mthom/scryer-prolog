@@ -226,7 +226,7 @@ fn merge_branch_seq(branches: impl Iterator<Item = BranchInfo>) -> BranchInfo {
 
     for mut branch in branches {
         branch_info.branch_num = branch.branch_num;
-        branch_info.chunks.extend(branch.chunks.drain(..));
+        branch_info.chunks.append(&mut branch.chunks);
     }
 
     branch_info.branch_num.delta = branch_info.branch_num.delta * Integer::from(2);
@@ -298,7 +298,7 @@ impl VariableClassifier {
 
     fn merge_branches(&mut self) {
         for branches in self.branch_map.values_mut() {
-            let mut old_branches = std::mem::replace(branches, vec![]);
+            let mut old_branches = std::mem::take(branches);
 
             while let Some(last_branch_num) = old_branches.last().map(|bi| &bi.branch_num) {
                 let mut old_branches_len = old_branches.len();
@@ -361,10 +361,7 @@ impl VariableClassifier {
             .current_chunk_type
             .to_gen_context(self.current_chunk_num);
 
-        let branch_info_v = self
-            .branch_map
-            .entry(var_info.var_ptr.clone())
-            .or_insert_with(|| vec![]);
+        let branch_info_v = self.branch_map.entry(var_info.var_ptr.clone()).or_default();
 
         let needs_new_branch = if let Some(last_bi) = branch_info_v.last() {
             !self.root_set.contains(&last_bi.branch_num)
@@ -420,56 +417,49 @@ impl VariableClassifier {
             arity: term.arity(),
         };
 
-        match term {
-            Term::Clause(_, _, terms) => {
-                for term in terms.into_iter() {
-                    for term_ref in breadth_first_iter(term, RootIterationPolicy::Iterated) {
-                        if let TermRef::Var(lvl, _, var_ptr) = term_ref {
-                            // a body term, so we need the child level here.
-                            let lvl = lvl.child_level();
+        if let Term::Clause(_, _, terms) = term {
+            for term in terms.iter() {
+                for term_ref in breadth_first_iter(term, RootIterationPolicy::Iterated) {
+                    if let TermRef::Var(lvl, _, var_ptr) = term_ref {
+                        // a body term, so we need the child level here.
+                        let lvl = lvl.child_level();
 
-                            // the body of the if let here is an inlined
-                            // "probe_head_var". note the difference between it
-                            // and "probe_body_var".
-                            let branch_info_v = self
-                                .branch_map
-                                .entry(var_ptr.clone())
-                                .or_insert_with(|| vec![]);
+                        // the body of the if let here is an inlined
+                        // "probe_head_var". note the difference between it
+                        // and "probe_body_var".
+                        let branch_info_v = self.branch_map.entry(var_ptr.clone()).or_default();
 
-                            let needs_new_branch = branch_info_v.is_empty();
+                        let needs_new_branch = branch_info_v.is_empty();
 
-                            if needs_new_branch {
-                                branch_info_v
-                                    .push(BranchInfo::new(self.current_branch_num.clone()));
-                            }
-
-                            let branch_info = branch_info_v.last_mut().unwrap();
-                            let needs_new_chunk = branch_info.chunks.is_empty();
-
-                            if needs_new_chunk {
-                                branch_info.chunks.push(ChunkInfo {
-                                    chunk_num: self.current_chunk_num,
-                                    term_loc: GenContext::Head,
-                                    vars: vec![],
-                                });
-                            }
-
-                            let chunk_info = branch_info.chunks.last_mut().unwrap();
-                            let var_info = VarInfo {
-                                var_ptr,
-                                classify_info,
-                                chunk_type: self.current_chunk_type,
-                                lvl,
-                            };
-
-                            chunk_info.vars.push(var_info);
+                        if needs_new_branch {
+                            branch_info_v.push(BranchInfo::new(self.current_branch_num.clone()));
                         }
-                    }
 
-                    classify_info.arg_c += 1;
+                        let branch_info = branch_info_v.last_mut().unwrap();
+                        let needs_new_chunk = branch_info.chunks.is_empty();
+
+                        if needs_new_chunk {
+                            branch_info.chunks.push(ChunkInfo {
+                                chunk_num: self.current_chunk_num,
+                                term_loc: GenContext::Head,
+                                vars: vec![],
+                            });
+                        }
+
+                        let chunk_info = branch_info.chunks.last_mut().unwrap();
+                        let var_info = VarInfo {
+                            var_ptr,
+                            classify_info,
+                            chunk_type: self.current_chunk_type,
+                            lvl,
+                        };
+
+                        chunk_info.vars.push(var_info);
+                    }
                 }
+
+                classify_info.arg_c += 1;
             }
-            _ => {}
         }
 
         Ok(())
@@ -538,7 +528,10 @@ impl VariableClassifier {
                     build_stack.push_chunk_term(if is_global {
                         QueryTerm::GlobalCut(var_num)
                     } else {
-                        QueryTerm::LocalCut { var_num, cut_prev: false }
+                        QueryTerm::LocalCut {
+                            var_num,
+                            cut_prev: false,
+                        }
                     });
                 }
                 TraversalState::CutPrev(var_num) => {
@@ -548,7 +541,10 @@ impl VariableClassifier {
 
                     self.probe_in_situ_var(var_num);
 
-                    build_stack.push_chunk_term(QueryTerm::LocalCut { var_num, cut_prev: true });
+                    build_stack.push_chunk_term(QueryTerm::LocalCut {
+                        var_num,
+                        cut_prev: true,
+                    });
                 }
                 TraversalState::Fail => {
                     build_stack.push_chunk_term(QueryTerm::Fail);
@@ -705,7 +701,9 @@ impl VariableClassifier {
                             state_stack.push(TraversalState::BuildDisjunct(build_stack_len));
                             state_stack.push(TraversalState::Fail);
                             state_stack.push(TraversalState::CutPrev(self.var_num));
-                            state_stack.push(TraversalState::ResetGlobalCutVarOverride(self.global_cut_var_num_override));
+                            state_stack.push(TraversalState::ResetGlobalCutVarOverride(
+                                self.global_cut_var_num_override,
+                            ));
                             state_stack.push(TraversalState::Term(not_term));
                             state_stack.push(TraversalState::OverrideGlobalCutVar(self.var_num));
                             state_stack.push(TraversalState::GetCutPoint {

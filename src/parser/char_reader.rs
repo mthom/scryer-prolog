@@ -131,15 +131,9 @@ impl<R: Read> CharReader<R> {
 
     pub fn peek_byte(&mut self) -> Option<io::Result<u8>> {
         match self.refresh_buffer() {
-            Ok(_buf) => {}
-            Err(e) => return Some(Err(e)),
+            Ok(_buf) => _buf.first().cloned().map(Ok),
+            Err(e) => Some(Err(e)),
         }
-
-        return if let Some(b) = self.buf.get(0).cloned() {
-            Some(Ok(b))
-        } else {
-            None
-        };
     }
 }
 
@@ -194,49 +188,47 @@ impl<R: Read> CharRead for CharReader<R> {
                         io::ErrorKind::InvalidData,
                         BadUtf8Error { bytes: badbytes },
                     )));
+                } else if self.pos >= self.buf.len() {
+                    return None;
+                } else if self.buf.len() - self.pos >= 4 {
+                    return match str::from_utf8(&self.buf[self.pos..e.valid_up_to()]) {
+                        Ok(s) => {
+                            let mut chars = s.chars();
+                            let c = chars.next().unwrap();
+
+                            Some(Ok(c))
+                        }
+                        Err(e) => {
+                            let badbytes = self.buf[self.pos..e.valid_up_to()].to_vec();
+
+                            Some(Err(io::Error::new(
+                                io::ErrorKind::InvalidData,
+                                BadUtf8Error { bytes: badbytes },
+                            )))
+                        }
+                    };
                 } else {
-                    if self.pos >= self.buf.len() {
-                        return None;
-                    } else if self.buf.len() - self.pos >= 4 {
-                        return match str::from_utf8(&self.buf[self.pos..e.valid_up_to()]) {
-                            Ok(s) => {
-                                let mut chars = s.chars();
-                                let c = chars.next().unwrap();
+                    let buf_len = self.buf.len();
 
-                                Some(Ok(c))
-                            }
-                            Err(e) => {
-                                let badbytes = self.buf[self.pos..e.valid_up_to()].to_vec();
-
-                                Some(Err(io::Error::new(
-                                    io::ErrorKind::InvalidData,
-                                    BadUtf8Error { bytes: badbytes },
-                                )))
-                            }
-                        };
-                    } else {
-                        let buf_len = self.buf.len();
-
-                        for (c, idx) in (self.pos..buf_len).enumerate() {
-                            self.buf[c] = self.buf[idx];
-                        }
-
-                        self.buf.truncate(buf_len - self.pos);
-
-                        let buf_len = self.buf.len();
-
-                        let mut word = [0u8; 4];
-                        let word_slice = &mut word[buf_len..4];
-
-                        match self.inner.read(word_slice) {
-                            Err(e) => return Some(Err(e)),
-                            Ok(nread) => {
-                                self.buf.extend_from_slice(&word_slice[0..nread]);
-                            }
-                        }
-
-                        self.pos = 0;
+                    for (c, idx) in (self.pos..buf_len).enumerate() {
+                        self.buf[c] = self.buf[idx];
                     }
+
+                    self.buf.truncate(buf_len - self.pos);
+
+                    let buf_len = self.buf.len();
+
+                    let mut word = [0u8; 4];
+                    let word_slice = &mut word[buf_len..4];
+
+                    match self.inner.read(word_slice) {
+                        Err(e) => return Some(Err(e)),
+                        Ok(nread) => {
+                            self.buf.extend_from_slice(&word_slice[0..nread]);
+                        }
+                    }
+
+                    self.pos = 0;
                 }
             } else {
                 return None;

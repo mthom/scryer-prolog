@@ -31,6 +31,7 @@ struct Level;
 struct NextOrFail;
 struct RegType;
 
+#[allow(clippy::enum_variant_names)]
 #[allow(dead_code)]
 #[derive(ToDeriveInput, EnumDiscriminants)]
 #[strum_discriminants(derive(EnumProperty, EnumString))]
@@ -49,6 +50,7 @@ enum CompareNumber {
     NumberEqual(ArithmeticTerm, ArithmeticTerm),
 }
 
+#[allow(clippy::enum_variant_names)]
 #[allow(dead_code)]
 #[derive(ToDeriveInput, EnumDiscriminants)]
 #[strum_discriminants(derive(EnumProperty, EnumString))]
@@ -206,6 +208,7 @@ enum REPLCodePtr {
     AddNonCountedBacktracking,
 }
 
+#[allow(clippy::upper_case_acronyms)]
 #[allow(dead_code)]
 #[derive(ToDeriveInput, EnumDiscriminants)]
 #[strum_discriminants(derive(EnumProperty, EnumString))]
@@ -897,13 +900,13 @@ fn generate_instruction_preface() -> TokenStream {
         }
 
         impl ArithmeticTerm {
-            fn into_functor(&self, arena: &mut Arena) -> MachineStub {
+            fn into_functor(self, arena: &mut Arena) -> MachineStub {
                 match self {
-                    &ArithmeticTerm::Reg(r) => reg_type_into_functor(r),
-                    &ArithmeticTerm::Interm(i) => {
+                    ArithmeticTerm::Reg(r) => reg_type_into_functor(r),
+                    ArithmeticTerm::Interm(i) => {
                         functor!(atom!("intermediate"), [fixnum(i)])
                     }
-                    &ArithmeticTerm::Number(n) => {
+                    ArithmeticTerm::Number(n) => {
                         vec![HeapCellValue::from((n, arena))]
                     }
                 }
@@ -925,24 +928,15 @@ fn generate_instruction_preface() -> TokenStream {
         impl NextOrFail {
             #[inline]
             pub fn is_next(&self) -> bool {
-                if let NextOrFail::Next(_) = self {
-                    true
-                } else {
-                    false
-                }
+                matches!(self, NextOrFail::Next(_))
             }
         }
 
-        #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+        #[derive(Debug, Default, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
         pub enum Death {
             Finite(usize),
+            #[default]
             Infinity,
-        }
-
-        impl Default for Death {
-            fn default() -> Self {
-                Death::Infinity
-            }
         }
 
         #[derive(Clone, Copy, Debug)]
@@ -956,30 +950,30 @@ fn generate_instruction_preface() -> TokenStream {
 
         impl IndexedChoiceInstruction {
             pub(crate) fn offset(&self) -> usize {
-                match self {
-                    &IndexedChoiceInstruction::Retry(offset) => offset,
-                    &IndexedChoiceInstruction::Trust(offset) => offset,
-                    &IndexedChoiceInstruction::Try(offset) => offset,
-                    &IndexedChoiceInstruction::DefaultRetry(offset) => offset,
-                    &IndexedChoiceInstruction::DefaultTrust(offset) => offset,
+                match *self {
+                    IndexedChoiceInstruction::Retry(offset) => offset,
+                    IndexedChoiceInstruction::Trust(offset) => offset,
+                    IndexedChoiceInstruction::Try(offset) => offset,
+                    IndexedChoiceInstruction::DefaultRetry(offset) => offset,
+                    IndexedChoiceInstruction::DefaultTrust(offset) => offset,
                 }
             }
 
-            pub(crate) fn to_functor(&self) -> MachineStub {
+            pub(crate) fn to_functor(self) -> MachineStub {
                 match self {
-                    &IndexedChoiceInstruction::Try(offset) => {
+                    IndexedChoiceInstruction::Try(offset) => {
                         functor!(atom!("try"), [fixnum(offset)])
                     }
-                    &IndexedChoiceInstruction::Trust(offset) => {
+                    IndexedChoiceInstruction::Trust(offset) => {
                         functor!(atom!("trust"), [fixnum(offset)])
                     }
-                    &IndexedChoiceInstruction::Retry(offset) => {
+                    IndexedChoiceInstruction::Retry(offset) => {
                         functor!(atom!("retry"), [fixnum(offset)])
                     }
-                    &IndexedChoiceInstruction::DefaultTrust(offset) => {
+                    IndexedChoiceInstruction::DefaultTrust(offset) => {
                         functor!(atom!("default_trust"), [fixnum(offset)])
                     }
-                    &IndexedChoiceInstruction::DefaultRetry(offset) => {
+                    IndexedChoiceInstruction::DefaultRetry(offset) => {
                         functor!(atom!("default_retry"), [fixnum(offset)])
                     }
                 }
@@ -1038,7 +1032,7 @@ fn generate_instruction_preface() -> TokenStream {
                             ]
                         )
                     }
-                    &IndexingInstruction::SwitchOnConstant(ref constants) => {
+                    IndexingInstruction::SwitchOnConstant(constants) => {
                         let mut key_value_list_stub = vec![];
                         let orig_h = h;
 
@@ -1066,7 +1060,7 @@ fn generate_instruction_preface() -> TokenStream {
                             [key_value_list_stub]
                         )
                     }
-                    &IndexingInstruction::SwitchOnStructure(ref structures) => {
+                    IndexingInstruction::SwitchOnStructure(structures) => {
                         let mut key_value_list_stub = vec![];
                         let orig_h = h;
 
@@ -1177,7 +1171,7 @@ fn generate_instruction_preface() -> TokenStream {
 
             #[inline]
             pub fn is_head_instr(&self) -> bool {
-                match self {
+                matches!(self,
                     Instruction::Deallocate |
                     Instruction::GetConstant(..) |
                     Instruction::GetList(..) |
@@ -1201,9 +1195,7 @@ fn generate_instruction_preface() -> TokenStream {
                     Instruction::SetLocalValue(..) |
                     Instruction::SetVariable(..) |
                     Instruction::SetValue(..) |
-                    Instruction::SetVoid(..) => true,
-                    _ => false,
-                }
+                    Instruction::SetVoid(..))
             }
 
             pub fn enqueue_functors(
@@ -1213,7 +1205,7 @@ fn generate_instruction_preface() -> TokenStream {
                 functors: &mut Vec<MachineStub>,
             ) {
                 match self {
-                    &Instruction::IndexingCode(ref indexing_instrs) => {
+                    Instruction::IndexingCode(indexing_instrs) => {
                         for indexing_instr in indexing_instrs {
                             match indexing_instr {
                                 IndexingLine::Indexing(indexing_instr) => {
@@ -2331,7 +2323,7 @@ pub fn generate_instructions_rs() -> TokenStream {
     let mut is_inlined_arms = vec![];
 
     is_inbuilt_arms.push(quote! {
-        (atom!(":-"), 1 | 2) => true
+        (atom!(":-"), 1 | 2)
     });
 
     for (name, arity, variant) in instr_data.compare_number_variants {
@@ -2388,11 +2380,11 @@ pub fn generate_instructions_rs() -> TokenStream {
         });
 
         is_inbuilt_arms.push(quote! {
-            (atom!(#name), #arity) => true
+            (atom!(#name), #arity)
         });
 
         is_inlined_arms.push(quote! {
-            (atom!(#name), #arity) => true
+            (atom!(#name), #arity)
         });
     }
 
@@ -2421,7 +2413,7 @@ pub fn generate_instructions_rs() -> TokenStream {
         });
 
         is_inbuilt_arms.push(quote! {
-            (atom!(#name), #arity) => true
+            (atom!(#name), #arity)
         });
     }
 
@@ -2487,7 +2479,7 @@ pub fn generate_instructions_rs() -> TokenStream {
         });
 
         is_inbuilt_arms.push(quote! {
-            (atom!(#name), #arity) => true
+            (atom!(#name), #arity)
         });
     }
 
@@ -2549,16 +2541,17 @@ pub fn generate_instructions_rs() -> TokenStream {
         });
 
         is_inbuilt_arms.push(quote! {
-            (atom!(#name), #arity) => true
+            (atom!(#name), #arity)
         });
 
         is_inlined_arms.push(quote! {
-            (atom!(#name), #arity) => true
+            (atom!(#name), #arity)
         });
     }
 
     for (name, arity, variant) in instr_data.system_clause_type_variants {
         let ident = variant.ident.clone();
+        let ident_s = ident.to_string();
 
         let variant_fields: Vec<_> = variant
             .fields
@@ -2574,19 +2567,13 @@ pub fn generate_instructions_rs() -> TokenStream {
             .collect();
 
         clause_type_from_name_and_arity_arms.push(if !variant_fields.is_empty() {
-            if ident.to_string() == "SetCutPoint" {
+            if ident_s == "SetCutPoint" || ident_s == "SetCutPointByDefault" {
                 quote! {
                     (atom!(#name), #arity) => ClauseType::System(
                         SystemClauseType::#ident(temp_v!(1))
                     )
                 }
-            } else if ident.to_string() == "SetCutPointByDefault" {
-                quote! {
-                    (atom!(#name), #arity) => ClauseType::System(
-                        SystemClauseType::#ident(temp_v!(1))
-                    )
-                }
-            } else if ident.to_string() == "InlineCallN" {
+            } else if ident_s == "InlineCallN" {
                 quote! {
                     (atom!(#name), arity) => ClauseType::System(
                         SystemClauseType::#ident(arity)
@@ -2649,11 +2636,11 @@ pub fn generate_instructions_rs() -> TokenStream {
 
         is_inbuilt_arms.push(if let Arity::Ident("arity") = &arity {
             quote! {
-                (atom!(#name), _arity) => true
+                (atom!(#name), _)
             }
         } else {
             quote! {
-                (atom!(#name), #arity) => true
+                (atom!(#name), #arity)
             }
         });
     }
@@ -2724,7 +2711,7 @@ pub fn generate_instructions_rs() -> TokenStream {
         });
 
         is_inbuilt_arms.push(quote! {
-            (atom!(#name), #arity) => true
+            (atom!(#name), #arity)
         });
     }
 
@@ -2798,7 +2785,7 @@ pub fn generate_instructions_rs() -> TokenStream {
         });
 
         is_inbuilt_arms.push(quote! {
-            (atom!(#name), _arity) => true
+            (atom!(#name), _)
         });
     }
 
@@ -2819,8 +2806,8 @@ pub fn generate_instructions_rs() -> TokenStream {
             let placeholder_ids: Vec<_> =
                 (0..enum_arity).map(|n| format_ident!("f_{}", n)).collect();
 
-            if variant_string.starts_with("Call") {
-                let execute_ident = format_ident!("Execute{}", variant_string["Call".len()..]);
+            if let Some(variant_suffix) = variant_string.strip_prefix("Call") {
+                let execute_ident = format_ident!("Execute{}", variant_suffix);
 
                 Some(if enum_arity == 0 {
                     quote! {
@@ -2833,9 +2820,8 @@ pub fn generate_instructions_rs() -> TokenStream {
                             Instruction::#execute_ident(#(#placeholder_ids),*)
                     }
                 })
-            } else if variant_string.starts_with("DefaultCall") {
-                let execute_ident =
-                    format_ident!("DefaultExecute{}", variant_string["DefaultCall".len()..]);
+            } else if let Some(variant_suffix) = variant_string.strip_prefix("DefaultCall") {
+                let execute_ident = format_ident!("DefaultExecute{}", variant_suffix);
 
                 Some(if enum_arity == 0 {
                     quote! {
@@ -2868,29 +2854,20 @@ pub fn generate_instructions_rs() -> TokenStream {
                 0
             };
 
-            if variant_string.starts_with("Execute") {
+            if variant_string.starts_with("Execute") || variant_string.starts_with("DefaultExecute")
+            {
                 Some(if enum_arity == 0 {
                     quote! {
-                        Instruction::#variant_ident => true
+                        Instruction::#variant_ident
                     }
                 } else {
                     quote! {
-                        Instruction::#variant_ident(..) => true
-                    }
-                })
-            } else if variant_string.starts_with("DefaultExecute") {
-                Some(if enum_arity == 0 {
-                    quote! {
-                        Instruction::#variant_ident => true
-                    }
-                } else {
-                    quote! {
-                        Instruction::#variant_ident(..) => true
+                        Instruction::#variant_ident(..)
                     }
                 })
             } else if variant_string == "JmpByExecute" {
                 Some(quote! {
-                    Instruction::#variant_ident(..) => true
+                    Instruction::#variant_ident(..)
                 })
             } else {
                 None
@@ -2955,11 +2932,11 @@ pub fn generate_instructions_rs() -> TokenStream {
 
             Some(if enum_arity == 0 {
                 quote! {
-                    Instruction::#variant_ident => true
+                    Instruction::#variant_ident
                 }
             } else {
                 quote! {
-                    Instruction::#variant_ident(..) => true
+                    Instruction::#variant_ident(..)
                 }
             })
         })
@@ -2970,7 +2947,7 @@ pub fn generate_instructions_rs() -> TokenStream {
         .iter()
         .rev() // produce default, execute & default & execute cases first.
         .cloned()
-        .filter_map(|(name, arity, _, variant)| {
+        .map(|(name, arity, _, variant)| {
             let variant_ident = variant.ident.clone();
             let variant_string = variant.ident.to_string();
             let arity = match arity {
@@ -2978,6 +2955,7 @@ pub fn generate_instructions_rs() -> TokenStream {
                 _ => 1,
             };
 
+            #[allow(clippy::collapsible_else_if)]
             Some(if variant_string.starts_with("Execute") {
                 if arity == 0 {
                     quote! {
@@ -3066,10 +3044,10 @@ pub fn generate_instructions_rs() -> TokenStream {
 
             match arity {
                 Arity::Static(_) if enum_arity == 0 => {
-                    quote! { &Instruction::#ident => (atom!(#name), #arity) }
+                    quote! { Instruction::#ident => (atom!(#name), #arity) }
                 }
                 Arity::Static(_) => {
-                    quote! { &Instruction::#ident(..) => (atom!(#name), #arity) }
+                    quote! { Instruction::#ident(..) => (atom!(#name), #arity) }
                 }
                 Arity::Ident(_) if enum_arity == 0 => {
                     quote! { &Instruction::#ident(#arity) => (atom!(#name), #arity) }
@@ -3169,12 +3147,9 @@ pub fn generate_instructions_rs() -> TokenStream {
             }
 
             pub fn is_inbuilt(name: Atom, arity: usize) -> bool {
-                match (name, arity) {
-                    #(
-                        #is_inbuilt_arms,
-                    )*
-                    _ => false,
-                }
+                matches!((name, arity),
+                    #(#is_inbuilt_arms)|*
+                )
             }
 
             pub fn name(&self) -> Atom {
@@ -3186,12 +3161,9 @@ pub fn generate_instructions_rs() -> TokenStream {
             }
 
             pub fn is_inlined(name: Atom, arity: usize) -> bool {
-                match (name, arity) {
-                    #(
-                        #is_inlined_arms,
-                    )*
-                    _ => false,
-                }
+                matches!((name, arity),
+                    #(#is_inlined_arms)|*
+                )
             }
         }
 
@@ -3230,29 +3202,23 @@ pub fn generate_instructions_rs() -> TokenStream {
             }
 
             pub fn is_execute(&self) -> bool {
-                match self {
-                    #(
-                        #is_execute_arms,
-                    )*
-                    _ => false,
-                }
+                matches!(self,
+                    #(#is_execute_arms)|*
+                )
             }
 
             pub fn is_ctrl_instr(&self) -> bool {
-                match self {
-                    &Instruction::Allocate(_) |
-                    &Instruction::Deallocate |
-                    &Instruction::Proceed |
-                    &Instruction::RevJmpBy(_) => true,
-                    #(
-                        #control_flow_arms,
-                    )*
-                    _ => false,
-                }
+                matches!(self,
+                    Instruction::Allocate(_) |
+                    Instruction::Deallocate |
+                    Instruction::Proceed |
+                    Instruction::RevJmpBy(_) |
+                    #(#control_flow_arms)|*
+                )
             }
 
             pub fn is_query_instr(&self) -> bool {
-                match self {
+                matches!(self,
                     &Instruction::GetVariable(..) |
                     &Instruction::PutConstant(..) |
                     &Instruction::PutList(..) |
@@ -3265,9 +3231,8 @@ pub fn generate_instructions_rs() -> TokenStream {
                     &Instruction::SetLocalValue(..) |
                     &Instruction::SetVariable(..) |
                     &Instruction::SetValue(..) |
-                    &Instruction::SetVoid(..) => true,
-                    _ => false,
-                }
+                    &Instruction::SetVoid(..)
+                )
             }
         }
 
@@ -3335,7 +3300,8 @@ enum Arity {
 
 impl From<&'static str> for Arity {
     fn from(arity: &'static str) -> Self {
-        usize::from_str_radix(&arity, 10)
+        arity
+            .parse::<usize>()
             .map(Arity::Static)
             .unwrap_or_else(|_| Arity::Ident(arity))
     }
@@ -3442,13 +3408,12 @@ impl InstructionData {
             panic!("type ID is: {}", id);
         };
 
-        let v_string = variant.ident.to_string();
-
-        let v_ident = if v_string.starts_with("Call") {
-            format_ident!("{}", v_string["Call".len()..])
-        } else {
-            variant.ident.clone()
-        };
+        let v_ident = variant
+            .ident
+            .to_string()
+            .strip_prefix("Call")
+            .map(|s| format_ident!("{}", s))
+            .unwrap_or_else(|| variant.ident.clone());
 
         let generated_variant =
             create_instr_variant(format_ident!("{}{}", prefix, v_ident), variant.clone());

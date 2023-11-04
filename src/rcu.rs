@@ -6,7 +6,7 @@ use std::{
     ptr::NonNull,
     sync::{
         atomic::{AtomicPtr, AtomicU8},
-        Arc, Weak, RwLock
+        Arc, RwLock, Weak,
     },
 };
 
@@ -52,7 +52,7 @@ impl<T> Rcu<T> {
                 // register the current threads epoch counter on init
                 EPOCH_COUNTERS
                     .write()
-		    .unwrap()
+                    .unwrap()
                     .push(Arc::downgrade(&epoch_counter));
                 epoch_counter
             });

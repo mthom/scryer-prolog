@@ -31,8 +31,8 @@ use std::sync::Arc;
 
 type SubtermDeque = VecDeque<(usize, usize)>;
 
-pub(crate) fn devour_whitespace<'a, R: CharRead>(
-    parser: &mut Parser<'a, R>,
+pub(crate) fn devour_whitespace<R: CharRead>(
+    parser: &mut Parser<'_, R>,
 ) -> Result<bool, ParserError> {
     match parser.lexer.scan_for_layout() {
         Err(e) if e.is_unexpected_eof() => Ok(true),
@@ -86,7 +86,7 @@ impl MachineState {
 
 static mut PROMPT: bool = false;
 #[cfg(feature = "repl")]
-const HISTORY_FILE: &'static str = ".scryer_history";
+const HISTORY_FILE: &str = ".scryer_history";
 
 pub(crate) fn set_prompt(value: bool) {
     unsafe {
@@ -137,7 +137,7 @@ impl ReadlineStream {
             ReadlineStream {
                 rl,
                 pending_input: CharReader::new(Cursor::new(pending_input.to_owned())),
-                add_history: add_history,
+                add_history,
             }
         }
 
@@ -145,7 +145,7 @@ impl ReadlineStream {
         {
             ReadlineStream {
                 pending_input: CharReader::new(Cursor::new(pending_input.to_owned())),
-                add_history: add_history,
+                add_history,
             }
         }
     }
@@ -187,7 +187,7 @@ impl ReadlineStream {
                         PROMPT = false;
                     }
 
-                    if self.pending_input.get_ref().get_ref().chars().last() != Some('\n') {
+                    if !self.pending_input.get_ref().get_ref().ends_with('\n') {
                         *self.pending_input.get_mut().get_mut() += "\n";
                     }
                 }
@@ -292,9 +292,9 @@ impl CharRead for ReadlineStream {
 }
 
 #[inline]
-pub(crate) fn write_term_to_heap<'a, 'b>(
-    term: &'a Term,
-    heap: &'b mut Heap,
+pub(crate) fn write_term_to_heap(
+    term: &Term,
+    heap: &mut Heap,
     atom_tbl: &AtomTable,
 ) -> Result<TermWriteResult, CompilationError> {
     let term_writer = TermWriter::new(heap, atom_tbl);
@@ -347,7 +347,7 @@ impl<'a, 'b> TermWriter<'a, 'b> {
         match term {
             &TermRef::Cons(..) => list_loc_as_cell!(h),
             &TermRef::AnonVar(_) | &TermRef::Var(..) => heap_loc_as_cell!(h),
-            &TermRef::CompleteString(_, _, ref src) => {
+            TermRef::CompleteString(_, _, src) => {
                 if src.as_str().is_empty() {
                     empty_list_as_cell!()
                 } else if self.heap[h].get_tag() == HeapCellValueTag::CStr {
@@ -358,7 +358,7 @@ impl<'a, 'b> TermWriter<'a, 'b> {
             }
             &TermRef::PartialString(..) => pstr_loc_as_cell!(h),
             &TermRef::Literal(_, _, literal) => HeapCellValue::from(*literal),
-            &TermRef::Clause(_, _, _, subterms) if subterms.len() == 0 => heap_loc_as_cell!(h),
+            &TermRef::Clause(_, _, _, subterms) if subterms.is_empty() => heap_loc_as_cell!(h),
             &TermRef::Clause(..) => str_loc_as_cell!(h),
         }
     }
@@ -390,7 +390,7 @@ impl<'a, 'b> TermWriter<'a, 'b> {
                         return Err(CompilationError::ExceededMaxArity);
                     }
 
-                    self.heap.push(if subterms.len() == 0 {
+                    self.heap.push(if subterms.is_empty() {
                         heap_loc_as_cell!(heap_loc + 1)
                     } else {
                         str_loc_as_cell!(heap_loc + 1)
@@ -438,11 +438,11 @@ impl<'a, 'b> TermWriter<'a, 'b> {
 
                     continue;
                 }
-                &TermRef::CompleteString(_, _, ref src) => {
+                TermRef::CompleteString(_, _, src) => {
                     let src = src.as_str().to_owned();
                     put_complete_string(self.heap, &src, self.atom_tbl);
                 }
-                &TermRef::PartialString(lvl, _, ref src, _) => {
+                &TermRef::PartialString(lvl, _, src, _) => {
                     if let Level::Root = lvl {
                         // Var tags can't refer directly to partial strings,
                         // so a PStrLoc cell must be pushed.
@@ -458,7 +458,7 @@ impl<'a, 'b> TermWriter<'a, 'b> {
                         continue;
                     }
                 }
-                &TermRef::Var(.., ref var) => {
+                TermRef::Var(.., var) => {
                     if let Some((arity, site_h)) = self.queue.pop_front() {
                         let var_key = VarKey::VarPtr(var.clone());
 

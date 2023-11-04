@@ -3,18 +3,17 @@ use std::sync::Arc;
 
 use crate::atom_table;
 use crate::heap_print::{HCPrinter, HCValueOutputter, PrinterOutputter};
-use crate::machine::{BREAK_FROM_DISPATCH_LOOP_LOC, LIB_QUERY_SUCCESS};
+use crate::machine::machine_indices::VarKey;
 use crate::machine::mock_wam::CompositeOpDir;
+use crate::machine::{BREAK_FROM_DISPATCH_LOOP_LOC, LIB_QUERY_SUCCESS};
+use crate::parser::ast::{Var, VarPtr};
 use crate::parser::parser::{Parser, Tokens};
 use crate::read::write_term_to_heap;
-use crate::machine::machine_indices::VarKey;
-use crate::parser::ast::{Var, VarPtr};
 use indexmap::IndexMap;
 
 use super::{
-    Machine, MachineConfig, QueryResult, QueryResolutionLine,
-    Atom, AtomCell, HeapCellValue, HeapCellValueTag, Value, QueryResolution,
-    streams::Stream
+    streams::Stream, Atom, AtomCell, HeapCellValue, HeapCellValueTag, Machine, MachineConfig,
+    QueryResolution, QueryResolutionLine, QueryResult, Value,
 };
 
 impl Machine {
@@ -30,7 +29,10 @@ impl Machine {
     pub fn consult_module_string(&mut self, module_name: &str, program: String) {
         let stream = Stream::from_owned_string(program, &mut self.machine_st.arena);
         self.machine_st.registers[1] = stream_as_cell!(stream);
-        self.machine_st.registers[2] = atom_as_cell!(&atom_table::AtomTable::build_with(&self.machine_st.atom_tbl, module_name));
+        self.machine_st.registers[2] = atom_as_cell!(&atom_table::AtomTable::build_with(
+            &self.machine_st.atom_tbl,
+            module_name
+        ));
 
         self.run_module_predicate(atom!("loader"), (atom!("consult_stream"), 2));
     }
@@ -62,21 +64,33 @@ impl Machine {
         // Parse the query so we can analyze and then call the term
         let mut parser = Parser::new(
             Stream::from_owned_string(query, &mut self.machine_st.arena),
-            &mut self.machine_st
+            &mut self.machine_st,
         );
         let op_dir = CompositeOpDir::new(&self.indices.op_dir, None);
-        let term = parser.read_term(&op_dir, Tokens::Default).expect("Failed to parse query");
+        let term = parser
+            .read_term(&op_dir, Tokens::Default)
+            .expect("Failed to parse query");
 
         // Write parsed term to heap
-        let term_write_result = write_term_to_heap(&term, &mut self.machine_st.heap, &mut self.machine_st.atom_tbl).expect("couldn't write term to heap");
+        let term_write_result =
+            write_term_to_heap(&term, &mut self.machine_st.heap, &self.machine_st.atom_tbl)
+                .expect("couldn't write term to heap");
 
         // Write term to heap
         self.machine_st.registers[1] = self.machine_st.heap[term_write_result.heap_loc];
 
         self.machine_st.cp = LIB_QUERY_SUCCESS; // BREAK_FROM_DISPATCH_LOOP_LOC;
-        self.machine_st.p = self.indices.code_dir.get(&(atom!("call"), 1)).expect("couldn't get code index").local().unwrap();
+        self.machine_st.p = self
+            .indices
+            .code_dir
+            .get(&(atom!("call"), 1))
+            .expect("couldn't get code index")
+            .local()
+            .unwrap();
 
-        let var_names: IndexMap<_, _> = term_write_result.var_dict.iter()
+        let var_names: IndexMap<_, _> = term_write_result
+            .var_dict
+            .iter()
             .map(|(var_key, cell)| match var_key {
                 // NOTE: not the intention behind Var::InSitu here but
                 // we can hijack it to store anonymous variables
@@ -99,27 +113,29 @@ impl Machine {
             //println!("stub_b: {}", stub_b);
             //println!("fail: {}", self.machine_st.fail);
 
-            if self.machine_st.ball.stub.len() != 0 {
+            if !self.machine_st.ball.stub.is_empty() {
                 // NOTE: this means an exception was thrown, at which
                 // point we backtracked to the stub choice point.
                 // this should halt the search for solutions as it
                 // does in the Scryer top-level. the exception term is
                 // contained in self.machine_st.ball.
-                let error_string = self.machine_st.ball.stub
+                let error_string = self
+                    .machine_st
+                    .ball
+                    .stub
                     .iter()
-                    .filter(|h| match h.get_tag() {
-                        HeapCellValueTag::Atom => true,
-                        HeapCellValueTag::Fixnum => true,
-                        _ => false,
+                    .filter(|h| {
+                        matches!(
+                            h.get_tag(),
+                            HeapCellValueTag::Atom | HeapCellValueTag::Fixnum
+                        )
                     })
                     .map(|h| match h.get_tag() {
                         HeapCellValueTag::Atom => {
                             let (name, _) = cell_as_atom_cell!(h).get_name_and_arity();
                             name.as_str().to_string()
                         }
-                        HeapCellValueTag::Fixnum => {
-                            h.get_value().clone().to_string()
-                        },
+                        HeapCellValueTag::Fixnum => h.get_value().clone().to_string(),
                         _ => unreachable!(),
                     })
                     .collect::<Vec<String>>()
@@ -154,7 +170,7 @@ impl Machine {
             let mut bindings: BTreeMap<String, Value> = BTreeMap::new();
 
             for (var_key, term_to_be_printed) in &term_write_result.var_dict {
-                if var_key.to_string().starts_with("_") {
+                if var_key.to_string().starts_with('_') {
                     continue;
                 }
                 let mut printer = HCPrinter::new(
@@ -210,7 +226,7 @@ mod tests {
     use ordered_float::OrderedFloat;
 
     use super::*;
-    use crate::machine::{QueryMatch, Value, QueryResolution};
+    use crate::machine::{QueryMatch, QueryResolution, Value};
 
     #[test]
     fn programatic_query() {
@@ -258,7 +274,9 @@ mod tests {
         let output = machine.run_query(query);
         assert_eq!(
             output,
-            Err(String::from("error existence_error procedure / triple 3 / triple 3"))
+            Err(String::from(
+                "error existence_error procedure / triple 3 / triple 3"
+            ))
         );
     }
 
@@ -278,26 +296,30 @@ mod tests {
                 constructor(xyz, '[{action: "addLink", source: "this", predicate: "recipe://title", target: "literal://string:Meta%20Muffins"}]').
             "#.to_string());
 
-        let result = machine.run_query(String::from("subject_class(\"Todo\", C), constructor(C, Actions)."));
+        let result = machine.run_query(String::from(
+            "subject_class(\"Todo\", C), constructor(C, Actions).",
+        ));
         assert_eq!(
             result,
-            Ok(QueryResolution::Matches(vec![
-                QueryMatch::from(btreemap! {
+            Ok(QueryResolution::Matches(vec![QueryMatch::from(
+                btreemap! {
                     "C" => Value::from("c"),
                     "Actions" => Value::from("[{action: \"addLink\", source: \"this\", predicate: \"todo://state\", target: \"todo://ready\"}]"),
-                }),
-            ]))
+                }
+            ),]))
         );
 
-        let result = machine.run_query(String::from("subject_class(\"Recipe\", C), constructor(C, Actions)."));
+        let result = machine.run_query(String::from(
+            "subject_class(\"Recipe\", C), constructor(C, Actions).",
+        ));
         assert_eq!(
             result,
-            Ok(QueryResolution::Matches(vec![
-                QueryMatch::from(btreemap! {
+            Ok(QueryResolution::Matches(vec![QueryMatch::from(
+                btreemap! {
                     "C" => Value::from("xyz"),
                     "Actions" => Value::from("[{action: \"addLink\", source: \"this\", predicate: \"recipe://title\", target: \"literal://string:Meta%20Muffins\"}]"),
-                }),
-            ]))
+                }
+            ),]))
         );
 
         let result = machine.run_query(String::from("subject_class(Class, _)."));
@@ -319,15 +341,17 @@ mod tests {
         let mut machine = Machine::new_lib();
         machine.load_module_string(
             "facts",
-                r#"
+            r#"
                 list([1,2,3]).
-            "#.to_string());
+            "#
+            .to_string(),
+        );
 
         let result = machine.run_query(String::from("list(X)."));
         assert_eq!(
             result,
-            Ok(QueryResolution::Matches(vec![
-                QueryMatch::from(btreemap! {
+            Ok(QueryResolution::Matches(vec![QueryMatch::from(
+                btreemap! {
                     "X" => Value::List(
                         Vec::from([
                             Value::Float(OrderedFloat::from(1.0)),
@@ -335,11 +359,10 @@ mod tests {
                             Value::Float(OrderedFloat::from(3.0))
                         ])
                     )
-                }),
-            ]))
+                }
+            ),]))
         );
     }
-
 
     #[test]
     fn consult() {
@@ -397,7 +420,6 @@ mod tests {
             machine.run_query(String::from(r#"triple("a","new","b")."#)),
             Ok(QueryResolution::True)
         );
-
     }
 
     #[ignore = "fails on windows"]
@@ -462,12 +484,13 @@ mod tests {
             ),
         );
 
-        let query = String::from(r#"findall([Predicate, Target], triple(_,Predicate,Target), Result)."#);
+        let query =
+            String::from(r#"findall([Predicate, Target], triple(_,Predicate,Target), Result)."#);
         let output = machine.run_query(query);
         assert_eq!(
             output,
-            Ok(QueryResolution::Matches(vec![
-                QueryMatch::from(btreemap! {
+            Ok(QueryResolution::Matches(vec![QueryMatch::from(
+                btreemap! {
                     "Predicate" => Value::from("Predicate"),
                     "Result" => Value::List(
                         Vec::from([
@@ -476,9 +499,8 @@ mod tests {
                         ])
                     ),
                     "Target" => Value::from("Target"),
-                }),
-            ]))
+                }
+            ),]))
         );
-
     }
 }

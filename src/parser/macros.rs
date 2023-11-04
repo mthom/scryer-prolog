@@ -77,7 +77,7 @@ macro_rules! cut_char {
 #[macro_export]
 macro_rules! decimal_digit_char {
     ($c: expr) => {
-        ('0'..='9').contains(&$c)
+        $c.is_ascii_digit()
     };
 }
 
@@ -125,7 +125,7 @@ macro_rules! graphic_token_char {
 #[macro_export]
 macro_rules! hexadecimal_digit_char {
     ($c: expr) => {
-        ('0'..='9').contains(&$c) || ('A'..='F').contains(&$c) || ('a'..='f').contains(&$c)
+        $c.is_ascii_digit() || ('A'..='F').contains(&$c) || ('a'..='f').contains(&$c)
     };
 }
 

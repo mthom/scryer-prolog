@@ -194,6 +194,7 @@ pub enum TrailRef {
     BlackboardOffset(Atom, HeapCellValue), // key atom, key value
 }
 
+#[allow(clippy::enum_variant_names)]
 #[derive(BitfieldSpecifier, Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[bits = 6]
 pub(crate) enum TrailEntryTag {
@@ -331,7 +332,7 @@ impl From<ConsPtr> for HeapCellValue {
     }
 }
 
-impl<'a> From<(Number, &mut Arena)> for HeapCellValue {
+impl From<(Number, &mut Arena)> for HeapCellValue {
     #[inline(always)]
     fn from((n, arena): (Number, &mut Arena)) -> HeapCellValue {
         use ordered_float::OrderedFloat;
@@ -393,16 +394,16 @@ impl HeapCellValue {
 
     #[inline]
     pub fn is_ref(self) -> bool {
-        match self.get_tag() {
+        matches!(
+            self.get_tag(),
             HeapCellValueTag::Str
-            | HeapCellValueTag::Lis
-            | HeapCellValueTag::Var
-            | HeapCellValueTag::StackVar
-            | HeapCellValueTag::AttrVar
-            | HeapCellValueTag::PStrLoc
-            | HeapCellValueTag::PStrOffset => true,
-            _ => false,
-        }
+                | HeapCellValueTag::Lis
+                | HeapCellValueTag::Var
+                | HeapCellValueTag::StackVar
+                | HeapCellValueTag::AttrVar
+                | HeapCellValueTag::PStrLoc
+                | HeapCellValueTag::PStrOffset
+        )
     }
 
     #[inline]
@@ -491,7 +492,7 @@ impl HeapCellValue {
 
     #[inline]
     pub fn get_value(self) -> u64 {
-        self.val() as u64
+        self.val()
     }
 
     #[inline]
@@ -739,10 +740,7 @@ impl UntypedArenaPtr {
 
     #[inline]
     pub fn payload_offset(self) -> *const u8 {
-        unsafe {
-            self.get_ptr()
-                .offset(mem::size_of::<ArenaHeader>() as isize)
-        }
+        unsafe { self.get_ptr().add(mem::size_of::<ArenaHeader>()) }
     }
 
     #[inline]
@@ -806,7 +804,7 @@ impl Sub<i64> for HeapCellValue {
                 | tag @ HeapCellValueTag::PStrLoc
                 | tag @ HeapCellValueTag::Var
                 | tag @ HeapCellValueTag::AttrVar => {
-                    HeapCellValue::build_with(tag, self.get_value() + rhs.abs() as u64)
+                    HeapCellValue::build_with(tag, self.get_value() + rhs.unsigned_abs())
                 }
                 _ => self,
             }

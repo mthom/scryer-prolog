@@ -91,14 +91,14 @@ pub fn lookup_float(
 ) -> RcuRef<RawBlock<F64Table>, UnsafeCell<OrderedFloat<f64>>> {
     let f64table = global_f64table()
         .read()
-	.unwrap()
+        .unwrap()
         .upgrade()
         .expect("We should only be looking up floats while there is a float table");
 
     RcuRef::try_map(f64table.block.active_epoch(), |raw_block| unsafe {
         raw_block
             .base
-            .offset(offset.0 as isize)
+            .add(offset.0)
             .cast_mut()
             .cast::<UnsafeCell<OrderedFloat<f64>>>()
             .as_ref()
@@ -129,6 +129,7 @@ impl F64Table {
         }
     }
 
+    #[allow(clippy::missing_safety_doc)]
     pub unsafe fn build_with(&self, value: f64) -> F64Offset {
         let update_guard = self.update.lock();
 
@@ -152,9 +153,7 @@ impl F64Table {
 
         ptr::write(ptr as *mut OrderedFloat<f64>, OrderedFloat(value));
 
-        let float = F64Offset {
-            0: ptr as usize - block_epoch.base as usize,
-        };
+        let float = F64Offset(ptr as usize - block_epoch.base as usize);
 
         // atometable would have to update the index table at this point
 
@@ -230,7 +229,7 @@ impl<T: ?Sized + PartialOrd> PartialOrd for TypedArenaPtr<T> {
 
 impl<T: ?Sized + PartialEq> PartialEq for TypedArenaPtr<T> {
     fn eq(&self, other: &TypedArenaPtr<T>) -> bool {
-        self.0 == other.0 || &**self == &**other
+        self.0 == other.0 || **self == **other
     }
 }
 
@@ -245,13 +244,13 @@ impl<T: ?Sized + Ord> Ord for TypedArenaPtr<T> {
 impl<T: ?Sized + Hash> Hash for TypedArenaPtr<T> {
     #[inline(always)]
     fn hash<H: Hasher>(&self, hasher: &mut H) {
-        (&*self as &T).hash(hasher)
+        (self as &T).hash(hasher)
     }
 }
 
 impl<T: ?Sized> Clone for TypedArenaPtr<T> {
     fn clone(&self) -> Self {
-        TypedArenaPtr(self.0)
+        *self
     }
 }
 
@@ -279,10 +278,10 @@ impl<T: fmt::Display> fmt::Display for TypedArenaPtr<T> {
 
 impl<T: ?Sized + ArenaAllocated> TypedArenaPtr<T> {
     // data must be allocated in the arena already.
+    #[allow(clippy::not_unsafe_ptr_arg_deref)]
     #[inline]
     pub const fn new(data: *mut T) -> Self {
-        let result = unsafe { TypedArenaPtr(ptr::NonNull::new_unchecked(data)) };
-        result
+        unsafe { TypedArenaPtr(ptr::NonNull::new_unchecked(data)) }
     }
 
     #[inline]
@@ -347,6 +346,7 @@ pub trait ArenaAllocated: Sized {
         mem::size_of::<ArenaHeader>()
     }
 
+    #[allow(clippy::missing_safety_doc)]
     unsafe fn alloc(arena: &mut Arena, value: Self) -> Self::PtrToAllocated {
         let size = value.size() + mem::size_of::<AllocSlab>();
 
@@ -363,7 +363,7 @@ pub trait ArenaAllocated: Sized {
         (*slab).header = ArenaHeader::build_with(value.size() as u64, Self::tag());
 
         let offset = (*slab).payload_offset();
-        let result = value.copy_to_arena(offset as *mut Self);
+        let result = value.copy_to_arena(offset);
 
         arena.base = slab;
 
@@ -390,7 +390,7 @@ impl Eq for F64Ptr {}
 
 impl PartialOrd for F64Ptr {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        (**self).partial_cmp(&**other)
+        Some(self.cmp(other))
     }
 }
 
@@ -403,13 +403,13 @@ impl Ord for F64Ptr {
 impl Hash for F64Ptr {
     #[inline(always)]
     fn hash<H: Hasher>(&self, hasher: &mut H) {
-        (&*self as &OrderedFloat<f64>).hash(hasher)
+        (self as &OrderedFloat<f64>).hash(hasher)
     }
 }
 
 impl fmt::Display for F64Ptr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", *self)
+        write!(f, "{}", self as &OrderedFloat<f64>)
     }
 }
 
@@ -418,7 +418,7 @@ impl Deref for F64Ptr {
 
     #[inline]
     fn deref(&self) -> &Self::Target {
-        unsafe { &*self.0.get().as_ref().unwrap() }
+        unsafe { self.0.get().as_ref().unwrap() }
     }
 }
 
@@ -478,7 +478,7 @@ impl Eq for F64Offset {}
 impl PartialOrd for F64Offset {
     #[inline(always)]
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.as_ptr().partial_cmp(&other.as_ptr())
+        Some(self.cmp(other))
     }
 }
 
@@ -515,11 +515,12 @@ impl ArenaAllocated for Integer {
         mem::size_of::<Self>()
     }
 
+    #[allow(clippy::not_unsafe_ptr_arg_deref)]
     #[inline]
     fn copy_to_arena(self, dst: *mut Self) -> Self::PtrToAllocated {
         unsafe {
             ptr::write(dst, self);
-            TypedArenaPtr::new(dst as *mut Self)
+            TypedArenaPtr::new(dst)
         }
     }
 }
@@ -537,11 +538,12 @@ impl ArenaAllocated for Rational {
         mem::size_of::<Self>()
     }
 
+    #[allow(clippy::not_unsafe_ptr_arg_deref)]
     #[inline]
     fn copy_to_arena(self, dst: *mut Self) -> Self::PtrToAllocated {
         unsafe {
             ptr::write(dst, self);
-            TypedArenaPtr::new(dst as *mut Self)
+            TypedArenaPtr::new(dst)
         }
     }
 }
@@ -559,11 +561,12 @@ impl ArenaAllocated for LiveLoadState {
         mem::size_of::<Self>()
     }
 
+    #[allow(clippy::not_unsafe_ptr_arg_deref)]
     #[inline]
     fn copy_to_arena(self, dst: *mut Self) -> Self::PtrToAllocated {
         unsafe {
             ptr::write(dst, self);
-            TypedArenaPtr::new(dst as *mut Self)
+            TypedArenaPtr::new(dst)
         }
     }
 }
@@ -581,11 +584,12 @@ impl ArenaAllocated for TcpListener {
         mem::size_of::<Self>()
     }
 
+    #[allow(clippy::not_unsafe_ptr_arg_deref)]
     #[inline]
     fn copy_to_arena(self, dst: *mut Self) -> Self::PtrToAllocated {
         unsafe {
             ptr::write(dst, self);
-            TypedArenaPtr::new(dst as *mut Self)
+            TypedArenaPtr::new(dst)
         }
     }
 }
@@ -604,11 +608,12 @@ impl ArenaAllocated for HttpListener {
         mem::size_of::<Self>()
     }
 
+    #[allow(clippy::not_unsafe_ptr_arg_deref)]
     #[inline]
     fn copy_to_arena(self, dst: *mut Self) -> Self::PtrToAllocated {
         unsafe {
             ptr::write(dst, self);
-            TypedArenaPtr::new(dst as *mut Self)
+            TypedArenaPtr::new(dst)
         }
     }
 }
@@ -627,11 +632,12 @@ impl ArenaAllocated for HttpResponse {
         mem::size_of::<Self>()
     }
 
+    #[allow(clippy::not_unsafe_ptr_arg_deref)]
     #[inline]
     fn copy_to_arena(self, dst: *mut Self) -> Self::PtrToAllocated {
         unsafe {
             ptr::write(dst, self);
-            TypedArenaPtr::new(dst as *mut Self)
+            TypedArenaPtr::new(dst)
         }
     }
 }
@@ -649,11 +655,12 @@ impl ArenaAllocated for IndexPtr {
         mem::size_of::<Self>()
     }
 
+    #[allow(clippy::not_unsafe_ptr_arg_deref)]
     #[inline]
     fn copy_to_arena(self, dst: *mut Self) -> Self::PtrToAllocated {
         unsafe {
             ptr::write(dst, self);
-            TypedArenaPtr::new(dst as *mut Self)
+            TypedArenaPtr::new(dst)
         }
     }
 
@@ -672,7 +679,10 @@ impl ArenaAllocated for IndexPtr {
 
         (*slab).next = arena.base;
 
-        let result = value.copy_to_arena(mem::transmute::<_, *mut IndexPtr>(&(*slab).header));
+        let result = value.copy_to_arena(
+            &(*slab).header as *const crate::arena::ArenaHeader
+                as *mut crate::machine::machine_indices::IndexPtr,
+        );
         arena.base = slab;
 
         result
@@ -697,6 +707,7 @@ pub struct Arena {
 unsafe impl Send for Arena {}
 unsafe impl Sync for Arena {}
 
+#[allow(clippy::new_without_default)]
 impl Arena {
     #[inline]
     pub fn new() -> Self {
@@ -837,12 +848,12 @@ mod tests {
         let mut cell = HeapCellValue::from(fp.clone());
 
         assert_eq!(cell.get_tag(), HeapCellValueTag::F64);
-        assert_eq!(cell.get_mark_bit(), false);
+        assert!(!cell.get_mark_bit());
         assert_eq!(fp.deref(), &OrderedFloat(f));
 
         cell.set_mark_bit(true);
 
-        assert_eq!(cell.get_mark_bit(), true);
+        assert!(cell.get_mark_bit());
 
         read_heap_cell!(cell,
             (HeapCellValueTag::F64, ptr) => {
@@ -874,7 +885,7 @@ mod tests {
                 );
             }
             None => {
-                assert!(false);
+                unreachable!();
             }
         }
 
@@ -890,7 +901,7 @@ mod tests {
                 );
             }
             None => {
-                assert!(false);
+                unreachable!();
             }
         }
     }
@@ -912,7 +923,6 @@ mod tests {
         let untyped_arena_ptr = match cell.to_untyped_arena_ptr() {
             Some(ptr) => ptr,
             None => {
-                assert!(false);
                 unreachable!()
             }
         };
@@ -954,7 +964,7 @@ mod tests {
                 );
             }
             None => {
-                assert!(false); // we fail.
+                unreachable!();
             }
         }
 
@@ -991,7 +1001,7 @@ mod tests {
                 assert_eq!(&*atom.as_str(), "f");
             }
             None => {
-                assert!(false);
+                unreachable!();
             }
         }
 
@@ -1026,7 +1036,7 @@ mod tests {
                 assert_eq!(&*pstr.as_str_from(0), "ronan");
             }
             None => {
-                assert!(false);
+                unreachable!();
             }
         }
 
@@ -1046,7 +1056,7 @@ mod tests {
 
         match fixnum_cell.to_fixnum() {
             Some(n) => assert_eq!(n.get_num(), 3),
-            None => assert!(false),
+            None => unreachable!(),
         }
 
         read_heap_cell!(fixnum_cell,
@@ -1062,52 +1072,48 @@ mod tests {
 
         match fixnum_b_cell.to_fixnum() {
             Some(n) => assert_eq!(n.get_num(), 1 << 54),
-            None => assert!(false),
+            None => unreachable!(),
         }
 
-        match Fixnum::build_with_checked(1 << 56) {
-            Ok(_) => assert!(false),
-            _ => assert!(true),
+        if Fixnum::build_with_checked(1 << 56).is_ok() {
+            unreachable!()
         }
 
-        match Fixnum::build_with_checked(i64::MAX) {
-            Ok(_) => assert!(false),
-            _ => assert!(true),
+        if Fixnum::build_with_checked(i64::MAX).is_ok() {
+            unreachable!()
         }
 
-        match Fixnum::build_with_checked(i64::MIN) {
-            Ok(_) => assert!(false),
-            _ => assert!(true),
+        if Fixnum::build_with_checked(i64::MIN).is_ok() {
+            unreachable!()
         }
 
         match Fixnum::build_with_checked(-1) {
             Ok(n) => assert_eq!(n.get_num(), -1),
-            _ => assert!(false),
+            _ => unreachable!(),
         }
 
         match Fixnum::build_with_checked((1 << 55) - 1) {
             Ok(n) => assert_eq!(n.get_num(), (1 << 55) - 1),
-            _ => assert!(false),
+            _ => unreachable!(),
         }
 
         match Fixnum::build_with_checked(-(1 << 55)) {
             Ok(n) => assert_eq!(n.get_num(), -(1 << 55)),
-            _ => assert!(false),
+            _ => unreachable!(),
         }
 
-        match Fixnum::build_with_checked(-(1 << 55) - 1) {
-            Ok(_n) => assert!(false),
-            _ => assert!(true),
+        if Fixnum::build_with_checked(-(1 << 55) - 1).is_ok() {
+            unreachable!()
         }
 
         match Fixnum::build_with_checked(-1) {
             Ok(n) => assert_eq!(-n, Fixnum::build_with(1)),
-            _ => assert!(false),
+            _ => unreachable!(),
         }
 
         // float
 
-        let float = 3.1415926f64;
+        let float = std::f64::consts::PI;
         let float_ptr = float_alloc!(float, wam.machine_st.arena);
         let cell = HeapCellValue::from(float_ptr);
 

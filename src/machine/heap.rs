@@ -169,7 +169,7 @@ pub(crate) fn allocate_pstr(heap: &mut Heap, mut src: &str, atom_tbl: &AtomTable
     let orig_h = heap.len();
 
     loop {
-        if src == "" {
+        if src.is_empty() {
             return if orig_h == heap.len() {
                 None
             } else {
@@ -199,7 +199,7 @@ pub(crate) fn allocate_pstr(heap: &mut Heap, mut src: &str, atom_tbl: &AtomTable
 
         heap.push(string_as_pstr_cell!(pstr));
 
-        if rest_src != "" {
+        if !rest_src.is_empty() {
             heap.push(pstr_loc_as_cell!(h + 2));
             src = rest_src;
         } else {
@@ -249,7 +249,7 @@ pub(crate) fn to_local_code_ptr(heap: &Heap, addr: HeapCellValue) -> Option<usiz
             Ok(Number::Integer(n)) => {
                 let value: usize = (&*n).try_into().unwrap();
                 Some(value)
-            },
+            }
             _ => None,
         }
     };

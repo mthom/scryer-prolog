@@ -80,7 +80,7 @@ impl ValidType {
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum ResourceError {
     FiniteMemory(HeapCellValue),
-    OutOfFiles
+    OutOfFiles,
 }
 
 pub(crate) trait TypeError {
@@ -170,7 +170,11 @@ impl PermissionError for Atom {
     ) -> MachineError {
         let stub = functor!(
             atom!("permission_error"),
-            [atom(perm.as_atom()), atom(index_atom), cell(atom_as_cell!(self))]
+            [
+                atom(perm.as_atom()),
+                atom(index_atom),
+                cell(atom_as_cell!(self))
+            ]
         );
 
         MachineError {
@@ -319,10 +323,7 @@ impl MachineState {
                 )
             }
             ResourceError::OutOfFiles => {
-                functor!(
-                    atom!("resource_error"),
-                    [atom(atom!("file_descriptors"))]
-                )
+                functor!(atom!("resource_error"), [atom(atom!("file_descriptors"))])
             }
         };
 
@@ -355,13 +356,21 @@ impl MachineState {
                     from: ErrorProvenance::Received,
                 }
             }
-            ExistenceError::QualifiedProcedure { module_name, name, arity } => {
+            ExistenceError::QualifiedProcedure {
+                module_name,
+                name,
+                arity,
+            } => {
                 let h = self.heap.len();
 
                 let ind_stub = functor!(atom!("/"), [atom(name), fixnum(arity)]);
                 let res_stub = functor!(atom!(":"), [atom(module_name), str(h + 3, 0)], [ind_stub]);
 
-                let stub = functor!(atom!("existence_error"), [atom(atom!("procedure")), str(h, 0)], [res_stub]);
+                let stub = functor!(
+                    atom!("existence_error"),
+                    [atom(atom!("procedure")), str(h, 0)],
+                    [res_stub]
+                );
 
                 MachineError {
                     stub,
@@ -472,21 +481,15 @@ impl MachineState {
 
     pub(super) fn session_error(&mut self, err: SessionError) -> MachineError {
         match err {
-            SessionError::CannotOverwriteBuiltIn(key) => {
-                self.permission_error(
-                    Permission::Modify,
-                    atom!("static_procedure"),
-                    functor_stub(key.0, key.1)
-                        .into_iter()
-                        .collect::<MachineStub>(),
-                )
-            }
+            SessionError::CannotOverwriteBuiltIn(key) => self.permission_error(
+                Permission::Modify,
+                atom!("static_procedure"),
+                functor_stub(key.0, key.1)
+                    .into_iter()
+                    .collect::<MachineStub>(),
+            ),
             SessionError::CannotOverwriteBuiltInModule(module) => {
-                self.permission_error(
-                    Permission::Modify,
-                    atom!("static_module"),
-                    module,
-                )
+                self.permission_error(Permission::Modify, atom!("static_module"), module)
             }
             SessionError::ExistenceError(err) => self.existence_error(err),
             SessionError::ModuleDoesNotContainExport(..) => {
@@ -641,7 +644,7 @@ impl MachineState {
         self.ball.boundary = 0;
         self.ball.stub.truncate(0);
 
-        self.heap.extend(err.into_iter());
+        self.heap.extend(err);
 
         self.registers[1] = if err_len == 1 {
             heap_loc_as_cell!(h)
@@ -705,58 +708,58 @@ impl From<ParserError> for CompilationError {
 impl CompilationError {
     pub(crate) fn line_and_col_num(&self) -> Option<(usize, usize)> {
         match self {
-            &CompilationError::ParserError(ref err) => err.line_and_col_num(),
+            CompilationError::ParserError(err) => err.line_and_col_num(),
             _ => None,
         }
     }
 
     pub(crate) fn as_functor(&self) -> MachineStub {
         match self {
-            &CompilationError::Arithmetic(..) => {
+            CompilationError::Arithmetic(..) => {
                 functor!(atom!("arithmetic_error"))
             }
-            &CompilationError::CannotParseCyclicTerm => {
+            CompilationError::CannotParseCyclicTerm => {
                 functor!(atom!("cannot_parse_cyclic_term"))
             }
-            &CompilationError::ExceededMaxArity => {
+            CompilationError::ExceededMaxArity => {
                 functor!(atom!("exceeded_max_arity"))
             }
-            &CompilationError::ExpectedRel => {
+            CompilationError::ExpectedRel => {
                 functor!(atom!("expected_relation"))
             }
-            &CompilationError::InadmissibleFact => {
+            CompilationError::InadmissibleFact => {
                 // TODO: type_error(callable, _).
                 functor!(atom!("inadmissible_fact"))
             }
-            &CompilationError::InadmissibleQueryTerm => {
+            CompilationError::InadmissibleQueryTerm => {
                 // TODO: type_error(callable, _).
                 functor!(atom!("inadmissible_query_term"))
             }
-            &CompilationError::InconsistentEntry => {
+            CompilationError::InconsistentEntry => {
                 functor!(atom!("inconsistent_entry"))
             }
-            &CompilationError::InvalidMetaPredicateDecl => {
+            CompilationError::InvalidMetaPredicateDecl => {
                 functor!(atom!("invalid_meta_predicate_decl"))
             }
-            &CompilationError::InvalidModuleDecl => {
+            CompilationError::InvalidModuleDecl => {
                 functor!(atom!("invalid_module_declaration"))
             }
-            &CompilationError::InvalidModuleExport => {
+            CompilationError::InvalidModuleExport => {
                 functor!(atom!("invalid_module_export"))
             }
-            &CompilationError::InvalidModuleResolution(ref module_name) => {
+            CompilationError::InvalidModuleResolution(ref module_name) => {
                 functor!(atom!("no_such_module"), [atom(module_name)])
             }
-            &CompilationError::InvalidRuleHead => {
+            CompilationError::InvalidRuleHead => {
                 functor!(atom!("invalid_head_of_rule")) // TODO: type_error(callable, _).
             }
-            &CompilationError::InvalidUseModuleDecl => {
+            CompilationError::InvalidUseModuleDecl => {
                 functor!(atom!("invalid_use_module_declaration"))
             }
-            &CompilationError::ParserError(ref err) => {
+            CompilationError::ParserError(ref err) => {
                 functor!(err.as_atom())
             }
-            &CompilationError::UnreadableTerm => {
+            CompilationError::UnreadableTerm => {
                 functor!(atom!("unreadable_term"))
             }
         }
@@ -986,7 +989,11 @@ pub enum ExistenceError {
     Module(Atom),
     ModuleSource(ModuleSource),
     Procedure(Atom, usize),
-    QualifiedProcedure { module_name: Atom, name: Atom, arity: usize },
+    QualifiedProcedure {
+        module_name: Atom,
+        name: Atom,
+        arity: usize,
+    },
     SourceSink(HeapCellValue),
     Stream(HeapCellValue),
 }

@@ -100,7 +100,7 @@ fn setup_module_export(
 }
 
 pub(crate) fn build_rule_body(vars: &[Term], body_term: Term) -> Term {
-    let head_term = Term::Clause(Cell::default(), atom!(""), vars.iter().cloned().collect());
+    let head_term = Term::Clause(Cell::default(), atom!(""), vars.to_vec());
     let rule = vec![head_term, body_term];
 
     Term::Clause(Cell::default(), atom!(":-"), rule)
@@ -238,7 +238,7 @@ fn setup_meta_predicate<'a, LS: LoadState<'a>>(
     ) -> Result<(Atom, Vec<MetaSpec>), CompilationError> {
         let mut meta_specs = vec![];
 
-        for meta_spec in terms.into_iter() {
+        for meta_spec in terms.iter_mut() {
             match meta_spec {
                 Term::Literal(_, Literal::Atom(meta_spec)) => {
                     let meta_spec = match meta_spec {
@@ -310,11 +310,11 @@ pub(super) fn setup_declaration<'a, LS: LoadState<'a>>(
             }
             (atom!("module"), 2) => {
                 let atom_tbl = &mut LS::machine_st(&mut loader.payload).atom_tbl;
-                Ok(Declaration::Module(setup_module_decl(terms, &atom_tbl)?))
+                Ok(Declaration::Module(setup_module_decl(terms, atom_tbl)?))
             }
             (atom!("op"), 3) => {
                 let atom_tbl = &mut LS::machine_st(&mut loader.payload).atom_tbl;
-                Ok(Declaration::Op(setup_op_decl(terms, &atom_tbl)?))
+                Ok(Declaration::Op(setup_op_decl(terms, atom_tbl)?))
             }
             (atom!("non_counted_backtracking"), 1) => {
                 let (name, arity) = setup_predicate_indicator(&mut terms.pop().unwrap())?;
@@ -323,7 +323,7 @@ pub(super) fn setup_declaration<'a, LS: LoadState<'a>>(
             (atom!("use_module"), 1) => Ok(Declaration::UseModule(setup_use_module_decl(terms)?)),
             (atom!("use_module"), 2) => {
                 let atom_tbl = &mut LS::machine_st(&mut loader.payload).atom_tbl;
-                let (name, exports) = setup_qualified_import(terms, &atom_tbl)?;
+                let (name, exports) = setup_qualified_import(terms, atom_tbl)?;
 
                 Ok(Declaration::UseQualifiedModule(name, exports))
             }
