@@ -1,6 +1,6 @@
 use crate::arena::*;
 use crate::forms::*;
-use crate::heap_iter::{NonListElider, stackful_preorder_iter};
+use crate::heap_iter::{stackful_preorder_iter, NonListElider};
 use crate::machine::machine_state::*;
 use crate::machine::partial_string::*;
 use crate::machine::*;
@@ -204,7 +204,7 @@ pub(crate) trait Unifier: DerefMut<Target = MachineState> {
 
                 let mut focus = pstr_iter2.focus;
 
-                'outer: loop {
+                'outer: {
                     while let Some(c) = chars_iter.peek() {
                         read_heap_cell!(focus,
                             (HeapCellValueTag::Lis, l) => {
@@ -329,8 +329,6 @@ pub(crate) trait Unifier: DerefMut<Target = MachineState> {
 
                     machine_st.pdl.push(focus);
                     machine_st.pdl.push(chars_iter.iter.focus);
-
-                    break;
                 }
             }
             PStrCmpResult::Unordered => {
@@ -609,10 +607,8 @@ pub(crate) trait Unifier: DerefMut<Target = MachineState> {
                         }
                     }
                     (HeapCellValueTag::Lis, l1) => {
-                        if d2.is_ref() {
-                            if tabu_list.contains(&(d1, d2)) {
-                                continue;
-                            }
+                        if d2.is_ref() && tabu_list.contains(&(d1, d2)) {
+                            continue;
                         }
 
                         Self::unify_list(self, l1, d2);
@@ -720,7 +716,11 @@ fn bind_with_occurs_check<U: Unifier>(unifier: &mut U, r: Ref, value: HeapCellVa
     if !value.is_constant() {
         let machine_st: &mut MachineState = unifier.deref_mut();
 
-        for cell in stackful_preorder_iter::<NonListElider>(&mut machine_st.heap, &mut machine_st.stack, value) {
+        for cell in stackful_preorder_iter::<NonListElider>(
+            &mut machine_st.heap,
+            &mut machine_st.stack,
+            value,
+        ) {
             let cell = unmark_cell_bits!(cell);
 
             if let Some(inner_r) = cell.as_var() {
@@ -738,7 +738,7 @@ fn bind_with_occurs_check<U: Unifier>(unifier: &mut U, r: Ref, value: HeapCellVa
         U::bind(unifier, r, value);
     }
 
-    return occurs_triggered;
+    occurs_triggered
 }
 
 #[derive(Deref, DerefMut)]

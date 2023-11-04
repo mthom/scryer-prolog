@@ -55,7 +55,7 @@ fn main() {
     let out_dir = env::var("OUT_DIR").unwrap();
     let dest_path = Path::new(&out_dir).join("libraries.rs");
 
-    let mut libraries = File::create(&dest_path).unwrap();
+    let mut libraries = File::create(dest_path).unwrap();
     let lib_path = Path::new("src/lib");
 
     libraries
@@ -66,7 +66,7 @@ fn main() {
         )
         .unwrap();
 
-    find_prolog_files(&mut libraries, "", &lib_path);
+    find_prolog_files(&mut libraries, "", lib_path);
     libraries.write_all(b"\n        m\n    };\n}\n").unwrap();
 
     let instructions_path = Path::new(&out_dir).join("instructions.rs");

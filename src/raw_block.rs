@@ -28,6 +28,7 @@ impl<T: RawBlockTraits> RawBlock<T> {
         }
     }
 
+    #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
         let mut block = Self::empty_block();
 
@@ -71,7 +72,7 @@ impl<T: RawBlockTraits> RawBlock<T> {
             } else {
                 let allocated = (*self.ptr.get()) as usize - self.base as usize;
                 self.base.copy_to(new_block.base.cast_mut(), allocated);
-                *new_block.ptr.get_mut() = new_block.base.offset(allocated as isize).cast_mut();
+                *new_block.ptr.get_mut() = new_block.base.add(allocated).cast_mut();
                 Some(new_block)
             }
         }

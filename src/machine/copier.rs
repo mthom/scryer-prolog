@@ -174,7 +174,7 @@ impl<T: CopierTarget> CopyTermState<T> {
 
     fn copy_attr_var_lists(&mut self) {
         while !self.attr_var_list_locs.is_empty() {
-            let iter = mem::replace(&mut self.attr_var_list_locs, vec![]);
+            let iter = std::mem::take(&mut self.attr_var_list_locs);
 
             for (threshold, list_loc) in iter {
                 self.target[threshold] = list_loc_as_cell!(self.target.threshold());

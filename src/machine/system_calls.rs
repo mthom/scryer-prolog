@@ -14,7 +14,7 @@ use crate::forms::*;
 use crate::heap_iter::*;
 use crate::heap_print::*;
 #[cfg(feature = "http")]
-use crate::http::{HttpRequestData, HttpListener, HttpResponse, HttpRequest};
+use crate::http::{HttpListener, HttpRequest, HttpRequestData, HttpResponse};
 use crate::instructions::*;
 use crate::machine;
 use crate::machine::code_walker::*;
@@ -44,28 +44,28 @@ pub(crate) use ref_thread_local::RefThreadLocal;
 
 use std::cell::Cell;
 use std::cmp::Ordering;
-use std::collections::{BTreeSet};
+use std::collections::BTreeSet;
 use std::convert::TryFrom;
 use std::env;
 #[cfg(feature = "ffi")]
 use std::ffi::CString;
 use std::fs;
 use std::hash::{BuildHasher, BuildHasherDefault};
-use std::io::{ErrorKind, Read, Write};
 #[cfg(feature = "http")]
 use std::io::BufRead;
+use std::io::{ErrorKind, Read, Write};
 use std::iter::{once, FromIterator};
 use std::mem;
-use std::net::{TcpListener, TcpStream};
 #[cfg(feature = "http")]
 use std::net::{SocketAddr, ToSocketAddrs};
+use std::net::{TcpListener, TcpStream};
 use std::num::NonZeroU32;
 use std::ops::Sub;
 use std::process;
 #[cfg(feature = "http")]
 use std::str::FromStr;
 #[cfg(feature = "http")]
-use std::sync::{Mutex, Arc, Condvar};
+use std::sync::{Arc, Condvar, Mutex};
 
 use chrono::{offset::Local, DateTime};
 #[cfg(not(target_arch = "wasm32"))]
@@ -99,15 +99,15 @@ use roxmltree;
 use select;
 
 #[cfg(feature = "http")]
-use warp::hyper::header::{HeaderValue, HeaderName};
+use futures::future;
+#[cfg(feature = "http")]
+use reqwest::Url;
+#[cfg(feature = "http")]
+use warp::hyper::header::{HeaderName, HeaderValue};
 #[cfg(feature = "http")]
 use warp::hyper::{HeaderMap, Method};
 #[cfg(feature = "http")]
 use warp::{Buf, Filter};
-#[cfg(feature = "http")]
-use reqwest::Url;
-#[cfg(feature = "http")]
-use futures::future;
 
 #[cfg(feature = "repl")]
 pub(crate) fn get_key() -> KeyEvent {
@@ -115,15 +115,13 @@ pub(crate) fn get_key() -> KeyEvent {
     enable_raw_mode().expect("failed to enable raw mode");
     loop {
         let key_ = read();
-        if let Ok(key_) = key_ {
-            if let Event::Key(key_) = key_ {
-                match key_.code {
-                    KeyCode::Char(_) | KeyCode::Enter | KeyCode::Tab => {
-                        key = key_;
-                        break;
-                    }
-                    _ => (),
+        if let Ok(Event::Key(key_)) = key_ {
+            match key_.code {
+                KeyCode::Char(_) | KeyCode::Enter | KeyCode::Tab => {
+                    key = key_;
+                    break;
                 }
+                _ => (),
             }
         }
     }
@@ -178,7 +176,7 @@ impl BrentAlgState {
 
     #[inline(always)]
     pub fn num_steps(&self) -> usize {
-        return self.lam + self.pstr_chars + self.power - 1;
+        self.lam + self.pstr_chars + self.power - 1
     }
 
     #[inline(always)]
@@ -300,10 +298,10 @@ impl BrentAlgState {
 
             read_heap_cell!(value,
                 (HeapCellValueTag::PStrLoc, h) => {
-                    return self.add_pstr_chars_and_step(&heap, h);
+                    return self.add_pstr_chars_and_step(heap, h);
                 }
                 (HeapCellValueTag::CStr | HeapCellValueTag::PStrOffset) => {
-                    return self.add_pstr_chars_and_step(&heap, self.hare);
+                    return self.add_pstr_chars_and_step(heap, self.hare);
                 }
                 (HeapCellValueTag::Lis, h) => {
                     return self.step(h+1);
@@ -349,7 +347,7 @@ impl BrentAlgState {
                 offset+1
             }
             (HeapCellValueTag::PStrLoc, h) => {
-                let (h_offset, n) = pstr_loc_and_offset(&heap, h);
+                let (h_offset, n) = pstr_loc_and_offset(heap, h);
                 let n = n.get_num() as usize;
                 let pstr = cell_as_string!(heap[h_offset]);
 
@@ -427,7 +425,7 @@ impl BrentAlgState {
                 }
             }
             (HeapCellValueTag::PStrLoc, h) => {
-                let (h_offset, n) = pstr_loc_and_offset(&heap, h);
+                let (h_offset, n) = pstr_loc_and_offset(heap, h);
                 let n = n.get_num() as usize;
                 let pstr = cell_as_string!(heap[h_offset]);
 
@@ -437,7 +435,7 @@ impl BrentAlgState {
                     debug_assert!(heap[h].get_tag() == HeapCellValueTag::PStrOffset);
 
                     if heap[h_offset].get_tag() == HeapCellValueTag::CStr {
-                        return if pstr_chars + 1 <= max_steps {
+                        return if pstr_chars < max_steps {
                             CycleSearchResult::ProperList(pstr_chars + 1)
                         } else {
                             CycleSearchResult::UntouchedCStr(pstr.into(), max_steps)
@@ -506,7 +504,7 @@ impl BrentAlgState {
 
         loop {
             if brent_st.exhausted_max_steps() {
-                return brent_st.to_result(&heap);
+                return brent_st.to_result(heap);
             }
 
             if let Some(result) = brent_st.cycle_step(heap) {
@@ -604,7 +602,7 @@ impl MachineState {
             loop {
                 read_heap_cell!(value,
                     (HeapCellValueTag::PStrLoc, h) => {
-                        let (h_offset, _) = pstr_loc_and_offset(&heap, h);
+                        let (h_offset, _) = pstr_loc_and_offset(heap, h);
                         return h_offset+1;
                     }
                     (HeapCellValueTag::Lis, h) => {
@@ -756,12 +754,12 @@ impl MachineState {
                     let value: i64 = (&*n).try_into().unwrap();
 
                     Some(value)
-                },
+                }
                 _ => None,
             };
 
             if let Some(max_steps) = max_steps_n {
-                if max_steps.abs() as u64 <= 1 << 63 {
+                if max_steps.unsigned_abs() <= 1 << 63 {
                     if max_steps >= 0 {
                         max_old = max_steps;
                     } else {
@@ -791,7 +789,8 @@ impl MachineState {
         let mut seen_set = IndexSet::new();
 
         {
-            let mut iter = stackful_post_order_iter::<NonListElider>(&mut self.heap, &mut self.stack, term);
+            let mut iter =
+                stackful_post_order_iter::<NonListElider>(&mut self.heap, &mut self.stack, term);
 
             while let Some(value) = iter.next() {
                 if iter.parent_stack_len() >= max_depth {
@@ -872,7 +871,7 @@ impl MachineState {
         use crate::parser::lexer::*;
 
         let nx = self.store(self.deref(self.registers[2]));
-        let add_dot = !string.ends_with(".");
+        let add_dot = !string.ends_with('.');
         let cursor = std::io::Cursor::new(string);
 
         let iter = std::io::Read::chain(cursor, {
@@ -1075,15 +1074,14 @@ impl MachineState {
             let addr = self.store(self.deref(addr));
 
             match Number::try_from(addr) {
-                Ok(Number::Fixnum(n)) => match u32::try_from(n.get_num()) {
-                    Ok(n) => {
+                Ok(Number::Fixnum(n)) => {
+                    if let Ok(n) = u32::try_from(n.get_num()) {
                         if let Some(c) = std::char::from_u32(n) {
                             string.push(c);
                             continue;
                         }
                     }
-                    _ => {}
-                },
+                }
                 Ok(Number::Integer(n)) => {
                     let n: u32 = (&*n).try_into().unwrap();
                     if let Some(c) = std::char::from_u32(n) {
@@ -1175,9 +1173,9 @@ impl Machine {
             let bp = or_frame.prelude.bp;
 
             match &self.code[bp] {
-                &Instruction::IndexingCode(ref indexing_code) => {
+                Instruction::IndexingCode(ref indexing_code) => {
                     match &indexing_code[or_frame.prelude.boip as usize] {
-                        &IndexingLine::IndexedChoice(ref indexed_choice) => {
+                        IndexingLine::IndexedChoice(ref indexed_choice) => {
                             let p = or_frame.prelude.biip as usize - 1;
 
                             match &indexed_choice[p] {
@@ -1228,7 +1226,7 @@ impl Machine {
             }
 
             match &self.code[bp] {
-                &Instruction::IndexingCode(ref indexing_code) => {
+                Instruction::IndexingCode(ref indexing_code) => {
                     let indexing_code_ptr = match &indexing_code[0] {
                         &IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(
                             _,
@@ -1251,17 +1249,17 @@ impl Machine {
                     let boip = extract_ptr!(indexing_code_ptr);
 
                     let boip = match &indexing_code[boip] {
-                        &IndexingLine::Indexing(IndexingInstruction::SwitchOnStructure(ref hm)) => {
+                        IndexingLine::Indexing(IndexingInstruction::SwitchOnStructure(ref hm)) => {
                             boip + extract_ptr!(hm.get(&key).cloned().unwrap())
                         }
-                        &IndexingLine::Indexing(IndexingInstruction::SwitchOnConstant(ref hm)) => {
+                        IndexingLine::Indexing(IndexingInstruction::SwitchOnConstant(ref hm)) => {
                             boip + extract_ptr!(hm.get(&Literal::Atom(key.0)).cloned().unwrap())
                         }
                         _ => boip,
                     };
 
                     match &indexing_code[boip] {
-                        &IndexingLine::IndexedChoice(ref indexed_choice) => {
+                        IndexingLine::IndexedChoice(indexed_choice) => {
                             return (
                                 skeleton.core.clause_clause_locs.back().cloned().unwrap(),
                                 bp + indexed_choice.back().unwrap().offset(),
@@ -1447,10 +1445,8 @@ impl Machine {
                                 heap_loc_as_cell!(0),
                             );
 
-                            if module_loc.is_var() || module_loc == atom_as_cell!(atom!("user")) {
-                                if arg_term.is_var() && supp_var.is_var() {
-                                    return arg_term == *supp_var;
-                                }
+                            if (module_loc.is_var() || module_loc == atom_as_cell!(atom!("user"))) && arg_term.is_var() && supp_var.is_var() {
+                                return arg_term == *supp_var;
                             }
 
                             false
@@ -1527,7 +1523,8 @@ impl Machine {
             result.goal
         } else {
             let mut unexpanded_vars = IndexSet::with_hasher(FxBuildHasher::default());
-            self.machine_st.variable_set(&mut unexpanded_vars, self.machine_st.registers[5]);
+            self.machine_st
+                .variable_set(&mut unexpanded_vars, self.machine_st.registers[5]);
 
             // all supp_vars must appear later!
             let vars = IndexSet::<HeapCellValue, BuildHasherDefault<FxHasher>>::from_iter(
@@ -1736,11 +1733,11 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn is_reset_cont_marker(&self, p: usize) -> bool {
-        match &self.code[p] {
+        matches!(
+            &self.code[p],
             &Instruction::CallResetContinuationMarker
-            | &Instruction::ExecuteResetContinuationMarker => true,
-            _ => false,
-        }
+                | &Instruction::ExecuteResetContinuationMarker
+        )
     }
 
     #[inline(always)]
@@ -1751,7 +1748,7 @@ impl Machine {
             Ok(Number::Integer(n)) => {
                 let value: usize = (&*n).try_into().unwrap();
                 Some(value)
-            },
+            }
             _ => {
                 unreachable!()
             }
@@ -1770,25 +1767,26 @@ impl Machine {
         self.machine_st.fail = true;
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
     #[inline(always)]
     pub(crate) fn current_hostname(&mut self) {
-        #[cfg(feature = "hostname")]
-        match hostname::get().ok() {
-            Some(host) => match host.to_str() {
-                Some(host) => {
-                    let hostname = AtomTable::build_with(&self.machine_st.atom_tbl, host);
+        if let Ok(host) = hostname::get() {
+            if let Some(host) = host.to_str() {
+                let hostname = AtomTable::build_with(&self.machine_st.atom_tbl, host);
 
-                    let a1 = self.deref_register(1);
-                    self.machine_st.unify_atom(hostname, a1);
+                let a1 = self.deref_register(1);
+                self.machine_st.unify_atom(hostname, a1);
 
-                    return;
-                }
-                None => {}
-            },
-            None => {}
+                return;
+            }
         }
 
         self.machine_st.fail = true;
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    pub(crate) fn current_hostname(&mut self) {
+        unimplemented!()
     }
 
     #[inline(always)]
@@ -2116,7 +2114,7 @@ impl Machine {
                 }
             };
 
-            let current_atom = AtomTable::build_with(&self.machine_st.atom_tbl, &current);
+            let current_atom = AtomTable::build_with(&self.machine_st.atom_tbl, current);
 
             let a1 = self.deref_register(1);
             self.machine_st.unify_complete_string(current_atom, a1);
@@ -2144,27 +2142,24 @@ impl Machine {
             .machine_st
             .value_to_str_like(self.machine_st.registers[1])
         {
-            match fs::canonicalize(&*path.as_str()) {
-                Ok(canonical) => {
-                    let cs = match canonical.to_str() {
-                        Some(s) => s,
-                        _ => {
-                            let stub = functor_stub(atom!("path_canonical"), 2);
-                            let err = self.machine_st.representation_error(RepFlag::Character);
-                            let err = self.machine_st.error_form(err, stub);
+            if let Ok(canonical) = fs::canonicalize(&*path.as_str()) {
+                let cs = match canonical.to_str() {
+                    Some(s) => s,
+                    _ => {
+                        let stub = functor_stub(atom!("path_canonical"), 2);
+                        let err = self.machine_st.representation_error(RepFlag::Character);
+                        let err = self.machine_st.error_form(err, stub);
 
-                            return Err(err);
-                        }
-                    };
+                        return Err(err);
+                    }
+                };
 
-                    let canonical_atom = AtomTable::build_with(&self.machine_st.atom_tbl, cs);
+                let canonical_atom = AtomTable::build_with(&self.machine_st.atom_tbl, cs);
 
-                    let a2 = self.deref_register(2);
-                    self.machine_st.unify_complete_string(canonical_atom, a2);
+                let a2 = self.deref_register(2);
+                self.machine_st.unify_complete_string(canonical_atom, a2);
 
-                    return Ok(());
-                }
-                _ => {}
+                return Ok(());
             }
         }
 
@@ -2369,7 +2364,7 @@ impl Machine {
         let atom_or_string = self.machine_st.value_to_str_like(a1).unwrap();
 
         self.machine_st
-            .parse_number_from_string(&*atom_or_string.as_str(), &self.indices, stub_gen)
+            .parse_number_from_string(&atom_or_string.as_str(), &self.indices, stub_gen)
     }
 
     #[inline(always)]
@@ -2407,7 +2402,7 @@ impl Machine {
 
         let mut iter = HeapPStrIter::new(&self.machine_st.heap, h);
 
-        while let Some(_) = iter.next() {}
+        for _ in iter.by_ref() {}
 
         let at_end_of_pstr = iter.focus.is_var() || iter.at_string_terminator();
         self.machine_st.fail = !at_end_of_pstr;
@@ -2476,11 +2471,7 @@ impl Machine {
         )?;
 
         if stream.past_end_of_stream() {
-            if EOFAction::Reset != stream.options().eof_action() {
-                return Ok(());
-            } else if self.machine_st.fail {
-                return Ok(());
-            }
+            return Ok(());
         }
 
         let addr = self.deref_register(2);
@@ -2541,9 +2532,7 @@ impl Machine {
                         2,
                     )?;
 
-                    if EOFAction::Reset != stream.options().eof_action() {
-                        break;
-                    } else if self.machine_st.fail {
+                    if EOFAction::Reset != stream.options().eof_action() || self.machine_st.fail {
                         break;
                     }
                 }
@@ -2572,12 +2561,10 @@ impl Machine {
             2,
         )?;
 
-        if stream.past_end_of_stream() {
-            if EOFAction::Reset != stream.options().eof_action() {
-                return Ok(());
-            } else if self.machine_st.fail {
-                return Ok(());
-            }
+        if stream.past_end_of_stream()
+            && (EOFAction::Reset != stream.options().eof_action() || self.machine_st.fail)
+        {
+            return Ok(());
         }
 
         let a2 = self.deref_register(2);
@@ -2637,9 +2624,7 @@ impl Machine {
                         2,
                     )?;
 
-                    if EOFAction::Reset != stream.options().eof_action() {
-                        break;
-                    } else if self.machine_st.fail {
+                    if EOFAction::Reset != stream.options().eof_action() || self.machine_st.fail {
                         break;
                     }
                 }
@@ -2668,12 +2653,10 @@ impl Machine {
             2,
         )?;
 
-        if stream.past_end_of_stream() {
-            if EOFAction::Reset != stream.options().eof_action() {
-                return Ok(());
-            } else if self.machine_st.fail {
-                return Ok(());
-            }
+        if stream.past_end_of_stream()
+            && (EOFAction::Reset != stream.options().eof_action() || self.machine_st.fail)
+        {
+            return Ok(());
         }
 
         let a2 = self.deref_register(2);
@@ -2697,7 +2680,7 @@ impl Machine {
                     Ok(Number::Integer(n)) => {
                         let n: u32 = (&*n).try_into().unwrap();
 
-                        let n = std::char::from_u32(n).and_then(|_| Some(n));
+                        let n = std::char::from_u32(n).map(|_| n);
 
                         if let Some(n) = n {
                             fixnum_as_cell!(Fixnum::build_with(n as i64))
@@ -2709,7 +2692,7 @@ impl Machine {
                     Ok(Number::Fixnum(n)) => {
                         let n = u32::try_from(n.get_num())
                             .ok()
-                            .and_then(|n| std::char::from_u32(n).and_then(|_| Some(n)));
+                            .and_then(|n| std::char::from_u32(n).map(|_| n));
 
                         if let Some(n) = n {
                             fixnum_as_cell!(Fixnum::build_with(n as i64))
@@ -2747,16 +2730,14 @@ impl Machine {
                         2,
                     )?;
 
-                    if EOFAction::Reset != stream.options().eof_action() {
-                        break;
-                    } else if self.machine_st.fail {
+                    if EOFAction::Reset != stream.options().eof_action() || self.machine_st.fail {
                         break;
                     }
                 }
             }
         }
 
-        return Ok(());
+        Ok(())
     }
 
     #[inline(always)]
@@ -2779,7 +2760,7 @@ impl Machine {
             }
         };
 
-        let chars_atom = AtomTable::build_with(&self.machine_st.atom_tbl, &string.trim());
+        let chars_atom = AtomTable::build_with(&self.machine_st.atom_tbl, string.trim());
         self.machine_st.unify_complete_string(chars_atom, chs);
     }
 
@@ -2885,14 +2866,11 @@ impl Machine {
                         return Ok(());
                     }
                     Ok(Number::Fixnum(n)) => {
-                        match u32::try_from(n.get_num()) {
-                            Ok(n) => {
-                                if let Some(c) = std::char::from_u32(n) {
-                                    self.machine_st.unify_char(c, a1);
-                                    return Ok(());
-                                }
+                        if let Ok(n) = u32::try_from(n.get_num()) {
+                            if let Some(c) = std::char::from_u32(n) {
+                                self.machine_st.unify_char(c, a1);
+                                return Ok(());
                             }
-                            _ => {}
                         }
 
                         let err = self.machine_st.representation_error(RepFlag::CharacterCode);
@@ -3064,7 +3042,7 @@ impl Machine {
                     let h = self.machine_st.heap.len();
                     let stub = ball.copy_and_align(h);
 
-                    self.machine_st.heap.extend(stub.into_iter());
+                    self.machine_st.heap.extend(stub);
 
                     unify_fn!(self.machine_st, addr, heap_loc_as_cell!(h));
 
@@ -3101,13 +3079,13 @@ impl Machine {
 
         if addr.is_var() {
             let err = self.machine_st.instantiation_error();
-            return Err(self.machine_st.error_form(err, stub_gen()));
+            Err(self.machine_st.error_form(err, stub_gen()))
         } else {
             match Number::try_from(addr) {
                 Ok(Number::Integer(n)) => {
                     let n: u32 = (&*n).try_into().unwrap();
                     let n = char::try_from(n);
-                    if let Some(c) = n.ok() {
+                    if let Ok(c) = n {
                         write!(&mut stream, "{}", c).unwrap();
                         return Ok(());
                     }
@@ -3115,7 +3093,7 @@ impl Machine {
                 Ok(Number::Fixnum(n)) => {
                     let n = n.get_num();
 
-                    if let Some(c) = u32::try_from(n).ok().and_then(|c| char::from_u32(c)) {
+                    if let Some(c) = u32::try_from(n).ok().and_then(char::from_u32) {
                         write!(&mut stream, "{}", c).unwrap();
                         return Ok(());
                     }
@@ -3127,7 +3105,7 @@ impl Machine {
             }
 
             let err = self.machine_st.representation_error(RepFlag::CharacterCode);
-            return Err(self.machine_st.error_form(err, stub_gen()));
+            Err(self.machine_st.error_form(err, stub_gen()))
         }
     }
 
@@ -3153,7 +3131,7 @@ impl Machine {
 
         if addr.is_var() {
             let err = self.machine_st.instantiation_error();
-            return Err(self.machine_st.error_form(err, stub_gen()));
+            Err(self.machine_st.error_form(err, stub_gen()))
         } else {
             read_heap_cell!(addr,
                 (HeapCellValueTag::Atom, (name, _arity)) => {
@@ -3171,7 +3149,7 @@ impl Machine {
             );
 
             let err = self.machine_st.type_error(ValidType::Character, addr);
-            return Err(self.machine_st.error_form(err, stub_gen()));
+            Err(self.machine_st.error_form(err, stub_gen()))
         }
     }
 
@@ -3252,26 +3230,22 @@ impl Machine {
                 Ok(Number::Integer(n)) => {
                     let n: u8 = (&*n).try_into().unwrap();
 
-                    match n {
-                        nb => {
-                            match stream.write(&mut [nb]) {
-                                Ok(1) => {
-                                    return Ok(());
-                                }
-                                _ => {
-                                    let err = self.machine_st.existence_error(
-                                        ExistenceError::Stream(stream_as_cell!(stream))
-                                    );
+                    match stream.write(&[n]) {
+                        Ok(1) => {
+                            return Ok(());
+                        }
+                        _ => {
+                            let err = self
+                                .machine_st
+                                .existence_error(ExistenceError::Stream(stream_as_cell!(stream)));
 
-                                    return Err(self.machine_st.error_form(err, stub_gen()));
-                                }
-                            }
+                            return Err(self.machine_st.error_form(err, stub_gen()));
                         }
                     }
                 }
                 Ok(Number::Fixnum(n)) => {
                     if let Ok(nb) = u8::try_from(n.get_num()) {
-                        match stream.write(&mut [nb]) {
+                        match stream.write(&[nb]) {
                             Ok(1) => {
                                 return Ok(());
                             }
@@ -3320,9 +3294,7 @@ impl Machine {
                 2,
             )?;
 
-            if EOFAction::Reset != stream.options().eof_action() {
-                return Ok(());
-            } else if self.machine_st.fail {
+            if EOFAction::Reset != stream.options().eof_action() || self.machine_st.fail {
                 return Ok(());
             }
         }
@@ -3365,21 +3337,17 @@ impl Machine {
             }
         };
 
-        loop {
-            let mut b = [0u8; 1];
+        let mut b = [0u8; 1];
 
-            match stream.read(&mut b) {
-                Ok(1) => {
-                    self.machine_st
-                        .unify_fixnum(Fixnum::build_with(b[0] as i64), addr);
-                    break;
-                }
-                _ => {
-                    stream.set_past_end_of_stream(true);
-                    self.machine_st
-                        .unify_fixnum(Fixnum::build_with(-1), self.machine_st.registers[2]);
-                    break;
-                }
+        match stream.read(&mut b) {
+            Ok(1) => {
+                self.machine_st
+                    .unify_fixnum(Fixnum::build_with(b[0] as i64), addr);
+            }
+            _ => {
+                stream.set_past_end_of_stream(true);
+                self.machine_st
+                    .unify_fixnum(Fixnum::build_with(-1), self.machine_st.registers[2]);
             }
         }
 
@@ -3403,12 +3371,10 @@ impl Machine {
             2,
         )?;
 
-        if stream.past_end_of_stream() {
-            if EOFAction::Reset != stream.options().eof_action() {
-                return Ok(());
-            } else if self.machine_st.fail {
-                return Ok(());
-            }
+        if stream.past_end_of_stream()
+            && (EOFAction::Reset != stream.options().eof_action() || self.machine_st.fail)
+        {
+            return Ok(());
         }
 
         let addr = self.deref_register(2);
@@ -3473,9 +3439,7 @@ impl Machine {
                         2,
                     )?;
 
-                    if EOFAction::Reset != stream.options().eof_action() {
-                        break;
-                    } else if self.machine_st.fail {
+                    if EOFAction::Reset != stream.options().eof_action() || self.machine_st.fail {
                         break;
                     }
                 }
@@ -3497,9 +3461,7 @@ impl Machine {
         let num = match Number::try_from(self.deref_register(2)) {
             Ok(Number::Fixnum(n)) => usize::try_from(n.get_num()).unwrap(),
             Ok(Number::Integer(n)) => match (&*n).try_into() as Result<usize, _> {
-                Ok(u) => {
-                    u
-                }
+                Ok(u) => u,
                 _ => {
                     self.machine_st.fail = true;
                     return Ok(());
@@ -3567,12 +3529,10 @@ impl Machine {
             2,
         )?;
 
-        if stream.past_end_of_stream() {
-            if EOFAction::Reset != stream.options().eof_action() {
-                return Ok(());
-            } else if self.machine_st.fail {
-                return Ok(());
-            }
+        if stream.past_end_of_stream()
+            && (EOFAction::Reset != stream.options().eof_action() || self.machine_st.fail)
+        {
+            return Ok(());
         }
 
         let addr = self.deref_register(2);
@@ -3607,7 +3567,7 @@ impl Machine {
                 Ok(Number::Fixnum(n)) => {
                     let nf = u32::try_from(n.get_num())
                         .ok()
-                        .and_then(|n| std::char::from_u32(n));
+                        .and_then(std::char::from_u32);
 
                     if nf.is_some() {
                         fixnum_as_cell!(n)
@@ -3651,9 +3611,7 @@ impl Machine {
                         2,
                     )?;
 
-                    if EOFAction::Reset != stream.options().eof_action() {
-                        break;
-                    } else if self.machine_st.fail {
+                    if EOFAction::Reset != stream.options().eof_action() || self.machine_st.fail {
                         break;
                     }
                 }
@@ -3852,7 +3810,7 @@ impl Machine {
 
             let close_result = stream.close();
 
-            if let Err(_) = close_result {
+            if close_result.is_err() {
                 let stub = functor_stub(atom!("close"), 1);
                 let addr = stream_as_cell!(stream);
                 let err = self
@@ -3953,7 +3911,7 @@ impl Machine {
                 Ok(Number::Integer(n)) => {
                     let value: usize = (&*n).try_into().unwrap();
                     Some(value)
-                },
+                }
                 _ => None,
             };
 
@@ -4057,7 +4015,11 @@ impl Machine {
 
                 heap.extend(functor!(
                     atom!("op"),
-                    [fixnum(prec), cell(atom_as_cell!(spec_atom)), cell(atom_as_cell!(name))]
+                    [
+                        fixnum(prec),
+                        cell(atom_as_cell!(spec_atom)),
+                        cell(atom_as_cell!(name))
+                    ]
                 ));
 
                 num_functors += 1;
@@ -4110,17 +4072,15 @@ impl Machine {
                     + op_descs[1].is_some() as usize
                     + op_descs[2].is_some() as usize;
 
-                let op_descs = op_descs.into_iter().filter_map(|op_desc| {
-                    op_desc.map(|op_desc| (orig_op, *op_desc))
-                });
+                let op_descs = op_descs
+                    .into_iter()
+                    .filter_map(|op_desc| op_desc.map(|op_desc| (orig_op, *op_desc)));
 
                 if number_of_keys == 0 {
                     self.machine_st.fail = true;
                 } else {
-                    let num_functors = write_op_functors_to_heap(
-                        &mut self.machine_st.heap,
-                        op_descs,
-                    );
+                    let num_functors =
+                        write_op_functors_to_heap(&mut self.machine_st.heap, op_descs);
 
                     let h = iter_to_heap_list(
                         &mut self.machine_st.heap,
@@ -4241,7 +4201,9 @@ impl Machine {
             Ok(Number::Integer(n)) => match (&*n).try_into() as Result<usize, _> {
                 Ok(n) => n,
                 Err(_) => {
-                    let err = self.machine_st.resource_error(ResourceError::FiniteMemory(len));
+                    let err = self
+                        .machine_st
+                        .resource_error(ResourceError::FiniteMemory(len));
                     return Err(self.machine_st.error_form(err, stub_gen()));
                 }
             },
@@ -4304,7 +4266,7 @@ impl Machine {
                         (HeapCellValueTag::Str, s) => {
                             let name = cell_as_atom_cell!(self.machine_st.heap[s]).get_name();
                             let value = self.machine_st.value_to_str_like(self.machine_st.heap[s + 1]).unwrap();
-                            header_map.insert(HeaderName::from_str(&*name.as_str()).unwrap(), HeaderValue::from_str(&*value.as_str()).unwrap());
+                            header_map.insert(HeaderName::from_str(&name.as_str()).unwrap(), HeaderValue::from_str(&value.as_str()).unwrap());
                         }
                         _ => {
                             unreachable!()
@@ -4325,7 +4287,7 @@ impl Machine {
             let mut req = reqwest::blocking::Request::new(method, address);
 
             *req.headers_mut() = headers;
-            if bytes.len() > 0 {
+            if !bytes.is_empty() {
                 *req.body_mut() = Some(reqwest::blocking::Body::from(bytes));
             }
 
@@ -4354,7 +4316,7 @@ impl Machine {
                                 )))]
                             );
 
-                            self.machine_st.heap.extend(header_term.into_iter());
+                            self.machine_st.heap.extend(header_term);
                             str_loc_as_cell!(h)
                         })
                         .collect();
@@ -4406,128 +4368,145 @@ impl Machine {
     #[inline(always)]
     pub(crate) fn http_listen(&mut self) -> CallResult {
         let address_sink = self.deref_register(1);
-	let tls_key = self.deref_register(3);
-	let tls_cert = self.deref_register(4);
-	let content_length_limit = self.deref_register(5);
-	const CONTENT_LENGTH_LIMIT_DEFAULT: u64 = 32768;
-	let content_length_limit = match Number::try_from(content_length_limit) {
-	    Ok(Number::Fixnum(n)) => if n.get_num() >= 0 {
-		n.get_num() as u64
-	    } else {
-		CONTENT_LENGTH_LIMIT_DEFAULT
-	    },
-	    Ok(Number::Integer(n)) => {
+        let tls_key = self.deref_register(3);
+        let tls_cert = self.deref_register(4);
+        let content_length_limit = self.deref_register(5);
+        const CONTENT_LENGTH_LIMIT_DEFAULT: u64 = 32768;
+        let content_length_limit = match Number::try_from(content_length_limit) {
+            Ok(Number::Fixnum(n)) => {
+                if n.get_num() >= 0 {
+                    n.get_num() as u64
+                } else {
+                    CONTENT_LENGTH_LIMIT_DEFAULT
+                }
+            }
+            Ok(Number::Integer(n)) => {
                 let n: Result<u64, _> = (&*n).try_into();
-		match n {
-		    Ok(u) => u,
-		    Err(_) => CONTENT_LENGTH_LIMIT_DEFAULT,
-		}
-	    }
-	    _ => CONTENT_LENGTH_LIMIT_DEFAULT,
-	};
+                match n {
+                    Ok(u) => u,
+                    Err(_) => CONTENT_LENGTH_LIMIT_DEFAULT,
+                }
+            }
+            _ => CONTENT_LENGTH_LIMIT_DEFAULT,
+        };
 
-	let ssl_server: Option<(String,String)> = {
-	    match self.machine_st.value_to_str_like(tls_key) {
-		Some(key) => {
-		    match self.machine_st.value_to_str_like(tls_cert) {
-			Some(cert) => {
-			    let key_str = key.as_str();
-			    let cert_str = cert.as_str();
+        let ssl_server: Option<(String, String)> = {
+            match self.machine_st.value_to_str_like(tls_key) {
+                Some(key) => match self.machine_st.value_to_str_like(tls_cert) {
+                    Some(cert) => {
+                        let key_str = key.as_str();
+                        let cert_str = cert.as_str();
 
-			    if key_str.is_empty() || cert_str.is_empty() {
-				None
-			    } else {
-				Some((key_str.to_string(), cert_str.to_string()))
-			    }
-			}
-			None => None
-		    }
-		}
-		None => None
-	    }
-	};
-
-	if let Some(address_str) = self.machine_st.value_to_str_like(address_sink) {
-	    let address_string = address_str.as_str();
-	    let addr: SocketAddr = match address_string.to_socket_addrs().ok().and_then(|mut s| s.next()) {
-		    Some(addr) => addr,
-            _ => {
-                self.machine_st.fail = true;
-                return Ok(());
+                        if key_str.is_empty() || cert_str.is_empty() {
+                            None
+                        } else {
+                            Some((key_str.to_string(), cert_str.to_string()))
+                        }
+                    }
+                    None => None,
+                },
+                None => None,
             }
         };
 
-        let (tx, rx) = std::sync::mpsc::sync_channel(1024);
+        if let Some(address_str) = self.machine_st.value_to_str_like(address_sink) {
+            let address_string = address_str.as_str();
+            let addr: SocketAddr = match address_string
+                .to_socket_addrs()
+                .ok()
+                .and_then(|mut s| s.next())
+            {
+                Some(addr) => addr,
+                _ => {
+                    self.machine_st.fail = true;
+                    return Ok(());
+                }
+            };
 
-        let runtime = tokio::runtime::Handle::current();
-        let _guard = runtime.enter();
+            let (tx, rx) = std::sync::mpsc::sync_channel(1024);
 
-	    fn get_reader(body: impl Buf + Send + 'static) -> Box<dyn BufRead + Send> {
-		Box::new(body.reader())
-	    }
+            let runtime = tokio::runtime::Handle::current();
+            let _guard = runtime.enter();
 
-	    let serve = warp::body::aggregate()
-		.and(warp::header::optional::<u64>(warp::http::header::CONTENT_LENGTH.as_str()))
-		.and(warp::method())
-		.and(warp::header::headers_cloned())
-		.and(warp::path::full())
-		.and(warp::query::raw().or_else(|_| future::ready(Ok::<(String,), warp::Rejection>(("".to_string(),)))))
-		.map(move |body, content_length, method, headers: warp::http::HeaderMap, path: warp::filters::path::FullPath, query| {
-		    if let Some(content_length) = content_length {
-			if content_length > content_length_limit {
-			    return warp::http::Response::builder()
-				.status(413)
-				.body(warp::hyper::Body::empty())
-				.unwrap();
-			}
-		    }
-		    
-		    let http_request_data = HttpRequestData {
-			method,
-			headers,
-			path: path.as_str().to_string(),
-			query,
-			body: get_reader(body),
-		    };
-		    let response = Arc::new((Mutex::new(false), Mutex::new(None), Condvar::new()));
-		    let http_request = HttpRequest { request_data: http_request_data, response: Arc::clone(&response) };
-		    // we send the request to http_accept
-		    tx.send(http_request).unwrap();
+            fn get_reader(body: impl Buf + Send + 'static) -> Box<dyn BufRead + Send> {
+                Box::new(body.reader())
+            }
 
-		    // we wait for the Response info from Prolog
-		    {
-			let (ready, _response, cvar) = &*response;
-			let mut ready = ready.lock().unwrap();
-			while !*ready {
-			    ready = cvar.wait(ready).unwrap();
-			}
-		    }
-		    {
-			let (_, response, _) = &*response;
-			let response = response.lock().unwrap().take();
-			response.expect("Data race error in HTTP server")
-		    }
-		});
+            let serve = warp::body::aggregate()
+                .and(warp::header::optional::<u64>(
+                    warp::http::header::CONTENT_LENGTH.as_str(),
+                ))
+                .and(warp::method())
+                .and(warp::header::headers_cloned())
+                .and(warp::path::full())
+                .and(warp::query::raw().or_else(|_| {
+                    future::ready(Ok::<(String,), warp::Rejection>(("".to_string(),)))
+                }))
+                .map(
+                    move |body,
+                          content_length,
+                          method,
+                          headers: warp::http::HeaderMap,
+                          path: warp::filters::path::FullPath,
+                          query| {
+                        if let Some(content_length) = content_length {
+                            if content_length > content_length_limit {
+                                return warp::http::Response::builder()
+                                    .status(413)
+                                    .body(warp::hyper::Body::empty())
+                                    .unwrap();
+                            }
+                        }
 
-	    runtime.spawn(async move {
-		match ssl_server {
-		    Some((key, cert)) => {
-			warp::serve(serve).tls().key(key).cert(cert).run(addr).await
-		    }
-		    None => {
-		        warp::serve(serve).run(addr).await
-		    }
-		}
-	    });
+                        let http_request_data = HttpRequestData {
+                            method,
+                            headers,
+                            path: path.as_str().to_string(),
+                            query,
+                            body: get_reader(body),
+                        };
+                        let response =
+                            Arc::new((Mutex::new(false), Mutex::new(None), Condvar::new()));
+                        let http_request = HttpRequest {
+                            request_data: http_request_data,
+                            response: Arc::clone(&response),
+                        };
+                        // we send the request to http_accept
+                        tx.send(http_request).unwrap();
 
-	    let http_listener = HttpListener { incoming: rx };
-	    let http_listener = arena_alloc!(http_listener, &mut self.machine_st.arena);
+                        // we wait for the Response info from Prolog
+                        {
+                            let (ready, _response, cvar) = &*response;
+                            let mut ready = ready.lock().unwrap();
+                            while !*ready {
+                                ready = cvar.wait(ready).unwrap();
+                            }
+                        }
+                        {
+                            let (_, response, _) = &*response;
+                            let response = response.lock().unwrap().take();
+                            response.expect("Data race error in HTTP server")
+                        }
+                    },
+                );
 
-        let addr = self.deref_register(2);
-        self.machine_st.bind(
-            addr.as_var().unwrap(),
-            typed_arena_ptr_as_cell!(http_listener),
-        );
+            runtime.spawn(async move {
+                match ssl_server {
+                    Some((key, cert)) => {
+                        warp::serve(serve).tls().key(key).cert(cert).run(addr).await
+                    }
+                    None => warp::serve(serve).run(addr).await,
+                }
+            });
+
+            let http_listener = HttpListener { incoming: rx };
+            let http_listener = arena_alloc!(http_listener, &mut self.machine_st.arena);
+
+            let addr = self.deref_register(2);
+            self.machine_st.bind(
+                addr.as_var().unwrap(),
+                typed_arena_ptr_as_cell!(http_listener),
+            );
         }
         Ok(())
     }
@@ -4535,36 +4514,36 @@ impl Machine {
     #[cfg(feature = "http")]
     #[inline(always)]
     pub(crate) fn http_accept(&mut self) -> CallResult {
-	let culprit = self.deref_register(1);
-	let method = self.deref_register(2);
-	let path = self.deref_register(3);
-	let query = self.deref_register(5);
-	let stream_addr = self.deref_register(6);
-	let handle_addr = self.deref_register(7);
-	read_heap_cell!(culprit,
-	    (HeapCellValueTag::Cons, cons_ptr) => {
-		match_untyped_arena_ptr!(cons_ptr,
-		    (ArenaHeaderTag::HttpListener, http_listener) => {
-			loop {
-		        match http_listener.incoming.recv_timeout(std::time::Duration::from_millis(200)) {
-			    Ok(request) => {
-			        let method_atom = match request.request_data.method {
-				    Method::GET => atom!("get"),
-				    Method::POST => atom!("post"),
-				    Method::PUT => atom!("put"),
-				    Method::DELETE => atom!("delete"),
-				    Method::PATCH => atom!("patch"),
-				    Method::HEAD => atom!("head"),
-				    Method::OPTIONS => atom!("options"),
-				    Method::TRACE => atom!("trace"),
-				    Method::CONNECT => atom!("connect"),
-				    _ => atom!("unsupported_extension"),
-				};
-				let path_atom = AtomTable::build_with(&self.machine_st.atom_tbl, &request.request_data.path);
-				let path_cell = atom_as_cstr_cell!(path_atom);
-				let headers: Vec<HeapCellValue> = request.request_data.headers.iter().map(|(header_name, header_value)| {
-				    let h = self.machine_st.heap.len();
-				    let header_term = functor!(AtomTable::build_with(&self.machine_st.atom_tbl, header_name.as_str()), [cell(string_as_cstr_cell!(AtomTable::build_with(&self.machine_st.atom_tbl, header_value.to_str().unwrap())))]);
+        let culprit = self.deref_register(1);
+        let method = self.deref_register(2);
+        let path = self.deref_register(3);
+        let query = self.deref_register(5);
+        let stream_addr = self.deref_register(6);
+        let handle_addr = self.deref_register(7);
+        read_heap_cell!(culprit,
+        (HeapCellValueTag::Cons, cons_ptr) => {
+        match_untyped_arena_ptr!(cons_ptr,
+            (ArenaHeaderTag::HttpListener, http_listener) => {
+            loop {
+                match http_listener.incoming.recv_timeout(std::time::Duration::from_millis(200)) {
+                Ok(request) => {
+                    let method_atom = match request.request_data.method {
+                    Method::GET => atom!("get"),
+                    Method::POST => atom!("post"),
+                    Method::PUT => atom!("put"),
+                    Method::DELETE => atom!("delete"),
+                    Method::PATCH => atom!("patch"),
+                    Method::HEAD => atom!("head"),
+                    Method::OPTIONS => atom!("options"),
+                    Method::TRACE => atom!("trace"),
+                    Method::CONNECT => atom!("connect"),
+                    _ => atom!("unsupported_extension"),
+                };
+                let path_atom = AtomTable::build_with(&self.machine_st.atom_tbl, &request.request_data.path);
+                let path_cell = atom_as_cstr_cell!(path_atom);
+                let headers: Vec<HeapCellValue> = request.request_data.headers.iter().map(|(header_name, header_value)| {
+                    let h = self.machine_st.heap.len();
+                    let header_term = functor!(AtomTable::build_with(&self.machine_st.atom_tbl, header_name.as_str()), [cell(string_as_cstr_cell!(AtomTable::build_with(&self.machine_st.atom_tbl, header_value.to_str().unwrap())))]);
 
                                     self.machine_st.heap.extend(header_term.into_iter());
                                     str_loc_as_cell!(h)
@@ -4572,19 +4551,19 @@ impl Machine {
 
                                 let headers_list = iter_to_heap_list(&mut self.machine_st.heap, headers.into_iter());
 
-				let query_str = request.request_data.query;
-				let query_atom = AtomTable::build_with(&self.machine_st.atom_tbl, &query_str);
-				let query_cell = string_as_cstr_cell!(query_atom);
+                let query_str = request.request_data.query;
+                let query_atom = AtomTable::build_with(&self.machine_st.atom_tbl, &query_str);
+                let query_cell = string_as_cstr_cell!(query_atom);
 
-				let mut stream = Stream::from_http_stream(
-				    path_atom,
-				    request.request_data.body,
-				    &mut self.machine_st.arena
-				);
-				*stream.options_mut() = StreamOptions::default();
-				stream.options_mut().set_stream_type(StreamType::Binary);
-				self.indices.streams.insert(stream);
-				let stream = stream_as_cell!(stream);
+                let mut stream = Stream::from_http_stream(
+                    path_atom,
+                    request.request_data.body,
+                    &mut self.machine_st.arena
+                );
+                *stream.options_mut() = StreamOptions::default();
+                stream.options_mut().set_stream_type(StreamType::Binary);
+                self.indices.streams.insert(stream);
+                let stream = stream_as_cell!(stream);
 
                                 let handle = arena_alloc!(request.response, &mut self.machine_st.arena);
 
@@ -4594,39 +4573,39 @@ impl Machine {
                                 self.machine_st.bind(query.as_var().unwrap(), query_cell);
                                 self.machine_st.bind(stream_addr.as_var().unwrap(), stream);
                                 self.machine_st.bind(handle_addr.as_var().unwrap(), typed_arena_ptr_as_cell!(handle));
-				break
+                break
                             }
-		            Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-			        let interrupted = machine::INTERRUPT.load(std::sync::atomic::Ordering::Relaxed);
+                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                    let interrupted = machine::INTERRUPT.load(std::sync::atomic::Ordering::Relaxed);
 
-				match machine::INTERRUPT.compare_exchange(
-				    interrupted,
-				    false,
-				    std::sync::atomic::Ordering::Relaxed,
-				    std::sync::atomic::Ordering::Relaxed,
-				) {
-				    Ok(interruption) => {
-					if interruption {
-					    self.machine_st.throw_interrupt_exception();
-					    self.machine_st.backtrack();
+                match machine::INTERRUPT.compare_exchange(
+                    interrupted,
+                    false,
+                    std::sync::atomic::Ordering::Relaxed,
+                    std::sync::atomic::Ordering::Relaxed,
+                ) {
+                    Ok(interruption) => {
+                    if interruption {
+                        self.machine_st.throw_interrupt_exception();
+                        self.machine_st.backtrack();
                         // We have extracted controll over the Tokio runtime to the calling context for enabling library use case
                         // (see https://github.com/mthom/scryer-prolog/pull/1880)
                         // So we only have access to a runtime handle in here and can't shut it down.
                         // Since I'm not aware of the consequences of deactivating this new code which came in while PR 1880
                         // was not merged, I'm only deactivating it for now.
-					    //let old_runtime = std::mem::replace(&mut self.runtime, tokio::runtime::Runtime::new().unwrap());
-					    //old_runtime.shutdown_background();
-					    break
-					}
-				    }
-				    Err(_) => unreachable!(),
-				}
+                        //let old_runtime = std::mem::replace(&mut self.runtime, tokio::runtime::Runtime::new().unwrap());
+                        //old_runtime.shutdown_background();
+                        break
+                    }
+                    }
+                    Err(_) => unreachable!(),
+                }
 
-		          }
-		          Err(_) => {
+                  }
+                  Err(_) => {
                               self.machine_st.fail = true;
                           }
-			}
+            }
                     }
                 }
                 _ => {
@@ -4644,24 +4623,27 @@ impl Machine {
     #[cfg(feature = "http")]
     #[inline(always)]
     pub(crate) fn http_answer(&mut self) -> CallResult {
-	let culprit = self.deref_register(1);
-	let status_code = self.deref_register(2);
-	let status_code: u16 = match Number::try_from(status_code) {
-	    Ok(Number::Fixnum(n)) => n.get_num() as u16,
-	    Ok(Number::Integer(n)) => {
-            let n: Result<u16, _> = (&*n).try_into();
+        let culprit = self.deref_register(1);
+        let status_code = self.deref_register(2);
+        let status_code: u16 = match Number::try_from(status_code) {
+            Ok(Number::Fixnum(n)) => n.get_num() as u16,
+            Ok(Number::Integer(n)) => {
+                let n: Result<u16, _> = (&*n).try_into();
 
-            if let Ok(value) = n {
-                value
-            } else {
-                self.machine_st.fail = true;
-                return Ok(());
+                if let Ok(value) = n {
+                    value
+                } else {
+                    self.machine_st.fail = true;
+                    return Ok(());
+                }
             }
-        }
-	    _ => unreachable!()
-	};
-	let stub_gen = || functor_stub(atom!("http_listen"), 2);
-	let headers = match self.machine_st.try_from_list(self.machine_st.registers[3], stub_gen) {
+            _ => unreachable!(),
+        };
+        let stub_gen = || functor_stub(atom!("http_listen"), 2);
+        let headers = match self
+            .machine_st
+            .try_from_list(self.machine_st.registers[3], stub_gen)
+        {
             Ok(addrs) => {
                 let mut header_map = HeaderMap::new();
                 for heap_cell in addrs {
@@ -4669,7 +4651,7 @@ impl Machine {
                         (HeapCellValueTag::Str, s) => {
                             let name = cell_as_atom_cell!(self.machine_st.heap[s]).get_name();
                             let value = self.machine_st.value_to_str_like(self.machine_st.heap[s + 1]).unwrap();
-                            header_map.insert(HeaderName::from_str(&*name.as_str()).unwrap(), HeaderValue::from_str(&*value.as_str()).unwrap());
+                            header_map.insert(HeaderName::from_str(&name.as_str()).unwrap(), HeaderValue::from_str(&value.as_str()).unwrap());
                         }
                         _ => {
                             unreachable!()
@@ -4747,9 +4729,10 @@ impl Machine {
                                 }
                         )
                     }
-                    if let Ok(_) = self
+                    if self
                         .foreign_function_table
-                        .load_library(&*library_name.as_str(), &functions)
+                        .load_library(&library_name.as_str(), &functions)
+                        .is_ok()
                     {
                         return Ok(());
                     }
@@ -4769,10 +4752,7 @@ impl Machine {
         let return_value = self.deref_register(3);
         if let Some(function_name) = self.machine_st.value_to_str_like(function_name) {
             let stub_gen = || functor_stub(atom!("foreign_call"), 3);
-            fn map_arg(
-                mut machine_st: &mut MachineState,
-                source: HeapCellValue,
-            ) -> crate::ffi::Value {
+            fn map_arg(machine_st: &mut MachineState, source: HeapCellValue) -> crate::ffi::Value {
                 match Number::try_from(source) {
                     Ok(Number::Fixnum(n)) => Value::Int(n.get_num()),
                     Ok(Number::Float(n)) => Value::Float(n.into_inner()),
@@ -4789,7 +4769,7 @@ impl Machine {
                                     {
                                         Value::Struct(
                                             struct_name.as_str().to_string(),
-                                            iter.map(|x| map_arg(&mut machine_st, x)).collect(),
+                                            iter.map(|x| map_arg(machine_st, x)).collect(),
                                         )
                                     } else {
                                         unreachable!()
@@ -4812,7 +4792,7 @@ impl Machine {
                         .collect();
                     match self
                         .foreign_function_table
-                        .exec(&*function_name.as_str(), args)
+                        .exec(&function_name.as_str(), args)
                     {
                         Ok(result) => {
                             match result {
@@ -4892,7 +4872,7 @@ impl Machine {
                 Err(e) => return Err(e),
             };
             self.foreign_function_table
-                .define_struct(&*struct_name.as_str(), fields);
+                .define_struct(&struct_name.as_str(), fields);
             return Ok(());
         }
         self.machine_st.fail = true;
@@ -4913,13 +4893,13 @@ impl Machine {
         let reposition = self.machine_st.registers[6];
         let stream_type = self.machine_st.registers[7];
 
-        let options = self
-            .machine_st
-            .to_stream_options(alias, eof_action, reposition, stream_type);
+        let options =
+            self.machine_st
+                .get_stream_options(alias, eof_action, reposition, stream_type);
         let src_sink = self.deref_register(1);
 
         if let Some(file_spec) = self.machine_st.value_to_str_like(src_sink) {
-            let file_spec = file_spec.as_atom(&*self.machine_st.atom_tbl);
+            let file_spec = file_spec.as_atom(&self.machine_st.atom_tbl);
 
             let mut stream =
                 self.machine_st
@@ -4956,7 +4936,7 @@ impl Machine {
             Ok(Number::Integer(n)) => {
                 let n: u16 = (&*n).try_into().unwrap();
                 n
-            },
+            }
             Ok(Number::Fixnum(n)) => u16::try_from(n.get_num()).unwrap(),
             _ => {
                 unreachable!();
@@ -4982,7 +4962,8 @@ impl Machine {
             .map_err(SessionError::from)
             .and_then(|mut op_decl| {
                 if op_decl.op_desc.get_prec() == 0 {
-                    Ok(op_decl.remove(&mut self.indices.op_dir))
+                    op_decl.remove(&mut self.indices.op_dir);
+                    Ok(())
                 } else {
                     let spec = get_op_desc(
                         op_decl.name,
@@ -5019,9 +5000,9 @@ impl Machine {
         let reposition = self.machine_st.registers[4];
         let stream_type = self.machine_st.registers[5];
 
-        let options = self
-            .machine_st
-            .to_stream_options(alias, eof_action, reposition, stream_type);
+        let options =
+            self.machine_st
+                .get_stream_options(alias, eof_action, reposition, stream_type);
         *stream.options_mut() = options;
 
         Ok(())
@@ -5116,7 +5097,7 @@ impl Machine {
             Ok(Number::Integer(n)) => {
                 let value: usize = (&*n).try_into().unwrap();
                 Some(value)
-            },
+            }
             Ok(Number::Fixnum(n)) => usize::try_from(n.get_num()).ok(),
             _ => {
                 self.machine_st.fail = true;
@@ -5150,37 +5131,35 @@ impl Machine {
 
         let module = self.deref_register(2);
 
-        match self.match_attribute(self.machine_st.heap[attr_var_list], module, attr) {
-            Some(AttrListMatch {
-                prev_tail,
-                match_site: MatchSite::Match(match_site),
-            }) => {
-                let prev_tail = if let Some(prev_tail) = prev_tail {
-                    // not at the head.
-                    prev_tail
-                } else {
-                    if self.machine_st.heap[match_site + 1].is_var() {
-                        let h = attr_var.get_value() as usize;
+        if let Some(AttrListMatch {
+            prev_tail,
+            match_site: MatchSite::Match(match_site),
+        }) = self.match_attribute(self.machine_st.heap[attr_var_list], module, attr)
+        {
+            let prev_tail = if let Some(prev_tail) = prev_tail {
+                // not at the head.
+                prev_tail
+            } else {
+                if self.machine_st.heap[match_site + 1].is_var() {
+                    let h = attr_var.get_value() as usize;
 
-                        self.machine_st.heap[h] = heap_loc_as_cell!(h);
-                        self.machine_st.trail(TrailRef::Ref(Ref::attr_var(h)));
-                    }
-
-                    // at the head.
-                    attr_var_list
-                };
-
-                if self.machine_st.heap[match_site + 1].get_tag() == HeapCellValueTag::Lis {
-                    let prev_tail_value = self.machine_st.heap[match_site + 1].get_value();
-                    self.machine_st.heap[prev_tail].set_value(prev_tail_value);
-                } else {
-                    self.machine_st.heap[prev_tail] = heap_loc_as_cell!(prev_tail);
+                    self.machine_st.heap[h] = heap_loc_as_cell!(h);
+                    self.machine_st.trail(TrailRef::Ref(Ref::attr_var(h)));
                 }
 
-                self.machine_st
-                    .trail(TrailRef::AttrVarListLink(prev_tail, match_site));
+                // at the head.
+                attr_var_list
+            };
+
+            if self.machine_st.heap[match_site + 1].get_tag() == HeapCellValueTag::Lis {
+                let prev_tail_value = self.machine_st.heap[match_site + 1].get_value();
+                self.machine_st.heap[prev_tail].set_value(prev_tail_value);
+            } else {
+                self.machine_st.heap[prev_tail] = heap_loc_as_cell!(prev_tail);
             }
-            _ => {}
+
+            self.machine_st
+                .trail(TrailRef::AttrVarListLink(prev_tail, match_site));
         }
     }
 
@@ -5502,7 +5481,7 @@ impl Machine {
             Ok(Number::Integer(n)) => {
                 let n: u8 = (&*n).try_into().unwrap();
                 n
-            },
+            }
             Ok(Number::Rational(r)) => {
                 // n has already been confirmed as an integer, and
                 // internally, Rational is assumed reduced, so its
@@ -5541,7 +5520,7 @@ impl Machine {
             Ok(Number::Integer(n)) => {
                 let value: usize = (&*n).try_into().unwrap();
                 value
-            },
+            }
             _ => {
                 let stub = functor_stub(atom!("call_with_inference_limit"), 3);
 
@@ -5555,7 +5534,7 @@ impl Machine {
         let count = self.machine_st.cwil.add_limit(n, bp);
 
         let result = count.try_into();
-        if let Ok(value) = result{
+        if let Ok(value) = result {
             self.machine_st.unify_fixnum(Fixnum::build_with(value), a3);
         } else {
             let count = arena_alloc!(count.clone(), &mut self.machine_st.arena);
@@ -5624,10 +5603,7 @@ impl Machine {
                         .map(|index| index.get())
                         .unwrap_or(IndexPtr::dynamic_undefined());
 
-                    match index.tag() {
-                        IndexPtrTag::DynamicUndefined | IndexPtrTag::Undefined => false,
-                        _ => true,
-                    }
+                    !matches!(index.tag(), IndexPtrTag::DynamicUndefined | IndexPtrTag::Undefined)
                 }
             }
             (HeapCellValueTag::Atom, (name, arity)) => {
@@ -5644,10 +5620,7 @@ impl Machine {
                         .map(|index| index.get())
                         .unwrap_or(IndexPtr::dynamic_undefined());
 
-                    match index.tag() {
-                        IndexPtrTag::DynamicUndefined => false,
-                        _ => true,
-                    }
+                    !matches!(index.tag(), IndexPtrTag::DynamicUndefined)
                 }
             }
             _ => {
@@ -5711,7 +5684,7 @@ impl Machine {
         let count = self.machine_st.cwil.remove_limit(block).clone();
         let result = count.clone().try_into();
 
-        if let Ok(value) = result{
+        if let Ok(value) = result {
             self.machine_st.unify_fixnum(Fixnum::build_with(value), a2);
         } else {
             let count = arena_alloc!(count.clone(), &mut self.machine_st.arena);
@@ -5899,9 +5872,9 @@ impl Machine {
         let addr = self.deref_register(1);
         let h = self.machine_st.heap.len();
 
-        if self.machine_st.ball.stub.len() > 0 {
+        if !self.machine_st.ball.stub.is_empty() {
             let stub = self.machine_st.ball.copy_and_align(h);
-            self.machine_st.heap.extend(stub.into_iter());
+            self.machine_st.heap.extend(stub);
         } else {
             self.machine_st.fail = true;
             return;
@@ -5915,7 +5888,7 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn push_ball_stack(&mut self) {
-        if self.machine_st.ball.stub.len() > 0 {
+        if !self.machine_st.ball.stub.is_empty() {
             self.machine_st
                 .ball_stack
                 .push(mem::replace(&mut self.machine_st.ball, Ball::new()));
@@ -6103,7 +6076,7 @@ impl Machine {
             Ok(()) => Ok(()),
             Err(e) => {
                 self.user_input.reset();
-                return Err(e);
+                Err(e)
             }
         }
     }
@@ -6140,8 +6113,8 @@ impl Machine {
         atom_or_string: AtomOrString,
     ) -> Result<Option<TermWriteResult>, MachineStub> {
         let string = match atom_or_string {
-            AtomOrString::Atom(atom) if atom == atom!("[]") => "".to_owned(),
-            _ => atom_or_string.to_string(),
+            AtomOrString::Atom(atom!("[]")) => "".to_owned(),
+            _ => atom_or_string.into(),
         };
 
         let chars = CharReader::new(ByteStream::from_string(string));
@@ -6264,14 +6237,14 @@ impl Machine {
                 let n: u64 = Integer::from(n).try_into().unwrap();
                 let rng: StdRng = SeedableRng::seed_from_u64(n);
                 self.rng = rng;
-            },
+            }
             Ok(Number::Integer(n)) => {
                 let n: u64 = (&*n).try_into().unwrap();
                 let rng: StdRng = SeedableRng::seed_from_u64(n);
                 self.rng = rng;
-            },
+            }
             Ok(Number::Rational(n)) => {
-                if n.denominator() == &UBig::from(1 as u32) {
+                if n.denominator() == &UBig::ONE {
                     let n: u64 = n.numerator().try_into().unwrap();
                     let rng: StdRng = SeedableRng::seed_from_u64(n);
                     self.rng = rng;
@@ -6344,9 +6317,9 @@ impl Machine {
         let reposition = self.machine_st.registers[6];
         let stream_type = self.machine_st.registers[7];
 
-        let options = self
-            .machine_st
-            .to_stream_options(alias, eof_action, reposition, stream_type);
+        let options =
+            self.machine_st
+                .get_stream_options(alias, eof_action, reposition, stream_type);
 
         if options.reposition() {
             return Err(self
@@ -6490,9 +6463,9 @@ impl Machine {
         let reposition = self.machine_st.registers[6];
         let stream_type = self.machine_st.registers[7];
 
-        let options = self
-            .machine_st
-            .to_stream_options(alias, eof_action, reposition, stream_type);
+        let options =
+            self.machine_st
+                .get_stream_options(alias, eof_action, reposition, stream_type);
 
         if options.reposition() {
             return Err(self
@@ -6574,7 +6547,7 @@ impl Machine {
             )?;
 
             let connector = TlsConnector::new().unwrap();
-            let stream = match connector.connect(&*hostname.as_str(), stream0) {
+            let stream = match connector.connect(&hostname.as_str(), stream0) {
                 Ok(tls_stream) => tls_stream,
                 Err(_) => {
                     return Err(self.machine_st.open_permission_error(
@@ -6609,7 +6582,7 @@ impl Machine {
             .machine_st
             .value_to_str_like(self.machine_st.registers[2])
         {
-            let identity = match Identity::from_pkcs12(&pkcs12, &*password.as_str()) {
+            let identity = match Identity::from_pkcs12(&pkcs12, &password.as_str()) {
                 Ok(identity) => identity,
                 Err(_) => {
                     return Err(self.machine_st.open_permission_error(
@@ -6680,7 +6653,7 @@ impl Machine {
         let err = self.machine_st.type_error(ValidType::TcpListener, culprit);
         let stub = functor_stub(atom!("socket_server_close"), 1);
 
-        return Err(self.machine_st.error_form(err, stub));
+        Err(self.machine_st.error_form(err, stub))
     }
 
     #[inline(always)]
@@ -6776,7 +6749,7 @@ impl Machine {
                         ]
                     );
 
-                    self.machine_st.heap.extend(position_term.into_iter());
+                    self.machine_st.heap.extend(position_term);
                     str_loc_as_cell!(h)
                 } else {
                     self.machine_st.fail = true;
@@ -6969,6 +6942,7 @@ impl Machine {
             instr.enqueue_functors(h, &mut self.machine_st.arena, &mut functors);
             let new_len = functors.len();
 
+            #[allow(clippy::needless_range_loop)]
             for index in old_len..new_len {
                 let functor_len = functors[index].len();
 
@@ -7007,7 +6981,7 @@ impl Machine {
             Ok(Number::Integer(n)) => {
                 let value: usize = (&*n).try_into().unwrap();
                 value
-            },
+            }
             _ => {
                 unreachable!()
             }
@@ -7031,7 +7005,7 @@ impl Machine {
         };
 
         let first_idx = match first_idx {
-            Some(ref idx) if idx.local().is_some() => {
+            Some(idx) if idx.local().is_some() => {
                 if let Some(idx) = idx.local() {
                     idx
                 } else {
@@ -7063,7 +7037,7 @@ impl Machine {
             Ok(Number::Integer(n)) => {
                 let value: usize = (&*n).try_into().unwrap();
                 value
-            },
+            }
             _ => {
                 unreachable!()
             }
@@ -7374,9 +7348,7 @@ impl Machine {
             };
 
             let salt = hkdf::Salt::new(digest_alg, &salt);
-            let mut bytes: Vec<u8> = Vec::new();
-
-            bytes.resize(length, 0);
+            let mut bytes: Vec<u8> = vec![0; length];
 
             match salt.extract(&data).expand(&[&info[..]], MyKey(length)) {
                 Ok(r) => {
@@ -7423,7 +7395,7 @@ impl Machine {
                         return;
                     }
                 }
-            },
+            }
             _ => {
                 unreachable!()
             }
@@ -7546,7 +7518,7 @@ impl Machine {
                 }
             };
 
-            if buffer.len() == 0 {
+            if buffer.is_empty() {
                 empty_list_as_cell!()
             } else {
                 atom_as_cstr_cell!(AtomTable::build_with(&self.machine_st.atom_tbl, &buffer))
@@ -7723,7 +7695,7 @@ impl Machine {
             .machine_st
             .value_to_str_like(self.machine_st.registers[1])
         {
-            match roxmltree::Document::parse(&*string.as_str()) {
+            match roxmltree::Document::parse(&string.as_str()) {
                 Ok(doc) => {
                     let result = self.xml_node_to_term(doc.root_element());
                     unify!(self.machine_st, self.machine_st.registers[2], result);
@@ -7836,7 +7808,7 @@ impl Machine {
 
         match env::var("SHELL") {
             Ok(value) => {
-                let command = process::Command::new(&value)
+                let command = process::Command::new(value)
                     .arg("-c")
                     .arg(&*command.as_str())
                     .status();
@@ -7844,7 +7816,7 @@ impl Machine {
             }
             _ => match env::var("COMSPEC") {
                 Ok(value) => {
-                    let command = process::Command::new(&value)
+                    let command = process::Command::new(value)
                         .arg("/C")
                         .arg(&*command.as_str())
                         .status();
@@ -7862,18 +7834,11 @@ impl Machine {
         let padding = cell_as_atom!(self.deref_register(3));
         let charset = cell_as_atom!(self.deref_register(4));
 
-        let config = if padding == atom!("true") {
-            if charset == atom!("standard") {
-                base64::STANDARD
-            } else {
-                base64::URL_SAFE
-            }
-        } else {
-            if charset == atom!("standard") {
-                base64::STANDARD_NO_PAD
-            } else {
-                base64::URL_SAFE_NO_PAD
-            }
+        let config = match (padding, charset) {
+            (atom!("true"), atom!("standard")) => base64::STANDARD,
+            (atom!("true"), _) => base64::URL_SAFE,
+            (_, atom!("standard")) => base64::STANDARD_NO_PAD,
+            (_, _) => base64::URL_SAFE_NO_PAD,
         };
 
         if self.deref_register(1).is_var() {
@@ -7907,7 +7872,7 @@ impl Machine {
             }
 
             let b64 = base64::encode_config(bytes, config);
-            let string = self.u8s_to_string(&b64.as_bytes());
+            let string = self.u8s_to_string(b64.as_bytes());
 
             unify!(self.machine_st, self.machine_st.registers[2], string);
         }
@@ -8058,8 +8023,10 @@ impl Machine {
             }
             Ok(Number::Integer(n)) => {
                 let value: usize = if n.sign() == Sign::Positive {
-                    UBig::from((&*n).clone().into_parts().1).count_ones()
-                } else { 0 };
+                    (*n).clone().into_parts().1.count_ones()
+                } else {
+                    0
+                };
                 Number::arena_from(value, &mut self.machine_st.arena)
             }
             _ => {
@@ -8119,7 +8086,7 @@ impl Machine {
                 let name = AtomTable::build_with(&self.machine_st.atom_tbl, attr.name());
                 let value = put_complete_string(
                     &mut self.machine_st.heap,
-                    &attr.value(),
+                    attr.value(),
                     &self.machine_st.atom_tbl,
                 );
 
@@ -8175,7 +8142,7 @@ impl Machine {
                     let name = AtomTable::build_with(&self.machine_st.atom_tbl, attr.0);
                     let value = put_complete_string(
                         &mut self.machine_st.heap,
-                        &attr.1,
+                        attr.1,
                         &self.machine_st.atom_tbl,
                     );
 
@@ -8220,7 +8187,7 @@ impl Machine {
     pub(super) fn u8s_to_string(&mut self, data: &[u8]) -> HeapCellValue {
         let buffer = String::from_iter(data.iter().map(|b| *b as char));
 
-        if buffer.len() == 0 {
+        if buffer.is_empty() {
             empty_list_as_cell!()
         } else {
             atom_as_cstr_cell!(AtomTable::build_with(&self.machine_st.atom_tbl, &buffer))

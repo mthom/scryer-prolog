@@ -149,7 +149,7 @@ impl MachineState {
             TrailRef::BlackboardEntry(key_atom) => {
                 self.trail.push(TrailEntry::build_with(
                     TrailEntryTag::TrailedBlackboardEntry,
-                    key_atom.index as u64,
+                    key_atom.index,
                 ));
 
                 self.tr += 1;
@@ -157,7 +157,7 @@ impl MachineState {
             TrailRef::BlackboardOffset(key_atom, value_cell) => {
                 self.trail.push(TrailEntry::build_with(
                     TrailEntryTag::TrailedBlackboardOffset,
-                    key_atom.index as u64,
+                    key_atom.index,
                 ));
 
                 self.trail
@@ -432,8 +432,7 @@ impl MachineState {
     pub fn compare_term_test(&mut self, var_comparison: VarComparison) -> Option<Ordering> {
         let mut tabu_list = IndexSet::new();
 
-        while !self.pdl.is_empty() {
-            let s1 = self.pdl.pop().unwrap();
+        while let Some(s1) = self.pdl.pop() {
             let s1 = self.deref(s1);
 
             let s2 = self.pdl.pop().unwrap();
@@ -896,7 +895,7 @@ impl MachineState {
 
         let s = string.as_str();
 
-        match heap_pstr_iter.compare_pstr_to_string(&*s) {
+        match heap_pstr_iter.compare_pstr_to_string(&s) {
             Some(PStrPrefixCmpResult {
                 focus,
                 offset,
@@ -1142,7 +1141,7 @@ impl MachineState {
 
         let cycle_found = {
             let mut iter = cycle_detecting_stackless_preorder_iter(&mut self.heap, h);
-            while let Some(_) = iter.next() {}
+            for _ in iter.by_ref() {}
             iter.cycle_found()
         };
 
@@ -1376,7 +1375,7 @@ impl MachineState {
 
                 let mut type_error = |arity| {
                     let err = self.type_error(ValidType::Integer, arity);
-                    return Err(self.error_form(err, stub_gen()));
+                    Err(self.error_form(err, stub_gen()))
                 };
 
                 let arity = match Number::try_from(arity) {
@@ -1573,7 +1572,7 @@ impl MachineState {
     ) -> Result<Vec<HeapCellValue>, MachineStub> {
         let mut heap_pstr_iter = HeapPStrIter::new(&self.heap, h);
 
-        while let Some(iteratee) = heap_pstr_iter.next() {
+        for iteratee in heap_pstr_iter.by_ref() {
             match iteratee {
                 PStrIteratee::Char(_, c) => chars.push(char_as_cell!(c)),
                 PStrIteratee::PStrSegment(_, pstr_atom, n) => {
@@ -1644,10 +1643,11 @@ impl MachineState {
                     let addr = self.store(self.deref(addr));
 
                     match Number::try_from(addr) {
-                        Ok(Number::Fixnum(n)) => match u8::try_from(n.get_num()) {
-                            Ok(b) => bytes.push(b),
-                            Err(_) => {}
-                        },
+                        Ok(Number::Fixnum(n)) => {
+                            if let Ok(b) = u8::try_from(n.get_num()) {
+                                bytes.push(b)
+                            }
+                        }
                         Ok(Number::Integer(n)) => {
                             let b: u8 = (&*n).try_into().unwrap();
 

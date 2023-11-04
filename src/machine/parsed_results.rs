@@ -1,6 +1,6 @@
 use crate::atom_table::*;
-use ordered_float::OrderedFloat;
 use dashu::*;
+use ordered_float::OrderedFloat;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 
@@ -67,13 +67,10 @@ impl From<Vec<QueryResolutionLine>> for QueryResolution {
 
         // If there is only one line, and it is an empty match, return true.
         if query_result_lines.len() == 1 {
-            match query_result_lines[0].clone() {
-                QueryResolutionLine::Match(m) => {
-                    if m.is_empty() {
-                        return QueryResolution::True;
-                    }
+            if let QueryResolutionLine::Match(m) = query_result_lines[0].clone() {
+                if m.is_empty() {
+                    return QueryResolution::True;
                 }
-                _ => {}
             }
         }
 
@@ -81,13 +78,9 @@ impl From<Vec<QueryResolutionLine>> for QueryResolution {
         if query_result_lines
             .iter()
             .any(|l| l == &QueryResolutionLine::True)
-            && !query_result_lines.iter().any(|l| {
-                if let &QueryResolutionLine::Match(_) = l {
-                    true
-                } else {
-                    false
-                }
-            })
+            && !query_result_lines
+                .iter()
+                .any(|l| matches!(l, QueryResolutionLine::Match(_)))
         {
             return QueryResolution::True;
         }
@@ -95,13 +88,7 @@ impl From<Vec<QueryResolutionLine>> for QueryResolution {
         // If there is at least one match, return all matches.
         let all_matches = query_result_lines
             .into_iter()
-            .filter(|l| {
-                if let &QueryResolutionLine::Match(_) = l {
-                    true
-                } else {
-                    false
-                }
-            })
+            .filter(|l| matches!(l, QueryResolutionLine::Match(_)))
             .map(|l| match l {
                 QueryResolutionLine::Match(m) => QueryMatch::from(m),
                 _ => unreachable!(),
@@ -132,7 +119,11 @@ fn split_response_string(input: &str) -> Vec<String> {
             ')' => level_parenthesis -= 1,
             '"' => in_double_quotes = !in_double_quotes,
             '\'' => in_single_quotes = !in_single_quotes,
-            ',' if level_bracket == 0 && level_parenthesis == 0 && !in_double_quotes && !in_single_quotes => {
+            ',' if level_bracket == 0
+                && level_parenthesis == 0
+                && !in_double_quotes
+                && !in_single_quotes =>
+            {
                 result.push(input[start..i].trim().to_string());
                 start = i + 1;
             }
@@ -167,13 +158,13 @@ fn parse_prolog_response(input: &str) -> HashMap<String, String> {
         let key = result.0;
         let value = result.1;
         // cut off at given characters/strings:
-        let value = value.split("\n").next().unwrap().to_string();
-        let value = value.split("  ").next().unwrap().to_string();
-        let value = value.split("\t").next().unwrap().to_string();
+        let value = value.split('\n').next().unwrap().to_string();
+        let value = value.split(' ').next().unwrap().to_string();
+        let value = value.split('\t').next().unwrap().to_string();
         let value = value.split("error").next().unwrap().to_string();
         map.insert(key, value);
     }
-    
+
     map
 }
 
@@ -192,9 +183,8 @@ impl TryFrom<String> for QueryResolutionLine {
                         Ok((key, Value::try_from(value)?))
                     })
                     .filter_map(Result::ok)
-                    .collect::<BTreeMap<_, _>>()
-                )
-            ),
+                    .collect::<BTreeMap<_, _>>(),
+            )),
         }
     }
 }
@@ -229,25 +219,25 @@ impl TryFrom<String> for Value {
             Ok(Value::Float(OrderedFloat(float_value)))
         } else if let Ok(int_value) = string.parse::<i128>() {
             Ok(Value::Integer(int_value.into()))
-        } else if trimmed.starts_with("'") && trimmed.ends_with("'") {
+        } else if trimmed.starts_with('\'') && trimmed.ends_with('\'')
+            || trimmed.starts_with('"') && trimmed.ends_with('"')
+        {
             Ok(Value::String(trimmed[1..trimmed.len() - 1].into()))
-        } else if trimmed.starts_with("\"") && trimmed.ends_with("\"") {
-            Ok(Value::String(trimmed[1..trimmed.len() - 1].into()))
-        } else if trimmed.starts_with("[") && trimmed.ends_with("]") {
+        } else if trimmed.starts_with('[') && trimmed.ends_with(']') {
             let split = split_nested_list(&trimmed[1..trimmed.len() - 1]);
-            
+
             let values = split
                 .into_iter()
                 .map(Value::try_from)
                 .collect::<Result<Vec<_>, _>>()?;
 
             Ok(Value::List(values))
-        } else if trimmed.starts_with("{") && trimmed.ends_with("}") {
-            let mut iter = trimmed[1..trimmed.len() - 1].split(",");
+        } else if trimmed.starts_with('{') && trimmed.ends_with('}') {
+            let iter = trimmed[1..trimmed.len() - 1].split(',');
             let mut values = vec![];
 
-            while let Some(value) = iter.next() {
-                let items: Vec<_> = value.split(":").collect();
+            for value in iter {
+                let items: Vec<_> = value.split(':').collect();
                 if items.len() == 2 {
                     let _key = items[0].to_string();
                     let value = items[1].to_string();
@@ -257,11 +247,11 @@ impl TryFrom<String> for Value {
 
             Ok(Value::Structure(atom!("{}"), values))
         } else if trimmed.starts_with("<<") && trimmed.ends_with(">>") {
-            let mut iter = trimmed[2..trimmed.len() - 2].split(",");
+            let iter = trimmed[2..trimmed.len() - 2].split(',');
             let mut values = vec![];
 
-            while let Some(value) = iter.next() {
-                let items: Vec<_> = value.split(":").collect();
+            for value in iter {
+                let items: Vec<_> = value.split(':').collect();
                 if items.len() == 2 {
                     let _key = items[0].to_string();
                     let value = items[1].to_string();
@@ -270,7 +260,7 @@ impl TryFrom<String> for Value {
             }
 
             Ok(Value::Structure(atom!("<<>>"), values))
-        } else if !trimmed.contains(",") && !trimmed.contains("'") && !trimmed.contains("\"") {
+        } else if !trimmed.contains(',') && !trimmed.contains('\'') && !trimmed.contains('"') {
             Ok(Value::String(trimmed.into()))
         } else {
             Err(())

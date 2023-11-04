@@ -9,14 +9,22 @@ pub(crate) trait UnmarkPolicy {
     fn forward_attr_var(iter: &mut StacklessPreOrderHeapIter<Self>) -> Option<HeapCellValue>
     where
         Self: Sized;
-    fn invert_marker(iter: &mut StacklessPreOrderHeapIter<Self>) where Self: Sized;
+    fn invert_marker(iter: &mut StacklessPreOrderHeapIter<Self>)
+    where
+        Self: Sized;
     fn mark_phase(&self) -> bool;
     #[inline]
-    fn report_var_link(iter: &StacklessPreOrderHeapIter<Self>) -> bool where Self: Sized {
+    fn report_var_link(iter: &StacklessPreOrderHeapIter<Self>) -> bool
+    where
+        Self: Sized,
+    {
         iter.heap[iter.next as usize].get_mark_bit() == iter.iter_state.mark_phase()
     }
     #[inline(always)]
-    fn record_focus(_iter: &mut StacklessPreOrderHeapIter<Self>) where Self: Sized {
+    fn record_focus(_iter: &mut StacklessPreOrderHeapIter<Self>)
+    where
+        Self: Sized,
+    {
     }
 }
 
@@ -34,7 +42,7 @@ fn invert_marker<UMP: UnmarkPolicy>(iter: &mut StacklessPreOrderHeapIter<UMP>) {
     iter.next = iter.heap[iter.start].get_value();
     iter.current = iter.start;
 
-    while let Some(_) = iter.forward() {}
+    while iter.forward().is_some() {}
 }
 
 impl UnmarkPolicy for IteratorUMP {
@@ -139,7 +147,7 @@ impl<'a> StacklessPreOrderHeapIter<'a, IteratorUMP> {
             start,
             current: start,
             next,
-            iter_state: IteratorUMP { mark_phase: true,},
+            iter_state: IteratorUMP { mark_phase: true },
         }
     }
 }
@@ -189,11 +197,9 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
                             return Some(cell);
                         }
 
-                        if self.next < self.heap.len() as u64 {
-                            if UMP::report_var_link(self) {
-                                let tag = HeapCellValueTag::AttrVar;
-                                return Some(HeapCellValue::build_with(tag, next as u64));
-                            }
+                        if self.next < self.heap.len() as u64 && UMP::report_var_link(self) {
+                            let tag = HeapCellValueTag::AttrVar;
+                            return Some(HeapCellValue::build_with(tag, next as u64));
                         }
                     }
                     HeapCellValueTag::Var => {
@@ -203,11 +209,9 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
                             return Some(cell);
                         }
 
-                        if self.next < self.heap.len() as u64 {
-                            if UMP::report_var_link(self) {
-                                let tag = HeapCellValueTag::Var;
-                                return Some(HeapCellValue::build_with(tag, next as u64));
-                            }
+                        if self.next < self.heap.len() as u64 && UMP::report_var_link(self) {
+                            let tag = HeapCellValueTag::Var;
+                            return Some(HeapCellValue::build_with(tag, next as u64));
                         }
                     }
                     HeapCellValueTag::Str => {
@@ -311,10 +315,8 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
                         return Some(self.backward_and_return());
                     }
                 }
-            } else {
-                if self.backward() {
-                    return None;
-                }
+            } else if self.backward() {
+                return None;
             }
         }
     }
@@ -358,7 +360,7 @@ impl<'a, UMP: UnmarkPolicy> Iterator for StacklessPreOrderHeapIter<'a, UMP> {
 
 pub fn mark_cells(heap: &mut Heap, start: usize) {
     let mut iter = StacklessPreOrderHeapIter::<MarkerUMP>::new(heap, start);
-    while let Some(_) = iter.forward() {}
+    while iter.forward().is_some() {}
 }
 
 #[cfg(test)]
@@ -665,14 +667,18 @@ mod tests {
 
         wam.machine_st.heap.push(pstr_loc_as_cell!(1));
 
-        let pstr_var_cell = put_partial_string(&mut wam.machine_st.heap, "abc ", &wam.machine_st.atom_tbl);
+        let pstr_var_cell =
+            put_partial_string(&mut wam.machine_st.heap, "abc ", &wam.machine_st.atom_tbl);
         let pstr_cell = wam.machine_st.heap[pstr_var_cell.get_value() as usize];
 
         mark_cells(&mut wam.machine_st.heap, 0);
 
         all_cells_marked_and_unforwarded(&wam.machine_st.heap);
 
-        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[0]), pstr_loc_as_cell!(1));
+        assert_eq!(
+            unmark_cell_bits!(wam.machine_st.heap[0]),
+            pstr_loc_as_cell!(1)
+        );
         assert_eq!(unmark_cell_bits!(wam.machine_st.heap[1]), pstr_cell);
         assert_eq!(
             unmark_cell_bits!(wam.machine_st.heap[2]),
@@ -720,7 +726,7 @@ mod tests {
 
         mark_cells(&mut wam.machine_st.heap, 7);
 
-        all_cells_marked_and_unforwarded(&wam.machine_st.heap[1 ..]);
+        all_cells_marked_and_unforwarded(&wam.machine_st.heap[1..]);
 
         assert_eq!(unmark_cell_bits!(wam.machine_st.heap[1]), pstr_cell);
         assert_eq!(
@@ -1536,10 +1542,10 @@ mod tests {
 
         mark_cells(&mut wam.machine_st.heap, 0);
 
-        all_cells_marked_and_unforwarded(&mut wam.machine_st.heap[0..24]);
+        all_cells_marked_and_unforwarded(&wam.machine_st.heap[0..24]);
 
         for cell in &wam.machine_st.heap[24..] {
-            assert_eq!(cell.get_mark_bit(), false);
+            assert!(!cell.get_mark_bit());
         }
 
         assert_eq!(

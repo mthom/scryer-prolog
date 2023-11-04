@@ -665,7 +665,7 @@ pub(crate) fn merge_clause_index(
 pub(crate) fn remove_constant_indices(
     constant: Literal,
     overlapping_constants: &[Literal],
-    indexing_code: &mut Vec<IndexingLine>,
+    indexing_code: &mut [IndexingLine],
     offset: usize,
 ) {
     let mut index = 0;
@@ -811,7 +811,7 @@ pub(crate) fn remove_constant_indices(
 pub(crate) fn remove_structure_index(
     name: Atom,
     arity: usize,
-    indexing_code: &mut Vec<IndexingLine>,
+    indexing_code: &mut [IndexingLine],
     offset: usize,
 ) {
     let mut index = 0;
@@ -843,10 +843,10 @@ pub(crate) fn remove_structure_index(
             IndexingLine::Indexing(IndexingInstruction::SwitchOnStructure(ref mut structures)) => {
                 structures_index = index;
 
-                match structures.get(&(name.clone(), arity)).cloned() {
+                match structures.get(&(name, arity)).cloned() {
                     Some(IndexingCodePtr::DynamicExternal(_))
                     | Some(IndexingCodePtr::External(_)) => {
-                        structures.remove(&(name.clone(), arity));
+                        structures.remove(&(name, arity));
                         break;
                     }
                     Some(IndexingCodePtr::Internal(o)) => {
@@ -877,7 +877,7 @@ pub(crate) fn remove_structure_index(
                             IndexingLine::Indexing(IndexingInstruction::SwitchOnStructure(
                                 ref mut structures,
                             )) => {
-                                structures.insert((name.clone(), arity), ext);
+                                structures.insert((name, arity), ext);
                             }
                             _ => {
                                 unreachable!()
@@ -908,7 +908,7 @@ pub(crate) fn remove_structure_index(
                             IndexingLine::Indexing(IndexingInstruction::SwitchOnStructure(
                                 ref mut structures,
                             )) => {
-                                structures.insert((name.clone(), arity), ext);
+                                structures.insert((name, arity), ext);
                             }
                             _ => {
                                 unreachable!()
@@ -948,7 +948,7 @@ pub(crate) fn remove_structure_index(
     }
 }
 
-pub(crate) fn remove_list_index(indexing_code: &mut Vec<IndexingLine>, offset: usize) {
+pub(crate) fn remove_list_index(indexing_code: &mut [IndexingLine], offset: usize) {
     let mut index = 0;
 
     match &mut indexing_code[index] {
@@ -1028,7 +1028,7 @@ pub(crate) fn remove_list_index(indexing_code: &mut Vec<IndexingLine>, offset: u
 
 pub(crate) fn remove_index(
     opt_arg_index_key: &OptArgIndexKey,
-    indexing_code: &mut Vec<IndexingLine>,
+    indexing_code: &mut [IndexingLine],
     clause_loc: usize,
 ) {
     match opt_arg_index_key {
@@ -1049,46 +1049,50 @@ pub(crate) fn remove_index(
 
 #[inline]
 fn cap_choice_seq(prelude: &mut [IndexedChoiceInstruction]) {
-    prelude.first_mut().map(|instr| {
+    if let Some(instr) = prelude.first_mut() {
         *instr = IndexedChoiceInstruction::Try(instr.offset());
-    });
+    }
 
     cap_choice_seq_with_trust(prelude);
 }
 
 #[inline]
 fn cap_choice_seq_with_trust(prelude: &mut [IndexedChoiceInstruction]) {
-    prelude.last_mut().map(|instr| match instr {
-        IndexedChoiceInstruction::Retry(i) => {
-            *instr = IndexedChoiceInstruction::Trust(*i);
+    if let Some(instr) = prelude.last_mut() {
+        match instr {
+            IndexedChoiceInstruction::Retry(i) => {
+                *instr = IndexedChoiceInstruction::Trust(*i);
+            }
+            IndexedChoiceInstruction::DefaultRetry(i) => {
+                *instr = IndexedChoiceInstruction::DefaultTrust(*i);
+            }
+            _ => {}
         }
-        IndexedChoiceInstruction::DefaultRetry(i) => {
-            *instr = IndexedChoiceInstruction::DefaultTrust(*i);
-        }
-        _ => {}
-    });
+    }
 }
 
 #[inline]
 fn uncap_choice_seq_with_trust(prelude: &mut [IndexedChoiceInstruction]) {
-    prelude.last_mut().map(|instr| match instr {
-        IndexedChoiceInstruction::Trust(i) => {
-            *instr = IndexedChoiceInstruction::Retry(*i);
+    if let Some(instr) = prelude.last_mut() {
+        match instr {
+            IndexedChoiceInstruction::Trust(i) => {
+                *instr = IndexedChoiceInstruction::Retry(*i);
+            }
+            IndexedChoiceInstruction::DefaultTrust(i) => {
+                *instr = IndexedChoiceInstruction::DefaultRetry(*i);
+            }
+            _ => {}
         }
-        IndexedChoiceInstruction::DefaultTrust(i) => {
-            *instr = IndexedChoiceInstruction::DefaultRetry(*i);
-        }
-        _ => {}
-    });
+    }
 }
 
 #[inline]
 fn uncap_choice_seq_with_try(prelude: &mut [IndexedChoiceInstruction]) {
-    prelude.first_mut().map(|instr| {
+    if let Some(instr) = prelude.first_mut() {
         if let IndexedChoiceInstruction::Try(i) = instr {
             *instr = IndexedChoiceInstruction::Retry(*i);
         }
-    });
+    }
 }
 
 pub(crate) fn constant_key_alternatives(
@@ -1105,7 +1109,7 @@ pub(crate) fn constant_key_alternatives(
             }
         }
         Literal::Char(c) => {
-            let atom = AtomTable::build_with(&atom_tbl, &c.to_string());
+            let atom = AtomTable::build_with(atom_tbl, &c.to_string());
             constants.push(Literal::Atom(atom));
         }
         /*
@@ -1124,9 +1128,11 @@ pub(crate) fn constant_key_alternatives(
         Literal::Integer(ref n) => {
             let result = (&**n).try_into();
             if let Ok(value) = result {
-                Fixnum::build_with_checked(value).map(|n| {
-                    constants.push(Literal::Fixnum(n));
-                }).unwrap();
+                Fixnum::build_with_checked(value)
+                    .map(|n| {
+                        constants.push(Literal::Fixnum(n));
+                    })
+                    .unwrap();
             }
         }
         _ => {}
@@ -1245,10 +1251,8 @@ impl Indexer for StaticCodeIndices {
                 index_locs.insert(key, IndexingCodePtr::Internal(prelude.len() + 1));
                 cap_choice_seq_with_trust(code.make_contiguous());
                 prelude.push_back(IndexingLine::from(code));
-            } else {
-                code.front().map(|i| {
-                    index_locs.insert(key, IndexingCodePtr::External(i.offset()));
-                });
+            } else if let Some(i) = code.front() {
+                index_locs.insert(key, IndexingCodePtr::External(i.offset()));
             }
         }
 
@@ -1285,7 +1289,7 @@ impl Indexer for StaticCodeIndices {
     ) -> IndexingCodePtr {
         if lists.len() > 1 {
             cap_choice_seq_with_trust(lists.make_contiguous());
-            let lists = mem::replace(lists, VecDeque::new());
+            let lists = std::mem::take(lists);
             prelude.push_back(IndexingLine::from(lists));
 
             IndexingCodePtr::Internal(1)
@@ -1361,10 +1365,8 @@ impl Indexer for DynamicCodeIndices {
                 prelude.push_back(IndexingLine::DynamicIndexedChoice(
                     code.into_iter().collect(),
                 ));
-            } else {
-                code.front().map(|i| {
-                    index_locs.insert(key, IndexingCodePtr::DynamicExternal(*i));
-                });
+            } else if let Some(i) = code.front() {
+                index_locs.insert(key, IndexingCodePtr::DynamicExternal(*i));
             }
         }
 
@@ -1400,7 +1402,7 @@ impl Indexer for DynamicCodeIndices {
         prelude: &mut VecDeque<IndexingLine>,
     ) -> IndexingCodePtr {
         if lists.len() > 1 {
-            let lists = mem::replace(lists, VecDeque::new());
+            let lists = std::mem::take(lists);
             prelude.push_back(IndexingLine::DynamicIndexedChoice(
                 lists.into_iter().collect(),
             ));
@@ -1458,11 +1460,7 @@ impl<I: Indexer> CodeOffsets<I> {
         index: usize,
     ) -> Vec<Literal> {
         let overlapping_constants = constant_key_alternatives(constant, atom_tbl);
-        let code = self
-            .indices
-            .constants()
-            .entry(constant)
-            .or_insert(VecDeque::new());
+        let code = self.indices.constants().entry(constant).or_default();
 
         let is_initial_index = code.is_empty();
         code.push_back(I::compute_index(
@@ -1472,11 +1470,7 @@ impl<I: Indexer> CodeOffsets<I> {
         ));
 
         for constant in &overlapping_constants {
-            let code = self
-                .indices
-                .constants()
-                .entry(*constant)
-                .or_insert(VecDeque::new());
+            let code = self.indices.constants().entry(*constant).or_default();
 
             let is_initial_index = code.is_empty();
             let index = I::compute_index(is_initial_index, index, self.non_counted_bt);
@@ -1488,11 +1482,7 @@ impl<I: Indexer> CodeOffsets<I> {
     }
 
     fn index_structure(&mut self, name: Atom, arity: usize, index: usize) -> usize {
-        let code = self
-            .indices
-            .structures()
-            .entry((name.clone(), arity))
-            .or_insert(VecDeque::new());
+        let code = self.indices.structures().entry((name, arity)).or_default();
 
         let code_len = code.len();
         let is_initial_index = code.is_empty();
@@ -1523,7 +1513,7 @@ impl<I: Indexer> CodeOffsets<I> {
             }
             &Term::Clause(_, name, ref terms) => {
                 clause_index_info.opt_arg_index_key =
-                    OptArgIndexKey::Structure(self.optimal_index, 0, name.clone(), terms.len());
+                    OptArgIndexKey::Structure(self.optimal_index, 0, name, terms.len());
 
                 self.index_structure(name, terms.len(), index);
             }
@@ -1575,20 +1565,14 @@ impl<I: Indexer> CodeOffsets<I> {
             &mut prelude,
         );
 
-        match &mut str_loc {
-            IndexingCodePtr::Internal(ref mut i) => {
-                *i += emitted_switch_on_constant as usize; // con_loc.is_internal() as usize;
-            }
-            _ => {}
-        };
+        if let IndexingCodePtr::Internal(ref mut i) = &mut str_loc {
+            *i += emitted_switch_on_constant as usize; // con_loc.is_internal() as usize;
+        }
 
-        match &mut lst_loc {
-            IndexingCodePtr::Internal(ref mut i) => {
-                *i += emitted_switch_on_constant as usize; // con_loc.is_internal() as usize;
-                *i += emitted_switch_on_structure as usize; // str_loc.is_internal() as usize;
-            }
-            _ => {}
-        };
+        if let IndexingCodePtr::Internal(ref mut i) = &mut lst_loc {
+            *i += emitted_switch_on_constant as usize; // con_loc.is_internal() as usize;
+            *i += emitted_switch_on_structure as usize; // str_loc.is_internal() as usize;
+        }
 
         let var_offset = 1 + skip_stub_try_me_else as usize;
 

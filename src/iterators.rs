@@ -8,6 +8,7 @@ use std::collections::VecDeque;
 use std::iter::*;
 use std::vec::Vec;
 
+#[allow(clippy::borrowed_box)]
 #[derive(Debug, Clone)]
 pub(crate) enum TermRef<'a> {
     AnonVar(Level),
@@ -35,6 +36,7 @@ impl<'a> TermRef<'a> {
 }
 */
 
+#[allow(clippy::borrowed_box)]
 #[derive(Debug)]
 pub(crate) enum TermIterState<'a> {
     AnonVar(Level),
@@ -113,11 +115,11 @@ impl<'a> QueryIterator<'a> {
 
     fn extend_state(&mut self, lvl: Level, term: &'a QueryTerm) {
         match term {
-            &QueryTerm::Clause(ref cell, ClauseType::CallN(_), ref terms, _) => {
+            QueryTerm::Clause(ref cell, ClauseType::CallN(_), ref terms, _) => {
                 self.state_stack
                     .push(TermIterState::Clause(lvl, 1, cell, atom!("$call"), terms));
             }
-            &QueryTerm::Clause(ref cell, ref ct, ref terms, _) => {
+            QueryTerm::Clause(ref cell, ref ct, ref terms, _) => {
                 self.state_stack
                     .push(TermIterState::Clause(lvl, 0, cell, ct.name(), terms));
             }
@@ -214,7 +216,7 @@ impl<'a> FactIterator<'a> {
             .push_back(TermIterState::subterm_to_state(lvl, term));
     }
 
-    pub(crate) fn from_rule_head_clause(terms: &'a Vec<Term>) -> Self {
+    pub(crate) fn from_rule_head_clause(terms: &'a [Term]) -> Self {
         let state_queue = terms
             .iter()
             .map(|bt| TermIterState::subterm_to_state(Level::Shallow, bt))
@@ -312,14 +314,14 @@ impl<'a> Iterator for FactIterator<'a> {
     }
 }
 
-pub(crate) fn post_order_iter<'a>(term: &'a Term) -> QueryIterator<'a> {
+pub(crate) fn post_order_iter(term: &'_ Term) -> QueryIterator {
     QueryIterator::from_term(term)
 }
 
-pub(crate) fn breadth_first_iter<'a>(
-    term: &'a Term,
+pub(crate) fn breadth_first_iter(
+    term: &'_ Term,
     iterable_root: RootIterationPolicy,
-) -> FactIterator<'a> {
+) -> FactIterator {
     FactIterator::new(term, iterable_root)
 }
 
@@ -343,7 +345,7 @@ pub(crate) struct ClauseIterator<'a> {
     remaining_chunks_on_stack: usize,
 }
 
-fn state_from_chunked_terms<'a>(chunk_vec: &'a VecDeque<ChunkedTerms>) -> ClauseIteratorState<'a> {
+fn state_from_chunked_terms(chunk_vec: &'_ VecDeque<ChunkedTerms>) -> ClauseIteratorState {
     if chunk_vec.len() == 1 {
         if let Some(ChunkedTerms::Branch(ref branches)) = chunk_vec.front() {
             return ClauseIteratorState::RemainingBranches(branches, 0);
@@ -422,7 +424,7 @@ impl<'a> Iterator for ClauseIterator<'a> {
                     if focus < branches.len() =>
                 {
                     self.state_stack
-                        .push(ClauseIteratorState::RemainingBranches(&branches, focus + 1));
+                        .push(ClauseIteratorState::RemainingBranches(branches, focus + 1));
                     let state = state_from_chunked_terms(&branches[focus]);
 
                     if let ClauseIteratorState::RemainingChunks(..) = &state {

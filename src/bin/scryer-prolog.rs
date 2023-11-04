@@ -1,6 +1,6 @@
 fn main() -> std::process::ExitCode {
-    use scryer_prolog::*;
     use scryer_prolog::atom_table::Atom;
+    use scryer_prolog::*;
     use std::sync::atomic::Ordering;
 
     #[cfg(feature = "repl")]

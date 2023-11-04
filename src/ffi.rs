@@ -28,7 +28,8 @@ use std::convert::TryFrom;
 use std::error::Error;
 use std::ffi::{c_void, CString};
 
-use libffi::low::{ffi_abi_FFI_DEFAULT_ABI, ffi_cif, ffi_type, prep_cif, type_tag, types, CodePtr};
+use libffi::low::type_tag::STRUCT;
+use libffi::low::{ffi_abi_FFI_DEFAULT_ABI, ffi_cif, ffi_type, prep_cif, types, CodePtr};
 use libloading::{Library, Symbol};
 
 pub struct FunctionDefinition {
@@ -69,11 +70,13 @@ impl ForeignFunctionTable {
     }
 
     pub fn define_struct(&mut self, name: &str, atom_fields: Vec<Atom>) {
-        let mut fields: Vec<_> = atom_fields.iter().map(|x| self.map_type_ffi(&x)).collect();
+        let mut fields: Vec<_> = atom_fields.iter().map(|x| self.map_type_ffi(x)).collect();
         fields.push(std::ptr::null_mut::<ffi_type>());
-        let mut struct_type: ffi_type = Default::default();
-        struct_type.type_ = type_tag::STRUCT;
-        struct_type.elements = fields.as_mut_ptr();
+        let struct_type = ffi_type {
+            type_: STRUCT,
+            elements: fields.as_mut_ptr(),
+            ..Default::default()
+        };
         self.structs.insert(
             name.to_string(),
             StructImpl {
@@ -121,11 +124,7 @@ impl ForeignFunctionTable {
                 let symbol_name: CString = CString::new(function.name.clone())?;
                 let code_ptr: Symbol<*mut c_void> =
                     library.get(&symbol_name.into_bytes_with_nul())?;
-                let mut args: Vec<_> = function
-                    .args
-                    .iter()
-                    .map(|x| self.map_type_ffi(&x))
-                    .collect();
+                let mut args: Vec<_> = function.args.iter().map(|x| self.map_type_ffi(x)).collect();
                 let mut cif: ffi_cif = Default::default();
                 prep_cif(
                     &mut cif,
@@ -163,7 +162,7 @@ impl ForeignFunctionTable {
 
     fn build_pointer_args(
         args: &mut Vec<Value>,
-        type_args: &Vec<*mut ffi_type>,
+        type_args: &[*mut ffi_type],
         structs_table: &mut HashMap<String, StructImpl>,
     ) -> Result<PointerArgs, FFIError> {
         let mut pointers = Vec::with_capacity(args.len());
@@ -237,6 +236,7 @@ impl ForeignFunctionTable {
                         let ptr = alloc(layout) as *mut c_void;
                         let mut field_ptr = ptr;
 
+                        #[allow(clippy::needless_range_loop)]
                         for i in 0..(struct_type.fields.len() - 1) {
                             macro_rules! try_write_int {
                                 ($type:ty) => {{
@@ -283,7 +283,7 @@ impl ForeignFunctionTable {
 
                                     std::ptr::copy(
                                         &*struct_ptr as *const _ as *const c_void,
-                                        field_ptr as *mut c_void,
+                                        field_ptr,
                                         struct_size,
                                     );
                                     field_ptr = field_ptr.add(struct_size);
@@ -293,12 +293,13 @@ impl ForeignFunctionTable {
                                 }
                             }
                         }
-                        return Ok((Box::from_raw(ptr), size, align));
+                        #[allow(clippy::from_raw_with_void_ptr)]
+                        Ok((Box::from_raw(ptr), size, align))
                     } else {
-                        return Err(FFIError::InvalidStructName);
+                        Err(FFIError::InvalidStructName)
                     }
                 }
-                _ => return Err(FFIError::ValueCast),
+                _ => Err(FFIError::ValueCast),
             }
         }
     }
@@ -336,7 +337,7 @@ impl ForeignFunctionTable {
                         &mut function_impl.cif,
                         Some(*function_impl.code_ptr.as_safe_fun()),
                         &mut *n as *mut _ as *mut c_void,
-                        pointer_args.pointers.as_mut_ptr() as *mut *mut c_void,
+                        pointer_args.pointers.as_mut_ptr(),
                     );
                     Ok(Value::Int(
                         i64::try_from(*n).map_err(|_| FFIError::ValueDontFit)?,
@@ -350,7 +351,7 @@ impl ForeignFunctionTable {
                         &mut function_impl.cif,
                         Some(*function_impl.code_ptr.as_safe_fun()),
                         &mut *n as *mut _ as *mut c_void,
-                        pointer_args.pointers.as_mut_ptr() as *mut *mut c_void,
+                        pointer_args.pointers.as_mut_ptr(),
                     );
                     Ok(Value::Float((*n).into()))
                 }
@@ -360,7 +361,7 @@ impl ForeignFunctionTable {
                         &mut function_impl.cif,
                         Some(*function_impl.code_ptr.as_safe_fun()),
                         &mut *n as *mut _ as *mut c_void,
-                        pointer_args.pointers.as_mut_ptr() as *mut *mut c_void,
+                        pointer_args.pointers.as_mut_ptr(),
                     );
                     Ok(Value::Float(*n))
                 }
@@ -380,10 +381,11 @@ impl ForeignFunctionTable {
                     libffi::raw::ffi_call(
                         &mut function_impl.cif,
                         Some(*function_impl.code_ptr.as_safe_fun()),
-                        &mut *ptr as *mut _ as *mut c_void,
-                        pointer_args.pointers.as_mut_ptr() as *mut *mut c_void,
+                        &mut *ptr as *mut _,
+                        pointer_args.pointers.as_mut_ptr(),
                     );
                     let struct_val = self.read_struct(ptr, name, struct_type);
+                    #[allow(clippy::from_raw_with_void_ptr)]
                     drop(Box::from_raw(ptr));
                     struct_val
                 }
@@ -441,7 +443,7 @@ impl ForeignFunctionTable {
                             .ok_or(FFIError::StructNotFound)?;
                         field_ptr = field_ptr
                             .add(field_ptr.align_offset(struct_type.ffi_type.alignment as usize));
-                        let struct_val = self.read_struct(field_ptr, &*substruct, struct_type);
+                        let struct_val = self.read_struct(field_ptr, &substruct, struct_type);
                         returns.push(struct_val?);
                         field_ptr = field_ptr.add(struct_type.ffi_type.size);
                     }

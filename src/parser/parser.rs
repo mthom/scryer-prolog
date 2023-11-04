@@ -464,7 +464,12 @@ impl<'a, R: CharRead> Parser<'a, R> {
             Token::End => TokenType::End,
         };
 
-        self.stack.push(TokenDesc { tt, priority, spec, unfold_bounds: 0, });
+        self.stack.push(TokenDesc {
+            tt,
+            priority,
+            spec,
+            unfold_bounds: 0,
+        });
     }
 
     fn reduce_op(&mut self, priority: usize) {
@@ -472,10 +477,9 @@ impl<'a, R: CharRead> Parser<'a, R> {
             if let Some(desc1) = self.stack.pop() {
                 if let Some(desc2) = self.stack.pop() {
                     if let Some(desc3) = self.stack.pop() {
-                        if is_xfx!(desc2.spec) && affirm_xfx(priority, desc2, desc3, desc1) {
-                            self.push_binary_op(desc2, LTERM);
-                            continue;
-                        } else if is_yfx!(desc2.spec) && affirm_yfx(priority, desc2, desc3, desc1) {
+                        if is_xfx!(desc2.spec) && affirm_xfx(priority, desc2, desc3, desc1)
+                            || is_yfx!(desc2.spec) && affirm_yfx(priority, desc2, desc3, desc1)
+                        {
                             self.push_binary_op(desc2, LTERM);
                             continue;
                         } else if is_xfy!(desc2.spec) && affirm_xfy(priority, desc2, desc3, desc1) {
@@ -555,10 +559,12 @@ impl<'a, R: CharRead> Parser<'a, R> {
         if self.stack.len() > 2 * arity {
             let idx = self.stack.len() - 2 * arity - 1;
 
-            if is_infix!(self.stack[idx].spec) && idx > 0 {
-                if !is_op!(self.stack[idx - 1].spec) && !self.stack[idx - 1].tt.is_sep() {
-                    return false;
-                }
+            if is_infix!(self.stack[idx].spec)
+                && idx > 0
+                && !is_op!(self.stack[idx - 1].spec)
+                && !self.stack[idx - 1].tt.is_sep()
+            {
+                return false;
             }
         } else {
             return false;
@@ -571,59 +577,57 @@ impl<'a, R: CharRead> Parser<'a, R> {
         let stack_len = self.stack.len() - 2 * arity - 1;
         let idx = self.terms.len() - arity;
 
-        if TokenType::Term == self.stack[stack_len].tt {
-            if atomize_term(&self.lexer.machine_st.atom_tbl, &self.terms[idx - 1]).is_some() {
-                self.stack.truncate(stack_len + 1);
+        if TokenType::Term == self.stack[stack_len].tt
+            && atomize_term(&self.lexer.machine_st.atom_tbl, &self.terms[idx - 1]).is_some()
+        {
+            self.stack.truncate(stack_len + 1);
 
-                let mut subterms: Vec<_> = self.terms.drain(idx..).collect();
+            let mut subterms: Vec<_> = self.terms.drain(idx..).collect();
 
-                if let Some(name) = self
-                    .terms
-                    .pop()
-                    .and_then(|t| atomize_term(&self.lexer.machine_st.atom_tbl, &t))
-                {
-                    // reduce the '.' functor to a cons cell if it applies.
-                    if name == atom!(".") && subterms.len() == 2 {
-                        let tail = subterms.pop().unwrap();
-                        let head = subterms.pop().unwrap();
+            if let Some(name) = self
+                .terms
+                .pop()
+                .and_then(|t| atomize_term(&self.lexer.machine_st.atom_tbl, &t))
+            {
+                // reduce the '.' functor to a cons cell if it applies.
+                if name == atom!(".") && subterms.len() == 2 {
+                    let tail = subterms.pop().unwrap();
+                    let head = subterms.pop().unwrap();
 
-                        self.terms.push(match as_partial_string(head, tail) {
-                            Ok((string_buf, Some(tail))) => {
-                                Term::PartialString(Cell::default(), string_buf, tail)
-                            }
-                            Ok((string_buf, None)) => {
-                                let atom = AtomTable::build_with(
-                                    &self.lexer.machine_st.atom_tbl,
-                                    &string_buf,
-                                );
-                                Term::CompleteString(Cell::default(), atom)
-                            }
-                            Err(term) => term,
-                        });
-                    } else {
-                        self.terms
-                            .push(Term::Clause(Cell::default(), name, subterms));
-                    }
-
-                    if let Some(&mut TokenDesc {
-                        ref mut tt,
-                        ref mut priority,
-                        ref mut spec,
-                        ref mut unfold_bounds,
-                    }) = self.stack.last_mut()
-                    {
-                        if *spec == BTERM {
-                            return false;
+                    self.terms.push(match as_partial_string(head, tail) {
+                        Ok((string_buf, Some(tail))) => {
+                            Term::PartialString(Cell::default(), string_buf, tail)
                         }
+                        Ok((string_buf, None)) => {
+                            let atom =
+                                AtomTable::build_with(&self.lexer.machine_st.atom_tbl, &string_buf);
+                            Term::CompleteString(Cell::default(), atom)
+                        }
+                        Err(term) => term,
+                    });
+                } else {
+                    self.terms
+                        .push(Term::Clause(Cell::default(), name, subterms));
+                }
 
-                        *tt = TokenType::Term;
-                        *priority = 0;
-                        *spec = TERM;
-                        *unfold_bounds = 0;
+                if let Some(&mut TokenDesc {
+                    ref mut tt,
+                    ref mut priority,
+                    ref mut spec,
+                    ref mut unfold_bounds,
+                }) = self.stack.last_mut()
+                {
+                    if *spec == BTERM {
+                        return false;
                     }
 
-                    return true;
+                    *tt = TokenType::Term;
+                    *priority = 0;
+                    *spec = TERM;
+                    *unfold_bounds = 0;
                 }
+
+                return true;
             }
         }
 
@@ -642,34 +646,31 @@ impl<'a, R: CharRead> Parser<'a, R> {
                 /* '|' is a head-tail separator here, not
                  * an operator, so expand the
                  * terms it compacted out again. */
-                match (term.name(), term.arity()) {
-                    (Some(name), 2) if name == atom!(",") => {
-                        let terms = if op_desc.unfold_bounds == 0 {
-                            unfold_by_str(term, atom!(","))
-                        } else {
-                            let mut terms = vec![];
+                if let (Some(atom!(",")), 2) = (term.name(), term.arity()) {
+                    let terms = if op_desc.unfold_bounds == 0 {
+                        unfold_by_str(term, atom!(","))
+                    } else {
+                        let mut terms = vec![];
 
-                            while let Some((fst, snd)) = unfold_by_str_once(&mut term, atom!(",")) {
-                                terms.push(fst);
-                                term = snd;
+                        while let Some((fst, snd)) = unfold_by_str_once(&mut term, atom!(",")) {
+                            terms.push(fst);
+                            term = snd;
 
-                                op_desc.unfold_bounds -= 2;
+                            op_desc.unfold_bounds -= 2;
 
-                                if op_desc.unfold_bounds == 0 {
-                                    break;
-                                }
+                            if op_desc.unfold_bounds == 0 {
+                                break;
                             }
+                        }
 
-                            terms.push(term);
-                            terms
-                        };
+                        terms.push(term);
+                        terms
+                    };
 
-                        let arity = terms.len() - 1;
+                    let arity = terms.len() - 1;
 
-                        self.terms.extend(terms.into_iter());
-                        return arity;
-                    }
-                    _ => {}
+                    self.terms.extend(terms);
+                    return arity;
                 }
             }
 
@@ -692,18 +693,15 @@ impl<'a, R: CharRead> Parser<'a, R> {
                 } else {
                     return None;
                 }
-            } else {
-                if desc.tt == TokenType::HeadTailSeparator {
-                    if arity == 1 {
-                        continue;
-                    }
-
-                    return None;
-                } else if desc.tt == TokenType::OpenList {
-                    return Some(arity);
-                } else if desc.tt != TokenType::Comma {
-                    return None;
+            } else if desc.tt == TokenType::HeadTailSeparator {
+                if arity == 1 {
+                    continue;
                 }
+                return None;
+            } else if desc.tt == TokenType::OpenList {
+                return Some(arity);
+            } else if desc.tt != TokenType::Comma {
+                return None;
             }
         }
 
@@ -882,7 +880,11 @@ impl<'a, R: CharRead> Parser<'a, R> {
                         .push(Term::Literal(Cell::default(), Literal::Atom(atom)));
                 }
 
-                self.stack[idx].spec = if self.stack[idx].priority > 0 { TERM } else { BTERM };
+                self.stack[idx].spec = if self.stack[idx].priority > 0 {
+                    TERM
+                } else {
+                    BTERM
+                };
                 self.stack[idx].tt = TokenType::Term;
                 self.stack[idx].priority = 0;
 
@@ -1018,13 +1020,11 @@ impl<'a, R: CharRead> Parser<'a, R> {
             Token::Open => self.shift(Token::Open, 1300, DELIMITER),
             Token::OpenCT => self.shift(Token::OpenCT, 1300, DELIMITER),
             Token::Close => {
-                if !self.reduce_term() {
-                    if !self.reduce_brackets() {
-                        return Err(ParserError::IncompleteReduction(
-                            self.lexer.line_num,
-                            self.lexer.col_num,
-                        ));
-                    }
+                if !self.reduce_term() && !self.reduce_brackets() {
+                    return Err(ParserError::IncompleteReduction(
+                        self.lexer.line_num,
+                        self.lexer.col_num,
+                    ));
                 }
             }
             Token::OpenList => self.shift(Token::OpenList, 1300, DELIMITER),

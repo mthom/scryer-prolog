@@ -413,7 +413,7 @@ impl MachineState {
     }
 
     pub(crate) fn increment_call_count(&mut self) -> bool {
-        if self.cwil.inference_limit_exceeded || self.ball.stub.len() > 0 {
+        if self.cwil.inference_limit_exceeded || !self.ball.stub.is_empty() {
             return true;
         }
 
@@ -590,7 +590,9 @@ impl MachineState {
 
         let mut singleton_var_set: IndexMap<Ref, bool> = IndexMap::new();
 
-        for cell in stackful_preorder_iter::<NonListElider>(&mut self.heap, &mut self.stack, heap_loc) {
+        for cell in
+            stackful_preorder_iter::<NonListElider>(&mut self.heap, &mut self.stack, heap_loc)
+        {
             let cell = unmark_cell_bits!(cell);
 
             if let Some(var) = cell.as_var() {
@@ -644,10 +646,8 @@ impl MachineState {
     ) -> Result<OnEOF, MachineStub> {
         self.eof_action(self.registers[2], stream, atom!("read_term"), 3)?;
 
-        if stream.options().eof_action() == EOFAction::Reset {
-            if self.fail == false {
-                return Ok(OnEOF::Continue);
-            }
+        if stream.options().eof_action() == EOFAction::Reset && !self.fail {
+            return Ok(OnEOF::Continue);
         }
 
         Ok(OnEOF::Return)
@@ -674,10 +674,10 @@ impl MachineState {
 
         if let Stream::Byte(_) = stream {
             return self.read_term(
-                stream, 
-                indices, 
-                MachineState::read_term_from_user_input_eof_handler
-            )
+                stream,
+                indices,
+                MachineState::read_term_from_user_input_eof_handler,
+            );
         }
 
         unreachable!("Stream must be a Stream::Readline(_)")
@@ -691,10 +691,8 @@ impl MachineState {
         } else if stream.past_end_of_stream() {
             self.eof_action(self.registers[2], stream, atom!("read_term"), 3)?;
 
-            if stream.options().eof_action() == EOFAction::Reset {
-                if self.fail == false {
-                    return Ok(OnEOF::Continue);
-                }
+            if stream.options().eof_action() == EOFAction::Reset && !self.fail {
+                return Ok(OnEOF::Continue);
             }
         }
 
@@ -716,11 +714,7 @@ impl MachineState {
         )?;
 
         if stream.past_end_of_stream() {
-            if EOFAction::Reset != stream.options().eof_action() {
-                return Ok(());
-            } else if self.fail {
-                return Ok(());
-            }
+            return Ok(());
         }
 
         loop {
@@ -970,6 +964,7 @@ impl MachineState {
     }
 }
 
+#[allow(clippy::upper_case_acronyms)]
 #[derive(Debug)]
 pub(crate) struct CWIL {
     count: Integer,

@@ -247,11 +247,7 @@ impl GenContext {
 
     #[inline]
     pub fn is_last(self) -> bool {
-        if let GenContext::Last(_) = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, GenContext::Last(_))
     }
 }
 
@@ -303,24 +299,16 @@ impl OpDesc {
 // name and fixity -> operator type and precedence.
 pub type OpDir = IndexMap<(Atom, Fixity), OpDesc, FxBuildHasher>;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct MachineFlags {
     pub double_quotes: DoubleQuotes,
     pub unknown: Unknown,
 }
 
-impl Default for MachineFlags {
-    fn default() -> Self {
-        MachineFlags {
-            double_quotes: DoubleQuotes::default(),
-            unknown: Unknown::default(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub enum DoubleQuotes {
     Atom,
+    #[default]
     Chars,
     Codes,
 }
@@ -336,12 +324,6 @@ impl DoubleQuotes {
 
     pub fn is_codes(self) -> bool {
         matches!(self, DoubleQuotes::Codes)
-    }
-}
-
-impl Default for DoubleQuotes {
-    fn default() -> Self {
-        DoubleQuotes::Chars
     }
 }
 
@@ -505,7 +487,7 @@ impl<'a, 'b> CompositeOpDir<'a, 'b> {
 
     #[inline]
     pub(crate) fn get(&self, name: Atom, fixity: Fixity) -> Option<OpDesc> {
-        let entry = if let Some(ref primary_op_dir) = &self.primary_op_dir {
+        let entry = if let Some(primary_op_dir) = &self.primary_op_dir {
             primary_op_dir.get(&(name, fixity))
         } else {
             None
@@ -567,7 +549,7 @@ impl Fixnum {
         const UPPER_BOUND: i64 = (1 << 55) - 1;
         const LOWER_BOUND: i64 = -(1 << 55);
 
-        if LOWER_BOUND <= num && num <= UPPER_BOUND {
+        if (LOWER_BOUND..=UPPER_BOUND).contains(&num) {
             Ok(Fixnum::new()
                 .with_m(false)
                 .with_f(false)
@@ -582,7 +564,7 @@ impl Fixnum {
     pub fn get_num(self) -> i64 {
         let n = self.num() as i64;
         let (n, overflowed) = (n << 8).overflowing_shr(8);
-        debug_assert_eq!(overflowed, false);
+        debug_assert!(!overflowed);
         n
     }
 }
@@ -730,11 +712,12 @@ impl Var {
     #[inline(always)]
     pub fn as_str(&self) -> Option<&str> {
         match self {
-            Var::Named(value) => Some(&value),
+            Var::Named(value) => Some(value),
             _ => None,
         }
     }
 
+    #[allow(clippy::inherent_to_string)]
     #[inline(always)]
     pub fn to_string(&self) -> String {
         match self {
@@ -800,10 +783,8 @@ impl Term {
 
 #[inline]
 pub fn source_arity(terms: &[Term]) -> usize {
-    if let Some(last_arg) = terms.last() {
-        if let Term::Literal(_, Literal::CodeIndex(_)) = last_arg {
-            return terms.len() - 1;
-        }
+    if let Some(Term::Literal(_, Literal::CodeIndex(_))) = terms.last() {
+        return terms.len() - 1;
     }
 
     terms.len()
@@ -811,10 +792,8 @@ pub fn source_arity(terms: &[Term]) -> usize {
 
 pub(crate) fn unfold_by_str_once(term: &mut Term, s: Atom) -> Option<(Term, Term)> {
     if let Term::Clause(_, ref name, ref mut subterms) = term {
-        if let Some(last_arg) = subterms.last() {
-            if let Term::Literal(_, Literal::CodeIndex(_)) = last_arg {
-                subterms.pop();
-            }
+        if let Some(Term::Literal(_, Literal::CodeIndex(_))) = subterms.last() {
+            subterms.pop();
         }
 
         if name == &s && subterms.len() == 2 {

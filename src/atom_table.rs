@@ -186,7 +186,7 @@ impl Atom {
             unsafe {
                 AtomTableRef::try_map(atom_table.buf(), |buf| {
                     (buf as *const u8)
-                        .offset(((self.index as usize) - (STRINGS.len() << 3)) as isize)
+                        .add((self.index as usize) - (STRINGS.len() << 3))
                         .as_ref()
                 })
             }
@@ -209,9 +209,13 @@ impl Atom {
         }
     }
 
+    pub fn is_empty(self) -> bool {
+        self.len() == 0
+    }
+
     #[inline(always)]
     pub fn flat_index(self) -> u64 {
-        (self.index >> 3) as u64
+        self.index >> 3
     }
 
     pub fn as_char(self) -> Option<char> {
@@ -232,20 +236,17 @@ impl Atom {
     pub fn as_str(&self) -> AtomString<'static> {
         if self.is_static() {
             AtomString::Static(STRINGS[(self.index >> 3) as usize])
-        } else {
-            if let Some(ptr) = self.as_ptr() {
-                AtomString::Dynamic(AtomTableRef::map(ptr, |ptr| {
-                    let header =
-                        unsafe { ptr::read::<AtomHeader>(ptr as *const u8 as *const AtomHeader) };
-                    let len = header.len() as usize;
-                    let buf =
-                        unsafe { (ptr as *const u8).offset(mem::size_of::<AtomHeader>() as isize) };
+        } else if let Some(ptr) = self.as_ptr() {
+            AtomString::Dynamic(AtomTableRef::map(ptr, |ptr| {
+                let header =
+                    unsafe { ptr::read::<AtomHeader>(ptr as *const u8 as *const AtomHeader) };
+                let len = header.len() as usize;
+                let buf = unsafe { (ptr as *const u8).add(mem::size_of::<AtomHeader>()) };
 
-                    unsafe { str::from_utf8_unchecked(slice::from_raw_parts(buf, len)) }
-                }))
-            } else {
-                AtomString::Static(&STRINGS[(self.index >> 3) as usize])
-            }
+                unsafe { str::from_utf8_unchecked(slice::from_raw_parts(buf, len)) }
+            }))
+        } else {
+            AtomString::Static(STRINGS[(self.index >> 3) as usize])
         }
     }
 
@@ -258,14 +259,14 @@ impl Atom {
             return *self;
         };
 
-        AtomTable::build_with(&atom_tbl, &sub_str)
+        AtomTable::build_with(atom_tbl, sub_str)
     }
 }
 
 unsafe fn write_to_ptr(string: &str, ptr: *mut u8) {
     ptr::write(ptr as *mut _, AtomHeader::build_with(string.len() as u64));
     let str_ptr = (ptr as usize + mem::size_of::<AtomHeader>()) as *mut u8;
-    ptr::copy_nonoverlapping(string.as_ptr(), str_ptr as *mut u8, string.len());
+    ptr::copy_nonoverlapping(string.as_ptr(), str_ptr, string.len());
 }
 
 impl PartialOrd for Atom {

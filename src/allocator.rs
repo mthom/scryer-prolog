@@ -24,6 +24,7 @@ pub(crate) trait Allocator {
         code: &mut CodeDeque,
     );
 
+    #[allow(clippy::too_many_arguments)]
     fn mark_reserved_var<'a, Target: CompilationTarget<'a>>(
         &mut self,
         var_num: usize,
@@ -48,7 +49,7 @@ pub(crate) trait Allocator {
 
     fn reset(&mut self);
     fn reset_arg(&mut self, arg_num: usize);
-    fn reset_at_head(&mut self, args: &Vec<Term>);
+    fn reset_at_head(&mut self, args: &[Term]);
     fn reset_contents(&mut self);
 
     fn advance_arg(&mut self);

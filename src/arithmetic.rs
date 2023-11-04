@@ -268,7 +268,7 @@ impl<'a> ArithmeticEvaluator<'a> {
                 let ninterm = if a1.interm_or(0) == 0 {
                     self.incr_interm()
                 } else {
-                    self.interm.push(a1.clone());
+                    self.interm.push(a1);
                     a1.interm_or(0)
                 };
 
@@ -312,9 +312,8 @@ impl<'a> ArithmeticEvaluator<'a> {
         arg: usize,
     ) -> Result<ArithCont, ArithmeticError> {
         let mut code = CodeDeque::new();
-        let mut iter = src.iter()?;
 
-        while let Some(term_ref) = iter.next() {
+        for term_ref in src.iter()? {
             match term_ref? {
                 ArithTermRef::Literal(c) => push_literal(&mut self.interm, c)?,
                 ArithTermRef::Var(lvl, cell, name) => {
@@ -353,17 +352,17 @@ impl<'a> ArithmeticEvaluator<'a> {
 }
 
 // integer division rounding function -- 9.1.3.1.
-pub(crate) fn rnd_i<'a>(n: &'a Number, arena: &mut Arena) -> Number {
+pub(crate) fn rnd_i(n: &'_ Number, arena: &mut Arena) -> Number {
     match n {
         &Number::Integer(i) => {
             let result = (&*i).try_into();
-            if let Ok(value) = result{
+            if let Ok(value) = result {
                 fixnum!(Number, value, arena)
             } else {
                 *n
             }
         }
-        &Number::Fixnum(_) => *n,
+        Number::Fixnum(_) => *n,
         &Number::Float(f) => {
             let f = f.floor();
 
@@ -376,7 +375,7 @@ pub(crate) fn rnd_i<'a>(n: &'a Number, arena: &mut Arena) -> Number {
                 Number::Integer(arena_alloc!(Integer::from(f.0 as i64), arena))
             }
         }
-        &Number::Rational(ref r) => {
+        Number::Rational(ref r) => {
             let (_, floor) = (r.fract(), r.floor());
 
             if let Ok(value) = (&floor).try_into() {
@@ -399,9 +398,9 @@ impl From<Fixnum> for Integer {
 pub(crate) fn rnd_f(n: &Number) -> f64 {
     match n {
         &Number::Fixnum(n) => n.get_num() as f64,
-        &Number::Integer(ref n) => n.to_f64().value(),
+        Number::Integer(ref n) => n.to_f64().value(),
         &Number::Float(OrderedFloat(f)) => f,
-        &Number::Rational(ref r) => r.to_f64().value(),
+        Number::Rational(ref r) => r.to_f64().value(),
     }
 }
 
@@ -529,47 +528,51 @@ impl PartialEq for Number {
     fn eq(&self, rhs: &Self) -> bool {
         match (self, rhs) {
             (&Number::Fixnum(n1), &Number::Fixnum(n2)) => n1.eq(&n2),
-            (&Number::Fixnum(n1), &Number::Integer(ref n2)) => n1.get_num().num_eq(&**n2),
-            (&Number::Integer(ref n1), &Number::Fixnum(n2)) => (&**n1).num_eq(&n2.get_num()),
-            (&Number::Fixnum(n1), &Number::Rational(ref n2)) => Integer::from(n1.get_num()).num_eq(&**n2),
-            (&Number::Rational(ref n1), &Number::Fixnum(n2)) => (&**n1).num_eq(&Integer::from(n2.get_num())),
+            (&Number::Fixnum(n1), Number::Integer(ref n2)) => n1.get_num().num_eq(&**n2),
+            (Number::Integer(ref n1), &Number::Fixnum(n2)) => n1.num_eq(&n2.get_num()),
+            (&Number::Fixnum(n1), Number::Rational(ref n2)) => {
+                Integer::from(n1.get_num()).num_eq(&**n2)
+            }
+            (Number::Rational(ref n1), &Number::Fixnum(n2)) => {
+                n1.num_eq(&Integer::from(n2.get_num()))
+            }
             (&Number::Fixnum(n1), &Number::Float(n2)) => OrderedFloat(n1.get_num() as f64).eq(&n2),
             (&Number::Float(n1), &Number::Fixnum(n2)) => n1.eq(&OrderedFloat(n2.get_num() as f64)),
-            (&Number::Integer(ref n1), &Number::Integer(ref n2)) => n1.eq(n2),
-            (&Number::Integer(ref n1), Number::Float(n2)) => {
+            (Number::Integer(ref n1), Number::Integer(ref n2)) => n1.eq(n2),
+            (Number::Integer(ref n1), Number::Float(n2)) => {
                 OrderedFloat(n1.to_f64().value()).eq(n2)
             }
-            (&Number::Float(n1), &Number::Integer(ref n2)) => {
+            (&Number::Float(n1), Number::Integer(ref n2)) => {
                 n1.eq(&OrderedFloat(n2.to_f64().value()))
             }
-            (&Number::Integer(ref n1), &Number::Rational(ref n2)) => {
+            (Number::Integer(ref n1), Number::Rational(ref n2)) => {
                 #[cfg(feature = "num")]
                 {
                     &Rational::from(&**n1) == &**n2
                 }
                 #[cfg(not(feature = "num"))]
                 {
-                    (&**n1).num_eq(&**n2)
+                    n1.num_eq(&**n2)
                 }
             }
-            (&Number::Rational(ref n1), &Number::Integer(ref n2)) => {
+            (Number::Rational(ref n1), Number::Integer(ref n2)) => {
                 #[cfg(feature = "num")]
                 {
-                    &**n1 == &Rational::from(&**n2)
+                    n1 == &Rational::from(&**n2)
                 }
                 #[cfg(not(feature = "num"))]
                 {
-                    (&**n1).num_eq(&**n2)
+                    n1.num_eq(&**n2)
                 }
             }
-            (&Number::Rational(ref n1), &Number::Float(n2)) => {
+            (Number::Rational(ref n1), &Number::Float(n2)) => {
                 OrderedFloat(n1.to_f64().value()).eq(&n2)
             }
-            (&Number::Float(n1), &Number::Rational(ref n2)) => {
+            (&Number::Float(n1), Number::Rational(ref n2)) => {
                 n1.eq(&OrderedFloat(n2.to_f64().value()))
             }
             (&Number::Float(f1), &Number::Float(f2)) => f1.eq(&f2),
-            (&Number::Rational(ref r1), &Number::Rational(ref r2)) => r1.eq(&r2),
+            (Number::Rational(ref r1), Number::Rational(ref r2)) => r1.eq(r2),
         }
     }
 }
@@ -589,8 +592,8 @@ impl PartialOrd<usize> for Number {
                     (n as usize).partial_cmp(rhs)
                 }
             }
-            Number::Integer(n) => Some((&**n).num_cmp(rhs)),
-            Number::Rational(r) => Some((&**r).num_cmp(&Integer::from(*rhs))),
+            Number::Integer(n) => Some((n).num_cmp(rhs)),
+            Number::Rational(r) => Some((r).num_cmp(&Integer::from(*rhs))),
             Number::Float(f) => f.partial_cmp(&OrderedFloat(*rhs as f64)),
         }
     }
@@ -609,8 +612,8 @@ impl PartialEq<usize> for Number {
                     (n as usize).eq(rhs)
                 }
             }
-            Number::Integer(n) => (&**n).num_eq(rhs),
-            Number::Rational(r) => (&**r).num_eq(&Integer::from(*rhs)),
+            Number::Integer(n) => (n).num_eq(rhs),
+            Number::Rational(r) => (r).num_eq(&Integer::from(*rhs)),
             Number::Float(f) => f.eq(&OrderedFloat(*rhs as f64)),
         }
     }
@@ -626,17 +629,17 @@ impl Ord for Number {
     fn cmp(&self, rhs: &Number) -> Ordering {
         match (self, rhs) {
             (&Number::Fixnum(n1), &Number::Fixnum(n2)) => n1.get_num().cmp(&n2.get_num()),
-            (&Number::Fixnum(n1), Number::Integer(n2)) => Integer::from(n1.get_num()).cmp(&*n2),
-            (Number::Integer(n1), &Number::Fixnum(n2)) => (&**n1).cmp(&Integer::from(n2.get_num())),
-            (&Number::Fixnum(n1), Number::Rational(n2)) => Rational::from(n1.get_num()).cmp(&*n2),
+            (&Number::Fixnum(n1), Number::Integer(n2)) => Integer::from(n1.get_num()).cmp(n2),
+            (Number::Integer(n1), &Number::Fixnum(n2)) => (**n1).cmp(&Integer::from(n2.get_num())),
+            (&Number::Fixnum(n1), Number::Rational(n2)) => Rational::from(n1.get_num()).cmp(n2),
             (Number::Rational(n1), &Number::Fixnum(n2)) => {
-                (&**n1).cmp(&Rational::from(n2.get_num()))
+                (**n1).cmp(&Rational::from(n2.get_num()))
             }
             (&Number::Fixnum(n1), &Number::Float(n2)) => OrderedFloat(n1.get_num() as f64).cmp(&n2),
             (&Number::Float(n1), &Number::Fixnum(n2)) => n1.cmp(&OrderedFloat(n2.get_num() as f64)),
             (&Number::Integer(n1), &Number::Integer(n2)) => (*n1).cmp(&*n2),
             (&Number::Integer(n1), Number::Float(n2)) => OrderedFloat(n1.to_f64().value()).cmp(n2),
-            (&Number::Float(n1), &Number::Integer(ref n2)) => {
+            (&Number::Float(n1), Number::Integer(ref n2)) => {
                 n1.cmp(&OrderedFloat(n2.to_f64().value()))
             }
             (&Number::Integer(n1), &Number::Rational(n2)) => {
@@ -646,7 +649,7 @@ impl Ord for Number {
                 }
                 #[cfg(not(feature = "num"))]
                 {
-                    (&*n1).num_partial_cmp(&*n2).unwrap_or(Ordering::Less)
+                    (*n1).num_partial_cmp(&*n2).unwrap_or(Ordering::Less)
                 }
             }
             (&Number::Rational(n1), &Number::Integer(n2)) => {
@@ -656,7 +659,7 @@ impl Ord for Number {
                 }
                 #[cfg(not(feature = "num"))]
                 {
-                    (&*n1).num_partial_cmp(&*n2).unwrap_or(Ordering::Less)
+                    (*n1).num_partial_cmp(&*n2).unwrap_or(Ordering::Less)
                 }
             }
             (&Number::Rational(n1), &Number::Float(n2)) => {

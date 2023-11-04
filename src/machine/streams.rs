@@ -21,9 +21,9 @@ use std::fmt::Debug;
 use std::fs::{File, OpenOptions};
 use std::hash::Hash;
 use std::io;
-use std::io::{Cursor, ErrorKind, Read, Seek, SeekFrom, Write};
 #[cfg(feature = "http")]
 use std::io::BufRead;
+use std::io::{Cursor, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::mem;
 use std::net::{Shutdown, TcpStream};
 use std::ops::{Deref, DerefMut};
@@ -161,7 +161,7 @@ impl StreamLayout<CharReader<InputFileStream>> {
         // its pending buffer length from position.
         self.get_mut()
             .file
-            .seek(SeekFrom::Current(0))
+            .stream_position()
             .map(|pos| pos - self.stream.rem_buf_len() as u64)
             .ok()
     }
@@ -317,32 +317,30 @@ impl Write for HttpWriteStream {
 
     #[inline]
     fn flush(&mut self) -> std::io::Result<()> {
-	Ok(())
+        Ok(())
     }
 }
 
 #[cfg(feature = "http")]
 impl HttpWriteStream {
     fn drop(&mut self) {
-	let headers = unsafe { mem::ManuallyDrop::take(&mut self.headers) };
-	let buffer = unsafe { mem::ManuallyDrop::take(&mut self.buffer) };
-	
-	let (ready, response, cvar) = &**self.response;
+        let headers = unsafe { mem::ManuallyDrop::take(&mut self.headers) };
+        let buffer = unsafe { mem::ManuallyDrop::take(&mut self.buffer) };
 
-	let mut ready = ready.lock().unwrap();
-	{
-	    let mut response = response.lock().unwrap();
-	
-	    let mut response_ = warp::http::Response::builder()
-	        .status(self.status_code);
-	    *response_.headers_mut().unwrap() = headers;
-	    *response = Some(response_.body(warp::hyper::Body::from(buffer)).unwrap());
-	}
-	*ready = true;
-	cvar.notify_one();
+        let (ready, response, cvar) = &**self.response;
+
+        let mut ready = ready.lock().unwrap();
+        {
+            let mut response = response.lock().unwrap();
+
+            let mut response_ = warp::http::Response::builder().status(self.status_code);
+            *response_.headers_mut().unwrap() = headers;
+            *response = Some(response_.body(warp::hyper::Body::from(buffer)).unwrap());
+        }
+        *ready = true;
+        cvar.notify_one();
     }
 }
-
 
 #[derive(Debug)]
 pub struct StandardOutputStream {}
@@ -389,7 +387,7 @@ impl StreamOptions {
     #[inline]
     pub fn get_alias(self) -> Option<Atom> {
         if self.has_alias() {
-            Some(Atom::from((self.alias() as u64) << 3))
+            Some(Atom::from(self.alias() << 3))
         } else {
             None
         }
@@ -466,6 +464,7 @@ macro_rules! arena_allocated_impl_for_stream {
                 mem::size_of::<StreamLayout<$stream_type>>()
             }
 
+            #[allow(clippy::not_unsafe_ptr_arg_deref)]
             #[inline]
             fn copy_to_arena(self, dst: *mut Self) -> Self::PtrToAllocated {
                 unsafe {
@@ -585,29 +584,17 @@ impl Stream {
 
     #[inline]
     pub fn is_stderr(&self) -> bool {
-        if let Stream::StandardError(_) = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, Stream::StandardError(_))
     }
 
     #[inline]
     pub fn is_stdout(&self) -> bool {
-        if let Stream::StandardOutput(_) = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, Stream::StandardOutput(_))
     }
 
     #[inline]
     pub fn is_stdin(&self) -> bool {
-        if let Stream::Readline(_) = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, Stream::Readline(_))
     }
 
     pub fn as_ptr(&self) -> *const ArenaHeader {
@@ -831,7 +818,7 @@ impl CharRead for Stream {
 impl Read for Stream {
     #[inline]
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        let bytes_read = match self {
+        match self {
             Stream::InputFile(file) => (*file).read(buf),
             Stream::NamedTcp(tcp_stream) => (*tcp_stream).read(buf),
             #[cfg(feature = "tls")]
@@ -853,9 +840,7 @@ impl Read for Stream {
                 ErrorKind::PermissionDenied,
                 StreamError::ReadFromOutputStream,
             )),
-        };
-
-        bytes_read
+        }
     }
 }
 
@@ -984,18 +969,14 @@ fn cursor_position<T>(
     cursor: &Cursor<T>,
     cursor_len: u64,
 ) -> AtEndOfStream {
-    let position = cursor.position();
-
-    let at_end_of_stream = match position.cmp(&cursor_len) {
+    match cursor.position().cmp(&cursor_len) {
         Ordering::Equal => AtEndOfStream::At,
         Ordering::Greater => {
             *past_end_of_stream = true;
             AtEndOfStream::Past
         }
         Ordering::Less => AtEndOfStream::Not,
-    };
-
-    at_end_of_stream
+    }
 }
 
 impl Stream {
@@ -1021,26 +1002,23 @@ impl Stream {
 
     #[inline]
     pub(crate) fn set_position(&mut self, position: u64) {
-        match self {
-            Stream::InputFile(stream_layout) => {
-                let StreamLayout {
-                    past_end_of_stream,
-                    stream,
-                    ..
-                } = &mut **stream_layout;
+        if let Stream::InputFile(stream_layout) = self {
+            let StreamLayout {
+                past_end_of_stream,
+                stream,
+                ..
+            } = &mut **stream_layout;
 
-                stream
-                    .get_mut()
-                    .file
-                    .seek(SeekFrom::Start(position))
-                    .unwrap();
-                stream.reset_buffer(); // flush the internal buffer.
+            stream
+                .get_mut()
+                .file
+                .seek(SeekFrom::Start(position))
+                .unwrap();
+            stream.reset_buffer(); // flush the internal buffer.
 
-                if let Ok(metadata) = stream.get_ref().file.metadata() {
-                    *past_end_of_stream = position > metadata.len();
-                }
+            if let Ok(metadata) = stream.get_ref().file.metadata() {
+                *past_end_of_stream = position > metadata.len();
             }
-            _ => {}
         }
     }
 
@@ -1257,15 +1235,15 @@ impl Stream {
         headers: hyper::HeaderMap,
         arena: &mut Arena,
     ) -> Self {
-	Stream::HttpWrite(arena_alloc!(
-	    StreamLayout::new(CharReader::new(HttpWriteStream {
-		response,
-		status_code,
-		headers: mem::ManuallyDrop::new(headers),
-		buffer: mem::ManuallyDrop::new(Vec::new()),
-	    })),
-	    arena
-	))
+        Stream::HttpWrite(arena_alloc!(
+            StreamLayout::new(CharReader::new(HttpWriteStream {
+                response,
+                status_code,
+                headers: mem::ManuallyDrop::new(headers),
+                buffer: mem::ManuallyDrop::new(Vec::new()),
+            })),
+            arena
+        ))
     }
 
     #[inline]
@@ -1313,8 +1291,8 @@ impl Stream {
                 Ok(())
             }
             #[cfg(feature = "http")]
-	    Stream::HttpWrite(ref mut http_stream) => {
-		http_stream.inner_mut().drop();
+            Stream::HttpWrite(ref mut http_stream) => {
+                http_stream.inner_mut().drop();
                 unsafe {
                     http_stream.set_tag(ArenaHeaderTag::Dropped);
                     std::ptr::drop_in_place(&mut http_stream.inner_mut().buffer as *mut _);
@@ -1346,11 +1324,7 @@ impl Stream {
 
     #[inline]
     pub(crate) fn is_null_stream(&self) -> bool {
-        if let Stream::Null(_) = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, Stream::Null(_))
     }
 
     #[inline]
@@ -1391,29 +1365,25 @@ impl Stream {
         self.set_lines_read(0);
         self.set_past_end_of_stream(false);
 
-        loop {
-            match self {
-                Stream::Byte(ref mut cursor) => {
-                    cursor.stream.get_mut().0.set_position(0);
-                    return true;
-                }
-                Stream::InputFile(ref mut file_stream) => {
-                    file_stream
-                        .stream
-                        .get_mut()
-                        .file
-                        .seek(SeekFrom::Start(0))
-                        .unwrap();
-                    return true;
-                }
-                Stream::Readline(ref mut readline_stream) => {
-                    readline_stream.reset();
-                    return true;
-                }
-                _ => {
-                    return false;
-                }
+        match self {
+            Stream::Byte(ref mut cursor) => {
+                cursor.stream.get_mut().0.set_position(0);
+                true
             }
+            Stream::InputFile(ref mut file_stream) => {
+                file_stream
+                    .stream
+                    .get_mut()
+                    .file
+                    .seek(SeekFrom::Start(0))
+                    .unwrap();
+                true
+            }
+            Stream::Readline(ref mut readline_stream) => {
+                readline_stream.reset();
+                true
+            }
+            _ => false,
         }
     }
 
@@ -1484,12 +1454,13 @@ impl MachineState {
                     stream.set_past_end_of_stream(true);
                 }
 
-                Ok(self.fail = stream.past_end_of_stream())
+                self.fail = stream.past_end_of_stream();
+                Ok(())
             }
         }
     }
 
-    pub(crate) fn to_stream_options(
+    pub(crate) fn get_stream_options(
         &mut self,
         alias: HeapCellValue,
         eof_action: HeapCellValue,
@@ -1782,9 +1753,9 @@ impl MachineState {
         caller: Atom,
         arity: usize,
     ) -> CallResult {
-        let opt_err = if input.is_some() && !stream.is_input_stream() {
-            Some(atom!("stream")) // 8.14.2.3 g)
-        } else if input.is_none() && !stream.is_output_stream() {
+        let opt_err = if input.is_some() && !stream.is_input_stream()
+            || input.is_none() && !stream.is_output_stream()
+        {
             Some(atom!("stream")) // 8.14.2.3 g)
         } else if stream.options().stream_type() != expected_type {
             Some(expected_type.other().as_atom()) // 8.14.2.3 h)

@@ -73,7 +73,7 @@ impl<'a, const STOP_AT_CYCLES: bool> CycleDetectingIter<'a, STOP_AT_CYCLES> {
     fn traverse_subterm(&mut self, h: usize, arity: usize) -> Option<usize> {
         let mut last_cell_loc = h + arity - 1;
 
-        for idx in (h .. h + arity).rev() {
+        for idx in (h..h + arity).rev() {
             if self.heap[idx].get_forwarding_bit() {
                 if self.cycle_detection_active() {
                     self.cycle_found = true;
@@ -93,8 +93,8 @@ impl<'a, const STOP_AT_CYCLES: bool> CycleDetectingIter<'a, STOP_AT_CYCLES> {
 
     #[inline]
     fn continue_forwarding(&self) -> bool {
-        self.heap[self.current].get_mark_bit() != self.mark_phase ||
-            self.heap[self.current].get_forwarding_bit()
+        self.heap[self.current].get_mark_bit() != self.mark_phase
+            || self.heap[self.current].get_forwarding_bit()
     }
 
     fn forward(&mut self) -> Option<HeapCellValue> {
@@ -150,7 +150,7 @@ impl<'a, const STOP_AT_CYCLES: bool> CycleDetectingIter<'a, STOP_AT_CYCLES> {
                         }
 
                         if self.cycle_detection_active() {
-                            for idx in (h + 1 .. last_cell_loc).rev() {
+                            for idx in (h + 1..last_cell_loc).rev() {
                                 if self.heap[idx].get_forwarding_bit() {
                                     self.cycle_found = true;
                                     return None;
@@ -176,7 +176,7 @@ impl<'a, const STOP_AT_CYCLES: bool> CycleDetectingIter<'a, STOP_AT_CYCLES> {
                         };
 
                         if self.cycle_detection_active() {
-                            for idx in (self.next as usize .. last_cell_loc).rev() {
+                            for idx in (self.next as usize..last_cell_loc).rev() {
                                 if self.heap[idx].get_forwarding_bit() {
                                     self.cycle_found = true;
                                     return None;
@@ -309,19 +309,19 @@ impl<'a, const STOP_AT_CYCLES: bool> CycleDetectingIter<'a, STOP_AT_CYCLES> {
             HeapCellValueTag::Str => {
                 let mut new_str_back_link = self.current;
 
-                for idx in (0 .. self.current).rev() {
-                    if self.heap[idx].get_tag() == HeapCellValueTag::Atom {
-                        if cell_as_atom_cell!(self.heap[idx]).get_arity() > 0 {
-                            new_str_back_link = idx;
-                            break;
-                        }
+                for idx in (0..self.current).rev() {
+                    if self.heap[idx].get_tag() == HeapCellValueTag::Atom
+                        && cell_as_atom_cell!(self.heap[idx]).get_arity() > 0
+                    {
+                        new_str_back_link = idx;
+                        break;
                     }
 
-                    if self.heap[idx].get_mark_bit() != self.mark_phase {
-                        if !self.heap[idx].get_forwarding_bit() {
-                            new_str_back_link = idx;
-                            break;
-                        }
+                    if self.heap[idx].get_mark_bit() != self.mark_phase
+                        && !self.heap[idx].get_forwarding_bit()
+                    {
+                        new_str_back_link = idx;
+                        break;
                     }
                 }
 
@@ -402,7 +402,7 @@ impl<'a, const STOP_AT_CYCLES: bool> CycleDetectingIter<'a, STOP_AT_CYCLES> {
         self.next = self.heap[self.start].get_value();
         self.current = self.start;
 
-        while let Some(_) = self.forward() {}
+        while self.forward().is_some() {}
     }
 }
 
@@ -414,7 +414,6 @@ impl<'a, const STOP_AT_CYCLES: bool> Iterator for CycleDetectingIter<'a, STOP_AT
         self.forward()
     }
 }
-
 
 impl<'a, const STOP_AT_CYCLES: bool> Drop for CycleDetectingIter<'a, STOP_AT_CYCLES> {
     fn drop(&mut self) {

@@ -313,8 +313,8 @@ impl MachineState {
 impl Machine {
     pub(super) fn find_living_dynamic_else(&self, mut p: usize) -> Option<(usize, usize)> {
         loop {
-            match &self.code[p] {
-                &Instruction::DynamicElse(birth, death, NextOrFail::Next(i)) => {
+            match self.code[p] {
+                Instruction::DynamicElse(birth, death, NextOrFail::Next(i)) => {
                     if birth < self.machine_st.cc && Death::Finite(self.machine_st.cc) <= death {
                         return Some((p, i));
                     } else if i > 0 {
@@ -323,14 +323,14 @@ impl Machine {
                         return None;
                     }
                 }
-                &Instruction::DynamicElse(birth, death, NextOrFail::Fail(_)) => {
+                Instruction::DynamicElse(birth, death, NextOrFail::Fail(_)) => {
                     if birth < self.machine_st.cc && Death::Finite(self.machine_st.cc) <= death {
                         return Some((p, 0));
                     } else {
                         return None;
                     }
                 }
-                &Instruction::DynamicInternalElse(birth, death, NextOrFail::Next(i)) => {
+                Instruction::DynamicInternalElse(birth, death, NextOrFail::Next(i)) => {
                     if birth < self.machine_st.cc && Death::Finite(self.machine_st.cc) <= death {
                         return Some((p, i));
                     } else if i > 0 {
@@ -339,14 +339,14 @@ impl Machine {
                         return None;
                     }
                 }
-                &Instruction::DynamicInternalElse(birth, death, NextOrFail::Fail(_)) => {
+                Instruction::DynamicInternalElse(birth, death, NextOrFail::Fail(_)) => {
                     if birth < self.machine_st.cc && Death::Finite(self.machine_st.cc) <= death {
                         return Some((p, 0));
                     } else {
                         return None;
                     }
                 }
-                &Instruction::RevJmpBy(i) => {
+                Instruction::RevJmpBy(i) => {
                     p -= i;
                 }
                 _ => {
@@ -395,25 +395,14 @@ impl Machine {
     fn execute_switch_on_term(&mut self) {
         #[inline(always)]
         fn dynamic_external_of_clause_is_valid(machine: &mut Machine, p: usize) -> bool {
-            match &machine.code[p] {
-                Instruction::DynamicInternalElse(..) => {
-                    machine.machine_st.dynamic_mode = FirstOrNext::First;
-                    return true;
-                }
-                _ => {}
+            if let Instruction::DynamicInternalElse(..) = machine.code[p] {
+                machine.machine_st.dynamic_mode = FirstOrNext::First;
+                return true;
             }
 
-            match &machine.code[p - 1] {
-                &Instruction::DynamicInternalElse(birth, death, _) => {
-                    if birth < machine.machine_st.cc
-                        && Death::Finite(machine.machine_st.cc) <= death
-                    {
-                        return true;
-                    } else {
-                        return false;
-                    }
-                }
-                _ => {}
+            if let Instruction::DynamicInternalElse(birth, death, _) = machine.code[p - 1] {
+                return birth < machine.machine_st.cc
+                    && Death::Finite(machine.machine_st.cc) <= death;
             }
 
             true
@@ -1896,7 +1885,7 @@ impl Machine {
                             self.machine_st.backtrack();
                         }
                     }
-                    &Instruction::CallNumberLessThanOrEqual(ref at_1, ref at_2) => {
+                    Instruction::CallNumberLessThanOrEqual(ref at_1, ref at_2) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_2));
 
@@ -1910,7 +1899,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::ExecuteNumberLessThanOrEqual(ref at_1, ref at_2) => {
+                    Instruction::ExecuteNumberLessThanOrEqual(ref at_1, ref at_2) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_2));
 
@@ -1924,7 +1913,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::CallNumberEqual(ref at_1, ref at_2) => {
+                    Instruction::CallNumberEqual(ref at_1, ref at_2) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_2));
 
@@ -1938,7 +1927,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::ExecuteNumberEqual(ref at_1, ref at_2) => {
+                    Instruction::ExecuteNumberEqual(ref at_1, ref at_2) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_2));
 
@@ -1952,7 +1941,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::CallNumberNotEqual(ref at_1, ref at_2) => {
+                    Instruction::CallNumberNotEqual(ref at_1, ref at_2) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_2));
 
@@ -1966,7 +1955,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::ExecuteNumberNotEqual(ref at_1, ref at_2) => {
+                    Instruction::ExecuteNumberNotEqual(ref at_1, ref at_2) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_2));
 
@@ -1980,7 +1969,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::CallNumberGreaterThanOrEqual(ref at_1, ref at_2) => {
+                    Instruction::CallNumberGreaterThanOrEqual(ref at_1, ref at_2) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_2));
 
@@ -1994,7 +1983,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::ExecuteNumberGreaterThanOrEqual(ref at_1, ref at_2) => {
+                    Instruction::ExecuteNumberGreaterThanOrEqual(ref at_1, ref at_2) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_2));
 
@@ -2008,7 +1997,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::CallNumberGreaterThan(ref at_1, ref at_2) => {
+                    Instruction::CallNumberGreaterThan(ref at_1, ref at_2) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_2));
 
@@ -2022,7 +2011,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::ExecuteNumberGreaterThan(ref at_1, ref at_2) => {
+                    Instruction::ExecuteNumberGreaterThan(ref at_1, ref at_2) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_2));
 
@@ -2036,7 +2025,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::CallNumberLessThan(ref at_1, ref at_2) => {
+                    Instruction::CallNumberLessThan(ref at_1, ref at_2) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_2));
 
@@ -2050,7 +2039,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::ExecuteNumberLessThan(ref at_1, ref at_2) => {
+                    Instruction::ExecuteNumberLessThan(ref at_1, ref at_2) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_2));
 
@@ -2064,7 +2053,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::DefaultCallNumberLessThanOrEqual(ref at_1, ref at_2) => {
+                    Instruction::DefaultCallNumberLessThanOrEqual(ref at_1, ref at_2) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_2));
 
@@ -2077,7 +2066,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::DefaultExecuteNumberLessThanOrEqual(ref at_1, ref at_2) => {
+                    Instruction::DefaultExecuteNumberLessThanOrEqual(ref at_1, ref at_2) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_2));
 
@@ -2090,7 +2079,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::DefaultCallNumberNotEqual(ref at_1, ref at_2) => {
+                    Instruction::DefaultCallNumberNotEqual(ref at_1, ref at_2) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_2));
 
@@ -2103,7 +2092,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::DefaultExecuteNumberNotEqual(ref at_1, ref at_2) => {
+                    Instruction::DefaultExecuteNumberNotEqual(ref at_1, ref at_2) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_2));
 
@@ -2116,7 +2105,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::DefaultCallNumberEqual(ref at_1, ref at_2) => {
+                    Instruction::DefaultCallNumberEqual(ref at_1, ref at_2) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_2));
 
@@ -2129,7 +2118,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::DefaultExecuteNumberEqual(ref at_1, ref at_2) => {
+                    Instruction::DefaultExecuteNumberEqual(ref at_1, ref at_2) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_2));
 
@@ -2142,7 +2131,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::DefaultCallNumberGreaterThanOrEqual(ref at_1, ref at_2) => {
+                    Instruction::DefaultCallNumberGreaterThanOrEqual(ref at_1, ref at_2) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_2));
 
@@ -2155,7 +2144,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::DefaultExecuteNumberGreaterThanOrEqual(ref at_1, ref at_2) => {
+                    Instruction::DefaultExecuteNumberGreaterThanOrEqual(ref at_1, ref at_2) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_2));
 
@@ -2168,7 +2157,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::DefaultCallNumberGreaterThan(ref at_1, ref at_2) => {
+                    Instruction::DefaultCallNumberGreaterThan(ref at_1, ref at_2) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_2));
 
@@ -2181,7 +2170,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::DefaultExecuteNumberGreaterThan(ref at_1, ref at_2) => {
+                    Instruction::DefaultExecuteNumberGreaterThan(ref at_1, ref at_2) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_2));
 
@@ -2194,7 +2183,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::DefaultCallNumberLessThan(ref at_1, ref at_2) => {
+                    Instruction::DefaultCallNumberLessThan(ref at_1, ref at_2) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_2));
 
@@ -2207,7 +2196,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::DefaultExecuteNumberLessThan(ref at_1, ref at_2) => {
+                    Instruction::DefaultExecuteNumberLessThan(ref at_1, ref at_2) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_2));
 
@@ -2955,7 +2944,7 @@ impl Machine {
 
                         self.machine_st.p += 1;
                     }
-                    &Instruction::IndexingCode(ref indexing_lines) => {
+                    Instruction::IndexingCode(ref indexing_lines) => {
                         match &indexing_lines[self.machine_st.oip as usize] {
                             IndexingLine::Indexing(_) => {
                                 self.execute_switch_on_term();
@@ -2965,22 +2954,22 @@ impl Machine {
                                 }
                             }
                             IndexingLine::IndexedChoice(ref indexed_choice) => {
-                                match &indexed_choice[self.machine_st.iip as usize] {
-                                    &IndexedChoiceInstruction::Try(offset) => {
+                                match indexed_choice[self.machine_st.iip as usize] {
+                                    IndexedChoiceInstruction::Try(offset) => {
                                         self.indexed_try(offset);
                                     }
-                                    &IndexedChoiceInstruction::Retry(l) => {
+                                    IndexedChoiceInstruction::Retry(l) => {
                                         self.retry(l);
                                         increment_call_count!(self.machine_st);
                                     }
-                                    &IndexedChoiceInstruction::DefaultRetry(l) => {
+                                    IndexedChoiceInstruction::DefaultRetry(l) => {
                                         self.retry(l);
                                     }
-                                    &IndexedChoiceInstruction::Trust(l) => {
+                                    IndexedChoiceInstruction::Trust(l) => {
                                         self.trust(l);
                                         increment_call_count!(self.machine_st);
                                     }
-                                    &IndexedChoiceInstruction::DefaultTrust(l) => {
+                                    IndexedChoiceInstruction::DefaultTrust(l) => {
                                         self.trust(l);
                                     }
                                 }
@@ -5089,16 +5078,13 @@ impl Machine {
                             .get_predicate_skeleton_mut(&compilation_target, &key)
                             .unwrap();
 
-                        match skeleton.target_pos_of_clause_clause_loc(l) {
-                            Some(n) => {
-                                let r = self
-                                    .machine_st
-                                    .store(self.machine_st.deref(self.machine_st.registers[5]));
+                        if let Some(n) = skeleton.target_pos_of_clause_clause_loc(l) {
+                            let r = self
+                                .machine_st
+                                .store(self.machine_st.deref(self.machine_st.registers[5]));
 
-                                self.machine_st
-                                    .unify_fixnum(Fixnum::build_with(n as i64), r);
-                            }
-                            None => {}
+                            self.machine_st
+                                .unify_fixnum(Fixnum::build_with(n as i64), r);
                         }
 
                         self.machine_st.call_at_index(2, p);
@@ -5135,16 +5121,13 @@ impl Machine {
                             .get_predicate_skeleton_mut(&compilation_target, &key)
                             .unwrap();
 
-                        match skeleton.target_pos_of_clause_clause_loc(l) {
-                            Some(n) => {
-                                let r = self
-                                    .machine_st
-                                    .store(self.machine_st.deref(self.machine_st.registers[5]));
+                        if let Some(n) = skeleton.target_pos_of_clause_clause_loc(l) {
+                            let r = self
+                                .machine_st
+                                .store(self.machine_st.deref(self.machine_st.registers[5]));
 
-                                self.machine_st
-                                    .unify_fixnum(Fixnum::build_with(n as i64), r);
-                            }
-                            None => {}
+                            self.machine_st
+                                .unify_fixnum(Fixnum::build_with(n as i64), r);
                         }
 
                         self.machine_st.execute_at_index(2, p);
@@ -5226,7 +5209,7 @@ impl Machine {
                         // So we only have access to a runtime handle in here and can't shut it down.
                         // Since I'm not aware of the consequences of deactivating this new code which came in while PR 1880
                         // was not merged, I'm only deactivating it for now.
-                        
+
                         //#[cfg(not(target_arch = "wasm32"))]
                         //let runtime = tokio::runtime::Runtime::new().unwrap();
                         //#[cfg(target_arch = "wasm32")]

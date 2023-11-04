@@ -69,7 +69,7 @@ fn handle_residual_goal() {
 #[test]
 fn occurs_check_flag() {
     run_top_level_test_with_args(
-        &["tests-pl/issue841-occurs-check.pl"],
+        ["tests-pl/issue841-occurs-check.pl"],
         "\
          f(X, X).\n\
          halt.\n\
@@ -102,14 +102,14 @@ fn occurs_check_flag2() {
 // issue #839
 #[test]
 fn op3() {
-    run_top_level_test_with_args(&["tests-pl/issue839-op3.pl", "-g", "halt"], "", "")
+    run_top_level_test_with_args(["tests-pl/issue839-op3.pl", "-g", "halt"], "", "")
 }
 
 // issue #820
 #[test]
 fn multiple_goals() {
     run_top_level_test_with_args(
-        &["-g", "test", "-g", "halt", "tests-pl/issue820-goals.pl"],
+        ["-g", "test", "-g", "halt", "tests-pl/issue820-goals.pl"],
         "",
         "helloworld\n",
     );
@@ -119,7 +119,7 @@ fn multiple_goals() {
 #[test]
 fn compound_goal() {
     run_top_level_test_with_args(
-        &["-g", "test,halt", "tests-pl/issue820-goals.pl"],
+        ["-g", "test,halt", "tests-pl/issue820-goals.pl"],
         "",
         "helloworld\n",
     )

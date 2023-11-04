@@ -11,6 +11,7 @@ use crate::parser::dashu::{Integer, Rational};
 use crate::parser::parser::CompositeOpDesc;
 use crate::types::*;
 
+use dashu::base::Signed;
 use fxhash::FxBuildHasher;
 
 use indexmap::{IndexMap, IndexSet};
@@ -99,11 +100,7 @@ pub enum RootIterationPolicy {
 impl RootIterationPolicy {
     #[inline(always)]
     pub fn iterable(&self) -> bool {
-        if let RootIterationPolicy::Iterated = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, RootIterationPolicy::Iterated)
     }
 }
 
@@ -151,6 +148,7 @@ impl DerefMut for ChunkedTermVec {
 }
 
 impl ChunkedTermVec {
+    #[allow(clippy::new_without_default)]
     #[inline]
     pub fn new() -> Self {
         Self {
@@ -202,8 +200,8 @@ pub enum QueryTerm {
     // register, clause type, subterms, clause call policy.
     Clause(Cell<RegType>, ClauseType, Vec<Term>, CallPolicy),
     Fail,
-    LocalCut { var_num: usize, cut_prev: bool },  // var_num
-    GlobalCut(usize), // var_num
+    LocalCut { var_num: usize, cut_prev: bool }, // var_num
+    GlobalCut(usize),                            // var_num
     GetCutPoint { var_num: usize, prev_b: bool },
     GetLevel(usize), // var_num
 }
@@ -211,7 +209,7 @@ pub enum QueryTerm {
 impl QueryTerm {
     pub(crate) fn arity(&self) -> usize {
         match self {
-            &QueryTerm::Clause(_, _, ref subterms, ..) => subterms.len(),
+            QueryTerm::Clause(_, _, subterms, ..) => subterms.len(),
             &QueryTerm::GetLevel(_) | &QueryTerm::GetCutPoint { .. } => 1,
             _ => 0,
         }
@@ -316,15 +314,15 @@ impl ClauseInfo for Rule {
 impl ClauseInfo for PredicateClause {
     fn name(&self) -> Option<Atom> {
         match self {
-            &PredicateClause::Fact(ref term, ..) => term.head.name(),
-            &PredicateClause::Rule(ref rule, ..) => rule.name(),
+            PredicateClause::Fact(ref term, ..) => term.head.name(),
+            PredicateClause::Rule(ref rule, ..) => rule.name(),
         }
     }
 
     fn arity(&self) -> usize {
         match self {
-            &PredicateClause::Fact(ref term, ..) => term.head.arity(),
-            &PredicateClause::Rule(ref rule, ..) => rule.arity(),
+            PredicateClause::Fact(ref term, ..) => term.head.arity(),
+            PredicateClause::Rule(ref rule, ..) => rule.arity(),
         }
     }
 }
@@ -339,7 +337,7 @@ impl PredicateClause {
     pub(crate) fn args(&self) -> Option<&[Term]> {
         match self {
             PredicateClause::Fact(term, ..) => match &term.head {
-                Term::Clause(_, _, args) => Some(&args),
+                Term::Clause(_, _, args) => Some(args),
                 _ => None,
             },
             PredicateClause::Rule(rule, ..) => {
@@ -433,13 +431,10 @@ impl OpDecl {
     pub(crate) fn insert_into_op_dir(&self, op_dir: &mut OpDir) -> Option<OpDesc> {
         let key = (self.name, fixity(self.op_desc.get_spec() as u32));
 
-        match op_dir.get_mut(&key) {
-            Some(cell) => {
-                let (old_prec, old_spec) = cell.get();
-                cell.set(self.op_desc.get_prec(), self.op_desc.get_spec());
-                return Some(OpDesc::build_with(old_prec, old_spec));
-            }
-            None => {}
+        if let Some(cell) = op_dir.get_mut(&key) {
+            let (old_prec, old_spec) = cell.get();
+            cell.set(self.op_desc.get_prec(), self.op_desc.get_spec());
+            return Some(OpDesc::build_with(old_prec, old_spec));
         }
 
         op_dir.insert(key, self.op_desc)
@@ -450,7 +445,7 @@ impl OpDecl {
         existing_desc: Option<CompositeOpDesc>,
         op_dir: &mut OpDir,
     ) -> Result<(), SessionError> {
-        let (spec, name) = (self.op_desc.get_spec(), self.name.clone());
+        let (spec, name) = (self.op_desc.get_spec(), self.name);
 
         if is_infix!(spec as u32) {
             if let Some(desc) = existing_desc {
@@ -484,7 +479,7 @@ impl AtomOrString {
     pub fn as_atom(&self, atom_tbl: &AtomTable) -> Atom {
         match self {
             &AtomOrString::Atom(atom) => atom,
-            AtomOrString::String(string) => AtomTable::build_with(atom_tbl, &string),
+            AtomOrString::String(string) => AtomTable::build_with(atom_tbl, string),
         }
     }
 
@@ -496,10 +491,11 @@ impl AtomOrString {
             AtomOrString::String(string) => AtomString::Static(string.as_str()),
         }
     }
+}
 
-    #[inline]
-    pub fn to_string(self) -> String {
-        match self {
+impl From<AtomOrString> for String {
+    fn from(val: AtomOrString) -> Self {
+        match val {
             AtomOrString::Atom(atom) => atom.as_str().to_owned(),
             AtomOrString::String(string) => string,
         }
@@ -543,7 +539,7 @@ pub(crate) fn fetch_op_spec(name: Atom, arity: usize, op_dir: &OpDir) -> Option<
             }
         }),
         1 => {
-            if let Some(op_desc) = op_dir.get(&(name.clone(), Fixity::Pre)) {
+            if let Some(op_desc) = op_dir.get(&(name, Fixity::Pre)) {
                 if op_desc.get_prec() > 0 {
                     return Some(*op_desc);
                 }
@@ -744,8 +740,8 @@ impl ArenaFrom<Number> for HeapCellValue {
 impl Number {
     pub(crate) fn sign(&self) -> Number {
         match self {
-            &Number::Float(f) if f == 0.0 => Number::Float(OrderedFloat(0f64)),
-            &Number::Float(f) => Number::Float(OrderedFloat(f.signum())),
+            Number::Float(f) if *f == 0.0 => Number::Float(OrderedFloat(0f64)),
+            Number::Float(f) => Number::Float(OrderedFloat(f.signum())),
             _ => {
                 if self.is_positive() {
                     Number::Fixnum(Fixnum::build_with(1))
@@ -761,39 +757,36 @@ impl Number {
     #[inline]
     pub(crate) fn is_positive(&self) -> bool {
         match self {
-            &Number::Fixnum(n) => n.get_num() > 0,
-            &Number::Integer(ref n) => &**n > &Integer::from(0),
-            &Number::Float(f) => f.is_sign_positive(),
-            &Number::Rational(ref r) => &**r > &Rational::from(0),
+            Number::Fixnum(n) => n.get_num() > 0,
+            Number::Integer(ref n) => n.is_positive(),
+            Number::Float(f) => f.is_sign_positive(),
+            Number::Rational(ref r) => r.is_positive(),
         }
     }
 
     #[inline]
     pub(crate) fn is_negative(&self) -> bool {
         match self {
-            &Number::Fixnum(n) => n.get_num() < 0,
-            &Number::Integer(ref n) => &**n < &Integer::from(0),
-            &Number::Float(OrderedFloat(f)) => f.is_sign_negative() && OrderedFloat(f) != -0f64,
-            &Number::Rational(ref r) => &**r < &Rational::from(0),
+            Number::Fixnum(n) => n.get_num() < 0,
+            Number::Integer(ref n) => n.is_negative(),
+            &Number::Float(OrderedFloat(f)) => f.is_sign_negative() && f != -0f64,
+            Number::Rational(ref r) => r.is_negative(),
         }
     }
 
     #[inline]
     pub(crate) fn is_zero(&self) -> bool {
         match self {
-            &Number::Fixnum(n) => n.get_num() == 0,
-            &Number::Integer(ref n) => &**n == &Integer::from(0),
-            &Number::Float(f) => f == OrderedFloat(0f64) || f == OrderedFloat(-0f64),
-            &Number::Rational(ref r) => &**r == &Rational::from(0),
+            Number::Fixnum(n) => n.get_num() == 0,
+            Number::Integer(ref n) => n.is_zero(),
+            &Number::Float(OrderedFloat(f)) => f == 0.0 || f == -0.0,
+            Number::Rational(ref r) => r.is_zero(),
         }
     }
 
     #[inline]
     pub(crate) fn is_integer(&self) -> bool {
-        match self {
-            Number::Fixnum(_) | Number::Integer(_) => true,
-            _ => false,
-        }
+        matches!(self, Number::Fixnum(_) | Number::Integer(_))
     }
 }
 
@@ -963,7 +956,7 @@ impl LocalPredicateSkeleton {
 
     #[inline]
     pub(crate) fn add_retracted_dynamic_clause_info(&mut self, clause_info: ClauseIndexInfo) {
-        debug_assert_eq!(self.is_dynamic, true);
+        debug_assert!(self.is_dynamic);
 
         if self.retracted_dynamic_clauses.is_none() {
             self.retracted_dynamic_clauses = Some(vec![]);
@@ -1008,7 +1001,7 @@ impl PredicateSkeleton {
     ) -> Option<usize> {
         let search_result = self.core.clause_clause_locs.make_contiguous()
             [0..self.core.clause_assert_margin]
-            .binary_search_by(|loc| clause_clause_loc.cmp(&loc));
+            .binary_search_by(|loc| clause_clause_loc.cmp(loc));
 
         match search_result {
             Ok(loc) => Some(loc),

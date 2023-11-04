@@ -82,6 +82,12 @@ impl MockWAM {
     }
 }
 
+impl Default for MockWAM {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 pub struct TermCopyingMockWAM<'a> {
     pub wam: &'a mut MockWAM,
@@ -109,14 +115,14 @@ impl<'a> Deref for TermCopyingMockWAM<'a> {
     type Target = MockWAM;
 
     fn deref(&self) -> &Self::Target {
-        &self.wam
+        self.wam
     }
 }
 
 #[cfg(test)]
 impl<'a> DerefMut for TermCopyingMockWAM<'a> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.wam
+        self.wam
     }
 }
 
@@ -165,9 +171,8 @@ impl<'a> CopierTarget for TermCopyingMockWAM<'a> {
 #[cfg(test)]
 pub fn all_cells_marked_and_unforwarded(heap: &[HeapCellValue]) {
     for (idx, cell) in heap.iter().enumerate() {
-        assert_eq!(
+        assert!(
             cell.get_mark_bit(),
-            true,
             "cell {:?} at index {} is not marked",
             cell,
             idx
@@ -230,20 +235,16 @@ impl Machine {
             &mut self.machine_st.arena,
         );
 
-        self.load_file(file.into(), stream);
+        self.load_file(file, stream);
         self.user_output.bytes().map(|b| b.unwrap()).collect()
     }
 
     pub fn test_load_string(&mut self, code: &str) -> Vec<u8> {
-        let stream = Stream::from_owned_string(
-            code.to_owned(),
-            &mut self.machine_st.arena,
-        );
+        let stream = Stream::from_owned_string(code.to_owned(), &mut self.machine_st.arena);
 
-        self.load_file("<stdin>".into(), stream);
+        self.load_file("<stdin>", stream);
         self.user_output.bytes().map(|b| b.unwrap()).collect()
     }
-
 }
 
 #[cfg(test)]

@@ -1,5 +1,5 @@
-use std::sync::{Arc, Mutex, Condvar};
 use std::io::BufRead;
+use std::sync::{Arc, Condvar, Mutex};
 
 use warp::http;
 

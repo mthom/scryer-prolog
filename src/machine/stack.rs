@@ -56,7 +56,7 @@ impl Index<usize> for AndFrame {
         let index_offset = (index - 1) * mem::size_of::<HeapCellValue>();
 
         unsafe {
-            let ptr = mem::transmute::<&AndFrame, *const u8>(self);
+            let ptr = self as *const crate::machine::stack::AndFrame as *const u8;
             let ptr = ptr as usize + prelude_offset + index_offset;
 
             &*(ptr as *const HeapCellValue)
@@ -70,7 +70,7 @@ impl IndexMut<usize> for AndFrame {
         let index_offset = (index - 1) * mem::size_of::<HeapCellValue>();
 
         unsafe {
-            let ptr = mem::transmute::<&mut AndFrame, *const u8>(self);
+            let ptr = self as *mut crate::machine::stack::AndFrame as *const u8;
             let ptr = ptr as usize + prelude_offset + index_offset;
 
             &mut *(ptr as *mut HeapCellValue)
@@ -129,7 +129,7 @@ impl Index<usize> for OrFrame {
         let index_offset = index * mem::size_of::<HeapCellValue>();
 
         unsafe {
-            let ptr = mem::transmute::<&OrFrame, *const u8>(self);
+            let ptr = self as *const crate::machine::stack::OrFrame as *const u8;
             let ptr = ptr as usize + prelude_offset + index_offset;
 
             &*(ptr as *const HeapCellValue)
@@ -144,7 +144,7 @@ impl IndexMut<usize> for OrFrame {
         let index_offset = index * mem::size_of::<HeapCellValue>();
 
         unsafe {
-            let ptr = mem::transmute::<&mut OrFrame, *const u8>(self);
+            let ptr = self as *mut crate::machine::stack::OrFrame as *const u8;
             let ptr = ptr as usize + prelude_offset + index_offset;
 
             &mut *(ptr as *mut HeapCellValue)
