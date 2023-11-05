@@ -68,7 +68,7 @@ pub struct HeapPStrIter<'a> {
     stepper: fn(&mut HeapPStrIter<'a>) -> Option<PStrIteratee>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct PStrPrefixCmpResult {
     pub focus: usize,
     pub offset: usize,
@@ -193,7 +193,7 @@ impl<'a> HeapPStrIter<'a> {
             }
         }
 
-        final_result
+        Some(result)
     }
 
     fn walk_hare_to_cycle_end(&mut self) {
@@ -336,9 +336,9 @@ impl<'a> HeapPStrIter<'a> {
                     );
 
                     return value.as_char().map(|c| PStrIterStep {
-                            iteratee: PStrIteratee::Char(curr_hare, c),
-                            next_hare: h+1,
-                        });
+                        iteratee: PStrIteratee::Char(curr_hare, c),
+                        next_hare: h+1,
+                    });
                 }
                 (HeapCellValueTag::Str, s) => {
                     let (name, arity) = cell_as_atom_cell!(self.heap[s])
