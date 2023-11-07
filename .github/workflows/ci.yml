@@ -15,42 +15,18 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v3
-      - uses: dtolnay/rust-toolchain@master
-        id: toolchain
+      - name: Setup Rust
+        uses: ./.github/actions/setup-rust
         with:
-          toolchain: nightly
+          rust-version: nightly
           targets: x86_64-unknown-linux-gnu
           components: clippy, rustfmt
-      - run: cargo install cargo2junit --force
-      - uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: style_rustc-${{ steps.toolchain.outputs.cachekey }}_cargo-${{ hashFiles('**/Cargo.lock') }}
+          cache-context: style
 
       - name: Check formatting
         run: cargo fmt --check
       - name: Check clippy
         run: cargo clippy --no-deps --all-targets
-      - name: Test and report
-        run: |
-          RUSTC_BOOTSTRAP=1 cargo test --all -- -Z unstable-options --format json --report-time | cargo2junit > cargo_test_results.xml
-      - name: Publish cargo test results artifact
-        uses: actions/upload-artifact@v3
-        with:
-          name: cargo-test-results
-          path: cargo_test_results.xml
-      - name: Publish cargo test summary
-        uses: EnricoMi/publish-unit-test-result-action/composite@master
-        with:
-          check_name: Cargo test summary
-          files: cargo_test_results.xml
-          fail_on: nothing
-          comment_mode: off
 
   build-test:
     runs-on: ${{ matrix.os }}
@@ -75,34 +51,19 @@ jobs:
         shell: bash
     steps:
       - uses: actions/checkout@v3
-      - uses: dtolnay/rust-toolchain@master
-        id: toolchain
+      - name: Setup Rust
+        uses: ./.github/actions/setup-rust
         with:
-          toolchain: ${{ matrix.rust-version }}
+          rust-version: ${{ matrix.rust-version }}
           targets: ${{ matrix.target }}
-      - name: Install i686 dependencies
-        if: "contains(matrix.target,'i686')"
-        run: |
-          sudo dpkg --add-architecture i386
-          sudo apt-get update
-          sudo apt-get install libssl-dev:i386 gcc-multilib clang -y
-          echo "CC=clang" >> $GITHUB_ENV
-          echo "PKG_CONFIG_SYSROOT_DIR=/" >> $GITHUB_ENV
-      - uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ matrix.os }}_${{ matrix.target }}_rustc-${{ steps.toolchain.outputs.cachekey }}_cargo-${{ hashFiles('**/Cargo.lock') }}
+          cache-context: ${{ matrix.os }}
 
       # Build and test.
       - name: Build library
         run: cargo rustc --lib --target ${{ matrix.target }} ${{ matrix.args }} --verbose
       - name: Test
-        run: cargo test --target ${{ matrix.target }} ${{ matrix.args }} --all --verbose || echo "::warning ::Tests failed"
+        continue-on-error: ${{ contains(matrix.target,'wasm32') }} # allow wasm builds to fail tests for now
+        run: cargo test --target ${{ matrix.target }} ${{ matrix.args }} --all --verbose
 
       # On stable rust builds, build a binary and publish as a github actions
       # artifact. These binaries could be useful for testing the pipeline but
@@ -163,6 +124,35 @@ jobs:
         with:
           check_name: Logtalk test summary
           files: '${{ env.LOGTALKUSER }}/tests/prolog/**/*.xml'
+          fail_on: nothing
+          comment_mode: off
+
+  report:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          rust-version: nightly
+          targets: x86_64-unknown-linux-gnu
+          cache-context: report
+      - run: |
+          cargo install cargo2junit --force
+
+      - name: Test and report
+        run: |
+          RUSTC_BOOTSTRAP=1 cargo test --all -- -Z unstable-options --format json --report-time | cargo2junit > cargo_test_results.xml
+      - name: Publish cargo test results artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: cargo-test-results
+          path: cargo_test_results.xml
+      - name: Publish cargo test summary
+        uses: EnricoMi/publish-unit-test-result-action/composite@master
+        with:
+          check_name: Cargo test summary
+          files: cargo_test_results.xml
           fail_on: nothing
           comment_mode: off
 

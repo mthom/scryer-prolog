@@ -1,0 +1,54 @@
+name: 'Setup Rust'
+inputs:
+  rust-version:
+    required: true
+    type: string
+  targets:
+    required: true
+    type: string
+  components:
+    required: false
+    default:
+  cache-context:
+    required: true
+    type: string
+
+runs:
+  using: "composite"
+  steps:
+  - uses: dtolnay/rust-toolchain@master
+    id: toolchain
+    with:
+      toolchain: ${{ inputs.rust-version }}
+      targets: ${{ inputs.targets }}
+      components: ${{ inputs.components }}
+
+  - name: Install i686 dependencies
+    if: "contains(inputs.targets,'i686')"
+    shell: bash
+    run: |
+      sudo dpkg --add-architecture i386
+      sudo apt-get update
+      sudo apt-get install libssl-dev:i386 gcc-multilib clang -y
+      echo "CC=clang" >> $GITHUB_ENV
+      echo "PKG_CONFIG_SYSROOT_DIR=/" >> $GITHUB_ENV
+
+  - uses: actions/cache@v3
+    with:
+      path: |
+        ~/.cargo/bin/
+        ~/.cargo/registry/index/
+        ~/.cargo/registry/cache/
+        ~/.cargo/git/db/
+        target/
+      key: ${{ inputs.cache-context }}_${{ inputs.targets }}_rustc-${{ steps.toolchain.outputs.cachekey }}_cargo-${{ hashFiles('**/Cargo.lock') }}
+
+  # Remove build artifacts for the current crate, since it will be rebuilt every
+  # run anyway, but keep dependency artifacts to cache them.
+  # Must be placed after actions/cache so its post step runs first.
+  - uses: pyTooling/Actions/with-post-step@v0.4.6
+    with:
+      main: "true"
+      post: |
+        echo Post job cleanup: bash -c "cargo clean -p `cargo metadata --format-version 1 | jq -r '[.workspace_members[]|split(\" \")|.[0]]|join(\" \")'`"
+        bash -c "cargo clean -p `cargo metadata --format-version 1 | jq -r '[.workspace_members[]|split(\" \")|.[0]]|join(\" \")'`"
