@@ -422,9 +422,8 @@ mod tests {
         );
     }
 
-    #[ignore = "fails on windows"]
     #[test]
-    fn stress_integration_test() {
+    fn integration_test() {
         let mut machine = Machine::new_lib();
 
         // File with test commands, i.e. program code to consult and queries to run
