@@ -48,7 +48,5 @@ runs:
   # Must be placed after actions/cache so its post step runs first.
   - uses: pyTooling/Actions/with-post-step@v0.4.6
     with:
-      main: "true"
-      post: |
-        echo Post job cleanup: bash -c "cargo clean -p `cargo metadata --format-version 1 | jq -r '[.workspace_members[]|split(\" \")|.[0]]|join(\" \")'`"
-        bash -c "cargo clean -p `cargo metadata --format-version 1 | jq -r '[.workspace_members[]|split(\" \")|.[0]]|join(\" \")'`"
+      main: bash ./.github/actions/setup-rust/cleanup.sh
+      post: bash ./.github/actions/setup-rust/cleanup.sh

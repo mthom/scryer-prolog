@@ -139,6 +139,8 @@ jobs:
           cache-context: report
       - run: |
           cargo install cargo2junit --force
+          cargo install iai-callgrind-runner --force --version `cargo metadata --format-version 1 | jq -r '.resolve.nodes[].id|split(" ")|select(.[0]=="iai-callgrind")|.[1]'`
+          sudo apt install valgrind -y
 
       - name: Test and report
         run: |
@@ -155,6 +157,22 @@ jobs:
           files: cargo_test_results.xml
           fail_on: nothing
           comment_mode: off
+
+      - run: cargo build --bench run_iai --release
+      - run: cargo bench --bench run_iai
+      - run: cargo bench --bench run_criterion
+
+      - name: Publish criterion benchmark results
+        uses: actions/upload-artifact@v3
+        with:
+          name: bench-criterion-results
+          path: target/criterion/**/*
+
+      - name: Publish iai benchmark results
+        uses: actions/upload-artifact@v3
+        with:
+          name: bench-iai-results
+          path: target/iai/scryer-prolog/run_iai/bench_group/*
 
   # Publish binaries when building for a tag
   release:
