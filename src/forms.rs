@@ -885,8 +885,6 @@ pub(crate) struct PredicateInfo {
     pub(crate) has_clauses: bool,
 }
 
-
-
 impl PredicateInfo {
     #[inline]
     pub(crate) fn compile_incrementally(&self) -> bool {
