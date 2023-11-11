@@ -189,7 +189,6 @@ impl DebrayAllocator {
                             }
                         }
                         _ => {
-                            unreachable!();
                         }
                     }
 
@@ -474,7 +473,7 @@ impl DebrayAllocator {
 
     #[inline(always)]
     pub fn get_binding(&self, var_num: usize) -> RegType {
-        self.var_data.records[var_num].allocation.as_reg_type()
+	self.var_data.records[var_num].allocation.as_reg_type()
     }
 
     pub fn num_perm_vars(&self) -> usize {
@@ -748,11 +747,11 @@ impl Allocator for DebrayAllocator {
             RegType::Temp(0) => {
                 let o = self.alloc_reg_to_var::<Target>(var_num, lvl, term_loc, code);
                 cell.set(VarReg::Norm(RegType::Temp(o)));
-
                 (RegType::Temp(o), true)
             }
             RegType::Perm(0) => {
                 let p = self.alloc_perm_var(var_num, term_loc.chunk_num());
+		cell.set(VarReg::Norm(RegType::Perm(p)));
                 (RegType::Perm(p), true)
             }
             r @ RegType::Perm(_) => {

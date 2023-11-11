@@ -10,6 +10,7 @@ use crate::parser::ast::*;
 use crate::targets::*;
 use crate::temp_v;
 use crate::types::*;
+use crate::variable_records::*;
 
 use crate::instr;
 use crate::machine::disjuncts::*;
@@ -277,7 +278,6 @@ impl DebrayAllocator {
         code: &mut CodeDeque,
     ) -> RegType {
         self.mark_var::<QueryInstruction>(var_num, Level::Shallow, vr, term_loc, code);
-
         vr.get().norm()
     }
 
@@ -296,6 +296,13 @@ impl DebrayAllocator {
                     self.mark_var_in_non_callable(var_num, term_loc, vr, code);
                     temp_v!(arg)
                 } else {
+		    match &self.var_data.records[var_num].allocation {
+			VarAlloc::Perm(_, PermVarAllocation::Pending) => {
+			    self.mark_var_in_non_callable(var_num, term_loc, vr, code);
+			}
+			_ => {}
+		    }
+
                     self.increment_running_count(var_num);
                     RegType::Perm(p)
                 }
