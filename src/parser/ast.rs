@@ -327,8 +327,9 @@ impl DoubleQuotes {
     }
 }
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub enum Unknown {
+    #[default]
     Error,
     Fail,
     Warn,
@@ -345,13 +346,6 @@ impl Unknown {
 
     pub fn is_warn(self) -> bool {
         matches!(self, Unknown::Warn)
-    }
-}
-
-impl Default for Unknown {
-    #[inline]
-    fn default() -> Self {
-        Unknown::Error
     }
 }
 

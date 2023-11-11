@@ -166,32 +166,29 @@ impl DebrayAllocator {
         for var_num in subsumed_hits {
             match &mut self.var_data.records[var_num].allocation {
                 VarAlloc::Perm(_, ref mut allocation) => {
-                    match allocation {
-                        PermVarAllocation::Done {
-                            shallow_safety,
-                            deep_safety,
-                            ..
-                        } => {
-                            if !self
-                                .branch_stack
-                                .safety_unneeded_in_branch(shallow_safety, &branch_designator)
-                            {
-                                let branch_occurrences = self.branch_stack.last_mut().unwrap();
-                                branch_occurrences.shallow_safety.insert(var_num);
-                            }
-
-                            if !self
-                                .branch_stack
-                                .safety_unneeded_in_branch(deep_safety, &branch_designator)
-                            {
-                                let branch_occurrences = self.branch_stack.last_mut().unwrap();
-                                branch_occurrences.deep_safety.insert(var_num);
-                            }
+		    if let PermVarAllocation::Done {
+                        shallow_safety,
+                        deep_safety,
+                        ..
+                    } = allocation
+		    {
+                        if !self
+                            .branch_stack
+                            .safety_unneeded_in_branch(shallow_safety, &branch_designator)
+                        {
+                            let branch_occurrences = self.branch_stack.last_mut().unwrap();
+                            branch_occurrences.shallow_safety.insert(var_num);
                         }
-                        _ => {
+
+                        if !self
+                            .branch_stack
+                            .safety_unneeded_in_branch(deep_safety, &branch_designator)
+                        {
+                            let branch_occurrences = self.branch_stack.last_mut().unwrap();
+                            branch_occurrences.deep_safety.insert(var_num);
                         }
                     }
-
+		    
                     *allocation = PermVarAllocation::Pending;
                 }
                 _ => unreachable!(),

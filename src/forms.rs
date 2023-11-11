@@ -876,7 +876,7 @@ impl ClauseIndexInfo {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct PredicateInfo {
     pub(crate) is_extensible: bool,
     pub(crate) is_discontiguous: bool,
@@ -885,18 +885,7 @@ pub(crate) struct PredicateInfo {
     pub(crate) has_clauses: bool,
 }
 
-impl Default for PredicateInfo {
-    #[inline]
-    fn default() -> Self {
-        PredicateInfo {
-            is_extensible: false,
-            is_discontiguous: false,
-            is_dynamic: false,
-            is_multifile: false,
-            has_clauses: false,
-        }
-    }
-}
+
 
 impl PredicateInfo {
     #[inline]
