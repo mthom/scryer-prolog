@@ -60,7 +60,7 @@ impl Machine {
     }
 
     pub fn run_query(&mut self, query: String) -> QueryResult {
-        println!("Query: {}", query);
+        // println!("Query: {}", query);
         // Parse the query so we can analyze and then call the term
         let mut parser = Parser::new(
             Stream::from_owned_string(query, &mut self.machine_st.arena),
@@ -192,7 +192,7 @@ impl Machine {
                 let outputter = printer.print();
 
                 let output: String = outputter.result();
-                println!("Result: {} = {}", var_key.to_string(), output);
+                // println!("Result: {} = {}", var_key.to_string(), output);
 
                 bindings.insert(var_key.to_string(), Value::try_from(output).expect("asdfs"));
             }
@@ -445,10 +445,7 @@ mod tests {
             }
 
             // Check if the block is a query
-            if block.starts_with("query") {
-                // Extract the query from the block
-                let query = &block[5..];
-
+            if let Some(query) = block.strip_prefix("query") {
                 i += 1;
                 println!("query #{}: {}", i, query);
                 // Parse and execute the query
@@ -458,10 +455,7 @@ mod tests {
 
                 // Print the result
                 println!("{:?}", result);
-            } else if block.starts_with("consult") {
-                // Extract the code from the block
-                let code = &block[7..];
-
+            } else if let Some(code) = block.strip_prefix("consult") {
                 println!("load code: {}", code);
 
                 // Load the code into the machine

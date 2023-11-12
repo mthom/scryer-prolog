@@ -166,12 +166,12 @@ impl DebrayAllocator {
         for var_num in subsumed_hits {
             match &mut self.var_data.records[var_num].allocation {
                 VarAlloc::Perm(_, ref mut allocation) => {
-		    if let PermVarAllocation::Done {
+                    if let PermVarAllocation::Done {
                         shallow_safety,
                         deep_safety,
                         ..
                     } = allocation
-		    {
+                    {
                         if !self
                             .branch_stack
                             .safety_unneeded_in_branch(shallow_safety, &branch_designator)
@@ -188,7 +188,7 @@ impl DebrayAllocator {
                             branch_occurrences.deep_safety.insert(var_num);
                         }
                     }
-		    
+
                     *allocation = PermVarAllocation::Pending;
                 }
                 _ => unreachable!(),
@@ -470,7 +470,7 @@ impl DebrayAllocator {
 
     #[inline(always)]
     pub fn get_binding(&self, var_num: usize) -> RegType {
-	self.var_data.records[var_num].allocation.as_reg_type()
+        self.var_data.records[var_num].allocation.as_reg_type()
     }
 
     pub fn num_perm_vars(&self) -> usize {
@@ -748,7 +748,7 @@ impl Allocator for DebrayAllocator {
             }
             RegType::Perm(0) => {
                 let p = self.alloc_perm_var(var_num, term_loc.chunk_num());
-		cell.set(VarReg::Norm(RegType::Perm(p)));
+                cell.set(VarReg::Norm(RegType::Perm(p)));
                 (RegType::Perm(p), true)
             }
             r @ RegType::Perm(_) => {
