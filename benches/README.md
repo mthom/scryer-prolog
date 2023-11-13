@@ -18,6 +18,9 @@ Run them using the following commands:
 ```
 cargo bench --bench run_criterion
 
+# run a particular criterion benchmark
+cargo bench --bench run_criterion -- <benchmark_name>
+
 # to run iai, you need valgrind installed and to install iai-callgrind-runner
 # at the same version as is in Cargo.toml:
 cargo install iai-callgrind-runner --version 0.7.3
@@ -30,14 +33,12 @@ the same setup code from `benches.rs`.
 
 ## Setup
 
-`setup.rs` contains the setup code for the actual benchmarks, which are run
-using the `Benches` struct. `fn benches()` at the top of the file is where the
-benchmarks are defined.
+`setup.rs` contains the setup code to run benchmarks. `fn prolog_benches()` at
+the top of the file is where the benchmarks are defined.
 
-Benchmarks are organized around running queries against one prolog module file.
-Before any runs start, `Benches::new()` reads the module files and initializes a
-new `scryer_prolog::machine::Machine` for each file; multiple queries can be
-declared to be benchmarked in the context of that module/machine instance.
+Benchmarks are organized around running queries against a prolog module file.
+Before a benchmark starts, `benchmark.setup()` is called which reads the module
+file and initializes a new `scryer_prolog::machine::Machine`.
 
 Each benchmark measurement is done by running a query against the machine. In
 the case of criterion each query is run many times, in the case of iai it's run
@@ -58,17 +59,17 @@ Some tips:
 
 * The goal of benchmarking is to know if a library or engine change improved
   performance or not.
-* Once a benchmark is defined and named, don't change it's definition. If a
-  benchmark needs to change to be more useful, give the new definition a new
-  name. This will prevent charts from showing wild changes in performance just
-  because the definition changed (see previous).
-* Aim for queries to execute in about 0.1-0.5s realtime. Longer runtimes make it
+* Once a benchmark is defined and named, avoid changing it's definition. In
+  general, if a benchmark needs to change to be more useful, give the new
+  definition a new name. This will prevent charts from showing wild changes in
+  performance just because the definition changed (see previous).
+* Aim for queries to execute in less than 0.5s realtime. Longer runtimes make it
   easier for humans to see big differences, but benchmarks either run 10x slower
   (iai) or execute repeatedly to attain statistical significance (criterion) and
-  in both cases queries that take 5+ seconds quickly become unweildly.
+  in both cases queries that take longer become cumbersome to run.
 * Consider that the library runtime actually parses the text output of the top
-  level. So keep the output small and don't use custom outputs or it will fail
-  to parse.
+  level. So don't use custom outputs or it will fail to parse. Also keep the
+  output small so it doesn't just benchmark the ouput parsing code.
 * DO test the output of the benchmark run, we don't want to count broken
   benchmarks.
 * Because a query may run against the same machine multiple times, don't
@@ -89,7 +90,5 @@ results.
 - [ ] Currently, the execution time to load a module is not benchmarked. It
   would be nice to have at least one benchmark for loading a module (probably a
   big one).
-- [ ] Adjust the benchmark execution strategy to allow queries to modify the
-  engine state (`assertz` etc).
 - [ ] Write a new action that consumes the test and benchmark results and plots
   them over time and publishes a report (github pages?).
