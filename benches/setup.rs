@@ -29,6 +29,13 @@ pub fn prolog_benches() -> BTreeMap<&'static str, PrologBenchmark> {
             Strategy::Reuse,
             btreemap! { "Head" => Value::try_from("1".to_string()).unwrap()},
         ),
+        (
+            "csv_codename",
+            "benches/csv.pl",
+            "get_codename(\"0020\",Name).",
+            Strategy::Reuse,
+            btreemap! { "Name" => Value::try_from("SPACE".to_string()).unwrap()},
+        ),
     ]
     .map(|b| {
         (
