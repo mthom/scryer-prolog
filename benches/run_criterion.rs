@@ -1,9 +1,16 @@
-use criterion::{criterion_group, criterion_main, Criterion};
+use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 
 mod setup;
 
 fn bench_criterion(c: &mut Criterion) {
-    setup::benches().run_all_criterion(c);
+    for (&name, bench) in setup::prolog_benches().iter() {
+        match bench.strategy {
+            setup::Strategy::Fresh => c.bench_function(name, |b| {
+                b.iter_batched(|| bench.setup(), |mut r| r(), BatchSize::LargeInput)
+            }),
+            setup::Strategy::Reuse => c.bench_function(name, |b| b.iter(bench.setup())),
+        };
+    }
 }
 
 criterion_group!(

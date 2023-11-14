@@ -296,11 +296,10 @@ impl DebrayAllocator {
                     self.mark_var_in_non_callable(var_num, term_loc, vr, code);
                     temp_v!(arg)
                 } else {
-                    match &self.var_data.records[var_num].allocation {
-                        VarAlloc::Perm(_, PermVarAllocation::Pending) => {
-                            self.mark_var_in_non_callable(var_num, term_loc, vr, code);
-                        }
-                        _ => {}
+                    if let VarAlloc::Perm(_, PermVarAllocation::Pending) =
+                        &self.var_data.records[var_num].allocation
+                    {
+                        self.mark_var_in_non_callable(var_num, term_loc, vr, code);
                     }
 
                     self.increment_running_count(var_num);
