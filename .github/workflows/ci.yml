@@ -10,6 +10,9 @@ on:
     - cron: '0 0 * * 3' # At 12:00 AM, only on Wednesday
   workflow_dispatch:
 
+permissions:
+  checks: write
+
 jobs:
   style:
     runs-on: ubuntu-22.04
