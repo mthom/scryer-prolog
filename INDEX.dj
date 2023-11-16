@@ -5,13 +5,6 @@
    X = "Scryer Prolog!".
 ```
 
-``` =html
-<div style="border: solid #00007f 3px;padding-left: 15px;padding-right: 15px;font-style: italic;background-color: #00007f30;">
-<h4>Scryer Prolog Meetup 2023</h4>
-<p>The first annual Scryer Prolog meetup is going to happen in Düsseldorf (Germany) on the 9th and 10th of November 2023. Join us to discover the present and future of Scryer Prolog! Participation is free, registration not required. <a href="https://hsd-pbsa.de/veranstaltung/scryer-prolog-meetup-2023/">More details here.</a></p>
-</div>
-```
-
 ![scryer](scryer.png){width=128 style=float:right;} [Scryer Prolog](https://github.com/mthom/scryer-prolog) is a free software ISO Prolog system intended to be an industrial
 strength production environment *and* a testbed for bleeding edge research in
 logic and constraint programming.
@@ -28,6 +21,7 @@ Some of the Scryer Prolog features are:
 * [Cryptographical predicates](/crypto.html)
 * [Foreign Function Interface](/ffi.html)
 * WebAssembly support
+* Usable as a library
 * WAM based engine, cross-platform made in Rust
 * _and more..._
 
