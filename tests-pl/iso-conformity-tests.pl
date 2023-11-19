@@ -783,10 +783,10 @@ test_217_181_290_317 :-
                         (  op(1105,xfy,'|'),
                            read_from_chars("(a-->b,c|d).", T0),
                            writeq_term_to_chars(T0, C0),
-                           C0 == "a-->b,c | d",
+                           C0 == "a-->b,c|d",
                            read_from_chars("[(a|b)].", T1),
                            writeq_term_to_chars(T1, C1),
-                           C1 == "[(a | b)]",
+                           C1 == "[(a|b)]",
                            read_from_chars("[a,(b,c)|[]].", T2),
                            writeq_term_to_chars(T2, C2),
                            C2 == "[a,(b,c)]"
