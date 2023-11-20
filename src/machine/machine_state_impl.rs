@@ -60,7 +60,6 @@ impl MachineState {
             unify_fn: MachineState::unify,
             bind_fn: MachineState::bind,
             run_cleaners_fn: |_| false,
-            increment_call_count_fn: |_| true,
         }
     }
 
