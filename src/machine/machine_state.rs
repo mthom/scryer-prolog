@@ -967,7 +967,7 @@ impl MachineState {
 #[allow(clippy::upper_case_acronyms)]
 #[derive(Debug)]
 pub(crate) struct CWIL {
-    count: Integer,
+    pub(crate) count: Integer,
     limits: Vec<(Integer, usize)>,
     pub(crate) inference_limit_exceeded: bool,
 }
@@ -981,16 +981,13 @@ impl CWIL {
         }
     }
 
-    pub(crate) fn add_limit(&mut self, limit: usize, block: usize) -> &Integer {
-        let mut limit = Integer::from(limit);
+    pub(crate) fn add_limit(&mut self, mut limit: Integer, block: usize) {
         limit += &self.count;
 
         match self.limits.last() {
             Some((ref inner_limit, _)) if *inner_limit <= limit => {}
             _ => self.limits.push((limit, block)),
         };
-
-        &self.count
     }
 
     #[inline(always)]

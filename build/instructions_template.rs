@@ -329,6 +329,11 @@ enum SystemClauseType {
     InstallSCCCleaner,
     #[strum_discriminants(strum(props(Arity = "3", Name = "$install_inference_counter")))]
     InstallInferenceCounter,
+    #[strum_discriminants(strum(props(
+        Arity = "1",
+        Name = "$install_unlimited_inference_counter"
+    )))]
+    InstallUnlimitedInferenceCounter,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$lh_length")))]
     LiftedHeapLength,
     #[strum_discriminants(strum(props(Arity = "3", Name = "$load_library_as_stream")))]
@@ -1720,6 +1725,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallHeadIsDynamic |
                     &Instruction::CallInstallSCCCleaner |
                     &Instruction::CallInstallInferenceCounter |
+                    &Instruction::CallInstallUnlimitedInferenceCounter |
                     &Instruction::CallLiftedHeapLength |
                     &Instruction::CallLoadLibraryAsStream |
                     &Instruction::CallModuleExists |
@@ -1954,6 +1960,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteHeadIsDynamic |
                     &Instruction::ExecuteInstallSCCCleaner |
                     &Instruction::ExecuteInstallInferenceCounter |
+                    &Instruction::ExecuteInstallUnlimitedInferenceCounter |
                     &Instruction::ExecuteLiftedHeapLength |
                     &Instruction::ExecuteLoadLibraryAsStream |
                     &Instruction::ExecuteModuleExists |

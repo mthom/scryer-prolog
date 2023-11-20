@@ -110,22 +110,13 @@ time_next_id(N) :-
 %
 %  Reports the execution time of Goal.
 
-setup_block(Bb, B) :-
-        '$get_current_block'(Bb),
-        '$get_b_value'(B).
-
-remove_call_policy_check(B) :-
-        '$remove_call_policy_check'(B).
-
 time(Goal) :-
         '$cpu_now'(T0),
-        upper_inference(U),
         time_next_id(ID),
         setup_call_cleanup(asserta(time_state(ID, T0)),
-                           (   call_cleanup(catch((setup_block(Bb, B),
-                                                   call_with_inference_limit(Goal, U, _, Bb, B, Inf),
-                                                   remove_call_policy_check(B))
-, E, (report_time(ID, Inf),throw(E))),
+                           (   call_cleanup(catch(call_with_unlimited_inference_limit(Goal, Inf, Result),
+                                                  E,
+                                                  (report_time(ID, Inf),throw(E))),
                                             Det = true),
                                time_true(ID, Inf),
                                (   Det == true -> !
@@ -134,11 +125,9 @@ time(Goal) :-
                            ;   report_time(ID, Inf),
                                false
                            ),
-                           retract(time_state(ID, _))).
-
-% use a high inference limit so that we can use the limit-based logic
-% for counting inferences which already exists in the engine.
-upper_inference(U) :- U is 2<<222.
+                           retract(time_state(ID, _))
+                          ),
+        call(Result).
 
 time_true(ID, Inf) :-
         report_time(ID, Inf).
@@ -171,52 +160,48 @@ report_time(ID, Inf) :-
    can report the number of inferences. A better abstraction may be
    able to share more inferences-related logic between time/1 and
    call_with_inference_limit/3.
+
+   call_with_unlimited_inference_limit/3 is introduced with new system
+   predicates '$install_unlimited_inference_counter'/1 and '$inference_count'/1.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
-:- meta_predicate(call_with_inference_limit(0,?,?,?,?,?)).
+:- meta_predicate(call_with_unlimited_inference_limit(0,?,?)).
 
-:- non_counted_backtracking call_with_inference_limit/6.
+:- non_counted_backtracking call_with_unlimited_inference_limit/3.
 
-call_with_inference_limit(G, L, R, Bb, B, Diff) :-
+call_with_unlimited_inference_limit(G, Inf, Result) :-
+    '$install_unlimited_inference_counter'(Count),
+    '$get_current_block'(Bb),
+    '$get_b_value'(B),
+    call_with_unlimited_inference_limit(G, Bb, B, Count, Inf, Result),
+    '$remove_call_policy_check'(B).
+
+:- non_counted_backtracking call_with_unlimited_inference_limit/6.
+
+call_with_unlimited_inference_limit(G, Bb, _B, Count0, Inf, true) :-
     '$install_new_block'(NBb),
-    '$install_inference_counter'(B, L, Count0),
     '$call_with_inference_counting'(call(G)),
-    '$inference_level'(R, B),
-    '$remove_inference_counter'(B, Count1),
-    Diff is Count1 - Count0,
-    end_block(B, Bb, NBb, Diff).
-call_with_inference_limit(_, _, R, Bb, B, _) :-
+    '$remove_inference_counter'(NBb, Count1),
+    Inf is Count1 - Count0,
+    (  '$clean_up_block'(NBb),
+       '$reset_block'(Bb)
+    ;  '$install_unlimited_inference_counter'(_),
+       '$reset_block'(NBb),
+       '$fail'
+    ).
+call_with_unlimited_inference_limit(_, Bb, B, Count0, Inf, false) :-
+    '$get_current_block'(NBb),
+    '$remove_inference_counter'(NBb, Count1),
     '$reset_block'(Bb),
-    '$remove_inference_counter'(B, _),
-    (  '$get_ball'(Ball),
+    '$remove_call_policy_check'(B),
+    (  '$get_ball'(_),
        '$push_ball_stack',
        '$get_cp'(Cp),
-       '$set_cp_by_default'(Cp)
-    ;  '$remove_call_policy_check'(B),
-       '$fail'
-    ),
-    handle_ile(B, Ball, R).
-
-
-:- non_counted_backtracking end_block/4.
-
-end_block(_, Bb, NBb, _L) :-
-    '$clean_up_block'(NBb),
-    '$reset_block'(Bb).
-end_block(B, _Bb, NBb, L) :-
-    '$install_inference_counter'(B, L, _),
-    '$reset_block'(NBb),
-    '$fail'.
-
-:- non_counted_backtracking handle_ile/3.
-
-handle_ile(B, inference_limit_exceeded(B), _) :-
-    throw(error(representation_error(inference_limit), time/1)).
-handle_ile(B, L, _) :-
-     L \= inference_limit_exceeded(_),
-    '$remove_call_policy_check'(B),
-    '$pop_from_ball_stack',
-    '$unwind_stack'.
+       '$set_cp_by_default'(Cp),
+       '$pop_from_ball_stack',
+       '$unwind_stack'
+    ;  Inf is Count1 - Count0
+    ).
 
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -

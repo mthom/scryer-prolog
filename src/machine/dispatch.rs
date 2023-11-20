@@ -3675,6 +3675,14 @@ impl Machine {
                         try_or_throw!(self.machine_st, self.install_inference_counter());
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                     }
+                    &Instruction::CallInstallUnlimitedInferenceCounter => {
+                        try_or_throw!(self.machine_st, self.install_unlimited_inference_counter());
+                        step_or_fail!(self, self.machine_st.p += 1);
+                    }
+                    &Instruction::ExecuteInstallUnlimitedInferenceCounter => {
+                        try_or_throw!(self.machine_st, self.install_unlimited_inference_counter());
+                        step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+                    }
                     &Instruction::CallLiftedHeapLength => {
                         self.lifted_heap_length();
                         step_or_fail!(self, self.machine_st.p += 1);

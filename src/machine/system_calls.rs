@@ -5516,11 +5516,8 @@ impl Machine {
         let a2 = self.deref_register(2);
 
         let n = match Number::try_from(a2) {
-            Ok(Number::Fixnum(bp)) => bp.get_num() as usize,
-            Ok(Number::Integer(n)) => {
-                let value: usize = (&*n).try_into().unwrap();
-                value
-            }
+            Ok(Number::Fixnum(bp)) => Integer::from(bp.get_num() as usize),
+            Ok(Number::Integer(n)) => (*n).clone(),
             _ => {
                 let stub = functor_stub(atom!("call_with_inference_limit"), 3);
 
@@ -5531,19 +5528,36 @@ impl Machine {
 
         let bp = cell_as_fixnum!(a1).get_num() as usize;
         let a3 = self.deref_register(3);
-        let count = self.machine_st.cwil.add_limit(n, bp);
 
-        let result = count.try_into();
-        if let Ok(value) = result {
-            self.machine_st.unify_fixnum(Fixnum::build_with(value), a3);
-        } else {
-            let count = arena_alloc!(count.clone(), &mut self.machine_st.arena);
-            self.machine_st.unify_big_int(count, a3);
-        }
-
+        self.machine_st.cwil.add_limit(n, bp);
+        self.inference_count(a3);
         self.machine_st.increment_call_count_fn = MachineState::increment_call_count;
 
         Ok(())
+    }
+
+    #[inline(always)]
+    pub(crate) fn install_unlimited_inference_counter(&mut self) -> CallResult {
+        let count_var = self.machine_st.registers[1];
+
+        self.machine_st.cwil.add_limit(Integer::from(-1), 0);
+        self.inference_count(count_var);
+        self.machine_st.increment_call_count_fn = MachineState::increment_call_count;
+
+        Ok(())
+    }
+
+    #[inline(always)]
+    pub(crate) fn inference_count(&mut self, count_var: HeapCellValue) {
+        let count = &self.machine_st.cwil.count;
+
+        if let Ok(value) = count.try_into() {
+            self.machine_st
+                .unify_fixnum(Fixnum::build_with(value), count_var);
+        } else {
+            let count = arena_alloc!(count.clone(), &mut self.machine_st.arena);
+            self.machine_st.unify_big_int(count, count_var);
+        }
     }
 
     #[inline(always)]
