@@ -2389,7 +2389,7 @@ dependencies = [
 
 [[package]]
 name = "scryer-prolog-libs"
-version = "0.1.0"
+version = "0.9.3"
 dependencies = [
  "indexmap",
  "ref_thread_local",

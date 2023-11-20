@@ -39,7 +39,7 @@ fn main() {
     let dest_path = Path::new(&out_dir).join("libraries.rs");
 
     let mut libraries = File::create(dest_path).unwrap();
-    let lib_path = Path::new("lib");
+    let lib_path = Path::new("../src/lib");
 
     libraries
         .write_all(
@@ -52,5 +52,5 @@ fn main() {
     find_prolog_files(&mut libraries, "", lib_path);
     libraries.write_all(b"\n        m\n    };\n}\n").unwrap();
 
-    println!("cargo:rerun-if-changed=lib/");
+    println!("cargo:rerun-if-changed=../src/lib/");
 }
