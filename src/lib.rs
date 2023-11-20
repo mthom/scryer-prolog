@@ -51,7 +51,8 @@ use wasm_bindgen::prelude::*;
 #[wasm_bindgen]
 pub fn eval_code(s: &str) -> String {
     use machine::mock_wam::*;
-    use web_sys::console;
+
+    console_error_panic_hook::set_once();
 
     let mut wam = Machine::with_test_streams();
     let bytes = wam.test_load_string(s);
