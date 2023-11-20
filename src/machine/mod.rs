@@ -28,6 +28,8 @@ pub mod system_calls;
 pub mod term_stream;
 pub mod unify;
 
+pub(crate) use scryer_prolog_libs::LIBRARIES;
+
 use crate::arena::*;
 use crate::arithmetic::*;
 use crate::atom_table::*;
@@ -112,8 +114,6 @@ impl LoadContext {
 fn current_dir() -> PathBuf {
     env::current_dir().unwrap_or(PathBuf::from("./"))
 }
-
-include!(concat!(env!("OUT_DIR"), "/libraries.rs"));
 
 pub static BREAK_FROM_DISPATCH_LOOP_LOC: usize = 0;
 pub static INSTALL_VERIFY_ATTR_INTERRUPT: usize = 1;

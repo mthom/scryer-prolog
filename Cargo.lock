@@ -2367,6 +2367,7 @@ dependencies = [
  "roxmltree",
  "rustyline",
  "ryu",
+ "scryer-prolog-libs",
  "select",
  "serde-wasm-bindgen",
  "serial_test",
@@ -2384,6 +2385,14 @@ dependencies = [
  "wasm-bindgen",
  "wasm-bindgen-futures",
  "web-sys",
+]
+
+[[package]]
+name = "scryer-prolog-libs"
+version = "0.1.0"
+dependencies = [
+ "indexmap",
+ "ref_thread_local",
 ]
 
 [[package]]
