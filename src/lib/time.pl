@@ -96,7 +96,7 @@ sleep(T) :-
 :- meta_predicate time(0).
 
 :- dynamic(time_id/1).
-:- dynamic(time_state/2).
+:- dynamic(time_state/3).
 
 time_next_id(N) :-
         (   retract(time_id(N0)) ->
@@ -111,9 +111,9 @@ time_next_id(N) :-
 %  Reports the execution time of Goal.
 
 time(Goal) :-
-        '$cpu_now'(T0),
+        cputime_inferences(T0, I0),
         time_next_id(ID),
-        setup_call_cleanup(asserta(time_state(ID, T0)),
+        setup_call_cleanup(asserta(time_state(ID, T0, I0)),
                            (   call_cleanup(catch(Goal, E, (report_time(ID),throw(E))),
                                             Det = true),
                                time_true(ID),
@@ -123,49 +123,72 @@ time(Goal) :-
                            ;   report_time(ID),
                                false
                            ),
-                           retract(time_state(ID, _))).
+                           retract(time_state(ID, _, _))).
+
+cputime_inferences(T, I) :-
+        '$cpu_now'(T),
+        '$inference_count'(I).
 
 time_true(ID) :-
         report_time(ID).
 time_true(ID)  :-
         % on backtracking, update the stored CPU time for this ID
-        retract(time_state(ID, _)),
-        '$cpu_now'(T0),
-        asserta(time_state(ID, T0)),
+        retract(time_state(ID, _, _)),
+        cputime_inferences(T0, I0),
+        asserta(time_state(ID, T0, I0)),
         false.
 
 report_time(ID) :-
-        time_state(ID, T0),
-        '$cpu_now'(T),
+        time_state(ID, T0, I0),
+        cputime_inferences(T, I),
         Time is T - T0,
+        Inferences0 is I - I0,
+        % we must subtract the number of inferences that time/1 itself takes;
+        % this may have to be adapted if the implementation changes,
+        % so that (for example) true/1 takes exactly 1 inference.
         (   bb_get('$answer_count', 0) ->
+            Inferences is Inferences0 - 60,
             Pre = "   ", Post = ""
-        ;   Pre = "", Post = "   "
+        ;   Inferences is Inferences0 - 9,
+            Pre = "", Post = "   "
         ),
-        format("~s% CPU time: ~3fs~n~s", [Pre,Time,Post]).
+        phrase((Pre,"% CPU time: ", format_("~3f", [Time]), "s, ",
+                format_("~U", [Inferences])," inference",s_if_necessary(Inferences),"\n",
+                Post), Cs),
+        format("~s", [Cs]).
+
+s_if_necessary(Inferences) -->
+        { compare(C, 1, Inferences) },
+        s_(C).
+
+s_(=) --> "".
+s_(<) --> "s".
+s_(>) --> " (exception?)".
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ?- time((true;false)).
-%@    % CPU time: 0.006s
-%@    true
-%@ ;  % CPU time: 0.001s
-%@    false.
+   % CPU time: 0.000s, 1 inference
+   true
+;  % CPU time: 0.000s, 0 inference (exception?)
+   false.
 
 :- time(use_module(library(clpz))).
-%@    % CPU time: 3.711s
-%@    true.
+   % CPU time: 0.343s, 409_874 inferences
+   true.
 
 :- time(use_module(library(lists))).
-%@    % CPU time: 0.006s
-%@    true.
+   % CPU time: 0.000s, 19 inferences
+   true.
 
 ?- time(member(X, "abc")).
-%@    % CPU time: 0.005s
-%@    X = a
-%@ ;  % CPU time: 0.000s
-%@    X = b
-%@ ;  % CPU time: 0.000s
-%@    X = c
-%@ ;  % CPU time: 0.000s
-%@    false.
+   % CPU time: 0.000s, 1 inference
+   X = a
+;  % CPU time: 0.000s, 3 inferences
+   X = b
+;  % CPU time: 0.000s, 3 inferences
+   X = c.
+
+?- time((repeat,false)).
+   % CPU time: 2.726s, 53_330_502 inferences
+   error('$interrupt_thrown',repl/0).
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
