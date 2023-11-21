@@ -827,8 +827,12 @@ impl MachineState {
     ) -> usize {
         let threshold = self.lifted_heap.len() - lh_offset;
 
-        let mut copy_ball_term =
-            CopyBallTerm::new(&mut self.stack, &mut self.heap, &mut self.lifted_heap);
+        let mut copy_ball_term = CopyBallTerm::new(
+            &mut self.attr_var_init.attr_var_queue,
+            &mut self.stack,
+            &mut self.heap,
+            &mut self.lifted_heap,
+        );
 
         copy_ball_term.push(list_loc_as_cell!(threshold + 1));
         copy_ball_term.push(heap_loc_as_cell!(threshold + 3));
@@ -6789,6 +6793,7 @@ impl Machine {
 
         copy_term(
             CopyBallTerm::new(
+                &mut self.machine_st.attr_var_init.attr_var_queue,
                 &mut self.machine_st.stack,
                 &mut self.machine_st.heap,
                 &mut ball.stub,
