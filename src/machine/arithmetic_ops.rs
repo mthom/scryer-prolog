@@ -348,7 +348,7 @@ pub(crate) fn int_pow(n1: Number, n2: Number, arena: &mut Arena) -> Result<Numbe
         (Number::Fixnum(n1), Number::Integer(n2)) => {
             let n1_i = n1.get_num();
 
-            if !(n1_i == 1 || n1_i == 0 || n1_i == -1) && n2.is_zero() {
+            if !(n1_i == 1 || n1_i == 0 || n1_i == -1) && n2.is_negative() {
                 let n = Number::Fixnum(n1);
                 Err(numerical_type_error(ValidType::Float, n, stub_gen))
             } else {
@@ -359,7 +359,7 @@ pub(crate) fn int_pow(n1: Number, n2: Number, arena: &mut Arena) -> Result<Numbe
         (Number::Integer(n1), Number::Fixnum(n2)) => {
             let n2_i = n2.get_num();
 
-            if !(*n1 == Integer::from(1) || n1.is_zero() || *n1 == Integer::from(-1)) && n2_i < 0 {
+            if !(n1.is_one() || n1.is_zero() || n1.num_eq(&-1)) && n2_i < 0 {
                 let n = Number::Integer(n1);
                 Err(numerical_type_error(ValidType::Float, n, stub_gen))
             } else {
@@ -368,9 +368,7 @@ pub(crate) fn int_pow(n1: Number, n2: Number, arena: &mut Arena) -> Result<Numbe
             }
         }
         (Number::Integer(n1), Number::Integer(n2)) => {
-            if !(*n1 == Integer::from(1) || n1.is_zero() || *n1 == Integer::from(-1))
-                && n2.is_zero()
-            {
+            if !(n1.is_one() || n1.is_zero() || n1.num_eq(&-1)) && n2.is_negative() {
                 let n = Number::Integer(n1);
                 Err(numerical_type_error(ValidType::Float, n, stub_gen))
             } else {
