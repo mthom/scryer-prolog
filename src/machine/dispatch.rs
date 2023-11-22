@@ -208,6 +208,7 @@ impl MachineState {
                 l
             }
             (HeapCellValueTag::Fixnum |
+             HeapCellValueTag::CutPoint |
              HeapCellValueTag::Char |
              HeapCellValueTag::F64) => {
                 c
