@@ -4882,6 +4882,70 @@ impl Machine {
         Ok(())
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
+    #[inline(always)]
+    pub(crate) fn js_eval(&mut self) -> CallResult {
+        unimplemented!()
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    #[inline(always)]
+    pub(crate) fn js_eval(&mut self) -> CallResult {
+        let code = self.deref_register(1);
+        let result_reg = self.deref_register(2);
+        if let Some(code) = self.machine_st.value_to_str_like(code) {
+            let result = match js_sys::eval(&code.as_str()) {
+                Ok(result) => self.unify_js_value(result, result_reg),
+                Err(result) => self.unify_js_value(result, result_reg),
+            };
+            return Ok(());
+        }
+        self.machine_st.fail = true;
+        Ok(())
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn unify_js_value(&mut self, result: wasm_bindgen::JsValue, result_reg: HeapCellValue) {
+        match result.as_bool() {
+            Some(result) => match result {
+                true => self.machine_st.unify_atom(atom!("true"), result_reg),
+                false => self.machine_st.unify_atom(atom!("false"), result_reg),
+            },
+            None => match result.as_f64() {
+                Some(result) => {
+                    let n = float_alloc!(result, self.machine_st.arena);
+                    self.machine_st.unify_f64(n, result_reg);
+                }
+                None => match result.as_string() {
+                    Some(result) => {
+                        let result = AtomTable::build_with(&self.machine_st.atom_tbl, &result);
+                        self.machine_st.unify_complete_string(result, result_reg);
+                    }
+                    None => {
+                        if result.is_null() {
+                            self.machine_st.unify_atom(atom!("null"), result_reg);
+                        } else if result.is_undefined() {
+                            self.machine_st.unify_atom(atom!("undefined"), result_reg);
+                        } else if result.is_symbol() {
+                            self.machine_st.unify_atom(atom!("js_symbol"), result_reg);
+                        } else if result.is_object() {
+                            self.machine_st.unify_atom(atom!("js_object"), result_reg);
+                        } else if result.is_array() {
+                            self.machine_st.unify_atom(atom!("js_array"), result_reg);
+                        } else if result.is_function() {
+                            self.machine_st.unify_atom(atom!("js_function"), result_reg);
+                        } else if result.is_bigint() {
+                            self.machine_st.unify_atom(atom!("js_bigint"), result_reg);
+                        } else {
+                            self.machine_st
+                                .unify_atom(atom!("js_unknown_type"), result_reg);
+                        }
+                    }
+                },
+            },
+        }
+    }
+
     #[inline(always)]
     pub(crate) fn current_time(&mut self) {
         let timestamp = self.systemtime_to_timestamp(SystemTime::now());

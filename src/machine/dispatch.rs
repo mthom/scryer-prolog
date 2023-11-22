@@ -4139,6 +4139,14 @@ impl Machine {
                         try_or_throw!(self.machine_st, self.define_foreign_struct());
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                     }
+                    &Instruction::CallJsEval => {
+                        try_or_throw!(self.machine_st, self.js_eval());
+                        step_or_fail!(self, self.machine_st.p += 1);
+                    }
+                    &Instruction::ExecuteJsEval => {
+                        try_or_throw!(self.machine_st, self.js_eval());
+                        step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+                    }
                     &Instruction::CallCurrentTime => {
                         self.current_time();
                         step_or_fail!(self, self.machine_st.p += 1);
