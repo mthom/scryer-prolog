@@ -17,9 +17,7 @@ but they're not part of the ISO Prolog standard at the moment.
                     succ/2,
                     call_nth/2,
                     countall/2,
-                    copy_term_nat/2,
-                    asserta/2,
-                    assertz/2]).
+                    copy_term_nat/2]).
 
 :- use_module(library(error), [can_be/2,
                                domain_error/3,
@@ -383,22 +381,4 @@ countall(Goal, N) :-
 % Similar to `copy_term/2` but without attribute variables
 copy_term_nat(Source, Dest) :-
     '$copy_term_without_attr_vars'(Source, Dest).
-
-%% asserta(Module, Rule_Fact).
-%
-% Similar to `asserta/1` but allows specifying a Module
-asserta(Module, (Head :- Body)) :-
-    !,
-    '$asserta'(Module, Head, Body).
-asserta(Module, Fact) :-
-    '$asserta'(Module, Fact, true).
-
-%% assertz(Module, Rule_Fact).
-%
-% Similar to `assertz/1` but allows specifying a Module
-assertz(Module, (Head :- Body)) :-
-    !,
-    '$assertz'(Module, Head, Body).
-assertz(Module, Fact) :-
-    '$assertz'(Module, Fact, true).
 
