@@ -175,6 +175,7 @@ jobs:
           path: |
             target/criterion/*
             target/iai/*
+            target/benchmark_inference_counts.json
 
   # Publish binaries when building for a tag
   release:

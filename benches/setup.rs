@@ -86,14 +86,47 @@ mod test {
     #[test]
     fn validate_benchmarks() {
         use super::prolog_benches;
-        use scryer_prolog::machine::parsed_results::QueryResolution;
+        use scryer_prolog::machine::parsed_results::{QueryMatch, QueryResolution};
+        use std::{fmt::Write, fs};
 
-        use scryer_prolog::machine::parsed_results::QueryMatch;
+        struct BenchResult {
+            pub name: &'static str,
+            pub setup_inference_count: u64,
+            pub query_inference_count: u64,
+        }
+
+        let mut results: Vec<BenchResult> = vec![];
+
         for (_, r) in prolog_benches() {
             let mut machine = r.make_machine();
+            let setup_inference_count = machine.get_inference_count();
+
             let result = machine.run_query(r.query.to_string()).unwrap();
+            let query_inference_count = machine.get_inference_count() - setup_inference_count;
+
             let expected = QueryResolution::Matches(vec![QueryMatch::from(r.bindings.clone())]);
             assert_eq!(result, expected, "validating benchmark {}", r.name);
+
+            results.push(BenchResult {
+                name: r.name,
+                setup_inference_count,
+                query_inference_count,
+            })
         }
+
+        let mut json: String = Default::default();
+        json.push('[');
+        for r in results {
+            json.push('\n');
+            write!(
+                json,
+                r#"{{"name":"{}","setup_inference_count":{},"query_inference_count":{}}},"#,
+                r.name, r.setup_inference_count, r.query_inference_count
+            )
+            .unwrap();
+        }
+        json.pop(); // trailing comma
+        json.push_str("\n]");
+        fs::write("target/benchmark_inference_counts.json", json).expect("Unable to write file");
     }
 }
