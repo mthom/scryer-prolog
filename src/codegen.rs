@@ -300,9 +300,10 @@ impl DebrayAllocator {
                         &self.var_data.records[var_num].allocation
                     {
                         self.mark_var_in_non_callable(var_num, term_loc, vr, code);
+                    } else {
+                        self.increment_running_count(var_num);
                     }
 
-                    self.increment_running_count(var_num);
                     RegType::Perm(p)
                 }
             }

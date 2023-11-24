@@ -334,7 +334,12 @@ impl MachineState {
         self.ball.boundary = self.heap.len();
 
         copy_term(
-            CopyBallTerm::new(&mut self.stack, &mut self.heap, &mut self.ball.stub),
+            CopyBallTerm::new(
+                &mut self.attr_var_init.attr_var_queue,
+                &mut self.stack,
+                &mut self.heap,
+                &mut self.ball.stub,
+            ),
             addr,
             AttrVarPolicy::DeepCopy,
         );

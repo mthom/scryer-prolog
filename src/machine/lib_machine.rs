@@ -57,6 +57,7 @@ impl Machine {
         or_frame.prelude.attr_var_queue_len = 0;
 
         self.machine_st.b = stub_b;
+        self.machine_st.hb = self.machine_st.heap.len();
     }
 
     pub fn run_query(&mut self, query: String) -> QueryResult {
@@ -87,6 +88,7 @@ impl Machine {
             .expect("couldn't get code index")
             .local()
             .unwrap();
+        self.machine_st.b0 = self.machine_st.b;
 
         let var_names: IndexMap<_, _> = term_write_result
             .var_dict
@@ -422,7 +424,6 @@ mod tests {
         );
     }
 
-    #[ignore = "fails on windows"]
     #[test]
     fn stress_integration_test() {
         let mut machine = Machine::new_lib();

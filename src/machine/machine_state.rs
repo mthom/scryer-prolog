@@ -290,6 +290,11 @@ impl<'a> CopierTarget for CopyTerm<'a> {
     }
 
     #[inline(always)]
+    fn push_attr_var_queue(&mut self, attr_var_loc: usize) {
+        self.state.attr_var_init.attr_var_queue.push(attr_var_loc);
+    }
+
+    #[inline(always)]
     fn store(&self, value: HeapCellValue) -> HeapCellValue {
         self.state.store(value)
     }
@@ -307,6 +312,7 @@ impl<'a> CopierTarget for CopyTerm<'a> {
 
 #[derive(Debug)]
 pub(super) struct CopyBallTerm<'a> {
+    attr_var_queue: &'a mut Vec<usize>,
     stack: &'a mut Stack,
     heap: &'a mut Heap,
     heap_boundary: usize,
@@ -314,10 +320,16 @@ pub(super) struct CopyBallTerm<'a> {
 }
 
 impl<'a> CopyBallTerm<'a> {
-    pub(super) fn new(stack: &'a mut Stack, heap: &'a mut Heap, stub: &'a mut Heap) -> Self {
+    pub(super) fn new(
+        attr_var_queue: &'a mut Vec<usize>,
+        stack: &'a mut Stack,
+        heap: &'a mut Heap,
+        stub: &'a mut Heap,
+    ) -> Self {
         let hb = heap.len();
 
         CopyBallTerm {
+            attr_var_queue,
             stack,
             heap,
             heap_boundary: hb,
@@ -357,6 +369,11 @@ impl<'a> CopierTarget for CopyBallTerm<'a> {
 
     fn push(&mut self, value: HeapCellValue) {
         self.stub.push(value);
+    }
+
+    #[inline(always)]
+    fn push_attr_var_queue(&mut self, attr_var_loc: usize) {
+        self.attr_var_queue.push(attr_var_loc);
     }
 
     fn store(&self, value: HeapCellValue) -> HeapCellValue {

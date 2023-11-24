@@ -18,6 +18,7 @@ pub trait CopierTarget: IndexMut<usize, Output = HeapCellValue> {
     fn store(&self, value: HeapCellValue) -> HeapCellValue;
     fn deref(&self, value: HeapCellValue) -> HeapCellValue;
     fn push(&mut self, value: HeapCellValue);
+    fn push_attr_var_queue(&mut self, attr_var_loc: usize);
     fn stack(&mut self) -> &mut Stack;
     fn threshold(&self) -> usize;
 }
@@ -73,7 +74,6 @@ impl<T: CopierTarget> CopyTermState<T> {
                     if h >= self.old_h {
                         *self.value_at_scan() = list_loc_as_cell!(h);
                         self.scan += 1;
-
                         return;
                     }
                 }
@@ -96,14 +96,19 @@ impl<T: CopierTarget> CopyTermState<T> {
             .store(self.target.deref(heap_loc_as_cell!(addr + 1)));
 
         if !cdr.is_var() {
+            // mark addr + 1 as a list back edge in the cdr of the list
             self.trail_list_cell(addr + 1, threshold);
+            self.target[addr + 1].set_mark_bit(true);
+            self.target[addr + 1].set_forwarding_bit(true);
         } else {
             let car = self
                 .target
                 .store(self.target.deref(heap_loc_as_cell!(addr)));
 
             if !car.is_var() {
+                // mark addr as a list back edge in the car of the list
                 self.trail_list_cell(addr, threshold);
+                self.target[addr].set_mark_bit(true);
             }
         }
 
@@ -178,6 +183,7 @@ impl<T: CopierTarget> CopyTermState<T> {
 
             for (threshold, list_loc) in iter {
                 self.target[threshold] = list_loc_as_cell!(self.target.threshold());
+                self.target.push_attr_var_queue(threshold - 1);
                 self.copy_attr_var_list(list_loc);
             }
         }
@@ -263,6 +269,7 @@ impl<T: CopierTarget> CopyTermState<T> {
     }
 
     fn copy_var(&mut self, addr: HeapCellValue) {
+        let index = addr.get_value() as usize;
         let rd = self.target.deref(addr);
         let ra = self.target.store(rd);
 
@@ -271,7 +278,20 @@ impl<T: CopierTarget> CopyTermState<T> {
                 if h >= self.old_h {
                     *self.value_at_scan() = ra;
                     self.scan += 1;
+                    return;
+                }
+            }
+            (HeapCellValueTag::Lis, h) => {
+                if h >= self.old_h && self.target[index].get_mark_bit() {
+                    *self.value_at_scan() = heap_loc_as_cell!(
+                        if ra.get_forwarding_bit() {
+                            h + 1
+                        } else {
+                            h
+                        }
+                    );
 
+                    self.scan += 1;
                     return;
                 }
             }
@@ -356,12 +376,16 @@ impl<T: CopierTarget> CopyTermState<T> {
         }
     }
 
-    fn unwind_trail(&mut self) {
-        for (r, value) in self.trail.drain(0..) {
+    fn unwind_trail(mut self) {
+        for (r, value) in self.trail {
             let index = r.get_value() as usize;
 
             match r.get_tag() {
-                RefTag::AttrVar | RefTag::HeapCell => self.target[index] = value,
+                RefTag::AttrVar | RefTag::HeapCell => {
+                    self.target[index] = value;
+                    self.target[index].set_mark_bit(false);
+                    self.target[index].set_forwarding_bit(false);
+                }
                 RefTag::StackCell => self.target.stack()[index] = value,
             }
         }
