@@ -112,11 +112,22 @@ assert_cmd = "1.0.3"
 predicates-core = "1.0.2"
 maplit = "1.0.2"
 serial_test = "2.0.0"
-iai-callgrind = "0.7.3"
+iai-callgrind = { git = "https://github.com/iai-callgrind/iai-callgrind.git", rev = "c77bc3c83d7f4e976cc42d4597236a8db259e772" }
 criterion = "0.5.1"
+
+[target.'cfg(not(target_os = "windows"))'.dev-dependencies]
+pprof = { version = "0.13.0", features = ["criterion", "flamegraph"] }
 
 [patch.crates-io]
 modular-bitfield = { git = "https://github.com/mthom/modular-bitfield" }
+
+[profile.bench]
+lto = true
+opt-level = 3
+
+[profile.release]
+lto = true
+opt-level = 3
 
 [[bench]]
 name = "run_criterion"

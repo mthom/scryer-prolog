@@ -142,7 +142,8 @@ jobs:
           cache-context: report
       - run: |
           cargo install cargo2junit --force
-          cargo install iai-callgrind-runner --force --version `cargo metadata --format-version 1 | jq -r '.resolve.nodes[].id|split(" ")|select(.[0]=="iai-callgrind")|.[1]'`
+          # cargo install iai-callgrind-runner --force --version `cargo metadata --format-version 1 | jq -r '.resolve.nodes[].id|split(" ")|select(.[0]=="iai-callgrind")|.[1]'`
+          cargo install iai-callgrind-runner --force --git https://github.com/iai-callgrind/iai-callgrind --rev c77bc3c83d7f4e976cc42d4597236a8db259e772
           sudo apt install valgrind -y
 
       - name: Test and report
@@ -161,21 +162,20 @@ jobs:
           fail_on: nothing
           comment_mode: off
 
-      - run: cargo build --bench run_iai --release
-      - run: cargo bench --bench run_iai
+      - run: cargo build --all-targets --release
+      - run: cargo test --bench setup --release
+      - run: cargo bench --bench run_iai -- --save-summary=json
       - run: cargo bench --bench run_criterion
+      - run: cargo bench --bench run_criterion -- --profile-time 60
 
-      - name: Publish criterion benchmark results
+      - name: Publish benchmark results
         uses: actions/upload-artifact@v3
         with:
-          name: bench-criterion-results
-          path: target/criterion/**/*
-
-      - name: Publish iai benchmark results
-        uses: actions/upload-artifact@v3
-        with:
-          name: bench-iai-results
-          path: target/iai/scryer-prolog/run_iai/bench_group/*
+          name: benchmark-results
+          path: |
+            target/criterion/*
+            target/iai/*
+            target/benchmark_inference_counts.json
 
   # Publish binaries when building for a tag
   release:

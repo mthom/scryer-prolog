@@ -1,5 +1,8 @@
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 
+#[cfg(not(target_os = "windows"))]
+use pprof::criterion::{Output, PProfProfiler};
+
 mod setup;
 
 fn bench_criterion(c: &mut Criterion) {
@@ -13,9 +16,21 @@ fn bench_criterion(c: &mut Criterion) {
     }
 }
 
+#[cfg(not(target_os = "windows"))]
+fn config() -> Criterion {
+    Criterion::default()
+        .sample_size(20)
+        .with_profiler(PProfProfiler::new(100, Output::Flamegraph(None)))
+}
+
+#[cfg(target_os = "windows")]
+fn config() -> Criterion {
+    Criterion::default().sample_size(20)
+}
+
 criterion_group!(
-    name = bench_group;
-    config = Criterion::default().sample_size(10);
+    name = benches;
+    config = config();
     targets = bench_criterion
 );
-criterion_main!(bench_group);
+criterion_main!(benches);
