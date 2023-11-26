@@ -1214,6 +1214,9 @@ retract(Clause0) :-
        Body = true,
        retract_module_clause(Head, Body, Module)
     ;  Clause = (Head :- Body) ->
+       (  var(Module) -> Module = user
+       ;  true
+       ),
        retract_module_clause(Head, Body, Module)
     ).
 
