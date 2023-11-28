@@ -27,6 +27,7 @@ use std::io::{Cursor, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::mem;
 use std::net::{Shutdown, TcpStream};
 use std::ops::{Deref, DerefMut};
+use std::path::PathBuf;
 use std::ptr;
 
 #[cfg(feature = "tls")]
@@ -1837,42 +1838,55 @@ impl MachineState {
             }
         };
 
-        let file = match open_options.open(&*file_spec.as_str()) {
-            Ok(file) => file,
-            Err(err) => {
-                match err.kind() {
-                    ErrorKind::NotFound => {
-                        // 8.11.5.3j)
-                        let stub = functor_stub(atom!("open"), 4);
+        let mut path = PathBuf::from(&*file_spec.as_str());
 
-                        let err =
-                            self.existence_error(ExistenceError::SourceSink(self[temp_v!(1)]));
+        loop {
+            let file = match open_options.open(&path) {
+                Ok(file) => file,
+                Err(err) => {
+                    match err.kind() {
+                        ErrorKind::NotFound => {
+                            // 8.11.5.3j)
+                            let stub = functor_stub(atom!("open"), 4);
 
-                        return Err(self.error_form(err, stub));
+                            let err =
+                                self.existence_error(ExistenceError::SourceSink(self[temp_v!(1)]));
+
+                            return Err(self.error_form(err, stub));
+                        }
+                        ErrorKind::PermissionDenied => {
+                            // 8.11.5.3k)
+                            return Err(self.open_permission_error(
+                                self.registers[1],
+                                atom!("open"),
+                                4,
+                            ));
+                        }
+                        _ => {
+                            // assume the OS is out of file descriptors.
+                            let stub = functor_stub(atom!("open"), 4);
+                            let err = self.resource_error(ResourceError::OutOfFiles);
+
+                            return Err(self.error_form(err, stub));
+                        }
                     }
-                    ErrorKind::PermissionDenied => {
-                        // 8.11.5.3k)
-                        return Err(self.open_permission_error(
-                            self.registers[1],
-                            atom!("open"),
-                            4,
-                        ));
-                    }
-                    _ => {
-                        // assume the OS is out of file descriptors.
-                        let stub = functor_stub(atom!("open"), 4);
-                        let err = self.resource_error(ResourceError::OutOfFiles);
+                }
+            };
 
-                        return Err(self.error_form(err, stub));
+            if path.extension().is_none() {
+                if let Some(metadata) = file.metadata().ok() {
+                    if metadata.is_dir() {
+                        path.set_extension("pl");
+                        continue;
                     }
                 }
             }
-        };
 
-        Ok(if is_input_file {
-            Stream::from_file_as_input(file_spec, file, &mut self.arena)
-        } else {
-            Stream::from_file_as_output(file_spec, file, in_append_mode, &mut self.arena)
-        })
+            return Ok(if is_input_file {
+                Stream::from_file_as_input(file_spec, file, &mut self.arena)
+            } else {
+                Stream::from_file_as_output(file_spec, file, in_append_mode, &mut self.arena)
+            });
+        }
     }
 }
