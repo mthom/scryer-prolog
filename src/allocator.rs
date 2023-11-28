@@ -29,20 +29,25 @@ pub(crate) trait Allocator {
         &mut self,
         var_num: usize,
         lvl: Level,
-        cell: &'a Cell<VarReg>,
+        cell: &Cell<VarReg>,
         term_loc: GenContext,
         code: &mut CodeDeque,
         r: RegType,
         is_new_var: bool,
     );
 
-    fn mark_cut_var(&mut self, var_num: usize, chunk_num: usize) -> RegType;
+    fn mark_cut_var<'a, Target: CompilationTarget<'a>>(
+        &mut self,
+        var_num: usize,
+        term_loc: GenContext,
+        code: &mut CodeDeque,
+    ) -> RegType;
 
     fn mark_var<'a, Target: CompilationTarget<'a>>(
         &mut self,
         var_num: usize,
         lvl: Level,
-        cell: &'a Cell<VarReg>,
+        cell: &Cell<VarReg>,
         context: GenContext,
         code: &mut CodeDeque,
     );
