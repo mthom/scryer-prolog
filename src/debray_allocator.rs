@@ -840,18 +840,23 @@ impl Allocator for DebrayAllocator {
         self.in_use.insert(o);
     }
 
-    fn mark_cut_var<'a, Target: CompilationTarget<'a>>(
-        &mut self,
-        var_num: usize,
-        term_loc: GenContext,
-        code: &mut CodeDeque,
-    ) -> RegType {
+    fn mark_cut_var(&mut self, var_num: usize, chunk_num: usize) -> RegType {
         match self.get_binding(var_num) {
-            RegType::Perm(0) => RegType::Perm(self.alloc_perm_var(var_num, term_loc.chunk_num())),
+            RegType::Perm(0) => RegType::Perm(self.alloc_perm_var(var_num, chunk_num)),
             RegType::Temp(0) => {
-                let cell = Cell::default();
-                self.mark_var::<Target>(var_num, Level::Shallow, &cell, term_loc, code);
-                cell.get().norm()
+                let t = self.alloc_reg_to_non_var();
+
+                match &mut self.var_data.records[var_num].allocation {
+                    VarAlloc::Temp {
+                        temp_reg, safety, ..
+                    } => {
+                        *temp_reg = t;
+                        *safety = VarSafetyStatus::GloballyUnneeded;
+                    }
+                    _ => unreachable!(),
+                };
+
+                RegType::Temp(t)
             }
             r => r,
         }

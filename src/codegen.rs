@@ -926,16 +926,12 @@ impl<'b> CodeGenerator<'b> {
                         match term {
                             &QueryTerm::GetLevel(var_num) => {
                                 let code = branch_code_stack.code(code);
-                                let r = self
-                                    .marker
-                                    .mark_cut_var::<QueryInstruction>(var_num, term_loc, code);
+                                let r = self.marker.mark_cut_var(var_num, chunk_num);
                                 code.push_back(instr!("get_level", r));
                             }
                             &QueryTerm::GetCutPoint { var_num, prev_b } => {
                                 let code = branch_code_stack.code(code);
-                                let r = self
-                                    .marker
-                                    .mark_cut_var::<FactInstruction>(var_num, term_loc, code);
+                                let r = self.marker.mark_cut_var(var_num, chunk_num);
 
                                 code.push_back(if prev_b {
                                     instr!("get_prev_level", r)

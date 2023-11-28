@@ -36,12 +36,7 @@ pub(crate) trait Allocator {
         is_new_var: bool,
     );
 
-    fn mark_cut_var<'a, Target: CompilationTarget<'a>>(
-        &mut self,
-        var_num: usize,
-        term_loc: GenContext,
-        code: &mut CodeDeque,
-    ) -> RegType;
+    fn mark_cut_var(&mut self, var_num: usize, chunk_num: usize) -> RegType;
 
     fn mark_var<'a, Target: CompilationTarget<'a>>(
         &mut self,
