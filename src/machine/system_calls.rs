@@ -4191,7 +4191,14 @@ impl Machine {
     #[cfg(target_arch = "wasm32")]
     #[inline(always)]
     pub(crate) fn cpu_now(&mut self) {
-        // TODO
+        let millisecs = web_sys::window()
+            .expect("window global object should be available")
+            .performance()
+            .expect("performance property in window should be available")
+            .now();
+        let secs = float_alloc!(millisecs / 1000.0, self.machine_st.arena);
+
+        self.machine_st.unify_f64(secs, self.deref_register(1));
     }
 
     #[inline(always)]
@@ -4894,7 +4901,7 @@ impl Machine {
         let code = self.deref_register(1);
         let result_reg = self.deref_register(2);
         if let Some(code) = self.machine_st.value_to_str_like(code) {
-            let result = match js_sys::eval(&code.as_str()) {
+            match js_sys::eval(&code.as_str()) {
                 Ok(result) => self.unify_js_value(result, result_reg),
                 Err(result) => self.unify_js_value(result, result_reg),
             };
