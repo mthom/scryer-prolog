@@ -37,6 +37,7 @@
                atomic_si/1,
                list_si/1,
                character_si/1,
+               term_si/1,
                chars_si/1,
                dif_si/2]).
 
@@ -67,6 +68,11 @@ character_si(Ch) :-
    functor(Ch,Ch,0),
    atom(Ch),
    atom_length(Ch,1).
+
+term_si(Term) :-
+   (   ground(Term) -> acyclic_term(Term)
+   ;   throw(error(instantiation_error, term_si/1))
+   ).
 
 chars_si(Chs0) :-
    '$skip_max_list'(_,_, Chs0,Chs),
