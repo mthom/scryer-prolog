@@ -663,12 +663,16 @@ impl VariableClassifier {
                                 state_stack.last(),
                                 Some(TraversalState::RemoveBranchNum)
                             ) {
-                                // check if the second-to-last element is a regular BuildDisjunct, as we don't
-                                // want to add GetPrevLevel in case of a TrustMe.
-                                matches!(
-                                    state_stack.iter().rev().nth(1),
-                                    Some(TraversalState::BuildDisjunct(..))
-                                )
+                                // check if the second-to-last element
+                                // is a regular BuildDisjunct, as we
+                                // don't want to add GetPrevLevel in
+                                // case of a TrustMe.
+                                match state_stack.iter().rev().nth(1) {
+                                    Some(&TraversalState::BuildDisjunct(preceding_len)) => {
+                                        preceding_len + 1 == build_stack.len()
+                                    }
+                                    _ => false,
+                                }
                             } else {
                                 false
                             };
