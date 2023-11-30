@@ -61,6 +61,7 @@ impl BranchCodeStack {
         marker: &mut DebrayAllocator,
     ) -> SubsumedBranchHits {
         let mut subsumed_hits = SubsumedBranchHits::with_hasher(FxBuildHasher::default());
+        let mut propagated_var_nums = IndexSet::with_hasher(FxBuildHasher::default());
 
         for idx in (self.stack.len() - depth..self.stack.len()).rev() {
             let branch = &mut marker.branch_stack[idx];
@@ -84,10 +85,18 @@ impl BranchCodeStack {
 
                             self.stack[idx][branch_idx].push_back(instr!("put_variable", r, 0));
                         }
+
+                        if idx > self.stack.len() - depth {
+                            propagated_var_nums.insert(var_num);
+                        }
                     }
 
                     subsumed_hits.insert(var_num);
                 }
+            }
+
+            for var_num in propagated_var_nums.drain(..) {
+                marker.branch_stack[idx - 1].add_branch_occurrence(var_num);
             }
         }
 

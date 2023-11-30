@@ -39,6 +39,19 @@ impl BranchOccurrences {
             subsumed_hits: SubsumedBranchHits::with_hasher(FxBuildHasher::default()),
         }
     }
+
+    pub(crate) fn add_branch_occurrence(&mut self, var_num: usize) {
+        debug_assert!(self.current_branch < self.num_branches);
+        let num_branches = self.num_branches;
+
+        let entry = self
+            .hits
+            .entry(var_num)
+            .or_insert_with(|| BitVec::repeat(false, num_branches));
+
+        entry.set(self.current_branch, true);
+        self.subsumed_hits.insert(var_num);
+    }
 }
 
 #[derive(Debug)]
@@ -92,17 +105,7 @@ impl BranchStack {
 
     pub(crate) fn add_branch_occurrence(&mut self, var_num: usize) {
         if let Some(occurrences) = self.last_mut() {
-            debug_assert!(occurrences.current_branch < occurrences.num_branches);
-
-            let num_branches = occurrences.num_branches;
-
-            let entry = occurrences
-                .hits
-                .entry(var_num)
-                .or_insert_with(|| BitVec::repeat(false, num_branches));
-
-            entry.set(occurrences.current_branch, true);
-            occurrences.subsumed_hits.insert(var_num);
+            occurrences.add_branch_occurrence(var_num);
         }
     }
 
