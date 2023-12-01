@@ -1,0 +1,1 @@
+   error(syntax_error(incomplete_reduction),read_term/3:6).

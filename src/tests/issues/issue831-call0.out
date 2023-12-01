@@ -1,0 +1,1 @@
+   error(existence_error(procedure,call/0),call/0).

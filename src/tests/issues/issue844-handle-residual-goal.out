@@ -1,0 +1,10 @@
+   true.
+   true.
+   false.
+   X = -X.
+   dif:dif(-X,X).
+   false.
+   Vars = [X], dif:dif(-X,X).
+   true.
+   true.
+   true.

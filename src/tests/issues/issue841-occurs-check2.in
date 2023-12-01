@@ -1,0 +1,6 @@
+set_prolog_flag(occurs_check, true).
+X = -X.
+asserta(f(X,g(X))).
+f(X,X).
+X-X = X-g(X).
+halt.

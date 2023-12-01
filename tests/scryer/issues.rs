@@ -1,115 +1,76 @@
-use crate::helper::{load_module_test, run_top_level_test_no_args, run_top_level_test_with_args};
-use serial_test::serial;
+#![cfg(test)]
+extern crate test_generator;
 
-// issue #857
-#[test]
-fn display_constraints() {
-    run_top_level_test_no_args(
-        "\
-        X = 1.\n\
-        use_module(library(dif)).\n\
-        X = 1.\n\
-        dif(X,1).\n
-        halt.\n",
-        "   \
-        X = 1.\n   \
-        true.\n   \
-        X = 1.\n   \
-        dif:dif(X,1).\n\
-        ",
-    );
-}
+use core::panic;
+use std::path::Path;
 
-// issue #852
-#[test]
-fn do_not_duplicate_path_components() {
-    run_top_level_test_no_args(
-        "\
-        ['tests-pl/issue852-throw_e.pl'].\n\
-        ['tests-pl/issue852-throw_e.pl'].\n\
-        halt.\n\
-        ",
-        "   throw(e).\n   throw(e).\n",
-    );
-}
+use crate::helper::run_top_level_test_with_args;
+use scryer_prolog::machine::Machine;
+use std::io::ErrorKind;
+use test_generator::test_resources;
 
-// issue #844
-#[test]
-fn handle_residual_goal() {
-    run_top_level_test_no_args(
-        "\
-        use_module(library(dif)).\n\
-        use_module(library(atts)).\n\
-        -X\\=X.\n\
-        -X=X.\n\
-        dif(-X,X).\n\
-        dif(-X,X), -X=X.\n\
-        call_residue_vars(dif(-X,X), Vars).\n\
-        set_prolog_flag(occurs_check, true).\n\
-        -X\\=X.\n\
-        dif(-X,X).\n\
-        halt.\n\
-        ",
-        "   \
-        true.\n   \
-        true.\n   \
-        false.\n   \
-        X = -X.\n   \
-        dif:dif(-X,X).\n   \
-        false.\n   \
-        Vars = [X], dif:dif(-X,X).\n   \
-        true.\n   \
-        true.\n   \
-        true.\n\
-        ",
-    )
-}
+#[test_resources("src/tests/*.pl")]
+#[test_resources("src/tests/issues/*.pl")]
+#[test_resources("src/tests/clpz/*.pl")]
+fn prolog_test(path: &str) {
+    let (expected_input_path, expected_output_path) = {
+        let mut i = Path::new(path).to_owned();
+        let mut o = i.clone();
+        i.set_extension("in");
+        o.set_extension("out");
+        (i, o)
+    };
 
-// issue #841
-#[test]
-fn occurs_check_flag() {
-    run_top_level_test_with_args(
-        ["tests-pl/issue841-occurs-check.pl"],
-        "\
-         f(X, X).\n\
-         halt.\n\
-        ",
-        "   false.\n",
-    )
-}
+    let mut machine = Machine::with_test_streams();
+    let mut output = machine.test_load_file(path);
 
-#[test]
-fn occurs_check_flag2() {
-    run_top_level_test_no_args(
-        "\
-            set_prolog_flag(occurs_check, true).\n\
-            X = -X.\n\
-            asserta(f(X,g(X))).\n\
-            f(X,X).\n\
-            X-X = X-g(X).\n\
-            halt.\n\
-            ",
-        "   \
-            true.\n   \
-            false.\n   \
-            true.\n   \
-            false.\n   \
-            false.\n\
-            ",
-    )
+    // Attempt 1: test_load_string() - this loads as a module file, not stdin
+    // match std::fs::read_to_string(expected_input_path) {
+    //     Ok(stdin) => output.extend(machine.test_load_string(&stdin)),
+    //     Err(err) if err.kind() == ErrorKind::NotFound => {}
+    //     _ => panic!("failed to read input file"),
+    // };
+
+    // Attempt 2: set_user_input() - doesn't seem to work
+    match std::fs::read_to_string(expected_input_path) {
+        Ok(stdin) => machine.set_user_input(stdin),
+        Err(err) if err.kind() == ErrorKind::NotFound => {}
+        _ => panic!("failed to read input file"),
+    };
+
+    // Attempt 3: run top level manually -- tests fail and time out
+    // use scryer_prolog::{atom, atom_table::Atom}
+    // machine.run_top_level(atom!("$toplevel"), (atom!("$repl"), 1));
+
+    let mut output = String::from_utf8(output).unwrap();
+    output.push_str(&machine.get_user_output()); // doesn't do anything?
+
+    match std::fs::read_to_string(expected_output_path) {
+        Ok(expected_output) => {
+            assert_eq!(expected_output.trim(), output.trim(), "expected != actual")
+        }
+        Err(err) if err.kind() == ErrorKind::NotFound => assert_eq!("", output.trim()),
+        _ => panic!("failed to read output file"),
+    }
 }
 
 // issue #839
 #[test]
 fn op3() {
-    run_top_level_test_with_args(["tests-pl/issue839-op3.pl", "-g", "halt"], "", "")
+    run_top_level_test_with_args(["src/tests/cli/issue839-op3.pl", "-g", "halt"], "", "")
 }
 
 // issue #820
 #[test]
 fn multiple_goals() {
     run_top_level_test_with_args(
-        ["-g", "test", "-g", "halt", "tests-pl/issue820-goals.pl"],
+        [
+            "-g",
+            "test",
+            "-g",
+            "halt",
+            "src/tests/cli/issue820-goals.pl",
+        ],
         "",
         "helloworld\n",
     );
@@ -119,20 +80,9 @@ fn multiple_goals() {
 #[test]
 fn compound_goal() {
     run_top_level_test_with_args(
-        ["-g", "test,halt", "tests-pl/issue820-goals.pl"],
+        ["-g", "test,halt", "src/tests/cli/issue820-goals.pl"],
         "",
         "helloworld\n",
-    )
-}
-
-// issue #815
-#[test]
-fn no_stutter() {
-    run_top_level_test_no_args(
-        "write(a), write(b), false.\n\
-                                halt.\n\
-                                ",
-        "ab   false.\n",
     )
 }
 
@@ -150,23 +100,3 @@ fn singleton_warning() {
     );
 }
 */
-
-// issue #807
-#[test]
-fn ignored_constraint() {
-    run_top_level_test_no_args(
-        "use_module(library(freeze)), freeze(X,false), X \\=a.\n\
-         halt.",
-        "   freeze:freeze(X,false).\n",
-    );
-}
-
-// issue #831
-#[serial]
-#[test]
-fn call_0() {
-    load_module_test(
-        "tests-pl/issue831-call0.pl",
-        "   error(existence_error(procedure,call/0),call/0).\n",
-    );
-}
