@@ -85,10 +85,10 @@ impl BranchCodeStack {
 
                             self.stack[idx][branch_idx].push_back(instr!("put_variable", r, 0));
                         }
+                    }
 
-                        if idx > self.stack.len() - depth {
-                            propagated_var_nums.insert(var_num);
-                        }
+                    if idx > self.stack.len() - depth {
+                        propagated_var_nums.insert(var_num);
                     }
 
                     subsumed_hits.insert(var_num);
