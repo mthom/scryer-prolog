@@ -166,7 +166,7 @@ dcg_cbody({Goal}, S0, S, ( Goal, S0 = S )).
 dcg_cbody(call(Cont), S0, S, call(Cont, S0, S)).
 dcg_cbody(phrase(Body), S0, S, phrase(Body, S0, S)).
 dcg_cbody(!, S0, S, ( !, S0 = S )).
-dcg_cbody(\+ GRBody, S0, S, ( \+ phrase(GRBody,S0,_), S0 = S )).
+% dcg_cbody(\+ GRBody, S0, S, ( \+ phrase(GRBody,S0,_), S0 = S )).
 dcg_cbody(( GRIf -> GRThen ), S0, S, ( If -> Then )) :-
     dcg_body(GRIf, S0, S1, If),
     dcg_body(GRThen, S1, S, Then).
