@@ -1,4 +1,3 @@
-
 pub(crate) trait Expectable {
     #[track_caller]
     fn assert_eq(self, other: &[u8]);

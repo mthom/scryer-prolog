@@ -1,7 +1,6 @@
 use crate::helper::load_module_test;
 use serial_test::serial;
 
-
 // issue #831
 #[serial]
 #[test]
