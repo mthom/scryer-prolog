@@ -101,7 +101,10 @@ dcg_rule(( NonTerminal --> GRBody ), ( Head :- Body )) :-
 dcg_non_terminal(NonTerminal, S0, S, Goal) :-
     NonTerminal =.. NonTerminalUniv,
     append(NonTerminalUniv, [S0, S], GoalUniv),
-    Goal =.. GoalUniv.
+    (  callable(NonTerminal) ->
+       Goal =.. GoalUniv
+    ;  Goal = NonTerminal % let call/N throw an error instead of throwing one here.
+    ).
 
 dcg_terminals(Terminals, S0, S, S0 = List) :-
     append(Terminals, S, List).
