@@ -1,0 +1,3 @@
+# issue 820
+args = ["-f", "--no-add-history", "-g", "test,halt", "tests-pl/issue820-goals.pl"]
+binary = true

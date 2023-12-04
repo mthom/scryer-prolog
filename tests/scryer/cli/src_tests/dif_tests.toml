@@ -1,0 +1,2 @@
+args = ["-f", "--no-add-history", "src/tests/dif.pl", "-f", "-g", "main_quiet"]
+binary = true

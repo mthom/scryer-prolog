@@ -37,17 +37,6 @@ pub(crate) fn load_module_test<T: Expectable>(file: &str, expected: T) {
 
 pub const SCRYER_PROLOG: &str = "scryer-prolog";
 
-pub fn run_top_level_test_no_args<
-    S: Into<Vec<u8>>,
-    O: assert_cmd::assert::IntoOutputPredicate<P>,
-    P: predicates_core::Predicate<[u8]>,
->(
-    stdin: S,
-    expected_stdout: O,
-) {
-    run_top_level_test_with_args::<&[&str], _, _, _, _>(&[], stdin, expected_stdout)
-}
-
 /// Test whether scryer-prolog
 /// produces the expected output when called with the supplied
 /// arguments and fed the supplied input

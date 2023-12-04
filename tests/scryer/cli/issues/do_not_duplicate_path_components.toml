@@ -1,0 +1,3 @@
+# issue 852
+args = ["-f", "--no-add-history"]
+binary = true

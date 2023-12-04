@@ -1,0 +1,3 @@
+# issue 841
+args = ["-f", "--no-add-history", "tests-pl/issue841-occurs-check.pl"]
+binary = true
