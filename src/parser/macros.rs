@@ -112,7 +112,7 @@ macro_rules! exponent_char {
 #[macro_export]
 macro_rules! graphic_char {
     ($c: expr) => ($crate::char_class!($c, ['#', '$', '&', '*', '+', '-', '.', '/', ':',
-                                            '<', '=', '>', '?', '@', '^', '~', '%']))
+                                            '<', '=', '>', '?', '@', '^', '~']))
 }
 
 #[macro_export]
