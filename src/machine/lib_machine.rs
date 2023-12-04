@@ -197,8 +197,11 @@ impl Machine {
                 // println!("Result: {} = {}", var_key.to_string(), output);
 
                 if var_key.to_string() != output {
-                    bindings.insert(var_key.to_string(), Value::try_from(output).expect("Couldn't convert Houtput to Value"));
-                }   
+                    bindings.insert(
+                        var_key.to_string(),
+                        Value::try_from(output).expect("Couldn't convert Houtput to Value"),
+                    );
+                }
             }
 
             matches.push(QueryResolutionLine::Match(bindings));
@@ -345,17 +348,14 @@ mod tests {
         let mut machine = Machine::new_lib();
         machine.load_module_string(
             "facts",
-                r#"
+            r#"
                 :- discontiguous(subject_class/2).
-            "#.to_string());
-
-        let result = machine.run_query(String::from(
-            "subject_class(X, _).",
-        ));
-        assert_eq!(
-            result,
-            Ok(QueryResolution::True)
+            "#
+            .to_string(),
         );
+
+        let result = machine.run_query(String::from("subject_class(X, _)."));
+        assert_eq!(result, Ok(QueryResolution::True));
     }
 
     #[test]

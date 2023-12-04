@@ -497,18 +497,11 @@ impl MachineState {
 
                 let stub = functor!(
                     atom!("module_does_not_contain_claimed_export"),
-                    [
-                        atom(module_name),
-                        str(self.heap.len() + 4, 0)
-                    ],
+                    [atom(module_name), str(self.heap.len() + 4, 0)],
                     [functor_stub]
                 );
 
-                self.permission_error(
-                    Permission::Access,
-                    atom!("private_procedure"),
-                    stub,
-                )
+                self.permission_error(Permission::Access, atom!("private_procedure"), stub)
             }
             SessionError::ModuleCannotImportSelf(module_name) => {
                 let error_atom = atom!("module_cannot_import_self");
