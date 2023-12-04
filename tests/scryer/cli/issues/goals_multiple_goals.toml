@@ -1,3 +1,2 @@
 # issue 820
 args = ["-f", "--no-add-history", "-g", "test", "-g", "halt", "tests/scryer/cli/issues/goals.pl"]
-binary = true

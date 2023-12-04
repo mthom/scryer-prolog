@@ -1,3 +1,2 @@
 # issue 857
 args = ["-f", "--no-add-history"]
-binary = true

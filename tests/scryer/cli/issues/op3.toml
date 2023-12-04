@@ -1,3 +1,2 @@
 # issue 839
 args = ["-f", "--no-add-history", "tests/scryer/cli/issues/op3.pl", "-g", "halt"]
-binary = true
