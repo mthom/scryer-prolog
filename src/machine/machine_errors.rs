@@ -492,13 +492,22 @@ impl MachineState {
                 self.permission_error(Permission::Modify, atom!("static_module"), module)
             }
             SessionError::ExistenceError(err) => self.existence_error(err),
-            SessionError::ModuleDoesNotContainExport(..) => {
-                let error_atom = atom!("module_does_not_contain_claimed_export");
+            SessionError::ModuleDoesNotContainExport(module_name, key) => {
+                let functor_stub = functor_stub(key.0, key.1);
+
+                let stub = functor!(
+                    atom!("module_does_not_contain_claimed_export"),
+                    [
+                        atom(module_name),
+                        str(self.heap.len() + 4, 0)
+                    ],
+                    [functor_stub]
+                );
 
                 self.permission_error(
                     Permission::Access,
                     atom!("private_procedure"),
-                    functor!(error_atom),
+                    stub,
                 )
             }
             SessionError::ModuleCannotImportSelf(module_name) => {

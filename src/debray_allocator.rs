@@ -39,6 +39,19 @@ impl BranchOccurrences {
             subsumed_hits: SubsumedBranchHits::with_hasher(FxBuildHasher::default()),
         }
     }
+
+    pub(crate) fn add_branch_occurrence(&mut self, var_num: usize) {
+        debug_assert!(self.current_branch < self.num_branches);
+        let num_branches = self.num_branches;
+
+        let entry = self
+            .hits
+            .entry(var_num)
+            .or_insert_with(|| BitVec::repeat(false, num_branches));
+
+        entry.set(self.current_branch, true);
+        self.subsumed_hits.insert(var_num);
+    }
 }
 
 #[derive(Debug)]
@@ -92,17 +105,7 @@ impl BranchStack {
 
     pub(crate) fn add_branch_occurrence(&mut self, var_num: usize) {
         if let Some(occurrences) = self.last_mut() {
-            debug_assert!(occurrences.current_branch < occurrences.num_branches);
-
-            let num_branches = occurrences.num_branches;
-
-            let entry = occurrences
-                .hits
-                .entry(var_num)
-                .or_insert_with(|| BitVec::repeat(false, num_branches));
-
-            entry.set(occurrences.current_branch, true);
-            occurrences.subsumed_hits.insert(var_num);
+            occurrences.add_branch_occurrence(var_num);
         }
     }
 
@@ -166,30 +169,26 @@ impl DebrayAllocator {
         for var_num in subsumed_hits {
             match &mut self.var_data.records[var_num].allocation {
                 VarAlloc::Perm(_, ref mut allocation) => {
-                    match allocation {
-                        PermVarAllocation::Done {
-                            shallow_safety,
-                            deep_safety,
-                            ..
-                        } => {
-                            if !self
-                                .branch_stack
-                                .safety_unneeded_in_branch(shallow_safety, &branch_designator)
-                            {
-                                let branch_occurrences = self.branch_stack.last_mut().unwrap();
-                                branch_occurrences.shallow_safety.insert(var_num);
-                            }
-
-                            if !self
-                                .branch_stack
-                                .safety_unneeded_in_branch(deep_safety, &branch_designator)
-                            {
-                                let branch_occurrences = self.branch_stack.last_mut().unwrap();
-                                branch_occurrences.deep_safety.insert(var_num);
-                            }
+                    if let PermVarAllocation::Done {
+                        shallow_safety,
+                        deep_safety,
+                        ..
+                    } = allocation
+                    {
+                        if !self
+                            .branch_stack
+                            .safety_unneeded_in_branch(shallow_safety, &branch_designator)
+                        {
+                            let branch_occurrences = self.branch_stack.last_mut().unwrap();
+                            branch_occurrences.shallow_safety.insert(var_num);
                         }
-                        _ => {
-                            unreachable!();
+
+                        if !self
+                            .branch_stack
+                            .safety_unneeded_in_branch(deep_safety, &branch_designator)
+                        {
+                            let branch_occurrences = self.branch_stack.last_mut().unwrap();
+                            branch_occurrences.deep_safety.insert(var_num);
                         }
                     }
 
@@ -740,7 +739,7 @@ impl Allocator for DebrayAllocator {
         &mut self,
         var_num: usize,
         lvl: Level,
-        cell: &'a Cell<VarReg>,
+        cell: &Cell<VarReg>,
         term_loc: GenContext,
         code: &mut CodeDeque,
     ) {
@@ -748,11 +747,11 @@ impl Allocator for DebrayAllocator {
             RegType::Temp(0) => {
                 let o = self.alloc_reg_to_var::<Target>(var_num, lvl, term_loc, code);
                 cell.set(VarReg::Norm(RegType::Temp(o)));
-
                 (RegType::Temp(o), true)
             }
             RegType::Perm(0) => {
                 let p = self.alloc_perm_var(var_num, term_loc.chunk_num());
+                cell.set(VarReg::Norm(RegType::Perm(p)));
                 (RegType::Perm(p), true)
             }
             r @ RegType::Perm(_) => {
@@ -780,7 +779,7 @@ impl Allocator for DebrayAllocator {
         &mut self,
         var_num: usize,
         lvl: Level,
-        cell: &'a Cell<VarReg>,
+        cell: &Cell<VarReg>,
         term_loc: GenContext,
         code: &mut CodeDeque,
         r: RegType,
@@ -846,8 +845,21 @@ impl Allocator for DebrayAllocator {
 
     fn mark_cut_var(&mut self, var_num: usize, chunk_num: usize) -> RegType {
         match self.get_binding(var_num) {
-            RegType::Perm(0) | RegType::Temp(0) => {
-                RegType::Perm(self.alloc_perm_var(var_num, chunk_num))
+            RegType::Perm(0) => RegType::Perm(self.alloc_perm_var(var_num, chunk_num)),
+            RegType::Temp(0) => {
+                let t = self.alloc_reg_to_non_var();
+
+                match &mut self.var_data.records[var_num].allocation {
+                    VarAlloc::Temp {
+                        temp_reg, safety, ..
+                    } => {
+                        *temp_reg = t;
+                        *safety = VarSafetyStatus::GloballyUnneeded;
+                    }
+                    _ => unreachable!(),
+                };
+
+                RegType::Temp(t)
             }
             r => r,
         }

@@ -1762,7 +1762,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         while let Some(loc_data) = self.state_stack.pop() {
             match loc_data {
                 TokenOrRedirect::Atom(atom) => self.print_impromptu_atom(atom),
-                TokenOrRedirect::BarAsOp => append_str!(self, " | "),
+                TokenOrRedirect::BarAsOp => append_str!(self, "|"),
                 TokenOrRedirect::Char(c) => print_char!(self, self.quoted, c),
                 TokenOrRedirect::Op(atom, op) => {
                     self.print_op(&atom.as_str());

@@ -744,7 +744,11 @@ impl Number {
             Number::Float(f) => Number::Float(OrderedFloat(f.signum())),
             _ => {
                 if self.is_positive() {
-                    Number::Fixnum(Fixnum::build_with(1))
+                    if self.is_zero() {
+                        Number::Fixnum(Fixnum::build_with(0))
+                    } else {
+                        Number::Fixnum(Fixnum::build_with(1))
+                    }
                 } else if self.is_negative() {
                     Number::Fixnum(Fixnum::build_with(-1))
                 } else {
@@ -876,26 +880,13 @@ impl ClauseIndexInfo {
     }
 }
 
-#[derive(Clone, Copy, Debug)]
+#[derive(Clone, Copy, Debug, Default)]
 pub(crate) struct PredicateInfo {
     pub(crate) is_extensible: bool,
     pub(crate) is_discontiguous: bool,
     pub(crate) is_dynamic: bool,
     pub(crate) is_multifile: bool,
     pub(crate) has_clauses: bool,
-}
-
-impl Default for PredicateInfo {
-    #[inline]
-    fn default() -> Self {
-        PredicateInfo {
-            is_extensible: false,
-            is_discontiguous: false,
-            is_dynamic: false,
-            is_multifile: false,
-            has_clauses: false,
-        }
-    }
 }
 
 impl PredicateInfo {

@@ -1173,8 +1173,13 @@ clause(H, B) :-
 % The clause will be inserted at the beginning of the module.
 asserta(Clause0) :-
     loader:strip_subst_module(Clause0, user, Module, Clause),
-    iso_ext:asserta(Module, Clause).
+    asserta_(Module, Clause).
 
+asserta_(Module, (Head :- Body)) :-
+    !,
+    '$asserta'(Module, Head, Body).
+asserta_(Module, Fact) :-
+    '$asserta'(Module, Fact, true).
 
 :- meta_predicate assertz(:).
 
@@ -1184,7 +1189,13 @@ asserta(Clause0) :-
 % The clase will be inserted at the end of the module.
 assertz(Clause0) :-
     loader:strip_subst_module(Clause0, user, Module, Clause),
-    iso_ext:assertz(Module, Clause).
+    assertz_(Module, Clause).
+
+assertz_(Module, (Head :- Body)) :-
+    !,
+    '$assertz'(Module, Head, Body).
+assertz_(Module, Fact) :-
+    '$assertz'(Module, Fact, true).
 
 
 :- meta_predicate retract(:).
@@ -1203,6 +1214,9 @@ retract(Clause0) :-
        Body = true,
        retract_module_clause(Head, Body, Module)
     ;  Clause = (Head :- Body) ->
+       (  var(Module) -> Module = user
+       ;  true
+       ),
        retract_module_clause(Head, Body, Module)
     ).
 

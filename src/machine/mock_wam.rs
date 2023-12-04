@@ -159,6 +159,14 @@ impl<'a> CopierTarget for TermCopyingMockWAM<'a> {
         self.wam.machine_st.heap.push(val);
     }
 
+    fn push_attr_var_queue(&mut self, attr_var_loc: usize) {
+        self.wam
+            .machine_st
+            .attr_var_init
+            .attr_var_queue
+            .push(attr_var_loc);
+    }
+
     fn stack(&mut self) -> &mut Stack {
         &mut self.wam.machine_st.stack
     }

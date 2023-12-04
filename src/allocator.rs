@@ -29,7 +29,7 @@ pub(crate) trait Allocator {
         &mut self,
         var_num: usize,
         lvl: Level,
-        cell: &'a Cell<VarReg>,
+        cell: &Cell<VarReg>,
         term_loc: GenContext,
         code: &mut CodeDeque,
         r: RegType,
@@ -42,7 +42,7 @@ pub(crate) trait Allocator {
         &mut self,
         var_num: usize,
         lvl: Level,
-        cell: &'a Cell<VarReg>,
+        cell: &Cell<VarReg>,
         context: GenContext,
         code: &mut CodeDeque,
     );

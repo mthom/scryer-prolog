@@ -148,9 +148,10 @@ impl<'a, LS: LoadState<'a>> Drop for Loader<'a, LS> {
     }
 }
 
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq, Default)]
 pub enum CompilationTarget {
     Module(Atom),
+    #[default]
     User,
 }
 
@@ -160,13 +161,6 @@ impl fmt::Display for CompilationTarget {
             CompilationTarget::User => write!(f, "user"),
             CompilationTarget::Module(ref module_name) => write!(f, "{}", module_name.as_str()),
         }
-    }
-}
-
-impl Default for CompilationTarget {
-    #[inline]
-    fn default() -> Self {
-        CompilationTarget::User
     }
 }
 

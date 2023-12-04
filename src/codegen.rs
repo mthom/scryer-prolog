@@ -10,6 +10,7 @@ use crate::parser::ast::*;
 use crate::targets::*;
 use crate::temp_v;
 use crate::types::*;
+use crate::variable_records::*;
 
 use crate::instr;
 use crate::machine::disjuncts::*;
@@ -60,6 +61,7 @@ impl BranchCodeStack {
         marker: &mut DebrayAllocator,
     ) -> SubsumedBranchHits {
         let mut subsumed_hits = SubsumedBranchHits::with_hasher(FxBuildHasher::default());
+        let mut propagated_var_nums = IndexSet::with_hasher(FxBuildHasher::default());
 
         for idx in (self.stack.len() - depth..self.stack.len()).rev() {
             let branch = &mut marker.branch_stack[idx];
@@ -85,8 +87,16 @@ impl BranchCodeStack {
                         }
                     }
 
+                    if idx > self.stack.len() - depth {
+                        propagated_var_nums.insert(var_num);
+                    }
+
                     subsumed_hits.insert(var_num);
                 }
+            }
+
+            for var_num in propagated_var_nums.drain(..) {
+                marker.branch_stack[idx - 1].add_branch_occurrence(var_num);
             }
         }
 
@@ -277,7 +287,6 @@ impl DebrayAllocator {
         code: &mut CodeDeque,
     ) -> RegType {
         self.mark_var::<QueryInstruction>(var_num, Level::Shallow, vr, term_loc, code);
-
         vr.get().norm()
     }
 
@@ -296,7 +305,14 @@ impl DebrayAllocator {
                     self.mark_var_in_non_callable(var_num, term_loc, vr, code);
                     temp_v!(arg)
                 } else {
-                    self.increment_running_count(var_num);
+                    if let VarAlloc::Perm(_, PermVarAllocation::Pending) =
+                        &self.var_data.records[var_num].allocation
+                    {
+                        self.mark_var_in_non_callable(var_num, term_loc, vr, code);
+                    } else {
+                        self.increment_running_count(var_num);
+                    }
+
                     RegType::Perm(p)
                 }
             }

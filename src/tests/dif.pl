@@ -207,6 +207,13 @@ test("scryer-prolog#2056",(
     \+ E=[]
 )).
 
+% https://github.com/mthom/scryer-prolog/issues/2175
+test("scryer-prolog#2175",(
+    dif(A,B),
+    A=_C*[],
+    A=[]*D*B,D=[]
+)).
+
 main :-
     findall(test(Name, Goal), test(Name, Goal), Tests),
     run_tests(Tests, Failed),

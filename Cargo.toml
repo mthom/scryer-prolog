@@ -85,19 +85,21 @@ tokio = { version = "1.28.2", features = ["full"] }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 getrandom = { version = "0.2.10", features = ["js"] }
-tokio = { version = "1.28.2", features = ["sync", "macros", "io-util", "rt", "time"] }
+tokio = { version = "1.28.2", features = [
+    "sync",
+    "macros",
+    "io-util",
+    "rt",
+    "time",
+] }
 
 [target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
 console_error_panic_hook = "0.1"
-console_log = "1.0"
 wasm-bindgen = "0.2.87"
 wasm-bindgen-futures = "0.4"
 serde-wasm-bindgen = "0.5"
-web-sys = { version = "0.3", features = [
-    "Document",
-    "Window",
-    "Element",
-]}
+web-sys = { version = "0.3", features = ["Document", "Window", "Element", "Performance"] }
+js-sys = "0.3"
 
 [target.'cfg(target_os = "wasi")'.dependencies]
 ring-wasi = { version = "0.16.25" }
@@ -110,6 +112,27 @@ assert_cmd = "1.0.3"
 predicates-core = "1.0.2"
 maplit = "1.0.2"
 serial_test = "2.0.0"
+iai-callgrind = { git = "https://github.com/iai-callgrind/iai-callgrind.git", rev = "c77bc3c83d7f4e976cc42d4597236a8db259e772" }
+criterion = "0.5.1"
+
+[target.'cfg(not(target_os = "windows"))'.dev-dependencies]
+pprof = { version = "0.13.0", features = ["criterion", "flamegraph"] }
 
 [patch.crates-io]
 modular-bitfield = { git = "https://github.com/mthom/modular-bitfield" }
+
+[profile.bench]
+lto = true
+opt-level = 3
+
+[profile.release]
+lto = true
+opt-level = 3
+
+[[bench]]
+name = "run_criterion"
+harness = false
+
+[[bench]]
+name = "run_iai"
+harness = false

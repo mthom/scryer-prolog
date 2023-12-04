@@ -348,7 +348,7 @@ pub(crate) fn int_pow(n1: Number, n2: Number, arena: &mut Arena) -> Result<Numbe
         (Number::Fixnum(n1), Number::Integer(n2)) => {
             let n1_i = n1.get_num();
 
-            if !(n1_i == 1 || n1_i == 0 || n1_i == -1) && n2.is_zero() {
+            if !(n1_i == 1 || n1_i == 0 || n1_i == -1) && n2.is_negative() {
                 let n = Number::Fixnum(n1);
                 Err(numerical_type_error(ValidType::Float, n, stub_gen))
             } else {
@@ -359,7 +359,7 @@ pub(crate) fn int_pow(n1: Number, n2: Number, arena: &mut Arena) -> Result<Numbe
         (Number::Integer(n1), Number::Fixnum(n2)) => {
             let n2_i = n2.get_num();
 
-            if !(*n1 == Integer::from(1) || n1.is_zero() || *n1 == Integer::from(-1)) && n2_i < 0 {
+            if !(n1.is_one() || n1.is_zero() || n1.num_eq(&-1)) && n2_i < 0 {
                 let n = Number::Integer(n1);
                 Err(numerical_type_error(ValidType::Float, n, stub_gen))
             } else {
@@ -368,9 +368,7 @@ pub(crate) fn int_pow(n1: Number, n2: Number, arena: &mut Arena) -> Result<Numbe
             }
         }
         (Number::Integer(n1), Number::Integer(n2)) => {
-            if !(*n1 == Integer::from(1) || n1.is_zero() || *n1 == Integer::from(-1))
-                && n2.is_zero()
-            {
+            if !(n1.is_one() || n1.is_zero() || n1.num_eq(&-1)) && n2.is_negative() {
                 let n = Number::Integer(n1);
                 Err(numerical_type_error(ValidType::Float, n, stub_gen))
             } else {
@@ -711,11 +709,8 @@ pub(crate) fn shl(n1: Number, n2: Number, arena: &mut Arena) -> Result<Number, M
         (Number::Fixnum(n1), Number::Integer(n2)) => {
             let n1 = Integer::from(n1.get_num());
 
-            match (&*n2).try_into() as Result<u32, _> {
-                Ok(n2) => {
-                    let n1: u64 = n1.try_into().unwrap();
-                    Ok(Number::arena_from(n1 << n2, arena))
-                }
+            match (&*n2).try_into() as Result<usize, _> {
+                Ok(n2) => Ok(Number::arena_from(n1 << n2, arena)),
                 _ => Ok(Number::arena_from(n1 << usize::max_value(), arena)),
             }
         }
@@ -726,11 +721,8 @@ pub(crate) fn shl(n1: Number, n2: Number, arena: &mut Arena) -> Result<Number, M
                 arena,
             )),
         },
-        (Number::Integer(n1), Number::Integer(n2)) => match (&*n2).try_into() as Result<u32, _> {
-            Ok(n2) => {
-                let n1: u64 = (&*n1).try_into().unwrap();
-                Ok(Number::arena_from(Integer::from(n1 << n2), arena))
-            }
+        (Number::Integer(n1), Number::Integer(n2)) => match (&*n2).try_into() as Result<usize, _> {
+            Ok(n2) => Ok(Number::arena_from(Integer::from(&*n1 << n2), arena)),
             _ => Ok(Number::arena_from(
                 Integer::from(&*n1 << usize::max_value()),
                 arena,

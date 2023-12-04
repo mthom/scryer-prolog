@@ -1,8 +1,7 @@
 use crate::parser::ast::*;
 use crate::parser::parser::*;
 
-use dashu::integer::Sign;
-use dashu::integer::UBig;
+use dashu::integer::{Sign, UBig};
 use lazy_static::lazy_static;
 use num_order::NumOrd;
 
@@ -828,8 +827,12 @@ impl MachineState {
     ) -> usize {
         let threshold = self.lifted_heap.len() - lh_offset;
 
-        let mut copy_ball_term =
-            CopyBallTerm::new(&mut self.stack, &mut self.heap, &mut self.lifted_heap);
+        let mut copy_ball_term = CopyBallTerm::new(
+            &mut self.attr_var_init.attr_var_queue,
+            &mut self.stack,
+            &mut self.heap,
+            &mut self.lifted_heap,
+        );
 
         copy_ball_term.push(list_loc_as_cell!(threshold + 1));
         copy_ball_term.push(heap_loc_as_cell!(threshold + 3));
@@ -4188,7 +4191,14 @@ impl Machine {
     #[cfg(target_arch = "wasm32")]
     #[inline(always)]
     pub(crate) fn cpu_now(&mut self) {
-        // TODO
+        let millisecs = web_sys::window()
+            .expect("window global object should be available")
+            .performance()
+            .expect("performance property in window should be available")
+            .now();
+        let secs = float_alloc!(millisecs / 1000.0, self.machine_st.arena);
+
+        self.machine_st.unify_f64(secs, self.deref_register(1));
     }
 
     #[inline(always)]
@@ -4879,6 +4889,70 @@ impl Machine {
         Ok(())
     }
 
+    #[cfg(not(target_arch = "wasm32"))]
+    #[inline(always)]
+    pub(crate) fn js_eval(&mut self) -> CallResult {
+        unimplemented!()
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    #[inline(always)]
+    pub(crate) fn js_eval(&mut self) -> CallResult {
+        let code = self.deref_register(1);
+        let result_reg = self.deref_register(2);
+        if let Some(code) = self.machine_st.value_to_str_like(code) {
+            match js_sys::eval(&code.as_str()) {
+                Ok(result) => self.unify_js_value(result, result_reg),
+                Err(result) => self.unify_js_value(result, result_reg),
+            };
+            return Ok(());
+        }
+        self.machine_st.fail = true;
+        Ok(())
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    fn unify_js_value(&mut self, result: wasm_bindgen::JsValue, result_reg: HeapCellValue) {
+        match result.as_bool() {
+            Some(result) => match result {
+                true => self.machine_st.unify_atom(atom!("true"), result_reg),
+                false => self.machine_st.unify_atom(atom!("false"), result_reg),
+            },
+            None => match result.as_f64() {
+                Some(result) => {
+                    let n = float_alloc!(result, self.machine_st.arena);
+                    self.machine_st.unify_f64(n, result_reg);
+                }
+                None => match result.as_string() {
+                    Some(result) => {
+                        let result = AtomTable::build_with(&self.machine_st.atom_tbl, &result);
+                        self.machine_st.unify_complete_string(result, result_reg);
+                    }
+                    None => {
+                        if result.is_null() {
+                            self.machine_st.unify_atom(atom!("null"), result_reg);
+                        } else if result.is_undefined() {
+                            self.machine_st.unify_atom(atom!("undefined"), result_reg);
+                        } else if result.is_symbol() {
+                            self.machine_st.unify_atom(atom!("js_symbol"), result_reg);
+                        } else if result.is_object() {
+                            self.machine_st.unify_atom(atom!("js_object"), result_reg);
+                        } else if result.is_array() {
+                            self.machine_st.unify_atom(atom!("js_array"), result_reg);
+                        } else if result.is_function() {
+                            self.machine_st.unify_atom(atom!("js_function"), result_reg);
+                        } else if result.is_bigint() {
+                            self.machine_st.unify_atom(atom!("js_bigint"), result_reg);
+                        } else {
+                            self.machine_st
+                                .unify_atom(atom!("js_unknown_type"), result_reg);
+                        }
+                    }
+                },
+            },
+        }
+    }
+
     #[inline(always)]
     pub(crate) fn current_time(&mut self) {
         let timestamp = self.systemtime_to_timestamp(SystemTime::now());
@@ -5516,11 +5590,8 @@ impl Machine {
         let a2 = self.deref_register(2);
 
         let n = match Number::try_from(a2) {
-            Ok(Number::Fixnum(bp)) => bp.get_num() as usize,
-            Ok(Number::Integer(n)) => {
-                let value: usize = (&*n).try_into().unwrap();
-                value
-            }
+            Ok(Number::Fixnum(bp)) => Integer::from(bp.get_num() as usize),
+            Ok(Number::Integer(n)) => (*n).clone(),
             _ => {
                 let stub = functor_stub(atom!("call_with_inference_limit"), 3);
 
@@ -5531,19 +5602,22 @@ impl Machine {
 
         let bp = cell_as_fixnum!(a1).get_num() as usize;
         let a3 = self.deref_register(3);
-        let count = self.machine_st.cwil.add_limit(n, bp);
 
-        let result = count.try_into();
-        if let Ok(value) = result {
-            self.machine_st.unify_fixnum(Fixnum::build_with(value), a3);
-        } else {
-            let count = arena_alloc!(count.clone(), &mut self.machine_st.arena);
-            self.machine_st.unify_big_int(count, a3);
-        }
-
-        self.machine_st.increment_call_count_fn = MachineState::increment_call_count;
+        let count = self.machine_st.cwil.add_limit(n, bp).clone();
+        self.inference_count(a3, count);
 
         Ok(())
+    }
+
+    #[inline(always)]
+    pub(crate) fn inference_count(&mut self, count_var: HeapCellValue, count: Integer) {
+        if let Some(value) = <&Integer as TryInto<i64>>::try_into(&count).ok() {
+            self.machine_st
+                .unify_fixnum(Fixnum::build_with(value), count_var);
+        } else {
+            let count = arena_alloc!(count, &mut self.machine_st.arena);
+            self.machine_st.unify_big_int(count, count_var);
+        }
     }
 
     #[inline(always)]
@@ -5671,7 +5745,6 @@ impl Machine {
 
         if bp == self.machine_st.b && self.machine_st.cwil.is_empty() {
             self.machine_st.cwil.reset();
-            self.machine_st.increment_call_count_fn = |_| true;
         }
     }
 
@@ -6791,6 +6864,7 @@ impl Machine {
 
         copy_term(
             CopyBallTerm::new(
+                &mut self.machine_st.attr_var_init.attr_var_queue,
                 &mut self.machine_st.stack,
                 &mut self.machine_st.heap,
                 &mut ball.stub,

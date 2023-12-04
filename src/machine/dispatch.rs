@@ -36,7 +36,7 @@ macro_rules! try_or_throw {
 
 macro_rules! increment_call_count {
     ($s:expr) => {{
-        if !($s.increment_call_count_fn)(&mut $s) {
+        if !$s.increment_call_count() {
             $s.backtrack();
             continue;
         }
@@ -208,6 +208,7 @@ impl MachineState {
                 l
             }
             (HeapCellValueTag::Fixnum |
+             HeapCellValueTag::CutPoint |
              HeapCellValueTag::Char |
              HeapCellValueTag::F64) => {
                 c
@@ -3675,6 +3676,16 @@ impl Machine {
                         try_or_throw!(self.machine_st, self.install_inference_counter());
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                     }
+                    &Instruction::CallInferenceCount => {
+                        let global_count = self.machine_st.cwil.global_count.clone();
+                        self.inference_count(self.machine_st.registers[1], global_count);
+                        step_or_fail!(self, self.machine_st.p += 1);
+                    }
+                    &Instruction::ExecuteInferenceCount => {
+                        let global_count = self.machine_st.cwil.global_count.clone();
+                        self.inference_count(self.machine_st.registers[1], global_count);
+                        step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+                    }
                     &Instruction::CallLiftedHeapLength => {
                         self.lifted_heap_length();
                         step_or_fail!(self, self.machine_st.p += 1);
@@ -4126,6 +4137,14 @@ impl Machine {
                     &Instruction::ExecuteDefineForeignStruct => {
                         #[cfg(feature = "ffi")]
                         try_or_throw!(self.machine_st, self.define_foreign_struct());
+                        step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+                    }
+                    &Instruction::CallJsEval => {
+                        try_or_throw!(self.machine_st, self.js_eval());
+                        step_or_fail!(self, self.machine_st.p += 1);
+                    }
+                    &Instruction::ExecuteJsEval => {
+                        try_or_throw!(self.machine_st, self.js_eval());
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                     }
                     &Instruction::CallCurrentTime => {

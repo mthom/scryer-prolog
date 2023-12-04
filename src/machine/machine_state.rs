@@ -96,7 +96,6 @@ pub struct MachineState {
     pub(crate) unify_fn: fn(&mut MachineState),
     pub(crate) bind_fn: fn(&mut MachineState, Ref, HeapCellValue),
     pub(crate) run_cleaners_fn: fn(&mut Machine) -> bool,
-    pub(crate) increment_call_count_fn: fn(&mut MachineState) -> bool,
 }
 
 impl fmt::Debug for MachineState {
@@ -291,6 +290,11 @@ impl<'a> CopierTarget for CopyTerm<'a> {
     }
 
     #[inline(always)]
+    fn push_attr_var_queue(&mut self, attr_var_loc: usize) {
+        self.state.attr_var_init.attr_var_queue.push(attr_var_loc);
+    }
+
+    #[inline(always)]
     fn store(&self, value: HeapCellValue) -> HeapCellValue {
         self.state.store(value)
     }
@@ -308,6 +312,7 @@ impl<'a> CopierTarget for CopyTerm<'a> {
 
 #[derive(Debug)]
 pub(super) struct CopyBallTerm<'a> {
+    attr_var_queue: &'a mut Vec<usize>,
     stack: &'a mut Stack,
     heap: &'a mut Heap,
     heap_boundary: usize,
@@ -315,10 +320,16 @@ pub(super) struct CopyBallTerm<'a> {
 }
 
 impl<'a> CopyBallTerm<'a> {
-    pub(super) fn new(stack: &'a mut Stack, heap: &'a mut Heap, stub: &'a mut Heap) -> Self {
+    pub(super) fn new(
+        attr_var_queue: &'a mut Vec<usize>,
+        stack: &'a mut Stack,
+        heap: &'a mut Heap,
+        stub: &'a mut Heap,
+    ) -> Self {
         let hb = heap.len();
 
         CopyBallTerm {
+            attr_var_queue,
             stack,
             heap,
             heap_boundary: hb,
@@ -358,6 +369,11 @@ impl<'a> CopierTarget for CopyBallTerm<'a> {
 
     fn push(&mut self, value: HeapCellValue) {
         self.stub.push(value);
+    }
+
+    #[inline(always)]
+    fn push_attr_var_queue(&mut self, attr_var_loc: usize) {
+        self.attr_var_queue.push(attr_var_loc);
     }
 
     fn store(&self, value: HeapCellValue) -> HeapCellValue {
@@ -417,15 +433,17 @@ impl MachineState {
             return true;
         }
 
+        self.cwil.global_count += 1;
+
         if let Some(&(ref limit, block)) = self.cwil.limits.last() {
-            if self.cwil.count == *limit {
+            if self.cwil.local_count == *limit {
                 self.cwil.inference_limit_exceeded = true;
                 self.block = block;
                 self.unwind_stack();
 
                 return false;
             } else {
-                self.cwil.count += 1;
+                self.cwil.local_count += 1;
             }
         }
 
@@ -967,7 +985,8 @@ impl MachineState {
 #[allow(clippy::upper_case_acronyms)]
 #[derive(Debug)]
 pub(crate) struct CWIL {
-    count: Integer,
+    local_count: Integer,
+    pub(crate) global_count: Integer,
     limits: Vec<(Integer, usize)>,
     pub(crate) inference_limit_exceeded: bool,
 }
@@ -975,22 +994,22 @@ pub(crate) struct CWIL {
 impl CWIL {
     pub(crate) fn new() -> Self {
         CWIL {
-            count: Integer::from(0),
+            local_count: Integer::from(0),
+            global_count: Integer::from(0),
             limits: vec![],
             inference_limit_exceeded: false,
         }
     }
 
-    pub(crate) fn add_limit(&mut self, limit: usize, block: usize) -> &Integer {
-        let mut limit = Integer::from(limit);
-        limit += &self.count;
+    pub(crate) fn add_limit(&mut self, mut limit: Integer, block: usize) -> &Integer {
+        limit += &self.local_count;
 
         match self.limits.last() {
             Some((ref inner_limit, _)) if *inner_limit <= limit => {}
             _ => self.limits.push((limit, block)),
-        };
+        }
 
-        &self.count
+        &self.local_count
     }
 
     #[inline(always)]
@@ -1001,12 +1020,12 @@ impl CWIL {
             }
         }
 
-        &self.count
+        &self.local_count
     }
 
     #[inline(always)]
     pub(crate) fn reset(&mut self) {
-        self.count = Integer::from(0);
+        self.local_count = Integer::from(0);
         self.limits.clear();
         self.inference_limit_exceeded = false;
     }

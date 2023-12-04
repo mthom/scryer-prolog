@@ -211,6 +211,15 @@ impl Machine {
         )
     }
 
+    pub fn get_inference_count(&mut self) -> u64 {
+        self.machine_st
+            .cwil
+            .global_count
+            .clone()
+            .try_into()
+            .unwrap()
+    }
+
     pub fn throw_session_error(&mut self, err: SessionError, key: PredicateKey) {
         let err = self.machine_st.session_error(err);
         let stub = functor_stub(key.0, key.1);
