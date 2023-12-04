@@ -196,7 +196,9 @@ impl Machine {
                 let output: String = outputter.result();
                 // println!("Result: {} = {}", var_key.to_string(), output);
 
-                bindings.insert(var_key.to_string(), Value::try_from(output).expect("asdfs"));
+                if var_key.to_string() != output {
+                    bindings.insert(var_key.to_string(), Value::try_from(output).expect("Couldn't convert Houtput to Value"));
+                }   
             }
 
             matches.push(QueryResolutionLine::Match(bindings));
@@ -335,6 +337,24 @@ mod tests {
                     "Class" => Value::from("Recipe")
                 }),
             ]))
+        );
+    }
+
+    #[test]
+    fn empty_predicate() {
+        let mut machine = Machine::new_lib();
+        machine.load_module_string(
+            "facts",
+                r#"
+                :- discontiguous(subject_class/2).
+            "#.to_string());
+
+        let result = machine.run_query(String::from(
+            "subject_class(X, _).",
+        ));
+        assert_eq!(
+            result,
+            Ok(QueryResolution::True)
         );
     }
 
@@ -486,14 +506,12 @@ mod tests {
             output,
             Ok(QueryResolution::Matches(vec![QueryMatch::from(
                 btreemap! {
-                    "Predicate" => Value::from("Predicate"),
                     "Result" => Value::List(
                         Vec::from([
                             Value::List([Value::from("p1"), Value::from("b")].into()),
                             Value::List([Value::from("p2"), Value::from("b")].into()),
                         ])
                     ),
-                    "Target" => Value::from("Target"),
                 }
             ),]))
         );
