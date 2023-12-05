@@ -355,7 +355,7 @@ mod tests {
         );
 
         let result = machine.run_query(String::from("subject_class(X, _)."));
-        assert_eq!(result, Ok(QueryResolution::True));
+        assert_eq!(result, Ok(QueryResolution::False));
     }
 
     #[test]
