@@ -114,6 +114,7 @@ maplit = "1.0.2"
 serial_test = "2.0.0"
 iai-callgrind = { git = "https://github.com/iai-callgrind/iai-callgrind.git", rev = "c77bc3c83d7f4e976cc42d4597236a8db259e772" }
 criterion = "0.5.1"
+trycmd = "0.14.19"
 
 [target.'cfg(not(target_os = "windows"))'.dev-dependencies]
 pprof = { version = "0.13.0", features = ["criterion", "flamegraph"] }

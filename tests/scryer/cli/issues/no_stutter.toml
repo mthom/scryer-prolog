@@ -1,0 +1,2 @@
+# issue 815
+args = ["-f", "--no-add-history"]

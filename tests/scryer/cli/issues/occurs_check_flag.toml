@@ -1,0 +1,2 @@
+# issue 841
+args = ["-f", "--no-add-history", "tests/scryer/cli/issues/occurs_check_flag.pl"]
