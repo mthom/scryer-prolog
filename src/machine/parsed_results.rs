@@ -65,11 +65,11 @@ impl From<Vec<QueryResolutionLine>> for QueryResolution {
             }
         }
 
-        // If there is only one line, and it is an empty match, return true.
+        // If there is only one line, and it is an empty match, return false.
         if query_result_lines.len() == 1 {
             if let QueryResolutionLine::Match(m) = query_result_lines[0].clone() {
                 if m.is_empty() {
-                    return QueryResolution::True;
+                    return QueryResolution::False;
                 }
             }
         }
