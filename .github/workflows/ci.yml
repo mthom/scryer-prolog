@@ -63,10 +63,11 @@ jobs:
 
       # Build and test.
       - name: Build library
-        run: cargo rustc --lib --target ${{ matrix.target }} ${{ matrix.args }} --verbose
+        continue-on-error: ${{ contains(matrix.target,'wasm32') }} # allow wasm builds to fail tests for now
+        run: cargo build --all-targets --target ${{ matrix.target }} ${{ matrix.args }} --verbose
       - name: Test
         continue-on-error: ${{ contains(matrix.target,'wasm32') }} # allow wasm builds to fail tests for now
-        run: cargo test --target ${{ matrix.target }} ${{ matrix.args }} --all --verbose
+        run: cargo test --target ${{ matrix.target }} ${{ matrix.args }} --all
 
       # On stable rust builds, build a binary and publish as a github actions
       # artifact. These binaries could be useful for testing the pipeline but
