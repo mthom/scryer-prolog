@@ -1,2 +1,2 @@
-['tests/scryer/cli/issues/issue812-singleton-warning.pl'].
+['singleton_example.pl'].
 halt.
