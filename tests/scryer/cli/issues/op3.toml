@@ -1,2 +1,2 @@
 # issue 839
-args = ["-f", "--no-add-history", "tests/scryer/cli/issues/op3.pl", "-g", "halt"]
+args = ["-f", "--no-add-history", "op3.pl", "-g", "halt"]
