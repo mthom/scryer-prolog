@@ -9,6 +9,9 @@ Provides the predicate `when/2`.
 :- use_module(library(lists)).
 :- use_module(library(lambda)).
 
+:- use_module(library(format)).
+:- use_module(library(debug)).
+
 :- attribute when_list/1.
 
 :- meta_predicate(when(+, 0)).
@@ -51,7 +54,7 @@ remove_goal([G0|G0s], Goal, Goals) :-
     (   G0 == Goal ->
         remove_goal(G0s, Goal, Goals)
     ;   Goals = [G0|Goals1],
-        remove_goal(G0, Goal, Goals1)
+        remove_goal(G0s, Goal, Goals1)
     ).
 
 vars_remove_goal(Vars, Goal) :-
