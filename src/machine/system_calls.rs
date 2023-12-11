@@ -6520,10 +6520,8 @@ impl Machine {
         );
 
         if had_zero_port {
-            self.machine_st.unify_fixnum(
-                Fixnum::build_with(port as i64),
-                self.deref_register(2),
-            );
+            self.machine_st
+                .unify_fixnum(Fixnum::build_with(port as i64), self.deref_register(2));
         }
 
         Ok(())
