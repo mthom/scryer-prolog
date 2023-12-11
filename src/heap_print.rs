@@ -1444,7 +1444,6 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         }
     }
 
-    #[allow(dead_code)]
     fn print_tcp_listener(&mut self, tcp_listener: &TcpListener, max_depth: usize) {
         let (ip, port) = if let Ok(addr) = tcp_listener.local_addr() {
             (addr.ip(), addr.port())
@@ -1726,6 +1725,9 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                    }
                    (ArenaHeaderTag::Stream, stream) => {
                        self.print_stream(stream, max_depth);
+                   }
+                   (ArenaHeaderTag::TcpListener, listener) => {
+                       self.print_tcp_listener(&*listener, max_depth);
                    }
                    (ArenaHeaderTag::Dropped, _value) => {
                        self.print_impromptu_atom(atom!("$dropped_value"));
