@@ -12,6 +12,7 @@ read and write chars.
                     get_n_chars/3,
                     get_line_to_chars/3,
                     read_from_chars/2,
+                    read_term_from_chars/2,
                     read_term_from_chars/3,
                     write_term_to_chars/3,
                     chars_base64/3]).
