@@ -53,40 +53,5 @@ pub(crate) trait Allocator {
     fn reset_contents(&mut self);
 
     fn advance_arg(&mut self);
-
-    /*
-    fn bindings(&self) -> &AllocVarDict;
-    fn bindings_mut(&mut self) -> &mut AllocVarDict;
-    fn take_bindings(self) -> AllocVarDict;
-    */
-
     fn max_reg_allocated(&self) -> usize;
-
-    // TODO: wha.. why?? grrr. it drains the VarStatus data from vs (which it owns!)
-    // into self.bindings and perm_vs after all is computed (i.e. vs.populate_restricting_sets()
-    // and vs.set_perm_vals(has_deep_cut) have both been called).
-    /*
-    fn drain_var_data<'a>(
-        &mut self,
-        vs: VariableFixtures,
-        num_of_chunks: usize,
-    ) -> VariableFixtures {
-        let mut perm_vs = VariableFixtures::new();
-
-        for (var, var_status) in vs.into_iter() {
-            match var_status {
-                VarStatus::Temp(chunk_num, tvd) => {
-                    self.bindings_mut()
-                        .insert(var.clone(), VarAlloc::Temp(chunk_num, 0, tvd));
-                }
-                VarStatus::Perm(_) => {
-                    self.bindings_mut().insert(var.clone(), VarAlloc::Perm(0));
-                    perm_vs.insert(var, var_status);
-                }
-            };
-        }
-
-        perm_vs
-    }
-    */
 }

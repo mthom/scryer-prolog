@@ -314,7 +314,9 @@ write_eqs_and_read_input(B, VarList, AttrVars) :-
     % one layer of depth added for (=/2) functor
     '$term_variables_under_max_depth'(OrigVars, 22, Vars0),
     '$project_atts':project_attributes(Vars0, AttrVars),
-    copy_term(AttrVars, AttrVars, AttrGoals),
+    % need to copy all the visible Vars here so that they appear
+    % properly in AttrGoals, even the non-attributed.
+    copy_term(Vars0, Vars0, AttrGoals),
     term_variables(AttrGoals, AttrGoalVars),
     append([Vars0, AttrGoalVars, AttrVars], Vars),
     charsio:extend_var_list(Vars, VarList, NewVarList, fabricated),
