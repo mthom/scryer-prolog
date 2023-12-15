@@ -1238,7 +1238,6 @@ call_retract_helper(Head, Body, P, Module) :-
        ClauseQualifier = builtins
     ;  ClauseQualifier = Module
     ),
-    '$debug_hook',
     ClauseQualifier:'$clause'(Head, Body),
     '$get_clause_p'(Head, P, Module).
 
