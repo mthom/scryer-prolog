@@ -42,42 +42,31 @@ pub(super) fn bootstrapping_compile(
     Ok(())
 }
 
-fn lower_bound_of_target_clause(skeleton: &PredicateSkeleton, target_pos: usize) -> usize {
+fn lower_bound_of_target_clause(skeleton: &mut PredicateSkeleton, target_pos: usize) -> usize {
     if target_pos == 0 {
         return 0;
     }
 
-    let arg_num = skeleton.clauses[target_pos - 1].opt_arg_index_key.arg_num();
+    let index = target_pos - 1;
 
-    if arg_num == 0 {
-        return target_pos - 1;
-    }
+    if let Some(index_loc) = skeleton.clauses[index]
+        .opt_arg_index_key
+        .switch_on_term_loc()
+    {
+        let search_result = skeleton.clauses.make_contiguous()
+            [0..skeleton.core.clause_assert_margin]
+            .partition_point(|clause_index_info| clause_index_info.clause_start > index_loc);
 
-    let mut index_loc_opt = None;
-
-    for index in (0..target_pos).rev() {
-        let current_arg_num = skeleton.clauses[index].opt_arg_index_key.arg_num();
-
-        if current_arg_num == 0 || current_arg_num != arg_num {
-            return index + 1;
-        }
-
-        if let Some(index_loc) = index_loc_opt {
-            let current_index_loc = skeleton.clauses[index]
-                .opt_arg_index_key
-                .switch_on_term_loc();
-
-            if Some(index_loc) != current_index_loc {
-                return index + 1;
-            }
+        if search_result < skeleton.core.clause_assert_margin {
+            search_result
         } else {
-            index_loc_opt = skeleton.clauses[index]
-                .opt_arg_index_key
-                .switch_on_term_loc();
+            skeleton.clauses.make_contiguous()[skeleton.core.clause_assert_margin..]
+                .partition_point(|clause_index_info| clause_index_info.clause_start < index_loc)
+                + skeleton.core.clause_assert_margin
         }
+    } else {
+        index
     }
-
-    0
 }
 
 fn derelictize_try_me_else(
@@ -1526,6 +1515,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         } = self.compile_standalone_clause(clause, settings)?;
 
         let code_len = self.wam_prelude.code.len();
+        standalone_skeleton.clauses[0].clause_start += code_len;
 
         let skeleton = match self
             .wam_prelude
@@ -1539,8 +1529,8 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         match append_or_prepend {
             AppendOrPrepend::Append => {
                 let clause_index_info = standalone_skeleton.clauses.pop_back().unwrap();
-                skeleton.clauses.push_back(clause_index_info);
 
+                skeleton.clauses.push_back(clause_index_info);
                 skeleton.core.clause_clause_locs.push_back(code_len);
 
                 self.payload
