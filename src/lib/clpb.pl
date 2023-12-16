@@ -189,18 +189,18 @@ A _Boolean expression_ is one of:
 | `1`                | true                                 |
 | _variable_         | unknown truth value                  |
 | _atom_             | universally quantified variable      |
-| ~ _Expr_           | logical NOT                          |
-| _Expr_ + _Expr_    | logical OR                           |
-| _Expr_ * _Expr_    | logical AND                          |
-| _Expr_ # _Expr_    | exclusive OR                         |
-| _Var_ ^ _Expr_     | existential quantification           |
-| _Expr_ =:= _Expr_  | equality                             |
-| _Expr_ =\= _Expr_  | disequality (same as #)              |
-| _Expr_ =< _Expr_   | less or equal (implication)          |
-| _Expr_ >= _Expr_   | greater or equal                     |
-| _Expr_ < _Expr_    | less than                            |
-| _Expr_ > _Expr_    | greater than                         |
-| card(Is,Exprs)     | cardinality constraint (_see below_) |
+| `~` _Expr_           | logical NOT                          |
+| _Expr_ `+` _Expr_    | logical OR                           |
+| _Expr_ `*` _Expr_    | logical AND                          |
+| _Expr_ `#` _Expr_    | exclusive OR                         |
+| _Var_ `^` _Expr_     | existential quantification           |
+| _Expr_ `=:=` _Expr_  | equality                             |
+| _Expr_ `=\=` _Expr_  | disequality (same as #)              |
+| _Expr_ `=<` _Expr_   | less or equal (implication)          |
+| _Expr_ `>=` _Expr_   | greater or equal                     |
+| _Expr_ `<` _Expr_    | less than                            |
+| _Expr_ `>` _Expr_    | greater than                         |
+| `card(Is,Exprs)`     | cardinality constraint (_see below_) |
 | `+(Exprs)`         | n-fold disjunction (_see below_)     |
 | `*(Exprs)`         | n-fold conjunction (_see below_)     |
 

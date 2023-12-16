@@ -1735,7 +1735,7 @@ intervals_to_domain(Is, D) :-
 %           _Lower_ must be an integer or the atom *inf*, which
 %           denotes negative infinity. _Upper_ must be an integer or
 %           the atom *sup*, which denotes positive infinity.
-%         * Domain1 \/ Domain2
+%         * Domain1 `\/` Domain2
 %           The union of Domain1 and Domain2.
 
 Var in Dom :- clpz_in(Var, Dom).
