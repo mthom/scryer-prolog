@@ -1450,10 +1450,15 @@ impl MachineState {
                             a1.as_var().unwrap(),
                         );
                     }
+                    (HeapCellValueTag::Cons | HeapCellValueTag::Fixnum |
+                     HeapCellValueTag::F64) if arity != 0 => {
+                        let err = self.type_error(ValidType::Atom, store_name);
+                        return Err(self.error_form(err, stub_gen())); // 8.5.1.3 e)
+                    }
                     _ => {
                         let err = self.type_error(ValidType::Atomic, store_name);
-                        return Err(self.error_form(err, stub_gen()));
-                    } // 8.5.1.3 c)
+                        return Err(self.error_form(err, stub_gen())); // 8.5.1.3 c)
+                    }
                 );
             }
             _ => {
