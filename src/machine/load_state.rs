@@ -504,13 +504,9 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             if !code_index.is_undefined() && !code_index.is_dynamic_undefined() {
                 let old_index_ptr = code_index.replace(IndexPtr::undefined());
 
-                self.payload
-                    .retraction_info
-                    .push_record(RetractionRecord::ReplacedModulePredicate(
-                        module_name,
-                        *key,
-                        old_index_ptr,
-                    ));
+                self.payload.retraction_info.push_record(
+                    RetractionRecord::ReplacedModulePredicate(module_name, *key, old_index_ptr),
+                );
             }
         }
 

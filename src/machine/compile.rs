@@ -49,7 +49,7 @@ fn lower_bound_of_target_clause(skeleton: &mut PredicateSkeleton, target_pos: us
 
     let index = target_pos - 1;
 
-    if let Some(index_loc) = skeleton.clauses[index]
+    let index = if let Some(index_loc) = skeleton.clauses[index]
         .opt_arg_index_key
         .switch_on_term_loc()
     {
@@ -66,7 +66,9 @@ fn lower_bound_of_target_clause(skeleton: &mut PredicateSkeleton, target_pos: us
         }
     } else {
         index
-    }
+    };
+
+    index.clamp(0, skeleton.clauses.len() - 1)
 }
 
 fn derelictize_try_me_else(
