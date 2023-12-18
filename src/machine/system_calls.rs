@@ -1171,112 +1171,73 @@ impl Machine {
             .get_predicate_skeleton(&compilation_target, &key)
             .unwrap();
 
-        if self.machine_st.b > self.machine_st.e {
-            let or_frame = self.machine_st.stack.index_or_frame(self.machine_st.b);
-            let bp = or_frame.prelude.bp;
+        let module_name = match compilation_target {
+            CompilationTarget::User => atom!("builtins"),
+            CompilationTarget::Module(target) => target,
+        };
 
-            match &self.code[bp] {
-                Instruction::IndexingCode(ref indexing_code) => {
-                    match &indexing_code[or_frame.prelude.boip as usize] {
-                        IndexingLine::IndexedChoice(ref indexed_choice) => {
-                            let p = or_frame.prelude.biip as usize - 1;
+        let bp = self
+            .indices
+            .get_predicate_code_index(atom!("$clause"), 2, module_name)
+            .and_then(|idx| idx.local())
+            .unwrap();
 
-                            match &indexed_choice[p] {
-                                &IndexedChoiceInstruction::Try(offset)
-                                | &IndexedChoiceInstruction::Retry(offset)
-                                | &IndexedChoiceInstruction::DefaultRetry(offset) => {
-                                    let clause_clause_loc = skeleton.core.clause_clause_locs[p];
-                                    (clause_clause_loc, bp + offset)
-                                }
-                                &IndexedChoiceInstruction::Trust(_)
-                                | &IndexedChoiceInstruction::DefaultTrust(_) => {
-                                    unreachable!()
-                                }
-                            }
-                        }
-                        _ => {
-                            unreachable!()
+        let p = self.machine_st.iip as usize;
+
+        macro_rules! extract_ptr {
+            ($ptr: expr) => {
+                match $ptr {
+                    IndexingCodePtr::External(p) => {
+                        return (
+                            skeleton.core.clause_clause_locs.back().cloned().unwrap(),
+                            bp + p,
+                        )
+                    }
+                    IndexingCodePtr::Internal(boip) => boip,
+                    _ => unreachable!(),
+                }
+            };
+        }
+
+        match &self.code[bp] {
+            Instruction::IndexingCode(ref indexing_code) => {
+                let indexing_code_ptr = match &indexing_code[0] {
+                    &IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(_, _, c, _, s)) => {
+                        if key.1 > 0 {
+                            s
+                        } else {
+                            c
                         }
                     }
-                }
-                _ => unreachable!(),
-            }
-        } else {
-            let module_name = match compilation_target {
-                CompilationTarget::User => atom!("builtins"),
-                CompilationTarget::Module(target) => target,
-            };
-
-            let bp = self
-                .indices
-                .get_predicate_code_index(atom!("$clause"), 2, module_name)
-                .and_then(|idx| idx.local())
-                .unwrap();
-
-            macro_rules! extract_ptr {
-                ($ptr: expr) => {
-                    match $ptr {
-                        IndexingCodePtr::External(p) => {
-                            return (
-                                skeleton.core.clause_clause_locs.back().cloned().unwrap(),
-                                bp + p,
-                            )
-                        }
-                        IndexingCodePtr::Internal(boip) => boip,
-                        _ => unreachable!(),
+                    _ => {
+                        unreachable!()
                     }
                 };
-            }
 
-            match &self.code[bp] {
-                Instruction::IndexingCode(ref indexing_code) => {
-                    let indexing_code_ptr = match &indexing_code[0] {
-                        &IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(
-                            _,
-                            _,
-                            c,
-                            _,
-                            s,
-                        )) => {
-                            if key.1 > 0 {
-                                s
-                            } else {
-                                c
-                            }
-                        }
-                        _ => {
-                            unreachable!()
-                        }
-                    };
+                let boip = extract_ptr!(indexing_code_ptr);
 
-                    let boip = extract_ptr!(indexing_code_ptr);
-
-                    let boip = match &indexing_code[boip] {
-                        IndexingLine::Indexing(IndexingInstruction::SwitchOnStructure(ref hm)) => {
-                            boip + extract_ptr!(hm.get(&key).cloned().unwrap())
-                        }
-                        IndexingLine::Indexing(IndexingInstruction::SwitchOnConstant(ref hm)) => {
-                            boip + extract_ptr!(hm.get(&Literal::Atom(key.0)).cloned().unwrap())
-                        }
-                        _ => boip,
-                    };
-
-                    match &indexing_code[boip] {
-                        IndexingLine::IndexedChoice(indexed_choice) => {
-                            return (
-                                skeleton.core.clause_clause_locs.back().cloned().unwrap(),
-                                bp + indexed_choice.back().unwrap().offset(),
-                            );
-                        }
-                        _ => unreachable!(),
+                let boip = match &indexing_code[boip] {
+                    IndexingLine::Indexing(IndexingInstruction::SwitchOnStructure(ref hm)) => {
+                        boip + extract_ptr!(hm.get(&key).cloned().unwrap())
                     }
+                    IndexingLine::Indexing(IndexingInstruction::SwitchOnConstant(ref hm)) => {
+                        boip + extract_ptr!(hm.get(&Literal::Atom(key.0)).cloned().unwrap())
+                    }
+                    _ => boip,
+                };
+
+                match &indexing_code[boip] {
+                    IndexingLine::IndexedChoice(indexed_choice) => {
+                        return (
+                            skeleton.core.clause_clause_locs[p],
+                            bp + indexed_choice[p].offset(),
+                        );
+                    }
+                    _ => unreachable!(),
                 }
-                _ => {
-                    return (
-                        skeleton.core.clause_clause_locs.back().cloned().unwrap(),
-                        bp,
-                    );
-                }
+            }
+            _ => {
+                return (skeleton.core.clause_clause_locs[p], bp);
             }
         }
     }

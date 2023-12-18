@@ -925,8 +925,8 @@ impl Machine {
 
             self.machine_st.hb = self.machine_st.heap.len();
 
-            self.machine_st.oip = 0;
-            self.machine_st.iip = 0;
+            // self.machine_st.oip = 0;
+            // self.machine_st.iip = 0;
         }
 
         self.machine_st.p += offset;
@@ -1010,8 +1010,8 @@ impl Machine {
 
             self.machine_st.heap.truncate(target_h);
 
-            self.machine_st.oip = 0;
-            self.machine_st.iip = 0;
+            // self.machine_st.oip = 0;
+            // self.machine_st.iip = 0;
         } else {
             self.trust_epilogue(offset);
         }
@@ -1059,8 +1059,13 @@ impl Machine {
         self.machine_st.stack.truncate(b);
         self.machine_st.heap.truncate(target_h);
 
-        self.machine_st.oip = 0;
-        self.machine_st.iip = 0;
+        // these registers don't need to be reset here and MUST NOT be
+        // (nor in indexed_try to trust_epilogue)! oip could be reset
+        // without any adverse effects but iip is needed by
+        // get_clause_p to find the last executed clause/2 clause.
+
+        // self.machine_st.oip = 0;
+        // self.machine_st.iip = 0;
     }
 
     #[inline(always)]
