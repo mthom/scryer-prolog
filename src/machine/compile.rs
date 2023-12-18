@@ -1316,7 +1316,8 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                         .clause_clause_locs
                         .extend(&clause_clause_locs.make_contiguous()[0..]);
 
-                    let skeleton = cg.skeleton;
+                    let mut skeleton = cg.skeleton;
+                    skeleton.core.is_dynamic = settings.is_dynamic();
 
                     self.add_extensible_predicate(key, skeleton, predicates.compilation_target);
                 }
@@ -2138,7 +2139,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             .map(|skeleton| skeleton.predicate_info())
             .unwrap_or_default();
 
-        let mut predicate_info = self
+        let predicate_info = self
             .wam_prelude
             .indices
             .get_predicate_skeleton(&self.payload.predicates.compilation_target, &key)
@@ -2200,8 +2201,6 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                             (0..skeleton.clauses.len()).map(Some).collect(),
                             false, // the builtin M:'$clause'/2 is never dynamic.
                         );
-
-                        predicate_info.is_dynamic = false;
                     }
 
                     self.payload

@@ -466,13 +466,39 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             None => return,
         };
 
+        let mut skipped_local_predicates = IndexSet::with_hasher(FxBuildHasher::default());
+
+        for ((local_compilation_target, key), skeleton) in
+            removed_module.local_extensible_predicates.iter()
+        {
+            skipped_local_predicates.insert(key);
+
+            if skeleton.is_multifile {
+                continue;
+            }
+
+            if let Some(code_index) = removed_module.code_dir.get_mut(key) {
+                if let Some(global_skeleton) = self
+                    .wam_prelude
+                    .indices
+                    .get_predicate_skeleton(local_compilation_target, key)
+                {
+                    let old_index_ptr = code_index.replace(if global_skeleton.core.is_dynamic {
+                        IndexPtr::dynamic_undefined()
+                    } else {
+                        IndexPtr::undefined()
+                    });
+
+                    self.payload.retraction_info.push_record(
+                        RetractionRecord::ReplacedModulePredicate(module_name, *key, old_index_ptr),
+                    );
+                }
+            }
+        }
+
         for (key, code_index) in removed_module.code_dir.iter_mut() {
-            match removed_module
-                .local_extensible_predicates
-                .get(&(CompilationTarget::User, *key))
-            {
-                Some(skeleton) if skeleton.is_multifile => continue,
-                _ => {}
+            if skipped_local_predicates.contains(&key) {
+                continue;
             }
 
             let old_index_ptr = code_index.replace(IndexPtr::undefined());
