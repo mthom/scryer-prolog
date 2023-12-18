@@ -497,19 +497,21 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         }
 
         for (key, code_index) in removed_module.code_dir.iter_mut() {
-            if skipped_local_predicates.contains(&key) {
+            if skipped_local_predicates.contains(key) {
                 continue;
             }
 
-            let old_index_ptr = code_index.replace(IndexPtr::undefined());
+            if !code_index.is_undefined() && !code_index.is_dynamic_undefined() {
+                let old_index_ptr = code_index.replace(IndexPtr::undefined());
 
-            self.payload
-                .retraction_info
-                .push_record(RetractionRecord::ReplacedModulePredicate(
-                    module_name,
-                    *key,
-                    old_index_ptr,
-                ));
+                self.payload
+                    .retraction_info
+                    .push_record(RetractionRecord::ReplacedModulePredicate(
+                        module_name,
+                        *key,
+                        old_index_ptr,
+                    ));
+            }
         }
 
         for (key, skeleton) in removed_module.extensible_predicates.drain(..) {
