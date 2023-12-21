@@ -47,6 +47,8 @@ fn lower_bound_of_target_clause(skeleton: &mut PredicateSkeleton, target_pos: us
         return 0;
     }
 
+    debug_assert!(skeleton.clauses.len() >= 2);
+
     let index = target_pos - 1;
 
     let index = if let Some(index_loc) = skeleton.clauses[index]
@@ -68,7 +70,7 @@ fn lower_bound_of_target_clause(skeleton: &mut PredicateSkeleton, target_pos: us
         index
     };
 
-    index.clamp(0, skeleton.clauses.len() - 1)
+    index.clamp(0, skeleton.clauses.len() - 2)
 }
 
 fn derelictize_try_me_else(
@@ -1518,6 +1520,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         } = self.compile_standalone_clause(clause, settings)?;
 
         let code_len = self.wam_prelude.code.len();
+
         standalone_skeleton.clauses[0].clause_start += code_len;
 
         let skeleton = match self
