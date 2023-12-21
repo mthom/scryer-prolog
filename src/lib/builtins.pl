@@ -1239,7 +1239,10 @@ call_retract_helper(Head, Body, P, Module) :-
     ;  ClauseQualifier = Module
     ),
     ClauseQualifier:'$clause'(Head, Body),
-    '$get_clause_p'(Head, P, Module).
+    % ensure '$get_clause_p'/3 is not the last clause so it can
+    % recover the choice point of '$clause' if necessary.
+    '$get_clause_p'(Head, P, Module),
+    true.
 
 call_retract(Head, Body, Name, Arity, Module) :-
     findall(P, builtins:call_retract_helper(Head, Body, P, Module), Ps),

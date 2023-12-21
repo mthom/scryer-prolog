@@ -1010,6 +1010,20 @@ impl Machine {
 
             self.machine_st.heap.truncate(target_h);
 
+            // these registers don't need to be reset here and MUST
+            // NOT be (nor in indexed_try! trust_epilogue is an
+            // exception, see next paragraph)! oip could be reset
+            // without any adverse effects but iip is needed by
+            // get_clause_p to find the last executed clause/2 clause.
+
+            // trust_epilogue must reset these for the sake of
+            // subsequent predicates beginning with
+            // switch_to_term. get_clause_p copes by checking
+            // self.machine_st.b > self.machine.e: if true, it is safe
+            // to use self.machine_st.iip; if false, use the choice
+            // point left at the top of the stack by '$clause'
+            // (specifically its biip value).
+
             // self.machine_st.oip = 0;
             // self.machine_st.iip = 0;
         } else {
@@ -1059,13 +1073,8 @@ impl Machine {
         self.machine_st.stack.truncate(b);
         self.machine_st.heap.truncate(target_h);
 
-        // these registers don't need to be reset here and MUST NOT be
-        // (nor in indexed_try to trust_epilogue)! oip could be reset
-        // without any adverse effects but iip is needed by
-        // get_clause_p to find the last executed clause/2 clause.
-
-        // self.machine_st.oip = 0;
-        // self.machine_st.iip = 0;
+        self.machine_st.oip = 0;
+        self.machine_st.iip = 0;
     }
 
     #[inline(always)]

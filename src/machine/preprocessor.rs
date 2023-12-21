@@ -565,21 +565,6 @@ impl Preprocessor {
         }
     }
 
-    /*
-    fn try_term_to_query<'a, LS: LoadState<'a>>(
-        &mut self,
-        loader: &mut Loader<'a, LS>,
-        terms: Vec<Term>,
-        cut_context: CutContext,
-    ) -> Result<TopLevel, CompilationError> {
-        Ok(TopLevel::Query(self.setup_query(
-            loader,
-            terms,
-            cut_context,
-        )?))
-    }
-    */
-
     pub(super) fn try_term_to_tl<'a, LS: LoadState<'a>>(
         &mut self,
         loader: &mut Loader<'a, LS>,
@@ -607,20 +592,4 @@ impl Preprocessor {
             }
         }
     }
-
-    /*
-    fn try_terms_to_tls<'a, I: IntoIterator<Item = Term>, LS: LoadState<'a>>(
-        &mut self,
-        loader: &mut Loader<'a, LS>,
-        terms: I,
-    ) -> Result<VecDeque<TopLevel>, CompilationError> {
-        let mut results = VecDeque::new();
-
-        for term in terms.into_iter() {
-            results.push_back(self.try_term_to_tl(loader, term)?);
-        }
-
-        Ok(results)
-    }
-    */
 }
