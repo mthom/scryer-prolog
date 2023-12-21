@@ -1201,7 +1201,13 @@ impl Machine {
             match &self.code[bp] {
                 Instruction::IndexingCode(ref indexing_code) => {
                     let indexing_code_ptr = match &indexing_code[0] {
-                        &IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(_, _, c, _, s)) => {
+                        &IndexingLine::Indexing(IndexingInstruction::SwitchOnTerm(
+                            _,
+                            _,
+                            c,
+                            _,
+                            s,
+                        )) => {
                             if key.1 > 0 {
                                 s
                             } else {
@@ -1260,7 +1266,10 @@ impl Machine {
                     bp -= offset;
                 }
                 _ => {
-                    return (skeleton.core.clause_clause_locs.back().cloned().unwrap(), bp);
+                    return (
+                        skeleton.core.clause_clause_locs.back().cloned().unwrap(),
+                        bp,
+                    );
                 }
             }
         }

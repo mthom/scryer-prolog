@@ -204,9 +204,7 @@ impl Stack {
     }
 
     pub(crate) fn top(&self) -> usize {
-        unsafe {
-            (*self.buf.ptr.get()) as usize - self.buf.base as usize
-        }
+        unsafe { (*self.buf.ptr.get()) as usize - self.buf.base as usize }
     }
 
     pub(crate) fn allocate_or_frame(&mut self, num_cells: usize) -> usize {
