@@ -144,6 +144,35 @@ impl<R: Read> CharRead for CharReader<R> {
             Err(e) => return Some(Err(e)),
         }
 
+        let bad_bytes_error = |buf: &[u8]| {
+            // If we have 4 bytes that still don't make up
+            // a valid code point, then we have garbage.
+
+            // We have bad data in the buffer. Remove
+            // leading bytes until either the buffer is
+            // empty, or we have a valid code point.
+
+            let mut split_point = 1;
+            let mut badbytes = vec![];
+
+            loop {
+                let (bad, rest) = buf.split_at(split_point);
+
+                if rest.is_empty() || str::from_utf8(rest).is_ok() {
+                    badbytes.extend_from_slice(bad);
+                    break;
+                }
+
+                split_point += 1;
+            }
+
+            // Raise the error. If we still have data in
+            // the buffer, it will be returned on the next
+            // loop.
+
+            io::Error::new(io::ErrorKind::InvalidData, BadUtf8Error { bytes: badbytes })
+        };
+
         loop {
             let buf = &self.buf[self.pos..];
 
@@ -159,35 +188,7 @@ impl<R: Read> CharRead for CharReader<R> {
                 };
 
                 if buf.len() - e.valid_up_to() >= 4 {
-                    // If we have 4 bytes that still don't make up
-                    // a valid code point, then we have garbage.
-
-                    // We have bad data in the buffer. Remove
-                    // leading bytes until either the buffer is
-                    // empty, or we have a valid code point.
-
-                    let mut split_point = 1;
-                    let mut badbytes = vec![];
-
-                    loop {
-                        let (bad, rest) = buf.split_at(split_point);
-
-                        if rest.is_empty() || str::from_utf8(rest).is_ok() {
-                            badbytes.extend_from_slice(bad);
-                            break;
-                        }
-
-                        split_point += 1;
-                    }
-
-                    // Raise the error. If we still have data in
-                    // the buffer, it will be returned on the next
-                    // loop.
-
-                    return Some(Err(io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        BadUtf8Error { bytes: badbytes },
-                    )));
+                    return Some(Err(bad_bytes_error(buf)));
                 } else if self.pos >= self.buf.len() {
                     return None;
                 } else if self.buf.len() - self.pos >= 4 {
@@ -223,6 +224,7 @@ impl<R: Read> CharRead for CharReader<R> {
 
                     match self.inner.read(word_slice) {
                         Err(e) => return Some(Err(e)),
+                        Ok(nread) if nread == 0 => return Some(Err(bad_bytes_error(&self.buf))),
                         Ok(nread) => {
                             self.buf.extend_from_slice(&word_slice[0..nread]);
                         }

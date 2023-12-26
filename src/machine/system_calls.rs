@@ -3492,6 +3492,12 @@ impl Machine {
                     Some(Ok(c)) => {
                         string.push(c);
                     }
+                    Some(Err(e)) => {
+                        let stub = functor_stub(atom!("$get_n_chars"), 3);
+                        let err = self.machine_st.session_error(SessionError::from(e));
+
+                        return Err(self.machine_st.error_form(err, stub));
+                    }
                     _ => {
                         break;
                     }

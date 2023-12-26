@@ -417,6 +417,9 @@ impl ParserError {
             ParserError::IO(e) if e.kind() == ErrorKind::UnexpectedEof => {
                 atom!("unexpected_end_of_file")
             }
+            ParserError::IO(e) if e.kind() == ErrorKind::InvalidData => {
+                atom!("invalid_data")
+            }
             ParserError::IO(_) => atom!("input_output_error"),
             ParserError::LexicalError(_) => atom!("lexical_error"),
             ParserError::MissingQuote(..) => atom!("missing_quote"),
