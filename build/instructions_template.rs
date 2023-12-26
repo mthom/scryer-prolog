@@ -511,18 +511,12 @@ enum SystemClauseType {
     #[cfg(feature = "crypto-full")]
     #[strum_discriminants(strum(props(Arity = "6", Name = "$crypto_data_decrypt")))]
     CryptoDataDecrypt,
-    #[cfg(feature = "crypto-full")]
-    #[strum_discriminants(strum(props(Arity = "4", Name = "$ed25519_sign")))]
-    Ed25519Sign,
-    #[cfg(feature = "crypto-full")]
-    #[strum_discriminants(strum(props(Arity = "4", Name = "$ed25519_verify")))]
-    Ed25519Verify,
-    #[cfg(feature = "crypto-full")]
-    #[strum_discriminants(strum(props(Arity = "1", Name = "$ed25519_new_keypair")))]
-    Ed25519NewKeyPair,
-    #[cfg(feature = "crypto-full")]
-    #[strum_discriminants(strum(props(Arity = "2", Name = "$ed25519_keypair_public_key")))]
-    Ed25519KeyPairPublicKey,
+    #[strum_discriminants(strum(props(Arity = "4", Name = "$ed25519_sign_raw")))]
+    Ed25519SignRaw,
+    #[strum_discriminants(strum(props(Arity = "4", Name = "$ed25519_verify_raw")))]
+    Ed25519VerifyRaw,
+    #[strum_discriminants(strum(props(Arity = "2", Name = "$ed25519_seed_to_public_key")))]
+    Ed25519SeedToPublicKey,
     #[strum_discriminants(strum(props(Arity = "2", Name = "$first_non_octet")))]
     FirstNonOctet,
     #[strum_discriminants(strum(props(Arity = "3", Name = "$load_html")))]
@@ -1874,18 +1868,17 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallFlushTermQueue |
                     &Instruction::CallRemoveModuleExports |
                     &Instruction::CallAddNonCountedBacktracking |
-                    &Instruction::CallPopCount => {
+                    &Instruction::CallPopCount |
+                    &Instruction::CallEd25519SignRaw |
+                    &Instruction::CallEd25519VerifyRaw |
+                    &Instruction::CallEd25519SeedToPublicKey => {
                         let (name, arity) = self.to_name_and_arity();
                         functor!(atom!("call"), [atom(name), fixnum(arity)])
                     }
                     //
                     #[cfg(feature = "crypto-full")]
                     &Instruction::CallCryptoDataEncrypt |
-                    &Instruction::CallCryptoDataDecrypt |
-                    &Instruction::CallEd25519Sign |
-                    &Instruction::CallEd25519Verify |
-                    &Instruction::CallEd25519NewKeyPair |
-                    &Instruction::CallEd25519KeyPairPublicKey => {
+                    &Instruction::CallCryptoDataDecrypt => {
                         let (name, arity) = self.to_name_and_arity();
                         functor!(atom!("call"), [atom(name), fixnum(arity)])
                     }
@@ -2110,18 +2103,17 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteFlushTermQueue |
                     &Instruction::ExecuteRemoveModuleExports |
                     &Instruction::ExecuteAddNonCountedBacktracking |
-                    &Instruction::ExecutePopCount => {
+                    &Instruction::ExecutePopCount |
+                    &Instruction::ExecuteEd25519SignRaw |
+                    &Instruction::ExecuteEd25519VerifyRaw |
+                    &Instruction::ExecuteEd25519SeedToPublicKey => {
                         let (name, arity) = self.to_name_and_arity();
                         functor!(atom!("execute"), [atom(name), fixnum(arity)])
                     }
                     //
                     #[cfg(feature = "crypto-full")]
                     &Instruction::ExecuteCryptoDataEncrypt |
-                    &Instruction::ExecuteCryptoDataDecrypt |
-                    &Instruction::ExecuteEd25519Sign |
-                    &Instruction::ExecuteEd25519Verify |
-                    &Instruction::ExecuteEd25519NewKeyPair |
-                    &Instruction::ExecuteEd25519KeyPairPublicKey => {
+                    &Instruction::ExecuteCryptoDataDecrypt => {
                         let (name, arity) = self.to_name_and_arity();
                         functor!(atom!("execute"), [atom(name), fixnum(arity)])
                     }

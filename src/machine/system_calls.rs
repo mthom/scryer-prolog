@@ -81,14 +81,11 @@ use ring::rand::{SecureRandom, SystemRandom};
 use ring::{digest, hkdf, pbkdf2};
 
 #[cfg(feature = "crypto-full")]
-use ring::{
-    aead,
-    signature::{self, KeyPair},
-};
+use ring::aead;
 use ripemd160::{Digest, Ripemd160};
 use sha3::{Sha3_224, Sha3_256, Sha3_384, Sha3_512};
 
-use crrl::{secp256k1, x25519};
+use crrl::{ed25519, secp256k1, x25519};
 
 #[cfg(feature = "tls")]
 use native_tls::{Identity, TlsAcceptor, TlsConnector};
@@ -7617,33 +7614,16 @@ impl Machine {
         unify!(self.machine_st, self.machine_st.registers[4], uncompressed);
     }
 
-    #[cfg(feature = "crypto-full")]
     #[inline(always)]
-    pub(crate) fn ed25519_new_key_pair(&mut self) {
-        let pkcs8_bytes = signature::Ed25519KeyPair::generate_pkcs8(rng()).unwrap();
-        let complete_string = self.u8s_to_string(pkcs8_bytes.as_ref());
+    pub(crate) fn ed25519_seed_to_public_key(&mut self) {
+        let stub_gen = || functor_stub(atom!("ed25519_seed_keypair"), 2);
+        let seed_bytes = self
+            .machine_st
+            .integers_to_bytevec(self.machine_st.registers[1], stub_gen);
 
-        unify!(
-            self.machine_st,
-            self.machine_st.registers[1],
-            complete_string
-        )
-    }
+        let skey = ed25519::PrivateKey::from_seed(&seed_bytes);
 
-    #[cfg(feature = "crypto-full")]
-    #[inline(always)]
-    pub(crate) fn ed25519_key_pair_public_key(&mut self) {
-        let bytes = self.string_encoding_bytes(self.machine_st.registers[1], atom!("octet"));
-
-        let key_pair = match signature::Ed25519KeyPair::from_pkcs8(&bytes) {
-            Ok(kp) => kp,
-            _ => {
-                self.machine_st.fail = true;
-                return;
-            }
-        };
-
-        let complete_string = self.u8s_to_string(key_pair.public_key().as_ref());
+        let complete_string = self.u8s_to_string(skey.public_key.encoded.as_ref());
 
         unify!(
             self.machine_st,
@@ -7652,22 +7632,19 @@ impl Machine {
         );
     }
 
-    #[cfg(feature = "crypto-full")]
     #[inline(always)]
-    pub(crate) fn ed25519_sign(&mut self) {
-        let key = self.string_encoding_bytes(self.machine_st.registers[1], atom!("octet"));
+    pub(crate) fn ed25519_sign_raw(&mut self) {
+        let stub_gen = || functor_stub(atom!("ed25519_sign"), 4);
+        let seed_bytes = self
+            .machine_st
+            .integers_to_bytevec(self.machine_st.registers[1], stub_gen);
+
+        let skey = ed25519::PrivateKey::from_seed(&seed_bytes);
+
         let encoding = cell_as_atom!(self.deref_register(3));
         let data = self.string_encoding_bytes(self.machine_st.registers[2], encoding);
 
-        let key_pair = match signature::Ed25519KeyPair::from_pkcs8(&key) {
-            Ok(kp) => kp,
-            _ => {
-                self.machine_st.fail = true;
-                return;
-            }
-        };
-
-        let sig = key_pair.sign(&data);
+        let sig = skey.sign_raw(&data);
 
         let sig_list = heap_loc_as_cell!(iter_to_heap_list(
             &mut self.machine_st.heap,
@@ -7679,25 +7656,21 @@ impl Machine {
         unify!(self.machine_st, self.machine_st.registers[4], sig_list);
     }
 
-    #[cfg(feature = "crypto-full")]
     #[inline(always)]
-    pub(crate) fn ed25519_verify(&mut self) {
-        let key = self.string_encoding_bytes(self.machine_st.registers[1], atom!("octet"));
+    pub(crate) fn ed25519_verify_raw(&mut self) {
+        let key_bytes = self.string_encoding_bytes(self.machine_st.registers[1], atom!("octet"));
+        let pkey = ed25519::PublicKey::decode(&key_bytes).unwrap();
+
         let encoding = cell_as_atom!(self.deref_register(3));
         let data = self.string_encoding_bytes(self.machine_st.registers[2], encoding);
-        let stub_gen = || functor_stub(atom!("ed25519_verify"), 5);
+
+        let stub_gen = || functor_stub(atom!("ed25519_verify"), 4);
+
         let signature = self
             .machine_st
             .integers_to_bytevec(self.machine_st.registers[4], stub_gen);
 
-        let peer_public_key = signature::UnparsedPublicKey::new(&signature::ED25519, &key);
-
-        match peer_public_key.verify(&data, &signature) {
-            Ok(_) => {}
-            _ => {
-                self.machine_st.fail = true;
-            }
-        }
+        self.machine_st.fail = !pkey.verify_raw(&signature, &data);
     }
 
     #[inline(always)]
