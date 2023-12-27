@@ -16,6 +16,7 @@ but they're not part of the ISO Prolog standard at the moment.
                     setup_call_cleanup/3,
                     succ/2,
                     call_nth/2,
+                    call_semidet/1,
                     countall/2,
                     copy_term_nat/2]).
 
@@ -344,6 +345,74 @@ call_nth_nesting(C, ID) :-
     atom_concat(i_call_nth_nesting_, Atom, ID),
     bb_put(ID, 0),
     bb_put(i_call_nth_counter, C).
+
+:- meta_predicate(call_semidet(0)).
+
+%% call_semidet(Goal)
+%
+% Calls a goal that succeeds at most once (it can fail after succeeding)
+% without leaving any choice points. This predicate is useful to get rid
+% of choicepoints in a safe way (without using cuts) to get better memory
+% usage for example. This implementation doesn't call the goal twice, so
+% the overhead is minimal. Examples:
+%
+% ```
+% ?- call_semidet(X = 1).
+%    X = 1.
+% ?- (X = 1; false).
+%    % This predicate succeeds once but leaves a choice point.
+%    X = 1
+% ;  false.
+% ?- call_semidet((X = 1; false)).
+%    % The choice point is eliminated.
+%    X = 1.
+% ?- (X = 1; X = 2).
+%    % This predicate succeeds more that once.
+%    X = 1
+% ;  X = 2.
+% ?- call_semidet((X = 1; X = 2)).
+%    % Safely errors.
+%    error(mode_error(semidet,(2=1;2=2)),_32).
+% ```
+call_semidet(Goal) :-
+    term_variables(Goal, Vars),
+    setup_call_cleanup(
+        call_semidet_ids(_, FirstId, VarsId),
+        (
+            \+ (
+                call(Goal),
+                bb_get(FirstId, First),
+                (   First == true ->
+                    bb_put(FirstId, false),
+                    copy_term(Vars, VarsCopy),
+                    bb_put(VarsId, vars(VarsCopy)),
+                    false
+                ;   throw(error(mode_error(semidet, Goal),_))
+                )
+            ),
+            bb_get(VarsId, vars(VarsCopy)),
+            Vars = VarsCopy
+        ),
+        (   bb_get(call_semidet_ids_count, C_) ->
+            C1_ is C_ - 1,
+            bb_put(call_semidet_ids_count, C1_)
+        ;   true
+        )
+    ).
+
+call_semidet_ids(C, FirstId, VarsId) :-
+    (   bb_get(call_semidet_ids_count, C0) ->
+        C is C0 + 1
+    ;   C = 0
+    ),
+    number_chars(C, CChars),
+    atom_chars(CAtom, CChars),
+    atom_concat(call_semidet_id_first_, CAtom, FirstId),
+    atom_concat(call_semidet_id_vars_, CAtom, VarsId),
+    bb_put(FirstId, true),
+    bb_put(VarsId, novars),
+    bb_put(call_semidet_ids_count, C).
+
 
 %% countall(G_0, N).
 %
