@@ -628,18 +628,34 @@ ed25519_seed_keypair(Seed, Pair) :-
         length(Seed, 32),
         '$ed25519_seed_to_public_key'(Seed, Public),
         maplist(char_code, Public, PublicBytes),
-        phrase(([0x30,81], % a sequence of 81 bytes follows
-                [2,1],     % the integer 1 denoting version 2 (awesome design!)
-                [1],       % the public key is also present
-                [48,5],    % an element of 5 bytes follows
-                [6,3,43,101,112],   % OID of Ed25519
-                [4,34],    % an octet string of 34 bytes follows
-                [4,32],    % an octet string of 32 bytes follows
-                seq(Seed), % the seed is the private key
-                [129,33],
-                [0],       % 32 bytes is divisible by 8
-                seq(PublicBytes)), ASN1),
-        maplist(char_code, Pair, ASN1).
+        phrase(ed25519_PKCS8v2(Seed,PublicBytes), DERs),
+        maplist(char_code, Pair, DERs).
+
+% DER (and hence BER) encoding of an Ed25519 private key and
+% corresponding public key in PKCS#8v2 format (RFC 5958) as specified
+% in RFC 8410.
+
+ed25519_PKCS8v2(Seed, PublicBytes) -->
+        [0x30,81],    % a SEQUENCE of 81 bytes follows
+
+        % the publicKey is present, hence we set version to v2
+        [2,1,1],      % the integer 1 denoting version 2 (awesome design!)
+
+        % privateKeyAlgorithm: SEQUENCE
+        [0x30,5],     % a SEQUENCE of 5 bytes follows
+        [6,3],        % an OBJECT IDENTIFIER of 3 bytes follows
+        [43,101,112], % OID of Ed25519
+
+        % privateKey: OCTET STRING
+        [4,34],       % an OCTET STRING of 34 bytes follows
+        [4,32],       % an OCTET STRING of 32 bytes follows
+        seq(Seed),    % the seed is the private key
+
+        % publicKey: [1] IMPLICIT BIT STRING; context-specific, hence bit 7 set
+        [0b10000001], % the public key follows
+        [33],         % a BIT STRING of length 33 follows
+        [0],          % 32 bytes is divisible by 8, hence 0 unused bits
+        seq(PublicBytes).
 
 %% ed25519_new_keypair(-Pair)
 %
