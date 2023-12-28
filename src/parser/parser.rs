@@ -97,7 +97,12 @@ pub(crate) fn as_partial_string(
                         string.push(*c);
                     }
                     _ => {
-                        return Err(Term::Cons(Cell::default(), Box::new(head), orig_tail));
+                        tail = Term::Cons(
+                            Cell::default(),
+                            Box::new((**prev).clone()),
+                            Box::new((**succ).clone()),
+                        );
+                        break;
                     }
                 }
 
