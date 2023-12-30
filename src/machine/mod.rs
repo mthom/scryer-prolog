@@ -1130,7 +1130,7 @@ impl Machine {
             }
             Unknown::Warn => {
                 println!(
-                    "warning: predicate {}/{} is undefined",
+                    "% Warning: predicate {}/{} is undefined",
                     name.as_str(),
                     arity
                 );

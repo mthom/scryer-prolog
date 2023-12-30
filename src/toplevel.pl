@@ -134,7 +134,7 @@ run_goals([g(Gs0)|Goals]) :- !,
                   write_term(Exception, [double_quotes(DQ)]), nl % halt?
               )
         ) -> true
-    ;   write('Warning: initialization failed for: '),
+    ;   write('% Warning: initialization failed for: '),
         write_term(Goal, [variable_names(VNs),double_quotes(DQ)]), nl
     ),
     run_goals(Goals).
