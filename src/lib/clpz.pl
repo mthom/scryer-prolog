@@ -1015,6 +1015,9 @@ X in inf..sup.
    needed to schedule the propagators!
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
+:- meta_predicate(duophrase(4, ?, ?)).
+:- meta_predicate(duophrase(4, ?, ?, ?, ?)).
+
 duophrase(NT, As, Bs) :-
         duophrase(NT, As, [], Bs, []).
 
@@ -2409,22 +2412,22 @@ sum_finite_domains([C|Cs], [V|Vs], Inf0, Sup0, Inf, Sup) ++>
         ),
         sum_finite_domains(Cs, Vs, Inf2, Sup2, Inf, Sup).
 
-remove_dist_upper_lower([], _, _, _).
-remove_dist_upper_lower([C|Cs], [V|Vs], D1, D2) :-
-        (   fd_get(V, VD, VPs) ->
+remove_dist_upper_lower([], _, _, _) --> [].
+remove_dist_upper_lower([C|Cs], [V|Vs], D1, D2) -->
+        (   { fd_get(V, VD, VPs) } ->
             (   C < 0 ->
-                domain_supremum(VD, n(Sup)),
-                L is Sup + D1//C,
-                domain_remove_smaller_than(VD, L, VD1),
-                domain_infimum(VD1, n(Inf)),
-                G is Inf - D2//C,
-                domain_remove_greater_than(VD1, G, VD2)
-            ;   domain_infimum(VD, n(Inf)),
-                G is Inf + D1//C,
-                domain_remove_greater_than(VD, G, VD1),
-                domain_supremum(VD1, n(Sup)),
-                L is Sup - D2//C,
-                domain_remove_smaller_than(VD1, L, VD2)
+                { domain_supremum(VD, n(Sup)),
+                  L is Sup + D1//C,
+                  domain_remove_smaller_than(VD, L, VD1),
+                  domain_infimum(VD1, n(Inf)),
+                  G is Inf - D2//C,
+                  domain_remove_greater_than(VD1, G, VD2) }
+            ;   { domain_infimum(VD, n(Inf)),
+                  G is Inf + D1//C,
+                  domain_remove_greater_than(VD, G, VD1),
+                  domain_supremum(VD1, n(Sup)),
+                  L is Sup - D2//C,
+                  domain_remove_smaller_than(VD1, L, VD2) }
             ),
             fd_put(V, VD2, VPs)
         ;   true
@@ -2432,16 +2435,16 @@ remove_dist_upper_lower([C|Cs], [V|Vs], D1, D2) :-
         remove_dist_upper_lower(Cs, Vs, D1, D2).
 
 
-remove_dist_upper_leq([], _, _).
-remove_dist_upper_leq([C|Cs], [V|Vs], D1) :-
-        (   fd_get(V, VD, VPs) ->
+remove_dist_upper_leq([], _, _) --> [].
+remove_dist_upper_leq([C|Cs], [V|Vs], D1) -->
+        (   { fd_get(V, VD, VPs) } ->
             (   C < 0 ->
-                domain_supremum(VD, n(Sup)),
-                L is Sup + D1//C,
-                domain_remove_smaller_than(VD, L, VD1)
-            ;   domain_infimum(VD, n(Inf)),
-                G is Inf + D1//C,
-                domain_remove_greater_than(VD, G, VD1)
+                { domain_supremum(VD, n(Sup)),
+                  L is Sup + D1//C,
+                  domain_remove_smaller_than(VD, L, VD1) }
+            ;   { domain_infimum(VD, n(Inf)),
+                  G is Inf + D1//C,
+                  domain_remove_greater_than(VD, G, VD1) }
             ),
             fd_put(V, VD1, VPs)
         ;   true
@@ -2449,18 +2452,18 @@ remove_dist_upper_leq([C|Cs], [V|Vs], D1) :-
         remove_dist_upper_leq(Cs, Vs, D1).
 
 
-remove_dist_upper([], _).
-remove_dist_upper([C*V|CVs], D) :-
-        (   fd_get(V, VD, VPs) ->
+remove_dist_upper([], _) --> [].
+remove_dist_upper([C*V|CVs], D) -->
+        (   { fd_get(V, VD, VPs) } ->
             (   C < 0 ->
-                (   domain_supremum(VD, n(Sup)) ->
-                    L is Sup + D//C,
-                    domain_remove_smaller_than(VD, L, VD1)
+                (   { domain_supremum(VD, n(Sup)) } ->
+                    { L is Sup + D//C,
+                      domain_remove_smaller_than(VD, L, VD1) }
                 ;   VD1 = VD
                 )
-            ;   (   domain_infimum(VD, n(Inf)) ->
-                    G is Inf + D//C,
-                    domain_remove_greater_than(VD, G, VD1)
+            ;   (   { domain_infimum(VD, n(Inf)) } ->
+                    { G is Inf + D//C,
+                      domain_remove_greater_than(VD, G, VD1) }
                 ;   VD1 = VD
                 )
             ),
@@ -2469,18 +2472,18 @@ remove_dist_upper([C*V|CVs], D) :-
         ),
         remove_dist_upper(CVs, D).
 
-remove_dist_lower([], _).
-remove_dist_lower([C*V|CVs], D) :-
-        (   fd_get(V, VD, VPs) ->
+remove_dist_lower([], _) --> [].
+remove_dist_lower([C*V|CVs], D) -->
+        (   { fd_get(V, VD, VPs) } ->
             (   C < 0 ->
-                (   domain_infimum(VD, n(Inf)) ->
-                    G is Inf - D//C,
-                    domain_remove_greater_than(VD, G, VD1)
+                (   { domain_infimum(VD, n(Inf)) } ->
+                    { G is Inf - D//C,
+                      domain_remove_greater_than(VD, G, VD1) }
                 ;   VD1 = VD
                 )
-            ;   (   domain_supremum(VD, n(Sup)) ->
-                    L is Sup - D//C,
-                    domain_remove_smaller_than(VD, L, VD1)
+            ;   (   { domain_supremum(VD, n(Sup)) } ->
+                    { L is Sup - D//C,
+                      domain_remove_smaller_than(VD, L, VD1) }
                 ;   VD1 = VD
                 )
             ),
@@ -2489,26 +2492,26 @@ remove_dist_lower([C*V|CVs], D) :-
         ),
         remove_dist_lower(CVs, D).
 
-remove_upper([], _).
-remove_upper([C*X|CXs], Max) :-
-        (   fd_get(X, XD, XPs) ->
+remove_upper([], _) --> [].
+remove_upper([C*X|CXs], Max) -->
+        (   { fd_get(X, XD, XPs) } ->
             D is Max//C,
             (   C < 0 ->
-                domain_remove_smaller_than(XD, D, XD1)
-            ;   domain_remove_greater_than(XD, D, XD1)
+                { domain_remove_smaller_than(XD, D, XD1) }
+            ;   { domain_remove_greater_than(XD, D, XD1) }
             ),
             fd_put(X, XD1, XPs)
         ;   true
         ),
         remove_upper(CXs, Max).
 
-remove_lower([], _).
-remove_lower([C*X|CXs], Min) :-
-        (   fd_get(X, XD, XPs) ->
+remove_lower([], _) --> [].
+remove_lower([C*X|CXs], Min) -->
+        (   { fd_get(X, XD, XPs) } ->
             D is -Min//C,
             (   C < 0 ->
-                domain_remove_greater_than(XD, D, XD1)
-            ;   domain_remove_smaller_than(XD, D, XD1)
+                { domain_remove_greater_than(XD, D, XD1) }
+            ;   { domain_remove_smaller_than(XD, D, XD1) }
             ),
             fd_put(X, XD1, XPs)
         ;   true
@@ -4753,55 +4756,55 @@ run_propagator(scalar_product_neq(Cs0,Vs0,P0), MState) -->
           ) }.
 
 run_propagator(scalar_product_leq(Cs0,Vs0,P0), MState) -->
-        { coeffs_variables_const(Cs0, Vs0, Cs, Vs, 0, I),
-          P is P0 - I,
-          (   Vs = [] -> kill(MState), P >= 0
-          ;   duophrase(sum_finite_domains(Cs, Vs, 0, 0, Inf, Sup), Infs, Sups),
-              D1 is P - Inf,
-              disable_queue,
-              (   Infs == [], Sups == [] ->
-                  Inf =< P,
-                  (   Sup =< P -> kill(MState)
-                  ;   remove_dist_upper_leq(Cs, Vs, D1)
-                  )
-              ;   Infs == [] -> Inf =< P, remove_dist_upper(Sups, D1)
-              ;   Infs = [_] -> remove_upper(Infs, D1)
-              ;   true
-              ),
-              enable_queue
-          ) }.
+        { coeffs_variables_const(Cs0, Vs0, Cs, Vs, 0, I) },
+        P is P0 - I,
+        (   Vs = [] -> kill(MState), P >= 0
+        ;   { duophrase(sum_finite_domains(Cs, Vs, 0, 0, Inf, Sup), Infs, Sups) },
+            D1 is P - Inf,
+            disable_queue,
+            (   Infs == [], Sups == [] ->
+                Inf =< P,
+                (   Sup =< P -> kill(MState)
+                ;   remove_dist_upper_leq(Cs, Vs, D1)
+                )
+            ;   Infs == [] -> Inf =< P, remove_dist_upper(Sups, D1)
+            ;   Infs = [_] -> remove_upper(Infs, D1)
+            ;   true
+            ),
+            enable_queue
+        ).
 
 run_propagator(scalar_product_eq(Cs0,Vs0,P0), MState) -->
-        { coeffs_variables_const(Cs0, Vs0, Cs, Vs, 0, I),
-          P is P0 - I,
-          (   Vs = [] -> kill(MState), P =:= 0
-          ;   Vs = [V], Cs = [C] -> kill(MState), P mod C =:= 0, V is P // C
-          ;   Cs == [1,1] -> kill(MState), Vs = [A,B], A + B #= P
-          ;   Cs == [1,-1] -> kill(MState), Vs = [A,B], A #= P + B
-          ;   Cs == [-1,1] -> kill(MState), Vs = [A,B], B #= P + A
-          ;   Cs == [-1,-1] -> kill(MState), Vs = [A,B], P1 is -P, A + B #= P1
-          ;   P =:= 0, Cs == [1,1,-1] -> kill(MState), Vs = [A,B,C], A + B #= C
-          ;   P =:= 0, Cs == [1,-1,1] -> kill(MState), Vs = [A,B,C], A + C #= B
-          ;   P =:= 0, Cs == [-1,1,1] -> kill(MState), Vs = [A,B,C], B + C #= A
-          ;   duophrase(sum_finite_domains(Cs, Vs, 0, 0, Inf, Sup), Infs, Sups),
-              % nl, writeln(Infs-Sups-Inf-Sup),
-              D1 is P - Inf,
-              D2 is Sup - P,
-              disable_queue,
-              (   Infs == [], Sups == [] ->
-                  between(Inf, Sup, P),
-                  remove_dist_upper_lower(Cs, Vs, D1, D2)
-              ;   Sups = [] -> P =< Sup, remove_dist_lower(Infs, D2)
-              ;   Infs = [] -> Inf =< P, remove_dist_upper(Sups, D1)
-              ;   Sups = [_], Infs = [_] ->
-                  remove_lower(Sups, D2),
-                  remove_upper(Infs, D1)
-              ;   Infs = [_] -> remove_upper(Infs, D1)
-              ;   Sups = [_] -> remove_lower(Sups, D2)
-              ;   true
-              ),
-              enable_queue
-          ) }.
+        { coeffs_variables_const(Cs0, Vs0, Cs, Vs, 0, I) },
+        P is P0 - I,
+        (   Vs = [] -> kill(MState), P =:= 0
+        ;   Vs = [V], Cs = [C] -> kill(MState), P mod C =:= 0, V is P // C
+        ;   Cs == [1,1] -> kill(MState), Vs = [A,B], { A + B #= P }
+        ;   Cs == [1,-1] -> kill(MState), Vs = [A,B], { A #= P + B }
+        ;   Cs == [-1,1] -> kill(MState), Vs = [A,B], { B #= P + A }
+        ;   Cs == [-1,-1] -> kill(MState), Vs = [A,B], P1 is -P, { A + B #= P1 }
+        ;   P =:= 0, Cs == [1,1,-1] -> kill(MState), Vs = [A,B,C], { A + B #= C }
+        ;   P =:= 0, Cs == [1,-1,1] -> kill(MState), Vs = [A,B,C], { A + C #= B }
+        ;   P =:= 0, Cs == [-1,1,1] -> kill(MState), Vs = [A,B,C], { B + C #= A }
+        ;   { duophrase(sum_finite_domains(Cs, Vs, 0, 0, Inf, Sup), Infs, Sups) },
+            % { nl, writeln(Infs-Sups-Inf-Sup) },
+            D1 is P - Inf,
+            D2 is Sup - P,
+            disable_queue,
+            (   Infs == [], Sups == [] ->
+                { between(Inf, Sup, P) },
+                remove_dist_upper_lower(Cs, Vs, D1, D2)
+            ;   Sups = [] -> P =< Sup, remove_dist_lower(Infs, D2)
+            ;   Infs = [] -> Inf =< P, remove_dist_upper(Sups, D1)
+            ;   Sups = [_], Infs = [_] ->
+                remove_lower(Sups, D2),
+                remove_upper(Infs, D1)
+            ;   Infs = [_] -> remove_upper(Infs, D1)
+            ;   Sups = [_] -> remove_lower(Sups, D2)
+            ;   true
+            ),
+            enable_queue
+        ).
 
 % X + Y = Z
 run_propagator(pplus(X,Y,Z,Morph), MState) -->
