@@ -3,7 +3,7 @@
     Author:        Markus Triska
     E-mail:        triska@metalevel.at
     WWW:           https://www.metalevel.at
-    Copyright (C): 2016-2023 Markus Triska
+    Copyright (C): 2016-2024 Markus Triska
 
     This library provides CLP(ℤ):
 
@@ -2750,20 +2750,24 @@ propagator_init_trigger(Vs, P) :-
 prop_init(Prop, V) :- init_propagator(V, Prop).
 
 geq(A, B) :-
-        (   fd_get(A, AD, APs) ->
-            domain_infimum(AD, AI),
-            (   fd_get(B, BD, _) ->
-                domain_supremum(BD, BS),
-                (   AI cis_geq BS -> true
+        new_queue(Q),
+        phrase((geq(A, B),do_queue), [Q], _).
+
+geq(A, B) -->
+        (   { fd_get(A, AD, APs) } ->
+            { domain_infimum(AD, AI) },
+            (   { fd_get(B, BD, _) } ->
+                { domain_supremum(BD, BS) },
+                (   { AI cis_geq BS } -> true
                 ;   propagator_init_trigger(pgeq(A,B))
                 )
-            ;   (   AI cis_geq n(B) -> true
-                ;   domain_remove_smaller_than(AD, B, AD1),
+            ;   (   { AI cis_geq n(B) } -> true
+                ;   { domain_remove_smaller_than(AD, B, AD1) },
                     fd_put(A, AD1, APs)
                 )
             )
-        ;   fd_get(B, BD, BPs) ->
-            domain_remove_greater_than(BD, A, BD1),
+        ;   { fd_get(B, BD, BPs) } ->
+            { domain_remove_greater_than(BD, A, BD1) },
             fd_put(B, BD1, BPs)
         ;   A >= B
         ).
@@ -4224,9 +4228,6 @@ activate_propagator(propagator(P,State)) -->
             )
         ).
 
-enable_queue  :- true. % NOP
-disable_queue :- true. % NOP
-
 %do_queue --> print_queue, { false }.
 do_queue -->
         (   queue_enabled ->
@@ -4510,13 +4511,13 @@ run_propagator(pelement(N, Is, V), MState) -->
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-run_propagator(pgcc_single(Vs, Pairs), _) --> { gcc_global(Vs, Pairs) }.
+run_propagator(pgcc_single(Vs, Pairs), _) --> gcc_global(Vs, Pairs).
 
-run_propagator(pgcc_check_single(Pairs), _) --> { gcc_check(Pairs) }.
+run_propagator(pgcc_check_single(Pairs), _) --> gcc_check(Pairs).
 
-run_propagator(pgcc_check(Pairs), _) --> { gcc_check(Pairs) }.
+run_propagator(pgcc_check(Pairs), _) --> gcc_check(Pairs).
 
-run_propagator(pgcc(Vs, _, Pairs), _) --> { gcc_global(Vs, Pairs) }.
+run_propagator(pgcc(Vs, _, Pairs), _) --> gcc_global(Vs, Pairs).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -6791,13 +6792,20 @@ gcc_pairs([Key-Num0|KNs], Vs, [Key-Num|Rest]) :-
     Constraint", AAAI-96 Portland, OR, USA, pp 209--215, 1996
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
-gcc_global(Vs, KNs) :-
-        gcc_check(KNs),
-        % previously: call do_queue/0 (now a NOP) here to reach a
-        % fix-point: all elements of clpz_gcc_vs must be variables. We
-        % must ensure this holds if gcc_check/1 is later rewritten to
-        % actually disable the queue.
-        with_local_attributes(Vs,
+gcc_global(Vs, KNs) -->
+        % at this point, all elements of clpz_gcc_vs must be
+        % variables, which a previously scheduled and called
+        % gcc_check//1 ensures. Note that gcc_check//1 disables the
+        % queue and accumulates constraints in the queue. Do we need
+        % to insert a call of do_queue//0 here to reach a fixpoint?  I
+        % think not, because verify_attributes/3 gives each variable
+        % that is involved in a unification an opportunity to schedule
+        % its propagators, even if the unifications happen
+        % simultaneously (such as [A,B] = [0,1], which can happen in
+        % the propagator of tuples_in/2). Hence: We need this only if
+        % an example shows it, ideally found by a systematic search
+        % that can be used to test the implementation.
+        { with_local_attributes(Vs,
               (gcc_arcs(KNs, S, Vals),
                variables_with_num_occurrences(Vs, VNs),
                maplist(target_to_v(T), VNs),
@@ -6808,9 +6816,9 @@ gcc_global(Vs, KNs) :-
                    gcc_consistent(T),
                    scc(Vals, gcc_successors),
                    phrase(gcc_goals(Vals), Gs)
-               ;   Gs = [] )), Gs),
+               ;   Gs = [] )), Gs) },
         disable_queue,
-        maplist(call, Gs),
+        neq_nums(Gs),
         enable_queue.
 
 gcc_consistent(T) :-
@@ -6837,7 +6845,7 @@ gcc_edge_goal(arc_to(_,_,V,F), Val) -->
               get_attr(Val, lowlink, L2),
               L1 =\= L2,
               get_attr(Val, value, Value) } ->
-            [clpz:neq_num(V, Value)]
+            [neq_num(V, Value)]
         ;   []
         ).
 
@@ -7007,7 +7015,7 @@ gcc_succ_edge(arc_from(_,_,V,F)) -->
    consistency.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
-gcc_check(Pairs) :-
+gcc_check(Pairs) -->
         disable_queue,
         gcc_check_(Pairs),
         enable_queue.
@@ -7017,36 +7025,36 @@ gcc_done(Num) :-
         del_attr(Num, clpz_gcc_num),
         del_attr(Num, clpz_gcc_occurred).
 
-gcc_check_([]).
-gcc_check_([Key-Num0|KNs]) :-
-        (   get_attr(Num0, clpz_gcc_vs, Vs) ->
-            get_attr(Num0, clpz_gcc_num, Num),
-            get_attr(Num0, clpz_gcc_occurred, Occ0),
-            vs_key_min_others(Vs, Key, 0, Min, Os),
-            put_attr(Num0, clpz_gcc_vs, Os),
-            put_attr(Num0, clpz_gcc_occurred, Occ1),
-            Occ1 is Occ0 + Min,
+gcc_check_([]) --> [].
+gcc_check_([Key-Num0|KNs]) -->
+        (   { get_attr(Num0, clpz_gcc_vs, Vs) } ->
+            { get_attr(Num0, clpz_gcc_num, Num),
+              get_attr(Num0, clpz_gcc_occurred, Occ0),
+              vs_key_min_others(Vs, Key, 0, Min, Os),
+              put_attr(Num0, clpz_gcc_vs, Os),
+              put_attr(Num0, clpz_gcc_occurred, Occ1),
+              Occ1 is Occ0 + Min },
             geq(Num, Occ1),
             % The queue is disabled for efficiency here in any case.
             % If it were enabled, make sure to retain the invariant
             % that gcc_global is never triggered during an
             % inconsistent state (after gcc_done/1 but before all
             % relevant constraints are posted).
-            (   Occ1 == Num -> all_neq(Os, Key), gcc_done(Num0)
-            ;   Os == [] -> gcc_done(Num0), Num = Occ1
-            ;   length(Os, L),
-                Max is Occ1 + L,
+            (   Occ1 == Num -> all_neq(Os, Key), { gcc_done(Num0) }
+            ;   Os == [] -> { gcc_done(Num0) }, Num = Occ1
+            ;   { length(Os, L),
+                  Max is Occ1 + L },
                 geq(Max, Num),
-                (   nonvar(Num) -> Diff is Num - Occ1
-                ;   fd_get(Num, ND, _),
-                    domain_infimum(ND, n(NInf)),
+                (   { nonvar(Num) } -> Diff is Num - Occ1
+                ;   { fd_get(Num, ND, _),
+                      domain_infimum(ND, n(NInf)) },
                     Diff is NInf - Occ1
                 ),
                 L >= Diff,
                 (   L =:= Diff ->
                     Num is Occ1 + Diff,
-                    maplist(=(Key), Os),
-                    gcc_done(Num0)
+                    { maplist(=(Key), Os),
+                      gcc_done(Num0) }
                 ;   true
                 )
             )
