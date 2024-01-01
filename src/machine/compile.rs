@@ -1208,7 +1208,7 @@ fn print_overwrite_warning(
     }
 
     println!(
-        "Warning: overwriting {}/{} because the clauses are discontiguous",
+        "% Warning: overwriting {}/{} because the clauses are discontiguous",
         key.0.as_str(),
         key.1
     );
@@ -2179,7 +2179,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             if is_cross_module_clause && !local_predicate_info.is_extensible {
                 if predicate_info.is_multifile {
                     println!(
-                        "Warning: overwriting multifile predicate {}:{}/{} because \
+                        "% Warning: overwriting multifile predicate {}:{}/{} because \
                               it was not locally declared multifile.",
                         self.payload.predicates.compilation_target,
                         key.0.as_str(),

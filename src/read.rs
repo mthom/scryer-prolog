@@ -130,7 +130,7 @@ impl ReadlineStream {
             if let Some(mut path) = dirs_next::home_dir() {
                 path.push(HISTORY_FILE);
                 if path.exists() && rl.load_history(&path).is_err() {
-                    println!("Warning: loading history failed");
+                    println!("% Warning: loading history failed");
                 }
             }
 
@@ -213,10 +213,10 @@ impl ReadlineStream {
             path.push(HISTORY_FILE);
             if path.exists() {
                 if self.rl.append_history(&path).is_err() {
-                    println!("Warning: couldn't append history (existing file)");
+                    println!("% Warning: couldn't append history (existing file)");
                 }
             } else if self.rl.save_history(&path).is_err() {
-                println!("Warning: couldn't save history (new file)");
+                println!("% Warning: couldn't save history (new file)");
             }
         }
     }

@@ -112,7 +112,7 @@ success_or_warning(Goal) :-
     (   call(Goal) ->
         true
     ;   %% initialization goals can fail without thwarting the load.
-        write('Warning: initialization/1 failed for: '),
+        write('% Warning: initialization/1 failed for: '),
         writeq(Goal),
         nl
     ).
@@ -188,7 +188,7 @@ warn_about_singletons([], _).
 warn_about_singletons([Singleton|Singletons], LinesRead) :-
     (  filter_anonymous_vars([Singleton|Singletons], VarEqs),
        VarEqs \== [] ->
-       write('Warning: singleton variables '),
+       write('% Warning: singleton variables '),
        print_comma_separated_list(VarEqs),
        write(' at line '),
        write(LinesRead),
@@ -286,7 +286,7 @@ module_expanded_head_variables(Head, HeadVars) :-
 
 print_goal_expansion_warning(Pred) :-
     nl,
-    write('Warning: clause body goal expansion failed because '),
+    write('% Warning: clause body goal expansion failed because '),
     writeq(Pred),
     write(' is not callable.'),
     nl.
