@@ -860,11 +860,8 @@ impl<'b> CodeGenerator<'b> {
                     self.marker.mark_safe_var_unconditionally(var_num);
                     compile_expr!(self, &terms[1], term_loc, code)
                 } else {
-                    self.marker.mark_anon_var::<QueryInstruction>(
-                        Level::Shallow,
-                        term_loc,
-                        code,
-                    );
+                    self.marker
+                        .mark_anon_var::<QueryInstruction>(Level::Shallow, term_loc, code);
 
                     if let Term::Var(ref vr, ref var) = &terms[1] {
                         let var_num = var.to_var_num().unwrap();
