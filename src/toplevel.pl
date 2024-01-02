@@ -1,5 +1,4 @@
-:- module('$toplevel', [argv/1,
-                        copy_term/3]).
+:- module('$toplevel', [copy_term/3, started/0]).
 
 :- use_module(library(atts), [call_residue_vars/2]).
 :- use_module(library(charsio)).
@@ -9,11 +8,13 @@
 :- use_module(library(lambda)).
 :- use_module(library(lists)).
 :- use_module(library(si)).
+:- use_module(library(os)).
 
 :- use_module(library('$project_atts')).
 :- use_module(library('$atts')).
 
 :- dynamic(disabled_init_file/0).
+:- dynamic(started/0).
 
 load_scryerrc :-
     (  '$home_directory'(HomeDir) ->
@@ -26,24 +27,18 @@ load_scryerrc :-
     ;  true
     ).
 
-:- dynamic(argv/1).
-
-'$repl'([_|Args0]) :-
-    \+ argv(_),
-    (   append(Args1, ["--"|Args2], Args0) ->
-        asserta('$toplevel':argv(Args2)),
+'$repl' :-
+    asserta('$toplevel':started),    
+    raw_argv(Args0),
+    (   append(Args1, ["--"|_], Args0) ->
         Args = Args1
-    ;   asserta('$toplevel':argv([])),
-        Args = Args0
+    ;   Args = Args0
     ),
-    delegate_task(Args, []),
-    (\+ disabled_init_file -> load_scryerrc ; true),
-    repl.
-'$repl'(_) :-
-    (   \+ argv(_) -> asserta('$toplevel':argv([]))
+    (   Args = [_|TaskArgs] ->
+	delegate_task(TaskArgs, [])
     ;   true
     ),
-    load_scryerrc,
+    (\+ disabled_init_file -> load_scryerrc ; true),
     repl.
 
 delegate_task([], []).

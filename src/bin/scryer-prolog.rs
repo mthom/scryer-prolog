@@ -23,6 +23,6 @@ fn main() -> std::process::ExitCode {
 
     runtime.block_on(async move {
         let mut wam = machine::Machine::new(Default::default());
-        wam.run_top_level(atom!("$toplevel"), (atom!("$repl"), 1))
+        wam.run_module_predicate(atom!("$toplevel"), (atom!("$repl"), 0))
     })
 }

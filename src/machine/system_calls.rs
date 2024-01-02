@@ -4951,6 +4951,27 @@ impl Machine {
     }
 
     #[inline(always)]
+    pub(crate) fn argv(&mut self) -> CallResult {
+        let args = self.deref_register(1);
+
+        let mut args_pstrs = vec![];
+        for arg in env::args() {
+            args_pstrs.push(put_complete_string(
+                &mut self.machine_st.heap,
+                &arg,
+                &self.machine_st.atom_tbl,
+            ));
+        }
+        let cell = heap_loc_as_cell!(iter_to_heap_list(
+            &mut self.machine_st.heap,
+            args_pstrs.into_iter()
+        ));
+
+        unify!(self.machine_st, args, cell);
+        Ok(())
+    }
+
+    #[inline(always)]
     pub(crate) fn current_time(&mut self) {
         let timestamp = self.systemtime_to_timestamp(SystemTime::now());
         self.machine_st
