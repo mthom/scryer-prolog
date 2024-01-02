@@ -1,0 +1,5 @@
+os:argv(V).
+os:argv(["test1"|_]).
+os:argv(["--"|_]).
+os:argv(["test2"|_]).
+os:argv([]).
