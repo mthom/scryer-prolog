@@ -1,2 +1,2 @@
 # https://github.com/mthom/scryer-prolog/pull/2263#issuecomment-1874400820
-args = ["-f", "--no-add-history", "--", "test1", "--", "test2"]
+args = ["-f", "--no-add-history", "--", "test1", "--", "test2", "--"]
