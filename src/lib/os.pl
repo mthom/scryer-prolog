@@ -138,7 +138,6 @@ argv(Argv) :-
     can_be(list, Argv),
     '$argv'(Argv0),
     (    append(Argv1, ["--"|Argv], Argv0) ->
-         \+ member("--", Argv1),
-	 true
+         \+ member("--", Argv1)
     ;    Argv = []
     ).
