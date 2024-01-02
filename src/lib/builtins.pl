@@ -33,6 +33,137 @@ predicates of the Prolog system under the ISO standard. Basic operators, metapro
 internal settings and basic I/O are all here.
 */
 
+%% @>(?X, ?Y)
+%
+% Compares X and Y in the term order mandated by the ISO standard (section 7.2).
+% Terms of different types are sorted in the ascending ordering:
+%
+% 1. Variable
+% 2. Floating point
+% 3. Integer
+% 4. Atom
+% 5. Compound
+%
+% If X and Y are both within one of the five categories, they are ordered as follows.
+%
+% 1. Variables: implementation-dependent, Scryer compares variables according to their
+%    locations in its global and local heap. The address space of the local heap is
+%    always above that of the global heap in the WAM architecture used by Scryer.
+% 2. Floating point and 3. Integer: Ordered by numeric value.
+% 4. X precedes Y if X is the null atom ('') and Y is not, or if X lexicographically
+%    precedes Y.
+% 5. X precedes Y if the arity of X is less than that of Y; if the arities are equal,
+%    X precedes Y if its atom precedes Y's atom according to 4. If the functor names
+%    and arities are equal, the subterms of X and Y are compared recursively from left
+%    to right.
+
+%% @<(?X,Y)
+%% @>=(?X,?Y)
+%% @=<(?X,?Y)
+%
+% These operators implement term comparisons according to the term
+% order described in the entry for (@>)/2.
+
+%% ==(?X,?Y)
+%
+% True iff X and Y are identical terms. Term identity is defined according to the
+% ordering described in the entry for (@>)/2.
+
+%% \==(?X,?Y)
+%
+% True iff X and Y are not identical, the negation of (==)/2.
+
+%% >(+X,+Y)
+%% <(+X,+Y)
+%% >=(+X,+Y)
+%% =<(+X,+Y)
+%% =:=(+X,+Y)
+%% =\=(+X,+Y)
+%
+% Numeric comparison operators respectively true if X is greater, less
+% than, greater than or equal, less than or equal, equal or not equal
+% to Y. X and Y must be instantiated to numbers.
+
+%% is(?X, +Y)
+%
+% Evaluate the evaluable functor of Y representing an arithmetic
+% expression to a numeric result and bound it to ?X. Arithmetic expressions
+% are constructed from a set of operators with pre-defined arities and precedences
+% documented in section 9 of the ISO standard.
+
+%% acyclic_term(?X)
+%
+% True iff ?X contains no variables bound to it.
+
+%% arg(N, Term, Arg)
+%
+% True iff the Nth argument of Term is Arg.
+
+%% compare(?Atom, +X, +Y)
+%
+% Compares X and Y according to the standard term order and unifies
+% ?Atom to either <, >, or = according to whether X is less than,
+% greater than or equal to Y.
+
+%% copy_term(?X, ?Y)
+%
+% Produce a deep copy of ?X and unify it to ?Y.
+
+%% functor(Term, Name, Arity)
+%
+% - True iff Term is a compound term whose Identifier is Name and arity Arity, or
+% - Term is an atomic term equal to Name and Arity is 0.
+
+%% ground(Term)
+%
+% True iff Term contains no free variables as subterms.
+
+%% keysort(List, Sorted)
+%
+% True iff List is a list of elements with the format Key-Value and
+% Sorted is a list containing the elements of List sorted according to
+% the value of Key in ascending order following standard order. The
+% relative order of elements of List with the same key shall not
+% change in the Sorted list.
+
+%% sort(List, Sorted)
+%
+% True iff Sorted is a list containing the non-duplicated elements of
+% List sorted in ascending order following standard order.
+
+%% atom(?X)
+%
+% True iff X is bound to an atom.
+
+%% compound(?X)
+%
+% True iff X is bound to a compound term.
+
+%% integer(?X)
+%
+% True iff X is bound to an integer.
+
+%% number(?X)
+%
+% True iff X is bound to an number (an integer, rational number or floating point).
+
+%% rational(?X)
+%
+% True iff X is bound to a rational number.
+
+%% float(?X)
+%
+% True iff X is bound to a floating point number.
+
+%% nonvar(?X)
+%
+% True iff X is not a free variable.
+
+%% var(?X)
+%
+% True iff X is a free variable.
+
+% % (7.2)
 
 % unify.
 
@@ -1828,7 +1959,7 @@ number_codes(N, Chs) :-
 %% subsumes_term(General, Specific)
 %
 % True iff General can be made equivalent to Specific by only binding variables
-% in Generic. The implementation unifies with occurs check always and ensures that
+% in General. The implementation unifies with occurs check always and ensures that
 % the variables of Specific did not change. Some examples:
 %
 % ```
