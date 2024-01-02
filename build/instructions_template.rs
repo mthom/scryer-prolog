@@ -604,6 +604,8 @@ enum SystemClauseType {
     KeySortWithConstantVarOrdering,
     #[strum_discriminants(strum(props(Arity = "0", Name = "$inference_limit_exceeded")))]
     InferenceLimitExceeded,
+    #[strum_discriminants(strum(props(Arity = "1", Name = "$argv")))]
+    Argv,
     REPL(REPLCodePtr),
 }
 
@@ -1869,6 +1871,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallRemoveModuleExports |
                     &Instruction::CallAddNonCountedBacktracking |
                     &Instruction::CallPopCount |
+                    &Instruction::CallArgv |
                     &Instruction::CallEd25519SignRaw |
                     &Instruction::CallEd25519VerifyRaw |
                     &Instruction::CallEd25519SeedToPublicKey => {
@@ -2104,6 +2107,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteRemoveModuleExports |
                     &Instruction::ExecuteAddNonCountedBacktracking |
                     &Instruction::ExecutePopCount |
+                    &Instruction::ExecuteArgv |
                     &Instruction::ExecuteEd25519SignRaw |
                     &Instruction::ExecuteEd25519VerifyRaw |
                     &Instruction::ExecuteEd25519SeedToPublicKey => {

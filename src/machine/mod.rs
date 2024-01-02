@@ -228,7 +228,7 @@ impl Machine {
         self.machine_st.throw_exception(err);
     }
 
-    fn run_module_predicate(
+    pub fn run_module_predicate(
         &mut self,
         module_name: Atom,
         key: PredicateKey,
@@ -305,29 +305,6 @@ impl Machine {
                 self.machine_st.attr_var_init.verify_attrs_loc = code_index.local().unwrap();
             }
         }
-    }
-
-    pub fn run_top_level(
-        &mut self,
-        module_name: Atom,
-        key: PredicateKey,
-    ) -> std::process::ExitCode {
-        let mut arg_pstrs = vec![];
-
-        for arg in env::args() {
-            arg_pstrs.push(put_complete_string(
-                &mut self.machine_st.heap,
-                &arg,
-                &self.machine_st.atom_tbl,
-            ));
-        }
-
-        self.machine_st.registers[1] = heap_loc_as_cell!(iter_to_heap_list(
-            &mut self.machine_st.heap,
-            arg_pstrs.into_iter()
-        ));
-
-        self.run_module_predicate(module_name, key)
     }
 
     pub fn set_user_input(&mut self, input: String) {

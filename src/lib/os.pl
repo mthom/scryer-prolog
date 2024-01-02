@@ -23,7 +23,9 @@ finding out the PID of the running system.
                unsetenv/1,
                shell/1,
                shell/2,
-               pid/1]).
+               pid/1,
+	       raw_argv/1,
+	       argv/1]).
 
 :- use_module(library(error)).
 :- use_module(library(charsio)).
@@ -110,3 +112,32 @@ permitted('_').
 must_be_chars(Cs) :-
         must_be(list, Cs),
         maplist(must_be(character), Cs).
+
+%% raw_argv(-Argv)
+%
+% True iff Argv is the list of arguments that this program was started with (usually passed via command line).
+% In contrast to `argv/1`, this version includes every argument, without any postprocessing, just as the operating
+% system reports it to the system. This includes-flags of Scryer itself, which are not needed in general.
+raw_argv(Argv) :-
+    can_be(list, Argv),
+    '$argv'(Argv).
+
+%% argv(-Argv)
+%
+% True if Argv is the list of arguments that this program was started with (usually passed via command line).
+% In this version, only arguments specific to the program are passed. To differentiate between the system
+% arguments and the program arguments, we use `--` as a separator.
+%
+% Example:
+% ```
+% % Call with scryer-prolog -f -- -t hello
+% ?- argv(X).
+%     X = ["-t", "hello"].
+% ```
+argv(Argv) :-
+    can_be(list, Argv),
+    '$argv'(Argv0),
+    (    append(_, ["--"|Argv], Argv0) ->
+	 true
+    ;    Argv = []
+    ).

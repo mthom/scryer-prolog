@@ -138,7 +138,7 @@ file_load_cleanup(Evacuable, Error) :-
     load_context(Module),
     abolish(Module:'$initialization_goals'/1),
     unload_evacuable(Evacuable),
-    (  clause('$toplevel':argv(_), _) ->
+    (  clause('$toplevel':started, _) ->
        % let the toplevel call loader:write_error/1
        throw(Error)
     ;  '$print_message_and_fail'(Error)
