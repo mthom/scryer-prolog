@@ -139,7 +139,8 @@ argv(Argv) :-
     '$argv'(Argv0),
     ( member("--", Argv0) ->
         append(Argv1, ["--"|Argv], Argv0),
-        \+ member("--", Argv1)
+        \+ member("--", Argv1),
+        !
     ;
         Argv = []
     ).
