@@ -129,6 +129,7 @@ raw_argv(Argv) :-
 % arguments and the program arguments, we use `--` as a separator.
 %
 % Example:
+%
 % ```
 % % Call with scryer-prolog -f -- -t hello
 % ?- argv(X).
