@@ -4288,18 +4288,18 @@ impl Machine {
             let address_string = address_sink.as_str(); //to_string();
             let address: Url = address_string.parse().unwrap();
 
-            let client = reqwest::blocking::Client::builder().build().unwrap();
+            let client = reqwest::Client::builder().build().unwrap();
 
             // request
-            let mut req = reqwest::blocking::Request::new(method, address);
+            let mut req = reqwest::Request::new(method, address);
 
             *req.headers_mut() = headers;
             if !bytes.is_empty() {
-                *req.body_mut() = Some(reqwest::blocking::Body::from(bytes));
+                *req.body_mut() = Some(reqwest::Body::from(bytes));
             }
 
             // do it!
-            match client.execute(req) {
+            match futures::executor::block_on(client.execute(req)) {
                 Ok(resp) => {
                     // status code
                     let status = resp.status().as_u16();
@@ -4336,7 +4336,7 @@ impl Machine {
                         self.machine_st.registers[6]
                     );
                     // body
-                    let reader = resp.bytes().unwrap().reader();
+                    let reader = futures::executor::block_on(resp.bytes()).unwrap().reader();
 
                     let mut stream = Stream::from_http_stream(
                         AtomTable::build_with(&self.machine_st.atom_tbl, &address_string),
