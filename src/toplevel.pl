@@ -1,4 +1,4 @@
-:- module('$toplevel', [copy_term/3, started/0]).
+:- module('$toplevel', [copy_term/3]).
 
 :- use_module(library(atts), [call_residue_vars/2]).
 :- use_module(library(charsio)).

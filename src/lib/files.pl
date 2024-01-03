@@ -178,7 +178,7 @@ directory_must_exist(Directory, Context) :-
         ;   throw(error(existence_error(directory, Directory), Context))
         ).
 
-%% workind_directory(Dir0, Dir).
+%% working_directory(Dir0, Dir).
 %
 % Dir0 is the current working directory, and the working directory
 % is changed to Dir.
