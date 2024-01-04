@@ -137,9 +137,8 @@ raw_argv(Argv) :-
 argv(Argv) :-
     can_be(list, Argv),
     '$argv'(Argv0),
-    ( member("--", Argv0) ->
-        once(append(Argv1, ["--"|Argv], Argv0)),
-        \+ member("--", Argv1)
+    ( append(_, ["--"|Argv1], Argv0) ->
+        Argv = Argv1
     ;
         Argv = []
     ).
