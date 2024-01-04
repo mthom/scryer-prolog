@@ -1972,10 +1972,12 @@ impl Machine {
             _ => CompilationTarget::Module(module_name),
         };
 
-        let stub_gen = || match append_or_prepend {
-            AppendOrPrepend::Append => functor_stub(atom!("assertz"), 1),
-            AppendOrPrepend::Prepend => functor_stub(atom!("asserta"), 1),
+        let key = match append_or_prepend {
+            AppendOrPrepend::Append  => (atom!("assertz"), 1),
+            AppendOrPrepend::Prepend => (atom!("asserta"), 1),
         };
+
+        let stub_gen = || functor_stub(key.0, key.1);
 
         let head = self.deref_register(2);
 
@@ -2015,7 +2017,11 @@ impl Machine {
                     .map(|code_idx| code_idx.get_tag())
                     .unwrap_or(IndexPtrTag::DynamicUndefined);
 
-                idx_tag == IndexPtrTag::DynamicUndefined || idx_tag == IndexPtrTag::Undefined
+                if idx_tag == IndexPtrTag::Index {
+                    return Err(SessionError::CannotOverwriteStaticProcedure((name, arity)));
+                } else {
+                    idx_tag == IndexPtrTag::Undefined || idx_tag == IndexPtrTag::DynamicUndefined
+                }
             } else if is_builtin {
                 return Err(SessionError::CannotOverwriteBuiltIn((name, arity)));
             } else {

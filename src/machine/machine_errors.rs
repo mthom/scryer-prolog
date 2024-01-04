@@ -488,6 +488,13 @@ impl MachineState {
                     .into_iter()
                     .collect::<MachineStub>(),
             ),
+            SessionError::CannotOverwriteStaticProcedure(key) => self.permission_error(
+                Permission::Modify,
+                atom!("static_procedure"),
+                functor_stub(key.0, key.1)
+                    .into_iter()
+                    .collect::<MachineStub>(),
+            ),
             SessionError::CannotOverwriteBuiltInModule(module) => {
                 self.permission_error(Permission::Modify, atom!("static_module"), module)
             }
@@ -1005,6 +1012,7 @@ pub enum SessionError {
     CompilationError(CompilationError),
     CannotOverwriteBuiltIn(PredicateKey),
     CannotOverwriteBuiltInModule(Atom),
+    CannotOverwriteStaticProcedure(PredicateKey),
     ExistenceError(ExistenceError),
     ModuleDoesNotContainExport(Atom, PredicateKey),
     ModuleCannotImportSelf(Atom),
