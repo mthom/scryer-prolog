@@ -1973,7 +1973,7 @@ impl Machine {
         };
 
         let key = match append_or_prepend {
-            AppendOrPrepend::Append  => (atom!("assertz"), 1),
+            AppendOrPrepend::Append => (atom!("assertz"), 1),
             AppendOrPrepend::Prepend => (atom!("asserta"), 1),
         };
 
