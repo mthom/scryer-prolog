@@ -885,11 +885,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
                         .push(Term::Literal(Cell::default(), Literal::Atom(atom)));
                 }
 
-                self.stack[idx].spec = if self.stack[idx].priority > 0 {
-                    TERM
-                } else {
-                    BTERM
-                };
+                self.stack[idx].spec = BTERM;
                 self.stack[idx].tt = TokenType::Term;
                 self.stack[idx].priority = 0;
 
