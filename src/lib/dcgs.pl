@@ -14,7 +14,8 @@ to learn more about them.
            phrase/3,
            seq//1,
            seqq//1,
-           ... //0
+           ... //0,
+           (-->)/2
           ]).
 
 :- use_module(library(error)).
@@ -220,3 +221,10 @@ user:goal_expansion(phrase(GRBody, S, S0), GRBody2) :-
     ).
 
 user:goal_expansion(phrase(GRBody, S), phrase(GRBody, S, [])).
+
+
+% (-->)/2 behaves as if it didn't exist. We export (and define) it
+% only so that clauses for (-->)/2 cannot be asserted when
+% library(dcgs) is loaded.
+
+(_-->_) :- throw(error(existence_error(procedure,(-->)/2),(-->)/2)).
