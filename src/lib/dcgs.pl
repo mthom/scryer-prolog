@@ -12,6 +12,8 @@ to learn more about them.
           [op(1105, xfy, '|'),
            phrase/2,
            phrase/3,
+           phrase/4,
+           phrase/5,
            seq//1,
            seqq//1,
            ... //0,
@@ -26,6 +28,10 @@ to learn more about them.
 :- meta_predicate phrase(2, ?).
 
 :- meta_predicate phrase(2, ?, ?).
+
+:- meta_predicate phrase(2, ?, ?, ?).
+
+:- meta_predicate phrase(2, ?, ?, ?, ?).
 
 %% phrase(+Body, ?Ls).
 %
@@ -74,6 +80,34 @@ phrase(GRBody, S0, S) :-
        dcg_body(GRBody1, S0, S, GRBody2) ->
        call(M:GRBody2)
     ;  call(M:GRBody1, S0, S)
+    ).
+
+phrase(GRBody, Arg, S0, S) :-
+    strip_module(GRBody, M, GRBody1),
+    (  var(GRBody) ->
+       instantiation_error(phrase/4)
+    ;  nonvar(GRBody1),
+       GRBody1 =.. GRBodys1,
+       append(GRBodys1, [Arg], GRBodys2),
+       GRBody2 =.. GRBodys2,
+       dcg_constr(GRBody2),
+       dcg_body(GRBody2, S0, S, GRBody3) ->
+       call(M:GRBody3)
+    ;  call(M:GRBody1, Arg, S0, S)
+    ).
+
+phrase(GRBody, Arg1, Arg2, S0, S) :-
+    strip_module(GRBody, M, GRBody1),
+    (  var(GRBody) ->
+       instantiation_error(phrase/5)
+    ;  nonvar(GRBody1),
+       GRBody1 =.. GRBodys1,
+       append(GRBodys1, [Arg1,Arg2], GRBodys2),
+       GRBody2 =.. GRBodys2,
+       dcg_constr(GRBody2),
+       dcg_body(GRBody2, S0, S, GRBody3) ->
+       call(M:GRBody3)
+    ;  call(M:GRBody1, Arg1, Arg2, S0, S)
     ).
 
 % The same version of the below two dcg_rule clauses, but with module scoping.
@@ -139,6 +173,8 @@ dcg_constr(( _'|'_ )). % 7.14.6 - alternative
 dcg_constr({_}). % 7.14.7
 dcg_constr(call(_)). % 7.14.8
 dcg_constr(phrase(_)). % 7.14.9
+dcg_constr(phrase(_,_)). % extension of 7.14.9
+dcg_constr(phrase(_,_,_)). % extension of 7.14.9
 dcg_constr(!). % 7.14.10
 %% dcg_constr(\+ _). % 7.14.11 - not (existence implementation dep.)
 dcg_constr((_->_)). % 7.14.12 - if-then (existence implementation dep.)
@@ -166,6 +202,8 @@ dcg_cbody(( GREither '|' GROr ), S0, S, ( Either ; Or )) :-
 dcg_cbody({Goal}, S0, S, ( Goal, S0 = S )).
 dcg_cbody(call(Cont), S0, S, call(Cont, S0, S)).
 dcg_cbody(phrase(Body), S0, S, phrase(Body, S0, S)).
+dcg_cbody(phrase(Body, Arg), S0, S, phrase(Body, Arg, S0, S)).
+dcg_cbody(phrase(Body, Arg1, Arg2), S0, S, phrase(Body, Arg1, Arg2, S0, S)).
 dcg_cbody(!, S0, S, ( !, S0 = S )).
 % dcg_cbody(\+ GRBody, S0, S, ( \+ phrase(GRBody,S0,_), S0 = S )).
 dcg_cbody(( GRIf -> GRThen ), S0, S, ( If -> Then )) :-
