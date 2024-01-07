@@ -5398,7 +5398,7 @@ run_propagator(pmax(X,Y,Z), MState) -->
         ;   { fd_get(Z, ZD, ZPs) } ->
             { fd_get(X, _, XInf, XSup, _),
               fd_get(Y, _, YInf, YSup, _) },
-            (   { YInf cis_gt YSup } -> kill(MState), queue_goal(Z = Y)
+            (   { YInf cis_gt XSup } -> kill(MState), queue_goal(Z = Y)
             ;   { YSup cis_lt XInf } -> kill(MState), queue_goal(Z = X)
             ;   { n(M) cis max(XSup, YSup) } ->
                 { domain_remove_greater_than(ZD, M, ZD1) },
@@ -5433,7 +5433,7 @@ run_propagator(pmin(X,Y,Z), MState) -->
         ;   { fd_get(Z, ZD, ZPs) } ->
             { fd_get(X, _, XInf, XSup, _),
               fd_get(Y, _, YInf, YSup, _) },
-            (   { YSup cis_lt YInf } -> kill(MState), Z = Y
+            (   { YSup cis_lt XInf } -> kill(MState), Z = Y
             ;   { YInf cis_gt XSup } -> kill(MState), Z = X
             ;   { n(M) cis min(XInf, YInf) } ->
                 { domain_remove_smaller_than(ZD, M, ZD1) },
