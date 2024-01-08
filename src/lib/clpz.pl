@@ -2759,7 +2759,7 @@ geq(A, B) -->
             (   { fd_get(B, BD, _) } ->
                 { domain_supremum(BD, BS) },
                 (   { AI cis_geq BS } -> true
-                ;   propagator_init_trigger(pgeq(A,B))
+                ;   { propagator_init_trigger(pgeq(A,B)) }
                 )
             ;   (   { AI cis_geq n(B) } -> true
                 ;   { domain_remove_smaller_than(AD, B, AD1) },
