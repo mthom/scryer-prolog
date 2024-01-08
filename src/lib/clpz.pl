@@ -5384,6 +5384,7 @@ run_propagator(pmax(X,Y,Z), MState) -->
                 ;   Z > X -> queue_goal(Z = Y)
                 ;   { false } % Z < X
                 )
+            ;   Y == Z -> kill(MState), queue_goal(Y #>= X)
             ;   { fd_get(Y, _, YInf, YSup, _) },
                 (   { YInf cis_gt n(X) } -> queue_goal(Z = Y)
                 ;   { YSup cis_lt n(X) } -> queue_goal(Z = X)
@@ -5398,7 +5399,7 @@ run_propagator(pmax(X,Y,Z), MState) -->
         ;   { fd_get(Z, ZD, ZPs) } ->
             { fd_get(X, _, XInf, XSup, _),
               fd_get(Y, _, YInf, YSup, _) },
-            (   { YInf cis_gt YSup } -> kill(MState), queue_goal(Z = Y)
+            (   { YInf cis_gt XSup } -> kill(MState), queue_goal(Z = Y)
             ;   { YSup cis_lt XInf } -> kill(MState), queue_goal(Z = X)
             ;   { n(M) cis max(XSup, YSup) } ->
                 { domain_remove_greater_than(ZD, M, ZD1) },
@@ -5419,6 +5420,7 @@ run_propagator(pmin(X,Y,Z), MState) -->
                 ;   Z < X -> Z = Y
                 ;   { false } % Z > X
                 )
+            ;   Y == Z -> kill(MState), queue_goal(Y #=< X)
             ;   { fd_get(Y, _, YInf, YSup, _) },
                 (   { YSup cis_lt n(X) } -> Z = Y
                 ;   { YInf cis_gt n(X) } -> Z = X
@@ -5433,7 +5435,7 @@ run_propagator(pmin(X,Y,Z), MState) -->
         ;   { fd_get(Z, ZD, ZPs) } ->
             { fd_get(X, _, XInf, XSup, _),
               fd_get(Y, _, YInf, YSup, _) },
-            (   { YSup cis_lt YInf } -> kill(MState), Z = Y
+            (   { YSup cis_lt XInf } -> kill(MState), Z = Y
             ;   { YInf cis_gt XSup } -> kill(MState), Z = X
             ;   { n(M) cis min(XInf, YInf) } ->
                 { domain_remove_smaller_than(ZD, M, ZD1) },
@@ -5540,7 +5542,7 @@ run_propagator(pexp(X,Y,Z,Morph), MState) -->
                 fd_put(Z, ZD2, ZPs),
                 { (   even(Y), ZU = n(Num) ->
                     integer_kth_root_leq(Num, Y, RU),
-                    (   XL cis_geq n(0), ZL = n(Num1) ->
+                    (   XL cis_geq n(0), ZL = n(Num1), Num1 >= 0 ->
                         integer_kth_root_leq(Num1, Y, RL0),
                         (   RL0^Y < Num1 -> RL is RL0 + 1
                         ;   RL = RL0
