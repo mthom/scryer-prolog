@@ -108,7 +108,7 @@ impl<'a> EagerStackfulPreOrderHeapIter<'a> {
                     let var_value = self.heap[h];
                     self.heap[h].set_mark_bit(self.mark_phase);
 
-                    if !(self.heap[h].is_var() && self.heap[h].get_value() as usize == h) {
+                    if var_value.get_mark_bit() || !(self.heap[h].is_var() && self.heap[h].get_value() as usize == h) {
                         self.iter_stack.push(var_value);
                         continue;
                     }
@@ -125,12 +125,13 @@ impl<'a> EagerStackfulPreOrderHeapIter<'a> {
                         continue;
                     }
 
-                    let value = self.heap[h+1];
-
                     self.heap[h].set_mark_bit(self.mark_phase);
-                    self.heap[h+1].set_mark_bit(self.mark_phase);
 
-                    self.iter_stack.push(value);
+                    if self.heap[h].get_tag() == HeapCellValueTag::PStr {
+                        let value = self.heap[h+1];
+                        self.heap[h+1].set_mark_bit(self.mark_phase);
+                        self.iter_stack.push(value);
+                    }
                 }
                 _ => {
                 }
