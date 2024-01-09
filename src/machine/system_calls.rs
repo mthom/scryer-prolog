@@ -578,7 +578,6 @@ impl MachineState {
         )
     }
 
-
     #[inline]
     pub(crate) fn variable_set<S: BuildHasher>(
         &mut self,
