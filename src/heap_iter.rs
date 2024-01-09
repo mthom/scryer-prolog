@@ -685,6 +685,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "it takes too long to run")]
     fn heap_stackless_iter_tests() {
         let mut wam = MockWAM::new();
 
@@ -1756,6 +1757,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "blocked on atom_table.rs UB")]
     fn heap_stackful_iter_tests() {
         let mut wam = MockWAM::new();
 
@@ -2348,6 +2350,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "blocked on atom_table.rs UB")]
     fn heap_stackful_post_order_iter() {
         let mut wam = MockWAM::new();
 
@@ -2831,6 +2834,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "blocked on atom_table.rs UB")]
     fn heap_stackless_post_order_iter() {
         let mut wam = MockWAM::new();
 

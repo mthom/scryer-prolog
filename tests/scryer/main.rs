@@ -13,6 +13,7 @@ mod src_tests;
 /// to re-generate all reference output files run `TRYCMD=overwrite cargo test -- cli_test`
 /// then check that the changes are as expected e.g. by looking at the `git diff`
 #[test]
+#[cfg_attr(miri, ignore = "blocked on crossbeam UB")]
 fn cli_tests() {
     trycmd::TestCases::new()
         .default_bin_name("scryer-prolog")

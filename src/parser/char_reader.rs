@@ -377,6 +377,7 @@ mod tests {
     use std::io::Cursor;
 
     #[test]
+    #[cfg_attr(miri, ignore = "slow and not very relevant")]
     fn plain_string() {
         let mut read_string = CharReader::new(Cursor::new("a string"));
 
@@ -389,6 +390,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "slow and not very relevant")]
     fn greek_string() {
         let mut read_string = CharReader::new(Cursor::new("λέξη"));
 
@@ -401,6 +403,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "slow and not very relevant")]
     fn russian_string() {
         let mut read_string = CharReader::new(Cursor::new("слово"));
 
@@ -413,6 +416,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "slow and not very relevant")]
     fn greek_lorem_ipsum() {
         let lorem_ipsum = "Λορεμ ιπσθμ δολορ σιτ αμετ, οφφενδιτ
     εφφιcιενδι σιτ ει, ηαρθμ λεγερε qθαερενδθμ ιθσ νε. Ηασ νο εροσ
@@ -484,6 +488,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "slow and not very relevant")]
     fn armenian_lorem_ipsum() {
         let lorem_ipsum = "լոռեմ իպսում դոլոռ սիթ ամեթ, նովում գռաեծո
         սեա եա, աբհոռռեանթ դիսպութանդո եի քուի. իդ քուոդ ինդոծթում
@@ -557,6 +562,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "slow and not very relevant")]
     fn russian_lorem_ipsum() {
         let lorem_ipsum = "Лорем ипсум долор сит амет, атяуи дицам еи
         сит, ид сеа фацилис елаборарет. Меа еу яуас алияуид, те яуи

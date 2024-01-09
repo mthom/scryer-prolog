@@ -1835,6 +1835,7 @@ mod tests {
     use crate::machine::mock_wam::*;
 
     #[test]
+    #[cfg_attr(miri, ignore = "blocked on streams.rs UB")]
     fn term_printing_tests() {
         let mut wam = MockWAM::new();
 
