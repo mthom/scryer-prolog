@@ -189,7 +189,7 @@ impl Stack {
 
             for idx in 0..num_cells {
                 ptr::write(
-                    (new_ptr as usize + offset) as *mut HeapCellValue,
+                    new_ptr.add(offset) as *mut HeapCellValue,
                     stack_loc_as_cell!(AndFrame, e, idx + 1),
                 );
 
@@ -242,7 +242,8 @@ impl Stack {
     #[inline(always)]
     pub(crate) fn index_and_frame_mut(&mut self, e: usize) -> &mut AndFrame {
         unsafe {
-            let ptr = self.buf.base as usize + e;
+            // This is doing alignment wrong
+            let ptr = self.buf.base.add(e);
             &mut *(ptr as *mut AndFrame)
         }
     }
@@ -280,6 +281,7 @@ mod tests {
     use crate::machine::mock_wam::*;
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn stack_tests() {
         let mut wam = MockWAM::new();
 

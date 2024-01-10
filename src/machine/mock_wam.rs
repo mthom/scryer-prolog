@@ -260,6 +260,7 @@ mod tests {
     use super::*;
 
     #[test]
+    #[cfg_attr(miri, ignore = "blocked on streams.rs UB")]
     fn unify_tests() {
         let mut wam = MachineState::new();
         let mut op_dir = default_op_dir();
@@ -481,6 +482,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "blocked on streams.rs UB")]
     fn test_unify_with_occurs_check() {
         let mut wam = MachineState::new();
         let mut op_dir = default_op_dir();

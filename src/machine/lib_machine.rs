@@ -236,6 +236,7 @@ mod tests {
     use crate::machine::{QueryMatch, QueryResolution, Value};
 
     #[test]
+    #[cfg_attr(miri, ignore = "blocked on streams.rs UB")]
     fn programatic_query() {
         let mut machine = Machine::new_lib();
 
@@ -275,6 +276,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "blocked on streams.rs UB")]
     fn failing_query() {
         let mut machine = Machine::new_lib();
         let query = String::from(r#"triple("a",P,"b")."#);
@@ -288,6 +290,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn complex_results() {
         let mut machine = Machine::new_lib();
         machine.load_module_string(
@@ -344,6 +347,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "blocked on streams.rs UB")]
     fn empty_predicate() {
         let mut machine = Machine::new_lib();
         machine.load_module_string(
@@ -359,6 +363,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "blocked on streams.rs UB")]
     fn list_results() {
         let mut machine = Machine::new_lib();
         machine.load_module_string(
@@ -387,6 +392,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "blocked on streams.rs UB")]
     fn consult() {
         let mut machine = Machine::new_lib();
 
@@ -445,6 +451,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "blocked on streams.rs UB")]
     fn integration_test() {
         let mut machine = Machine::new_lib();
 
@@ -486,6 +493,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "blocked on streams.rs UB")]
     fn findall() {
         let mut machine = Machine::new_lib();
 

@@ -369,6 +369,7 @@ mod tests {
     use crate::machine::mock_wam::*;
 
     #[test]
+    #[cfg_attr(miri, ignore = "blocked on streams.rs UB")]
     fn heap_marking_tests() {
         let mut wam = MockWAM::new();
 

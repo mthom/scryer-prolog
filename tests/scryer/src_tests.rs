@@ -3,30 +3,35 @@ use serial_test::serial;
 
 #[serial]
 #[test]
+#[cfg_attr(miri, ignore = "blocked on streams.rs UB")]
 fn builtins() {
     load_module_test("src/tests/builtins.pl", "");
 }
 
 #[serial]
 #[test]
+#[cfg_attr(miri, ignore = "blocked on streams.rs UB")]
 fn call_with_inference_limit() {
     load_module_test("src/tests/call_with_inference_limit.pl", "");
 }
 
 #[serial]
 #[test]
+#[cfg_attr(miri, ignore = "blocked on streams.rs UB")]
 fn facts() {
     load_module_test("src/tests/facts.pl", "");
 }
 
 #[serial]
 #[test]
+#[cfg_attr(miri, ignore = "blocked on streams.rs UB")]
 fn hello_world() {
     load_module_test("src/tests/hello_world.pl", "Hello World!\n");
 }
 
 #[serial]
 #[test]
+#[cfg_attr(miri, ignore = "blocked on streams.rs UB")]
 fn syntax_error() {
     load_module_test(
         "tests-pl/syntax_error.pl",
@@ -36,18 +41,21 @@ fn syntax_error() {
 
 #[serial]
 #[test]
+#[cfg_attr(miri, ignore = "blocked on streams.rs UB")]
 fn predicates() {
     load_module_test("src/tests/predicates.pl", "");
 }
 
 #[serial]
 #[test]
+#[cfg_attr(miri, ignore = "blocked on streams.rs UB")]
 fn rules() {
     load_module_test("src/tests/rules.pl", "");
 }
 
 #[serial]
 #[test]
+#[cfg_attr(miri, ignore = "blocked on streams.rs UB")]
 fn setup_call_cleanup_load() {
     load_module_test(
         "src/tests/setup_call_cleanup.pl",
@@ -57,12 +65,14 @@ fn setup_call_cleanup_load() {
 
 #[serial]
 #[test]
+#[cfg_attr(miri, ignore = "blocked on streams.rs UB")]
 fn clpz_load() {
     load_module_test("src/tests/clpz/test_clpz.pl", "");
 }
 
 #[serial]
 #[test]
+#[cfg_attr(miri, ignore = "blocked on streams.rs UB")]
 fn iso_conformity_tests() {
     load_module_test("tests-pl/iso-conformity-tests.pl", "All tests passed");
 }

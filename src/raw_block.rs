@@ -43,7 +43,7 @@ impl<T: RawBlockTraits> RawBlock<T> {
         let layout = alloc::Layout::from_size_align_unchecked(cap, T::align());
 
         self.base = alloc::alloc(layout) as *const _;
-        self.top = (self.base as usize + cap) as *const _;
+        self.top = self.base.add(cap);
         *self.ptr.get_mut() = self.base as *mut _;
     }
 
@@ -98,7 +98,7 @@ impl<T: RawBlockTraits> RawBlock<T> {
     pub unsafe fn alloc(&self, size: usize) -> *mut u8 {
         if self.free_space() >= size {
             let ptr = *self.ptr.get();
-            *self.ptr.get() = (ptr as usize + size) as *mut _;
+            *self.ptr.get() = ptr.add(size) as *mut _;
             ptr
         } else {
             ptr::null_mut()
