@@ -229,6 +229,42 @@ pub(crate) trait Unifier: DerefMut<Target = MachineState> {
                                     break 'outer;
                                 }
                             }
+                            (HeapCellValueTag::CStr, cstr) => {
+                                let cstr_str = cstr.as_str();
+                                let mut cstr_chars_iter = cstr_str.chars();
+                                let mut char_len = 0;
+
+                                while let Some(c) = chars_iter.next() {
+                                    if Some(c) != cstr_chars_iter.next() {
+                                        machine_st.fail = true;
+                                        break 'outer;
+                                    }
+
+                                    char_len += c.len_utf8();
+                                }
+
+                                let chars_iter_focus = chars_iter.iter.focus;
+
+                                machine_st.heap.pop();
+                                machine_st.heap.pop();
+
+                                let pstr_loc = if cstr_str.len() > char_len {
+                                    let h = machine_st.heap.len();
+
+                                    machine_st.heap.push(string_as_cstr_cell!(cstr));
+                                    machine_st.heap.push(pstr_offset_as_cell!(h));
+                                    machine_st.heap.push(fixnum_as_cell!(Fixnum::build_with(char_len as i64)));
+
+                                    pstr_loc_as_cell!(h+1)
+                                } else {
+                                    empty_list_as_cell!()
+                                };
+
+                                machine_st.pdl.push(chars_iter_focus);
+                                machine_st.pdl.push(pstr_loc);
+
+                                return;
+                            }
                             (HeapCellValueTag::AttrVar | HeapCellValueTag::Var, h) => {
                                 match chars_iter.item.unwrap() {
                                     PStrIteratee::Char(focus, _) => {
