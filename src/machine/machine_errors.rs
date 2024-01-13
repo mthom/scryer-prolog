@@ -79,6 +79,7 @@ impl ValidType {
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum ResourceError {
+    HeapLimit,
     FiniteMemory(HeapCellValue),
     OutOfFiles,
 }
@@ -321,10 +322,19 @@ impl MachineState {
                     atom!("resource_error"),
                     [atom(atom!("finite_memory")), cell(size_requested)]
                 )
-            }
+            },
             ResourceError::OutOfFiles => {
                 functor!(atom!("resource_error"), [atom(atom!("file_descriptors"))])
-            }
+            },
+            ResourceError::HeapLimit => {
+                functor!(
+                    atom!("resource_error"),
+                    [
+                        atom(AtomTable::build_with(&self.atom_tbl, "heap_limit")),
+                        fixnum(self.heap_limit)
+                    ]
+                )
+            },
         };
 
         MachineError {
@@ -667,7 +677,7 @@ impl MachineState {
 }
 
 impl MachineError {
-    fn into_iter(self, offset: usize) -> Box<dyn Iterator<Item = HeapCellValue>> {
+    pub(super) fn into_iter(self, offset: usize) -> Box<dyn Iterator<Item = HeapCellValue>> {
         match self.from {
             ErrorProvenance::Constructed => {
                 Box::new(self.stub.into_iter().map(move |hcv| hcv + offset))

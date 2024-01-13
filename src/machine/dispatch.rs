@@ -5202,6 +5202,11 @@ impl Machine {
                 }
             }
 
+            // Not sure if this is the best place to put this
+            if let Err(()) = self.machine_st.check_heap_limit() {
+                continue;
+            }
+
             let interrupted = INTERRUPT.load(std::sync::atomic::Ordering::Relaxed);
 
             match INTERRUPT.compare_exchange(
