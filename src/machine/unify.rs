@@ -173,6 +173,98 @@ pub(crate) trait Unifier: DerefMut<Target = MachineState> {
         let mut pstr_iter1 = HeapPStrIter::new(&machine_st.heap, s1);
         let mut pstr_iter2 = HeapPStrIter::new(&machine_st.heap, s1 + 1);
 
+        fn unify_sequence(
+            machine_st: &mut MachineState,
+            iter: PStrIteratee,
+            source_cell: HeapCellValue,
+        ) -> bool {
+            match iter {
+                PStrIteratee::Char(focus, _) => {
+                    machine_st.pdl.push(machine_st.heap[focus]);
+                    machine_st.pdl.push(source_cell);
+                }
+                PStrIteratee::PStrSegment(focus, _, n) => {
+                    read_heap_cell!(machine_st.heap[focus],
+                        (HeapCellValueTag::CStr | HeapCellValueTag::PStr, pstr_atom) => {
+                            if focus < machine_st.heap.len() - 2 {
+                                machine_st.heap.pop();
+                                machine_st.heap.pop();
+                            }
+
+                            if n == 0 {
+                                let target_cell = match machine_st.heap[focus].get_tag() {
+                                    HeapCellValueTag::CStr => {
+                                        atom_as_cstr_cell!(pstr_atom)
+                                    }
+                                    HeapCellValueTag::PStr => {
+                                        pstr_loc_as_cell!(focus)
+                                    }
+                                    _ => {
+                                        unreachable!()
+                                    }
+                                };
+
+                                machine_st.pdl.push(target_cell);
+                                machine_st.pdl.push(source_cell);
+                            } else {
+                                let h_len = machine_st.heap.len();
+
+                                machine_st.heap.push(pstr_offset_as_cell!(focus));
+                                machine_st.heap.push(fixnum_as_cell!(
+                                    Fixnum::build_with(n as i64)
+                                ));
+
+                                machine_st.pdl.push(pstr_loc_as_cell!(h_len));
+                                machine_st.pdl.push(source_cell);
+                            }
+
+                            return true;
+                        }
+                        (HeapCellValueTag::PStrOffset, pstr_loc) => {
+                            let n0 = cell_as_fixnum!(machine_st.heap[focus+1])
+                                .get_num() as usize;
+
+                            if pstr_loc < machine_st.heap.len() - 2 {
+                                machine_st.heap.pop();
+                                machine_st.heap.pop();
+                            }
+
+                            if n == n0 {
+                                machine_st.pdl.push(pstr_loc_as_cell!(focus));
+                                machine_st.pdl.push(source_cell);
+                            } else {
+                                let h_len = machine_st.heap.len();
+
+                                machine_st.heap.push(pstr_offset_as_cell!(pstr_loc));
+                                machine_st.heap.push(fixnum_as_cell!(
+                                    Fixnum::build_with(n as i64)
+                                ));
+
+                                machine_st.pdl.push(pstr_loc_as_cell!(h_len));
+                                machine_st.pdl.push(source_cell);
+                            }
+
+                            return true;
+                        }
+                        _ => {
+                        }
+                    );
+
+                    if focus < machine_st.heap.len() - 2 {
+                        machine_st.heap.pop();
+                        machine_st.heap.pop();
+                    }
+
+                    machine_st.pdl.push(machine_st.heap[focus]);
+                    machine_st.pdl.push(source_cell);
+
+                    return true;
+                }
+            }
+
+            false
+        }
+
         match compare_pstr_prefixes(&mut pstr_iter1, &mut pstr_iter2) {
             PStrCmpResult::Ordered(Ordering::Equal) => {}
             PStrCmpResult::Ordered(Ordering::Less) => {
@@ -230,117 +322,12 @@ pub(crate) trait Unifier: DerefMut<Target = MachineState> {
                                 }
                             }
                             (HeapCellValueTag::CStr | HeapCellValueTag::PStrLoc) => {
-                                machine_st.pdl.push(focus);
-
-                                match chars_iter.item.unwrap() {
-                                    PStrIteratee::Char(focus, _) |
-                                    PStrIteratee::PStrSegment(focus, _, 0) => {
-                                        machine_st.pdl.push(machine_st.heap[focus]);
-
-                                        machine_st.heap.pop();
-                                        machine_st.heap.pop();
-                                    }
-                                    PStrIteratee::PStrSegment(focus, _, n) => {
-                                        let segment = machine_st.heap[focus];
-
-                                        machine_st.heap.pop();
-                                        machine_st.heap.pop();
-
-                                        let h = machine_st.heap.len();
-
-                                        machine_st.pdl.push(pstr_loc_as_cell!(h+1));
-
-                                        machine_st.heap.push(segment);
-                                        machine_st.heap.push(pstr_offset_as_cell!(h));
-                                        machine_st.heap.push(fixnum_as_cell!(Fixnum::build_with(n as i64)));
-                                    }
-                                }
-
+                                unify_sequence(machine_st, chars_iter.item.unwrap(), focus);
                                 return;
                             }
                             (HeapCellValueTag::AttrVar | HeapCellValueTag::Var, h) => {
-                                match chars_iter.item.unwrap() {
-                                    PStrIteratee::Char(focus, _) => {
-                                        machine_st.pdl.push(machine_st.heap[focus]);
-                                        machine_st.pdl.push(heap_loc_as_cell!(h));
-                                    }
-                                    PStrIteratee::PStrSegment(focus, _, n) => {
-                                        read_heap_cell!(machine_st.heap[focus],
-                                            (HeapCellValueTag::CStr | HeapCellValueTag::PStr, pstr_atom) => {
-                                                if focus < machine_st.heap.len() - 2 {
-                                                    machine_st.heap.pop();
-                                                    machine_st.heap.pop();
-                                                }
-
-                                                if n == 0 {
-                                                    let target_cell = match machine_st.heap[focus].get_tag() {
-                                                        HeapCellValueTag::CStr => {
-                                                            atom_as_cstr_cell!(pstr_atom)
-                                                        }
-                                                        HeapCellValueTag::PStr => {
-                                                            pstr_loc_as_cell!(focus)
-                                                        }
-                                                        _ => {
-                                                            unreachable!()
-                                                        }
-                                                    };
-
-                                                    machine_st.pdl.push(target_cell);
-                                                    machine_st.pdl.push(heap_loc_as_cell!(h));
-                                                } else {
-                                                    let h_len = machine_st.heap.len();
-
-                                                    machine_st.heap.push(pstr_offset_as_cell!(focus));
-                                                    machine_st.heap.push(fixnum_as_cell!(
-                                                        Fixnum::build_with(n as i64)
-                                                    ));
-
-                                                    machine_st.pdl.push(pstr_loc_as_cell!(h_len));
-                                                    machine_st.pdl.push(heap_loc_as_cell!(h));
-                                                }
-
-                                                return;
-                                            }
-                                            (HeapCellValueTag::PStrOffset, pstr_loc) => {
-                                                let n0 = cell_as_fixnum!(machine_st.heap[focus+1])
-                                                    .get_num() as usize;
-
-                                                if pstr_loc < machine_st.heap.len() - 2 {
-                                                    machine_st.heap.pop();
-                                                    machine_st.heap.pop();
-                                                }
-
-                                                if n == n0 {
-                                                    machine_st.pdl.push(pstr_loc_as_cell!(focus));
-                                                    machine_st.pdl.push(heap_loc_as_cell!(h));
-                                                } else {
-                                                    let h_len = machine_st.heap.len();
-
-                                                    machine_st.heap.push(pstr_offset_as_cell!(pstr_loc));
-                                                    machine_st.heap.push(fixnum_as_cell!(
-                                                        Fixnum::build_with(n as i64)
-                                                    ));
-
-                                                    machine_st.pdl.push(pstr_loc_as_cell!(h_len));
-                                                    machine_st.pdl.push(heap_loc_as_cell!(h));
-                                                }
-
-                                                return;
-                                            }
-                                            _ => {
-                                            }
-                                        );
-
-                                        if focus < machine_st.heap.len() - 2 {
-                                            machine_st.heap.pop();
-                                            machine_st.heap.pop();
-                                        }
-
-                                        machine_st.pdl.push(machine_st.heap[focus]);
-                                        machine_st.pdl.push(heap_loc_as_cell!(h));
-
-                                        return;
-                                    }
+                                if unify_sequence(machine_st, chars_iter.item.unwrap(), heap_loc_as_cell!(h)) {
+                                    return;
                                 }
 
                                 break 'outer;
