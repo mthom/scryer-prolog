@@ -351,9 +351,9 @@ impl<'a> HeapPStrIter<'a> {
                         );
 
                         value.as_char().map(|c| PStrIterStep {
-                                iteratee: PStrIteratee::Char(curr_hare, c),
-                                next_hare: s+2,
-                            })
+                            iteratee: PStrIteratee::Char(curr_hare, c),
+                            next_hare: s+2,
+                        })
                     } else {
                         None
                     };
@@ -764,13 +764,29 @@ pub fn compare_pstr_prefixes<'a>(
         if i1.focus == empty_list_as_cell!() {
             PStrCmpResult::Ordered(Ordering::Less)
         } else {
-            PStrCmpResult::SecondIterContinuable(r2.unwrap().iteratee)
+            let r2_step = r2.unwrap();
+
+            // advance i2 to the next character so the same character
+            // isn't repeated
+            if matches!(r2_step.iteratee, PStrIteratee::Char(..)) {
+                cycle_detection_step(i2, i1, &r2_step);
+            }
+
+            PStrCmpResult::SecondIterContinuable(r2_step.iteratee)
         }
     } else if r2_at_end {
         if i2.focus == empty_list_as_cell!() {
             PStrCmpResult::Ordered(Ordering::Greater)
         } else {
-            PStrCmpResult::FirstIterContinuable(r1.unwrap().iteratee)
+            let r1_step = r1.unwrap();
+
+            // advance i1 to the next character so the same character
+            // isn't repeated
+            if matches!(r1_step.iteratee, PStrIteratee::Char(..)) {
+                cycle_detection_step(i1, i2, &r1_step);
+            }
+
+            PStrCmpResult::FirstIterContinuable(r1_step.iteratee)
         }
     } else if i1.is_continuable() && i2.is_continuable() {
         PStrCmpResult::Ordered(Ordering::Equal)
@@ -1090,9 +1106,119 @@ mod test {
                 Some(PStrIteratee::PStrSegment(2, atom!("abc"), 1))
             );
 
-            // assert!(iter.next().is_none());
-
             for _ in iter {}
         }
+
+        // #2293, test1.
+
+        wam.machine_st.heap.clear();
+
+        wam.machine_st.heap.push(atom_as_cstr_cell!(atom!("a ")));
+        wam.machine_st.heap.push(heap_loc_as_cell!(1));
+        wam.machine_st.heap.push(list_loc_as_cell!(3));
+        wam.machine_st.heap.push(char_as_cell!(' '));
+        wam.machine_st.heap.push(empty_list_as_cell!());
+
+        unify!(wam.machine_st, list_loc_as_cell!(1), heap_loc_as_cell!(0));
+
+        assert!(!wam.machine_st.fail);
+
+        // #2293, test2.
+
+        wam.machine_st.heap.clear();
+
+        wam.machine_st.heap.push(atom_as_cstr_cell!(atom!(" a")));
+        wam.machine_st.heap.push(char_as_cell!(' '));
+        wam.machine_st.heap.push(list_loc_as_cell!(3));
+        wam.machine_st.heap.push(heap_loc_as_cell!(3));
+        wam.machine_st.heap.push(empty_list_as_cell!());
+
+        unify!(wam.machine_st, list_loc_as_cell!(1), heap_loc_as_cell!(0));
+
+        assert!(!wam.machine_st.fail);
+
+        // #2293, test3.
+
+        wam.machine_st.heap.clear();
+
+        wam.machine_st.heap.push(atom_as_cstr_cell!(atom!("a b")));
+        wam.machine_st.heap.push(heap_loc_as_cell!(1));
+        wam.machine_st.heap.push(list_loc_as_cell!(3));
+        wam.machine_st.heap.push(char_as_cell!(' '));
+        wam.machine_st.heap.push(list_loc_as_cell!(5));
+        wam.machine_st.heap.push(heap_loc_as_cell!(5));
+        wam.machine_st.heap.push(empty_list_as_cell!());
+
+        unify!(wam.machine_st, list_loc_as_cell!(1), heap_loc_as_cell!(0));
+
+        assert!(!wam.machine_st.fail);
+
+        // #2293, test4.
+
+        wam.machine_st.heap.clear();
+
+        wam.machine_st.heap.push(atom_as_cstr_cell!(atom!(" a ")));
+        wam.machine_st.heap.push(char_as_cell!(' '));
+        wam.machine_st.heap.push(list_loc_as_cell!(3));
+        wam.machine_st.heap.push(heap_loc_as_cell!(3));
+        wam.machine_st.heap.push(list_loc_as_cell!(5));
+        wam.machine_st.heap.push(char_as_cell!(' '));
+        wam.machine_st.heap.push(empty_list_as_cell!());
+
+        unify!(wam.machine_st, list_loc_as_cell!(1), heap_loc_as_cell!(0));
+
+        assert!(!wam.machine_st.fail);
+
+        // #2293, test5.
+
+        wam.machine_st.heap.clear();
+
+        wam.machine_st.heap.push(atom_as_cstr_cell!(atom!(" a bc")));
+        wam.machine_st.heap.push(char_as_cell!(' '));
+        wam.machine_st.heap.push(list_loc_as_cell!(3));
+        wam.machine_st.heap.push(heap_loc_as_cell!(3));
+        wam.machine_st.heap.push(list_loc_as_cell!(5));
+        wam.machine_st.heap.push(char_as_cell!(' '));
+        wam.machine_st.heap.push(heap_loc_as_cell!(6));
+
+        unify!(wam.machine_st, list_loc_as_cell!(1), heap_loc_as_cell!(0));
+
+        assert!(!wam.machine_st.fail);
+
+        // #2293, test6.
+
+        wam.machine_st.heap.clear();
+
+        wam.machine_st.heap.push(atom_as_cstr_cell!(atom!("abc")));
+        wam.machine_st.heap.push(heap_loc_as_cell!(1));
+        wam.machine_st.heap.push(list_loc_as_cell!(3));
+        wam.machine_st.heap.push(char_as_cell!('b'));
+        wam.machine_st.heap.push(list_loc_as_cell!(5));
+        wam.machine_st.heap.push(heap_loc_as_cell!(5));
+        wam.machine_st.heap.push(empty_list_as_cell!());
+
+        unify!(wam.machine_st, list_loc_as_cell!(1), heap_loc_as_cell!(0));
+
+        assert!(!wam.machine_st.fail);
+
+        // #2293, test7.
+
+        wam.machine_st.heap.clear();
+
+        wam.machine_st.heap.push(atom_as_cstr_cell!(atom!("abcde")));
+        wam.machine_st.heap.push(char_as_cell!('a'));
+        wam.machine_st.heap.push(list_loc_as_cell!(3));
+        wam.machine_st.heap.push(heap_loc_as_cell!(3));
+        wam.machine_st.heap.push(list_loc_as_cell!(5));
+        wam.machine_st.heap.push(char_as_cell!('c'));
+        wam.machine_st.heap.push(list_loc_as_cell!(7));
+        wam.machine_st.heap.push(heap_loc_as_cell!(7));
+        wam.machine_st.heap.push(list_loc_as_cell!(9));
+        wam.machine_st.heap.push(char_as_cell!('e'));
+        wam.machine_st.heap.push(empty_list_as_cell!());
+
+        unify!(wam.machine_st, list_loc_as_cell!(1), heap_loc_as_cell!(0));
+
+        assert!(!wam.machine_st.fail);
     }
 }
