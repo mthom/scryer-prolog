@@ -331,7 +331,7 @@ impl MachineState {
                     atom!("resource_error"),
                     [
                         atom(AtomTable::build_with(&self.atom_tbl, "heap_limit")),
-                        fixnum(self.heap_limit)
+                        fixnum(self.heap_limit.expect("should have heap limit"))
                     ]
                 )
             },

@@ -39,7 +39,7 @@ impl MachineState {
             attr_var_init: AttrVarInitializer::new(0),
             fail: false,
             heap: Heap::with_capacity(256 * 256),
-            heap_limit: 1 * (1 << (10 * 2)), // 100MB
+            heap_limit: None,
             mode: MachineMode::Write,
             stack: Stack::new(),
             registers: [heap_loc_as_cell!(0); MAX_ARITY + 1], // self.registers[0] is never used.
@@ -1726,26 +1726,26 @@ impl MachineState {
     }
 
     pub fn check_heap_limit(&mut self) -> Result<(),()> {
-        let h = self.heap.len();
-        println!("Current heap length: {h}");
-        if h > self.heap_limit / 8 {
-            let error = self.resource_error(ResourceError::HeapLimit);
+        if let Some(heap_limit) = self.heap_limit {
+            let h = self.heap.len();
+            if h > heap_limit / 8 {
+                let error = self.resource_error(ResourceError::HeapLimit);
 
-            let mut stub = vec![
-                atom_as_cell!(atom!("error"), 2),
-                str_loc_as_cell!(h + 3),
-                heap_loc_as_cell!(h + 2),
-            ];
-            stub.extend(error.into_iter(3));
-            //let functor_stub = functor_stub(atom!("error"), 2);
-            //let stub = self.error_form(error, functor_stub);
+                let mut stub = vec![
+                    atom_as_cell!(atom!("error"), 2),
+                    str_loc_as_cell!(h + 3),
+                    heap_loc_as_cell!(h + 2),
+                ];
+                stub.extend(error.into_iter(3));
 
-            println!("Throwing exception!!!");
-            self.throw_exception(stub);
-            self.backtrack();
-            Err(())
+                self.throw_exception(stub);
+                self.backtrack();
+                Err(())
+            } else {
+                Ok(())
+            }
         } else {
-            Ok(())
+            Err(())
         }
     }
 }
