@@ -4978,7 +4978,8 @@ impl Machine {
         let stub = functor_stub(atom!("$set_heap_limit"), 1);
         let error = stub.type_error(&mut self.machine_st, ValidType::Integer);
 
-        value.to_fixnum()
+        value
+            .to_fixnum()
             .ok_or(self.machine_st.error_form(error, stub))
             .map(|fixnum| {
                 self.machine_st.heap_limit = Some(fixnum.get_num() as usize);
@@ -4989,7 +4990,9 @@ impl Machine {
     pub(crate) fn get_heap_limit(&mut self) -> CallResult {
         let value = self.deref_register(1);
 
-        let cell = self.machine_st.heap_limit
+        let cell = self
+            .machine_st
+            .heap_limit
             .map(|limit| fixnum_as_cell!(Fixnum::build_with(limit as i64)))
             .unwrap_or(atom_as_cell!(atom!("no_limit")));
         self.machine_st.heap.push(cell);

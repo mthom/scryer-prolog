@@ -1725,7 +1725,7 @@ impl MachineState {
         self.throw_exception(err);
     }
 
-    pub fn check_heap_limit(&mut self) -> Result<(),()> {
+    pub fn check_heap_limit(&mut self) -> Result<(), ()> {
         if let Some(heap_limit) = self.heap_limit {
             let h = self.heap.len();
             if h > heap_limit / 8 {

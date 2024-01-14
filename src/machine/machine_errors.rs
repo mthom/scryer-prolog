@@ -322,10 +322,10 @@ impl MachineState {
                     atom!("resource_error"),
                     [atom(atom!("finite_memory")), cell(size_requested)]
                 )
-            },
+            }
             ResourceError::OutOfFiles => {
                 functor!(atom!("resource_error"), [atom(atom!("file_descriptors"))])
-            },
+            }
             ResourceError::HeapLimit => {
                 functor!(
                     atom!("resource_error"),
@@ -334,7 +334,7 @@ impl MachineState {
                         fixnum(self.heap_limit.expect("should have heap limit"))
                     ]
                 )
-            },
+            }
         };
 
         MachineError {
