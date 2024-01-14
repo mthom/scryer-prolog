@@ -4155,6 +4155,22 @@ impl Machine {
                         try_or_throw!(self.machine_st, self.argv());
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                     }
+                    &Instruction::CallSetHeapLimit => {
+                        try_or_throw!(self.machine_st, self.set_heap_limit());
+                        step_or_fail!(self, self.machine_st.p += 1);
+                    }
+                    &Instruction::ExecuteSetHeapLimit => {
+                        try_or_throw!(self.machine_st, self.set_heap_limit());
+                        step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+                    }
+                    &Instruction::CallGetHeapLimit => {
+                        try_or_throw!(self.machine_st, self.get_heap_limit());
+                        step_or_fail!(self, self.machine_st.p += 1);
+                    }
+                    &Instruction::ExecuteGetHeapLimit => {
+                        try_or_throw!(self.machine_st, self.get_heap_limit());
+                        step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+                    }
                     &Instruction::CallCurrentTime => {
                         self.current_time();
                         step_or_fail!(self, self.machine_st.p += 1);

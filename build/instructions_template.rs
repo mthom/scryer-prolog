@@ -607,6 +607,10 @@ enum SystemClauseType {
     #[strum_discriminants(strum(props(Arity = "1", Name = "$argv")))]
     Argv,
     REPL(REPLCodePtr),
+    #[strum_discriminants(strum(props(Arity = "1", Name = "$set_heap_limit")))]
+    SetHeapLimit,
+    #[strum_discriminants(strum(props(Arity = "1", Name = "$get_heap_limit")))]
+    GetHeapLimit,
 }
 
 #[allow(dead_code)]
@@ -1872,6 +1876,8 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallAddNonCountedBacktracking |
                     &Instruction::CallPopCount |
                     &Instruction::CallArgv |
+                    &Instruction::CallSetHeapLimit |
+                    &Instruction::CallGetHeapLimit |
                     &Instruction::CallEd25519SignRaw |
                     &Instruction::CallEd25519VerifyRaw |
                     &Instruction::CallEd25519SeedToPublicKey => {
@@ -2108,6 +2114,8 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteAddNonCountedBacktracking |
                     &Instruction::ExecutePopCount |
                     &Instruction::ExecuteArgv |
+                    &Instruction::ExecuteSetHeapLimit |
+                    &Instruction::ExecuteGetHeapLimit |
                     &Instruction::ExecuteEd25519SignRaw |
                     &Instruction::ExecuteEd25519VerifyRaw |
                     &Instruction::ExecuteEd25519SeedToPublicKey => {
