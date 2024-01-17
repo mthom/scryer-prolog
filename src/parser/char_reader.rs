@@ -191,7 +191,7 @@ impl<R: Read> CharRead for CharReader<R> {
                     return Some(Err(bad_bytes_error(buf)));
                 } else if self.pos >= self.buf.len() {
                     return None;
-                } else if self.buf.len() - self.pos >= 4 {
+                } else if self.buf.len() - self.pos >= 4 && self.pos < e.valid_up_to() {
                     return match str::from_utf8(&self.buf[self.pos..e.valid_up_to()]) {
                         Ok(s) => {
                             let mut chars = s.chars();
@@ -218,6 +218,11 @@ impl<R: Read> CharRead for CharReader<R> {
                     self.buf.truncate(buf_len - self.pos);
 
                     let buf_len = self.buf.len();
+                    self.pos = 0;
+
+                    if buf_len >= 4 {
+                        continue;
+                    }
 
                     let mut word = [0u8; 4];
                     let word_slice = &mut word[buf_len..4];
@@ -229,8 +234,6 @@ impl<R: Read> CharRead for CharReader<R> {
                             self.buf.extend_from_slice(&word_slice[0..nread]);
                         }
                     }
-
-                    self.pos = 0;
                 }
             } else {
                 return None;
