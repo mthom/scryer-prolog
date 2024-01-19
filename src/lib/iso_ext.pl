@@ -17,7 +17,8 @@ but they're not part of the ISO Prolog standard at the moment.
                     succ/2,
                     call_nth/2,
                     countall/2,
-                    copy_term_nat/2]).
+                    copy_term_nat/2,
+		    copy_term/3]).
 
 :- use_module(library(error), [can_be/2,
                                domain_error/3,
@@ -25,6 +26,8 @@ but they're not part of the ISO Prolog standard at the moment.
                                type_error/3]).
 
 :- use_module(library(lists), [maplist/3]).
+
+:- use_module(library('$project_atts')).
 
 :- meta_predicate(forall(0, 0)).
 
@@ -382,3 +385,15 @@ countall(Goal, N) :-
 copy_term_nat(Source, Dest) :-
     '$copy_term_without_attr_vars'(Source, Dest).
 
+%% copy_term(+Term, -Copy, -Gs).
+%
+% Produce a deep copy of Term and unify it to Copy, without attributes.
+% Unify Gs with a list of goals that represent the attributes of Term.
+% Similar to `copy_term/2` but splitting the attributes.
+copy_term(Term, Copy, Gs) :-
+   can_be(list, Gs),
+   findall(Term-Rs, '$project_atts':term_residual_goals(Term,Rs), [Copy-Gs]),
+   (  var(Gs) ->
+      Gs = []
+   ;  true
+   ).
