@@ -1,4 +1,4 @@
-:- module('$project_atts', [copy_term/3]).
+:- module('$project_atts', []).
 
 :- use_module(library(dcgs)).
 :- use_module(library(error), [can_be/2]).
@@ -99,14 +99,6 @@ gather_residual_goals([V|Vs]) -->
     gather_residual_goals(Vs).
 
 delete_all_attributes_from_var(V) :- '$delete_all_attributes_from_var'(V).
-
-copy_term(Term, Copy, Gs) :-
-   can_be(list, Gs),
-   findall(Term-Rs, term_residual_goals(Term,Rs), [Copy-Gs]),
-   (  var(Gs) ->
-      Gs = []
-   ;  true
-   ).
 
 term_residual_goals(Term,Rs) :-
     '$term_attributed_variables'(Term, Vs),
