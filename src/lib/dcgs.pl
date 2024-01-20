@@ -154,8 +154,6 @@ dcg_body(GRBody, S0, S, Body) :-
 dcg_body(NonTerminal, S0, S, Goal1) :-
     nonvar(NonTerminal),
     \+ dcg_constr(NonTerminal),
-    NonTerminal \= ( _ -> _ ),
-    NonTerminal \= ( \+ _ ),
     loader:strip_module(NonTerminal, M, NonTerminal0),
     dcg_non_terminal(NonTerminal0, S0, S, Goal0),
     (  functor(NonTerminal, (:), 2) ->
