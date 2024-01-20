@@ -176,8 +176,10 @@ dcg_constr(phrase(_)). % 7.14.9
 dcg_constr(phrase(_,_)). % extension of 7.14.9
 dcg_constr(phrase(_,_,_)). % extension of 7.14.9
 dcg_constr(!). % 7.14.10
-%% dcg_constr(\+ _). % 7.14.11 - not (existence implementation dep.)
-%% dcg_constr((_->_)). % 7.14.12 - if-then (existence implementation dep.)
+dcg_constr(\+ _) :- % 7.14.11 - not (existence implementation dep.)
+    throw(error(representation_error(dcg_body), phrase/3)).
+dcg_constr((_->_)) :- % 7.14.12 - if-then (existence implementation dep.)
+    throw(error(representation_error(dcg_body), phrase/3)).
 
 % The principal functor of the first argument indicates
 % the construct to be expanded.
@@ -244,6 +246,8 @@ seqq([Es|Ess]) --> seq(Es), seqq(Ess).
 
 error_goal(error(E, must_be/2), error(E, must_be/2)).
 error_goal(error(E, (=..)/2), error(E, (=..)/2)).
+error_goal(error(representation_error(dcg_body), Context),
+           error(representation_error(dcg_body), Context)).
 error_goal(E, _) :- throw(E).
 
 user:goal_expansion(phrase(GRBody, S, S0), GRBody2) :-
