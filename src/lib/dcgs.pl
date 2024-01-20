@@ -177,7 +177,7 @@ dcg_constr(phrase(_,_)). % extension of 7.14.9
 dcg_constr(phrase(_,_,_)). % extension of 7.14.9
 dcg_constr(!). % 7.14.10
 %% dcg_constr(\+ _). % 7.14.11 - not (existence implementation dep.)
-dcg_constr((_->_)). % 7.14.12 - if-then (existence implementation dep.)
+%% dcg_constr((_->_)). % 7.14.12 - if-then (existence implementation dep.)
 
 % The principal functor of the first argument indicates
 % the construct to be expanded.
