@@ -4171,6 +4171,7 @@ var(V) --> { var(V) }.
 ground(T) --> { ground(T) }.
 
 true --> [].
+false --> { false }.
 
 X >= Y	--> { X >= Y }.
 X =< Y  --> { X =< Y }.
@@ -4665,7 +4666,7 @@ run_propagator(x_eq_abs_plus_v(X,V), MState) -->
         (   nonvar(V) ->
             (   V =:= 0 -> kill(MState), { X in 0..sup }
             ;   V < 0 -> kill(MState), { X #= V / 2 }
-            ;   V > 0 -> { false }
+            ;   false % V > 0
             )
         ;   nonvar(X) ->
             kill(MState),
@@ -5062,7 +5063,7 @@ run_propagator(pmod(X,Y,Z), MState) -->
             Z is X mod Y
         ;   nonvar(Y), nonvar(Z) ->
             (   Y > 0 -> Z >= 0, Z < Y
-            ;   Y < 0 -> Z =< 0, Z > Y
+            ;   Z =< 0, Z > Y    % Y < 0
             ),
             (   { fd_get(X, _, n(XL), _, _) } ->
                 (   (XL - Z) mod Y =\= 0 ->
@@ -5131,7 +5132,7 @@ run_propagator(pmodz(X,Y,Z), MState) -->
                         fd_put(Z, ZD2, ZPs)
                         % queue_goal(Z #=< X)
                     )
-                ;   X < 0 ->
+                ;   X < 0,
                     (   { fd_get(Y, _, _, n(YU), _), YU < X } ->
                         kill(MState),
                         queue_goal(Z = X)
@@ -5171,7 +5172,7 @@ run_propagator(pmodz(X,Y,Z), MState) -->
                     fd_put(Z, ZD5, ZPs)
                     % queue_goal(Z in ZMin..0)
                 )
-            ;   Y > 0 ->
+            ;   Y > 0,
                 (   { fd_get(X, _, n(XL), n(XU), _), XL >= 0, Y > XU } ->
                     kill(MState),
                     queue_goal(Z = X)
