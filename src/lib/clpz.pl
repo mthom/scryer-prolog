@@ -4171,6 +4171,7 @@ var(V) --> { var(V) }.
 ground(T) --> { ground(T) }.
 
 true --> [].
+false --> { false }.
 
 X >= Y	--> { X >= Y }.
 X =< Y  --> { X =< Y }.
@@ -4228,7 +4229,7 @@ activate_propagator(propagator(P,State)) -->
             )
         ).
 
-%do_queue --> print_queue, { false }.
+%do_queue --> print_queue, false.
 do_queue -->
         (   queue_enabled ->
             (   queue_get_goal(Goal) -> { call(Goal) }, do_queue
@@ -4592,7 +4593,7 @@ run_propagator(pserialized(S_I, D_I, S_J, D_J, _), MState) -->
             kill(MState),
             (   S_I + D_I =< S_J -> []
             ;   S_J + D_J =< S_I -> []
-            ;   { false }
+            ;   false
             )
         ;   serialize_lower_upper(S_I, D_I, S_J, D_J, MState),
             serialize_lower_upper(S_J, D_J, S_I, D_I, MState)
@@ -4665,7 +4666,7 @@ run_propagator(x_eq_abs_plus_v(X,V), MState) -->
         (   nonvar(V) ->
             (   V =:= 0 -> kill(MState), { X in 0..sup }
             ;   V < 0 -> kill(MState), { X #= V / 2 }
-            ;   V > 0 -> { false }
+            ;   false % V > 0
             )
         ;   nonvar(X) ->
             kill(MState),
@@ -5052,8 +5053,8 @@ run_propagator(ptzdiv(X,Y,Z,Morph), MState) -->
 %% % Z = X mod Y
 
 run_propagator(pmod(X,Y,Z), MState) -->
-        (   Y == 0 -> { false }
-        ;   Y == Z -> { false }
+        (   Y == 0 -> false
+        ;   Y == Z -> false
         ;   X == Y -> kill(MState), queue_goal(Z = 0)
         ;   true
         ),
@@ -5062,7 +5063,7 @@ run_propagator(pmod(X,Y,Z), MState) -->
             Z is X mod Y
         ;   nonvar(Y), nonvar(Z) ->
             (   Y > 0 -> Z >= 0, Z < Y
-            ;   Y < 0 -> Z =< 0, Z > Y
+            ;   Z =< 0, Z > Y    % Y < 0
             ),
             (   { fd_get(X, _, n(XL), _, _) } ->
                 (   (XL - Z) mod Y =\= 0 ->
@@ -5131,7 +5132,7 @@ run_propagator(pmodz(X,Y,Z), MState) -->
                         fd_put(Z, ZD2, ZPs)
                         % queue_goal(Z #=< X)
                     )
-                ;   X < 0 ->
+                ;   X < 0,
                     (   { fd_get(Y, _, _, n(YU), _), YU < X } ->
                         kill(MState),
                         queue_goal(Z = X)
@@ -5171,7 +5172,7 @@ run_propagator(pmodz(X,Y,Z), MState) -->
                     fd_put(Z, ZD5, ZPs)
                     % queue_goal(Z in ZMin..0)
                 )
-            ;   Y > 0 ->
+            ;   Y > 0,
                 (   { fd_get(X, _, n(XL), n(XU), _), XL >= 0, Y > XU } ->
                     kill(MState),
                     queue_goal(Z = X)
@@ -5382,7 +5383,7 @@ run_propagator(pmax(X,Y,Z), MState) -->
             ;   nonvar(Z) ->
                 (   Z =:= X -> kill(MState), queue_goal(X #>= Y)
                 ;   Z > X -> queue_goal(Z = Y)
-                ;   { false } % Z < X
+                ;   false % Z < X
                 )
             ;   Y == Z -> kill(MState), queue_goal(Y #>= X)
             ;   { fd_get(Y, _, YInf, YSup, _) },
@@ -5418,7 +5419,7 @@ run_propagator(pmin(X,Y,Z), MState) -->
             ;   nonvar(Z) ->
                 (   Z =:= X -> kill(MState), { X #=< Y }
                 ;   Z < X -> Z = Y
-                ;   { false } % Z > X
+                ;   false % Z > X
                 )
             ;   Y == Z -> kill(MState), queue_goal(Y #=< X)
             ;   { fd_get(Y, _, YInf, YSup, _) },
@@ -5733,8 +5734,7 @@ run_propagator(reified_fd(V,B), MState) -->
             B = 1
         ;   { B == 0 } ->
             (   { fd_inf(V, inf) } -> []
-            ;   { fd_sup(V, sup) } -> []
-            ;   { false }
+            ;   { fd_sup(V, sup) }
             )
         ;   []
         ).
