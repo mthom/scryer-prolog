@@ -174,10 +174,10 @@ dcg_constr(phrase(_)). % 7.14.9
 dcg_constr(phrase(_,_)). % extension of 7.14.9
 dcg_constr(phrase(_,_,_)). % extension of 7.14.9
 dcg_constr(!). % 7.14.10
-dcg_constr(\+ _) :- % 7.14.11 - not (existence implementation dep.)
-    throw(error(representation_error(dcg_body), phrase/3)).
-dcg_constr((_->_)) :- % 7.14.12 - if-then (existence implementation dep.)
-    throw(error(representation_error(dcg_body), phrase/3)).
+dcg_constr(\+ G_0) :- % 7.14.11 - not (existence implementation def.)
+    throw(error(representation_error(dcg_body), [culprit- (\+ G_0)])).
+dcg_constr((If->Then)) :- % 7.14.12 - if-then (existence implementation def.)
+    throw(error(representation_error(dcg_body), [culprit- (If->Then)])).
 
 % The principal functor of the first argument indicates
 % the construct to be expanded.
