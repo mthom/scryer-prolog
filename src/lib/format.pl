@@ -306,10 +306,10 @@ n_newlines(N0) --> { N0 > 0, N is N0 - 1 }, [newline], n_newlines(N).
 n_newlines(0)  --> [].
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-?- phrase(upto_what(Cs, ~), "abc~test", Rest).
-Cs = [a,b,c], Rest = [~,t,e,s,t].
-?- phrase(upto_what(Cs, ~), "abc", Rest).
-Cs = [a,b,c], Rest = [].
+?- phrase(format:upto_what(Cs, ~), "abc~test", Rest).
+   Cs = "abc", Rest = "~test".
+?- phrase(format:upto_what(Cs, ~), "abc", Rest).
+   Cs = "abc", Rest = [].
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 separate_digits_fractional(Arg, Sep, Num, Cs) :-
@@ -444,9 +444,9 @@ format(Stream, Fs, Args) :-
 ?- phrase(format:cells("~`at~50|", [], 0, [], []), Cs),
    phrase(format:format_cells(Cs), Ls).
 ?- phrase(format:cells("~ta~t~tb~tc~21|", [], 0, [], []), Cs).
-Cs = [cell(0,21,[glue(' ',_A),chars("a"),glue(' ',_B),glue(' ',_C),chars("b"),glue(' ',_D),chars("c ...")])]
+   Cs = [cell(0,21,[glue(' ',_A),chars("a"),glue(' ',_B),glue(' ',_C),chars("b"),glue(' ',_D),chars("c")])].
 ?- phrase(format:cells("~ta~t~4|", [], 0, [], []), Cs).
-Cs = [cell(0,4,[glue(' ',_A),chars("a"),glue(' ',_B)])]
+   Cs = [cell(0,4,[glue(' ',_A),chars("a"),glue(' ',_B)])].
 
 ?- phrase(format:format_cell(cell(0,1,[glue(a,_94)])), Ls).
 
