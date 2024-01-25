@@ -604,16 +604,9 @@ impl DebrayAllocator {
                     Target::unsafe_argument_to_value(r, arg_c)
                 }
             }
-            VarAlloc::Temp { ref mut safety, .. } => {
-                if self
-                    .branch_stack
-                    .safety_unneeded_in_branch(safety, &branch_designator)
-                {
-                    Target::argument_to_value(r, arg_c)
-                } else {
-                    *safety = VarSafetyStatus::GloballyUnneeded;
-                    Target::unsafe_argument_to_value(r, arg_c)
-                }
+            VarAlloc::Temp { .. } => {
+                debug_assert!(matches!(r, RegType::Temp(_)));
+                Target::argument_to_value(r, arg_c)
             }
             _ => {
                 unreachable!()
