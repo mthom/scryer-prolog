@@ -9,6 +9,7 @@ but they're not part of the ISO Prolog standard at the moment.
                     bb_put/2,
                     call_cleanup/2,
                     call_with_inference_limit/3,
+                    call_residue_vars/2,
                     forall/2,
                     partial_string/1,
                     partial_string/3,
@@ -397,3 +398,11 @@ copy_term(Term, Copy, Gs) :-
       Gs = []
    ;  true
    ).
+
+:- meta_predicate call_residue_vars(0, ?).
+
+call_residue_vars(Goal, Vars) :-
+    can_be(list, Vars),
+    '$get_attr_var_queue_delim'(B),
+    call(Goal),
+    '$get_attr_var_queue_beyond'(B, Vars).

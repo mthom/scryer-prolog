@@ -1,5 +1,4 @@
 :- module(atts, [op(1199, fx, attribute),
-                 call_residue_vars/2,
                  term_attributed_variables/2]).
 
 :- use_module(library(dcgs)).
@@ -110,14 +109,6 @@ user:goal_expansion(Term, M:put_atts(Var, Attr)) :-
 user:goal_expansion(Term, M:get_atts(Var, Attr)) :-
     nonvar(Term),
     Term = get_atts(Var, M, Attr).
-
-:- meta_predicate call_residue_vars(0, ?).
-
-call_residue_vars(Goal, Vars) :-
-    can_be(list, Vars),
-    '$get_attr_var_queue_delim'(B),
-    call(Goal),
-    '$get_attr_var_queue_beyond'(B, Vars).
 
 term_attributed_variables(Term, Vars) :-
     '$term_attributed_variables'(Term, Vars).

@@ -1,10 +1,10 @@
 /**/
 
+:- use_module(library(iso_ext)).
 :- use_module(library(format)).
 :- use_module(library(dcgs)).
 :- use_module(library(lists)).
 :- use_module(library(debug)).
-:- use_module(library(atts)).
 
 :- use_module(library(when)).
 

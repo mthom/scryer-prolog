@@ -1,6 +1,5 @@
 :- module('$toplevel', []).
 
-:- use_module(library(atts), [call_residue_vars/2]).
 :- use_module(library(charsio)).
 :- use_module(library(error)).
 :- use_module(library(files)).
@@ -28,7 +27,7 @@ load_scryerrc :-
     ).
 
 '$repl' :-
-    asserta('$toplevel':started),    
+    asserta('$toplevel':started),
     raw_argv(Args0),
     (   append(Args1, ["--"|_], Args0) ->
         Args = Args1
@@ -186,7 +185,7 @@ submit_query_and_print_results_(Term, VarList) :-
     bb_put('$report_all', false),
     bb_put('$report_n_more', 0),
     expand_goal(Term, user, Term0),
-    atts:call_residue_vars(user:Term0, AttrVars),
+    call_residue_vars(user:Term0, AttrVars),
     write_eqs_and_read_input(B, VarList, AttrVars),
     !.
 submit_query_and_print_results_(_, _) :-
@@ -451,4 +450,3 @@ print_exception_with_check(E) :-
     % is expected to be printed instead.
     ;  print_exception(E)
     ).
-

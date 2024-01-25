@@ -1,5 +1,5 @@
 use_module(library(dif)).
-use_module(library(atts)).
+use_module(library(iso_ext)).
 -X\=X.
 -X=X.
 dif(-X,X).
