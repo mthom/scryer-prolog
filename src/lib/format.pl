@@ -1,5 +1,5 @@
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   Written 2020-2023 by Markus Triska (triska@metalevel.at)
+   Written 2020-2024 by Markus Triska (triska@metalevel.at)
    Part of Scryer Prolog.
    I place this code in the public domain. Use it in any way you want.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
@@ -302,8 +302,8 @@ format_number_chars(N0, Chars) :-
         N is N0, % evaluate compound expression
         number_chars(N, Chars).
 
-n_newlines(0) --> !.
 n_newlines(N0) --> { N0 > 0, N is N0 - 1 }, [newline], n_newlines(N).
+n_newlines(0)  --> [].
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ?- phrase(upto_what(Cs, ~), "abc~test", Rest).
