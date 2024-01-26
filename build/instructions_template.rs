@@ -1195,7 +1195,10 @@ fn generate_instruction_preface() -> TokenStream {
                     Instruction::SetLocalValue(..) |
                     Instruction::SetVariable(..) |
                     Instruction::SetValue(..) |
-                    Instruction::SetVoid(..))
+                    Instruction::SetVoid(..) |
+                    Instruction::GetLevel(..) |
+                    Instruction::GetPrevLevel(..) |
+                    Instruction::GetCutPoint(..))
             }
 
             pub fn enqueue_functors(
