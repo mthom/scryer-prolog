@@ -557,20 +557,29 @@ impl Machine {
                         }
 
                         let mut p = self.machine_st.p;
+                        let mut arity = 0;
 
                         while self.code[p].is_head_instr() {
+                            for r in self.code[p].registers() {
+                                if let RegType::Temp(t) = r {
+                                    arity = std::cmp::max(arity, t);
+                                }
+                            }
+
                             p += 1;
                         }
 
-                        let instr =
-                            std::mem::replace(&mut self.code[p], Instruction::VerifyAttrInterrupt);
+                        let instr = std::mem::replace(
+                            &mut self.code[p],
+                            Instruction::VerifyAttrInterrupt(arity),
+                        );
 
                         self.code[VERIFY_ATTR_INTERRUPT_LOC] = instr;
                         self.machine_st.attr_var_init.cp = p;
                     }
-                    &Instruction::VerifyAttrInterrupt => {
-                        let (_, arity) = self.code[VERIFY_ATTR_INTERRUPT_LOC].to_name_and_arity();
-                        let arity = std::cmp::max(arity, self.machine_st.num_of_args);
+                    &Instruction::VerifyAttrInterrupt(arity) => {
+                        // let (_, arity) = self.code[VERIFY_ATTR_INTERRUPT_LOC].to_name_and_arity();
+                        // let arity = std::cmp::max(arity, self.machine_st.num_of_args);
                         self.run_verify_attr_interrupt(arity);
                     }
                     &Instruction::Add(ref a1, ref a2, t) => {

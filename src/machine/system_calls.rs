@@ -5739,11 +5739,11 @@ impl Machine {
     #[inline(always)]
     pub(super) fn restore_instr_at_verify_attr_interrupt(&mut self) {
         match &self.code[VERIFY_ATTR_INTERRUPT_LOC] {
-            &Instruction::VerifyAttrInterrupt => {}
+            &Instruction::VerifyAttrInterrupt(_) => {}
             _ => {
                 let instr = mem::replace(
                     &mut self.code[VERIFY_ATTR_INTERRUPT_LOC],
-                    Instruction::VerifyAttrInterrupt,
+                    Instruction::VerifyAttrInterrupt(0),
                 );
 
                 self.code[self.machine_st.attr_var_init.cp] = instr;

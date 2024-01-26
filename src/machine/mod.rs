@@ -391,7 +391,7 @@ impl Machine {
         self.code.extend(vec![
             Instruction::BreakFromDispatchLoop,
             Instruction::InstallVerifyAttr,
-            Instruction::VerifyAttrInterrupt,
+            Instruction::VerifyAttrInterrupt(0),
             Instruction::BreakFromDispatchLoop, // the location of LIB_QUERY_SUCCESS
             Instruction::ExecuteTermGreaterThan,
             Instruction::ExecuteTermLessThan,
