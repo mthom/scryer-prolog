@@ -455,6 +455,7 @@ mod tests {
         let blocks = code.split("=====");
 
         let mut i = 0;
+        let mut last_result: Option<_> = None;
         // Iterate over the blocks
         for block in blocks {
             // Trim the block to remove any leading or trailing whitespace
@@ -471,16 +472,24 @@ mod tests {
                 println!("query #{}: {}", i, query);
                 // Parse and execute the query
                 let result = machine.run_query(query.to_string());
-
-                assert!(result.is_ok());
-
                 // Print the result
                 println!("{:?}", result);
+                assert!(result.is_ok());
+
+                last_result = Some(result);
             } else if let Some(code) = block.strip_prefix("consult") {
                 println!("load code: {}", code);
 
                 // Load the code into the machine
                 machine.consult_module_string("facts", code.to_string());
+            } else if let Some(result) = block.strip_prefix("result") {
+                if let Some(Ok(ref last_result)) = last_result {
+                    assert_eq!(
+                        last_result.to_string().trim(),
+                        result.to_string().trim(),
+                    )
+                }
+                
             }
         }
     }
