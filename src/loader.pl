@@ -112,7 +112,7 @@ success_or_warning(Goal) :-
     (   call(Goal) ->
         true
     ;   %% initialization goals can fail without thwarting the load.
-        write('Warning: initialization/1 failed for: '),
+        write('% Warning: initialization/1 failed for: '),
         writeq(Goal),
         nl
     ).
@@ -138,7 +138,7 @@ file_load_cleanup(Evacuable, Error) :-
     load_context(Module),
     abolish(Module:'$initialization_goals'/1),
     unload_evacuable(Evacuable),
-    (  clause('$toplevel':argv(_), _) ->
+    (  clause('$toplevel':started, _) ->
        % let the toplevel call loader:write_error/1
        throw(Error)
     ;  '$print_message_and_fail'(Error)
@@ -188,7 +188,7 @@ warn_about_singletons([], _).
 warn_about_singletons([Singleton|Singletons], LinesRead) :-
     (  filter_anonymous_vars([Singleton|Singletons], VarEqs),
        VarEqs \== [] ->
-       write('Warning: singleton variables '),
+       write('% Warning: singleton variables '),
        print_comma_separated_list(VarEqs),
        write(' at line '),
        write(LinesRead),
@@ -231,14 +231,17 @@ complete_partial_goal(N, HeadArg, InnerHeadArgs, SuppArgs, CompleteHeadArg) :-
     integer(N),
     N >= 0,
     HeadArg =.. [Functor | InnerHeadArgs],
-    % the next two lines are equivalent to length(SuppArgs, N) but
-    % avoid length/2 so that copy_term/3 (which is invoked by
-    % length/2) can be bootstrapped without self-reference.
-    functor(SuppArgsFunctor, '.', N),
-    SuppArgsFunctor =.. [_ | SuppArgs],
-    % length(SuppArgs, N),
-    append(InnerHeadArgs, SuppArgs, InnerHeadArgs0),
-    CompleteHeadArg =.. [Functor | InnerHeadArgs0].
+    (  callable(Functor) ->
+       % the next two lines are equivalent to length(SuppArgs, N) but
+       % avoid length/2 so that copy_term/3 (which is invoked by
+       % length/2) can be bootstrapped without self-reference.
+       functor(SuppArgsFunctor, '.', N),
+       SuppArgsFunctor =.. [_ | SuppArgs],
+       % length(SuppArgs, N),
+       append(InnerHeadArgs, SuppArgs, InnerHeadArgs0),
+       CompleteHeadArg =.. [Functor | InnerHeadArgs0]
+    ;  type_error(callable, Functor, _)
+    ).
 
 inner_meta_specs(0, HeadArg, InnerHeadArgs, InnerMetaSpecs) :-
     !,
@@ -283,7 +286,7 @@ module_expanded_head_variables(Head, HeadVars) :-
 
 print_goal_expansion_warning(Pred) :-
     nl,
-    write('Warning: clause body goal expansion failed because '),
+    write('% Warning: clause body goal expansion failed because '),
     writeq(Pred),
     write(' is not callable.'),
     nl.
@@ -296,7 +299,7 @@ expand_term_goals(Terms0, Terms) :-
           (  atom(Module) ->
              prolog_load_context(module, Target),
              module_expanded_head_variables(Head2, HeadVars),
-             catch(expand_goal(Body0, Target, Body1, HeadVars),
+             catch(expand_goal(Body0, Target, Body1, HeadVars, []),
                    error(type_error(callable, Pred), _),
                    (  loader:print_goal_expansion_warning(Pred),
                       builtins:(Body1 = Body0)
@@ -306,7 +309,7 @@ expand_term_goals(Terms0, Terms) :-
           )
        ;  module_expanded_head_variables(Head1, HeadVars),
           prolog_load_context(module, Target),
-          catch(expand_goal(Body0, Target, Body1, HeadVars),
+          catch(expand_goal(Body0, Target, Body1, HeadVars, []),
                 error(type_error(callable, Pred), _),
                 (  loader:print_goal_expansion_warning(Pred),
                    builtins:(Body1 = Body0)
@@ -726,9 +729,9 @@ subgoal_expansion(Goal, Module, ExpandedGoal) :-
     ).
 
 
-:- non_counted_backtracking expand_subgoal/5.
+:- non_counted_backtracking expand_subgoal/6.
 
-expand_subgoal(UnexpandedGoals, MS, M, ExpandedGoals, HeadVars) :-
+expand_subgoal(UnexpandedGoals, MS, M, ExpandedGoals, HeadVars, TGs) :-
     strip_subst_module(UnexpandedGoals, M, Module, UnexpandedGoals0),
     nonvar(UnexpandedGoals0),
     complete_partial_goal(MS, UnexpandedGoals0, _, SuppArgs, UnexpandedGoals1),
@@ -740,7 +743,7 @@ expand_subgoal(UnexpandedGoals, MS, M, ExpandedGoals, HeadVars) :-
     ),
     strip_subst_module(UnexpandedGoals3, Module, Module1, UnexpandedGoals4),
     (  inner_meta_specs(0, UnexpandedGoals4, _, MetaSpecs) ->
-       expand_module_names(UnexpandedGoals4, MetaSpecs, Module1, ExpandedGoals0, HeadVars)
+       expand_module_names(UnexpandedGoals4, MetaSpecs, Module1, ExpandedGoals0, HeadVars, TGs)
     ;  ExpandedGoals0 = UnexpandedGoals4
     ),
     '$compile_inline_or_expanded_goal'(ExpandedGoals0, SuppArgs, ExpandedGoals1, Module1, UnexpandedGoals0),
@@ -769,10 +772,10 @@ expand_module_name(ESG0, MS, M, ESG) :-
 
 :- non_counted_backtracking eq_member/2.
 
-eq_member(V, [L-_|Ls]) :-
+eq_member(V-M, [L-M|Ls]) :-
     V == L.
-eq_member(V, [_|Ls]) :-
-    eq_member(V, Ls).
+eq_member(V-M, [_|Ls]) :-
+    eq_member(V-M, Ls).
 
 :- non_counted_backtracking qualified_spec/1.
 
@@ -782,11 +785,19 @@ qualified_spec(MS) :- integer(MS), MS >= 0.
 
 :- non_counted_backtracking expand_meta_predicate_subgoals/5.
 
-expand_meta_predicate_subgoals([SG | SGs], [MS | MSs], M, [ESG | ESGs], HeadVars) :-
+expand_meta_predicate_subgoals([SG | SGs], [MS | MSs], M, [ESG | ESGs], HeadVars, TGs) :-
     (  var(SG) ->
        (  qualified_spec(MS) ->
-          (  eq_member(SG, HeadVars) ->
+          (  eq_member(SG-_, HeadVars) ->
              ESG = SG
+          ;  eq_member(SG-TG, TGs),
+             % transitive goals come about from previous equalities:
+             % if SG was bound by (=)/2 to a potential goal TG earlier
+             % in the goal sequence, expand TG and substitute SG with it
+             % in this subgoal context. the binding to SG must not be
+             % changed.
+             expand_subgoal(TG, MS, M, ESG, HeadVars, TGs) ->
+             true
           ;  expand_module_name(SG, MS, M, ESG)
           )
        ;  ESG = SG
@@ -795,26 +806,26 @@ expand_meta_predicate_subgoals([SG | SGs], [MS | MSs], M, [ESG | ESGs], HeadVars
        expand_module_name(SG, MS, M, ESG)
     ;  '$is_expanded_or_inlined'(SG) ->
        ESG = SG
-    ;  expand_subgoal(SG, MS, M, ESG, HeadVars) ->
+    ;  expand_subgoal(SG, MS, M, ESG, HeadVars, TGs) ->
        true
     ;  integer(MS),
        MS >= 0 ->
        expand_module_name(SG, MS, M, ESG)
     ;  SG = ESG
     ),
-    expand_meta_predicate_subgoals(SGs, MSs, M, ESGs, HeadVars).
+    expand_meta_predicate_subgoals(SGs, MSs, M, ESGs, HeadVars, TGs).
 
-expand_meta_predicate_subgoals([], _, _, [], _).
+expand_meta_predicate_subgoals([], _, _, [], _, _).
 
-:- non_counted_backtracking expand_module_names/5.
+:- non_counted_backtracking expand_module_names/6.
 
-expand_module_names(Goals, MetaSpecs, Module, ExpandedGoals, HeadVars) :-
+expand_module_names(Goals, MetaSpecs, Module, ExpandedGoals, HeadVars, TGs) :-
     Goals =.. [GoalFunctor | SubGoals],
     (  GoalFunctor == (:),
        SubGoals = [M, SubGoal] ->
-       expand_module_names(SubGoal, MetaSpecs, M, ExpandedSubGoal, HeadVars),
+       expand_module_names(SubGoal, MetaSpecs, M, ExpandedSubGoal, HeadVars, TGs),
        expand_module_name(ExpandedSubGoal, 0, M, ExpandedGoals)
-    ;  expand_meta_predicate_subgoals(SubGoals, MetaSpecs, Module, ExpandedGoalList, HeadVars),
+    ;  expand_meta_predicate_subgoals(SubGoals, MetaSpecs, Module, ExpandedGoalList, HeadVars, TGs),
        ExpandedGoals =.. [GoalFunctor | ExpandedGoalList]
     ).
 
@@ -822,26 +833,26 @@ expand_module_names(Goals, MetaSpecs, Module, ExpandedGoals, HeadVars) :-
 :- non_counted_backtracking expand_goal/3.
 
 expand_goal(UnexpandedGoals, Module, ExpandedGoals) :-
-    catch(loader:expand_goal(UnexpandedGoals, Module, ExpandedGoals, []),
+    catch(loader:expand_goal(UnexpandedGoals, Module, ExpandedGoals, [], []),
           error(type_error(callable, _), _),
           UnexpandedGoals = ExpandedGoals),
     !.
 
-:- non_counted_backtracking expand_goal/4.
+:- non_counted_backtracking expand_goal/5.
 
-expand_goal(UnexpandedGoals, Module, ExpandedGoals, HeadVars) :-
+expand_goal(UnexpandedGoals, Module, ExpandedGoals, HeadVars, TGs) :-
     (  var(UnexpandedGoals) ->
-       expand_module_names(call(UnexpandedGoals), [0], Module, ExpandedGoals, HeadVars)
+       expand_module_names(call(UnexpandedGoals), [0], Module, ExpandedGoals, HeadVars, TGs)
     ;  goal_expansion(UnexpandedGoals, Module, UnexpandedGoals1),
        (  Module \== user ->
           goal_expansion(UnexpandedGoals1, user, Goals)
        ;  Goals = UnexpandedGoals1
        ),
-       (  expand_goal_cases(Goals, Module, ExpandedGoals, HeadVars) ->
+       (  expand_goal_cases(Goals, Module, ExpandedGoals, HeadVars, TGs) ->
           true
        ;  predicate_property(Module:Goals, meta_predicate(MetaSpecs0)),
           MetaSpecs0 =.. [_ | MetaSpecs] ->
-          expand_module_names(Goals, MetaSpecs, Module, ExpandedGoals, HeadVars)
+          expand_module_names(Goals, MetaSpecs, Module, ExpandedGoals, HeadVars, TGs)
        ;  thread_goals(Goals, ExpandedGoals, (','))
        ;  Goals = ExpandedGoals
        )
@@ -874,28 +885,40 @@ expand_call_goal_(UnexpandedGoals, Module, ExpandedGoals) :-
        )
     ).
 
-:- non_counted_backtracking expand_goal_cases/4.
+:- non_counted_backtracking transitive_goal/3.
 
-expand_goal_cases((Goal0, Goals0), Module, ExpandedGoals, HeadVars) :-
-    (  expand_goal(Goal0, Module, Goal1, HeadVars) ->
-       expand_goal(Goals0, Module, Goals1, HeadVars),
+transitive_goal(G, TGs0, TGs1) :-
+    (  G = (G1 = PotentialGoal),
+       callable(PotentialGoal),
+       subsumes_term(G1, PotentialGoal) ->
+       TGs1 = [G1-PotentialGoal|TGs0]
+    ;  TGs1 = TGs0
+    ).
+
+:- non_counted_backtracking expand_goal_cases/5.
+
+expand_goal_cases((Goal0, Goals0), Module, ExpandedGoals, HeadVars, TGs) :-
+    (  expand_goal(Goal0, Module, Goal1, HeadVars, TGs) ->
+       transitive_goal(Goal0, TGs, TGs1),
+       expand_goal(Goals0, Module, Goals1, HeadVars, TGs1),
        thread_goals(Goal1, ExpandedGoals, Goals1, (','))
-    ;  expand_goal(Goals0, Module, Goals1, HeadVars),
+    ;  expand_goal(Goals0, Module, Goals1, HeadVars, TGs),
        ExpandedGoals = (Goal0, Goals1)
     ).
-expand_goal_cases((Goals0 -> Goals1), Module, ExpandedGoals, HeadVars) :-
-    expand_goal(Goals0, Module, ExpandedGoals0, HeadVars),
-    expand_goal(Goals1, Module, ExpandedGoals1, HeadVars),
+expand_goal_cases((Goals0 -> Goals1), Module, ExpandedGoals, HeadVars, TGs) :-
+    expand_goal(Goals0, Module, ExpandedGoals0, HeadVars, TGs),
+    transitive_goal(ExpandedGoals0, TGs, TGs1),
+    expand_goal(Goals1, Module, ExpandedGoals1, HeadVars, TGs1),
     ExpandedGoals = (ExpandedGoals0 -> ExpandedGoals1).
-expand_goal_cases((Goals0 ; Goals1), Module, ExpandedGoals, HeadVars) :-
-    expand_goal(Goals0, Module, ExpandedGoals0, HeadVars),
-    expand_goal(Goals1, Module, ExpandedGoals1, HeadVars),
+expand_goal_cases((Goals0 ; Goals1), Module, ExpandedGoals, HeadVars, TGs) :-
+    expand_goal(Goals0, Module, ExpandedGoals0, HeadVars, TGs),
+    expand_goal(Goals1, Module, ExpandedGoals1, HeadVars, TGs),
     ExpandedGoals = (ExpandedGoals0 ; ExpandedGoals1).
-expand_goal_cases((\+ Goals0), Module, ExpandedGoals, HeadVars) :-
-    expand_goal(Goals0, Module, Goals1, HeadVars),
+expand_goal_cases((\+ Goals0), Module, ExpandedGoals, HeadVars, TGs) :-
+    expand_goal(Goals0, Module, Goals1, HeadVars, TGs),
     ExpandedGoals = (\+ Goals1).
-expand_goal_cases((Module:Goals0), _, ExpandedGoals, HeadVars) :-
-    expand_goal(Goals0, Module, Goals1, HeadVars),
+expand_goal_cases((Module:Goals0), _, ExpandedGoals, HeadVars, TGs) :-
+    expand_goal(Goals0, Module, Goals1, HeadVars, TGs),
     ExpandedGoals = (Module:Goals1).
 
 :- non_counted_backtracking thread_goals/3.

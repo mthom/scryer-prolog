@@ -469,6 +469,7 @@ macro_rules! arena_allocated_impl_for_stream {
             #[inline]
             fn copy_to_arena(self, dst: *mut Self) -> Self::PtrToAllocated {
                 unsafe {
+                    // Miri seems to hit this a lot
                     ptr::write(dst, self);
                     TypedArenaPtr::new(dst as *mut Self)
                 }

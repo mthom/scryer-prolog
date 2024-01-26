@@ -821,9 +821,9 @@ impl AllocSlab {
     }
 
     fn payload_offset<T>(&self) -> *mut T {
-        let mut ptr = (self as *const AllocSlab) as usize;
-        ptr += mem::size_of::<AllocSlab>();
-        ptr as *mut T
+        // This looks really scary, should this method be marked as unsafe?
+        // Also, this seems to cause UB.
+        unsafe { (self as *const AllocSlab).add(1) as *mut T }
     }
 }
 
@@ -864,6 +864,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "blocked on streams.rs UB")]
     fn heap_cell_value_const_cast() {
         let mut wam = MockWAM::new();
         #[cfg(target_pointer_width = "32")]
@@ -907,6 +908,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "blocked on arena.rs UB")]
     fn heap_put_literal_tests() {
         let mut wam = MockWAM::new();
 

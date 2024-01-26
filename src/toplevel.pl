@@ -1,7 +1,5 @@
-:- module('$toplevel', [argv/1,
-                        copy_term/3]).
+:- module('$toplevel', []).
 
-:- use_module(library(atts), [call_residue_vars/2]).
 :- use_module(library(charsio)).
 :- use_module(library(error)).
 :- use_module(library(files)).
@@ -9,11 +7,13 @@
 :- use_module(library(lambda)).
 :- use_module(library(lists)).
 :- use_module(library(si)).
+:- use_module(library(os)).
 
 :- use_module(library('$project_atts')).
 :- use_module(library('$atts')).
 
 :- dynamic(disabled_init_file/0).
+:- dynamic(started/0).
 
 load_scryerrc :-
     (  '$home_directory'(HomeDir) ->
@@ -26,24 +26,18 @@ load_scryerrc :-
     ;  true
     ).
 
-:- dynamic(argv/1).
-
-'$repl'([_|Args0]) :-
-    \+ argv(_),
-    (   append(Args1, ["--"|Args2], Args0) ->
-        asserta('$toplevel':argv(Args2)),
+'$repl' :-
+    asserta('$toplevel':started),
+    raw_argv(Args0),
+    (   append(Args1, ["--"|_], Args0) ->
         Args = Args1
-    ;   asserta('$toplevel':argv([])),
-        Args = Args0
+    ;   Args = Args0
     ),
-    delegate_task(Args, []),
-    (\+ disabled_init_file -> load_scryerrc ; true),
-    repl.
-'$repl'(_) :-
-    (   \+ argv(_) -> asserta('$toplevel':argv([]))
+    (   Args = [_|TaskArgs] ->
+	delegate_task(TaskArgs, [])
     ;   true
     ),
-    load_scryerrc,
+    (\+ disabled_init_file -> load_scryerrc ; true),
     repl.
 
 delegate_task([], []).
@@ -134,7 +128,7 @@ run_goals([g(Gs0)|Goals]) :- !,
                   write_term(Exception, [double_quotes(DQ)]), nl % halt?
               )
         ) -> true
-    ;   write('Warning: initialization failed for: '),
+    ;   write('% Warning: initialization failed for: '),
         write_term(Goal, [variable_names(VNs),double_quotes(DQ)]), nl
     ),
     run_goals(Goals).
@@ -191,7 +185,7 @@ submit_query_and_print_results_(Term, VarList) :-
     bb_put('$report_all', false),
     bb_put('$report_n_more', 0),
     expand_goal(Term, user, Term0),
-    atts:call_residue_vars(user:Term0, AttrVars),
+    call_residue_vars(user:Term0, AttrVars),
     write_eqs_and_read_input(B, VarList, AttrVars),
     !.
 submit_query_and_print_results_(_, _) :-
@@ -314,7 +308,11 @@ write_eqs_and_read_input(B, VarList, AttrVars) :-
     % one layer of depth added for (=/2) functor
     '$term_variables_under_max_depth'(OrigVars, 22, Vars0),
     '$project_atts':project_attributes(Vars0, AttrVars),
-    copy_term(AttrVars, AttrVars, AttrGoals),
+    % Need to copy all the visible Vars here so that they appear
+    % properly in AttrGoals, even the non-attributed. Need to also
+    % copy all the attributed variables here so that anonymous
+    % attributed variables also appear properly in AttrGoals.
+    copy_term([Vars0, AttrVars], [Vars0, AttrVars], AttrGoals),
     term_variables(AttrGoals, AttrGoalVars),
     append([Vars0, AttrGoalVars, AttrVars], Vars),
     charsio:extend_var_list(Vars, VarList, NewVarList, fabricated),
@@ -452,4 +450,3 @@ print_exception_with_check(E) :-
     % is expected to be printed instead.
     ;  print_exception(E)
     ).
-

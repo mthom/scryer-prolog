@@ -1833,9 +1833,33 @@ impl Machine {
     }
 
     pub(crate) fn scoped_clause_to_evacuable(&mut self) -> CallResult {
-        let module_name = cell_as_atom!(self
-            .machine_st
-            .store(self.machine_st.deref(self.machine_st.registers[1])));
+        let target = self.deref_register(1);
+
+        let mut permission_error = || {
+            let err = self.machine_st.permission_error(
+                Permission::Modify,
+                atom!("static_procedure"),
+                functor_stub(atom!(":"), 2)
+                    .into_iter()
+                    .collect::<MachineStub>(),
+            );
+
+            self.machine_st
+                .error_form(err, functor_stub(atom!("load"), 1))
+        };
+
+        let module_name = read_heap_cell!(target,
+            (HeapCellValueTag::Atom, (name, arity)) => {
+                if arity == 0 {
+                    name
+                } else {
+                    return Err(permission_error());
+                }
+            }
+            _ => {
+                return Err(permission_error());
+            }
+        );
 
         let loader = self.loader_from_heap_evacuable(temp_v!(3));
 
@@ -1948,10 +1972,12 @@ impl Machine {
             _ => CompilationTarget::Module(module_name),
         };
 
-        let stub_gen = || match append_or_prepend {
-            AppendOrPrepend::Append => functor_stub(atom!("assertz"), 1),
-            AppendOrPrepend::Prepend => functor_stub(atom!("asserta"), 1),
+        let key = match append_or_prepend {
+            AppendOrPrepend::Append => (atom!("assertz"), 1),
+            AppendOrPrepend::Prepend => (atom!("asserta"), 1),
         };
+
+        let stub_gen = || functor_stub(key.0, key.1);
 
         let head = self.deref_register(2);
 
@@ -1991,7 +2017,11 @@ impl Machine {
                     .map(|code_idx| code_idx.get_tag())
                     .unwrap_or(IndexPtrTag::DynamicUndefined);
 
-                idx_tag == IndexPtrTag::DynamicUndefined || idx_tag == IndexPtrTag::Undefined
+                if idx_tag == IndexPtrTag::Index {
+                    return Err(SessionError::CannotOverwriteStaticProcedure((name, arity)));
+                } else {
+                    idx_tag == IndexPtrTag::Undefined || idx_tag == IndexPtrTag::DynamicUndefined
+                }
             } else if is_builtin {
                 return Err(SessionError::CannotOverwriteBuiltIn((name, arity)));
             } else {

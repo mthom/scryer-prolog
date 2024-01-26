@@ -557,20 +557,29 @@ impl Machine {
                         }
 
                         let mut p = self.machine_st.p;
+                        let mut arity = 0;
 
                         while self.code[p].is_head_instr() {
+                            for r in self.code[p].registers() {
+                                if let RegType::Temp(t) = r {
+                                    arity = std::cmp::max(arity, t);
+                                }
+                            }
+
                             p += 1;
                         }
 
-                        let instr =
-                            std::mem::replace(&mut self.code[p], Instruction::VerifyAttrInterrupt);
+                        let instr = std::mem::replace(
+                            &mut self.code[p],
+                            Instruction::VerifyAttrInterrupt(arity),
+                        );
 
                         self.code[VERIFY_ATTR_INTERRUPT_LOC] = instr;
                         self.machine_st.attr_var_init.cp = p;
                     }
-                    &Instruction::VerifyAttrInterrupt => {
-                        let (_, arity) = self.code[VERIFY_ATTR_INTERRUPT_LOC].to_name_and_arity();
-                        let arity = std::cmp::max(arity, self.machine_st.num_of_args);
+                    &Instruction::VerifyAttrInterrupt(arity) => {
+                        // let (_, arity) = self.code[VERIFY_ATTR_INTERRUPT_LOC].to_name_and_arity();
+                        // let arity = std::cmp::max(arity, self.machine_st.num_of_args);
                         self.run_verify_attr_interrupt(arity);
                     }
                     &Instruction::Add(ref a1, ref a2, t) => {
@@ -4147,6 +4156,14 @@ impl Machine {
                         try_or_throw!(self.machine_st, self.js_eval());
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                     }
+                    &Instruction::CallArgv => {
+                        try_or_throw!(self.machine_st, self.argv());
+                        step_or_fail!(self, self.machine_st.p += 1);
+                    }
+                    &Instruction::ExecuteArgv => {
+                        try_or_throw!(self.machine_st, self.argv());
+                        step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+                    }
                     &Instruction::CallCurrentTime => {
                         self.current_time();
                         step_or_fail!(self, self.machine_st.p += 1);
@@ -4491,44 +4508,28 @@ impl Machine {
                         self.crypto_curve_scalar_mult();
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                     }
-                    #[cfg(feature = "crypto-full")]
-                    &Instruction::CallEd25519Sign => {
-                        self.ed25519_sign();
+                    &Instruction::CallEd25519SignRaw => {
+                        self.ed25519_sign_raw();
                         step_or_fail!(self, self.machine_st.p += 1);
                     }
-                    #[cfg(feature = "crypto-full")]
-                    &Instruction::ExecuteEd25519Sign => {
-                        self.ed25519_sign();
+                    &Instruction::ExecuteEd25519SignRaw => {
+                        self.ed25519_sign_raw();
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                     }
-                    #[cfg(feature = "crypto-full")]
-                    &Instruction::CallEd25519Verify => {
-                        self.ed25519_verify();
+                    &Instruction::CallEd25519VerifyRaw => {
+                        self.ed25519_verify_raw();
                         step_or_fail!(self, self.machine_st.p += 1);
                     }
-                    #[cfg(feature = "crypto-full")]
-                    &Instruction::ExecuteEd25519Verify => {
-                        self.ed25519_verify();
+                    &Instruction::ExecuteEd25519VerifyRaw => {
+                        self.ed25519_verify_raw();
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                     }
-                    #[cfg(feature = "crypto-full")]
-                    &Instruction::CallEd25519NewKeyPair => {
-                        self.ed25519_new_key_pair();
+                    &Instruction::CallEd25519SeedToPublicKey => {
+                        self.ed25519_seed_to_public_key();
                         step_or_fail!(self, self.machine_st.p += 1);
                     }
-                    #[cfg(feature = "crypto-full")]
-                    &Instruction::ExecuteEd25519NewKeyPair => {
-                        self.ed25519_new_key_pair();
-                        step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
-                    }
-                    #[cfg(feature = "crypto-full")]
-                    &Instruction::CallEd25519KeyPairPublicKey => {
-                        self.ed25519_key_pair_public_key();
-                        step_or_fail!(self, self.machine_st.p += 1);
-                    }
-                    #[cfg(feature = "crypto-full")]
-                    &Instruction::ExecuteEd25519KeyPairPublicKey => {
-                        self.ed25519_key_pair_public_key();
+                    &Instruction::ExecuteEd25519SeedToPublicKey => {
+                        self.ed25519_seed_to_public_key();
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                     }
                     &Instruction::CallCurve25519ScalarMult => {

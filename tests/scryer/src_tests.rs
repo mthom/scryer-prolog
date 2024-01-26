@@ -1,32 +1,37 @@
-use crate::helper::{load_module_test, run_top_level_test_with_args};
+use crate::helper::load_module_test;
 use serial_test::serial;
 
 #[serial]
 #[test]
+#[cfg_attr(miri, ignore = "blocked on streams.rs UB")]
 fn builtins() {
     load_module_test("src/tests/builtins.pl", "");
 }
 
 #[serial]
 #[test]
+#[cfg_attr(miri, ignore = "blocked on streams.rs UB")]
 fn call_with_inference_limit() {
     load_module_test("src/tests/call_with_inference_limit.pl", "");
 }
 
 #[serial]
 #[test]
+#[cfg_attr(miri, ignore = "blocked on streams.rs UB")]
 fn facts() {
     load_module_test("src/tests/facts.pl", "");
 }
 
 #[serial]
 #[test]
+#[cfg_attr(miri, ignore = "blocked on streams.rs UB")]
 fn hello_world() {
     load_module_test("src/tests/hello_world.pl", "Hello World!\n");
 }
 
 #[serial]
 #[test]
+#[cfg_attr(miri, ignore = "blocked on streams.rs UB")]
 fn syntax_error() {
     load_module_test(
         "tests-pl/syntax_error.pl",
@@ -36,18 +41,21 @@ fn syntax_error() {
 
 #[serial]
 #[test]
+#[cfg_attr(miri, ignore = "blocked on streams.rs UB")]
 fn predicates() {
     load_module_test("src/tests/predicates.pl", "");
 }
 
 #[serial]
 #[test]
+#[cfg_attr(miri, ignore = "blocked on streams.rs UB")]
 fn rules() {
     load_module_test("src/tests/rules.pl", "");
 }
 
 #[serial]
 #[test]
+#[cfg_attr(miri, ignore = "blocked on streams.rs UB")]
 fn setup_call_cleanup_load() {
     load_module_test(
         "src/tests/setup_call_cleanup.pl",
@@ -55,59 +63,16 @@ fn setup_call_cleanup_load() {
     );
 }
 
-#[test]
-fn setup_call_cleanup_process() {
-    run_top_level_test_with_args(
-        ["src/tests/setup_call_cleanup.pl", "-f", "-g", "halt"],
-        "",
-        "1+21+31+2>A+B1+G1+2>41+2>B1+2>31+2>31+2>4ba",
-    );
-}
-
 #[serial]
 #[test]
+#[cfg_attr(miri, ignore = "blocked on streams.rs UB")]
 fn clpz_load() {
     load_module_test("src/tests/clpz/test_clpz.pl", "");
 }
 
 #[serial]
 #[test]
+#[cfg_attr(miri, ignore = "blocked on streams.rs UB")]
 fn iso_conformity_tests() {
     load_module_test("tests-pl/iso-conformity-tests.pl", "All tests passed");
-}
-
-#[test]
-fn dif_tests() {
-    run_top_level_test_with_args(
-        ["src/tests/dif.pl", "-f", "-g", "main_quiet"],
-        "",
-        "All tests passed",
-    );
-}
-
-#[test]
-fn ground_tests() {
-    run_top_level_test_with_args(
-        ["src/tests/ground.pl", "-f", "-g", "main_quiet"],
-        "",
-        "All tests passed",
-    );
-}
-
-#[test]
-fn term_variables_tests() {
-    run_top_level_test_with_args(
-        ["src/tests/term_variables.pl", "-f", "-g", "main_quiet"],
-        "",
-        "All tests passed",
-    );
-}
-
-#[test]
-fn acyclic_term_tests() {
-    run_top_level_test_with_args(
-        ["src/tests/acyclic_term.pl", "-f", "-g", "main_quiet"],
-        "",
-        "All tests passed",
-    );
 }

@@ -12,9 +12,12 @@ to learn more about them.
           [op(1105, xfy, '|'),
            phrase/2,
            phrase/3,
+           phrase/4,
+           phrase/5,
            seq//1,
            seqq//1,
-           ... //0
+           ... //0,
+           (-->)/2
           ]).
 
 :- use_module(library(error)).
@@ -25,6 +28,10 @@ to learn more about them.
 :- meta_predicate phrase(2, ?).
 
 :- meta_predicate phrase(2, ?, ?).
+
+:- meta_predicate phrase(2, ?, ?, ?).
+
+:- meta_predicate phrase(2, ?, ?, ?, ?).
 
 %% phrase(+Body, ?Ls).
 %
@@ -75,6 +82,34 @@ phrase(GRBody, S0, S) :-
     ;  call(M:GRBody1, S0, S)
     ).
 
+phrase(GRBody, Arg, S0, S) :-
+    strip_module(GRBody, M, GRBody1),
+    (  var(GRBody) ->
+       instantiation_error(phrase/4)
+    ;  nonvar(GRBody1),
+       GRBody1 =.. GRBodys1,
+       append(GRBodys1, [Arg], GRBodys2),
+       GRBody2 =.. GRBodys2,
+       dcg_constr(GRBody2),
+       dcg_body(GRBody2, S0, S, GRBody3) ->
+       call(M:GRBody3)
+    ;  call(M:GRBody1, Arg, S0, S)
+    ).
+
+phrase(GRBody, Arg1, Arg2, S0, S) :-
+    strip_module(GRBody, M, GRBody1),
+    (  var(GRBody) ->
+       instantiation_error(phrase/5)
+    ;  nonvar(GRBody1),
+       GRBody1 =.. GRBodys1,
+       append(GRBodys1, [Arg1,Arg2], GRBodys2),
+       GRBody2 =.. GRBodys2,
+       dcg_constr(GRBody2),
+       dcg_body(GRBody2, S0, S, GRBody3) ->
+       call(M:GRBody3)
+    ;  call(M:GRBody1, Arg1, Arg2, S0, S)
+    ).
+
 % The same version of the below two dcg_rule clauses, but with module scoping.
 dcg_rule(( M:NonTerminal, Terminals --> GRBody ), ( M:Head :- Body )) :-
     dcg_non_terminal(NonTerminal, S0, S, Head),
@@ -101,7 +136,10 @@ dcg_rule(( NonTerminal --> GRBody ), ( Head :- Body )) :-
 dcg_non_terminal(NonTerminal, S0, S, Goal) :-
     NonTerminal =.. NonTerminalUniv,
     append(NonTerminalUniv, [S0, S], GoalUniv),
-    Goal =.. GoalUniv.
+    (  callable(NonTerminal) ->
+       Goal =.. GoalUniv
+    ;  Goal = NonTerminal % let call/N throw an error instead of throwing one here.
+    ).
 
 dcg_terminals(Terminals, S0, S, S0 = List) :-
     append(Terminals, S, List).
@@ -116,8 +154,6 @@ dcg_body(GRBody, S0, S, Body) :-
 dcg_body(NonTerminal, S0, S, Goal1) :-
     nonvar(NonTerminal),
     \+ dcg_constr(NonTerminal),
-    NonTerminal \= ( _ -> _ ),
-    NonTerminal \= ( \+ _ ),
     loader:strip_module(NonTerminal, M, NonTerminal0),
     dcg_non_terminal(NonTerminal0, S0, S, Goal0),
     (  functor(NonTerminal, (:), 2) ->
@@ -135,9 +171,13 @@ dcg_constr(( _'|'_ )). % 7.14.6 - alternative
 dcg_constr({_}). % 7.14.7
 dcg_constr(call(_)). % 7.14.8
 dcg_constr(phrase(_)). % 7.14.9
+dcg_constr(phrase(_,_)). % extension of 7.14.9
+dcg_constr(phrase(_,_,_)). % extension of 7.14.9
 dcg_constr(!). % 7.14.10
-%% dcg_constr(\+ _). % 7.14.11 - not (existence implementation dep.)
-dcg_constr((_->_)). % 7.14.12 - if-then (existence implementation dep.)
+dcg_constr(\+ G_0) :- % 7.14.11 - not (existence implementation def.)
+    throw(error(representation_error(dcg_body), [culprit- (\+ G_0)])).
+dcg_constr((If->Then)) :- % 7.14.12 - if-then (existence implementation def.)
+    throw(error(representation_error(dcg_body), [culprit- (If->Then)])).
 
 % The principal functor of the first argument indicates
 % the construct to be expanded.
@@ -162,8 +202,10 @@ dcg_cbody(( GREither '|' GROr ), S0, S, ( Either ; Or )) :-
 dcg_cbody({Goal}, S0, S, ( Goal, S0 = S )).
 dcg_cbody(call(Cont), S0, S, call(Cont, S0, S)).
 dcg_cbody(phrase(Body), S0, S, phrase(Body, S0, S)).
+dcg_cbody(phrase(Body, Arg), S0, S, phrase(Body, Arg, S0, S)).
+dcg_cbody(phrase(Body, Arg1, Arg2), S0, S, phrase(Body, Arg1, Arg2, S0, S)).
 dcg_cbody(!, S0, S, ( !, S0 = S )).
-dcg_cbody(\+ GRBody, S0, S, ( \+ phrase(GRBody,S0,_), S0 = S )).
+% dcg_cbody(\+ GRBody, S0, S, ( \+ phrase(GRBody,S0,_), S0 = S )).
 dcg_cbody(( GRIf -> GRThen ), S0, S, ( If -> Then )) :-
     dcg_body(GRIf, S0, S1, If),
     dcg_body(GRThen, S1, S, Then).
@@ -202,6 +244,8 @@ seqq([Es|Ess]) --> seq(Es), seqq(Ess).
 
 error_goal(error(E, must_be/2), error(E, must_be/2)).
 error_goal(error(E, (=..)/2), error(E, (=..)/2)).
+error_goal(error(representation_error(dcg_body), Context),
+           error(representation_error(dcg_body), Context)).
 error_goal(E, _) :- throw(E).
 
 user:goal_expansion(phrase(GRBody, S, S0), GRBody2) :-
@@ -217,3 +261,10 @@ user:goal_expansion(phrase(GRBody, S, S0), GRBody2) :-
     ).
 
 user:goal_expansion(phrase(GRBody, S), phrase(GRBody, S, [])).
+
+
+% (-->)/2 behaves as if it didn't exist. We export (and define) it
+% only so that clauses for (-->)/2 cannot be asserted when
+% library(dcgs) is loaded.
+
+(_-->_) :- throw(error(existence_error(procedure,(-->)/2),(-->)/2)).

@@ -1,0 +1,1 @@
+args = ["-f", "--no-add-history", "src/tests/term_variables.pl", "-f", "-g", "main_quiet"]

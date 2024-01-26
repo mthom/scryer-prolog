@@ -1,0 +1,1 @@
+args = ["-f", "--no-add-history", "src/tests/when.pl", "-f", "-g", "main_quiet"]

@@ -1,0 +1,11 @@
+use_module(library(dif)).
+use_module(library(iso_ext)).
+-X\=X.
+-X=X.
+dif(-X,X).
+dif(-X,X), -X=X.
+call_residue_vars(dif(-X,X), Vars).
+set_prolog_flag(occurs_check, true).
+-X\=X.
+dif(-X,X).
+halt.

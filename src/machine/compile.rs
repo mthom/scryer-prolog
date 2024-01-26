@@ -42,42 +42,35 @@ pub(super) fn bootstrapping_compile(
     Ok(())
 }
 
-fn lower_bound_of_target_clause(skeleton: &PredicateSkeleton, target_pos: usize) -> usize {
+fn lower_bound_of_target_clause(skeleton: &mut PredicateSkeleton, target_pos: usize) -> usize {
     if target_pos == 0 {
         return 0;
     }
 
-    let arg_num = skeleton.clauses[target_pos - 1].opt_arg_index_key.arg_num();
+    debug_assert!(skeleton.clauses.len() >= 2);
 
-    if arg_num == 0 {
-        return target_pos - 1;
-    }
+    let index = target_pos - 1;
 
-    let mut index_loc_opt = None;
+    let index = if let Some(index_loc) = skeleton.clauses[index]
+        .opt_arg_index_key
+        .switch_on_term_loc()
+    {
+        let search_result = skeleton.clauses.make_contiguous()
+            [0..skeleton.core.clause_assert_margin]
+            .partition_point(|clause_index_info| clause_index_info.clause_start > index_loc);
 
-    for index in (0..target_pos).rev() {
-        let current_arg_num = skeleton.clauses[index].opt_arg_index_key.arg_num();
-
-        if current_arg_num == 0 || current_arg_num != arg_num {
-            return index + 1;
-        }
-
-        if let Some(index_loc) = index_loc_opt {
-            let current_index_loc = skeleton.clauses[index]
-                .opt_arg_index_key
-                .switch_on_term_loc();
-
-            if Some(index_loc) != current_index_loc {
-                return index + 1;
-            }
+        if search_result < skeleton.core.clause_assert_margin {
+            search_result
         } else {
-            index_loc_opt = skeleton.clauses[index]
-                .opt_arg_index_key
-                .switch_on_term_loc();
+            skeleton.clauses.make_contiguous()[skeleton.core.clause_assert_margin..]
+                .partition_point(|clause_index_info| clause_index_info.clause_start < index_loc)
+                + skeleton.core.clause_assert_margin
         }
-    }
+    } else {
+        index
+    };
 
-    0
+    index.clamp(0, skeleton.clauses.len() - 2)
 }
 
 fn derelictize_try_me_else(
@@ -1215,7 +1208,7 @@ fn print_overwrite_warning(
     }
 
     println!(
-        "Warning: overwriting {}/{} because the clauses are discontiguous",
+        "% Warning: overwriting {}/{} because the clauses are discontiguous",
         key.0.as_str(),
         key.1
     );
@@ -1327,7 +1320,8 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                         .clause_clause_locs
                         .extend(&clause_clause_locs.make_contiguous()[0..]);
 
-                    let skeleton = cg.skeleton;
+                    let mut skeleton = cg.skeleton;
+                    skeleton.core.is_dynamic = settings.is_dynamic();
 
                     self.add_extensible_predicate(key, skeleton, predicates.compilation_target);
                 }
@@ -1527,6 +1521,8 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
 
         let code_len = self.wam_prelude.code.len();
 
+        standalone_skeleton.clauses[0].clause_start += code_len;
+
         let skeleton = match self
             .wam_prelude
             .indices
@@ -1539,8 +1535,8 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         match append_or_prepend {
             AppendOrPrepend::Append => {
                 let clause_index_info = standalone_skeleton.clauses.pop_back().unwrap();
-                skeleton.clauses.push_back(clause_index_info);
 
+                skeleton.clauses.push_back(clause_index_info);
                 skeleton.core.clause_clause_locs.push_back(code_len);
 
                 self.payload
@@ -2148,7 +2144,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             .map(|skeleton| skeleton.predicate_info())
             .unwrap_or_default();
 
-        let mut predicate_info = self
+        let predicate_info = self
             .wam_prelude
             .indices
             .get_predicate_skeleton(&self.payload.predicates.compilation_target, &key)
@@ -2183,7 +2179,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             if is_cross_module_clause && !local_predicate_info.is_extensible {
                 if predicate_info.is_multifile {
                     println!(
-                        "Warning: overwriting multifile predicate {}:{}/{} because \
+                        "% Warning: overwriting multifile predicate {}:{}/{} because \
                               it was not locally declared multifile.",
                         self.payload.predicates.compilation_target,
                         key.0.as_str(),
@@ -2210,8 +2206,6 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                             (0..skeleton.clauses.len()).map(Some).collect(),
                             false, // the builtin M:'$clause'/2 is never dynamic.
                         );
-
-                        predicate_info.is_dynamic = false;
                     }
 
                     self.payload

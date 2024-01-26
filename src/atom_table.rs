@@ -239,6 +239,7 @@ impl Atom {
         } else if let Some(ptr) = self.as_ptr() {
             AtomString::Dynamic(AtomTableRef::map(ptr, |ptr| {
                 let header =
+                    // Miri seems to hit this line a lot
                     unsafe { ptr::read::<AtomHeader>(ptr as *const u8 as *const AtomHeader) };
                 let len = header.len() as usize;
                 let buf = unsafe { (ptr as *const u8).add(mem::size_of::<AtomHeader>()) };
@@ -265,7 +266,7 @@ impl Atom {
 
 unsafe fn write_to_ptr(string: &str, ptr: *mut u8) {
     ptr::write(ptr as *mut _, AtomHeader::build_with(string.len() as u64));
-    let str_ptr = (ptr as usize + mem::size_of::<AtomHeader>()) as *mut u8;
+    let str_ptr = ptr.add(mem::size_of::<AtomHeader>());
     ptr::copy_nonoverlapping(string.as_ptr(), str_ptr, string.len());
 }
 

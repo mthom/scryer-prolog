@@ -108,7 +108,7 @@ impl<'a> EagerStackfulPreOrderHeapIter<'a> {
                     let var_value = self.heap[h];
                     self.heap[h].set_mark_bit(self.mark_phase);
 
-                    if !(self.heap[h].is_var() && self.heap[h].get_value() as usize == h) {
+                    if var_value.get_mark_bit() || !(self.heap[h].is_var() && self.heap[h].get_value() as usize == h) {
                         self.iter_stack.push(var_value);
                         continue;
                     }
@@ -125,12 +125,13 @@ impl<'a> EagerStackfulPreOrderHeapIter<'a> {
                         continue;
                     }
 
-                    let value = self.heap[h+1];
-
                     self.heap[h].set_mark_bit(self.mark_phase);
-                    self.heap[h+1].set_mark_bit(self.mark_phase);
 
-                    self.iter_stack.push(value);
+                    if self.heap[h].get_tag() == HeapCellValueTag::PStr {
+                        let value = self.heap[h+1];
+                        self.heap[h+1].set_mark_bit(self.mark_phase);
+                        self.iter_stack.push(value);
+                    }
                 }
                 _ => {
                 }
@@ -685,6 +686,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "it takes too long to run")]
     fn heap_stackless_iter_tests() {
         let mut wam = MockWAM::new();
 
@@ -1756,6 +1758,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "blocked on atom_table.rs UB")]
     fn heap_stackful_iter_tests() {
         let mut wam = MockWAM::new();
 
@@ -2348,6 +2351,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "blocked on atom_table.rs UB")]
     fn heap_stackful_post_order_iter() {
         let mut wam = MockWAM::new();
 
@@ -2831,6 +2835,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "blocked on atom_table.rs UB")]
     fn heap_stackless_post_order_iter() {
         let mut wam = MockWAM::new();
 

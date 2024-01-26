@@ -398,6 +398,7 @@ mod tests {
     use crate::machine::mock_wam::*;
 
     #[test]
+    #[cfg_attr(miri, ignore = "blocked on atom_table.rs UB")]
     fn copier_tests() {
         let mut wam = MockWAM::new();
 

@@ -1005,6 +1005,18 @@ test_311 :- test_syntax_error("Finis ().", syntax_error(incomplete_reduction)).
 test_318 :- writeq_term_to_chars(+((1*2)^3), C),
             C == "+ (1*2)^3".
 
+test_320 :- writeq_term_to_chars([a|\+2], C),
+            C == "[a|\\+2]".
+
+test_321 :- test_syntax_error("writeq((a)(b)).", syntax_error(incomplete_reduction)).
+
+test_324 :- writeq_term_to_chars('%', C),
+            C == "'%'".
+
+test_325 :- test_syntax_error("writeq({[y}]).", syntax_error(incomplete_reduction)).
+
+test_326 :- test_syntax_error("(>)(1,2).", syntax_error(incomplete_reduction)).
+
 run_tests([Test|Tests]) -->
     (  { call(Test) } ->
        []

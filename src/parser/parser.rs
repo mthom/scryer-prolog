@@ -97,7 +97,12 @@ pub(crate) fn as_partial_string(
                         string.push(*c);
                     }
                     _ => {
-                        return Err(Term::Cons(Cell::default(), Box::new(head), orig_tail));
+                        tail = Term::Cons(
+                            Cell::default(),
+                            Box::new((**prev).clone()),
+                            Box::new((**succ).clone()),
+                        );
+                        break;
                     }
                 }
 
@@ -880,11 +885,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
                         .push(Term::Literal(Cell::default(), Literal::Atom(atom)));
                 }
 
-                self.stack[idx].spec = if self.stack[idx].priority > 0 {
-                    TERM
-                } else {
-                    BTERM
-                };
+                self.stack[idx].spec = BTERM;
                 self.stack[idx].tt = TokenType::Term;
                 self.stack[idx].priority = 0;
 

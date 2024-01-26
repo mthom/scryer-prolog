@@ -3,7 +3,7 @@
     Author:        Markus Triska
     E-mail:        triska@metalevel.at
     WWW:           https://www.metalevel.at
-    Copyright (C): 2016-2023 Markus Triska
+    Copyright (C): 2016-2024 Markus Triska
 
     This library provides CLP(ℤ):
 
@@ -1015,6 +1015,9 @@ X in inf..sup.
    needed to schedule the propagators!
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
+:- meta_predicate(duophrase(4, ?, ?)).
+:- meta_predicate(duophrase(4, ?, ?, ?, ?)).
+
 duophrase(NT, As, Bs) :-
         duophrase(NT, As, [], Bs, []).
 
@@ -1735,7 +1738,7 @@ intervals_to_domain(Is, D) :-
 %           _Lower_ must be an integer or the atom *inf*, which
 %           denotes negative infinity. _Upper_ must be an integer or
 %           the atom *sup*, which denotes positive infinity.
-%         * Domain1 \/ Domain2
+%         * Domain1 `\/` Domain2
 %           The union of Domain1 and Domain2.
 
 Var in Dom :- clpz_in(Var, Dom).
@@ -2409,22 +2412,22 @@ sum_finite_domains([C|Cs], [V|Vs], Inf0, Sup0, Inf, Sup) ++>
         ),
         sum_finite_domains(Cs, Vs, Inf2, Sup2, Inf, Sup).
 
-remove_dist_upper_lower([], _, _, _).
-remove_dist_upper_lower([C|Cs], [V|Vs], D1, D2) :-
-        (   fd_get(V, VD, VPs) ->
+remove_dist_upper_lower([], _, _, _) --> [].
+remove_dist_upper_lower([C|Cs], [V|Vs], D1, D2) -->
+        (   { fd_get(V, VD, VPs) } ->
             (   C < 0 ->
-                domain_supremum(VD, n(Sup)),
-                L is Sup + D1//C,
-                domain_remove_smaller_than(VD, L, VD1),
-                domain_infimum(VD1, n(Inf)),
-                G is Inf - D2//C,
-                domain_remove_greater_than(VD1, G, VD2)
-            ;   domain_infimum(VD, n(Inf)),
-                G is Inf + D1//C,
-                domain_remove_greater_than(VD, G, VD1),
-                domain_supremum(VD1, n(Sup)),
-                L is Sup - D2//C,
-                domain_remove_smaller_than(VD1, L, VD2)
+                { domain_supremum(VD, n(Sup)),
+                  L is Sup + D1//C,
+                  domain_remove_smaller_than(VD, L, VD1),
+                  domain_infimum(VD1, n(Inf)),
+                  G is Inf - D2//C,
+                  domain_remove_greater_than(VD1, G, VD2) }
+            ;   { domain_infimum(VD, n(Inf)),
+                  G is Inf + D1//C,
+                  domain_remove_greater_than(VD, G, VD1),
+                  domain_supremum(VD1, n(Sup)),
+                  L is Sup - D2//C,
+                  domain_remove_smaller_than(VD1, L, VD2) }
             ),
             fd_put(V, VD2, VPs)
         ;   true
@@ -2432,16 +2435,16 @@ remove_dist_upper_lower([C|Cs], [V|Vs], D1, D2) :-
         remove_dist_upper_lower(Cs, Vs, D1, D2).
 
 
-remove_dist_upper_leq([], _, _).
-remove_dist_upper_leq([C|Cs], [V|Vs], D1) :-
-        (   fd_get(V, VD, VPs) ->
+remove_dist_upper_leq([], _, _) --> [].
+remove_dist_upper_leq([C|Cs], [V|Vs], D1) -->
+        (   { fd_get(V, VD, VPs) } ->
             (   C < 0 ->
-                domain_supremum(VD, n(Sup)),
-                L is Sup + D1//C,
-                domain_remove_smaller_than(VD, L, VD1)
-            ;   domain_infimum(VD, n(Inf)),
-                G is Inf + D1//C,
-                domain_remove_greater_than(VD, G, VD1)
+                { domain_supremum(VD, n(Sup)),
+                  L is Sup + D1//C,
+                  domain_remove_smaller_than(VD, L, VD1) }
+            ;   { domain_infimum(VD, n(Inf)),
+                  G is Inf + D1//C,
+                  domain_remove_greater_than(VD, G, VD1) }
             ),
             fd_put(V, VD1, VPs)
         ;   true
@@ -2449,18 +2452,18 @@ remove_dist_upper_leq([C|Cs], [V|Vs], D1) :-
         remove_dist_upper_leq(Cs, Vs, D1).
 
 
-remove_dist_upper([], _).
-remove_dist_upper([C*V|CVs], D) :-
-        (   fd_get(V, VD, VPs) ->
+remove_dist_upper([], _) --> [].
+remove_dist_upper([C*V|CVs], D) -->
+        (   { fd_get(V, VD, VPs) } ->
             (   C < 0 ->
-                (   domain_supremum(VD, n(Sup)) ->
-                    L is Sup + D//C,
-                    domain_remove_smaller_than(VD, L, VD1)
+                (   { domain_supremum(VD, n(Sup)) } ->
+                    { L is Sup + D//C,
+                      domain_remove_smaller_than(VD, L, VD1) }
                 ;   VD1 = VD
                 )
-            ;   (   domain_infimum(VD, n(Inf)) ->
-                    G is Inf + D//C,
-                    domain_remove_greater_than(VD, G, VD1)
+            ;   (   { domain_infimum(VD, n(Inf)) } ->
+                    { G is Inf + D//C,
+                      domain_remove_greater_than(VD, G, VD1) }
                 ;   VD1 = VD
                 )
             ),
@@ -2469,18 +2472,18 @@ remove_dist_upper([C*V|CVs], D) :-
         ),
         remove_dist_upper(CVs, D).
 
-remove_dist_lower([], _).
-remove_dist_lower([C*V|CVs], D) :-
-        (   fd_get(V, VD, VPs) ->
+remove_dist_lower([], _) --> [].
+remove_dist_lower([C*V|CVs], D) -->
+        (   { fd_get(V, VD, VPs) } ->
             (   C < 0 ->
-                (   domain_infimum(VD, n(Inf)) ->
-                    G is Inf - D//C,
-                    domain_remove_greater_than(VD, G, VD1)
+                (   { domain_infimum(VD, n(Inf)) } ->
+                    { G is Inf - D//C,
+                      domain_remove_greater_than(VD, G, VD1) }
                 ;   VD1 = VD
                 )
-            ;   (   domain_supremum(VD, n(Sup)) ->
-                    L is Sup - D//C,
-                    domain_remove_smaller_than(VD, L, VD1)
+            ;   (   { domain_supremum(VD, n(Sup)) } ->
+                    { L is Sup - D//C,
+                      domain_remove_smaller_than(VD, L, VD1) }
                 ;   VD1 = VD
                 )
             ),
@@ -2489,26 +2492,26 @@ remove_dist_lower([C*V|CVs], D) :-
         ),
         remove_dist_lower(CVs, D).
 
-remove_upper([], _).
-remove_upper([C*X|CXs], Max) :-
-        (   fd_get(X, XD, XPs) ->
+remove_upper([], _) --> [].
+remove_upper([C*X|CXs], Max) -->
+        (   { fd_get(X, XD, XPs) } ->
             D is Max//C,
             (   C < 0 ->
-                domain_remove_smaller_than(XD, D, XD1)
-            ;   domain_remove_greater_than(XD, D, XD1)
+                { domain_remove_smaller_than(XD, D, XD1) }
+            ;   { domain_remove_greater_than(XD, D, XD1) }
             ),
             fd_put(X, XD1, XPs)
         ;   true
         ),
         remove_upper(CXs, Max).
 
-remove_lower([], _).
-remove_lower([C*X|CXs], Min) :-
-        (   fd_get(X, XD, XPs) ->
+remove_lower([], _) --> [].
+remove_lower([C*X|CXs], Min) -->
+        (   { fd_get(X, XD, XPs) } ->
             D is -Min//C,
             (   C < 0 ->
-                domain_remove_greater_than(XD, D, XD1)
-            ;   domain_remove_smaller_than(XD, D, XD1)
+                { domain_remove_greater_than(XD, D, XD1) }
+            ;   { domain_remove_smaller_than(XD, D, XD1) }
             ),
             fd_put(X, XD1, XPs)
         ;   true
@@ -2747,20 +2750,24 @@ propagator_init_trigger(Vs, P) :-
 prop_init(Prop, V) :- init_propagator(V, Prop).
 
 geq(A, B) :-
-        (   fd_get(A, AD, APs) ->
-            domain_infimum(AD, AI),
-            (   fd_get(B, BD, _) ->
-                domain_supremum(BD, BS),
-                (   AI cis_geq BS -> true
-                ;   propagator_init_trigger(pgeq(A,B))
+        new_queue(Q),
+        phrase((geq(A, B),do_queue), [Q], _).
+
+geq(A, B) -->
+        (   { fd_get(A, AD, APs) } ->
+            { domain_infimum(AD, AI) },
+            (   { fd_get(B, BD, _) } ->
+                { domain_supremum(BD, BS) },
+                (   { AI cis_geq BS } -> true
+                ;   { propagator_init_trigger(pgeq(A,B)) }
                 )
-            ;   (   AI cis_geq n(B) -> true
-                ;   domain_remove_smaller_than(AD, B, AD1),
+            ;   (   { AI cis_geq n(B) } -> true
+                ;   { domain_remove_smaller_than(AD, B, AD1) },
                     fd_put(A, AD1, APs)
                 )
             )
-        ;   fd_get(B, BD, BPs) ->
-            domain_remove_greater_than(BD, A, BD1),
+        ;   { fd_get(B, BD, BPs) } ->
+            { domain_remove_greater_than(BD, A, BD1) },
             fd_put(B, BD1, BPs)
         ;   A >= B
         ).
@@ -4164,6 +4171,7 @@ var(V) --> { var(V) }.
 ground(T) --> { ground(T) }.
 
 true --> [].
+false --> { false }.
 
 X >= Y	--> { X >= Y }.
 X =< Y  --> { X =< Y }.
@@ -4221,10 +4229,7 @@ activate_propagator(propagator(P,State)) -->
             )
         ).
 
-enable_queue  :- true. % NOP
-disable_queue :- true. % NOP
-
-%do_queue --> print_queue, { false }.
+%do_queue --> print_queue, false.
 do_queue -->
         (   queue_enabled ->
             (   queue_get_goal(Goal) -> { call(Goal) }, do_queue
@@ -4507,13 +4512,13 @@ run_propagator(pelement(N, Is, V), MState) -->
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
-run_propagator(pgcc_single(Vs, Pairs), _) --> { gcc_global(Vs, Pairs) }.
+run_propagator(pgcc_single(Vs, Pairs), _) --> gcc_global(Vs, Pairs).
 
-run_propagator(pgcc_check_single(Pairs), _) --> { gcc_check(Pairs) }.
+run_propagator(pgcc_check_single(Pairs), _) --> gcc_check(Pairs).
 
-run_propagator(pgcc_check(Pairs), _) --> { gcc_check(Pairs) }.
+run_propagator(pgcc_check(Pairs), _) --> gcc_check(Pairs).
 
-run_propagator(pgcc(Vs, _, Pairs), _) --> { gcc_global(Vs, Pairs) }.
+run_propagator(pgcc(Vs, _, Pairs), _) --> gcc_global(Vs, Pairs).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -4588,7 +4593,7 @@ run_propagator(pserialized(S_I, D_I, S_J, D_J, _), MState) -->
             kill(MState),
             (   S_I + D_I =< S_J -> []
             ;   S_J + D_J =< S_I -> []
-            ;   { false }
+            ;   false
             )
         ;   serialize_lower_upper(S_I, D_I, S_J, D_J, MState),
             serialize_lower_upper(S_J, D_J, S_I, D_I, MState)
@@ -4661,7 +4666,7 @@ run_propagator(x_eq_abs_plus_v(X,V), MState) -->
         (   nonvar(V) ->
             (   V =:= 0 -> kill(MState), { X in 0..sup }
             ;   V < 0 -> kill(MState), { X #= V / 2 }
-            ;   V > 0 -> { false }
+            ;   false % V > 0
             )
         ;   nonvar(X) ->
             kill(MState),
@@ -4753,55 +4758,55 @@ run_propagator(scalar_product_neq(Cs0,Vs0,P0), MState) -->
           ) }.
 
 run_propagator(scalar_product_leq(Cs0,Vs0,P0), MState) -->
-        { coeffs_variables_const(Cs0, Vs0, Cs, Vs, 0, I),
-          P is P0 - I,
-          (   Vs = [] -> kill(MState), P >= 0
-          ;   duophrase(sum_finite_domains(Cs, Vs, 0, 0, Inf, Sup), Infs, Sups),
-              D1 is P - Inf,
-              disable_queue,
-              (   Infs == [], Sups == [] ->
-                  Inf =< P,
-                  (   Sup =< P -> kill(MState)
-                  ;   remove_dist_upper_leq(Cs, Vs, D1)
-                  )
-              ;   Infs == [] -> Inf =< P, remove_dist_upper(Sups, D1)
-              ;   Infs = [_] -> remove_upper(Infs, D1)
-              ;   true
-              ),
-              enable_queue
-          ) }.
+        { coeffs_variables_const(Cs0, Vs0, Cs, Vs, 0, I) },
+        P is P0 - I,
+        (   Vs = [] -> kill(MState), P >= 0
+        ;   { duophrase(sum_finite_domains(Cs, Vs, 0, 0, Inf, Sup), Infs, Sups) },
+            D1 is P - Inf,
+            disable_queue,
+            (   Infs == [], Sups == [] ->
+                Inf =< P,
+                (   Sup =< P -> kill(MState)
+                ;   remove_dist_upper_leq(Cs, Vs, D1)
+                )
+            ;   Infs == [] -> Inf =< P, remove_dist_upper(Sups, D1)
+            ;   Infs = [_] -> remove_upper(Infs, D1)
+            ;   true
+            ),
+            enable_queue
+        ).
 
 run_propagator(scalar_product_eq(Cs0,Vs0,P0), MState) -->
-        { coeffs_variables_const(Cs0, Vs0, Cs, Vs, 0, I),
-          P is P0 - I,
-          (   Vs = [] -> kill(MState), P =:= 0
-          ;   Vs = [V], Cs = [C] -> kill(MState), P mod C =:= 0, V is P // C
-          ;   Cs == [1,1] -> kill(MState), Vs = [A,B], A + B #= P
-          ;   Cs == [1,-1] -> kill(MState), Vs = [A,B], A #= P + B
-          ;   Cs == [-1,1] -> kill(MState), Vs = [A,B], B #= P + A
-          ;   Cs == [-1,-1] -> kill(MState), Vs = [A,B], P1 is -P, A + B #= P1
-          ;   P =:= 0, Cs == [1,1,-1] -> kill(MState), Vs = [A,B,C], A + B #= C
-          ;   P =:= 0, Cs == [1,-1,1] -> kill(MState), Vs = [A,B,C], A + C #= B
-          ;   P =:= 0, Cs == [-1,1,1] -> kill(MState), Vs = [A,B,C], B + C #= A
-          ;   duophrase(sum_finite_domains(Cs, Vs, 0, 0, Inf, Sup), Infs, Sups),
-              % nl, writeln(Infs-Sups-Inf-Sup),
-              D1 is P - Inf,
-              D2 is Sup - P,
-              disable_queue,
-              (   Infs == [], Sups == [] ->
-                  between(Inf, Sup, P),
-                  remove_dist_upper_lower(Cs, Vs, D1, D2)
-              ;   Sups = [] -> P =< Sup, remove_dist_lower(Infs, D2)
-              ;   Infs = [] -> Inf =< P, remove_dist_upper(Sups, D1)
-              ;   Sups = [_], Infs = [_] ->
-                  remove_lower(Sups, D2),
-                  remove_upper(Infs, D1)
-              ;   Infs = [_] -> remove_upper(Infs, D1)
-              ;   Sups = [_] -> remove_lower(Sups, D2)
-              ;   true
-              ),
-              enable_queue
-          ) }.
+        { coeffs_variables_const(Cs0, Vs0, Cs, Vs, 0, I) },
+        P is P0 - I,
+        (   Vs = [] -> kill(MState), P =:= 0
+        ;   Vs = [V], Cs = [C] -> kill(MState), P mod C =:= 0, V is P // C
+        ;   Cs == [1,1] -> kill(MState), Vs = [A,B], { A + B #= P }
+        ;   Cs == [1,-1] -> kill(MState), Vs = [A,B], { A #= P + B }
+        ;   Cs == [-1,1] -> kill(MState), Vs = [A,B], { B #= P + A }
+        ;   Cs == [-1,-1] -> kill(MState), Vs = [A,B], P1 is -P, { A + B #= P1 }
+        ;   P =:= 0, Cs == [1,1,-1] -> kill(MState), Vs = [A,B,C], { A + B #= C }
+        ;   P =:= 0, Cs == [1,-1,1] -> kill(MState), Vs = [A,B,C], { A + C #= B }
+        ;   P =:= 0, Cs == [-1,1,1] -> kill(MState), Vs = [A,B,C], { B + C #= A }
+        ;   { duophrase(sum_finite_domains(Cs, Vs, 0, 0, Inf, Sup), Infs, Sups) },
+            % { nl, writeln(Infs-Sups-Inf-Sup) },
+            D1 is P - Inf,
+            D2 is Sup - P,
+            disable_queue,
+            (   Infs == [], Sups == [] ->
+                { between(Inf, Sup, P) },
+                remove_dist_upper_lower(Cs, Vs, D1, D2)
+            ;   Sups = [] -> P =< Sup, remove_dist_lower(Infs, D2)
+            ;   Infs = [] -> Inf =< P, remove_dist_upper(Sups, D1)
+            ;   Sups = [_], Infs = [_] ->
+                remove_lower(Sups, D2),
+                remove_upper(Infs, D1)
+            ;   Infs = [_] -> remove_upper(Infs, D1)
+            ;   Sups = [_] -> remove_lower(Sups, D2)
+            ;   true
+            ),
+            enable_queue
+        ).
 
 % X + Y = Z
 run_propagator(pplus(X,Y,Z,Morph), MState) -->
@@ -5048,8 +5053,8 @@ run_propagator(ptzdiv(X,Y,Z,Morph), MState) -->
 %% % Z = X mod Y
 
 run_propagator(pmod(X,Y,Z), MState) -->
-        (   Y == 0 -> { false }
-        ;   Y == Z -> { false }
+        (   Y == 0 -> false
+        ;   Y == Z -> false
         ;   X == Y -> kill(MState), queue_goal(Z = 0)
         ;   true
         ),
@@ -5058,7 +5063,7 @@ run_propagator(pmod(X,Y,Z), MState) -->
             Z is X mod Y
         ;   nonvar(Y), nonvar(Z) ->
             (   Y > 0 -> Z >= 0, Z < Y
-            ;   Y < 0 -> Z =< 0, Z > Y
+            ;   Z =< 0, Z > Y    % Y < 0
             ),
             (   { fd_get(X, _, n(XL), _, _) } ->
                 (   (XL - Z) mod Y =\= 0 ->
@@ -5127,7 +5132,7 @@ run_propagator(pmodz(X,Y,Z), MState) -->
                         fd_put(Z, ZD2, ZPs)
                         % queue_goal(Z #=< X)
                     )
-                ;   X < 0 ->
+                ;   X < 0,
                     (   { fd_get(Y, _, _, n(YU), _), YU < X } ->
                         kill(MState),
                         queue_goal(Z = X)
@@ -5167,7 +5172,7 @@ run_propagator(pmodz(X,Y,Z), MState) -->
                     fd_put(Z, ZD5, ZPs)
                     % queue_goal(Z in ZMin..0)
                 )
-            ;   Y > 0 ->
+            ;   Y > 0,
                 (   { fd_get(X, _, n(XL), n(XU), _), XL >= 0, Y > XU } ->
                     kill(MState),
                     queue_goal(Z = X)
@@ -5378,8 +5383,9 @@ run_propagator(pmax(X,Y,Z), MState) -->
             ;   nonvar(Z) ->
                 (   Z =:= X -> kill(MState), queue_goal(X #>= Y)
                 ;   Z > X -> queue_goal(Z = Y)
-                ;   { false } % Z < X
+                ;   false % Z < X
                 )
+            ;   Y == Z -> kill(MState), queue_goal(Y #>= X)
             ;   { fd_get(Y, _, YInf, YSup, _) },
                 (   { YInf cis_gt n(X) } -> queue_goal(Z = Y)
                 ;   { YSup cis_lt n(X) } -> queue_goal(Z = X)
@@ -5394,7 +5400,7 @@ run_propagator(pmax(X,Y,Z), MState) -->
         ;   { fd_get(Z, ZD, ZPs) } ->
             { fd_get(X, _, XInf, XSup, _),
               fd_get(Y, _, YInf, YSup, _) },
-            (   { YInf cis_gt YSup } -> kill(MState), queue_goal(Z = Y)
+            (   { YInf cis_gt XSup } -> kill(MState), queue_goal(Z = Y)
             ;   { YSup cis_lt XInf } -> kill(MState), queue_goal(Z = X)
             ;   { n(M) cis max(XSup, YSup) } ->
                 { domain_remove_greater_than(ZD, M, ZD1) },
@@ -5413,8 +5419,9 @@ run_propagator(pmin(X,Y,Z), MState) -->
             ;   nonvar(Z) ->
                 (   Z =:= X -> kill(MState), { X #=< Y }
                 ;   Z < X -> Z = Y
-                ;   { false } % Z > X
+                ;   false % Z > X
                 )
+            ;   Y == Z -> kill(MState), queue_goal(Y #=< X)
             ;   { fd_get(Y, _, YInf, YSup, _) },
                 (   { YSup cis_lt n(X) } -> Z = Y
                 ;   { YInf cis_gt n(X) } -> Z = X
@@ -5429,7 +5436,7 @@ run_propagator(pmin(X,Y,Z), MState) -->
         ;   { fd_get(Z, ZD, ZPs) } ->
             { fd_get(X, _, XInf, XSup, _),
               fd_get(Y, _, YInf, YSup, _) },
-            (   { YSup cis_lt YInf } -> kill(MState), Z = Y
+            (   { YSup cis_lt XInf } -> kill(MState), Z = Y
             ;   { YInf cis_gt XSup } -> kill(MState), Z = X
             ;   { n(M) cis min(XInf, YInf) } ->
                 { domain_remove_smaller_than(ZD, M, ZD1) },
@@ -5448,6 +5455,7 @@ run_propagator(pexp(X,Y,Z,Morph), MState) -->
             morph_into_propagator(MState, [Y,Z], reified_eq(1,Y,1,0,[],Z), Morph)
         ;   Y == 0 -> kill(MState), Z = 1
         ;   Y == 1 -> kill(MState), Z = X
+        ;   Y == Z -> kill(MState), X = Y, queue_goal(X in -1\/1)
         ;   nonvar(X) ->
             (   nonvar(Y) ->
                 (   Y >= 0 -> true ; X =:= -1 ),
@@ -5536,7 +5544,7 @@ run_propagator(pexp(X,Y,Z,Morph), MState) -->
                 fd_put(Z, ZD2, ZPs),
                 { (   even(Y), ZU = n(Num) ->
                     integer_kth_root_leq(Num, Y, RU),
-                    (   XL cis_geq n(0), ZL = n(Num1) ->
+                    (   XL cis_geq n(0), ZL = n(Num1), Num1 >= 0 ->
                         integer_kth_root_leq(Num1, Y, RL0),
                         (   RL0^Y < Num1 -> RL is RL0 + 1
                         ;   RL = RL0
@@ -5726,8 +5734,7 @@ run_propagator(reified_fd(V,B), MState) -->
             B = 1
         ;   { B == 0 } ->
             (   { fd_inf(V, inf) } -> []
-            ;   { fd_sup(V, sup) } -> []
-            ;   { false }
+            ;   { fd_sup(V, sup) }
             )
         ;   []
         ).
@@ -6788,13 +6795,20 @@ gcc_pairs([Key-Num0|KNs], Vs, [Key-Num|Rest]) :-
     Constraint", AAAI-96 Portland, OR, USA, pp 209--215, 1996
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
-gcc_global(Vs, KNs) :-
-        gcc_check(KNs),
-        % previously: call do_queue/0 (now a NOP) here to reach a
-        % fix-point: all elements of clpz_gcc_vs must be variables. We
-        % must ensure this holds if gcc_check/1 is later rewritten to
-        % actually disable the queue.
-        with_local_attributes(Vs,
+gcc_global(Vs, KNs) -->
+        % at this point, all elements of clpz_gcc_vs must be
+        % variables, which a previously scheduled and called
+        % gcc_check//1 ensures. Note that gcc_check//1 disables the
+        % queue and accumulates constraints in the queue. Do we need
+        % to insert a call of do_queue//0 here to reach a fixpoint?  I
+        % think not, because verify_attributes/3 gives each variable
+        % that is involved in a unification an opportunity to schedule
+        % its propagators, even if the unifications happen
+        % simultaneously (such as [A,B] = [0,1], which can happen in
+        % the propagator of tuples_in/2). Hence: We need this only if
+        % an example shows it, ideally found by a systematic search
+        % that can be used to test the implementation.
+        { with_local_attributes(Vs,
               (gcc_arcs(KNs, S, Vals),
                variables_with_num_occurrences(Vs, VNs),
                maplist(target_to_v(T), VNs),
@@ -6805,9 +6819,9 @@ gcc_global(Vs, KNs) :-
                    gcc_consistent(T),
                    scc(Vals, gcc_successors),
                    phrase(gcc_goals(Vals), Gs)
-               ;   Gs = [] )), Gs),
+               ;   Gs = [] )), Gs) },
         disable_queue,
-        maplist(call, Gs),
+        neq_nums(Gs),
         enable_queue.
 
 gcc_consistent(T) :-
@@ -6834,7 +6848,7 @@ gcc_edge_goal(arc_to(_,_,V,F), Val) -->
               get_attr(Val, lowlink, L2),
               L1 =\= L2,
               get_attr(Val, value, Value) } ->
-            [clpz:neq_num(V, Value)]
+            [neq_num(V, Value)]
         ;   []
         ).
 
@@ -7004,7 +7018,7 @@ gcc_succ_edge(arc_from(_,_,V,F)) -->
    consistency.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
-gcc_check(Pairs) :-
+gcc_check(Pairs) -->
         disable_queue,
         gcc_check_(Pairs),
         enable_queue.
@@ -7014,36 +7028,36 @@ gcc_done(Num) :-
         del_attr(Num, clpz_gcc_num),
         del_attr(Num, clpz_gcc_occurred).
 
-gcc_check_([]).
-gcc_check_([Key-Num0|KNs]) :-
-        (   get_attr(Num0, clpz_gcc_vs, Vs) ->
-            get_attr(Num0, clpz_gcc_num, Num),
-            get_attr(Num0, clpz_gcc_occurred, Occ0),
-            vs_key_min_others(Vs, Key, 0, Min, Os),
-            put_attr(Num0, clpz_gcc_vs, Os),
-            put_attr(Num0, clpz_gcc_occurred, Occ1),
-            Occ1 is Occ0 + Min,
+gcc_check_([]) --> [].
+gcc_check_([Key-Num0|KNs]) -->
+        (   { get_attr(Num0, clpz_gcc_vs, Vs) } ->
+            { get_attr(Num0, clpz_gcc_num, Num),
+              get_attr(Num0, clpz_gcc_occurred, Occ0),
+              vs_key_min_others(Vs, Key, 0, Min, Os),
+              put_attr(Num0, clpz_gcc_vs, Os),
+              put_attr(Num0, clpz_gcc_occurred, Occ1),
+              Occ1 is Occ0 + Min },
             geq(Num, Occ1),
             % The queue is disabled for efficiency here in any case.
             % If it were enabled, make sure to retain the invariant
             % that gcc_global is never triggered during an
             % inconsistent state (after gcc_done/1 but before all
             % relevant constraints are posted).
-            (   Occ1 == Num -> all_neq(Os, Key), gcc_done(Num0)
-            ;   Os == [] -> gcc_done(Num0), Num = Occ1
-            ;   length(Os, L),
-                Max is Occ1 + L,
+            (   Occ1 == Num -> all_neq(Os, Key), { gcc_done(Num0) }
+            ;   Os == [] -> { gcc_done(Num0) }, Num = Occ1
+            ;   { length(Os, L),
+                  Max is Occ1 + L },
                 geq(Max, Num),
-                (   nonvar(Num) -> Diff is Num - Occ1
-                ;   fd_get(Num, ND, _),
-                    domain_infimum(ND, n(NInf)),
+                (   { nonvar(Num) } -> Diff is Num - Occ1
+                ;   { fd_get(Num, ND, _),
+                      domain_infimum(ND, n(NInf)) },
                     Diff is NInf - Occ1
                 ),
                 L >= Diff,
                 (   L =:= Diff ->
                     Num is Occ1 + Diff,
-                    maplist(=(Key), Os),
-                    gcc_done(Num0)
+                    { maplist(=(Key), Os),
+                      gcc_done(Num0) }
                 ;   true
                 )
             )

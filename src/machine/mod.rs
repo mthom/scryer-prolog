@@ -228,7 +228,7 @@ impl Machine {
         self.machine_st.throw_exception(err);
     }
 
-    fn run_module_predicate(
+    pub fn run_module_predicate(
         &mut self,
         module_name: Atom,
         key: PredicateKey,
@@ -305,29 +305,6 @@ impl Machine {
                 self.machine_st.attr_var_init.verify_attrs_loc = code_index.local().unwrap();
             }
         }
-    }
-
-    pub fn run_top_level(
-        &mut self,
-        module_name: Atom,
-        key: PredicateKey,
-    ) -> std::process::ExitCode {
-        let mut arg_pstrs = vec![];
-
-        for arg in env::args() {
-            arg_pstrs.push(put_complete_string(
-                &mut self.machine_st.heap,
-                &arg,
-                &self.machine_st.atom_tbl,
-            ));
-        }
-
-        self.machine_st.registers[1] = heap_loc_as_cell!(iter_to_heap_list(
-            &mut self.machine_st.heap,
-            arg_pstrs.into_iter()
-        ));
-
-        self.run_module_predicate(module_name, key)
     }
 
     pub fn set_user_input(&mut self, input: String) {
@@ -414,7 +391,7 @@ impl Machine {
         self.code.extend(vec![
             Instruction::BreakFromDispatchLoop,
             Instruction::InstallVerifyAttr,
-            Instruction::VerifyAttrInterrupt,
+            Instruction::VerifyAttrInterrupt(0),
             Instruction::BreakFromDispatchLoop, // the location of LIB_QUERY_SUCCESS
             Instruction::ExecuteTermGreaterThan,
             Instruction::ExecuteTermLessThan,
@@ -925,8 +902,8 @@ impl Machine {
 
             self.machine_st.hb = self.machine_st.heap.len();
 
-            self.machine_st.oip = 0;
-            self.machine_st.iip = 0;
+            // self.machine_st.oip = 0;
+            // self.machine_st.iip = 0;
         }
 
         self.machine_st.p += offset;
@@ -1010,8 +987,22 @@ impl Machine {
 
             self.machine_st.heap.truncate(target_h);
 
-            self.machine_st.oip = 0;
-            self.machine_st.iip = 0;
+            // these registers don't need to be reset here and MUST
+            // NOT be (nor in indexed_try! trust_epilogue is an
+            // exception, see next paragraph)! oip could be reset
+            // without any adverse effects but iip is needed by
+            // get_clause_p to find the last executed clause/2 clause.
+
+            // trust_epilogue must reset these for the sake of
+            // subsequent predicates beginning with
+            // switch_to_term. get_clause_p copes by checking
+            // self.machine_st.b > self.machine.e: if true, it is safe
+            // to use self.machine_st.iip; if false, use the choice
+            // point left at the top of the stack by '$clause'
+            // (specifically its biip value).
+
+            // self.machine_st.oip = 0;
+            // self.machine_st.iip = 0;
         } else {
             self.trust_epilogue(offset);
         }
@@ -1116,7 +1107,7 @@ impl Machine {
             }
             Unknown::Warn => {
                 println!(
-                    "warning: predicate {}/{} is undefined",
+                    "% Warning: predicate {}/{} is undefined",
                     name.as_str(),
                     arity
                 );

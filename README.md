@@ -316,6 +316,35 @@ To quit Scryer Prolog, use the standard predicate `halt/0`:
 ?- halt.
 ```
 
+### Starting Scryer Prolog
+
+Scryer Prolog can be started from the command line by specifying
+options, files and additional arguments. All components are optional:
+
+<pre>
+scryer-prolog [OPTIONS] [FILES] [-- ARGUMENTS]
+</pre>
+
+The supported options are:
+
+```
+   -h, --help             Display help message
+   -v, --version          Print version information and exit
+   -g, --goal GOAL        Run the query GOAL after consulting files
+   -f                     Fast startup. Do not load initialization file (~/.scryerrc)
+   --no-add-history       Prevent adding input to history file (~/.scryer_history)
+```
+
+All specified Prolog files are consulted.
+
+After Prolog files, application-specific arguments can be specified on
+the command line. These arguments can be accessed from within Prolog
+applications with the predicate&nbsp;`argv/1`, which yields the list
+of arguments represented as strings.
+
+Prolog files can also be turned into *shell&nbsp;scripts* as explained in
+https://github.com/mthom/scryer-prolog/issues/2170#issuecomment-1821713993.
+
 ### Dynamic operators
 
 Scryer supports dynamic operators. Using the built-in

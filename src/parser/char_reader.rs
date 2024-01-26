@@ -144,6 +144,35 @@ impl<R: Read> CharRead for CharReader<R> {
             Err(e) => return Some(Err(e)),
         }
 
+        let bad_bytes_error = |buf: &[u8]| {
+            // If we have 4 bytes that still don't make up
+            // a valid code point, then we have garbage.
+
+            // We have bad data in the buffer. Remove
+            // leading bytes until either the buffer is
+            // empty, or we have a valid code point.
+
+            let mut split_point = 1;
+            let mut badbytes = vec![];
+
+            loop {
+                let (bad, rest) = buf.split_at(split_point);
+
+                if rest.is_empty() || str::from_utf8(rest).is_ok() {
+                    badbytes.extend_from_slice(bad);
+                    break;
+                }
+
+                split_point += 1;
+            }
+
+            // Raise the error. If we still have data in
+            // the buffer, it will be returned on the next
+            // loop.
+
+            io::Error::new(io::ErrorKind::InvalidData, BadUtf8Error { bytes: badbytes })
+        };
+
         loop {
             let buf = &self.buf[self.pos..];
 
@@ -159,38 +188,10 @@ impl<R: Read> CharRead for CharReader<R> {
                 };
 
                 if buf.len() - e.valid_up_to() >= 4 {
-                    // If we have 4 bytes that still don't make up
-                    // a valid code point, then we have garbage.
-
-                    // We have bad data in the buffer. Remove
-                    // leading bytes until either the buffer is
-                    // empty, or we have a valid code point.
-
-                    let mut split_point = 1;
-                    let mut badbytes = vec![];
-
-                    loop {
-                        let (bad, rest) = buf.split_at(split_point);
-
-                        if rest.is_empty() || str::from_utf8(rest).is_ok() {
-                            badbytes.extend_from_slice(bad);
-                            break;
-                        }
-
-                        split_point += 1;
-                    }
-
-                    // Raise the error. If we still have data in
-                    // the buffer, it will be returned on the next
-                    // loop.
-
-                    return Some(Err(io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        BadUtf8Error { bytes: badbytes },
-                    )));
+                    return Some(Err(bad_bytes_error(buf)));
                 } else if self.pos >= self.buf.len() {
                     return None;
-                } else if self.buf.len() - self.pos >= 4 {
+                } else if self.buf.len() - self.pos >= 4 && self.pos < e.valid_up_to() {
                     return match str::from_utf8(&self.buf[self.pos..e.valid_up_to()]) {
                         Ok(s) => {
                             let mut chars = s.chars();
@@ -217,18 +218,22 @@ impl<R: Read> CharRead for CharReader<R> {
                     self.buf.truncate(buf_len - self.pos);
 
                     let buf_len = self.buf.len();
+                    self.pos = 0;
+
+                    if buf_len >= 4 {
+                        continue;
+                    }
 
                     let mut word = [0u8; 4];
                     let word_slice = &mut word[buf_len..4];
 
                     match self.inner.read(word_slice) {
                         Err(e) => return Some(Err(e)),
+                        Ok(nread) if nread == 0 => return Some(Err(bad_bytes_error(&self.buf))),
                         Ok(nread) => {
                             self.buf.extend_from_slice(&word_slice[0..nread]);
                         }
                     }
-
-                    self.pos = 0;
                 }
             } else {
                 return None;
@@ -375,6 +380,7 @@ mod tests {
     use std::io::Cursor;
 
     #[test]
+    #[cfg_attr(miri, ignore = "slow and not very relevant")]
     fn plain_string() {
         let mut read_string = CharReader::new(Cursor::new("a string"));
 
@@ -387,6 +393,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "slow and not very relevant")]
     fn greek_string() {
         let mut read_string = CharReader::new(Cursor::new("λέξη"));
 
@@ -399,6 +406,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "slow and not very relevant")]
     fn russian_string() {
         let mut read_string = CharReader::new(Cursor::new("слово"));
 
@@ -411,6 +419,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "slow and not very relevant")]
     fn greek_lorem_ipsum() {
         let lorem_ipsum = "Λορεμ ιπσθμ δολορ σιτ αμετ, οφφενδιτ
     εφφιcιενδι σιτ ει, ηαρθμ λεγερε qθαερενδθμ ιθσ νε. Ηασ νο εροσ
@@ -482,6 +491,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "slow and not very relevant")]
     fn armenian_lorem_ipsum() {
         let lorem_ipsum = "լոռեմ իպսում դոլոռ սիթ ամեթ, նովում գռաեծո
         սեա եա, աբհոռռեանթ դիսպութանդո եի քուի. իդ քուոդ ինդոծթում
@@ -555,6 +565,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "slow and not very relevant")]
     fn russian_lorem_ipsum() {
         let lorem_ipsum = "Лорем ипсум долор сит амет, атяуи дицам еи
         сит, ид сеа фацилис елаборарет. Меа еу яуас алияуид, те яуи

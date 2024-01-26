@@ -39,7 +39,8 @@
                character_si/1,
                term_si/1,
                chars_si/1,
-               dif_si/2]).
+               dif_si/2,
+               when_si/2]).
 
 :- use_module(library(lists)).
 
@@ -98,3 +99,31 @@ dif_si(X, Y) :-
    ( X \= Y -> true
    ; throw(error(instantiation_error,dif_si/2))
    ).
+
+:- meta_predicate(when_si(+, 0)).
+
+%% when_si(Condition, Goal).
+%
+% Executes Goal when Condition becomes true. Throws an instantiation error if
+% it can't decide.
+when_si(Condition, Goal) :-
+    % Taken from https://stackoverflow.com/a/40449516
+    (   when_condition_si(Condition) ->
+        (   Condition ->
+            Goal
+        ;   throw(error(instantiation_error,when_si/2))
+        )
+    ;   throw(error(domain_error(when_condition_si, Condition),_))
+    ).
+
+when_condition_si(Cond) :-
+    var(Cond), !, throw(error(instantiation_error,when_condition_si/2)).
+when_condition_si(ground(_)).
+when_condition_si(nonvar(_)).
+when_condition_si((A, B)) :-
+    when_condition_si(A),
+    when_condition_si(B).
+when_condition_si((A ; B)) :-
+    when_condition_si(A),
+    when_condition_si(B).
+

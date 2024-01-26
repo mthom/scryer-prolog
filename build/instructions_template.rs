@@ -511,18 +511,12 @@ enum SystemClauseType {
     #[cfg(feature = "crypto-full")]
     #[strum_discriminants(strum(props(Arity = "6", Name = "$crypto_data_decrypt")))]
     CryptoDataDecrypt,
-    #[cfg(feature = "crypto-full")]
-    #[strum_discriminants(strum(props(Arity = "4", Name = "$ed25519_sign")))]
-    Ed25519Sign,
-    #[cfg(feature = "crypto-full")]
-    #[strum_discriminants(strum(props(Arity = "4", Name = "$ed25519_verify")))]
-    Ed25519Verify,
-    #[cfg(feature = "crypto-full")]
-    #[strum_discriminants(strum(props(Arity = "1", Name = "$ed25519_new_keypair")))]
-    Ed25519NewKeyPair,
-    #[cfg(feature = "crypto-full")]
-    #[strum_discriminants(strum(props(Arity = "2", Name = "$ed25519_keypair_public_key")))]
-    Ed25519KeyPairPublicKey,
+    #[strum_discriminants(strum(props(Arity = "4", Name = "$ed25519_sign_raw")))]
+    Ed25519SignRaw,
+    #[strum_discriminants(strum(props(Arity = "4", Name = "$ed25519_verify_raw")))]
+    Ed25519VerifyRaw,
+    #[strum_discriminants(strum(props(Arity = "2", Name = "$ed25519_seed_to_public_key")))]
+    Ed25519SeedToPublicKey,
     #[strum_discriminants(strum(props(Arity = "2", Name = "$first_non_octet")))]
     FirstNonOctet,
     #[strum_discriminants(strum(props(Arity = "3", Name = "$load_html")))]
@@ -610,6 +604,8 @@ enum SystemClauseType {
     KeySortWithConstantVarOrdering,
     #[strum_discriminants(strum(props(Arity = "0", Name = "$inference_limit_exceeded")))]
     InferenceLimitExceeded,
+    #[strum_discriminants(strum(props(Arity = "1", Name = "$argv")))]
+    Argv,
     REPL(REPLCodePtr),
 }
 
@@ -796,8 +792,8 @@ enum InstructionTemplate {
     #[strum_discriminants(strum(props(Arity = "0", Name = "install_verify_attr")))]
     InstallVerifyAttr,
     // call verify_attrs.
-    #[strum_discriminants(strum(props(Arity = "0", Name = "verify_attr_interrupt")))]
-    VerifyAttrInterrupt,
+    #[strum_discriminants(strum(props(Arity = "1", Name = "verify_attr_interrupt")))]
+    VerifyAttrInterrupt(usize),
     // procedures
     CallClause(ClauseType, usize, usize, bool, bool), // ClauseType,
                                                       // arity,
@@ -1158,6 +1154,33 @@ fn generate_instruction_preface() -> TokenStream {
 
         impl Instruction {
             #[inline]
+            pub fn registers(&self) -> Vec<RegType> {
+                match self {
+                    &Instruction::GetConstant(_, _, r) => vec![r],
+                    &Instruction::GetList(_, r) => vec![r],
+                    &Instruction::GetPartialString(_, _, r, _) => vec![r],
+                    &Instruction::GetStructure(_, _, _, r) => vec![r],
+                    &Instruction::GetVariable(r, t) => vec![r, temp_v!(t)],
+                    &Instruction::GetValue(r, t) => vec![r, temp_v!(t)],
+                    &Instruction::UnifyLocalValue(r) => vec![r],
+                    &Instruction::UnifyVariable(r) => vec![r],
+                    &Instruction::PutConstant(_, _, r) => vec![r],
+                    &Instruction::PutList(_, r) => vec![r],
+                    &Instruction::PutPartialString(_, _, r, _) => vec![r],
+                    &Instruction::PutStructure(_, _, r) => vec![r],
+                    &Instruction::PutValue(r, t) => vec![r, temp_v!(t)],
+                    &Instruction::PutVariable(r, t) => vec![r, temp_v!(t)],
+                    &Instruction::SetLocalValue(r) => vec![r],
+                    &Instruction::SetVariable(r) => vec![r],
+                    &Instruction::SetValue(r) => vec![r],
+                    &Instruction::GetLevel(r) => vec![r],
+                    &Instruction::GetPrevLevel(r) => vec![r],
+                    &Instruction::GetCutPoint(r) => vec![r],
+                    _ => vec![],
+                }
+            }
+
+            #[inline]
             pub fn to_indexing_line_mut(&mut self) -> Option<&mut Vec<IndexingLine>> {
                 match self {
                     Instruction::IndexingCode(ref mut indexing_code) => Some(indexing_code),
@@ -1199,7 +1222,10 @@ fn generate_instruction_preface() -> TokenStream {
                     Instruction::SetLocalValue(..) |
                     Instruction::SetVariable(..) |
                     Instruction::SetValue(..) |
-                    Instruction::SetVoid(..))
+                    Instruction::SetVoid(..) |
+                    Instruction::GetLevel(..) |
+                    Instruction::GetPrevLevel(..) |
+                    Instruction::GetCutPoint(..))
             }
 
             pub fn enqueue_functors(
@@ -1244,8 +1270,8 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::InstallVerifyAttr => {
                         functor!(atom!("install_verify_attr"))
                     }
-                    &Instruction::VerifyAttrInterrupt => {
-                        functor!(atom!("verify_attr_interrupt"))
+                    &Instruction::VerifyAttrInterrupt(arity) => {
+                        functor!(atom!("verify_attr_interrupt"), [fixnum(arity)])
                     }
                     &Instruction::DynamicElse(birth, death, next_or_fail) => {
                         match (death, next_or_fail) {
@@ -1874,18 +1900,18 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallFlushTermQueue |
                     &Instruction::CallRemoveModuleExports |
                     &Instruction::CallAddNonCountedBacktracking |
-                    &Instruction::CallPopCount => {
+                    &Instruction::CallPopCount |
+                    &Instruction::CallArgv |
+                    &Instruction::CallEd25519SignRaw |
+                    &Instruction::CallEd25519VerifyRaw |
+                    &Instruction::CallEd25519SeedToPublicKey => {
                         let (name, arity) = self.to_name_and_arity();
                         functor!(atom!("call"), [atom(name), fixnum(arity)])
                     }
                     //
                     #[cfg(feature = "crypto-full")]
                     &Instruction::CallCryptoDataEncrypt |
-                    &Instruction::CallCryptoDataDecrypt |
-                    &Instruction::CallEd25519Sign |
-                    &Instruction::CallEd25519Verify |
-                    &Instruction::CallEd25519NewKeyPair |
-                    &Instruction::CallEd25519KeyPairPublicKey => {
+                    &Instruction::CallCryptoDataDecrypt => {
                         let (name, arity) = self.to_name_and_arity();
                         functor!(atom!("call"), [atom(name), fixnum(arity)])
                     }
@@ -2110,18 +2136,18 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteFlushTermQueue |
                     &Instruction::ExecuteRemoveModuleExports |
                     &Instruction::ExecuteAddNonCountedBacktracking |
-                    &Instruction::ExecutePopCount => {
+                    &Instruction::ExecutePopCount |
+                    &Instruction::ExecuteArgv |
+                    &Instruction::ExecuteEd25519SignRaw |
+                    &Instruction::ExecuteEd25519VerifyRaw |
+                    &Instruction::ExecuteEd25519SeedToPublicKey => {
                         let (name, arity) = self.to_name_and_arity();
                         functor!(atom!("execute"), [atom(name), fixnum(arity)])
                     }
                     //
                     #[cfg(feature = "crypto-full")]
                     &Instruction::ExecuteCryptoDataEncrypt |
-                    &Instruction::ExecuteCryptoDataDecrypt |
-                    &Instruction::ExecuteEd25519Sign |
-                    &Instruction::ExecuteEd25519Verify |
-                    &Instruction::ExecuteEd25519NewKeyPair |
-                    &Instruction::ExecuteEd25519KeyPairPublicKey => {
+                    &Instruction::ExecuteCryptoDataDecrypt => {
                         let (name, arity) = self.to_name_and_arity();
                         functor!(atom!("execute"), [atom(name), fixnum(arity)])
                     }
