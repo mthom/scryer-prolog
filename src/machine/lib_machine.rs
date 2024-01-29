@@ -549,7 +549,62 @@ mod tests {
         );
 
         let query =
-            String::from(r#"subject_class("Todo", C), property_resolve(C, "isLiked")."#);
+            String::from(r#"property_resolve(C, "isLiked"), subject_class("Todo", C)."#);
+        let output = machine.run_query(query);
+        assert_eq!(
+            output,
+            Ok(QueryResolution::False)
+        );
+
+        let query =
+        String::from(r#"subject_class("Todo", C), property_resolve(C, "isLiked")."#);
+        let output = machine.run_query(query);
+        assert_eq!(
+            output,
+            Ok(QueryResolution::False)
+        );
+    }
+
+    #[test]
+    fn dont_return_partial_matches_without_discountiguous() {
+        let mut machine = Machine::new_lib();
+
+        machine.consult_module_string(
+            "facts",
+            String::from(
+                r#"
+                a("true for a").
+                b("true for b").
+        "#,
+            ),
+        );
+
+        let query =
+            String::from(r#"a("true for a")."#);
+        let output = machine.run_query(query);
+        assert_eq!(
+            output,
+            Ok(QueryResolution::True)
+        );
+
+        let query =
+            String::from(r#"a("true for a"), b("true for b")."#);
+        let output = machine.run_query(query);
+        assert_eq!(
+            output,
+            Ok(QueryResolution::True)
+        );
+
+        let query =
+            String::from(r#"a("true for b"), b("true for b")."#);
+        let output = machine.run_query(query);
+        assert_eq!(
+            output,
+            Ok(QueryResolution::False)
+        );
+
+        let query =
+            String::from(r#"a("true for a"), b("true for a")."#);
         let output = machine.run_query(query);
         assert_eq!(
             output,
