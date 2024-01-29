@@ -156,17 +156,17 @@ impl Machine {
             };
             */
 
-            if term_write_result.var_dict.is_empty() {
-                if self.machine_st.p == LIB_QUERY_SUCCESS {
+            if self.machine_st.p == LIB_QUERY_SUCCESS {
+                if term_write_result.var_dict.is_empty() {
                     matches.push(QueryResolutionLine::True);
                     break;
-                } else if self.machine_st.p == BREAK_FROM_DISPATCH_LOOP_LOC {
-                    // NOTE: only print results on success
-                    // self.machine_st.fail = false;
-                    // println!("b == stub_b");
-                    matches.push(QueryResolutionLine::False);
-                    break;
                 }
+            } else if self.machine_st.p == BREAK_FROM_DISPATCH_LOOP_LOC {
+                // NOTE: only print results on success
+                // self.machine_st.fail = false;
+                // println!("b == stub_b");
+                matches.push(QueryResolutionLine::False);
+                break;
             }
 
             let mut bindings: BTreeMap<String, Value> = BTreeMap::new();
