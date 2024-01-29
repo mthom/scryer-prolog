@@ -533,4 +533,27 @@ mod tests {
             ),]))
         );
     }
+
+    #[test]
+    fn dont_return_partial_matches() {
+        let mut machine = Machine::new_lib();
+
+        machine.consult_module_string(
+            "facts",
+            String::from(
+                r#"
+                :- discontiguous(property_resolve/2).
+                subject_class("Todo", c).
+        "#,
+            ),
+        );
+
+        let query =
+            String::from(r#"subject_class("Todo", C), property_resolve(C, "isLiked")."#);
+        let output = machine.run_query(query);
+        assert_eq!(
+            output,
+            Ok(QueryResolution::False)
+        );
+    }
 }
