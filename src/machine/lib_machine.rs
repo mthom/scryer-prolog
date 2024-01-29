@@ -491,12 +491,8 @@ mod tests {
                 machine.consult_module_string("facts", code.to_string());
             } else if let Some(result) = block.strip_prefix("result") {
                 if let Some(Ok(ref last_result)) = last_result {
-                    assert_eq!(
-                        last_result.to_string().trim(),
-                        result.to_string().trim(),
-                    )
+                    assert_eq!(last_result.to_string().trim(), result.to_string().trim(),)
                 }
-                
             }
         }
     }
@@ -548,21 +544,13 @@ mod tests {
             ),
         );
 
-        let query =
-            String::from(r#"property_resolve(C, "isLiked"), subject_class("Todo", C)."#);
+        let query = String::from(r#"property_resolve(C, "isLiked"), subject_class("Todo", C)."#);
         let output = machine.run_query(query);
-        assert_eq!(
-            output,
-            Ok(QueryResolution::False)
-        );
+        assert_eq!(output, Ok(QueryResolution::False));
 
-        let query =
-        String::from(r#"subject_class("Todo", C), property_resolve(C, "isLiked")."#);
+        let query = String::from(r#"subject_class("Todo", C), property_resolve(C, "isLiked")."#);
         let output = machine.run_query(query);
-        assert_eq!(
-            output,
-            Ok(QueryResolution::False)
-        );
+        assert_eq!(output, Ok(QueryResolution::False));
     }
 
     #[test]
@@ -579,36 +567,20 @@ mod tests {
             ),
         );
 
-        let query =
-            String::from(r#"a("true for a")."#);
+        let query = String::from(r#"a("true for a")."#);
         let output = machine.run_query(query);
-        assert_eq!(
-            output,
-            Ok(QueryResolution::True)
-        );
+        assert_eq!(output, Ok(QueryResolution::True));
 
-        let query =
-            String::from(r#"a("true for a"), b("true for b")."#);
+        let query = String::from(r#"a("true for a"), b("true for b")."#);
         let output = machine.run_query(query);
-        assert_eq!(
-            output,
-            Ok(QueryResolution::True)
-        );
+        assert_eq!(output, Ok(QueryResolution::True));
 
-        let query =
-            String::from(r#"a("true for b"), b("true for b")."#);
+        let query = String::from(r#"a("true for b"), b("true for b")."#);
         let output = machine.run_query(query);
-        assert_eq!(
-            output,
-            Ok(QueryResolution::False)
-        );
+        assert_eq!(output, Ok(QueryResolution::False));
 
-        let query =
-            String::from(r#"a("true for a"), b("true for a")."#);
+        let query = String::from(r#"a("true for a"), b("true for a")."#);
         let output = machine.run_query(query);
-        assert_eq!(
-            output,
-            Ok(QueryResolution::False)
-        );
+        assert_eq!(output, Ok(QueryResolution::False));
     }
 }
