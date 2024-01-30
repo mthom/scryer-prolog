@@ -475,22 +475,18 @@ mod tests {
 
             // Check if the block is a query
             if let Some(query) = block.strip_prefix("query") {
-                i += 1;
-                println!("query #{}: {}", i, query);
                 // Parse and execute the query
                 let result = machine.run_query(query.to_string());
-                // Print the result
-                println!("{:?}", result);
                 assert!(result.is_ok());
 
                 last_result = Some(result);
             } else if let Some(code) = block.strip_prefix("consult") {
-                println!("load code: {}", code);
-
                 // Load the code into the machine
                 machine.consult_module_string("facts", code.to_string());
             } else if let Some(result) = block.strip_prefix("result") {
+                i += 1;
                 if let Some(Ok(ref last_result)) = last_result {
+                    println!("\n\n=====Result No. {}=======\n{}\n===============", i, last_result.to_string().trim());
                     assert_eq!(last_result.to_string().trim(), result.to_string().trim(),)
                 }
             }

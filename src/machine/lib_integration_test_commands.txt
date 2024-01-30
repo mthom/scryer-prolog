@@ -257,19 +257,19 @@ subject_class("Todo", C), property_resolve_language(C, "title", Language).
 =====query
 subject_class("Todo", C), collection(C, Collection).
 =====result
-[{"C":"c","Collection":"comments"},{"C":"c","Collection":"entries"},{"C":"c","Collection":"likedMessages"},{"C":"c","Collection":"messages"}]
+[{"C":"c","Collection":"comments"},{"C":"c","Collection":"entries"},{"C":"c","Collection":"messages"},{"C":"c","Collection":"likedMessages"}]
 =====query
 subject_class("Todo", C), collection_adder(C, Collection, Adder).
 =====result
-[{"Adder":"[{action: \"addLink\", source: \"this\", predicate: \"todo://comment\", target: \"value\"}]","C":"c","Collection":"commentss"},{"Adder":"[{action: \"addLink\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]","C":"c","Collection":"entriess"},{"Adder":"[{action: \"addLink\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]","C":"c","Collection":"likedMessagess"},{"Adder":"[{action: \"addLink\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]","C":"c","Collection":"messagess"}]
+[{"Adder":"[{action: \"addLink\", source: \"this\", predicate: \"todo://comment\", target: \"value\"}]","C":"c","Collection":"commentss"},{"Adder":"[{action: \"addLink\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]","C":"c","Collection":"entriess"},{"Adder":"[{action: \"addLink\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]","C":"c","Collection":"messagess"},{"Adder":"[{action: \"addLink\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]","C":"c","Collection":"likedMessagess"}]
 =====query
 subject_class("Todo", C), collection_remover(C, Collection, Remover).
 =====result
-[{"C":"c","Collection":"commentss","Remover":"[{action: \"removeLink\", source: \"this\", predicate: \"todo://comment\", target: \"value\"}]"},{"C":"c","Collection":"entriess","Remover":"[{action: \"removeLink\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]"},{"C":"c","Collection":"likedMessagess","Remover":"[{action: \"removeLink\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]"},{"C":"c","Collection":"messagess","Remover":"[{action: \"removeLink\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]"}]
+[{"C":"c","Collection":"commentss","Remover":"[{action: \"removeLink\", source: \"this\", predicate: \"todo://comment\", target: \"value\"}]"},{"C":"c","Collection":"entriess","Remover":"[{action: \"removeLink\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]"},{"C":"c","Collection":"messagess","Remover":"[{action: \"removeLink\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]"},{"C":"c","Collection":"likedMessagess","Remover":"[{action: \"removeLink\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]"}]
 =====query
 subject_class("Todo", C), collection_setter(C, Collection, Setter).
 =====result
-[{"C":"c","Collection":"commentss","Setter":"[{action: \"collectionSetter\", source: \"this\", predicate: \"todo://comment\", target: \"value\"}]"},{"C":"c","Collection":"entriess","Setter":"[{action: \"collectionSetter\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]"},{"C":"c","Collection":"likedMessagess","Setter":"[{action: \"collectionSetter\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]"},{"C":"c","Collection":"messagess","Setter":"[{action: \"collectionSetter\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]"}]
+[{"C":"c","Collection":"commentss","Setter":"[{action: \"collectionSetter\", source: \"this\", predicate: \"todo://comment\", target: \"value\"}]"},{"C":"c","Collection":"entriess","Setter":"[{action: \"collectionSetter\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]"},{"C":"c","Collection":"messagess","Setter":"[{action: \"collectionSetter\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]"},{"C":"c","Collection":"likedMessagess","Setter":"[{action: \"collectionSetter\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]"}]
 =====query
 subject_class("Todo", C), instance(C, "literal://string:construct%20test").
 =====result
@@ -384,7 +384,7 @@ subject_class("Todo", C), instance(C, "literal://string:get%20proxy%20test").
 =====query
 subject_class("Todo", C), property(C, Property).
 =====result
-[{"C":"c","Property":"isLiked"},{"C":"c","Property":"state"},{"C":"c","Property":"title"}]
+[{"C":"c","Property":"state"},{"C":"c","Property":"title"},{"C":"c","Property":"isLiked"}]
 =====query
 subject_class("Todo", C), property_resolve(C, "isLiked").
 =====result
@@ -412,19 +412,19 @@ subject_class("Todo", C), property_resolve_language(C, "title", Language).
 =====query
 subject_class("Todo", C), collection(C, Collection).
 =====result
-[{"C":"c","Collection":"comments"},{"C":"c","Collection":"entries"},{"C":"c","Collection":"likedMessages"},{"C":"c","Collection":"messages"}]
+[{"C":"c","Collection":"comments"},{"C":"c","Collection":"entries"},{"C":"c","Collection":"messages"},{"C":"c","Collection":"likedMessages"}]
 =====query
 subject_class("Todo", C), collection_adder(C, Collection, Adder).
 =====result
-[{"Adder":"[{action: \"addLink\", source: \"this\", predicate: \"todo://comment\", target: \"value\"}]","C":"c","Collection":"commentss"},{"Adder":"[{action: \"addLink\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]","C":"c","Collection":"entriess"},{"Adder":"[{action: \"addLink\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]","C":"c","Collection":"likedMessagess"},{"Adder":"[{action: \"addLink\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]","C":"c","Collection":"messagess"}]
+[{"Adder":"[{action: \"addLink\", source: \"this\", predicate: \"todo://comment\", target: \"value\"}]","C":"c","Collection":"commentss"},{"Adder":"[{action: \"addLink\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]","C":"c","Collection":"entriess"},{"Adder":"[{action: \"addLink\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]","C":"c","Collection":"messagess"},{"Adder":"[{action: \"addLink\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]","C":"c","Collection":"likedMessagess"}]
 =====query
 subject_class("Todo", C), collection_remover(C, Collection, Remover).
 =====result
-[{"C":"c","Collection":"commentss","Remover":"[{action: \"removeLink\", source: \"this\", predicate: \"todo://comment\", target: \"value\"}]"},{"C":"c","Collection":"entriess","Remover":"[{action: \"removeLink\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]"},{"C":"c","Collection":"likedMessagess","Remover":"[{action: \"removeLink\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]"},{"C":"c","Collection":"messagess","Remover":"[{action: \"removeLink\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]"}]
+[{"C":"c","Collection":"commentss","Remover":"[{action: \"removeLink\", source: \"this\", predicate: \"todo://comment\", target: \"value\"}]"},{"C":"c","Collection":"entriess","Remover":"[{action: \"removeLink\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]"},{"C":"c","Collection":"messagess","Remover":"[{action: \"removeLink\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]"},{"C":"c","Collection":"likedMessagess","Remover":"[{action: \"removeLink\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]"}]
 =====query
 subject_class("Todo", C), collection_setter(C, Collection, Setter).
 =====result
-[{"C":"c","Collection":"commentss","Setter":"[{action: \"collectionSetter\", source: \"this\", predicate: \"todo://comment\", target: \"value\"}]"},{"C":"c","Collection":"entriess","Setter":"[{action: \"collectionSetter\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]"},{"C":"c","Collection":"likedMessagess","Setter":"[{action: \"collectionSetter\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]"},{"C":"c","Collection":"messagess","Setter":"[{action: \"collectionSetter\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]"}]
+[{"C":"c","Collection":"commentss","Setter":"[{action: \"collectionSetter\", source: \"this\", predicate: \"todo://comment\", target: \"value\"}]"},{"C":"c","Collection":"entriess","Setter":"[{action: \"collectionSetter\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]"},{"C":"c","Collection":"messagess","Setter":"[{action: \"collectionSetter\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]"},{"C":"c","Collection":"likedMessagess","Setter":"[{action: \"collectionSetter\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]"}]
 =====query
 subject_class("Todo", C), instance(C, "literal://string:get%20proxy%20test").
 =====result
@@ -436,7 +436,7 @@ subject_class("Todo", C), instance(C, "literal://string:get%20proxy%20test").
 =====query
 subject_class("Todo", C), property(C, Property).
 =====result
-[{"C":"c","Property":"isLiked"},{"C":"c","Property":"state"},{"C":"c","Property":"title"}]
+[{"C":"c","Property":"state"},{"C":"c","Property":"title"},{"C":"c","Property":"isLiked"}]
 =====query
 subject_class("Todo", C), property_resolve(C, "isLiked").
 =====result
@@ -464,29 +464,29 @@ subject_class("Todo", C), property_resolve_language(C, "title", Language).
 =====query
 subject_class("Todo", C), collection(C, Collection).
 =====result
-[{"C":"c","Collection":"comments"},{"C":"c","Collection":"entries"},{"C":"c","Collection":"likedMessages"},{"C":"c","Collection":"messages"}]
+[{"C":"c","Collection":"comments"},{"C":"c","Collection":"entries"},{"C":"c","Collection":"messages"},{"C":"c","Collection":"likedMessages"}]
 =====query
 subject_class("Todo", C), collection_adder(C, Collection, Adder).
 =====result
-[{"Adder":"[{action: \"addLink\", source: \"this\", predicate: \"todo://comment\", target: \"value\"}]","C":"c","Collection":"commentss"},{"Adder":"[{action: \"addLink\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]","C":"c","Collection":"entriess"},{"Adder":"[{action: \"addLink\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]","C":"c","Collection":"likedMessagess"},{"Adder":"[{action: \"addLink\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]","C":"c","Collection":"messagess"}]
+[{"Adder":"[{action: \"addLink\", source: \"this\", predicate: \"todo://comment\", target: \"value\"}]","C":"c","Collection":"commentss"},{"Adder":"[{action: \"addLink\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]","C":"c","Collection":"entriess"},{"Adder":"[{action: \"addLink\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]","C":"c","Collection":"messagess"},{"Adder":"[{action: \"addLink\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]","C":"c","Collection":"likedMessagess"}]
 =====query
 subject_class("Todo", C), collection_remover(C, Collection, Remover).
 =====result
-[{"C":"c","Collection":"commentss","Remover":"[{action: \"removeLink\", source: \"this\", predicate: \"todo://comment\", target: \"value\"}]"},{"C":"c","Collection":"entriess","Remover":"[{action: \"removeLink\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]"},{"C":"c","Collection":"likedMessagess","Remover":"[{action: \"removeLink\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]"},{"C":"c","Collection":"messagess","Remover":"[{action: \"removeLink\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]"}]
+[{"C":"c","Collection":"commentss","Remover":"[{action: \"removeLink\", source: \"this\", predicate: \"todo://comment\", target: \"value\"}]"},{"C":"c","Collection":"entriess","Remover":"[{action: \"removeLink\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]"},{"C":"c","Collection":"messagess","Remover":"[{action: \"removeLink\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]"},{"C":"c","Collection":"likedMessagess","Remover":"[{action: \"removeLink\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]"}]
 =====query
 subject_class("Todo", C), collection_setter(C, Collection, Setter).
 =====result
-[{"C":"c","Collection":"commentss","Setter":"[{action: \"collectionSetter\", source: \"this\", predicate: \"todo://comment\", target: \"value\"}]"},{"C":"c","Collection":"entriess","Setter":"[{action: \"collectionSetter\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]"},{"C":"c","Collection":"likedMessagess","Setter":"[{action: \"collectionSetter\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]"},{"C":"c","Collection":"messagess","Setter":"[{action: \"collectionSetter\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]"}]
+[{"C":"c","Collection":"commentss","Setter":"[{action: \"collectionSetter\", source: \"this\", predicate: \"todo://comment\", target: \"value\"}]"},{"C":"c","Collection":"entriess","Setter":"[{action: \"collectionSetter\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]"},{"C":"c","Collection":"messagess","Setter":"[{action: \"collectionSetter\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]"},{"C":"c","Collection":"likedMessagess","Setter":"[{action: \"collectionSetter\", source: \"this\", predicate: \"flux://entry_type\", target: \"value\"}]"}]
 =====query
 subject_class("Todo", C), property_getter(C, "literal://string:get%20proxy%20test", "state", Value).
-=====query
-subject_class("Todo", C), property_getter(C, "literal://string:get%20proxy%20test", "title", Value).
 =====result
 [{"C":"c","Value":"todo://ready"}]
 =====query
-subject_class("Todo", C), constructor(C, Actions).
+subject_class("Todo", C), property_getter(C, "literal://string:get%20proxy%20test", "title", Value).
 =====result
 false
+=====query
+subject_class("Todo", C), constructor(C, Actions).
 =====result
 [{"Actions":"[{action: \"addLink\", source: \"this\", predicate: \"todo://state\", target: \"todo://ready\"}]","C":"c"}]
 =====consult
@@ -589,15 +589,15 @@ collection_setter(c, "likedMessagess", '[{action: "collectionSetter", source: "t
 =====query
 subject_class("Todo", C), instance(C, "literal://string:construct%20test").
 =====result
-[{"C":"c"},{"C":"c"}]
+[{"C":"c"}]
 =====query
 subject_class("Todo", C), instance(C, "literal://string:construct%20test").
 =====result
-[{"C":"c"},{"C":"c"}]
+[{"C":"c"}]
 =====query
 subject_class("Todo", C), property(C, Property).
 =====result
-[{"C":"c","Property":"isLiked"},{"C":"c","Property":"state"},{"C":"c","Property":"title"}]
+[{"C":"c","Property":"state"},{"C":"c","Property":"title"},{"C":"c","Property":"isLiked"}]
 =====query
 subject_class("Todo", C), property_resolve(C, "isLiked").
 =====result
