@@ -487,7 +487,11 @@ mod tests {
             } else if let Some(result) = block.strip_prefix("result") {
                 i += 1;
                 if let Some(Ok(ref last_result)) = last_result {
-                    println!("\n\n=====Result No. {}=======\n{}\n===============", i, last_result.to_string().trim());
+                    println!(
+                        "\n\n=====Result No. {}=======\n{}\n===============",
+                        i,
+                        last_result.to_string().trim()
+                    );
                     assert_eq!(last_result.to_string().trim(), result.to_string().trim(),)
                 }
             }
@@ -585,8 +589,10 @@ mod tests {
     fn replicate_failing_assertion_from_integration_test() {
         let mut machine = Machine::new_lib();
 
-        machine.consult_module_string("facts", String::from(
-            r#"
+        machine.consult_module_string(
+            "facts",
+            String::from(
+                r#"
             :- discontiguous(triple/3).
 :- discontiguous(link/5).
 :- discontiguous(reachable/2).
@@ -619,7 +625,9 @@ reachable(A,B) :- triple(A,_,X), reachable(X,B).
 :- discontiguous(p3_class_icon/2).
 :- discontiguous(p3_class_color/2).
 :- discontiguous(p3_instance_color/3).
-"#));
+"#,
+            ),
+        );
 
         machine.consult_module_string(
             "facts",
@@ -909,10 +917,14 @@ collection_setter(c, "likedMessagess", '[{action: "collectionSetter", source: "t
             ),
         );
 
-        let query = String::from(r#"subject_class("Todo", C), instance(C, "literal://string:construct%20test")."#);
+        let query = String::from(
+            r#"subject_class("Todo", C), instance(C, "literal://string:construct%20test")."#,
+        );
         let _ = machine.run_query(query);
 
-        let query = String::from(r#"subject_class("Todo", C), instance(C, "literal://string:construct%20test")."#);
+        let query = String::from(
+            r#"subject_class("Todo", C), instance(C, "literal://string:construct%20test")."#,
+        );
         let _ = machine.run_query(query);
 
         let query = String::from(r#"subject_class("Todo", C), property(C, Property)."#);
