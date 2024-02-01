@@ -607,6 +607,6 @@ mod tests {
         assert_eq!(
             result,
             Err(String::from("error existence_error procedure / non_existent_predicate 3 / non_existent_predicate 3"))
-        );    
+        );
     }
 }

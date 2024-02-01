@@ -22,7 +22,7 @@ thread_local! {
     // odd value means the current thread is about to access the active_epoch of an Rcu
     // a thread has a single epoch counter for all Rcu it accesses,
     // as a thread can only access one Rcu at a time
-    static THREAD_EPOCH_COUNTER: OnceCell<Arc<AtomicU8>> = OnceCell::new();
+    static THREAD_EPOCH_COUNTER: OnceCell<Arc<AtomicU8>> = const { OnceCell::new() };
 }
 
 pub struct Rcu<T> {
