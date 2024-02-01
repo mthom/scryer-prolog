@@ -584,4 +584,28 @@ mod tests {
         let output = machine.run_query(query);
         assert_eq!(output, Ok(QueryResolution::False));
     }
+
+    #[test]
+    fn non_existent_predicate_should_not_cause_panic_when_other_predicates_are_defined() {
+        let mut machine = Machine::new_lib();
+
+        machine.consult_module_string(
+            "facts",
+            String::from(
+                r#"
+                triple("a", "p1", "b").
+                triple("a", "p2", "b").
+        "#,
+            ),
+        );
+
+        let query = String::from("non_existent_predicate(\"a\",\"p1\",\"b\").");
+
+        let result = machine.run_query(query);
+
+        assert_eq!(
+            result,
+            Err(String::from("error existence_error procedure / non_existent_predicate 3 / non_existent_predicate 3"))
+        );    
+    }
 }
