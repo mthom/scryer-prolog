@@ -5629,7 +5629,7 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn inference_count(&mut self, count_var: HeapCellValue, count: Integer) {
-        if let Some(value) = <&Integer as TryInto<i64>>::try_into(&count).ok() {
+        if let Ok(value) = <&Integer as TryInto<i64>>::try_into(&count) {
             self.machine_st
                 .unify_fixnum(Fixnum::build_with(value), count_var);
         } else {

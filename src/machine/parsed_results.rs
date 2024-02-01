@@ -25,10 +25,10 @@ pub fn prolog_value_to_json_tring(value: Value) -> String {
                 //escape double quotes
                 format!(
                     "\"{}\"",
-                    s.replace("\"", "\\\"")
-                        .replace("\n", "\\n")
-                        .replace("\t", "\\t")
-                        .replace("\r", "\\r")
+                    s.replace('\"', "\\\"")
+                        .replace('\n', "\\n")
+                        .replace('\t', "\\t")
+                        .replace('\r', "\\r")
                 )
             } else {
                 //return valid json string
@@ -39,22 +39,22 @@ pub fn prolog_value_to_json_tring(value: Value) -> String {
             let mut string_result = "[".to_string();
             for (i, v) in l.iter().enumerate() {
                 if i > 0 {
-                    string_result.push_str(",");
+                    string_result.push(',');
                 }
                 string_result.push_str(&prolog_value_to_json_tring(v.clone()));
             }
-            string_result.push_str("]");
+            string_result.push(']');
             string_result
         }
         Value::Structure(s, l) => {
             let mut string_result = format!("\"{}\":[", s.as_str());
             for (i, v) in l.iter().enumerate() {
                 if i > 0 {
-                    string_result.push_str(",");
+                    string_result.push(',');
                 }
                 string_result.push_str(&prolog_value_to_json_tring(v.clone()));
             }
-            string_result.push_str("]");
+            string_result.push(']');
             string_result
         }
         _ => "null".to_string(),
@@ -65,7 +65,7 @@ fn prolog_match_to_json_string(query_match: &QueryMatch) -> String {
     let mut string_result = "{".to_string();
     for (i, (k, v)) in query_match.bindings.iter().enumerate() {
         if i > 0 {
-            string_result.push_str(",");
+            string_result.push(',');
         }
         string_result.push_str(&format!(
             "\"{}\":{}",
@@ -73,7 +73,7 @@ fn prolog_match_to_json_string(query_match: &QueryMatch) -> String {
             prolog_value_to_json_tring(v.clone())
         ));
     }
-    string_result.push_str("}");
+    string_result.push('}');
     string_result
 }
 
@@ -85,7 +85,7 @@ impl ToString for QueryResolution {
             QueryResolution::Matches(matches) => {
                 let matches_json: Vec<String> = matches
                     .iter()
-                    .map(|m| prolog_match_to_json_string(m))
+                    .map(prolog_match_to_json_string)
                     .collect();
                 format!("[{}]", matches_json.join(","))
             }
