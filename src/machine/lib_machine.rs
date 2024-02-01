@@ -58,6 +58,7 @@ impl Machine {
 
         self.machine_st.b = stub_b;
         self.machine_st.hb = self.machine_st.heap.len();
+        self.machine_st.block = stub_b;
     }
 
     pub fn run_query(&mut self, query: String) -> QueryResult {
