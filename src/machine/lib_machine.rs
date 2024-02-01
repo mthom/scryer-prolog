@@ -39,10 +39,10 @@ impl Machine {
 
     fn allocate_stub_choice_point(&mut self) {
         // NOTE: create a choice point to terminate the dispatch_loop
-        // if an exception is thrown. since the and/or stack is presumed empty,
+        // if an exception is thrown.
 
         let stub_b = self.machine_st.stack.allocate_or_frame(0);
-        let or_frame = self.machine_st.stack.index_or_frame_mut(0);
+        let or_frame = self.machine_st.stack.index_or_frame_mut(stub_b);
 
         or_frame.prelude.num_cells = 0;
         or_frame.prelude.e = 0;
@@ -72,23 +72,12 @@ impl Machine {
             .read_term(&op_dir, Tokens::Default)
             .expect("Failed to parse query");
 
+        self.allocate_stub_choice_point();
+
         // Write parsed term to heap
         let term_write_result =
             write_term_to_heap(&term, &mut self.machine_st.heap, &self.machine_st.atom_tbl)
                 .expect("couldn't write term to heap");
-
-        // Write term to heap
-        self.machine_st.registers[1] = self.machine_st.heap[term_write_result.heap_loc];
-
-        self.machine_st.cp = LIB_QUERY_SUCCESS; // BREAK_FROM_DISPATCH_LOOP_LOC;
-        self.machine_st.p = self
-            .indices
-            .code_dir
-            .get(&(atom!("call"), 1))
-            .expect("couldn't get code index")
-            .local()
-            .unwrap();
-        self.machine_st.b0 = self.machine_st.b;
 
         let var_names: IndexMap<_, _> = term_write_result
             .var_dict
@@ -102,7 +91,19 @@ impl Machine {
             })
             .collect();
 
-        self.allocate_stub_choice_point();
+        // Write term to heap
+        self.machine_st.registers[1] = self.machine_st.heap[term_write_result.heap_loc];
+
+        self.machine_st.cp = LIB_QUERY_SUCCESS; // BREAK_FROM_DISPATCH_LOOP_LOC;
+        let call_index_p = self
+            .indices
+            .code_dir
+            .get(&(atom!("call"), 1))
+            .expect("couldn't get code index")
+            .local()
+            .unwrap();
+
+        self.machine_st.execute_at_index(1, call_index_p);
 
         let stub_b = self.machine_st.b;
 
