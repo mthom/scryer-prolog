@@ -83,10 +83,8 @@ impl ToString for QueryResolution {
             QueryResolution::True => "true".to_string(),
             QueryResolution::False => "false".to_string(),
             QueryResolution::Matches(matches) => {
-                let matches_json: Vec<String> = matches
-                    .iter()
-                    .map(prolog_match_to_json_string)
-                    .collect();
+                let matches_json: Vec<String> =
+                    matches.iter().map(prolog_match_to_json_string).collect();
                 format!("[{}]", matches_json.join(","))
             }
         }
