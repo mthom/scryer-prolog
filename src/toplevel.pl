@@ -28,7 +28,6 @@ load_scryerrc :-
 
 '$repl' :-
     asserta('$toplevel':started),
-    (\+ disabled_init_file -> load_scryerrc ; true),
     raw_argv(Args0),
     (   append(Args1, ["--"|_], Args0) ->
         Args = Args1
@@ -38,6 +37,7 @@ load_scryerrc :-
 	delegate_task(TaskArgs, [])
     ;   true
     ),
+    (\+ disabled_init_file -> load_scryerrc ; true),
     repl.
 
 delegate_task([], []).
@@ -48,15 +48,17 @@ delegate_task([], Goals0) :-
     repl.
 
 delegate_task([Arg0|Args], Goals0) :-
-    (   member(Arg0, ["-h", "--help"]) -> print_help
-    ;   member(Arg0, ["-v", "--version"]) -> print_version
-    ;   member(Arg0, ["-g", "--goal"]) -> gather_goal(g, Args, Goals0)
-    ;   member(Arg0, ["-f"]) -> disable_init_file
-    ;   member(Arg0, ["--no-add-history"]) -> ignore_machine_arg
+    (   (   member(Arg0, ["-h", "--help"]) -> print_help
+        ;   member(Arg0, ["-v", "--version"]) -> print_version
+        ;   member(Arg0, ["-g", "--goal"]) -> gather_goal(g, Args, Goals0)
+        ;   member(Arg0, ["-f"]) -> disable_init_file
+        ;   member(Arg0, ["--no-add-history"]) -> ignore_machine_arg
+        ),
+        !,
+        delegate_task(Args, Goals0)
     ;   atom_chars(Mod, Arg0),
-        catch(consult(Mod), E, print_exception(E))
-    ),
-    delegate_task(Args, Goals0).
+        delegate_task(Args, [t(consult(Mod))|Goals0])
+    ).
 
 print_help :-
     write('Usage: scryer-prolog [OPTIONS] [FILES] [-- ARGUMENTS]'),
@@ -130,6 +132,14 @@ run_goals([g(Gs0)|Goals]) :- !,
         ) -> true
     ;   write('% Warning: initialization failed for: '),
         write_term(Goal, [variable_names(VNs),double_quotes(DQ)]), nl
+    ),
+    run_goals(Goals).
+run_goals([t(Goal)|Goals]) :- !,
+    (   catch(user:Goal, E, print_exception(E)) ->
+        true
+    ;   write('% Warning: initialization failed for: '),
+        double_quotes_option(DQ),
+        write_term(Goal, [double_quotes(DQ)]), nl
     ),
     run_goals(Goals).
 run_goals([Goal|_]) :-
