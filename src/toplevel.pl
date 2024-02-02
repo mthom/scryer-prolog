@@ -28,6 +28,7 @@ load_scryerrc :-
 
 '$repl' :-
     asserta('$toplevel':started),
+    (\+ disabled_init_file -> load_scryerrc ; true),
     raw_argv(Args0),
     (   append(Args1, ["--"|_], Args0) ->
         Args = Args1
@@ -37,7 +38,6 @@ load_scryerrc :-
 	delegate_task(TaskArgs, [])
     ;   true
     ),
-    (\+ disabled_init_file -> load_scryerrc ; true),
     repl.
 
 delegate_task([], []).
