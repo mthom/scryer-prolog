@@ -1875,7 +1875,7 @@ impl MachineState {
             };
 
             if path.extension().is_none() {
-                if let Some(metadata) = file.metadata().ok() {
+                if let Ok(metadata) = file.metadata() {
                     if metadata.is_dir() {
                         path.set_extension("pl");
                         continue;
