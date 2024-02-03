@@ -1,2 +1,2 @@
 # issue 820
-args = ["-f", "--no-add-history", "goals.pl", "-g", "test", "-g", "halt"]
+args = ["-f", "--no-add-history", "-g", "test", "-g", "halt", "goals.pl"]
