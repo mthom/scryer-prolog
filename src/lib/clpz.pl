@@ -102,6 +102,7 @@
                  fd_dom/2,
 
                  % for use in predicates from library(reif)
+                 clpz_t/2,
                  (#=)/3,
                  (#<)/3
 
@@ -7981,13 +7982,13 @@ coeff_var_term(C-V, T) :- ( C =:= 1 -> T = #V ; T = C * #V ).
    Reified predicates for use with predicates from library(reif).
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
-#=(X, Y, T) :-
-        X #= Y #<==> #B,
+clpz_t(Expr, T) :-
+        Expr #<==> #B,
         zo_t(B, T).
 
-#<(X, Y, T) :-
-        X #< Y #<==> #B,
-        zo_t(B, T).
+#=(X, Y, T) :- clpz_t(X #= Y, T).
+
+#<(X, Y, T) :- clpz_t(X #< Y, T).
 
 zo_t(0, false).
 zo_t(1, true).
