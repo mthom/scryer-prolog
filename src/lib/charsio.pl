@@ -153,7 +153,7 @@ char_type(Char, Type) :-
 
 max_char_code(Max) :-
         catch((length(_, Code),
-               catch(char_code(Char, Code),
+               catch(char_code(_Char, Code),
                      error(representation_error(_),_),
                      throw(max_char_code(Code))),
                false),
