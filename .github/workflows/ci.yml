@@ -48,7 +48,8 @@ jobs:
           # rust versions
           - { os: ubuntu-22.04,   rust-version: "1.70",  target: 'x86_64-unknown-linux-gnu'}
           - { os: ubuntu-22.04,   rust-version: beta,    target: 'x86_64-unknown-linux-gnu'}
-          # - { os: ubuntu-22.04,   rust-version: nightly, target: 'x86_64-unknown-linux-gnu'}
+          - { os: ubuntu-22.04,   rust-version: nightly, target: 'x86_64-unknown-linux-gnu', continue-on-error: true}
+    continue-on-error: ${{ matrix.continue-on-error }}
     defaults:
       run:
         shell: bash
