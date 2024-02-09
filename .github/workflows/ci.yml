@@ -48,8 +48,7 @@ jobs:
           # rust versions
           - { os: ubuntu-22.04,   rust-version: "1.70",  target: 'x86_64-unknown-linux-gnu'}
           - { os: ubuntu-22.04,   rust-version: beta,    target: 'x86_64-unknown-linux-gnu'}
-          - { os: ubuntu-22.04,   rust-version: nightly, target: 'x86_64-unknown-linux-gnu', continue-on-error: true}
-    continue-on-error: ${{ matrix.continue-on-error }}
+          - { os: ubuntu-22.04,   rust-version: nightly, target: 'x86_64-unknown-linux-gnu'}
     defaults:
       run:
         shell: bash
@@ -64,10 +63,10 @@ jobs:
 
       # Build and test.
       - name: Build library
-        continue-on-error: ${{ contains(matrix.target,'wasm32') }} # allow wasm builds to fail tests for now
+        continue-on-error: ${{ contains(matrix.target,'wasm32') || contains(matrix.rust-version,'nightly') }} # allow wasm builds to fail tests for now
         run: cargo build --all-targets --target ${{ matrix.target }} ${{ matrix.args }} --verbose
       - name: Test
-        continue-on-error: ${{ contains(matrix.target,'wasm32') }} # allow wasm builds to fail tests for now
+        continue-on-error: ${{ contains(matrix.target,'wasm32') || contains(matrix.rust-version,'nightly') }} # allow wasm builds to fail tests for now
         run: cargo test --target ${{ matrix.target }} ${{ matrix.args }} --all
 
       # On stable rust builds, build a binary and publish as a github actions
