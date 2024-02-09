@@ -13,7 +13,7 @@ pub enum QueryResolution {
     Matches(Vec<QueryMatch>),
 }
 
-pub fn prolog_value_to_json_tring(value: Value) -> String {
+pub fn prolog_value_to_json_string(value: Value) -> String {
     match value {
         Value::Integer(i) => format!("{}", i),
         Value::Float(f) => format!("{}", f),
@@ -41,7 +41,7 @@ pub fn prolog_value_to_json_tring(value: Value) -> String {
                 if i > 0 {
                     string_result.push(',');
                 }
-                string_result.push_str(&prolog_value_to_json_tring(v.clone()));
+                string_result.push_str(&prolog_value_to_json_string(v.clone()));
             }
             string_result.push(']');
             string_result
@@ -52,7 +52,7 @@ pub fn prolog_value_to_json_tring(value: Value) -> String {
                 if i > 0 {
                     string_result.push(',');
                 }
-                string_result.push_str(&prolog_value_to_json_tring(v.clone()));
+                string_result.push_str(&prolog_value_to_json_string(v.clone()));
             }
             string_result.push(']');
             string_result
@@ -70,7 +70,7 @@ fn prolog_match_to_json_string(query_match: &QueryMatch) -> String {
         string_result.push_str(&format!(
             "\"{}\":{}",
             k,
-            prolog_value_to_json_tring(v.clone())
+            prolog_value_to_json_string(v.clone())
         ));
     }
     string_result.push('}');
