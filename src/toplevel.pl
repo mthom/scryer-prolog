@@ -40,23 +40,36 @@ load_scryerrc :-
     (\+ disabled_init_file -> load_scryerrc ; true),
     repl.
 
+args_consults_goals([], [], []).
+args_consults_goals([Arg|Args], Consults, Goals) :-
+    arg_consults_goals(Arg, Args, Consults, Goals).
+
+arg_consults_goals(c(Mod), Args, [c(Mod)|Consults], Goals) :-
+    args_consults_goals(Args, Consults, Goals).
+arg_consults_goals(g(Goal), Args, Consults, [g(Goal)|Goals]) :-
+    args_consults_goals(Args, Consults, Goals).
+
 delegate_task([], []).
 delegate_task([], Goals0) :-
-    reverse(Goals0, Goals),
     (\+ disabled_init_file -> load_scryerrc ; true),
+    reverse(Goals0, Goals1),
+    args_consults_goals(Goals1, Consults, Goals),
+    run_goals(Consults),
     run_goals(Goals),
     repl.
 
 delegate_task([Arg0|Args], Goals0) :-
-    (   member(Arg0, ["-h", "--help"]) -> print_help
-    ;   member(Arg0, ["-v", "--version"]) -> print_version
-    ;   member(Arg0, ["-g", "--goal"]) -> gather_goal(g, Args, Goals0)
-    ;   member(Arg0, ["-f"]) -> disable_init_file
-    ;   member(Arg0, ["--no-add-history"]) -> ignore_machine_arg
+    (   (   member(Arg0, ["-h", "--help"]) -> print_help
+        ;   member(Arg0, ["-v", "--version"]) -> print_version
+        ;   member(Arg0, ["-g", "--goal"]) -> gather_goal(g, Args, Goals0)
+        ;   member(Arg0, ["-f"]) -> disable_init_file
+        ;   member(Arg0, ["--no-add-history"]) -> ignore_machine_arg
+        ),
+        !,
+        delegate_task(Args, Goals0)
     ;   atom_chars(Mod, Arg0),
-        catch(consult(Mod), E, print_exception(E))
-    ),
-    delegate_task(Args, Goals0).
+        delegate_task(Args, [c(Mod)|Goals0])
+    ).
 
 print_help :-
     write('Usage: scryer-prolog [OPTIONS] [FILES] [-- ARGUMENTS]'),
@@ -96,6 +109,7 @@ ignore_machine_arg.
 
 arg_type(g).
 arg_type(t).
+arg_type(c(_)).
 arg_type(g(_)).
 arg_type(t(_)).
 
@@ -130,6 +144,14 @@ run_goals([g(Gs0)|Goals]) :- !,
         ) -> true
     ;   write('% Warning: initialization failed for: '),
         write_term(Goal, [variable_names(VNs),double_quotes(DQ)]), nl
+    ),
+    run_goals(Goals).
+run_goals([c(Mod)|Goals]) :- !,
+    (   catch(consult(Mod), E, print_exception(E)) ->
+        true
+    ;   write('% Warning: initialization failed for: '),
+        double_quotes_option(DQ),
+        write_term(consult(Mod), [double_quotes(DQ)]), nl
     ),
     run_goals(Goals).
 run_goals([Goal|_]) :-
