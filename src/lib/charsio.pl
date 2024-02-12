@@ -143,22 +143,17 @@ char_type(Char, Type) :-
             ctype(Type),
             '$char_type'(Char, Type)
         ;   ground(Type) ->
-            max_char_code(Max),
-            between(0, Max, Code),
+            ccode(Code),
             char_code(Char, Code),
             '$char_type'(Char, Type)
         ;   must_be(character, Char)
         ).
 
 
-max_char_code(Max) :-
-        catch((length(_, Code),
-               catch(char_code(_Char, Code),
-                     error(representation_error(_),_),
-                     throw(max_char_code(Code))),
-               false),
-              max_char_code(Code),
-              Max is Code - 1).
+% 0xD800 to 0xDFFF are surrogate code points used by UTF-16.
+
+ccode(Code) :- between(0, 0xD7FF, Code).
+ccode(Code) :- between(0xE000, 0x10FFFF, Code).
 
 ctype(alnum).
 ctype(alpha).
