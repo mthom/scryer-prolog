@@ -40,6 +40,7 @@
             gen_assoc/3,                % ?Key, +Assoc, ?Value
             get_assoc/3,                % +Key, +Assoc, ?Value
             get_assoc/5,                % +Key, +Assoc0, ?Val0, ?Assoc, ?Val
+            get_assoc_subsumes_key/4,   % +Key0, +Assoc, ?Key, ?Val
             list_to_assoc/2,            % +List, ?Assoc
             map_assoc/2,                % :Goal, +Assoc
             map_assoc/3,                % :Goal, +Assoc0, ?Assoc
@@ -197,6 +198,26 @@ get_assoc(>, Key, _, _, Tree, Val) :-
     get_assoc(Key, Tree, Val).
 % :- endif.
 
+%% get_assoc_subsumes_key(+Key0, +Assoc, ?Key, ?Val) is nondet.
+%
+% True if Key0 is subsumed by Key in the sense of subsumes_term/2
+% and Key-Val is in Assoc.
+
+get_assoc_subsumes_key(Key0, t(K,V,_,L,R), Key, Val) :-
+    compare(Rel, Key0, K),
+    get_assoc_subsumes_key(Rel, Key0, Key, V, L, R, Val).
+
+get_assoc_subsumes_key(=, Key, Key, V, _, _, V).
+get_assoc_subsumes_key(<, Key0, Key, V, Tree, _, Val) :-
+    (  subsumes_term(Key, Key0),
+       V = Val
+    ;  get_assoc_subsumes_key(Key0, Tree, Key, Val)
+    ).
+get_assoc_subsumes_key(>, Key0, Key, V, _, Tree, Val) :-
+    (  subsumes_term(Key, Key0),
+       V = Val
+    ;  get_assoc_subsumes_key(Key0, Tree, Key, Val)
+    ).
 
 %% get_assoc(+Key, +Assoc0, ?Val0, ?Assoc, ?Val) is semidet.
 %
