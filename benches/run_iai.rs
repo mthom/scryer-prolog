@@ -23,7 +23,16 @@ mod iai {
     );
 
     main!(library_benchmark_groups = benches);
+
+    pub fn call_main() {
+        main()
+    }
 }
 
 #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+fn main() {
+    iai::call_main();
+}
+
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
 fn main() {}
