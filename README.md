@@ -805,7 +805,8 @@ by the Austrian Federal Computing Center, and parts of the
 [precautionary](https://github.com/dcnorris/precautionary/tree/main/exec/prolog)
 package for the analysis of dose-escalation trials in the
 safety-critical and highly regulated domain of oncology
-trial&nbsp;design.
+trial&nbsp;design, described in [*An Executable Specification of
+Oncology Dose-Escalation Protocols with&nbsp;Prolog*](https://arxiv.org/abs/2402.08334).
 
 Scryer Prolog is also very well suited for teaching and learning
 Prolog, and for testing syntactic conformance and hence portability of
