@@ -78,7 +78,7 @@ use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 
 use blake2::{Blake2b, Blake2s};
 use ring::rand::{SecureRandom, SystemRandom};
-use ring::{digest, hkdf, pbkdf2};
+use ring::{digest, hkdf, hmac, pbkdf2};
 
 #[cfg(feature = "crypto-full")]
 use ring::aead;
@@ -7391,6 +7391,40 @@ impl Machine {
         };
 
         unify!(self.machine_st, self.machine_st.registers[3], ints_list);
+    }
+
+    #[inline(always)]
+    pub(crate) fn crypto_hmac(&mut self) {
+        let encoding = cell_as_atom!(self.deref_register(2));
+        let data = self.string_encoding_bytes(self.machine_st.registers[1], encoding);
+
+        let stub_gen = || functor_stub(atom!("crypto_data_hash"), 3);
+
+        let key = self
+            .machine_st
+            .integers_to_bytevec(self.machine_st.registers[3], stub_gen);
+
+        let algorithm = cell_as_atom!(self.deref_register(5));
+        let ralg = match algorithm {
+            atom!("sha256") => hmac::HMAC_SHA256,
+            atom!("sha384") => hmac::HMAC_SHA384,
+            atom!("sha512") => hmac::HMAC_SHA512,
+            _ => {
+                unreachable!()
+            }
+        };
+
+        let rkey = hmac::Key::new(ralg, key.as_ref());
+        let tag = hmac::sign(&rkey, &data);
+
+        let ints_list = heap_loc_as_cell!(iter_to_heap_list(
+            &mut self.machine_st.heap,
+            tag.as_ref()
+                .iter()
+                .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64))),
+        ));
+
+        unify!(self.machine_st, self.machine_st.registers[4], ints_list);
     }
 
     #[inline(always)]

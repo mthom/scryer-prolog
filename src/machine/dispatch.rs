@@ -4464,6 +4464,14 @@ impl Machine {
                         self.crypto_data_hash();
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                     }
+                    &Instruction::CallCryptoHMAC => {
+                        self.crypto_hmac();
+                        step_or_fail!(self, self.machine_st.p += 1);
+                    }
+                    &Instruction::ExecuteCryptoHMAC => {
+                        self.crypto_hmac();
+                        step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+                    }
                     &Instruction::CallCryptoDataHKDF => {
                         self.crypto_data_hkdf();
                         step_or_fail!(self, self.machine_st.p += 1);
