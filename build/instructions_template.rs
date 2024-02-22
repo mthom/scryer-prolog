@@ -497,6 +497,8 @@ enum SystemClauseType {
     CryptoRandomByte,
     #[strum_discriminants(strum(props(Arity = "4", Name = "$crypto_data_hash")))]
     CryptoDataHash,
+    #[strum_discriminants(strum(props(Arity = "5", Name = "$crypto_hmac")))]
+    CryptoHMAC,
     #[strum_discriminants(strum(props(Arity = "7", Name = "$crypto_data_hkdf")))]
     CryptoDataHKDF,
     #[strum_discriminants(strum(props(Arity = "4", Name = "$crypto_password_hash")))]
@@ -1846,6 +1848,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallScryerPrologVersion |
                     &Instruction::CallCryptoRandomByte |
                     &Instruction::CallCryptoDataHash |
+                    &Instruction::CallCryptoHMAC |
                     &Instruction::CallCryptoDataHKDF |
                     &Instruction::CallCryptoPasswordHash |
                     &Instruction::CallCryptoCurveScalarMult |
@@ -2082,6 +2085,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteScryerPrologVersion |
                     &Instruction::ExecuteCryptoRandomByte |
                     &Instruction::ExecuteCryptoDataHash |
+                    &Instruction::ExecuteCryptoHMAC |
                     &Instruction::ExecuteCryptoDataHKDF |
                     &Instruction::ExecuteCryptoPasswordHash |
                     &Instruction::ExecuteCryptoCurveScalarMult |

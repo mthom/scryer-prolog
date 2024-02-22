@@ -1,5 +1,5 @@
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   Written 2020-2023 by Markus Triska (triska@metalevel.at)
+   Written 2020-2024 by Markus Triska (triska@metalevel.at)
    Part of Scryer Prolog.
 
 /** Predicates for cryptographic applications.
@@ -192,6 +192,11 @@ crypto_random_byte(B) :- '$crypto_random_byte'(B).
 %      The default encoding is `utf8`. The alternative is `octet`, to
 %      treat the input as a list of raw bytes.
 %
+%    - `hmac(+Key)`
+%      Compute a hash-based message authentication code (HMAC) using
+%      Key, a list of bytes. This option is currently supported for
+%      algorithms `sha256`, `sha384` and `sha512`.
+%
 %  Example:
 %
 % ```
@@ -214,8 +219,17 @@ crypto_data_hash(Data0, Hash, Options0) :-
         (   hash_algorithm(A) -> true
         ;   domain_error(hash_algorithm, A, crypto_data_hash/3)
         ),
-        '$crypto_data_hash'(Data, Encoding, HashBytes, A),
+        (   member(HMAC, Options0), nonvar(HMAC), HMAC = hmac(Ks) ->
+            must_be_bytes(Ks, crypto_data_hash/3),
+            hmac_algorithm(A),
+            '$crypto_hmac'(Data, Encoding, Ks, HashBytes, A)
+        ;   '$crypto_data_hash'(Data, Encoding, HashBytes, A)
+        ),
         hex_bytes(Hash, HashBytes).
+
+hmac_algorithm(sha256).
+hmac_algorithm(sha384).
+hmac_algorithm(sha512).
 
 options_data_chars(Options, Data, Chars, Encoding) :-
         option(encoding(Encoding), Options, utf8),
