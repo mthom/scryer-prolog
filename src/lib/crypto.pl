@@ -828,8 +828,25 @@ curve_a(curve(_,_,A,_,_,_,_,_), A).
 curve_b(curve(_,_,_,B,_,_,_,_), B).
 curve_field_length(curve(_,_,_,_,_,_,FieldLength,_), FieldLength).
 
+%% crypto_curve_generator(+Curve, -G)
+%
+%  Yields the generator point G of Curve.
+
 crypto_curve_generator(curve(_,_,_,_,G,_,_,_), G).
+
+%% crypto_curve_order(+Curve, -Order)
+%
+%  Yields the order of Curve.
+
 crypto_curve_order(curve(_,_,_,_,_,Order,_,_), Order).
+
+%% crypto_curve_scalar_mult(+Curve, +Scalar, +Point, -Result)
+%
+%  Computes the point _Result = Scalar*Point_. Scalar must be an
+%  integer, and Point must be a point on Curve. This operation can be
+%  used to negotiate a shared secret over a public channel. Consider
+%  using `curve25519_scalar_mult/3` instead for more desirable
+%  security properties.
 
 crypto_curve_scalar_mult(Curve, Scalar, point(X,Y), point(RX, RY)) :-
         must_be(integer, Scalar),
@@ -896,6 +913,12 @@ fitting_exponent(N, E0, E) :-
         ;   E1 #= E0 + 1,
             fitting_exponent(N, E1, E)
         ).
+
+%% crypto_name_curve(+Name, -Curve)
+%
+%  Yields a representation of the elliptic curve with name Name.
+%  Currently, the only supported name is `secp256k1`, a Koblitz curve
+%  regarded as secure.
 
 crypto_name_curve(secp256k1,
                   curve(secp256k1,
