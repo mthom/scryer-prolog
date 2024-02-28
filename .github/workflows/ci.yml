@@ -21,7 +21,7 @@ jobs:
       - name: Setup Rust
         uses: ./.github/actions/setup-rust
         with:
-          rust-version: nightly
+          rust-version: stable
           targets: x86_64-unknown-linux-gnu
           components: clippy, rustfmt
           cache-context: style
@@ -44,7 +44,8 @@ jobs:
           # architectures
           - { os: ubuntu-22.04,   rust-version: stable,  target: 'x86_64-unknown-linux-gnu', publish: true }
           - { os: ubuntu-22.04,   rust-version: stable,  target: 'i686-unknown-linux-gnu',   publish: true }
-          - { os: ubuntu-22.04,   rust-version: nightly, target: 'wasm32-unknown-unknown',   publish: true, args: '--no-default-features' }
+          # FIXME(issue #2138): run wasm tests, failing to run since https://github.com/mthom/scryer-prolog/pull/2137 removed wasm-pack
+          - { os: ubuntu-22.04,   rust-version: nightly, target: 'wasm32-unknown-unknown',   publish: true, args: '--no-default-features' , test-args: '--no-run --no-default-features' }
           # rust versions
           - { os: ubuntu-22.04,   rust-version: "1.70",  target: 'x86_64-unknown-linux-gnu'}
           - { os: ubuntu-22.04,   rust-version: beta,    target: 'x86_64-unknown-linux-gnu'}
@@ -63,11 +64,9 @@ jobs:
 
       # Build and test.
       - name: Build library
-        continue-on-error: ${{ contains(matrix.target,'wasm32') }} # allow wasm builds to fail tests for now
         run: cargo build --all-targets --target ${{ matrix.target }} ${{ matrix.args }} --verbose
       - name: Test
-        continue-on-error: ${{ contains(matrix.target,'wasm32') }} # allow wasm builds to fail tests for now
-        run: cargo test --target ${{ matrix.target }} ${{ matrix.args }} --all
+        run: cargo test --target ${{ matrix.target }} ${{ matrix.test-args }} --all
 
       # On stable rust builds, build a binary and publish as a github actions
       # artifact. These binaries could be useful for testing the pipeline but
@@ -138,7 +137,7 @@ jobs:
       - name: Setup Rust
         uses: ./.github/actions/setup-rust
         with:
-          rust-version: nightly
+          rust-version: stable
           targets: x86_64-unknown-linux-gnu
           cache-context: report
       - run: |

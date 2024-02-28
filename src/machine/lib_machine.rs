@@ -39,10 +39,10 @@ impl Machine {
 
     fn allocate_stub_choice_point(&mut self) {
         // NOTE: create a choice point to terminate the dispatch_loop
-        // if an exception is thrown. since the and/or stack is presumed empty,
+        // if an exception is thrown.
 
         let stub_b = self.machine_st.stack.allocate_or_frame(0);
-        let or_frame = self.machine_st.stack.index_or_frame_mut(0);
+        let or_frame = self.machine_st.stack.index_or_frame_mut(stub_b);
 
         or_frame.prelude.num_cells = 0;
         or_frame.prelude.e = 0;
@@ -58,6 +58,7 @@ impl Machine {
 
         self.machine_st.b = stub_b;
         self.machine_st.hb = self.machine_st.heap.len();
+        self.machine_st.block = stub_b;
     }
 
     pub fn run_query(&mut self, query: String) -> QueryResult {
@@ -72,23 +73,12 @@ impl Machine {
             .read_term(&op_dir, Tokens::Default)
             .expect("Failed to parse query");
 
+        self.allocate_stub_choice_point();
+
         // Write parsed term to heap
         let term_write_result =
             write_term_to_heap(&term, &mut self.machine_st.heap, &self.machine_st.atom_tbl)
                 .expect("couldn't write term to heap");
-
-        // Write term to heap
-        self.machine_st.registers[1] = self.machine_st.heap[term_write_result.heap_loc];
-
-        self.machine_st.cp = LIB_QUERY_SUCCESS; // BREAK_FROM_DISPATCH_LOOP_LOC;
-        self.machine_st.p = self
-            .indices
-            .code_dir
-            .get(&(atom!("call"), 1))
-            .expect("couldn't get code index")
-            .local()
-            .unwrap();
-        self.machine_st.b0 = self.machine_st.b;
 
         let var_names: IndexMap<_, _> = term_write_result
             .var_dict
@@ -102,7 +92,19 @@ impl Machine {
             })
             .collect();
 
-        self.allocate_stub_choice_point();
+        // Write term to heap
+        self.machine_st.registers[1] = self.machine_st.heap[term_write_result.heap_loc];
+
+        self.machine_st.cp = LIB_QUERY_SUCCESS; // BREAK_FROM_DISPATCH_LOOP_LOC;
+        let call_index_p = self
+            .indices
+            .code_dir
+            .get(&(atom!("call"), 1))
+            .expect("couldn't get code index")
+            .local()
+            .unwrap();
+
+        self.machine_st.execute_at_index(1, call_index_p);
 
         let stub_b = self.machine_st.b;
 
@@ -156,17 +158,17 @@ impl Machine {
             };
             */
 
-            if term_write_result.var_dict.is_empty() {
-                if self.machine_st.p == LIB_QUERY_SUCCESS {
+            if self.machine_st.p == LIB_QUERY_SUCCESS {
+                if term_write_result.var_dict.is_empty() {
                     matches.push(QueryResolutionLine::True);
                     break;
-                } else if self.machine_st.p == BREAK_FROM_DISPATCH_LOOP_LOC {
-                    // NOTE: only print results on success
-                    // self.machine_st.fail = false;
-                    // println!("b == stub_b");
-                    matches.push(QueryResolutionLine::False);
-                    break;
                 }
+            } else if self.machine_st.p == BREAK_FROM_DISPATCH_LOOP_LOC {
+                // NOTE: only print results on success
+                // self.machine_st.fail = false;
+                // println!("b == stub_b");
+                matches.push(QueryResolutionLine::False);
+                break;
             }
 
             let mut bindings: BTreeMap<String, Value> = BTreeMap::new();
@@ -462,6 +464,7 @@ mod tests {
         let blocks = code.split("=====");
 
         let mut i = 0;
+        let mut last_result: Option<_> = None;
         // Iterate over the blocks
         for block in blocks {
             // Trim the block to remove any leading or trailing whitespace
@@ -474,20 +477,24 @@ mod tests {
 
             // Check if the block is a query
             if let Some(query) = block.strip_prefix("query") {
-                i += 1;
-                println!("query #{}: {}", i, query);
                 // Parse and execute the query
                 let result = machine.run_query(query.to_string());
-
                 assert!(result.is_ok());
 
-                // Print the result
-                println!("{:?}", result);
+                last_result = Some(result);
             } else if let Some(code) = block.strip_prefix("consult") {
-                println!("load code: {}", code);
-
                 // Load the code into the machine
                 machine.consult_module_string("facts", code.to_string());
+            } else if let Some(result) = block.strip_prefix("result") {
+                i += 1;
+                if let Some(Ok(ref last_result)) = last_result {
+                    println!(
+                        "\n\n=====Result No. {}=======\n{}\n===============",
+                        i,
+                        last_result.to_string().trim()
+                    );
+                    assert_eq!(last_result.to_string().trim(), result.to_string().trim(),)
+                }
             }
         }
     }
@@ -522,6 +529,84 @@ mod tests {
                     ),
                 }
             ),]))
+        );
+    }
+
+    #[test]
+    fn dont_return_partial_matches() {
+        let mut machine = Machine::new_lib();
+
+        machine.consult_module_string(
+            "facts",
+            String::from(
+                r#"
+                :- discontiguous(property_resolve/2).
+                subject_class("Todo", c).
+        "#,
+            ),
+        );
+
+        let query = String::from(r#"property_resolve(C, "isLiked"), subject_class("Todo", C)."#);
+        let output = machine.run_query(query);
+        assert_eq!(output, Ok(QueryResolution::False));
+
+        let query = String::from(r#"subject_class("Todo", C), property_resolve(C, "isLiked")."#);
+        let output = machine.run_query(query);
+        assert_eq!(output, Ok(QueryResolution::False));
+    }
+
+    #[test]
+    fn dont_return_partial_matches_without_discountiguous() {
+        let mut machine = Machine::new_lib();
+
+        machine.consult_module_string(
+            "facts",
+            String::from(
+                r#"
+                a("true for a").
+                b("true for b").
+        "#,
+            ),
+        );
+
+        let query = String::from(r#"a("true for a")."#);
+        let output = machine.run_query(query);
+        assert_eq!(output, Ok(QueryResolution::True));
+
+        let query = String::from(r#"a("true for a"), b("true for b")."#);
+        let output = machine.run_query(query);
+        assert_eq!(output, Ok(QueryResolution::True));
+
+        let query = String::from(r#"a("true for b"), b("true for b")."#);
+        let output = machine.run_query(query);
+        assert_eq!(output, Ok(QueryResolution::False));
+
+        let query = String::from(r#"a("true for a"), b("true for a")."#);
+        let output = machine.run_query(query);
+        assert_eq!(output, Ok(QueryResolution::False));
+    }
+
+    #[test]
+    fn non_existent_predicate_should_not_cause_panic_when_other_predicates_are_defined() {
+        let mut machine = Machine::new_lib();
+
+        machine.consult_module_string(
+            "facts",
+            String::from(
+                r#"
+                triple("a", "p1", "b").
+                triple("a", "p2", "b").
+        "#,
+            ),
+        );
+
+        let query = String::from("non_existent_predicate(\"a\",\"p1\",\"b\").");
+
+        let result = machine.run_query(query);
+
+        assert_eq!(
+            result,
+            Err(String::from("error existence_error procedure / non_existent_predicate 3 / non_existent_predicate 3"))
         );
     }
 }

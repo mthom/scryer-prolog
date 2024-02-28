@@ -229,7 +229,7 @@ impl<R: Read> CharRead for CharReader<R> {
 
                     match self.inner.read(word_slice) {
                         Err(e) => return Some(Err(e)),
-                        Ok(nread) if nread == 0 => return Some(Err(bad_bytes_error(&self.buf))),
+                        Ok(0) => return Some(Err(bad_bytes_error(&self.buf))),
                         Ok(nread) => {
                             self.buf.extend_from_slice(&word_slice[0..nread]);
                         }
