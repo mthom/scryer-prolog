@@ -609,4 +609,25 @@ mod tests {
             Err(String::from("error existence_error procedure / non_existent_predicate 3 / non_existent_predicate 3"))
         );
     }
+
+    #[test]
+    fn issue_2341() {
+        let mut machine = Machine::new_lib();
+
+        machine.load_module_string(
+            "facts",
+            String::from(
+                r#"
+                male(stephen).
+                parent(albert,edward).
+                father(F,C):-parent(F,C),male(F).
+        "#,
+            ),
+        );
+
+        let query = String::from(r#"father(F,C)."#);
+        let output = machine.run_query(query);
+
+        assert_eq!(output, Ok(QueryResolution::False));
+    }
 }
