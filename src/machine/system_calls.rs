@@ -1693,7 +1693,10 @@ impl Machine {
                 }
             }
             _ => {
-                unreachable!()
+                let call_form = functor!(atom!(":"), [cell(module_name), cell(self.machine_st.registers[2])]);
+                let stub = functor_stub(atom!("call"), narity + 1);
+                let err = self.machine_st.type_error(ValidType::Callable, call_form);
+                return Err(self.machine_st.error_form(err, stub));
             }
         );
 
