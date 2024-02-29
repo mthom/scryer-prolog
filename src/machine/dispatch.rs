@@ -269,7 +269,16 @@ impl MachineState {
                         Literal::Rational(r)
                     }
                     (ArenaHeaderTag::Integer, n) => {
-                        Literal::Integer(n)
+                        let result = (&*n).try_into();
+
+                        match result {
+                            Ok(fixnum) => if let Ok(n) = Fixnum::build_with_checked(fixnum) {
+                                Literal::Fixnum(n)
+                            } else {
+                                Literal::Integer(n)
+                            },
+                            Err(_) => Literal::Integer(n)
+                        }
                     }
                     _ => {
                         unreachable!()

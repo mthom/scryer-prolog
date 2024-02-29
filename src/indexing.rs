@@ -1113,16 +1113,10 @@ pub(crate) fn constant_key_alternatives(
             constants.push(Literal::Atom(atom));
         }
         /*
+        // constant_to_literal takes care of the downward conversion from Integer to Fixnum
+        // if possible.
         Literal::Fixnum(ref n) => {
-            constants.push(Literal::Integer(arena_alloc!(n, arena))); //Rc::new(Integer::from(*n))));
-
-            /*
-            if *n >= 0 {
-                if let Ok(n) = usize::try_from(*n) {
-                    constants.push(Literal::Usize(n));
-                }
-            }
-            */
+            constants.push(Literal::Integer(arena_alloc!(n, arena)));
         }
         */
         Literal::Integer(ref n) => {
