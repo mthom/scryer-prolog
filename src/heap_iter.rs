@@ -8,7 +8,7 @@ use crate::machine::stack::*;
 use crate::types::*;
 
 use core::marker::PhantomData;
-use modular_bitfield::prelude::*;
+use scryer_modular_bitfield::prelude::*;
 
 use std::ops::Deref;
 use std::vec::Vec;

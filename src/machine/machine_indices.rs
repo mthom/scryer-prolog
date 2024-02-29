@@ -10,8 +10,8 @@ use crate::machine::ClauseType;
 
 use fxhash::FxBuildHasher;
 use indexmap::{IndexMap, IndexSet};
-use modular_bitfield::specifiers::*;
-use modular_bitfield::{bitfield, BitfieldSpecifier};
+use scryer_modular_bitfield::specifiers::*;
+use scryer_modular_bitfield::{bitfield, BitfieldSpecifier};
 
 use std::cmp::Ordering;
 use std::collections::BTreeSet;

@@ -1279,8 +1279,9 @@ dependencies = [
 
 [[package]]
 name = "iai-callgrind"
-version = "0.8.0"
-source = "git+https://github.com/iai-callgrind/iai-callgrind.git?rev=c77bc3c83d7f4e976cc42d4597236a8db259e772#c77bc3c83d7f4e976cc42d4597236a8db259e772"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7ebd67b0ae963bb8b800829320c264fcf71f821e3aed0c004ee252c99dbff3f7"
 dependencies = [
  "bincode",
  "iai-callgrind-macros",
@@ -1290,7 +1291,8 @@ dependencies = [
 [[package]]
 name = "iai-callgrind-macros"
 version = "0.1.0"
-source = "git+https://github.com/iai-callgrind/iai-callgrind.git?rev=c77bc3c83d7f4e976cc42d4597236a8db259e772#c77bc3c83d7f4e976cc42d4597236a8db259e772"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "af5af66b85e350097b8c0f6329c6347d3323d010443475741c29a1a167f116fb"
 dependencies = [
  "proc-macro-error",
  "proc-macro2",
@@ -1300,9 +1302,11 @@ dependencies = [
 
 [[package]]
 name = "iai-callgrind-runner"
-version = "0.8.0"
-source = "git+https://github.com/iai-callgrind/iai-callgrind.git?rev=c77bc3c83d7f4e976cc42d4597236a8db259e772#c77bc3c83d7f4e976cc42d4597236a8db259e772"
+version = "0.9.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6a465e75ad1dfe0fbbb3ee22f5f7d5c077401e412059edb5f3856b1734668bee"
 dependencies = [
+ "lazy_static",
  "serde",
 ]
 
@@ -1648,25 +1652,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "b9f1c5b025cda876f66ef43a113f91ebc9f4ccef34843000e0adf6ebbab84e21"
 dependencies = [
  "winapi",
-]
-
-[[package]]
-name = "modular-bitfield"
-version = "0.11.2"
-source = "git+https://github.com/mthom/modular-bitfield#213535c684af277563678179d8496f11b84a283f"
-dependencies = [
- "modular-bitfield-impl",
- "static_assertions",
-]
-
-[[package]]
-name = "modular-bitfield-impl"
-version = "0.11.2"
-source = "git+https://github.com/mthom/modular-bitfield#213535c684af277563678179d8496f11b84a283f"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
 ]
 
 [[package]]
@@ -2549,8 +2534,29 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "94143f37725109f92c262ed2cf5e59bce7498c01bcc1502d7b9afe439a4e9f49"
 
 [[package]]
+name = "scryer-modular-bitfield"
+version = "0.11.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d1f26c70c56d2c94a02545d86384b91994532c2be928c974784b603c2b1f76ac"
+dependencies = [
+ "scryer-modular-bitfield-impl",
+ "static_assertions",
+]
+
+[[package]]
+name = "scryer-modular-bitfield-impl"
+version = "0.11.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "212164841808ccfccf1b0471d91f8cfe675eeb60dbb96e4ca7a1f37b22570a29"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 1.0.109",
+]
+
+[[package]]
 name = "scryer-prolog"
-version = "0.9.3"
+version = "0.9.4"
 dependencies = [
  "assert_cmd",
  "base64 0.12.3",
@@ -2583,7 +2589,6 @@ dependencies = [
  "libffi",
  "libloading",
  "maplit",
- "modular-bitfield",
  "native-tls",
  "num-order",
  "ordered-float",
@@ -2601,6 +2606,7 @@ dependencies = [
  "roxmltree",
  "rustyline",
  "ryu",
+ "scryer-modular-bitfield",
  "select",
  "serde",
  "serde-wasm-bindgen",

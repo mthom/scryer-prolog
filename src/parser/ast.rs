@@ -17,8 +17,8 @@ use crate::parser::dashu::{Integer, Rational};
 
 use fxhash::FxBuildHasher;
 use indexmap::IndexMap;
-use modular_bitfield::error::OutOfBounds;
-use modular_bitfield::prelude::*;
+use scryer_modular_bitfield::error::OutOfBounds;
+use scryer_modular_bitfield::prelude::*;
 
 pub type Specifier = u32;
 
@@ -537,7 +537,7 @@ impl Fixnum {
 
     #[inline]
     pub fn get_tag(&self) -> HeapCellValueTag {
-        use modular_bitfield::Specifier;
+        use scryer_modular_bitfield::Specifier;
         HeapCellValueTag::from_bytes(self.tag()).unwrap()
     }
 

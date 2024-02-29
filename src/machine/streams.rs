@@ -12,7 +12,7 @@ use crate::machine::machine_indices::*;
 use crate::machine::machine_state::*;
 use crate::types::*;
 
-pub use modular_bitfield::prelude::*;
+pub use scryer_modular_bitfield::prelude::*;
 
 use std::cmp::Ordering;
 use std::error::Error;

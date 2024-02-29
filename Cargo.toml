@@ -1,6 +1,6 @@
 [package]
 name = "scryer-prolog"
-version = "0.9.3"
+version = "0.9.4"
 authors = ["Mark Thom <markjordanthom@gmail.com>"]
 edition = "2021"
 description = "A modern Prolog implementation written mostly in Rust."
@@ -57,7 +57,7 @@ lazy_static = "1.4.0"
 lexical = "5.2.2"
 libc = "0.2.62"
 libloading = "0.7"
-modular-bitfield = "0.11.2"
+scryer-modular-bitfield = "0.11.4"
 num-order = { version = "1.2.0" }
 ordered-float = "2.6.0"
 phf = { version = "0.9", features = ["macros"] }
@@ -118,14 +118,11 @@ serial_test = "2.0.0"
 [target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dev-dependencies]
 assert_cmd = "1.0.3"
 criterion = "0.5.1"
-iai-callgrind = { git = "https://github.com/iai-callgrind/iai-callgrind.git", rev = "c77bc3c83d7f4e976cc42d4597236a8db259e772" }
+iai-callgrind = "0.9.0"
 trycmd = "0.14.19"
 
 [target.'cfg(not(any(target_os = "windows", all(target_arch = "wasm32", target_os = "unknown"))))'.dev-dependencies]
 pprof = { version = "0.13.0", features = ["criterion", "flamegraph"] }
-
-[patch.crates-io]
-modular-bitfield = { git = "https://github.com/mthom/modular-bitfield" }
 
 [profile.bench]
 lto = true
