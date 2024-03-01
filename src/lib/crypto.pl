@@ -91,9 +91,36 @@ bytes_hex([B|Bs]) --> [C0,C1],
         },
         bytes_hex(Bs).
 
+char_hexval(C, H) :-
+        integer(H),
+        !,
+        hexval_char(H, C).
 char_hexval(C, H) :- nth0(H, "0123456789abcdef", C), !.
 char_hexval(C, H) :- nth0(H, "0123456789ABCDEF", C), !.
 
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  We specialize char_hexval/2 for use if the value is given,
+  so that it works in constant time in this case.
+
+  The security of HMAC verification depends on this property.
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+hexval_char(0, '0').
+hexval_char(1, '1').
+hexval_char(2, '2').
+hexval_char(3, '3').
+hexval_char(4, '4').
+hexval_char(5, '5').
+hexval_char(6, '6').
+hexval_char(7, '7').
+hexval_char(8, '8').
+hexval_char(9, '9').
+hexval_char(0xa, a).
+hexval_char(0xb, b).
+hexval_char(0xc, c).
+hexval_char(0xd, d).
+hexval_char(0xe, e).
+hexval_char(0xf, f).
 
 must_be_bytes(Bytes, Context) :-
         must_be(list, Bytes),
@@ -195,7 +222,13 @@ crypto_random_byte(B) :- '$crypto_random_byte'(B).
 %    - `hmac(+Key)`
 %      Compute a hash-based message authentication code (HMAC) using
 %      Key, a list of bytes. This option is currently supported for
-%      algorithms `sha256`, `sha384` and `sha512`.
+%      algorithms `sha256`, `sha384` and `sha512`. If `Hash` is
+%      instantiated, then it is compared with the computed HMAC
+%      in such a way that no information about the expected HMAC
+%      is revealed, using a comparison of strings that always takes
+%      the same time independent of whether and where the strings
+%      differ. This option can therefore also be used to safely
+%      _verify_ a given HMAC.
 %
 %  Example:
 %
@@ -222,10 +255,26 @@ crypto_data_hash(Data0, Hash, Options0) :-
         (   member(HMAC, Options0), nonvar(HMAC), HMAC = hmac(Ks) ->
             must_be_bytes(Ks, crypto_data_hash/3),
             hmac_algorithm(A),
-            '$crypto_hmac'(Data, Encoding, Ks, HashBytes, A)
-        ;   '$crypto_data_hash'(Data, Encoding, HashBytes, A)
-        ),
-        hex_bytes(Hash, HashBytes).
+            '$crypto_hmac'(Data, Encoding, Ks, HashBytes, A),
+            (   var(Hash) ->
+                hex_bytes(Hash, HashBytes)
+            ;   must_be(chars, Hash),
+                hex_bytes(HashMAC, HashBytes),
+                chars_equal_constant_time(Hash, HashMAC)
+            )
+        ;   '$crypto_data_hash'(Data, Encoding, HashBytes, A),
+            hex_bytes(Hash, HashBytes)
+        ).
+
+chars_equal_constant_time(As, Bs) :-
+        maplist(chars_xor, As, Bs, Xs),
+        sum_list(Xs, Sum),
+        Sum =:= 0.
+
+chars_xor(A, B, Xor) :-
+        char_code(A, CA),
+        char_code(B, CB),
+        Xor is xor(CA,CB).
 
 hmac_algorithm(sha256).
 hmac_algorithm(sha384).
