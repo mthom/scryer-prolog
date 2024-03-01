@@ -140,10 +140,12 @@ jobs:
           rust-version: stable
           targets: x86_64-unknown-linux-gnu
           cache-context: report
-      - run: |
+      - name: Install CLI tools
+        run: |
           cargo install cargo2junit --force
-          # cargo install iai-callgrind-runner --force --version `cargo metadata --format-version 1 | jq -r '.resolve.nodes[].id|split(" ")|select(.[0]=="iai-callgrind")|.[1]'`
-          cargo install iai-callgrind-runner --force --git https://github.com/iai-callgrind/iai-callgrind --rev c77bc3c83d7f4e976cc42d4597236a8db259e772
+          version=`yq -ptoml -oy -r '.target.*.dev-dependencies.iai-callgrind|select(.)' Cargo.toml`
+          echo installing iai-callgrind "$version"
+          cargo install iai-callgrind-runner --force --version "$version"
           sudo apt install valgrind -y
 
       - name: Test and report
