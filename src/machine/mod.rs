@@ -12,6 +12,7 @@ pub mod disjuncts;
 pub mod dispatch;
 pub mod gc;
 pub mod heap;
+pub mod jit;
 pub mod lib_machine;
 pub mod load_state;
 pub mod machine_errors;
@@ -1139,6 +1140,8 @@ impl Machine {
 
         Ok(())
     }
+
+    
 
     #[inline(always)]
     fn try_execute(&mut self, name: Atom, arity: usize, idx: IndexPtr) -> CallResult {

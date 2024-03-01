@@ -13,7 +13,7 @@ build = "build/main.rs"
 rust-version = "1.70"
 
 [lib]
-crate-type = ["cdylib", "rlib"]
+crate-type = ["cdylib", "rlib", "staticlib"]
 
 [features]
 default = ["ffi", "repl", "hostname", "tls", "http", "crypto-full"]
@@ -83,6 +83,9 @@ native-tls = { version = "0.2.4", optional = true }
 warp = { version = "=0.3.5", features = ["tls"], optional = true }
 reqwest = { version = "0.11.18", optional = true }
 tokio = { version = "1.28.2", features = ["full"] }
+cranelift = "0.105.0"
+cranelift-jit = "0.105.0"
+cranelift-module = "0.105.0"
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
 getrandom = { version = "0.2.10", features = ["js"] }

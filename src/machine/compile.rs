@@ -1355,6 +1355,8 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             index_ptr,
         );
 
+	dbg!(&code);
+	
         self.wam_prelude.code.extend(code);
         Ok(code_index)
     }
