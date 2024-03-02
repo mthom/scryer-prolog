@@ -223,8 +223,8 @@ compile_term(Term, Evacuable) :-
     (  var(Terms) ->
        instantiation_error(load/1)
     ;  Terms = [_|_] ->
-       compile_dispatch_or_clause_on_list(Terms, Evacuable)
-    ;  compile_dispatch_or_clause(Terms, Evacuable)
+       compile_dispatch_or_clause_on_list(list(Term), Terms, Evacuable)
+    ;  compile_dispatch_or_clause(term(Term), Terms, Evacuable)
     ).
 
 complete_partial_goal(N, HeadArg, InnerHeadArgs, SuppArgs, CompleteHeadArg) :-
@@ -330,18 +330,18 @@ expand_terms_and_goals(Term, Terms) :-
     ).
 
 
-compile_dispatch_or_clause_on_list([], Evacuable).
-compile_dispatch_or_clause_on_list([Term | Terms], Evacuable) :-
-    compile_dispatch_or_clause(Term, Evacuable),
-    compile_dispatch_or_clause_on_list(Terms, Evacuable).
+compile_dispatch_or_clause_on_list(OrigTerm, [], Evacuable).
+compile_dispatch_or_clause_on_list(OrigTerm, [Term | Terms], Evacuable) :-
+    compile_dispatch_or_clause(OrigTerm, Term, Evacuable),
+    compile_dispatch_or_clause_on_list(OrigTerm, Terms, Evacuable).
 
 
-compile_dispatch_or_clause(Term, Evacuable) :-
+compile_dispatch_or_clause(OrigTerm, Term, Evacuable) :-
     (  var(Term) ->
        instantiation_error(load/1)
     ;  compile_dispatch(Term, Evacuable) ->
        '$flush_term_queue'(Evacuable)
-    ;  compile_clause(Term, Evacuable)
+    ;  compile_clause(OrigTerm, Term, Evacuable)
     ).
 
 
@@ -467,39 +467,46 @@ compile_declaration(non_counted_backtracking(Name/Arity), Evacuable) :-
     ;  domain_error(not_less_than_zero, Arity, load/1)
     ).
 
+recompile_term(list(OrigTerm), Term, Evacuable) :-
+    % since OrigTerm expanded to a list, its contents are considered a
+    % unit to be compiled simultaneously, and so its clauses are not
+    % re-expanded when their predecessors are compiled.
+    compile_clause(list(OrigTerm), Term, Evacuable).
+recompile_term(term(OrigTerm), _Term, Evacuable) :-
+    compile_term(OrigTerm, Evacuable).
 
-compile_clause((Target:Head :- Body), Evacuable) :-
+compile_clause(OrigTerm, (Target:Head :- Body), Evacuable) :-
     !,
     functor(Head, Name, Arity),
     (  '$is_consistent_with_term_queue'(Target, Name, Arity, Evacuable) ->
        '$scoped_clause_to_evacuable'(Target, (Head :- Body), Evacuable)
     ;  '$flush_term_queue'(Evacuable),
-       compile_term((Target:Head :- Body), Evacuable)
+       recompile_term(OrigTerm, (Target:Head :- Body), Evacuable)
     ).
-compile_clause(Target:Head, Evacuable) :-
+compile_clause(OrigTerm, Target:Head, Evacuable) :-
     !,
     functor(Head, Name, Arity),
     (  '$is_consistent_with_term_queue'(Target, Name, Arity, Evacuable) ->
        '$scoped_clause_to_evacuable'(Target, Head, Evacuable)
     ;  '$flush_term_queue'(Evacuable),
-       compile_term(Target:Head, Evacuable)
+       recompile_term(OrigTerm, Target:Head, Evacuable)
     ).
-compile_clause((Head :- Body), Evacuable) :-
+compile_clause(OrigTerm, (Head :- Body), Evacuable) :-
     !,
     prolog_load_context(module, Target),
     functor(Head, Name, Arity),
     (  '$is_consistent_with_term_queue'(Target, Name, Arity, Evacuable) ->
        '$clause_to_evacuable'((Head :- Body), Evacuable)
     ;  '$flush_term_queue'(Evacuable),
-       compile_term((Head :- Body), Evacuable)
+       recompile_term(OrigTerm, (Head :- Body), Evacuable)
     ).
-compile_clause(Head, Evacuable) :-
+compile_clause(OrigTerm, Head, Evacuable) :-
     prolog_load_context(module, Target),
     functor(Head, Name, Arity),
     (  '$is_consistent_with_term_queue'(Target, Name, Arity, Evacuable) ->
        '$clause_to_evacuable'(Head, Evacuable)
     ;  '$flush_term_queue'(Evacuable),
-       compile_term(Head, Evacuable)
+       recompile_term(OrigTerm, Head, Evacuable)
     ).
 
 
