@@ -55,11 +55,14 @@ the builtin Prolog modules and libraries in Scryer, check the documentation site
 
 ## Downloads
 
-The latest version of Scryer Prolog is *0.9.3*. And it's already useful for lots of tasks.
+The latest version of Scryer Prolog is *0.9.4*. And it's already useful for lots of tasks.
 
-| Windows | [Download](https://github.com/mthom/scryer-prolog/releases/download/v0.9.3/scryer-prolog_windows-latest.zip) |
-| macOS (Intel) | [Download](https://github.com/mthom/scryer-prolog/releases/download/v0.9.3/scryer-prolog_macos-11.zip) |
-| Linux | [Download](https://github.com/mthom/scryer-prolog/releases/download/v0.9.3/scryer-prolog_ubuntu-20.04.zip) |
+| Windows (64 bits) | [Download](https://scryerprologrelease.blob.core.windows.net/release-094/scryer-prolog_windows-latest_x86_64-pc-windows-msvc.zip) |
+| macOS (Intel) | [Download](https://scryerprologrelease.blob.core.windows.net/release-094/scryer-prolog_macos-11_x86_64-apple-darwin.zip) |
+| macOS (ARM) | [Download](https://scryerprologrelease.blob.core.windows.net/release-094/scryer-prolog-macos-arm.zip) |
+| Linux (Ubuntu 20.04, 64 bits) | [Download](https://scryerprologrelease.blob.core.windows.net/release-094/scryer-prolog_ubuntu-20.04_x86_64-unknown-linux-gnu.zip) |
+| Linux (Ubuntu 22.04, 64 bits) | [Download](https://scryerprologrelease.blob.core.windows.net/release-094/scryer-prolog_ubuntu-22.04_x86_64-unknown-linux-gnu.zip) |
+| Linux (Ubuntu 22.04, 32 bits) | [Download](https://scryerprologrelease.blob.core.windows.net/release-094/scryer-prolog_ubuntu-22.04_i686-unknown-linux-gnu.zip) |
 
 Scryer Prolog can also be compiled from source, instructions are on the [GitHub README](https://github.com/mthom/scryer-prolog). It runs on Linux, macOS and Windows. Other operating systems may work but they're not regularly tested.
 
