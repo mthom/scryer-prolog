@@ -10,10 +10,6 @@
 
    Especially for cryptographic applications, it is an advantage that
    using strings leaves little trace of what was processed in the system.
-
-   For predicates that accept an `encoding/1` option to specify the encoding
-   of the input data, if `encoding(octet)` is used, then the input can also
-   be specified as a list of _bytes_, i.e., integers between 0 and 255.
 */
 
 :- module(crypto,
