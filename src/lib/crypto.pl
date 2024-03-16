@@ -664,6 +664,8 @@ crypto_data_decrypt(CipherText0, Algorithm, Key, IV, PlainText, Options) :-
 encoding_chars(octet, Bs, Cs) :-
         must_be(list, Bs),
         (   maplist(integer, Bs) ->
+            % the ability to use integers is deprecated and a
+            % candidate for removal in the future!
             maplist(char_code, Cs, Bs)
         ;   Bs = Cs
         ),
