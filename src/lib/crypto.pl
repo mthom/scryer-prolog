@@ -10,10 +10,6 @@
 
    Especially for cryptographic applications, it is an advantage that
    using strings leaves little trace of what was processed in the system.
-
-   For predicates that accept an `encoding/1` option to specify the encoding
-   of the input data, if `encoding(octet)` is used, then the input can also
-   be specified as a list of _bytes_, i.e., integers between 0 and 255.
 */
 
 :- module(crypto,
@@ -217,7 +213,8 @@ crypto_random_byte(B) :- '$crypto_random_byte'(B).
 %
 %    - `encoding(+Encoding)`
 %      The default encoding is `utf8`. The alternative is `octet`, to
-%      treat the input as a list of raw bytes.
+%      use the character code of each character in Data as a byte
+%      value.
 %
 %    - `hmac(+Key)`
 %      Compute a hash-based message authentication code (HMAC) using
@@ -334,7 +331,8 @@ hash_algorithm(blake2b512).
 %      default is all zeroes.
 %    - `encoding(+Encoding)`
 %      The default encoding is `utf8`. The alternative is `octet`,
-%      to treat the input as a list of raw bytes.
+%      to use the character code of each character in Data as a byte
+%      value.
 %
 %  The `info/1`  option can be  used to  generate multiple keys  from a
 %  single  master key,  using for  example values  such as  "key" and
@@ -540,8 +538,9 @@ bytes_base64(Bytes, Base64) :-
 %  Options:
 %
 %     - `encoding(+Encoding)`
-%     Encoding to use for PlainText. Default is utf8. The alternative
-%     is octet to treat PlainText as raw bytes.
+%     Encoding to use for PlainText. The default is `utf8`. The
+%     alternative is `octet`, to use the character code of each
+%     character in PlainText as a byte value.
 %
 %     - `tag(-List)`
 %     For authenticated encryption schemes, List is unified with a
@@ -627,8 +626,9 @@ algorithm_key_iv('chacha20-poly1305', Key, IV) :-
 %  Options is a list of:
 %
 %   - `encoding(+Encoding)`
-%   Encoding to use for PlainText. The default is utf8. The
-%   alternative is octet, which is used if the data are raw bytes.
+%   Encoding to use for PlainText. The default is `utf8`. The
+%   alternative is `octet`, to obtain a list of characters where each
+%   character code corresponds to a decrypted octet of CipherText.
 %
 %   - `tag(+Tag)`
 %   For authenticated encryption schemes, the tag must be specified as
@@ -664,6 +664,8 @@ crypto_data_decrypt(CipherText0, Algorithm, Key, IV, PlainText, Options) :-
 encoding_chars(octet, Bs, Cs) :-
         must_be(list, Bs),
         (   maplist(integer, Bs) ->
+            % the ability to use integers is deprecated and a
+            % candidate for removal in the future!
             maplist(char_code, Cs, Bs)
         ;   Bs = Cs
         ),
@@ -911,7 +913,8 @@ ed25519_sign(KeyPair, Data0, Signature, Options) :-
 %
 %  - `encoding(+Encoding)`
 %    The default encoding of Data is `utf8`. The alternative is `octet`,
-%    which treats Data as a list of raw bytes.
+%    to use the character code of each character in Data as a byte
+%    value.
 
 ed25519_verify(Key, Data0, Signature0, Options) :-
         must_be_octet_chars(Key, ed25519_verify/4),
