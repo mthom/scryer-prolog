@@ -88,7 +88,7 @@ format_(Fs, Args) -->
         format_cells(Cells).
 
 format_args_cells(Fs, Args, Cells) :-
-        must_be(list, Fs),
+        must_be(chars, Fs),
         must_be(list, Args),
         unique_variable_names(Args, VNs),
         phrase(cells(Fs,Args,0,[],VNs), Cells).
