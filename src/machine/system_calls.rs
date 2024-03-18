@@ -7245,6 +7245,39 @@ impl Machine {
     }
 
     #[inline(always)]
+    pub(crate) fn integer_in_radix(&mut self) {
+        let radix = match Number::try_from(self.deref_register(2)) {
+            Ok(Number::Fixnum(n)) => u32::try_from(n.get_num()).unwrap(),
+            Ok(Number::Integer(n)) => match (&*n).try_into() as Result<u32, _> {
+                Ok(u) => u,
+                _ => {
+                    self.machine_st.fail = true;
+                    return;
+                }
+            },
+            _ => {
+                unreachable!()
+            }
+        };
+
+        let str = match Number::try_from(self.deref_register(1)) {
+            Ok(Number::Fixnum(n)) => {
+                Integer::from(n).in_radix(radix).to_string()
+            }
+            Ok(Number::Integer(n)) => {
+                n.in_radix(radix).to_string()
+            }
+            _ => {
+                unreachable!()
+            }
+        };
+
+        let r3 = self.deref_register(3);
+        let chars_atom = AtomTable::build_with(&self.machine_st.atom_tbl, &str);
+        self.machine_st.unify_complete_string(chars_atom, r3);
+    }
+
+    #[inline(always)]
     pub(crate) fn scryer_prolog_version(&mut self) {
         use git_version::git_version;
 
