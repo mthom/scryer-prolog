@@ -14,16 +14,22 @@ struct CompileOutput {
 }
 
 #[derive(Debug, PartialEq)]
-enum JitCompileError {
+pub enum JitCompileError {
     UndefinedPredicate,
     InstructionNotImplemented,
 }
 
-struct JitMachine {
+pub struct JitMachine {
     modules: HashMap<String, CompileOutput>,
     machine_state: *const u8,
     registers: *const u8,
     write_literal_to_var: *const u8,
+}
+
+impl std::fmt::Debug for JitMachine {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "JitMachine")
+    }
 }
 
 impl JitMachine {
@@ -124,12 +130,13 @@ impl JitMachine {
 	Ok(())
     }
 
-    pub fn exec(&self, name: &str) {
+    pub fn exec(&self, name: &str) -> Result<(), ()> {
 	if let Some(output) = self.modules.get(name) {
 	    let code_ptr = unsafe { std::mem::transmute::<_, extern "C" fn() -> ()>(output.code_ptr) };
 	    code_ptr();
+	    Ok(())
 	} else {
-	    panic!("Can't find function");
+	    Err(())
 	}
     }
 }

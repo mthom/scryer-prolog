@@ -40,6 +40,7 @@ use crate::machine::args::*;
 use crate::machine::compile::*;
 use crate::machine::copier::*;
 use crate::machine::heap::*;
+use crate::machine::jit::*;
 use crate::machine::loader::*;
 use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
@@ -81,6 +82,7 @@ pub struct Machine {
     #[cfg(feature = "ffi")]
     pub(super) foreign_function_table: ForeignFunctionTable,
     pub(super) rng: StdRng,
+    pub(super) jit_machine: JitMachine,
 }
 
 #[derive(Debug)]
@@ -467,6 +469,8 @@ impl Machine {
             ),
         };
 
+	let jit_machine = JitMachine::new(&machine_st);
+
         let mut wam = Machine {
             machine_st,
             indices: IndexStore::new(),
@@ -478,6 +482,7 @@ impl Machine {
             #[cfg(feature = "ffi")]
             foreign_function_table: Default::default(),
             rng: StdRng::from_entropy(),
+	    jit_machine: jit_machine,
         };
 
         let mut lib_path = current_dir();
@@ -1146,6 +1151,19 @@ impl Machine {
     #[inline(always)]
     fn try_execute(&mut self, name: Atom, arity: usize, idx: IndexPtr) -> CallResult {
         let compiled_tl_index = idx.p() as usize;
+
+	if name == atom!("a") {
+	    self.machine_st.p = self.machine_st.cp;
+	    self.machine_st.oip = 0;
+	    self.machine_st.iip = 0;
+	    self.machine_st.num_of_args = arity;
+	    self.machine_st.b0 = self.machine_st.b;
+	}
+
+	if let Ok(_) = self.jit_machine.exec(&format!("{}/{}", name.as_str(), arity)) {
+	    println!("Executed JIT predicate");
+	    return Ok(());
+	}
 
         match idx.tag() {
             IndexPtrTag::DynamicUndefined => {

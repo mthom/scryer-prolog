@@ -4164,6 +4164,14 @@ impl Machine {
                         try_or_throw!(self.machine_st, self.argv());
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                     }
+		    &Instruction::CallJitCompile => {
+			try_or_throw!(self.machine_st, self.jit_compile());
+			step_or_fail!(self, self.machine_st.p += 1);
+		    }
+		    &Instruction::ExecuteJitCompile => {
+			try_or_throw!(self.machine_st, self.jit_compile());
+			step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+		    }
                     &Instruction::CallCurrentTime => {
                         self.current_time();
                         step_or_fail!(self, self.machine_st.p += 1);
