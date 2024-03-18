@@ -84,11 +84,37 @@
 % ```
 
 format_(Fs, Args) -->
-        { must_be(list, Fs),
-          must_be(list, Args),
-          unique_variable_names(Args, VNs),
-          phrase(cells(Fs,Args,0,[],VNs), Cells) },
+        { format_args_cells(Fs, Args, Cells) },
         format_cells(Cells).
+
+format_args_cells(Fs, Args, Cells) :-
+        must_be(list, Fs),
+        must_be(list, Args),
+        unique_variable_names(Args, VNs),
+        phrase(cells(Fs,Args,0,[],VNs), Cells).
+
+unique_variable_names(Term, VNs) :-
+        term_variables(Term, Vs),
+        foldl(var_name, Vs, VNs, 0, _).
+
+var_name(V, Name=V, Num0, Num) :-
+        charsio:fabricate_var_name(numbervars, Name, Num0),
+        Num is Num0 + 1.
+
+user:goal_expansion(format_(Fs,Args,Cs0,Cs),
+                    format:format_cells(Cells, Cs0, Cs)) :-
+        catch(format_args_cells(Fs,Args,Cells),
+              E,
+              % no partial evaluation for uses of format_//2 that
+              % cannot be compiled statically, for example those where
+              % the argument list is a variable, or where ~*n occurs
+              % in the format string, or a domain error occurs
+              (   (   E = error(instantiation_error,_)
+                  ;   E = error(domain_error(_,_), _)
+                  ) ->
+                  false
+              ;   throw(E)
+              )).
 
 format_cells([]) --> [].
 format_cells([Cell|Cells]) -->
@@ -125,6 +151,7 @@ format_element(glue(Fill,Num)) -->
         { length(Ls, Num),
           maplist(=(Fill), Ls) },
         seq(Ls).
+format_element(goal(_)) --> [].
 
 elements_gluevars([], N, N) --> [].
 elements_gluevars([E|Es], N0, N) -->
@@ -135,6 +162,7 @@ element_gluevar(chars(Cs), N0, N) -->
         { length(Cs, L),
           N is N0 + L }.
 element_gluevar(glue(_,V), N, N) --> [V].
+element_gluevar(goal(G), N, N)   --> { G }.
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    Our key datastructure is a list of cells and newlines.
@@ -142,12 +170,16 @@ element_gluevar(glue(_,V), N, N) --> [V].
    From and To denote the positions of surrounding tab stops.
 
    Elements is a list of elements that occur in a cell,
-   namely terms of the form chars(Cs) and glue(Char, Var).
+   namely terms of the form chars(Cs), glue(Char, Var)
+   and goal(G).
+
    "glue" elements (TeX terminology) are evenly stretched
    to fill the remaining whitespace in the cell. For each
    glue element, the character Char is used for filling,
    and Var is a free variable that is used when the
-   available space is distributed.
+   available space is distributed. Goals are dynamically
+   executed to obtain characters. In this way, format strings
+   can be parsed and compiled statically when possible.
 
    newline is used if ~n occurs in a format string.
    It is used because a newline character does not
@@ -161,54 +193,54 @@ cells([], Args, Tab, Es, _) --> !,
 cells([~,~|Fs], Args, Tab, Es, VNs) --> !,
         cells(Fs, Args, Tab, [chars("~")|Es], VNs).
 cells([~,w|Fs], [Arg|Args], Tab, Es, VNs) --> !,
-        { write_term_to_chars(Arg, [numbervars(true),variable_names(VNs)], Chars) },
-        cells(Fs, Args, Tab, [chars(Chars)|Es], VNs).
+        { G = write_term_to_chars(Arg, [numbervars(true),variable_names(VNs)], Chars) },
+        cells(Fs, Args, Tab, [chars(Chars),goal(G)|Es], VNs).
 cells([~,q|Fs], [Arg|Args], Tab, Es, VNs) --> !,
-        { write_term_to_chars(Arg, [quoted(true),numbervars(true),variable_names(VNs)], Chars) },
-        cells(Fs, Args, Tab, [chars(Chars)|Es], VNs).
+        { G = write_term_to_chars(Arg, [quoted(true),numbervars(true),variable_names(VNs)], Chars) },
+        cells(Fs, Args, Tab, [chars(Chars),goal(G)|Es], VNs).
 cells([~,a|Fs], [Arg|Args], Tab, Es, VNs) --> !,
-        { atom_chars(Arg, Chars) },
-        cells(Fs, Args, Tab, [chars(Chars)|Es], VNs).
+        { G = atom_chars(Arg, Chars) },
+        cells(Fs, Args, Tab, [chars(Chars),goal(G)|Es], VNs).
 cells([~|Fs0], Args0, Tab, Es, VNs) -->
         { numeric_argument(Fs0, Num, [d|Fs], Args0, [Arg0|Args]) },
         !,
-        { Arg is Arg0, % evaluate compound expression
-          must_be(integer, Arg),
-          number_chars(Arg, Cs0) },
-        (   { Num =:= 0 } -> { Cs = Cs0 }
-        ;   { length(Cs0, L),
-              (   L =< Num ->
-                  Delta is Num - L,
-                  length(Zs, Delta),
-                  maplist(=('0'), Zs),
-                  phrase(("0.",seq(Zs),seq(Cs0)), Cs)
-              ;   BeforeComma is L - Num,
-                  length(Bs, BeforeComma),
-                  append(Bs, Ds, Cs0),
-                  phrase((seq(Bs),".",seq(Ds)), Cs)
-              ) }
-        ),
-        cells(Fs, Args, Tab, [chars(Cs)|Es], VNs).
+        { G = ( Arg is Arg0, % evaluate compound expression
+                must_be(integer, Arg),
+                number_chars(Arg, Cs0),
+                (   Num =:= 0 -> Cs = Cs0
+                ;   length(Cs0, L),
+                    (   L =< Num ->
+                        Delta is Num - L,
+                        length(Zs, Delta),
+                        maplist(=('0'), Zs),
+                        phrase(("0.",seq(Zs),seq(Cs0)), Cs)
+                    ;   BeforeComma is L - Num,
+                        length(Bs, BeforeComma),
+                        append(Bs, Ds, Cs0),
+                        phrase((seq(Bs),".",seq(Ds)), Cs)
+                    )
+                )) },
+        cells(Fs, Args, Tab, [chars(Cs),goal(G)|Es], VNs).
 cells([~|Fs0], Args0, Tab, Es, VNs) -->
         { numeric_argument(Fs0, Num, ['D'|Fs], Args0, [Arg|Args]) },
         !,
-        { separate_digits_fractional(Arg, ',', Num, Cs) },
-        cells(Fs, Args, Tab, [chars(Cs)|Es], VNs).
+        { G = separate_digits_fractional(Arg, ',', Num, Cs) },
+        cells(Fs, Args, Tab, [chars(Cs),goal(G)|Es], VNs).
 cells([~|Fs0], Args0, Tab, Es, VNs) -->
         { numeric_argument(Fs0, Num, ['U'|Fs], Args0, [Arg|Args]) },
         !,
-        { separate_digits_fractional(Arg, '_', Num, Cs) },
-        cells(Fs, Args, Tab, [chars(Cs)|Es], VNs).
+        { G = separate_digits_fractional(Arg, '_', Num, Cs) },
+        cells(Fs, Args, Tab, [chars(Cs),goal(G)|Es], VNs).
 cells([~|Fs0], Args0, Tab, Es, VNs) -->
         { numeric_argument(Fs0, Num0, ['L'|Fs], Args0, [Arg|Args]) },
         !,
-        { (   Num0 =:= 0 ->
-              Num = 72
-          ;   Num = Num0
-          ),
-          phrase(format_("~d", [Arg]), Cs0),
-          phrase(split_lines_width(Cs0, Num), Cs) },
-        cells(Fs, Args, Tab, [chars(Cs)|Es], VNs).
+        { G = ((   Num0 =:= 0 ->
+                   Num = 72
+               ;   Num = Num0
+               ),
+               phrase(format_("~d", [Arg]), Cs0),
+               phrase(split_lines_width(Cs0, Num), Cs) ) },
+        cells(Fs, Args, Tab, [chars(Cs),goal(G)|Es], VNs).
 cells([~,i|Fs], [_|Args], Tab, Es, VNs) --> !,
         cells(Fs, Args, Tab, Es, VNs).
 cells([~,n|Fs], Args, Tab, Es, VNs) --> !,
@@ -224,58 +256,58 @@ cells([~|Fs0], Args0, Tab, Es, VNs) -->
 cells([~,s|Fs], [Arg|Args], Tab, Es, VNs) --> !,
         cells(Fs, Args, Tab, [chars(Arg)|Es], VNs).
 cells([~,f|Fs], [Arg|Args], Tab, Es, VNs) --> !,
-        { format_number_chars(Arg, Chars) },
-        cells(Fs, Args, Tab, [chars(Chars)|Es], VNs).
+        { G = format_number_chars(Arg, Chars) },
+        cells(Fs, Args, Tab, [chars(Chars),goal(G)|Es], VNs).
 cells([~|Fs0], Args0, Tab, Es, VNs) -->
         { numeric_argument(Fs0, Num, [f|Fs], Args0, [Arg|Args]) },
         !,
-        { format_number_chars(Arg, Cs0),
-          phrase(upto_what(Bs, .), Cs0, Cs),
-          (   Num =:= 0 -> Chars = Bs
-          ;   (   Cs = ['.'|Rest] ->
-                  length(Rest, L),
-                  (   Num < L ->
-                      length(Ds, Num),
-                      append(Ds, _, Rest)
-                  ;   Num =:= L ->
-                      Ds = Rest
-                  ;   Num > L,
-                      Delta is Num - L,
-                      % we should look into the float with
-                      % greater accuracy here, and use the
-                      % actual digits instead of 0.
-                      length(Zs, Delta),
-                      maplist(=('0'), Zs),
-                      append(Rest, Zs, Ds)
-                  )
-              ;   length(Ds, Num),
-                  maplist(=('0'), Ds)
-              ),
-              append(Bs, ['.'|Ds], Chars)
-          ) },
-        cells(Fs, Args, Tab, [chars(Chars)|Es], VNs).
+        { G = (format_number_chars(Arg, Cs0),
+               phrase(upto_what(Bs, .), Cs0, Cs),
+               (   Num =:= 0 -> Chars = Bs
+               ;   (   Cs = ['.'|Rest] ->
+                       length(Rest, L),
+                       (   Num < L ->
+                           length(Ds, Num),
+                           append(Ds, _, Rest)
+                       ;   Num =:= L ->
+                           Ds = Rest
+                       ;   Num > L,
+                           Delta is Num - L,
+                           % we should look into the float with
+                           % greater accuracy here, and use the
+                           % actual digits instead of 0.
+                           length(Zs, Delta),
+                           maplist(=('0'), Zs),
+                           append(Rest, Zs, Ds)
+                       )
+                   ;   length(Ds, Num),
+                       maplist(=('0'), Ds)
+                   ),
+                   append(Bs, ['.'|Ds], Chars)
+               )) },
+        cells(Fs, Args, Tab, [chars(Chars),goal(G)|Es], VNs).
 cells([~,r|Fs], Args, Tab, Es, VNs) --> !,
         cells([~,'8',r|Fs], Args, Tab, Es, VNs).
 cells([~|Fs0], Args0, Tab, Es, VNs) -->
         { numeric_argument(Fs0, Num, [r|Fs], Args0, [Arg|Args]) },
         !,
-        { integer_to_radix(Arg, Num, lowercase, Cs) },
-        cells(Fs, Args, Tab, [chars(Cs)|Es], VNs).
+        { G = integer_to_radix(Arg, Num, lowercase, Cs) },
+        cells(Fs, Args, Tab, [chars(Cs),goal(G)|Es], VNs).
 cells([~,'R'|Fs], Args, Tab, Es, VNs) --> !,
         cells([~,'8','R'|Fs], Args, Tab, Es, VNs).
 cells([~|Fs0], Args0, Tab, Es, VNs) -->
         { numeric_argument(Fs0, Num, ['R'|Fs], Args0, [Arg|Args]) },
         !,
-        { integer_to_radix(Arg, Num, uppercase, Cs) },
-        cells(Fs, Args, Tab, [chars(Cs)|Es], VNs).
+        { G = integer_to_radix(Arg, Num, uppercase, Cs) },
+        cells(Fs, Args, Tab, [chars(Cs),goal(G)|Es], VNs).
 cells([~,'`',Char,t|Fs], Args, Tab, Es, VNs) --> !,
         cells(Fs, Args, Tab, [glue(Char,_)|Es], VNs).
 cells([~,t|Fs], Args, Tab, Es, VNs) --> !,
         cells(Fs, Args, Tab, [glue(' ',_)|Es], VNs).
 cells([~,'|'|Fs], Args, Tab0, Es, VNs) --> !,
-        { phrase(elements_gluevars(Es, 0, Width), _),
-          Tab is Tab0 + Width },
-        cell(Tab0, Tab, Es),
+        { G = (phrase(elements_gluevars(Es, 0, Width), _),
+               Tab is Tab0 + Width) },
+        cell(Tab0, Tab, [goal(G)|Es]),
         cells(Fs, Args, Tab, [], VNs).
 cells([~|Fs0], Args0, Tab, Es, VNs) -->
         { numeric_argument(Fs0, Num, ['|'|Fs], Args0, Args) },
@@ -285,8 +317,8 @@ cells([~|Fs0], Args0, Tab, Es, VNs) -->
 cells([~|Fs0], Args0, Tab0, Es, VNs) -->
         { numeric_argument(Fs0, Num, [+|Fs], Args0, Args) },
         !,
-        { Tab is Tab0 + Num },
-        cell(Tab0, Tab, Es),
+        { G = (Tab is Tab0 + Num) },
+        cell(Tab0, Tab, [goal(G)|Es]),
         cells(Fs, Args, Tab, [], VNs).
 cells([~|Cs], Args, _, _, _) -->
         (   { Args == [] } ->
@@ -516,14 +548,6 @@ portray_clause(Stream, Term) :-
 portray_clause_(Term) -->
         { unique_variable_names(Term, VNs) },
         portray_(Term, VNs), ".\n".
-
-unique_variable_names(Term, VNs) :-
-        term_variables(Term, Vs),
-        foldl(var_name, Vs, VNs, 0, _).
-
-var_name(V, Name=V, Num0, Num) :-
-        charsio:fabricate_var_name(numbervars, Name, Num0),
-        Num is Num0 + 1.
 
 literal(Lit, VNs) -->
         { write_term_to_chars(Lit, [quoted(true),variable_names(VNs),double_quotes(true)], Ls) },
