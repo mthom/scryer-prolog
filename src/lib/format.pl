@@ -451,9 +451,11 @@ digits(uppercase, "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ").
 %  advantage of this is that an ideal implementation writes the
 %  characters as they become known, without manifesting the list.
 
-format(Fs, Args) :-
-        current_output(Stream),
-        format(Stream, Fs, Args).
+format(_, _) :- not_used.
+
+user:goal_expansion(format(Fs, Args),
+                    (   current_output(Stream),
+                        format(Stream, Fs, Args))).
 
 %% format(Stream, FormatString, Arguments)
 %
@@ -461,9 +463,11 @@ format(Fs, Args) :-
 %  binary stream, then the code of each emitted character must be in
 %  0..255.
 
-format(Stream, Fs, Args) :-
-        phrase_to_stream(format_(Fs, Args), Stream),
-        flush_output(Stream).
+format(_, _, _) :- not_used.
+
+user:goal_expansion(format(Stream, Fs, Args),
+                    (   pio:phrase_to_stream(format:format_(Fs, Args), Stream),
+                        flush_output(Stream))).
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
 ?- phrase(format:cells("hello", [], 0, [], []), Cs).
