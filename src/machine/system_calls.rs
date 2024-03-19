@@ -1339,38 +1339,49 @@ impl Machine {
         let index_cell = index_cell_opt.or_else(|| {
             let is_internal_call = name == atom!("$call") && goal_arity > 0;
 
-            if !is_internal_call && self.indices.goal_expansion_defined((name, arity)) {
-                None
-            } else {
-                if is_internal_call {
-                    debug_assert_eq!(goal.get_tag(), HeapCellValueTag::Str);
-                    goal = self.machine_st.heap[goal.get_value() as usize + 1];
-                    (module_name, goal) = self.machine_st.strip_module(goal, module_name);
-
-                    if let Some((inner_name, inner_arity)) =
-                        self.machine_st.name_and_arity_from_heap(goal)
-                    {
-                        arity -= goal_arity;
-                        (name, goal_arity) = (inner_name, inner_arity);
-                        arity += goal_arity;
-                    } else {
-                        return None;
-                    }
-                }
-
-                let module_name = if module_name.get_tag() != HeapCellValueTag::Atom {
-                    if let Some(load_context) = self.load_contexts.last() {
-                        load_context.module
-                    } else {
-                        atom!("user")
-                    }
-                } else {
+            if !is_internal_call {
+                let module_name = if module_name.get_tag() == HeapCellValueTag::Atom {
                     cell_as_atom!(module_name)
+                } else {
+                    atom!("user")
                 };
 
-                self.indices
-                    .get_predicate_code_index(name, arity, module_name)
+                if self
+                    .indices
+                    .goal_expansion_defined((name, arity), module_name)
+                {
+                    return None;
+                }
             }
+
+            if is_internal_call {
+                debug_assert_eq!(goal.get_tag(), HeapCellValueTag::Str);
+                goal = self.machine_st.heap[goal.get_value() as usize + 1];
+                (module_name, goal) = self.machine_st.strip_module(goal, module_name);
+
+                if let Some((inner_name, inner_arity)) =
+                    self.machine_st.name_and_arity_from_heap(goal)
+                {
+                    arity -= goal_arity;
+                    (name, goal_arity) = (inner_name, inner_arity);
+                    arity += goal_arity;
+                } else {
+                    return None;
+                }
+            }
+
+            let module_name = if module_name.get_tag() != HeapCellValueTag::Atom {
+                if let Some(load_context) = self.load_contexts.last() {
+                    load_context.module
+                } else {
+                    atom!("user")
+                }
+            } else {
+                cell_as_atom!(module_name)
+            };
+
+            self.indices
+                .get_predicate_code_index(name, arity, module_name)
         });
 
         if let Some(code_index) = index_cell {

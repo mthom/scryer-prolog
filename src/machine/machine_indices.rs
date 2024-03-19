@@ -287,8 +287,25 @@ impl IndexStore {
     }
 
     #[inline(always)]
-    pub(crate) fn goal_expansion_defined(&self, key: PredicateKey) -> bool {
-        self.goal_expansion_indices.contains(&key)
+    pub(crate) fn goal_expansion_defined(&self, key: PredicateKey, module_name: Atom) -> bool {
+        let compilation_target = match module_name {
+            atom!("user") => CompilationTarget::User,
+            _ => CompilationTarget::Module(module_name),
+        };
+
+        match key {
+            _ if self.goal_expansion_indices.contains(&key) => true,
+            _ => self
+                .get_meta_predicate_spec(key.0, key.1, &compilation_target)
+                .map(|meta_specs| {
+                    meta_specs.iter().find(|meta_spec| match meta_spec {
+                        MetaSpec::Colon | MetaSpec::RequiresExpansionWithArgument(_) => true,
+                        _ => false,
+                    })
+                })
+                .map(|meta_spec_opt| meta_spec_opt.is_some())
+                .unwrap_or(false),
+        }
     }
 
     pub(crate) fn get_predicate_skeleton_mut(
