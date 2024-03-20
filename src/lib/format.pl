@@ -116,6 +116,34 @@ user:goal_expansion(format_(Fs,Args,Cs0,Cs),
               ;   throw(E)
               )).
 
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   Partial evaluation of goals involving conditions that can be
+   checked at compilation time. This is especially useful for the
+   common case of conditions that test a numeric argument against 0.
+   It is currently used for the goals of ~d.
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+goal_pe(G0, G) :- var(G0), !, G = G0.
+goal_pe((A0,B0), (A,B)) :- !, goal_pe(A0, A), goal_pe(B0, B).
+goal_pe((Body0 ; Else0), Body) :-
+        nonvar(Body0),
+        Body0 = ( If -> Then0 ),
+        !,
+        (   ground(If) ->
+            (   If ->
+                goal_pe(Then0, Body)
+            ;   goal_pe(Else0, Body)
+            )
+        ;   goal_pe(Then0, Then),
+            goal_pe(Else0, Else),
+            Body = ( If -> Then ; Else )
+        ).
+goal_pe(Goal, Goal).
+
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   format_cells//1 is an interpreter for cells, describing a string.
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
 format_cells([]) --> [].
 format_cells([Cell|Cells]) -->
         format_cell(Cell),
@@ -204,22 +232,23 @@ cells([~,a|Fs], [Arg|Args], Tab, Es, VNs) --> !,
 cells([~|Fs0], Args0, Tab, Es, VNs) -->
         { numeric_argument(Fs0, Num, [d|Fs], Args0, [Arg0|Args]) },
         !,
-        { G = ( Arg is Arg0, % evaluate compound expression
-                must_be(integer, Arg),
-                number_chars(Arg, Cs0),
-                (   Num =:= 0 -> Cs = Cs0
-                ;   length(Cs0, L),
-                    (   L =< Num ->
-                        Delta is Num - L,
-                        length(Zs, Delta),
-                        maplist(=('0'), Zs),
-                        phrase(("0.",seq(Zs),seq(Cs0)), Cs)
-                    ;   BeforeComma is L - Num,
-                        length(Bs, BeforeComma),
-                        append(Bs, Ds, Cs0),
-                        phrase((seq(Bs),".",seq(Ds)), Cs)
-                    )
-                )) },
+        { G0 = ( Arg is Arg0, % evaluate compound expression
+                 must_be(integer, Arg),
+                 number_chars(Arg, Cs0),
+                 (   Num =:= 0 -> Cs = Cs0
+                 ;   length(Cs0, L),
+                     (   L =< Num ->
+                         Delta is Num - L,
+                         length(Zs, Delta),
+                         maplist(=('0'), Zs),
+                         phrase(("0.",seq(Zs),seq(Cs0)), Cs)
+                     ;   BeforeComma is L - Num,
+                         length(Bs, BeforeComma),
+                         append(Bs, Ds, Cs0),
+                         phrase((seq(Bs),".",seq(Ds)), Cs)
+                     )
+                 )),
+          goal_pe(G0, G) },
         cells(Fs, Args, Tab, [chars(Cs),goal(G)|Es], VNs).
 cells([~|Fs0], Args0, Tab, Es, VNs) -->
         { numeric_argument(Fs0, Num, ['D'|Fs], Args0, [Arg|Args]) },
