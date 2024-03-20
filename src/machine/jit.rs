@@ -21,9 +21,8 @@ pub enum JitCompileError {
 
 pub struct JitMachine {
     modules: HashMap<String, CompileOutput>,
-    machine_state: *const u8,
-    registers: *const u8,
     write_literal_to_var: *const u8,
+    deref: *const u8,
 }
 
 impl std::fmt::Debug for JitMachine {
@@ -37,9 +36,8 @@ impl JitMachine {
 
 	JitMachine {
 	    modules: HashMap::new(),
-	    machine_state: machine_st as *const MachineState as *const u8,
-	    registers: machine_st.registers.as_ptr() as *const u8,
 	    write_literal_to_var: MachineState::write_literal_to_var as *const u8,
+	    deref: MachineState::deref as *const u8,
 	}
     }
 
@@ -53,18 +51,21 @@ impl JitMachine {
 	builder.symbols(self.modules.iter().map(|(k, v)| (k,v.code_ptr)));
 	
 	let mut module = JITModule::new(builder);
+	let pointer_type = module.isa().pointer_type();
 	let mut ctx = module.make_context();
 	let mut func_ctx = FunctionBuilderContext::new();
 
 	let mut sig = module.make_signature();
-	// Set arguments/returns
-	sig.call_conv = isa::CallConv::Tail;
+	sig.params.push(AbiParam::new(pointer_type));
+	sig.params.push(AbiParam::new(pointer_type));
+	sig.call_conv = isa::CallConv::SystemV;
 	ctx.func.signature = sig.clone();
 
 	let mut func = module.declare_function(name, Linkage::Local, &sig).unwrap();
 
 	let mut fn_builder = FunctionBuilder::new(&mut ctx.func, &mut func_ctx);
 	let block = fn_builder.create_block();
+	fn_builder.append_block_params_for_function_params(block);
 	fn_builder.switch_to_block(block);
 	for wam_instr in code {
 	    match wam_instr {
@@ -89,12 +90,21 @@ impl JitMachine {
 		    }
 		}
 		Instruction::GetConstant(_, c, reg) => {
-		    let reg_ptr = fn_builder.ins().iconst(types::I64, self.registers as i64); // TODO: call deref
+    		    let machine_state_value = fn_builder.block_params(block)[0];
+		    let reg_ptr = fn_builder.block_params(block)[1];
 		    let reg_num = reg.reg_num();
 		    let reg_value = fn_builder.ins().load(types::I64, MemFlags::new(), reg_ptr, Offset32::new((reg_num as i32)*8));
+		    let mut sig = module.make_signature();
+		    sig.call_conv = isa::CallConv::SystemV;
+		    sig.params.push(AbiParam::new(pointer_type));
+		    sig.params.push(AbiParam::new(types::I64));
+		    sig.returns.push(AbiParam::new(types::I64));
+		    let sig_ref = fn_builder.import_signature(sig);
+		    let deref = fn_builder.ins().iconst(types::I64, self.deref as i64);
+		    let deref_call = fn_builder.ins().call_indirect(sig_ref, deref, &[machine_state_value, reg_value]);
+		    let reg_value = fn_builder.inst_results(deref_call)[0];
 		    let c = unsafe { std::mem::transmute::<u64, i64>(u64::from(c)) };		    
 		    let c_value = fn_builder.ins().iconst(types::I64, c);
-		    let machine_state_value = fn_builder.ins().iconst(types::I64, self.machine_state as i64);
 		    let mut sig = module.make_signature();
 		    sig.call_conv = isa::CallConv::SystemV;
 		    sig.params.push(AbiParam::new(types::I64));
@@ -105,7 +115,7 @@ impl JitMachine {
 		    fn_builder.ins().call_indirect(sig_ref, write_literal_to_var, &[machine_state_value, reg_value, c_value]);
 		}
 		Instruction::PutConstant(_, c, reg) => {
-		    let reg_ptr = fn_builder.ins().iconst(types::I64, self.registers as i64);
+		    let reg_ptr = fn_builder.block_params(block)[1];
 		    let reg_num = reg.reg_num();
 		    let c = unsafe { std::mem::transmute::<u64, i64>(u64::from(c)) };
 		    let c_value = fn_builder.ins().iconst(types::I64, c);
@@ -130,10 +140,17 @@ impl JitMachine {
 	Ok(())
     }
 
-    pub fn exec(&self, name: &str) -> Result<(), ()> {
+    pub fn exec(&self, name: &str, machine_st: &mut MachineState) -> Result<(), ()> {
 	if let Some(output) = self.modules.get(name) {
-	    let code_ptr = unsafe { std::mem::transmute::<_, extern "C" fn() -> ()>(output.code_ptr) };
-	    code_ptr();
+	    machine_st.p = machine_st.cp;
+	    machine_st.oip = 0;
+	    machine_st.iip = 0;
+	    // machine_st.num_of_args = arity;
+	    machine_st.num_of_args = 1;
+	    machine_st.b0 = machine_st.b;
+	    
+	    let code_ptr = unsafe { std::mem::transmute::<_, extern "C" fn(*mut MachineState, *mut Registers) -> ()>(output.code_ptr) };
+	    code_ptr(machine_st as *mut MachineState, machine_st.registers.as_ptr() as *mut Registers);
 	    Ok(())
 	} else {
 	    Err(())

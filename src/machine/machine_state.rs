@@ -21,6 +21,7 @@ use indexmap::IndexMap;
 
 use std::convert::TryFrom;
 use std::fmt;
+use std::pin::*;
 use std::ops::{Index, IndexMut};
 use std::sync::Arc;
 

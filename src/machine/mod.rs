@@ -61,6 +61,7 @@ use std::cmp::Ordering;
 use std::env;
 use std::io::Read;
 use std::path::PathBuf;
+use std::pin::*;
 use std::sync::atomic::AtomicBool;
 
 use self::config::MachineConfig;
@@ -1152,16 +1153,8 @@ impl Machine {
     fn try_execute(&mut self, name: Atom, arity: usize, idx: IndexPtr) -> CallResult {
         let compiled_tl_index = idx.p() as usize;
 
-	if name == atom!("a") {
-	    self.machine_st.p = self.machine_st.cp;
-	    self.machine_st.oip = 0;
-	    self.machine_st.iip = 0;
-	    self.machine_st.num_of_args = arity;
-	    self.machine_st.b0 = self.machine_st.b;
-	}
-
-	if let Ok(_) = self.jit_machine.exec(&format!("{}/{}", name.as_str(), arity)) {
-	    println!("Executed JIT predicate");
+	if let Ok(_) = self.jit_machine.exec(&format!("{}/{}", name.as_str(), arity), &mut self.machine_st) {
+	    println!("jit_compiler: executed JIT predicate");
 	    return Ok(());
 	}
 
