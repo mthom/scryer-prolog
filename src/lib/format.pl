@@ -305,9 +305,14 @@ cells([~,'`',Char,t|Fs], Args, Tab, Es, VNs) --> !,
 cells([~,t|Fs], Args, Tab, Es, VNs) --> !,
         cells(Fs, Args, Tab, [glue(' ',_)|Es], VNs).
 cells([~,'|'|Fs], Args, Tab0, Es, VNs) --> !,
-        { G = (phrase(elements_gluevars(Es, 0, Width), _),
-               Tab is Tab0 + Width) },
-        cell(Tab0, Tab, [goal(G)|Es]),
+        (   { ground(Tab0), Es = [chars(Cs)], ground(Cs) } ->
+            { length(Cs, Width),
+              Tab is Tab0 + Width },
+            cell(Tab0, Tab, Es)
+        ;   { G = (phrase(elements_gluevars(Es, 0, Width), _),
+                   Tab is Tab0 + Width) },
+            cell(Tab0, Tab, [goal(G)|Es])
+        ),
         cells(Fs, Args, Tab, [], VNs).
 cells([~|Fs0], Args0, Tab, Es, VNs) -->
         { numeric_argument(Fs0, Num, ['|'|Fs], Args0, Args) },
@@ -317,8 +322,12 @@ cells([~|Fs0], Args0, Tab, Es, VNs) -->
 cells([~|Fs0], Args0, Tab0, Es, VNs) -->
         { numeric_argument(Fs0, Num, [+|Fs], Args0, Args) },
         !,
-        { G = (Tab is Tab0 + Num) },
-        cell(Tab0, Tab, [goal(G)|Es]),
+        (   { ground(Tab0+Num) } ->
+            { Tab is Tab0 + Num },
+            cell(Tab0, Tab, Es)
+        ;   { G = (Tab is Tab0 + Num) },
+            cell(Tab0, Tab, [goal(G)|Es])
+        ),
         cells(Fs, Args, Tab, [], VNs).
 cells([~|Cs], Args, _, _, _) -->
         (   { Args == [] } ->
