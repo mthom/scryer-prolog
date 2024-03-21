@@ -4449,6 +4449,14 @@ impl Machine {
                         try_or_throw!(self.machine_st, self.write_term_to_chars());
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                     }
+                    &Instruction::CallIntegerInRadix => {
+                        self.integer_in_radix();
+                        step_or_fail!(self, self.machine_st.p += 1);
+                    }
+                    &Instruction::ExecuteIntegerInRadix => {
+                        self.integer_in_radix();
+                        step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+                    }
                     &Instruction::CallScryerPrologVersion => {
                         self.scryer_prolog_version();
                         step_or_fail!(self, self.machine_st.p += 1);
