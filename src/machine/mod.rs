@@ -470,7 +470,7 @@ impl Machine {
             ),
         };
 
-	let jit_machine = JitMachine::new(&machine_st);
+	let jit_machine = JitMachine::new();
 
         let mut wam = Machine {
             machine_st,
