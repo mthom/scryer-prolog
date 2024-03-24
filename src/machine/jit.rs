@@ -107,7 +107,7 @@ impl JitMachine {
 
 	let mut fn_builder = FunctionBuilder::new(&mut ctx.func, &mut func_ctx);
 	let block = fn_builder.create_block();
-	fn_builder.append_block_params_for_function_params(block);
+ 	fn_builder.append_block_params_for_function_params(block);
 	fn_builder.switch_to_block(block);
 	for wam_instr in code {
 	    match wam_instr {
@@ -118,12 +118,15 @@ impl JitMachine {
 		    break;
 		}
 		Instruction::ExecuteNamed(arity, pred_name, ..) => {
+    		    let machine_state_value = fn_builder.block_params(block)[0];
+		    let reg_ptr = fn_builder.block_params(block)[1];		    
 		    let mut callee_func_sig = module.make_signature();
 		    callee_func_sig.call_conv = isa::CallConv::Tail;
-		    // right now, all predicates have 0 arguments. In the future with shadow registers, we could improve this
+		    callee_func_sig.params.push(AbiParam::new(pointer_type));
+		    callee_func_sig.params.push(AbiParam::new(pointer_type));
 		    if let Ok(callee_func) = module.declare_function(&format!("{}/{}", pred_name.as_str(), arity), Linkage::Import, &callee_func_sig) {
 			let func_ref = module.declare_func_in_func(callee_func, fn_builder.func);
-			fn_builder.ins().return_call(func_ref, &[]);
+			fn_builder.ins().return_call(func_ref, &[machine_state_value, reg_ptr]);
 			fn_builder.seal_all_blocks();
 			fn_builder.finalize();
 			break;
