@@ -278,7 +278,8 @@ impl BrentAlgState {
     ) -> Option<CycleSearchResult> {
         read_heap_cell!(heap[h],
             (HeapCellValueTag::PStrOffset, l) => {
-                let (pstr_loc, offset) = pstr_loc_and_offset(heap, l);
+                let (pstr_loc, _) = pstr_loc_and_offset(heap, l);
+                let offset = cell_as_fixnum!(heap[h+1]);
                 self.add_pstr_offset_chars(heap, pstr_loc, offset.get_num() as usize)
             }
             _ => {
