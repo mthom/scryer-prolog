@@ -33,6 +33,10 @@ to learn more about them.
 
 :- meta_predicate phrase(2, ?, ?, ?, ?).
 
+:- meta_predicate(','(2, 2, ?, ?)).
+
+:- meta_predicate(;(2, 2, ?, ?)).
+
 %% phrase(+Body, ?Ls).
 %
 % True iff Body describes the list Ls. Body must be a DCG body.
