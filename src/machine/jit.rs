@@ -22,8 +22,11 @@ pub enum JitCompileError {
 pub struct JitMachine {
     modules: HashMap<String, CompileOutput>,
     trampoline: extern "C" fn (*mut MachineState, *mut Registers, *const u8),
+    offset_interms: usize,
     write_literal_to_var: *const u8,
     deref: *const u8,
+    store: *const u8,
+    unify_fixnum: *const u8,
 }
 
 impl std::fmt::Debug for JitMachine {
@@ -75,16 +78,26 @@ impl JitMachine {
 
 	let code_ptr = unsafe { std::mem::transmute(module.get_finalized_function(func)) };
 
+	let machine_st = std::mem::MaybeUninit::uninit();
+	let machine_st_ptr: *const MachineState = machine_st.as_ptr();
+        let machine_st_ptr_u8 = machine_st_ptr as *const u8;	
+	let offset_interms = unsafe {
+	    let interms_ptr = std::ptr::addr_of!((*machine_st_ptr).interms) as *const u8;
+	    interms_ptr.offset_from(machine_st_ptr_u8) as usize
+	};
+
 	JitMachine {
 	    modules: HashMap::new(),
 	    trampoline: code_ptr,
+	    offset_interms: offset_interms,
 	    write_literal_to_var: MachineState::write_literal_to_var as *const u8,
 	    deref: MachineState::deref as *const u8,
+	    store: MachineState::store as *const u8,
+	    unify_fixnum: MachineState::unify_fixnum as *const u8,
 	}
     }
 
     // For now, one module = one predicate
-    // Functions must take N parameters (arity)
     // Access to MachineState via global pointer
     // MachineState Registers + ShadowRegisters??
     // Use TAIL call convention
@@ -109,6 +122,7 @@ impl JitMachine {
 	let block = fn_builder.create_block();
  	fn_builder.append_block_params_for_function_params(block);
 	fn_builder.switch_to_block(block);
+	// TODO: Manage failure
 	for wam_instr in code {
 	    match wam_instr {
 		Instruction::Proceed => {
@@ -134,6 +148,7 @@ impl JitMachine {
 			return Err(JitCompileError::UndefinedPredicate);
 		    }
 		}
+		// TODO Manage RegType
 		Instruction::GetConstant(_, c, reg) => {
     		    let machine_state_value = fn_builder.block_params(block)[0];
 		    let reg_ptr = fn_builder.block_params(block)[1];
@@ -159,12 +174,115 @@ impl JitMachine {
 		    let write_literal_to_var = fn_builder.ins().iconst(types::I64, self.write_literal_to_var as i64);
 		    fn_builder.ins().call_indirect(sig_ref, write_literal_to_var, &[machine_state_value, reg_value, c_value]);
 		}
+		Instruction::GetVariable(norm, arg) => {
+		    let reg_ptr = fn_builder.block_params(block)[1];
+		    let value = fn_builder.ins().load(types::I64, MemFlags::new(), reg_ptr, Offset32::new((arg as i32)*8));
+		    match norm {
+			RegType::Temp(temp) => {
+			    fn_builder.ins().store(MemFlags::new(), value, reg_ptr, Offset32::new((temp as i32)*8));
+			}
+			_ => unimplemented!()
+		    }
+		}
+		// TODO Manage RegType
 		Instruction::PutConstant(_, c, reg) => {
 		    let reg_ptr = fn_builder.block_params(block)[1];
 		    let reg_num = reg.reg_num();
 		    let c = unsafe { std::mem::transmute::<u64, i64>(u64::from(c)) };
 		    let c_value = fn_builder.ins().iconst(types::I64, c);
 		    fn_builder.ins().store(MemFlags::new(), c_value, reg_ptr, Offset32::new((reg_num as i32)*8));
+		}
+		Instruction::PutValue(norm, arg) => {
+		    let reg_ptr = fn_builder.block_params(block)[1];
+		    match norm {
+			RegType::Temp(temp) => {
+			    let value = fn_builder.ins().load(types::I64, MemFlags::new(), reg_ptr, Offset32::new((temp as i32)*8));
+			    fn_builder.ins().store(MemFlags::new(), value, reg_ptr, Offset32::new((arg as i32)*8));
+			}
+			_ => unimplemented!()
+		    }
+		}
+		// TODO Fill more cases. Can we optimize the add in some cases to use the Cranelift add?
+		Instruction::Add(ref a1, ref a2, t) => {
+		    /*let val_a = match a1 {
+			ArithmeticTerm::Number(n) => {
+			    n
+			}
+			_ => unimplemented!()
+		    };
+		    let val_b = match a2 {
+			ArithmeticTerm::Number(n) => {
+			    n
+			}
+			_ => unimplemented!()
+		    };
+		    let mut sig = module.make_signature();
+		    sig.call_conv = isa::CallConv::SystemV;
+		    sig.params.push(AbiParam::new(types::I64));
+		    sig.params.push(AbiParam::new(types::I64));
+		    sig.params.push(AbiParam::new(pointer_type));
+		    let sig_ref = fn_builder.import_signature(sig);
+		    let add = fn_builder.ins().iconst(types::I64, self.add as i64);
+		    let add_call = fn_builder.ins().call_indirect(sig_ref, add
+		    
+		    */
+		}
+		// TOO SIMPLE, just for debugging
+		Instruction::ExecuteIs(r, at) => {
+		    let machine_state = fn_builder.block_params(block)[0];
+		    let reg_ptr = fn_builder.block_params(block)[1];
+		    let n1 = match r {
+			RegType::Temp(temp) => {
+			    fn_builder.ins().load(types::I64, MemFlags::new(), reg_ptr, Offset32::new((temp as i32)*8))
+			}
+			_ => unimplemented!()
+		    };
+		    
+		    let mut sig = module.make_signature();
+		    sig.call_conv = isa::CallConv::SystemV;
+		    sig.params.push(AbiParam::new(pointer_type));
+		    sig.params.push(AbiParam::new(types::I64));
+		    sig.returns.push(AbiParam::new(types::I64));
+		    let sig_ref = fn_builder.import_signature(sig);
+		    let deref = fn_builder.ins().iconst(types::I64, self.deref as i64);
+		    let deref_call = fn_builder.ins().call_indirect(sig_ref, deref, &[machine_state, n1]);
+		    let n1 = fn_builder.inst_results(deref_call)[0];
+
+		    let mut sig = module.make_signature();
+		    sig.call_conv = isa::CallConv::SystemV;
+		    sig.params.push(AbiParam::new(pointer_type));
+		    sig.params.push(AbiParam::new(types::I64));
+		    sig.returns.push(AbiParam::new(types::I64));
+		    let sig_ref = fn_builder.import_signature(sig);
+		    let store = fn_builder.ins().iconst(types::I64, self.store as i64);
+		    let store_call = fn_builder.ins().call_indirect(sig_ref, store, &[machine_state, n1]);
+		    let n1 = fn_builder.inst_results(store_call)[0];
+
+		    let n = match at {
+			ArithmeticTerm::Number(n) => {
+			    match n {
+				Number::Fixnum(fixnum) => {
+				    fixnum
+				}
+				_ => unimplemented!()
+			    }
+			}
+			_ => unimplemented!()
+		    };
+
+		    let mut sig = module.make_signature();
+		    sig.call_conv = isa::CallConv::SystemV;
+		    sig.params.push(AbiParam::new(pointer_type));
+		    sig.params.push(AbiParam::new(types::I64));
+		    sig.params.push(AbiParam::new(types::I64));
+		    let sig_ref = fn_builder.import_signature(sig);
+		    let n = fn_builder.ins().iconst(types::I64, unsafe { std::mem::transmute::<_, i64>(n) });
+		    let unify_fixnum = fn_builder.ins().iconst(types::I64, self.unify_fixnum as i64);
+		    fn_builder.ins().call_indirect(sig_ref, unify_fixnum, &[machine_state, n, n1]);
+		    fn_builder.ins().return_(&[]);
+		    fn_builder.seal_all_blocks();
+		    fn_builder.finalize();
+		    break;
 		}
 		_ => {
 		    return Err(JitCompileError::InstructionNotImplemented);
