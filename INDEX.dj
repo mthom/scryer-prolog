@@ -5,6 +5,13 @@
    X = "Scryer Prolog!".
 ```
 
+``` =html
+<div style="border: solid #00007f 3px;padding-left: 15px;padding-right: 15px;font-style: italic;background-color: #00007f30;">
+<h4>Scryer Prolog Meetup 2024</h4>
+<p>The second annual Scryer Prolog meetup is going to happen in Vienna (Austria) on the 7th and 8th of November 2024. Join us to discover the present and future of Scryer Prolog! Participation is free, registration is required. <a href="https://www.digitalaustria.gv.at/eng/insights/Digital-Austria-Events-EN/Scryer-Prolog-Meetup-2024.html">More details here.</a></p>
+</div>
+```
+
 ![scryer](scryer.png){width=128 style=float:right;} [Scryer Prolog](https://github.com/mthom/scryer-prolog) is a free software ISO Prolog system intended to be an industrial
 strength production environment *and* a testbed for bleeding edge research in
 logic and constraint programming.
