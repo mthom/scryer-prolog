@@ -247,9 +247,9 @@ impl BrentAlgState {
                     self.pstr_chars += num_chars;
                     Some(CycleSearchResult::ProperList(self.num_steps()))
                 } else {
-                    let offset = self.num_steps() + num_chars - self.max_steps as usize;
-                    self.pstr_chars += offset;
-                    Some(CycleSearchResult::PStrLocation(self.max_steps as usize, h, offset))
+                    let char_offset = self.num_steps() + num_chars - self.max_steps as usize;
+                    self.pstr_chars += char_offset;
+                    Some(CycleSearchResult::PStrLocation(self.max_steps as usize, h, char_offset + offset))
                 }
             }
             (HeapCellValueTag::PStr, pstr_atom) => {
@@ -260,9 +260,9 @@ impl BrentAlgState {
                     self.pstr_chars += num_chars - 1;
                     self.step(h+1)
                 } else {
-                    let offset = self.num_steps() + num_chars - self.max_steps as usize;
-                    self.pstr_chars += offset;
-                    Some(CycleSearchResult::PStrLocation(self.max_steps as usize, h, offset))
+                    let char_offset = self.num_steps() + num_chars - self.max_steps as usize;
+                    self.pstr_chars += char_offset;
+                    Some(CycleSearchResult::PStrLocation(self.max_steps as usize, h, char_offset + offset))
                 }
             }
             _ => {
@@ -429,14 +429,12 @@ impl BrentAlgState {
                 pstr_chars = pstr.as_str_from(n).chars().count() - 1;
 
                 if heap[h].get_tag() == HeapCellValueTag::PStrOffset {
-                    debug_assert!(heap[h].get_tag() == HeapCellValueTag::PStrOffset);
-
                     if heap[h_offset].get_tag() == HeapCellValueTag::CStr {
                         return if pstr_chars < max_steps {
                             CycleSearchResult::ProperList(pstr_chars + 1)
                         } else {
-                            CycleSearchResult::UntouchedCStr(pstr.into(), max_steps)
-                        };
+                            CycleSearchResult::PStrLocation(max_steps, h_offset, n)
+                        }
                     }
                 }
 
@@ -689,6 +687,7 @@ impl MachineState {
 
                 let cell = if offset > 0 {
                     let h = self.heap.len();
+                    let (pstr_loc, _) = pstr_loc_and_offset(&self.heap, pstr_loc);
 
                     self.heap.push(pstr_offset_as_cell!(pstr_loc));
                     self.heap
