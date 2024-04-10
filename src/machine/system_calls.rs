@@ -247,7 +247,7 @@ impl BrentAlgState {
                     self.pstr_chars += num_chars;
                     Some(CycleSearchResult::ProperList(self.num_steps()))
                 } else {
-                    let char_offset = self.num_steps() + num_chars - self.max_steps as usize;
+                    let char_offset = self.max_steps as usize - self.num_steps();
                     self.pstr_chars += char_offset;
                     Some(CycleSearchResult::PStrLocation(self.max_steps as usize, h, char_offset + offset))
                 }
@@ -260,7 +260,7 @@ impl BrentAlgState {
                     self.pstr_chars += num_chars - 1;
                     self.step(h+1)
                 } else {
-                    let char_offset = self.num_steps() + num_chars - self.max_steps as usize;
+                    let char_offset = self.max_steps as usize - self.num_steps();
                     self.pstr_chars += char_offset;
                     Some(CycleSearchResult::PStrLocation(self.max_steps as usize, h, char_offset + offset))
                 }
