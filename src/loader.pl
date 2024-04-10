@@ -890,7 +890,7 @@ expand_call_goal_(UnexpandedGoals, Module, ExpandedGoals) :-
           goal_expansion(UnexpandedGoals1, user, Goals),
           (  predicate_property(Module:Goals, meta_predicate(MetaSpecs0)),
              MetaSpecs0 =.. [_ | MetaSpecs] ->
-             expand_module_names(Goals, MetaSpecs, Module, ExpandedGoals, HeadVars, TGs)
+             expand_module_names(Goals, MetaSpecs, Module, ExpandedGoals, [], [])
           ;  ExpandedGoals = Goals
           )
        ;  ExpandedGoals = UnexpandedGoals1
