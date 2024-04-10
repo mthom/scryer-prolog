@@ -747,11 +747,7 @@ impl MachineState {
 
             let max_steps_n = match max_steps {
                 Ok(Number::Fixnum(n)) => Some(n.get_num()),
-                Ok(Number::Integer(n)) => {
-                    let value: i64 = (&*n).try_into().unwrap();
-
-                    Some(value)
-                }
+                Ok(Number::Integer(n)) => (&*n).try_into().ok(),
                 _ => None,
             };
 
