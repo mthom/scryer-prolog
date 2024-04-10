@@ -433,7 +433,8 @@ impl BrentAlgState {
                         return if pstr_chars < max_steps {
                             CycleSearchResult::ProperList(pstr_chars + 1)
                         } else {
-                            CycleSearchResult::PStrLocation(max_steps, h_offset, n)
+                            let offset = max_steps as usize + n;
+                            CycleSearchResult::PStrLocation(max_steps, h_offset, offset)
                         }
                     }
                 }
