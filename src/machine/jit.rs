@@ -33,6 +33,7 @@ pub struct JitMachine {
     get_number: *const u8,
     add: *const u8,
     vec_as_ptr: *const u8,
+    number_try_from: *const u8,
 }
 
 impl std::fmt::Debug for JitMachine {
@@ -108,6 +109,7 @@ impl JitMachine {
 	    get_number: MachineState::get_number as *const u8,
 	    add: add_jit as *const u8,
 	    vec_as_ptr: Vec::<Number>::as_ptr as *const u8,
+	    number_try_from: Number::jit_try_from as *const u8,
 	}
     }
 
@@ -218,50 +220,11 @@ impl JitMachine {
 		    }
 		}
 		// TODO Fill more cases. Can we optimize the add in some cases to use the Cranelift add?
-		Instruction::Add(ref a1, ref a2, t) => {
-		    let machine_state = fn_builder.block_params(block)[0];		    
-		    let n1 = match a1 {
-			&ArithmeticTerm::Number(n) => {
-			    let n128 = unsafe { std::mem::transmute::<_, i128>(n) };
-			    let lo = fn_builder.ins().iconst(types::I64, n128 as i64);
-			    let hi = fn_builder.ins().iconst(types::I64, (n128 >> 64) as i64);
-			    fn_builder.ins().iconcat(lo, hi)
-			}
-			&ArithmeticTerm::Interm(i) => {
-			    let interms_vec = fn_builder.ins().iadd_imm(machine_state, self.offset_interms as i64);
-			    let mut sig = module.make_signature();
-			    sig.call_conv = isa::CallConv::SystemV;
-			    sig.params.push(AbiParam::new(pointer_type));
-			    sig.returns.push(AbiParam::new(pointer_type));
-			    let sig_ref = fn_builder.import_signature(sig);
-			    let vec_ptr = fn_builder.ins().iconst(types::I64, self.vec_as_ptr as i64);
-			    let vec_ptr_call = fn_builder.ins().call_indirect(sig_ref, vec_ptr, &[interms_vec]);
-			    let interms = fn_builder.inst_results(vec_ptr_call)[0];
-			    fn_builder.ins().load(types::I128, MemFlags::new(), interms, Offset32::new((i as i32 - 1) * 16))
-			}			
-			_ => unimplemented!()
-		    };
-		    let n2 = match a2 {
-			&ArithmeticTerm::Number(n) => {
-			    let n128 = unsafe { std::mem::transmute::<_, i128>(n) };
-			    let lo = fn_builder.ins().iconst(types::I64, n128 as i64);
-			    let hi = fn_builder.ins().iconst(types::I64, (n128 >> 64) as i64);
-			    fn_builder.ins().iconcat(lo, hi)
-			}
-			&ArithmeticTerm::Interm(i) => {
-			    let interms_vec = fn_builder.ins().iadd_imm(machine_state, self.offset_interms as i64);
-			    let mut sig = module.make_signature();
-			    sig.call_conv = isa::CallConv::SystemV;
-			    sig.params.push(AbiParam::new(pointer_type));
-			    sig.returns.push(AbiParam::new(pointer_type));
-			    let sig_ref = fn_builder.import_signature(sig);
-			    let vec_ptr = fn_builder.ins().iconst(types::I64, self.vec_as_ptr as i64);
-			    let vec_ptr_call = fn_builder.ins().call_indirect(sig_ref, vec_ptr, &[interms_vec]);
-			    let interms = fn_builder.inst_results(vec_ptr_call)[0];
-			    fn_builder.ins().load(types::I128, MemFlags::new(), interms, Offset32::new((i as i32 - 1) * 16))
-			}			
-			_ => unimplemented!()
-		    };
+		Instruction::Add(a1, a2, t) => {
+		    let machine_state = fn_builder.block_params(block)[0];
+		    let reg_ptr = fn_builder.block_params(block)[1];
+		    let n1 = self.jit_get_number(&module, machine_state, reg_ptr, &mut fn_builder, a1);
+		    let n2 = self.jit_get_number(&module, machine_state, reg_ptr, &mut fn_builder, a2);
 		    let mut sig = module.make_signature();
 		    sig.call_conv = isa::CallConv::SystemV;
 		    sig.params.push(AbiParam::new(types::I128));
@@ -285,35 +248,11 @@ impl JitMachine {
 		    let interms = fn_builder.inst_results(vec_ptr_call)[0];
 		    fn_builder.ins().store(MemFlags::new(), n3, interms, Offset32::new((t as i32 - 1) * 16));
 		}
-		// TOO SIMPLE, just for debugging
 		Instruction::ExecuteIs(r, at) => {
 		    let machine_state = fn_builder.block_params(block)[0];
 		    let reg_ptr = fn_builder.block_params(block)[1];
 		    let n1 = self.jit_store_deref_reg(&module, machine_state, reg_ptr, &mut fn_builder, r);
-		    let n = match at {
-			ArithmeticTerm::Number(n) => {
-			    let n128 = unsafe { std::mem::transmute::<_, i128>(n) };
-			    let lo = fn_builder.ins().iconst(types::I64, n128 as i64);
-			    let hi = fn_builder.ins().iconst(types::I64, (n128 >> 64) as i64);
-			    fn_builder.ins().iconcat(lo, hi)			    
-			}
-			ArithmeticTerm::Interm(i) => {
-			    let interms_vec = fn_builder.ins().iadd_imm(machine_state, self.offset_interms as i64);
-			    let mut sig = module.make_signature();
-			    sig.call_conv = isa::CallConv::SystemV;
-			    sig.params.push(AbiParam::new(pointer_type));
-			    sig.returns.push(AbiParam::new(pointer_type));
-			    let sig_ref = fn_builder.import_signature(sig);
-			    let vec_ptr = fn_builder.ins().iconst(types::I64, self.vec_as_ptr as i64);
-			    let vec_ptr_call = fn_builder.ins().call_indirect(sig_ref, vec_ptr, &[interms_vec]);
-			    let interms = fn_builder.inst_results(vec_ptr_call)[0];
-			    fn_builder.ins().load(types::I128, MemFlags::new(), interms, Offset32::new((i as i32 - 1) * 16))
-			}
-			/*ArithmeticTerm::Reg(reg_type) => {
-			    // TODO
-		    }*/
-			_ => unimplemented!()
-		    };
+		    let n = self.jit_get_number(&module, machine_state, reg_ptr, &mut fn_builder, at);
 
 		    let mut sig = module.make_signature();
 		    sig.call_conv = isa::CallConv::SystemV;
@@ -376,6 +315,43 @@ impl JitMachine {
 	let store = fn_builder.ins().iconst(types::I64, self.store as i64);
 	let store_call = fn_builder.ins().call_indirect(sig_ref, store, &[machine_state, n1]);
 	fn_builder.inst_results(store_call)[0]
+    }
+
+    fn jit_get_number(&self, module: &JITModule, machine_state: Value, reg_ptr: Value, fn_builder: &mut FunctionBuilder, at: ArithmeticTerm) -> Value {
+	let pointer_type = module.isa().pointer_type();
+	let system_call_conv = module.isa().default_call_conv();
+	
+        match at {
+	    ArithmeticTerm::Number(n) => {
+		let n128 = unsafe { std::mem::transmute::<_, i128>(n) };
+		let lo = fn_builder.ins().iconst(types::I64, n128 as i64);
+		let hi = fn_builder.ins().iconst(types::I64, (n128 >> 64) as i64);
+		fn_builder.ins().iconcat(lo, hi)			    
+	    }
+	    ArithmeticTerm::Interm(i) => {
+		let interms_vec = fn_builder.ins().iadd_imm(machine_state, self.offset_interms as i64);
+		let mut sig = module.make_signature();
+		sig.call_conv = isa::CallConv::SystemV;
+		sig.params.push(AbiParam::new(pointer_type));
+		sig.returns.push(AbiParam::new(pointer_type));
+		let sig_ref = fn_builder.import_signature(sig);
+		let vec_ptr = fn_builder.ins().iconst(types::I64, self.vec_as_ptr as i64);
+		let vec_ptr_call = fn_builder.ins().call_indirect(sig_ref, vec_ptr, &[interms_vec]);
+		let interms = fn_builder.inst_results(vec_ptr_call)[0];
+		fn_builder.ins().load(types::I128, MemFlags::new(), interms, Offset32::new((i as i32 - 1) * 16))
+	    }
+	    ArithmeticTerm::Reg(reg_type) => {
+		let value = self.jit_store_deref_reg(&module, machine_state, reg_ptr, fn_builder, reg_type);
+		let mut sig = module.make_signature();
+		sig.call_conv = isa::CallConv::SystemV;
+		sig.params.push(AbiParam::new(types::I64));
+		sig.returns.push(AbiParam::new(types::I128));
+		let sig_ref = fn_builder.import_signature(sig);
+		let number_try_from = fn_builder.ins().iconst(types::I64, self.number_try_from as i64);
+		let number_try_from_call = fn_builder.ins().call_indirect(sig_ref, number_try_from, &[value]);
+		fn_builder.inst_results(number_try_from_call)[0]
+	    }
+	}
     }
 
 
