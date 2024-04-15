@@ -6,6 +6,7 @@ use crate::machine::arithmetic_ops::add_jit;
 
 use cranelift::prelude::*;
 use cranelift::prelude::codegen::ir::immediates::Offset32;
+use cranelift::prelude::codegen::ir::entities::Value;
 use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{Linkage, Module};
 
@@ -187,6 +188,7 @@ impl JitMachine {
 		    let write_literal_to_var = fn_builder.ins().iconst(types::I64, self.write_literal_to_var as i64);
 		    fn_builder.ins().call_indirect(sig_ref, write_literal_to_var, &[machine_state_value, reg_value, c_value]);
 		}
+		// TODO: Manage RegType
 		Instruction::GetVariable(norm, arg) => {
 		    let reg_ptr = fn_builder.block_params(block)[1];
 		    let value = fn_builder.ins().load(types::I64, MemFlags::new(), reg_ptr, Offset32::new((arg as i32)*8));
@@ -287,33 +289,7 @@ impl JitMachine {
 		Instruction::ExecuteIs(r, at) => {
 		    let machine_state = fn_builder.block_params(block)[0];
 		    let reg_ptr = fn_builder.block_params(block)[1];
-		    let n1 = match r {
-			RegType::Temp(temp) => {
-			    fn_builder.ins().load(types::I64, MemFlags::new(), reg_ptr, Offset32::new((temp as i32)*8))
-			}
-			_ => unimplemented!()
-		    };
-		    
-		    let mut sig = module.make_signature();
-		    sig.call_conv = isa::CallConv::SystemV;
-		    sig.params.push(AbiParam::new(pointer_type));
-		    sig.params.push(AbiParam::new(types::I64));
-		    sig.returns.push(AbiParam::new(types::I64));
-		    let sig_ref = fn_builder.import_signature(sig);
-		    let deref = fn_builder.ins().iconst(types::I64, self.deref as i64);
-		    let deref_call = fn_builder.ins().call_indirect(sig_ref, deref, &[machine_state, n1]);
-		    let n1 = fn_builder.inst_results(deref_call)[0];
-
-		    let mut sig = module.make_signature();
-		    sig.call_conv = isa::CallConv::SystemV;
-		    sig.params.push(AbiParam::new(pointer_type));
-		    sig.params.push(AbiParam::new(types::I64));
-		    sig.returns.push(AbiParam::new(types::I64));
-		    let sig_ref = fn_builder.import_signature(sig);
-		    let store = fn_builder.ins().iconst(types::I64, self.store as i64);
-		    let store_call = fn_builder.ins().call_indirect(sig_ref, store, &[machine_state, n1]);
-		    let n1 = fn_builder.inst_results(store_call)[0];
-
+		    let n1 = self.jit_store_deref_reg(&module, machine_state, reg_ptr, &mut fn_builder, r);
 		    let n = match at {
 			ArithmeticTerm::Number(n) => {
 			    let n128 = unsafe { std::mem::transmute::<_, i128>(n) };
@@ -333,6 +309,9 @@ impl JitMachine {
 			    let interms = fn_builder.inst_results(vec_ptr_call)[0];
 			    fn_builder.ins().load(types::I128, MemFlags::new(), interms, Offset32::new((i as i32 - 1) * 16))
 			}
+			/*ArithmeticTerm::Reg(reg_type) => {
+			    // TODO
+		    }*/
 			_ => unimplemented!()
 		    };
 
@@ -367,6 +346,38 @@ impl JitMachine {
 
 	Ok(())
     }
+    
+    fn jit_store_deref_reg(&self, module: &JITModule, machine_state: Value, reg_ptr: Value, fn_builder: &mut FunctionBuilder, reg: RegType) -> Value {
+	let pointer_type = module.isa().pointer_type();
+	let system_call_conv = module.isa().default_call_conv();
+	let n1 = match reg {
+	    RegType::Temp(temp) => {
+		fn_builder.ins().load(types::I64, MemFlags::new(), reg_ptr, Offset32::new((temp as i32)*8))
+	    }
+	    _ => unimplemented!() // TODO
+	};
+
+	let mut sig = module.make_signature();
+	sig.call_conv = system_call_conv;
+	sig.params.push(AbiParam::new(pointer_type));
+	sig.params.push(AbiParam::new(types::I64));
+	sig.returns.push(AbiParam::new(types::I64));
+	let sig_ref = fn_builder.import_signature(sig);
+	let deref = fn_builder.ins().iconst(types::I64, self.deref as i64);
+	let deref_call = fn_builder.ins().call_indirect(sig_ref, deref, &[machine_state, n1]);
+	let n1 = fn_builder.inst_results(deref_call)[0];
+
+	let mut sig = module.make_signature();
+	sig.call_conv = system_call_conv;
+	sig.params.push(AbiParam::new(pointer_type));
+	sig.params.push(AbiParam::new(types::I64));
+	sig.returns.push(AbiParam::new(types::I64));
+	let sig_ref = fn_builder.import_signature(sig);
+	let store = fn_builder.ins().iconst(types::I64, self.store as i64);
+	let store_call = fn_builder.ins().call_indirect(sig_ref, store, &[machine_state, n1]);
+	fn_builder.inst_results(store_call)[0]
+    }
+
 
     pub fn exec(&self, name: &str, machine_st: &mut MachineState) -> Result<(), ()> {
 	if let Some(output) = self.modules.get(name) {
@@ -377,8 +388,6 @@ impl JitMachine {
 	    machine_st.num_of_args = 1;
 	    machine_st.b0 = machine_st.b;
 	    
-	    //let code_ptr = unsafe { std::mem::transmute::<_, extern "C" fn(*mut MachineState, *mut Registers) -> ()>(output.code_ptr) };
-	    //code_ptr(machine_st as *mut MachineState, machine_st.registers.as_ptr() as *mut Registers);
 	    (self.trampoline)(machine_st as *mut MachineState, machine_st.registers.as_ptr() as *mut Registers, output.code_ptr);
 	    Ok(())
 	} else {
