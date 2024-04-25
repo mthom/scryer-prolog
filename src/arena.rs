@@ -595,7 +595,7 @@ impl ArenaAllocated for IndexPtr {
 
     #[inline]
     fn ptr_to_allocated(slab: &mut AllocSlab) -> Self::PtrToAllocated {
-        TypedArenaPtr::new(unsafe { mem::transmute(slab.header) })
+        TypedArenaPtr::new(ptr::addr_of_mut!(slab.header) as *mut _)
     }
 
     #[inline]
@@ -608,7 +608,7 @@ impl ArenaAllocated for IndexPtr {
         let mut slab = Box::new(AllocSlab {
             next: arena.base.take(),
             #[cfg(target_pointer_width = "32")]
-            padding: 0,
+            _padding: 0,
             header: unsafe { mem::transmute(value) },
         });
 
@@ -666,7 +666,7 @@ unsafe fn drop_slab_in_place(value: &mut AllocSlab) {
     macro_rules! drop_typed_slab_in_place {
         ($payload: ty, $value: expr) => {
             let slab: &mut TypedAllocSlab<$payload> = mem::transmute($value);
-            ptr::drop_in_place(ptr::addr_of_mut!(slab.payload));
+            ptr::drop_in_place(&mut slab.payload);
         };
     }
 
