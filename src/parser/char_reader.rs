@@ -327,12 +327,11 @@ impl<R: Read> Read for CharReader<R> {
             return self.inner.read_vectored(bufs);
         }
 
-        let nread = {
-            self.refresh_buffer()?;
-            (&self.buf[self.pos..]).read_vectored(bufs)?
-        };
+        self.refresh_buffer()?;
 
+        let nread = (&self.buf[self.pos..]).read_vectored(bufs)?;
         self.consume(nread);
+
         Ok(nread)
     }
 }

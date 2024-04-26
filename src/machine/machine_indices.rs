@@ -298,9 +298,11 @@ impl IndexStore {
             _ => self
                 .get_meta_predicate_spec(key.0, key.1, &compilation_target)
                 .map(|meta_specs| {
-                    meta_specs.iter().find(|meta_spec| match meta_spec {
-                        MetaSpec::Colon | MetaSpec::RequiresExpansionWithArgument(_) => true,
-                        _ => false,
+                    meta_specs.iter().find(|meta_spec| {
+                        matches!(
+                            meta_spec,
+                            MetaSpec::Colon | MetaSpec::RequiresExpansionWithArgument(_)
+                        )
                     })
                 })
                 .map(|meta_spec_opt| meta_spec_opt.is_some())

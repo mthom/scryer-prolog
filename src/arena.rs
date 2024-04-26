@@ -24,10 +24,7 @@ use std::sync::RwLock;
 macro_rules! arena_alloc {
     ($e:expr, $arena:expr) => {{
         let result = $e;
-        #[allow(unused_unsafe)]
-        unsafe {
-            ArenaAllocated::alloc($arena, result)
-        }
+        ArenaAllocated::alloc($arena, result)
     }};
 }
 
@@ -35,10 +32,7 @@ macro_rules! arena_alloc {
 macro_rules! float_alloc {
     ($e:expr, $arena:expr) => {{
         let result = $e;
-        #[allow(unused_unsafe)]
-        unsafe {
-            $arena.f64_tbl.build_with(result).as_ptr()
-        }
+        unsafe { $arena.f64_tbl.build_with(result).as_ptr() }
     }};
 }
 
@@ -746,8 +740,6 @@ impl Drop for Arena {
                 ptr = slab.next;
             }
         }
-
-        self.base = None;
     }
 }
 
