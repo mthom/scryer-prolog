@@ -246,6 +246,9 @@ seqq([Es|Ess]) --> seq(Es), seqq(Ess).
    Cs0 = Cs.
 ... --> [] | [_], ... .
 
+% defer instantiation errors until runtime. instantiations may be made
+% then.
+error_goal(error(instantiation_error, _Context), _).
 error_goal(error(E, must_be/2), error(E, must_be/2)).
 error_goal(error(E, (=..)/2), error(E, (=..)/2)).
 error_goal(error(representation_error(dcg_body), Context),
@@ -259,7 +262,11 @@ user:goal_expansion(phrase(GRBody, S, S0), GRBody2) :-
           E,
           dcgs:error_goal(E, GRBody1)
          ),
-    (  GRBody = (_:_) ->
+    (  E = error(instantiation_error, _),
+       GRBody0 = [T|Ts] ->
+       GRBody2 = (error:must_be(list, [T|Ts]),
+                  lists:append([T|Ts], S0, S))
+    ;  GRBody = (_:_) ->
        GRBody2 = M:GRBody1
     ;  GRBody2 = GRBody1
     ).
