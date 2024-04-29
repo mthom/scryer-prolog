@@ -1017,6 +1017,13 @@ fn generate_instruction_preface() -> TokenStream {
                     },
                 }
             }
+
+            pub fn is_external(&self) -> bool {
+                matches!(
+                    self,
+                    IndexingCodePtr::External(_) | IndexingCodePtr::DynamicExternal(_)
+                )
+            }
         }
 
         impl IndexingInstruction {

@@ -114,13 +114,13 @@ impl<'a> IndexingCodeMergingPtr<'a> {
             Some(OptArgIndexKey::Literal(_, _, constant, _)) => {
                 constants.insert(*constant, constant_ptr);
             }
+            _ if constant_ptr.is_external() => {
+                // this must be a defunct clause, because it's been deleted
+                // from the skeleton.
+                debug_assert!(constant_key.is_none());
+            }
             _ => {
-                if let IndexingCodePtr::DynamicExternal(_) = constant_ptr {
-                    // this must be a defunct clause, because it's been deleted
-                    // from the skeleton.
-                } else {
-                    unreachable!()
-                }
+                unreachable!()
             }
         }
 
