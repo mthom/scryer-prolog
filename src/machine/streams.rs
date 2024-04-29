@@ -455,24 +455,11 @@ macro_rules! arena_allocated_impl_for_stream {
         impl ArenaAllocated for StreamLayout<$stream_type> {
             type PtrToAllocated = TypedArenaPtr<StreamLayout<$stream_type>>;
 
+            gen_ptr_to_allocated!(StreamLayout<$stream_type>);
+
             #[inline]
             fn tag() -> ArenaHeaderTag {
                 ArenaHeaderTag::$stream_tag
-            }
-
-            #[inline]
-            fn size(&self) -> usize {
-                mem::size_of::<StreamLayout<$stream_type>>()
-            }
-
-            #[allow(clippy::not_unsafe_ptr_arg_deref)]
-            #[inline]
-            fn copy_to_arena(self, dst: *mut Self) -> Self::PtrToAllocated {
-                unsafe {
-                    // Miri seems to hit this a lot
-                    ptr::write(dst, self);
-                    TypedArenaPtr::new(dst as *mut Self)
-                }
             }
         }
     };

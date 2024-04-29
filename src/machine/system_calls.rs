@@ -428,14 +428,12 @@ impl BrentAlgState {
 
                 pstr_chars = pstr.as_str_from(n).chars().count() - 1;
 
-                if heap[h].get_tag() == HeapCellValueTag::PStrOffset {
-                    if heap[h_offset].get_tag() == HeapCellValueTag::CStr {
-                        return if pstr_chars < max_steps {
-                            CycleSearchResult::ProperList(pstr_chars + 1)
-                        } else {
-                            let offset = max_steps as usize + n;
-                            CycleSearchResult::PStrLocation(max_steps, h_offset, offset)
-                        }
+                if heap[h].get_tag() == HeapCellValueTag::PStrOffset && heap[h_offset].get_tag() == HeapCellValueTag::CStr {
+                    return if pstr_chars < max_steps {
+                        CycleSearchResult::ProperList(pstr_chars + 1)
+                    } else {
+                        let offset = max_steps + n;
+                        CycleSearchResult::PStrLocation(max_steps, h_offset, offset)
                     }
                 }
 
