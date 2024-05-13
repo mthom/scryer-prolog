@@ -150,6 +150,7 @@ pub fn get_op_desc(name: Atom, op_dir: &CompositeOpDir) -> Option<CompositeOpDes
             op_desc.pre = pri as usize;
             op_desc.spec |= spec as u32;
         } else if name == atom!("-") {
+            // used to denote a negative sign that should be treated as an atom and not an operator
             op_desc.spec |= NEGATIVE_SIGN;
         }
     }
@@ -693,7 +694,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
                 // expect a term or non-comma operator.
                 if let TokenType::Comma = desc.tt {
                     return None;
-                } else if is_term!(desc.spec) || is_op!(desc.spec) {
+                } else if is_term!(desc.spec) || is_op!(desc.spec) || is_negate!(desc.spec) {
                     arity += 1;
                 } else {
                     return None;
@@ -911,9 +912,6 @@ impl<'a, R: CharRead> Parser<'a, R> {
                         // can't be prefix, so either inf == 0
                         // or post == 0.
                         self.reduce_op(inf + post);
-
-                        // let fixity = if inf > 0 { Fixity::In } else { Fixity::Post };
-
                         self.promote_atom_op(name, inf + post, spec & (XFX | XFY | YFX | YF | XF));
                     }
                     _ => {
@@ -927,12 +925,12 @@ impl<'a, R: CharRead> Parser<'a, R> {
                                     inf + post,
                                     spec & (XFX | XFY | YFX | XF | YF),
                                 );
-                            } else {
-                                self.promote_atom_op(name, pre, spec & (FX | FY | NEGATIVE_SIGN));
+
+                                return Ok(true);
                             }
-                        } else {
-                            self.promote_atom_op(name, pre, spec & (FX | FY | NEGATIVE_SIGN));
                         }
+
+                        self.promote_atom_op(name, pre, spec & (FX | FY | NEGATIVE_SIGN));
                     }
                 }
             } else {

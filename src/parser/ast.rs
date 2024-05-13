@@ -49,13 +49,13 @@ macro_rules! fixnum {
 
 macro_rules! is_term {
     ($x:expr) => {
-        ($x as u32 & $crate::parser::ast::TERM) != 0
+        ($x as u32 & $crate::parser::ast::TERM) != 0 || is_negate!($x)
     };
 }
 
 macro_rules! is_lterm {
     ($x:expr) => {
-        ($x as u32 & $crate::parser::ast::LTERM) != 0
+        ($x as u32 & $crate::parser::ast::LTERM) != 0 || is_negate!($x)
     };
 }
 

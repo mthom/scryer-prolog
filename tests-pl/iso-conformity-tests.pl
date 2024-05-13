@@ -230,13 +230,16 @@ test_61 :- integer('-'/*.*/1).
 
 test_62 :- atom(-/*.*/-).
 
-test_63_180_64 :- setup_call_cleanup((  current_op(P,fy,-),
-                                        op(0,fy,-)
-                                     ),
-                                     (  integer(-1),
-                                        integer(- 1)
-                                     ),
-                                     op(P,fy,-)).
+test_63_180_64_328 :- setup_call_cleanup((  current_op(P,fy,-),
+                                            op(0,fy,-)
+                                         ),
+                                         (  integer(-1),
+                                            integer(- 1),
+                                            read_from_chars("writeq_term_to_chars([-]).", Writer),
+                                            call(Writer, Cs),
+                                            Cs == "[-]"
+                                         ),
+                                         op(P,fy,-)).
 
 test_135 :- writeq_term_to_chars(-(1), Chars),
             Chars == "- (1)".
