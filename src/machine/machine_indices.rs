@@ -169,6 +169,13 @@ impl From<TypedArenaPtr<IndexPtr>> for CodeIndex {
     }
 }
 
+impl From<CodeIndex> for HeapCellValue {
+    #[inline(always)]
+    fn from(idx: CodeIndex) -> HeapCellValue {
+        untyped_arena_ptr_as_cell!(UntypedArenaPtr::from(idx))
+    }
+}
+
 impl CodeIndex {
     #[inline]
     pub(crate) fn new(ptr: IndexPtr, arena: &mut Arena) -> Self {
@@ -208,10 +215,12 @@ impl CodeIndex {
         std::mem::replace(self.0.deref_mut(), value)
     }
 
+    /*
     #[inline(always)]
     pub(crate) fn as_ptr(&self) -> *const IndexPtr {
         self.0.as_ptr()
     }
+    */
 }
 
 pub(crate) type GlobalVarDir = IndexMap<Atom, (Ball, Option<HeapCellValue>), FxBuildHasher>;

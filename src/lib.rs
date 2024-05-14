@@ -2,6 +2,7 @@
 #![recursion_limit = "4112"]
 #![deny(missing_docs)]
 
+
 #[macro_use]
 extern crate static_assertions;
 
@@ -13,6 +14,8 @@ pub(crate) mod atom_table;
 pub(crate) mod arena;
 #[macro_use]
 pub(crate) mod parser;
+#[macro_use]
+pub(crate) mod functor_macro;
 mod allocator;
 mod arithmetic;
 pub(crate) mod codegen;

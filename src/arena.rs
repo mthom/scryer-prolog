@@ -909,7 +909,7 @@ mod tests {
     use crate::arena::*;
     use crate::atom_table::*;
     use crate::machine::mock_wam::*;
-    use crate::machine::partial_string::*;
+    use crate::types::*;
 
     use crate::parser::dashu::{Integer, Rational};
     use ordered_float::OrderedFloat;
@@ -992,7 +992,7 @@ mod tests {
 
         assert!(!big_int_ptr.as_ptr().is_null());
 
-        let cell = HeapCellValue::from(Literal::Integer(big_int_ptr));
+        let cell = HeapCellValue::from(big_int_ptr);
         assert_eq!(cell.get_tag(), HeapCellValueTag::Cons);
 
         let untyped_arena_ptr = match cell.to_untyped_arena_ptr() {
@@ -1098,31 +1098,6 @@ mod tests {
             _ => { unreachable!() }
         );
 
-        // complete string
-
-        let pstr_var_cell =
-            put_partial_string(&mut wam.machine_st.heap, "ronan", &wam.machine_st.atom_tbl);
-        let pstr_cell = wam.machine_st.heap[pstr_var_cell.get_value() as usize];
-
-        assert_eq!(pstr_cell.get_tag(), HeapCellValueTag::PStr);
-
-        match pstr_cell.to_pstr() {
-            Some(pstr) => {
-                assert_eq!(&*pstr.as_str_from(0), "ronan");
-            }
-            None => {
-                unreachable!();
-            }
-        }
-
-        read_heap_cell!(pstr_cell,
-            (HeapCellValueTag::PStr, pstr_atom) => {
-                let pstr = PartialString::from(pstr_atom);
-                assert_eq!(&*pstr.as_str_from(0), "ronan");
-            }
-            _ => { unreachable!() }
-        );
-
         // fixnum
 
         let fixnum_cell = fixnum_as_cell!(Fixnum::build_with(3));
@@ -1200,8 +1175,8 @@ mod tests {
         let char_cell = char_as_cell!(c);
 
         read_heap_cell!(char_cell,
-            (HeapCellValueTag::Char, c) => {
-                assert_eq!(c, 'c');
+            (HeapCellValueTag::Atom, (c, _arity)) => {
+                assert_eq!(&*c.as_str(), "c");
             }
             _ => { unreachable!() }
         );
@@ -1210,8 +1185,8 @@ mod tests {
         let cyrillic_char_cell = char_as_cell!(c);
 
         read_heap_cell!(cyrillic_char_cell,
-            (HeapCellValueTag::Char, c) => {
-                assert_eq!(c, 'Ћ');
+            (HeapCellValueTag::Atom, (c, _arity)) => {
+                assert_eq!(&*c.as_str(), "Ћ");
             }
             _ => { unreachable!() }
         );
