@@ -3,6 +3,7 @@ use crate::codegen::CodeGenSettings;
 use crate::forms::*;
 use crate::instructions::*;
 use crate::machine::disjuncts::*;
+use crate::machine::heap::*;
 use crate::machine::loader::*;
 use crate::machine::machine_errors::*;
 use crate::machine::CodeIndex;
@@ -27,25 +28,42 @@ pub(crate) fn to_op_decl_spec(spec: Atom) -> Result<OpDeclSpec, CompilationError
 fn setup_op_decl(term: &FocusedHeapRefMut) -> Result<OpDecl, CompilationError> {
     let (focus, _cell) = subterm_index(term.heap, term.focus);
 
-    let name = match term.name(focus+3) {
-        Some(name) => name,
-        None => return Err(CompilationError::InconsistentEntry),
+    let name = match term_predicate_key(term.heap, focus+3) {
+        Some((name, 0)) => name,
+        _ => {
+            return Err(CompilationError::InvalidDirective(
+                DirectiveError::InvalidOpDeclNameType(term.heap[focus+3]),
+            ));
+        }
     };
 
-    let spec = match term.name(focus+2) {
-        Some(name) => name,
-        None => return Err(CompilationError::InconsistentEntry),
+    let spec = match term_predicate_key(term.heap, focus+2) {
+        Some((name, _)) => name,
+        None => {
+            return Err(CompilationError::InvalidDirective(
+                DirectiveError::InvalidOpDeclSpecDomain(term.heap[focus+2]),
+            ));
+        }
     };
 
-    let prec = read_heap_cell!(term.deref_loc(focus+1),
+    let spec = to_op_decl_spec(spec)?;
+    let prec = term.deref_loc(focus+1);
+
+    let prec = read_heap_cell!(prec,
         (HeapCellValueTag::Fixnum, n) => {
             match u16::try_from(n.get_num()) {
                 Ok(n) if n <= 1200 => n,
-                _ => return Err(CompilationError::InconsistentEntry),
+                _ => {
+                    return Err(CompilationError::InvalidDirective(
+                        DirectiveError::InvalidOpDeclPrecDomain(n),
+                    ));
+                }
             }
         }
         _ => {
-            return Err(CompilationError::InconsistentEntry);
+            return Err(CompilationError::InvalidDirective(
+                DirectiveError::InvalidOpDeclPrecType(prec),
+            ));
         }
     );
 
@@ -71,10 +89,9 @@ fn setup_op_decl(term: &FocusedHeapRefMut) -> Result<OpDecl, CompilationError> {
 }
 
 fn setup_predicate_indicator(term: &FocusedHeapRefMut) -> Result<PredicateKey, CompilationError> {
-    let name_opt = term.name(term.focus);
-    let arity = term.arity(term.focus);
+    let key_opt = term_predicate_key(term.heap, term.focus);
 
-    if let (Some(atom!("/") | atom!("//")), 2) = (name_opt, arity) {
+    if let Some((atom!("/") | atom!("//"), 2)) = key_opt {
         let arity_loc = term.nth_arg(term.focus, 2).unwrap();
 
         let arity = match Number::try_from(term.deref_loc(arity_loc)) {
@@ -85,11 +102,11 @@ fn setup_predicate_indicator(term: &FocusedHeapRefMut) -> Result<PredicateKey, C
         .ok_or(CompilationError::InvalidModuleExport)?;
 
         let name_loc = term.nth_arg(term.focus, 1).unwrap();
-        let name = term
-            .name(name_loc)
+        let name = term_predicate_key(term.heap, name_loc)
+            .map(|(name, _)| name)
             .ok_or(CompilationError::InvalidModuleExport)?;
 
-        if name_opt == Some(atom!("/")) {
+        if matches!(key_opt, Some((atom!("/"), _))) {
             Ok((name, arity))
         } else {
             Ok((name, arity + 2))
@@ -103,10 +120,9 @@ fn setup_module_export(term: &FocusedHeapRefMut) -> Result<ModuleExport, Compila
     setup_predicate_indicator(term)
         .map(ModuleExport::PredicateKey)
         .or_else(|_| {
-            let name_opt = term.name(term.focus);
-            let arity = term.arity(term.focus);
+            let key_opt = term_predicate_key(term.heap, term.focus);
 
-            if let (Some(atom!("op")), 3) = (name_opt, arity) {
+            if let Some((atom!("op"), 3)) = key_opt {
                 Ok(ModuleExport::OpDecl(setup_op_decl(term)?))
             } else {
                 Err(CompilationError::InvalidModuleDecl)
@@ -131,48 +147,46 @@ pub(super) fn setup_module_export_list(
     let mut focus = term.focus;
 
     loop {
-	read_heap_cell!(term.heap[focus],
-	    (HeapCellValueTag::AttrVar | HeapCellValueTag::Var, h) => {
-		if h == focus {
-		    break;
-		} else {
-		    focus = h;
-		}
-	    }
-	    (HeapCellValueTag::Lis, l) => {
-		let term = FocusedHeapRefMut {
-		    heap: term.heap,
-		    focus: l,
-		};
-		exports.push(setup_module_export(&term)?);
+	   read_heap_cell!(term.heap[focus],
+	       (HeapCellValueTag::AttrVar | HeapCellValueTag::Var, h) => {
+	   	       if h == focus {
+	   	           break;
+	   	       } else {
+	   	           focus = h;
+	   	       }
+	       }
+	       (HeapCellValueTag::Lis, l) => {
+	   	       let term = FocusedHeapRefMut {
+	   	           heap: term.heap,
+	   	           focus: l,
+	   	       };
 
-		focus = l + 1;
-	    }
-            (HeapCellValueTag::Atom, (name, _arity)) => {
-		if name == atom!("[]") {
-		    return Ok(exports);
-		} else {
-		    break;
-		}
-	    }
-	    _ => {
-		break;
-	    }
-	);
+	   	       exports.push(setup_module_export(&term)?);
+	   	       focus = l + 1;
+	       }
+           (HeapCellValueTag::Atom, (name, _arity)) => {
+	   	       if name == atom!("[]") {
+	   	           return Ok(exports);
+	   	       } else {
+	   	           break;
+	   	       }
+	       }
+	       _ => {
+	   	       break;
+	       }
+	   );
     }
 
     Err(CompilationError::InvalidModuleDecl)
 }
 
-fn setup_module_decl(term: FocusedHeapRefMut) -> Result<ModuleDecl, CompilationError> {
-    let name = term
-        .name(term.focus + 1)
+fn setup_module_decl(mut term: FocusedHeapRefMut) -> Result<ModuleDecl, CompilationError> {
+    let name = term_predicate_key(term.heap, term.focus + 1)
+        .map(|(name, _)| name)
         .ok_or(CompilationError::InvalidModuleDecl)?;
-    let export_list = FocusedHeapRefMut {
-        heap: term.heap,
-        focus: term.focus + 2,
-    };
-    let exports = setup_module_export_list(export_list)?;
+
+    term.focus = term.focus + 2;
+    let exports = setup_module_export_list(term)?;
 
     Ok(ModuleDecl { name, exports })
 }
@@ -224,8 +238,8 @@ fn setup_qualified_import(term: FocusedHeapRefMut) -> Result<UseModuleExport, Co
             heap: term.heap,
             focus,
         };
-        exports.insert(setup_module_export(&term)?);
 
+        exports.insert(setup_module_export(&term)?);
         focus = focus + 1;
     }
 
@@ -276,7 +290,7 @@ fn setup_qualified_import(term: FocusedHeapRefMut) -> Result<UseModuleExport, Co
  */
 
 fn setup_meta_predicate<'a, LS: LoadState<'a>>(
-    term: FocusedHeapRefMut,
+    term: TermWriteResult,
     loader: &mut Loader<'a, LS>,
 ) -> Result<(Atom, Atom, Vec<MetaSpec>), CompilationError> {
     fn get_meta_specs(
@@ -319,24 +333,27 @@ fn setup_meta_predicate<'a, LS: LoadState<'a>>(
         Ok(meta_specs)
     }
 
-    read_heap_cell!(term.deref_loc(term.focus+1),
+    let heap = loader.machine_heap();
+    let cell = heap_bound_store(heap, heap_bound_deref(heap, heap[term.focus+1]));
+
+    read_heap_cell!(cell,
         (HeapCellValueTag::Str, s) => {
-            let (name, arity) = cell_as_atom_cell!(term.heap[s]).get_name_and_arity();
+            let (name, arity) = cell_as_atom_cell!(heap[s]).get_name_and_arity();
 
             match (name, arity) {
                 (atom!(":"), 2) => {
-                    let module_name = term.heap[s+1];
-                    let spec = term.heap[s+2];
+                    let module_name = heap[s+1];
+                    let spec = heap[s+2];
 
                     read_heap_cell!(module_name,
                         (HeapCellValueTag::Atom, (module_name, arity)) => {
                             if arity == 0 {
                                 read_heap_cell!(spec,
                                     (HeapCellValueTag::Str, s) => {
-                                        let (name, arity) = cell_as_atom_cell!(term.heap[s])
+                                        let (name, arity) = cell_as_atom_cell!(heap[s])
                                             .get_name_and_arity();
 
-                                        let term = FocusedHeapRefMut { heap: term.heap, focus: s };
+                                        let term = FocusedHeapRefMut { heap, focus: s };
                                         return Ok((module_name, name, get_meta_specs(term, arity)?));
                                     }
                                     _ => {
@@ -351,9 +368,11 @@ fn setup_meta_predicate<'a, LS: LoadState<'a>>(
                     );
                 }
                 _ => {
-                    let term = FocusedHeapRefMut { heap: term.heap, focus: s };
+                    let term = FocusedHeapRefMut { heap, focus: s };
+                    let specs = get_meta_specs(term, arity)?;
                     let module_name = loader.payload.compilation_target.module_name();
-                    return Ok((module_name, name, get_meta_specs(term, arity)?));
+
+                    return Ok((module_name, name, specs));
                 }
             }
 
@@ -367,38 +386,41 @@ fn setup_meta_predicate<'a, LS: LoadState<'a>>(
 
 pub(super) fn setup_declaration<'a, LS: LoadState<'a>>(
     loader: &mut Loader<'a, LS>,
-    term: FocusedHeapRefMut,
+    mut term: TermWriteResult,
 ) -> Result<Declaration, CompilationError> {
     let mut focus = term.focus;
+    let machine_st = LS::machine_st(&mut loader.payload);
 
     loop {
-        read_heap_cell!(term.heap[focus],
+        let decl = machine_st.heap[focus];
+
+        read_heap_cell!(decl,
             (HeapCellValueTag::Atom, (name, arity)) => {
-                let term = FocusedHeapRefMut { heap: term.heap, focus };
+                let mut focused = FocusedHeapRefMut::from(&mut machine_st.heap, focus);
 
                 return match (name, arity) {
                     (atom!("dynamic"), 1) => {
-                        let (name, arity) = setup_predicate_indicator(&term)?;
+                        let (name, arity) = setup_predicate_indicator(&focused)?;
                         Ok(Declaration::Dynamic(name, arity))
                     }
                     (atom!("module"), 2) => {
-                        Ok(Declaration::Module(setup_module_decl(term)?))
+                        Ok(Declaration::Module(setup_module_decl(focused)?))
                     }
                     (atom!("op"), 3) => {
-                        Ok(Declaration::Op(setup_op_decl(&term)?))
+                        Ok(Declaration::Op(setup_op_decl(&focused)?))
                     }
                     (atom!("non_counted_backtracking"), 1) => {
-                        let focus = term.nth_arg(term.focus, 1).unwrap();
-                        let (name, arity) = setup_predicate_indicator(&FocusedHeapRefMut { heap: term.heap, focus })?;
+                        focused.focus = focused.nth_arg(focused.focus, 1).unwrap();
+                        let (name, arity) = setup_predicate_indicator(&focused)?;
                         Ok(Declaration::NonCountedBacktracking(name, arity))
                     }
-                    (atom!("use_module"), 1) => Ok(Declaration::UseModule(setup_use_module_decl(&term)?)),
+                    (atom!("use_module"), 1) => Ok(Declaration::UseModule(setup_use_module_decl(&focused)?)),
                     (atom!("use_module"), 2) => {
-                        let (name, exports) = setup_qualified_import(term)?;
-
+                        let (name, exports) = setup_qualified_import(focused)?;
                         Ok(Declaration::UseQualifiedModule(name, exports))
                     }
                     (atom!("meta_predicate"), 1) => {
+                        term.focus = focus;
                         let (module_name, name, meta_specs) = setup_meta_predicate(term, loader)?;
                         Ok(Declaration::MetaPredicate(module_name, name, meta_specs))
                     }
@@ -415,13 +437,13 @@ pub(super) fn setup_declaration<'a, LS: LoadState<'a>>(
                     focus = h;
                 } else {
                     return Err(CompilationError::InvalidDirective(
-                        DirectiveError::ExpectedDirective(heap_loc_as_cell!(h)),
+                        DirectiveError::ExpectedDirective(decl),
                     ));
                 }
             }
             _ => {
                 return Err(CompilationError::InvalidDirective(
-                    DirectiveError::ExpectedDirective(term.heap[focus])
+                    DirectiveError::ExpectedDirective(decl),
                 ));
             }
         );
@@ -432,41 +454,44 @@ fn build_meta_predicate_clause<'a, LS: LoadState<'a>>(
     loader: &mut Loader<'a, LS>,
     module_name: Atom,
     arity: usize,
-    term: &FocusedHeapRefMut,
+    term: &TermWriteResult,
     meta_specs: Vec<MetaSpec>,
 ) -> IndexMap<usize, CodeIndex, FxBuildHasher> {
+    use crate::machine::heap::Heap;
     let mut index_ptrs = IndexMap::with_hasher(FxBuildHasher::default());
 
     for (subterm_loc, meta_spec) in (term.focus + 1..term.focus + arity + 1).zip(meta_specs) {
         if let MetaSpec::RequiresExpansionWithArgument(supp_args) = meta_spec {
-            if let Some(name) = term.name(subterm_loc) {
+            let predicate_key_opt = term_predicate_key(loader.machine_heap(), subterm_loc);
+
+            if let Some((name, arity)) = predicate_key_opt {
                 if name == atom!("$call") {
                     continue;
                 }
 
-                let arity = term.arity(subterm_loc);
-
                 struct QualifiedNameInfo {
                     module_name: Atom,
                     name: Atom,
+                    arity: usize,
                     qualified_term_loc: usize,
                 }
 
                 fn get_qualified_name(
-                    term: &FocusedHeapRefMut,
+                    heap: &Heap,
                     module_term_loc: usize,
                     qualified_term_loc: usize,
                 ) -> Option<QualifiedNameInfo> {
-                    let (module_term_loc, _) = subterm_index(term.heap, module_term_loc);
-                    let (qualified_term_loc, _) = subterm_index(term.heap, qualified_term_loc);
+                    let (module_term_loc, _) = subterm_index(heap, module_term_loc);
+                    let (qualified_term_loc, _) = subterm_index(heap, qualified_term_loc);
 
-                    read_heap_cell!(term.heap[module_term_loc],
+                    read_heap_cell!(heap[module_term_loc],
                         (HeapCellValueTag::Atom, (module_name, arity)) => {
                             if arity == 0 {
-                                if let Some(name) = term.name(qualified_term_loc) {
+                                if let Some((name, arity)) = term_predicate_key(heap, qualified_term_loc) {
                                     return Some(QualifiedNameInfo {
                                         module_name,
                                         name,
+                                        arity,
                                         qualified_term_loc,
                                     });
                                 }
@@ -478,23 +503,20 @@ fn build_meta_predicate_clause<'a, LS: LoadState<'a>>(
                     None
                 }
 
-                let (subterm_loc, _) = subterm_index(term.heap, subterm_loc);
-
-                let subterm_arity = term.arity(subterm_loc);
-                let subterm_name_opt = term.name(subterm_loc);
+                let (subterm_loc, _) = subterm_index(loader.machine_heap(), subterm_loc);
+                let subterm_key_opt = term_predicate_key(loader.machine_heap(), subterm_loc);
 
                 let (module_name, key, term_loc) =
-                    if subterm_name_opt == Some(atom!(":")) && subterm_arity == 2 {
-                        debug_assert_eq!(term.heap[subterm_loc].get_tag(), HeapCellValueTag::Atom);
-
-                        match get_qualified_name(term, subterm_loc + 1, subterm_loc + 2) {
+                    if subterm_key_opt == Some((atom!(":"), 2)) {
+                        match get_qualified_name(loader.machine_heap(), subterm_loc + 1, subterm_loc + 2) {
                             Some(QualifiedNameInfo {
                                 module_name,
                                 name,
+                                arity,
                                 qualified_term_loc,
                             }) => (
                                 module_name,
-                                (name, term.arity(qualified_term_loc) + supp_args),
+                                (name, arity + supp_args),
                                 qualified_term_loc,
                             ),
                             None => {
@@ -505,7 +527,7 @@ fn build_meta_predicate_clause<'a, LS: LoadState<'a>>(
                         (module_name, (name, arity + supp_args), subterm_loc)
                     };
 
-                if let Some(index_ptr) = fetch_index_ptr(term.heap, key.1, term_loc) {
+                if let Some(index_ptr) = fetch_index_ptr(loader.machine_heap(), key.1, term_loc) {
                     index_ptrs.insert(term_loc, index_ptr);
                     continue;
                 }
@@ -525,13 +547,13 @@ fn build_meta_predicate_clause<'a, LS: LoadState<'a>>(
 pub(super) fn clause_to_query_term<'a, LS: LoadState<'a>>(
     loader: &mut Loader<'a, LS>,
     key: PredicateKey,
-    terms: FocusedHeapRefMut,
+    terms: &TermWriteResult,
     term: HeapCellValue,
     call_policy: CallPolicy,
 ) -> QueryClause {
     // supplementary code vector indices are unnecessary for
     // root-level clauses.
-    blunt_index_ptr(terms.heap, key, terms.focus);
+    blunt_index_ptr(loader.machine_heap(), key, terms.focus);
 
     let mut ct = loader.get_clause_type(key.0, key.1);
 
@@ -539,11 +561,10 @@ pub(super) fn clause_to_query_term<'a, LS: LoadState<'a>>(
         if let Some(meta_specs) = loader.get_meta_specs(name, arity).cloned() {
             let module_name = loader.payload.compilation_target.module_name();
             let code_indices =
-                build_meta_predicate_clause(loader, module_name, arity, &terms, meta_specs);
+                build_meta_predicate_clause(loader, module_name, arity, terms, meta_specs);
 
             return QueryClause {
                 ct: ClauseType::Named(key.1, key.0, idx),
-                arity,
                 term,
                 code_indices,
                 call_policy,
@@ -555,7 +576,6 @@ pub(super) fn clause_to_query_term<'a, LS: LoadState<'a>>(
 
     QueryClause {
         ct,
-        arity: key.1,
         term,
         code_indices: IndexMap::with_hasher(FxBuildHasher::default()),
         call_policy,
@@ -567,13 +587,13 @@ pub(super) fn qualified_clause_to_query_term<'a, LS: LoadState<'a>>(
     loader: &mut Loader<'a, LS>,
     key: PredicateKey,
     module_name: Atom,
-    terms: FocusedHeapRefMut,
+    terms: &TermWriteResult,
     term: HeapCellValue,
     call_policy: CallPolicy,
 ) -> QueryClause {
     // supplementary code vector indices are unnecessary for
     // root-level clauses.
-    blunt_index_ptr(terms.heap, key, terms.focus);
+    blunt_index_ptr(loader.machine_heap(), key, terms.focus);
 
     let mut ct = loader.get_qualified_clause_type(module_name, key.0, key.1);
 
@@ -584,7 +604,6 @@ pub(super) fn qualified_clause_to_query_term<'a, LS: LoadState<'a>>(
 
             return QueryClause {
                 ct: ClauseType::Named(key.1, key.0, idx),
-                arity,
                 term,
                 code_indices,
                 call_policy,
@@ -596,7 +615,6 @@ pub(super) fn qualified_clause_to_query_term<'a, LS: LoadState<'a>>(
 
     QueryClause {
         ct,
-        arity: key.1,
         term,
         code_indices: IndexMap::with_hasher(FxBuildHasher::default()),
         call_policy,
@@ -613,15 +631,18 @@ impl Preprocessor {
         Preprocessor { settings }
     }
 
-    pub fn setup_fact(
+    pub fn setup_fact<'a, LS: LoadState<'a>>(
         &mut self,
-        mut term: FocusedHeap,
+        loader: &mut Loader<'a, LS>,
+        term: TermWriteResult,
     ) -> Result<(Fact, VarData), CompilationError> {
-        if term.name(term.focus).is_some() {
-            let classifier = VariableClassifier::new(self.settings.default_call_policy());
-            let var_data = classifier.classify_fact(&mut term)?;
+        let heap = loader.machine_heap();
 
-            Ok((Fact { term }, var_data))
+        if term_predicate_key(heap, term.focus).is_some() {
+            let classifier = VariableClassifier::new(self.settings.default_call_policy());
+            let var_data = classifier.classify_fact(loader, &term)?;
+
+            Ok((Fact { term_loc: term.focus }, var_data))
         } else {
             Err(CompilationError::InadmissibleFact)
         }
@@ -630,14 +651,16 @@ impl Preprocessor {
     fn setup_rule<'a, LS: LoadState<'a>>(
         &mut self,
         loader: &mut Loader<'a, LS>,
-        mut term: FocusedHeap,
+        term: TermWriteResult,
     ) -> Result<(Rule, VarData), CompilationError> {
         let classifier = VariableClassifier::new(self.settings.default_call_policy());
-        let (clauses, var_data) = classifier.classify_rule(loader, &mut term)?;
-        let head_loc = term.nth_arg(term.focus, 1).unwrap();
+        let (clauses, var_data) = classifier.classify_rule(loader, &term)?;
 
-        if term.name(head_loc).is_some() {
-            Ok((Rule { term, clauses }, var_data))
+        let heap = loader.machine_heap();
+        let head_loc = term_nth_arg(heap, term.focus, 1).unwrap();
+
+        if term_predicate_key(heap, head_loc).is_some() {
+            Ok((Rule { term_loc: term.focus, clauses }, var_data))
         } else {
             Err(CompilationError::InvalidRuleHead)
         }
@@ -646,19 +669,18 @@ impl Preprocessor {
     pub(super) fn try_term_to_tl<'a, LS: LoadState<'a>>(
         &mut self,
         loader: &mut Loader<'a, LS>,
-        term: FocusedHeap,
-    ) -> Result<TopLevel, CompilationError> {
-        let name = term.name(term.focus);
-        let arity = term.arity(term.focus);
+        term: TermWriteResult,
+    ) -> Result<PredicateClause, CompilationError> {
+        let heap = &LS::machine_st(&mut loader.payload).heap;
 
-        match (name, arity) {
-            (Some(atom!(":-")), 2) => {
+        match term_predicate_key(heap, term.focus) {
+            Some((atom!(":-"), 2)) => {
                 let (rule, var_data) = self.setup_rule(loader, term)?;
-                Ok(TopLevel::Rule(rule, var_data))
+                Ok(PredicateClause::Rule(rule, var_data))
             }
             _ => {
-                let (fact, var_data) = self.setup_fact(term)?;
-                Ok(TopLevel::Fact(fact, var_data))
+                let (fact, var_data) = self.setup_fact(loader, term)?;
+                Ok(PredicateClause::Fact(fact, var_data))
             }
         }
     }

@@ -3,8 +3,8 @@
 use crate::arena::*;
 use crate::atom_table::*;
 use crate::forms::*;
+use crate::machine::heap::*;
 use crate::machine::machine_indices::*;
-use crate::machine::partial_string::PartialString;
 use crate::machine::streams::*;
 use crate::parser::ast::Fixnum;
 
@@ -15,59 +15,64 @@ use std::mem;
 use std::ops::{Add, Sub, SubAssign};
 
 #[derive(BitfieldSpecifier, Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[repr(u8)]
 #[bits = 6]
 pub enum HeapCellValueTag {
-    Str = 0b000011,
+    Str = 0b000001,
     Lis = 0b000101,
-    Var = 0b000111,
-    StackVar = 0b001001,
-    AttrVar = 0b001011,
-    PStrLoc = 0b001101,
-    PStrOffset = 0b001111,
+    Var = 0b001011,
+    StackVar = 0b001101,
+    AttrVar = 0b010001,
+    PStrLoc = 0b010011,
     // constants.
     Cons = 0b0,
-    F64 = 0b010001,
-    Fixnum = 0b010011,
-    Char = 0b010101,
-    Atom = 0b010111,
-    PStr = 0b011001,
-    CStr = 0b011011,
-    CutPoint = 0b011111,
+    F64 = 0b010101,
+    Fixnum = 0b011001,
+    // Char = 0b011011,
+    Atom = 0b011111,
+    CutPoint = 0b011101,
+    // trail elements.
+    TrailedHeapVar = 0b100001,
+    TrailedStackVar = 0b100011,
+    TrailedAttrVar = 0b100101,
+    TrailedAttrVarListLink = 0b101001,
+    TrailedAttachedValue = 0b101011,
+    TrailedBlackboardEntry = 0b101101,
+    TrailedBlackboardOffset = 0b110001,
 }
 
 #[derive(BitfieldSpecifier, Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[repr(u8)]
 #[bits = 6]
 pub enum HeapCellValueView {
-    Str = 0b000011,
+    Str = 0b000001,
     Lis = 0b000101,
-    Var = 0b000111,
-    StackVar = 0b001001,
-    AttrVar = 0b001011,
-    PStrLoc = 0b001101,
-    PStrOffset = 0b001111,
+    Var = 0b001011,
+    StackVar = 0b001101,
+    AttrVar = 0b010001,
+    PStrLoc = 0b010011,
     // constants.
     Cons = 0b0,
-    F64 = 0b010001,
-    Fixnum = 0b010011,
-    Char = 0b010101,
-    Atom = 0b010111,
-    PStr = 0b011001,
-    CStr = 0b011011,
-    CutPoint = 0b011111,
+    F64 = 0b010101,
+    Fixnum = 0b011001,
+    Char = 0b011011,
+    Atom = 0b011111,
+    CutPoint = 0b011101,
     // trail elements.
-    TrailedHeapVar = 0b101111,
-    TrailedStackVar = 0b101011,
-    TrailedAttrVar = 0b100001,
-    TrailedAttrVarListLink = 0b100011,
-    TrailedAttachedValue = 0b100101,
-    TrailedBlackboardEntry = 0b100111,
-    TrailedBlackboardOffset = 0b110011,
+    TrailedHeapVar = 0b100001,
+    TrailedStackVar = 0b100011,
+    TrailedAttrVar = 0b100101,
+    TrailedAttrVarListLink = 0b101001,
+    TrailedAttachedValue = 0b101011,
+    TrailedBlackboardEntry = 0b101101,
+    TrailedBlackboardOffset = 0b110001,
 }
 
 #[derive(BitfieldSpecifier, Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[bits = 1]
 pub enum ConsPtrMaskTag {
     Cons = 0b0,
+    Atom = 0b1,
 }
 
 #[bitfield]
@@ -105,9 +110,9 @@ impl ConsPtr {
 #[derive(BitfieldSpecifier, Copy, Clone, Debug)]
 #[bits = 6]
 pub(crate) enum RefTag {
-    HeapCell = 0b000111,
-    StackCell = 0b001001,
-    AttrVar = 0b001011,
+    HeapCell = 0b001011,
+    StackCell = 0b001101,
+    AttrVar = 0b010001,
 }
 
 #[bitfield]
@@ -245,6 +250,7 @@ pub struct HeapCellValue {
     val: B56,
     f: bool,
     m: bool,
+    #[allow(dead_code)]
     tag: HeapCellValueTag,
 }
 
@@ -279,6 +285,7 @@ impl fmt::Debug for HeapCellValue {
                     .field("f", &self.f())
                     .finish()
             }
+            /*
             HeapCellValueTag::PStr => {
                 let (name, _) = cell_as_atom_cell!(self).get_name_and_arity();
 
@@ -289,6 +296,7 @@ impl fmt::Debug for HeapCellValue {
                     .field("f", &self.f())
                     .finish()
             }
+            */
             tag => f
                 .debug_struct("HeapCellValue")
                 .field("tag", &tag)
@@ -354,19 +362,15 @@ impl HeapCellValue {
     }
 
     #[inline]
-    pub fn is_string_terminator(mut self, heap: &[HeapCellValue]) -> bool {
-        use crate::machine::heap::*;
-
+    pub fn is_string_terminator(mut self, heap: &impl SizedHeap) -> bool {
         loop {
             return read_heap_cell!(self,
                 (HeapCellValueTag::Atom, (name, arity)) => {
                     name == atom!("[]") && arity == 0
                 }
-                (HeapCellValueTag::CStr) => {
-                    true
-                }
                 (HeapCellValueTag::PStrLoc, h) => {
-                    self = heap[h];
+                    let (_s, tail_loc) = heap.scan_slice_to_str(h);
+                    self = heap[tail_loc];
                     continue;
                 }
                 (HeapCellValueTag::AttrVar | HeapCellValueTag::Var, h) => {
@@ -378,9 +382,6 @@ impl HeapCellValue {
 
                     self = cell;
                     continue;
-                }
-                (HeapCellValueTag::PStrOffset, pstr_offset) => {
-                    heap[pstr_offset].get_tag() == HeapCellValueTag::CStr
                 }
                 _ => {
                     false
@@ -399,16 +400,13 @@ impl HeapCellValue {
                 | HeapCellValueTag::StackVar
                 | HeapCellValueTag::AttrVar
                 | HeapCellValueTag::PStrLoc
-                | HeapCellValueTag::PStrOffset
+                // | HeapCellValueTag::PStrOffset
         )
     }
 
     #[inline]
     pub fn as_char(self) -> Option<char> {
         read_heap_cell!(self,
-            (HeapCellValueTag::Char, c) => {
-                Some(c)
-            }
             (HeapCellValueTag::Atom, (name, arity)) => {
                 if arity > 0 {
                     return None;
@@ -428,9 +426,7 @@ impl HeapCellValue {
             HeapCellValueTag::Cons
             | HeapCellValueTag::F64
             | HeapCellValueTag::Fixnum
-            | HeapCellValueTag::CutPoint
-            | HeapCellValueTag::Char
-            | HeapCellValueTag::CStr => true,
+            | HeapCellValueTag::CutPoint => true,
             HeapCellValueTag::Atom => cell_as_atom_cell!(self).get_arity() == 0,
             _ => false,
         }
@@ -442,16 +438,12 @@ impl HeapCellValue {
     }
 
     #[inline]
-    pub fn is_compound(self, heap: &[HeapCellValue]) -> bool {
+    pub fn is_compound(self, heap: &Heap) -> bool {
         match self.get_tag() {
             HeapCellValueTag::Str => {
                 cell_as_atom_cell!(heap[self.get_value() as usize]).get_arity() > 0
             }
-            HeapCellValueTag::Lis
-            | HeapCellValueTag::CStr
-            | HeapCellValueTag::PStr
-            | HeapCellValueTag::PStrLoc
-            | HeapCellValueTag::PStrOffset => true,
+            HeapCellValueTag::Lis | HeapCellValueTag::PStrLoc => true,
             HeapCellValueTag::Atom => cell_as_atom_cell!(self).get_arity() > 0,
             _ => false,
         }
@@ -502,6 +494,7 @@ impl HeapCellValue {
         match self.tag_or_err() {
             Ok(tag) => tag,
             Err(_) => match ConsPtr::from_bytes(self.into_bytes()).tag() {
+                ConsPtrMaskTag::Atom => HeapCellValueTag::Atom,
                 ConsPtrMaskTag::Cons => HeapCellValueTag::Cons,
             },
         }
@@ -509,16 +502,10 @@ impl HeapCellValue {
 
     #[inline]
     pub fn to_atom(self) -> Option<Atom> {
-        match self.tag() {
-            HeapCellValueTag::Atom => Some(Atom::from(self.val() << 3)),
-            _ => None,
-        }
-    }
-
-    #[inline]
-    pub fn to_pstr(self) -> Option<PartialString> {
-        match self.tag() {
-            HeapCellValueTag::PStr => Some(PartialString::from(Atom::from(self.val() << 3))),
+        match self.get_tag() {
+            HeapCellValueTag::Atom => {
+                Some(AtomCell::from_bytes(self.into_bytes()).get_name())
+            }
             _ => None,
         }
     }
@@ -593,7 +580,7 @@ impl HeapCellValue {
         }
     }
 
-    pub fn order_category(self, heap: &[HeapCellValue]) -> Option<TermOrderCategory> {
+    pub fn order_category(self, heap: &Heap) -> Option<TermOrderCategory> {
         match Number::try_from(self).ok() {
             Some(Number::Integer(_)) | Some(Number::Fixnum(_)) | Some(Number::Rational(_)) => {
                 Some(TermOrderCategory::Integer)
@@ -603,13 +590,14 @@ impl HeapCellValue {
                 HeapCellValueTag::Var | HeapCellValueTag::StackVar | HeapCellValueTag::AttrVar => {
                     Some(TermOrderCategory::Variable)
                 }
-                HeapCellValueTag::Char => Some(TermOrderCategory::Atom),
+                // HeapCellValueTag::Char => Some(TermOrderCategory::Atom),
                 HeapCellValueTag::Atom => Some(if cell_as_atom_cell!(self).get_arity() > 0 {
                     TermOrderCategory::Compound
                 } else {
                     TermOrderCategory::Atom
                 }),
-                HeapCellValueTag::Lis | HeapCellValueTag::PStrLoc | HeapCellValueTag::CStr => {
+                HeapCellValueTag::Lis | HeapCellValueTag::PStrLoc => {
+                    // | HeapCellValueTag::CStr => {
                     Some(TermOrderCategory::Compound)
                 }
                 HeapCellValueTag::Str => {
@@ -732,11 +720,13 @@ impl Add<usize> for HeapCellValue {
         match self.get_tag() {
             tag @ HeapCellValueTag::Str
             | tag @ HeapCellValueTag::Lis
-            | tag @ HeapCellValueTag::PStrOffset
-            | tag @ HeapCellValueTag::PStrLoc
             | tag @ HeapCellValueTag::Var
             | tag @ HeapCellValueTag::AttrVar => {
                 HeapCellValue::build_with(tag, (self.get_value() as usize + rhs) as u64)
+            }
+            tag @ HeapCellValueTag::PStrLoc => {
+                let value = (self.get_value() as usize + heap_index!(rhs)) as u64;
+                HeapCellValue::build_with(tag, value)
             }
             _ => self,
         }
@@ -750,11 +740,13 @@ impl Sub<usize> for HeapCellValue {
         match self.get_tag() {
             tag @ HeapCellValueTag::Str
             | tag @ HeapCellValueTag::Lis
-            | tag @ HeapCellValueTag::PStrOffset
-            | tag @ HeapCellValueTag::PStrLoc
             | tag @ HeapCellValueTag::Var
             | tag @ HeapCellValueTag::AttrVar => {
                 HeapCellValue::build_with(tag, (self.get_value() as usize - rhs) as u64)
+            }
+            tag @ HeapCellValueTag::PStrLoc => {
+                let value = self.get_value() as usize - heap_index!(rhs);
+                HeapCellValue::build_with(tag, value as u64)
             }
             _ => self,
         }
@@ -776,11 +768,13 @@ impl Sub<i64> for HeapCellValue {
             match self.get_tag() {
                 tag @ HeapCellValueTag::Str
                 | tag @ HeapCellValueTag::Lis
-                | tag @ HeapCellValueTag::PStrOffset
-                | tag @ HeapCellValueTag::PStrLoc
                 | tag @ HeapCellValueTag::Var
                 | tag @ HeapCellValueTag::AttrVar => {
                     HeapCellValue::build_with(tag, self.get_value() + rhs.unsigned_abs())
+                }
+                tag @ HeapCellValueTag::PStrLoc => {
+                    let value = self.get_value() as usize + heap_index!(rhs.unsigned_abs() as usize);
+                    HeapCellValue::build_with(tag, value as u64)
                 }
                 _ => self,
             }

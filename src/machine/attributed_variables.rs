@@ -6,7 +6,6 @@ use crate::types::*;
 use indexmap::IndexSet;
 
 use std::cmp::Ordering;
-use std::vec::IntoIter;
 
 pub(super) type Bindings = Vec<(usize, HeapCellValue)>;
 
@@ -55,32 +54,36 @@ impl MachineState {
         self.attr_var_init.bindings.push((h, addr));
     }
 
-    fn populate_var_and_value_lists(&mut self) -> (HeapCellValue, HeapCellValue) {
+    fn populate_var_and_value_lists(&mut self) -> Result<(HeapCellValue, HeapCellValue), usize> {
+        let size = self.attr_var_init.bindings.len();
+
         let iter = self
             .attr_var_init
             .bindings
             .iter()
             .map(|(ref h, _)| attr_var_as_cell!(*h));
 
-        let var_list_addr = heap_loc_as_cell!(iter_to_heap_list(&mut self.heap, iter));
+        let var_list_addr = sized_iter_to_heap_list(&mut self.heap, size, iter)?;
         let iter = self.attr_var_init.bindings.drain(0..).map(|(_, ref v)| *v);
-        let value_list_addr = heap_loc_as_cell!(iter_to_heap_list(&mut self.heap, iter));
+        let value_list_addr = sized_iter_to_heap_list(&mut self.heap, size, iter)?;
 
-        (var_list_addr, value_list_addr)
+        Ok((var_list_addr, value_list_addr))
     }
 
-    fn verify_attributes(&mut self) {
+    fn verify_attributes(&mut self) -> Result<(), usize> {
         for (h, _) in &self.attr_var_init.bindings {
             self.heap[*h] = attr_var_as_cell!(*h);
         }
 
-        let (var_list_addr, value_list_addr) = self.populate_var_and_value_lists();
+        let (var_list_addr, value_list_addr) = self.populate_var_and_value_lists()?;
 
         self[temp_v!(1)] = var_list_addr;
         self[temp_v!(2)] = value_list_addr;
+
+        Ok(())
     }
 
-    pub(super) fn gather_attr_vars_created_since(&mut self, b: usize) -> IntoIter<HeapCellValue> {
+    pub(super) fn gather_attr_vars_created_since(&mut self, b: usize) -> Vec<HeapCellValue> {
         let mut attr_vars: Vec<_> = if b >= self.attr_var_init.attr_var_queue.len() {
             vec![]
         } else {
@@ -104,10 +107,10 @@ impl MachineState {
         });
 
         attr_vars.dedup();
-        attr_vars.into_iter()
+        attr_vars
     }
 
-    pub(super) fn verify_attr_interrupt(&mut self, p: usize, arity: usize) {
+    pub(super) fn verify_attr_interrupt(&mut self, p: usize, arity: usize) -> Result<(), usize> {
         self.allocate(arity + 3);
 
         let e = self.e;
@@ -121,14 +124,18 @@ impl MachineState {
         and_frame[arity + 2] = fixnum_as_cell!(Fixnum::build_with(self.num_of_args as i64));
         and_frame[arity + 3] = fixnum_as_cell!(Fixnum::build_with(self.attr_var_init.cp as i64));
 
-        self.verify_attributes();
+        self.verify_attributes()?;
 
         self.num_of_args = 3;
         self.b0 = self.b;
         self.p = p;
+
+        Ok(())
     }
 
     pub(super) fn attr_vars_of_term(&mut self, cell: HeapCellValue) -> Vec<HeapCellValue> {
+        debug_assert!(cell.is_ref());
+
         let mut seen_set = IndexSet::new();
         let mut seen_vars = vec![];
         let root_loc = if cell.is_ref() {

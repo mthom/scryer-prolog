@@ -1,8 +1,14 @@
-#![allow(dead_code)]
-
+#[cfg(test)]
 use crate::atom_table::*;
+#[cfg(test)]
 use crate::machine::heap::*;
+#[cfg(test)]
 use crate::types::*;
+
+#[cfg(test)]
+use fxhash::FxBuildHasher;
+#[cfg(test)]
+use indexmap::IndexMap;
 
 #[cfg(test)]
 use crate::heap_iter::{FocusedHeapIter, HeapOrStackTag, IterStackLoc};
@@ -10,6 +16,7 @@ use crate::heap_iter::{FocusedHeapIter, HeapOrStackTag, IterStackLoc};
 #[cfg(test)]
 use std::ops::Deref;
 
+#[cfg(test)]
 pub(crate) trait UnmarkPolicy {
     fn forward_attr_var(iter: &mut StacklessPreOrderHeapIter<Self>) -> Option<HeapCellValue>
     where
@@ -29,8 +36,7 @@ pub(crate) trait UnmarkPolicy {
     fn record_focus(_iter: &mut StacklessPreOrderHeapIter<Self>)
     where
         Self: Sized,
-    {
-    }
+    {}
 }
 
 #[cfg(test)]
@@ -71,8 +77,10 @@ impl UnmarkPolicy for IteratorUMP {
     }
 }
 
+#[cfg(test)]
 struct MarkerUMP {}
 
+#[cfg(test)]
 impl UnmarkPolicy for MarkerUMP {
     #[inline(always)]
     fn forward_attr_var(iter: &mut StacklessPreOrderHeapIter<Self>) -> Option<HeapCellValue> {
@@ -100,18 +108,23 @@ impl UnmarkPolicy for MarkerUMP {
     }
 }
 
+#[cfg(test)]
+type PStrLocValuesMap = IndexMap<usize, usize, FxBuildHasher>;
+
+#[cfg(test)]
 #[derive(Debug)]
 pub(crate) struct StacklessPreOrderHeapIter<'a, UMP: UnmarkPolicy> {
-    pub(crate) heap: &'a mut [HeapCellValue],
+    pub(crate) heap: &'a mut Heap,
     start: usize,
     current: usize,
     next: u64,
     iter_state: UMP,
+    pstr_loc_values: PStrLocValuesMap,
 }
 
 #[cfg(test)]
 impl<'a> Deref for StacklessPreOrderHeapIter<'a, IteratorUMP> {
-    type Target = [HeapCellValue];
+    type Target = Heap;
 
     fn deref(&self) -> &Self::Target {
         self.heap
@@ -126,6 +139,7 @@ impl<'a> FocusedHeapIter for StacklessPreOrderHeapIter<'a, IteratorUMP> {
     }
 }
 
+#[cfg(test)]
 impl<'a, UMP: UnmarkPolicy> Drop for StacklessPreOrderHeapIter<'a, UMP> {
     fn drop(&mut self) {
         UMP::invert_marker(self);
@@ -138,8 +152,9 @@ impl<'a, UMP: UnmarkPolicy> Drop for StacklessPreOrderHeapIter<'a, UMP> {
     }
 }
 
+#[cfg(test)]
 impl<'a> StacklessPreOrderHeapIter<'a, MarkerUMP> {
-    pub(crate) fn new(heap: &'a mut [HeapCellValue], start: usize) -> Self {
+    pub(crate) fn new(heap: &'a mut Heap, start: usize) -> Self {
         heap[start].set_forwarding_bit(true);
         let next = heap[start].get_value();
 
@@ -149,13 +164,15 @@ impl<'a> StacklessPreOrderHeapIter<'a, MarkerUMP> {
             current: start,
             next,
             iter_state: MarkerUMP {},
+            pstr_loc_values: PStrLocValuesMap::with_hasher(FxBuildHasher::default()),
         }
     }
 }
 
 #[cfg(test)]
 impl<'a> StacklessPreOrderHeapIter<'a, IteratorUMP> {
-    pub(crate) fn new(heap: &'a mut [HeapCellValue], start: usize) -> Self {
+    #[cfg(test)]
+    pub(crate) fn new(heap: &'a mut Heap, start: usize) -> Self {
         heap[start].set_forwarding_bit(true);
         let next = heap[start].get_value();
 
@@ -165,10 +182,12 @@ impl<'a> StacklessPreOrderHeapIter<'a, IteratorUMP> {
             current: start,
             next,
             iter_state: IteratorUMP { mark_phase: true },
+            pstr_loc_values: PStrLocValuesMap::with_hasher(FxBuildHasher::default()),
         }
     }
 }
 
+#[cfg(test)]
 impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
     fn backward_and_return(&mut self) -> HeapCellValue {
         let mut current = self.heap[self.current];
@@ -214,7 +233,7 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
                             return Some(cell);
                         }
 
-                        if self.next < self.heap.len() as u64 && UMP::report_var_link(self) {
+                        if self.next < self.heap.cell_len() as u64 && UMP::report_var_link(self) {
                             let tag = HeapCellValueTag::AttrVar;
                             return Some(HeapCellValue::build_with(tag, next as u64));
                         }
@@ -226,7 +245,7 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
                             return Some(cell);
                         }
 
-                        if self.next < self.heap.len() as u64 && UMP::report_var_link(self) {
+                        if self.next < self.heap.cell_len() as u64 && UMP::report_var_link(self) {
                             let tag = HeapCellValueTag::Var;
                             return Some(HeapCellValue::build_with(tag, next as u64));
                         }
@@ -241,7 +260,7 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
 
                         let arity = cell_as_atom_cell!(self.heap[h]).get_arity();
 
-                        for cell in &mut self.heap[h + 1..h + arity + 1] {
+                        for cell in &mut self.heap.splice_mut(h + 1..h + arity + 1) {
                             cell.set_forwarding_bit(true);
                         }
 
@@ -270,14 +289,13 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
                     }
                     HeapCellValueTag::PStrLoc => {
                         let h = self.next as usize;
+                        let (_, last_cell_loc) = self.heap.scan_slice_to_str(h);
 
-                        if self.heap[h + 1].get_forwarding_bit() {
+                        self.pstr_loc_values.insert(self.current, h);
+
+                        if self.heap[last_cell_loc].get_forwarding_bit() {
                             return Some(self.backward_and_return());
                         }
-
-                        let cell = self.heap[h];
-
-                        let last_cell_loc = h + 1;
 
                         self.next = self.heap[last_cell_loc].get_value();
                         self.heap[last_cell_loc].set_value(self.current as u64);
@@ -285,33 +303,7 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
 
                         self.heap[last_cell_loc].set_forwarding_bit(true);
 
-                        return Some(cell);
-                    }
-                    HeapCellValueTag::PStrOffset => {
-                        let h = self.next as usize;
-                        let cell = self.heap[h];
-
-                        let last_cell_loc = h + 1;
-
-                        if self.heap[last_cell_loc].get_forwarding_bit() {
-                            return Some(self.backward_and_return());
-                        }
-
-                        if self.heap[h].get_tag() == HeapCellValueTag::PStr {
-                            self.heap[last_cell_loc].set_forwarding_bit(true);
-
-                            self.next = self.heap[last_cell_loc].get_value();
-                            self.heap[last_cell_loc].set_value(self.current as u64);
-                            self.current = last_cell_loc;
-                        } else {
-                            debug_assert!(self.heap[h].get_tag() == HeapCellValueTag::CStr);
-
-                            self.next = self.heap[h].get_value();
-                            self.heap[h].set_value(self.current as u64);
-                            self.current = h;
-                        }
-
-                        return Some(cell);
+                        return Some(pstr_loc_as_cell!(h));
                     }
                     tag @ HeapCellValueTag::Atom => {
                         let cell = HeapCellValue::build_with(tag, self.next);
@@ -323,7 +315,15 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
                             return None;
                         }
                     }
-                    HeapCellValueTag::PStr => {
+                    HeapCellValueTag::Cons if self.heap.pstr_at(self.current) => {
+                        let pstr_loc_loc = self.heap[self.current].get_value() as usize;
+                        let pstr_loc_val = self.pstr_loc_values.get(&pstr_loc_loc).unwrap();
+
+                        self.heap[self.current].set_value(self.next);
+
+                        self.next = *pstr_loc_val as u64;
+                        self.current = pstr_loc_loc;
+
                         if self.backward() {
                             return None;
                         }
@@ -366,6 +366,7 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
     }
 }
 
+#[cfg(test)]
 impl<'a, UMP: UnmarkPolicy> Iterator for StacklessPreOrderHeapIter<'a, UMP> {
     type Item = HeapCellValue;
 
@@ -375,157 +376,167 @@ impl<'a, UMP: UnmarkPolicy> Iterator for StacklessPreOrderHeapIter<'a, UMP> {
     }
 }
 
-pub fn mark_cells(heap: &mut Heap, start: usize) {
-    let mut iter = StacklessPreOrderHeapIter::<MarkerUMP>::new(heap, start);
-    while iter.forward().is_some() {}
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::functor_macro::*;
     use crate::machine::mock_wam::*;
+
+    fn mark_cells(heap: &mut Heap, start: usize) {
+        let mut iter = StacklessPreOrderHeapIter::<MarkerUMP>::new(heap, start);
+        while iter.forward().is_some() {}
+    }
 
     #[test]
     fn heap_marking_tests() {
         let mut wam = MockWAM::new();
 
+        // clear the heap of resource error data etc
+        wam.machine_st.heap.clear();
+
         let f_atom = atom!("f");
         let a_atom = atom!("a");
         let b_atom = atom!("b");
 
-        wam.machine_st.heap.push(str_loc_as_cell!(1));
+        let mut functor_writer = Heap::functor_writer(
+            functor!(f_atom, [atom_as_cell(a_atom), atom_as_cell(b_atom)]),
+        );
 
-        wam.machine_st
-            .heap
-            .extend(functor!(f_atom, [atom(a_atom), atom(b_atom)]));
+        let cell = functor_writer(&mut wam.machine_st.heap).unwrap();
+        let h = wam.machine_st.heap.cell_len();
 
-        mark_cells(&mut wam.machine_st.heap, 0);
+        wam.machine_st.heap.push_cell(cell).unwrap();
 
-        all_cells_marked_and_unforwarded(&wam.machine_st.heap);
+        mark_cells(&mut wam.machine_st.heap, h);
+
+        all_cells_marked_and_unforwarded(wam.machine_st.heap.splice(..));
 
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[0]),
-            str_loc_as_cell!(1)
+            unmark_cell_bits!(wam.machine_st.heap[3]),
+            str_loc_as_cell!(0)
         );
 
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[1]),
+            unmark_cell_bits!(wam.machine_st.heap[0]),
             atom_as_cell!(f_atom, 2)
         );
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[2]),
+            unmark_cell_bits!(wam.machine_st.heap[1]),
             atom_as_cell!(a_atom)
         );
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[3]),
+            unmark_cell_bits!(wam.machine_st.heap[2]),
             atom_as_cell!(b_atom)
         );
 
         wam.machine_st.heap.clear();
 
-        wam.machine_st.heap.push(str_loc_as_cell!(1));
+        let mut functor_writer = Heap::functor_writer(
+            functor!(
+                f_atom,
+                [
+                    atom_as_cell(a_atom),
+                    atom_as_cell(b_atom),
+                    atom_as_cell(a_atom),
+                    str_loc_as_cell(1)
+                ]
+            ),
+        );
 
-        wam.machine_st.heap.extend(functor!(
-            f_atom,
-            [
-                atom(a_atom),
-                atom(b_atom),
-                atom(a_atom),
-                cell(str_loc_as_cell!(1))
-            ]
-        ));
+        let cell = functor_writer(&mut wam.machine_st.heap).unwrap();
+        let h = wam.machine_st.heap.cell_len();
 
-        mark_cells(&mut wam.machine_st.heap, 0);
+        wam.machine_st.heap.push_cell(cell).unwrap();
 
-        all_cells_marked_and_unforwarded(&wam.machine_st.heap);
+        mark_cells(&mut wam.machine_st.heap, h);
+        all_cells_marked_and_unforwarded(wam.machine_st.heap.splice(..));
+
+        assert_eq!(
+            unmark_cell_bits!(wam.machine_st.heap[5]),
+            str_loc_as_cell!(0)
+        );
 
         assert_eq!(
             unmark_cell_bits!(wam.machine_st.heap[0]),
-            str_loc_as_cell!(1)
-        );
-
-        assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[1]),
             atom_as_cell!(f_atom, 4)
         );
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[2]),
+            unmark_cell_bits!(wam.machine_st.heap[1]),
             atom_as_cell!(a_atom)
         );
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[3]),
+            unmark_cell_bits!(wam.machine_st.heap[2]),
             atom_as_cell!(b_atom)
         );
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[4]),
+            unmark_cell_bits!(wam.machine_st.heap[3]),
             atom_as_cell!(a_atom)
         );
-        assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[5]),
-            str_loc_as_cell!(1)
-        );
 
-        for cell in &mut wam.machine_st.heap {
-            cell.set_mark_bit(false);
-        }
+        unmark_all_cells(wam.machine_st.heap.splice_mut(..));
 
         // make the structure doubly cyclic.
-        wam.machine_st.heap[2] = str_loc_as_cell!(1);
+        wam.machine_st.heap[1] = str_loc_as_cell!(0);
 
-        mark_cells(&mut wam.machine_st.heap, 0);
+        mark_cells(&mut wam.machine_st.heap, h);
 
-        all_cells_marked_and_unforwarded(&wam.machine_st.heap);
+        all_cells_marked_and_unforwarded(wam.machine_st.heap.splice(..));
 
         wam.machine_st.heap.clear();
 
-        wam.machine_st.heap.push(str_loc_as_cell!(1));
+        let mut functor_writer = Heap::functor_writer(
+            functor!(
+                f_atom,
+                [
+                    atom_as_cell(a_atom),
+                    atom_as_cell(b_atom),
+                    atom_as_cell(a_atom),
+                    str_loc_as_cell(0)
+                ]
+            ),
+        );
 
-        wam.machine_st.heap.extend(functor!(
-            f_atom,
-            [
-                atom(a_atom),
-                atom(b_atom),
-                atom(a_atom),
-                cell(str_loc_as_cell!(1))
-            ]
-        ));
+        let cell = functor_writer(&mut wam.machine_st.heap).unwrap();
+        let h = wam.machine_st.heap.cell_len();
 
-        mark_cells(&mut wam.machine_st.heap, 0);
+        wam.machine_st.heap.push_cell(cell).unwrap();
 
-        all_cells_marked_and_unforwarded(&wam.machine_st.heap);
+        mark_cells(&mut wam.machine_st.heap, h);
+
+        all_cells_marked_and_unforwarded(wam.machine_st.heap.splice(..));
 
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[0]),
-            str_loc_as_cell!(1)
+            unmark_cell_bits!(wam.machine_st.heap[5]),
+            str_loc_as_cell!(0)
         );
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[1]),
+            unmark_cell_bits!(wam.machine_st.heap[0]),
             atom_as_cell!(f_atom, 4)
         );
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[2]),
+            unmark_cell_bits!(wam.machine_st.heap[1]),
             atom_as_cell!(a_atom)
         );
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[3]),
+            unmark_cell_bits!(wam.machine_st.heap[2]),
             atom_as_cell!(b_atom)
         );
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[4]),
+            unmark_cell_bits!(wam.machine_st.heap[3]),
             atom_as_cell!(a_atom)
         );
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[5]),
-            str_loc_as_cell!(1)
+            unmark_cell_bits!(wam.machine_st.heap[4]),
+            str_loc_as_cell!(0)
         );
 
         wam.machine_st.heap.clear();
 
-        wam.machine_st.heap.push(heap_loc_as_cell!(0));
+        wam.machine_st.heap.push_cell(heap_loc_as_cell!(0)).unwrap();
 
         mark_cells(&mut wam.machine_st.heap, 0);
 
-        all_cells_marked_and_unforwarded(&wam.machine_st.heap);
+        all_cells_marked_and_unforwarded(wam.machine_st.heap.splice(..));
 
         assert_eq!(
             unmark_cell_bits!(wam.machine_st.heap[0]),
@@ -534,16 +545,20 @@ mod tests {
 
         wam.machine_st.heap.clear();
 
-        // term is: [a, b]
-        wam.machine_st.heap.push(list_loc_as_cell!(1));
-        wam.machine_st.heap.push(atom_as_cell!(a_atom));
-        wam.machine_st.heap.push(list_loc_as_cell!(3));
-        wam.machine_st.heap.push(atom_as_cell!(b_atom));
-        wam.machine_st.heap.push(empty_list_as_cell!());
+        let mut writer = wam.machine_st.heap.reserve(16).unwrap();
+
+        writer.write_with(|section| {
+            // term is: [a, b]
+            section.push_cell(list_loc_as_cell!(1));
+            section.push_cell(atom_as_cell!(a_atom));
+            section.push_cell(list_loc_as_cell!(3));
+            section.push_cell(atom_as_cell!(b_atom));
+            section.push_cell(empty_list_as_cell!());
+        });
 
         mark_cells(&mut wam.machine_st.heap, 0);
 
-        all_cells_marked_and_unforwarded(&wam.machine_st.heap);
+        all_cells_marked_and_unforwarded(wam.machine_st.heap.splice(..));
 
         assert_eq!(
             unmark_cell_bits!(wam.machine_st.heap[0]),
@@ -566,18 +581,14 @@ mod tests {
             empty_list_as_cell!()
         );
 
-        wam.machine_st.heap.pop();
-
-        for cell in &mut wam.machine_st.heap {
-            cell.set_mark_bit(false);
-        }
+        unmark_all_cells(wam.machine_st.heap.splice_mut(..));
 
         // now make the list cyclic.
-        wam.machine_st.heap.push(heap_loc_as_cell!(0));
+        wam.machine_st.heap[4] = heap_loc_as_cell!(0);
 
         mark_cells(&mut wam.machine_st.heap, 0);
 
-        all_cells_marked_and_unforwarded(&wam.machine_st.heap);
+        all_cells_marked_and_unforwarded(wam.machine_st.heap.splice(..));
 
         assert_eq!(
             unmark_cell_bits!(wam.machine_st.heap[0]),
@@ -600,7 +611,7 @@ mod tests {
             heap_loc_as_cell!(0)
         );
 
-        for cell in &mut wam.machine_st.heap {
+        for cell in &mut wam.machine_st.heap.splice_mut(..) {
             cell.set_mark_bit(false);
         }
 
@@ -609,24 +620,29 @@ mod tests {
 
         mark_cells(&mut wam.machine_st.heap, 0);
 
-        all_cells_marked_and_unforwarded(&wam.machine_st.heap);
+        all_cells_marked_and_unforwarded(wam.machine_st.heap.splice(..));
 
         wam.machine_st.heap.clear();
 
         // term is: [a, <stream ptr>]
         let stream = Stream::from_static_string("test", &mut wam.machine_st.arena);
-        let stream_cell =
-            HeapCellValue::from(ConsPtr::build_with(stream.as_ptr(), ConsPtrMaskTag::Cons));
+        let stream_cell = HeapCellValue::from(
+            ConsPtr::build_with(stream.as_ptr(), ConsPtrMaskTag::Cons),
+        );
 
-        wam.machine_st.heap.push(list_loc_as_cell!(1));
-        wam.machine_st.heap.push(atom_as_cell!(a_atom));
-        wam.machine_st.heap.push(list_loc_as_cell!(3));
-        wam.machine_st.heap.push(stream_cell);
-        wam.machine_st.heap.push(empty_list_as_cell!());
+        let mut writer = wam.machine_st.heap.reserve(16).unwrap();
+
+        writer.write_with(|section| {
+            section.push_cell(list_loc_as_cell!(1));
+            section.push_cell(atom_as_cell!(a_atom));
+            section.push_cell(list_loc_as_cell!(3));
+            section.push_cell(stream_cell);
+            section.push_cell(empty_list_as_cell!());
+        });
 
         mark_cells(&mut wam.machine_st.heap, 0);
 
-        all_cells_marked_and_unforwarded(&wam.machine_st.heap);
+        all_cells_marked_and_unforwarded(wam.machine_st.heap.splice(..));
 
         assert_eq!(
             unmark_cell_bits!(wam.machine_st.heap[0]),
@@ -650,14 +666,18 @@ mod tests {
 
         // now a cycle of variables.
 
-        wam.machine_st.heap.push(heap_loc_as_cell!(1));
-        wam.machine_st.heap.push(heap_loc_as_cell!(2));
-        wam.machine_st.heap.push(heap_loc_as_cell!(3));
-        wam.machine_st.heap.push(heap_loc_as_cell!(0));
+        let mut writer = wam.machine_st.heap.reserve(16).unwrap();
+
+        writer.write_with(|section| {
+            section.push_cell(heap_loc_as_cell!(1));
+            section.push_cell(heap_loc_as_cell!(2));
+            section.push_cell(heap_loc_as_cell!(3));
+            section.push_cell(heap_loc_as_cell!(0));
+        });
 
         mark_cells(&mut wam.machine_st.heap, 0);
 
-        all_cells_marked_and_unforwarded(&wam.machine_st.heap);
+        all_cells_marked_and_unforwarded(wam.machine_st.heap.splice(..));
 
         assert_eq!(
             unmark_cell_bits!(wam.machine_st.heap[0]),
@@ -682,264 +702,282 @@ mod tests {
         // two-part complete string, then a three-part cyclic string
         // involving an uncompacted list of chars.
 
-        wam.machine_st.heap.push(pstr_loc_as_cell!(1));
+        let pstr_cell = wam.machine_st.allocate_pstr("abc ").unwrap();
 
-        let pstr_var_cell =
-            put_partial_string(&mut wam.machine_st.heap, "abc ", &wam.machine_st.atom_tbl);
-        let pstr_cell = wam.machine_st.heap[pstr_var_cell.get_value() as usize];
+        wam.machine_st.heap.push_cell(heap_loc_as_cell!(1)).unwrap();
 
-        mark_cells(&mut wam.machine_st.heap, 0);
+        let pstr_cell_loc = wam.machine_st.heap.cell_len();
 
-        all_cells_marked_and_unforwarded(&wam.machine_st.heap);
+        wam.machine_st.heap.push_cell(pstr_loc_as_cell!(heap_index!(0))).unwrap();
+
+        mark_cells(&mut wam.machine_st.heap, pstr_cell_loc);
+
+        all_cells_marked_and_unforwarded(wam.machine_st.heap.splice(..));
+
+        unmark_all_cells(wam.machine_st.heap.splice_mut(..));
 
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[0]),
-            pstr_loc_as_cell!(1)
+            wam.machine_st.heap.slice_to_str(heap_index!(0), "abc ".len()),
+            "abc "
         );
-        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[1]), pstr_cell);
+        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[pstr_cell_loc]), pstr_cell);
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[2]),
-            heap_loc_as_cell!(2)
+            unmark_cell_bits!(wam.machine_st.heap[1]),
+            heap_loc_as_cell!(1)
         );
 
-        wam.machine_st.heap.pop();
+        wam.machine_st.heap[1] = pstr_loc_as_cell!(heap_index!(3));
 
-        for cell in &mut wam.machine_st.heap {
-            cell.set_mark_bit(false);
-        }
+        wam.machine_st.allocate_pstr("abc ").unwrap();
+        wam.machine_st.heap.push_cell(heap_loc_as_cell!(4)).unwrap();
 
-        wam.machine_st.heap.push(pstr_loc_as_cell!(3));
+        mark_cells(&mut wam.machine_st.heap, 2);
 
-        let pstr_second_var_cell =
-            put_partial_string(&mut wam.machine_st.heap, "def", &wam.machine_st.atom_tbl);
-        let pstr_second_cell = wam.machine_st.heap[pstr_second_var_cell.get_value() as usize];
+        all_cells_marked_and_unforwarded(wam.machine_st.heap.splice(..));
 
-        mark_cells(&mut wam.machine_st.heap, 0);
+        unmark_all_cells(wam.machine_st.heap.splice_mut(..));
 
-        all_cells_marked_and_unforwarded(&wam.machine_st.heap);
-
-        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[1]), pstr_cell);
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[2]),
-            pstr_loc_as_cell!(3)
+            wam.machine_st.heap.slice_to_str(heap_index!(0), "abc ".len()),
+            "abc "
         );
-        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[3]), pstr_second_cell);
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[4]),
+            wam.machine_st.heap[1],
+            pstr_loc_as_cell!(heap_index!(3))
+        );
+        assert_eq!(
+            wam.machine_st.heap[2],
+            pstr_loc_as_cell!(heap_index!(0))
+        );
+        assert_eq!(
+            wam.machine_st.heap.slice_to_str(heap_index!(3), "abc ".len()),
+            "abc "
+        );
+        assert_eq!(
+            wam.machine_st.heap[4],
             heap_loc_as_cell!(4)
         );
 
-        for cell in &mut wam.machine_st.heap {
-            cell.set_mark_bit(false);
-        }
+        // create a cycle offset two characters into the partial string at 0
+        wam.machine_st.heap[4] = pstr_loc_as_cell!(heap_index!(0) + 2);
 
-        wam.machine_st.heap.pop();
-        wam.machine_st.heap.push(pstr_loc_as_cell!(5));
-        wam.machine_st.heap.push(pstr_offset_as_cell!(1));
-        wam.machine_st
-            .heap
-            .push(fixnum_as_cell!(Fixnum::build_with(2)));
-        wam.machine_st.heap.push(pstr_loc_as_cell!(5));
+        mark_cells(&mut wam.machine_st.heap, 2);
 
-        mark_cells(&mut wam.machine_st.heap, 7);
+        all_cells_marked_and_unforwarded(wam.machine_st.heap.splice(..));
 
-        all_cells_marked_and_unforwarded(&wam.machine_st.heap[1..]);
+        unmark_all_cells(wam.machine_st.heap.splice_mut(..));
 
-        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[1]), pstr_cell);
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[2]),
-            pstr_loc_as_cell!(3)
-        );
-        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[3]), pstr_second_cell);
-        assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[4]),
-            pstr_loc_as_cell!(5)
+            wam.machine_st.heap.slice_to_str(0, "abc ".len()),
+            "abc "
         );
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[5]),
-            pstr_offset_as_cell!(1)
+            wam.machine_st.heap[1],
+            pstr_loc_as_cell!(heap_index!(3))
         );
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[6]),
-            fixnum_as_cell!(Fixnum::build_with(2))
+            wam.machine_st.heap[2],
+            pstr_loc_as_cell!(heap_index!(0))
         );
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[7]),
-            pstr_loc_as_cell!(5)
+            wam.machine_st.heap.slice_to_str(heap_index!(3), "abc ".len()),
+            "abc "
+        );
+        assert_eq!(
+            wam.machine_st.heap[4],
+            pstr_loc_as_cell!(heap_index!(0) + 2)
         );
 
-        for cell in &mut wam.machine_st.heap {
-            cell.set_mark_bit(false);
-        }
+        wam.machine_st.heap[4] = heap_loc_as_cell!(2);
 
-        wam.machine_st.heap[7] = heap_loc_as_cell!(2);
+        wam.machine_st.heap.push_cell(heap_loc_as_cell!(2)).unwrap();
 
-        mark_cells(&mut wam.machine_st.heap, 7);
+        mark_cells(&mut wam.machine_st.heap, 5);
 
-        all_cells_marked_and_unforwarded(&wam.machine_st.heap[1..]);
+        all_cells_marked_and_unforwarded(wam.machine_st.heap.splice(..));
 
-        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[1]), pstr_cell);
+        unmark_all_cells(wam.machine_st.heap.splice_mut(..));
+
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[2]),
-            pstr_loc_as_cell!(3)
-        );
-        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[3]), pstr_second_cell);
-        assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[4]),
-            pstr_loc_as_cell!(5)
+            wam.machine_st.heap.slice_to_str(0, "abc ".len()),
+            "abc "
         );
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[5]),
-            pstr_offset_as_cell!(1)
+            wam.machine_st.heap[1],
+            pstr_loc_as_cell!(heap_index!(3))
         );
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[6]),
-            fixnum_as_cell!(Fixnum::build_with(2))
+            wam.machine_st.heap[2],
+            pstr_loc_as_cell!(heap_index!(0))
         );
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[7]),
+            wam.machine_st.heap.slice_to_str(heap_index!(3), "abc ".len()),
+            "abc "
+        );
+        assert_eq!(
+            wam.machine_st.heap[4],
+            heap_loc_as_cell!(2)
+        );
+        assert_eq!(
+            wam.machine_st.heap[5],
             heap_loc_as_cell!(2)
         );
 
-        for cell in &mut wam.machine_st.heap {
-            cell.set_mark_bit(false);
-        }
+        wam.machine_st.heap[4] = pstr_loc_as_cell!(0);
 
-        wam.machine_st.heap[7] = pstr_loc_as_cell!(1);
+        mark_cells(&mut wam.machine_st.heap, 2);
 
-        mark_cells(&mut wam.machine_st.heap, 7);
+        all_cells_marked_and_unforwarded(wam.machine_st.heap.splice(.. 5));
 
-        all_cells_marked_and_unforwarded(&wam.machine_st.heap[1..]);
+        unmark_all_cells(wam.machine_st.heap.splice_mut(.. 5));
 
-        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[1]), pstr_cell);
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[2]),
-            pstr_loc_as_cell!(3)
-        );
-        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[3]), pstr_second_cell);
-        assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[4]),
-            pstr_loc_as_cell!(5)
+            wam.machine_st.heap.slice_to_str(0, "abc ".len()),
+            "abc "
         );
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[5]),
-            pstr_offset_as_cell!(1)
+            wam.machine_st.heap[1],
+            pstr_loc_as_cell!(heap_index!(3))
         );
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[6]),
-            fixnum_as_cell!(Fixnum::build_with(2))
+            wam.machine_st.heap[2],
+            pstr_loc_as_cell!(heap_index!(0))
         );
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[7]),
-            pstr_loc_as_cell!(1)
-        );
-
-        for cell in &mut wam.machine_st.heap {
-            cell.set_mark_bit(false);
-        }
-
-        wam.machine_st.heap[7] = heap_loc_as_cell!(0);
-
-        mark_cells(&mut wam.machine_st.heap, 7);
-
-        all_cells_marked_and_unforwarded(&wam.machine_st.heap[1..]);
-
-        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[1]), pstr_cell);
-        assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[2]),
-            pstr_loc_as_cell!(3)
-        );
-        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[3]), pstr_second_cell);
-        assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[4]),
-            pstr_loc_as_cell!(5)
+            wam.machine_st.heap.slice_to_str(heap_index!(3), "abc ".len()),
+            "abc "
         );
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[5]),
-            pstr_offset_as_cell!(1)
+            wam.machine_st.heap[4],
+            pstr_loc_as_cell!(heap_index!(0))
         );
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[6]),
-            fixnum_as_cell!(Fixnum::build_with(2))
-        );
-        assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[7]),
-            heap_loc_as_cell!(0)
+            wam.machine_st.heap[5],
+            heap_loc_as_cell!(2)
         );
 
         wam.machine_st.heap.truncate(4);
 
-        for cell in &mut wam.machine_st.heap {
-            cell.set_mark_bit(false);
-        }
+        let mut writer = wam.machine_st.heap.reserve(2).unwrap();
 
-        wam.machine_st
-            .heap
-            .push(atom_as_cell!(atom!("irrelevant stuff")));
-        wam.machine_st.heap.push(pstr_offset_as_cell!(1));
-        wam.machine_st
-            .heap
-            .push(fixnum_as_cell!(Fixnum::build_with(2)));
+        writer.write_with(|section| {
+            section.push_cell(atom_as_cell!(atom!("irrelevant stuff")));
+            section.push_cell(pstr_loc_as_cell!(heap_index!(0) + 2)); // offset two chars into pstr at 0
+        });
 
-        // this is at index 7
-        wam.machine_st.heap.push(pstr_loc_as_cell!(5));
+        wam.machine_st.heap.push_cell(heap_loc_as_cell!(5)).unwrap();
 
-        mark_cells(&mut wam.machine_st.heap, 7);
+        mark_cells(&mut wam.machine_st.heap, 6);
 
-        assert!(!wam.machine_st.heap[0].get_mark_bit());
+        // indices 0 and 3 are the beginning of one-cell partial
+        // strings, and they should be marked! despite the HeapCellValue casts
+        // otherwise not being sensible.
+        assert!(wam.machine_st.heap[0].get_mark_bit());
         assert!(wam.machine_st.heap[1].get_mark_bit());
-        assert!(wam.machine_st.heap[2].get_mark_bit());
+        assert!(!wam.machine_st.heap[2].get_mark_bit());
         assert!(wam.machine_st.heap[3].get_mark_bit());
         assert!(wam.machine_st.heap[4].get_mark_bit());
         assert!(wam.machine_st.heap[5].get_mark_bit());
         assert!(wam.machine_st.heap[6].get_mark_bit());
 
-        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[1]), pstr_cell);
+        unmark_all_cells(wam.machine_st.heap.splice_mut(..));
+
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[2]),
-            pstr_loc_as_cell!(3)
+            wam.machine_st.heap.slice_to_str(0, "abc ".len()),
+            "abc "
         );
-        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[3]), pstr_second_cell);
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[4]),
+            wam.machine_st.heap[1],
+            pstr_loc_as_cell!(heap_index!(3))
+        );
+        assert_eq!(
+            wam.machine_st.heap[2],
+            pstr_loc_as_cell!(heap_index!(0))
+        );
+        assert_eq!(
+            wam.machine_st.heap.slice_to_str(heap_index!(3), "abc ".len()),
+            "abc "
+        );
+        assert_eq!(
+            wam.machine_st.heap[4],
             atom_as_cell!(atom!("irrelevant stuff"))
         );
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[5]),
-            pstr_offset_as_cell!(1)
+            wam.machine_st.heap[5],
+            pstr_loc_as_cell!(heap_index!(0) + 2)
         );
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[6]),
-            fixnum_as_cell!(Fixnum::build_with(2))
-        );
-        assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[7]),
-            pstr_loc_as_cell!(5)
+            wam.machine_st.heap[6],
+            heap_loc_as_cell!(5)
         );
 
         wam.machine_st.heap.clear();
 
-        wam.machine_st
-            .heap
-            .push(atom_as_cell!(atom!("irrelevant stuff")));
-        wam.machine_st.heap.push(pstr_cell);
-        wam.machine_st.heap.push(pstr_loc_as_cell!(4));
-        wam.machine_st
-            .heap
-            .push(atom_as_cell!(atom!("irrelevant stuff")));
-        wam.machine_st.heap.push(pstr_second_cell);
-        wam.machine_st.heap.push(pstr_loc_as_cell!(7));
-        wam.machine_st
-            .heap
-            .push(atom_as_cell!(atom!("irrelevant stuff")));
-        wam.machine_st.heap.push(pstr_offset_as_cell!(1));
-        wam.machine_st
-            .heap
-            .push(fixnum_as_cell!(Fixnum::build_with(2)));
+        let mut writer = wam.machine_st.heap.reserve(96).unwrap();
 
-        wam.machine_st.heap.push(pstr_loc_as_cell!(7));
+        writer.write_with(|section| {
+            section.push_cell(atom_as_cell!(atom!("irrelevant stuff")));
+            section.push_pstr("abc ");
+            section.push_cell(pstr_loc_as_cell!(heap_index!(4)));
+            section.push_cell(atom_as_cell!(atom!("irrelevant stuff")));
+            section.push_pstr("def");
+            section.push_cell(pstr_loc_as_cell!(heap_index!(1) + 2));
+            section.push_cell(atom_as_cell!(atom!("irrelevant stuff")));
+            section.push_cell(pstr_loc_as_cell!(heap_index!(1) + 2));
+        });
 
-        mark_cells(&mut wam.machine_st.heap, 9);
+        mark_cells(&mut wam.machine_st.heap, 7);
+
+        assert!(!wam.machine_st.heap[0].get_mark_bit());
+        assert!(wam.machine_st.heap[1].get_mark_bit());
+        assert!(wam.machine_st.heap[2].get_mark_bit());
+        assert!(!wam.machine_st.heap[3].get_mark_bit());
+        assert!(wam.machine_st.heap[4].get_mark_bit());
+        assert!(wam.machine_st.heap[5].get_mark_bit());
+        assert!(!wam.machine_st.heap[6].get_mark_bit());
+
+        assert!(!wam.machine_st.heap[0].get_forwarding_bit());
+        assert!(!wam.machine_st.heap[1].get_forwarding_bit());
+        assert!(!wam.machine_st.heap[2].get_forwarding_bit());
+        assert!(!wam.machine_st.heap[3].get_forwarding_bit());
+        assert!(!wam.machine_st.heap[4].get_forwarding_bit());
+        assert!(!wam.machine_st.heap[5].get_forwarding_bit());
+        assert!(!wam.machine_st.heap[6].get_forwarding_bit());
+
+        unmark_all_cells(wam.machine_st.heap.splice_mut(..));
+
+        assert_eq!(
+            wam.machine_st.heap[0],
+            atom_as_cell!(atom!("irrelevant stuff"))
+        );
+        assert_eq!(
+            wam.machine_st.heap.slice_to_str(heap_index!(1), "abc ".len()),
+            "abc "
+        );
+        assert_eq!(
+            wam.machine_st.heap[2],
+            pstr_loc_as_cell!(heap_index!(4))
+        );
+        assert_eq!(
+            wam.machine_st.heap[3],
+            atom_as_cell!(atom!("irrelevant stuff"))
+        );
+        assert_eq!(
+            wam.machine_st.heap.slice_to_str(heap_index!(4), "def".len()),
+            "def"
+        );
+        assert_eq!(
+            wam.machine_st.heap[5],
+            pstr_loc_as_cell!(heap_index!(1) + 2)
+        );
+        assert_eq!(
+            wam.machine_st.heap[6],
+            atom_as_cell!(atom!("irrelevant stuff"))
+        );
+
+        wam.machine_st.heap[7] = heap_loc_as_cell!(2);
+
+        mark_cells(&mut wam.machine_st.heap, 7);
 
         assert!(!wam.machine_st.heap[0].get_mark_bit());
         assert!(wam.machine_st.heap[1].get_mark_bit());
@@ -949,46 +987,49 @@ mod tests {
         assert!(wam.machine_st.heap[5].get_mark_bit());
         assert!(!wam.machine_st.heap[6].get_mark_bit());
         assert!(wam.machine_st.heap[7].get_mark_bit());
-        assert!(wam.machine_st.heap[8].get_mark_bit());
+
+        unmark_all_cells(wam.machine_st.heap.splice_mut(..));
+
+        assert!(!wam.machine_st.heap[0].get_forwarding_bit());
+        assert!(!wam.machine_st.heap[1].get_forwarding_bit());
+        assert!(!wam.machine_st.heap[2].get_forwarding_bit());
+        assert!(!wam.machine_st.heap[3].get_forwarding_bit());
+        assert!(!wam.machine_st.heap[4].get_forwarding_bit());
+        assert!(!wam.machine_st.heap[5].get_forwarding_bit());
+        assert!(!wam.machine_st.heap[6].get_forwarding_bit());
 
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[0]),
-            atom_as_cell!(atom!("irrelevant stuff"))
-        );
-        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[1]), pstr_cell);
-        assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[2]),
-            pstr_loc_as_cell!(4)
-        );
-        assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[3]),
-            atom_as_cell!(atom!("irrelevant stuff"))
-        );
-        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[4]), pstr_second_cell);
-        assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[5]),
-            pstr_loc_as_cell!(7)
-        );
-        assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[6]),
+            wam.machine_st.heap[0],
             atom_as_cell!(atom!("irrelevant stuff"))
         );
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[7]),
-            pstr_offset_as_cell!(1)
+            wam.machine_st.heap.slice_to_str(heap_index!(1), "abc ".len()),
+            "abc "
         );
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[8]),
-            fixnum_as_cell!(Fixnum::build_with(2))
+            wam.machine_st.heap[2],
+            pstr_loc_as_cell!(heap_index!(4))
+        );
+        assert_eq!(
+            wam.machine_st.heap[3],
+            atom_as_cell!(atom!("irrelevant stuff"))
+        );
+        assert_eq!(
+            wam.machine_st.heap.slice_to_str(heap_index!(4), "def".len()),
+            "def"
+        );
+        assert_eq!(
+            wam.machine_st.heap[5],
+            pstr_loc_as_cell!(heap_index!(1) + 2)
+        );
+        assert_eq!(
+            wam.machine_st.heap[6],
+            atom_as_cell!(atom!("irrelevant stuff"))
         );
 
-        for cell in &mut wam.machine_st.heap {
-            cell.set_mark_bit(false);
-        }
+        wam.machine_st.heap[7] = pstr_loc_as_cell!(heap_index!(4));
 
-        wam.machine_st.heap[9] = heap_loc_as_cell!(5);
-
-        mark_cells(&mut wam.machine_st.heap, 9);
+        mark_cells(&mut wam.machine_st.heap, 7);
 
         assert!(!wam.machine_st.heap[0].get_mark_bit());
         assert!(wam.machine_st.heap[1].get_mark_bit());
@@ -998,340 +1039,143 @@ mod tests {
         assert!(wam.machine_st.heap[5].get_mark_bit());
         assert!(!wam.machine_st.heap[6].get_mark_bit());
         assert!(wam.machine_st.heap[7].get_mark_bit());
-        assert!(wam.machine_st.heap[8].get_mark_bit());
 
-        for cell in &wam.machine_st.heap {
-            assert!(!cell.get_forwarding_bit());
-        }
+        unmark_all_cells(wam.machine_st.heap.splice_mut(..));
+
+        assert!(!wam.machine_st.heap[0].get_forwarding_bit());
+        assert!(!wam.machine_st.heap[1].get_forwarding_bit());
+        assert!(!wam.machine_st.heap[2].get_forwarding_bit());
+        assert!(!wam.machine_st.heap[3].get_forwarding_bit());
+        assert!(!wam.machine_st.heap[4].get_forwarding_bit());
+        assert!(!wam.machine_st.heap[5].get_forwarding_bit());
+        assert!(!wam.machine_st.heap[6].get_forwarding_bit());
 
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[0]),
-            atom_as_cell!(atom!("irrelevant stuff"))
-        );
-        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[1]), pstr_cell);
-        assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[2]),
-            pstr_loc_as_cell!(4)
-        );
-        assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[3]),
-            atom_as_cell!(atom!("irrelevant stuff"))
-        );
-        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[4]), pstr_second_cell);
-        assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[5]),
-            pstr_loc_as_cell!(7)
-        );
-        assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[6]),
+            wam.machine_st.heap[0],
             atom_as_cell!(atom!("irrelevant stuff"))
         );
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[7]),
-            pstr_offset_as_cell!(1)
+            wam.machine_st.heap.slice_to_str(heap_index!(1), "abc ".len()),
+            "abc "
         );
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[8]),
-            fixnum_as_cell!(Fixnum::build_with(2))
-        );
-
-        for cell in &mut wam.machine_st.heap {
-            cell.set_mark_bit(false);
-        }
-
-        wam.machine_st.heap[9] = pstr_loc_as_cell!(4);
-
-        mark_cells(&mut wam.machine_st.heap, 9);
-
-        assert!(!wam.machine_st.heap[0].get_mark_bit());
-        assert!(wam.machine_st.heap[1].get_mark_bit());
-        assert!(wam.machine_st.heap[2].get_mark_bit());
-        assert!(!wam.machine_st.heap[3].get_mark_bit());
-        assert!(wam.machine_st.heap[4].get_mark_bit());
-        assert!(wam.machine_st.heap[5].get_mark_bit());
-        assert!(!wam.machine_st.heap[6].get_mark_bit());
-        assert!(wam.machine_st.heap[7].get_mark_bit());
-        assert!(wam.machine_st.heap[8].get_mark_bit());
-
-        for cell in &wam.machine_st.heap {
-            assert!(!cell.get_forwarding_bit());
-        }
-
-        assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[0]),
-            atom_as_cell!(atom!("irrelevant stuff"))
-        );
-        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[1]), pstr_cell);
-        assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[2]),
-            pstr_loc_as_cell!(4)
+            wam.machine_st.heap[2],
+            pstr_loc_as_cell!(heap_index!(4))
         );
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[3]),
-            atom_as_cell!(atom!("irrelevant stuff"))
-        );
-        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[4]), pstr_second_cell);
-        assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[5]),
-            pstr_loc_as_cell!(7)
-        );
-        assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[6]),
+            wam.machine_st.heap[3],
             atom_as_cell!(atom!("irrelevant stuff"))
         );
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[7]),
-            pstr_offset_as_cell!(1)
+            wam.machine_st.heap.slice_to_str(heap_index!(4), "def".len()),
+            "def"
         );
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[8]),
-            fixnum_as_cell!(Fixnum::build_with(2))
+            wam.machine_st.heap[5],
+            pstr_loc_as_cell!(heap_index!(1) + 2)
         );
-
-        for cell in &mut wam.machine_st.heap {
-            cell.set_mark_bit(false);
-        }
-
-        mark_cells(&mut wam.machine_st.heap, 9);
-
-        wam.machine_st.heap[9] = heap_loc_as_cell!(2);
-
-        assert!(!wam.machine_st.heap[0].get_mark_bit());
-        assert!(wam.machine_st.heap[1].get_mark_bit());
-        assert!(wam.machine_st.heap[2].get_mark_bit());
-        assert!(!wam.machine_st.heap[3].get_mark_bit());
-        assert!(wam.machine_st.heap[4].get_mark_bit());
-        assert!(wam.machine_st.heap[5].get_mark_bit());
-        assert!(!wam.machine_st.heap[6].get_mark_bit());
-        assert!(wam.machine_st.heap[7].get_mark_bit());
-        assert!(wam.machine_st.heap[8].get_mark_bit());
-
-        for cell in &wam.machine_st.heap {
-            assert!(!cell.get_forwarding_bit());
-        }
-
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[0]),
+            wam.machine_st.heap[6],
             atom_as_cell!(atom!("irrelevant stuff"))
         );
-        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[1]), pstr_cell);
-        assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[2]),
-            pstr_loc_as_cell!(4)
-        );
-        assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[3]),
-            atom_as_cell!(atom!("irrelevant stuff"))
-        );
-        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[4]), pstr_second_cell);
-        assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[5]),
-            pstr_loc_as_cell!(7)
-        );
-        assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[6]),
-            atom_as_cell!(atom!("irrelevant stuff"))
-        );
-        assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[7]),
-            pstr_offset_as_cell!(1)
-        );
-        assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[8]),
-            fixnum_as_cell!(Fixnum::build_with(2))
-        );
-
-        for cell in &mut wam.machine_st.heap {
-            cell.set_mark_bit(false);
-        }
-
-        wam.machine_st.heap[9] = pstr_loc_as_cell!(1);
-
-        mark_cells(&mut wam.machine_st.heap, 9);
-
-        assert!(!wam.machine_st.heap[0].get_mark_bit());
-        assert!(wam.machine_st.heap[1].get_mark_bit());
-        assert!(wam.machine_st.heap[2].get_mark_bit());
-        assert!(!wam.machine_st.heap[3].get_mark_bit());
-        assert!(wam.machine_st.heap[4].get_mark_bit());
-        assert!(wam.machine_st.heap[5].get_mark_bit());
-        assert!(!wam.machine_st.heap[6].get_mark_bit());
-        assert!(wam.machine_st.heap[7].get_mark_bit());
-        assert!(wam.machine_st.heap[8].get_mark_bit());
-
-        for cell in &wam.machine_st.heap {
-            assert!(!cell.get_forwarding_bit());
-        }
-
-        assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[0]),
-            atom_as_cell!(atom!("irrelevant stuff"))
-        );
-        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[1]), pstr_cell);
-        assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[2]),
-            pstr_loc_as_cell!(4)
-        );
-        assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[3]),
-            atom_as_cell!(atom!("irrelevant stuff"))
-        );
-        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[4]), pstr_second_cell);
-        assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[5]),
-            pstr_loc_as_cell!(7)
-        );
-        assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[6]),
-            atom_as_cell!(atom!("irrelevant stuff"))
-        );
-        assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[7]),
-            pstr_offset_as_cell!(1)
-        );
-        assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[8]),
-            fixnum_as_cell!(Fixnum::build_with(2))
-        );
-
-        for cell in &mut wam.machine_st.heap {
-            cell.set_mark_bit(false);
-        }
 
         wam.machine_st.heap.clear();
 
-        // embedded cyclic partial string.
+        // embedded cyclic partial string
 
-        wam.machine_st.heap.push(pstr_cell);
-        wam.machine_st.heap.push(pstr_loc_as_cell!(2));
-        wam.machine_st.heap.push(pstr_offset_as_cell!(0));
-        wam.machine_st
-            .heap
-            .push(fixnum_as_cell!(Fixnum::build_with(3)));
-        wam.machine_st.heap.push(list_loc_as_cell!(5));
-        wam.machine_st.heap.push(pstr_loc_as_cell!(0));
-        wam.machine_st.heap.push(empty_list_as_cell!());
+        let mut writer = wam.machine_st.heap.reserve(8).unwrap();
 
-        mark_cells(&mut wam.machine_st.heap, 4);
+        writer.write_with(|section| {
+            section.push_pstr("abc ");
+            section.push_cell(pstr_loc_as_cell!(heap_index!(0) + 3)); // 3 character offset into pstr_cell
+            section.push_cell(list_loc_as_cell!(3));
+            section.push_cell(pstr_loc_as_cell!(0));
+            section.push_cell(empty_list_as_cell!());
+            section.push_cell(heap_loc_as_cell!(2));
+        });
 
-        all_cells_marked_and_unforwarded(&wam.machine_st.heap);
+        mark_cells(&mut wam.machine_st.heap, 5);
 
-        for cell in &mut wam.machine_st.heap {
-            cell.set_mark_bit(false);
-        }
+        all_cells_marked_and_unforwarded(wam.machine_st.heap.splice(..));
 
-        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[0]), pstr_cell);
+        unmark_all_cells(wam.machine_st.heap.splice_mut(..));
+
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[1]),
-            pstr_loc_as_cell!(2)
+            wam.machine_st.heap.slice_to_str(heap_index!(0), "abc ".len()),
+            "abc "
         );
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[2]),
-            pstr_offset_as_cell!(0)
+            wam.machine_st.heap[1],
+            pstr_loc_as_cell!(heap_index!(0) + 3)
         );
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[3]),
-            fixnum_as_cell!(Fixnum::build_with(3))
+            wam.machine_st.heap[2],
+            list_loc_as_cell!(3)
         );
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[4]),
-            list_loc_as_cell!(5)
-        );
-        assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[5]),
+            wam.machine_st.heap[3],
             pstr_loc_as_cell!(0)
         );
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[6]),
+            wam.machine_st.heap[4],
             empty_list_as_cell!()
         );
-
-        wam.machine_st.heap.clear();
-
-        wam.machine_st.heap.push(pstr_cell);
-        wam.machine_st.heap.push(pstr_loc_as_cell!(2));
-        wam.machine_st.heap.push(pstr_offset_as_cell!(0));
-        wam.machine_st
-            .heap
-            .push(fixnum_as_cell!(Fixnum::build_with(3)));
-        wam.machine_st.heap.push(list_loc_as_cell!(5));
-        wam.machine_st.heap.push(pstr_loc_as_cell!(0));
-        wam.machine_st.heap.push(heap_loc_as_cell!(4));
-
-        mark_cells(&mut wam.machine_st.heap, 4);
-
-        all_cells_marked_and_unforwarded(&wam.machine_st.heap);
-
-        for cell in &mut wam.machine_st.heap {
-            cell.set_mark_bit(false);
-        }
-
-        assert_eq!(unmark_cell_bits!(wam.machine_st.heap[0]), pstr_cell);
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[1]),
-            pstr_loc_as_cell!(2)
-        );
-        assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[2]),
-            pstr_offset_as_cell!(0)
-        );
-        assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[3]),
-            fixnum_as_cell!(Fixnum::build_with(3))
-        );
-        assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[4]),
-            list_loc_as_cell!(5)
-        );
-        assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[5]),
-            pstr_loc_as_cell!(0)
-        );
-        assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[6]),
-            heap_loc_as_cell!(4)
+            wam.machine_st.heap[5],
+            heap_loc_as_cell!(2)
         );
 
         wam.machine_st.heap.clear();
 
         // a chain of variables, ending in a self-referential variable.
 
-        wam.machine_st.heap.push(heap_loc_as_cell!(1));
-        wam.machine_st.heap.push(heap_loc_as_cell!(2));
-        wam.machine_st.heap.push(heap_loc_as_cell!(3));
-        wam.machine_st.heap.push(heap_loc_as_cell!(3));
+        let mut writer = wam.machine_st.heap.reserve(96).unwrap();
+
+        writer.write_with(|section| {
+            section.push_cell(heap_loc_as_cell!(1));
+            section.push_cell(heap_loc_as_cell!(2));
+            section.push_cell(heap_loc_as_cell!(3));
+            section.push_cell(heap_loc_as_cell!(3));
+        });
 
         mark_cells(&mut wam.machine_st.heap, 0);
 
-        all_cells_marked_and_unforwarded(&wam.machine_st.heap);
+        all_cells_marked_and_unforwarded(wam.machine_st.heap.splice(..));
+
+        unmark_all_cells(wam.machine_st.heap.splice_mut(..));
 
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[0]),
+            wam.machine_st.heap[0],
             heap_loc_as_cell!(1)
         );
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[1]),
+            wam.machine_st.heap[1],
             heap_loc_as_cell!(2)
         );
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[2]),
+            wam.machine_st.heap[2],
             heap_loc_as_cell!(3)
         );
         assert_eq!(
-            unmark_cell_bits!(wam.machine_st.heap[3]),
+            wam.machine_st.heap[3],
             heap_loc_as_cell!(3)
         );
 
         wam.machine_st.heap.clear();
 
         // print L = [L|L].
-        wam.machine_st.heap.push(list_loc_as_cell!(1));
-        wam.machine_st.heap.push(list_loc_as_cell!(1));
-        wam.machine_st.heap.push(list_loc_as_cell!(1));
+
+        let mut writer = wam.machine_st.heap.reserve(96).unwrap();
+
+        writer.write_with(|section| {
+            section.push_cell(list_loc_as_cell!(1));
+            section.push_cell(list_loc_as_cell!(1));
+            section.push_cell(list_loc_as_cell!(1));
+        });
 
         mark_cells(&mut wam.machine_st.heap, 0);
 
-        all_cells_marked_and_unforwarded(&wam.machine_st.heap);
+        all_cells_marked_and_unforwarded(wam.machine_st.heap.splice(..));
 
         assert_eq!(
             unmark_cell_bits!(wam.machine_st.heap[0]),
@@ -1350,23 +1194,28 @@ mod tests {
 
         // term is [X,f(Y),Z].
         // Z is an attributed variable, but has a variable attributes list.
-        wam.machine_st.heap.push(list_loc_as_cell!(1));
-        wam.machine_st.heap.push(heap_loc_as_cell!(1));
-        wam.machine_st.heap.push(heap_loc_as_cell!(3)); // 2
-        wam.machine_st.heap.push(list_loc_as_cell!(4)); // 3
-        wam.machine_st.heap.push(str_loc_as_cell!(6)); // 4
-        wam.machine_st.heap.push(heap_loc_as_cell!(8));
-        wam.machine_st.heap.push(atom_as_cell!(f_atom, 1)); // 6
-        wam.machine_st.heap.push(heap_loc_as_cell!(11)); // 7
-        wam.machine_st.heap.push(list_loc_as_cell!(9));
-        wam.machine_st.heap.push(heap_loc_as_cell!(9));
-        wam.machine_st.heap.push(empty_list_as_cell!());
-        wam.machine_st.heap.push(attr_var_as_cell!(11)); // linked from 7.
-        wam.machine_st.heap.push(heap_loc_as_cell!(12));
+
+        let mut writer = wam.machine_st.heap.reserve(96).unwrap();
+
+        writer.write_with(|section| {
+            section.push_cell(list_loc_as_cell!(1));
+            section.push_cell(heap_loc_as_cell!(1));
+            section.push_cell(heap_loc_as_cell!(3)); // 2
+            section.push_cell(list_loc_as_cell!(4)); // 3
+            section.push_cell(str_loc_as_cell!(6)); // 4
+            section.push_cell(heap_loc_as_cell!(8));
+            section.push_cell(atom_as_cell!(f_atom, 1)); // 6
+            section.push_cell(heap_loc_as_cell!(11)); // 7
+            section.push_cell(list_loc_as_cell!(9));
+            section.push_cell(heap_loc_as_cell!(9));
+            section.push_cell(empty_list_as_cell!());
+            section.push_cell(attr_var_as_cell!(11)); // linked from 7.
+            section.push_cell(heap_loc_as_cell!(12));
+        });
 
         mark_cells(&mut wam.machine_st.heap, 0);
 
-        all_cells_marked_and_unforwarded(&wam.machine_st.heap);
+        all_cells_marked_and_unforwarded(wam.machine_st.heap.splice(..));
 
         assert_eq!(
             unmark_cell_bits!(wam.machine_st.heap[0]),
@@ -1425,29 +1274,32 @@ mod tests {
         let clpz_atom = atom!("clpz");
         let p_atom = atom!("p");
 
-        for cell in &mut wam.machine_st.heap {
+        for cell in &mut wam.machine_st.heap.splice_mut(..) {
             cell.set_mark_bit(false);
             cell.set_forwarding_bit(false);
         }
 
-        wam.machine_st.heap.pop();
+        wam.machine_st.heap[12] = heap_loc_as_cell!(13);
 
-        wam.machine_st.heap.push(heap_loc_as_cell!(13)); // 12
-        wam.machine_st.heap.push(list_loc_as_cell!(14)); // 13
-        wam.machine_st.heap.push(str_loc_as_cell!(16)); // 14
-        wam.machine_st.heap.push(heap_loc_as_cell!(19)); // 15
-        wam.machine_st.heap.push(atom_as_cell!(clpz_atom, 2)); // 16
-        wam.machine_st.heap.push(atom_as_cell!(a_atom)); // 17
-        wam.machine_st.heap.push(atom_as_cell!(b_atom)); // 18
-        wam.machine_st.heap.push(list_loc_as_cell!(20)); // 19
-        wam.machine_st.heap.push(str_loc_as_cell!(22)); // 20
-        wam.machine_st.heap.push(empty_list_as_cell!()); // 21
-        wam.machine_st.heap.push(atom_as_cell!(p_atom, 1)); // 22
-        wam.machine_st.heap.push(heap_loc_as_cell!(23)); // 23
+        let mut writer = wam.machine_st.heap.reserve(96).unwrap();
+
+        writer.write_with(|section| {
+            section.push_cell(list_loc_as_cell!(14)); // 13
+            section.push_cell(str_loc_as_cell!(16)); // 14
+            section.push_cell(heap_loc_as_cell!(19)); // 15
+            section.push_cell(atom_as_cell!(clpz_atom, 2)); // 16
+            section.push_cell(atom_as_cell!(a_atom)); // 17
+            section.push_cell(atom_as_cell!(b_atom)); // 18
+            section.push_cell(list_loc_as_cell!(20)); // 19
+            section.push_cell(str_loc_as_cell!(22)); // 20
+            section.push_cell(empty_list_as_cell!()); // 21
+            section.push_cell(atom_as_cell!(p_atom, 1)); // 22
+            section.push_cell(heap_loc_as_cell!(23)); // 23
+        });
 
         mark_cells(&mut wam.machine_st.heap, 0);
 
-        all_cells_marked_and_unforwarded(&wam.machine_st.heap);
+        all_cells_marked_and_unforwarded(wam.machine_st.heap.splice(..));
 
         assert_eq!(
             unmark_cell_bits!(wam.machine_st.heap[0]),
@@ -1546,22 +1398,26 @@ mod tests {
             heap_loc_as_cell!(23)
         );
 
-        for cell in &mut wam.machine_st.heap {
+        for cell in &mut wam.machine_st.heap.splice_mut(..) {
             cell.set_mark_bit(false);
             cell.set_forwarding_bit(false);
         }
 
         // push some unrelated nonsense cells to the heap and check that they
         // are unmarked after the marker has finished at 0.
-        wam.machine_st.heap.push(heap_loc_as_cell!(5));
-        wam.machine_st.heap.push(heap_loc_as_cell!(5));
-        wam.machine_st.heap.push(list_loc_as_cell!(5));
+        let mut writer = wam.machine_st.heap.reserve(96).unwrap();
+
+        writer.write_with(|section| {
+            section.push_cell(heap_loc_as_cell!(5));
+            section.push_cell(heap_loc_as_cell!(5));
+            section.push_cell(list_loc_as_cell!(5));
+        });
 
         mark_cells(&mut wam.machine_st.heap, 0);
 
-        all_cells_marked_and_unforwarded(&wam.machine_st.heap[0..24]);
+        all_cells_marked_and_unforwarded(wam.machine_st.heap.splice(0..24));
 
-        for cell in &wam.machine_st.heap[24..] {
+        for cell in wam.machine_st.heap.splice(24..) {
             assert!(!cell.get_mark_bit());
         }
 
@@ -1677,32 +1533,37 @@ mod tests {
         wam.machine_st.heap.clear();
         wam.machine_st
             .heap
-            .push(fixnum_as_cell!(Fixnum::build_with(0)));
+            .push_cell(fixnum_as_cell!(Fixnum::build_with(0)))
+            .unwrap();
 
         mark_cells(&mut wam.machine_st.heap, 0);
 
-        assert_eq!(wam.machine_st.heap.len(), 1);
+        assert_eq!(wam.machine_st.heap.cell_len(), 1);
 
-        all_cells_marked_and_unforwarded(&wam.machine_st.heap);
+        all_cells_marked_and_unforwarded(wam.machine_st.heap.splice(..));
 
         wam.machine_st.heap.clear();
 
-        wam.machine_st.heap.push(str_loc_as_cell!(1));
-        wam.machine_st.heap.push(atom_as_cell!(atom!("g"), 2));
-        wam.machine_st.heap.push(heap_loc_as_cell!(0));
-        wam.machine_st.heap.push(atom_as_cell!(atom!("y")));
-        wam.machine_st.heap.push(atom_as_cell!(atom!("="), 2));
-        wam.machine_st.heap.push(atom_as_cell!(atom!("X")));
-        wam.machine_st.heap.push(heap_loc_as_cell!(0));
-        wam.machine_st.heap.push(list_loc_as_cell!(8));
-        wam.machine_st.heap.push(str_loc_as_cell!(4));
-        wam.machine_st.heap.push(empty_list_as_cell!());
+        let mut writer = wam.machine_st.heap.reserve(96).unwrap();
+
+        writer.write_with(|section| {
+            section.push_cell(str_loc_as_cell!(1));
+            section.push_cell(atom_as_cell!(atom!("g"), 2));
+            section.push_cell(heap_loc_as_cell!(0));
+            section.push_cell(atom_as_cell!(atom!("y")));
+            section.push_cell(atom_as_cell!(atom!("="), 2));
+            section.push_cell(atom_as_cell!(atom!("X")));
+            section.push_cell(heap_loc_as_cell!(0));
+            section.push_cell(list_loc_as_cell!(8));
+            section.push_cell(str_loc_as_cell!(4));
+            section.push_cell(empty_list_as_cell!());
+        });
 
         mark_cells(&mut wam.machine_st.heap, 7);
 
-        assert_eq!(wam.machine_st.heap.len(), 10);
+        assert_eq!(wam.machine_st.heap.cell_len(), 10);
 
-        all_cells_marked_and_unforwarded(&wam.machine_st.heap);
+        all_cells_marked_and_unforwarded(wam.machine_st.heap.splice(..));
 
         assert_eq!(
             unmark_cell_bits!(wam.machine_st.heap[0]),
@@ -1747,14 +1608,18 @@ mod tests {
 
         wam.machine_st.heap.clear();
 
-        wam.machine_st.heap.push(atom_as_cell!(atom!("f"), 2));
-        wam.machine_st.heap.push(heap_loc_as_cell!(1));
-        wam.machine_st.heap.push(heap_loc_as_cell!(1));
-        wam.machine_st.heap.push(str_loc_as_cell!(0));
+        let mut writer = wam.machine_st.heap.reserve(96).unwrap();
+
+        writer.write_with(|section| {
+            section.push_cell(atom_as_cell!(atom!("f"), 2));
+            section.push_cell(heap_loc_as_cell!(1));
+            section.push_cell(heap_loc_as_cell!(1));
+            section.push_cell(str_loc_as_cell!(0));
+        });
 
         mark_cells(&mut wam.machine_st.heap, 3);
 
-        all_cells_marked_and_unforwarded(&wam.machine_st.heap);
+        all_cells_marked_and_unforwarded(wam.machine_st.heap.splice(..));
 
         assert_eq!(
             unmark_cell_bits!(wam.machine_st.heap[0]),
@@ -1773,19 +1638,22 @@ mod tests {
 
         // representation of one of the heap terms as in issue #1384.
 
-        wam.machine_st.heap.push(list_loc_as_cell!(1));
-        wam.machine_st.heap.push(empty_list_as_cell!());
-        wam.machine_st.heap.push(list_loc_as_cell!(3));
-        wam.machine_st.heap.push(heap_loc_as_cell!(0));
-        wam.machine_st.heap.push(heap_loc_as_cell!(0));
-        wam.machine_st.heap.push(empty_list_as_cell!());
-        wam.machine_st.heap.push(heap_loc_as_cell!(2));
+        let mut writer = wam.machine_st.heap.reserve(96).unwrap();
 
-        wam.machine_st.heap.push(list_loc_as_cell!(5));
+        writer.write_with(|section| {
+            section.push_cell(list_loc_as_cell!(1));
+            section.push_cell(empty_list_as_cell!());
+            section.push_cell(list_loc_as_cell!(3));
+            section.push_cell(heap_loc_as_cell!(0));
+            section.push_cell(heap_loc_as_cell!(0));
+            section.push_cell(empty_list_as_cell!());
+            section.push_cell(heap_loc_as_cell!(2));
+            section.push_cell(list_loc_as_cell!(5));
+        });
 
         mark_cells(&mut wam.machine_st.heap, 7);
 
-        all_cells_marked_and_unforwarded(&wam.machine_st.heap);
+        all_cells_marked_and_unforwarded(wam.machine_st.heap.splice(..));
 
         assert_eq!(
             unmark_cell_bits!(wam.machine_st.heap[0]),
@@ -1820,23 +1688,27 @@ mod tests {
 
         // representation of one of the heap terms as in issue #1384.
 
-        wam.machine_st.heap.push(list_loc_as_cell!(7));
-        wam.machine_st.heap.push(heap_loc_as_cell!(0));
-        wam.machine_st.heap.push(list_loc_as_cell!(3)); // A = [B|[]].
-        wam.machine_st.heap.push(list_loc_as_cell!(5)); // B = [A|A].
-        wam.machine_st.heap.push(empty_list_as_cell!());
-        wam.machine_st.heap.push(heap_loc_as_cell!(2));
-        wam.machine_st.heap.push(heap_loc_as_cell!(2));
-        wam.machine_st.heap.push(empty_list_as_cell!()); // C = [[]|B].
-        wam.machine_st.heap.push(heap_loc_as_cell!(3));
-        wam.machine_st.heap.push(heap_loc_as_cell!(0));
+        let mut writer = wam.machine_st.heap.reserve(96).unwrap();
+
+        writer.write_with(|section| {
+            section.push_cell(list_loc_as_cell!(7));
+            section.push_cell(heap_loc_as_cell!(0));
+            section.push_cell(list_loc_as_cell!(3)); // A = [B|[]].
+            section.push_cell(list_loc_as_cell!(5)); // B = [A|A].
+            section.push_cell(empty_list_as_cell!());
+            section.push_cell(heap_loc_as_cell!(2));
+            section.push_cell(heap_loc_as_cell!(2));
+            section.push_cell(empty_list_as_cell!()); // C = [[]|B].
+            section.push_cell(heap_loc_as_cell!(3));
+            section.push_cell(heap_loc_as_cell!(0));
+        });
 
         mark_cells(&mut wam.machine_st.heap, 9);
 
         assert!(wam.machine_st.heap[0].get_mark_bit());
         assert!(!wam.machine_st.heap[1].get_mark_bit());
 
-        all_cells_marked_and_unforwarded(&wam.machine_st.heap[2..]);
+        all_cells_marked_and_unforwarded(wam.machine_st.heap.splice(2..));
 
         assert_eq!(
             unmark_cell_bits!(wam.machine_st.heap[0]),
@@ -1874,31 +1746,31 @@ mod tests {
             unmark_cell_bits!(wam.machine_st.heap[8]),
             heap_loc_as_cell!(3)
         );
+        assert_eq!(
+            unmark_cell_bits!(wam.machine_st.heap[9]),
+            heap_loc_as_cell!(0)
+        );
 
         wam.machine_st.heap.clear();
 
-        wam.machine_st.heap.push(str_loc_as_cell!(1));
-        wam.machine_st.heap.push(atom_as_cell!(atom!("+"), 2));
-        wam.machine_st.heap.push(str_loc_as_cell!(4));
-        wam.machine_st
-            .heap
-            .push(fixnum_as_cell!(Fixnum::build_with(2)));
-        wam.machine_st.heap.push(atom_as_cell!(atom!("-"), 2));
-        wam.machine_st.heap.push(str_loc_as_cell!(7));
-        wam.machine_st
-            .heap
-            .push(fixnum_as_cell!(Fixnum::build_with(1)));
-        wam.machine_st.heap.push(atom_as_cell!(atom!("+"), 2));
-        wam.machine_st
-            .heap
-            .push(fixnum_as_cell!(Fixnum::build_with(3)));
-        wam.machine_st
-            .heap
-            .push(fixnum_as_cell!(Fixnum::build_with(4)));
+        let mut writer = wam.machine_st.heap.reserve(96).unwrap();
+
+        writer.write_with(|section| {
+            section.push_cell(str_loc_as_cell!(1));
+            section.push_cell(atom_as_cell!(atom!("+"), 2));
+            section.push_cell(str_loc_as_cell!(4));
+            section.push_cell(fixnum_as_cell!(Fixnum::build_with(2)));
+            section.push_cell(atom_as_cell!(atom!("-"), 2));
+            section.push_cell(str_loc_as_cell!(7));
+            section.push_cell(fixnum_as_cell!(Fixnum::build_with(1)));
+            section.push_cell(atom_as_cell!(atom!("+"), 2));
+            section.push_cell(fixnum_as_cell!(Fixnum::build_with(3)));
+            section.push_cell(fixnum_as_cell!(Fixnum::build_with(4)));
+        });
 
         mark_cells(&mut wam.machine_st.heap, 0);
 
-        all_cells_marked_and_unforwarded(&wam.machine_st.heap);
+        all_cells_marked_and_unforwarded(wam.machine_st.heap.splice(..));
 
         assert_eq!(
             unmark_cell_bits!(wam.machine_st.heap[0]),

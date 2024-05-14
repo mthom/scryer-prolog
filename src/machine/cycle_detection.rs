@@ -1,4 +1,5 @@
 use crate::atom_table::*;
+use crate::machine::heap::*;
 use crate::types::*;
 
 /* Use the pointer reversal technique of the Deutsch-Schorr-Waite
@@ -11,7 +12,7 @@ use crate::types::*;
  * - Cells are only marked during the backward phase
  * - Visiting subterms of a visited compound does not immediately shift to the backward phase
  * - The heads of LIS structures are both marked and forwarded rather
- *   than just forwarded to distinguish them from tails;
+ *   than just forwarded to distinguish them from tails
  *   continue_forwarding() checks for this before entering the forward
  *   phase
  *
@@ -22,7 +23,7 @@ use crate::types::*;
 
 #[derive(Debug)]
 pub(crate) struct CycleDetectingIter<'a, const STOP_AT_CYCLES: bool> {
-    pub(crate) heap: &'a mut [HeapCellValue],
+    pub(crate) heap: &'a mut Heap,
     start: usize,
     current: usize,
     next: u64,
@@ -31,7 +32,7 @@ pub(crate) struct CycleDetectingIter<'a, const STOP_AT_CYCLES: bool> {
 }
 
 impl<'a, const STOP_AT_CYCLES: bool> CycleDetectingIter<'a, STOP_AT_CYCLES> {
-    pub(crate) fn new(heap: &'a mut [HeapCellValue], start: usize) -> Self {
+    pub(crate) fn new(heap: &'a mut Heap, start: usize) -> Self {
         heap[start].set_forwarding_bit(true);
         let next = heap[start].get_value();
 
@@ -127,7 +128,7 @@ impl<'a, const STOP_AT_CYCLES: bool> CycleDetectingIter<'a, STOP_AT_CYCLES> {
                         self.current = next;
                         self.next = temp;
 
-                        if self.next < self.heap.len() as u64 {
+                        if self.next < self.heap.cell_len() as u64 {
                             return Some(HeapCellValue::build_with(tag, next as u64));
                         }
                     }
@@ -205,8 +206,7 @@ impl<'a, const STOP_AT_CYCLES: bool> CycleDetectingIter<'a, STOP_AT_CYCLES> {
                     }
                     HeapCellValueTag::PStrLoc => {
                         let h = self.next as usize;
-                        let cell = self.heap[h];
-                        let last_cell_loc = h + 1;
+                        let (_, last_cell_loc) = self.heap.scan_slice_to_str(h);
 
                         if self.heap[last_cell_loc].get_forwarding_bit() {
                             if self.cycle_detection_active() {
@@ -225,39 +225,7 @@ impl<'a, const STOP_AT_CYCLES: bool> CycleDetectingIter<'a, STOP_AT_CYCLES> {
                         self.heap[last_cell_loc].set_value(self.current as u64);
                         self.current = last_cell_loc;
 
-                        return Some(cell);
-                    }
-                    HeapCellValueTag::PStrOffset => {
-                        let h = self.next as usize;
-                        let cell = self.heap[h];
-                        let last_cell_loc = h + 1;
-
-                        if self.heap[h].get_tag() == HeapCellValueTag::PStr {
-                            if self.heap[last_cell_loc].get_forwarding_bit() {
-                                if self.cycle_detection_active() {
-                                    self.cycle_found = true;
-                                    return None;
-                                } else if self.backward() {
-                                    return None;
-                                }
-
-                                continue;
-                            }
-
-                            self.heap[last_cell_loc].set_forwarding_bit(true);
-
-                            self.next = self.heap[last_cell_loc].get_value();
-                            self.heap[last_cell_loc].set_value(self.current as u64);
-                            self.current = last_cell_loc;
-                        } else {
-                            debug_assert!(self.heap[h].get_tag() == HeapCellValueTag::CStr);
-
-                            self.next = self.heap[h].get_value();
-                            self.heap[h].set_value(self.current as u64);
-                            self.current = h;
-                        }
-
-                        return Some(cell);
+                        return Some(pstr_loc_as_cell!(h));
                     }
                     tag @ HeapCellValueTag::Atom => {
                         let cell = HeapCellValue::build_with(tag, self.next);
@@ -266,11 +234,6 @@ impl<'a, const STOP_AT_CYCLES: bool> CycleDetectingIter<'a, STOP_AT_CYCLES> {
                         if arity == 0 {
                             return Some(self.backward_and_return());
                         } else if self.backward() {
-                            return None;
-                        }
-                    }
-                    HeapCellValueTag::PStr => {
-                        if self.backward() {
                             return None;
                         }
                     }
