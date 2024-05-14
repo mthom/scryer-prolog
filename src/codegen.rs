@@ -7,7 +7,7 @@ use crate::forms::*;
 use crate::indexing::*;
 use crate::instructions::*;
 use crate::iterators::*;
-use crate::machine::heap::{heap_bound_deref, heap_bound_store};
+use crate::machine::heap::*;
 use crate::parser::ast::*;
 use crate::targets::*;
 use crate::types::*;
@@ -16,7 +16,6 @@ use crate::variable_records::*;
 use crate::machine::disjuncts::*;
 use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::CodeIndex;
-use crate::machine::machine_state::pstr_loc_and_offset;
 use crate::machine::stack::Stack;
 
 use fxhash::FxBuildHasher;
@@ -24,6 +23,7 @@ use indexmap::IndexMap;
 use indexmap::IndexSet;
 
 use std::collections::VecDeque;
+use std::rc::Rc;
 
 #[derive(Debug)]
 pub struct BranchCodeStack {
@@ -274,31 +274,10 @@ impl CodeGenSettings {
 }
 
 #[derive(Debug)]
-pub(crate) struct CodeGenerator<'a> {
-    pub(crate) atom_tbl: &'a AtomTable,
+pub(crate) struct CodeGenerator {
     marker: DebrayAllocator,
     settings: CodeGenSettings,
     pub(crate) skeleton: PredicateSkeleton,
-}
-
-fn subterm_index(heap: &[HeapCellValue], subterm_loc: usize) -> (usize, HeapCellValue) {
-    let subterm = heap[subterm_loc];
-
-    if subterm.is_ref() {
-        let subterm = heap_bound_deref(heap, subterm);
-        let subterm_loc = subterm.get_value() as usize;
-        let subterm = heap_bound_store(heap, subterm);
-
-        let subterm_loc = if subterm.is_ref() {
-            subterm.get_value() as usize
-        } else {
-            subterm_loc
-        };
-
-        (subterm_loc, subterm)
-    } else {
-        (subterm_loc, subterm)
-    }
 }
 
 impl DebrayAllocator {
@@ -337,7 +316,7 @@ trait AddToFreeList<'a, Target: CompilationTarget<'a>> {
     fn add_subterm_to_free_list(&mut self, r: RegType);
 }
 
-impl<'a, 'b> AddToFreeList<'a, FactInstruction> for CodeGenerator<'b> {
+impl<'a> AddToFreeList<'a, FactInstruction> for CodeGenerator {
     fn add_term_to_free_list(&mut self, r: RegType) {
         self.marker.add_reg_to_free_list(r);
     }
@@ -345,7 +324,7 @@ impl<'a, 'b> AddToFreeList<'a, FactInstruction> for CodeGenerator<'b> {
     fn add_subterm_to_free_list(&mut self, _r: RegType) {}
 }
 
-impl<'a, 'b> AddToFreeList<'a, QueryInstruction> for CodeGenerator<'b> {
+impl<'a> AddToFreeList<'a, QueryInstruction> for CodeGenerator {
     #[inline(always)]
     fn add_term_to_free_list(&mut self, _r: RegType) {}
 
@@ -357,19 +336,19 @@ impl<'a, 'b> AddToFreeList<'a, QueryInstruction> for CodeGenerator<'b> {
 
 fn add_index_ptr<'a, Target: crate::targets::CompilationTarget<'a>>(
     index_ptrs: &IndexMap<usize, CodeIndex, FxBuildHasher>,
-    heap: &[HeapCellValue],
+    heap: &Heap,
     arity: usize,
     heap_loc: usize,
 ) -> Option<Instruction> {
     match fetch_index_ptr(heap, arity, heap_loc) {
         Some(index_ptr) => {
-            let subterm = Literal::CodeIndex(index_ptr);
+            let subterm = HeapCellValue::from(index_ptr);
             return Some(Target::constant_subterm(subterm));
         }
         None => {
             // if Level::Shallow == lvl {
                 if let Some(index_ptr) = index_ptrs.get(&heap_loc) {
-                    let subterm = Literal::CodeIndex(*index_ptr);
+                    let subterm = HeapCellValue::from(*index_ptr);
                     return Some(Target::constant_subterm(subterm));
                 }
             // }
@@ -379,10 +358,9 @@ fn add_index_ptr<'a, Target: crate::targets::CompilationTarget<'a>>(
     None
 }
 
-impl<'b> CodeGenerator<'b> {
-    pub(crate) fn new(atom_tbl: &'b AtomTable, settings: CodeGenSettings) -> Self {
+impl CodeGenerator {
+    pub(crate) fn new(settings: CodeGenSettings) -> Self {
         CodeGenerator {
-            atom_tbl,
             marker: DebrayAllocator::new(),
             settings,
             skeleton: PredicateSkeleton::new(),
@@ -445,33 +423,26 @@ impl<'b> CodeGenerator<'b> {
 
                 None
             }
-            (HeapCellValueTag::Atom, (name, arity)) => {
-                debug_assert_eq!(arity, 0);
-
+            (HeapCellValueTag::Atom, (name, _arity)) => {
                 if index_ptrs.contains_key(&heap_loc) {
                     let r = self.marker.mark_non_var::<Target>(Level::Deep, heap_loc, context, target);
                     target.push_back(Target::clause_arg_to_instr(r));
                     return Some(r);
                 } else {
-                    target.push_back(Target::constant_subterm(Literal::Atom(name)));
+                    target.push_back(Target::constant_subterm(atom_as_cell!(name)));
                 }
 
                 None
             }
             (HeapCellValueTag::Str
              | HeapCellValueTag::Lis
-             | HeapCellValueTag::PStrLoc
-             | HeapCellValueTag::CStr) => {
+             | HeapCellValueTag::PStrLoc) => {
                 let r = self.marker.mark_non_var::<Target>(Level::Deep, heap_loc, context, target);
                 target.push_back(Target::clause_arg_to_instr(r));
                 return Some(r);
             }
             _ => {
-                match Literal::try_from(subterm) {
-                    Ok(lit) => target.push_back(Target::constant_subterm(lit)),
-                    Err(_)  => unreachable!(),
-                }
-
+                target.push_back(Target::constant_subterm(subterm));
                 None
             }
         )
@@ -486,7 +457,7 @@ impl<'b> CodeGenerator<'b> {
     where
         Target: crate::targets::CompilationTarget<'a>,
         Iter: TermIterator,
-        CodeGenerator<'b>: AddToFreeList<'a, Target>,
+        CodeGenerator: AddToFreeList<'a, Target>,
     {
         let mut target = CodeDeque::new();
         let chunk_num = context.chunk_num();
@@ -530,13 +501,13 @@ impl<'b> CodeGenerator<'b> {
                             target.push_back(instr);
                         } else if lvl == Level::Shallow {
                             let r = self.marker.mark_non_var::<Target>(lvl, heap_loc, context, &mut target);
-                            target.push_back(Target::to_constant(lvl, Literal::Atom(name), r));
+                            target.push_back(Target::to_constant(lvl, atom_as_cell!(name), r));
                         }
                     } else {
                         let r = self.marker.mark_non_var::<Target>(lvl, heap_loc, context, &mut target);
                         target.push_back(Target::to_structure(lvl, name, arity, r));
 
-                        <CodeGenerator<'b> as AddToFreeList<'a, Target>>::add_term_to_free_list(
+                        <CodeGenerator as AddToFreeList<'a, Target>>::add_term_to_free_list(
                             self,
                             r,
                         );
@@ -557,7 +528,7 @@ impl<'b> CodeGenerator<'b> {
 
                         for r_opt in free_list_regs {
                             if let Some(r) = r_opt {
-                                <CodeGenerator<'b> as AddToFreeList<'a, Target>>::add_subterm_to_free_list(
+                                <CodeGenerator as AddToFreeList<'a, Target>>::add_subterm_to_free_list(
                                     self, r,
                                 );
                             }
@@ -572,7 +543,7 @@ impl<'b> CodeGenerator<'b> {
 
                     target.push_back(Target::to_list(lvl, r));
 
-                    <CodeGenerator<'b> as AddToFreeList<'a, Target>>::add_term_to_free_list(
+                    <CodeGenerator as AddToFreeList<'a, Target>>::add_term_to_free_list(
                         self,
                         r,
                     );
@@ -597,62 +568,36 @@ impl<'b> CodeGenerator<'b> {
                     );
 
                     if let Some(r) = head_r_opt {
-                        <CodeGenerator<'b> as AddToFreeList<'a, Target>>::add_subterm_to_free_list(
+                        <CodeGenerator as AddToFreeList<'a, Target>>::add_subterm_to_free_list(
                             self, r,
                         );
                     }
 
                     if let Some(r) = tail_r_opt {
-                        <CodeGenerator<'b> as AddToFreeList<'a, Target>>::add_subterm_to_free_list(
+                        <CodeGenerator as AddToFreeList<'a, Target>>::add_subterm_to_free_list(
                             self, r,
                         );
                     }
                 }
-                (HeapCellValueTag::CStr, cstr_atom) => {
-                    let heap_loc = iter.focus().value() as usize;
-                    let r = self.marker.mark_non_var::<Target>(lvl, heap_loc, context, &mut target);
-
-                    target.push_back(Target::to_pstr(lvl, cstr_atom, r, false));
-                }
-                (HeapCellValueTag::PStr, pstr_atom) => {
+                (HeapCellValueTag::PStrLoc, pstr_loc) => {
                     let heap_loc = iter.focus().value() as usize;
                     let (heap_loc, _) = subterm_index(iter.deref(), heap_loc);
                     let r = self.marker.mark_non_var::<Target>(lvl, heap_loc, context, &mut target);
+                    let (pstr_str, tail_loc) = iter.scan_slice_to_str(pstr_loc);
 
-                    target.push_back(Target::to_pstr(lvl, pstr_atom, r, true));
+                    target.push_back(Target::to_pstr(lvl, Rc::new(pstr_str.to_owned()), r));
 
-                    let (tail_loc, tail) = subterm_index(iter.deref(), heap_loc + 1);
-                    self.subterm_to_instr::<Target>(
-                        tail, tail_loc, context, index_ptrs, &mut target,
-                    );
-                }
-                (HeapCellValueTag::PStrOffset, l) => {
-                    let heap_loc = iter.focus().value() as usize;
-                    let r = self.marker.mark_non_var::<Target>(lvl, heap_loc, context, &mut target);
-
-                    let (index, n) = pstr_loc_and_offset(&iter, l);
-                    let n = n.get_num() as usize;
-
-                    let pstr_atom = cell_as_atom!(iter[index]);
-                    let pstr_offset_atom = if n == 0 {
-                        pstr_atom
-                    } else {
-                        AtomTable::build_with(self.atom_tbl, &pstr_atom.as_str()[n ..])
-                    };
-
-                    let (tail_loc, tail) = subterm_index(iter.deref(), l+1);
-                    target.push_back(Target::to_pstr(lvl, pstr_offset_atom, r, true));
-
+                    let (tail_loc, tail) = subterm_index(iter.deref(), tail_loc);
                     self.subterm_to_instr::<Target>(
                         tail, tail_loc, context, index_ptrs, &mut target,
                     );
                 }
                 _ if lvl == Level::Shallow => {
-                    if let Ok(lit) = Literal::try_from(term) {
+                    if term.is_constant() {
                         let heap_loc = iter.focus().value() as usize;
                         let (heap_loc, _) = subterm_index(iter.deref(), heap_loc);
                         let r = self.marker.mark_non_var::<Target>(lvl, heap_loc, context, &mut target);
-                        target.push_back(Target::to_constant(lvl, lit, r));
+                        target.push_back(Target::to_constant(lvl, term, r));
                     }
                 }
                 _ => {}
@@ -688,7 +633,7 @@ impl<'b> CodeGenerator<'b> {
     fn compile_inlined(
         &mut self,
         ct: &InlinedClauseType,
-        terms: &mut FocusedHeap,
+        terms: &mut FocusedHeapRefMut,
         term_loc: usize,
         context: GenContext,
         code: &mut CodeDeque,
@@ -763,9 +708,6 @@ impl<'b> CodeGenerator<'b> {
                                 instr!("$fail")
                             }
                         }
-                        (HeapCellValueTag::Char) => {
-                            instr!("$succeed")
-                        }
                         _ => {
                             instr!("$fail")
                         }
@@ -780,7 +722,6 @@ impl<'b> CodeGenerator<'b> {
                 } else {
                    read_heap_cell!(first_arg,
                        (HeapCellValueTag::Fixnum |
-                        HeapCellValueTag::Char |
                         HeapCellValueTag::F64) => {
                            instr!("$succeed")
                        }
@@ -803,12 +744,11 @@ impl<'b> CodeGenerator<'b> {
                        }
                        (HeapCellValueTag::Lis
                         | HeapCellValueTag::Str
-                        | HeapCellValueTag::PStrLoc
-                        | HeapCellValueTag::CStr) => {
+                        | HeapCellValueTag::PStrLoc) => {
                            instr!("$fail")
                        }
                        _ => {
-                           if Literal::try_from(first_arg).is_ok() {
+                           if first_arg.is_constant() {
                                instr!("$succeed")
                            } else {
                                instr!("$fail")
@@ -833,8 +773,7 @@ impl<'b> CodeGenerator<'b> {
                         }
                         (HeapCellValueTag::Lis
                          | HeapCellValueTag::Str
-                         | HeapCellValueTag::PStrLoc
-                         | HeapCellValueTag::CStr) => {
+                         | HeapCellValueTag::PStrLoc) => {
                             instr!("$succeed")
                         }
                         _ => {
@@ -889,12 +828,10 @@ impl<'b> CodeGenerator<'b> {
                 self.marker.reset_arg(1);
                 if let Some(r) = variable_marker(&mut self.marker) {
                     instr!("number", r)
+                } else if Number::try_from(first_arg).is_ok() {
+                    instr!("$succeed")
                 } else {
-                    if Number::try_from(first_arg).is_ok() {
-                        instr!("$succeed")
-                    } else {
-                        instr!("$fail")
-                    }
+                    instr!("$fail")
                 }
             }
             InlinedClauseType::IsNonVar(..) => {
@@ -902,12 +839,10 @@ impl<'b> CodeGenerator<'b> {
 
                 if let Some(r) = variable_marker(&mut self.marker) {
                     instr!("nonvar", r)
+                } else if first_arg.is_var() {
+                    instr!("$fail")
                 } else {
-                    if first_arg.is_var() {
-                        instr!("$fail")
-                    } else {
-                        instr!("$succeed")
-                    }
+                    instr!("$succeed")
                 }
             }
             InlinedClauseType::IsInteger(..) => {
@@ -931,12 +866,10 @@ impl<'b> CodeGenerator<'b> {
 
                 if let Some(r) = variable_marker(&mut self.marker) {
                     instr!("var", r)
+                } else if first_arg.is_var() {
+                    instr!("$succeed")
                 } else {
-                    if first_arg.is_var() {
-                        instr!("$succeed")
-                    } else {
-                        instr!("$fail")
-                    }
+                    instr!("$fail")
                 }
             },
         };
@@ -948,7 +881,7 @@ impl<'b> CodeGenerator<'b> {
 
     fn compile_arith_expr(
         &mut self,
-        terms: &mut FocusedHeap,
+        terms: &mut FocusedHeapRefMut,
         term_loc: usize,
         target_int: usize,
         context: GenContext,
@@ -960,7 +893,7 @@ impl<'b> CodeGenerator<'b> {
 
     fn compile_is_call(
         &mut self,
-        terms: &mut FocusedHeap,
+        terms: &mut FocusedHeapRefMut,
         term_loc: usize,
         code: &mut CodeDeque,
         context: GenContext,
@@ -977,12 +910,10 @@ impl<'b> CodeGenerator<'b> {
 
         self.marker.reset_arg(2);
 
-        let var = {
-            let var_cell = terms.heap[term_loc + 1];
-            let terms = FocusedHeapRefMut::from_cell(&mut terms.heap, var_cell);
-
-            terms.deref_loc(term_loc + 1)
-        };
+        let var = heap_bound_store(
+            terms.heap,
+            heap_bound_deref(terms.heap, heap_loc_as_cell!(term_loc + 1)),
+        );
 
         let at = read_heap_cell!(var,
             (HeapCellValueTag::AttrVar | HeapCellValueTag::Var, term_loc) => {
@@ -1029,7 +960,7 @@ impl<'b> CodeGenerator<'b> {
 
     fn compile_seq(
         &mut self,
-        focused_heap: &mut FocusedHeap,
+        mut focused_heap: FocusedHeapRefMut,
         clauses: &ChunkedTermVec,
         code: &mut CodeDeque,
     ) -> Result<(), CompilationError> {
@@ -1108,7 +1039,7 @@ impl<'b> CodeGenerator<'b> {
                                     ..
                                 },
                             ) => self.compile_is_call(
-                                focused_heap,
+                                &mut focused_heap,
                                 clause.term_loc(),
                                 branch_code_stack.code(code),
                                 context,
@@ -1121,7 +1052,7 @@ impl<'b> CodeGenerator<'b> {
                                 },
                             ) => self.compile_inlined(
                                 ct,
-                                focused_heap,
+                                &mut focused_heap,
                                 clause.term_loc(),
                                 context,
                                 branch_code_stack.code(code),
@@ -1132,15 +1063,13 @@ impl<'b> CodeGenerator<'b> {
                             &QueryTerm::Succeed => {
                                 let code = branch_code_stack.code(code);
 
-                                if self.marker.in_tail_position {
-                                    if self.marker.var_data.allocates {
-                                        code.push_back(instr!("deallocate"));
-                                    }
+                                if self.marker.in_tail_position && self.marker.var_data.allocates {
+                                    code.push_back(instr!("deallocate"));
                                 }
 
                                 code.push_back(
                                     if self.marker.in_tail_position {
-                                        instr!("$succeed").to_execute()
+                                        instr!("$succeed").into_execute()
                                     } else {
                                         instr!("$succeed")
                                     },
@@ -1148,7 +1077,7 @@ impl<'b> CodeGenerator<'b> {
                             }
                             QueryTerm::Clause(clause) => {
                                 self.compile_query_line(
-                                    focused_heap,
+                                    &mut focused_heap,
                                     clause,
                                     context,
                                     branch_code_stack.code(code),
@@ -1208,24 +1137,23 @@ impl<'b> CodeGenerator<'b> {
 
     pub(crate) fn compile_rule(
         &mut self,
+        heap: &mut Heap,
         rule: &mut Rule,
         var_data: VarData,
     ) -> Result<Code, CompilationError> {
-        let Rule {
-            ref mut term,
-            clauses,
-        } = rule;
+        let Rule { term_loc, clauses } = rule;
+
         self.marker.var_data = var_data;
 
+        let term = FocusedHeapRefMut { heap, focus: *term_loc };
         let mut code = VecDeque::new();
+
         let head_loc = term.nth_arg(term.focus, 1).unwrap();
 
-        self.marker.reset_at_head(term, head_loc);
+        self.marker.reset_at_head(term.heap, head_loc);
 
         let mut stack = Stack::uninitialized();
-        let iter = fact_iterator::<true>(
-            &mut term.heap, &mut stack, head_loc,
-        );
+        let iter = fact_iterator::<true>(term.heap, &mut stack, head_loc);
 
         let fact = self.compile_target::<FactInstruction, _>(
             iter,
@@ -1247,20 +1175,18 @@ impl<'b> CodeGenerator<'b> {
 
     pub(crate) fn compile_fact(
         &mut self,
+        heap: &mut Heap,
         fact: &mut Fact,
         var_data: VarData,
     ) -> Result<Code, CompilationError> {
         let mut code = Vec::new();
 
-        let fact_focus = fact.term.focus;
         let mut stack = Stack::uninitialized();
 
         self.marker.var_data = var_data;
-        self.marker.reset_at_head(&mut fact.term, fact_focus);
+        self.marker.reset_at_head(heap, fact.term_loc);
 
-        let iter = fact_iterator::<true>(
-            &mut fact.term.heap, &mut stack, fact_focus,
-        );
+        let iter = fact_iterator::<true>(heap, &mut stack, fact.term_loc);
 
         let compiled_fact = self.compile_target::<FactInstruction, _>(
             iter,
@@ -1280,7 +1206,7 @@ impl<'b> CodeGenerator<'b> {
 
     fn compile_query_line(
         &mut self,
-        term: &mut FocusedHeap,
+        term: &mut FocusedHeapRefMut,
         clause: &QueryClause,
         context: GenContext,
         code: &mut CodeDeque,
@@ -1300,15 +1226,16 @@ impl<'b> CodeGenerator<'b> {
         self.add_call(code, clause.ct.to_instr(), clause.call_policy);
     }
 
-    fn split_predicate(clauses: &[PredicateClause]) -> Vec<ClauseSpan> {
+    fn split_predicate(heap: &mut Heap, clauses: &[PredicateClause]) -> Vec<ClauseSpan> {
         let mut subseqs = Vec::new();
         let mut left = 0;
         let mut optimal_index = 0;
 
         'outer: for (right, clause) in clauses.iter().enumerate() {
-            if let Some(args) = clause.args() {
-                for (instantiated_arg_index, arg) in args.iter().cloned().enumerate() {
-                    let arg = heap_bound_store(clause.heap(), heap_bound_deref(clause.heap(), arg));
+            if let Some(args) = clause.args(heap) {
+                for (instantiated_arg_index, arg_idx) in args.enumerate() {
+                    let arg = heap[arg_idx];
+                    let arg = heap_bound_store(heap, heap_bound_deref(heap, arg));
 
                     if !arg.is_var() {
                         if optimal_index != instantiated_arg_index {
@@ -1364,6 +1291,7 @@ impl<'b> CodeGenerator<'b> {
 
     fn compile_pred_subseq<I: Indexer>(
         &mut self,
+        heap: &mut Heap,
         clauses: &mut [PredicateClause],
         optimal_index: usize,
     ) -> Result<Code, CompilationError> {
@@ -1382,11 +1310,11 @@ impl<'b> CodeGenerator<'b> {
             let clause_code = match clause {
                 PredicateClause::Fact(fact, var_data) => {
                     let var_data = std::mem::take(var_data);
-                    self.compile_fact(fact, var_data)?
+                    self.compile_fact(heap, fact, var_data)?
                 }
                 PredicateClause::Rule(rule, var_data) => {
                     let var_data = std::mem::take(var_data);
-                    self.compile_rule(rule, var_data)?
+                    self.compile_rule(heap, rule, var_data)?
                 }
             };
 
@@ -1414,19 +1342,19 @@ impl<'b> CodeGenerator<'b> {
                 skip_stub_try_me_else = !self.settings.is_dynamic();
             }
 
-            let arg = clause.args().and_then(|args| args.get(optimal_index));
+            let arg = clause.args(heap)
+                .map(|r| heap[r.start() + optimal_index]);
 
-            if let Some(arg) = arg.cloned() {
+            if let Some(arg) = arg {
                 let index = code.len();
 
                 if clauses_len > 1 || self.settings.is_extensible {
-                    let arg = heap_bound_store(clause.heap(), heap_bound_deref(clause.heap(), arg));
+                    let arg = heap_bound_store(heap, heap_bound_deref(heap, arg));
                     code_offsets.index_term(
-                        clause.heap(),
+                        heap,
                         arg,
                         index,
                         &mut clause_index_info,
-                        self.atom_tbl,
                     );
                 }
             }
@@ -1457,11 +1385,12 @@ impl<'b> CodeGenerator<'b> {
 
     pub(crate) fn compile_predicate(
         &mut self,
+        heap: &mut Heap,
         mut clauses: Vec<PredicateClause>,
     ) -> Result<Code, CompilationError> {
         let mut code = Code::new();
 
-        let split_pred = Self::split_predicate(&clauses);
+        let split_pred = Self::split_predicate(heap, &clauses);
         let multi_seq = split_pred.len() > 1;
 
         for ClauseSpan {
@@ -1473,11 +1402,13 @@ impl<'b> CodeGenerator<'b> {
             let skel_lower_bound = self.skeleton.clauses.len();
             let code_segment = if self.settings.is_dynamic() {
                 self.compile_pred_subseq::<DynamicCodeIndices>(
+                    heap,
                     &mut clauses[left..right],
                     instantiated_arg_index,
                 )?
             } else {
                 self.compile_pred_subseq::<StaticCodeIndices>(
+                    heap,
                     &mut clauses[left..right],
                     instantiated_arg_index,
                 )?
