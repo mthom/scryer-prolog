@@ -19,6 +19,7 @@ use to_syn_value_derive::ToDeriveInput;
  */
 
 use std::any::*;
+use std::rc::Rc;
 use std::str::FromStr;
 
 struct ArithmeticTerm;
@@ -28,6 +29,7 @@ struct Death;
 struct HeapCellValue;
 struct IndexingLine;
 struct Level;
+// struct Literal;
 struct NextOrFail;
 struct RegType;
 
@@ -622,7 +624,7 @@ enum InstructionTemplate {
     #[strum_discriminants(strum(props(Arity = "2", Name = "get_list")))]
     GetList(Level, RegType),
     #[strum_discriminants(strum(props(Arity = "4", Name = "get_partial_string")))]
-    GetPartialString(Level, Atom, RegType, bool),
+    GetPartialString(Level, Rc<String>, RegType),
     #[strum_discriminants(strum(props(Arity = "3", Name = "get_structure")))]
     GetStructure(Level, Atom, usize, RegType),
     #[strum_discriminants(strum(props(Arity = "2", Name = "get_variable")))]
@@ -645,7 +647,7 @@ enum InstructionTemplate {
     #[strum_discriminants(strum(props(Arity = "2", Name = "put_list")))]
     PutList(Level, RegType),
     #[strum_discriminants(strum(props(Arity = "4", Name = "put_partial_string")))]
-    PutPartialString(Level, Atom, RegType, bool),
+    PutPartialString(Level, Rc<String>, RegType),
     #[strum_discriminants(strum(props(Arity = "3", Name = "put_structure")))]
     PutStructure(Atom, usize, RegType),
     #[strum_discriminants(strum(props(Arity = "2", Name = "put_unsafe_value")))]
@@ -875,6 +877,7 @@ fn generate_instruction_preface() -> TokenStream {
         use crate::arithmetic::*;
         use crate::atom_table::*;
         use crate::forms::*;
+        use crate::functor_macro::*;
         use crate::machine::heap::*;
         use crate::machine::machine_errors::MachineStub;
         use crate::machine::machine_indices::CodeIndex;
@@ -885,6 +888,7 @@ fn generate_instruction_preface() -> TokenStream {
         use indexmap::IndexMap;
 
         use std::collections::VecDeque;
+        use std::rc::Rc;
 
         fn reg_type_into_functor(r: RegType) -> MachineStub {
             match r {
@@ -896,9 +900,9 @@ fn generate_instruction_preface() -> TokenStream {
         impl Level {
             fn into_functor(self) -> MachineStub {
                 match self {
-                    Level::Root => functor!(atom!("level"), [atom(atom!("root"))]),
-                    Level::Shallow => functor!(atom!("level"), [atom(atom!("shallow"))]),
-                    Level::Deep => functor!(atom!("level"), [atom(atom!("deep"))]),
+                    Level::Root => functor!(atom!("level"), [atom_as_cell((atom!("root")))]),
+                    Level::Shallow => functor!(atom!("level"), [atom_as_cell((atom!("shallow")))]),
+                    Level::Deep => functor!(atom!("level"), [atom_as_cell((atom!("deep")))]),
                 }
             }
         }
@@ -911,7 +915,7 @@ fn generate_instruction_preface() -> TokenStream {
                         functor!(atom!("intermediate"), [fixnum(i)])
                     }
                     ArithmeticTerm::Number(n) => {
-                        functor!(atom!("number"), [cell(HeapCellValue::from((n, arena)))])
+                        functor!(atom!("number"), [number(n, arena)])
                     }
                 }
             }
@@ -996,7 +1000,7 @@ fn generate_instruction_preface() -> TokenStream {
                 IndexingCodePtr,
                 IndexingCodePtr,
             ),
-            SwitchOnConstant(IndexMap<Literal, IndexingCodePtr, FxBuildHasher>),
+            SwitchOnConstant(IndexMap<HeapCellValue, IndexingCodePtr, FxBuildHasher>),
             SwitchOnStructure(IndexMap<(Atom, usize), IndexingCodePtr, FxBuildHasher>),
         }
 
@@ -1016,7 +1020,7 @@ fn generate_instruction_preface() -> TokenStream {
                     IndexingCodePtr::External(o) => functor!(atom!("external"), [fixnum(o)]),
                     IndexingCodePtr::Internal(o) => functor!(atom!("internal"), [fixnum(o)]),
                     IndexingCodePtr::Fail => {
-                        vec![atom_as_cell!(atom!("fail"))]
+                        functor!(atom!("fail"))
                     },
                 }
             }
@@ -1030,80 +1034,43 @@ fn generate_instruction_preface() -> TokenStream {
         }
 
         impl IndexingInstruction {
-            pub fn to_functor(&self, mut h: usize) -> MachineStub {
+            pub fn to_functor(&self) -> MachineStub {
                 match self {
                     &IndexingInstruction::SwitchOnTerm(arg, vars, constants, lists, structures) => {
                         functor!(
                             atom!("switch_on_term"),
                             [
                                 fixnum(arg),
-                                indexing_code_ptr(h, vars),
-                                indexing_code_ptr(h, constants),
-                                indexing_code_ptr(h, lists),
-                                indexing_code_ptr(h, structures)
+                                indexing_code_ptr(vars),
+                                indexing_code_ptr(constants),
+                                indexing_code_ptr(lists),
+                                indexing_code_ptr(structures)
                             ]
                         )
                     }
                     IndexingInstruction::SwitchOnConstant(constants) => {
-                        let mut key_value_list_stub = vec![];
-                        let orig_h = h;
-
-                        h += 2; // skip the 2-cell "switch_on_constant" functor.
-
-                        for (c, ptr) in constants.iter() {
-                            let key_value_pair = functor!(
-                                atom!(":"),
-                                [literal(*c), indexing_code_ptr(h + 3, *ptr)]
-                            );
-
-                            key_value_list_stub.push(list_loc_as_cell!(h + 1));
-                            key_value_list_stub.push(str_loc_as_cell!(h + 3));
-                            key_value_list_stub.push(heap_loc_as_cell!(h + 3 + key_value_pair.len()));
-
-                            h += key_value_pair.len() + 3;
-                            key_value_list_stub.extend(key_value_pair.into_iter());
-                        }
-
-                        key_value_list_stub.push(empty_list_as_cell!());
-
-                        functor!(
-                            atom!("switch_on_constant"),
-                            [str(orig_h, 0)],
-                            [key_value_list_stub]
+                        variadic_functor(
+                            atom!("switch_on_constants"),
+                            1,
+                            constants.iter().map(|(c, ptr)| {
+                                functor!(
+                                    atom!(":"),
+                                    [cell((c.clone())), indexing_code_ptr((*ptr))]
+                                )
+                            }),
                         )
                     }
                     IndexingInstruction::SwitchOnStructure(structures) => {
-                        let mut key_value_list_stub = vec![];
-                        let orig_h = h;
-
-                        h += 2; // skip the 2-cell "switch_on_constant" functor.
-
-                        for ((name, arity), ptr) in structures.iter() {
-                            let predicate_indicator_stub = functor!(
-                                atom!("/"),
-                                [atom(name), fixnum(*arity)]
-                            );
-
-                            let key_value_pair = functor!(
-                                atom!(":"),
-                                [str(h + 3, 0), indexing_code_ptr(h + 3, *ptr)],
-                                [predicate_indicator_stub]
-                            );
-
-                            key_value_list_stub.push(list_loc_as_cell!(h + 1));
-                            key_value_list_stub.push(str_loc_as_cell!(h + 3));
-                            key_value_list_stub.push(heap_loc_as_cell!(h + 3 + key_value_pair.len()));
-
-                            h += key_value_pair.len() + 3;
-                            key_value_list_stub.extend(key_value_pair.into_iter());
-                        }
-
-                        key_value_list_stub.push(empty_list_as_cell!());
-
-                        functor!(
+                        variadic_functor(
                             atom!("switch_on_structure"),
-                            [str(orig_h, 0)],
-                            [key_value_list_stub]
+                            1,
+                            structures.iter().map(|((name, arity), ptr)| {
+                                functor!(
+                                    atom!(":"),
+                                    [functor((atom!("/")), [atom_as_cell(name), fixnum((*arity))]),
+                                     indexing_code_ptr((*ptr))]
+                                )
+                            }),
                         )
                     }
                 }
@@ -1133,18 +1100,16 @@ fn generate_instruction_preface() -> TokenStream {
         }
 
         fn arith_instr_unary_functor(
-            h: usize,
             name: Atom,
             arena: &mut Arena,
             at: &ArithmeticTerm,
             t: usize,
         ) -> MachineStub {
             let at_stub = at.into_functor(arena);
-            functor!(name, [str(h, 0), fixnum(t)], [at_stub])
+            functor!(name, [functor(at_stub), fixnum(t)])
         }
 
         fn arith_instr_bin_functor(
-            h: usize,
             name: Atom,
             arena: &mut Arena,
             at_1: &ArithmeticTerm,
@@ -1154,11 +1119,9 @@ fn generate_instruction_preface() -> TokenStream {
             let at_1_stub = at_1.into_functor(arena);
             let at_2_stub = at_2.into_functor(arena);
 
-            functor!(
-                name,
-                [str(h, 0), str(h, 1), fixnum(t)],
-                [at_1_stub, at_2_stub]
-            )
+            functor!(name, [functor(at_1_stub),
+                            functor(at_2_stub),
+                            fixnum(t)])
         }
 
         pub type Code = Vec<Instruction>;
@@ -1170,7 +1133,7 @@ fn generate_instruction_preface() -> TokenStream {
                 match *self {
                     Instruction::GetConstant(_, _, r) => vec![r],
                     Instruction::GetList(_, r) => vec![r],
-                    Instruction::GetPartialString(_, _, r, _) => vec![r],
+                    Instruction::GetPartialString(_, _, r) => vec![r],
                     Instruction::GetStructure(_, _, _, r) => vec![r],
                     Instruction::GetVariable(r, t) => vec![r, temp_v!(t)],
                     Instruction::GetValue(r, t) => vec![r, temp_v!(t)],
@@ -1178,7 +1141,7 @@ fn generate_instruction_preface() -> TokenStream {
                     Instruction::UnifyVariable(r) => vec![r],
                     Instruction::PutConstant(_, _, r) => vec![r],
                     Instruction::PutList(_, r) => vec![r],
-                    Instruction::PutPartialString(_, _, r, _) => vec![r],
+                    Instruction::PutPartialString(_, _, r) => vec![r],
                     Instruction::PutStructure(_, _, r) => vec![r],
                     Instruction::PutValue(r, t) => vec![r, temp_v!(t)],
                     Instruction::PutVariable(r, t) => vec![r, temp_v!(t)],
@@ -1242,7 +1205,6 @@ fn generate_instruction_preface() -> TokenStream {
 
             pub fn enqueue_functors(
                 &self,
-                mut h: usize,
                 arena: &mut Arena,
                 functors: &mut Vec<MachineStub>,
             ) {
@@ -1251,33 +1213,30 @@ fn generate_instruction_preface() -> TokenStream {
                         for indexing_instr in indexing_instrs {
                             match indexing_instr {
                                 IndexingLine::Indexing(indexing_instr) => {
-                                    let section = indexing_instr.to_functor(h);
-                                    h += section.len();
+                                    let section = indexing_instr.to_functor();
                                     functors.push(section);
                                 }
                                 IndexingLine::IndexedChoice(indexed_choice_instrs) => {
                                     for indexed_choice_instr in indexed_choice_instrs {
                                         let section = indexed_choice_instr.to_functor();
-                                        h += section.len();
                                         functors.push(section);
                                     }
                                 }
                                 IndexingLine::DynamicIndexedChoice(indexed_choice_instrs) => {
                                     for indexed_choice_instr in indexed_choice_instrs {
-                                        let section = functor!(atom!("dynamic"), [fixnum(*indexed_choice_instr)]);
-
-                                        h += section.len();
+                                        let section = functor!(atom!("dynamic"),
+                                                               [fixnum((*indexed_choice_instr))]);
                                         functors.push(section);
                                     }
                                 }
                             }
                         }
                     }
-                    instr => functors.push(instr.to_functor(h, arena)),
+                    instr => functors.push(instr.to_functor(arena)),
                 }
             }
 
-            fn to_functor(&self, h: usize, arena: &mut Arena) -> MachineStub {
+            fn to_functor(&self, arena: &mut Arena) -> MachineStub {
                 match self {
                     &Instruction::InstallVerifyAttr => {
                         functor!(atom!("install_verify_attr"))
@@ -1290,25 +1249,23 @@ fn generate_instruction_preface() -> TokenStream {
                             (Death::Infinity, NextOrFail::Next(i)) => {
                                 functor!(
                                     atom!("dynamic_else"),
-                                    [fixnum(birth), atom(atom!("inf")), fixnum(i)]
+                                    [fixnum(birth), atom_as_cell((atom!("inf"))), fixnum(i)]
                                 )
                             }
                             (Death::Infinity, NextOrFail::Fail(i)) => {
-                                let next_functor = functor!(atom!("fail"), [fixnum(i)]);
-
                                 functor!(
                                     atom!("dynamic_else"),
-                                    [fixnum(birth), atom(atom!("inf")), str(h, 0)],
-                                    [next_functor]
+                                    [fixnum(birth),
+                                     atom_as_cell((atom!("inf"))),
+                                     functor((atom!("fail")), [fixnum(i)])]
                                 )
                             }
                             (Death::Finite(d), NextOrFail::Fail(i)) => {
-                                let next_functor = functor!(atom!("fail"), [fixnum(i)]);
-
                                 functor!(
                                     atom!("dynamic_else"),
-                                    [fixnum(birth), fixnum(d), str(h, 0)],
-                                    [next_functor]
+                                    [fixnum(birth),
+                                     fixnum(d),
+                                     functor((atom!("fail")), [fixnum(i)])]
                                 )
                             }
                             (Death::Finite(d), NextOrFail::Next(i)) => {
@@ -1321,25 +1278,23 @@ fn generate_instruction_preface() -> TokenStream {
                             (Death::Infinity, NextOrFail::Next(i)) => {
                                 functor!(
                                     atom!("dynamic_internal_else"),
-                                    [fixnum(birth), atom(atom!("inf")), fixnum(i)]
+                                    [fixnum(birth), atom_as_cell((atom!("inf"))), fixnum(i)]
                                 )
                             }
                             (Death::Infinity, NextOrFail::Fail(i)) => {
-                                let next_functor = functor!(atom!("fail"), [fixnum(i)]);
-
                                 functor!(
                                     atom!("dynamic_internal_else"),
-                                    [fixnum(birth), atom(atom!("inf")), str(h, 0)],
-                                    [next_functor]
+                                    [fixnum(birth),
+                                     atom_as_cell((atom!("inf"))),
+                                     functor((atom!("fail")), [fixnum(i)])]
                                 )
                             }
                             (Death::Finite(d), NextOrFail::Fail(i)) => {
-                                let next_functor = functor!(atom!("fail"), [fixnum(i)]);
-
                                 functor!(
                                     atom!("dynamic_internal_else"),
-                                    [fixnum(birth), fixnum(d), str(h, 0)],
-                                    [next_functor]
+                                    [fixnum(birth),
+                                     fixnum(d),
+                                     functor((atom!("fail")), [fixnum(i)])]
                                 )
                             }
                             (Death::Finite(d), NextOrFail::Next(i)) => {
@@ -1367,157 +1322,154 @@ fn generate_instruction_preface() -> TokenStream {
                     }
                     &Instruction::Cut(r) => {
                         let rt_stub = reg_type_into_functor(r);
-                        functor!(atom!("cut"), [str(h, 0)], [rt_stub])
+                        functor!(atom!("cut"), [functor(rt_stub)])
                     }
                     &Instruction::CutPrev(r) => {
                         let rt_stub = reg_type_into_functor(r);
-                        functor!(atom!("cut_prev"), [str(h, 0)], [rt_stub])
+                        functor!(atom!("cut_prev"), [functor(rt_stub)])
                     }
                     &Instruction::GetLevel(r) => {
                         let rt_stub = reg_type_into_functor(r);
-                        functor!(atom!("get_level"), [str(h, 0)], [rt_stub])
+                        functor!(atom!("get_level"), [functor(rt_stub)])
                     }
                     &Instruction::GetPrevLevel(r) => {
                         let rt_stub = reg_type_into_functor(r);
-                        functor!(atom!("get_prev_level"), [str(h, 0)], [rt_stub])
+                        functor!(atom!("get_prev_level"), [functor(rt_stub)])
                     }
                     &Instruction::GetCutPoint(r) => {
                         let rt_stub = reg_type_into_functor(r);
-                        functor!(atom!("get_cut_point"), [str(h, 0)], [rt_stub])
+                        functor!(atom!("get_cut_point"), [functor(rt_stub)])
                     }
                     &Instruction::NeckCut => {
                         functor!(atom!("neck_cut"))
                     }
                     &Instruction::Add(ref at_1, ref at_2, t) => {
-                        arith_instr_bin_functor(h, atom!("add"), arena, at_1, at_2, t)
+                        arith_instr_bin_functor(atom!("add"), arena, at_1, at_2, t)
                     }
                     &Instruction::Sub(ref at_1, ref at_2, t) => {
-                        arith_instr_bin_functor(h, atom!("sub"), arena, at_1, at_2, t)
+                        arith_instr_bin_functor(atom!("sub"), arena, at_1, at_2, t)
                     }
                     &Instruction::Mul(ref at_1, ref at_2, t) => {
-                        arith_instr_bin_functor(h, atom!("mul"), arena, at_1, at_2, t)
+                        arith_instr_bin_functor(atom!("mul"), arena, at_1, at_2, t)
                     }
                     &Instruction::IntPow(ref at_1, ref at_2, t) => {
-                        arith_instr_bin_functor(h, atom!("int_pow"), arena, at_1, at_2, t)
+                        arith_instr_bin_functor(atom!("int_pow"), arena, at_1, at_2, t)
                     }
                     &Instruction::Pow(ref at_1, ref at_2, t) => {
-                        arith_instr_bin_functor(h, atom!("pow"), arena, at_1, at_2, t)
+                        arith_instr_bin_functor(atom!("pow"), arena, at_1, at_2, t)
                     }
                     &Instruction::IDiv(ref at_1, ref at_2, t) => {
-                        arith_instr_bin_functor(h, atom!("idiv"), arena, at_1, at_2, t)
+                        arith_instr_bin_functor(atom!("idiv"), arena, at_1, at_2, t)
                     }
                     &Instruction::Max(ref at_1, ref at_2, t) => {
-                        arith_instr_bin_functor(h, atom!("max"), arena, at_1, at_2, t)
+                        arith_instr_bin_functor(atom!("max"), arena, at_1, at_2, t)
                     }
                     &Instruction::Min(ref at_1, ref at_2, t) => {
-                        arith_instr_bin_functor(h, atom!("min"), arena, at_1, at_2, t)
+                        arith_instr_bin_functor(atom!("min"), arena, at_1, at_2, t)
                     }
                     &Instruction::IntFloorDiv(ref at_1, ref at_2, t) => {
-                        arith_instr_bin_functor(h, atom!("int_floor_div"), arena, at_1, at_2, t)
+                        arith_instr_bin_functor(atom!("int_floor_div"), arena, at_1, at_2, t)
                     }
                     &Instruction::RDiv(ref at_1, ref at_2, t) => {
-                        arith_instr_bin_functor(h, atom!("rdiv"), arena, at_1, at_2, t)
+                        arith_instr_bin_functor(atom!("rdiv"), arena, at_1, at_2, t)
                     }
                     &Instruction::Div(ref at_1, ref at_2, t) => {
-                        arith_instr_bin_functor(h, atom!("div"), arena, at_1, at_2, t)
+                        arith_instr_bin_functor(atom!("div"), arena, at_1, at_2, t)
                     }
                     &Instruction::Shl(ref at_1, ref at_2, t) => {
-                        arith_instr_bin_functor(h, atom!("shl"), arena, at_1, at_2, t)
+                        arith_instr_bin_functor(atom!("shl"), arena, at_1, at_2, t)
                     }
                     &Instruction::Shr(ref at_1, ref at_2, t) => {
-                        arith_instr_bin_functor(h, atom!("shr"), arena, at_1, at_2, t)
+                        arith_instr_bin_functor(atom!("shr"), arena, at_1, at_2, t)
                     }
                     &Instruction::Xor(ref at_1, ref at_2, t) => {
-                        arith_instr_bin_functor(h, atom!("xor"), arena, at_1, at_2, t)
+                        arith_instr_bin_functor(atom!("xor"), arena, at_1, at_2, t)
                     }
                     &Instruction::And(ref at_1, ref at_2, t) => {
-                        arith_instr_bin_functor(h, atom!("and"), arena, at_1, at_2, t)
+                        arith_instr_bin_functor(atom!("and"), arena, at_1, at_2, t)
                     }
                     &Instruction::Or(ref at_1, ref at_2, t) => {
-                        arith_instr_bin_functor(h, atom!("or"), arena, at_1, at_2, t)
+                        arith_instr_bin_functor(atom!("or"), arena, at_1, at_2, t)
                     }
                     &Instruction::Mod(ref at_1, ref at_2, t) => {
-                        arith_instr_bin_functor(h, atom!("mod"), arena, at_1, at_2, t)
+                        arith_instr_bin_functor(atom!("mod"), arena, at_1, at_2, t)
                     }
                     &Instruction::Rem(ref at_1, ref at_2, t) => {
-                        arith_instr_bin_functor(h, atom!("rem"), arena, at_1, at_2, t)
+                        arith_instr_bin_functor(atom!("rem"), arena, at_1, at_2, t)
                     }
                     &Instruction::ATan2(ref at_1, ref at_2, t) => {
-                        arith_instr_bin_functor(h, atom!("rem"), arena, at_1, at_2, t)
+                        arith_instr_bin_functor(atom!("rem"), arena, at_1, at_2, t)
                     }
                     &Instruction::Gcd(ref at_1, ref at_2, t) => {
-                        arith_instr_bin_functor(h, atom!("gcd"), arena, at_1, at_2, t)
+                        arith_instr_bin_functor(atom!("gcd"), arena, at_1, at_2, t)
                     }
                     &Instruction::Sign(ref at, t) => {
-                        arith_instr_unary_functor(h, atom!("sign"), arena, at, t)
+                        arith_instr_unary_functor(atom!("sign"), arena, at, t)
                     }
                     &Instruction::Cos(ref at, t) => {
-                        arith_instr_unary_functor(h, atom!("cos"), arena, at, t)
+                        arith_instr_unary_functor(atom!("cos"), arena, at, t)
                     }
                     &Instruction::Sin(ref at, t) => {
-                        arith_instr_unary_functor(h, atom!("sin"), arena, at, t)
+                        arith_instr_unary_functor(atom!("sin"), arena, at, t)
                     }
                     &Instruction::Tan(ref at, t) => {
-                        arith_instr_unary_functor(h, atom!("tan"), arena, at, t)
+                        arith_instr_unary_functor(atom!("tan"), arena, at, t)
                     }
                     &Instruction::Log(ref at, t) => {
-                        arith_instr_unary_functor(h, atom!("log"), arena, at, t)
+                        arith_instr_unary_functor(atom!("log"), arena, at, t)
                     }
                     &Instruction::Exp(ref at, t) => {
-                        arith_instr_unary_functor(h, atom!("exp"), arena, at, t)
+                        arith_instr_unary_functor(atom!("exp"), arena, at, t)
                     }
                     &Instruction::ACos(ref at, t) => {
-                        arith_instr_unary_functor(h, atom!("acos"), arena, at, t)
+                        arith_instr_unary_functor(atom!("acos"), arena, at, t)
                     }
                     &Instruction::ASin(ref at, t) => {
-                        arith_instr_unary_functor(h, atom!("asin"), arena, at, t)
+                        arith_instr_unary_functor(atom!("asin"), arena, at, t)
                     }
                     &Instruction::ATan(ref at, t) => {
-                        arith_instr_unary_functor(h, atom!("atan"), arena, at, t)
+                        arith_instr_unary_functor(atom!("atan"), arena, at, t)
                     }
                     &Instruction::Sqrt(ref at, t) => {
-                        arith_instr_unary_functor(h, atom!("sqrt"), arena, at, t)
+                        arith_instr_unary_functor(atom!("sqrt"), arena, at, t)
                     }
                     &Instruction::Abs(ref at, t) => {
-                        arith_instr_unary_functor(h, atom!("abs"), arena, at, t)
+                        arith_instr_unary_functor(atom!("abs"), arena, at, t)
                     }
                     &Instruction::Float(ref at, t) => {
-                        arith_instr_unary_functor(h, atom!("float"), arena, at, t)
+                        arith_instr_unary_functor(atom!("float"), arena, at, t)
                     }
                     &Instruction::Truncate(ref at, t) => {
-                        arith_instr_unary_functor(h, atom!("truncate"), arena, at, t)
+                        arith_instr_unary_functor(atom!("truncate"), arena, at, t)
                     }
                     &Instruction::Round(ref at, t) => {
-                        arith_instr_unary_functor(h, atom!("round"), arena, at, t)
+                        arith_instr_unary_functor(atom!("round"), arena, at, t)
                     }
                     &Instruction::Ceiling(ref at, t) => {
-                        arith_instr_unary_functor(h, atom!("ceiling"), arena, at, t)
+                        arith_instr_unary_functor(atom!("ceiling"), arena, at, t)
                     }
                     &Instruction::Floor(ref at, t) => {
-                        arith_instr_unary_functor(h, atom!("floor"), arena, at, t)
+                        arith_instr_unary_functor(atom!("floor"), arena, at, t)
                     }
                     &Instruction::FloatFractionalPart(ref at, t) => {
-                        arith_instr_unary_functor(h, atom!("float_fractional_part"), arena, at, t)
+                        arith_instr_unary_functor(atom!("float_fractional_part"), arena, at, t)
                     }
                     &Instruction::FloatIntegerPart(ref at, t) => {
-                        arith_instr_unary_functor(h, atom!("float_integer_part"), arena, at, t)
+                        arith_instr_unary_functor(atom!("float_integer_part"), arena, at, t)
                     }
                     &Instruction::Neg(ref at, t) => arith_instr_unary_functor(
-                        h,
                         atom!("-"),
                         arena,
                         at,
                         t,
                     ),
                     &Instruction::Plus(ref at, t) => arith_instr_unary_functor(
-                        h,
                         atom!("+"),
                         arena,
                         at,
                         t,
                     ),
                     &Instruction::BitwiseComplement(ref at, t) => arith_instr_unary_functor(
-                        h,
                         atom!("\\"),
                         arena,
                         at,
@@ -1533,16 +1485,16 @@ fn generate_instruction_preface() -> TokenStream {
                         functor!(atom!("allocate"), [fixnum(num_frames)])
                     }
                     &Instruction::CallNamed(arity, name, ..) => {
-                        functor!(atom!("call"), [atom(name), fixnum(arity)])
+                        functor!(atom!("call"), [atom_as_cell(name), fixnum(arity)])
                     }
                     &Instruction::ExecuteNamed(arity, name, ..) => {
-                        functor!(atom!("execute"), [atom(name), fixnum(arity)])
+                        functor!(atom!("execute"), [atom_as_cell(name), fixnum(arity)])
                     }
                     &Instruction::DefaultCallNamed(arity, name, ..) => {
-                        functor!(atom!("call_default"), [atom(name), fixnum(arity)])
+                        functor!(atom!("call_default"), [atom_as_cell(name), fixnum(arity)])
                     }
                     &Instruction::DefaultExecuteNamed(arity, name, ..) => {
-                        functor!(atom!("execute_default"), [atom(name), fixnum(arity)])
+                        functor!(atom!("execute_default"), [atom_as_cell(name), fixnum(arity)])
                     }
                     &Instruction::CallN(arity) => {
                         functor!(atom!("call_n"), [fixnum(arity)])
@@ -1585,7 +1537,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallSort |
                     &Instruction::CallGetNumber(_) => {
                         let (name, arity) = self.to_name_and_arity();
-                        functor!(atom!("call"), [atom(name), fixnum(arity)])
+                        functor!(atom!("call"), [atom_as_cell(name), fixnum(arity)])
                     }
                     //
                     &Instruction::ExecuteTermGreaterThan |
@@ -1611,7 +1563,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteSort |
                     &Instruction::ExecuteGetNumber(_) => {
                         let (name, arity) = self.to_name_and_arity();
-                        functor!(atom!("execute"), [atom(name), fixnum(arity)])
+                        functor!(atom!("execute"), [atom_as_cell(name), fixnum(arity)])
                     }
                     //
                     &Instruction::DefaultCallTermGreaterThan |
@@ -1637,7 +1589,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::DefaultCallSort |
                     &Instruction::DefaultCallGetNumber(_) => {
                         let (name, arity) = self.to_name_and_arity();
-                        functor!(atom!("call_default"), [atom(name), fixnum(arity)])
+                        functor!(atom!("call_default"), [atom_as_cell(name), fixnum(arity)])
                     }
                     //
                     &Instruction::DefaultExecuteTermGreaterThan |
@@ -1663,7 +1615,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::DefaultExecuteSort |
                     &Instruction::DefaultExecuteGetNumber(_) => {
                         let (name, arity) = self.to_name_and_arity();
-                        functor!(atom!("execute_default"), [atom(name), fixnum(arity)])
+                        functor!(atom!("execute_default"), [atom_as_cell(name), fixnum(arity)])
                     }
                     &Instruction::CallIsAtom(r) |
                     &Instruction::CallIsAtomic(r) |
@@ -1676,7 +1628,8 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallIsVar(r) => {
                         let (name, arity) = self.to_name_and_arity();
                         let rt_stub = reg_type_into_functor(r);
-                        functor!(atom!("call"), [atom(name), fixnum(arity), str(h, 0)], [rt_stub])
+
+                        functor!(atom!("call"), [atom_as_cell(name), fixnum(arity), functor(rt_stub)])
                     }
                     &Instruction::ExecuteIsAtom(r) |
                     &Instruction::ExecuteIsAtomic(r) |
@@ -1689,7 +1642,8 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteIsVar(r) => {
                         let (name, arity) = self.to_name_and_arity();
                         let rt_stub = reg_type_into_functor(r);
-                        functor!(atom!("execute"), [atom(name), fixnum(arity), str(h, 0)], [rt_stub])
+
+                        functor!(atom!("execute"), [atom_as_cell(name), fixnum(arity), functor(rt_stub)])
                     }
                     //
                     &Instruction::CallAtomChars |
@@ -1920,14 +1874,14 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallEd25519VerifyRaw |
                     &Instruction::CallEd25519SeedToPublicKey => {
                         let (name, arity) = self.to_name_and_arity();
-                        functor!(atom!("call"), [atom(name), fixnum(arity)])
+                        functor!(atom!("call"), [atom_as_cell(name), fixnum(arity)])
                     }
                     //
                     #[cfg(feature = "crypto-full")]
                     &Instruction::CallCryptoDataEncrypt |
                     &Instruction::CallCryptoDataDecrypt => {
                         let (name, arity) = self.to_name_and_arity();
-                        functor!(atom!("call"), [atom(name), fixnum(arity)])
+                        functor!(atom!("call"), [atom_as_cell(name), fixnum(arity)])
                     }
                     //
                     &Instruction::ExecuteAtomChars |
@@ -2158,14 +2112,14 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteEd25519VerifyRaw |
                     &Instruction::ExecuteEd25519SeedToPublicKey => {
                         let (name, arity) = self.to_name_and_arity();
-                        functor!(atom!("execute"), [atom(name), fixnum(arity)])
+                        functor!(atom!("execute"), [atom_as_cell(name), fixnum(arity)])
                     }
                     //
                     #[cfg(feature = "crypto-full")]
                     &Instruction::ExecuteCryptoDataEncrypt |
                     &Instruction::ExecuteCryptoDataDecrypt => {
                         let (name, arity) = self.to_name_and_arity();
-                        functor!(atom!("execute"), [atom(name), fixnum(arity)])
+                        functor!(atom!("execute"), [atom_as_cell(name), fixnum(arity)])
                     }
                     //
                     &Instruction::Deallocate => {
@@ -2180,73 +2134,60 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::Proceed => {
                         functor!(atom!("proceed"))
                     }
-                    &Instruction::GetConstant(lvl, c, r) => {
+                    &Instruction::GetConstant(lvl, lit, r) => {
                         let lvl_stub = lvl.into_functor();
                         let rt_stub = reg_type_into_functor(r);
 
-                        functor!(
-                            atom!("get_constant"),
-                            [str(h, 0), cell(c), str(h, 1)],
-                            [lvl_stub, rt_stub]
-                        )
+                        functor!(atom!("get_constant"), [functor(lvl_stub),
+                                                         cell(lit),
+                                                         functor(rt_stub)])
                     }
                     &Instruction::GetList(lvl, r) => {
                         let lvl_stub = lvl.into_functor();
                         let rt_stub = reg_type_into_functor(r);
 
-                        functor!(
-                            atom!("get_list"),
-                            [str(h, 0), str(h, 1)],
-                            [lvl_stub, rt_stub]
-                        )
+                        functor!(atom!("get_list"), [functor(lvl_stub), functor(rt_stub)])
                     }
-                    &Instruction::GetPartialString(lvl, s, r, has_tail) => {
+                    &Instruction::GetPartialString(lvl, ref s, r) => {
                         let lvl_stub = lvl.into_functor();
                         let rt_stub = reg_type_into_functor(r);
 
-                        functor!(
-                            atom!("get_partial_string"),
-                            [
-                                str(h, 0),
-                                string(h, s),
-                                str(h, 1),
-                                boolean(has_tail)
-                            ],
-                            [lvl_stub, rt_stub]
-                        )
+                        functor!(atom!("get_partial_string"), [functor(lvl_stub),
+                                                               string((s.to_string())),
+                                                               functor(rt_stub)])
                     }
                     &Instruction::GetStructure(lvl, name, arity, r) => {
                         let lvl_stub = lvl.into_functor();
                         let rt_stub = reg_type_into_functor(r);
 
-                        functor!(
-                            atom!("get_structure"),
-                            [str(h, 0), atom(name), fixnum(arity), str(h, 1)],
-                            [lvl_stub, rt_stub]
-                        )
+                        functor!(atom!("get_structure"), [functor(lvl_stub),
+                                                          atom_as_cell(name),
+                                                          fixnum(arity),
+                                                          functor(rt_stub)])
                     }
                     &Instruction::GetValue(r, arg) => {
                         let rt_stub = reg_type_into_functor(r);
-                        functor!(atom!("get_value"), [str(h, 0), fixnum(arg)], [rt_stub])
+                        functor!(atom!("get_value"), [functor(rt_stub),
+                                                      fixnum(arg)])
                     }
                     &Instruction::GetVariable(r, arg) => {
                         let rt_stub = reg_type_into_functor(r);
-                        functor!(atom!("get_variable"), [str(h, 0), fixnum(arg)], [rt_stub])
+                        functor!(atom!("get_variable"), [functor(rt_stub), fixnum(arg)])
                     }
                     &Instruction::UnifyConstant(c) => {
                         functor!(atom!("unify_constant"), [cell(c)])
                     }
                     &Instruction::UnifyLocalValue(r) => {
                         let rt_stub = reg_type_into_functor(r);
-                        functor!(atom!("unify_local_value"), [str(h, 0)], [rt_stub])
+                        functor!(atom!("unify_local_value"), [functor(rt_stub)])
                     }
                     &Instruction::UnifyVariable(r) => {
                         let rt_stub = reg_type_into_functor(r);
-                        functor!(atom!("unify_variable"), [str(h, 0)], [rt_stub])
+                        functor!(atom!("unify_variable"), [functor(rt_stub)])
                     }
                     &Instruction::UnifyValue(r) => {
                         let rt_stub = reg_type_into_functor(r);
-                        functor!(atom!("unify_value"), [str(h, 0)], [rt_stub])
+                        functor!(atom!("unify_value"), [functor(rt_stub)])
                     }
                     &Instruction::UnifyVoid(vars) => {
                         functor!(atom!("unify_void"), [fixnum(vars)])
@@ -2258,68 +2199,55 @@ fn generate_instruction_preface() -> TokenStream {
                         let lvl_stub = lvl.into_functor();
                         let rt_stub = reg_type_into_functor(r);
 
-                        functor!(
-                            atom!("put_constant"),
-                            [str(h, 0), cell(c), str(h, 1)],
-                            [lvl_stub, rt_stub]
-                        )
+                        functor!(atom!("put_constant"), [functor(rt_stub), cell(c), functor(lvl_stub)])
                     }
                     &Instruction::PutList(lvl, r) => {
                         let lvl_stub = lvl.into_functor();
                         let rt_stub = reg_type_into_functor(r);
 
-                        functor!(
-                            atom!("put_list"),
-                            [str(h, 0), str(h, 1)],
-                            [lvl_stub, rt_stub]
-                        )
+                        functor!(atom!("put_list"), [functor(lvl_stub), functor(rt_stub)])
                     }
-                    &Instruction::PutPartialString(lvl, s, r, has_tail) => {
+                    &Instruction::PutPartialString(lvl, ref s, r) => {
                         let lvl_stub = lvl.into_functor();
                         let rt_stub = reg_type_into_functor(r);
 
-                        functor!(
-                            atom!("put_partial_string"),
-                            [
-                                str(h, 0),
-                                string(h, s),
-                                str(h, 1),
-                                boolean(has_tail)
-                            ],
-                            [lvl_stub, rt_stub]
-                        )
+                        functor!(atom!("put_partial_string"), [functor(lvl_stub),
+                                                               string((s.to_string())),
+                                                               functor(rt_stub)])
                     }
                     &Instruction::PutStructure(name, arity, r) => {
                         let rt_stub = reg_type_into_functor(r);
 
-                        functor!(
-                            atom!("put_structure"),
-                            [atom(name), fixnum(arity), str(h, 0)],
-                            [rt_stub]
-                        )
+                        functor!(atom!("put_structure"), [atom_as_cell(name),
+                                                          fixnum(arity),
+                                                          functor(rt_stub)])
                     }
                     &Instruction::PutValue(r, arg) => {
                         let rt_stub = reg_type_into_functor(r);
-                        functor!(atom!("put_value"), [str(h, 0), fixnum(arg)], [rt_stub])
+
+                        functor!(atom!("put_value"), [functor(rt_stub),
+                                                      fixnum(arg)])
                     }
                     &Instruction::PutVariable(r, arg) => {
                         let rt_stub = reg_type_into_functor(r);
-                        functor!(atom!("put_variable"), [str(h, 0), fixnum(arg)], [rt_stub])
+
+                        functor!(atom!("put_variable"), [functor(rt_stub),
+                                                         fixnum(arg)])
                     }
                     &Instruction::SetConstant(c) => {
                         functor!(atom!("set_constant"), [cell(c)])
                     }
                     &Instruction::SetLocalValue(r) => {
                         let rt_stub = reg_type_into_functor(r);
-                        functor!(atom!("set_local_value"), [str(h, 0)], [rt_stub])
+                        functor!(atom!("set_local_value"), [functor(rt_stub)])
                     }
                     &Instruction::SetVariable(r) => {
                         let rt_stub = reg_type_into_functor(r);
-                        functor!(atom!("set_variable"), [str(h, 0)], [rt_stub])
+                        functor!(atom!("set_variable"), [functor(rt_stub)])
                     }
                     &Instruction::SetValue(r) => {
                         let rt_stub = reg_type_into_functor(r);
-                        functor!(atom!("set_value"), [str(h, 0)], [rt_stub])
+                        functor!(atom!("set_value"), [functor(rt_stub)])
                     }
                     &Instruction::SetVoid(vars) => {
                         functor!(atom!("set_void"), [fixnum(vars)])
@@ -3202,14 +3130,6 @@ pub fn generate_instructions_rs() -> TokenStream {
                 matches!((name, arity),
                     #(#is_inbuilt_arms)|*
                 )
-            }
-
-            pub fn name(&self) -> Atom {
-                match self {
-                    #(
-                        #clause_type_name_arms,
-                    )*
-                }
             }
 
             pub fn is_inlined(name: Atom, arity: usize) -> bool {

@@ -9,7 +9,6 @@ use crate::instructions::*;
 use crate::iterators::*;
 use crate::machine::disjuncts::*;
 use crate::machine::stack::Stack;
-use crate::parser::ast::FocusedHeap;
 use crate::targets::QueryInstruction;
 use crate::types::*;
 
@@ -55,103 +54,6 @@ impl Default for ArithmeticTerm {
 
 pub(crate) type ArithCont = (CodeDeque, Option<ArithmeticTerm>);
 
-/*
-#[derive(Debug)]
-pub(crate) struct ArithInstructionIterator<'a> {
-    state_stack: Vec<TermIterState<'a>>,
-}
-
-impl<'a> ArithInstructionIterator<'a> {
-    fn push_subterm(&mut self, lvl: Level, term: &'a Term) {
-        self.state_stack
-            .push(TermIterState::subterm_to_state(lvl, term));
-    }
-
-    fn from(term: &'a Term) -> Result<Self, ArithmeticError> {
-        let state = match term {
-            Term::AnonVar => return Err(ArithmeticError::UninstantiatedVar),
-            Term::Clause(cell, name, terms) => {
-                TermIterState::Clause(Level::Shallow, 0, cell, *name, terms)
-            }
-            Term::Literal(cell, cons) => TermIterState::Literal(Level::Shallow, cell, cons),
-            Term::Cons(..) | Term::PartialString(..) | Term::CompleteString(..) => {
-                return Err(ArithmeticError::NonEvaluableFunctor(
-                    Literal::Atom(atom!(".")),
-                    2,
-                ))
-            }
-            Term::Var(cell, var_ptr) => TermIterState::Var(Level::Shallow, cell, var_ptr.clone()),
-        };
-
-        Ok(ArithInstructionIterator {
-            state_stack: vec![state],
-        })
-    }
-}
-
-#[derive(Debug)]
-pub(crate) enum ArithTermRef<'a> {
-    Literal(&'a Literal),
-    Op(Atom, usize), // name, arity.
-    Var(Level, &'a Cell<VarReg>, VarPtr),
-}
-
-impl<'a> Iterator for ArithInstructionIterator<'a> {
-    type Item = Result<ArithTermRef<'a>, ArithmeticError>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        while let Some(iter_state) = self.state_stack.pop() {
-            match iter_state {
-                TermIterState::AnonVar(_) => return Some(Err(ArithmeticError::UninstantiatedVar)),
-                TermIterState::Clause(lvl, child_num, cell, name, subterms) => {
-                    let arity = subterms.len();
-
-                    if child_num == arity {
-                        return Some(Ok(ArithTermRef::Op(name, arity)));
-                    } else {
-                        self.state_stack.push(TermIterState::Clause(
-                            lvl,
-                            child_num + 1,
-                            cell,
-                            name,
-                            subterms,
-                        ));
-
-                        self.push_subterm(lvl.child_level(), &subterms[child_num]);
-                    }
-                }
-                TermIterState::Literal(_, _, c) => return Some(Ok(ArithTermRef::Literal(c))),
-                TermIterState::Var(lvl, cell, var_ptr) => {
-                    return Some(Ok(ArithTermRef::Var(lvl, cell, var_ptr)));
-                }
-                _ => {
-                    return Some(Err(ArithmeticError::NonEvaluableFunctor(
-                        Literal::Atom(atom!(".")),
-                        2,
-                    )));
-                }
-            };
-        }
-
-        None
-    }
-}
-
-pub(crate) trait ArithmeticTermIter<'a> {
-    type Iter: Iterator<Item = Result<ArithTermRef<'a>, ArithmeticError>>;
-
-    fn iter(self) -> Result<Self::Iter, ArithmeticError>;
-}
-
-impl<'a> ArithmeticTermIter<'a> for &'a Term {
-    type Iter = ArithInstructionIterator<'a>;
-
-    fn iter(self) -> Result<Self::Iter, ArithmeticError> {
-        ArithInstructionIterator::from(self)
-    }
-}
-*/
-
 #[derive(Debug)]
 pub(crate) struct ArithmeticEvaluator<'a> {
     marker: &'a mut DebrayAllocator,
@@ -159,23 +61,45 @@ pub(crate) struct ArithmeticEvaluator<'a> {
     interm_c: usize,
 }
 
-fn push_literal(interm: &mut Vec<ArithmeticTerm>, c: Literal) -> Result<(), ArithmeticError> {
-    match c {
-        Literal::Fixnum(n) => interm.push(ArithmeticTerm::Number(Number::Fixnum(n))),
-        Literal::Integer(n) => interm.push(ArithmeticTerm::Number(Number::Integer(n))),
-        Literal::Float(n) => interm.push(ArithmeticTerm::Number(Number::Float(*n.as_ptr()))),
-        Literal::Rational(n) => interm.push(ArithmeticTerm::Number(Number::Rational(n))),
-        Literal::Atom(name) if name == atom!("e") => interm.push(ArithmeticTerm::Number(
-            Number::Float(OrderedFloat(std::f64::consts::E)),
-        )),
-        Literal::Atom(name) if name == atom!("pi") => interm.push(ArithmeticTerm::Number(
-            Number::Float(OrderedFloat(std::f64::consts::PI)),
-        )),
-        Literal::Atom(name) if name == atom!("epsilon") => interm.push(ArithmeticTerm::Number(
-            Number::Float(OrderedFloat(f64::EPSILON)),
-        )),
-        _ => return Err(ArithmeticError::NonEvaluableFunctor(HeapCellValue::from(c), 0)),
-    }
+fn push_literal(interm: &mut Vec<ArithmeticTerm>, c: HeapCellValue) -> Result<(), ArithmeticError> {
+    read_heap_cell!(c,
+        (HeapCellValueTag::Fixnum, n) => {
+            interm.push(ArithmeticTerm::Number(Number::Fixnum(n)))
+        }
+        (HeapCellValueTag::Cons, cons_ptr) => {
+            match_untyped_arena_ptr!(cons_ptr,
+                 (ArenaHeaderTag::Integer, n) => {
+                     interm.push(ArithmeticTerm::Number(Number::Integer(n)));
+                 }
+                 (ArenaHeaderTag::Rational, n) => {
+                     interm.push(ArithmeticTerm::Number(Number::Rational(n)));
+                 }
+                 _ => return Err(ArithmeticError::NonEvaluableFunctor(c, 0)),
+            );
+        }
+        (HeapCellValueTag::Atom, (name, arity)) => {
+            debug_assert_eq!(arity, 0);
+
+            match name {
+                atom!("pi") => interm.push(ArithmeticTerm::Number(
+                    Number::Float(OrderedFloat(std::f64::consts::PI)),
+                )),
+                atom!("epsilon") => interm.push(ArithmeticTerm::Number(
+                    Number::Float(OrderedFloat(std::f64::EPSILON)),
+                )),
+                atom!("e") => interm.push(ArithmeticTerm::Number(
+                    Number::Float(OrderedFloat(std::f64::consts::E)),
+                )),
+                _ => unreachable!(),
+            }
+        }
+        (HeapCellValueTag::F64, n) => {
+            interm.push(ArithmeticTerm::Number(Number::Float(*n)));
+        }
+        _ => {
+            return Err(ArithmeticError::NonEvaluableFunctor(c, 0));
+        }
+    );
 
     Ok(())
 }
@@ -313,7 +237,7 @@ impl<'a> ArithmeticEvaluator<'a> {
 
     pub(crate) fn compile_is(
         &mut self,
-        src: &mut FocusedHeap,
+        src: &mut FocusedHeapRefMut,
         term_loc: usize,
         context: GenContext,
         arg: usize,
@@ -360,16 +284,13 @@ impl<'a> ArithmeticEvaluator<'a> {
                 }
                 (HeapCellValueTag::Atom, (name, arity)) => {
                     if arity == 0 {
-                        push_literal(&mut self.interm, Literal::Atom(name))?;
+                        push_literal(&mut self.interm, atom_as_cell!(name))?;
                     } else {
                         code.push_back(self.instr_from_clause(name, arity)?);
                     }
                 }
                 _ => {
-                    match Literal::try_from(term) {
-                        Ok(lit) => push_literal(&mut self.interm, lit)?,
-                        _ => return Err(ArithmeticError::NonEvaluableFunctor(term, 0)),
-                    }
+                    push_literal(&mut self.interm, term)?;
                 }
             );
         }

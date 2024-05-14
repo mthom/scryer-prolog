@@ -2,6 +2,7 @@ use crate::parser::ast::*;
 
 use crate::forms::*;
 use crate::instructions::*;
+use crate::machine::heap::Heap;
 use crate::targets::*;
 
 pub(crate) trait Allocator {
@@ -45,7 +46,7 @@ pub(crate) trait Allocator {
 
     fn reset(&mut self);
     fn reset_arg(&mut self, arg_num: usize);
-    fn reset_at_head(&mut self, term: &mut FocusedHeap, head_loc: usize);
+    fn reset_at_head(&mut self, heap: &mut Heap, head_loc: usize);
     fn reset_contents(&mut self);
 
     fn advance_arg(&mut self);

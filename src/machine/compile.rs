@@ -1232,15 +1232,16 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
 
     fn compile_standalone_clause(
         &mut self,
-        term: FocusedHeap,
+        term: TermWriteResult,
         settings: CodeGenSettings,
     ) -> Result<StandaloneCompileResult, SessionError> {
         let mut preprocessor = Preprocessor::new(settings);
 
-        let clause = self.try_term_to_tl(term, &mut preprocessor)?;
-        let mut cg = CodeGenerator::new(&LS::machine_st(&mut self.payload).atom_tbl, settings);
+        let clause = preprocessor.try_term_to_tl(self, term)?;
+        let machine_st = LS::machine_st(&mut self.payload);
+        let mut cg = CodeGenerator::new(settings);
 
-        let clause_code = cg.compile_predicate(vec![clause])?;
+        let clause_code = cg.compile_predicate(&mut machine_st.heap, vec![clause])?;
 
         Ok(StandaloneCompileResult {
             clause_code,
@@ -1265,11 +1266,13 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         let mut preprocessor = Preprocessor::new(settings);
 
         for term in predicates.predicates.drain(0..) {
-            clauses.push(self.try_term_to_tl(term, &mut preprocessor)?);
+            clauses.push(preprocessor.try_term_to_tl(self, term)?);
         }
 
-        let mut cg = CodeGenerator::new(&LS::machine_st(&mut self.payload).atom_tbl, settings);
-        let mut code = cg.compile_predicate(clauses)?;
+        let machine_st = LS::machine_st(&mut self.payload);
+
+        let mut cg = CodeGenerator::new(settings);
+        let mut code = cg.compile_predicate(&mut machine_st.heap, clauses)?;
 
         if settings.is_extensible {
             let mut clause_clause_locs = VecDeque::new();
@@ -1466,7 +1469,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
     pub(super) fn incremental_compile_clause(
         &mut self,
         key: PredicateKey,
-        clause: FocusedHeap,
+        clause: TermWriteResult,
         compilation_target: CompilationTarget,
         non_counted_bt: bool,
         append_or_prepend: AppendOrPrepend,
@@ -2005,7 +2008,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         &mut self,
         key: PredicateKey,
         compilation_target: CompilationTarget,
-        clause_clauses: Vec<FocusedHeap>,
+        clause_clauses: Vec<TermWriteResult>,
         append_or_prepend: AppendOrPrepend,
     ) -> Result<(), SessionError> {
         let clause_clause_compilation_target = match compilation_target {
@@ -2099,15 +2102,19 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
     }
 
     pub(super) fn compile_and_submit(&mut self) -> Result<(), SessionError> {
-        let key = self
+        let key = match self
             .payload
             .predicates
             .first()
-            .and_then(|cl| {
-                let arity = ClauseInfo::arity(cl);
-                ClauseInfo::name(cl).map(|name| (name, arity))
-            })
-            .ok_or(SessionError::NamelessEntry)?;
+            .map(|term| term.focus) {
+                Some(focus) => {
+                    clause_predicate_key(self.machine_heap(), focus)
+                        .ok_or(SessionError::NamelessEntry)?
+                }
+                None => {
+                    return Err(SessionError::NamelessEntry);
+                }
+            };
 
         let listing_src_file_name = self.listing_src_file_name();
 
@@ -2285,46 +2292,46 @@ impl Machine {
     ) -> Result<(), SessionError> {
         let body_cell = self.machine_st.store(self.machine_st.deref(self.machine_st[term_reg]));
 
-        let new_header_loc = self.machine_st.heap.len();
+        let new_header_loc = self.machine_st.heap.cell_len();
         let arity = vars.len();
+        let term_loc = self.machine_st.heap.cell_len() + 1 + arity;
 
-        self.machine_st.heap.push(atom_as_cell!(atom!(""), arity));
+        let mut writer = self.machine_st.heap.reserve(4 + arity)
+            .map_err(|_err_loc| ParserError::ResourceError(ParserErrorSrc::default()))?;
 
-        for var in vars {
-            self.machine_st.heap.push(var);
-        }
+        writer.write_with(move |section| {
+            section.push_cell(atom_as_cell!(atom!(""), arity));
 
-        let head_loc = if arity > 0 {
-            str_loc_as_cell!(new_header_loc)
-        } else {
-            heap_loc_as_cell!(new_header_loc)
-        };
+            for var in vars {
+                section.push_cell(var);
+            }
 
-        let term_loc = self.machine_st.heap.len();
+            let head_loc = if arity > 0 {
+                str_loc_as_cell!(new_header_loc)
+            } else {
+                heap_loc_as_cell!(new_header_loc)
+            };
 
-        self.machine_st.heap.push(atom_as_cell!(atom!(":-"), 2));
-        self.machine_st.heap.push(head_loc);
-        self.machine_st.heap.push(body_cell);
+            section.push_cell(atom_as_cell!(atom!(":-"), 2));
+            section.push_cell(head_loc);
+            section.push_cell(body_cell);
+        });
 
         let mut compile = || {
-            use crate::heap_iter::eager_stackful_preorder_iter;
-
             let mut loader: Loader<'_, InlineLoadState<'_>> =
                 Loader::new(self, InlineTermStream {});
 
-            let mut term = loader.copy_term_from_heap(str_loc_as_cell!(term_loc));
+            let machine_st = InlineLoadState::machine_st(&mut loader.payload);
+
+            let term_loc = str_loc_as_cell!(term_loc);
+            let term = TermWriteResult::from(&mut machine_st.heap, term_loc)
+                .map_err(|_err_loc| ParserError::ResourceError(ParserErrorSrc::default()))?;
 
             let settings = CodeGenSettings {
                 global_clock_tick: None,
                 is_extensible: false,
                 non_counted_bt: true,
             };
-
-            let value = term.heap[term.focus];
-
-            term.inverse_var_locs = inverse_var_locs_from_iter(
-                eager_stackful_preorder_iter(&mut term.heap, value),
-            );
 
             loader.compile_standalone_clause(term, settings)
         };

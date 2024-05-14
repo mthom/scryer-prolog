@@ -20,6 +20,25 @@ use std::convert::TryFrom;
 use std::fmt;
 use std::ops::{Deref, DerefMut};
 
+impl TermWriteResult {
+    pub(super) fn from(heap: &mut Heap, value: HeapCellValue) -> Result<Self, usize> {
+        let focus = heap.index_of(value)?;
+        let mut stack = Stack::uninitialized();
+
+        heap[0] = value;
+
+        let inverse_var_locs = inverse_var_locs_from_iter(
+            stackful_preorder_iter::<NonListElider>(
+                heap,
+                &mut stack,
+                0,
+            ),
+        );
+
+        Ok(Self { focus, inverse_var_locs })
+    }
+}
+
 /*
  * The loader compiles Prolog terms read from a TermStream instance,
  * which may be incremental or monolithic. The monolithic term stream
@@ -176,18 +195,18 @@ impl CompilationTarget {
 }
 
 pub struct PredicateQueue {
-    pub(super) predicates: Vec<FocusedHeap>,
-    pub(super) compilation_target: CompilationTarget,
+    pub predicates: Vec<TermWriteResult>,
+    pub compilation_target: CompilationTarget,
 }
 
 impl PredicateQueue {
     #[inline]
-    pub(super) fn push(&mut self, clause: FocusedHeap) {
-        self.predicates.push(clause);
+    pub(super) fn push(&mut self, term_write_result: TermWriteResult) {
+        self.predicates.push(term_write_result);
     }
 
     #[inline]
-    pub(crate) fn first(&self) -> Option<&FocusedHeap> {
+    pub(crate) fn first(&self) -> Option<&TermWriteResult> {
         self.predicates.first()
     }
 
@@ -381,7 +400,6 @@ impl<'a> LoadState<'a> for BootstrappingLoadState<'a> {
         let repo_len = loader.wam_prelude.code.len();
 
         loader.payload.retraction_info.reset(repo_len);
-
         loader.remove_module_op_exports();
 
         Ok(loader.payload.compilation_target)
@@ -399,7 +417,7 @@ impl<'a> LoadState<'a> for BootstrappingLoadState<'a> {
 
     #[inline(always)]
     fn machine_st(loader: &mut Self::LoaderFieldType) -> &mut MachineState {
-        loader.term_stream.parser.lexer.machine_st
+        loader.term_stream.lexer_parser.machine_st
     }
 
     #[inline(always)]
@@ -491,23 +509,9 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         }
     }
 
-    pub(crate) fn copy_term_from_heap(&mut self, cell: HeapCellValue) -> FocusedHeap {
-        use crate::iterators::fact_iterator;
-
-        let mut term = FocusedHeap::empty();
-        let mut stack = Stack::uninitialized();
-        let machine_st = LS::machine_st(&mut self.payload);
-
-        term.copy_term_from_machine_heap(machine_st, cell);
-        term.inverse_var_locs = inverse_var_locs_from_iter(
-            fact_iterator::<false>(
-                &mut term.heap,
-                &mut stack,
-                0,
-            ),
-        );
-
-        term
+    #[inline]
+    pub(super) fn machine_heap(&mut self) -> &mut Heap {
+        &mut LS::machine_st(&mut self.payload).heap
     }
 
     pub(crate) fn load(mut self) -> Result<LS::Evacuable, SessionError> {
@@ -525,14 +529,26 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             let composite_op_dir = self.wam_prelude.composite_op_dir(compilation_target);
 
             let mut term = load_state.term_stream.next(&composite_op_dir)?;
+            let predicate_focus_opt = load_state.predicates.first().map(|term_write_result| {
+                term_write_result.focus
+            });
 
-            if !term.is_consistent(&load_state.predicates) {
-                self.compile_and_submit()?;
+            let machine_st = LS::machine_st(&mut self.payload);
+            let term_key_opt = clause_predicate_key(&machine_st.heap, term.focus);
+
+            if let Some(predicate_focus) = predicate_focus_opt {
+                let predicate_key_opt = clause_predicate_key(&machine_st.heap, predicate_focus);
+
+                debug_assert!(predicate_key_opt.is_some());
+
+                if term_key_opt != predicate_key_opt {
+                    self.compile_and_submit()?;
+                }
             }
 
-            if Some(atom!(":-")) == term.name(term.focus) && term.arity(term.focus) == 1 {
-                let new_focus = term.nth_arg(term.focus, 1).unwrap();
-                let term = term.as_ref_mut(new_focus);
+            if Some((atom!(":-"), 1)) == term_key_opt {
+                let machine_st = LS::machine_st(&mut self.payload);
+                term.focus = term_nth_arg(&machine_st.heap, term.focus, 1).unwrap();
                 return Ok(Some(setup_declaration(self, term)?));
             }
 
@@ -1055,48 +1071,55 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         let machine_st = LS::machine_st(&mut self.payload);
         let cell = machine_st[r];
 
-        let export_list = FocusedHeapRefMut::from_cell(&mut machine_st.heap, cell);
+        let focus = machine_st.heap.cell_len();
+        machine_st.heap.push_cell(cell)
+            .map_err(|_err_loc| ParserError::ResourceError(ParserErrorSrc::default()))?;
+
+        let export_list = FocusedHeapRefMut { heap: &mut machine_st.heap, focus };
         let export_list = setup_module_export_list(export_list)?;
 
         Ok(export_list.into_iter().collect())
     }
 
-    fn clause_clause(&mut self, cell: HeapCellValue) -> Result<FocusedHeap, CompilationError> {
+    fn clause_clause(&mut self, cell: HeapCellValue) -> Result<TermWriteResult, CompilationError> {
         let machine_st = LS::machine_st(&mut self.payload);
-        let mut term = FocusedHeap::empty();
+        let focus = machine_st.heap.cell_len();
 
         read_heap_cell!(cell,
             (HeapCellValueTag::Str, s) => {
                 let (name, arity) = cell_as_atom_cell!(machine_st.heap[s])
                     .get_name_and_arity();
 
-                term.copy_term_from_machine_heap(machine_st, cell);
-                let focus = term.heap.len();
+                let mut writer = machine_st.heap.reserve(4)
+                    .map_err(|_err_loc| ParserError::ResourceError(ParserErrorSrc::default()))?;
 
-                term.heap.push(str_loc_as_cell!(focus+1));
-                term.heap.push(atom_as_cell!(atom!("clause"), 2));
+                writer.write_with(|section| {
+                    section.push_cell(str_loc_as_cell!(focus+1));
+                    section.push_cell(atom_as_cell!(atom!("clause"), 2));
 
-                match (name, arity) {
-                    (atom!(":-"), 2) => {
-                        term.heap.push(heap_loc_as_cell!(2));
-                        term.heap.push(heap_loc_as_cell!(3));
+                    match (name, arity) {
+                        (atom!(":-"), 2) => {
+                            section.push_cell(heap_loc_as_cell!(s+1));
+                            section.push_cell(heap_loc_as_cell!(s+2));
+                        }
+                        _ => {
+                            section.push_cell(str_loc_as_cell!(s));
+                            section.push_cell(atom_as_cell!(atom!("true")));
+                        }
                     }
-                    _ => {
-                        term.heap.push(heap_loc_as_cell!(0));
-                        term.heap.push(atom_as_cell!(atom!("true")));
-                    }
-                }
-
-                term.focus = focus;
+                });
             }
             (HeapCellValueTag::Atom, (name, arity)) => {
                 if arity == 0 {
-                    term.heap.push(str_loc_as_cell!(1));
-                    term.heap.push(atom_as_cell!(atom!("clause"), 2));
-                    term.heap.push(atom_as_cell!(name));
-                    term.heap.push(atom_as_cell!(atom!("true")));
+                    let mut writer = machine_st.heap.reserve(4)
+                        .map_err(|_err_loc| ParserError::ResourceError(ParserErrorSrc::default()))?;
 
-                    term.focus = 0;
+                    writer.write_with(|section| {
+                        section.push_cell(str_loc_as_cell!(focus+1));
+                        section.push_cell(atom_as_cell!(atom!("clause"), 2));
+                        section.push_cell(atom_as_cell!(name));
+                        section.push_cell(atom_as_cell!(atom!("true")));
+                    });
                 } else {
                     return Err(CompilationError::InadmissibleFact);
                 }
@@ -1106,11 +1129,8 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             }
         );
 
-        let value = term.heap[term.focus];
-        term.inverse_var_locs = inverse_var_locs_from_iter(
-            eager_stackful_preorder_iter(&mut term.heap, value),
-        );
-        Ok(term)
+        Ok(TermWriteResult::from(&mut machine_st.heap, heap_loc_as_cell!(focus))
+           .map_err(|_err_loc| ParserError::ResourceError(ParserErrorSrc::default()))?)
     }
 
     fn add_extensible_predicate_declaration(
@@ -1330,18 +1350,18 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
 
     fn add_clause_clause_if_dynamic(&mut self, value: HeapCellValue) -> Result<(), SessionError> {
         let machine_st = LS::machine_st(&mut self.payload);
-        let term = FocusedHeapRefMut::from_cell(&mut machine_st.heap, value);
+        let key_opt = clause_predicate_key_from_heap(&machine_st.heap, value);
 
-        let name_opt = ClauseInfo::name(&term);
-
-        if let Some(predicate_name) = name_opt {
-            let arity = ClauseInfo::arity(&term);
+        if let Some((predicate_name, predicate_arity)) = key_opt {
             let predicates_compilation_target = self.payload.predicates.compilation_target;
 
             let is_dynamic = self
                 .wam_prelude
                 .indices
-                .get_predicate_skeleton(&predicates_compilation_target, &(predicate_name, arity))
+                .get_predicate_skeleton(
+                    &predicates_compilation_target,
+                    &(predicate_name, predicate_arity),
+                )
                 .map(|skeleton| skeleton.core.is_dynamic)
                 .unwrap_or(false);
 
@@ -1574,11 +1594,14 @@ impl Machine {
 
     pub(crate) fn add_term_expansion_clause(&mut self) -> CallResult {
         let value = self.machine_st.registers[1];
+        let term = resource_error_call_result!(
+            self.machine_st,
+            TermWriteResult::from(&mut self.machine_st.heap, value)
+        );
+
         let mut loader = self.loader_from_heap_evacuable(temp_v!(2));
 
         let add_clause = || {
-            let term = loader.copy_term_from_heap(value);
-
             loader.incremental_compile_clause(
                 (atom!("term_expansion"), 2),
                 term,
@@ -1599,31 +1622,40 @@ impl Machine {
             .machine_st
             .store(self.machine_st.deref(self.machine_st.registers[1])));
 
-        let value = self.machine_st.registers[2];
-        let mut loader = self.loader_from_heap_evacuable(temp_v!(3));
-
         let compilation_target = match target_module_name {
             atom!("user") => CompilationTarget::User,
             _ => CompilationTarget::Module(target_module_name),
         };
 
-        let add_clause = || {
-            let term = loader.copy_term_from_heap(value);
+        let value = self.machine_st.registers[2];
+        let term  = resource_error_call_result!(
+            self.machine_st,
+            TermWriteResult::from(&mut self.machine_st.heap, value)
+        );
 
-            let indexing_arg = match term.name(term.focus) {
-                Some(atom!(":-")) => term.nth_arg(term.focus, 1).and_then(|h| term.nth_arg(h, 1)),
-                Some(_) => term.nth_arg(term.focus, 1),
+        let add_clause = || {
+            let indexing_arg_opt = match term_predicate_key(&self.machine_st.heap, term.focus) {
+                Some((atom!(":-"), _)) => {
+                    term_nth_arg(&self.machine_st.heap, term.focus, 1).and_then(|h| {
+                        term_nth_arg(&self.machine_st.heap, h, 1)
+                    })
+                }
+                Some(_) => term_nth_arg(&self.machine_st.heap, term.focus, 1),
                 None => None,
             };
 
-            if let Some(indexing_term_loc) = indexing_arg {
-                if let Some(indexing_name) = term.name(indexing_term_loc) {
-                    loader
-                        .wam_prelude
-                        .indices
-                        .goal_expansion_indices
-                        .insert((indexing_name, term.arity(indexing_term_loc)));
-                }
+            let key_opt = indexing_arg_opt.and_then(|indexing_term_loc| {
+                term_predicate_key(&self.machine_st.heap, indexing_term_loc)
+            });
+
+            let mut loader = self.loader_from_heap_evacuable(temp_v!(3));
+
+            if let Some((name, arity)) = key_opt {
+                loader
+                    .wam_prelude
+                    .indices
+                    .goal_expansion_indices
+                    .insert((name, arity));
             }
 
             loader.incremental_compile_clause(
@@ -1929,19 +1961,16 @@ impl Machine {
 
         let stub_gen = || functor_stub(key.0, key.1);
         let assert_clause = self.machine_st.registers[2];
-        let (name, arity) = {
-            let term = FocusedHeapRefMut::from_cell(&mut self.machine_st.heap, assert_clause);
-            (ClauseInfo::name(&term), ClauseInfo::arity(&term))
-        };
+        let key_opt = clause_predicate_key_from_heap(&self.machine_st.heap, assert_clause);
 
-        let mut compile_assert = |assert_clause, name, arity| {
+        let mut compile_assert = |assert_clause, key_opt| {
             let mut loader: Loader<'_, LiveLoadAndMachineState<'_>> =
                 Loader::new(self, LiveTermStream::new(ListingSource::User));
 
             loader.payload.compilation_target = compilation_target;
 
-            let name = if let Some(name) = name {
-                name
+            let (name, arity) = if let Some(key) = key_opt {
+                key
             } else {
                 return Err(SessionError::from(CompilationError::InvalidRuleHead));
             };
@@ -1979,11 +2008,16 @@ impl Machine {
 
             // if a new predicate was just created, make it dynamic.
             loader.add_dynamic_predicate(compilation_target, name, arity)?;
-            let asserted_clause = loader.copy_term_from_heap(assert_clause);
+
+            let machine_st = LiveLoadAndMachineState::machine_st(&mut loader.payload);
+            // let asserted_clause = loader.copy_term_from_heap(assert_clause);
+
+            let term = TermWriteResult::from(&mut machine_st.heap, assert_clause)
+                .map_err(|_err_loc| ParserError::ResourceError(ParserErrorSrc::default()))?;
 
             loader.incremental_compile_clause(
                 (name, arity),
-                asserted_clause,
+                term,
                 compilation_target,
                 false,
                 append_or_prepend,
@@ -2004,7 +2038,7 @@ impl Machine {
             LiveLoadAndMachineState::evacuate(loader)
         };
 
-        match compile_assert(assert_clause, name, arity) {
+        match compile_assert(assert_clause, key_opt) {
             Ok(_) => Ok(()),
             Err(SessionError::CompilationError(
                 CompilationError::InvalidRuleHead | CompilationError::InadmissibleFact,
@@ -2206,11 +2240,21 @@ impl Machine {
         };
 
         let mut loader = self.loader_from_heap_evacuable(temp_v!(4));
+        let predicate_focus_opt = loader.payload.predicates.first().map(|term_write_result| {
+            term_write_result.focus
+        });
+
+        let is_consistent = if let Some(predicate_focus) = predicate_focus_opt {
+            let machine_st = LiveLoadAndMachineState::machine_st(&mut loader.payload);
+            clause_predicate_key(&machine_st.heap, predicate_focus) == Some(key)
+        } else {
+            true
+        };
 
         LiveLoadAndMachineState::machine_st(&mut loader.payload).fail =
             (!loader.payload.predicates.is_empty()
-                && loader.payload.predicates.compilation_target != compilation_target)
-                || !key.is_consistent(&loader.payload.predicates);
+             && loader.payload.predicates.compilation_target != compilation_target)
+                || !is_consistent;
 
         let result = LiveLoadAndMachineState::evacuate(loader);
         self.restore_load_state_payload(result)
@@ -2278,29 +2322,36 @@ impl Machine {
             .get_meta_predicate_spec(predicate_name, arity, &compilation_target)
         {
             Some(meta_specs) => {
-                let term_loc = self.machine_st.heap.len();
+                let term_loc = self.machine_st.heap.cell_len();
 
-                self.machine_st
-                    .heap
-                    .push(atom_as_cell!(predicate_name, arity));
-                self.machine_st
-                    .heap
-                    .extend(meta_specs.iter().map(|meta_spec| match meta_spec {
-                        MetaSpec::Minus => atom_as_cell!(atom!("+")),
-                        MetaSpec::Plus => atom_as_cell!(atom!("-")),
-                        MetaSpec::Either => atom_as_cell!(atom!("?")),
-                        MetaSpec::Colon => atom_as_cell!(atom!(":")),
-                        MetaSpec::RequiresExpansionWithArgument(ref arg_num) => {
-                            fixnum_as_cell!(Fixnum::build_with(*arg_num as i64))
-                        }
-                    }));
+                let mut writer = match self.machine_st.heap.reserve(3 + meta_specs.len()) {
+                    Ok(writer) => writer,
+                    Err(err_loc) => {
+                        self.machine_st.throw_resource_error(err_loc);
+                        return;
+                    }
+                };
 
-                let heap_loc = self.machine_st.heap.len();
+                writer.write_with(|section| {
+                    section.push_cell(atom_as_cell!(predicate_name, arity));
 
-                self.machine_st
-                    .heap
-                    .push(atom_as_cell!(atom!("meta_predicate"), 1));
-                self.machine_st.heap.push(str_loc_as_cell!(term_loc));
+                    for meta_spec in meta_specs.iter() {
+                        section.push_cell(match meta_spec {
+                            MetaSpec::Minus => atom_as_cell!(atom!("+")),
+                            MetaSpec::Plus => atom_as_cell!(atom!("-")),
+                            MetaSpec::Either => atom_as_cell!(atom!("?")),
+                            MetaSpec::Colon => atom_as_cell!(atom!(":")),
+                            MetaSpec::RequiresExpansionWithArgument(ref arg_num) => {
+                                fixnum_as_cell!(Fixnum::build_with(*arg_num as i64))
+                            }
+                        });
+                    }
+
+                    section.push_cell(atom_as_cell!(atom!("meta_predicate"), 1));
+                    section.push_cell(str_loc_as_cell!(term_loc));
+                });
+
+                let heap_loc = self.machine_st.heap.cell_len() - 2;
 
                 unify!(
                     self.machine_st,
@@ -2411,13 +2462,16 @@ impl<'a> Loader<'a, LiveLoadAndMachineState<'a>> {
         }
 
         let machine_st = LiveLoadAndMachineState::machine_st(&mut self.payload);
-        let value = machine_st[term_reg];
+        let value = machine_st.store(MachineState::deref(&machine_st, machine_st[term_reg]));
 
         self.add_clause_clause_if_dynamic(value)?;
 
-        let term = self.copy_term_from_heap(value);
-        self.payload.term_stream.term_queue.push_back(term);
+        let machine_st = LiveLoadAndMachineState::machine_st(&mut self.payload);
 
+        let term = TermWriteResult::from(&mut machine_st.heap, value)
+            .map_err(|_err_loc| ParserError::ResourceError(ParserErrorSrc::default()))?;
+
+        self.payload.term_stream.term_queue.push_back(term);
         self.load()
     }
 }
