@@ -14,9 +14,7 @@ use std::iter::*;
 use std::ops::Deref;
 use std::vec::Vec;
 
-pub(crate) trait TermIterator:
-    Deref<Target = [HeapCellValue]> + Iterator<Item = HeapCellValue>
-{
+pub(crate) trait TermIterator: Deref<Target = Heap> + Iterator<Item = HeapCellValue> {
     fn focus(&self) -> IterStackLoc;
     fn level(&mut self) -> Level;
 }
@@ -30,7 +28,7 @@ pub(crate) struct TargetIterator<I: FocusedHeapIter, const SKIP_ROOT: bool> {
 }
 
 fn record_path(
-    heap: &[HeapCellValue],
+    heap: &impl SizedHeap,
     root_terms: &mut BitSet<usize>,
     mut root_loc: usize,
 ) -> usize {
@@ -47,9 +45,9 @@ fn record_path(
                 }
             }
             (HeapCellValueTag::Lis) => {
-		root_terms.insert(root_loc);
-		break;
-	    }
+		        root_terms.insert(root_loc);
+		        break;
+	        }
             _ => {
                 if cell.is_ref() {
                     root_terms.insert(cell.get_value() as usize);
@@ -63,14 +61,14 @@ fn record_path(
     root_loc
 }
 
-fn find_root_terms(heap: &[HeapCellValue], root_loc: usize) -> (usize, BitSet<usize>) {
+fn find_root_terms(heap: &impl SizedHeap, root_loc: usize) -> (usize, BitSet<usize>) {
     let mut root_terms = BitSet::<usize>::default();
     let root_loc = record_path(heap, &mut root_terms, root_loc);
     (root_loc, root_terms)
 }
 
 fn find_shallow_terms(
-    heap: &[HeapCellValue],
+    heap: &impl SizedHeap,
     root_loc: usize,
 ) -> IndexMap<usize, BitSet<usize>, FxBuildHasher> {
     let mut shallow_terms_map = IndexMap::with_hasher(FxBuildHasher::default());
@@ -101,8 +99,8 @@ fn find_shallow_terms(
 
 impl<I: FocusedHeapIter, const SKIP_ROOT: bool> TargetIterator<I, SKIP_ROOT> {
     fn new(iter: I, root_loc: usize, arg_c: usize) -> Self {
-        let (derefed_root_loc, root_terms) = find_root_terms(&iter, root_loc);
-        let shallow_terms = find_shallow_terms(&iter, derefed_root_loc);
+        let (derefed_root_loc, root_terms) = find_root_terms(iter.deref(), root_loc);
+        let shallow_terms = find_shallow_terms(iter.deref(), derefed_root_loc);
 
         Self {
             shallow_terms,
@@ -184,7 +182,7 @@ impl<I: FocusedHeapIter, const SKIP_ROOT: bool> Iterator for TargetIterator<I, S
 }
 
 impl<I: FocusedHeapIter, const SKIP_ROOT: bool> Deref for TargetIterator<I, SKIP_ROOT> {
-    type Target = [HeapCellValue];
+    type Target = Heap;
 
     fn deref(&self) -> &Self::Target {
         self.iter.deref()
@@ -205,7 +203,6 @@ pub(crate) fn fact_iterator<'a, const SKIP_ROOT: bool>(
     stack: &'a mut Stack,
     root_loc: usize,
 ) -> FactIterator<'a, SKIP_ROOT> {
-    // let cell = heap[root_loc];
     TargetIterator::new(stackful_preorder_iter(heap, stack, root_loc), root_loc, 0)
 }
 
@@ -217,7 +214,6 @@ pub(crate) fn query_iterator<'a, const SKIP_ROOT: bool>(
     stack: &'a mut Stack,
     root_loc: usize,
 ) -> QueryIterator<'a, SKIP_ROOT> {
-    // let cell = heap[root_loc];
     TargetIterator::new(stackful_post_order_iter(heap, stack, root_loc), root_loc, 1)
 }
 
