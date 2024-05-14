@@ -125,7 +125,7 @@ call(_, _, _, _, _, _, _, _, _).
 %
 % The flags that Scryer Prolog support are:
 %
-%  * `max_arity`: The max arity a predicate can have in Prolog. On Scryer is set to 1023. Read only.
+%  * `max_arity`: The max arity a predicate can have in Prolog. On Scryer is set to 255. Read only.
 %  * `bounded`: `true` if integer arithmethic is bounded between some min/max values. On Scryer is always set
 %    to `false` since it supports unbounded integer arithmethic. Read only.
 %  * `integer_rounding_function`: Describes the rounding donde by `//` and `rem` functions. On Scryer is
@@ -145,8 +145,8 @@ call(_, _, _, _, _, _, _, _, _).
 %    `fail` (the call silently fails) and `warn` (the call fails and a warning about the undefined predicate is printed).
 %  * `answer_write_options`: Additional write options used by the top level for writing answers.
 %
-current_prolog_flag(Flag, Value) :- Flag == max_arity, !, Value = 1023.
-current_prolog_flag(max_arity, 1023).
+current_prolog_flag(Flag, Value) :- Flag == max_arity, !, Value = 255.
+current_prolog_flag(max_arity, 255).
 current_prolog_flag(Flag, Value) :- Flag == bounded, !, Value = false.
 current_prolog_flag(bounded, false).
 current_prolog_flag(Flag, Value) :- Flag == integer_rounding_function, !, Value == toward_zero.

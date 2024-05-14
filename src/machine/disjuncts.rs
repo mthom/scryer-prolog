@@ -3,6 +3,7 @@ use crate::forms::*;
 use crate::instructions::*;
 use crate::iterators::fact_iterator;
 use crate::machine::Stack;
+use crate::machine::heap::*;
 use crate::machine::loader::*;
 use crate::machine::machine_errors::CompilationError;
 use crate::machine::preprocessor::*;
@@ -320,13 +321,12 @@ impl VariableClassifier {
         }
     }
 
-    pub fn classify_fact(
+    pub fn classify_fact<'a, LS: LoadState<'a>>(
         mut self,
-        term: &mut FocusedHeap,
+        loader: &mut Loader<'a, LS>,
+        term: &TermWriteResult,
     ) -> Result<ClassifyFactResult, CompilationError> {
-        let focus = term.focus;
-        self.classify_head_variables(term, focus)?;
-
+        self.classify_head_variables(loader, &term, term.focus)?;
         Ok(self.branch_map.separate_and_classify_variables(
             self.var_num,
             self.global_cut_var_num,
@@ -337,12 +337,14 @@ impl VariableClassifier {
     pub fn classify_rule<'a, LS: LoadState<'a>>(
         mut self,
         loader: &mut Loader<'a, LS>,
-        term: &mut FocusedHeap,
+        term: &TermWriteResult,
     ) -> Result<ClassifyRuleResult, CompilationError> {
-        let head_loc = term.nth_arg(term.focus, 1).unwrap();
-        let body_loc = term.nth_arg(term.focus, 2).unwrap();
+        let heap = &mut LS::machine_st(&mut loader.payload).heap;
 
-        self.classify_head_variables(term, head_loc)?;
+        let head_loc = term_nth_arg(heap, term.focus, 1).unwrap();
+        let body_loc = term_nth_arg(heap, term.focus, 2).unwrap();
+
+        self.classify_head_variables(loader, &term, head_loc)?;
         self.root_set.insert(self.current_branch_num.clone());
 
         let mut query_terms = self.classify_body_variables(loader, term, body_loc)?;
@@ -385,8 +387,8 @@ impl VariableClassifier {
         &mut self,
         arg_c: usize,
         arity: usize,
-        term: &mut FocusedHeap,
-        term_loc: usize,
+        term: &mut FocusedHeapRefMut,
+        inverse_var_locs: &InverseVarLocs,
         context: GenContext,
     ) {
         let classify_info = ClassifyInfo { arg_c, arity };
@@ -394,9 +396,9 @@ impl VariableClassifier {
         let mut lvl = Level::Shallow;
         let mut stack = Stack::uninitialized();
         let mut iter = fact_iterator::<false>(
-            &mut term.heap,
+            term.heap,
             &mut stack,
-            term_loc,
+            term.focus,
         );
 
         // second arg is true to iterate the root, which may be a variable
@@ -407,7 +409,7 @@ impl VariableClassifier {
             }
 
             let var_loc = subterm.get_value() as usize;
-            let var = to_classified_var(&term.inverse_var_locs, var_loc);
+            let var = to_classified_var(inverse_var_locs, var_loc);
 
             self.probe_body_var(
                 context,
@@ -468,27 +470,21 @@ impl VariableClassifier {
         self.probe_body_var(context, var_info);
     }
 
-    fn classify_head_variables(
+    fn classify_head_variables<'a, LS: LoadState<'a>>(
         &mut self,
-        term: &mut FocusedHeap,
+        loader: &mut Loader<'a, LS>,
+        term: &TermWriteResult,
         head_loc: usize,
     ) -> Result<(), CompilationError> {
-        let arity = read_heap_cell!(term.deref_loc(head_loc),
-            (HeapCellValueTag::Str, s) => {
-                cell_as_atom_cell!(term.heap[s]).get_arity()
-            }
-            (HeapCellValueTag::Atom) => {
-                return Ok(());
-            }
-            _ => {
-                return Err(CompilationError::InvalidRuleHead);
-            }
-        );
+        let heap = &mut LS::machine_st(&mut loader.payload).heap;
+        let arity = term_predicate_key(heap, head_loc)
+            .and_then(|(_, arity)| Some(arity))
+            .ok_or(CompilationError::InvalidRuleHead)?;
 
         let mut classify_info = ClassifyInfo { arg_c: 1, arity };
 
         if arity > 0 {
-            let (_term_loc, value) = subterm_index(&term.heap, head_loc);
+            let (_term_loc, value) = subterm_index(heap, head_loc);
             let str_offset = value.get_value() as usize;
 
             debug_assert_eq!(value.get_tag(), HeapCellValueTag::Str);
@@ -497,7 +493,7 @@ impl VariableClassifier {
                 let mut lvl = Level::Shallow;
                 let mut stack = Stack::uninitialized();
                 let mut iter = fact_iterator::<false>(
-                    &mut term.heap,
+                    heap,
                     &mut stack,
                     idx,
                 );
@@ -571,11 +567,11 @@ impl VariableClassifier {
     fn classify_body_variables<'a, LS: LoadState<'a>>(
         &mut self,
         loader: &mut Loader<'a, LS>,
-        terms: &mut FocusedHeap,
+        terms: &TermWriteResult,
         term_loc: usize,
     ) -> Result<ChunkedTermVec, CompilationError> {
         let mut state_stack = vec![TraversalState::Term {
-            subterm: terms.heap[term_loc],
+            subterm: loader.machine_heap()[term_loc],
             term_loc,
         }];
         let mut build_stack = ChunkedTermVec::new();
@@ -684,13 +680,21 @@ impl VariableClassifier {
                             for (arg_c, term_loc) in
                                 ($term_loc + 1 ..= $term_loc + $key.1).enumerate()
                             {
-                                self.probe_body_term(arg_c + 1, $key.1, terms, term_loc, context);
+                                let mut term = FocusedHeapRefMut::from(loader.machine_heap(), term_loc);
+
+                                self.probe_body_term(
+                                    arg_c + 1,
+                                    $key.1,
+                                    &mut term,
+                                    &terms.inverse_var_locs,
+                                    context,
+                                );
                             }
 
                             build_stack.push_chunk_term(QueryTerm::Clause(clause_to_query_term(
                                 loader,
                                 $key,
-                                terms.as_ref_mut($term_loc),
+                                &terms,
                                 HeapCellValue::build_with($tag, $term_loc as u64),
                                 self.call_policy,
                             )));
@@ -706,9 +710,17 @@ impl VariableClassifier {
                             let context = build_stack.current_gen_context();
 
                             for (arg_c, term_loc) in
-                                ($term_loc + 1..$term_loc + $key.1 + 1).enumerate()
+                                ($term_loc + 1 ..= $term_loc + $key.1).enumerate()
                             {
-                                self.probe_body_term(arg_c + 1, $key.1, terms, term_loc, context);
+                                let mut term = FocusedHeapRefMut::from(loader.machine_heap(), term_loc);
+
+                                self.probe_body_term(
+                                    arg_c + 1,
+                                    $key.1,
+                                    &mut term,
+                                    &terms.inverse_var_locs,
+                                    context,
+                                );
                             }
 
                             build_stack.push_chunk_term(QueryTerm::Clause(
@@ -716,7 +728,7 @@ impl VariableClassifier {
                                     loader,
                                     $key,
                                     $module_name,
-                                    terms.as_ref_mut($term_loc),
+                                    &terms,
                                     HeapCellValue::build_with($tag, $term_loc as u64),
                                     self.call_policy,
                                 ),
@@ -725,26 +737,28 @@ impl VariableClassifier {
                     }
 
                     loop {
+                        let heap = loader.machine_heap();
+
                         read_heap_cell!(subterm,
                             (HeapCellValueTag::Str, subterm_loc) => {
-                                let (name, arity) = cell_as_atom_cell!(terms.heap[subterm_loc])
+                                let (name, arity) = cell_as_atom_cell!(heap[subterm_loc])
                                     .get_name_and_arity();
 
                                 match (name, arity) {
                                     (atom!("->") | atom!(";") | atom!(","), 3) => {
-                                        if blunt_index_ptr(&mut terms.heap, (name, 2), subterm_loc) {
-                                            subterm = terms.heap[subterm_loc];
+                                        if blunt_index_ptr(heap, (name, 2), subterm_loc) {
+                                            subterm = heap[subterm_loc];
                                             continue;
                                         }
 
                                         add_chunk!((name, 2), HeapCellValueTag::Str, subterm_loc);
                                     }
                                     (atom!(","), 2) => {
-                                        let head_loc = terms.nth_arg(subterm_loc, 1).unwrap();
-                                        let tail_loc = terms.nth_arg(subterm_loc, 2).unwrap();
-                                        let head = terms.heap[head_loc];
+                                        let head_loc = term_nth_arg(heap, subterm_loc, 1).unwrap();
+                                        let tail_loc = term_nth_arg(heap, subterm_loc, 2).unwrap();
+                                        let head = heap[head_loc];
 
-                                        let iter = unfold_by_str_locs(&mut terms.heap, tail_loc, atom!(","))
+                                        let iter = unfold_by_str_locs(heap, tail_loc, atom!(","))
                                             .into_iter()
                                             .rev()
                                             .chain(std::iter::once((head, head_loc)))
@@ -754,15 +768,15 @@ impl VariableClassifier {
                                         state_stack.extend(iter);
                                     }
                                     (atom!(";"), 2) => {
-                                        let head_loc = terms.nth_arg(subterm_loc, 1).unwrap();
-                                        let tail_loc = terms.nth_arg(subterm_loc, 2).unwrap();
+                                        let head_loc = term_nth_arg(heap, subterm_loc, 1).unwrap();
+                                        let tail_loc = term_nth_arg(heap, subterm_loc, 2).unwrap();
 
-                                        let head = terms.heap[head_loc];
+                                        let head = heap[head_loc];
 
                                         let first_branch_num = self.current_branch_num.split();
                                         let branches: Vec<_> = std::iter::once((head, head_loc))
                                             .chain(
-                                                unfold_by_str_locs(&mut terms.heap, tail_loc, atom!(";"))
+                                                unfold_by_str_locs(heap, tail_loc, atom!(";"))
                                                     .into_iter(),
                                             )
                                             .collect();
@@ -807,11 +821,11 @@ impl VariableClassifier {
                                         build_stack.current_chunk_num += 1;
                                     }
                                     (atom!("->"), 2) => {
-                                        let if_term_loc = terms.nth_arg(subterm_loc, 1).unwrap();
-                                        let then_term_loc = terms.nth_arg(subterm_loc, 2).unwrap();
+                                        let if_term_loc = term_nth_arg(heap, subterm_loc, 1).unwrap();
+                                        let then_term_loc = term_nth_arg(heap, subterm_loc, 2).unwrap();
 
-                                        let if_term = terms.heap[if_term_loc];
-                                        let then_term = terms.heap[then_term_loc];
+                                        let if_term = heap[if_term_loc];
+                                        let then_term = heap[then_term_loc];
 
                                         let prev_b = if matches!(
                                             state_stack.last(),
@@ -851,8 +865,8 @@ impl VariableClassifier {
                                         self.var_num += 1;
                                     }
                                     (atom!("\\+"), 1) => {
-                                        let not_term_loc = terms.nth_arg(subterm_loc, 1).unwrap();
-                                        let not_term = terms.heap[not_term_loc];
+                                        let not_term_loc = term_nth_arg(heap, subterm_loc, 1).unwrap();
+                                        let not_term = heap[not_term_loc];
                                         let build_stack_len = build_stack.len();
 
                                         build_stack.reserve_branch(2);
@@ -886,18 +900,19 @@ impl VariableClassifier {
                                         self.var_num += 1;
                                     }
                                     (atom!(":"), 2) => {
-                                        let module_name_loc = terms.nth_arg(subterm_loc, 1).unwrap();
-                                        let predicate_term_loc = terms.nth_arg(subterm_loc, 2).unwrap();
+                                        let module_name_loc = term_nth_arg(heap, subterm_loc, 1).unwrap();
+                                        let predicate_term_loc = term_nth_arg(heap, subterm_loc, 2).unwrap();
+                                        let mut focused = FocusedHeapRefMut::from(heap, module_name_loc);
 
-                                        let module_name = terms.deref_loc(module_name_loc);
-                                        let predicate_term = terms.deref_loc(predicate_term_loc);
+                                        let module_name = focused.deref_loc(module_name_loc);
+                                        let predicate_term = focused.deref_loc(predicate_term_loc);
 
                                         read_heap_cell!(module_name,
                                             (HeapCellValueTag::Atom, (module_name, arity)) => {
                                                 if arity == 0 {
                                                     read_heap_cell!(predicate_term,
                                                         (HeapCellValueTag::Str, s) => {
-                                                            let key = cell_as_atom_cell!(terms.heap[s])
+                                                            let key = cell_as_atom_cell!(heap[s])
                                                                 .get_name_and_arity();
 
                                                             add_qualified_chunk!(
@@ -933,25 +948,40 @@ impl VariableClassifier {
 
                                         let context = build_stack.current_gen_context();
 
-                                        self.probe_body_term(1, 0, terms, module_name_loc, context);
-                                        self.probe_body_term(2, 0, terms, predicate_term_loc, context);
+                                        focused.focus = module_name_loc;
 
-                                        let h = terms.heap.len();
+                                        self.probe_body_term(
+                                            1, 0, &mut focused, &terms.inverse_var_locs, context,
+                                        );
 
-                                        terms.heap.push(atom_as_cell!(atom!("call"), 1));
-                                        terms.heap.push(str_loc_as_cell!(subterm_loc));
+                                        focused.focus = predicate_term_loc;
+
+                                        self.probe_body_term(
+                                            2, 0, &mut focused, &terms.inverse_var_locs, context,
+                                        );
+
+                                        let h = heap.cell_len();
+
+                                        heap.push_cell(atom_as_cell!(atom!("call"), 1))
+                                            .map_err(|_err_loc| ParserError::ResourceError(ParserErrorSrc::default()))?;
+                                        heap.push_cell(str_loc_as_cell!(subterm_loc))
+                                            .map_err(|_err_loc| ParserError::ResourceError(ParserErrorSrc::default()))?;
 
                                         build_stack.push_chunk_term(QueryTerm::Clause(clause_to_query_term(
                                             loader,
                                             (atom!("call"), 1),
-                                            terms.as_ref_mut(h),
+                                            terms,
                                             str_loc_as_cell!(h),
                                             self.call_policy,
                                         )));
                                     }
                                     (atom!("$call_with_inference_counting"), 1) => {
-                                        let term_loc = terms.nth_arg(subterm_loc, 1).unwrap();
-                                        let subterm  = terms.deref_loc(term_loc);
+                                        let term_loc = term_nth_arg(heap, subterm_loc, 1).unwrap();
+                                        let heap = loader.machine_heap();
+                                        let subterm = heap_bound_store(
+                                            heap,
+                                            heap_bound_deref(heap, heap[term_loc]),
+                                        );
 
                                         state_stack.push(TraversalState::ResetCallPolicy(self.call_policy));
                                         state_stack.push(TraversalState::Term { subterm, term_loc });
@@ -973,17 +1003,9 @@ impl VariableClassifier {
                                     add_chunk!((name, 0), HeapCellValueTag::Var, term_loc);
                                 }
                             }
-                            (HeapCellValueTag::Char, c) => {
-                                if c == '!' {
-                                    let context = build_stack.current_gen_context();
-                                    state_stack.push(self.new_cut_state(context));
-                                } else {
-                                    return Err(CompilationError::InadmissibleQueryTerm);
-                                }
-                            }
                             (HeapCellValueTag::AttrVar | HeapCellValueTag::Var, h) => {
                                 if h != term_loc {
-                                    subterm = terms.heap[h];
+                                    subterm = heap[h];
                                     term_loc = h;
                                     continue;
                                 }
