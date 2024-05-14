@@ -205,7 +205,6 @@ load_loop(Stream, Evacuable) :-
        read_term(Stream, Term, [singletons(Singletons)])
     ;  Term = end_of_file
     ),
-    % write('Term: '), writeq(Term), nl,
     (  Term == end_of_file ->
        close(Stream),
        '$conclude_load'(Evacuable)
@@ -220,7 +219,6 @@ load_loop(Stream, Evacuable) :-
 
 compile_term(Term, Evacuable) :-
     expand_terms_and_goals(Term, Terms),
-    % write('Terms: '), writeq(Terms),nl,
     !,
     (  var(Terms) ->
        instantiation_error(load/1)
@@ -301,7 +299,7 @@ expand_term_goals(Terms0, Terms) :-
           (  atom(Module) ->
              prolog_load_context(module, Target),
              module_expanded_head_variables(Head2, HeadVars),
-             catch(expand_goal(Body0, Target, Body1, HeadVars, []),
+             catch('$call'(loader:expand_goal(Body0, Target, Body1, HeadVars, [])),
                    error(type_error(callable, Pred), _),
                    (  loader:print_goal_expansion_warning(Pred),
                       builtins:(Body1 = Body0)
@@ -311,7 +309,7 @@ expand_term_goals(Terms0, Terms) :-
           )
        ;  module_expanded_head_variables(Head1, HeadVars),
           prolog_load_context(module, Target),
-          catch(expand_goal(Body0, Target, Body1, HeadVars, []),
+          catch('$call'(loader:expand_goal(Body0, Target, Body1, HeadVars, [])),
                 error(type_error(callable, Pred), _),
                 (  loader:print_goal_expansion_warning(Pred),
                    builtins:(Body1 = Body0)

@@ -6,7 +6,7 @@ use rustyline::{Context, Helper as RlHelper, Result};
 
 use std::sync::Weak;
 
-use crate::atom_table::{AtomString, AtomTable, STATIC_ATOMS_MAP};
+use crate::atom_table::{AtomString, AtomTable}; //, STATIC_ATOMS_MAP};
 
 // TODO: Maybe add validation to the helper
 pub struct Helper {
@@ -74,7 +74,7 @@ impl Completer for Helper {
 
             let mut matching = index_set
                 .iter()
-                .chain(STATIC_ATOMS_MAP.values())
+                // .chain(STATIC_ATOMS_MAP.values())
                 .map(|a| a.as_str())
                 .filter(|a| a.starts_with(sub_str))
                 .collect::<Vec<_>>();

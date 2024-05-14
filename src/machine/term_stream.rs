@@ -4,6 +4,7 @@ use crate::machine::loader::*;
 use crate::machine::machine_errors::*;
 use crate::machine::*;
 use crate::parser::ast::*;
+use crate::parser::lexer::*;
 use crate::parser::parser::*;
 use crate::read::devour_whitespace;
 
@@ -20,11 +21,11 @@ pub struct LoadStatePayload<TS> {
     pub(super) module_op_exports: ModuleOpExports,
     pub(super) non_counted_bt_preds: IndexSet<PredicateKey, FxBuildHasher>,
     pub(super) predicates: PredicateQueue,
-    pub(super) clause_clauses: Vec<FocusedHeap>,
+    pub(super) clause_clauses: Vec<TermWriteResult>,
 }
 
 pub trait TermStream: Sized {
-    fn next(&mut self, op_dir: &CompositeOpDir) -> Result<FocusedHeap, CompilationError>;
+    fn next(&mut self, op_dir: &CompositeOpDir) -> Result<TermWriteResult, CompilationError>;
     fn eof(&mut self) -> Result<bool, CompilationError>;
     fn listing_src(&self) -> &ListingSource;
 }
@@ -32,7 +33,7 @@ pub trait TermStream: Sized {
 #[derive(Debug)]
 pub struct BootstrappingTermStream<'a> {
     listing_src: ListingSource,
-    pub(super) parser: Parser<'a, Stream>,
+    pub(super) lexer_parser: LexerParser<'a, Stream>,
 }
 
 impl<'a> BootstrappingTermStream<'a> {
@@ -42,26 +43,23 @@ impl<'a> BootstrappingTermStream<'a> {
         machine_st: &'a mut MachineState,
         listing_src: ListingSource,
     ) -> Self {
-        let parser = Parser::new(stream, machine_st);
-        Self {
-            parser,
-            listing_src,
-        }
+        let lexer_parser = LexerParser::new(stream, machine_st);
+        Self { lexer_parser, listing_src }
     }
 }
 
 impl<'a> TermStream for BootstrappingTermStream<'a> {
     #[inline]
-    fn next(&mut self, op_dir: &CompositeOpDir) -> Result<FocusedHeap, CompilationError> {
-        self.parser.reset();
-        self.parser
-            .read_term(op_dir, Tokens::Default)
-            .map_err(CompilationError::from)
+    fn next(&mut self, op_dir: &CompositeOpDir) -> Result<TermWriteResult, CompilationError> {
+        let result = self.lexer_parser.read_term(op_dir, Tokens::Default)
+            .map_err(CompilationError::from);
+
+        result
     }
 
     #[inline]
     fn eof(&mut self) -> Result<bool, CompilationError> {
-        devour_whitespace(&mut self.parser) // eliminate dangling comments before checking for EOF.
+        devour_whitespace(&mut self.lexer_parser) // eliminate dangling comments before checking for EOF.
             .map_err(CompilationError::from)
     }
 
@@ -72,7 +70,7 @@ impl<'a> TermStream for BootstrappingTermStream<'a> {
 }
 
 pub struct LiveTermStream {
-    pub(super) term_queue: VecDeque<FocusedHeap>,
+    pub(super) term_queue: VecDeque<TermWriteResult>,
     pub(super) listing_src: ListingSource,
 }
 
@@ -108,7 +106,7 @@ impl<TS> LoadStatePayload<TS> {
 
 impl TermStream for LiveTermStream {
     #[inline]
-    fn next(&mut self, _: &CompositeOpDir) -> Result<FocusedHeap, CompilationError> {
+    fn next(&mut self, _: &CompositeOpDir) -> Result<TermWriteResult, CompilationError> {
         Ok(self.term_queue.pop_front().unwrap())
     }
 
@@ -126,7 +124,7 @@ impl TermStream for LiveTermStream {
 pub struct InlineTermStream {}
 
 impl TermStream for InlineTermStream {
-    fn next(&mut self, _: &CompositeOpDir) -> Result<FocusedHeap, CompilationError> {
+    fn next(&mut self, _: &CompositeOpDir) -> Result<TermWriteResult, CompilationError> {
         Err(CompilationError::from(ParserError::unexpected_eof(ParserErrorSrc::default())))
     }
 
