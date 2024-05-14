@@ -2,7 +2,6 @@ use crate::forms::*;
 use crate::machine::loader::*;
 use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
-use crate::machine::preprocessor::*;
 use crate::machine::term_stream::*;
 use crate::machine::*;
 use crate::parser::ast::*;
@@ -432,19 +431,6 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         };
 
         self.retract_local_clauses_impl(clause_clause_compilation_target, key, clause_locs);
-    }
-
-    pub(super) fn try_term_to_tl(
-        &mut self,
-        term: FocusedHeap,
-        preprocessor: &mut Preprocessor,
-    ) -> Result<PredicateClause, SessionError> {
-        let tl = preprocessor.try_term_to_tl(self, term)?;
-
-        Ok(match tl {
-            TopLevel::Fact(fact, var_data) => PredicateClause::Fact(fact, var_data),
-            TopLevel::Rule(rule, var_data) => PredicateClause::Rule(rule, var_data),
-        })
     }
 
     #[inline]

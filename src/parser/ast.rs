@@ -3,10 +3,8 @@
 use crate::arena::*;
 use crate::atom_table::*;
 use crate::forms::PredicateKey;
-use crate::machine::copier::*;
 use crate::machine::heap::*;
 use crate::machine::machine_indices::*;
-use crate::machine::machine_state::*;
 use crate::types::*;
 
 use std::fmt;
@@ -14,10 +12,7 @@ use std::hash::Hash;
 use std::io::{Error as IOError, ErrorKind};
 use std::ops::Neg;
 use std::rc::Rc;
-use std::sync::Arc;
 use std::vec::Vec;
-
-use crate::parser::dashu::{Integer, Rational};
 
 use fxhash::FxBuildHasher;
 use indexmap::IndexMap;
@@ -26,7 +21,7 @@ use scryer_modular_bitfield::prelude::*;
 
 pub type Specifier = u32;
 
-pub const MAX_ARITY: usize = 1023;
+pub const MAX_ARITY: usize = 255;
 
 #[allow(clippy::upper_case_acronyms)]
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
@@ -143,7 +138,12 @@ pub const BTERM: u32 = 0x11000;
 pub const NEGATIVE_SIGN: u32 = 0x0200;
 
 macro_rules! fixnum {
-    ($wrapper:tt, $n:expr, $arena:expr) => {
+    ($n:expr, $arena:expr) => {
+        Fixnum::build_with_checked($n)
+            .map(|n| fixnum_as_cell!(n))
+            .unwrap_or_else(|_| typed_arena_ptr_as_cell!(arena_alloc!(Integer::from($n), $arena) as TypedArenaPtr<Integer>))
+    };
+    ($wrapper:ty, $n:expr, $arena:expr) => {
         Fixnum::build_with_checked($n)
             .map(<$wrapper>::Fixnum)
             .unwrap_or_else(|_| <$wrapper>::Integer(arena_alloc!(Integer::from($n), $arena)))
@@ -272,47 +272,9 @@ impl fmt::Display for RegType {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Clone, Copy)]
-pub enum VarReg {
-    ArgAndNorm(RegType, usize),
-    Norm(RegType),
-}
-
-impl VarReg {
-    pub fn norm(self) -> RegType {
-        match self {
-            VarReg::ArgAndNorm(reg, _) | VarReg::Norm(reg) => reg,
-        }
-    }
-}
-
-impl fmt::Display for VarReg {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        match self {
-            VarReg::Norm(RegType::Perm(reg)) => write!(f, "Y{}", reg),
-            VarReg::Norm(RegType::Temp(reg)) => write!(f, "X{}", reg),
-            VarReg::ArgAndNorm(RegType::Perm(reg), arg) => write!(f, "Y{} A{}", reg, arg),
-            VarReg::ArgAndNorm(RegType::Temp(reg), arg) => write!(f, "X{} A{}", reg, arg),
-        }
-    }
-}
-
-impl Default for VarReg {
-    fn default() -> Self {
-        VarReg::Norm(RegType::default())
-    }
-}
-
 macro_rules! temp_v {
     ($x:expr) => {
         $crate::parser::ast::RegType::Temp($x)
-    };
-}
-
-#[macro_export]
-macro_rules! perm_v {
-    ($x:expr) => {
-        $crate::parser::ast::RegType::Perm($x)
     };
 }
 
@@ -410,7 +372,6 @@ pub fn default_op_dir() -> OpDir {
 #[derive(Debug, Clone)]
 pub enum ArithmeticError {
     NonEvaluableFunctor(HeapCellValue, usize),
-    UninstantiatedVar,
 }
 
 #[derive(Debug, Copy, Clone, Default)]
@@ -424,11 +385,12 @@ pub enum ParserError {
     BackQuotedString(ParserErrorSrc),
     IO(IOError, ParserErrorSrc),
     IncompleteReduction(ParserErrorSrc),
-    InvalidSingleQuotedCharacter(char, ParserErrorSrc),
-    LexicalError(lexical::Error, ParserErrorSrc),
+    InvalidSingleQuotedCharacter(ParserErrorSrc),
+    LexicalError(ParserErrorSrc),
     MissingQuote(ParserErrorSrc),
     NonPrologChar(ParserErrorSrc),
     ParseBigInt(ParserErrorSrc),
+    ResourceError(ParserErrorSrc),
     UnexpectedChar(char, ParserErrorSrc),
     // UnexpectedEOF,
     Utf8Error(ParserErrorSrc),
@@ -440,11 +402,12 @@ impl ParserError {
             &ParserError::BackQuotedString(err_src)
             | &ParserError::IO(_, err_src)
             | &ParserError::IncompleteReduction(err_src)
-            | &ParserError::InvalidSingleQuotedCharacter(_, err_src)
-            | &ParserError::LexicalError(_, err_src)
+            | &ParserError::InvalidSingleQuotedCharacter(err_src)
+            | &ParserError::LexicalError(err_src)
             | &ParserError::MissingQuote(err_src)
             | &ParserError::NonPrologChar(err_src)
             | &ParserError::ParseBigInt(err_src)
+            | &ParserError::ResourceError(err_src)
             | &ParserError::UnexpectedChar(_, err_src)
             | &ParserError::Utf8Error(err_src) => err_src,
         }
@@ -470,6 +433,7 @@ impl ParserError {
             ParserError::ParseBigInt(..) => atom!("cannot_parse_big_int"),
             ParserError::UnexpectedChar(..) => atom!("unexpected_char"),
             ParserError::Utf8Error(..) => atom!("utf8_conversion_error"),
+            ParserError::ResourceError(..) => atom!("resource_error"),
         }
     }
 
@@ -487,29 +451,13 @@ impl ParserError {
         }
     }
 }
-/*
-impl From<lexical::Error> for ParserError {
-    fn from((e, err_src): (lexical::Error, ParserErrorSrc)) -> ParserError {
-        ParserError::LexicalError(e, err_src)
+
+impl From<ParserErrorSrc> for ParserError {
+    fn from(err_src: ParserErrorSrc) -> ParserError {
+        ParserError::LexicalError(err_src)
     }
 }
 
-impl From<IOError> for ParserError {
-    fn from(e: IOError) -> ParserError {
-        ParserError::IO(e)
-    }
-}
-
-impl From<&IOError> for ParserError {
-    fn from(error: &IOError) -> ParserError {
-        if error.get_ref().filter(|e| e.is::<BadUtf8Error>()).is_some() {
-            ParserError::Utf8Error(0, 0)
-        } else {
-            ParserError::IO(error.kind().into())
-        }
-    }
-}
-*/
 #[derive(Debug, Clone, Copy)]
 pub struct CompositeOpDir<'a, 'b> {
     pub primary_op_dir: Option<&'b OpDir>,
@@ -618,16 +566,16 @@ impl Neg for Fixnum {
     }
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash)]
+/*
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Literal {
     Atom(Atom),
-    Char(char),
     CodeIndex(CodeIndex),
     Fixnum(Fixnum),
     Integer(TypedArenaPtr<Integer>),
     Rational(TypedArenaPtr<Rational>),
     Float(F64Offset),
-    String(Atom),
+    String(Rc<String>),
 }
 
 impl From<F64Ptr> for Literal {
@@ -643,7 +591,7 @@ impl fmt::Display for Literal {
             Literal::Atom(ref atom) => {
                 write!(f, "{}", atom.flat_index())
             }
-            Literal::Char(c) => write!(f, "'{}'", *c as u32),
+            // Literal::Char(c) => write!(f, "'{}'", *c as u32),
             Literal::CodeIndex(i) => write!(f, "{:x}", i.as_ptr() as u64),
             Literal::Fixnum(n) => write!(f, "{}", n.get_num()),
             Literal::Integer(ref n) => write!(f, "{}", n),
@@ -662,10 +610,14 @@ impl Literal {
         }
     }
 }
+*/
 
 pub type Var = Rc<String>;
 
-pub(crate) fn subterm_index(heap: &[HeapCellValue], subterm_loc: usize) -> (usize, HeapCellValue) {
+pub(crate) fn subterm_index(
+    heap: &impl SizedHeap,
+    subterm_loc: usize,
+) -> (usize, HeapCellValue) {
     let subterm = heap[subterm_loc];
 
     if subterm.is_ref() {
@@ -691,11 +643,12 @@ pub enum Term {
     AnonVar,
     Clause(Cell<RegType>, Atom, Vec<Term>),
     Cons(Cell<RegType>, Box<Term>, Box<Term>),
-    Literal(Cell<RegType>, Literal),
+    Literal(Cell<RegType>, HeapCellValue),
+    // Literal(Cell<RegType>, Literal),
     // PartialString wraps a String in anticipation of it absorbing
     // other PartialString variants in as_partial_string.
-    PartialString(Cell<RegType>, String, Box<Term>),
-    CompleteString(Cell<RegType>, Atom),
+    PartialString(Cell<RegType>, Rc<String>, Box<Term>),
+    CompleteString(Cell<RegType>, Rc<String>),
     Var(Cell<VarReg>, VarPtr),
 }
 
@@ -709,8 +662,11 @@ impl Term {
 
     pub fn name(&self) -> Option<Atom> {
         match self {
-            &Term::Literal(_, Literal::Atom(ref atom)) | &Term::Clause(_, ref atom, ..) => {
-                Some(*atom)
+            Term::Literal(_, cell) => {
+                cell.to_atom()
+            }
+            &Term::Clause(_, atom, ..) => {
+                Some(atom)
             }
             _ => None,
         }
@@ -755,11 +711,11 @@ pub fn unfold_by_str(mut term: Term, s: Atom) -> Vec<Term> {
  */
 
 pub(crate) fn fetch_index_ptr(
-    heap: &[HeapCellValue],
+    heap: &impl SizedHeap,
     arity: usize,
     term_loc: usize,
 ) -> Option<CodeIndex> {
-    if term_loc + arity + 1 >= heap.len() {
+    if term_loc + arity + 1 >= heap.cell_len() || heap.pstr_at(term_loc + arity + 1) {
         return None;
     }
 
@@ -779,7 +735,7 @@ pub(crate) fn fetch_index_ptr(
 }
 
 pub(crate) fn blunt_index_ptr(
-    heap: &mut [HeapCellValue],
+    heap: &mut impl SizedHeapMut,
     key: PredicateKey,
     term_loc: usize,
 ) -> bool {
@@ -792,7 +748,7 @@ pub(crate) fn blunt_index_ptr(
 }
 
 pub(crate) fn unfold_by_str_once(
-    heap: &mut [HeapCellValue],
+    heap: &mut impl SizedHeapMut,
     start_term: HeapCellValue,
     atom: Atom,
 ) -> Option<usize> {
@@ -816,7 +772,7 @@ pub(crate) fn unfold_by_str_once(
 }
 
 pub fn unfold_by_str(
-    heap: &mut [HeapCellValue],
+    heap: &mut impl SizedHeapMut,
     mut start_term: HeapCellValue,
     atom: Atom,
 ) -> Vec<HeapCellValue> {
@@ -857,7 +813,7 @@ pub fn unfold_by_str_locs(
 */
 
 pub fn unfold_by_str_locs(
-    heap: &mut [HeapCellValue],
+    heap: &mut impl SizedHeapMut,
     mut term_loc: usize,
     atom: Atom,
 ) -> Vec<(HeapCellValue, usize)> {
@@ -875,11 +831,14 @@ pub fn unfold_by_str_locs(
     terms
 }
 
-pub fn term_name(heap: &[HeapCellValue], mut term_loc: usize) -> Option<Atom> {
+pub fn term_predicate_key(
+    heap: &impl SizedHeap,
+    mut term_loc: usize,
+) -> Option<PredicateKey> {
     loop {
         read_heap_cell!(heap[term_loc],
-            (HeapCellValueTag::Atom, (name, _arity)) => {
-                return Some(name);
+            (HeapCellValueTag::Atom, (name, arity)) => {
+                return Some((name, arity));
             }
             (HeapCellValueTag::Str, s) => {
                 term_loc = s;
@@ -893,32 +852,6 @@ pub fn term_name(heap: &[HeapCellValue], mut term_loc: usize) -> Option<Atom> {
             }
             _ => {
                 return None;
-            }
-        );
-    }
-}
-
-pub fn term_arity(heap: &[HeapCellValue], mut term_loc: usize) -> usize {
-    loop {
-        read_heap_cell!(heap[term_loc],
-            (HeapCellValueTag::Atom, (_name, arity)) => {
-                return arity;
-            }
-            (HeapCellValueTag::Str, s) => {
-                term_loc = s;
-            }
-            (HeapCellValueTag::Lis) => {
-                return 2;
-            }
-            (HeapCellValueTag::AttrVar | HeapCellValueTag::Var, h) => {
-                if h != term_loc {
-                    term_loc = h;
-                } else {
-                    return 0;
-                }
-            }
-            _ => {
-                return 0;
             }
         );
     }
@@ -970,7 +903,7 @@ pub fn term_deref(heap: &[HeapCellValue], mut term_loc: usize) -> HeapCellValue 
 }
 */
 
-pub fn term_nth_arg(heap: &[HeapCellValue], mut term_loc: usize, n: usize) -> Option<usize> {
+pub fn term_nth_arg(heap: &impl SizedHeap, mut term_loc: usize, n: usize) -> Option<usize> {
     loop {
         read_heap_cell!(heap[term_loc],
             (HeapCellValueTag::Str, s) => {
@@ -1010,108 +943,55 @@ pub fn term_nth_arg(heap: &[HeapCellValue], mut term_loc: usize, n: usize) -> Op
     }
 }
 
-pub type VarLocs = IndexMap<Var, HeapCellValue, FxBuildHasher>;
-pub type InverseVarLocs = IndexMap<usize, Var, FxBuildHasher>;
-
 #[derive(Debug)]
-pub struct FocusedHeap {
-    pub heap: Vec<HeapCellValue>,
+pub struct TermWriteResult {
     pub focus: usize,
     pub inverse_var_locs: InverseVarLocs,
 }
 
-impl FocusedHeap {
-    pub fn empty() -> Self {
-        Self {
-            heap: vec![],
-            focus: 0,
-            inverse_var_locs: InverseVarLocs::default(),
-        }
-    }
+pub type VarLocs = IndexMap<Var, HeapCellValue, FxBuildHasher>;
+pub type InverseVarLocs = IndexMap<usize, Var, FxBuildHasher>;
 
-    pub fn copy_term_from_machine_heap(
-        &mut self,
-        machine_st: &mut MachineState,
-        cell: HeapCellValue,
-    ) {
-        let hb = machine_st.heap.len();
-
-        copy_term(
-            CopyBallTerm::new(
-                &mut machine_st.attr_var_init.attr_var_queue,
-                &mut machine_st.stack,
-                &mut machine_st.heap,
-                &mut self.heap,
-            ),
-            cell,
-            AttrVarPolicy::DeepCopy,
-        );
-
-        for cell in self.heap.iter_mut() {
-            *cell = *cell - hb;
-        }
-    }
-
-    pub fn as_ref_mut(&mut self, focus: usize) -> FocusedHeapRefMut {
-        FocusedHeapRefMut {
-            heap: &mut self.heap,
-            focus,
-        }
-    }
-
-    pub fn deref_loc(&self, term_loc: usize) -> HeapCellValue {
-        use crate::machine::heap::*;
-
-        let cell = self.heap[term_loc];
-        heap_bound_store(&self.heap, heap_bound_deref(&self.heap, cell))
-    }
-
-    pub fn name(&self, term_loc: usize) -> Option<Atom> {
-        term_name(&self.heap, term_loc)
-    }
-
-    pub fn arity(&self, term_loc: usize) -> usize {
-        term_arity(&self.heap, term_loc)
-    }
-
-    pub fn nth_arg(&self, term_loc: usize, n: usize) -> Option<usize> {
-        term_nth_arg(&self.heap, term_loc, n)
-    }
-}
-
+#[derive(Debug)]
 pub struct FocusedHeapRefMut<'a> {
-    pub heap: &'a mut Vec<HeapCellValue>,
+    pub heap: &'a mut Heap,
     pub focus: usize,
 }
 
 impl<'a> FocusedHeapRefMut<'a> {
-    pub fn name(&self, term_loc: usize) -> Option<Atom> {
-        term_name(&self.heap, term_loc)
+    #[inline]
+    pub fn from(heap: &'a mut Heap, focus: usize) -> Self {
+        Self { heap, focus }
+    }
+
+    pub fn predicate_key(&self, term_loc: usize) -> Option<PredicateKey> {
+        term_predicate_key(self.heap, term_loc)
     }
 
     pub fn arity(&self, term_loc: usize) -> usize {
-        term_arity(&self.heap, term_loc)
+        self.predicate_key(term_loc)
+            .map(|(_, arity)| arity)
+            .unwrap_or(0)
     }
 
     pub fn deref_loc(&self, term_loc: usize) -> HeapCellValue {
-        use crate::machine::heap::*;
-
         let cell = self.heap[term_loc];
-        heap_bound_store(&self.heap, heap_bound_deref(&self.heap, cell))
+        heap_bound_store(self.heap, heap_bound_deref(self.heap, cell))
     }
 
     pub fn nth_arg(&self, term_loc: usize, n: usize) -> Option<usize> {
         term_nth_arg(self.heap, term_loc, n)
     }
 
-    pub fn from_cell(heap: &'a mut Vec<HeapCellValue>, cell: HeapCellValue) -> Self {
+    /*
+    pub fn from_cell(heap: &'a mut Heap, cell: HeapCellValue) -> Self {
         let focus = read_heap_cell!(cell,
             (HeapCellValueTag::AttrVar | HeapCellValueTag::Var, h) => {
                 h
             }
             _ => {
                 let h = heap.len();
-                heap.push(cell);
+                heap.push_cell(cell).unwrap();
 
                 h
             }
@@ -1119,4 +999,5 @@ impl<'a> FocusedHeapRefMut<'a> {
 
         Self { heap, focus }
     }
+    */
 }

@@ -3,9 +3,10 @@ use crate::parser::parser::*;
 
 use crate::atom_table::*;
 use crate::machine::machine_errors::*;
-use crate::machine::machine_state::{MachineState, copy_and_align_iter};
+use crate::machine::machine_state::MachineState;
 use crate::machine::streams::*;
 use crate::parser::char_reader::*;
+use crate::parser::lexer::LexerParser;
 #[cfg(feature = "repl")]
 use crate::repl_helper::Helper;
 
@@ -22,9 +23,9 @@ use std::io::{Error, ErrorKind};
 use std::sync::Arc;
 
 pub(crate) fn devour_whitespace<R: CharRead>(
-    parser: &mut Parser<'_, R>,
+    lexer: &mut LexerParser<'_, R>,
 ) -> Result<bool, ParserError> {
-    match parser.lexer.scan_for_layout() {
+    match lexer.scan_for_layout() {
         Err(e) if e.is_unexpected_eof() => Ok(true),
         Err(e) => Err(e),
         Ok(_) => Ok(false),
@@ -47,35 +48,17 @@ pub(crate) fn error_after_read_term(
     CompilationError::from(err)
 }
 
-impl FocusedHeap {
-    pub fn to_machine_heap(mut self, machine_st: &mut MachineState) -> TermWriteResult {
-        let heap_len = machine_st.heap.len();
-        machine_st.heap.extend(copy_and_align_iter(self.heap.drain(..), 0, heap_len as i64));
-
-        let mut inverse_var_locs = InverseVarLocs::default();
-
-        for (var_loc, var_name) in self.inverse_var_locs.drain(..) {
-            inverse_var_locs.insert(var_loc + heap_len, var_name);
-        }
-
-        TermWriteResult {
-            heap_loc: self.focus + heap_len,
-            inverse_var_locs,
-        }
-    }
-}
-
 impl MachineState {
     pub(crate) fn read<R: CharRead>(
         &mut self,
         inner: R,
         op_dir: &OpDir,
-    ) -> Result<(FocusedHeap, usize), ParserError> {
-        let mut parser = Parser::new(inner, self);
+    ) -> Result<(TermWriteResult, usize), ParserError> {
+        let mut lexer_parser = LexerParser::new(inner, self);
         let op_dir = CompositeOpDir::new(op_dir, None);
 
-        let term_result = parser.read_term(&op_dir, Tokens::Default);
-        let lines_read  = parser.lines_read();
+        let term_result = lexer_parser.read_term(&op_dir, Tokens::Default);
+        let lines_read  = lexer_parser.line_num();
 
         term_result.map(|term| (term, lines_read))
     }
@@ -96,7 +79,7 @@ impl MachineState {
             }
         };
 
-        Ok(term.to_machine_heap(self))
+        Ok(term)
     }
 }
 
@@ -304,10 +287,4 @@ impl CharRead for ReadlineStream {
     fn put_back_char(&mut self, c: char) {
         self.pending_input.put_back_char(c);
     }
-}
-
-#[derive(Debug)]
-pub struct TermWriteResult {
-    pub heap_loc: usize,
-    pub inverse_var_locs: InverseVarLocs,
 }
