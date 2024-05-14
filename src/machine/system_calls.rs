@@ -1,4 +1,5 @@
 use crate::parser::ast::*;
+use crate::parser::lexer::LexerParser;
 use crate::parser::parser::*;
 
 use base64::Engine;
@@ -11,6 +12,7 @@ use crate::atom_table::*;
 #[cfg(feature = "ffi")]
 use crate::ffi::*;
 use crate::forms::*;
+use crate::functor_macro::*;
 use crate::heap_iter::*;
 use crate::heap_print::*;
 #[cfg(feature = "http")]
@@ -39,7 +41,6 @@ use ordered_float::OrderedFloat;
 use fxhash::{FxBuildHasher, FxHasher};
 use indexmap::IndexSet;
 
-use std::cell::Cell;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::convert::TryFrom;
@@ -124,6 +125,56 @@ pub(crate) fn get_key() -> KeyEvent {
     key
 }
 
+fn pstr_segment_char_count_and_tail(heap: &Heap, pstr_loc: usize) -> (usize, usize) {
+    let char_iter = heap.char_iter(pstr_loc);
+
+    let mut char_count = 0;
+    let mut byte_offset = 0;
+
+    for c in char_iter {
+        if c == '\u{0}' {
+            break;
+        }
+
+        char_count += 1;
+        byte_offset += c.len_utf8();
+    }
+
+    (char_count, Heap::neighboring_cell_offset(pstr_loc + byte_offset))
+}
+
+fn pstr_segment_char_count_up_to(
+    heap: &Heap,
+    pstr_loc: usize,
+    max_chars: usize,
+) -> PStrSegmentCountResult {
+    let mut char_iter = heap.char_iter(pstr_loc);
+    let mut char_count = 0;
+    let mut byte_offset = 0;
+
+    if max_chars > 0 {
+        while let Some(c) = char_iter.next() {
+            if c == '\u{0}' {
+                break;
+            }
+
+            char_count += 1;
+            byte_offset += c.len_utf8();
+
+            if char_count >= max_chars {
+                break;
+            }
+        }
+    }
+
+    if char_iter.next().is_some() {
+        PStrSegmentCountResult::Mid { char_count, pstr_loc: pstr_loc + byte_offset }
+    } else {
+        let tail_loc = Heap::neighboring_cell_offset(pstr_loc + byte_offset);
+        PStrSegmentCountResult::End { char_count, tail_loc }
+    }
+}
+
 #[derive(Debug, Clone, Copy)]
 pub struct BrentAlgState {
     pub hare: usize,
@@ -161,7 +212,7 @@ impl BrentAlgState {
         self.lam += 1;
 
         if self.tortoise == self.hare {
-            return Some(CycleSearchResult::Cyclic(self.lam));
+            return Some(CycleSearchResult::Cyclic { lambda: self.lam });
         } else {
             self.teleport_tortoise();
         }
@@ -179,28 +230,26 @@ impl BrentAlgState {
         self.max_steps > -1 && self.num_steps() as i64 >= self.max_steps
     }
 
-    pub fn to_result(mut self, heap: &[HeapCellValue]) -> CycleSearchResult {
+    pub fn to_result(mut self, heap: &Heap) -> CycleSearchResult {
         loop {
             read_heap_cell!(heap[self.hare],
-                (HeapCellValueTag::PStrOffset) => {
-                    let (pstr_loc, offset) = pstr_loc_and_offset(heap, self.hare);
-                    let offset = offset.get_num() as usize;
-
-                    let pstr = cell_as_string!(heap[self.hare]);
-                    self.pstr_chars += pstr.as_str_from(offset).chars().count();
-
-                    return CycleSearchResult::PStrLocation(self.num_steps(), pstr_loc, offset);
-                }
-                (HeapCellValueTag::PStrLoc, l) => {
-                    let (_pstr_loc, offset) = pstr_loc_and_offset(heap, l);
-                    let offset = offset.get_num() as usize;
-                    return CycleSearchResult::PStrLocation(self.num_steps(), l, offset);
+                (HeapCellValueTag::PStrLoc) => {
+                    // let (_pstr_loc, offset) = pstr_loc_and_offset(heap, l);
+                    // let offset = offset.get_num() as usize;
+                    let num_steps = self.num_steps();
+                    return CycleSearchResult::PStrLocation { num_steps, pstr_loc: heap[self.hare] };
                 }
                 (HeapCellValueTag::Atom, (name, arity)) => {
                     return if name == atom!("[]") && arity == 0 {
-                        CycleSearchResult::ProperList(self.num_steps())
+                        CycleSearchResult::ProperList { num_steps: self.num_steps() }
                     } else {
-                        CycleSearchResult::NotList(self.num_steps(), heap[self.hare])
+                        let heap_loc = if arity > 0 {
+                            str_loc_as_cell!(self.hare)
+                        } else {
+                            heap_loc_as_cell!(self.hare)
+                        };
+
+                        CycleSearchResult::NotList { num_steps: self.num_steps(), heap_loc }
                     };
                 }
                 (HeapCellValueTag::Str, s) => {
@@ -208,96 +257,72 @@ impl BrentAlgState {
                         .get_name_and_arity();
 
                     return if name == atom!("[]") && arity == 0 {
-                        CycleSearchResult::ProperList(self.num_steps())
+                        CycleSearchResult::ProperList { num_steps: self.num_steps() }
                     } else {
-                        CycleSearchResult::NotList(self.num_steps(), heap[self.hare])
+                        CycleSearchResult::NotList {
+                            num_steps: self.num_steps(),
+                            heap_loc: heap[self.hare],
+                        }
                     };
                 }
                 (HeapCellValueTag::Lis, l) => {
-                    return CycleSearchResult::UntouchedList(self.num_steps(), l);
+                    return CycleSearchResult::UntouchedList { num_steps: self.num_steps(), list_loc: l };
                 }
                 (HeapCellValueTag::AttrVar | HeapCellValueTag::Var, h) => {
                     if h == self.hare {
-                        let var = heap[self.hare].as_var().unwrap();
-                        return CycleSearchResult::PartialList(self.num_steps(), var);
+                        // let var = heap[self.hare].as_var().unwrap();
+                        return CycleSearchResult::PartialList {
+                            num_steps: self.num_steps(),
+                            heap_loc: heap[self.hare],
+                        };
                     } else {
                         self.hare = h;
                     }
                 }
                 _ => {
-                    return CycleSearchResult::NotList(self.num_steps(), heap[self.hare]);
+                    let heap_loc = heap_loc_as_cell!(self.hare);
+                    return CycleSearchResult::NotList { num_steps: self.num_steps(), heap_loc };
                 }
             );
         }
     }
 
-    fn add_pstr_offset_chars(
-        &mut self,
-        heap: &[HeapCellValue],
-        h: usize,
-        offset: usize,
-    ) -> Option<CycleSearchResult> {
-        read_heap_cell!(heap[h],
-            (HeapCellValueTag::CStr, cstr_atom) => {
-                let cstr = PartialString::from(cstr_atom);
-                let num_chars = cstr.as_str_from(offset).chars().count();
+    fn add_pstr_chars(&mut self, heap: &Heap, pstr_loc: usize) -> Option<CycleSearchResult> {
+        let next_cell_loc;
 
-                if self.max_steps == -1 || self.num_steps() + num_chars <= self.max_steps as usize {
-                    self.pstr_chars += num_chars;
-                    Some(CycleSearchResult::ProperList(self.num_steps()))
-                } else {
-                    let char_offset = self.max_steps as usize - self.num_steps();
-                    self.pstr_chars += char_offset;
-                    Some(CycleSearchResult::PStrLocation(self.max_steps as usize, h, char_offset + offset))
+        if self.max_steps == -1 {
+            let num_chars;
+            (num_chars, next_cell_loc) = pstr_segment_char_count_and_tail(heap, pstr_loc);
+            self.pstr_chars += num_chars - 1;
+        } else {
+            let max_chars = self.max_steps as usize - self.num_steps();
+
+            match pstr_segment_char_count_up_to(heap, pstr_loc, max_chars) {
+                PStrSegmentCountResult::Mid { char_count, pstr_loc } => {
+                    self.pstr_chars += char_count;
+                    return Some(CycleSearchResult::PStrLocation {
+                        num_steps: self.num_steps(),
+                        pstr_loc: pstr_loc_as_cell!(pstr_loc),
+                    });
+                }
+                PStrSegmentCountResult::End { char_count, tail_loc } => {
+                    self.pstr_chars += char_count.saturating_sub(1);
+                    next_cell_loc = tail_loc;
                 }
             }
-            (HeapCellValueTag::PStr, pstr_atom) => {
-                let pstr = PartialString::from(pstr_atom);
-                let num_chars = pstr.as_str_from(offset).chars().count();
+        }
 
-                if self.max_steps == -1 || self.num_steps() + num_chars <= self.max_steps as usize {
-                    self.pstr_chars += num_chars - 1;
-                    self.step(h+1)
-                } else {
-                    let char_offset = self.max_steps as usize - self.num_steps();
-                    self.pstr_chars += char_offset;
-                    Some(CycleSearchResult::PStrLocation(self.max_steps as usize, h, char_offset + offset))
-                }
-            }
-            _ => {
-                unreachable!()
-            }
-        )
-    }
-
-    fn add_pstr_chars_and_step(
-        &mut self,
-        heap: &[HeapCellValue],
-        h: usize,
-    ) -> Option<CycleSearchResult> {
-        read_heap_cell!(heap[h],
-            (HeapCellValueTag::PStrOffset, l) => {
-                let (pstr_loc, _) = pstr_loc_and_offset(heap, l);
-                let offset = cell_as_fixnum!(heap[h+1]);
-                self.add_pstr_offset_chars(heap, pstr_loc, offset.get_num() as usize)
-            }
-            _ => {
-                self.add_pstr_offset_chars(heap, h, 0)
-            }
-        )
+        self.step(next_cell_loc)
     }
 
     #[inline(always)]
-    fn cycle_step(&mut self, heap: &[HeapCellValue]) -> Option<CycleSearchResult> {
+    fn cycle_step(&mut self, heap: &Heap) -> Option<CycleSearchResult> {
         loop {
             let value = heap[self.hare];
 
             read_heap_cell!(value,
                 (HeapCellValueTag::PStrLoc, h) => {
-                    return self.add_pstr_chars_and_step(heap, h);
-                }
-                (HeapCellValueTag::CStr | HeapCellValueTag::PStrOffset) => {
-                    return self.add_pstr_chars_and_step(heap, self.hare);
+                    return self.add_pstr_chars(heap, h);
                 }
                 (HeapCellValueTag::Lis, h) => {
                     return self.step(h+1);
@@ -308,63 +333,49 @@ impl BrentAlgState {
                     return if name == atom!(".") && arity == 2 {
                         self.step(s+2)
                     } else {
-                        Some(CycleSearchResult::NotList(self.num_steps(), value))
+                        Some(CycleSearchResult::NotList { num_steps: self.num_steps(), heap_loc: value })
                     };
                 }
                 (HeapCellValueTag::Atom, (name, arity)) => {
                     debug_assert!(arity == 0);
 
                     return if name == atom!("[]") {
-                        Some(CycleSearchResult::ProperList(self.num_steps()))
+                        Some(CycleSearchResult::ProperList { num_steps: self.num_steps() })
                     } else {
-                        Some(CycleSearchResult::NotList(self.num_steps(), value))
+                        Some(CycleSearchResult::NotList { num_steps: self.num_steps(), heap_loc: value })
                     };
                 }
                 (HeapCellValueTag::AttrVar | HeapCellValueTag::Var, h) => {
                     if self.hare == h {
-                        let r = value.as_var().unwrap();
-                        return Some(CycleSearchResult::PartialList(self.num_steps(), r));
+                        return Some(CycleSearchResult::PartialList { num_steps: self.num_steps(), heap_loc: value });
                     }
 
                     self.hare = h;
                 }
                 _ => {
-                    return Some(CycleSearchResult::NotList(self.num_steps(), value));
+                    return Some(CycleSearchResult::NotList { num_steps: self.num_steps(), heap_loc: value });
                 }
             );
         }
     }
 
-    pub fn detect_cycles(heap: &[HeapCellValue], value: HeapCellValue) -> CycleSearchResult {
-        let mut pstr_chars = 0;
+    pub fn detect_cycles(heap: &Heap, value: HeapCellValue) -> CycleSearchResult {
+        let mut char_count = 0;
 
         let hare = read_heap_cell!(value,
             (HeapCellValueTag::Lis, offset) => {
                 offset+1
             }
             (HeapCellValueTag::PStrLoc, h) => {
-                let (h_offset, n) = pstr_loc_and_offset(heap, h);
-                let n = n.get_num() as usize;
-                let pstr = cell_as_string!(heap[h_offset]);
+                let tail_idx;
+                (char_count, tail_idx) = pstr_segment_char_count_and_tail(heap, h);
 
-                pstr_chars = pstr.as_str_from(n).chars().count() - 1;
-
-                if heap[h].get_tag() == HeapCellValueTag::PStrOffset {
-                    debug_assert!(heap[h].get_tag() == HeapCellValueTag::PStrOffset);
-
-                    if heap[h_offset].get_tag() == HeapCellValueTag::CStr {
-                        return CycleSearchResult::ProperList(pstr_chars + 1);
-                    }
+                if heap[tail_idx] == empty_list_as_cell!() {
+                    return CycleSearchResult::ProperList { num_steps: char_count };
                 }
 
-                h_offset+1
-            }
-            (HeapCellValueTag::PStrOffset) => {
-                unreachable!()
-            }
-            (HeapCellValueTag::CStr, cstr_atom) => {
-                let cstr = PartialString::from(cstr_atom);
-                return CycleSearchResult::ProperList(cstr.as_str_from(0).chars().count());
+                char_count = char_count.saturating_sub(1);
+                tail_idx
             }
             (HeapCellValueTag::Str, s) => {
                 let (name, arity) = cell_as_atom_cell!(heap[s])
@@ -375,28 +386,29 @@ impl BrentAlgState {
                 } else if name == atom!(".") && arity == 2 {
                     s + 2
                 } else {
-                    return CycleSearchResult::NotList(0, value);
+                    return CycleSearchResult::NotList { num_steps: 0, heap_loc: value };
                 }
             }
             (HeapCellValueTag::Atom, (name, arity)) => {
                 return if name == atom!("[]") && arity == 0 {
                     CycleSearchResult::EmptyList
                 } else {
-                    CycleSearchResult::NotList(0, value)
+                    debug_assert_eq!(arity, 0);
+                    CycleSearchResult::NotList { num_steps: 0, heap_loc: value }
                 };
             }
             (HeapCellValueTag::AttrVar | HeapCellValueTag::StackVar | HeapCellValueTag::Var) => {
-                return CycleSearchResult::PartialList(0, value.as_var().unwrap());
+                return CycleSearchResult::PartialList { num_steps: 0, heap_loc: value };
             }
             _ => {
-                return CycleSearchResult::NotList(0, value);
+                return CycleSearchResult::NotList { num_steps: 0, heap_loc: value };
             }
         );
 
         let mut brent_st = BrentAlgState::new(hare);
 
         brent_st.power += 1; // advance a step.
-        brent_st.pstr_chars = pstr_chars;
+        brent_st.pstr_chars = char_count;
 
         loop {
             if let Some(result) = brent_st.cycle_step(heap) {
@@ -406,58 +418,31 @@ impl BrentAlgState {
     }
 
     pub fn detect_cycles_with_max(
-        heap: &[HeapCellValue],
+        heap: &Heap,
         max_steps: usize,
         value: HeapCellValue,
     ) -> CycleSearchResult {
-        let mut pstr_chars = 0;
+        let mut char_count = 0;
 
         let hare = read_heap_cell!(value,
             (HeapCellValueTag::Lis, offset) => {
                 if max_steps > 0 {
                     offset+1
                 } else {
-                    return CycleSearchResult::UntouchedList(0, offset);
+                    return CycleSearchResult::UntouchedList { num_steps: 0, list_loc: offset };
                 }
             }
             (HeapCellValueTag::PStrLoc, h) => {
-                let (h_offset, n) = pstr_loc_and_offset(heap, h);
-                let n = n.get_num() as usize;
-                let pstr = cell_as_string!(heap[h_offset]);
-
-                pstr_chars = pstr.as_str_from(n).chars().count() - 1;
-
-                if heap[h].get_tag() == HeapCellValueTag::PStrOffset && heap[h_offset].get_tag() == HeapCellValueTag::CStr {
-                    return if pstr_chars < max_steps {
-                        CycleSearchResult::ProperList(pstr_chars + 1)
-                    } else {
-                        let offset = max_steps + n;
-                        CycleSearchResult::PStrLocation(max_steps, h_offset, offset)
+                match pstr_segment_char_count_up_to(heap, h, max_steps) {
+                    PStrSegmentCountResult::Mid { char_count, pstr_loc } => {
+                        let pstr_loc = pstr_loc_as_cell!(pstr_loc);
+                        return CycleSearchResult::PStrLocation { num_steps: char_count, pstr_loc };
+                    }
+                    PStrSegmentCountResult::End { char_count: num_chars, tail_loc } => {
+                        char_count = num_chars - 1;
+                        tail_loc
                     }
                 }
-
-                if pstr_chars + 1 > max_steps {
-                    return CycleSearchResult::PStrLocation(max_steps, h_offset, max_steps);
-                }
-
-                h_offset+1
-            }
-            (HeapCellValueTag::PStrOffset) => {
-                unreachable!()
-            }
-            (HeapCellValueTag::CStr, cstr_atom) => {
-                return if max_steps > 0 {
-                    let cstr = PartialString::from(cstr_atom);
-                    let pstr_chars = cstr.as_str_from(0).chars().count();
-
-                    if pstr_chars <= max_steps {
-                        CycleSearchResult::ProperList(pstr_chars)
-                    } else {
-                        CycleSearchResult::UntouchedCStr(cstr_atom, max_steps)
-                    }
-                } else {
-                    CycleSearchResult::UntouchedCStr(cstr_atom, 0)
-                };
             }
             (HeapCellValueTag::Str, s) => {
                 let (name, arity) = cell_as_atom_cell!(heap[s]).get_name_and_arity();
@@ -468,31 +453,32 @@ impl BrentAlgState {
                     if max_steps > 0 {
                         s + 2
                     } else {
-                        return CycleSearchResult::UntouchedList(0, s + 1);
+                        return CycleSearchResult::UntouchedList { num_steps: 0, list_loc: s + 1 };
                     }
                 } else {
-                    return CycleSearchResult::NotList(0, value);
+                    return CycleSearchResult::NotList { num_steps: 0, heap_loc: value };
                 }
             }
             (HeapCellValueTag::Atom, (name, arity)) => {
                 return if name == atom!("[]") && arity == 0 {
                     CycleSearchResult::EmptyList
                 } else {
-                    CycleSearchResult::NotList(0, value)
+                    debug_assert_eq!(arity, 0);
+                    CycleSearchResult::NotList { num_steps: 0, heap_loc: value }
                 };
             }
             (HeapCellValueTag::AttrVar | HeapCellValueTag::StackVar | HeapCellValueTag::Var) => {
-                return CycleSearchResult::PartialList(0, value.as_var().unwrap());
+                return CycleSearchResult::PartialList { num_steps: 0, heap_loc: value };
             }
             _ => {
-                return CycleSearchResult::NotList(0, value);
+                return CycleSearchResult::NotList { num_steps: 0, heap_loc: value };
             }
         );
 
         let mut brent_st = BrentAlgState::new(hare);
 
         brent_st.power += 1; // advance a step.
-        brent_st.pstr_chars = pstr_chars;
+        brent_st.pstr_chars = char_count;
         brent_st.max_steps = max_steps as i64;
 
         loop {
@@ -511,6 +497,12 @@ impl BrentAlgState {
 enum MatchSite {
     NoMatchVarTail(usize), // no match, we refer to the location of the uninstantiated tail instead.
     Match(usize),          // a match
+}
+
+#[derive(Debug)]
+enum PStrSegmentCountResult {
+    Mid { char_count: usize, pstr_loc: usize },
+    End { char_count: usize, tail_loc: usize }
 }
 
 #[derive(Debug)]
@@ -539,24 +531,26 @@ impl MachineState {
         );
     }
 
-    pub(crate) fn get_attr_var_list(&mut self, attr_var: HeapCellValue) -> Option<usize> {
+    pub(crate) fn get_attr_var_list(&mut self, attr_var: HeapCellValue) -> Result<Option<usize>, usize> {
         read_heap_cell!(attr_var,
             (HeapCellValueTag::AttrVar, h) => {
-                Some(h + 1)
+                Ok(Some(h + 1))
             }
             (HeapCellValueTag::Var | HeapCellValueTag::StackVar) => {
                 // create an AttrVar in the heap.
-                let h = self.heap.len();
+                let h = self.heap.cell_len();
+                let mut writer = self.heap.reserve(2)?;
 
-                self.heap.push(attr_var_as_cell!(h));
-                self.heap.push(heap_loc_as_cell!(h+1));
+                writer.write_with(|section| {
+                    section.push_cell(attr_var_as_cell!(h));
+                    section.push_cell(heap_loc_as_cell!(h+1));
+                });
 
                 self.bind(Ref::attr_var(h), attr_var);
-
-                Some(h + 1)
+                Ok(Some(h + 1))
             }
             _ => {
-                None
+                Ok(None)
             }
         )
     }
@@ -591,12 +585,13 @@ impl MachineState {
     }
 
     fn skip_max_list_cycle(&mut self, lam: usize) {
-        fn step(heap: &[HeapCellValue], mut value: HeapCellValue) -> usize {
+        fn step(heap: &Heap, mut value: HeapCellValue) -> usize {
             loop {
                 read_heap_cell!(value,
                     (HeapCellValueTag::PStrLoc, h) => {
-                        let (h_offset, _) = pstr_loc_and_offset(heap, h);
-                        return h_offset+1;
+                        let (_, tail) = heap.scan_slice_to_str(h);
+                        // let (h_offset, _) = pstr_loc_and_offset(heap, h);
+                        return tail;
                     }
                     (HeapCellValueTag::Lis, h) => {
                         return h+1;
@@ -614,13 +609,14 @@ impl MachineState {
             }
         }
 
-        let h = self.heap.len();
-        self.heap.push(self.registers[3]);
+        // let h = self.heap.cell_len();
+        // self.heap.push(self.registers[3]);
 
-        let mut hare = h;
+        let orig_hare = step(&self.heap, self.registers[3]);
+        let mut hare = orig_hare;
         let mut tortoise = hare;
 
-        for _ in 0..lam {
+        for _ in 1..lam {
             hare = step(&self.heap, self.heap[hare]);
         }
 
@@ -636,7 +632,7 @@ impl MachineState {
         // reached in the fashion of a C do-while loop since hare
         // may point to the beginning of a cycle.
 
-        let mut brent_st = BrentAlgState::new(h);
+        let mut brent_st = BrentAlgState::new(orig_hare);
 
         brent_st.cycle_step(&self.heap);
 
@@ -644,7 +640,7 @@ impl MachineState {
             brent_st.cycle_step(&self.heap);
         }
 
-        self.heap.pop();
+        // self.heap.pop_cell();
 
         let target_n = self.store(self.deref(self.registers[1]));
         self.unify_fixnum(Fixnum::build_with(brent_st.num_steps() as i64), target_n);
@@ -665,72 +661,45 @@ impl MachineState {
     }
 
     fn skip_max_list_result(&mut self, max_steps: i64) {
+        let cell = self.store(self.deref(self.registers[3]));
+
         let search_result = if max_steps == -1 {
-            BrentAlgState::detect_cycles(&self.heap, self.store(self.deref(self.registers[3])))
+            BrentAlgState::detect_cycles(&self.heap, cell)
         } else {
             BrentAlgState::detect_cycles_with_max(
                 &self.heap,
                 max_steps as usize,
-                self.store(self.deref(self.registers[3])),
+                cell
             )
         };
 
         match search_result {
-            CycleSearchResult::PStrLocation(steps, pstr_loc, offset) => {
+            CycleSearchResult::PStrLocation { num_steps, pstr_loc } => {
                 let steps = if max_steps > -1 {
-                    std::cmp::min(max_steps, steps as i64)
+                    std::cmp::min(max_steps, num_steps as i64)
                 } else {
-                    steps as i64
+                    max_steps as i64
                 };
 
-                let cell = if offset > 0 {
-                    let h = self.heap.len();
-                    let (pstr_loc, _) = pstr_loc_and_offset(&self.heap, pstr_loc);
-
-                    self.heap.push(pstr_offset_as_cell!(pstr_loc));
-                    self.heap
-                        .push(fixnum_as_cell!(Fixnum::build_with(offset as i64)));
-
-                    pstr_loc_as_cell!(h)
-                } else {
-                    pstr_loc_as_cell!(pstr_loc)
-                };
-
-                self.finalize_skip_max_list(steps, cell);
+                self.finalize_skip_max_list(steps, pstr_loc); // cell);
             }
-            CycleSearchResult::UntouchedList(n, l) => {
-                self.finalize_skip_max_list(n as i64, list_loc_as_cell!(l));
-            }
-            CycleSearchResult::UntouchedCStr(cstr_atom, n) => {
-                let cell = if n > 0 {
-                    let h = self.heap.len();
-
-                    self.heap.push(string_as_cstr_cell!(cstr_atom));
-                    self.heap.push(pstr_offset_as_cell!(h));
-                    self.heap
-                        .push(fixnum_as_cell!(Fixnum::build_with(n as i64)));
-
-                    pstr_loc_as_cell!(h + 1)
-                } else {
-                    string_as_cstr_cell!(cstr_atom)
-                };
-
-                self.finalize_skip_max_list(n as i64, cell);
+            CycleSearchResult::UntouchedList { num_steps, list_loc: l } => {
+                self.finalize_skip_max_list(num_steps as i64, list_loc_as_cell!(l));
             }
             CycleSearchResult::EmptyList => {
                 self.finalize_skip_max_list(0, empty_list_as_cell!());
             }
-            CycleSearchResult::PartialList(n, r) => {
-                self.finalize_skip_max_list(n as i64, r.as_heap_cell_value());
+            CycleSearchResult::PartialList { num_steps, heap_loc } => {
+                self.finalize_skip_max_list(num_steps as i64, heap_loc)
             }
-            CycleSearchResult::ProperList(steps) => {
-                self.finalize_skip_max_list(steps as i64, empty_list_as_cell!())
+            CycleSearchResult::ProperList { num_steps } => {
+                self.finalize_skip_max_list(num_steps as i64, empty_list_as_cell!())
             }
-            CycleSearchResult::NotList(n, value) => {
-                self.finalize_skip_max_list(n as i64, value);
+            CycleSearchResult::NotList { num_steps, heap_loc } => {
+                self.finalize_skip_max_list(num_steps as i64, heap_loc);
             }
-            CycleSearchResult::Cyclic(lam) => {
-                self.skip_max_list_cycle(lam);
+            CycleSearchResult::Cyclic { lambda } => {
+                self.skip_max_list_cycle(lambda);
             }
         };
     }
@@ -778,30 +747,33 @@ impl MachineState {
     ) {
         let mut seen_set = IndexSet::new();
 
-        let outcome = if term.is_ref() {
-            {
-                let mut iter = stackful_post_order_iter::<NonListElider>(
-                    &mut self.heap, &mut self.stack, term.get_value() as usize,
-                );
+        if term.is_ref() {
+            let mut iter = stackful_post_order_iter::<NonListElider>(
+                &mut self.heap, &mut self.stack, term.get_value() as usize,
+            );
 
-                while let Some(value) = iter.next() {
-                    if iter.parent_stack_len() >= max_depth {
-                        iter.pop_stack();
-                        continue;
-                    }
+            while let Some(value) = iter.next() {
+                if iter.parent_stack_len() >= max_depth {
+                    iter.pop_stack();
+                    continue;
+                }
 
-                    let value = unmark_cell_bits!(value);
+                let value = unmark_cell_bits!(value);
 
-                    if value.is_var() {
-                        seen_set.insert(value);
-                    }
+                if value.is_var() {
+                    seen_set.insert(value);
                 }
             }
+        }
 
-            heap_loc_as_cell!(iter_to_heap_list(&mut self.heap, seen_set.into_iter()))
-        } else {
-            empty_list_as_cell!()
-        };
+        let outcome = step_or_resource_error!(
+            self,
+            sized_iter_to_heap_list(
+                &mut self.heap,
+                seen_set.len(),
+                seen_set.into_iter(),
+            )
+        );
 
         unify_fn!(*self, list_of_vars, outcome);
     }
@@ -820,8 +792,8 @@ impl MachineState {
         &mut self,
         lh_offset: usize,
         copy_target: HeapCellValue,
-    ) -> usize {
-        let threshold = self.lifted_heap.len() - lh_offset;
+    ) -> Result<usize, usize> {
+        let threshold = self.lifted_heap.cell_len() - lh_offset;
 
         let mut copy_ball_term = CopyBallTerm::new(
             &mut self.attr_var_init.attr_var_queue,
@@ -830,13 +802,17 @@ impl MachineState {
             &mut self.lifted_heap,
         );
 
-        copy_ball_term.push(list_loc_as_cell!(threshold + 1));
-        copy_ball_term.push(heap_loc_as_cell!(threshold + 3));
-        copy_ball_term.push(heap_loc_as_cell!(threshold + 2));
+        let mut writer = copy_ball_term.reserve(3)?;
 
-        copy_term(copy_ball_term, copy_target, AttrVarPolicy::DeepCopy);
+        writer.write_with(|section| {
+            section.push_cell(list_loc_as_cell!(threshold + 1));
+            section.push_cell(heap_loc_as_cell!(threshold + 3));
+            section.push_cell(heap_loc_as_cell!(threshold + 2));
+        });
 
-        threshold + lh_offset + 2
+        copy_term(copy_ball_term, copy_target, AttrVarPolicy::DeepCopy)?;
+
+        Ok(threshold + lh_offset + 2)
     }
 
     #[inline(always)]
@@ -848,11 +824,14 @@ impl MachineState {
             (HeapCellValueTag::Fixnum, n) => {
                 let lh_offset = n.get_num() as usize;
 
-                if lh_offset >= self.lifted_heap.len() {
+                if lh_offset >= self.lifted_heap.cell_len() {
                     self.lifted_heap.truncate(lh_offset);
                 } else {
-                    let threshold = self.lifted_heap.len() - lh_offset;
-                    self.lifted_heap.push(addr_constr(threshold));
+                    let threshold = self.lifted_heap.cell_len() - lh_offset;
+                    step_or_resource_error!(
+                        self,
+                        self.lifted_heap.push_cell(addr_constr(threshold))
+                    );
                 }
             }
             _ => {
@@ -865,7 +844,7 @@ impl MachineState {
         &mut self,
         string: &str,
         indices: &IndexStore,
-        stub_gen: impl Fn() -> FunctorStub,
+        stub_gen: impl Fn() -> MachineStub,
     ) -> CallResult {
         use crate::parser::lexer::*;
 
@@ -883,14 +862,14 @@ impl MachineState {
             std::io::Cursor::new(dot_buf)
         });
 
-        let mut lexer = Lexer::new(CharReader::new(iter), self);
+        let mut lexer_parser = LexerParser::new(CharReader::new(iter), self);
         let mut tokens = vec![];
 
-        match lexer.next_token() {
-            Ok(token @ Token::Literal(Literal::Atom(atom!("-")) | Literal::Char('-'))) => {
+        match lexer_parser.next_token() {
+            Ok(token @ Token::Literal(atom)) if atom == atom_as_cell!(atom!("-")) => {
                 tokens.push(token);
 
-                if let Ok(token) = lexer.next_token() {
+                if let Ok(token) = lexer_parser.next_token() {
                     tokens.push(token);
                 }
             }
@@ -904,23 +883,16 @@ impl MachineState {
         }
 
         loop {
-            match lexer.lookahead_char() {
+            match lexer_parser.lookahead_char() {
                 Err(e) if e.is_unexpected_eof() => {
-                    let mut parser = Parser::from_lexer(lexer);
                     let op_dir = CompositeOpDir::new(&indices.op_dir, None);
 
                     tokens.reverse();
+                    let byte_size = heap_index!(tokens.len());
 
-                    match parser.read_term(&op_dir, Tokens::Provided(tokens)) {
+                    match lexer_parser.read_term(&op_dir, Tokens::Provided(tokens, byte_size)) {
                         Ok(term) => {
-                            let mut error_gen = || {
-                                let e = ParserError::ParseBigInt(ParserErrorSrc::default());
-                                let e = self.syntax_error(e);
-
-                                return Err(self.error_form(e, stub_gen()));
-                            };
-
-                            read_heap_cell!(term.heap[term.focus],
+                            read_heap_cell!(lexer_parser.machine_st.heap[term.focus],
                                 (HeapCellValueTag::Cons, c) => {
                                     match_untyped_arena_ptr!(c,
                                        (ArenaHeaderTag::Rational, n) => {
@@ -930,7 +902,10 @@ impl MachineState {
                                            self.unify_big_int(n, nx);
                                        }
                                        _ => {
-                                           return error_gen();
+                                           let e = ParserError::ParseBigInt(lexer_parser.loc_to_err_src());
+                                           let e = self.syntax_error(e);
+
+                                           return Err(self.error_form(e, stub_gen()));
                                        }
                                     )
                                 }
@@ -941,23 +916,26 @@ impl MachineState {
                                     self.unify_fixnum(n, nx);
                                 }
                                 _ => {
-                                    return error_gen();
+                                    let e = ParserError::ParseBigInt(lexer_parser.loc_to_err_src());
+                                    let e = self.syntax_error(e);
+
+                                    return Err(self.error_form(e, stub_gen()));
                                 }
                             );
+
+                            return Ok(());
                         }
                         Err(e) => {
                             let e = self.syntax_error(e);
                             return Err(self.error_form(e, stub_gen()));
                         }
                     }
-
-                    break;
                 }
                 Ok('.') => {
-                    lexer.skip_char('.');
+                    lexer_parser.skip_char('.');
                 }
                 Ok(c) => {
-                    let err_src = lexer.loc_to_err_src();
+                    let err_src = lexer_parser.loc_to_err_src();
 
                     let err = ParserError::UnexpectedChar(c, err_src);
                     let err = self.syntax_error(err);
@@ -967,8 +945,6 @@ impl MachineState {
                 Err(_) => unreachable!(),
             }
         }
-
-        Ok(())
     }
 
     pub(crate) fn call_continuation_chunk(
@@ -1020,6 +996,7 @@ impl MachineState {
 
     pub fn value_to_str_like(&mut self, value: HeapCellValue) -> Option<AtomOrString> {
         read_heap_cell!(value,
+            /*
             (HeapCellValueTag::CStr, cstr_atom) => {
                 // avoid allocating a String if possible:
                 // We must be careful to preserve the string "[]" as is,
@@ -1030,6 +1007,7 @@ impl MachineState {
                     Some(AtomOrString::Atom(cstr_atom))
                 }
             }
+            */
             (HeapCellValueTag::Atom, (atom, arity)) => {
                 if arity == 0 {
                     // ... likewise.
@@ -1048,27 +1026,23 @@ impl MachineState {
                     None
                 }
             }
-            (HeapCellValueTag::Char, c) => {
-                Some(AtomOrString::String(c.to_string()))
-            }
             _ => {
                 if value.is_constant() {
                     return None;
                 }
 
-                let h = self.heap.len();
-                self.heap.push(value);
+                // 0 is reserved for use by the machine. See
+                // MachineState::new.
+                self.heap[0] = value;
 
-                let mut iter = HeapPStrIter::new(&self.heap, h);
+                let mut iter = HeapPStrIter::new(&self.heap, 0);
                 let string = iter.to_string_mut();
-                let at_terminator = iter.at_string_terminator();
-
-                self.heap.pop();
+                let end_cell = iter.heap[iter.focus()];
 
                 // if the iteration doesn't terminate like a string
                 // (i.e. with the [] atom or a CStr), it is not
                 // "str_like" so return None.
-                if at_terminator {
+                if end_cell.is_string_terminator(iter.heap) {
                     Some(AtomOrString::String(string))
                 } else {
                     None
@@ -1080,7 +1054,7 @@ impl MachineState {
     pub(crate) fn codes_to_string(
         &mut self,
         addrs: impl Iterator<Item = HeapCellValue>,
-        stub_gen: impl Fn() -> FunctorStub,
+        stub_gen: impl Fn() -> MachineStub,
     ) -> Result<String, MachineStub> {
         let mut string = String::new();
 
@@ -1237,7 +1211,7 @@ impl Machine {
                             boip + extract_ptr!(hm.get(&key).cloned().unwrap())
                         }
                         IndexingLine::Indexing(IndexingInstruction::SwitchOnConstant(ref hm)) => {
-                            boip + extract_ptr!(hm.get(&Literal::Atom(key.0)).cloned().unwrap())
+                            boip + extract_ptr!(hm.get(&atom_as_cell!(key.0)).cloned().unwrap())
                         }
                         _ => boip,
                     };
@@ -1274,6 +1248,7 @@ impl Machine {
                     }
                 }
                 &Instruction::RevJmpBy(offset) => {
+
                     bp -= offset;
                 }
                 _ => {
@@ -1332,8 +1307,12 @@ impl Machine {
             (HeapCellValueTag::Str, s) => {
                 let (name, arity) = cell_as_atom_cell!(self.machine_st.heap[s]).get_name_and_arity();
 
-                (name, arity, if self.machine_st.heap.len() > s + arity + 1 {
-                    get_structure_index(self.machine_st.heap[s + arity + 1])
+                (name, arity, if self.machine_st.heap.cell_len() > s + arity + 1 {
+                    if !self.machine_st.heap.pstr_at(s + arity + 1) {
+                        get_structure_index(self.machine_st.heap[s + arity + 1])
+                    } else {
+                        None
+                    }
                 } else {
                     None
                 })
@@ -1398,10 +1377,9 @@ impl Machine {
                 .get_predicate_code_index(name, arity, module_name)
         });
 
-        // println!("(fast) calling {}/{}", name.as_str(), arity);
-
         if let Some(code_index) = index_cell {
             if !code_index.is_undefined() {
+                // println!("(fast) calling {}/{}", name.as_str(), arity);
                 load_registers(&mut self.machine_st, goal, goal_arity);
                 self.machine_st.neck_cut();
                 return call_at_index(self, name, arity, code_index.get());
@@ -1454,9 +1432,7 @@ impl Machine {
                     // disjoint from them. if they are not, the
                     // expanded goal is not simple.
 
-                    let post_supp_args = self.machine_st.heap[s+arity-supp_vars.len()+1 .. s+arity+1]
-                        .iter()
-                        .cloned();
+                    let post_supp_args = self.machine_st.heap.splice(s+arity-supp_vars.len()+1 .. s+arity+1);
 
                     post_supp_args
                         .zip(supp_vars.iter())
@@ -1480,16 +1456,20 @@ impl Machine {
                 };
 
                 let goal = if is_simple_goal {
-                    let h = self.machine_st.heap.len();
+                    let h = self.machine_st.heap.cell_len();
                     let arity = arity - supp_vars.len();
 
-                    for idx in 0 .. arity + 1 {
-                        let value = self.machine_st.heap[s + idx];
-                        self.machine_st.heap.push(value);
-                    }
+                    resource_error_call_result!(
+                        self.machine_st,
+                        self.machine_st.heap.copy_slice_to_end(
+                            s .. s + arity + 1
+                        )
+                    );
 
                     self.machine_st.heap[h] = atom_as_cell!(name, arity);
 
+                    // even if arity == 0, goal must be a Str cell,
+                    // since an index is about to appended to it.
                     str_loc_as_cell!(h)
                 } else {
                     goal
@@ -1505,8 +1485,11 @@ impl Machine {
             (HeapCellValueTag::Atom, (name, arity)) => {
                 debug_assert_eq!(arity, 0);
 
-                let h = self.machine_st.heap.len();
-                self.machine_st.heap.push(goal);
+                let h = self.machine_st.heap.cell_len();
+                resource_error_call_result!(
+                    self.machine_st,
+                    self.machine_st.heap.push_cell(goal)
+                );
 
                 GoalAnalysisResult {
                     is_simple_goal: true,
@@ -1515,11 +1498,15 @@ impl Machine {
                     supp_vars,
                 }
             }
+            /*
             (HeapCellValueTag::Char, c) => {
                 let name = AtomTable::build_with(&self.machine_st.atom_tbl,&c.to_string());
+                let h = self.machine_st.heap.cell_len();
 
-                let h = self.machine_st.heap.len();
-                self.machine_st.heap.push(atom_as_cell!(name));
+                resource_error_call_result!(
+                    self.machine_st,
+                    self.machine_st.heap.push_cell(atom_as_cell!(name))
+                );
 
                 GoalAnalysisResult {
                     is_simple_goal: true,
@@ -1528,6 +1515,7 @@ impl Machine {
                     supp_vars,
                 }
             }
+            */
             _ => {
                 self.machine_st.fail = true;
                 return Ok(());
@@ -1541,9 +1529,14 @@ impl Machine {
 
         let expanded_term = if result.is_simple_goal {
             let idx = self.get_or_insert_qualified_code_index(module_name, result.key);
-            self.machine_st
-                .heap
-                .push(untyped_arena_ptr_as_cell!(UntypedArenaPtr::from(idx)));
+
+            resource_error_call_result!(
+                self.machine_st,
+                self.machine_st
+                    .heap
+                    .push_cell(untyped_arena_ptr_as_cell!(UntypedArenaPtr::from(idx)))
+            );
+
             result.goal
         } else {
             let mut unexpanded_vars = IndexSet::with_hasher(FxBuildHasher::default());
@@ -1566,20 +1559,26 @@ impl Machine {
                 Err(e) => {
                     let err = self.machine_st.session_error(e);
                     let stub = functor_stub(atom!("call"), result.key.1);
-
                     return Err(self.machine_st.error_form(err, stub));
                 }
                 Ok(()) => {
-                    let h = self.machine_st.heap.len();
+                    let h = self.machine_st.heap.cell_len();
+                    let mut writer = resource_error_call_result!(
+                        self.machine_st,
+                        self.machine_st.heap.reserve(unexpanded_vars.len() + 2)
+                    );
 
-                    self.machine_st.heap.push(atom_as_cell!(atom!("$aux"), 0));
+                    writer.write_with(|section| {
+                        section.push_cell(atom_as_cell!(atom!("$aux"), 0));
 
-                    for value in unexpanded_vars.difference(&result.supp_vars).cloned() {
-                        self.machine_st.heap.push(value);
-                    }
+                        for value in unexpanded_vars.difference(&result.supp_vars).cloned() {
+                            section.push_cell(value);
+                        }
 
-                    let anon_str_arity = self.machine_st.heap.len() - h - 1;
+                        section.push_cell(atom_as_cell!(atom!("[]")));
+                    });
 
+                    let anon_str_arity = self.machine_st.heap.cell_len() - h - 2;
                     self.machine_st.heap[h] = atom_as_cell!(atom!("$aux"), anon_str_arity);
 
                     let idx = CodeIndex::new(
@@ -1587,9 +1586,9 @@ impl Machine {
                         &mut self.machine_st.arena,
                     );
 
-                    self.machine_st
-                        .heap
-                        .push(untyped_arena_ptr_as_cell!(UntypedArenaPtr::from(idx)));
+                    self.machine_st.heap.last_cell_mut().map(|cell| {
+                        *cell = untyped_arena_ptr_as_cell!(UntypedArenaPtr::from(idx));
+                    });
 
                     str_loc_as_cell!(h)
                 }
@@ -1606,17 +1605,25 @@ impl Machine {
     pub(crate) fn is_expanded_or_inlined(&self) -> bool {
         let (_module_loc, qualified_goal) = self
             .machine_st
-            .strip_module(self.machine_st.registers[1], empty_list_as_cell!());
+            .strip_module(
+                self.machine_st.registers[1],
+                empty_list_as_cell!(),
+            );
 
         if HeapCellValueTag::Str == qualified_goal.get_tag() {
             let s = qualified_goal.get_value() as usize;
-            let (name, arity) = cell_as_atom_cell!(self.machine_st.heap[s]).get_name_and_arity();
+            let (name, arity) = cell_as_atom_cell!(self.machine_st.heap[s])
+                .get_name_and_arity();
 
             if name == atom!("$call") {
                 return false;
             }
 
-            if self.machine_st.heap.len() > s + 1 + arity {
+            if self.machine_st.heap.cell_len() > s + 1 + arity {
+                if self.machine_st.heap.pstr_at(s + 1 + arity) {
+                    return false;
+                }
+
                 let idx_cell = self.machine_st.heap[s + 1 + arity];
 
                 if HeapCellValueTag::Cons == idx_cell.get_tag() {
@@ -1641,11 +1648,9 @@ impl Machine {
             .strip_module(self.machine_st.registers[1], self.machine_st.registers[2]);
 
         let target_module_loc = self.machine_st.registers[2];
-
         unify_fn!(&mut self.machine_st, module_loc, target_module_loc);
 
         let target_qualified_goal = self.machine_st.registers[3];
-
         unify_fn!(&mut self.machine_st, qualified_goal, target_qualified_goal);
     }
 
@@ -1666,21 +1671,24 @@ impl Machine {
         let target_goal = if arity == 0 {
             qualified_goal
         } else {
-            // if narity + arity > 0 {
-            let h = self.machine_st.heap.len();
-            self.machine_st
-                .heap
-                .push(atom_as_cell!(name, narity + arity));
+            let h = self.machine_st.heap.cell_len();
 
-            for idx in 1..narity + 1 {
-                self.machine_st.heap.push(self.machine_st.heap[s + idx]);
-            }
+            let mut writer = resource_error_call_result!(
+                self.machine_st,
+                self.machine_st.heap.reserve(1 + narity + arity)
+            );
 
-            for idx in 1..arity + 1 {
-                self.machine_st
-                    .heap
-                    .push(self.machine_st.registers[2 + idx]);
-            }
+            writer.write_with(|section| {
+                section.push_cell(atom_as_cell!(name, narity + arity));
+
+                for idx in 1..narity + 1 {
+                    section.push_cell(section[s + idx]);
+                }
+
+                for idx in 1..arity + 1 {
+                    section.push_cell(self.machine_st.registers[2 + idx]);
+                }
+            });
 
             if narity + arity > 0 {
                 str_loc_as_cell!(h)
@@ -1690,9 +1698,7 @@ impl Machine {
         };
 
         let target_qualified_goal = self.machine_st.registers[1];
-
         unify_fn!(&mut self.machine_st, target_goal, target_qualified_goal);
-
         Ok(())
     }
 
@@ -1723,12 +1729,9 @@ impl Machine {
                 }
             }
             _ => {
-                let h = self.machine_st.heap.len();
-                let call_form = functor!(atom!(":"), [cell(module_name), cell(self.machine_st.registers[2])]);
-                self.machine_st.heap.extend(call_form);
-
+                let call_form = functor!(atom!(":"), [cell(module_name), cell((self.machine_st.registers[2]))]);
                 let stub = functor_stub(atom!("call"), narity + 1);
-                let err = self.machine_st.type_error(ValidType::Callable, str_loc_as_cell!(h));
+                let err = self.machine_st.type_error(ValidType::Callable, call_form);
                 return Err(self.machine_st.error_form(err, stub));
             }
         );
@@ -1903,9 +1906,12 @@ impl Machine {
                 for entry in entries {
                     if let Ok(entry) = entry {
                         if let Some(name) = entry.file_name().to_str() {
-                            let name = AtomTable::build_with(&self.machine_st.atom_tbl, name);
-                            files.push(atom_as_cstr_cell!(name));
+                            let file_string_cell = resource_error_call_result!(
+                                self.machine_st,
+                                self.machine_st.allocate_cstr(name)
+                            );
 
+                            files.push(file_string_cell);
                             continue;
                         }
                     }
@@ -1917,12 +1923,16 @@ impl Machine {
                     return Err(err);
                 }
 
-                let files_list = heap_loc_as_cell!(iter_to_heap_list(
-                    &mut self.machine_st.heap,
-                    files.into_iter()
-                ));
+                let files_list_cell = resource_error_call_result!(
+                    self.machine_st,
+                    sized_iter_to_heap_list(
+                        &mut self.machine_st.heap,
+                        files.len(),
+                        files.into_iter()
+                    )
+                );
 
-                unify!(self.machine_st, self.machine_st.registers[2], files_list);
+                unify!(self.machine_st, self.machine_st.registers[2], files_list_cell);
                 return Ok(());
             }
         }
@@ -2009,11 +2019,14 @@ impl Machine {
                         unreachable!()
                     }
                 } {
-                    let chars_atom = self.systemtime_to_timestamp(time);
+                    let chars_string = self.systemtime_to_timestamp(time);
 
-                    self.machine_st
-                        .unify_complete_string(chars_atom, self.machine_st.registers[3]);
+                    let cstr_cell = step_or_resource_error!(
+                        self.machine_st,
+                        self.machine_st.allocate_cstr(&chars_string)
+                    );
 
+                    unify!(self.machine_st, cstr_cell, self.machine_st.registers[3]);
                     return;
                 }
             }
@@ -2144,10 +2157,12 @@ impl Machine {
                 }
             };
 
-            let current_atom = AtomTable::build_with(&self.machine_st.atom_tbl, current);
+            let current_string = resource_error_call_result!(
+                self.machine_st,
+                self.machine_st.allocate_cstr(current)
+            );
 
-            let a1 = self.deref_register(1);
-            self.machine_st.unify_complete_string(current_atom, a1);
+            unify!(self.machine_st, current_string, self.machine_st.registers[1]);
 
             if self.machine_st.fail {
                 return Ok(());
@@ -2184,11 +2199,12 @@ impl Machine {
                     }
                 };
 
-                let canonical_atom = AtomTable::build_with(&self.machine_st.atom_tbl, cs);
+                let canonical_string = resource_error_call_result!(
+                    self.machine_st,
+                    self.machine_st.allocate_cstr(cs)
+                );
 
-                let a2 = self.deref_register(2);
-                self.machine_st.unify_complete_string(canonical_atom, a2);
-
+                unify!(self.machine_st, canonical_string, self.machine_st.registers[2]);
                 return Ok(());
             }
         }
@@ -2200,39 +2216,38 @@ impl Machine {
     #[inline(always)]
     pub(crate) fn atom_chars(&mut self) {
         let a1 = self.deref_register(1);
-        let a2 = self.deref_register(2);
 
         read_heap_cell!(a1,
+            /*
             (HeapCellValueTag::Char) => {
-                let h = self.machine_st.heap.len();
+                let h = self.machine_st.heap.cell_len();
 
-                self.machine_st.heap.push(a1);
-                self.machine_st.heap.push(empty_list_as_cell!());
+                let mut writer = resource_error_call_result!(
+                    self.machine_st,
+                    self.machine_st.heap.reserve(2)
+                );
+
+                step_or_resource_error!(
+                    self.machine_st,
+                    writer.write_with(|section| {
+                        section.push_cell(a1);
+                        section.push_cell(empty_list_as_cell!());
+                        Ok::<(), usize>(())
+                    })
+                );
 
                 unify!(self.machine_st, self.machine_st.registers[2], list_loc_as_cell!(h));
             }
-            (HeapCellValueTag::Str, s) => {
-                let (name, arity) = cell_as_atom_cell!(self.machine_st.heap[s])
-                    .get_name_and_arity();
-
-                if arity == 0 {
-                    self.machine_st.unify_complete_string(
-                        name,
-                        a2,
-                    );
-                } else {
-                    self.machine_st.fail = true;
-                }
-            }
+            */
             (HeapCellValueTag::Atom, (name, arity)) => {
-                if arity == 0 {
-                    self.machine_st.unify_complete_string(
-                        name,
-                        a2,
-                    );
-                } else {
-                    self.machine_st.fail = true;
-                }
+                debug_assert_eq!(arity, 0);
+
+                let cell = step_or_resource_error!(
+                    self.machine_st,
+                    self.machine_st.allocate_cstr(&*name.as_str())
+                );
+
+                unify!(self.machine_st, self.machine_st.registers[2], cell);
             }
             (HeapCellValueTag::Var | HeapCellValueTag::AttrVar | HeapCellValueTag::StackVar) => {
                 let a2 = self.deref_register(2);
@@ -2258,7 +2273,7 @@ impl Machine {
                 self.machine_st.fail = true;
             }
             _ => {
-                unreachable!();
+                self.machine_st.fail = true;
             }
         );
     }
@@ -2268,6 +2283,7 @@ impl Machine {
         let a1 = self.deref_register(1);
 
         read_heap_cell!(a1,
+            /*
             (HeapCellValueTag::Char, c) => {
                 let h = self.machine_st.heap.len();
 
@@ -2276,33 +2292,50 @@ impl Machine {
 
                 unify!(self.machine_st, list_loc_as_cell!(h), self.machine_st.registers[2]);
             }
+            */
             (HeapCellValueTag::Atom, (name, arity)) => {
-                if arity == 0 {
-                    let name = name.as_str();
-                    let iter = name.chars()
-                        .map(|c| fixnum_as_cell!(Fixnum::build_with(c as i64)));
+                debug_assert_eq!(arity, 0);
 
-                    let h = iter_to_heap_list(&mut self.machine_st.heap, iter);
-                    unify!(self.machine_st, heap_loc_as_cell!(h), self.machine_st.registers[2]);
-                } else {
-                    self.machine_st.fail = true;
-                }
+                let name = name.as_str();
+                let iter = name.chars().map(|c| fixnum_as_cell!(Fixnum::build_with(c as i64)));
+
+                let list_cell = resource_error_call_result!(
+                    self.machine_st,
+                    sized_iter_to_heap_list(
+                        &mut self.machine_st.heap,
+                        (&*name).chars().count(),
+                        iter,
+                    )
+                );
+
+                unify!(self.machine_st, list_cell, self.machine_st.registers[2]);
             }
+            /*
             (HeapCellValueTag::Str, s) => {
+                /*
                 let (name, arity) = cell_as_atom_cell!(self.machine_st.heap[s])
                     .get_name_and_arity();
 
                 if arity == 0 {
                     let name = name.as_str();
-                    let iter = name.chars()
-                        .map(|c| fixnum_as_cell!(Fixnum::build_with(c as i64)));
+                    let iter = name.chars().map(|c| fixnum_as_cell!(Fixnum::build_with(c as i64)));
 
-                    let h = iter_to_heap_list(&mut self.machine_st.heap, iter);
-                    unify!(self.machine_st, heap_loc_as_cell!(h), self.machine_st.registers[2]);
+                    let list_cell = resource_error_call_result!(
+                        self.machine_st,
+                        sized_iter_to_heap_list(
+                            &mut self.machine_st.heap,
+                            name.as_str().chars().count(),
+                            iter,
+                        )
+                    );
+
+                    unify!(self.machine_st, list_cell, self.machine_st.registers[2]);
                 } else {
-                    self.machine_st.fail = true;
-                }
+                */
+                self.machine_st.fail = true;
+                // }
             }
+            */
             (HeapCellValueTag::Var | HeapCellValueTag::AttrVar | HeapCellValueTag::StackVar) => {
                 let stub_gen = || functor_stub(atom!("atom_codes"), 2);
 
@@ -2350,9 +2383,11 @@ impl Machine {
                     return;
                 }
             }
+            /*
             (HeapCellValueTag::Char) => {
                 1
             }
+            */
             _ => {
                 unreachable!()
             }
@@ -2406,20 +2441,27 @@ impl Machine {
             return;
         }
 
-        let pstr_h = self.machine_st.heap.len();
+        let pstr_h = self.machine_st.heap.cell_len();
 
-        self.machine_st.heap.push(pstr_as_cell!(atom));
-        self.machine_st.heap.push(heap_loc_as_cell!(pstr_h + 1));
-
-        unify!(
+        let pstr_loc_cell = step_or_resource_error!(
             self.machine_st,
-            self.machine_st.registers[2],
-            pstr_loc_as_cell!(pstr_h)
+            self.machine_st.allocate_pstr(&*atom.as_str())
         );
+
+        let tail_loc = Heap::neighboring_cell_offset(
+            atom.as_str().len() + heap_index!(pstr_h),
+        );
+
+        step_or_resource_error!(
+            self.machine_st,
+            self.machine_st.heap.push_cell(heap_loc_as_cell!(tail_loc))
+        );
+
+        unify!(self.machine_st, self.machine_st.registers[2], pstr_loc_cell);
 
         if !self.machine_st.fail {
             let tail = self.machine_st.registers[3];
-            unify!(self.machine_st, tail, heap_loc_as_cell!(pstr_h + 1));
+            unify!(self.machine_st, tail, heap_loc_as_cell!(tail_loc));
         }
     }
 
@@ -2427,17 +2469,21 @@ impl Machine {
     pub(crate) fn is_partial_string(&mut self) {
         let value = self.deref_register(1);
 
-        let h = self.machine_st.heap.len();
-        self.machine_st.heap.push(value);
+        if value.is_constant() {
+            self.machine_st.fail = empty_list_as_cell!() != value;
+        } else {
+            self.machine_st.heap[0] = value;
+            let mut iter = HeapPStrIter::new(&self.machine_st.heap, 0);
 
-        let mut iter = HeapPStrIter::new(&self.machine_st.heap, h);
+            for _ in iter.by_ref() {}
 
-        for _ in iter.by_ref() {}
+            let focus = iter.focus();
+            let end_cell = self.machine_st.heap[focus];
+            let at_end_of_pstr = end_cell.is_var() ||
+                end_cell.is_string_terminator(&self.machine_st.heap);
 
-        let at_end_of_pstr = iter.focus.is_var() || iter.at_string_terminator();
-        self.machine_st.fail = !at_end_of_pstr;
-
-        self.machine_st.heap.pop();
+            self.machine_st.fail = !at_end_of_pstr;
+        }
     }
 
     #[inline(always)]
@@ -2447,26 +2493,8 @@ impl Machine {
 
         read_heap_cell!(pstr,
             (HeapCellValueTag::PStrLoc, h) => {
-                let (h, _) = pstr_loc_and_offset(&self.machine_st.heap, h);
-
-                if HeapCellValueTag::CStr == self.machine_st.heap[h].get_tag() {
-                    self.machine_st.unify_atom(
-                        atom!("[]"),
-                        a2
-                    );
-                } else {
-                    unify_fn!(
-                        self.machine_st,
-                        heap_loc_as_cell!(h+1),
-                        a2
-                    );
-                }
-            }
-            (HeapCellValueTag::CStr) => {
-                self.machine_st.unify_atom(
-                    atom!("[]"),
-                    a2
-                );
+                let (_, tail_loc) = self.machine_st.heap.scan_slice_to_str(h);
+                unify_fn!(self.machine_st, heap_loc_as_cell!(tail_loc), a2);
             }
             (HeapCellValueTag::Lis, h) => {
                 unify_fn!(
@@ -2608,9 +2636,11 @@ impl Machine {
         }
 
         let a2 = read_heap_cell!(a2,
+            /*
             (HeapCellValueTag::Char) => {
                 a2
             }
+            */
             (HeapCellValueTag::Atom, (name, arity)) => {
                 if arity == 0 {
                     if let Some(c) = name.as_char() {
@@ -2790,8 +2820,12 @@ impl Machine {
             }
         };
 
-        let chars_atom = AtomTable::build_with(&self.machine_st.atom_tbl, string.trim());
-        self.machine_st.unify_complete_string(chars_atom, chs);
+        let cstr_cell = step_or_resource_error!(
+            self.machine_st,
+            self.machine_st.allocate_cstr(string.trim())
+        );
+
+        unify!(self.machine_st, cstr_cell, chs);
     }
 
     #[inline(always)]
@@ -2821,8 +2855,16 @@ impl Machine {
             .chars()
             .map(|c| fixnum_as_cell!(Fixnum::build_with(c as i64)));
 
-        let h = iter_to_heap_list(&mut self.machine_st.heap, codes);
-        unify!(self.machine_st, heap_loc_as_cell!(h), chs);
+        let list_cell = step_or_resource_error!(
+            self.machine_st,
+            sized_iter_to_heap_list(
+                &mut self.machine_st.heap,
+                string.trim().chars().count(),
+                codes,
+            )
+        );
+
+        unify!(self.machine_st, list_cell, chs);
     }
 
     #[inline(always)]
@@ -2854,7 +2896,7 @@ impl Machine {
     #[inline(always)]
     pub(crate) fn lifted_heap_length(&mut self) {
         let a1 = self.machine_st.registers[1];
-        let lh_len = Fixnum::build_with(self.machine_st.lifted_heap.len() as i64);
+        let lh_len = Fixnum::build_with(self.machine_st.lifted_heap.cell_len() as i64);
 
         self.machine_st.unify_fixnum(lh_len, a1);
     }
@@ -2876,9 +2918,11 @@ impl Machine {
                 debug_assert_eq!(arity, 0);
                 name.as_char().unwrap()
             }
+            /*
             (HeapCellValueTag::Char, c) => {
                 c
             }
+            */
             _ => {
                 match Number::try_from(a2) {
                     Ok(Number::Integer(n)) => {
@@ -2926,9 +2970,11 @@ impl Machine {
         let a2 = self.deref_register(2);
 
         let c = read_heap_cell!(a1,
+            /*
             (HeapCellValueTag::Char, c) => {
                 c
             }
+            */
             (HeapCellValueTag::Atom, (name, _arity)) => {
                 name.as_char().unwrap()
             }
@@ -3014,14 +3060,19 @@ impl Machine {
                 match (name, arity) {
                     (atom!("upper"), 1) => {
                         let reg = self.machine_st.deref(self.machine_st.heap[s+1]);
-                        let atom = AtomTable::build_with(&self.machine_st.atom_tbl, &c.to_uppercase().to_string());
-                        let upper_str = string_as_cstr_cell!(atom);
+                        let upper_str = step_or_resource_error!(
+                            self.machine_st,
+                            self.machine_st.allocate_cstr(&c.to_uppercase().to_string())
+                        );
                         unify!(self.machine_st, reg, upper_str);
                     }
                     (atom!("lower"), 1) => {
                         let reg = self.machine_st.deref(self.machine_st.heap[s+1]);
-                        let atom = AtomTable::build_with(&self.machine_st.atom_tbl, &c.to_lowercase().to_string());
-                        let lower_str = string_as_cstr_cell!(atom);
+                        let lower_str = step_or_resource_error!(
+                            self.machine_st,
+                            self.machine_st.allocate_cstr(&c.to_uppercase().to_string())
+                        );
+
                         unify!(self.machine_st, reg, lower_str);
                     }
                     _ => {
@@ -3069,10 +3120,10 @@ impl Machine {
                     unify_fn!(self.machine_st, addr, *value_loc);
                 }
                 None if !ball.stub.is_empty() => {
-                    let h = self.machine_st.heap.len();
-                    let stub = ball.copy_and_align(h);
-
-                    self.machine_st.heap.extend(stub);
+                    let h = step_or_resource_error!(
+                        self.machine_st,
+                        ball.copy_and_align_to(&mut self.machine_st.heap)
+                    );
 
                     unify_fn!(self.machine_st, addr, heap_loc_as_cell!(h));
 
@@ -3170,10 +3221,12 @@ impl Machine {
                         return Ok(());
                     }
                 }
+                /*
                 (HeapCellValueTag::Char, c) => {
                     write!(&mut stream, "{}", c).unwrap();
                     return Ok(());
                 }
+                */
                 _ => {
                 }
             );
@@ -3428,9 +3481,11 @@ impl Machine {
                 (HeapCellValueTag::Atom, (atom, _arity)) => {
                     char_as_cell!(atom.as_char().unwrap())
                 }
+                /*
                 (HeapCellValueTag::Char) => {
                     addr
                 }
+                */
                 _ => {
                     let err = self.machine_st.type_error(ValidType::InCharacter, addr);
                     return Err(self.machine_st.error_form(err, stub_gen()));
@@ -3544,9 +3599,12 @@ impl Machine {
         };
 
         let output = self.deref_register(3);
-        let atom = AtomTable::build_with(&self.machine_st.atom_tbl, &string);
+        let cstr_cell = resource_error_call_result!(
+            self.machine_st,
+            self.machine_st.allocate_cstr(&string)
+        );
 
-        self.machine_st.unify_complete_string(atom, output);
+        unify!(self.machine_st, cstr_cell, output);
         Ok(())
     }
 
@@ -3860,18 +3918,18 @@ impl Machine {
     #[inline(always)]
     pub(crate) fn copy_to_lifted_heap(&mut self) {
         let lh_offset = cell_as_fixnum!(self.deref_register(1)).get_num() as usize;
-
         let copy_target = self.machine_st.registers[2];
+        let old_threshold = step_or_resource_error!(
+            self.machine_st,
+            self.machine_st.copy_findall_solution(lh_offset, copy_target)
+        );
 
-        let old_threshold = self
-            .machine_st
-            .copy_findall_solution(lh_offset, copy_target);
-        let new_threshold = self.machine_st.lifted_heap.len() - lh_offset;
+        let new_threshold = self.machine_st.lifted_heap.cell_len() - lh_offset;
 
         self.machine_st.lifted_heap[old_threshold] = heap_loc_as_cell!(new_threshold);
 
-        for addr in self.machine_st.lifted_heap[old_threshold + 1..].iter_mut() {
-            *addr -= self.machine_st.heap.len() + lh_offset;
+        for addr in &mut self.machine_st.lifted_heap.splice_mut(old_threshold + 1..) {
+            *addr -= self.machine_st.heap.cell_len() + lh_offset;
         }
     }
 
@@ -3956,7 +4014,7 @@ impl Machine {
             }
         };
 
-        let h = self.machine_st.heap.len();
+        let h = self.machine_st.heap.cell_len();
         let mut num_functors = 0;
 
         let code_dir = if module_name == atom!("user") {
@@ -3976,51 +4034,53 @@ impl Machine {
             }
         };
 
-        for (name, arity) in code_dir.keys() {
-            if self.indices.builtin_property((*name, *arity)) {
+        for (name, arity) in code_dir.keys().cloned() {
+            if self.indices.builtin_property((name, arity)) {
                 continue;
             }
 
-            if name_match(pred_atom, *name) && arity_match(pred_arity, *arity) {
-                self.machine_st.heap.extend(functor!(
+            if name_match(pred_atom, name) && arity_match(pred_arity, arity) {
+                let functor = functor!(
                     atom!("/"),
-                    [cell(atom_as_cell!(name)), fixnum(*arity)]
-                ));
+                    [atom_as_cell(name), fixnum(arity)]
+                ); // self.machine_st.heap.extend(
+
+                let mut functor_writer = Heap::functor_writer(functor);
+
+                step_or_resource_error!(
+                    self.machine_st,
+                    functor_writer(&mut self.machine_st.heap)
+                );
 
                 num_functors += 1;
             }
         }
 
-        if num_functors > 0 {
-            let h = iter_to_heap_list(
+        let functor_list_cell = step_or_resource_error!(
+            self.machine_st,
+            sized_iter_to_heap_list(
                 &mut self.machine_st.heap,
-                (0..num_functors).map(|i| str_loc_as_cell!(h + 3 * i)),
-            );
+                num_functors,
+                (0..num_functors).map(|i| str_loc_as_cell!(h + 3 * i))
+            )
+        );
 
-            unify!(
-                self.machine_st,
-                heap_loc_as_cell!(h),
-                self.machine_st.registers[4]
-            );
-        } else {
-            unify!(
-                self.machine_st,
-                empty_list_as_cell!(),
-                self.machine_st.registers[4]
-            );
-        }
+        unify!(
+            self.machine_st,
+            functor_list_cell,
+            self.machine_st.registers[4]
+        );
     }
 
     #[inline(always)]
     pub(crate) fn get_next_op_db_ref(&mut self) {
         let prec = self.deref_register(1);
-
-        let h = self.machine_st.heap.len();
+        let h = self.machine_st.heap.cell_len();
 
         fn write_op_functors_to_heap(
             heap: &mut Heap,
             op_descs: impl Iterator<Item = (Atom, OpDesc)>,
-        ) -> usize {
+        ) -> Result<usize, usize> {
             let mut num_functors = 0;
 
             for (name, op_desc) in op_descs {
@@ -4033,19 +4093,25 @@ impl Machine {
 
                 let spec_atom = op_desc.get_spec().get_spec();
 
-                heap.extend(functor!(
+                let functor = functor!(
                     atom!("op"),
                     [
                         fixnum(prec),
-                        cell(atom_as_cell!(spec_atom)),
-                        cell(atom_as_cell!(name))
+                        atom_as_cell(spec_atom),
+                        atom_as_cell(name)
                     ]
-                ));
+                );
+
+                let mut functor_writer = Heap::functor_writer(functor);
+
+                if let Err(e) = functor_writer(heap) {
+                    return Err(e);
+                }
 
                 num_functors += 1;
             }
 
-            num_functors
+            Ok(num_functors)
         }
 
         if prec.is_var() {
@@ -4071,9 +4137,11 @@ impl Machine {
                     (HeapCellValueTag::Str, s) => {
                         cell_as_atom!(self.machine_st.heap[s])
                     }
+                    /*
                     (HeapCellValueTag::Char, c) => {
                         AtomTable::build_with(&self.machine_st.atom_tbl, &c.to_string())
                     }
+                    */
                     _ => {
                         unreachable!()
                     }
@@ -4096,17 +4164,26 @@ impl Machine {
                 if number_of_keys == 0 {
                     self.machine_st.fail = true;
                 } else {
-                    let num_functors =
-                        write_op_functors_to_heap(&mut self.machine_st.heap, op_descs);
+                    let num_functors = step_or_resource_error!(
+                        self.machine_st,
+                        write_op_functors_to_heap(
+                            &mut self.machine_st.heap,
+                            op_descs,
+                        )
+                    );
 
-                    let h = iter_to_heap_list(
-                        &mut self.machine_st.heap,
-                        (0..num_functors).map(|i| str_loc_as_cell!(h + 4 * i)),
+                    let functor_list_cell = step_or_resource_error!(
+                        self.machine_st,
+                        sized_iter_to_heap_list(
+                            &mut self.machine_st.heap,
+                            num_functors,
+                            (0..num_functors).map(|i| str_loc_as_cell!(h + 4 * i))
+                        )
                     );
 
                     unify!(
                         self.machine_st,
-                        heap_loc_as_cell!(h),
+                        functor_list_cell,
                         self.machine_st.registers[4]
                     );
                 }
@@ -4131,23 +4208,28 @@ impl Machine {
                     Some((key.0, *op_desc))
                 });
 
-                write_op_functors_to_heap(&mut self.machine_st.heap, op_descs)
+                step_or_resource_error!(
+                    self.machine_st,
+                    write_op_functors_to_heap(
+                        &mut self.machine_st.heap,
+                        op_descs,
+                    )                )
             };
 
-            if num_functors > 0 {
-                let h = iter_to_heap_list(
+            let functor_list_cell = step_or_resource_error!(
+                self.machine_st,
+                sized_iter_to_heap_list(
                     &mut self.machine_st.heap,
+                    num_functors,
                     (0..num_functors).map(|i| str_loc_as_cell!(h + 4 * i)),
-                );
+                )
+            );
 
-                unify!(
-                    self.machine_st,
-                    heap_loc_as_cell!(h),
-                    self.machine_st.registers[4]
-                );
-            } else {
-                self.machine_st.fail = true;
-            }
+            unify!(
+                self.machine_st,
+                functor_list_cell,
+                self.machine_st.registers[4]
+            );
         } else {
             let spec = cell_as_atom!(self.deref_register(2));
             let op_atom = cell_as_atom!(self.deref_register(3));
@@ -4164,19 +4246,26 @@ impl Machine {
 
             match self.indices.op_dir.get(&(op_atom, fixity)).cloned() {
                 Some(op_desc) => {
-                    let num_functors = write_op_functors_to_heap(
-                        &mut self.machine_st.heap,
-                        std::iter::once((op_atom, op_desc)),
+                    let num_functors = step_or_resource_error!(
+                        self.machine_st,
+                        write_op_functors_to_heap(
+                            &mut self.machine_st.heap,
+                            std::iter::once((op_atom, op_desc))
+                        )
                     );
 
-                    let h = iter_to_heap_list(
-                        &mut self.machine_st.heap,
-                        (0..num_functors).map(|i| str_loc_as_cell!(h + 4 * i)),
+                    let functor_list = step_or_resource_error!(
+                        self.machine_st,
+                        sized_iter_to_heap_list(
+                            &mut self.machine_st.heap,
+                            num_functors,
+                            (0..num_functors).map(|i| str_loc_as_cell!(h + 4 * i)),
+                        )
                     );
 
                     unify!(
                         self.machine_st,
-                        heap_loc_as_cell!(h),
+                        functor_list,
                         self.machine_st.registers[4]
                     );
                 }
@@ -4236,17 +4325,18 @@ impl Machine {
             }
         };
 
-        let h = self.machine_st.heap.len();
+        let h = self.machine_st.heap.cell_len();
 
-        iter_to_heap_list(
-            &mut self.machine_st.heap,
-            (0..n).map(|i| heap_loc_as_cell!(h + 2 * i + 1)),
+        let list_cell = resource_error_call_result!(
+            self.machine_st,
+            sized_iter_to_heap_list(
+                &mut self.machine_st.heap,
+                n,
+                (0..n).map(|i| heap_loc_as_cell!(h + 2 * i + 1)),
+            )
         );
 
-        let tail = self.deref_register(1);
-        self.machine_st
-            .bind(tail.as_var().unwrap(), heap_loc_as_cell!(h));
-
+        unify!(self.machine_st, self.deref_register(1), list_cell);
         Ok(())
     }
 
@@ -4322,35 +4412,47 @@ impl Machine {
                     self.machine_st
                         .unify_fixnum(Fixnum::build_with(status as i64), address_status);
                     // headers
-                    let headers: Vec<HeapCellValue> = resp
-                        .headers()
-                        .iter()
-                        .map(|(header_name, header_value)| {
-                            let h = self.machine_st.heap.len();
+                    let mut headers: Vec<HeapCellValue> = vec![];
 
-                            let header_term = functor!(
-                                AtomTable::build_with(
-                                    &self.machine_st.atom_tbl,
-                                    header_name.as_str()
-                                ),
-                                [cell(string_as_cstr_cell!(AtomTable::build_with(
-                                    &self.machine_st.atom_tbl,
-                                    header_value.to_str().unwrap()
-                                )))]
-                            );
+                    for (header_name, header_value) in resp.headers().iter() {
+                        let string_cell = resource_error_call_result!(
+                            self.machine_st,
+                            self.machine_st.allocate_cstr(header_value.to_str().unwrap())
+                        );
 
-                            self.machine_st.heap.extend(header_term);
-                            str_loc_as_cell!(h)
-                        })
-                        .collect();
+                        let header_term = functor!(
+                            AtomTable::build_with(
+                                &self.machine_st.atom_tbl,
+                                header_name.as_str()
+                            ),
+                            [cell(string_cell)]
+                        );
 
-                    let headers_list =
-                        iter_to_heap_list(&mut self.machine_st.heap, headers.into_iter());
+                        let mut functor_writer = Heap::functor_writer(header_term);
+
+                        let functor_cell = resource_error_call_result!(
+                            self.machine_st,
+                            functor_writer(&mut self.machine_st.heap)
+                        );
+
+                        headers.push(functor_cell);
+                    }
+
+                    let headers_list_cell = resource_error_call_result!(
+                        self.machine_st,
+                        sized_iter_to_heap_list(
+                            &mut self.machine_st.heap,
+                            headers.len(),
+                            headers.into_iter(),
+                        )
+                    );
+
                     unify!(
                         self.machine_st,
-                        heap_loc_as_cell!(headers_list),
+                        headers_list_cell,
                         self.machine_st.registers[6]
                     );
+
                     // body
                     let reader = futures::executor::block_on(resp.bytes()).unwrap().reader();
 
@@ -4546,89 +4648,120 @@ impl Machine {
             (ArenaHeaderTag::HttpListener, http_listener) => {
             loop {
                 match http_listener.incoming.recv_timeout(std::time::Duration::from_millis(200)) {
-                Ok(request) => {
-                    let method_atom = match request.request_data.method {
-                    Method::GET => atom!("get"),
-                    Method::POST => atom!("post"),
-                    Method::PUT => atom!("put"),
-                    Method::DELETE => atom!("delete"),
-                    Method::PATCH => atom!("patch"),
-                    Method::HEAD => atom!("head"),
-                    Method::OPTIONS => atom!("options"),
-                    Method::TRACE => atom!("trace"),
-                    Method::CONNECT => atom!("connect"),
-                    _ => atom!("unsupported_extension"),
-                };
-                let path_atom = AtomTable::build_with(&self.machine_st.atom_tbl, &request.request_data.path);
-                let path_cell = atom_as_cstr_cell!(path_atom);
-                let headers: Vec<HeapCellValue> = request.request_data.headers.iter().map(|(header_name, header_value)| {
-                    let h = self.machine_st.heap.len();
-                    let header_term = functor!(AtomTable::build_with(&self.machine_st.atom_tbl, header_name.as_str()), [cell(string_as_cstr_cell!(AtomTable::build_with(&self.machine_st.atom_tbl, header_value.to_str().unwrap())))]);
+                    Ok(request) => {
+                        let method_atom = match request.request_data.method {
+                            Method::GET => atom!("get"),
+                            Method::POST => atom!("post"),
+                            Method::PUT => atom!("put"),
+                            Method::DELETE => atom!("delete"),
+                            Method::PATCH => atom!("patch"),
+                            Method::HEAD => atom!("head"),
+                            Method::OPTIONS => atom!("options"),
+                            Method::TRACE => atom!("trace"),
+                            Method::CONNECT => atom!("connect"),
+                            _ => atom!("unsupported_extension"),
+                        };
 
-                                    self.machine_st.heap.extend(header_term.into_iter());
-                                    str_loc_as_cell!(h)
-                                }).collect();
+                        let path_atom = AtomTable::build_with(&self.machine_st.atom_tbl, &request.request_data.path);
+                        let path_cell = resource_error_call_result!(
+                            self.machine_st,
+                            self.machine_st.allocate_cstr(&request.request_data.path)
+                        );
 
-                                let headers_list = iter_to_heap_list(&mut self.machine_st.heap, headers.into_iter());
+                        let mut headers = vec![];
 
-                let query_str = request.request_data.query;
-                let query_atom = AtomTable::build_with(&self.machine_st.atom_tbl, &query_str);
-                let query_cell = string_as_cstr_cell!(query_atom);
+                        for (header_name, header_value) in request.request_data.headers {
+                            let header_value = resource_error_call_result!(
+                                self.machine_st,
+                                self.machine_st.allocate_cstr(header_value.to_str().unwrap())
+                            );
 
-                let mut stream = Stream::from_http_stream(
-                    path_atom,
-                    request.request_data.body,
-                    &mut self.machine_st.arena
-                );
-                *stream.options_mut() = StreamOptions::default();
-                stream.options_mut().set_stream_type(StreamType::Binary);
-                self.indices.streams.insert(stream);
-                let stream = stream_as_cell!(stream);
+                            let header_term = functor!(
+                                AtomTable::build_with(&self.machine_st.atom_tbl, header_name.unwrap().as_str()),
+                                [cell(header_value)]
+                            );
 
-                                let handle: TypedArenaPtr<HttpResponse> = arena_alloc!(request.response, &mut self.machine_st.arena);
+                            let mut functor_writer = Heap::functor_writer(header_term);
 
-                                self.machine_st.bind(method.as_var().unwrap(), atom_as_cell!(method_atom));
-                                self.machine_st.bind(path.as_var().unwrap(), path_cell);
-                                unify!(self.machine_st, heap_loc_as_cell!(headers_list), self.machine_st.registers[4]);
-                                self.machine_st.bind(query.as_var().unwrap(), query_cell);
-                                self.machine_st.bind(stream_addr.as_var().unwrap(), stream);
-                                self.machine_st.bind(handle_addr.as_var().unwrap(), typed_arena_ptr_as_cell!(handle));
-                break
-                            }
-                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
-                    let interrupted = machine::INTERRUPT.load(std::sync::atomic::Ordering::Relaxed);
+                            let functor_cell = resource_error_call_result!(
+                                self.machine_st,
+                                functor_writer(&mut self.machine_st.heap)
+                            );
 
-                match machine::INTERRUPT.compare_exchange(
-                    interrupted,
-                    false,
-                    std::sync::atomic::Ordering::Relaxed,
-                    std::sync::atomic::Ordering::Relaxed,
-                ) {
-                    Ok(interruption) => {
-                    if interruption {
-                        self.machine_st.throw_interrupt_exception();
-                        self.machine_st.backtrack();
-                        // We have extracted controll over the Tokio runtime to the calling context for enabling library use case
-                        // (see https://github.com/mthom/scryer-prolog/pull/1880)
-                        // So we only have access to a runtime handle in here and can't shut it down.
-                        // Since I'm not aware of the consequences of deactivating this new code which came in while PR 1880
-                        // was not merged, I'm only deactivating it for now.
-                        //let old_runtime = std::mem::replace(&mut self.runtime, tokio::runtime::Runtime::new().unwrap());
-                        //old_runtime.shutdown_background();
+                            headers.push(functor_cell);
+                        }
+
+                        let headers_list_cell = resource_error_call_result!(
+                            self.machine_st,
+                            sized_iter_to_heap_list(
+                                &mut self.machine_st.heap,
+                                headers.len(),
+                                headers.into_iter(),
+                            )
+                        );
+
+                        let query_str  = request.request_data.query;
+                        let query_cell = resource_error_call_result!(
+                            self.machine_st,
+                            self.machine_st.allocate_cstr(&query_str)
+                        );
+
+                        let mut stream = Stream::from_http_stream(
+                            path_atom,
+                            request.request_data.body,
+                            &mut self.machine_st.arena
+                        );
+
+                        *stream.options_mut() = StreamOptions::default();
+                        stream.options_mut().set_stream_type(StreamType::Binary);
+                        self.indices.streams.insert(stream);
+                        let stream = stream_as_cell!(stream);
+
+                        let handle = arena_alloc!(request.response, &mut self.machine_st.arena)
+                            as TypedArenaPtr<HttpResponse>;
+
+                        self.machine_st.bind(method.as_var().unwrap(), atom_as_cell!(method_atom));
+                        self.machine_st.bind(path.as_var().unwrap(), path_cell);
+                        unify!(self.machine_st, headers_list_cell, self.machine_st.registers[4]);
+                        self.machine_st.bind(query.as_var().unwrap(), query_cell);
+                        self.machine_st.bind(stream_addr.as_var().unwrap(), stream);
+                        self.machine_st.bind(handle_addr.as_var().unwrap(), typed_arena_ptr_as_cell!(handle));
+
                         break
                     }
-                    }
-                    Err(_) => unreachable!(),
-                }
+                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {
+                        let interrupted = machine::INTERRUPT.load(std::sync::atomic::Ordering::Relaxed);
 
-                  }
-                  Err(_) => {
-                              self.machine_st.fail = true;
-                          }
-            }
+                        match machine::INTERRUPT.compare_exchange(
+                            interrupted,
+                            false,
+                            std::sync::atomic::Ordering::Relaxed,
+                            std::sync::atomic::Ordering::Relaxed,
+                        ) {
+                            Ok(interruption) => {
+                                if interruption {
+                                    self.machine_st.throw_interrupt_exception();
+                                    self.machine_st.backtrack();
+                                    // We have extracted controll over the Tokio runtime to the calling context for enabling library use case
+                                    // (see https://github.com/mthom/scryer-prolog/pull/1880)
+                                    // So we only have access to a runtime handle in here and can't shut it down.
+                                    // Since I'm not aware of the consequences of deactivating this new code which came in while PR 1880
+                                    // was not merged, I'm only deactivating it for now.
+                                    //let old_runtime = std::mem::replace(&mut self.runtime, tokio::runtime::Runtime::new().unwrap());
+                                    //old_runtime.shutdown_background();
+                                    break
+                                }
+                            }
+                            Err(_) => unreachable!(),
+                        }
                     }
+                  Err(_) => {
+                      self.machine_st.fail = true;
+                  }
                 }
-                _ => {
+            }
+            }
+            _ => {
                     unreachable!();
                 }
             );
@@ -4824,15 +4957,20 @@ impl Machine {
                                     self.machine_st.unify_f64(n, return_value)
                                 }
                                 Value::Struct(name, args) => {
-                                    let struct_value = self.build_struct(&name, args);
+                                    let struct_value = resource_error_call_result!(
+                                        self.machine_st,
+                                        self.build_struct(&name, args)
+                                    );
+
                                     unify!(self.machine_st, return_value, struct_value);
                                 }
                                 Value::CString(cstr) => {
-                                    let cstr = AtomTable::build_with(
-                                        &self.machine_st.atom_tbl,
-                                        cstr.to_str().unwrap(),
+                                    let str_cell = resource_error_call_result!(
+                                        self.machine_st,
+                                        self.machine_st.allocate_cstr(cstr.to_str().unwrap())
                                     );
-                                    self.machine_st.unify_complete_string(cstr, return_value);
+
+                                    unify!(self.machine_st, str_cell, return_value);
                                 }
                             }
                             return Ok(());
@@ -4848,30 +4986,34 @@ impl Machine {
                 Err(e) => return Err(e),
             }
         }
+
         self.machine_st.fail = true;
         Ok(())
     }
 
     #[cfg(feature = "ffi")]
-    fn build_struct(&mut self, name: &str, mut args: Vec<Value>) -> HeapCellValue {
+    fn build_struct(&mut self, name: &str, mut args: Vec<Value>) -> Result<HeapCellValue, usize> {
         args.insert(0, Value::CString(CString::new(name).unwrap()));
-        let cells: Vec<_> = args
-            .into_iter()
-            .map(|val| match val {
+
+        let mut expanded_args = Vec::with_capacity(args.len());
+
+        for val in args {
+            expanded_args.push(match val {
                 Value::Int(n) => fixnum_as_cell!(Fixnum::build_with(n)),
                 Value::Float(n) => HeapCellValue::from(float_alloc!(n, self.machine_st.arena)),
                 Value::CString(cstr) => atom_as_cell!(AtomTable::build_with(
                     &self.machine_st.atom_tbl,
                     &cstr.into_string().unwrap()
                 )),
-                Value::Struct(name, struct_args) => self.build_struct(&name, struct_args),
-            })
-            .collect();
+                Value::Struct(name, struct_args) => self.build_struct(&name, struct_args)?,
+            });
+        }
 
-        heap_loc_as_cell!(iter_to_heap_list(
+        sized_iter_to_heap_list(
             &mut self.machine_st.heap,
-            cells.into_iter()
-        ))
+            expanded_args.len(),
+            expanded_args.into_iter(),
+        )
     }
 
     #[cfg(feature = "ffi")]
@@ -4966,29 +5108,39 @@ impl Machine {
     #[inline(always)]
     pub(crate) fn argv(&mut self) -> CallResult {
         let args = self.deref_register(1);
-
         let mut args_pstrs = vec![];
-        for arg in env::args() {
-            args_pstrs.push(put_complete_string(
-                &mut self.machine_st.heap,
-                &arg,
-                &self.machine_st.atom_tbl,
-            ));
-        }
-        let cell = heap_loc_as_cell!(iter_to_heap_list(
-            &mut self.machine_st.heap,
-            args_pstrs.into_iter()
-        ));
 
-        unify!(self.machine_st, args, cell);
+        for arg in env::args() {
+            let pstr_cell = resource_error_call_result!(
+                self.machine_st,
+                self.machine_st.allocate_cstr(&arg)
+            );
+
+            args_pstrs.push(pstr_cell);
+        }
+
+        let list_cell = resource_error_call_result!(
+            self.machine_st,
+            sized_iter_to_heap_list(
+                &mut self.machine_st.heap,
+                args_pstrs.len(),
+                args_pstrs.into_iter(),
+            )
+        );
+
+        unify!(self.machine_st, args, list_cell);
         Ok(())
     }
 
     #[inline(always)]
     pub(crate) fn current_time(&mut self) {
         let timestamp = self.systemtime_to_timestamp(SystemTime::now());
-        self.machine_st
-            .unify_complete_string(timestamp, self.machine_st.registers[1]);
+        let cstr_cell = step_or_resource_error!(
+            self.machine_st,
+            self.machine_st.allocate_cstr(&timestamp)
+        );
+
+        unify!(self.machine_st, cstr_cell, self.machine_st.registers[1]);
     }
 
     #[inline(always)]
@@ -5049,9 +5201,11 @@ impl Machine {
         };
 
         let op = read_heap_cell!(self.deref_register(3),
+            /*
             (HeapCellValueTag::Char, c) => {
                 AtomTable::build_with(&self.machine_st.atom_tbl, &c.to_string())
             }
+            */
             (HeapCellValueTag::Atom, (name, _arity)) => {
                 name
             }
@@ -5116,14 +5270,12 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn truncate_if_no_lifted_heap_growth_diff(&mut self) {
-        self.machine_st
-            .truncate_if_no_lifted_heap_diff(|h| heap_loc_as_cell!(h))
+        self.machine_st.truncate_if_no_lifted_heap_diff(|h| heap_loc_as_cell!(h))
     }
 
     #[inline(always)]
     pub(crate) fn truncate_if_no_lifted_heap_growth(&mut self) {
-        self.machine_st
-            .truncate_if_no_lifted_heap_diff(|_| empty_list_as_cell!())
+        self.machine_st.truncate_if_no_lifted_heap_diff(|_| empty_list_as_cell!())
     }
 
     #[inline(always)]
@@ -5212,10 +5364,16 @@ impl Machine {
         };
 
         if let Some(b) = b {
-            let iter = self.machine_st.gather_attr_vars_created_since(b);
+            let attr_vars = self.machine_st.gather_attr_vars_created_since(b);
 
-            let var_list_addr =
-                heap_loc_as_cell!(iter_to_heap_list(&mut self.machine_st.heap, iter));
+            let var_list_addr = step_or_resource_error!(
+                self.machine_st,
+                sized_iter_to_heap_list(
+                    &mut self.machine_st.heap,
+                    attr_vars.len(),
+                    attr_vars.into_iter(),
+                )
+            );
 
             let list_addr = self.machine_st.registers[2];
             unify!(self.machine_st, var_list_addr, list_addr);
@@ -5273,7 +5431,12 @@ impl Machine {
     pub(crate) fn put_to_attributed_variable_list(&mut self) {
         let attr_var = self.deref_register(1);
         let attr = self.deref_register(3);
-        let attr_var_list = match self.machine_st.get_attr_var_list(attr_var) {
+        let attr_var_list_result = step_or_resource_error!(
+            self.machine_st,
+            self.machine_st.get_attr_var_list(attr_var)
+        );
+
+        let attr_var_list = match attr_var_list_result {
             Some(h) => h,
             None => {
                 self.machine_st.fail = true;
@@ -5300,12 +5463,19 @@ impl Machine {
          * or str cells (> 0-arity).
          */
 
-        let h = self.machine_st.heap.len();
+        let module_functor = functor!(atom!(":"), [cell(module), cell(attr)]);
+        let h = self.machine_st.heap.cell_len();
 
-        self.machine_st.heap.push(str_loc_as_cell!(h + 1));
-        self.machine_st
-            .heap
-            .extend(functor!(atom!(":"), [cell(module), cell(attr)]));
+        step_or_resource_error!(
+            self.machine_st,
+            self.machine_st.heap.push_cell(str_loc_as_cell!(h + 1))
+        );
+
+        let mut functor_writer = Heap::functor_writer(module_functor);
+        step_or_resource_error!(
+            self.machine_st,
+            functor_writer(&mut self.machine_st.heap)
+        );
 
         match self.match_attribute(self.machine_st.heap[attr_var_list], module, attr) {
             Some(AttrListMatch { match_site, .. }) => {
@@ -5315,8 +5485,16 @@ impl Machine {
 
                         // at the end of the (non-empty) list here.
                         self.machine_st.heap[match_site] = list_loc_as_cell!(h + 4);
-                        self.machine_st.heap.push(heap_loc_as_cell!(h));
-                        self.machine_st.heap.push(heap_loc_as_cell!(h + 5));
+
+                        let mut writer = step_or_resource_error!(
+                            self.machine_st,
+                            self.machine_st.heap.reserve(2)
+                        );
+
+                        writer.write_with(|section| {
+                            section.push_cell(heap_loc_as_cell!(h));
+                            section.push_cell(heap_loc_as_cell!(h + 5));
+                        });
 
                         (match_site, l)
                     }
@@ -5334,8 +5512,16 @@ impl Machine {
             None => {
                 // the list is empty.
                 self.machine_st.heap[attr_var_list] = list_loc_as_cell!(h + 4);
-                self.machine_st.heap.push(heap_loc_as_cell!(h));
-                self.machine_st.heap.push(heap_loc_as_cell!(h + 5));
+
+                let mut writer = step_or_resource_error!(
+                    self.machine_st,
+                    self.machine_st.heap.reserve(2)
+                );
+
+                writer.write_with(|section| {
+                    section.push_cell(heap_loc_as_cell!(h));
+                    section.push_cell(heap_loc_as_cell!(h + 5));
+                });
 
                 self.machine_st
                     .attr_var_init
@@ -5433,10 +5619,56 @@ impl Machine {
     pub(crate) fn get_continuation_chunk(&mut self) {
         let e = self.deref_register(1);
         let e = cell_as_fixnum!(e).get_num() as usize;
+        let h = self.machine_st.heap.cell_len();
 
-        let p_functor = self.deref_register(2);
-
+        let p_functor_cell = self.deref_register(2);
         let num_cells = self.machine_st.stack.index_and_frame(e).prelude.num_cells;
+
+        let mut writer = step_or_resource_error!(
+            self.machine_st,
+            self.machine_st.heap.reserve(2 + num_cells)
+        );
+
+        writer.write_with(|section| {
+            section.push_cell(atom_as_cell!(atom!("cont_chunk"), 1 + num_cells));
+            section.push_cell(p_functor_cell);
+
+            for idx in 1 ..= num_cells {
+                let mut stack_offset = stack_loc!(AndFrame, e, idx);
+                let mut addr = self.machine_st.stack[stack_offset];
+
+                while addr.get_tag() == HeapCellValueTag::StackVar {
+                    stack_offset = addr.get_value() as usize;
+
+                    if self.machine_st.stack[stack_offset] == addr {
+                        break;
+                    }
+
+                    addr = self.machine_st.stack[stack_offset];
+                }
+
+                if addr.get_tag() == HeapCellValueTag::StackVar {
+                    section.push_cell(heap_loc_as_cell!(h + 1 + idx));
+
+                    self.machine_st.stack[stack_offset] = heap_loc_as_cell!(h + 1 + idx);
+
+                    // have to inline the TrailRef::Ref(RefTag::StackCell) case of MachineState::trail
+                    // here to get around the borrow checker.
+                    if stack_offset < self.machine_st.b {
+                        self.machine_st.trail.push(TrailEntry::build_with(
+                            TrailEntryTag::TrailedStackVar,
+                            stack_offset as u64,
+                        ));
+
+                        self.machine_st.tr += 1;
+                    }
+                } else {
+                    section.push_cell(addr);
+                }
+            }
+        });
+
+        /*
         let mut addrs = vec![];
 
         for idx in 1..num_cells + 1 {
@@ -5446,7 +5678,7 @@ impl Machine {
             // avoid pushing stack variables to the heap where they
             // must not go.
             if addr.is_stack_var() {
-                let h = self.machine_st.heap.len();
+                let h = self.machine_st.heap.cell_len();
 
                 self.machine_st.heap.push(heap_loc_as_cell!(h));
                 self.machine_st.bind(Ref::heap_cell(h), addr);
@@ -5456,14 +5688,17 @@ impl Machine {
                 addrs.push(addr);
             }
         }
+        */
 
-        let chunk = str_loc_as_cell!(self.machine_st.heap.len());
+        let chunk = str_loc_as_cell!(self.machine_st.heap.cell_len());
 
+        /*
         self.machine_st
             .heap
             .push(atom_as_cell!(atom!("cont_chunk"), 1 + num_cells));
-        self.machine_st.heap.push(p_functor);
+        self.machine_st.heap.push(p_functor_cell);
         self.machine_st.heap.extend(addrs);
+        */
 
         unify!(self.machine_st, self.machine_st.registers[3], chunk);
     }
@@ -5474,24 +5709,27 @@ impl Machine {
         let lh_offset = cell_as_fixnum!(self.machine_st.store(self.machine_st.deref(lh_offset)))
             .get_num() as usize;
 
-        if lh_offset >= self.machine_st.lifted_heap.len() {
+        if lh_offset >= self.machine_st.lifted_heap.cell_len() {
             let solutions = self.machine_st.registers[2];
             let diff = self.machine_st.registers[3];
 
             unify_fn!(self.machine_st, solutions, diff);
         } else {
-            let h = self.machine_st.heap.len();
-            let mut last_index = h;
+            let h = self.machine_st.heap.cell_len();
 
-            for value in self.machine_st.lifted_heap[lh_offset..].iter().cloned() {
-                last_index = self.machine_st.heap.len();
-                self.machine_st.heap.push(value + h);
+            step_or_resource_error!(
+                self.machine_st,
+                self.machine_st.heap.append(
+                    self.machine_st.lifted_heap.splice(lh_offset ..),
+                )
+            );
+
+            for cell in &mut self.machine_st.heap.splice_mut(h ..) {
+                *cell = *cell + h;
             }
 
-            if last_index < self.machine_st.heap.len() {
-                let diff = self.machine_st.registers[3];
-                unify_fn!(self.machine_st, diff, self.machine_st.heap[last_index]);
-            }
+            let diff = self.machine_st.registers[3];
+            unify_fn!(self.machine_st, diff, self.machine_st.heap.last_cell().unwrap());
 
             self.machine_st.lifted_heap.truncate(lh_offset);
 
@@ -5506,14 +5744,21 @@ impl Machine {
         let lh_offset = cell_as_fixnum!(self.machine_st.store(self.machine_st.deref(lh_offset)))
             .get_num() as usize;
 
-        if lh_offset >= self.machine_st.lifted_heap.len() {
+        if lh_offset >= self.machine_st.lifted_heap.cell_len() {
             let solutions = self.machine_st.registers[2];
             unify_fn!(self.machine_st, solutions, empty_list_as_cell!());
         } else {
-            let h = self.machine_st.heap.len();
+            let h = self.machine_st.heap.cell_len();
 
-            for addr in self.machine_st.lifted_heap[lh_offset..].iter().cloned() {
-                self.machine_st.heap.push(addr + h);
+            step_or_resource_error!(
+                self.machine_st,
+                self.machine_st.heap.append(
+                    self.machine_st.lifted_heap.splice(lh_offset ..),
+                )
+            );
+
+            for cell in &mut self.machine_st.heap.splice_mut(h ..) {
+                *cell = *cell + h;
             }
 
             self.machine_st.lifted_heap.truncate(lh_offset);
@@ -5592,8 +5837,7 @@ impl Machine {
                 // n has already been confirmed as an integer, and
                 // internally, Rational is assumed reduced, so its
                 // denominator must be 1.
-                let r = r.numerator().try_into().unwrap();
-                r
+                r.numerator().try_into().unwrap()
             }
             _ => {
                 unreachable!()
@@ -5610,7 +5854,6 @@ impl Machine {
         let prev_block = self.machine_st.scc_block;
 
         self.machine_st.run_cleaners_fn = Machine::run_cleaners;
-
         self.machine_st.scc_block = b;
         self.machine_st.cont_pts.push((addr, b, prev_block));
     }
@@ -5626,7 +5869,6 @@ impl Machine {
             Ok(Number::Integer(n)) => (*n).clone(),
             _ => {
                 let stub = functor_stub(atom!("call_with_inference_limit"), 3);
-
                 let err = self.machine_st.type_error(ValidType::Integer, a2);
                 return Err(self.machine_st.error_form(err, stub));
             }
@@ -5644,8 +5886,7 @@ impl Machine {
     #[inline(always)]
     pub(crate) fn inference_count(&mut self, count_var: HeapCellValue, count: Integer) {
         if let Ok(value) = <&Integer as TryInto<i64>>::try_into(&count) {
-            self.machine_st
-                .unify_fixnum(Fixnum::build_with(value), count_var);
+            self.machine_st.unify_fixnum(Fixnum::build_with(value), count_var);
         } else {
             let count = arena_alloc!(count, &mut self.machine_st.arena);
             self.machine_st.unify_big_int(count, count_var);
@@ -5690,7 +5931,6 @@ impl Machine {
     #[inline(always)]
     pub(crate) fn no_such_predicate(&mut self) -> CallResult {
         let module_name = cell_as_atom!(self.deref_register(1));
-
         let head = self.deref_register(2);
 
         self.machine_st.fail = read_heap_cell!(head,
@@ -5975,15 +6215,15 @@ impl Machine {
     #[inline(always)]
     pub(crate) fn get_ball(&mut self) {
         let addr = self.deref_register(1);
-        let h = self.machine_st.heap.len();
-
-        if !self.machine_st.ball.stub.is_empty() {
-            let stub = self.machine_st.ball.copy_and_align(h);
-            self.machine_st.heap.extend(stub);
+        let h = if !self.machine_st.ball.stub.is_empty() {
+            step_or_resource_error!(
+                self.machine_st,
+                self.machine_st.ball.copy_and_align_to(&mut self.machine_st.heap)
+            )
         } else {
             self.machine_st.fail = true;
             return;
-        }
+        };
 
         match addr.as_var() {
             Some(r) => self.machine_st.bind(r, self.machine_st.heap[h]),
@@ -6063,15 +6303,17 @@ impl Machine {
             let e = and_frame.prelude.e;
             let e = Fixnum::build_with(i64::try_from(e).unwrap());
 
-            let p = str_loc_as_cell!(machine_st.heap.len());
+            let mut writer = Heap::functor_writer(functor!(atom!("dir_entry"), [fixnum(cp)]));
 
-            machine_st
-                .heap
-                .extend(functor!(atom!("dir_entry"), [fixnum(cp)]));
+            let p_functor_cell = step_or_resource_error!(
+                machine_st,
+                writer(&mut machine_st.heap)
+            );
+
             machine_st.unify_fixnum(e, machine_st.registers[2]);
 
             if !machine_st.fail {
-                unify!(machine_st, p, machine_st.registers[3]);
+                unify!(machine_st, p_functor_cell, machine_st.registers[3]);
             }
         };
 
@@ -6098,15 +6340,18 @@ impl Machine {
                 // it later.
                 let and_frame = self.machine_st.stack.index_and_frame(e);
                 let cp = and_frame.prelude.cp - 1;
+                let mut writer = Heap::functor_writer(functor!(atom!("dir_entry"), [fixnum(cp)]));
 
-                let p = str_loc_as_cell!(self.machine_st.heap.len());
-                self.machine_st.heap.extend(functor!(atom!("dir_entry"), [fixnum(cp)]));
+                let p_functor_cell = step_or_resource_error!(
+                    self.machine_st,
+                    writer(&mut self.machine_st.heap)
+                );
 
                 let e = Fixnum::build_with(i64::try_from(and_frame.prelude.e).unwrap());
                 self.machine_st.unify_fixnum(e, self.machine_st.registers[2]);
 
                 if !self.machine_st.fail {
-                    unify!(self.machine_st, p, self.machine_st.registers[3]);
+                    unify!(self.machine_st, p_functor_cell, self.machine_st.registers[3]);
                 }
             }
             _ => {
@@ -6146,9 +6391,11 @@ impl Machine {
                     None => true,
                 };
             }
+            /*
             (HeapCellValueTag::Char, c) => {
                 self.machine_st.fail = non_quoted_token(once(c));
             }
+            */
             (HeapCellValueTag::Atom, (name, arity)) => {
                 debug_assert_eq!(arity, 0);
                 self.machine_st.fail = non_quoted_token(name.as_str().chars());
@@ -6216,14 +6463,14 @@ impl Machine {
     fn read_term_from_atom(
         &mut self,
         atom_or_string: AtomOrString,
-    ) -> Result<Option<FocusedHeap>, MachineStub> {
+    ) -> Result<Option<TermWriteResult>, MachineStub> {
         let string = match atom_or_string {
             AtomOrString::Atom(atom!("[]")) => "".to_owned(),
             _ => atom_or_string.into(),
         };
 
         let chars = CharReader::new(ByteStream::from_string(string));
-        let mut parser = Parser::new(chars, &mut self.machine_st);
+        let mut parser = LexerParser::new(chars, &mut self.machine_st);
         let op_dir = CompositeOpDir::new(&self.indices.op_dir, None);
 
         let term = parser
@@ -6254,14 +6501,8 @@ impl Machine {
             .value_to_str_like(self.machine_st.registers[1])
             .unwrap();
 
-        if let Some(mut term) = self.read_term_from_atom(atom_or_string)? {
-            let heap_len = self.machine_st.heap.len();
-
-            self.machine_st.heap.extend(
-                copy_and_align_iter(term.heap.drain(..), 0, heap_len as i64),
-            );
-
-            let result = heap_loc_as_cell!(heap_len + term.focus);
+        if let Some(term) = self.read_term_from_atom(atom_or_string)? {
+            let result = self.machine_st.heap[term.focus];
             let var = self.deref_register(2).as_var().unwrap();
 
             self.machine_st.bind(var, result);
@@ -6283,8 +6524,8 @@ impl Machine {
         };
 
         let chars = CharReader::new(ByteStream::from_string(string));
-        let term_write_result = self.machine_st.read(chars, &self.indices.op_dir)
-            .map(|(term, _)| term.to_machine_heap(&mut self.machine_st))
+        let term = self.machine_st.read(chars, &self.indices.op_dir)
+            .map(|(term, _)| term)
             .map_err(|e| {
                 let e = self.machine_st.session_error(SessionError::from(e));
                 let stub = functor_stub(atom!("read_term_from_chars"), 3);
@@ -6292,7 +6533,7 @@ impl Machine {
                 self.machine_st.error_form(e, stub)
             })?;
 
-        self.machine_st.read_term_body(term_write_result)
+        self.machine_st.read_term_body(term)
     }
 
     #[inline(always)]
@@ -6325,12 +6566,15 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn reset_continuation_marker(&mut self) {
-        let h = self.machine_st.heap.len();
+        let h = self.machine_st.heap.cell_len();
 
         self.machine_st.registers[3] = atom_as_cell!(atom!("none"));
         self.machine_st.registers[4] = heap_loc_as_cell!(h);
 
-        self.machine_st.heap.push(heap_loc_as_cell!(h));
+        step_or_resource_error!(
+            self.machine_st,
+            self.machine_st.heap.push_cell(heap_loc_as_cell!(h))
+        );
     }
 
     #[inline(always)]
@@ -6671,10 +6915,9 @@ impl Machine {
             let stream = Stream::from_tls_stream(addr, stream, &mut self.machine_st.arena);
             self.indices.streams.insert(stream);
 
-            self.machine_st.heap.push(stream_as_cell!(stream));
+            // self.machine_st.heap.push(stream_as_cell!(stream));
             let stream_addr = self.deref_register(3);
-            self.machine_st
-                .bind(stream_addr.as_var().unwrap(), stream_as_cell!(stream));
+            self.machine_st.bind(stream_addr.as_var().unwrap(), stream_as_cell!(stream));
 
             Ok(())
         } else {
@@ -6844,18 +7087,20 @@ impl Machine {
             }
             atom!("position") => {
                 if let Some((position, lines_read)) = stream.position() {
-                    let h = self.machine_st.heap.len();
-
                     let position_term = functor!(
                         atom!("position_and_lines_read"),
                         [
-                            integer(position, &mut self.machine_st.arena),
-                            integer(lines_read, &mut self.machine_st.arena)
+                            number(position, (&mut self.machine_st.arena)),
+                            number(lines_read, (&mut self.machine_st.arena))
                         ]
                     );
 
-                    self.machine_st.heap.extend(position_term);
-                    str_loc_as_cell!(h)
+                    let mut functor_writer = Heap::functor_writer(position_term);
+
+                    resource_error_call_result!(
+                        self.machine_st,
+                        functor_writer(&mut self.machine_st.heap)
+                    )
                 } else {
                     self.machine_st.fail = true;
                     return Ok(());
@@ -6892,17 +7137,20 @@ impl Machine {
         let value = self.machine_st.registers[2];
         let mut ball = Ball::new();
 
-        ball.boundary = self.machine_st.heap.len();
+        ball.boundary = self.machine_st.heap.cell_len();
 
-        copy_term(
-            CopyBallTerm::new(
-                &mut self.machine_st.attr_var_init.attr_var_queue,
-                &mut self.machine_st.stack,
-                &mut self.machine_st.heap,
-                &mut ball.stub,
-            ),
-            value,
-            AttrVarPolicy::DeepCopy,
+        step_or_resource_error!(
+            self.machine_st,
+            copy_term(
+                CopyBallTerm::new(
+                    &mut self.machine_st.attr_var_init.attr_var_queue,
+                    &mut self.machine_st.stack,
+                    &mut self.machine_st.heap,
+                    &mut ball.stub,
+                ),
+                value,
+                AttrVarPolicy::DeepCopy,
+            )
         );
 
         self.indices.global_variables.insert(key, (ball, None));
@@ -6946,10 +7194,15 @@ impl Machine {
         let seen_vars = self
             .machine_st
             .attr_vars_of_term(self.machine_st.registers[1]);
-        let outcome = heap_loc_as_cell!(iter_to_heap_list(
-            &mut self.machine_st.heap,
-            seen_vars.into_iter()
-        ));
+
+        let outcome = step_or_resource_error!(
+            self.machine_st,
+            sized_iter_to_heap_list(
+                &mut self.machine_st.heap,
+                seen_vars.len(),
+                seen_vars.into_iter(),
+            )
+        );
 
         unify_fn!(self.machine_st, self.machine_st.registers[2], outcome);
     }
@@ -6965,24 +7218,30 @@ impl Machine {
         }
 
         let stored_v = if stored_v.is_stack_var() {
-            let h = self.machine_st.heap.len();
+            let h = self.machine_st.heap.cell_len();
 
-            self.machine_st.heap.push(heap_loc_as_cell!(h));
+            step_or_resource_error!(
+                self.machine_st,
+                self.machine_st.heap.push_cell(heap_loc_as_cell!(h))
+            );
+
             self.machine_st.bind(Ref::heap_cell(h), stored_v);
-
             heap_loc_as_cell!(h)
         } else {
             stored_v
         };
 
         let mut seen_set = IndexSet::with_hasher(FxBuildHasher::default());
-
         self.machine_st.variable_set(&mut seen_set, stored_v);
 
-        let outcome = heap_loc_as_cell!(iter_to_heap_list(
-            &mut self.machine_st.heap,
-            seen_set.into_iter()
-        ));
+        let outcome = step_or_resource_error!(
+            self.machine_st,
+            sized_iter_to_heap_list(
+                &mut self.machine_st.heap,
+                seen_set.len(),
+                seen_set.into_iter(),
+            )
+        );
 
         unify_fn!(self.machine_st, a2, outcome);
     }
@@ -7037,18 +7296,18 @@ impl Machine {
         false
     }
 
-    fn walk_code_at_ptr(&mut self, index_ptr: usize) -> HeapCellValue {
-        let mut h = self.machine_st.heap.len();
+    fn walk_code_at_ptr(&mut self, index_ptr: usize) -> Result<HeapCellValue, usize> {
+        let orig_h = self.machine_st.heap.cell_len();
+        let mut h = orig_h;
 
         let mut functors = vec![];
         let mut functor_list = vec![];
 
         walk_code(&self.code, index_ptr, |instr| {
             let old_len = functors.len();
-            instr.enqueue_functors(h, &mut self.machine_st.arena, &mut functors);
+            instr.enqueue_functors(&mut self.machine_st.arena, &mut functors);
             let new_len = functors.len();
 
-            #[allow(clippy::needless_range_loop)]
             for index in old_len..new_len {
                 let functor_len = functors[index].len();
 
@@ -7056,24 +7315,30 @@ impl Machine {
                     0 => {}
                     1 => {
                         functor_list.push(heap_loc_as_cell!(h));
-                        h += functor_len;
+                        h += cell_index!(Heap::compute_functor_byte_size(&functors[index]));
                     }
                     _ => {
                         functor_list.push(str_loc_as_cell!(h));
-                        h += functor_len;
+                        h += cell_index!(Heap::compute_functor_byte_size(&functors[index]));
                     }
-                }
+                };
             }
         });
 
-        for functor in functors {
-            self.machine_st.heap.extend(functor.into_iter());
-        }
+        let mut writer = self.machine_st.heap.reserve(h - orig_h)?;
 
-        heap_loc_as_cell!(iter_to_heap_list(
+        writer.write_with(|section| {
+            for functor in functors {
+                let mut functor_writer = ReservedHeapSection::functor_writer(functor);
+                functor_writer(section);
+            }
+        });
+
+        sized_iter_to_heap_list(
             &mut self.machine_st.heap,
-            functor_list.into_iter()
-        ))
+            functor_list.len(),
+            functor_list.into_iter(),
+        )
     }
 
     #[inline(always)]
@@ -7128,7 +7393,11 @@ impl Machine {
             }
         };
 
-        let listing = self.walk_code_at_ptr(first_idx);
+        let listing = resource_error_call_result!(
+            self.machine_st,
+            self.walk_code_at_ptr(first_idx)
+        );
+
         let listing_var = self.machine_st.registers[4];
 
         unify!(self.machine_st, listing, listing_var);
@@ -7149,7 +7418,11 @@ impl Machine {
             }
         };
 
-        let listing = self.walk_code_at_ptr(index_ptr);
+        let listing = step_or_resource_error!(
+            self.machine_st,
+            self.walk_code_at_ptr(index_ptr)
+        );
+
         let listing_var = self.machine_st.registers[2];
 
         unify!(self.machine_st, listing, listing_var);
@@ -7237,19 +7510,15 @@ impl Machine {
         };
 
         let result = printer.print().result();
-        let chars = put_complete_string(
-            &mut self.machine_st.heap,
-            &result,
-            &self.machine_st.atom_tbl,
+        let chars = resource_error_call_result!(
+            self.machine_st,
+            self.machine_st.allocate_cstr(&result)
         );
 
         let result_addr = self.deref_register(1);
+        let var = result_addr.as_var().unwrap();
 
-        if let Some(var) = result_addr.as_var() {
-            self.machine_st.bind(var, chars);
-        } else {
-            unreachable!()
-        }
+        self.machine_st.bind(var, chars);
 
         Ok(())
     }
@@ -7259,10 +7528,12 @@ impl Machine {
         use git_version::git_version;
 
         let buffer = git_version!(cargo_prefix = "cargo:", fallback = "unknown");
-        let buffer_atom = AtomTable::build_with(&self.machine_st.atom_tbl, buffer);
+        let cstr_cell = step_or_resource_error!(
+            self.machine_st,
+            self.machine_st.allocate_cstr(&buffer)
+        );
 
-        let a1 = self.deref_register(1);
-        self.machine_st.unify_complete_string(buffer_atom, a1);
+        unify!(self.machine_st, cstr_cell, self.machine_st.registers[1]);
     }
 
     #[inline(always)]
@@ -7297,84 +7568,121 @@ impl Machine {
                 let mut context = Sha3_224::new();
                 context.update(&bytes);
 
-                heap_loc_as_cell!(iter_to_heap_list(
-                    &mut self.machine_st.heap,
-                    context
-                        .finalize()
-                        .iter()
-                        .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64))),
-                ))
+                let finalized_context = context.finalize();
+                let context_len = finalized_context.len();
+
+                step_or_resource_error!(
+                    self.machine_st,
+                    sized_iter_to_heap_list(
+                        &mut self.machine_st.heap,
+                        context_len,
+                        finalized_context
+                            .iter()
+                            .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64)))
+                    )
+                )
             }
             atom!("sha3_256") => {
                 let mut context = Sha3_256::new();
                 context.update(&bytes);
-                heap_loc_as_cell!(iter_to_heap_list(
-                    &mut self.machine_st.heap,
-                    context
-                        .finalize()
-                        .iter()
-                        .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64))),
-                ))
+                let finalized_context = context.finalize();
+                let context_len = finalized_context.len();
+
+                step_or_resource_error!(
+                    self.machine_st,
+                    sized_iter_to_heap_list(
+                        &mut self.machine_st.heap,
+                        context_len,
+                        finalized_context
+                            .iter()
+                            .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64)))
+                    )
+                )
             }
             atom!("sha3_384") => {
                 let mut context = Sha3_384::new();
                 context.update(&bytes);
+                let finalized_context = context.finalize();
+                let context_len = finalized_context.len();
 
-                heap_loc_as_cell!(iter_to_heap_list(
-                    &mut self.machine_st.heap,
-                    context
-                        .finalize()
-                        .iter()
-                        .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64))),
-                ))
+                step_or_resource_error!(
+                    self.machine_st,
+                    sized_iter_to_heap_list(
+                        &mut self.machine_st.heap,
+                        context_len,
+                        finalized_context
+                            .iter()
+                            .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64)))
+                    )
+                )
             }
             atom!("sha3_512") => {
                 let mut context = Sha3_512::new();
                 context.update(&bytes);
+                let finalized_context = context.finalize();
+                let context_len = finalized_context.len();
 
-                heap_loc_as_cell!(iter_to_heap_list(
-                    &mut self.machine_st.heap,
-                    context
-                        .finalize()
-                        .iter()
-                        .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64))),
-                ))
+                step_or_resource_error!(
+                    self.machine_st,
+                    sized_iter_to_heap_list(
+                        &mut self.machine_st.heap,
+                        context_len,
+                        finalized_context
+                            .iter()
+                            .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64))),
+                    )
+                )
             }
             atom!("blake2s256") => {
                 let mut context = Blake2s256::new();
                 context.update(&bytes);
+                let finalized_context = context.finalize();
+                let context_len = finalized_context.len();
 
-                heap_loc_as_cell!(iter_to_heap_list(
-                    &mut self.machine_st.heap,
-                    context
-                        .finalize()
-                        .iter()
-                        .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64))),
-                ))
+                step_or_resource_error!(
+                    self.machine_st,
+                    sized_iter_to_heap_list(
+                        &mut self.machine_st.heap,
+                        context_len,
+                        finalized_context
+                            .iter()
+                            .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64))),
+                    )
+                )
             }
             atom!("blake2b512") => {
                 let mut context = Blake2b512::new();
                 context.update(&bytes);
+                let finalized_context = context.finalize();
+                let context_len = finalized_context.len();
 
-                heap_loc_as_cell!(iter_to_heap_list(
-                    &mut self.machine_st.heap,
-                    context
-                        .finalize()
-                        .iter()
-                        .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64))),
-                ))
+                step_or_resource_error!(
+                    self.machine_st,
+                    sized_iter_to_heap_list(
+                        &mut self.machine_st.heap,
+                        context_len,
+                        finalized_context
+                            .iter()
+                            .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64))),
+                    )
+                )
             }
             atom!("ripemd160") => {
                 let mut context = Ripemd160::new();
                 context.update(&bytes);
+                let finalized_context = context.finalize();
+                let context_len = finalized_context.len();
 
-                heap_loc_as_cell!(iter_to_heap_list(
-                    &mut self.machine_st.heap,
-                    context
-                        .finalize()
-                        .iter()
-                        .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64))),
-                ))
+                step_or_resource_error!(
+                    self.machine_st,
+                    sized_iter_to_heap_list(
+                        &mut self.machine_st.heap,
+                        context_len,
+                        finalized_context
+                            .iter()
+                            .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64)))
+                    )
+                )
             }
             _ => {
                 let ints = digest::digest(
@@ -7390,12 +7698,16 @@ impl Machine {
                     &bytes,
                 );
 
-                heap_loc_as_cell!(iter_to_heap_list(
-                    &mut self.machine_st.heap,
-                    ints.as_ref()
-                        .iter()
-                        .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64))),
-                ))
+                step_or_resource_error!(
+                    self.machine_st,
+                    sized_iter_to_heap_list(
+                        &mut self.machine_st.heap,
+                        ints.as_ref().len(),
+                        ints.as_ref()
+                            .iter()
+                            .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64)))
+                    )
+                )
             }
         };
 
@@ -7426,12 +7738,16 @@ impl Machine {
         let rkey = hmac::Key::new(ralg, key.as_ref());
         let tag = hmac::sign(&rkey, &data);
 
-        let ints_list = heap_loc_as_cell!(iter_to_heap_list(
-            &mut self.machine_st.heap,
-            tag.as_ref()
-                .iter()
-                .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64))),
-        ));
+        let ints_list = step_or_resource_error!(
+            self.machine_st,
+            sized_iter_to_heap_list(
+                &mut self.machine_st.heap,
+                tag.as_ref().len(),
+                tag.as_ref()
+                    .iter()
+                    .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64)))
+            )
+        );
 
         unify!(self.machine_st, self.machine_st.registers[4], ints_list);
     }
@@ -7493,12 +7809,16 @@ impl Machine {
                 }
             }
 
-            heap_loc_as_cell!(iter_to_heap_list(
-                &mut self.machine_st.heap,
-                bytes
-                    .iter()
-                    .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64))),
-            ))
+            step_or_resource_error!(
+                self.machine_st,
+                sized_iter_to_heap_list(
+                    &mut self.machine_st.heap,
+                    bytes.len(),
+                    bytes
+                        .iter()
+                        .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64)))
+                )
+            )
         };
 
         unify!(self.machine_st, self.machine_st.registers[7], ints_list);
@@ -7545,12 +7865,16 @@ impl Machine {
                 &mut bytes,
             );
 
-            heap_loc_as_cell!(iter_to_heap_list(
-                &mut self.machine_st.heap,
-                bytes
-                    .iter()
-                    .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64))),
-            ))
+            step_or_resource_error!(
+                self.machine_st,
+                sized_iter_to_heap_list(
+                    &mut self.machine_st.heap,
+                    bytes.len(),
+                    bytes
+                        .iter()
+                        .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64)))
+                )
+            )
         };
 
         unify!(self.machine_st, self.machine_st.registers[4], ints_list);
@@ -7588,14 +7912,21 @@ impl Machine {
             }
         };
 
-        let tag_list = heap_loc_as_cell!(iter_to_heap_list(
-            &mut self.machine_st.heap,
-            tag.as_ref()
-                .iter()
-                .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64))),
-        ));
+        let tag_list = step_or_resource_error!(
+            self.machine_st,
+            sized_iter_to_heap_list(
+                &mut self.machine_st.heap,
+                tag.as_ref().len(),
+                tag.as_ref()
+                    .iter()
+                    .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64)))
+            )
+        );
 
-        let complete_string = self.u8s_to_string(&in_out);
+        let complete_string = step_or_resource_error!(
+            self.machine_st,
+            self.u8s_to_string(&in_out)
+        );
 
         unify!(self.machine_st, self.machine_st.registers[6], tag_list);
         unify!(
@@ -7654,7 +7985,10 @@ impl Machine {
             if buffer.is_empty() {
                 empty_list_as_cell!()
             } else {
-                atom_as_cstr_cell!(AtomTable::build_with(&self.machine_st.atom_tbl, &buffer))
+                step_or_resource_error!(
+                    self.machine_st,
+                    self.machine_st.allocate_cstr(&buffer)
+                )
             }
         };
 
@@ -7679,7 +8013,10 @@ impl Machine {
         let scalar = secp256k1::Scalar::decode_reduce(&scalar_bytes);
         point *= scalar;
 
-        let uncompressed = self.u8s_to_string(&point.encode_uncompressed());
+        let uncompressed = step_or_resource_error!(
+            self.machine_st,
+            self.u8s_to_string(&point.encode_uncompressed())
+        );
 
         unify!(self.machine_st, self.machine_st.registers[4], uncompressed);
     }
@@ -7693,7 +8030,10 @@ impl Machine {
 
         let skey = ed25519::PrivateKey::from_seed(&seed_bytes);
 
-        let complete_string = self.u8s_to_string(skey.public_key.encoded.as_ref());
+        let complete_string = step_or_resource_error!(
+            self.machine_st,
+            self.u8s_to_string(skey.public_key.encoded.as_ref())
+        );
 
         unify!(
             self.machine_st,
@@ -7715,13 +8055,16 @@ impl Machine {
         let data = self.string_encoding_bytes(self.machine_st.registers[2], encoding);
 
         let sig = skey.sign_raw(&data);
-
-        let sig_list = heap_loc_as_cell!(iter_to_heap_list(
-            &mut self.machine_st.heap,
-            sig.as_ref()
-                .iter()
-                .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64))),
-        ));
+        let sig_list = step_or_resource_error!(
+            self.machine_st,
+            sized_iter_to_heap_list(
+                &mut self.machine_st.heap,
+                sig.as_ref().len(),
+                sig.as_ref()
+                    .iter()
+                    .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64)))
+            )
+        );
 
         unify!(self.machine_st, self.machine_st.registers[4], sig_list);
     }
@@ -7759,7 +8102,10 @@ impl Machine {
             &<[u8; 32]>::try_from(&scalar_bytes[..]).unwrap(),
         );
 
-        let string = self.u8s_to_string(&result[..]);
+        let string = step_or_resource_error!(
+            self.machine_st,
+            self.u8s_to_string(&result[..])
+        );
 
         unify!(self.machine_st, self.machine_st.registers[3], string);
     }
@@ -7784,29 +8130,31 @@ impl Machine {
     }
 
     #[inline(always)]
-    pub(crate) fn load_html(&mut self) {
+    pub(crate) fn load_html(&mut self) -> Result<(), usize> {
         if let Some(string) = self
             .machine_st
             .value_to_str_like(self.machine_st.registers[1])
         {
             let document = scraper::Html::parse_document(&string.as_str());
-            let result = self.html_node_to_term(document.tree.root().first_child().unwrap());
+            let result = self.html_node_to_term(document.tree.root().first_child().unwrap())?;
 
             unify!(self.machine_st, self.machine_st.registers[2], result);
         } else {
             self.machine_st.fail = true;
         }
+
+        Ok(())
     }
 
     #[inline(always)]
-    pub(crate) fn load_xml(&mut self) {
+    pub(crate) fn load_xml(&mut self) -> Result<(), usize> {
         if let Some(string) = self
             .machine_st
             .value_to_str_like(self.machine_st.registers[1])
         {
             match roxmltree::Document::parse(&string.as_str()) {
                 Ok(doc) => {
-                    let result = self.xml_node_to_term(doc.root_element());
+                    let result = self.xml_node_to_term(doc.root_element())?;
                     unify!(self.machine_st, self.machine_st.registers[2], result);
                 }
                 _ => {
@@ -7816,6 +8164,8 @@ impl Machine {
         } else {
             self.machine_st.fail = true;
         }
+
+        Ok(())
     }
 
     #[inline(always)]
@@ -7826,10 +8176,9 @@ impl Machine {
         {
             match env::var(&*key.as_str()) {
                 Ok(value) => {
-                    let cstr = put_complete_string(
-                        &mut self.machine_st.heap,
-                        &value,
-                        &self.machine_st.atom_tbl,
+                    let cstr = step_or_resource_error!(
+                        self.machine_st,
+                        self.machine_st.allocate_cstr(&value)
                     );
 
                     unify!(self.machine_st, self.machine_st.registers[2], cstr);
@@ -7960,7 +8309,10 @@ impl Machine {
 
             match bytes {
                 Ok(bs) => {
-                    let string = self.u8s_to_string(&bs);
+                    let string = resource_error_call_result!(
+                        self.machine_st,
+                        self.u8s_to_string(&bs)
+                    );
 
                     unify!(self.machine_st, self.machine_st.registers[1], string);
                 }
@@ -7982,7 +8334,10 @@ impl Machine {
             }
 
             let b64 = b64_engine.encode(bytes);
-            let string = self.u8s_to_string(b64.as_bytes());
+            let string = resource_error_call_result!(
+                self.machine_st,
+                self.u8s_to_string(b64.as_bytes())
+            );
 
             unify!(self.machine_st, self.machine_st.registers[2], string);
         }
@@ -8040,12 +8395,12 @@ impl Machine {
             1,
         )?;
 
-        let mut parser = Parser::new(stream, &mut self.machine_st);
+        let mut lexer_parser = LexerParser::new(stream, &mut self.machine_st);
 
-        match devour_whitespace(&mut parser) {
+        match devour_whitespace(&mut lexer_parser) {
             Ok(false) => {
                 // not at EOF ...
-                stream.add_lines_read(parser.lines_read());
+                stream.add_lines_read(lexer_parser.line_num());
 
                 // ... unless we are.
                 if stream.at_end_of_stream() {
@@ -8053,7 +8408,7 @@ impl Machine {
                 }
             }
             Ok(true) => {
-                stream.add_lines_read(parser.lines_read());
+                stream.add_lines_read(lexer_parser.line_num());
                 self.machine_st.fail = true;
             }
             Err(err) => {
@@ -8113,8 +8468,10 @@ impl Machine {
 
         if path.is_dir() {
             if let Some(path) = path.to_str() {
-                let path_string =
-                    put_complete_string(&mut self.machine_st.heap, path, &self.machine_st.atom_tbl);
+                let path_string = step_or_resource_error!(
+                    self.machine_st,
+                    self.machine_st.allocate_cstr(path)
+                );
 
                 unify!(self.machine_st, self.machine_st.registers[1], path_string);
                 return;
@@ -8149,7 +8506,7 @@ impl Machine {
         unify!(self.machine_st, self.machine_st.registers[2], pop_count);
     }
 
-    pub(super) fn systemtime_to_timestamp(&mut self, system_time: SystemTime) -> Atom {
+    pub(super) fn systemtime_to_timestamp(&mut self, system_time: SystemTime) -> String {
         let datetime: DateTime<Local> = system_time.into();
 
         let mut fstr = "[".to_string();
@@ -8163,9 +8520,7 @@ impl Machine {
         }
 
         fstr.push_str("finis].");
-        let s = datetime.format(&fstr).to_string();
-
-        AtomTable::build_with(&self.machine_st.atom_tbl, &s)
+        datetime.format(&fstr).to_string()
     }
 
     pub(super) fn string_encoding_bytes(
@@ -8184,128 +8539,125 @@ impl Machine {
         }
     }
 
-    pub(super) fn xml_node_to_term(&mut self, node: roxmltree::Node) -> HeapCellValue {
+    pub(super) fn xml_node_to_term(&mut self, node: roxmltree::Node) -> Result<HeapCellValue, usize> {
         if node.is_text() {
-            put_complete_string(
-                &mut self.machine_st.heap,
-                node.text().unwrap(),
-                &self.machine_st.atom_tbl,
-            )
+            self.machine_st.allocate_cstr(node.text().unwrap())
         } else {
             let mut avec = Vec::new();
 
             for attr in node.attributes() {
                 let name = AtomTable::build_with(&self.machine_st.atom_tbl, attr.name());
-                let value = put_complete_string(
-                    &mut self.machine_st.heap,
-                    attr.value(),
-                    &self.machine_st.atom_tbl,
-                );
+                let value = self.machine_st.allocate_cstr(attr.value())?;
 
-                avec.push(str_loc_as_cell!(self.machine_st.heap.len()));
+                avec.push(str_loc_as_cell!(self.machine_st.heap.cell_len()));
 
-                self.machine_st.heap.push(atom_as_cell!(atom!("="), 2));
-                self.machine_st.heap.push(atom_as_cell!(name));
-                self.machine_st.heap.push(value);
+                let mut writer = self.machine_st.heap.reserve(3)?;
+
+                writer.write_with(|section| {
+                    section.push_cell(atom_as_cell!(atom!("="), 2));
+                    section.push_cell(atom_as_cell!(name));
+                    section.push_cell(value);
+                });
             }
 
-            let attrs = heap_loc_as_cell!(iter_to_heap_list(
+            let attrs = sized_iter_to_heap_list(
                 &mut self.machine_st.heap,
-                avec.into_iter()
-            ));
+                avec.len(),
+                avec.into_iter(),
+            )?;
 
             let mut cvec = Vec::new();
 
             for child in node.children() {
-                cvec.push(self.xml_node_to_term(child));
+                cvec.push(self.xml_node_to_term(child)?);
             }
 
-            let children = heap_loc_as_cell!(iter_to_heap_list(
+            let children = sized_iter_to_heap_list(
                 &mut self.machine_st.heap,
-                cvec.into_iter()
-            ));
+                cvec.len(),
+                cvec.into_iter(),
+            )?;
 
             let tag = AtomTable::build_with(&self.machine_st.atom_tbl, node.tag_name().name());
+            let result = str_loc_as_cell!(self.machine_st.heap.cell_len());
+            let mut writer = self.machine_st.heap.reserve(4)?;
 
-            let result = str_loc_as_cell!(self.machine_st.heap.len());
+            writer.write_with(|section| {
+                section.push_cell(atom_as_cell!(atom!("element"), 3));
+                section.push_cell(atom_as_cell!(tag));
+                section.push_cell(attrs);
+                section.push_cell(children);
+            });
 
-            self.machine_st
-                .heap
-                .push(atom_as_cell!(atom!("element"), 3));
-            self.machine_st.heap.push(atom_as_cell!(tag));
-            self.machine_st.heap.push(attrs);
-            self.machine_st.heap.push(children);
-
-            result
+            Ok(result)
         }
     }
 
-    pub(super) fn html_node_to_term(
+     pub(super) fn html_node_to_term(
         &mut self,
         node: ego_tree::NodeRef<'_, scraper::Node>,
-    ) -> HeapCellValue {
+    ) -> Result<HeapCellValue, usize> {
         match node.value().as_element() {
-            None => put_complete_string(
-                &mut self.machine_st.heap,
-                &node.value().as_text().unwrap().text,
-                &self.machine_st.atom_tbl,
-            ),
+            None => self.machine_st.allocate_cstr(&node.value().as_text().unwrap().text),
             Some(element) => {
                 let mut avec = Vec::new();
 
                 for attr in element.attrs() {
                     let name = AtomTable::build_with(&self.machine_st.atom_tbl, attr.0);
-                    let value = put_complete_string(
-                        &mut self.machine_st.heap,
-                        attr.1,
-                        &self.machine_st.atom_tbl,
-                    );
+                    let value = self.machine_st.allocate_cstr(attr.1)?;
 
-                    avec.push(str_loc_as_cell!(self.machine_st.heap.len()));
+                    avec.push(str_loc_as_cell!(self.machine_st.heap.cell_len()));
 
-                    self.machine_st.heap.push(atom_as_cell!(atom!("="), 2));
-                    self.machine_st.heap.push(atom_as_cell!(name));
-                    self.machine_st.heap.push(value);
+                    let mut writer = self.machine_st.heap.reserve(3)?;
+
+                    writer.write_with(|section| {
+                        section.push_cell(atom_as_cell!(atom!("="), 2));
+                        section.push_cell(atom_as_cell!(name));
+                        section.push_cell(value);
+                    });
                 }
 
-                let attrs = heap_loc_as_cell!(iter_to_heap_list(
+                let attrs = sized_iter_to_heap_list(
                     &mut self.machine_st.heap,
-                    avec.into_iter()
-                ));
+                    avec.len(),
+                    avec.into_iter(),
+                )?;
 
                 let mut cvec = Vec::new();
 
                 for child in node.children() {
-                    cvec.push(self.html_node_to_term(child));
+                    cvec.push(self.html_node_to_term(child)?);
                 }
 
-                let children = heap_loc_as_cell!(iter_to_heap_list(
+                let children = sized_iter_to_heap_list(
                     &mut self.machine_st.heap,
-                    cvec.into_iter()
-                ));
+                    cvec.len(),
+                    cvec.into_iter(),
+                )?;
 
                 let tag = AtomTable::build_with(&self.machine_st.atom_tbl, element.name());
-                let result = str_loc_as_cell!(self.machine_st.heap.len());
+                let result = str_loc_as_cell!(self.machine_st.heap.cell_len());
+                let mut writer = self.machine_st.heap.reserve(4)?;
 
-                self.machine_st
-                    .heap
-                    .push(atom_as_cell!(atom!("element"), 3));
-                self.machine_st.heap.push(atom_as_cell!(tag));
-                self.machine_st.heap.push(attrs);
-                self.machine_st.heap.push(children);
+                writer.write_with(|section| {
+                    section.push_cell(atom_as_cell!(atom!("element"), 3));
+                    section.push_cell(atom_as_cell!(tag));
+                    section.push_cell(attrs);
+                    section.push_cell(children);
+                });
 
-                result
+                Ok(result)
             }
         }
     }
 
-    pub(super) fn u8s_to_string(&mut self, data: &[u8]) -> HeapCellValue {
+    pub(super) fn u8s_to_string(&mut self, data: &[u8]) -> Result<HeapCellValue, usize> {
         let buffer = String::from_iter(data.iter().map(|b| *b as char));
 
         if buffer.is_empty() {
-            empty_list_as_cell!()
+            Ok(empty_list_as_cell!())
         } else {
-            atom_as_cstr_cell!(AtomTable::build_with(&self.machine_st.atom_tbl, &buffer))
+            self.machine_st.allocate_cstr(&buffer)
         }
     }
 }

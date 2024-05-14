@@ -11,9 +11,13 @@ pub(crate) mod macros;
 #[macro_use]
 pub(crate) mod atom_table;
 #[macro_use]
-pub(crate) mod arena;
+pub mod arena;
 #[macro_use]
 pub(crate) mod parser;
+pub mod types;
+#[macro_use]
+pub mod functor_macro;
+
 mod allocator;
 mod arithmetic;
 pub(crate) mod codegen;
@@ -38,7 +42,6 @@ pub(crate) mod read;
 #[cfg(feature = "repl")]
 mod repl_helper;
 mod targets;
-pub(crate) mod types;
 
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;

@@ -1,15 +1,10 @@
 /* A simple macro to count the arguments in a variadic list
  * of token trees.
  */
-macro_rules! count_tt {
-    () => { 0 };
-    ($odd:tt $($a:tt $b:tt)*) => { (count_tt!($($a)*) << 1) | 1 };
-    ($($a:tt $even:tt)*) => { count_tt!($($a)*) << 1 };
-}
 
 macro_rules! char_as_cell {
     ($c: expr) => {
-        HeapCellValue::build_with(HeapCellValueTag::Char, $c as u64)
+        HeapCellValue::from_bytes(AtomCell::new_char_inlined($c).into_bytes())
     };
 }
 
@@ -46,30 +41,21 @@ macro_rules! empty_list_as_cell {
 macro_rules! atom_as_cell {
     ($atom:expr) => {
         HeapCellValue::from_bytes(
-            AtomCell::build_with($atom.flat_index(), 0, HeapCellValueTag::Atom).into_bytes(),
+            AtomCell::build_with($atom.index, 0).into_bytes(),
         )
     };
     ($atom:expr, $arity:expr) => {
         HeapCellValue::from_bytes(
-            AtomCell::build_with($atom.flat_index(), $arity as u16, HeapCellValueTag::Atom)
+            AtomCell::build_with($atom.index, $arity as u8)
                 .into_bytes(),
         )
     };
 }
 
-macro_rules! cell_as_string {
-    ($cell:expr) => {
-        PartialString::from(cell_as_atom!($cell))
-    };
-}
-
 macro_rules! cell_as_atom {
-    ($cell:expr) => {{
-        let cell = AtomCell::from_bytes($cell.into_bytes());
-        let name = (cell.get_index() as u64) << 3;
-
-        Atom::from(name)
-    }};
+    ($cell:expr) => {
+        AtomCell::from_bytes($cell.into_bytes()).get_name()
+    };
 }
 
 macro_rules! cell_as_atom_cell {
@@ -91,23 +77,9 @@ macro_rules! cell_as_untyped_arena_ptr {
     };
 }
 
-macro_rules! pstr_as_cell {
-    ($atom:expr) => {
-        HeapCellValue::from_bytes(
-            AtomCell::build_with($atom.flat_index(), 0, HeapCellValueTag::PStr).into_bytes(),
-        )
-    };
-}
-
 macro_rules! pstr_loc_as_cell {
     ($h:expr) => {
         HeapCellValue::build_with(HeapCellValueTag::PStrLoc, $h as u64)
-    };
-}
-
-macro_rules! pstr_offset_as_cell {
-    ($h:expr) => {
-        HeapCellValue::build_with(HeapCellValueTag::PStrOffset, $h as u64)
     };
 }
 
@@ -183,38 +155,6 @@ macro_rules! untyped_arena_ptr_as_cell {
     ($ptr:expr) => {
         HeapCellValue::from_bytes(UntypedArenaPtr::into_bytes($ptr))
     };
-}
-
-macro_rules! atom_as_cstr_cell {
-    ($atom:expr) => {{
-        let offset = $atom.flat_index();
-
-        HeapCellValue::from_bytes(
-            AtomCell::build_with(offset as u64, 0, HeapCellValueTag::CStr).into_bytes(),
-        )
-    }};
-}
-
-macro_rules! string_as_cstr_cell {
-    ($ptr:expr) => {{
-        let atom: Atom = $ptr.into();
-        let offset = atom.flat_index();
-
-        HeapCellValue::from_bytes(
-            AtomCell::build_with(offset as u64, 0, HeapCellValueTag::CStr).into_bytes(),
-        )
-    }};
-}
-
-macro_rules! string_as_pstr_cell {
-    ($ptr:expr) => {{
-        let atom: Atom = $ptr.into();
-        let offset = atom.flat_index();
-
-        HeapCellValue::from_bytes(
-            AtomCell::build_with(offset as u64, 0, HeapCellValueTag::PStr).into_bytes(),
-        )
-    }};
 }
 
 macro_rules! stream_as_cell {
@@ -354,6 +294,7 @@ macro_rules! read_heap_cell_pat_body {
         #[allow(unused_braces)]
         $code
     }};
+    /*
     ($cell:ident, PStr, $atom:ident, $code:expr) => {{
         let $atom = cell_as_atom!($cell);
         #[allow(unused_braces)]
@@ -374,6 +315,7 @@ macro_rules! read_heap_cell_pat_body {
         #[allow(unused_braces)]
         $code
     }};
+    */
     ($cell:ident, Fixnum, $value:ident, $code:expr) => {{
         let $value = Fixnum::from_bytes($cell.into_bytes());
         #[allow(unused_braces)]
@@ -438,119 +380,6 @@ macro_rules! read_heap_cell {
             })+
         }
     });
-}
-
-macro_rules! functor {
-    ($name:expr, [$($dt:ident($($value:expr),*)),+], [$($aux:ident),*]) => ({
-        {
-            #[allow(unused_variables, unused_mut)]
-            let mut addendum = Heap::new();
-            let arity: usize = count_tt!($($dt) +);
-
-            #[allow(unused_variables)]
-            let aux_lens: [usize; count_tt!($($aux) *)] = [$($aux.len()),*];
-
-            let mut result =
-                vec![ atom_as_cell!($name, arity as u16),
-                      $(functor_term!( $dt($($value),*), arity, aux_lens, addendum ),)+ ];
-
-            $(
-                result.extend($aux.iter());
-            )*
-
-            result.extend(addendum.into_iter());
-            result
-        }
-    });
-    ($name:expr, [$($dt:ident($($value:expr),*)),+]) => ({
-        {
-            let arity: usize = count_tt!($($dt) +);
-
-            #[allow(unused_variables, unused_mut)]
-            let mut addendum = Heap::new();
-
-            let mut result =
-                vec![ atom_as_cell!($name, arity as u16),
-                      $(functor_term!( $dt($($value),*), arity, [], addendum ),)+ ];
-
-            result.extend(addendum.into_iter());
-            result
-        }
-    });
-    ($name:expr) => ({
-        vec![ atom_as_cell!($name) ]
-    });
-}
-
-macro_rules! functor_term {
-    (str(0), $arity:expr, $aux_lens:expr, $addendum:ident) => ({
-        str_loc_as_cell!($arity + 1)
-    });
-    (str($e:expr), $arity:expr, $aux_lens:expr, $addendum:ident) => ({
-        let len: usize = $aux_lens[0 .. $e].iter().sum();
-        str_loc_as_cell!($arity + 1 + len)
-    });
-    (str($h:expr, 0), $arity:expr, $aux_lens:expr, $addendum:ident) => ({
-        str_loc_as_cell!($arity + $h + 1)
-    });
-    (str($h:expr, $e:expr), $arity:expr, $aux_lens:expr, $addendum:ident) => ({
-        let len: usize = $aux_lens[0 .. $e].iter().sum();
-        str_loc_as_cell!($arity + $h + 1 + len)
-    });
-    (literal($e:expr), $arity:expr, $aux_lens:expr, $addendum:ident) => (
-        HeapCellValue::from($e)
-    );
-    (integer($e:expr, $arena:expr), $arity:expr, $aux_lens:expr, $addendum:ident) => (
-        HeapCellValue::arena_from(Number::arena_from($e, $arena), $arena)
-    );
-    (fixnum($e:expr), $arity:expr, $aux_lens:expr, $addendum:ident) => (
-        fixnum_as_cell!(Fixnum::build_with($e as i64))
-    );
-    (indexing_code_ptr($h:expr, $e:expr), $arity:expr, $aux_lens:expr, $addendum:ident) => ({
-        let stub =
-            match $e {
-                IndexingCodePtr::DynamicExternal(o) => functor!(atom!("dynamic_external"), [fixnum(o)]),
-                IndexingCodePtr::External(o) => functor!(atom!("external"), [fixnum(o)]),
-                IndexingCodePtr::Internal(o) => functor!(atom!("internal"), [fixnum(o)]),
-                IndexingCodePtr::Fail => {
-                    vec![atom_as_cell!(atom!("fail"))]
-                },
-            };
-
-        let len: usize = $aux_lens.iter().sum();
-        let h = len + $arity + 1 + $addendum.len() + $h;
-
-        $addendum.extend(stub.into_iter());
-
-        str_loc_as_cell!(h)
-    });
-    (number($arena:expr, $e:expr), $arity:expr, $aux_lens:expr, $addendum:ident) => (
-        HeapCellValue::from(($e, $arena))
-    );
-    (atom($e:expr), $arity:expr, $aux_lens:expr, $addendum:ident) => (
-        atom_as_cell!($e)
-    );
-    (string($h:expr, $e:expr), $arity:expr, $aux_lens:expr, $addendum: ident) => ({
-        let len: usize = $aux_lens.iter().sum();
-        let h = len + $arity + 1 + $addendum.len() + $h;
-
-        let cell = string_as_pstr_cell!($e);
-
-        $addendum.push(cell);
-        $addendum.push(empty_list_as_cell!());
-
-        heap_loc_as_cell!(h)
-    });
-    (boolean($e:expr), $arity:expr, $aux_lens:expr, $addendum: ident) => ({
-        if $e {
-            functor_term!(atom(atom!("true")), $arity, $aux_lens, $addendum)
-        } else {
-            functor_term!(atom(atom!("false")), $arity, $aux_lens, $addendum)
-        }
-    });
-    (cell($e:expr), $arity:expr, $aux_lens:expr, $addendum:ident) => (
-        $e
-    );
 }
 
 macro_rules! compare_number_instr {
@@ -636,4 +465,41 @@ macro_rules! compare_term_test {
 
         $machine_st.compare_term_test($var_comparison)
     }};
+}
+
+macro_rules! step_or_resource_error {
+    ($machine_st:expr, $val:expr) => {{
+        match $val {
+            Ok(r) => r,
+            Err(err_loc) => {
+                $machine_st.throw_resource_error(err_loc);
+                return;
+            }
+        }
+    }};
+    ($machine_st:expr, $val:expr, $fail:block) => {{
+        match $val {
+            Ok(r) => r,
+            Err(err_loc) => {
+                $machine_st.throw_resource_error(err_loc);
+                $fail
+            }
+        }
+    }};
+}
+
+macro_rules! resource_error_call_result {
+    ($machine_st:expr, $val:expr) => {
+        step_or_resource_error!($machine_st, $val, {
+            return Err(vec![]); // TODO: return Ok(());
+        })
+    };
+}
+
+macro_rules! heap_index {
+    ($idx:expr) => {($idx) * std::mem::size_of::<HeapCellValue>()};
+}
+
+macro_rules! cell_index {
+    ($idx:expr) => {(($idx) / std::mem::size_of::<HeapCellValue>())};
 }

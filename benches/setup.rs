@@ -1,7 +1,10 @@
 use std::{collections::BTreeMap, fs, path::Path};
 
 use maplit::btreemap;
-use scryer_prolog::{Machine, QueryResolution, Value};
+use scryer_prolog::machine::{
+    parsed_results::{QueryResolution, Value},
+    Machine,
+};
 
 pub fn prolog_benches() -> BTreeMap<&'static str, PrologBenchmark> {
     [
@@ -85,7 +88,7 @@ mod test {
     #[test]
     fn validate_benchmarks() {
         use super::prolog_benches;
-        use scryer_prolog::{QueryMatch, QueryResolution};
+        use scryer_prolog::machine::parsed_results::{QueryMatch, QueryResolution};
         use std::{fmt::Write, fs};
 
         struct BenchResult {

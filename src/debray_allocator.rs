@@ -4,7 +4,7 @@ use crate::codegen::SubsumedBranchHits;
 use crate::forms::{GenContext, Level};
 use crate::instructions::*;
 use crate::machine::disjuncts::*;
-use crate::machine::heap::{heap_bound_deref, heap_bound_store};
+use crate::machine::heap::*;
 use crate::parser::ast::*;
 use crate::targets::*;
 use crate::types::*;
@@ -920,19 +920,24 @@ impl Allocator for DebrayAllocator {
         self.arg_c += 1;
     }
 
-    fn reset_at_head(&mut self, term: &mut FocusedHeap, head_loc: usize) {
-        read_heap_cell!(term.deref_loc(head_loc),
+    fn reset_at_head(&mut self, heap: &mut Heap, head_loc: usize) {
+        let head_cell = heap_bound_store(
+            heap,
+            heap_bound_deref(heap, heap_loc_as_cell!(head_loc)),
+        );
+
+        read_heap_cell!(head_cell,
             (HeapCellValueTag::Str, s) => {
-                let arity = cell_as_atom_cell!(term.heap[s]).get_arity();
+                let arity = cell_as_atom_cell!(heap[s]).get_arity();
 
                 self.reset_arg(arity);
                 self.arity = arity;
 
-                for (idx, arg) in term.heap[s+1 .. s+arity+1].iter().cloned().enumerate() {
+                for (idx, arg) in heap.splice(s+1 ..= s+arity).enumerate() {
                     if arg.is_var() {
                         let var = heap_bound_store(
-                            &term.heap,
-                            heap_bound_deref(&term.heap, arg),
+                            heap,
+                            heap_bound_deref(heap, arg),
                         );
 
                         if !var.is_var() {

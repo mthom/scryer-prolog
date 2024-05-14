@@ -5,7 +5,7 @@ mod setup;
 mod iai {
     use iai_callgrind::{library_benchmark, library_benchmark_group, main};
 
-    use scryer_prolog::QueryResolution;
+    use scryer_prolog::machine::parsed_results::QueryResolution;
 
     use super::setup;
 

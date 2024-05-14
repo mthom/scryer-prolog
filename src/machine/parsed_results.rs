@@ -1,11 +1,11 @@
 use crate::atom_table::*;
 use crate::heap_iter::{stackful_post_order_iter, NonListElider};
 use crate::machine::{F64Offset, F64Ptr, Fixnum, HeapCellValueTag};
-use crate::parser::ast::{Var, VarPtr};
+use crate::parser::ast::Var;
 use dashu::*;
 use indexmap::IndexMap;
 use ordered_float::OrderedFloat;
-use std::cmp::Ordering;
+use std::borrow::Borrow;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::fmt::Display;
@@ -24,7 +24,7 @@ pub enum QueryResolution {
     Matches(Vec<QueryMatch>),
 }
 
-fn write_prolog_value_as_json<W: Write>(
+pub fn write_prolog_value_as_json<W: Write>(
     writer: &mut W,
     value: &Value,
 ) -> Result<(), std::fmt::Error> {
@@ -163,29 +163,22 @@ impl Value {
     pub(crate) fn from_heapcell(
         machine: &mut Machine,
         heap_cell: HeapCellValue,
-        var_names: &mut IndexMap<HeapCellValue, VarPtr>,
+        var_names: &mut IndexMap<HeapCellValue, Var>,
     ) -> Self {
         // Adapted from MachineState::read_term_from_heap
         let mut term_stack = vec![];
-        let iter = stackful_post_order_iter::<NonListElider>(
+
+        machine.machine_st.heap[0] = heap_cell;
+
+        let mut iter = stackful_post_order_iter::<NonListElider>(
             &mut machine.machine_st.heap,
             &mut machine.machine_st.stack,
-            heap_cell,
+            0,
         );
 
         let mut anon_count: usize = 0;
-        let var_ptr_cmp = |a, b| match a {
-            Var::Named(name_a) => match b {
-                Var::Named(name_b) => name_a.cmp(&name_b),
-                _ => Ordering::Less,
-            },
-            _ => match b {
-                Var::Named(_) => Ordering::Greater,
-                _ => Ordering::Equal,
-            },
-        };
 
-        for addr in iter {
+        while let Some(addr) = iter.next() {
             let addr = unmark_cell_bits!(addr);
 
             read_heap_cell!(addr,
@@ -202,6 +195,7 @@ impl Value {
                             _ => Value::List(vec![head]),
                         },
                         Value::List(elems) if elems.is_empty() => match head {
+                            // a.chars().collect::<Vec<_>>().len() == 1
                             Value::Atom(ref a) if a.chars().collect::<Vec<_>>().len() == 1 => {
                                 // Handle lists of char as strings
                                 Value::String(a.to_string())
@@ -234,29 +228,28 @@ impl Value {
                     term_stack.push(list);
                 }
                 (HeapCellValueTag::Var | HeapCellValueTag::AttrVar | HeapCellValueTag::StackVar) => {
-                    let var = var_names.get(&addr).map(|x| x.borrow().clone());
+                    let var = var_names.get(&addr).cloned();
                     match var {
-                        Some(Var::Named(name)) => term_stack.push(Value::Var(name)),
+                        Some(name) => term_stack.push(Value::Var(name.to_string())),
                         _ => {
                             let anon_name = loop {
                                 // Generate a name for the anonymous variable
                                 let anon_name = count_to_letter_code(anon_count);
 
                                 // Find if this name is already being used
-                                var_names.sort_by(|_, a, _, b| {
-                                    var_ptr_cmp(a.borrow().clone(), b.borrow().clone())
-                                });
+                                var_names.sort_by(|_, a, _, b| a.cmp(b));
+
                                 let binary_result = var_names.binary_search_by(|_,a| {
-                                    let var_ptr = Var::Named(anon_name.clone());
-                                    var_ptr_cmp(a.borrow().clone(), var_ptr.clone())
+                                    let a: &String = a.borrow();
+                                    a.cmp(&anon_name)
                                 });
 
                                 match binary_result {
                                     Ok(_) => anon_count += 1, // Name already used
                                     Err(_) => {
                                         // Name not used, assign it to this variable
-                                        let var_ptr = VarPtr::from(Var::Named(anon_name.clone()));
-                                        var_names.insert(addr, var_ptr);
+                                        let var = anon_name.clone();
+                                        var_names.insert(addr, Var::from(var));
                                         break anon_name;
                                     },
                                 }
@@ -268,9 +261,6 @@ impl Value {
                 (HeapCellValueTag::F64, f) => {
                     term_stack.push(Value::Float(*f));
                 }
-                (HeapCellValueTag::Char, c) => {
-                    term_stack.push(Value::Atom(c.into()));
-                }
                 (HeapCellValueTag::Fixnum, n) => {
                     term_stack.push(Value::Integer(n.into()));
                 }
@@ -280,9 +270,6 @@ impl Value {
                         Ok(Number::Rational(r)) => term_stack.push(Value::Rational((*r).clone())),
                         _ => {}
                     }
-                }
-                (HeapCellValueTag::CStr, s) => {
-                    term_stack.push(Value::String(s.as_str().to_string()));
                 }
                 (HeapCellValueTag::Atom, (name, arity)) => {
                     //let h = iter.focus().value() as usize;
@@ -325,8 +312,9 @@ impl Value {
                         term_stack.push(Value::Structure(name.as_str().to_string(), subterms));
                     }
                 }
-                (HeapCellValueTag::PStr, atom) => {
+                (HeapCellValueTag::PStrLoc, pstr_loc) => {
                     let tail = term_stack.pop().unwrap();
+                    let char_iter = iter.base_iter.heap.char_iter(pstr_loc);
 
                     match tail {
                         Value::Atom(atom) => {
@@ -334,21 +322,18 @@ impl Value {
                                 term_stack.push(Value::String(atom.as_str().to_string()));
                             }
                         },
+                        Value::List(l) if l.is_empty() => {
+                            term_stack.push(Value::String(char_iter.collect()));
+                        }
                         Value::List(l) => {
-                            let mut list: Vec<Value> = atom
-                                .as_str()
-                                .to_string()
-                                .chars()
+                            let mut list: Vec<Value> = char_iter
                                 .map(|x| Value::Atom(x.to_string()))
                                 .collect();
                             list.extend(l.into_iter());
                             term_stack.push(Value::List(list));
                         },
                         _ => {
-                            let mut list: Vec<Value> = atom
-                                .as_str()
-                                .to_string()
-                                .chars()
+                            let mut list: Vec<Value> = char_iter
                                 .map(|x| Value::Atom(x.to_string()))
                                 .collect();
 
@@ -374,19 +359,6 @@ impl Value {
                         }
                     }
                 }
-                // I dont know if this is needed here.
-                /*
-                (HeapCellValueTag::PStrLoc, h) => {
-                    let atom = cell_as_atom_cell!(iter.heap[h]).get_name();
-                    let tail = term_stack.pop().unwrap();
-
-                    term_stack.push(Term::PartialString(
-                        Cell::default(),
-                        atom.as_str().to_owned(),
-                        Box::new(tail),
-                    ));
-                }
-                */
                 _ => {
                 }
             );
