@@ -2462,7 +2462,7 @@ impl<'a> Loader<'a, LiveLoadAndMachineState<'a>> {
         }
 
         let machine_st = LiveLoadAndMachineState::machine_st(&mut self.payload);
-        let value = machine_st[term_reg];
+        let value = machine_st.store(MachineState::deref(&machine_st, machine_st[term_reg]));
 
         self.add_clause_clause_if_dynamic(value)?;
 
