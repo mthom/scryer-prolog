@@ -9,7 +9,6 @@ use crate::forms::*;
 use crate::heap_iter::*;
 use crate::machine::heap::*;
 use crate::machine::machine_indices::*;
-use crate::machine::machine_state::pstr_loc_and_offset;
 use crate::machine::partial_string::*;
 use crate::machine::stack::*;
 use crate::machine::streams::*;
@@ -25,7 +24,6 @@ use std::convert::TryFrom;
 use std::iter::once;
 use std::net::{IpAddr, TcpListener};
 use std::rc::Rc;
-use std::sync::Arc;
 
 /* contains the location, name, precision and Specifier of the parent op. */
 #[derive(Debug, Copy, Clone)]
@@ -206,11 +204,12 @@ impl NumberFocus {
 
 #[derive(Debug, Clone, Copy)]
 struct CommaSeparatedCharList {
-    pstr: PartialString,
-    offset: usize,
+    // pstr: PartialString,
+    // offset: usize,
+    pstr_loc: usize,
     max_depth: usize,
-    end_cell: HeapCellValue,
-    end_h: Option<usize>,
+    // end_cell: HeapCellValue,
+    // end_h: Option<usize>,
 }
 
 #[derive(Debug, Clone)]
@@ -473,7 +472,6 @@ pub fn fmt_float(mut fl: f64) -> String {
 pub struct HCPrinter<'a, Outputter> {
     outputter: Outputter,
     iter: StackfulPreOrderHeapIter<'a, ListElider>,
-    atom_tbl: Arc<AtomTable>,
     op_dir: &'a OpDir,
     state_stack: Vec<TokenOrRedirect>,
     toplevel_spec: Option<DirectedOp>,
@@ -488,9 +486,19 @@ pub struct HCPrinter<'a, Outputter> {
     pub double_quotes: bool,
 }
 
+fn ambiguity_check(outputter: &impl HCValueOutputter, quoted: bool, last_item_idx: usize, atom: &str) -> bool {
+    let tail = &outputter.as_str()[last_item_idx..];
+
+    if atom == "," || !quoted || non_quoted_token(atom.chars()) {
+        requires_space(tail, atom)
+    } else {
+        requires_space(tail, "'")
+    }
+}
+
 macro_rules! push_space_if_amb {
     ($self:expr, $atom:expr, $action:block) => {
-        if $self.ambiguity_check($atom) {
+        if ambiguity_check(&$self.outputter, $self.quoted, $self.last_item_idx, $atom) {
             $self.outputter.push_char(' ');
             $action;
         } else {
@@ -528,7 +536,6 @@ pub(crate) fn numbervar(offset: &Integer, addr: HeapCellValue) -> Option<String>
 impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
     pub fn new(
         heap: &'a mut Heap,
-        atom_tbl: Arc<AtomTable>,
         stack: &'a mut Stack,
         op_dir: &'a OpDir,
         output: Outputter,
@@ -537,7 +544,6 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         HCPrinter {
             outputter: output,
             iter: stackful_preorder_iter(heap, stack, root_loc),
-            atom_tbl,
             op_dir,
             state_stack: vec![],
             toplevel_spec: None,
@@ -550,17 +556,6 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             var_names: IndexMap::new(),
             max_depth: 0,
             double_quotes: false,
-        }
-    }
-
-    #[inline]
-    fn ambiguity_check(&self, atom: &str) -> bool {
-        let tail = &self.outputter.as_str()[self.last_item_idx..];
-
-        if atom == "," || !self.quoted || non_quoted_token(atom.chars()) {
-            requires_space(tail, atom)
-        } else {
-            requires_space(tail, "'")
         }
     }
 
@@ -1123,9 +1118,10 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
     // returns true if max_depth limit is reached and ellipsis is printed.
     fn print_string_as_functor(&mut self, focus: usize, max_depth: &mut usize) -> bool {
-        let iter = HeapPStrIter::new(self.iter.heap, focus);
+        let mut iter = HeapPStrIter::new(self.iter.heap, focus);
+        let mut char_count = 0;
 
-        for (char_count, c) in iter.chars().enumerate() {
+        while let Some(iteratee) = iter.next() {
             if self.check_max_depth(max_depth) {
                 if char_count > 0 {
                     self.state_stack.push(TokenOrRedirect::Close);
@@ -1135,13 +1131,31 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 return true;
             }
 
-            append_str!(self, "'.'");
-            push_char!(self, '(');
+            macro_rules! emit_char {
+                ($c:expr) => ({
+                    append_str!(self, "'.'");
+                    push_char!(self, '(');
 
-            print_char!(self, self.quoted, c);
-            push_char!(self, ',');
+                    print_char!(self, self.quoted, $c);
+                    push_char!(self, ',');
 
-            self.state_stack.push(TokenOrRedirect::Close);
+                    self.state_stack.push(TokenOrRedirect::Close);
+                    char_count += 1;
+                });
+            }
+
+            match iteratee {
+                PStrIteratee::Char { value, .. } => {
+                    emit_char!(value);
+                }
+                PStrIteratee::PStrSlice { slice_loc, slice_len } => {
+                    let s = iter.heap.slice_to_str(slice_loc, slice_len);
+
+                    for c in s.chars() {
+                        emit_char!(c);
+                    }
+                }
+            }
         }
 
         false
@@ -1152,7 +1166,8 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
     fn print_proper_string(&mut self, focus: usize, max_depth: usize) {
         push_char!(self, '"');
 
-        let iter = HeapPStrIter::new(self.iter.heap, focus);
+        let mut iter = HeapPStrIter::new(self.iter.heap, focus);
+
         let char_to_string = |c: char| {
             // refrain from quoting characters other than '"' and '\'
             // unless self.quoted is true.
@@ -1164,19 +1179,43 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         };
 
         if max_depth == 0 {
-            for c in iter.chars() {
-                for c in char_to_string(c).chars() {
-                    push_char!(self, c);
+            while let Some(iteratee) = iter.next() {
+                let iter: Box<dyn Iterator<Item = char>> = match iteratee {
+                    PStrIteratee::Char { value: c, .. } => {
+                        Box::new(std::iter::once(c))
+                    }
+                    PStrIteratee::PStrSlice { slice_loc, slice_len } => {
+                        let s = iter.heap.slice_to_str(slice_loc, slice_len);
+                        Box::new(s.chars())
+                    }
+                };
+
+                for c in iter {
+                    for c in char_to_string(c).chars() {
+                        push_char!(self, c);
+                    }
                 }
             }
         } else {
             let mut char_count = 0;
 
-            for c in iter.chars().take(max_depth) {
-                char_count += 1;
+            while let Some(iteratee) = iter.next() {
+                let iter: Box<dyn Iterator<Item = char>> = match iteratee {
+                    PStrIteratee::Char { value: c, .. } => {
+                        Box::new(std::iter::once(c))
+                    }
+                    PStrIteratee::PStrSlice { slice_loc, slice_len } => {
+                        let s = iter.heap.slice_to_str(slice_loc, slice_len);
+                        Box::new(s.chars())
+                    }
+                };
 
-                for c in char_to_string(c).chars() {
-                    push_char!(self, c);
+                for c in iter.take(max_depth - char_count) {
+                    char_count += 1;
+
+                    for c in char_to_string(c).chars() {
+                        push_char!(self, c);
+                    }
                 }
             }
 
@@ -1194,10 +1233,10 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 self.iter.pop_stack();
                 self.iter.pop_stack();
             }
-            HeapCellValueTag::PStr | HeapCellValueTag::PStrOffset => {
+            HeapCellValueTag::PStrLoc => {
                 self.iter.pop_stack();
             }
-            HeapCellValueTag::CStr => {}
+            // HeapCellValueTag::CStr => {}
             _ => {
                 unreachable!();
             }
@@ -1208,19 +1247,15 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         let focus = self.iter.focus();
         let mut heap_pstr_iter = HeapPStrIter::new(self.iter.heap, focus.value() as usize);
 
-        let next_h;
-        let next_hare;
-
-        if heap_pstr_iter.next().is_some() {
-            next_h = heap_pstr_iter.focus;
-            next_hare = heap_pstr_iter.focus();
+        let is_cyclic = if heap_pstr_iter.next().is_some() {
             for _ in heap_pstr_iter.by_ref() {}
+            heap_pstr_iter.is_cyclic()
         } else {
             return self.push_list(max_depth);
-        }
+        };
 
         let end_h = heap_pstr_iter.focus();
-        let end_cell = heap_pstr_iter.focus;
+        let end_cell = heap_pstr_iter.heap[end_h]; // heap_pstr_iter.focus;
 
         if self.check_max_depth(&mut max_depth) {
             self.remove_list_children(focus.value() as usize);
@@ -1230,9 +1265,11 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
         let at_cdr = self.outputter.ends_with("|");
 
-        if self.double_quotes && !self.ignore_ops && end_cell.is_string_terminator(self.iter.heap) {
-            self.remove_list_children(focus.value() as usize);
-            return self.print_proper_string(focus.value() as usize, max_depth);
+        if self.double_quotes && !self.ignore_ops && !is_cyclic {
+            if end_cell.is_string_terminator(self.iter.heap) {
+                self.remove_list_children(focus.value() as usize);
+                return self.print_proper_string(focus.value() as usize, max_depth);
+            }
         }
 
         if self.ignore_ops {
@@ -1261,36 +1298,26 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                 (HeapCellValueTag::Lis) => {
                     self.push_list(max_depth)
                 }
-                _ => {
+                (HeapCellValueTag::PStrLoc, h) => {
                     let switch = Rc::new(Cell::new((!at_cdr, 0)));
                     let switch = self.close_list(switch);
 
-                    let (h, offset) = pstr_loc_and_offset(self.iter.heap, focus.value() as usize);
-
-                    let offset = offset.get_num() as usize;
-                    let tag = value.get_tag();
-
-                    let end_h = if tag == HeapCellValueTag::PStrOffset {
-                        // remove the fixnum offset from the iterator stack so we don't
-                        // print an extraneous number. pstr offset value cells are never
-                        // used by the iterator to mark cyclic terms so the removal is safe.
-                        self.iter.pop_stack();
-                        Some(next_hare)
-                        // Some(end_h)
-                    } else {
-                        None
-                    };
-
                     if !self.max_depth_exhausted(max_depth) {
-                        let pstr = cell_as_string!(self.iter.heap[h]);
-                        self.state_stack.push(TokenOrRedirect::CommaSeparatedCharList(CommaSeparatedCharList {
-                            pstr, offset, max_depth, end_cell: next_h, end_h,
-                        }));
+                        self.state_stack.push(
+                            TokenOrRedirect::CommaSeparatedCharList(
+                                CommaSeparatedCharList {
+                                    pstr_loc: h, max_depth,
+                                }
+                            ),
+                        );
                     } else {
                         self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
                     }
 
                     self.open_list(switch);
+                }
+                _ => {
+                    unreachable!()
                 }
             );
         }
@@ -1521,32 +1548,29 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
     fn print_comma_separated_char_list(&mut self, char_list: CommaSeparatedCharList) {
         let CommaSeparatedCharList {
-            pstr,
-            offset,
+            pstr_loc,
             max_depth,
-            end_cell,
-            end_h,
         } = char_list;
-        let pstr_str = pstr.as_str_from(offset);
 
-        if let Some(c) = pstr_str.chars().next() {
-            let offset = offset + c.len_utf8();
+        let c = self.iter.heap.char_at(pstr_loc);
+
+        if c != '\u{0}' || pstr_loc % std::mem::size_of::<HeapCellValue>() == 0 {
+            // if a null character in a pstr has location aligned
+            // to a cell boundary, the string is ['\\x0\\'].
 
             if !self.max_depth_exhausted(max_depth) {
                 self.state_stack
                     .push(TokenOrRedirect::CommaSeparatedCharList(
                         CommaSeparatedCharList {
-                            pstr,
-                            offset,
+                            pstr_loc: pstr_loc + c.len_utf8(),
                             max_depth: max_depth.saturating_sub(1),
-                            end_cell,
-                            end_h,
                         },
                     ));
 
                 let max_depth_allows = self.max_depth == 0 || max_depth > 1;
+                let next_c = self.iter.heap.char_at(pstr_loc + c.len_utf8());
 
-                if max_depth_allows && pstr_str.chars().nth(1).is_some() {
+                if max_depth_allows && next_c != '\u{0}' {
                     self.state_stack.push(TokenOrRedirect::Comma);
                 }
 
@@ -1558,14 +1582,23 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         } else if self.max_depth_exhausted(max_depth) {
             self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
             self.state_stack.push(TokenOrRedirect::HeadTailSeparator);
-        } else if end_cell != empty_list_as_cell!() {
-            if let Some(end_h) = end_h {
-                self.iter
-                    .push_stack(IterStackLoc::iterable_loc(end_h, HeapOrStackTag::Heap));
-            }
+        } else {
+            /*
+            let end_cell_h = Heap::neighboring_cell_offset(pstr_loc);
+            let end_cell = self.iter.heap[end_cell_h];
+            let end_cell = heap_bound_store(
+                self.iter.heap,
+                heap_bound_deref(self.iter.heap, end_cell),
+            );
 
-            self.state_stack
-                .push(TokenOrRedirect::FunctorRedirect(max_depth + 1));
+            if end_cell != empty_list_as_cell!() {
+                self.iter.push_stack(
+                    IterStackLoc::iterable_loc(end_cell_h, HeapOrStackTag::Heap),
+                );
+            }
+            */
+
+            self.state_stack.push(TokenOrRedirect::FunctorRedirect(max_depth + 1));
             self.state_stack.push(TokenOrRedirect::HeadTailSeparator);
         }
     }
@@ -1658,10 +1691,6 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             (HeapCellValueTag::Atom, (name, arity)) => {
                 print_struct(self, name, arity);
             }
-            (HeapCellValueTag::Char, c) => {
-                let name = AtomTable::build_with(&self.atom_tbl, &String::from(c));
-                print_struct(self, name, 0);
-            }
             (HeapCellValueTag::Str, s) => {
                 let (name, arity) = cell_as_atom_cell!(self.iter.heap[s])
                     .get_name_and_arity();
@@ -1688,7 +1717,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             (HeapCellValueTag::F64, f) => {
                 self.print_number(max_depth, NumberFocus::Unfocused(Number::Float(*f)), &op);
             }
-            (HeapCellValueTag::CStr | HeapCellValueTag::PStr | HeapCellValueTag::PStrOffset) => {
+            (HeapCellValueTag::PStrLoc) => { // HeapCellValueTag::CStr | HeapCellValueTag::PStr | HeapCellValueTag::PStrOffset) => {
                 self.print_list_like(max_depth);
             }
             (HeapCellValueTag::Lis) => {
@@ -1825,6 +1854,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 mod tests {
     use super::*;
 
+    use crate::functor_macro::*;
     use crate::machine::mock_wam::*;
 
     #[test]
@@ -1832,25 +1862,30 @@ mod tests {
     fn term_printing_tests() {
         let mut wam = MockWAM::new();
 
+        // clear the heap of resource error data etc
+        wam.machine_st.heap.clear();
+
         let f_atom = atom!("f");
         let a_atom = atom!("a");
         let b_atom = atom!("b");
         let c_atom = atom!("c");
 
-        wam.machine_st
-            .heap
-            .extend(functor!(f_atom, [atom(a_atom), atom(b_atom)]));
+        let mut functor_writer = Heap::functor_writer(functor!(
+            f_atom,
+            [atom_as_cell(a_atom),
+             atom_as_cell(b_atom)]),
+        );
 
-        wam.machine_st.heap.push(str_loc_as_cell!(0));
+        let cell = functor_writer(&mut wam.machine_st.heap).unwrap();
+        wam.machine_st.heap.push_cell(cell).unwrap();
 
         {
             let printer = HCPrinter::new(
                 &mut wam.machine_st.heap,
-                Arc::clone(&wam.machine_st.atom_tbl),
                 &mut wam.machine_st.stack,
                 &wam.op_dir,
                 PrinterOutputter::new(),
-                0,
+                3,
             );
 
             let output = printer.print();
@@ -1858,31 +1893,31 @@ mod tests {
             assert_eq!(output.result(), "f(a,b)");
         }
 
-        all_cells_unmarked(&wam.machine_st.heap);
+        all_cells_unmarked(wam.machine_st.heap.splice(..));
 
         wam.machine_st.heap.clear();
 
-        wam.machine_st.heap.extend(functor!(
+        let mut functor_writer = Heap::functor_writer(functor!(
             f_atom,
             [
-                atom(a_atom),
-                atom(b_atom),
-                atom(a_atom),
-                cell(str_loc_as_cell!(0))
+                atom_as_cell(a_atom),
+                atom_as_cell(b_atom),
+                atom_as_cell(a_atom),
+                str_loc_as_cell(0)
             ]
         ));
 
-        let h = wam.machine_st.heap.len();
-        wam.machine_st.heap.push(str_loc_as_cell!(0));
+        let cell = functor_writer(&mut wam.machine_st.heap).unwrap();
+
+        wam.machine_st.heap.push_cell(cell).unwrap();
 
         {
             let printer = HCPrinter::new(
                 &mut wam.machine_st.heap,
-                Arc::clone(&wam.machine_st.atom_tbl),
                 &mut wam.machine_st.stack,
                 &wam.op_dir,
                 PrinterOutputter::new(),
-                h,
+                5,
             );
 
             let output = printer.print();
@@ -1890,19 +1925,22 @@ mod tests {
             assert_eq!(output.result(), "f(a,b,a,...)");
         }
 
-        all_cells_unmarked(&wam.machine_st.heap);
+        all_cells_unmarked(wam.machine_st.heap.splice(..));
 
         wam.machine_st.heap.clear();
 
+        let mut writer = wam.machine_st.heap.reserve(96).unwrap();
+
         // print L = [L|L].
-        wam.machine_st.heap.push(list_loc_as_cell!(1));
-        wam.machine_st.heap.push(list_loc_as_cell!(1));
-        wam.machine_st.heap.push(list_loc_as_cell!(1));
+        writer.write_with(|section| {
+            section.push_cell(list_loc_as_cell!(1));
+            section.push_cell(list_loc_as_cell!(1));
+            section.push_cell(list_loc_as_cell!(1));
+        });
 
         {
             let printer = HCPrinter::new(
                 &mut wam.machine_st.heap,
-                Arc::clone(&wam.machine_st.atom_tbl),
                 &mut wam.machine_st.stack,
                 &wam.op_dir,
                 PrinterOutputter::new(),
@@ -1915,7 +1953,6 @@ mod tests {
 
             let mut printer = HCPrinter::new(
                 &mut wam.machine_st.heap,
-                Arc::clone(&wam.machine_st.atom_tbl),
                 &mut wam.machine_st.stack,
                 &wam.op_dir,
                 PrinterOutputter::new(),
@@ -1931,24 +1968,32 @@ mod tests {
             assert_eq!(output.result(), "[L|L]");
         }
 
-        all_cells_unmarked(&wam.machine_st.heap);
+        all_cells_unmarked(wam.machine_st.heap.splice(..));
 
         wam.machine_st.heap.clear();
 
-        let functor = functor!(f_atom, [atom(a_atom), atom(b_atom), atom(b_atom)]);
+        let mut writer = wam.machine_st.heap.reserve(96).unwrap();
 
-        wam.machine_st.heap.push(list_loc_as_cell!(1));
-        wam.machine_st.heap.push(str_loc_as_cell!(5));
-        wam.machine_st.heap.push(list_loc_as_cell!(3));
-        wam.machine_st.heap.push(str_loc_as_cell!(5));
-        wam.machine_st.heap.push(empty_list_as_cell!());
+        writer.write_with(|section| {
+            section.push_cell(list_loc_as_cell!(1));
+            section.push_cell(str_loc_as_cell!(5));
+            section.push_cell(list_loc_as_cell!(3));
+            section.push_cell(str_loc_as_cell!(5));
+            section.push_cell(empty_list_as_cell!());
+        });
 
-        wam.machine_st.heap.extend(functor);
+        let mut functor_writer = Heap::functor_writer(functor!(
+            f_atom,
+            [atom_as_cell(a_atom),
+             atom_as_cell(b_atom),
+             atom_as_cell(b_atom)]
+        ));
+
+        functor_writer(&mut wam.machine_st.heap).unwrap();
 
         {
             let printer = HCPrinter::new(
                 &mut wam.machine_st.heap,
-                Arc::clone(&wam.machine_st.atom_tbl),
                 &mut wam.machine_st.stack,
                 &wam.op_dir,
                 PrinterOutputter::new(),
@@ -1960,14 +2005,13 @@ mod tests {
             assert_eq!(output.result(), "[f(a,b,b),f(a,b,b)]");
         }
 
-        all_cells_unmarked(&wam.machine_st.heap);
+        all_cells_unmarked(wam.machine_st.heap.splice(..));
 
         wam.machine_st.heap[4] = list_loc_as_cell!(1);
 
         {
             let printer = HCPrinter::new(
                 &mut wam.machine_st.heap,
-                Arc::clone(&wam.machine_st.atom_tbl),
                 &mut wam.machine_st.stack,
                 &wam.op_dir,
                 PrinterOutputter::new(),
@@ -1979,12 +2023,11 @@ mod tests {
             assert_eq!(output.result(), "[f(a,b,b),f(a,b,b)|...]");
         }
 
-        all_cells_unmarked(&wam.machine_st.heap);
+        all_cells_unmarked(wam.machine_st.heap.splice(..));
 
         {
             let mut printer = HCPrinter::new(
                 &mut wam.machine_st.heap,
-                Arc::clone(&wam.machine_st.atom_tbl),
                 &mut wam.machine_st.stack,
                 &wam.op_dir,
                 PrinterOutputter::new(),
@@ -2000,23 +2043,27 @@ mod tests {
             assert_eq!(output.result(), "[f(a,b,b),f(a,b,b)|L]");
         }
 
-        all_cells_unmarked(&wam.machine_st.heap);
+        all_cells_unmarked(wam.machine_st.heap.splice(..));
 
         // issue #382
         wam.machine_st.heap.clear();
-        wam.machine_st.heap.push(list_loc_as_cell!(1));
 
-        for idx in 0..3000 {
-            wam.machine_st.heap.push(heap_loc_as_cell!(2 * idx + 1));
-            wam.machine_st.heap.push(list_loc_as_cell!(2 * idx + 2 + 1));
-        }
+        let mut writer = wam.machine_st.heap.reserve(6002).unwrap();
 
-        wam.machine_st.heap.push(empty_list_as_cell!());
+        writer.write_with(|section| {
+            section.push_cell(list_loc_as_cell!(1));
+
+            for idx in 0..3000 {
+                section.push_cell(heap_loc_as_cell!(2 * idx + 1));
+                section.push_cell(list_loc_as_cell!(2 * idx + 2 + 1));
+            }
+
+            section.push_cell(empty_list_as_cell!());
+        });
 
         {
             let mut printer = HCPrinter::new(
                 &mut wam.machine_st.heap,
-                Arc::clone(&wam.machine_st.atom_tbl),
                 &mut wam.machine_st.stack,
                 &wam.op_dir,
                 PrinterOutputter::new(),
@@ -2030,24 +2077,22 @@ mod tests {
             assert_eq!(output.result(), "[_1,_3,_5,_7,_9|...]");
         }
 
-        all_cells_unmarked(&wam.machine_st.heap);
+        all_cells_unmarked(wam.machine_st.heap.splice(..));
 
         wam.machine_st.heap.clear();
 
-        put_partial_string(&mut wam.machine_st.heap, "abc", &wam.machine_st.atom_tbl);
+        wam.machine_st.allocate_pstr("abc").unwrap();
 
-        wam.machine_st.heap.push(pstr_loc_as_cell!(0));
-
-        let h = wam.machine_st.heap.len() - 1;
+        wam.machine_st.heap.push_cell(heap_loc_as_cell!(1)).unwrap();
+        wam.machine_st.heap.push_cell(pstr_loc_as_cell!(0)).unwrap();
 
         {
             let printer = HCPrinter::new(
                 &mut wam.machine_st.heap,
-                Arc::clone(&wam.machine_st.atom_tbl),
                 &mut wam.machine_st.stack,
                 &wam.op_dir,
                 PrinterOutputter::new(),
-                h,
+                2,
             );
 
             let output = printer.print();
@@ -2055,28 +2100,28 @@ mod tests {
             assert_eq!(output.result(), "[a,b,c|_1]");
         }
 
-        all_cells_unmarked(&wam.machine_st.heap);
+        all_cells_unmarked(wam.machine_st.heap.splice(..));
 
-        wam.machine_st.heap.pop();
-        wam.machine_st.heap.pop();
+        let mut writer = wam.machine_st.heap.reserve(96).unwrap();
 
-        wam.machine_st.heap.push(list_loc_as_cell!(2));
+        writer.write_with(|section| {
+            section.push_cell(atom_as_cell!(a_atom));
+            section.push_cell(list_loc_as_cell!(5));
+            section.push_cell(atom_as_cell!(b_atom));
+            section.push_cell(list_loc_as_cell!(7));
+            section.push_cell(atom_as_cell!(c_atom));
+            section.push_cell(empty_list_as_cell!());
+        });
 
-        wam.machine_st.heap.push(atom_as_cell!(a_atom));
-        wam.machine_st.heap.push(list_loc_as_cell!(4));
-        wam.machine_st.heap.push(atom_as_cell!(b_atom));
-        wam.machine_st.heap.push(list_loc_as_cell!(6));
-        wam.machine_st.heap.push(atom_as_cell!(c_atom));
-        wam.machine_st.heap.push(empty_list_as_cell!());
+        wam.machine_st.heap[1] = list_loc_as_cell!(3);
 
         {
             let mut printer = HCPrinter::new(
                 &mut wam.machine_st.heap,
-                Arc::clone(&wam.machine_st.atom_tbl),
                 &mut wam.machine_st.stack,
                 &wam.op_dir,
                 PrinterOutputter::new(),
-                0,
+                2,
             );
 
             printer.double_quotes = true;
@@ -2086,7 +2131,7 @@ mod tests {
             assert_eq!(output.result(), "\"abcabc\"");
         }
 
-        all_cells_unmarked(&wam.machine_st.heap);
+        all_cells_unmarked(wam.machine_st.heap.splice(..));
 
         wam.machine_st.heap.clear();
 
@@ -2095,14 +2140,14 @@ mod tests {
             "=(X,[a,b,c|X])"
         );
 
-        all_cells_unmarked(&wam.machine_st.heap);
+        all_cells_unmarked(wam.machine_st.heap.splice(..));
 
         assert_eq!(
             &wam.parse_and_print_term("[a,b,\"a\",[a,b,c]].").unwrap(),
             "[a,b,[a],[a,b,c]]"
         );
 
-        all_cells_unmarked(&wam.machine_st.heap);
+        all_cells_unmarked(wam.machine_st.heap.splice(..));
 
         assert_eq!(
             &wam.parse_and_print_term("[\"abc\",e,f,[g,e,h,Y,v|[X,Y]]].")
@@ -2110,11 +2155,11 @@ mod tests {
             "[[a,b,c],e,f,[g,e,h,Y,v,X,Y]]"
         );
 
-        all_cells_unmarked(&wam.machine_st.heap);
+        all_cells_unmarked(wam.machine_st.heap.splice(..));
 
         assert_eq!(&wam.parse_and_print_term("f((a,b)).").unwrap(), "f((a,b))");
 
-        all_cells_unmarked(&wam.machine_st.heap);
+        all_cells_unmarked(wam.machine_st.heap.splice(..));
 
         wam.op_dir
             .insert((atom!("+"), Fixity::In), OpDesc::build_with(500, YFX));
@@ -2126,14 +2171,14 @@ mod tests {
             "[a|[]+b]"
         );
 
-        all_cells_unmarked(&wam.machine_st.heap);
+        all_cells_unmarked(wam.machine_st.heap.splice(..));
 
         assert_eq!(
             &wam.parse_and_print_term("[a|[b|c]*d].").unwrap(),
             "[a|[b|c]*d]"
         );
 
-        all_cells_unmarked(&wam.machine_st.heap);
+        all_cells_unmarked(wam.machine_st.heap.splice(..));
 
         wam.op_dir
             .insert((atom!("fy"), Fixity::Pre), OpDesc::build_with(9, FY));

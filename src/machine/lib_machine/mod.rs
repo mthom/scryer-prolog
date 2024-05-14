@@ -3,15 +3,14 @@ use std::collections::BTreeMap;
 
 use crate::atom_table;
 use crate::heap_iter::{stackful_post_order_iter, NonListElider};
-use crate::machine::machine_indices::VarKey;
 use crate::machine::mock_wam::CompositeOpDir;
 use crate::machine::{
     ArenaHeaderTag, F64Offset, F64Ptr, Fixnum, Number, BREAK_FROM_DISPATCH_LOOP_LOC,
     LIB_QUERY_SUCCESS,
 };
-use crate::parser::ast::{Var, VarPtr};
-use crate::parser::parser::{Parser, Tokens};
-use crate::read::{write_term_to_heap, TermWriteResult};
+use crate::parser::ast::{TermWriteResult, Var};
+use crate::parser::lexer::LexerParser;
+use crate::parser::parser::Tokens;
 use crate::types::UntypedArenaPtr;
 
 use dashu::{Integer, Rational};
@@ -171,29 +170,22 @@ impl Term {
     pub(crate) fn from_heapcell(
         machine: &mut Machine,
         heap_cell: HeapCellValue,
-        var_names: &mut IndexMap<HeapCellValue, VarPtr>,
+        var_names: &mut IndexMap<HeapCellValue, Var>,
     ) -> Self {
         // Adapted from MachineState::read_term_from_heap
         let mut term_stack = vec![];
-        let iter = stackful_post_order_iter::<NonListElider>(
+
+        machine.machine_st.heap[0] = heap_cell;
+
+        let mut iter = stackful_post_order_iter::<NonListElider>(
             &mut machine.machine_st.heap,
             &mut machine.machine_st.stack,
-            heap_cell,
+            0,
         );
 
         let mut anon_count: usize = 0;
-        let var_ptr_cmp = |a, b| match a {
-            Var::Named(name_a) => match b {
-                Var::Named(name_b) => name_a.cmp(&name_b),
-                _ => Ordering::Less,
-            },
-            _ => match b {
-                Var::Named(_) => Ordering::Greater,
-                _ => Ordering::Equal,
-            },
-        };
 
-        for addr in iter {
+        while let Some(addr) = iter.next() {
             let addr = unmark_cell_bits!(addr);
 
             read_heap_cell!(addr,
@@ -242,29 +234,28 @@ impl Term {
                     term_stack.push(list);
                 }
                 (HeapCellValueTag::Var | HeapCellValueTag::AttrVar | HeapCellValueTag::StackVar) => {
-                    let var = var_names.get(&addr).map(|x| x.borrow().clone());
+                    let var = var_names.get(&addr).cloned();
                     match var {
-                        Some(Var::Named(name)) => term_stack.push(Term::Var(name)),
+                        Some(name) => term_stack.push(Term::Var(name.to_string())),
                         _ => {
                             let anon_name = loop {
                                 // Generate a name for the anonymous variable
                                 let anon_name = count_to_letter_code(anon_count);
 
                                 // Find if this name is already being used
-                                var_names.sort_by(|_, a, _, b| {
-                                    var_ptr_cmp(a.borrow().clone(), b.borrow().clone())
-                                });
+                                var_names.sort_by(|_, a, _, b| a.cmp(b));
+
                                 let binary_result = var_names.binary_search_by(|_,a| {
-                                    let var_ptr = Var::Named(anon_name.clone());
-                                    var_ptr_cmp(a.borrow().clone(), var_ptr.clone())
+                                    let a: &String = a.as_ref();
+                                    a.cmp(&anon_name)
                                 });
 
                                 match binary_result {
                                     Ok(_) => anon_count += 1, // Name already used
                                     Err(_) => {
                                         // Name not used, assign it to this variable
-                                        let var_ptr = VarPtr::from(Var::Named(anon_name.clone()));
-                                        var_names.insert(addr, var_ptr);
+                                        let var = anon_name.clone();
+                                        var_names.insert(addr, Var::from(var));
                                         break anon_name;
                                     },
                                 }
@@ -275,9 +266,6 @@ impl Term {
                 }
                 (HeapCellValueTag::F64, f) => {
                     term_stack.push(Term::Float((*f).into()));
-                }
-                (HeapCellValueTag::Char, c) => {
-                    term_stack.push(Term::Atom(c.into()));
                 }
                 (HeapCellValueTag::Fixnum, n) => {
                     term_stack.push(Term::Integer(n.into()));
@@ -309,9 +297,6 @@ impl Term {
                             }
                         );
                     }
-                }
-                (HeapCellValueTag::CStr, s) => {
-                    term_stack.push(Term::String(s.as_str().to_string()));
                 }
                 (HeapCellValueTag::Atom, (name, arity)) => {
                     //let h = iter.focus().value() as usize;
@@ -354,8 +339,9 @@ impl Term {
                         term_stack.push(Term::Compound(name.as_str().to_string(), subterms));
                     }
                 }
-                (HeapCellValueTag::PStr, atom) => {
+                (HeapCellValueTag::PStrLoc, pstr_loc) => {
                     let tail = term_stack.pop().unwrap();
+                    let char_iter = iter.base_iter.heap.char_iter(pstr_loc);
 
                     match tail {
                         Term::Atom(atom) => {
@@ -363,21 +349,18 @@ impl Term {
                                 term_stack.push(Term::String(atom.as_str().to_string()));
                             }
                         },
+                        Term::List(l) if l.is_empty() => {
+                            term_stack.push(Term::String(char_iter.collect()));
+                        }
                         Term::List(l) => {
-                            let mut list: Vec<Term> = atom
-                                .as_str()
-                                .to_string()
-                                .chars()
+                            let mut list: Vec<Term> = char_iter
                                 .map(|x| Term::Atom(x.to_string()))
                                 .collect();
                             list.extend(l.into_iter());
                             term_stack.push(Term::List(list));
                         },
                         _ => {
-                            let mut list: Vec<Term> = atom
-                                .as_str()
-                                .to_string()
-                                .chars()
+                            let mut list: Vec<Term> = char_iter
                                 .map(|x| Term::Atom(x.to_string()))
                                 .collect();
 
@@ -403,19 +386,6 @@ impl Term {
                         }
                     }
                 }
-                // I dont know if this is needed here.
-                /*
-                (HeapCellValueTag::PStrLoc, h) => {
-                    let atom = cell_as_atom_cell!(iter.heap[h]).get_name();
-                    let tail = term_stack.pop().unwrap();
-
-                    term_stack.push(Term::PartialString(
-                        Cell::default(),
-                        atom.as_str().to_owned(),
-                        Box::new(tail),
-                    ));
-                }
-                */
                 _ => {
                     unreachable!();
                 }
@@ -432,7 +402,7 @@ pub struct QueryState<'a> {
     machine: &'a mut Machine,
     term: TermWriteResult,
     stub_b: usize,
-    var_names: IndexMap<HeapCellValue, VarPtr>,
+    var_names: IndexMap<HeapCellValue, Var>,
     called: bool,
 }
 
@@ -472,7 +442,7 @@ impl Iterator for QueryState<'_> {
             if let Err(resource_err_loc) = machine
                 .machine_st
                 .heap
-                .append(&machine.machine_st.ball.stub)
+                .append(machine.machine_st.ball.stub.splice(..))
             {
                 return Some(Err(Term::from_heapcell(
                     machine,
@@ -589,13 +559,13 @@ impl Machine {
         or_frame.prelude.attr_var_queue_len = 0;
 
         self.machine_st.b = stub_b;
-        self.machine_st.hb = self.machine_st.heap.len();
+        self.machine_st.hb = self.machine_st.heap.cell_len();
         self.machine_st.block = stub_b;
     }
 
     /// Runs a query.
     pub fn run_query(&mut self, query: impl Into<String>) -> QueryState {
-        let mut parser = Parser::new(
+        let mut parser = LexerParser::new(
             Stream::from_owned_string(query.into(), &mut self.machine_st.arena),
             &mut self.machine_st,
         );
