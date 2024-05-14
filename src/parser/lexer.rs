@@ -1,13 +1,15 @@
 use crate::arena::F64Ptr;
 use crate::arena::TypedArenaPtr;
-use lexical::{FromLexicalLossy, parse_lossy};
+use lexical::{FromLexical, parse};
 
-use crate::arena::ArenaAllocated;
+use crate::arena::*;
 use crate::atom_table::*;
+use crate::machine::heap::*;
 pub use crate::machine::machine_state::*;
 use crate::parser::ast::*;
 use crate::parser::char_reader::*;
 use crate::parser::dashu::Integer;
+use crate::types::*;
 
 use std::convert::TryFrom;
 use std::fmt;
@@ -33,8 +35,9 @@ struct LayoutInfo {
 
 #[derive(Debug, PartialEq)]
 pub enum Token {
-    Literal(Literal),
+    Literal(HeapCellValue),
     Var(String),
+    String(String),
     Open,              // '('
     OpenCT,            // '('
     Close,             // ')'
@@ -48,6 +51,30 @@ pub enum Token {
 }
 
 impl Token {
+    pub(super) fn byte_size(&self, flags: MachineFlags) -> usize {
+        match self {
+            Token::String(string) if flags.double_quotes.is_codes() => {
+                2 * string.chars().count() + 1
+            }
+            Token::String(string) => {
+                Heap::compute_pstr_size(&string)
+            }
+            Token::Literal(_) |
+            Token::Comma |
+            Token::HeadTailSeparator |
+            Token::Open |
+            Token::OpenCT |
+            Token::OpenCurly |
+            Token::OpenList |
+            Token::Var(_) => {
+                heap_index!(1)
+            }
+            _ => {
+                0
+            }
+        }
+    }
+
     #[inline]
     pub(super) fn is_end(&self) -> bool {
         matches!(self, Token::End)
@@ -103,16 +130,16 @@ macro_rules! try_nt {
     }};
 }
 
-pub struct Lexer<'a, R> {
+pub(crate) struct LexerParser<'a, R> {
     pub(crate) reader: R,
     pub(crate) machine_st: &'a mut MachineState,
     pub(crate) line_num: usize,
     pub(crate) col_num: usize,
 }
 
-impl<'a, R: fmt::Debug> fmt::Debug for Lexer<'a, R> {
+impl<'a, R: fmt::Debug> fmt::Debug for LexerParser<'a, R> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("Lexer")
+        f.debug_struct("LexerParser")
             .field("reader", &"&'a mut R") // Hacky solution.
             .field("line_num", &self.line_num)
             .field("col_num", &self.col_num)
@@ -120,9 +147,9 @@ impl<'a, R: fmt::Debug> fmt::Debug for Lexer<'a, R> {
     }
 }
 
-impl<'a, R: CharRead> Lexer<'a, R> {
+impl<'a, R: CharRead> LexerParser<'a, R> {
     pub fn new(src: R, machine_st: &'a mut MachineState) -> Self {
-        Lexer {
+        LexerParser {
             reader: src,
             machine_st,
             line_num: 0,
@@ -142,11 +169,6 @@ impl<'a, R: CharRead> Lexer<'a, R> {
             Some(Ok(c)) => Ok(c),
             _ => Err(ParserError::unexpected_eof(self.loc_to_err_src())),
         }
-    }
-
-    #[inline]
-    pub fn loc_to_err_src(&self) -> ParserErrorSrc {
-        ParserErrorSrc { line_num: self.line_num, col_num: self.col_num }
     }
 
     #[inline(always)]
@@ -631,11 +653,11 @@ impl<'a, R: CharRead> Lexer<'a, R> {
 
                 if !token.is_empty() && token.chars().nth(1).is_none() {
                     if let Some(c) = token.chars().next() {
-                        return Ok(Token::Literal(Literal::Char(c)));
+                        return Ok(Token::Literal(char_as_cell!(c)));
                     }
                 }
             } else {
-                return Err(ParserError::InvalidSingleQuotedCharacter(c, self.loc_to_err_src()));
+                return Err(ParserError::InvalidSingleQuotedCharacter(self.loc_to_err_src()));
             }
         } else {
             match self.get_back_quoted_string() {
@@ -645,26 +667,29 @@ impl<'a, R: CharRead> Lexer<'a, R> {
         }
 
         if token.as_str() == "[]" {
-            Ok(Token::Literal(Literal::Atom(atom!("[]"))))
+            Ok(Token::Literal(empty_list_as_cell!()))
         } else {
-            Ok(Token::Literal(Literal::Atom(AtomTable::build_with(
+            Ok(Token::Literal(atom_as_cell!(AtomTable::build_with(
                 &self.machine_st.atom_tbl,
                 &token,
             ))))
         }
     }
 
-    fn parse_lossy_wrapper<T: FromLexicalLossy>(&self, token: String) -> Result<T, ParserError> {
-        match parse_lossy::<T, _>(token.as_bytes()) {
+    fn parse_lossy_wrapper<T: FromLexical>(&self, token: &str) -> Result<T, ParserError> {
+        match parse::<T, _>(token.as_bytes()) {
             Ok(n) => Ok(n),
-            Err(e) => return Err(ParserError::LexicalError(e, self.loc_to_err_src())),
+            Err(_) => return Err(ParserError::LexicalError(self.loc_to_err_src())),
         }
     }
 
     fn vacate_with_float(&mut self, mut token: String) -> Result<Token, ParserError> {
         self.return_char(token.pop().unwrap());
-        let n = self.parse_lossy_wrapper::<f64>(token)?;
-        Ok(Token::Literal(Literal::from(float_alloc!(n, self.machine_st.arena))))
+        let n = self.parse_lossy_wrapper::<f64>(&token)?;
+        Ok(Token::Literal(HeapCellValue::from(float_alloc!(
+            n,
+            self.machine_st.arena
+        ))))
     }
 
     fn skip_underscore_in_number(&mut self) -> Result<char, ParserError> {
@@ -790,8 +815,8 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                             }
                         }
 
-                        let n = parse_float_lossy(&token)?;
-                        Ok(NumberToken::Number(Number::Float(float_alloc!(
+                        let n = self.parse_lossy_wrapper::<f64>(&token)?;
+                        Ok(Token::Literal(HeapCellValue::from(float_alloc!(
                             n,
                             self.machine_st.arena
                         ))))
@@ -799,8 +824,8 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                         return self.vacate_with_float(token).map(NumberToken::Number);
                     }
                 } else {
-                    let n = parse_float_lossy(&token)?;
-                    Ok(NumberToken::Number(Number::Float(float_alloc!(
+                    let n = self.parse_lossy_wrapper::<f64>(&token)?;
+                    Ok(Token::Literal(HeapCellValue::from(float_alloc!(
                         n,
                         self.machine_st.arena
                     ))))
@@ -1034,12 +1059,12 @@ impl<'a, R: CharRead> Lexer<'a, R> {
 
                 if c == '"' {
                     let s = self.char_code_list_token(c)?;
-                    let atom = AtomTable::build_with(&self.machine_st.atom_tbl, &s);
 
                     return if let DoubleQuotes::Atom = self.machine_st.flags.double_quotes {
-                        Ok(Token::Literal(Literal::Atom(atom)))
+                        let atom = AtomTable::build_with(&self.machine_st.atom_tbl, &s);
+                        Ok(Token::Literal(atom_as_cell!(atom)))
                     } else {
-                        Ok(Token::Literal(Literal::String(atom)))
+                        Ok(Token::String(s))
                     };
                 }
 
@@ -1052,14 +1077,4 @@ impl<'a, R: CharRead> Lexer<'a, R> {
             Err(e) => Err(e),
         }
     }
-}
-
-fn parse_float_lossy(token: &str) -> Result<f64, ParserError> {
-    const FORMAT: u128 = lexical::format::STANDARD;
-    let options = lexical::ParseFloatOptions::builder()
-        .lossy(true)
-        .build()
-        .unwrap();
-    let n = lexical::parse_with_options::<f64, _, FORMAT>(token.as_bytes(), &options)?;
-    Ok(n)
 }
