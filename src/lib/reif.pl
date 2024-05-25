@@ -1,7 +1,7 @@
-/** Reification is the process of treating the success and failure of a
-predicate as if it were a concrete value. By indexing success and failure to
-two distinct values, reification reduces the complexity of interfacing with
-impure code.
+/** Reification, to put in simple terms, is to treat the success and failure of
+a predicate as if it were a concrete value. By indexing success and failure to
+two distinct values `true` and `false`, reification reduces the complexity of
+interfacing with impure code.
  
 For more info, please read
 [*Indexing dif/2*](https://arxiv.org/abs/1607.01590).
@@ -98,3 +98,34 @@ tmember(P_2, [X|Xs]) :-
 tmember_t(_P_2, [], false).
 tmember_t(P_2, [X|Xs], T) :-
    if_( call(P_2, X), T = true, tmember_t(P_2, Xs, T) ).
+
+%% if_(+If_1, +Then_0, +Else_0)
+%
+%  A monotonic if-then-else. When the last argument of the predicate If
+%  unifies with true, Then is executed, if the last argument
+%  unifies with false, Else is executed. 
+
+%% =(?X, ?Y, ?T)
+%
+%  Unifies T with false if X and Y are different terms. Otherwise, T is
+%  unified with true. See [dif/2](./dif#dif/2).
+%  Useful in conjunction with if_/3.
+
+%% ','(+A_1, +B_1, -T)
+%
+%  When the last argument of predicate A unifies with true, B is executed with
+%  T as the argument. Otherwise, T is unified with false.
+%  Similar to a short-circuiting logical AND in other programming languages.
+
+%% ';'(+A_1, +B_1, -T)
+%
+%  When the last argument of predicate A unifies with true, T is unified with
+%  true. Otherwise, B is executed with T as the argument.
+%  Similar to a short-circuiting logical OR in other programming languages.
+
+%% cond_t(If_1, Then_0, T)
+%
+%  When the last argument of predicate If unifies with true, Then is executed
+%  and T is unified with true. If the last argument unifies with false, then
+%  Then is not executed and T is unified with false. 
+
