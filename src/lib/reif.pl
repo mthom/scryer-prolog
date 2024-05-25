@@ -1,4 +1,10 @@
-/** Predicates from [*Indexing dif/2*](https://arxiv.org/abs/1607.01590).
+/** Reification is the process of treating the success and failure of a
+predicate as if it were a concrete value. By indexing success and failure to
+two distinct values, reification reduces the complexity of interfacing with
+impure code.
+ 
+For more info, please read
+[*Indexing dif/2*](https://arxiv.org/abs/1607.01590).
 
 Example:
 
