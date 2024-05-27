@@ -1,7 +1,9 @@
-/** Reification, to put in simple terms, is to treat the success and failure of
-a predicate as if it were a concrete value. By indexing success and failure to
-two distinct values `true` and `false`, reification reduces the complexity of
-interfacing with impure code.
+/** Reification, to put in simple terms, is to treat a more abstract thing as 
+if it were something concrete. In this library, an indexing technique is
+employed to reify concepts like synactic equality (see dif/2) into boolean
+values, `true` and `false`. By converting such concepts to concrete objects
+using indexing, `library(reif)` provides methods to arrive at more correct and
+efficient code.
  
 For more info, please read
 [*Indexing dif/2*](https://arxiv.org/abs/1607.01590).
@@ -107,8 +109,10 @@ tmember_t(P_2, [X|Xs], T) :-
 
 %% =(?X, ?Y, ?T)
 %
+%  Reifies syntactic inequality. See [dif/2](./dif#dif/2).
+%
 %  Unifies T with false if X and Y are different terms. Otherwise, T is
-%  unified with true. See [dif/2](./dif#dif/2).
+%  unified with true.
 %  Useful in conjunction with if_/3.
 
 %% ','(+A_1, +B_1, -T)
