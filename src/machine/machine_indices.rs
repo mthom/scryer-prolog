@@ -18,8 +18,6 @@ use std::collections::BTreeSet;
 use std::ops::{Deref, DerefMut};
 
 use crate::types::*;
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) struct OrderedOpDirKey(pub(crate) Atom, pub(crate) Fixity);
 
 // 7.2
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
