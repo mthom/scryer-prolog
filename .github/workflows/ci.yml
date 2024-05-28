@@ -40,6 +40,7 @@ jobs:
           # operating systems
           - { os: windows-latest, rust-version: stable,  target: 'x86_64-pc-windows-msvc',   publish: true }
           - { os: macos-11,       rust-version: stable,  target: 'x86_64-apple-darwin',      publish: true }
+          - { os: macos-14,       rust-version: stable,  target: 'aarch64-apple-darwin', publish: true }
           - { os: ubuntu-20.04,   rust-version: stable,  target: 'x86_64-unknown-linux-gnu', publish: true }
           # architectures
           - { os: ubuntu-22.04,   rust-version: stable,  target: 'x86_64-unknown-linux-gnu', publish: true }
@@ -188,6 +189,7 @@ jobs:
       - name: Zip binaries for release
         run: |
           zip scryer-prolog_macos-11.zip ./scryer-prolog_macos-11_x86_64-apple-darwin/scryer-prolog
+          zip scryer-prolog_macos-14.zip ./scryer-prolog_macos-14_aarch64-apple-darwin/scryer-prolog
           zip scryer-prolog_ubuntu-20.04.zip ./scryer-prolog_ubuntu-20.04_x86_64-unknown-linux-gnu/scryer-prolog
           zip scryer-prolog_ubuntu-22.04.zip ./scryer-prolog_ubuntu-22.04_x86_64-unknown-linux-gnu/scryer-prolog
           zip scryer-prolog_windows-latest.zip ./scryer-prolog_windows-latest_x86_64-pc-windows-msvc/scryer-prolog.exe
@@ -197,6 +199,7 @@ jobs:
         with:
           files: |
             scryer-prolog_macos-11.zip
+            scryer-prolog_macos-14.zip
             scryer-prolog_ubuntu-20.04.zip
             scryer-prolog_ubuntu-22.04.zip
             scryer-prolog_windows-latest.zip
