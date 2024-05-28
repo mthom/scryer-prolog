@@ -109,7 +109,7 @@ pub(crate) fn as_partial_string(
                 tail_ref = succ;
             }
             Term::PartialString(_, pstr, tail) => {
-                string += &pstr;
+                string += pstr;
                 tail_ref = tail;
             }
             Term::CompleteString(_, cstr) => {

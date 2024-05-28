@@ -24,7 +24,6 @@ use std::io;
 #[cfg(feature = "http")]
 use std::io::BufRead;
 use std::io::{Cursor, ErrorKind, Read, Seek, SeekFrom, Write};
-use std::mem;
 use std::net::{Shutdown, TcpStream};
 use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
@@ -296,9 +295,9 @@ impl Read for HttpReadStream {
 #[cfg(feature = "http")]
 pub struct HttpWriteStream {
     status_code: u16,
-    headers: mem::ManuallyDrop<hyper::HeaderMap>,
+    headers: std::mem::ManuallyDrop<hyper::HeaderMap>,
     response: TypedArenaPtr<HttpResponse>,
-    buffer: mem::ManuallyDrop<Vec<u8>>,
+    buffer: std::mem::ManuallyDrop<Vec<u8>>,
 }
 
 #[cfg(feature = "http")]
@@ -325,8 +324,8 @@ impl Write for HttpWriteStream {
 #[cfg(feature = "http")]
 impl HttpWriteStream {
     fn drop(&mut self) {
-        let headers = unsafe { mem::ManuallyDrop::take(&mut self.headers) };
-        let buffer = unsafe { mem::ManuallyDrop::take(&mut self.buffer) };
+        let headers = unsafe { std::mem::ManuallyDrop::take(&mut self.headers) };
+        let buffer = unsafe { std::mem::ManuallyDrop::take(&mut self.buffer) };
 
         let (ready, response, cvar) = &**self.response;
 
@@ -1228,8 +1227,8 @@ impl Stream {
             StreamLayout::new(CharReader::new(HttpWriteStream {
                 response,
                 status_code,
-                headers: mem::ManuallyDrop::new(headers),
-                buffer: mem::ManuallyDrop::new(Vec::new()),
+                headers: std::mem::ManuallyDrop::new(headers),
+                buffer: std::mem::ManuallyDrop::new(Vec::new()),
             })),
             arena
         ))
