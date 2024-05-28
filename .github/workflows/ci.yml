@@ -46,6 +46,8 @@ jobs:
           - { os: ubuntu-22.04,   rust-version: stable,  target: 'i686-unknown-linux-gnu',   publish: true }
           # FIXME(issue #2138): run wasm tests, failing to run since https://github.com/mthom/scryer-prolog/pull/2137 removed wasm-pack
           - { os: ubuntu-22.04,   rust-version: nightly, target: 'wasm32-unknown-unknown',   publish: true, args: '--no-default-features' , test-args: '--no-run --no-default-features' }
+          # Cargo.toml rust-version
+          - { os: ubuntu-22.04,   rust-version: "1.77",  target: 'x86_64-unknown-linux-gnu'}
           # rust versions
           - { os: ubuntu-22.04,   rust-version: beta,    target: 'x86_64-unknown-linux-gnu'}
           - { os: ubuntu-22.04,   rust-version: nightly, target: 'x86_64-unknown-linux-gnu'}
