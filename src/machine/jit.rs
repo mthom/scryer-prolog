@@ -26,6 +26,7 @@ pub struct JitMachine {
     trampoline: extern "C" fn (*mut MachineState, *mut Registers, *const u8),
     offset_interms: usize,
     offset_arena: usize,
+    offset_heap: usize,
     write_literal_to_var: *const u8,
     deref: *const u8,
     store: *const u8,
@@ -33,6 +34,7 @@ pub struct JitMachine {
     get_number: *const u8,
     add: *const u8,
     vec_as_ptr: *const u8,
+    vec_push: *const u8,
     number_try_from: *const u8,
 }
 
@@ -49,6 +51,7 @@ impl JitMachine {
 	
         let mut module = JITModule::new(builder);
 	let pointer_type = module.isa().pointer_type();
+	let call_conv = module.isa().default_call_conv();
 	let mut ctx = module.make_context();
 	let mut func_ctx = FunctionBuilderContext::new();
 
@@ -56,7 +59,7 @@ impl JitMachine {
 	sig.params.push(AbiParam::new(pointer_type));
 	sig.params.push(AbiParam::new(pointer_type));
 	sig.params.push(AbiParam::new(pointer_type));
-	sig.call_conv = isa::CallConv::SystemV;
+	sig.call_conv = call_conv;
 	ctx.func.signature = sig.clone();
 
 	let mut func = module.declare_function("$trampoline", Linkage::Local, &sig).unwrap();
@@ -96,12 +99,16 @@ impl JitMachine {
 	    let arena_ptr = std::ptr::addr_of!((*machine_st_ptr).arena) as *const u8;
 	    arena_ptr.offset_from(machine_st_ptr_u8) as usize
 	};
-
+	let offset_heap = unsafe {
+	    let heap_ptr = std::ptr::addr_of!((*machine_st_ptr).heap) as *const u8;
+	    heap_ptr.offset_from(machine_st_ptr_u8) as usize
+	};
 	JitMachine {
 	    modules: HashMap::new(),
 	    trampoline: code_ptr,
 	    offset_interms: offset_interms,
 	    offset_arena: offset_arena,
+	    offset_heap: offset_heap,
 	    write_literal_to_var: MachineState::write_literal_to_var as *const u8,
 	    deref: MachineState::deref as *const u8,
 	    store: MachineState::store as *const u8,
@@ -109,6 +116,7 @@ impl JitMachine {
 	    get_number: MachineState::get_number as *const u8,
 	    add: add_jit as *const u8,
 	    vec_as_ptr: Vec::<Number>::as_ptr as *const u8,
+	    vec_push: Vec::<HeapCellValue>::push as *const u8,
 	    number_try_from: Number::jit_try_from as *const u8,
 	}
     }
@@ -123,6 +131,7 @@ impl JitMachine {
 	
 	let mut module = JITModule::new(builder);
 	let pointer_type = module.isa().pointer_type();
+	let call_conv = module.isa().default_call_conv();
 	let mut ctx = module.make_context();
 	let mut func_ctx = FunctionBuilderContext::new();
 
@@ -171,7 +180,7 @@ impl JitMachine {
 		    let reg_num = reg.reg_num();
 		    let reg_value = fn_builder.ins().load(types::I64, MemFlags::new(), reg_ptr, Offset32::new((reg_num as i32)*8));
 		    let mut sig = module.make_signature();
-		    sig.call_conv = isa::CallConv::SystemV;
+		    sig.call_conv = call_conv;
 		    sig.params.push(AbiParam::new(pointer_type));
 		    sig.params.push(AbiParam::new(types::I64));
 		    sig.returns.push(AbiParam::new(types::I64));
@@ -182,7 +191,7 @@ impl JitMachine {
 		    let c = unsafe { std::mem::transmute::<u64, i64>(u64::from(c)) };		    
 		    let c_value = fn_builder.ins().iconst(types::I64, c);
 		    let mut sig = module.make_signature();
-		    sig.call_conv = isa::CallConv::SystemV;
+		    sig.call_conv = call_conv;
 		    sig.params.push(AbiParam::new(types::I64));
 		    sig.params.push(AbiParam::new(types::I64));
 		    sig.params.push(AbiParam::new(types::I64));
@@ -219,6 +228,18 @@ impl JitMachine {
 			_ => unimplemented!()
 		    }
 		}
+		Instruction::SetConstant(c) => {
+		    let machine_st = fn_builder.block_params(block)[0];
+		    let mut sig = module.make_signature();
+		    sig.call_conv = call_conv;
+		    sig.params.push(AbiParam::new(pointer_type));
+		    let sig_ref = fn_builder.import_signature(sig);
+		    let heap = fn_builder.ins().iadd_imm(machine_st, self.offset_heap as i64);
+		    let vec_push = fn_builder.ins().iconst(types::I64, self.vec_push as i64);
+		    let c = unsafe { std::mem::transmute::<u64, i64>(u64::from(c)) };
+		    let c_value = fn_builder.ins().iconst(types::I64, c);
+		    fn_builder.ins().call_indirect(sig_ref, vec_push, &[heap, c_value]);
+		}
 		// TODO Fill more cases. Can we optimize the add in some cases to use the Cranelift add?
 		Instruction::Add(a1, a2, t) => {
 		    let machine_state = fn_builder.block_params(block)[0];
@@ -226,7 +247,7 @@ impl JitMachine {
 		    let n1 = self.jit_get_number(&module, machine_state, reg_ptr, &mut fn_builder, a1);
 		    let n2 = self.jit_get_number(&module, machine_state, reg_ptr, &mut fn_builder, a2);
 		    let mut sig = module.make_signature();
-		    sig.call_conv = isa::CallConv::SystemV;
+		    sig.call_conv = call_conv;
 		    sig.params.push(AbiParam::new(types::I128));
 		    sig.params.push(AbiParam::new(types::I128));
 		    sig.params.push(AbiParam::new(pointer_type));
@@ -239,7 +260,7 @@ impl JitMachine {
 
 		    let interms_vec = fn_builder.ins().iadd_imm(machine_state, self.offset_interms as i64);
 		    let mut sig = module.make_signature();
-		    sig.call_conv = isa::CallConv::SystemV;
+		    sig.call_conv = call_conv;
 		    sig.params.push(AbiParam::new(pointer_type));
 		    sig.returns.push(AbiParam::new(pointer_type));
 		    let sig_ref = fn_builder.import_signature(sig);
@@ -255,7 +276,7 @@ impl JitMachine {
 		    let n = self.jit_get_number(&module, machine_state, reg_ptr, &mut fn_builder, at);
 
 		    let mut sig = module.make_signature();
-		    sig.call_conv = isa::CallConv::SystemV;
+		    sig.call_conv = call_conv;
 		    sig.params.push(AbiParam::new(pointer_type));
 		    sig.params.push(AbiParam::new(types::I128));
 		    sig.params.push(AbiParam::new(types::I64));
@@ -319,7 +340,7 @@ impl JitMachine {
 
     fn jit_get_number(&self, module: &JITModule, machine_state: Value, reg_ptr: Value, fn_builder: &mut FunctionBuilder, at: ArithmeticTerm) -> Value {
 	let pointer_type = module.isa().pointer_type();
-	let system_call_conv = module.isa().default_call_conv();
+	let call_conv = module.isa().default_call_conv();
 	
         match at {
 	    ArithmeticTerm::Number(n) => {
@@ -331,7 +352,7 @@ impl JitMachine {
 	    ArithmeticTerm::Interm(i) => {
 		let interms_vec = fn_builder.ins().iadd_imm(machine_state, self.offset_interms as i64);
 		let mut sig = module.make_signature();
-		sig.call_conv = isa::CallConv::SystemV;
+		sig.call_conv = call_conv;
 		sig.params.push(AbiParam::new(pointer_type));
 		sig.returns.push(AbiParam::new(pointer_type));
 		let sig_ref = fn_builder.import_signature(sig);
@@ -343,7 +364,7 @@ impl JitMachine {
 	    ArithmeticTerm::Reg(reg_type) => {
 		let value = self.jit_store_deref_reg(&module, machine_state, reg_ptr, fn_builder, reg_type);
 		let mut sig = module.make_signature();
-		sig.call_conv = isa::CallConv::SystemV;
+		sig.call_conv = call_conv;
 		sig.params.push(AbiParam::new(types::I64));
 		sig.returns.push(AbiParam::new(types::I128));
 		let sig_ref = fn_builder.import_signature(sig);
