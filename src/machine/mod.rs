@@ -12,6 +12,7 @@ pub mod disjuncts;
 pub mod dispatch;
 pub mod gc;
 pub mod heap;
+#[cfg(feature = "jit")]
 pub mod jit;
 pub mod lib_machine;
 pub mod load_state;
@@ -40,6 +41,7 @@ use crate::machine::args::*;
 use crate::machine::compile::*;
 use crate::machine::copier::*;
 use crate::machine::heap::*;
+#[cfg(feature = "jit")]
 use crate::machine::jit::*;
 use crate::machine::loader::*;
 use crate::machine::machine_errors::*;
@@ -61,7 +63,6 @@ use std::cmp::Ordering;
 use std::env;
 use std::io::Read;
 use std::path::PathBuf;
-use std::pin::*;
 use std::sync::atomic::AtomicBool;
 
 use self::config::MachineConfig;
@@ -83,6 +84,7 @@ pub struct Machine {
     #[cfg(feature = "ffi")]
     pub(super) foreign_function_table: ForeignFunctionTable,
     pub(super) rng: StdRng,
+    #[cfg(feature = "jit")]
     pub(super) jit_machine: JitMachine,
 }
 
@@ -470,8 +472,6 @@ impl Machine {
             ),
         };
 
-	let jit_machine = JitMachine::new();
-
         let mut wam = Machine {
             machine_st,
             indices: IndexStore::new(),
@@ -483,7 +483,8 @@ impl Machine {
             #[cfg(feature = "ffi")]
             foreign_function_table: Default::default(),
             rng: StdRng::from_entropy(),
-	    jit_machine: jit_machine,
+	    #[cfg(feature = "jit")]
+	    jit_machine: JitMachine::new(),
         };
 
         let mut lib_path = current_dir();
@@ -1148,14 +1149,16 @@ impl Machine {
     }
 
     
-
     #[inline(always)]
     fn try_execute(&mut self, name: Atom, arity: usize, idx: IndexPtr) -> CallResult {
         let compiled_tl_index = idx.p() as usize;
 
-	if let Ok(_) = self.jit_machine.exec(&format!("{}/{}", name.as_str(), arity), &mut self.machine_st) {
-	    println!("jit_compiler: executed JIT predicate");
-	    return Ok(());
+	#[cfg(feature = "jit")]
+	{
+	    if let Ok(_) = self.jit_machine.exec(&format!("{}/{}", name.as_str(), arity), &mut self.machine_st) {
+		// println!("jit_compiler: executed JIT predicate");
+		return Ok(());
+	    }
 	}
 
         match idx.tag() {

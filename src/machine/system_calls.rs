@@ -19,6 +19,7 @@ use crate::machine;
 use crate::machine::code_walker::*;
 use crate::machine::copier::*;
 use crate::machine::heap::*;
+#[cfg(feature = "jit")]
 use crate::machine::jit::*;
 use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
@@ -4972,9 +4973,16 @@ impl Machine {
         Ok(())
     }
 
+    #[cfg(not(feature = "jit"))]
+    #[inline(always)]
+    pub(crate) fn jit_compile(&mut self) -> CallResult {
+	Ok(())
+    }
+
     // Tries to compile an existing predicate into native code
     // For this to work: the predicate must be loaded, must use the subset of Prolog supported by the JIT
     // and every call to a predicate must have been compiled previously
+    #[cfg(feature = "jit")]
     #[inline(always)]
     pub(crate) fn jit_compile(&mut self) -> CallResult {
         let module_name = cell_as_atom!(self.deref_register(1));

@@ -1,0 +1,18 @@
+name: Test JIT
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  test-jit:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          rust-version: nightly
+          targets: x86_64-unknown-linux-gnu      
+      - name: Test with JIT
+        run: cargo +nightly test --features jit
