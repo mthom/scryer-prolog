@@ -1,4 +1,5 @@
-/** Reification, to put in simple terms, is to treat a more abstract thing as 
+/** Reification, to put in simple terms, is to treat a more abstract thing 
+(unification, backtracking, etc) as 
 if it were something concrete. In this library, an indexing technique is
 employed to reify concepts like synactic equality (see dif/2) into boolean
 values, `true` and `false`. By converting such concepts to concrete objects
@@ -109,7 +110,8 @@ tmember_t(P_2, [X|Xs], T) :-
 
 %% =(?X, ?Y, ?T)
 %
-%  Reifies syntactic inequality. See [dif/2](./dif#dif/2).
+%  Reifies syntactic inequality. See [dif/2](./dif#dif/2). This predicate is
+%  one of the basic building blocks of the logic of library(reif).
 %
 %  Unifies T with false if X and Y are different terms. Otherwise, T is
 %  unified with true.
@@ -127,9 +129,46 @@ tmember_t(P_2, [X|Xs], T) :-
 %  true. Otherwise, B is executed with T as the argument.
 %  Similar to a short-circuiting logical OR in other programming languages.
 
-%% cond_t(If_1, Then_0, T)
+%% cond_t(+If_1, +Then_0, -T)
+%
+%  A monotonic if-then.
 %
 %  When the last argument of predicate If unifies with true, Then is executed
 %  and T is unified with true. If the last argument unifies with false, then
 %  Then is not executed and T is unified with false. 
+
+%% dif(?X, ?Y, ?T)
+%
+%  A version of dif/2 that returns a boolean true/false in T. The complement of 
+%  (=)/3.
+
+%% memberd_t(?E, ?Xs, ?T)
+%
+%  If Xs is a member of E, T is true. Otherwise it is false.
+
+%% tfilter(+C_2, E, Fs0)
+%
+%  A list filtering predicate.
+%
+%  The elements of E which return true when passed to C are put into Fs0.
+
+%% tmember(+P_2, ?X) 
+%
+%  If P_2 when called on any of the members of X returns true in its last
+%  argument, this predicate succeeds. Otherwise, it fails.
+
+%% tmember_t(+P_2, ?X, -T)
+%
+%  A reified version of tmember/2, which returns true in T in case of success,
+%  and false in case of failure.
+
+%% tpartition(+P_2, ?Xs, ?Ts, ?Fs)
+%  
+%  Similar to tfilter/3. 
+%  For each element in Xs, when the predicate C_2 returns true, the element is
+%  put in Ts, when C_2 returns false, the element is put in Fs.
+%  ```
+%  ?- tpartition(=(1), [1,2,4,5,1], X, Y).
+%     X = [1,1], Y = [2,4,5].
+%  ```
 
