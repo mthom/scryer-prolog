@@ -294,16 +294,15 @@ impl JitMachine {
 	    }
 	}
 	module.define_function(func, &mut ctx).unwrap();
+	println!("{}", ctx.func.display());	
 	module.clear_context(&mut ctx);
 
 	module.finalize_definitions().unwrap();
-
 	let code_ptr = unsafe { std::mem::transmute(module.get_finalized_function(func)) };
 	self.modules.insert(name.to_string(), CompileOutput {
 	    module,
 	    code_ptr
 	});
-
 	Ok(())
     }
     
