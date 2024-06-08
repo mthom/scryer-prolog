@@ -4173,6 +4173,22 @@ impl Machine {
                         try_or_throw!(self.machine_st, self.argv());
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                     }
+                    &Instruction::CallSetHeapLimit => {
+                        try_or_throw!(self.machine_st, self.set_heap_limit());
+                        step_or_fail!(self, self.machine_st.p += 1);
+                    }
+                    &Instruction::ExecuteSetHeapLimit => {
+                        try_or_throw!(self.machine_st, self.set_heap_limit());
+                        step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+                    }
+                    &Instruction::CallGetHeapLimit => {
+                        try_or_throw!(self.machine_st, self.get_heap_limit());
+                        step_or_fail!(self, self.machine_st.p += 1);
+                    }
+                    &Instruction::ExecuteGetHeapLimit => {
+                        try_or_throw!(self.machine_st, self.get_heap_limit());
+                        step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+                    }
                     &Instruction::CallCurrentTime => {
                         self.current_time();
                         step_or_fail!(self, self.machine_st.p += 1);
@@ -5226,6 +5242,11 @@ impl Machine {
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                     }
                 }
+            }
+
+            // Not sure if this is the best place to put this
+            if let Err(()) = self.machine_st.check_heap_limit() {
+                continue;
             }
 
             let interrupted = INTERRUPT.load(std::sync::atomic::Ordering::Relaxed);
