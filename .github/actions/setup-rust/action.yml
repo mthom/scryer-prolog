@@ -33,7 +33,7 @@ runs:
       echo "CC=clang" >> $GITHUB_ENV
       echo "PKG_CONFIG_SYSROOT_DIR=/" >> $GITHUB_ENV
 
-  - uses: actions/cache@v3
+  - uses: actions/cache@v4
     with:
       path: |
         ~/.cargo/bin/
@@ -46,7 +46,7 @@ runs:
   # Remove build artifacts for the current crate, since it will be rebuilt every
   # run anyway, but keep dependency artifacts to cache them.
   # Must be placed after actions/cache so its post step runs first.
-  - uses: pyTooling/Actions/with-post-step@v0.4.6
+  - uses: pyTooling/Actions/with-post-step@v0.4.7
     with:
       main: bash ./.github/actions/setup-rust/cleanup.sh
       post: bash ./.github/actions/setup-rust/cleanup.sh
