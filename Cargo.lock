@@ -2765,6 +2765,7 @@ dependencies = [
  "console_error_panic_hook",
  "cpu-time",
  "cranelift",
+ "cranelift-codegen",
  "cranelift-jit",
  "cranelift-module",
  "criterion",
