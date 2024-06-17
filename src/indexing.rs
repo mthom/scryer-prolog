@@ -114,13 +114,13 @@ impl<'a> IndexingCodeMergingPtr<'a> {
             Some(OptArgIndexKey::Literal(_, _, constant, _)) => {
                 constants.insert(*constant, constant_ptr);
             }
+            _ if constant_ptr.is_external() => {
+                // this must be a defunct clause, because it's been deleted
+                // from the skeleton.
+                debug_assert!(constant_key.is_none());
+            }
             _ => {
-                if let IndexingCodePtr::DynamicExternal(_) = constant_ptr {
-                    // this must be a defunct clause, because it's been deleted
-                    // from the skeleton.
-                } else {
-                    unreachable!()
-                }
+                unreachable!()
             }
         }
 
@@ -1113,16 +1113,10 @@ pub(crate) fn constant_key_alternatives(
             constants.push(Literal::Atom(atom));
         }
         /*
+        // constant_to_literal takes care of the downward conversion from Integer to Fixnum
+        // if possible.
         Literal::Fixnum(ref n) => {
-            constants.push(Literal::Integer(arena_alloc!(n, arena))); //Rc::new(Integer::from(*n))));
-
-            /*
-            if *n >= 0 {
-                if let Ok(n) = usize::try_from(*n) {
-                    constants.push(Literal::Usize(n));
-                }
-            }
-            */
+            constants.push(Literal::Integer(arena_alloc!(n, arena)));
         }
         */
         Literal::Integer(ref n) => {

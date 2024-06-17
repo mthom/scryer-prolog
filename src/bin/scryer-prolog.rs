@@ -1,11 +1,10 @@
 fn main() -> std::process::ExitCode {
     use scryer_prolog::atom_table::Atom;
     use scryer_prolog::*;
-    use std::sync::atomic::Ordering;
 
     #[cfg(feature = "repl")]
     ctrlc::set_handler(move || {
-        scryer_prolog::machine::INTERRUPT.store(true, Ordering::Relaxed);
+        scryer_prolog::machine::INTERRUPT.store(true, std::sync::atomic::Ordering::Relaxed);
     })
     .unwrap();
 

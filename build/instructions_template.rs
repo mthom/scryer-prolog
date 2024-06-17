@@ -497,6 +497,8 @@ enum SystemClauseType {
     CryptoRandomByte,
     #[strum_discriminants(strum(props(Arity = "4", Name = "$crypto_data_hash")))]
     CryptoDataHash,
+    #[strum_discriminants(strum(props(Arity = "5", Name = "$crypto_hmac")))]
+    CryptoHMAC,
     #[strum_discriminants(strum(props(Arity = "7", Name = "$crypto_data_hkdf")))]
     CryptoDataHKDF,
     #[strum_discriminants(strum(props(Arity = "4", Name = "$crypto_password_hash")))]
@@ -1017,6 +1019,13 @@ fn generate_instruction_preface() -> TokenStream {
                     },
                 }
             }
+
+            pub fn is_external(&self) -> bool {
+                matches!(
+                    self,
+                    IndexingCodePtr::External(_) | IndexingCodePtr::DynamicExternal(_)
+                )
+            }
         }
 
         impl IndexingInstruction {
@@ -1157,27 +1166,27 @@ fn generate_instruction_preface() -> TokenStream {
         impl Instruction {
             #[inline]
             pub fn registers(&self) -> Vec<RegType> {
-                match self {
-                    &Instruction::GetConstant(_, _, r) => vec![r],
-                    &Instruction::GetList(_, r) => vec![r],
-                    &Instruction::GetPartialString(_, _, r, _) => vec![r],
-                    &Instruction::GetStructure(_, _, _, r) => vec![r],
-                    &Instruction::GetVariable(r, t) => vec![r, temp_v!(t)],
-                    &Instruction::GetValue(r, t) => vec![r, temp_v!(t)],
-                    &Instruction::UnifyLocalValue(r) => vec![r],
-                    &Instruction::UnifyVariable(r) => vec![r],
-                    &Instruction::PutConstant(_, _, r) => vec![r],
-                    &Instruction::PutList(_, r) => vec![r],
-                    &Instruction::PutPartialString(_, _, r, _) => vec![r],
-                    &Instruction::PutStructure(_, _, r) => vec![r],
-                    &Instruction::PutValue(r, t) => vec![r, temp_v!(t)],
-                    &Instruction::PutVariable(r, t) => vec![r, temp_v!(t)],
-                    &Instruction::SetLocalValue(r) => vec![r],
-                    &Instruction::SetVariable(r) => vec![r],
-                    &Instruction::SetValue(r) => vec![r],
-                    &Instruction::GetLevel(r) => vec![r],
-                    &Instruction::GetPrevLevel(r) => vec![r],
-                    &Instruction::GetCutPoint(r) => vec![r],
+                match *self {
+                    Instruction::GetConstant(_, _, r) => vec![r],
+                    Instruction::GetList(_, r) => vec![r],
+                    Instruction::GetPartialString(_, _, r, _) => vec![r],
+                    Instruction::GetStructure(_, _, _, r) => vec![r],
+                    Instruction::GetVariable(r, t) => vec![r, temp_v!(t)],
+                    Instruction::GetValue(r, t) => vec![r, temp_v!(t)],
+                    Instruction::UnifyLocalValue(r) => vec![r],
+                    Instruction::UnifyVariable(r) => vec![r],
+                    Instruction::PutConstant(_, _, r) => vec![r],
+                    Instruction::PutList(_, r) => vec![r],
+                    Instruction::PutPartialString(_, _, r, _) => vec![r],
+                    Instruction::PutStructure(_, _, r) => vec![r],
+                    Instruction::PutValue(r, t) => vec![r, temp_v!(t)],
+                    Instruction::PutVariable(r, t) => vec![r, temp_v!(t)],
+                    Instruction::SetLocalValue(r) => vec![r],
+                    Instruction::SetVariable(r) => vec![r],
+                    Instruction::SetValue(r) => vec![r],
+                    Instruction::GetLevel(r) => vec![r],
+                    Instruction::GetPrevLevel(r) => vec![r],
+                    Instruction::GetCutPoint(r) => vec![r],
                     _ => vec![],
                 }
             }
@@ -1848,6 +1857,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallScryerPrologVersion |
                     &Instruction::CallCryptoRandomByte |
                     &Instruction::CallCryptoDataHash |
+                    &Instruction::CallCryptoHMAC |
                     &Instruction::CallCryptoDataHKDF |
                     &Instruction::CallCryptoPasswordHash |
                     &Instruction::CallCryptoCurveScalarMult |
@@ -2085,6 +2095,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteScryerPrologVersion |
                     &Instruction::ExecuteCryptoRandomByte |
                     &Instruction::ExecuteCryptoDataHash |
+                    &Instruction::ExecuteCryptoHMAC |
                     &Instruction::ExecuteCryptoDataHKDF |
                     &Instruction::ExecuteCryptoPasswordHash |
                     &Instruction::ExecuteCryptoCurveScalarMult |

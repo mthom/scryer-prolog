@@ -27,6 +27,7 @@ use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::error::Error;
 use std::ffi::{c_void, CString};
+use std::ptr::addr_of_mut;
 
 use libffi::low::type_tag::STRUCT;
 use libffi::low::{ffi_abi_FFI_DEFAULT_ABI, ffi_cif, ffi_type, prep_cif, types, CodePtr};
@@ -90,20 +91,20 @@ impl ForeignFunctionTable {
     fn map_type_ffi(&mut self, source: &Atom) -> *mut ffi_type {
         unsafe {
             match source {
-                atom!("sint64") => &mut types::sint64,
-                atom!("sint32") => &mut types::sint32,
-                atom!("sint16") => &mut types::sint16,
-                atom!("sint8") => &mut types::sint8,
-                atom!("uint64") => &mut types::uint64,
-                atom!("uint32") => &mut types::uint32,
-                atom!("uint16") => &mut types::uint16,
-                atom!("uint8") => &mut types::uint8,
-                atom!("bool") => &mut types::sint8,
-                atom!("void") => &mut types::void,
-                atom!("cstr") => &mut types::pointer,
-                atom!("ptr") => &mut types::pointer,
-                atom!("f32") => &mut types::float,
-                atom!("f64") => &mut types::double,
+                atom!("sint64") => addr_of_mut!(types::sint64),
+                atom!("sint32") => addr_of_mut!(types::sint32),
+                atom!("sint16") => addr_of_mut!(types::sint16),
+                atom!("sint8") => addr_of_mut!(types::sint8),
+                atom!("uint64") => addr_of_mut!(types::uint64),
+                atom!("uint32") => addr_of_mut!(types::uint32),
+                atom!("uint16") => addr_of_mut!(types::uint16),
+                atom!("uint8") => addr_of_mut!(types::uint8),
+                atom!("bool") => addr_of_mut!(types::sint8),
+                atom!("void") => addr_of_mut!(types::void),
+                atom!("cstr") => addr_of_mut!(types::pointer),
+                atom!("ptr") => addr_of_mut!(types::pointer),
+                atom!("f32") => addr_of_mut!(types::float),
+                atom!("f64") => addr_of_mut!(types::double),
                 struct_name => match self.structs.get_mut(&*struct_name.as_str()) {
                     Some(ref mut struct_type) => &mut struct_type.ffi_type,
                     None => unreachable!(),
@@ -161,7 +162,7 @@ impl ForeignFunctionTable {
     }
 
     fn build_pointer_args(
-        args: &mut Vec<Value>,
+        args: &mut [Value],
         type_args: &[*mut ffi_type],
         structs_table: &mut HashMap<String, StructImpl>,
     ) -> Result<PointerArgs, FFIError> {
@@ -435,6 +436,18 @@ impl ForeignFunctionTable {
                     }
                     libffi::raw::FFI_TYPE_SINT64 => read_and_push_int!(i64),
                     libffi::raw::FFI_TYPE_POINTER => read_and_push_int!(i64),
+		    libffi::raw::FFI_TYPE_FLOAT => {
+			field_ptr = field_ptr.add(field_ptr.align_offset(std::mem::align_of::<f32>()));
+			let n = std::ptr::read(field_ptr as *mut f32);
+			returns.push(Value::Float(f32::from(n).into()));
+			field_ptr = field_ptr.add(std::mem::size_of::<f32>());
+		    }
+		    libffi::raw::FFI_TYPE_DOUBLE => {
+			field_ptr = field_ptr.add(field_ptr.align_offset(std::mem::align_of::<f64>()));
+			let n = std::ptr::read(field_ptr as *mut f64);
+			returns.push(Value::Float(f64::from(n)));
+			field_ptr = field_ptr.add(std::mem::size_of::<f64>());
+		    }
                     libffi::raw::FFI_TYPE_STRUCT => {
                         let substruct = struct_type.atom_fields[i].as_str();
                         let struct_type = self

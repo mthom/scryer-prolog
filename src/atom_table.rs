@@ -17,7 +17,7 @@ use std::sync::Weak;
 
 use indexmap::IndexSet;
 
-use modular_bitfield::prelude::*;
+use scryer_modular_bitfield::prelude::*;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub struct Atom {

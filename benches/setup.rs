@@ -71,6 +71,7 @@ impl PrologBenchmark {
         machine
     }
 
+    #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
     pub fn setup(&self) -> impl FnMut() -> QueryResolution {
         let mut machine = self.make_machine();
         let query = self.query;

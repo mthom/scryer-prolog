@@ -53,5 +53,4 @@ $(G_0) :-
 %
 %  Generalize away Goal.
 
-
 *(_).

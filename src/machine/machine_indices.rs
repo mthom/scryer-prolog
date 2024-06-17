@@ -10,16 +10,14 @@ use crate::machine::ClauseType;
 
 use fxhash::FxBuildHasher;
 use indexmap::{IndexMap, IndexSet};
-use modular_bitfield::specifiers::*;
-use modular_bitfield::{bitfield, BitfieldSpecifier};
+use scryer_modular_bitfield::specifiers::*;
+use scryer_modular_bitfield::{bitfield, BitfieldSpecifier};
 
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::ops::{Deref, DerefMut};
 
 use crate::types::*;
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) struct OrderedOpDirKey(pub(crate) Atom, pub(crate) Fixity);
 
 // 7.2
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -287,8 +285,27 @@ impl IndexStore {
     }
 
     #[inline(always)]
-    pub(crate) fn goal_expansion_defined(&self, key: PredicateKey) -> bool {
-        self.goal_expansion_indices.contains(&key)
+    pub(crate) fn goal_expansion_defined(&self, key: PredicateKey, module_name: Atom) -> bool {
+        let compilation_target = match module_name {
+            atom!("user") => CompilationTarget::User,
+            _ => CompilationTarget::Module(module_name),
+        };
+
+        match key {
+            _ if self.goal_expansion_indices.contains(&key) => true,
+            _ => self
+                .get_meta_predicate_spec(key.0, key.1, &compilation_target)
+                .map(|meta_specs| {
+                    meta_specs.iter().find(|meta_spec| {
+                        matches!(
+                            meta_spec,
+                            MetaSpec::Colon | MetaSpec::RequiresExpansionWithArgument(_)
+                        )
+                    })
+                })
+                .map(|meta_spec_opt| meta_spec_opt.is_some())
+                .unwrap_or(false),
+        }
     }
 
     pub(crate) fn get_predicate_skeleton_mut(
