@@ -1,0 +1,1 @@
+args = ["-f", "--no-add-history", "src/tests/jit_test.pl", "-f", "-g", "test"]

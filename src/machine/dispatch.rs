@@ -187,6 +187,19 @@ impl MachineState {
         Ok(())
     }
 
+    pub extern "C" fn unify_num_jit(&mut self, n: Number, n1: HeapCellValue) {
+	match n {
+            Number::Fixnum(n) => self.unify_fixnum(n, n1),
+            Number::Float(n) => {
+                let n = float_alloc!(n.into_inner(), self.arena);
+                self.unify_f64(n, n1)
+            }
+            Number::Integer(n) => self.unify_big_int(n, n1),
+            Number::Rational(n) => self.unify_rational(n, n1),
+
+	}
+    }
+
     #[inline(always)]
     pub(crate) fn select_switch_on_term_index(
         &self,
@@ -4173,6 +4186,14 @@ impl Machine {
                         try_or_throw!(self.machine_st, self.argv());
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                     }
+		    &Instruction::CallJitCompile => {
+			try_or_throw!(self.machine_st, self.jit_compile());
+			step_or_fail!(self, self.machine_st.p += 1);
+		    }
+		    &Instruction::ExecuteJitCompile => {
+			try_or_throw!(self.machine_st, self.jit_compile());
+			step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+		    }
                     &Instruction::CallCurrentTime => {
                         self.current_time();
                         step_or_fail!(self, self.machine_st.p += 1);

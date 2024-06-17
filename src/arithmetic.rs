@@ -674,6 +674,12 @@ impl Ord for Number {
     }
 }
 
+impl Number {
+    pub extern "C" fn jit_try_from(value: HeapCellValue) -> Number {
+	Number::try_from(value).unwrap()
+    }
+}
+
 impl TryFrom<HeapCellValue> for Number {
     type Error = ();
 

@@ -128,6 +128,11 @@ fn isize_gcd(n1: isize, n2: isize) -> Option<isize> {
     Some(n1 << shift as isize)
 }
 
+// TODO: Error handling
+pub extern "C" fn add_jit(lhs: Number, rhs: Number, arena: &mut Arena) -> Number {
+    add(lhs, rhs, &mut Arena::new()).unwrap()
+}
+
 pub(crate) fn add(lhs: Number, rhs: Number, arena: &mut Arena) -> Result<Number, EvalError> {
     match (lhs, rhs) {
         (Number::Fixnum(n1), Number::Fixnum(n2)) => Ok(
