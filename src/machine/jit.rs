@@ -294,7 +294,7 @@ impl JitMachine {
 	    }
 	}
 	module.define_function(func, &mut ctx).unwrap();
-	println!("{}", ctx.func.display());	
+	// println!("{}", ctx.func.display());	
 	module.clear_context(&mut ctx);
 
 	module.finalize_definitions().unwrap();
