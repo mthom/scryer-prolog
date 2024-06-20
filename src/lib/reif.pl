@@ -104,69 +104,58 @@ tmember_t(P_2, [X|Xs], T) :-
 
 %% if_(+If_1, +Then_0, +Else_0)
 %
-%  A monotonic if-then-else. When the last argument of the predicate If
-%  unifies with true, Then is executed, if the last argument
-%  unifies with false, Else is executed. 
+%  A monotonic if-then-else. If_1 must be a reified predicate i.e. its last
+%  argument must be either true/false.
 
 %% =(?X, ?Y, ?T)
 %
 %  Reifies syntactic inequality. See [dif/2](./dif#dif/2). This predicate is
 %  one of the basic building blocks of the logic of library(reif).
 %
-%  Unifies T with false if X and Y are different terms. Otherwise, T is
-%  unified with true.
+%  True iff X and Y are not different terms, and T describes whether they are
+%  different terms.
 %  Useful in conjunction with if_/3.
 
 %% ','(+A_1, +B_1, -T)
 %
-%  When the last argument of predicate A unifies with true, B is executed with
-%  T as the argument. Otherwise, T is unified with false.
 %  Similar to a short-circuiting logical AND in other programming languages.
 
 %% ';'(+A_1, +B_1, -T)
 %
-%  When the last argument of predicate A unifies with true, T is unified with
-%  true. Otherwise, B is executed with T as the argument.
 %  Similar to a short-circuiting logical OR in other programming languages.
 
 %% cond_t(+If_1, +Then_0, -T)
 %
 %  A monotonic if-then.
-%
-%  When the last argument of predicate If unifies with true, Then is executed
-%  and T is unified with true. If the last argument unifies with false, then
-%  Then is not executed and T is unified with false. 
+%  
+%  Similar to if_ without the Else clause.
 
 %% dif(?X, ?Y, ?T)
 %
-%  A version of dif/2 that returns a boolean true/false in T. The complement of 
-%  (=)/3.
+%  The complement of (=)/3. True iff X and Y are different terms, and T
+%  describes whether they are different terms.
 
 %% memberd_t(?E, ?Xs, ?T)
 %
-%  If Xs is a member of E, T is true. Otherwise it is false.
+%  True iff T describes whether Xs is a member of E.
 
 %% tfilter(+C_2, E, Fs0)
 %
-%  A list filtering predicate.
-%
-%  The elements of E which return true when passed to C are put into Fs0.
+%  Performs list filtering.
 
 %% tmember(+P_2, ?X) 
 %
-%  If P_2 when called on any of the members of X returns true in its last
-%  argument, this predicate succeeds. Otherwise, it fails.
+%  True if any of the members of X satisfy predicate P.
 
 %% tmember_t(+P_2, ?X, -T)
 %
-%  A reified version of tmember/2, which returns true in T in case of success,
-%  and false in case of failure.
+%  Similar to tmember.
 
 %% tpartition(+P_2, ?Xs, ?Ts, ?Fs)
 %  
-%  Similar to tfilter/3. 
-%  For each element in Xs, when the predicate C_2 returns true, the element is
-%  put in Ts, when C_2 returns false, the element is put in Fs.
+%  Similar to tfilter/3, except the members for which P does not succeed are
+%  represented by Fs.
+%
 %  ```
 %  ?- tpartition(=(1), [1,2,4,5,1], X, Y).
 %     X = [1,1], Y = [2,4,5].
