@@ -1,4 +1,5 @@
-/** Reification, to put in simple terms, is to treat a more abstract thing 
+/** For accurate information, please read [*Indexing dif/2*](https://arxiv.org/abs/1607.01590).
+Reification, to put in simple terms, is to treat a more abstract thing 
 (unification, backtracking, etc) as 
 if it were something concrete. In this library, an indexing technique is
 employed to reify concepts like synactic equality (see dif/2) into boolean
@@ -6,8 +7,6 @@ values, `true` and `false`. By converting such concepts to concrete objects
 using indexing, `library(reif)` provides methods to arrive at more correct and
 efficient code.
  
-For more info, please read
-[*Indexing dif/2*](https://arxiv.org/abs/1607.01590).
 
 Example:
 
@@ -109,8 +108,7 @@ tmember_t(P_2, [X|Xs], T) :-
 
 %% =(?X, ?Y, ?T)
 %
-%  Reifies syntactic inequality. See [dif/2](./dif#dif/2). This predicate is
-%  one of the basic building blocks of the logic of library(reif).
+%  Reifies syntactic inequality. See [dif/2](./dif#dif/2).
 %
 %  True iff X and Y are not different terms, and T describes whether they are
 %  different terms.
@@ -118,17 +116,17 @@ tmember_t(P_2, [X|Xs], T) :-
 
 %% ','(+A_1, +B_1, -T)
 %
-%  Similar to a short-circuiting logical AND in other programming languages.
+%  Similar to ,/2.
 
 %% ';'(+A_1, +B_1, -T)
 %
-%  Similar to a short-circuiting logical OR in other programming languages.
+%  A version of ;/2 that avoids.
 
 %% cond_t(+If_1, +Then_0, -T)
 %
 %  A monotonic if-then.
 %  
-%  Similar to if_ without the Else clause.
+%  Similar to if_ without the Else predicate.
 
 %% dif(?X, ?Y, ?T)
 %
@@ -141,11 +139,12 @@ tmember_t(P_2, [X|Xs], T) :-
 
 %% tfilter(+C_2, E, Fs0)
 %
-%  Performs list filtering.
+%  A predicate for filtering items of a list that uses a reified condition C.
 
 %% tmember(+P_2, ?X) 
 %
-%  True if any of the members of X satisfy predicate P.
+%  True iff any of the members of X satisfy predicate P. Avoids visiting all
+%  members of the list when possible.
 
 %% tmember_t(+P_2, ?X, -T)
 %
