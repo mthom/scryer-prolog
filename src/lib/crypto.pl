@@ -296,6 +296,7 @@ functor_hash_options(F, Hash, Options0, [Option|Options]) :-
         ).
 
 hash_algorithm(ripemd160).
+hash_algorithm(sha1_deprecated).
 hash_algorithm(sha256).
 hash_algorithm(sha512).
 hash_algorithm(sha384).

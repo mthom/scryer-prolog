@@ -7382,6 +7382,7 @@ impl Machine {
             _ => {
                 let ints = digest::digest(
                     match algorithm {
+                        atom!("sha1_deprecated") => &digest::SHA1_FOR_LEGACY_USE_ONLY,
                         atom!("sha256") => &digest::SHA256,
                         atom!("sha384") => &digest::SHA384,
                         atom!("sha512") => &digest::SHA512,
