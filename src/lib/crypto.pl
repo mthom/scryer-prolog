@@ -14,6 +14,7 @@
 
 :- module(crypto,
           [hex_bytes/2,                  % ?Hex, ?Bytes
+           bytes_base64/3,               % ?Bytes, ?Base64, +PaddingEnabled
            crypto_n_random_bytes/2,      % +N, -Bytes
            crypto_data_hash/3,           % +Data, -Hash, +Options
            crypto_data_hkdf/4,           % +Data, +Length, -Bytes, +Options
@@ -405,8 +406,8 @@ crypto_password_hash(Password0, Hash) :-
             must_be(list, Hash),
             dollar_segments(Hash, [[],"pbkdf2-sha512",[t,=|CsIterations],SaltB64,HashB64]),
             number_chars(Iterations, CsIterations),
-            bytes_base64(SaltBytes, SaltB64),
-            bytes_base64(HashBytes, HashB64),
+            bytes_base64(SaltBytes, SaltB64, false),
+            bytes_base64(HashBytes, HashB64, false),
             '$crypto_password_hash'(Password, SaltBytes, Iterations, HashBytes)
         ;   crypto_password_hash(Password0, Hash, [])
         ).
@@ -483,21 +484,22 @@ crypto_password_hash(Password0, Hash, Options) :-
         ;   crypto_n_random_bytes(16, SaltBytes)
         ),
         '$crypto_password_hash'(Password, SaltBytes, Iterations, HashBytes),
-        bytes_base64(HashBytes, HashB64),
-        bytes_base64(SaltBytes, SaltB64),
+        bytes_base64(HashBytes, HashB64, false),
+        bytes_base64(SaltBytes, SaltB64, false),
         phrase(format_("$pbkdf2-sha512$t=~d$~s$~s", [Iterations,SaltB64,HashB64]), Hash).
 
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   Bidirectional Bytes <-> Base64 conversion *without padding*.
+   Bidirectional Bytes <-> Base64 conversion. Padding *must* be true/false.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
-bytes_base64(Bytes, Base64) :-
+bytes_base64(Bytes, Base64, PaddingEnabled) :-
+        ground(PaddingEnabled),
         (   var(Bytes) ->
-            chars_base64(Chars, Base64, [padding(false)]),
+            chars_base64(Chars, Base64, [padding(PaddingEnabled)]),
             maplist(char_code, Chars, Bytes)
         ;   maplist(char_code, Chars, Bytes),
-            chars_base64(Chars, Base64, [padding(false)])
+            chars_base64(Chars, Base64, [padding(PaddingEnabled)])
         ).
 
 %% crypto_data_encrypt(+PlainText, +Algorithm, +Key, +IV, -CipherText, +Options).
