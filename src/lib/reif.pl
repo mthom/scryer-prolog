@@ -194,7 +194,14 @@ non(false, true).
 
 %% tfilter(+Predicate, ?List, ?FilteredList).
 %
-% Example:
+% `FilteredList` contains all elements of `List` that satisfy `Predicate`. Same
+% as more common `include/3` or `filter/3`, but more general and it doesn't
+% leave spurious choice points.
+%
+% `Predicate` is an incomplete goal that lacks two further arguments: one for
+% the element to be considered and one for the reified truth value.
+%
+% Take a note that in the following examples `=/3` will be used and not `=/2`:
 %
 % ```
 % ?- tfilter(=(a), [X,Y], Es).
@@ -202,6 +209,16 @@ non(false, true).
 % ;  X = a, Es = "a", dif:dif(a,Y)
 % ;  Y = a, Es = "a", dif:dif(a,X)
 % ;  Es = [], dif:dif(a,X), dif:dif(a,Y).
+% ```
+%
+% Another example to demonstrate generality:
+%
+% ```
+% ?- tfilter(=(X), [1,2,3,2,3,3], Fs).
+%    X = 1, Fs = [1]
+% ;  X = 2, Fs = [2,2]
+% ;  X = 3, Fs = [3,3,3]
+% ;  Fs = [], dif(X, 1), dif(X, 2), dif(X, 3).
 % ```
 tfilter(_, [], []).
 tfilter(C_2, [E|Es], Fs0) :-
