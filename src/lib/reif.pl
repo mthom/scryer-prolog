@@ -313,7 +313,23 @@ t(true, (expands_call1_for_modules :- goal_expanded(call(a:b(1)), a:b(1)))).
 t(true, (expands_call2_for_modules :- goal_expanded(call(a:b,c), a:b(c)))).
 t(true, (doesnt_expand_call2 :- goal_expanded(call(b,c), call(b,c)))).
 t(true, (doesnt_expand_cyclic_terms :- X=a(X), goal_expanded(call(X), Y), call(X) == Y)).
+t(true, (doesnt_expand_cyclic_call1 :- X=call(X), goal_expanded(X, Y), X == Y)).
 t(true, (doesnt_expand_higher_order_predicates :- X = maplist(=(1), _), goal_expanded(X, Y), X == Y)).
+
+% This test fails, and I don't know if goal_expanded/2 should be recursive or not,
+% and what properties it shall maintain (is idempotence even desirable?).
+t(skip, (second_expansion_doesnt_modify_goal :-
+    findall(G==Gxx, test_expand_goal_twice(G,Gxx), Goals), maplist(call, Goals)
+)).
+
+test_expand_goal_twice(G, Gxx) :-
+    test_goal(G), goal_expanded(G,Gx), goal_expanded(Gx, Gxx).
+test_goal(_).
+test_goal(call(a)).
+test_goal(call(a:b(1))).
+test_goal(call(a:b,c)).
+test_goal(call(call(a))).
+test_goal(call(call(a:b))).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Unit test support (probably should be moved to another module)
