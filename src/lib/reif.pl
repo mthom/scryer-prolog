@@ -84,7 +84,7 @@ sameargs(0, _, _).
 % ```
 %
 % [2]: http://www.complang.tuwien.ac.at/ulrich/Prolog-inedit/sicstus/memberbench.pl
-goal_expansion(if_(If_1, Then_0, Else_0), G_0) :-
+user:goal_expansion(if_(If_1, Then_0, Else_0), G_0) :-
     ugoal_expansion(if_(If_1, Then_0, Else_0), G_0),
     % Dump expanded goals to the console for inspection.
     % TODO: Remove when fully debugged
