@@ -11,6 +11,9 @@
 :- use_module(library(debug)).
 :- use_module(library(format)).
 :- op(750, xfy, =>).
+:- op(950, fy, +).
++(A) :- call(A).
+%+(_).
 
 %% goal_expanded(+Goal, -ExpandedGoal).
 %
@@ -88,7 +91,7 @@ user:goal_expansion(if_(If_1, Then_0, Else_0), G_0) :-
     ugoal_expansion(if_(If_1, Then_0, Else_0), G_0),
     % Dump expanded goals to the console for inspection.
     % TODO: Remove when fully debugged
-  * portray_clause((if_(If_1,Then_0,Else_0) => G_0)).
+  + portray_clause((if_(If_1,Then_0,Else_0) => G_0)).
 
 
 %% ugoal_expansion(if_(+If_1, ?Then_0, ?Else_0), -Goal_0).
@@ -120,7 +123,7 @@ ugoal_expansion(if_(If_1, Then_0, Else_0), Goal_0) :-
     goal_expanded(call(Then_0), Thenx_0),
     goal_expanded(call(Else_0), Elsex_0),
     !,
-  * write('% =\n'),
+  + write('% =\n'),
     Goal_0 =
         ( X \= Y -> Elsex_0
         ; X == Y -> Thenx_0
@@ -134,7 +137,7 @@ ugoal_expansion(if_(If_1, Then_0, Else_0), Goal) :-
     ( M == reif -> true ; throw(error(existence_error(predicate_property,imported_from),_)) ),
   % ( M == reif -> true ; predicate_property(M:;(_,_,_),imported_from(reif)) ),
     !,
-  * write('% ;\n'),
+  + write('% ;\n'),
     Goal = if_(A_1, Then_0, if_(B_1, Then_0, Else_0)).
 ugoal_expansion(if_(If_1, Then_0, Else_0), Goal_0) :-
     subsumes_term(M:(A_1,B_1), If_1),
@@ -143,10 +146,10 @@ ugoal_expansion(if_(If_1, Then_0, Else_0), Goal_0) :-
     ( M == reif -> true ; throw(error(existence_error(predicate_property,imported_from),_)) ),
   % ( M == reif -> true ; predicate_property(M:','(_,_,_),imported_from(reif)) ),
     !,
-  * write('% ,\n'),
+  + write('% ,\n'),
     Goal_0 = if_(A_1, if_(B_1, Then_0, Else_0), Else_0).
 ugoal_expansion(if_(If_1, Then_0, Else_0), Goal_0) :-
-  * write('% _\n'),
+  + write('% _\n'),
     goal_expanded(call(If_1, T), Ifx_0),
     goal_expanded(call(Then_0), Thenx_0),
     goal_expanded(call(Else_0), Elsex_0),
