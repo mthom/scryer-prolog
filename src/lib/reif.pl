@@ -68,6 +68,20 @@ sameargs(0, _, _).
 */
 
 
+% FIXME: I did benchmarking from memberbench[2] using other Prolog
+% implementation because Scryer doesn't have statistics/2, and I didn't notice
+% any change in performance, with and without goal expansion. Also I have notice
+% that in practice only last clause of ugoal_expansion/2 is ever executed, and
+% expanded goals still have some duplicated call/N calls like so:
+%
+% ```
+% if_(call(A, B), C=[B|D], C=D) =>
+%    ( call(call(A, B), E),
+%    ...
+%    ).
+% ```
+%
+% [2]: http://www.complang.tuwien.ac.at/ulrich/Prolog-inedit/sicstus/memberbench.pl
 goal_expansion(if_(If_1, Then_0, Else_0), G_0) :-
     ugoal_expansion(if_(If_1, Then_0, Else_0), G_0),
     % Dump expanded goals to the console for inspection.
@@ -267,11 +281,6 @@ tree_non_member(E, t(F,L,R)) :-
     dif(E,F),
     tree_non_member(E, L),
     tree_non_member(E, R).
-
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Benchmark
-
-bench :- false.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Unit tests
