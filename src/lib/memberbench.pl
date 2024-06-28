@@ -1,3 +1,8 @@
+/*
+Direct copy from http://www.complang.tuwien.ac.at/ulrich/Prolog-inedit/sicstus/memberbench.pl
+only with minor modifications.
+*/
+
 :- module(memberbench,[run/0]).
 
 :- use_module(library(reif)).
