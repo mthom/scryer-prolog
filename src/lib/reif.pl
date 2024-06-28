@@ -12,6 +12,8 @@
 :- use_module(library(format)).
 :- op(750, xfy, =>).
 
+%% goal_expanded(+Goal, -ExpandedGoal).
+%
 goal_expanded(MG_0, MGx_0) :-
    var(MG_0),
    !,
