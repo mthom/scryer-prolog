@@ -90,7 +90,7 @@ goal_expansion(if_(If_1, Then_0, Else_0), G_0) :-
 % => if_(A_1, Then_0, if_(B_1, Then_0, Else_0))
 %
 % if_((A_1,B_1), Then_0, Else_0)
-% => Goal_0 = if_(A_1, if_(B_1, Then_0, Else_0), Else_0).
+% => if_(A_1, if_(B_1, Then_0, Else_0), Else_0).
 %
 % Otherwise it simply expands If_1, Then_0 and Else_0 using goal_expanded/2.
 % Read it's documentation to find out how it operates.
