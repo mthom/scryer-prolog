@@ -11,7 +11,10 @@
 
 % uwnportray(T) :- write_term(T,[quoted(true)]),nl.
 
-
+:- use_module(library(lists)).
+:- use_module(library(format)).
+:- use_module(library(dif)).
+statistics(_,[0]).
 
 uwnportray(T) :- portray_clause(T).  % Item#539
 
@@ -294,7 +297,7 @@ time(G_0, Tms) :-
 time(G_0) :-
    time(G_0, Tms),
    functor(G_0, F, N),
-   format('~q: t=~3ds~n',[F/N,Tms]).
+   format("~q: t=~3ds~n",[F/N,Tms]).
 
 ten.
 ten.
@@ -344,8 +347,8 @@ run :-
    time(en_memberd(N, E, Es)),
    time(en_memberd2(N, E, Es)),
    time(en_memberd3(N, E, Es)),
-%   time(en_memberdc(N, E, Es)),
-%   time(en_memberdo(N, E, Es)),
+   time(en_memberdc(N, E, Es)),
+   time(en_memberdo(N, E, Es)),
    time(en_memberd_fif(N, E, Es)),
    time(en_memberd_ifc(N, E, Es)),
    time(en_memberd_if1(N, E, Es)),
@@ -355,7 +358,7 @@ run :-
    time(en_memberd_if3bad2(N, E, Es)),
    time(en_memberd_if3bad3(N, E, Es)),
    time(en_memberd_if4(N, E, Es)),
-   time(en_memberd_ifopti(N, E, Es)),
+%  time(en_memberd_ifopti(N, E, Es)),
    time(en_memberd_ifperfect(N, E, Es)),
    time(en_memberd_ifperfect(N, E, Es)),
    K = c,
@@ -379,10 +382,3 @@ n_kvs(Len, KVs) :-
    length(Pre,Len),
    maplist(=(b-v),Pre),
    append(Pre,[c-w,d-e],KVs).
-
-maplist(_P_1, []).
-maplist(P_1, [E|Es]):-
-   call(P_1, E),
-   maplist(P_1, Es).
-
-
