@@ -114,9 +114,9 @@ ugoal_expansion(if_(If_1, Then_0, Else_0), Goal_0) :-
     subsumes_term(M:(X=Y), If_1),
     M:(X=Y) = If_1,
     atom(M),
-    M == reif,
     % FIXME: imported_from(_) key isn't implemented for predicate_property/2
-    % ( M == reif -> true ; predicate_property(M: =(_,_,_),imported_from(reif)) ),
+    ( M == reif -> true ; throw(error(existence_error(predicate_property,imported_from),_)) ),
+  % ( M == reif -> true ; predicate_property(M: =(_,_,_),imported_from(reif)) ),
     goal_expanded(call(Then_0), Thenx_0),
     goal_expanded(call(Else_0), Elsex_0),
     !,
@@ -131,8 +131,8 @@ ugoal_expansion(if_(If_1, Then_0, Else_0), Goal) :-
     subsumes_term(M:(A_1;B_1), If_1),
     M:(A_1;B_1) = If_1,
     atom(M),
-    M == reif,
-    % ( M == reif -> true ; predicate_property(M:;(_,_,_),imported_from(reif)) ),
+    ( M == reif -> true ; throw(error(existence_error(predicate_property,imported_from),_)) ),
+  % ( M == reif -> true ; predicate_property(M:;(_,_,_),imported_from(reif)) ),
     !,
   * write('% ;\n'),
     Goal = if_(A_1, Then_0, if_(B_1, Then_0, Else_0)).
@@ -140,8 +140,8 @@ ugoal_expansion(if_(If_1, Then_0, Else_0), Goal_0) :-
     subsumes_term(M:(A_1,B_1), If_1),
     M:(A_1,B_1) = If_1,
     atom(M),
-    M == reif,
-    % ( M == reif -> true ; predicate_property(M:','(_,_,_),imported_from(reif)) ),
+    ( M == reif -> true ; throw(error(existence_error(predicate_property,imported_from),_)) ),
+  % ( M == reif -> true ; predicate_property(M:','(_,_,_),imported_from(reif)) ),
     !,
   * write('% ,\n'),
     Goal_0 = if_(A_1, if_(B_1, Then_0, Else_0), Else_0).
