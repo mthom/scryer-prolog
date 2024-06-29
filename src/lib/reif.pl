@@ -1,4 +1,14 @@
 /** Predicates from [*Indexing dif/2*](https://arxiv.org/abs/1607.01590).
+
+Example:
+
+```
+?- tfilter(=(a), [X,Y], Es).
+   X = a, Y = a, Es = "aa"
+;  X = a, Es = "a", dif:dif(a,Y)
+;  Y = a, Es = "a", dif:dif(a,X)
+;  Es = [], dif:dif(a,X), dif:dif(a,Y).
+```
 */
 
 :- module(reif, [if_/3, (=)/3, (',')/3, (;)/3, cond_t/3, dif/3,
