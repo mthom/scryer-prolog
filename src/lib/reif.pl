@@ -178,7 +178,6 @@ if_(If_1, Then_0, Else_0) :-
     ;  T = false, dif(X, Y)
     ).
 
-
 dif(X, Y, T) :-
   =(X, Y, NT),
   non(NT, T).
@@ -228,32 +227,16 @@ i_memberd_t([X|Xs], E, T) :-
    if_( X = E, T = true, i_memberd_t(Xs, E, T) ).
 
 :- meta_predicate(tmember(2, ?)).
+
 tmember(P_2, [X|Xs]) :-
    if_( call(P_2, X), true, tmember(P_2, Xs) ).
 
 :- meta_predicate(tmember_t(2, ?, ?)).
+
 tmember_t(_P_2, [], false).
 tmember_t(P_2, [X|Xs], T) :-
    if_( call(P_2, X), T = true, tmember_t(P_2, Xs, T) ).
 
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-% Extras from the paper
-
-duplicate(X, Xs) :-
-    tfilter(=(X), Xs, [_,_|_]).
-
-firstduplicate(X, [E|Es]) :-
-    if_(memberd_t(E,Es), X=E, firstduplicate(X, Es)).
-
-treememberd_t(_, nil, false).
-treememberd_t(E, t(F,L,R), T) :-
-    call((E=F; treememberd_t(E,L); treememberd_t(E,R)), T).
-
-tree_non_member(_, nill).
-tree_non_member(E, t(F,L,R)) :-
-    dif(E,F),
-    tree_non_member(E, L),
-    tree_non_member(E, R).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Unit tests
@@ -303,6 +286,27 @@ test_goal(call(a:b(1))).
 test_goal(call(a:b,c)).
 test_goal(call(call(a))).
 test_goal(call(call(a:b))).
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+% Extras from the paper
+
+duplicate(X, Xs) :-
+    tfilter(=(X), Xs, [_,_|_]).
+
+firstduplicate(X, [E|Es]) :-
+    if_(memberd_t(E,Es), X=E, firstduplicate(X, Es)).
+
+treememberd_t(_, nil, false).
+treememberd_t(E, t(F,L,R), T) :-
+    call((E=F; treememberd_t(E,L); treememberd_t(E,R)), T).
+
+tree_non_member(_, nill).
+tree_non_member(E, t(F,L,R)) :-
+    dif(E,F),
+    tree_non_member(E, L),
+    tree_non_member(E, R).
+
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 % Unit test support (probably should be moved to another module)
