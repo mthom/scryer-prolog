@@ -170,7 +170,6 @@ if_(If_1, Then_0, Else_0) :-
     ;  throw(error(instantiation_error, _))
     ).
 
-
 =(X, Y, T) :-
     (  X == Y -> T = true
     ;  X \= Y -> T = false
