@@ -15,8 +15,6 @@
 +(A) :- call(A).
 %+(_).
 
-%% goal_expanded(+Goal, -ExpandedGoal).
-%
 goal_expanded(MG_0, MGx_0) :-
    var(MG_0),
    !,
@@ -173,9 +171,6 @@ if_(If_1, Then_0, Else_0) :-
     ).
 
 
-%% =(?X, ?Y, -T)
-%
-% Support predicate for the 1st argument of if_/3
 =(X, Y, T) :-
     (  X == Y -> T = true
     ;  X \= Y -> T = false
@@ -184,10 +179,6 @@ if_(If_1, Then_0, Else_0) :-
     ).
 
 
-%% dif(?X, ?Y, -T)
-%
-% Reified version of dif/2, always succeeds and makes sure that T value
-% is `true` if X differs from Y. The only use case is in if_/3 meta-predicat.
 dif(X, Y, T) :-
   =(X, Y, NT),
   non(NT, T).
@@ -197,34 +188,6 @@ non(false, true).
 
 :- meta_predicate(tfilter(2, ?, ?)).
 
-%% tfilter(+Predicate, ?List, ?FilteredList).
-%
-% `FilteredList` contains all elements of `List` that satisfy `Predicate`. Same
-% as more common `include/3` or `filter/3`, but more general and it doesn't
-% leave spurious choice points.
-%
-% `Predicate` is an incomplete goal that lacks two further arguments: one for
-% the element to be considered and one for the reified truth value.
-%
-% Take a note that in the following examples `=/3` will be used and not `=/2`:
-%
-% ```
-% ?- tfilter(=(a), [X,Y], Es).
-%    X = a, Y = a, Es = "aa"
-% ;  X = a, Es = "a", dif:dif(a,Y)
-% ;  Y = a, Es = "a", dif:dif(a,X)
-% ;  Es = [], dif:dif(a,X), dif:dif(a,Y).
-% ```
-%
-% Another example to demonstrate generality:
-%
-% ```
-% ?- tfilter(=(X), [1,2,3,2,3,3], Fs).
-%    X = 1, Fs = [1]
-% ;  X = 2, Fs = [2,2]
-% ;  X = 3, Fs = [3,3,3]
-% ;  Fs = [], dif(X, 1), dif(X, 2), dif(X, 3).
-% ```
 tfilter(_, [], []).
 tfilter(C_2, [E|Es], Fs0) :-
    if_(call(C_2, E), Fs0 = [E|Fs], Fs0 = Fs),
@@ -244,31 +207,19 @@ i_tpartition([X|Xs], P_2, Ts0, Fs0) :-
 
 :- meta_predicate(','(1, 1, ?)).
 
-%% ','(?A, ?B, -T).
-%
-% Support predicate for the 1st argument of if_/3
 ','(A_1, B_1, T) :-
     if_(A_1, call(B_1, T), T = false).
 
 :- meta_predicate(';'(1, 1, ?)).
 
-%% ';'(?A, ?B, -T).
-%
-% Support predicate for the 1st argument of if_/3
 ';'(A_1, B_1, T) :-
     if_(A_1, T = true, call(B_1, T)).
 
 :- meta_predicate(cond_t(1, 0, ?)).
 
-%% cond_t(?If_1, ?Then_0, -T).
-%
-% Support predicate for the 1st argument of if_/3
 cond_t(If_1, Then_0, T) :-
    if_(If_1, ( Then_0, T = true ), T = false ).
 
-%% memberd_t(?Element, ?List, -T).
-%
-% Support predicate for the 1st argument of if_/3
 memberd_t(E, Xs, T) :-
    i_memberd_t(Xs, E, T).
 
