@@ -119,7 +119,7 @@ ugoal_expansion(if_(If_1, Then_0, Else_0), Goal_0) :-
         ( X \= Y -> Elsex_0
         ; X == Y -> Thenx_0
         ; X = Y,    Thenx_0
-        ; dif(X,Y), Ellsex_0
+        ; dif(X,Y), Elsex_0
         ).
 ugoal_expansion(if_(If_1, Then_0, Else_0), Goal) :-
    nonvar(If_1), If_1 = dif(X, Y),
