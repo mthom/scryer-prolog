@@ -81,20 +81,6 @@ sameargs(0, _, _).
 */
 
 
-% FIXME: I did benchmarking from memberbench[2] using other Prolog
-% implementation because Scryer doesn't have statistics/2, and I didn't notice
-% any change in performance, with and without goal expansion. Also I have notice
-% that in practice only last clause of ugoal_expansion/2 is ever executed, and
-% expanded goals still have some duplicated call/N calls like so:
-%
-% ```
-% if_(call(A, B), C=[B|D], C=D) =>
-%    ( call(call(A, B), E),
-%    ...
-%    ).
-% ```
-%
-% [2]: http://www.complang.tuwien.ac.at/ulrich/Prolog-inedit/sicstus/memberbench.pl
 user:goal_expansion(if_(If_1, Then_0, Else_0), G_0) :-
     ugoal_expansion(if_(If_1, Then_0, Else_0), G_0),
     % Dump expanded goals to the console for inspection.
@@ -121,13 +107,10 @@ user:goal_expansion(if_(If_1, Then_0, Else_0), G_0) :-
 %
 % Otherwise it simply expands If_1, Then_0 and Else_0 using goal_expanded/2.
 % Read it's documentation to find out how it operates.
+%
+% TODO: Remove code duplication
 ugoal_expansion(if_(If_1, Then_0, Else_0), Goal_0) :-
-    subsumes_term(M:(X=Y), If_1),
-    M:(X=Y) = If_1,
-    atom(M),
-    % FIXME: imported_from(_) key isn't implemented for predicate_property/2
-    ( M == reif -> true ; throw(error(existence_error(predicate_property,imported_from),_)) ),
-  % ( M == reif -> true ; predicate_property(M: =(_,_,_),imported_from(reif)) ),
+    nonvar(If_1), If_1 = (X = Y),
     goal_expanded(call(Then_0), Thenx_0),
     goal_expanded(call(Else_0), Elsex_0),
     !,
@@ -136,23 +119,29 @@ ugoal_expansion(if_(If_1, Then_0, Else_0), Goal_0) :-
         ( X \= Y -> Elsex_0
         ; X == Y -> Thenx_0
         ; X = Y,    Thenx_0
-        ; dif(X,Y), Elsex_0
+        ; dif(X,Y), Ellsex_0
         ).
 ugoal_expansion(if_(If_1, Then_0, Else_0), Goal) :-
-    subsumes_term(M:(A_1;B_1), If_1),
-    M:(A_1;B_1) = If_1,
-    atom(M),
-    ( M == reif -> true ; throw(error(existence_error(predicate_property,imported_from),_)) ),
-  % ( M == reif -> true ; predicate_property(M:;(_,_,_),imported_from(reif)) ),
+   nonvar(If_1), If_1 = dif(X, Y),
+   goal_expanded(call(Then_0), Thenx_0),
+   goal_expanded(call(Else_0), Elsex_0),
+   !,
+ + write('% ≠\n'),
+   Goal =
+      ( X \= Y -> Thenx_0
+      ; X == Y -> Elsex_0
+      ; X = Y,    Elsex_0
+      ; dif(X,Y), Thenx_0
+      ).
+ugoal_expansion(if_(If_1, Then_0, Else_0), Goal) :-
+    subsumes_term((A_1;B_1), If_1),
+    (A_1;B_1) = If_1,
     !,
   + write('% ;\n'),
     Goal = if_(A_1, Then_0, if_(B_1, Then_0, Else_0)).
 ugoal_expansion(if_(If_1, Then_0, Else_0), Goal_0) :-
-    subsumes_term(M:(A_1,B_1), If_1),
-    M:(A_1,B_1) = If_1,
-    atom(M),
-    ( M == reif -> true ; throw(error(existence_error(predicate_property,imported_from),_)) ),
-  % ( M == reif -> true ; predicate_property(M:','(_,_,_),imported_from(reif)) ),
+    subsumes_term((A_1,B_1), If_1),
+    (A_1,B_1) = If_1,
     !,
   + write('% ,\n'),
     Goal_0 = if_(A_1, if_(B_1, Then_0, Else_0), Else_0).
