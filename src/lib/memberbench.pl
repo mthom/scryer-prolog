@@ -19,7 +19,22 @@ only with minor modifications.
 :- use_module(library(lists)).
 :- use_module(library(format)).
 :- use_module(library(dif)).
-statistics(_,[0]).
+:- use_module(library(os)).
+:- use_module(library(pio)).
+:- use_module(library(dcgs)).
+
+%% statistics(runtime, [-SinceStart]).
+%
+% Crude temporary implementation of statistics/2 created only to test lib reif.
+% Only works in Unix-like environment.
+statistics(runtime, [SinceStart]) :-
+    shell("date \'+%s\' >/tmp/ts", 0),
+    once(phrase_from_file(memberbench:intc(C), "/tmp/ts")),
+    number_chars(SinceStart, C).
+
+intc([]) --> "\n".
+intc([H|T]) --> digc(H), intc(T).
+digc(N) --> [N], { member(N, "0123456789") }.
 
 uwnportray(T) :- portray_clause(T).  % Item#539
 
