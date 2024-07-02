@@ -13,7 +13,7 @@ pub mod dispatch;
 pub mod gc;
 pub mod heap;
 #[cfg(feature = "jit")]
-pub mod jit;
+pub mod jit2;
 pub mod lib_machine;
 pub mod load_state;
 pub mod machine_errors;
@@ -42,7 +42,7 @@ use crate::machine::compile::*;
 use crate::machine::copier::*;
 use crate::machine::heap::*;
 #[cfg(feature = "jit")]
-use crate::machine::jit::*;
+use crate::machine::jit2::*;
 use crate::machine::loader::*;
 use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;

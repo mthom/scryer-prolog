@@ -20,7 +20,7 @@ use crate::machine::code_walker::*;
 use crate::machine::copier::*;
 use crate::machine::heap::*;
 #[cfg(feature = "jit")]
-use crate::machine::jit::*;
+use crate::machine::jit2::*;
 use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
 use crate::machine::machine_state::*;
@@ -5038,7 +5038,7 @@ impl Machine {
 	let mut code = vec![];
 	walk_code(&self.code, first_idx, |instr| code.push(instr.clone()));
 
-	match self.jit_machine.compile(&format!("{}/{}", name.as_str(), arity), code) {
+	match self.jit_machine.compile(&name.as_str(), arity, code) {
 	    Err(JitCompileError::UndefinedPredicate) => {
 		eprintln!("jit_compiler: undefined_predicate");
 		self.machine_st.fail = true;
