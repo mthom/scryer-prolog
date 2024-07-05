@@ -371,8 +371,7 @@ impl AtomTable {
             }
 
             let size = mem::size_of::<AtomHeader>() + string.len();
-            let align_offset = 8 * mem::align_of::<AtomHeader>();
-            let size = (size & !(align_offset - 1)) + align_offset;
+            let size = size.next_multiple_of(AtomTable::align());
 
             unsafe {
                 let len_ptr = loop {
