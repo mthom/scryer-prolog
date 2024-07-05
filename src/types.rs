@@ -743,6 +743,13 @@ impl UntypedArenaPtr {
         unsafe { self.get_ptr().add(mem::size_of::<ArenaHeader>()) }
     }
 
+    /// Safety
+    /// - this UntypedArenaPtr actuall pointee type is T
+    #[inline]
+    pub unsafe fn as_typed_ptr<T: ArenaAllocated>(self) -> TypedArenaPtr<T> {
+        T::typed_ptr(self)
+    }
+
     #[inline]
     pub fn get_mark_bit(self) -> bool {
         self.m()

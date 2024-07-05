@@ -160,7 +160,7 @@ impl From<CodeIndex> for UntypedArenaPtr {
 impl From<UntypedArenaPtr> for CodeIndex {
     #[inline(always)]
     fn from(ptr: UntypedArenaPtr) -> CodeIndex {
-        CodeIndex(TypedArenaPtr::new(ptr.get_ptr() as *mut IndexPtr))
+        CodeIndex(unsafe { ptr.as_typed_ptr() })
     }
 }
 

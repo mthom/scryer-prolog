@@ -173,13 +173,15 @@ macro_rules! typed_arena_ptr_as_cell {
 macro_rules! raw_ptr_as_cell {
     ($ptr:expr) => {
         // Cell is 64-bit, but raw ptr is 32-bit in 32-bit systems
-        HeapCellValue::from_raw_ptr_bytes(unsafe { std::mem::transmute($ptr) })
+        // TODO use <*{const,mut} _>::addr instead of as when the strict_provenance feature is stable rust-lang/rust#95228
+        // we might need <*{const,mut} _>::expose_provenance for strict provenance, dependening on how we recreate a pointer later
+        HeapCellValue::from_raw_ptr_bytes(($ptr as usize).to_ne_bytes())
     };
 }
 
 macro_rules! untyped_arena_ptr_as_cell {
     ($ptr:expr) => {
-        HeapCellValue::from_bytes(unsafe { std::mem::transmute($ptr) })
+        HeapCellValue::from_bytes(UntypedArenaPtr::into_bytes($ptr))
     };
 }
 
@@ -224,86 +226,69 @@ macro_rules! stream_as_cell {
 macro_rules! cell_as_stream {
     ($cell:expr) => {{
         let ptr = cell_as_untyped_arena_ptr!($cell);
-        Stream::from_tag(ptr.get_tag(), ptr.payload_offset())
+        Stream::from_tag(ptr.get_tag(), ptr)
     }};
 }
 
 macro_rules! cell_as_load_state_payload {
-    ($cell:expr) => {
-        unsafe {
-            let ptr = cell_as_untyped_arena_ptr!($cell);
-            let ptr = std::mem::transmute::<_, *mut LiveLoadState>(ptr.payload_offset());
-
-            TypedArenaPtr::new(ptr)
-        }
-    };
+    ($cell:expr) => {{
+        let ptr = cell_as_untyped_arena_ptr!($cell);
+        unsafe { ptr.as_typed_ptr::<LiveLoadState>() }
+    }};
 }
 
 macro_rules! match_untyped_arena_ptr_pat_body {
     ($ptr:ident, Integer, $n:ident, $code:expr) => {{
-        let payload_ptr = unsafe { std::mem::transmute::<_, *mut Integer>($ptr.payload_offset()) };
-        let $n = TypedArenaPtr::new(payload_ptr);
+        let $n = unsafe { $ptr.as_typed_ptr::<Integer>() };
         #[allow(unused_braces)]
         $code
     }};
     ($ptr:ident, Rational, $n:ident, $code:expr) => {{
-        let payload_ptr = unsafe { std::mem::transmute::<_, *mut Rational>($ptr.payload_offset()) };
-        let $n = TypedArenaPtr::new(payload_ptr);
+        let $n = unsafe { $ptr.as_typed_ptr::<Rational>() };
         #[allow(unused_braces)]
         $code
     }};
     ($ptr:ident, OssifiedOpDir, $n:ident, $code:expr) => {{
-        let payload_ptr =
-            unsafe { std::mem::transmute::<_, *mut OssifiedOpDir>($ptr.payload_offset()) };
-        let $n = TypedArenaPtr::new(payload_ptr);
+        let $n = unsafe { $ptr.as_typed_ptr::<OssifiedOpDir>() };
         #[allow(unused_braces)]
         $code
     }};
     ($ptr:ident, LiveLoadState, $n:ident, $code:expr) => {{
-        let payload_ptr =
-            unsafe { std::mem::transmute::<_, *mut LiveLoadState>($ptr.payload_offset()) };
-        let $n = TypedArenaPtr::new(payload_ptr);
+        let $n = unsafe { $ptr.as_typed_ptr::<LiveLoadState>() };
         #[allow(unused_braces)]
         $code
     }};
     ($ptr:ident, Stream, $s:ident, $code:expr) => {{
-        let $s = Stream::from_tag($ptr.get_tag(), $ptr.payload_offset());
+        let $s = Stream::from_tag($ptr.get_tag(), $ptr);
         #[allow(unused_braces)]
         $code
     }};
     ($ptr:ident, TcpListener, $listener:ident, $code:expr) => {{
-        let payload_ptr =
-            unsafe { std::mem::transmute::<_, *mut TcpListener>($ptr.payload_offset()) };
         #[allow(unused_mut)]
-        let mut $listener = TypedArenaPtr::new(payload_ptr);
+        let mut $listener = unsafe { $ptr.as_typed_ptr::<TcpListener>() };
         #[allow(unused_braces)]
         $code
     }};
     ($ptr:ident, HttpListener, $listener:ident, $code:expr) => {{
-        let payload_ptr =
-            unsafe { std::mem::transmute::<_, *mut HttpListener>($ptr.payload_offset()) };
         #[allow(unused_mut)]
-        let mut $listener = TypedArenaPtr::new(payload_ptr);
+        let mut $listener = unsafe { $ptr.as_typed_ptr::<HttpListener>() };
         #[allow(unused_braces)]
         $code
     }};
     ($ptr:ident, HttpResponse, $listener:ident, $code:expr) => {{
-        let payload_ptr =
-            unsafe { std::mem::transmute::<_, *mut HttpResponse>($ptr.payload_offset()) };
         #[allow(unused_mut)]
-        let mut $listener = TypedArenaPtr::new(payload_ptr);
+        let mut $listener = unsafe { $ptr.as_typed_ptr::<HttpResponse>() };
         #[allow(unused_braces)]
         $code
     }};
     ($ptr:ident, IndexPtr, $ip:ident, $code:expr) => {{
         #[allow(unused_mut)]
-        let mut $ip =
-            TypedArenaPtr::new(unsafe { std::mem::transmute::<_, *mut IndexPtr>($ptr.get_ptr()) });
+        let mut $ip = unsafe { $ptr.as_typed_ptr::<IndexPtr>() };
         #[allow(unused_braces)]
         $code
     }};
     ($ptr:ident, $($tags:tt)|+, $s:ident, $code:expr) => {{
-        let $s = Stream::from_tag($ptr.get_tag(), $ptr.payload_offset());
+        let $s = Stream::from_tag($ptr.get_tag(), $ptr);
         #[allow(unused_braces)]
         $code
     }};

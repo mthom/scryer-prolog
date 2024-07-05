@@ -452,10 +452,6 @@ impl<T> DerefMut for StreamLayout<T> {
 macro_rules! arena_allocated_impl_for_stream {
     ($stream_type:ty, $stream_tag:ident) => {
         impl ArenaAllocated for StreamLayout<$stream_type> {
-            type PtrToAllocated = TypedArenaPtr<StreamLayout<$stream_type>>;
-
-            gen_ptr_to_allocated!(StreamLayout<$stream_type>);
-
             #[inline]
             fn tag() -> ArenaHeaderTag {
                 ArenaHeaderTag::$stream_tag
@@ -539,29 +535,27 @@ impl Stream {
         ))
     }
 
-    pub fn from_tag(tag: ArenaHeaderTag, ptr: *const u8) -> Self {
+    pub fn from_tag(tag: ArenaHeaderTag, ptr: UntypedArenaPtr) -> Self {
         match tag {
-            ArenaHeaderTag::ByteStream => Stream::Byte(TypedArenaPtr::new(ptr as *mut _)),
-            ArenaHeaderTag::InputFileStream => Stream::InputFile(TypedArenaPtr::new(ptr as *mut _)),
-            ArenaHeaderTag::OutputFileStream => {
-                Stream::OutputFile(TypedArenaPtr::new(ptr as *mut _))
-            }
-            ArenaHeaderTag::NamedTcpStream => Stream::NamedTcp(TypedArenaPtr::new(ptr as *mut _)),
+            ArenaHeaderTag::ByteStream => Stream::Byte(unsafe { ptr.as_typed_ptr() }),
+            ArenaHeaderTag::InputFileStream => Stream::InputFile(unsafe { ptr.as_typed_ptr() }),
+            ArenaHeaderTag::OutputFileStream => Stream::OutputFile(unsafe { ptr.as_typed_ptr() }),
+            ArenaHeaderTag::NamedTcpStream => Stream::NamedTcp(unsafe { ptr.as_typed_ptr() }),
             #[cfg(feature = "tls")]
-            ArenaHeaderTag::NamedTlsStream => Stream::NamedTls(TypedArenaPtr::new(ptr as *mut _)),
+            ArenaHeaderTag::NamedTlsStream => Stream::NamedTls(unsafe { ptr.as_typed_ptr() }),
             #[cfg(feature = "http")]
-            ArenaHeaderTag::HttpReadStream => Stream::HttpRead(TypedArenaPtr::new(ptr as *mut _)),
+            ArenaHeaderTag::HttpReadStream => Stream::HttpRead(unsafe { ptr.as_typed_ptr() }),
             #[cfg(feature = "http")]
-            ArenaHeaderTag::HttpWriteStream => Stream::HttpWrite(TypedArenaPtr::new(ptr as *mut _)),
-            ArenaHeaderTag::ReadlineStream => Stream::Readline(TypedArenaPtr::new(ptr as *mut _)),
+            ArenaHeaderTag::HttpWriteStream => Stream::HttpWrite(unsafe { ptr.as_typed_ptr() }),
+            ArenaHeaderTag::ReadlineStream => Stream::Readline(unsafe { ptr.as_typed_ptr() }),
             ArenaHeaderTag::StaticStringStream => {
-                Stream::StaticString(TypedArenaPtr::new(ptr as *mut _))
+                Stream::StaticString(unsafe { ptr.as_typed_ptr() })
             }
             ArenaHeaderTag::StandardOutputStream => {
-                Stream::StandardOutput(TypedArenaPtr::new(ptr as *mut _))
+                Stream::StandardOutput(unsafe { ptr.as_typed_ptr() })
             }
             ArenaHeaderTag::StandardErrorStream => {
-                Stream::StandardError(TypedArenaPtr::new(ptr as *mut _))
+                Stream::StandardError(unsafe { ptr.as_typed_ptr() })
             }
             ArenaHeaderTag::Dropped | ArenaHeaderTag::NullStream => {
                 Stream::Null(StreamOptions::default())
