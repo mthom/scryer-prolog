@@ -566,7 +566,7 @@ impl ArenaAllocated for IndexPtr {
     /// #  Safety
     /// - the caller must guarantee that the pointee type of UntypedArenaPtr is T
     unsafe fn typed_ptr(ptr: UntypedArenaPtr) -> TypedArenaPtr<Self> {
-        unsafe { TypedArenaPtr::new(std::mem::transmute::<_, *mut IndexPtr>(ptr.get_ptr())) }
+        unsafe { TypedArenaPtr::new(ptr.get_ptr().cast_mut().cast::<IndexPtr>()) }
     }
 
     #[inline]
