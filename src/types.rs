@@ -88,18 +88,10 @@ impl ConsPtr {
             .with_tag(tag)
     }
 
-    #[cfg(target_pointer_width = "32")]
     #[inline(always)]
     pub fn as_ptr(self) -> *mut u8 {
-        let bytes = self.into_bytes();
-        let raw_ptr_bytes = [bytes[1], bytes[2], bytes[3], bytes[4]];
-        unsafe { mem::transmute(raw_ptr_bytes) }
-    }
-
-    #[cfg(target_pointer_width = "64")]
-    #[inline(always)]
-    pub fn as_ptr(self) -> *mut u8 {
-        self.ptr() as *mut _
+        let addr: u64 = self.ptr();
+        addr as usize as *mut _
     }
 
     #[inline(always)]
@@ -534,37 +526,13 @@ impl HeapCellValue {
         }
     }
 
-    #[cfg(target_pointer_width = "32")]
     #[inline]
-    pub fn from_raw_ptr_bytes(ptr_bytes: [u8; 4]) -> Self {
-        HeapCellValue::from_bytes([
-            ptr_bytes[0],
-            ptr_bytes[1],
-            ptr_bytes[2],
-            ptr_bytes[3],
-            0,
-            0,
-            0,
-            0,
-        ])
-    }
-    #[cfg(target_pointer_width = "64")]
-    #[inline]
-    pub fn from_raw_ptr_bytes(ptr_bytes: [u8; 8]) -> Self {
-        HeapCellValue::from_bytes(ptr_bytes)
+    pub fn from_ptr_addr(ptr_bytes: usize) -> Self {
+        HeapCellValue::from_bytes((ptr_bytes as u64).to_ne_bytes())
     }
 
-    #[inline]
-    #[cfg(target_pointer_width = "32")]
-    pub fn to_raw_ptr_bytes(self) -> [u8; 4] {
-        let bytes = self.into_bytes();
-        [bytes[0], bytes[1], bytes[2], bytes[3]]
-    }
-
-    #[inline]
-    #[cfg(target_pointer_width = "64")]
-    pub fn to_raw_ptr_bytes(self) -> [u8; 8] {
-        self.into_bytes()
+    pub fn to_ptr_addr(self) -> usize {
+        u64::from_ne_bytes(self.into_bytes()) as usize
     }
 
     #[inline]
@@ -716,18 +684,10 @@ impl UntypedArenaPtr {
         self.set_m(m);
     }
 
-    #[cfg(target_pointer_width = "32")]
     #[inline]
     pub fn get_ptr(self) -> *const u8 {
-        let bytes = self.into_bytes();
-        let raw_ptr_bytes = [bytes[0], bytes[1], bytes[2], bytes[3]];
-        unsafe { mem::transmute(raw_ptr_bytes) }
-    }
-
-    #[cfg(target_pointer_width = "64")]
-    #[inline]
-    pub fn get_ptr(self) -> *const u8 {
-        self.ptr() as *const u8
+        let addr: u64 = self.ptr();
+        addr as usize as *const u8
     }
 
     #[inline]
