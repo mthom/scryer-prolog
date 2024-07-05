@@ -8,7 +8,6 @@ use std::hash::{Hash, Hasher};
 use std::mem;
 use std::ops::Deref;
 use std::ptr;
-use std::slice;
 use std::str;
 use std::sync::Arc;
 use std::sync::Mutex;
@@ -99,6 +98,12 @@ struct AtomHeader {
     padding: B13,
 }
 
+#[repr(C)]
+pub struct AtomData {
+    header: AtomHeader,
+    data: str,
+}
+
 impl AtomHeader {
     fn build_with(len: u64) -> Self {
         AtomHeader::new().with_len(len).with_m(false)
@@ -177,19 +182,23 @@ impl Atom {
     }
 
     #[inline(always)]
-    pub fn as_ptr(self) -> Option<AtomTableRef<u8>> {
+    pub fn as_ptr(self) -> Option<AtomTableRef<AtomData>> {
         if self.is_static() {
             None
         } else {
             let atom_table =
                 arc_atom_table().expect("We should only have an Atom while there is an AtomTable");
-            unsafe {
-                AtomTableRef::try_map(atom_table.buf(), |buf| {
-                    (buf as *const u8)
-                        .add((self.index as usize) - (STRINGS.len() << 3))
-                        .as_ref()
-                })
-            }
+
+            AtomTableRef::try_map(atom_table.inner.active_epoch(), |buf| unsafe {
+                let ptr = buf
+                    .block
+                    .base
+                    .add((self.index as usize) - (STRINGS.len() << 3));
+                // TODO use std::ptr::from_raw_parts instead when feature ptr_metadata is stable rust-lang/rust#81513
+                let atom_data = &*(std::ptr::slice_from_raw_parts(ptr, 0) as *const AtomData);
+                let len = atom_data.header.len();
+                Some(&*(std::ptr::slice_from_raw_parts(ptr, len as usize) as *const AtomData))
+            })
         }
     }
 
@@ -203,9 +212,8 @@ impl Atom {
         if self.is_static() {
             STRINGS[(self.index >> 3) as usize].len()
         } else {
-            let ptr = self.as_ptr().unwrap();
-            let ptr = ptr.deref() as *const u8 as *const AtomHeader;
-            unsafe { ptr::read(ptr) }.len() as _
+            let len: u64 = self.as_ptr().unwrap().header.len();
+            len as usize
         }
     }
 
@@ -237,15 +245,7 @@ impl Atom {
         if self.is_static() {
             AtomString::Static(STRINGS[(self.index >> 3) as usize])
         } else if let Some(ptr) = self.as_ptr() {
-            AtomString::Dynamic(AtomTableRef::map(ptr, |ptr| {
-                let header =
-                    // Miri seems to hit this line a lot
-                    unsafe { ptr::read::<AtomHeader>(ptr as *const u8 as *const AtomHeader) };
-                let len = header.len() as usize;
-                let buf = unsafe { (ptr as *const u8).add(mem::size_of::<AtomHeader>()) };
-
-                unsafe { str::from_utf8_unchecked(slice::from_raw_parts(buf, len)) }
-            }))
+            AtomString::Dynamic(AtomTableRef::map(ptr, |ptr| &ptr.data))
         } else {
             AtomString::Static(STRINGS[(self.index >> 3) as usize])
         }
@@ -333,13 +333,6 @@ impl AtomTable {
                 atom_table
             }
         }
-    }
-
-    #[inline]
-    pub fn buf(&self) -> AtomTableRef<u8> {
-        AtomTableRef::<InnerAtomTable>::map(self.inner.active_epoch(), |inner| {
-            unsafe { inner.block.base.as_ref() }.unwrap()
-        })
     }
 
     pub fn active_table(&self) -> RcuRef<IndexSet<Atom>, IndexSet<Atom>> {
