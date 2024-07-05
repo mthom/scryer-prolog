@@ -281,7 +281,7 @@ mod tests {
     use crate::machine::mock_wam::*;
 
     #[test]
-    #[cfg_attr(miri, ignore)]
+    #[cfg_attr(miri, ignore = "crashes Miri!??")]
     fn stack_tests() {
         let mut wam = MockWAM::new();
 

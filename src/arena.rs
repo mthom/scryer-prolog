@@ -46,6 +46,7 @@ pub fn header_offset_from_payload<Payload: Sized>() -> usize {
 }
 
 pub fn ptr_to_allocated<Payload: ArenaAllocated>(slab: &mut AllocSlab) -> TypedArenaPtr<Payload> {
+    // Miri points UB here for all the tests currently marked as blocked by arena.rs UB.
     let typed_slab: &mut TypedAllocSlab<Payload> = unsafe { mem::transmute(slab) };
     typed_slab.to_typed_arena_ptr()
 }
@@ -781,7 +782,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(miri, ignore = "blocked on streams.rs UB")]
+    #[cfg_attr(miri, ignore = "blocked on arena.rs UB")]
     fn heap_cell_value_const_cast() {
         let mut wam = MockWAM::new();
         #[cfg(target_pointer_width = "32")]

@@ -4,7 +4,7 @@ use serial_test::serial;
 // issue #831
 #[serial]
 #[test]
-#[cfg_attr(miri, ignore = "blocked on streams.rs UB")]
+#[cfg_attr(miri, ignore = "blocked on arena.rs UB")]
 fn call_0() {
     load_module_test(
         "tests-pl/issue831-call0.pl",
@@ -15,7 +15,7 @@ fn call_0() {
 // issue #2361
 #[serial]
 #[test]
-#[cfg_attr(miri, ignore = "blocked on streams.rs UB")]
+#[cfg_attr(miri, ignore = "blocked on arena.rs UB")]
 fn call_qualification() {
     load_module_test("tests-pl/issue2361-call-qualified.pl", "");
 }

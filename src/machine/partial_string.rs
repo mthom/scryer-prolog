@@ -801,7 +801,7 @@ mod test {
     use crate::machine::mock_wam::*;
 
     #[test]
-    #[cfg_attr(miri, ignore = "blocked on streams.rs UB")]
+    #[cfg_attr(miri, ignore = "blocked on atom_table.rs UB")]
     fn pstr_iter_tests() {
         let mut wam = MockWAM::new();
 
