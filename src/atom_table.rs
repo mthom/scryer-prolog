@@ -56,19 +56,8 @@ const ATOM_TABLE_ALIGN: usize = 8;
 
 #[inline(always)]
 fn global_atom_table() -> &'static RwLock<Weak<AtomTable>> {
-    #[cfg(feature = "rust_beta_channel")]
-    {
-        // const Weak::new will be stabilized in 1.73 which is currently in beta,
-        // till then we need a OnceLock for initialization
-        static GLOBAL_ATOM_TABLE: RwLock<Weak<AtomTable>> = RwLock::const_new(Weak::new());
-        &GLOBAL_ATOM_TABLE
-    }
-    #[cfg(not(feature = "rust_beta_channel"))]
-    {
-        use std::sync::OnceLock;
-        static GLOBAL_ATOM_TABLE: OnceLock<RwLock<Weak<AtomTable>>> = OnceLock::new();
-        GLOBAL_ATOM_TABLE.get_or_init(|| RwLock::new(Weak::new()))
-    }
+    static GLOBAL_ATOM_TABLE: RwLock<Weak<AtomTable>> = RwLock::new(Weak::new());
+    &GLOBAL_ATOM_TABLE
 }
 
 #[inline(always)]

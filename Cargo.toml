@@ -22,7 +22,6 @@ repl = ["dep:crossterm", "dep:ctrlc", "dep:rustyline"]
 hostname = ["dep:hostname"]
 tls = ["dep:native-tls"]
 http = ["dep:warp", "dep:reqwest"]
-rust_beta_channel = []
 crypto-full = []
 
 [build-dependencies]
