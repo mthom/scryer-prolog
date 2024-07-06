@@ -529,6 +529,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "blocked on libraries.rs UB")]
     fn dont_return_partial_matches() {
         let mut machine = Machine::new_lib();
 
@@ -552,6 +553,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "blocked on libraries.rs UB")]
     fn dont_return_partial_matches_without_discountiguous() {
         let mut machine = Machine::new_lib();
 
@@ -583,6 +585,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "blocked on libraries.rs UB")]
     fn non_existent_predicate_should_not_cause_panic_when_other_predicates_are_defined() {
         let mut machine = Machine::new_lib();
 
@@ -607,6 +610,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "blocked on libraries.rs UB")]
     fn issue_2341() {
         let mut machine = Machine::new_lib();
 
