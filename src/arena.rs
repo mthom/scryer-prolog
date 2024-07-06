@@ -627,6 +627,12 @@ impl ArenaAllocated for IndexPtr {
         arena.base = Some(NonNull::new(raw_box).unwrap());
         allocated_ptr
     }
+
+    /// # Safety
+    /// - ptr points to an allocated slab of the correct kind
+    unsafe fn dealloc(ptr: NonNull<TypedAllocSlab<Self>>) {
+        drop(unsafe { Box::from_raw(ptr.as_ptr().cast::<AllocSlab>()) });
+    }
 }
 
 #[repr(C)]
@@ -768,11 +774,15 @@ unsafe fn drop_slab_in_place(value: NonNull<AllocSlab>) {
         ArenaHeaderTag::StandardErrorStream => {
             drop_typed_slab_in_place!(StandardErrorStream, value);
         }
-        ArenaHeaderTag::NullStream
-        | ArenaHeaderTag::IndexPtrUndefined
+        ArenaHeaderTag::IndexPtrUndefined
         | ArenaHeaderTag::IndexPtrDynamicUndefined
         | ArenaHeaderTag::IndexPtrDynamicIndex
-        | ArenaHeaderTag::IndexPtrIndex => {}
+        | ArenaHeaderTag::IndexPtrIndex => {
+            drop_typed_slab_in_place!(IndexPtr, value);
+        }
+        ArenaHeaderTag::NullStream => {
+            unreachable!("NullStream is never arena allocated!");
+        }
     }
 }
 
