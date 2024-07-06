@@ -50,8 +50,6 @@ use std::env;
 use std::ffi::CString;
 use std::fs;
 use std::hash::{BuildHasher, BuildHasherDefault};
-#[cfg(feature = "http")]
-use std::io::BufRead;
 use std::io::{ErrorKind, Read, Write};
 use std::iter::{once, FromIterator};
 use std::mem;
@@ -4352,7 +4350,7 @@ impl Machine {
 
                     let mut stream = Stream::from_http_stream(
                         AtomTable::build_with(&self.machine_st.atom_tbl, &address_string),
-                        Box::new(reader),
+                        reader,
                         &mut self.machine_st.arena,
                     );
                     *stream.options_mut() = StreamOptions::default();
@@ -4447,11 +4445,7 @@ impl Machine {
             let runtime = tokio::runtime::Handle::current();
             let _guard = runtime.enter();
 
-            fn get_reader(body: impl Buf + Send + 'static) -> Box<dyn BufRead + Send> {
-                Box::new(body.reader())
-            }
-
-            let serve = warp::body::aggregate()
+            let serve = warp::body::bytes()
                 .and(warp::header::optional::<u64>(
                     warp::http::header::CONTENT_LENGTH.as_str(),
                 ))
@@ -4462,7 +4456,7 @@ impl Machine {
                     future::ready(Ok::<(String,), warp::Rejection>(("".to_string(),)))
                 }))
                 .map(
-                    move |body,
+                    move |body: bytes::Bytes,
                           content_length,
                           method,
                           headers: warp::http::HeaderMap,
@@ -4482,7 +4476,7 @@ impl Machine {
                             headers,
                             path: path.as_str().to_string(),
                             query,
-                            body: get_reader(body),
+                            body: body.reader(),
                         };
                         let response =
                             Arc::new((Mutex::new(false), Mutex::new(None), Condvar::new()));
