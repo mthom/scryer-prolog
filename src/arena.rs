@@ -614,15 +614,17 @@ impl ArenaAllocated for IndexPtr {
 
     #[inline]
     fn alloc(arena: &mut Arena, value: Self) -> TypedArenaPtr<Self> {
-        let mut slab = Box::new(AllocSlab {
+        let slab = Box::new(AllocSlab {
             next: arena.base.take(),
             #[cfg(target_pointer_width = "32")]
             _padding: 0,
             header: HeaderOrIdxPtr { idx_ptr: value },
         });
 
-        let allocated_ptr = unsafe { TypedArenaPtr::new(ptr::addr_of_mut!(slab.header.idx_ptr)) };
-        arena.base = Some(NonNull::new(Box::into_raw(slab)).unwrap());
+        let raw_box = Box::into_raw(slab);
+        let allocated_ptr =
+            unsafe { TypedArenaPtr::new(ptr::addr_of_mut!((*raw_box).header.idx_ptr)) };
+        arena.base = Some(NonNull::new(raw_box).unwrap());
         allocated_ptr
     }
 }
