@@ -20,6 +20,8 @@ use std::mem;
 use std::net::TcpListener;
 use std::ops::{Deref, DerefMut};
 use std::ptr;
+use std::ptr::addr_of_mut;
+use std::ptr::NonNull;
 use std::sync::RwLock;
 
 #[macro_export]
@@ -345,7 +347,7 @@ pub trait ArenaAllocated: Sized {
     #[allow(clippy::missing_safety_doc)]
     fn alloc(arena: &mut Arena, value: Self) -> TypedArenaPtr<Self> {
         let size = mem::size_of::<TypedAllocSlab<Self>>();
-        let mut slab = Box::new(TypedAllocSlab {
+        let slab = Box::new(TypedAllocSlab {
             slab: AllocSlab {
                 next: arena.base.take(),
                 #[cfg(target_pointer_width = "32")]
@@ -357,10 +359,10 @@ pub trait ArenaAllocated: Sized {
             payload: value,
         });
 
-        let allocated_ptr = slab.to_typed_arena_ptr();
-        let untyped_slab = unsafe { Box::from_raw(Box::into_raw(slab) as *mut AllocSlab) };
+        let raw_box = Box::into_raw(slab);
+        let allocated_ptr = TypedAllocSlab::to_typed_arena_ptr(raw_box);
 
-        arena.base = Some(untyped_slab);
+        arena.base = Some(NonNull::new(raw_box.cast::<AllocSlab>()).unwrap());
 
         allocated_ptr
     }
@@ -568,7 +570,7 @@ impl ArenaAllocated for IndexPtr {
         });
 
         let allocated_ptr = unsafe { TypedArenaPtr::new(ptr::addr_of_mut!(slab.header.idx_ptr)) };
-        arena.base = Some(slab);
+        arena.base = Some(NonNull::new(Box::into_raw(slab)).unwrap());
         allocated_ptr
     }
 }
@@ -603,7 +605,7 @@ impl Clone for HeaderOrIdxPtr {
 #[repr(C)]
 #[derive(Clone, Debug)]
 pub struct AllocSlab {
-    next: Option<Box<AllocSlab>>,
+    next: Option<NonNull<AllocSlab>>,
     #[cfg(target_pointer_width = "32")]
     _padding: u32,
     header: HeaderOrIdxPtr,
@@ -618,16 +620,16 @@ pub struct TypedAllocSlab<Payload> {
 
 impl<Payload: ArenaAllocated> TypedAllocSlab<Payload> {
     #[inline]
-    pub fn to_typed_arena_ptr(&mut self) -> TypedArenaPtr<Payload> {
+    pub fn to_typed_arena_ptr(ptr: *mut Self) -> TypedArenaPtr<Payload> {
         // safety:
         // - this is the arena allocation of corresponding type
-        unsafe { TypedArenaPtr::new(&mut self.payload) }
+        unsafe { TypedArenaPtr::new(addr_of_mut!((*ptr).payload)) }
     }
 }
 
 #[derive(Debug)]
 pub struct Arena {
-    base: Option<Box<AllocSlab>>,
+    base: Option<NonNull<AllocSlab>>,
     pub f64_tbl: Arc<F64Table>,
 }
 
@@ -645,15 +647,16 @@ impl Arena {
     }
 }
 
-unsafe fn drop_slab_in_place(value: &mut AllocSlab) {
+unsafe fn drop_slab_in_place(value: NonNull<AllocSlab>) {
     macro_rules! drop_typed_slab_in_place {
         ($payload: ty, $value: expr) => {
-            let slab: &mut TypedAllocSlab<$payload> = mem::transmute($value);
-            ptr::drop_in_place(&mut slab.payload);
+            drop(Box::from_raw(
+                $value.as_ptr().cast::<TypedAllocSlab<$payload>>(),
+            ));
         };
     }
 
-    match value.header.header.tag() {
+    match (unsafe { value.as_ref() }).header.header.tag() {
         ArenaHeaderTag::Integer => {
             drop_typed_slab_in_place!(Integer, value);
         }
@@ -723,10 +726,10 @@ impl Drop for Arena {
     fn drop(&mut self) {
         let mut ptr = self.base.take();
 
-        while let Some(mut slab) = ptr {
+        while let Some(slab) = ptr {
             unsafe {
-                drop_slab_in_place(&mut slab);
-                ptr = slab.next;
+                ptr = slab.as_ref().next;
+                drop_slab_in_place(slab);
             }
         }
     }
@@ -814,7 +817,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(miri, ignore = "blocked on arena.rs UB")]
     fn heap_put_literal_tests() {
         let mut wam = MockWAM::new();
 

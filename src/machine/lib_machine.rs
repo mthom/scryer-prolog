@@ -292,7 +292,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(miri, ignore)]
+    #[cfg_attr(miri, ignore = "blocked on streams.rs UB")]
     fn complex_results() {
         let mut machine = Machine::new_lib();
         machine.load_module_string(
