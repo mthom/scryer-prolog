@@ -439,15 +439,15 @@ impl ForeignFunctionTable {
                     libffi::raw::FFI_TYPE_FLOAT => {
                         field_ptr =
                             field_ptr.add(field_ptr.align_offset(std::mem::align_of::<f32>()));
-                        let n = std::ptr::read(field_ptr as *mut f32);
-                        returns.push(Value::Float(f32::from(n).into()));
+                        let n: f32 = std::ptr::read(field_ptr as *mut f32);
+                        returns.push(Value::Float(n.into()));
                         field_ptr = field_ptr.add(std::mem::size_of::<f32>());
                     }
                     libffi::raw::FFI_TYPE_DOUBLE => {
                         field_ptr =
                             field_ptr.add(field_ptr.align_offset(std::mem::align_of::<f64>()));
-                        let n = std::ptr::read(field_ptr as *mut f64);
-                        returns.push(Value::Float(f64::from(n)));
+                        let n: f64 = std::ptr::read(field_ptr as *mut f64);
+                        returns.push(Value::Float(n));
                         field_ptr = field_ptr.add(std::mem::size_of::<f64>());
                     }
                     libffi::raw::FFI_TYPE_STRUCT => {
