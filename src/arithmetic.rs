@@ -168,7 +168,7 @@ fn push_literal(interm: &mut Vec<ArithmeticTerm>, c: &Literal) -> Result<(), Ari
             Number::Float(OrderedFloat(std::f64::consts::PI)),
         )),
         Literal::Atom(name) if name == &atom!("epsilon") => interm.push(ArithmeticTerm::Number(
-            Number::Float(OrderedFloat(std::f64::EPSILON)),
+            Number::Float(OrderedFloat(f64::EPSILON)),
         )),
         _ => return Err(ArithmeticError::NonEvaluableFunctor(*c, 0)),
     }
