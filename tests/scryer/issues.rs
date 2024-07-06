@@ -15,6 +15,7 @@ fn call_0() {
 // issue #2361
 #[serial]
 #[test]
+#[cfg_attr(miri, ignore = "blocked on helper.rs UB")]
 fn call_qualification() {
     load_module_test("tests-pl/issue2361-call-qualified.pl", "");
 }
