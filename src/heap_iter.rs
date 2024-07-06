@@ -1,3 +1,5 @@
+#![allow(clippy::new_without_default)] // annotating structs annotated with #[bitfield] doesn't work
+
 #[cfg(test)]
 pub(crate) use crate::machine::gc::StacklessPreOrderHeapIter;
 
