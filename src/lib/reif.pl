@@ -11,7 +11,7 @@
      tfilter/3,
      tpartition/4
 %
-    ], [hidden(true)]).
+    ]).
 %
 %
 %
@@ -23,16 +23,16 @@ see Indexing dif/2
 U. Neumerkel and S. Kral. https://arxiv.org/abs/1607.01590 [cs.PL]. July 2016.
 */
 
+:- use_module(library(dif)).
 
-:- meta_predicate
-    if_(1, 0, 0),
-    cond_t(1, 0, ?),
-    tfilter(2, ?, ?),
-    tpartition(2, ?, ?, ?),
-    ','(1, 1, ?),
-    ;(1, 1, ?),
-    tmember(2, ?),
-    tmember_t(2, ?, ?).
+:- meta_predicate(if_(1, 0, 0)).
+:- meta_predicate(cond_t(1, 0, ?)).
+:- meta_predicate(tfilter(2, ?, ?)).
+:- meta_predicate(tpartition(2, ?, ?, ?)).
+:- meta_predicate(','(1, 1, ?)).
+:- meta_predicate(;(1, 1, ?)).
+:- meta_predicate(tmember(2, ?)).
+:- meta_predicate(tmember_t(2, ?, ?)).
 
 :- op(900, fy, [$]).
 
@@ -102,7 +102,7 @@ sameargs(0, _, _).
 */
 
 %
-goal_expansion(if_(If_1, Then_0, Else_0), _L0, _M, G_0, []) :-
+user:goal_expansion(if_(If_1, Then_0, Else_0), G_0) :-
    ugoal_expansion(if_(If_1, Then_0, Else_0), G_0).
 
 %
@@ -117,10 +117,7 @@ goal_expansion(if_(If_1, Then_0, Else_0), _L0, _M, G_0, []) :-
 %
 %
 ugoal_expansion(if_(If_1, Then_0, Else_0), Goal_0) :-
-   subsumes_term(M:(X=Y), If_1),
-   M:(X=Y) = If_1,
-   atom(M),
-   ( M == reif -> true ; predicate_property(M: =(_,_,_),imported_from(reif)) ),
+    nonvar(If_1), If_1 = (X = Y),
    goal_expanded(call(Then_0), Thenx_0),
    goal_expanded(call(Else_0), Elsex_0),
    !,
@@ -130,20 +127,27 @@ ugoal_expansion(if_(If_1, Then_0, Else_0), Goal_0) :-
       ; X = Y,    Thenx_0
       ; dif(X,Y), Elsex_0
       ).
+ugoal_expansion(if_(If_1, Then_0, Else_0), Goal) :-
+   nonvar(If_1), If_1 = dif(X, Y),
+   goal_expanded(call(Then_0), Thenx_0),
+   goal_expanded(call(Else_0), Elsex_0),
+   !,
+   Goal =
+      ( X \= Y -> Thenx_0
+      ; X == Y -> Elsex_0
+      ; X = Y,    Elsex_0
+      ; dif(X,Y), Thenx_0
+      ).
 % if_((A_1;B_1), Then_0, Else_0)
 % => if_(A_1, Then_0, if_(B_1, Then_0, Else_0))
 ugoal_expansion(if_(If_1, Then_0, Else_0), Goal) :-
-   subsumes_term(M:(A_1;B_1), If_1),
-   M:(A_1;B_1) = If_1,
-   atom(M),
-   ( M == reif -> true ; predicate_property(M:;(_,_,_),imported_from(reif)) ),
+   subsumes_term((A_1;B_1), If_1),
+   (A_1;B_1) = If_1,
    !,
    Goal = if_(A_1, Then_0, if_(B_1, Then_0, Else_0)).
 ugoal_expansion(if_(If_1, Then_0, Else_0), Goal_0) :-
-   subsumes_term(M:(A_1,B_1), If_1),
-   M:(A_1,B_1) = If_1,
-   atom(M),
-   ( M == reif -> true ; predicate_property(M:','(_,_,_),imported_from(reif)) ),
+   subsumes_term((A_1,B_1), If_1),
+   (A_1,B_1) = If_1,
    !,
    Goal_0 = if_(A_1, if_(B_1, Then_0, Else_0), Else_0).
 ugoal_expansion(if_(If_1, Then_0, Else_0), Goal_0) :-
