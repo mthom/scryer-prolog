@@ -451,7 +451,9 @@ impl<T> DerefMut for StreamLayout<T> {
 
 macro_rules! arena_allocated_impl_for_stream {
     ($stream_type:ty, $stream_tag:ident) => {
-        impl ArenaAllocated for StreamLayout<$stream_type> {
+        impl ArenaAllocated for $stream_tag {
+            type Payload = StreamLayout<$stream_type>;
+
             #[inline]
             fn tag() -> ArenaHeaderTag {
                 ArenaHeaderTag::$stream_tag
@@ -477,26 +479,26 @@ arena_allocated_impl_for_stream!(StandardErrorStream, StandardErrorStream);
 
 #[derive(Debug, Copy, Clone)]
 pub enum Stream {
-    Byte(TypedArenaPtr<StreamLayout<CharReader<ByteStream>>>),
-    InputFile(TypedArenaPtr<StreamLayout<CharReader<InputFileStream>>>),
-    OutputFile(TypedArenaPtr<StreamLayout<OutputFileStream>>),
-    StaticString(TypedArenaPtr<StreamLayout<StaticStringStream>>),
-    NamedTcp(TypedArenaPtr<StreamLayout<CharReader<NamedTcpStream>>>),
+    Byte(TypedArenaPtr<ByteStream>),
+    InputFile(TypedArenaPtr<InputFileStream>),
+    OutputFile(TypedArenaPtr<OutputFileStream>),
+    StaticString(TypedArenaPtr<StaticStringStream>),
+    NamedTcp(TypedArenaPtr<NamedTcpStream>),
     #[cfg(feature = "tls")]
-    NamedTls(TypedArenaPtr<StreamLayout<CharReader<NamedTlsStream>>>),
+    NamedTls(TypedArenaPtr<NamedTlsStream>),
     #[cfg(feature = "http")]
-    HttpRead(TypedArenaPtr<StreamLayout<CharReader<HttpReadStream>>>),
+    HttpRead(TypedArenaPtr<HttpReadStream>),
     #[cfg(feature = "http")]
-    HttpWrite(TypedArenaPtr<StreamLayout<CharReader<HttpWriteStream>>>),
+    HttpWrite(TypedArenaPtr<HttpWriteStream>),
     Null(StreamOptions),
-    Readline(TypedArenaPtr<StreamLayout<ReadlineStream>>),
-    StandardOutput(TypedArenaPtr<StreamLayout<StandardOutputStream>>),
-    StandardError(TypedArenaPtr<StreamLayout<StandardErrorStream>>),
+    Readline(TypedArenaPtr<ReadlineStream>),
+    StandardOutput(TypedArenaPtr<StandardOutputStream>),
+    StandardError(TypedArenaPtr<StandardErrorStream>),
 }
 
-impl From<TypedArenaPtr<StreamLayout<ReadlineStream>>> for Stream {
+impl From<TypedArenaPtr<ReadlineStream>> for Stream {
     #[inline]
-    fn from(stream: TypedArenaPtr<StreamLayout<ReadlineStream>>) -> Stream {
+    fn from(stream: TypedArenaPtr<ReadlineStream>) -> Stream {
         Stream::Readline(stream)
     }
 }

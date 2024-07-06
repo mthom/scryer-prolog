@@ -1757,7 +1757,7 @@ impl Machine {
 
     #[inline]
     pub(crate) fn push_load_state_payload(&mut self) {
-        let payload = arena_alloc!(
+        let payload: TypedArenaPtr<LiveLoadState> = arena_alloc!(
             LoadStatePayload::new(self.code.len(), LiveTermStream::new(ListingSource::User),),
             &mut self.machine_st.arena
         );

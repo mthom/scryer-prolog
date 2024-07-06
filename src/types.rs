@@ -300,7 +300,10 @@ impl fmt::Debug for HeapCellValue {
     }
 }
 
-impl<T: ArenaAllocated> From<TypedArenaPtr<T>> for HeapCellValue {
+impl<T: ArenaAllocated> From<TypedArenaPtr<T>> for HeapCellValue
+where
+    T::Payload: Sized,
+{
     #[inline]
     fn from(arena_ptr: TypedArenaPtr<T>) -> HeapCellValue {
         HeapCellValue::from(arena_ptr.header_ptr() as u64)
@@ -708,7 +711,10 @@ impl UntypedArenaPtr {
     /// # Safety
     /// - this UntypedArenaPtr actuall pointee type is T
     #[inline]
-    pub unsafe fn as_typed_ptr<T: ArenaAllocated>(self) -> TypedArenaPtr<T> {
+    pub unsafe fn as_typed_ptr<T: ?Sized + ArenaAllocated>(self) -> TypedArenaPtr<T>
+    where
+        T::Payload: Sized,
+    {
         T::typed_ptr(self)
     }
 

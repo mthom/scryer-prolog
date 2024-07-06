@@ -5,7 +5,6 @@ use crate::http::{HttpListener, HttpResponse};
 use crate::machine::loader::LiveLoadState;
 use crate::machine::machine_indices::*;
 use crate::machine::streams::*;
-use crate::parser::char_reader::CharReader;
 use crate::raw_block::*;
 use crate::read::*;
 use crate::types::UntypedArenaPtr;
@@ -45,9 +44,12 @@ macro_rules! float_alloc {
     }};
 }
 
-pub fn header_offset_from_payload<Payload: Sized>() -> usize {
-    let payload_offset = mem::offset_of!(TypedAllocSlab<Payload>, payload);
-    let slab_offset = mem::offset_of!(TypedAllocSlab<Payload>, slab);
+pub fn header_offset_from_payload<T: ?Sized + ArenaAllocated>() -> usize
+where
+    T::Payload: Sized,
+{
+    let payload_offset = mem::offset_of!(TypedAllocSlab<T>, payload);
+    let slab_offset = mem::offset_of!(TypedAllocSlab<T>, slab);
     let header_offset = slab_offset + mem::offset_of!(AllocSlab, header);
 
     debug_assert!(payload_offset > header_offset);
@@ -220,60 +222,75 @@ impl ArenaHeader {
 }
 
 #[derive(Debug)]
-pub struct TypedArenaPtr<T: ?Sized>(ptr::NonNull<T>);
+pub struct TypedArenaPtr<T: ?Sized + ArenaAllocated>(ptr::NonNull<T::Payload>);
 
-impl<T: ?Sized + PartialOrd> PartialOrd for TypedArenaPtr<T> {
+impl<T: ?Sized + ArenaAllocated> PartialOrd for TypedArenaPtr<T>
+where
+    T::Payload: PartialOrd,
+{
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         (**self).partial_cmp(&**other)
     }
 }
 
-impl<T: ?Sized + PartialEq> PartialEq for TypedArenaPtr<T> {
+impl<T: ?Sized + ArenaAllocated> PartialEq for TypedArenaPtr<T>
+where
+    T::Payload: PartialEq,
+{
     fn eq(&self, other: &TypedArenaPtr<T>) -> bool {
         std::ptr::addr_eq(self.0.as_ptr(), other.0.as_ptr()) || **self == **other
     }
 }
 
-impl<T: ?Sized + PartialEq> Eq for TypedArenaPtr<T> {}
+impl<T: ?Sized + ArenaAllocated> Eq for TypedArenaPtr<T> where T::Payload: Eq {}
 
-impl<T: ?Sized + Ord> Ord for TypedArenaPtr<T> {
+impl<T: ?Sized + ArenaAllocated> Ord for TypedArenaPtr<T>
+where
+    T::Payload: Ord,
+{
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         (**self).cmp(&**other)
     }
 }
 
-impl<T: ?Sized + Hash> Hash for TypedArenaPtr<T> {
+impl<T: ?Sized + ArenaAllocated> Hash for TypedArenaPtr<T>
+where
+    T::Payload: Hash,
+{
     #[inline(always)]
     fn hash<H: Hasher>(&self, hasher: &mut H) {
-        (self as &T).hash(hasher)
+        (self as &T::Payload).hash(hasher)
     }
 }
 
-impl<T: ?Sized> Clone for TypedArenaPtr<T> {
+impl<T: ?Sized + ArenaAllocated> Clone for TypedArenaPtr<T> {
     fn clone(&self) -> Self {
         *self
     }
 }
 
-impl<T: ?Sized> Copy for TypedArenaPtr<T> {}
+impl<T: ?Sized + ArenaAllocated> Copy for TypedArenaPtr<T> {}
 
-impl<T: ?Sized> Deref for TypedArenaPtr<T> {
-    type Target = T;
+impl<T: ?Sized + ArenaAllocated> Deref for TypedArenaPtr<T> {
+    type Target = T::Payload;
 
     fn deref(&self) -> &Self::Target {
         unsafe { self.0.as_ref() }
     }
 }
 
-impl<T: ?Sized> DerefMut for TypedArenaPtr<T> {
+impl<T: ?Sized + ArenaAllocated> DerefMut for TypedArenaPtr<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         unsafe { self.0.as_mut() }
     }
 }
 
-impl<T: fmt::Display> fmt::Display for TypedArenaPtr<T> {
+impl<T: ArenaAllocated> fmt::Display for TypedArenaPtr<T>
+where
+    T::Payload: fmt::Display,
+{
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", **self)
+        write!(f, "{}", (self as &T::Payload))
     }
 }
 
@@ -282,15 +299,20 @@ impl<T: ?Sized + ArenaAllocated> TypedArenaPtr<T> {
     /// - the pointers referee type is correct, safe code depends on the correctness of the type argument
     /// - the pointer is allocated in the arena
     #[inline]
-    pub const unsafe fn new(data: *mut T) -> Self {
+    pub const unsafe fn new(data: *mut T::Payload) -> Self {
         unsafe { TypedArenaPtr(ptr::NonNull::new_unchecked(data)) }
     }
 
     #[inline]
-    pub fn as_ptr(&self) -> *mut T {
+    pub fn as_ptr(&self) -> *mut T::Payload {
         self.0.as_ptr()
     }
+}
 
+impl<T: ?Sized + ArenaAllocated> TypedArenaPtr<T>
+where
+    T::Payload: Sized,
+{
     #[inline]
     pub fn header_ptr(&self) -> *const ArenaHeader {
         unsafe { self.as_ptr().byte_sub(T::header_offset_from_payload()) as *const _ }
@@ -333,24 +355,35 @@ impl<T: ?Sized + ArenaAllocated> TypedArenaPtr<T> {
     }
 }
 
-pub trait ArenaAllocated: Sized {
+pub trait ArenaAllocated {
+    type Payload: ?Sized;
+
     fn tag() -> ArenaHeaderTag;
 
-    fn header_offset_from_payload() -> usize {
+    fn header_offset_from_payload() -> usize
+    where
+        Self::Payload: Sized,
+    {
         header_offset_from_payload::<Self>()
     }
 
     /// #  Safety
     /// - the caller must guarantee that the pointee type of UntypedArenaPtr is Self
-    unsafe fn typed_ptr(ptr: UntypedArenaPtr) -> TypedArenaPtr<Self> {
+    unsafe fn typed_ptr(ptr: UntypedArenaPtr) -> TypedArenaPtr<Self>
+    where
+        Self::Payload: Sized,
+    {
         // safety:
         // - allocated in an arena as from an UntypedArenaPtr
         // - caller guarantees the type is correct
-        unsafe { TypedArenaPtr::new(ptr.payload_offset().cast_mut().cast::<Self>()) }
+        unsafe { TypedArenaPtr::new(ptr.payload_offset().cast_mut().cast::<Self::Payload>()) }
     }
 
     #[allow(clippy::missing_safety_doc)]
-    fn alloc(arena: &mut Arena, value: Self) -> TypedArenaPtr<Self> {
+    fn alloc(arena: &mut Arena, value: Self::Payload) -> TypedArenaPtr<Self>
+    where
+        Self::Payload: Sized,
+    {
         let size = mem::size_of::<TypedAllocSlab<Self>>();
         let slab = Box::new(TypedAllocSlab {
             slab: AllocSlab {
@@ -512,6 +545,7 @@ impl fmt::Display for F64Offset {
 }
 
 impl ArenaAllocated for Integer {
+    type Payload = Self;
     #[inline]
     fn tag() -> ArenaHeaderTag {
         ArenaHeaderTag::Integer
@@ -519,6 +553,7 @@ impl ArenaAllocated for Integer {
 }
 
 impl ArenaAllocated for Rational {
+    type Payload = Self;
     #[inline]
     fn tag() -> ArenaHeaderTag {
         ArenaHeaderTag::Rational
@@ -526,6 +561,7 @@ impl ArenaAllocated for Rational {
 }
 
 impl ArenaAllocated for LiveLoadState {
+    type Payload = Self;
     #[inline]
     fn tag() -> ArenaHeaderTag {
         ArenaHeaderTag::LiveLoadState
@@ -533,6 +569,7 @@ impl ArenaAllocated for LiveLoadState {
 }
 
 impl ArenaAllocated for TcpListener {
+    type Payload = Self;
     #[inline]
     fn tag() -> ArenaHeaderTag {
         ArenaHeaderTag::TcpListener
@@ -541,6 +578,7 @@ impl ArenaAllocated for TcpListener {
 
 #[cfg(feature = "http")]
 impl ArenaAllocated for HttpListener {
+    type Payload = Self;
     #[inline]
     fn tag() -> ArenaHeaderTag {
         ArenaHeaderTag::HttpListener
@@ -549,6 +587,7 @@ impl ArenaAllocated for HttpListener {
 
 #[cfg(feature = "http")]
 impl ArenaAllocated for HttpResponse {
+    type Payload = Self;
     #[inline]
     fn tag() -> ArenaHeaderTag {
         ArenaHeaderTag::HttpResponse
@@ -556,6 +595,7 @@ impl ArenaAllocated for HttpResponse {
 }
 
 impl ArenaAllocated for IndexPtr {
+    type Payload = Self;
     #[inline]
     fn tag() -> ArenaHeaderTag {
         ArenaHeaderTag::IndexPtrUndefined
@@ -625,16 +665,16 @@ pub struct AllocSlab {
 
 #[repr(C)]
 #[derive(Clone, Debug)]
-pub struct TypedAllocSlab<Payload> {
+pub struct TypedAllocSlab<T: ?Sized + ArenaAllocated> {
     slab: AllocSlab,
-    payload: Payload,
+    payload: T::Payload,
 }
 
-impl<Payload: ArenaAllocated> TypedAllocSlab<Payload> {
+impl<T: ?Sized + ArenaAllocated> TypedAllocSlab<T> {
     /// # Safety
     /// - ptr points to a valid allocation of Self
     #[inline]
-    pub unsafe fn to_typed_arena_ptr(ptr: *mut Self) -> TypedArenaPtr<Payload> {
+    pub unsafe fn to_typed_arena_ptr(ptr: *mut Self) -> TypedArenaPtr<T> {
         // safety:
         // - this is the arena allocation of corresponding type
         unsafe { TypedArenaPtr::new(addr_of_mut!((*ptr).payload)) }
@@ -676,34 +716,34 @@ unsafe fn drop_slab_in_place(value: NonNull<AllocSlab>) {
             drop_typed_slab_in_place!(Rational, value);
         }
         ArenaHeaderTag::InputFileStream => {
-            drop_typed_slab_in_place!(StreamLayout<CharReader<InputFileStream>>, value);
+            drop_typed_slab_in_place!(InputFileStream, value);
         }
         ArenaHeaderTag::OutputFileStream => {
-            drop_typed_slab_in_place!(StreamLayout<OutputFileStream>, value);
+            drop_typed_slab_in_place!(OutputFileStream, value);
         }
         ArenaHeaderTag::NamedTcpStream => {
-            drop_typed_slab_in_place!(StreamLayout<CharReader<NamedTcpStream>>, value);
+            drop_typed_slab_in_place!(NamedTcpStream, value);
         }
         ArenaHeaderTag::NamedTlsStream => {
             #[cfg(feature = "tls")]
-            drop_typed_slab_in_place!(StreamLayout<CharReader<NamedTlsStream>>, value);
+            drop_typed_slab_in_place!(NamedTlsStream, value);
         }
         ArenaHeaderTag::HttpReadStream => {
             #[cfg(feature = "http")]
-            drop_typed_slab_in_place!(StreamLayout<CharReader<HttpReadStream>>, value);
+            drop_typed_slab_in_place!(HttpReadStream, value);
         }
         ArenaHeaderTag::HttpWriteStream => {
             #[cfg(feature = "http")]
-            drop_typed_slab_in_place!(StreamLayout<CharReader<HttpWriteStream>>, value);
+            drop_typed_slab_in_place!(HttpWriteStream, value);
         }
         ArenaHeaderTag::ReadlineStream => {
-            drop_typed_slab_in_place!(StreamLayout<ReadlineStream>, value);
+            drop_typed_slab_in_place!(ReadlineStream, value);
         }
         ArenaHeaderTag::StaticStringStream => {
-            drop_typed_slab_in_place!(StreamLayout<StaticStringStream>, value);
+            drop_typed_slab_in_place!(StaticStringStream, value);
         }
         ArenaHeaderTag::ByteStream => {
-            drop_typed_slab_in_place!(StreamLayout<CharReader<ByteStream>>, value);
+            drop_typed_slab_in_place!(ByteStream, value);
         }
         ArenaHeaderTag::LiveLoadState | ArenaHeaderTag::InactiveLoadState => {
             drop_typed_slab_in_place!(LiveLoadState, value);
@@ -721,10 +761,10 @@ unsafe fn drop_slab_in_place(value: NonNull<AllocSlab>) {
             drop_typed_slab_in_place!(HttpResponse, value);
         }
         ArenaHeaderTag::StandardOutputStream => {
-            drop_typed_slab_in_place!(StreamLayout<StandardOutputStream>, value);
+            drop_typed_slab_in_place!(StandardOutputStream, value);
         }
         ArenaHeaderTag::StandardErrorStream => {
-            drop_typed_slab_in_place!(StreamLayout<StandardErrorStream>, value);
+            drop_typed_slab_in_place!(StandardErrorStream, value);
         }
         ArenaHeaderTag::NullStream
         | ArenaHeaderTag::IndexPtrUndefined

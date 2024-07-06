@@ -4519,7 +4519,8 @@ impl Machine {
             });
 
             let http_listener = HttpListener { incoming: rx };
-            let http_listener = arena_alloc!(http_listener, &mut self.machine_st.arena);
+            let http_listener: TypedArenaPtr<HttpListener> =
+                arena_alloc!(http_listener, &mut self.machine_st.arena);
 
             let addr = self.deref_register(2);
             self.machine_st.bind(
@@ -4584,7 +4585,7 @@ impl Machine {
                 self.indices.streams.insert(stream);
                 let stream = stream_as_cell!(stream);
 
-                                let handle = arena_alloc!(request.response, &mut self.machine_st.arena);
+                                let handle: TypedArenaPtr<HttpResponse> = arena_alloc!(request.response, &mut self.machine_st.arena);
 
                                 self.machine_st.bind(method.as_var().unwrap(), atom_as_cell!(method_atom));
                                 self.machine_st.bind(path.as_var().unwrap(), path_cell);
@@ -6516,32 +6517,33 @@ impl Machine {
             format!("{}:{}", socket_atom.as_str(), port)
         };
 
-        let (tcp_listener, port) = match TcpListener::bind(server_addr).map_err(|e| e.kind()) {
-            Ok(tcp_listener) => {
-                let port = tcp_listener.local_addr().map(|addr| addr.port()).ok();
+        let (tcp_listener, port): (TypedArenaPtr<TcpListener>, _) =
+            match TcpListener::bind(server_addr).map_err(|e| e.kind()) {
+                Ok(tcp_listener) => {
+                    let port = tcp_listener.local_addr().map(|addr| addr.port()).ok();
 
-                if let Some(port) = port {
-                    (
-                        arena_alloc!(tcp_listener, &mut self.machine_st.arena),
-                        port as usize,
-                    )
-                } else {
+                    if let Some(port) = port {
+                        (
+                            arena_alloc!(tcp_listener, &mut self.machine_st.arena),
+                            port as usize,
+                        )
+                    } else {
+                        self.machine_st.fail = true;
+                        return Ok(());
+                    }
+                }
+                Err(ErrorKind::PermissionDenied) => {
+                    return Err(self.machine_st.open_permission_error(
+                        addr,
+                        atom!("socket_server_open"),
+                        2,
+                    ));
+                }
+                _ => {
                     self.machine_st.fail = true;
                     return Ok(());
                 }
-            }
-            Err(ErrorKind::PermissionDenied) => {
-                return Err(self.machine_st.open_permission_error(
-                    addr,
-                    atom!("socket_server_open"),
-                    2,
-                ));
-            }
-            _ => {
-                self.machine_st.fail = true;
-                return Ok(());
-            }
-        };
+            };
 
         let addr = self.deref_register(3);
         self.machine_st.bind(
