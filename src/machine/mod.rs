@@ -111,13 +111,17 @@ impl LoadContext {
 #[inline]
 fn current_dir() -> PathBuf {
     if !cfg!(miri) {
-    env::current_dir().unwrap_or(PathBuf::from("./"))
+        env::current_dir().unwrap_or(PathBuf::from("./"))
     } else {
         PathBuf::from("./")
     }
 }
 
-include!(concat!(env!("OUT_DIR"), "/libraries.rs"));
+mod libraries {
+    include!(concat!(env!("OUT_DIR"), "/libraries.rs"));
+}
+
+pub(crate) use libraries::LIBRARIES;
 
 pub static BREAK_FROM_DISPATCH_LOOP_LOC: usize = 0;
 pub static INSTALL_VERIFY_ATTR_INTERRUPT: usize = 1;
@@ -492,7 +496,7 @@ impl Machine {
 
         bootstrapping_compile(
             Stream::from_static_string(
-                LIBRARIES.borrow()["ops_and_meta_predicates"],
+                libraries::LIBRARIES.borrow()["ops_and_meta_predicates"],
                 &mut wam.machine_st.arena,
             ),
             &mut wam,
