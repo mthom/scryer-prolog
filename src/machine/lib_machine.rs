@@ -191,7 +191,7 @@ impl Machine {
                 printer.quoted = true;
                 printer.max_depth = 1000; // NOTE: set this to 0 for unbounded depth
                 printer.double_quotes = true;
-                printer.var_names = var_names.clone();
+                printer.var_names.clone_from(&var_names);
 
                 let outputter = printer.print();
 
@@ -488,12 +488,8 @@ mod tests {
             } else if let Some(result) = block.strip_prefix("result") {
                 i += 1;
                 if let Some(Ok(ref last_result)) = last_result {
-                    println!(
-                        "\n\n=====Result No. {}=======\n{}\n===============",
-                        i,
-                        last_result.to_string().trim()
-                    );
-                    assert_eq!(last_result.to_string().trim(), result.to_string().trim(),)
+                    println!("\n\n=====Result No. {i}=======\n{last_result}\n===============");
+                    assert_eq!(last_result.to_string(), result.to_string().trim(),)
                 }
             }
         }
