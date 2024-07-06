@@ -278,7 +278,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(miri, ignore = "blocked on libraries.rs UB")]
+    #[cfg_attr(miri, ignore = "it takes too long to run")]
     fn failing_query() {
         let mut machine = Machine::new_lib();
         let query = String::from(r#"triple("a",P,"b")."#);
@@ -292,7 +292,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(miri, ignore = "blocked on libraries.rs UB")]
+    #[cfg_attr(miri, ignore = "it takes too long to run")]
     fn complex_results() {
         let mut machine = Machine::new_lib();
         machine.load_module_string(
@@ -349,7 +349,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(miri, ignore = "blocked on libraries.rs UB")]
+    #[cfg_attr(miri, ignore = "it takes too long to run")]
     fn empty_predicate() {
         let mut machine = Machine::new_lib();
         machine.load_module_string(
@@ -365,7 +365,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(miri, ignore = "blocked on libraries.rs UB")]
+    #[cfg_attr(miri, ignore = "it takes too long to run")]
     fn list_results() {
         let mut machine = Machine::new_lib();
         machine.load_module_string(
@@ -394,7 +394,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(miri, ignore = "blocked on libraries.rs UB")]
+    #[cfg_attr(miri, ignore = "it takes too long to run")]
     fn consult() {
         let mut machine = Machine::new_lib();
 
@@ -453,7 +453,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(miri, ignore = "blocked on libraries.rs UB")]
+    #[cfg_attr(miri, ignore = "it takes too long to run")]
     fn integration_test() {
         let mut machine = Machine::new_lib();
 
@@ -496,7 +496,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(miri, ignore = "blocked on libraries.rs UB")]
+    #[cfg_attr(miri, ignore = "it takes too long to run")]
     fn findall() {
         let mut machine = Machine::new_lib();
 
@@ -529,7 +529,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(miri, ignore = "blocked on libraries.rs UB")]
+    #[cfg_attr(miri, ignore = "it takes too long to run")]
     fn dont_return_partial_matches() {
         let mut machine = Machine::new_lib();
 
@@ -553,7 +553,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(miri, ignore = "blocked on libraries.rs UB")]
+    #[cfg_attr(miri, ignore = "it takes too long to run")]
     fn dont_return_partial_matches_without_discountiguous() {
         let mut machine = Machine::new_lib();
 
@@ -585,7 +585,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(miri, ignore = "blocked on libraries.rs UB")]
+    #[cfg_attr(miri, ignore = "it takes too long to run")]
     fn non_existent_predicate_should_not_cause_panic_when_other_predicates_are_defined() {
         let mut machine = Machine::new_lib();
 
@@ -610,7 +610,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(miri, ignore = "blocked on libraries.rs UB")]
+    #[cfg_attr(miri, ignore = "it takes too long to run")]
     fn issue_2341() {
         let mut machine = Machine::new_lib();
 
