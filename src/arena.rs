@@ -7,12 +7,14 @@ use crate::machine::machine_indices::*;
 use crate::machine::streams::*;
 use crate::parser::char_reader::CharReader;
 use crate::raw_block::*;
-use crate::rcu::Rcu;
-use crate::rcu::RcuRef;
 use crate::read::*;
 use crate::types::UntypedArenaPtr;
 
 use crate::parser::dashu::{Integer, Rational};
+use arcu::atomic::Arcu;
+use arcu::epoch_counters::GlobalEpochCounterPool;
+use arcu::rcu_ref::RcuRef;
+use arcu::Rcu;
 use ordered_float::OrderedFloat;
 
 use std::cell::UnsafeCell;
@@ -79,7 +81,7 @@ impl RawBlockTraits for F64Table {
 
 #[derive(Debug)]
 pub struct F64Table {
-    block: Rcu<RawBlock<F64Table>>,
+    block: Arcu<RawBlock<F64Table>, GlobalEpochCounterPool>,
     update: Mutex<()>,
 }
 
@@ -93,7 +95,7 @@ pub fn lookup_float(
         .upgrade()
         .expect("We should only be looking up floats while there is a float table");
 
-    RcuRef::try_map(f64table.block.active_epoch(), |raw_block| unsafe {
+    RcuRef::try_map(f64table.block.read(), |raw_block| unsafe {
         raw_block
             .base
             .add(offset.0)
@@ -118,7 +120,7 @@ impl F64Table {
                 atom_table
             } else {
                 let atom_table = Arc::new(Self {
-                    block: Rcu::new(RawBlock::new()),
+                    block: Arcu::new(RawBlock::new(), GlobalEpochCounterPool),
                     update: Mutex::new(()),
                 });
                 *guard = Arc::downgrade(&atom_table);
@@ -133,7 +135,7 @@ impl F64Table {
 
         // we don't have an index table for lookups as AtomTable does so
         // just get the epoch after we take the upgrade lock
-        let mut block_epoch = self.block.active_epoch();
+        let mut block_epoch = self.block.read();
 
         let mut ptr;
 
@@ -143,7 +145,7 @@ impl F64Table {
             if ptr.is_null() {
                 let new_block = block_epoch.grow_new().unwrap();
                 self.block.replace(new_block);
-                block_epoch = self.block.active_epoch();
+                block_epoch = self.block.read();
             } else {
                 break;
             }

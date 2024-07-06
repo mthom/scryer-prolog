@@ -2,7 +2,6 @@
 
 use crate::parser::ast::MAX_ARITY;
 use crate::raw_block::*;
-use crate::rcu::{Rcu, RcuRef};
 use crate::types::*;
 
 use std::cmp::Ordering;
@@ -16,6 +15,10 @@ use std::sync::Mutex;
 use std::sync::RwLock;
 use std::sync::Weak;
 
+use arcu::atomic::Arcu;
+use arcu::epoch_counters::GlobalEpochCounterPool;
+use arcu::rcu_ref::RcuRef;
+use arcu::Rcu;
 use indexmap::IndexSet;
 
 use scryer_modular_bitfield::prelude::*;
@@ -180,7 +183,7 @@ impl Atom {
             let atom_table =
                 arc_atom_table().expect("We should only have an Atom while there is an AtomTable");
 
-            AtomTableRef::try_map(atom_table.inner.active_epoch(), |buf| unsafe {
+            AtomTableRef::try_map(atom_table.inner.read(), |buf| unsafe {
                 let ptr = buf
                     .block
                     .base
@@ -278,17 +281,17 @@ impl Ord for Atom {
 #[derive(Debug)]
 pub struct InnerAtomTable {
     block: RawBlock<AtomTable>,
-    pub table: Rcu<IndexSet<Atom>>,
+    pub table: Arcu<IndexSet<Atom>, GlobalEpochCounterPool>,
 }
 
 #[derive(Debug)]
 pub struct AtomTable {
-    inner: Rcu<InnerAtomTable>,
+    inner: Arcu<InnerAtomTable, GlobalEpochCounterPool>,
     // this lock is taking during resizing
     update: Mutex<()>,
 }
 
-pub type AtomTableRef<M> = RcuRef<InnerAtomTable, M>;
+pub type AtomTableRef<M> = arcu::rcu_ref::RcuRef<InnerAtomTable, M>;
 
 impl InnerAtomTable {
     #[inline(always)]
@@ -296,7 +299,7 @@ impl InnerAtomTable {
         STATIC_ATOMS_MAP
             .get(string)
             .cloned()
-            .or_else(|| self.table.active_epoch().get(string).cloned())
+            .or_else(|| self.table.read().get(string).cloned())
     }
 }
 
@@ -314,10 +317,13 @@ impl AtomTable {
                 atom_table
             } else {
                 let atom_table = Arc::new(Self {
-                    inner: Rcu::new(InnerAtomTable {
-                        block: RawBlock::new(),
-                        table: Rcu::new(IndexSet::new()),
-                    }),
+                    inner: Arcu::new(
+                        InnerAtomTable {
+                            block: RawBlock::new(),
+                            table: Arcu::new(IndexSet::new(), GlobalEpochCounterPool),
+                        },
+                        GlobalEpochCounterPool,
+                    ),
                     update: Mutex::new(()),
                 });
                 *guard = Arc::downgrade(&atom_table);
@@ -327,13 +333,13 @@ impl AtomTable {
     }
 
     pub fn active_table(&self) -> RcuRef<IndexSet<Atom>, IndexSet<Atom>> {
-        self.inner.active_epoch().table.active_epoch()
+        self.inner.read().table.read()
     }
 
     pub fn build_with(atom_table: &AtomTable, string: &str) -> Atom {
         loop {
-            let mut block_epoch = atom_table.inner.active_epoch();
-            let mut table_epoch = block_epoch.table.active_epoch();
+            let mut block_epoch = atom_table.inner.read();
+            let mut table_epoch = block_epoch.table.read();
 
             if let Some(atom) = block_epoch.lookup_str(string) {
                 return atom;
@@ -342,10 +348,8 @@ impl AtomTable {
             // take a lock to prevent concurrent updates
             let update_guard = atom_table.update.lock().unwrap();
 
-            let is_same_allocation =
-                RcuRef::same_epoch(&block_epoch, &atom_table.inner.active_epoch());
-            let is_same_atom_list =
-                RcuRef::same_epoch(&table_epoch, &block_epoch.table.active_epoch());
+            let is_same_allocation = RcuRef::same_epoch(&block_epoch, &atom_table.inner.read());
+            let is_same_atom_list = RcuRef::same_epoch(&table_epoch, &block_epoch.table.read());
 
             if !(is_same_allocation && is_same_atom_list) {
                 // some other thread raced us between our lookup and
@@ -364,14 +368,14 @@ impl AtomTable {
                     if ptr.is_null() {
                         // garbage collection would go here
                         let new_block = block_epoch.block.grow_new().unwrap();
-                        let new_table = Rcu::new(table_epoch.clone());
+                        let new_table = Arcu::new(table_epoch.clone(), GlobalEpochCounterPool);
                         let new_alloc = InnerAtomTable {
                             block: new_block,
                             table: new_table,
                         };
                         atom_table.inner.replace(new_alloc);
-                        block_epoch = atom_table.inner.active_epoch();
-                        table_epoch = block_epoch.table.active_epoch();
+                        block_epoch = atom_table.inner.read();
+                        table_epoch = block_epoch.table.read();
                     } else {
                         break ptr;
                     }

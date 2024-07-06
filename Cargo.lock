@@ -109,6 +109,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "arcu"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f8727c0fb4c436605c8f11c579ec86edcb729134aec4ee66e454efd99a91859f"
+
+[[package]]
 name = "arrayvec"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2558,6 +2564,7 @@ dependencies = [
 name = "scryer-prolog"
 version = "0.9.4"
 dependencies = [
+ "arcu",
  "assert_cmd",
  "base64 0.12.3",
  "bit-set",
