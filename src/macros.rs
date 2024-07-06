@@ -324,6 +324,7 @@ macro_rules! match_untyped_arena_ptr {
     ($ptr:expr, $( ($(ArenaHeaderTag::$tag:tt)|+, $n:ident) => $code:block $(,)?)+ $(_ => $misc_code:expr $(,)?)?) => ({
         let ptr_id = $ptr;
 
+        #[allow(clippy::toplevel_ref_arg)]
         match ptr_id.get_tag() {
             $($(match_untyped_arena_ptr_pat!($tag) => {
                 match_untyped_arena_ptr_pat_body!(ptr_id, $tag, $n, $code)

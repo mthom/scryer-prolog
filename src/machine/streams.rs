@@ -323,6 +323,9 @@ impl Write for HttpWriteStream {
 
 #[cfg(feature = "http")]
 impl HttpWriteStream {
+    // TODO why is this suddenly dead code and should it be used somewhere?
+    // Should this be impl Drop for HttpWriteStream?
+    #[allow(dead_code)]
     fn drop(&mut self) {
         let headers = unsafe { std::mem::ManuallyDrop::take(&mut self.headers) };
         let buffer = unsafe { std::mem::ManuallyDrop::take(&mut self.buffer) };
