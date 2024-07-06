@@ -38,7 +38,7 @@ pub fn write_prolog_value_as_json<W: Write>(
                 )
             } else {
                 //return valid json string
-                writer.write_str(&s)
+                writer.write_str(s)
             }
         }
         Value::List(l) => {

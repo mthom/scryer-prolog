@@ -125,7 +125,7 @@ mod libraries {
     }
 
     pub(crate) fn get(name: &str) -> Option<&'static str> {
-        LIBRARIES.with(|libs| libs.get(name).map(|&lib| lib))
+        LIBRARIES.with(|libs| libs.get(name).copied())
     }
 
     #[cfg(test)]
