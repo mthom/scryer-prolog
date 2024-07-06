@@ -3,6 +3,8 @@ use dashu::*;
 use ordered_float::OrderedFloat;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
+use std::fmt::Display;
+use std::fmt::Write;
 
 pub type QueryResult = Result<QueryResolution, String>;
 
@@ -13,17 +15,21 @@ pub enum QueryResolution {
     Matches(Vec<QueryMatch>),
 }
 
-pub fn prolog_value_to_json_string(value: Value) -> String {
+pub fn write_prolog_value_as_json<W: Write>(
+    writer: &mut W,
+    value: &Value,
+) -> Result<(), std::fmt::Error> {
     match value {
-        Value::Integer(i) => format!("{}", i),
-        Value::Float(f) => format!("{}", f),
-        Value::Rational(r) => format!("{}", r),
-        Value::Atom(a) => format!("{}", a.as_str()),
+        Value::Integer(i) => write!(writer, "{}", i),
+        Value::Float(f) => write!(writer, "{}", f),
+        Value::Rational(r) => write!(writer, "{}", r),
+        Value::Atom(a) => writer.write_str(&a.as_str()),
         Value::String(s) => {
             if let Err(_e) = serde_json::from_str::<serde_json::Value>(s.as_str()) {
                 //treat as string literal
                 //escape double quotes
-                format!(
+                write!(
+                    writer,
                     "\"{}\"",
                     s.replace('\"', "\\\"")
                         .replace('\n', "\\n")
@@ -32,60 +38,71 @@ pub fn prolog_value_to_json_string(value: Value) -> String {
                 )
             } else {
                 //return valid json string
-                s
+                writer.write_str(&s)
             }
         }
         Value::List(l) => {
-            let mut string_result = "[".to_string();
-            for (i, v) in l.iter().enumerate() {
-                if i > 0 {
-                    string_result.push(',');
+            writer.write_char('[')?;
+            if let Some((first, rest)) = l.split_first() {
+                write_prolog_value_as_json(writer, first)?;
+
+                for other in rest {
+                    writer.write_char(',')?;
+                    write_prolog_value_as_json(writer, other)?;
                 }
-                string_result.push_str(&prolog_value_to_json_string(v.clone()));
             }
-            string_result.push(']');
-            string_result
+            writer.write_char(']')
         }
         Value::Structure(s, l) => {
-            let mut string_result = format!("\"{}\":[", s.as_str());
-            for (i, v) in l.iter().enumerate() {
-                if i > 0 {
-                    string_result.push(',');
+            write!(writer, "\"{}\":[", s.as_str())?;
+
+            if let Some((first, rest)) = l.split_first() {
+                write_prolog_value_as_json(writer, first)?;
+                for other in rest {
+                    writer.write_char(',')?;
+                    write_prolog_value_as_json(writer, other)?;
                 }
-                string_result.push_str(&prolog_value_to_json_string(v.clone()));
             }
-            string_result.push(']');
-            string_result
+            writer.write_char(']')
         }
-        _ => "null".to_string(),
+        _ => writer.write_str("null"),
     }
 }
 
-fn prolog_match_to_json_string(query_match: &QueryMatch) -> String {
-    let mut string_result = "{".to_string();
-    for (i, (k, v)) in query_match.bindings.iter().enumerate() {
-        if i > 0 {
-            string_result.push(',');
+fn write_prolog_match_as_json<W: std::fmt::Write>(
+    writer: &mut W,
+    query_match: &QueryMatch,
+) -> Result<(), std::fmt::Error> {
+    writer.write_char('{')?;
+    let mut iter = query_match.bindings.iter();
+
+    if let Some((k, v)) = iter.next() {
+        write!(writer, "\"{k}\":")?;
+        write_prolog_value_as_json(writer, v)?;
+
+        for (k, v) in iter {
+            write!(writer, ",\"{k}\":")?;
+            write_prolog_value_as_json(writer, v)?;
         }
-        string_result.push_str(&format!(
-            "\"{}\":{}",
-            k,
-            prolog_value_to_json_string(v.clone())
-        ));
     }
-    string_result.push('}');
-    string_result
+    writer.write_char('}')
 }
 
-impl ToString for QueryResolution {
-    fn to_string(&self) -> String {
+impl Display for QueryResolution {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            QueryResolution::True => "true".to_string(),
-            QueryResolution::False => "false".to_string(),
+            QueryResolution::True => f.write_str("true"),
+            QueryResolution::False => f.write_str("false"),
             QueryResolution::Matches(matches) => {
-                let matches_json: Vec<String> =
-                    matches.iter().map(prolog_match_to_json_string).collect();
-                format!("[{}]", matches_json.join(","))
+                f.write_char('[')?;
+                if let Some((first, rest)) = matches.split_first() {
+                    write_prolog_match_as_json(f, first)?;
+                    for other in rest {
+                        f.write_char(',')?;
+                        write_prolog_match_as_json(f, other)?;
+                    }
+                }
+                f.write_char(']')
             }
         }
     }
