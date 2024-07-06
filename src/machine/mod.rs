@@ -110,7 +110,11 @@ impl LoadContext {
 
 #[inline]
 fn current_dir() -> PathBuf {
+    if !cfg!(miri) {
     env::current_dir().unwrap_or(PathBuf::from("./"))
+    } else {
+        PathBuf::from("./")
+    }
 }
 
 include!(concat!(env!("OUT_DIR"), "/libraries.rs"));
