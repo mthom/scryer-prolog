@@ -188,7 +188,7 @@ pub enum TrailRef {
     BlackboardOffset(Atom, HeapCellValue), // key atom, key value
 }
 
-#[allow(clippy::enum_variant_names)]
+#[allow(clippy::enum_variant_names)] // allow the common "Trailed" prefix
 #[derive(BitfieldSpecifier, Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[bits = 6]
 pub(crate) enum TrailEntryTag {
@@ -705,7 +705,7 @@ impl UntypedArenaPtr {
         unsafe { self.get_ptr().add(mem::size_of::<ArenaHeader>()) }
     }
 
-    /// Safety
+    /// # Safety
     /// - this UntypedArenaPtr actuall pointee type is T
     #[inline]
     pub unsafe fn as_typed_ptr<T: ArenaAllocated>(self) -> TypedArenaPtr<T> {
