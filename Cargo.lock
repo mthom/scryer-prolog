@@ -2298,12 +2298,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ref_thread_local"
-version = "0.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d813022b2e00774a48eaf43caaa3c20b45f040ba8cbf398e2e8911a06668dbe6"
-
-[[package]]
 name = "regex"
 version = "1.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2605,7 +2599,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "rand",
- "ref_thread_local",
  "regex",
  "reqwest",
  "ring 0.17.7",

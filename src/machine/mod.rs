@@ -119,9 +119,25 @@ fn current_dir() -> PathBuf {
 
 mod libraries {
     include!(concat!(env!("OUT_DIR"), "/libraries.rs"));
-}
 
-pub(crate) use libraries::LIBRARIES;
+    pub(crate) fn contains(name: &str) -> bool {
+        LIBRARIES.with(|libs| libs.contains_key(name))
+    }
+
+    pub(crate) fn get(name: &str) -> Option<&'static str> {
+        LIBRARIES.with(|libs| libs.get(name).map(|&lib| lib))
+    }
+
+    #[cfg(test)]
+    std::thread_local! {
+        #[allow(dead_code)]
+        static LIBRARIES2 : IndexMap<&'static str, &'static str> = {
+            let mut  m = IndexMap::new();
+            m.insert("test", "test2");
+            m
+        };
+    }
+}
 
 pub static BREAK_FROM_DISPATCH_LOOP_LOC: usize = 0;
 pub static INSTALL_VERIFY_ATTR_INTERRUPT: usize = 1;
@@ -456,8 +472,6 @@ impl Machine {
 
     #[allow(clippy::new_without_default)]
     pub fn new(config: MachineConfig) -> Self {
-        use ref_thread_local::RefThreadLocal;
-
         let args = MachineArgs::new();
         let mut machine_st = MachineState::new();
 
@@ -496,7 +510,8 @@ impl Machine {
 
         bootstrapping_compile(
             Stream::from_static_string(
-                libraries::LIBRARIES.borrow()["ops_and_meta_predicates"],
+                libraries::get("ops_and_meta_predicates")
+                    .expect("library ops_and_meta_predicates should exist"),
                 &mut wam.machine_st.arena,
             ),
             &mut wam,
@@ -508,7 +523,10 @@ impl Machine {
         .unwrap();
 
         bootstrapping_compile(
-            Stream::from_static_string(LIBRARIES.borrow()["builtins"], &mut wam.machine_st.arena),
+            Stream::from_static_string(
+                libraries::get("builtins").expect("library builtins should exist"),
+                &mut wam.machine_st.arena,
+            ),
             &mut wam,
             ListingSource::from_file_and_path(atom!("builtins.pl"), lib_path.clone()),
         )

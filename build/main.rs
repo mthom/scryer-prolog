@@ -82,8 +82,8 @@ use indexmap::IndexMap;\
     writeln!(
         libraries,
         "\
-ref_thread_local::ref_thread_local! {{
-    pub(crate) static managed LIBRARIES: IndexMap<&'static str, &'static str> = {{
+std::thread_local!{{
+    static LIBRARIES: IndexMap<&'static str, &'static str> = {{
         let mut m = IndexMap::new();"
     )
     .unwrap();

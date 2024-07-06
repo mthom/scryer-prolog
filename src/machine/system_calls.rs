@@ -39,8 +39,6 @@ use ordered_float::OrderedFloat;
 use fxhash::{FxBuildHasher, FxHasher};
 use indexmap::IndexSet;
 
-pub(crate) use ref_thread_local::RefThreadLocal;
-
 use std::cell::Cell;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
@@ -104,6 +102,8 @@ use warp::hyper::header::{HeaderName, HeaderValue};
 use warp::hyper::{HeaderMap, Method};
 #[cfg(feature = "http")]
 use warp::{Buf, Filter};
+
+use super::libraries;
 
 #[cfg(feature = "repl")]
 pub(crate) fn get_key() -> KeyEvent {
@@ -7998,10 +7998,7 @@ impl Machine {
     pub(crate) fn load_library_as_stream(&mut self) -> CallResult {
         let library_name = cell_as_atom!(self.deref_register(1));
 
-        use crate::machine::LIBRARIES;
-
-        let lib_ref = LIBRARIES.borrow();
-        let lib = lib_ref.get(&*library_name.as_str());
+        let lib = libraries::get(&library_name.as_str());
         match lib {
             Some(library) => {
                 let lib_stream = Stream::from_static_string(library, &mut self.machine_st.arena);

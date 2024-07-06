@@ -61,7 +61,6 @@ num-order = { version = "1.2.0" }
 ordered-float = "2.6.0"
 phf = { version = "0.9", features = ["macros"] }
 rand = "0.8.5"
-ref_thread_local = "0.0.0"
 regex = "1.9.1"
 ring = { version = "0.17.5", features = ["wasm32_unknown_unknown_js"] }
 ripemd160 = "0.8.0"

@@ -353,7 +353,7 @@ impl<'a> LoadState<'a> for LiveLoadAndMachineState<'a> {
 
     #[inline]
     fn err_on_builtin_module_overwrite(module_name: Atom) -> Result<(), SessionError> {
-        if LIBRARIES.borrow().contains_key(&*module_name.as_str()) {
+        if libraries::contains(&module_name.as_str()) {
             Err(SessionError::CannotOverwriteBuiltInModule(module_name))
         } else {
             Ok(())

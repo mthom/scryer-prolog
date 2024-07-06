@@ -238,7 +238,7 @@ mod tests {
     use crate::machine::{QueryMatch, QueryResolution, Value};
 
     #[test]
-    #[cfg_attr(miri, ignore = "blocked on libraries.rs UB")]
+    #[cfg_attr(miri, ignore = "it takes too long to run")]
     fn programatic_query() {
         let mut machine = Machine::new_lib();
 
