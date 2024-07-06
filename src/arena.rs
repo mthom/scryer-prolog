@@ -227,7 +227,7 @@ impl<T: ?Sized + PartialOrd> PartialOrd for TypedArenaPtr<T> {
 
 impl<T: ?Sized + PartialEq> PartialEq for TypedArenaPtr<T> {
     fn eq(&self, other: &TypedArenaPtr<T>) -> bool {
-        self.0 == other.0 || **self == **other
+        std::ptr::addr_eq(self.0.as_ptr(), other.0.as_ptr()) || **self == **other
     }
 }
 
