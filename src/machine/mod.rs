@@ -60,6 +60,7 @@ use std::env;
 use std::io::Read;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
+use std::sync::OnceLock;
 
 use self::config::MachineConfig;
 use self::parsed_results::*;
@@ -1261,33 +1262,25 @@ impl Machine {
 
     #[inline(always)]
     fn run_cleaners(&mut self) -> bool {
-        use std::sync::Once;
+        static CLEANER_INIT: OnceLock<(usize, usize)> = OnceLock::new();
 
-        static CLEANER_INIT: Once = Once::new();
+        let (r_c_w_h, r_c_wo_h) = *CLEANER_INIT.get_or_init(|| {
+            let r_c_w_h_atom = atom!("run_cleaners_with_handling");
+            let r_c_wo_h_atom = atom!("run_cleaners_without_handling");
+            let iso_ext = atom!("iso_ext");
 
-        static mut RCWH: usize = 0;
-        static mut RCWOH: usize = 0;
-
-        let (r_c_w_h, r_c_wo_h) = unsafe {
-            CLEANER_INIT.call_once(|| {
-                let r_c_w_h_atom = atom!("run_cleaners_with_handling");
-                let r_c_wo_h_atom = atom!("run_cleaners_without_handling");
-                let iso_ext = atom!("iso_ext");
-
-                RCWH = self
-                    .indices
-                    .get_predicate_code_index(r_c_w_h_atom, 0, iso_ext)
-                    .and_then(|item| item.local())
-                    .unwrap();
-                RCWOH = self
-                    .indices
-                    .get_predicate_code_index(r_c_wo_h_atom, 1, iso_ext)
-                    .and_then(|item| item.local())
-                    .unwrap();
-            });
-
-            (RCWH, RCWOH)
-        };
+            let r_c_w_h = self
+                .indices
+                .get_predicate_code_index(r_c_w_h_atom, 0, iso_ext)
+                .and_then(|item| item.local())
+                .unwrap();
+            let r_c_wo_h = self
+                .indices
+                .get_predicate_code_index(r_c_wo_h_atom, 1, iso_ext)
+                .and_then(|item| item.local())
+                .unwrap();
+            (r_c_w_h, r_c_wo_h)
+        });
 
         if let Some(&(_, b_cutoff, prev_block)) = self.machine_st.cont_pts.last() {
             if self.machine_st.b < b_cutoff {
