@@ -362,7 +362,8 @@ pub trait ArenaAllocated: Sized {
         });
 
         let raw_box = Box::into_raw(slab);
-        let allocated_ptr = TypedAllocSlab::to_typed_arena_ptr(raw_box);
+        // safety: Box::into_raw retuns a pointer to a valid allocation
+        let allocated_ptr = unsafe { TypedAllocSlab::to_typed_arena_ptr(raw_box) };
 
         arena.base = Some(NonNull::new(raw_box.cast::<AllocSlab>()).unwrap());
 
@@ -621,8 +622,10 @@ pub struct TypedAllocSlab<Payload> {
 }
 
 impl<Payload: ArenaAllocated> TypedAllocSlab<Payload> {
+    /// # Safety
+    /// - ptr points to a valid allocation of Self
     #[inline]
-    pub fn to_typed_arena_ptr(ptr: *mut Self) -> TypedArenaPtr<Payload> {
+    pub unsafe fn to_typed_arena_ptr(ptr: *mut Self) -> TypedArenaPtr<Payload> {
         // safety:
         // - this is the arena allocation of corresponding type
         unsafe { TypedArenaPtr::new(addr_of_mut!((*ptr).payload)) }
