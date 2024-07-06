@@ -11,9 +11,8 @@ use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{Linkage, Module};
 use cranelift_codegen::Context;
 use cranelift::prelude::codegen::ir::immediates::Offset32;
-use cranelift::prelude::codegen::ir::entities::Value;
 
-use std::ops::Index;
+use std::collections::HashMap;
 
 #[derive(Debug, PartialEq)]
 pub enum JitCompileError {
@@ -33,6 +32,7 @@ pub struct JitMachine {
     heap_push_sig: Signature,
     heap_len: *const u8,
     heap_len_sig: Signature,
+    predicates: HashMap<(String, usize), *const u8>,
 }
 
 impl std::fmt::Debug for JitMachine {
@@ -44,11 +44,12 @@ impl std::fmt::Debug for JitMachine {
 
 impl JitMachine {
     pub fn new() -> Self {
-	let builder = JITBuilder::with_flags(&[
+	let mut builder = JITBuilder::with_flags(&[
 	    ("preserve_frame_pointers", "true"),
 	    ("enable_llvm_abi_extensions", "1")],
 					     cranelift_module::default_libcall_names()
 	).unwrap();
+	builder.symbol("print_func", print_syscall as *const u8);
 	let mut module = JITModule::new(builder);
 	let pointer_type = module.isa().pointer_type();
 	let call_conv = module.isa().default_call_conv();
@@ -57,6 +58,7 @@ impl JitMachine {
 	let mut func_ctx = FunctionBuilderContext::new();
 	
 	let mut sig = module.make_signature();
+	sig.params.push(AbiParam::new(pointer_type));
 	sig.params.push(AbiParam::new(pointer_type));
 	sig.params.push(AbiParam::new(pointer_type));
 	sig.call_conv = call_conv;
@@ -72,16 +74,24 @@ impl JitMachine {
 	    fn_builder.switch_to_block(block);
 	    let func_addr = fn_builder.block_params(block)[0];
 	    let registers = fn_builder.block_params(block)[1];
+	    let heap = fn_builder.block_params(block)[2];
 	    let mut jump_sig = module.make_signature();
 	    jump_sig.call_conv = isa::CallConv::Tail;
+	    jump_sig.params.push(AbiParam::new(types::I64));
 	    let mut params = vec![];
+	    params.push(heap);	    
 	    for i in 1..n+1 {
 		jump_sig.params.push(AbiParam::new(types::I64));
-		let reg_value = fn_builder.ins().load(types::I64, MemFlags::new(), registers, Offset32::new((i as i32)*8));
+		jump_sig.returns.push(AbiParam::new(types::I64));
+		let reg_value = fn_builder.ins().load(types::I64, MemFlags::trusted(), registers, Offset32::new((i as i32)*8));
 		params.push(reg_value);
 	    }
 	    let jump_sig_ref = fn_builder.import_signature(jump_sig);
-	    fn_builder.ins().call_indirect(jump_sig_ref, func_addr, &params);
+	    let jump_call = fn_builder.ins().call_indirect(jump_sig_ref, func_addr, &params);
+	    for i in 0..n {
+		let reg_value = fn_builder.inst_results(jump_call)[i];
+		fn_builder.ins().store(MemFlags::trusted(), reg_value, registers, Offset32::new(((i as i32) + 1) * 8));
+	    }
 	    fn_builder.ins().return_(&[]);
 	    fn_builder.seal_block(block);
 	    fn_builder.finalize();
@@ -106,6 +116,8 @@ impl JitMachine {
 	let mut heap_len_sig = module.make_signature();
 	heap_len_sig.params.push(AbiParam::new(pointer_type));
 	heap_len_sig.returns.push(AbiParam::new(types::I64));
+
+	let predicates = HashMap::new();
 	JitMachine {
 	    trampolines,
 	    module,
@@ -117,10 +129,17 @@ impl JitMachine {
 	    heap_push_sig,
 	    heap_len,
 	    heap_len_sig,
+	    predicates
 	}
     }
 
     pub fn compile(&mut self, name: &str, arity: usize, code: Code) -> Result<(), JitCompileError> {
+	let mut print_func_sig = self.module.make_signature();
+        print_func_sig.params.push(AbiParam::new(types::I64));
+        let print_func = self.module
+            .declare_function("print_func", Linkage::Import, &print_func_sig)
+            .unwrap();
+	
 	let mut sig = self.module.make_signature();
 	sig.params.push(AbiParam::new(types::I64));
 	for _ in 1..=arity {
@@ -129,6 +148,7 @@ impl JitMachine {
 	}
 	sig.call_conv = isa::CallConv::Tail;
 	self.ctx.func.signature = sig.clone();
+	self.ctx.set_disasm(true);
 
 	let mut fn_builder = FunctionBuilder::new(&mut self.ctx.func, &mut self.func_ctx);
 	let block = fn_builder.create_block();
@@ -148,6 +168,15 @@ impl JitMachine {
 	for i in 1..=arity {
 	    let reg = fn_builder.block_params(block)[i];
 	    registers.push(reg);
+	}
+
+	macro_rules! print_rt {
+	    ($x:expr) => {
+		{
+		    let print_func_fn = self.module.declare_func_in_func(print_func, &mut fn_builder.func);
+		    fn_builder.ins().call(print_func_fn, &[$x]);
+		}
+	    }
 	}
 
         macro_rules! heap_len {
@@ -249,7 +278,7 @@ impl JitMachine {
 		    let str_cell = fn_builder.ins().bor(heap_len_shift, str_cell);
 		    match reg {
 			RegType::Temp(x) => {
-			    registers[x] = str_cell;
+			    registers[x-1] = str_cell;
 			}
 			_ => unimplemented!()
 		    }
@@ -266,7 +295,7 @@ impl JitMachine {
 		    fn_builder.ins().call_indirect(sig_ref, heap_push_fn, &[heap, heap_loc_cell]);
 		    match reg {
 			RegType::Temp(x) => {
-			    registers[x] = heap_loc_cell;
+			    registers[x-1] = heap_loc_cell;
 			}
 			_ => unimplemented!()
 		    }
@@ -275,7 +304,7 @@ impl JitMachine {
 		Instruction::SetValue(reg) => {
 		    let value = match reg {
 			RegType::Temp(x) => {
-			    registers[x]
+			    registers[x-1]
 			},
 			_ => unimplemented!()
 		    };
@@ -284,6 +313,41 @@ impl JitMachine {
 		    let sig_ref = fn_builder.import_signature(self.heap_push_sig.clone());
 		    let heap_push_fn = fn_builder.ins().iconst(types::I64, self.heap_push as i64);
 		    fn_builder.ins().call_indirect(sig_ref, heap_push_fn, &[heap, value]);
+		}
+		// TODO: Missing RegType Perm
+		Instruction::GetStructure(_lvl, name, arity, reg) => {
+		    /*let xi = match reg {
+			RegType::Temp(x) => {
+			    registers[x]
+			}
+			_ => unimplemented!()
+		    };
+		    let deref = deref!(xi);
+		    let store = store!(deref);
+
+		    let var_block = fn_builder.create_block();
+		    let str_block = fn_builder.create_block();
+		    let nostr_block = fn_builder.create_block();
+		    let other_block = fn_builder.create_block();
+		    let exit_block = fn_builder.create_block();
+
+    		    let tag = fn_builder.ins().band_imm(store, 64);
+		    let is_str = fn_builder.ins().icmp_imm(IntCC::Equal, tag, HeapCellValueTag::Str as i64);
+		    fn_builder.ins().brif(is_str, str_block, &[], nostr_block, &[]);
+		    fn_builder.seal_block(str_block);
+		    fn_builder.seal_block(nostr_block);
+		    // str block
+		    fn_builder.switch_to_block(str_block);
+		    let a = fn_builder.ins().ushr_imm(store, 8);
+		    let heap_ptr = heap_as_ptr!();
+		    let a = fn_builder.ins().imul_imm(a, 8);
+		    let idx = fn_builder.ins().iadd(heap_ptr, a);
+		    let atom = fn_builder.ins().load(types::I64, MemFlags::trusted(), idx, Offset32::new(0));*/
+		    // TODO: Check atom values
+		    // TODO: Continue
+		    
+
+		    
 		}
 		// TODO: Missing RegType Perm. Let's suppose Mode is local to each predicate
 		// TODO: Missing support for PStr and CStr
@@ -304,7 +368,7 @@ impl JitMachine {
 		    let value = deref!(value);
 		    match reg {
 			RegType::Temp(x) => {
-			    registers[x] = value;
+			    registers[x-1] = value;
 			},
 			_ => unimplemented!()
 		    }
@@ -323,7 +387,7 @@ impl JitMachine {
 		    fn_builder.ins().call_indirect(sig_ref, heap_push_fn, &[heap, heap_loc_cell]);
 		    match reg {
 			RegType::Temp(x) => {
-			    registers[x] = heap_loc_cell;
+			    registers[x-1] = heap_loc_cell;
 			}
 			_ => unimplemented!()
 		    }
@@ -332,6 +396,27 @@ impl JitMachine {
 		    fn_builder.switch_to_block(exit_block);
 		    fn_builder.seal_block(exit_block);
 		    
+		}
+		// TODO: Manage RegType Perm
+		// TODO: manage NonVar cases
+		// TODO: Manage failure
+		Instruction::GetConstant(_, c, reg) => {
+		    let value = match reg {
+			RegType::Temp(x) => {
+			    registers[x-1]
+			}
+			_ => unimplemented!()
+		    };
+		    //let value = deref!(value);
+		    //let value = store!(value);
+		    // The order of HeapCellValue is TAG (6), M (1), F (1), VALUE (56)
+		    let c = fn_builder.ins().iconst(types::I64, i64::from_le_bytes(c.into_bytes()));
+		    // Let's suppose STORE[addr] is REF
+		    let heap_ptr = heap_as_ptr!();
+		    let idx = fn_builder.ins().ishl_imm(value, 8);
+		    let idx = fn_builder.ins().ushr_imm(idx, 5);
+		    let idx = fn_builder.ins().iadd(heap_ptr, idx);
+		    fn_builder.ins().store(MemFlags::new(), c, idx, Offset32::new(0));
 		}
 		Instruction::Proceed => {
 		    fn_builder.ins().return_(&registers);
@@ -347,15 +432,31 @@ impl JitMachine {
 	fn_builder.seal_all_blocks();
 	fn_builder.finalize();
 
-
 	let func = self.module.declare_function(name, Linkage::Local, &sig).unwrap();
 	self.module.define_function(func, &mut self.ctx).unwrap();
 	println!("{}", self.ctx.func.display());
+	self.module.finalize_definitions().unwrap();	
+	let code_ptr = self.module.get_finalized_function(func);
+	self.predicates.insert((name.to_string(), arity), code_ptr);
+	println!("{}", self.ctx.compiled_code().unwrap().vcode.clone().unwrap());
 	self.module.clear_context(&mut self.ctx);
 	Ok(())
     }
 
-    pub fn exec(&self, name: &str, machine_st: &mut MachineState) -> Result<(), ()> {
-	Err(())
+    pub fn exec(&self, name: &str, arity: usize, machine_st: &mut MachineState) -> Result<(), ()> {
+	let Some(predicate) = self.predicates.get(&(name.to_string(), arity)) else {
+	    return Err(());
+	};
+	let trampoline: extern "C" fn (*const u8, *mut Registers, *const Vec<HeapCellValue>) = unsafe { std::mem::transmute(self.trampolines[arity])};
+	let registers = machine_st.registers.as_ptr() as *mut Registers;
+	let heap = &machine_st.heap as *const Vec<HeapCellValue>;
+	trampoline(*predicate, registers, heap);
+	machine_st.p = machine_st.cp;
+	Ok(())
     }
+}
+
+
+fn print_syscall(value: i64) {
+    println!("{}", value);
 }

@@ -1155,7 +1155,7 @@ impl Machine {
 
 	#[cfg(feature = "jit")]
 	{
-	    if let Ok(_) = self.jit_machine.exec(&format!("{}/{}", name.as_str(), arity), &mut self.machine_st) {
+	    if let Ok(_) = self.jit_machine.exec(&name.as_str(), arity, &mut self.machine_st) {
 		// println!("jit_compiler: executed JIT predicate");
 		return Ok(());
 	    }
