@@ -5,6 +5,7 @@ use crate::http::{HttpListener, HttpResponse};
 use crate::machine::loader::LiveLoadState;
 use crate::machine::machine_indices::*;
 use crate::machine::streams::*;
+use crate::parser::char_reader::CharReader;
 use crate::raw_block::*;
 use crate::rcu::Rcu;
 use crate::rcu::RcuRef;
@@ -369,6 +370,12 @@ pub trait ArenaAllocated: Sized {
 
         allocated_ptr
     }
+
+    /// # Safety
+    /// - ptr points to an allocated slab of the correct kind
+    unsafe fn dealloc(ptr: NonNull<TypedAllocSlab<Self>>) {
+        drop(unsafe { Box::from_raw(ptr.as_ptr()) });
+    }
 }
 
 #[derive(Debug)]
@@ -655,9 +662,7 @@ impl Arena {
 unsafe fn drop_slab_in_place(value: NonNull<AllocSlab>) {
     macro_rules! drop_typed_slab_in_place {
         ($payload: ty, $value: expr) => {
-            drop(Box::from_raw(
-                $value.as_ptr().cast::<TypedAllocSlab<$payload>>(),
-            ));
+            <$payload as ArenaAllocated>::dealloc($value.cast::<TypedAllocSlab<$payload>>())
         };
     }
 
@@ -669,34 +674,34 @@ unsafe fn drop_slab_in_place(value: NonNull<AllocSlab>) {
             drop_typed_slab_in_place!(Rational, value);
         }
         ArenaHeaderTag::InputFileStream => {
-            drop_typed_slab_in_place!(InputFileStream, value);
+            drop_typed_slab_in_place!(StreamLayout<CharReader<InputFileStream>>, value);
         }
         ArenaHeaderTag::OutputFileStream => {
-            drop_typed_slab_in_place!(OutputFileStream, value);
+            drop_typed_slab_in_place!(StreamLayout<OutputFileStream>, value);
         }
         ArenaHeaderTag::NamedTcpStream => {
-            drop_typed_slab_in_place!(NamedTcpStream, value);
+            drop_typed_slab_in_place!(StreamLayout<CharReader<NamedTcpStream>>, value);
         }
         ArenaHeaderTag::NamedTlsStream => {
             #[cfg(feature = "tls")]
-            drop_typed_slab_in_place!(NamedTlsStream, value);
+            drop_typed_slab_in_place!(StreamLayout<CharReader<NamedTlsStream>>, value);
         }
         ArenaHeaderTag::HttpReadStream => {
             #[cfg(feature = "http")]
-            drop_typed_slab_in_place!(HttpReadStream, value);
+            drop_typed_slab_in_place!(StreamLayout<CharReader<HttpReadStream>>, value);
         }
         ArenaHeaderTag::HttpWriteStream => {
             #[cfg(feature = "http")]
-            drop_typed_slab_in_place!(HttpWriteStream, value);
+            drop_typed_slab_in_place!(StreamLayout<CharReader<HttpWriteStream>>, value);
         }
         ArenaHeaderTag::ReadlineStream => {
-            drop_typed_slab_in_place!(ReadlineStream, value);
+            drop_typed_slab_in_place!(StreamLayout<ReadlineStream>, value);
         }
         ArenaHeaderTag::StaticStringStream => {
-            drop_typed_slab_in_place!(StaticStringStream, value);
+            drop_typed_slab_in_place!(StreamLayout<StaticStringStream>, value);
         }
         ArenaHeaderTag::ByteStream => {
-            drop_typed_slab_in_place!(ByteStream, value);
+            drop_typed_slab_in_place!(StreamLayout<CharReader<ByteStream>>, value);
         }
         ArenaHeaderTag::LiveLoadState | ArenaHeaderTag::InactiveLoadState => {
             drop_typed_slab_in_place!(LiveLoadState, value);
@@ -714,10 +719,10 @@ unsafe fn drop_slab_in_place(value: NonNull<AllocSlab>) {
             drop_typed_slab_in_place!(HttpResponse, value);
         }
         ArenaHeaderTag::StandardOutputStream => {
-            drop_typed_slab_in_place!(StandardOutputStream, value);
+            drop_typed_slab_in_place!(StreamLayout<StandardOutputStream>, value);
         }
         ArenaHeaderTag::StandardErrorStream => {
-            drop_typed_slab_in_place!(StandardErrorStream, value);
+            drop_typed_slab_in_place!(StreamLayout<StandardErrorStream>, value);
         }
         ArenaHeaderTag::NullStream
         | ArenaHeaderTag::IndexPtrUndefined
@@ -778,7 +783,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(miri, ignore = "blocked on streams.rs UB")]
     fn heap_cell_value_const_cast() {
         let mut wam = MockWAM::new();
         #[cfg(target_pointer_width = "32")]

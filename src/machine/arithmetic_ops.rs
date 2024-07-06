@@ -1415,7 +1415,6 @@ mod tests {
     use crate::machine::mock_wam::*;
 
     #[test]
-    #[cfg_attr(miri, ignore = "blocked on streams.rs UB")]
     fn arith_eval_by_metacall_tests() {
         let mut wam = MachineState::new();
         let mut op_dir = default_op_dir();
