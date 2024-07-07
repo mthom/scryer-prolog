@@ -159,13 +159,6 @@ impl From<CodeIndex> for UntypedArenaPtr {
     }
 }
 
-impl From<UntypedArenaPtr> for CodeIndex {
-    #[inline(always)]
-    fn from(ptr: UntypedArenaPtr) -> CodeIndex {
-        CodeIndex(unsafe { ptr.as_typed_ptr() })
-    }
-}
-
 impl From<TypedArenaPtr<IndexPtr>> for CodeIndex {
     #[inline(always)]
     fn from(ptr: TypedArenaPtr<IndexPtr>) -> CodeIndex {
