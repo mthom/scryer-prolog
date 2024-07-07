@@ -470,7 +470,16 @@ macro_rules! arena_allocated_impl_for_stream {
 
             unsafe fn dealloc(ptr: std::ptr::NonNull<TypedAllocSlab<Self>>) {
                 let mut slab = unsafe { Box::from_raw(ptr.as_ptr()) };
-                unsafe { std::mem::ManuallyDrop::drop(slab.payload()) };
+
+                match slab.tag() {
+                    ArenaHeaderTag::$stream_tag => {
+                        unsafe { std::mem::ManuallyDrop::drop(slab.payload()) };
+                    }
+                    ArenaHeaderTag::Dropped => {}
+                    _ => {
+                        unreachable!()
+                    }
+                }
                 drop(slab);
             }
         }

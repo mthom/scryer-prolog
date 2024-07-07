@@ -197,6 +197,7 @@ pub enum ArenaHeaderTag {
 }
 
 #[bitfield]
+#[repr(align(8))]
 #[derive(Copy, Clone, Debug)]
 pub struct ArenaHeader {
     #[allow(dead_code)]
@@ -590,7 +591,16 @@ impl ArenaAllocated for LiveLoadState {
 
     unsafe fn dealloc(ptr: NonNull<TypedAllocSlab<Self>>) {
         let mut slab = unsafe { Box::from_raw(ptr.as_ptr()) };
-        unsafe { ManuallyDrop::drop(&mut slab.payload) };
+
+        match slab.tag() {
+            ArenaHeaderTag::LiveLoadState | ArenaHeaderTag::InactiveLoadState => {
+                unsafe { ManuallyDrop::drop(&mut slab.payload) };
+            }
+            ArenaHeaderTag::Dropped => {}
+            _ => {
+                unreachable!()
+            }
+        }
         drop(slab);
     }
 }
@@ -710,6 +720,7 @@ impl IndexPtrSlab {
         let untyped_arena = UntypedArenaSlab {
             // safety: pointer from Box::into_raw is never null
             slab: unsafe { NonNull::new_unchecked(raw_box.cast::<AllocSlab>()) },
+            tag: <IndexPtr as ArenaAllocated>::tag(),
         };
 
         (allocated_ptr, untyped_arena)
@@ -747,20 +758,21 @@ impl<T: ?Sized + ArenaAllocated> TypedAllocSlab<T> {
             UntypedArenaSlab {
                 // safety: pointer from Box::into_raw is never null
                 slab: unsafe { NonNull::new_unchecked(raw_box.cast::<AllocSlab>()) },
+                tag: T::tag(),
             },
         )
     }
 }
 
 #[derive(Debug)]
-#[repr(transparent)]
 pub struct UntypedArenaSlab {
     slab: NonNull<AllocSlab>,
+    tag: ArenaHeaderTag,
 }
 
 impl Drop for UntypedArenaSlab {
     fn drop(&mut self) {
-        unsafe { drop_slab_in_place(self.slab) };
+        unsafe { drop_slab_in_place(self.slab, self.tag) };
     }
 }
 
@@ -784,14 +796,14 @@ impl Arena {
     }
 }
 
-unsafe fn drop_slab_in_place(value: NonNull<AllocSlab>) {
+unsafe fn drop_slab_in_place(value: NonNull<AllocSlab>, tag: ArenaHeaderTag) {
     macro_rules! drop_typed_slab_in_place {
         ($payload: ty, $value: expr) => {
             <$payload as ArenaAllocated>::dealloc($value.cast::<TypedAllocSlab<$payload>>())
         };
     }
 
-    match (unsafe { value.as_ref() }).header.tag() {
+    match tag {
         ArenaHeaderTag::Integer => {
             drop_typed_slab_in_place!(Integer, value);
         }
