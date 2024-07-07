@@ -21,6 +21,7 @@ use std::fmt;
 use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::mem;
+use std::mem::ManuallyDrop;
 use std::net::TcpListener;
 use std::ops::{Deref, DerefMut};
 use std::ptr;
@@ -32,7 +33,7 @@ use std::sync::RwLock;
 macro_rules! arena_alloc {
     ($e:expr, $arena:expr) => {{
         let result = $e;
-        ArenaAllocated::alloc($arena, result)
+        $crate::arena::AllocateInArena::arena_allocate(result, $arena)
     }};
 }
 
@@ -354,6 +355,27 @@ where
         }
     }
 }
+
+pub trait AllocateInArena<AllocFor>
+where
+    AllocFor: ArenaAllocated,
+{
+    fn arena_allocate(self, arena: &mut Arena) -> TypedArenaPtr<AllocFor>;
+}
+
+impl<P, T: ArenaAllocated<Payload = P>> AllocateInArena<T> for P {
+    fn arena_allocate(self, arena: &mut Arena) -> TypedArenaPtr<T> {
+        T::alloc(arena, self)
+    }
+}
+
+/* apparently this overlaps the planket impl above somehow
+impl<P, T: ArenaAllocated<Payload = ManuallyDrop<P>>> AllocateInArena<T> for P {
+    fn arena_allocate(self, arena: &mut Arena) -> TypedArenaPtr<T> {
+        T::alloc(arena, ManuallyDrop::new(self))
+    }
+}
+*/
 
 pub trait ArenaAllocated {
     type Payload: ?Sized;
