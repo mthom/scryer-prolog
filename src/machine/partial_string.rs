@@ -801,6 +801,7 @@ mod test {
     use crate::machine::mock_wam::*;
 
     #[test]
+    #[cfg_attr(miri, ignore = "it takes too long to run")]
     fn pstr_iter_tests() {
         let mut wam = MockWAM::new();
 
