@@ -6737,12 +6737,8 @@ impl Machine {
             (HeapCellValueTag::Cons, cons_ptr) => {
                 match_untyped_arena_ptr!(cons_ptr,
                     (ArenaHeaderTag::TcpListener, tcp_listener) => {
-                        unsafe {
-                            // dropping closes the instance.
-                            std::ptr::drop_in_place(&mut tcp_listener as *mut _);
-                        }
+                        tcp_listener.drop_payload();
 
-                        tcp_listener.set_tag(ArenaHeaderTag::Dropped);
                         return Ok(());
                     }
                     _ => {

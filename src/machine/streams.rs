@@ -454,12 +454,24 @@ impl<T> DerefMut for StreamLayout<T> {
 
 macro_rules! arena_allocated_impl_for_stream {
     ($stream_type:ty, $stream_tag:ident) => {
+        impl $crate::arena::AllocateInArena<$stream_tag> for StreamLayout<$stream_type> {
+            fn arena_allocate(self, arena: &mut Arena) -> TypedArenaPtr<$stream_tag> {
+                $stream_tag::alloc(arena, core::mem::ManuallyDrop::new(self))
+            }
+        }
+
         impl ArenaAllocated for $stream_tag {
-            type Payload = StreamLayout<$stream_type>;
+            type Payload = core::mem::ManuallyDrop<StreamLayout<$stream_type>>;
 
             #[inline]
             fn tag() -> ArenaHeaderTag {
                 ArenaHeaderTag::$stream_tag
+            }
+
+            unsafe fn dealloc(ptr: std::ptr::NonNull<TypedAllocSlab<Self>>) {
+                let mut slab = unsafe { Box::from_raw(ptr.as_ptr()) };
+                unsafe { std::mem::ManuallyDrop::drop(slab.payload()) };
+                drop(slab);
             }
         }
     };
@@ -994,7 +1006,7 @@ impl Stream {
                 past_end_of_stream,
                 stream,
                 ..
-            } = &mut **stream_layout;
+            } = &mut ***stream_layout;
 
             stream
                 .get_mut()
@@ -1068,7 +1080,7 @@ impl Stream {
                     past_end_of_stream,
                     stream,
                     ..
-                } = &mut **stream_layout;
+                } = &mut ***stream_layout;
 
                 let cursor_len = stream.get_ref().0.get_ref().len() as u64;
                 cursor_position(past_end_of_stream, &stream.get_ref().0, cursor_len)
@@ -1078,7 +1090,7 @@ impl Stream {
                     past_end_of_stream,
                     stream,
                     ..
-                } = &mut **stream_layout;
+                } = &mut ***stream_layout;
 
                 let cursor_len = stream.stream.get_ref().len() as u64;
                 cursor_position(past_end_of_stream, &stream.stream, cursor_len)
@@ -1090,7 +1102,7 @@ impl Stream {
                     past_end_of_stream,
                     stream,
                     ..
-                } = &mut **stream_layout;
+                } = &mut ***stream_layout;
 
                 match stream.get_ref().file.metadata() {
                     Ok(metadata) => {
@@ -1270,38 +1282,25 @@ impl Stream {
             Stream::NamedTls(ref mut tls_stream) => tls_stream.inner_mut().tls_stream.shutdown(),
             #[cfg(feature = "http")]
             Stream::HttpRead(ref mut http_stream) => {
-                unsafe {
-                    http_stream.set_tag(ArenaHeaderTag::Dropped);
-                    std::ptr::drop_in_place(&mut http_stream.inner_mut().body_reader as *mut _);
-                }
+                http_stream.drop_payload();
 
                 Ok(())
             }
             #[cfg(feature = "http")]
-            Stream::HttpWrite(ref mut http_stream) => {
-                http_stream.inner_mut().drop();
-                unsafe {
-                    http_stream.set_tag(ArenaHeaderTag::Dropped);
-                    std::ptr::drop_in_place(&mut http_stream.inner_mut().buffer as *mut _);
-                }
+            Stream::HttpWrite(mut http_stream) => {
+                http_stream.drop_payload();
 
                 Ok(())
             }
             Stream::InputFile(mut file_stream) => {
                 // close the stream by dropping the inner File.
-                unsafe {
-                    file_stream.set_tag(ArenaHeaderTag::Dropped);
-                    std::ptr::drop_in_place(&mut file_stream.inner_mut().file as *mut _);
-                }
+                file_stream.drop_payload();
 
                 Ok(())
             }
             Stream::OutputFile(mut file_stream) => {
                 // close the stream by dropping the inner File.
-                unsafe {
-                    file_stream.set_tag(ArenaHeaderTag::Dropped);
-                    std::ptr::drop_in_place(&mut file_stream.file as *mut _);
-                }
+                file_stream.drop_payload();
 
                 Ok(())
             }

@@ -305,11 +305,11 @@ impl<'a> LoadState<'a> for LiveLoadAndMachineState<'a> {
     #[inline(always)]
     fn evacuate(mut loader: Loader<'a, Self>) -> Result<Self::Evacuable, SessionError> {
         if loader.payload.load_state.get_tag() != ArenaHeaderTag::Dropped {
-        loader
-            .payload
-            .load_state
-            .set_tag(ArenaHeaderTag::InactiveLoadState);
-        Ok(loader.payload.load_state)
+            loader
+                .payload
+                .load_state
+                .set_tag(ArenaHeaderTag::InactiveLoadState);
+            Ok(loader.payload.load_state)
         } else {
             unreachable!("we never evacuate after dropping")
         }
@@ -323,7 +323,7 @@ impl<'a> LoadState<'a> for LiveLoadAndMachineState<'a> {
     #[inline(always)]
     fn reset_machine(loader: &mut Loader<'a, Self>) {
         if loader.payload.load_state.get_tag() != ArenaHeaderTag::Dropped {
-            loader.payload.load_state.set_tag(ArenaHeaderTag::Dropped);
+            loader.payload.load_state.drop_payload();
             loader.reset_machine();
         }
     }
@@ -1788,11 +1788,8 @@ impl Machine {
             (HeapCellValueTag::Cons, cons_ptr) => {
                 match_untyped_arena_ptr!(cons_ptr,
                     (ArenaHeaderTag::LiveLoadState, payload) => {
-                        unsafe {
-                            std::ptr::drop_in_place(
-                                payload.as_ptr() as *mut LiveLoadState,
-                            );
-                        }
+                        let mut payload = payload;
+                        payload.drop_payload()
                     }
                     _ => {}
                 );

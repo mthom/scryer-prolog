@@ -310,6 +310,13 @@ impl<T: ?Sized + ArenaAllocated> TypedArenaPtr<T> {
     }
 }
 
+impl<P, T: ?Sized + ArenaAllocated<Payload = ManuallyDrop<P>>> TypedArenaPtr<T> {
+    pub fn drop_payload(&mut self) {
+        self.set_tag(ArenaHeaderTag::Dropped);
+        unsafe { ManuallyDrop::drop(&mut *self.as_ptr()) }
+    }
+}
+
 impl<T: ?Sized + ArenaAllocated> TypedArenaPtr<T>
 where
     T::Payload: Sized,
@@ -582,16 +589,34 @@ impl ArenaAllocated for Rational {
     }
 }
 
+impl AllocateInArena<LiveLoadState> for LiveLoadState {
+    fn arena_allocate(self, arena: &mut Arena) -> TypedArenaPtr<LiveLoadState> {
+        LiveLoadState::alloc(arena, ManuallyDrop::new(self))
+    }
+}
+
 impl ArenaAllocated for LiveLoadState {
-    type Payload = Self;
+    type Payload = ManuallyDrop<Self>;
     #[inline]
     fn tag() -> ArenaHeaderTag {
         ArenaHeaderTag::LiveLoadState
     }
+
+    unsafe fn dealloc(ptr: NonNull<TypedAllocSlab<Self>>) {
+        let mut slab = unsafe { Box::from_raw(ptr.as_ptr()) };
+        unsafe { ManuallyDrop::drop(&mut slab.payload) };
+        drop(slab);
+    }
+}
+
+impl AllocateInArena<TcpListener> for TcpListener {
+    fn arena_allocate(self, arena: &mut Arena) -> TypedArenaPtr<TcpListener> {
+        TcpListener::alloc(arena, ManuallyDrop::new(self))
+    }
 }
 
 impl ArenaAllocated for TcpListener {
-    type Payload = Self;
+    type Payload = ManuallyDrop<Self>;
     #[inline]
     fn tag() -> ArenaHeaderTag {
         ArenaHeaderTag::TcpListener
@@ -701,6 +726,10 @@ pub struct TypedAllocSlab<T: ?Sized + ArenaAllocated> {
 }
 
 impl<T: ?Sized + ArenaAllocated> TypedAllocSlab<T> {
+    pub fn payload(&mut self) -> &mut T::Payload {
+        &mut self.payload
+    }
+
     /// # Safety
     /// - ptr points to a valid allocation of Self
     #[inline]
