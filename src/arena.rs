@@ -296,14 +296,6 @@ where
 }
 
 impl<T: ?Sized + ArenaAllocated> TypedArenaPtr<T> {
-    /// # Safety
-    /// - the pointers referee type is correct, safe code depends on the correctness of the type argument
-    /// - the pointer is allocated in the arena
-    #[inline]
-    pub const unsafe fn new(data: *mut T::Payload) -> Self {
-        unsafe { TypedArenaPtr(ptr::NonNull::new_unchecked(data)) }
-    }
-
     #[inline]
     pub fn as_ptr(&self) -> *mut T::Payload {
         self.0.as_ptr()
@@ -398,14 +390,14 @@ pub trait ArenaAllocated {
 
     /// #  Safety
     /// - the caller must guarantee that the pointee type of UntypedArenaPtr is Self
+    /// - the pointer must be non-null
     unsafe fn typed_ptr(ptr: UntypedArenaPtr) -> TypedArenaPtr<Self>
     where
         Self::Payload: Sized,
     {
-        // safety:
-        // - allocated in an arena as from an UntypedArenaPtr
-        // - caller guarantees the type is correct
-        unsafe { TypedArenaPtr::new(ptr.payload_offset().cast_mut().cast::<Self::Payload>()) }
+        TypedArenaPtr(NonNull::new_unchecked(
+            ptr.payload_offset().cast_mut().cast::<Self::Payload>(),
+        ))
     }
 
     #[allow(clippy::missing_safety_doc)]
@@ -417,20 +409,14 @@ pub trait ArenaAllocated {
         let slab = Box::new(TypedAllocSlab {
             slab: AllocSlab {
                 next: arena.base.take(),
-                #[cfg(target_pointer_width = "32")]
-                _padding: 0,
-                header: HeaderOrIdxPtr {
-                    header: ArenaHeader::build_with(size as u64, Self::tag()),
-                },
+                header: ArenaHeader::build_with(size as u64, Self::tag()),
             },
             payload: value,
         });
 
-        let raw_box = Box::into_raw(slab);
-        // safety: Box::into_raw retuns a pointer to a valid allocation
-        let allocated_ptr = unsafe { TypedAllocSlab::to_typed_arena_ptr(raw_box) };
+        let (allocated_ptr, untyped_slab) = slab.to_untyped();
 
-        arena.base = Some(NonNull::new(raw_box.cast::<AllocSlab>()).unwrap());
+        arena.base = Some(untyped_slab);
 
         allocated_ptr
     }
@@ -655,94 +641,132 @@ impl ArenaAllocated for IndexPtr {
 
     /// #  Safety
     /// - the caller must guarantee that the pointee type of UntypedArenaPtr is T
+    /// - the pointer must be non-null
     unsafe fn typed_ptr(ptr: UntypedArenaPtr) -> TypedArenaPtr<Self> {
-        unsafe { TypedArenaPtr::new(ptr.get_ptr().cast_mut().cast::<IndexPtr>()) }
+        TypedArenaPtr(NonNull::new_unchecked(
+            ptr.get_ptr().cast_mut().cast::<IndexPtr>(),
+        ))
     }
 
     #[inline]
     fn alloc(arena: &mut Arena, value: Self) -> TypedArenaPtr<Self> {
-        let slab = Box::new(AllocSlab {
+        let slab = Box::new(IndexPtrSlab {
             next: arena.base.take(),
-            #[cfg(target_pointer_width = "32")]
-            _padding: 0,
-            header: HeaderOrIdxPtr { idx_ptr: value },
+            index_ptr: value,
         });
 
-        let raw_box = Box::into_raw(slab);
-        let allocated_ptr =
-            unsafe { TypedArenaPtr::new(ptr::addr_of_mut!((*raw_box).header.idx_ptr)) };
-        arena.base = Some(NonNull::new(raw_box).unwrap());
+        let (allocated_ptr, untyped_slab) = slab.to_untyped();
+        arena.base = Some(untyped_slab);
         allocated_ptr
     }
 
     /// # Safety
     /// - ptr points to an allocated slab of the correct kind
     unsafe fn dealloc(ptr: NonNull<TypedAllocSlab<Self>>) {
-        drop(unsafe { Box::from_raw(ptr.as_ptr().cast::<AllocSlab>()) });
+        drop(unsafe { Box::from_raw(ptr.as_ptr().cast::<IndexPtrSlab>()) });
     }
 }
 
 #[repr(C)]
-union HeaderOrIdxPtr {
+#[derive(Debug)]
+pub struct AllocSlab {
+    next: Option<UntypedArenaSlab>,
     header: ArenaHeader,
-    idx_ptr: IndexPtr,
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct IndexPtrSlab {
+    next: Option<UntypedArenaSlab>,
+    index_ptr: IndexPtr,
 }
 
 const _: () = {
-    if std::mem::size_of::<ArenaHeader>() != std::mem::size_of::<IndexPtr>() {
-        panic!("Size of ArenaHeader != IndexPtr")
+    if std::mem::align_of::<AllocSlab>() < std::mem::align_of::<*const ()>() {
+        panic!("alignment of AllocSlab is too low");
+    }
+
+    if std::mem::offset_of!(AllocSlab, header) % std::mem::align_of::<*const ()>() != 0 {
+        panic!("alignment of header not a multiple of pointers alignment");
+    }
+
+    if std::mem::offset_of!(AllocSlab, header) != std::mem::offset_of!(IndexPtrSlab, index_ptr) {
+        panic!("IndexPtrSlab.index_ptr and AllocSlab.header are at different offsets");
     }
 };
 
-impl Debug for HeaderOrIdxPtr {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        unsafe { &self.header }.fmt(f)
-    }
-}
+impl IndexPtrSlab {
+    #[inline]
+    pub fn to_untyped(self: Box<Self>) -> (TypedArenaPtr<IndexPtr>, UntypedArenaSlab) {
+        let raw_box = Box::into_raw(self);
 
-impl Clone for HeaderOrIdxPtr {
-    fn clone(&self) -> Self {
-        // safety:
-        // - we created the pointer from a valid reference
-        // - both ArenaHeader and IndexPtr are plain old datatypes, i.e. no managed resources that need to be cloned
-        unsafe { std::ptr::read(self) }
+        // safety: the pointer from Box::into_raw fullfills addr_of_mut's saftey requirements
+        let index_ptr_ptr = unsafe { ptr::addr_of_mut!((*raw_box).index_ptr) };
+        let allocated_ptr = TypedArenaPtr(
+            // safety: the pointer points into a valid allocation so it is non null
+            unsafe { NonNull::new_unchecked(index_ptr_ptr) },
+        );
+
+        let untyped_arena = UntypedArenaSlab {
+            // safety: pointer from Box::into_raw is never null
+            slab: unsafe { NonNull::new_unchecked(raw_box.cast::<AllocSlab>()) },
+        };
+
+        (allocated_ptr, untyped_arena)
     }
 }
 
 #[repr(C)]
-#[derive(Clone, Debug)]
-pub struct AllocSlab {
-    next: Option<NonNull<AllocSlab>>,
-    #[cfg(target_pointer_width = "32")]
-    _padding: u32,
-    header: HeaderOrIdxPtr,
-}
-
-#[repr(C)]
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct TypedAllocSlab<T: ?Sized + ArenaAllocated> {
     slab: AllocSlab,
     payload: T::Payload,
 }
 
 impl<T: ?Sized + ArenaAllocated> TypedAllocSlab<T> {
+    pub fn tag(&self) -> ArenaHeaderTag {
+        self.slab.header.tag()
+    }
+
     pub fn payload(&mut self) -> &mut T::Payload {
         &mut self.payload
     }
 
-    /// # Safety
-    /// - ptr points to a valid allocation of Self
     #[inline]
-    pub unsafe fn to_typed_arena_ptr(ptr: *mut Self) -> TypedArenaPtr<T> {
-        // safety:
-        // - this is the arena allocation of corresponding type
-        unsafe { TypedArenaPtr::new(addr_of_mut!((*ptr).payload)) }
+    pub fn to_untyped(self: Box<Self>) -> (TypedArenaPtr<T>, UntypedArenaSlab) {
+        let raw_box = Box::into_raw(self);
+
+        // safety: the pointer from Box::into_raw fullfills addr_of_mut's saftey requirements
+        let payload_ptr = unsafe { addr_of_mut!((*raw_box).payload) };
+
+        (
+            TypedArenaPtr(unsafe {
+                // safety: the pointer points into a valid allocation so it is non null
+                ptr::NonNull::new_unchecked(payload_ptr)
+            }),
+            UntypedArenaSlab {
+                // safety: pointer from Box::into_raw is never null
+                slab: unsafe { NonNull::new_unchecked(raw_box.cast::<AllocSlab>()) },
+            },
+        )
+    }
+}
+
+#[derive(Debug)]
+#[repr(transparent)]
+pub struct UntypedArenaSlab {
+    slab: NonNull<AllocSlab>,
+}
+
+impl Drop for UntypedArenaSlab {
+    fn drop(&mut self) {
+        unsafe { drop_slab_in_place(self.slab) };
     }
 }
 
 #[derive(Debug)]
 pub struct Arena {
-    base: Option<NonNull<AllocSlab>>,
+    base: Option<UntypedArenaSlab>,
     pub f64_tbl: Arc<F64Table>,
 }
 
@@ -767,7 +791,7 @@ unsafe fn drop_slab_in_place(value: NonNull<AllocSlab>) {
         };
     }
 
-    match (unsafe { value.as_ref() }).header.header.tag() {
+    match (unsafe { value.as_ref() }).header.tag() {
         ArenaHeaderTag::Integer => {
             drop_typed_slab_in_place!(Integer, value);
         }
@@ -839,18 +863,18 @@ unsafe fn drop_slab_in_place(value: NonNull<AllocSlab>) {
 
 impl Drop for Arena {
     fn drop(&mut self) {
+        // we un-nest UntypedArenaSlab to prevent stackoverflow due to the recursive drop
+
         let mut ptr = self.base.take();
 
-        while let Some(slab) = ptr {
-            unsafe {
-                ptr = slab.as_ref().next;
-                drop_slab_in_place(slab);
-            }
+        while let Some(mut slab) = ptr {
+            ptr = unsafe { slab.slab.as_mut() }.next.take();
+            drop(slab);
         }
     }
 }
 
-const_assert!(mem::size_of::<AllocSlab>() == 16);
+const_assert!(mem::size_of::<AllocSlab>() <= 24);
 const_assert!(mem::size_of::<OrderedFloat<f64>>() == 8);
 
 #[cfg(test)]
