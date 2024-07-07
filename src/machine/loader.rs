@@ -304,11 +304,15 @@ impl<'a> LoadState<'a> for LiveLoadAndMachineState<'a> {
 
     #[inline(always)]
     fn evacuate(mut loader: Loader<'a, Self>) -> Result<Self::Evacuable, SessionError> {
+        if loader.payload.load_state.get_tag() != ArenaHeaderTag::Dropped {
         loader
             .payload
             .load_state
             .set_tag(ArenaHeaderTag::InactiveLoadState);
         Ok(loader.payload.load_state)
+        } else {
+            unreachable!("we never evacuate after dropping")
+        }
     }
 
     #[inline(always)]
