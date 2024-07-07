@@ -12,6 +12,7 @@ use crate::machine::machine_indices::*;
 use crate::machine::machine_state::*;
 use crate::types::*;
 
+use bytes::Buf;
 pub use scryer_modular_bitfield::prelude::*;
 
 use std::cmp::Ordering;
@@ -22,7 +23,7 @@ use std::fs::{File, OpenOptions};
 use std::hash::Hash;
 use std::io;
 #[cfg(feature = "http")]
-use std::io::BufRead;
+use bytes::{buf::Reader as BufReader, Bytes};
 use std::io::{Cursor, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::net::{Shutdown, TcpStream};
 use std::ops::{Deref, DerefMut};
@@ -274,7 +275,7 @@ impl Write for NamedTlsStream {
 #[cfg(feature = "http")]
 pub struct HttpReadStream {
     url: Atom,
-    body_reader: Box<dyn BufRead>,
+    body_reader: BufReader<Bytes>,
 }
 
 #[cfg(feature = "http")]
@@ -1115,6 +1116,13 @@ impl Stream {
                     }
                 }
             }
+	    Stream::HttpRead(stream_layout) => {
+		if stream_layout.stream.get_ref().body_reader.get_ref().has_remaining() {
+		    AtEndOfStream::Not
+		} else {
+		    AtEndOfStream::Past
+		}
+	    }
             _ => AtEndOfStream::Not,
         }
     }
@@ -1203,7 +1211,7 @@ impl Stream {
     #[inline]
     pub(crate) fn from_http_stream(
         url: Atom,
-        http_stream: Box<dyn BufRead>,
+        http_stream: BufReader<Bytes>,
         arena: &mut Arena,
     ) -> Self {
         Stream::HttpRead(arena_alloc!(
