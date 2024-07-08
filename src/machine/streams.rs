@@ -12,7 +12,6 @@ use crate::machine::machine_indices::*;
 use crate::machine::machine_state::*;
 use crate::types::*;
 
-use bytes::Buf;
 pub use scryer_modular_bitfield::prelude::*;
 
 use std::cmp::Ordering;
@@ -23,7 +22,7 @@ use std::fs::{File, OpenOptions};
 use std::hash::Hash;
 use std::io;
 #[cfg(feature = "http")]
-use bytes::{buf::Reader as BufReader, Bytes};
+use bytes::{buf::Reader as BufReader, Bytes, Buf};
 use std::io::{Cursor, ErrorKind, Read, Seek, SeekFrom, Write};
 use std::net::{Shutdown, TcpStream};
 use std::ops::{Deref, DerefMut};
@@ -1116,6 +1115,7 @@ impl Stream {
                     }
                 }
             }
+	    #[cfg(feature = "http")]
 	    Stream::HttpRead(stream_layout) => {
 		if stream_layout.stream.get_ref().body_reader.get_ref().has_remaining() {
 		    AtEndOfStream::Not
