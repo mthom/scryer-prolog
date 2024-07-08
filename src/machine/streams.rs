@@ -12,11 +12,10 @@ use crate::machine::machine_indices::*;
 use crate::machine::machine_state::*;
 use crate::types::*;
 
-use bytes::Buf;
 pub use scryer_modular_bitfield::prelude::*;
 
 #[cfg(feature = "http")]
-use bytes::{buf::Reader as BufReader, Bytes};
+use bytes::{buf::Reader as BufReader, Buf, Bytes};
 use std::cmp::Ordering;
 use std::error::Error;
 use std::fmt;
@@ -1136,6 +1135,7 @@ impl Stream {
                     }
                 }
             }
+            #[cfg(feature = "http")]
             Stream::HttpRead(stream_layout) => {
                 if stream_layout
                     .stream
