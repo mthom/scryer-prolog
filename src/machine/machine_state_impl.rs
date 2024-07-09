@@ -19,7 +19,6 @@ use indexmap::IndexSet;
 
 use std::cmp::Ordering;
 use std::convert::TryFrom;
-use std::pin::*;
 
 impl MachineState {
     pub(crate) fn new() -> Self {
@@ -80,7 +79,7 @@ impl MachineState {
     }
 
     #[inline]
-    pub extern "C" fn deref(&self, mut addr: HeapCellValue) -> HeapCellValue {
+    pub fn deref(&self, mut addr: HeapCellValue) -> HeapCellValue {
         loop {
             let value = self.store(addr);
 
@@ -1013,7 +1012,7 @@ impl MachineState {
         }
     }
 
-    pub(super) extern "C" fn write_literal_to_var(&mut self, deref_v: HeapCellValue, lit: HeapCellValue) {
+    pub(super) fn write_literal_to_var(&mut self, deref_v: HeapCellValue, lit: HeapCellValue) {
         let store_v = self.store(deref_v);
 
         read_heap_cell!(lit,

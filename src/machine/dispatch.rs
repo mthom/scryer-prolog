@@ -187,19 +187,6 @@ impl MachineState {
         Ok(())
     }
 
-    pub extern "C" fn unify_num_jit(&mut self, n: Number, n1: HeapCellValue) {
-	match n {
-            Number::Fixnum(n) => self.unify_fixnum(n, n1),
-            Number::Float(n) => {
-                let n = float_alloc!(n.into_inner(), self.arena);
-                self.unify_f64(n, n1)
-            }
-            Number::Integer(n) => self.unify_big_int(n, n1),
-            Number::Rational(n) => self.unify_rational(n, n1),
-
-	}
-    }
-
     #[inline(always)]
     pub(crate) fn select_switch_on_term_index(
         &self,
