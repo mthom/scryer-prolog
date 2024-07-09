@@ -98,7 +98,7 @@ impl JitMachine {
 
 	    let func = module.declare_function(&format!("$trampoline/{}", n), Linkage::Local, &sig).unwrap();
 	    module.define_function(func, &mut ctx).unwrap();
-	    println!("{}", ctx.func.display());
+	    // println!("{}", ctx.func.display());
 	    module.finalize_definitions().unwrap();	    
 	    module.clear_context(&mut ctx);
 	    let code_ptr: *const u8 = unsafe { std::mem::transmute(module.get_finalized_function(func)) };	    
@@ -210,18 +210,18 @@ impl JitMachine {
 		    fn_builder.append_block_param(is_var_block, types::I64);
 		    let is_not_var_block = fn_builder.create_block();
 		    fn_builder.append_block_param(is_not_var_block, types::I64);
-		    let tag = fn_builder.ins().band_imm($x, 64);
+		    let tag = fn_builder.ins().ushr_imm($x, 58);
 		    let is_var = fn_builder.ins().icmp_imm(IntCC::Equal, tag, HeapCellValueTag::Var as i64);
 		    fn_builder.ins().brif(is_var, is_var_block, &[$x], is_not_var_block, &[$x]);
 		    // is_var
 		    fn_builder.switch_to_block(is_var_block);
 		    fn_builder.seal_block(is_var_block);
 		    let param = fn_builder.block_params(is_var_block)[0];
-		    let idx = fn_builder.ins().ushr_imm(param, 8);
 		    let heap_ptr = heap_as_ptr!();
-		    let idx_ptr = fn_builder.ins().imul_imm(idx, 8);
-		    let idx_ptr = fn_builder.ins().iadd(heap_ptr, idx_ptr);
-		    let heap_value = fn_builder.ins().load(types::I64, MemFlags::trusted(), idx_ptr, Offset32::new(0));
+		    let idx = fn_builder.ins().ishl_imm(param, 8);
+		    let idx = fn_builder.ins().ushr_imm(idx, 5);
+		    let idx = fn_builder.ins().iadd(heap_ptr, idx);
+		    let heap_value = fn_builder.ins().load(types::I64, MemFlags::trusted(), idx, Offset32::new(0));
 		    fn_builder.ins().jump(merge_block, &[heap_value]);
 		    // is_not_var
 		    fn_builder.switch_to_block(is_not_var_block);
@@ -248,7 +248,7 @@ impl JitMachine {
 		    let addr = fn_builder.block_params(loop_block)[0];
 		    let value = store!(addr);
 		    // check if is var
-		    let tag = fn_builder.ins().band_imm(value, 64);
+		    let tag = fn_builder.ins().ushr_imm($x, 58);
 		    let is_var = fn_builder.ins().icmp_imm(IntCC::Equal, tag, HeapCellValueTag::Var as i64);
 		    let not_equal = fn_builder.ins().icmp(IntCC::NotEqual, value, addr);
 		    let check = fn_builder.ins().band(is_var, not_equal);
@@ -399,7 +399,8 @@ impl JitMachine {
 		}
 		// TODO: Manage RegType Perm
 		// TODO: manage NonVar cases
-		// TODO: Manage failure
+		// TODO: Manage unification case
+		// TODO: manage STORE[addr] is not REF
 		Instruction::GetConstant(_, c, reg) => {
 		    let value = match reg {
 			RegType::Temp(x) => {
@@ -407,8 +408,8 @@ impl JitMachine {
 			}
 			_ => unimplemented!()
 		    };
-		    //let value = deref!(value);
-		    //let value = store!(value);
+		    let value = deref!(value);
+		    let value = store!(value);
 		    // The order of HeapCellValue is TAG (6), M (1), F (1), VALUE (56)
 		    let c = fn_builder.ins().iconst(types::I64, i64::from_le_bytes(c.into_bytes()));
 		    // Let's suppose STORE[addr] is REF
@@ -434,11 +435,11 @@ impl JitMachine {
 
 	let func = self.module.declare_function(name, Linkage::Local, &sig).unwrap();
 	self.module.define_function(func, &mut self.ctx).unwrap();
-	println!("{}", self.ctx.func.display());
+	// println!("{}", self.ctx.func.display());
 	self.module.finalize_definitions().unwrap();	
 	let code_ptr = self.module.get_finalized_function(func);
 	self.predicates.insert((name.to_string(), arity), code_ptr);
-	println!("{}", self.ctx.compiled_code().unwrap().vcode.clone().unwrap());
+	// println!("{}", self.ctx.compiled_code().unwrap().vcode.clone().unwrap());
 	self.module.clear_context(&mut self.ctx);
 	Ok(())
     }
