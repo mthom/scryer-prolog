@@ -269,7 +269,16 @@ impl MachineState {
                         Literal::Rational(r)
                     }
                     (ArenaHeaderTag::Integer, n) => {
-                        Literal::Integer(n)
+                        let result = (&*n).try_into();
+
+                        match result {
+                            Ok(fixnum) => if let Ok(n) = Fixnum::build_with_checked(fixnum) {
+                                Literal::Fixnum(n)
+                            } else {
+                                Literal::Integer(n)
+                            },
+                            Err(_) => Literal::Integer(n)
+                        }
                     }
                     _ => {
                         unreachable!()
@@ -4470,6 +4479,14 @@ impl Machine {
                     }
                     &Instruction::ExecuteCryptoDataHash => {
                         self.crypto_data_hash();
+                        step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+                    }
+                    &Instruction::CallCryptoHMAC => {
+                        self.crypto_hmac();
+                        step_or_fail!(self, self.machine_st.p += 1);
+                    }
+                    &Instruction::ExecuteCryptoHMAC => {
+                        self.crypto_hmac();
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                     }
                     &Instruction::CallCryptoDataHKDF => {

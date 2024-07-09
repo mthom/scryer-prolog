@@ -12,7 +12,8 @@ use crate::machine::machine_indices::*;
 use crate::machine::machine_state::*;
 use crate::types::*;
 
-pub use modular_bitfield::prelude::*;
+use bytes::Buf;
+pub use scryer_modular_bitfield::prelude::*;
 
 use std::cmp::Ordering;
 use std::error::Error;
@@ -22,9 +23,8 @@ use std::fs::{File, OpenOptions};
 use std::hash::Hash;
 use std::io;
 #[cfg(feature = "http")]
-use std::io::BufRead;
+use bytes::{buf::Reader as BufReader, Bytes};
 use std::io::{Cursor, ErrorKind, Read, Seek, SeekFrom, Write};
-use std::mem;
 use std::net::{Shutdown, TcpStream};
 use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
@@ -275,7 +275,7 @@ impl Write for NamedTlsStream {
 #[cfg(feature = "http")]
 pub struct HttpReadStream {
     url: Atom,
-    body_reader: Box<dyn BufRead>,
+    body_reader: BufReader<Bytes>,
 }
 
 #[cfg(feature = "http")]
@@ -296,9 +296,9 @@ impl Read for HttpReadStream {
 #[cfg(feature = "http")]
 pub struct HttpWriteStream {
     status_code: u16,
-    headers: mem::ManuallyDrop<hyper::HeaderMap>,
+    headers: std::mem::ManuallyDrop<hyper::HeaderMap>,
     response: TypedArenaPtr<HttpResponse>,
-    buffer: mem::ManuallyDrop<Vec<u8>>,
+    buffer: std::mem::ManuallyDrop<Vec<u8>>,
 }
 
 #[cfg(feature = "http")]
@@ -325,8 +325,8 @@ impl Write for HttpWriteStream {
 #[cfg(feature = "http")]
 impl HttpWriteStream {
     fn drop(&mut self) {
-        let headers = unsafe { mem::ManuallyDrop::take(&mut self.headers) };
-        let buffer = unsafe { mem::ManuallyDrop::take(&mut self.buffer) };
+        let headers = unsafe { std::mem::ManuallyDrop::take(&mut self.headers) };
+        let buffer = unsafe { std::mem::ManuallyDrop::take(&mut self.buffer) };
 
         let (ready, response, cvar) = &**self.response;
 
@@ -455,24 +455,11 @@ macro_rules! arena_allocated_impl_for_stream {
         impl ArenaAllocated for StreamLayout<$stream_type> {
             type PtrToAllocated = TypedArenaPtr<StreamLayout<$stream_type>>;
 
+            gen_ptr_to_allocated!(StreamLayout<$stream_type>);
+
             #[inline]
             fn tag() -> ArenaHeaderTag {
                 ArenaHeaderTag::$stream_tag
-            }
-
-            #[inline]
-            fn size(&self) -> usize {
-                mem::size_of::<StreamLayout<$stream_type>>()
-            }
-
-            #[allow(clippy::not_unsafe_ptr_arg_deref)]
-            #[inline]
-            fn copy_to_arena(self, dst: *mut Self) -> Self::PtrToAllocated {
-                unsafe {
-                    // Miri seems to hit this a lot
-                    ptr::write(dst, self);
-                    TypedArenaPtr::new(dst as *mut Self)
-                }
             }
         }
     };
@@ -1129,6 +1116,13 @@ impl Stream {
                     }
                 }
             }
+	    Stream::HttpRead(stream_layout) => {
+		if stream_layout.stream.get_ref().body_reader.get_ref().has_remaining() {
+		    AtEndOfStream::Not
+		} else {
+		    AtEndOfStream::Past
+		}
+	    }
             _ => AtEndOfStream::Not,
         }
     }
@@ -1217,7 +1211,7 @@ impl Stream {
     #[inline]
     pub(crate) fn from_http_stream(
         url: Atom,
-        http_stream: Box<dyn BufRead>,
+        http_stream: BufReader<Bytes>,
         arena: &mut Arena,
     ) -> Self {
         Stream::HttpRead(arena_alloc!(
@@ -1241,8 +1235,8 @@ impl Stream {
             StreamLayout::new(CharReader::new(HttpWriteStream {
                 response,
                 status_code,
-                headers: mem::ManuallyDrop::new(headers),
-                buffer: mem::ManuallyDrop::new(Vec::new()),
+                headers: std::mem::ManuallyDrop::new(headers),
+                buffer: std::mem::ManuallyDrop::new(Vec::new()),
             })),
             arena
         ))

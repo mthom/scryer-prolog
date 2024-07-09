@@ -1,1 +1,1 @@
-args = ["-f", "--no-add-history", "src/tests/dif.pl", "-f", "-g", "main_quiet"]
+args = ["-f", "--no-add-history", "src/tests/dif.pl", "-f", "-g", "use_module(library(dif_tests)), dif_tests:main_quiet(dif_tests)"]

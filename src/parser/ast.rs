@@ -17,8 +17,8 @@ use crate::parser::dashu::{Integer, Rational};
 
 use fxhash::FxBuildHasher;
 use indexmap::IndexMap;
-use modular_bitfield::error::OutOfBounds;
-use modular_bitfield::prelude::*;
+use scryer_modular_bitfield::error::OutOfBounds;
+use scryer_modular_bitfield::prelude::*;
 
 pub type Specifier = u32;
 
@@ -49,13 +49,13 @@ macro_rules! fixnum {
 
 macro_rules! is_term {
     ($x:expr) => {
-        ($x as u32 & $crate::parser::ast::TERM) != 0
+        ($x as u32 & $crate::parser::ast::TERM) != 0 || is_negate!($x)
     };
 }
 
 macro_rules! is_lterm {
     ($x:expr) => {
-        ($x as u32 & $crate::parser::ast::LTERM) != 0
+        ($x as u32 & $crate::parser::ast::LTERM) != 0 || is_negate!($x)
     };
 }
 
@@ -537,7 +537,7 @@ impl Fixnum {
 
     #[inline]
     pub fn get_tag(&self) -> HeapCellValueTag {
-        use modular_bitfield::Specifier;
+        use scryer_modular_bitfield::Specifier;
         HeapCellValueTag::from_bytes(self.tag()).unwrap()
     }
 

@@ -1,10 +1,14 @@
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 use criterion::{criterion_group, criterion_main, BatchSize, Criterion};
 
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 #[cfg(not(target_os = "windows"))]
 use pprof::criterion::{Output, PProfProfiler};
 
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 mod setup;
 
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 fn bench_criterion(c: &mut Criterion) {
     for (&name, bench) in setup::prolog_benches().iter() {
         match bench.strategy {
@@ -15,7 +19,7 @@ fn bench_criterion(c: &mut Criterion) {
         };
     }
 }
-
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 #[cfg(not(target_os = "windows"))]
 fn config() -> Criterion {
     Criterion::default()
@@ -28,9 +32,15 @@ fn config() -> Criterion {
     Criterion::default().sample_size(20)
 }
 
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 criterion_group!(
     name = benches;
     config = config();
     targets = bench_criterion
 );
+
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
 criterion_main!(benches);
+
+#[cfg(all(target_arch = "wasm32", target_os = "unknown"))]
+fn main() {}

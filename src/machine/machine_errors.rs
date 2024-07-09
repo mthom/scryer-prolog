@@ -1022,19 +1022,6 @@ pub enum SessionError {
     QueryCannotBeDefinedAsFact,
 }
 
-#[derive(Debug)]
-pub(crate) enum EvalSession {
-    // EntrySuccess,
-    Error(SessionError),
-}
-
-impl From<SessionError> for EvalSession {
-    #[inline]
-    fn from(err: SessionError) -> Self {
-        EvalSession::Error(err)
-    }
-}
-
 impl From<std::io::Error> for SessionError {
     #[inline]
     fn from(err: std::io::Error) -> SessionError {
@@ -1053,12 +1040,5 @@ impl From<CompilationError> for SessionError {
     #[inline]
     fn from(err: CompilationError) -> Self {
         SessionError::CompilationError(err)
-    }
-}
-
-impl From<ParserError> for EvalSession {
-    #[inline]
-    fn from(err: ParserError) -> Self {
-        EvalSession::from(SessionError::from(err))
     }
 }

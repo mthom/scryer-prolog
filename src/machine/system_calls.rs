@@ -52,8 +52,6 @@ use std::env;
 use std::ffi::CString;
 use std::fs;
 use std::hash::{BuildHasher, BuildHasherDefault};
-#[cfg(feature = "http")]
-use std::io::BufRead;
 use std::io::{ErrorKind, Read, Write};
 use std::iter::{once, FromIterator};
 use std::mem;
@@ -80,7 +78,7 @@ use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 
 use blake2::{Blake2b, Blake2s};
 use ring::rand::{SecureRandom, SystemRandom};
-use ring::{digest, hkdf, pbkdf2};
+use ring::{digest, hkdf, hmac, pbkdf2};
 
 #[cfg(feature = "crypto-full")]
 use ring::aead;
@@ -249,9 +247,9 @@ impl BrentAlgState {
                     self.pstr_chars += num_chars;
                     Some(CycleSearchResult::ProperList(self.num_steps()))
                 } else {
-                    let offset = self.num_steps() + num_chars - self.max_steps as usize;
-                    self.pstr_chars += offset;
-                    Some(CycleSearchResult::PStrLocation(self.max_steps as usize, h, offset))
+                    let char_offset = self.max_steps as usize - self.num_steps();
+                    self.pstr_chars += char_offset;
+                    Some(CycleSearchResult::PStrLocation(self.max_steps as usize, h, char_offset + offset))
                 }
             }
             (HeapCellValueTag::PStr, pstr_atom) => {
@@ -262,9 +260,9 @@ impl BrentAlgState {
                     self.pstr_chars += num_chars - 1;
                     self.step(h+1)
                 } else {
-                    let offset = self.num_steps() + num_chars - self.max_steps as usize;
-                    self.pstr_chars += offset;
-                    Some(CycleSearchResult::PStrLocation(self.max_steps as usize, h, offset))
+                    let char_offset = self.max_steps as usize - self.num_steps();
+                    self.pstr_chars += char_offset;
+                    Some(CycleSearchResult::PStrLocation(self.max_steps as usize, h, char_offset + offset))
                 }
             }
             _ => {
@@ -280,7 +278,8 @@ impl BrentAlgState {
     ) -> Option<CycleSearchResult> {
         read_heap_cell!(heap[h],
             (HeapCellValueTag::PStrOffset, l) => {
-                let (pstr_loc, offset) = pstr_loc_and_offset(heap, l);
+                let (pstr_loc, _) = pstr_loc_and_offset(heap, l);
+                let offset = cell_as_fixnum!(heap[h+1]);
                 self.add_pstr_offset_chars(heap, pstr_loc, offset.get_num() as usize)
             }
             _ => {
@@ -429,15 +428,12 @@ impl BrentAlgState {
 
                 pstr_chars = pstr.as_str_from(n).chars().count() - 1;
 
-                if heap[h].get_tag() == HeapCellValueTag::PStrOffset {
-                    debug_assert!(heap[h].get_tag() == HeapCellValueTag::PStrOffset);
-
-                    if heap[h_offset].get_tag() == HeapCellValueTag::CStr {
-                        return if pstr_chars < max_steps {
-                            CycleSearchResult::ProperList(pstr_chars + 1)
-                        } else {
-                            CycleSearchResult::UntouchedCStr(pstr.into(), max_steps)
-                        };
+                if heap[h].get_tag() == HeapCellValueTag::PStrOffset && heap[h_offset].get_tag() == HeapCellValueTag::CStr {
+                    return if pstr_chars < max_steps {
+                        CycleSearchResult::ProperList(pstr_chars + 1)
+                    } else {
+                        let offset = max_steps + n;
+                        CycleSearchResult::PStrLocation(max_steps, h_offset, offset)
                     }
                 }
 
@@ -690,6 +686,7 @@ impl MachineState {
 
                 let cell = if offset > 0 {
                     let h = self.heap.len();
+                    let (pstr_loc, _) = pstr_loc_and_offset(&self.heap, pstr_loc);
 
                     self.heap.push(pstr_offset_as_cell!(pstr_loc));
                     self.heap
@@ -748,11 +745,7 @@ impl MachineState {
 
             let max_steps_n = match max_steps {
                 Ok(Number::Fixnum(n)) => Some(n.get_num()),
-                Ok(Number::Integer(n)) => {
-                    let value: i64 = (&*n).try_into().unwrap();
-
-                    Some(value)
-                }
+                Ok(Number::Integer(n)) => (&*n).try_into().ok(),
                 _ => None,
             };
 
@@ -1341,38 +1334,49 @@ impl Machine {
         let index_cell = index_cell_opt.or_else(|| {
             let is_internal_call = name == atom!("$call") && goal_arity > 0;
 
-            if !is_internal_call && self.indices.goal_expansion_defined((name, arity)) {
-                None
-            } else {
-                if is_internal_call {
-                    debug_assert_eq!(goal.get_tag(), HeapCellValueTag::Str);
-                    goal = self.machine_st.heap[goal.get_value() as usize + 1];
-                    (module_name, goal) = self.machine_st.strip_module(goal, module_name);
-
-                    if let Some((inner_name, inner_arity)) =
-                        self.machine_st.name_and_arity_from_heap(goal)
-                    {
-                        arity -= goal_arity;
-                        (name, goal_arity) = (inner_name, inner_arity);
-                        arity += goal_arity;
-                    } else {
-                        return None;
-                    }
-                }
-
-                let module_name = if module_name.get_tag() != HeapCellValueTag::Atom {
-                    if let Some(load_context) = self.load_contexts.last() {
-                        load_context.module
-                    } else {
-                        atom!("user")
-                    }
-                } else {
+            if !is_internal_call {
+                let module_name = if module_name.get_tag() == HeapCellValueTag::Atom {
                     cell_as_atom!(module_name)
+                } else {
+                    atom!("user")
                 };
 
-                self.indices
-                    .get_predicate_code_index(name, arity, module_name)
+                if self
+                    .indices
+                    .goal_expansion_defined((name, arity), module_name)
+                {
+                    return None;
+                }
             }
+
+            if is_internal_call {
+                debug_assert_eq!(goal.get_tag(), HeapCellValueTag::Str);
+                goal = self.machine_st.heap[goal.get_value() as usize + 1];
+                (module_name, goal) = self.machine_st.strip_module(goal, module_name);
+
+                if let Some((inner_name, inner_arity)) =
+                    self.machine_st.name_and_arity_from_heap(goal)
+                {
+                    arity -= goal_arity;
+                    (name, goal_arity) = (inner_name, inner_arity);
+                    arity += goal_arity;
+                } else {
+                    return None;
+                }
+            }
+
+            let module_name = if module_name.get_tag() != HeapCellValueTag::Atom {
+                if let Some(load_context) = self.load_contexts.last() {
+                    load_context.module
+                } else {
+                    atom!("user")
+                }
+            } else {
+                cell_as_atom!(module_name)
+            };
+
+            self.indices
+                .get_predicate_code_index(name, arity, module_name)
         });
 
         if let Some(code_index) = index_cell {
@@ -1695,7 +1699,13 @@ impl Machine {
                 }
             }
             _ => {
-                unreachable!()
+                let h = self.machine_st.heap.len();
+                let call_form = functor!(atom!(":"), [cell(module_name), cell(self.machine_st.registers[2])]);
+                self.machine_st.heap.extend(call_form);
+
+                let stub = functor_stub(atom!("call"), narity + 1);
+                let err = self.machine_st.type_error(ValidType::Callable, str_loc_as_cell!(h));
+                return Err(self.machine_st.error_form(err, stub));
             }
         );
 
@@ -4342,7 +4352,7 @@ impl Machine {
 
                     let mut stream = Stream::from_http_stream(
                         AtomTable::build_with(&self.machine_st.atom_tbl, &address_string),
-                        Box::new(reader),
+                        reader,
                         &mut self.machine_st.arena,
                     );
                     *stream.options_mut() = StreamOptions::default();
@@ -4437,11 +4447,7 @@ impl Machine {
             let runtime = tokio::runtime::Handle::current();
             let _guard = runtime.enter();
 
-            fn get_reader(body: impl Buf + Send + 'static) -> Box<dyn BufRead + Send> {
-                Box::new(body.reader())
-            }
-
-            let serve = warp::body::aggregate()
+            let serve = warp::body::bytes()
                 .and(warp::header::optional::<u64>(
                     warp::http::header::CONTENT_LENGTH.as_str(),
                 ))
@@ -4452,7 +4458,7 @@ impl Machine {
                     future::ready(Ok::<(String,), warp::Rejection>(("".to_string(),)))
                 }))
                 .map(
-                    move |body,
+                    move |body: bytes::Bytes,
                           content_length,
                           method,
                           headers: warp::http::HeaderMap,
@@ -4472,7 +4478,7 @@ impl Machine {
                             headers,
                             path: path.as_str().to_string(),
                             query,
-                            body: get_reader(body),
+                            body: body.reader(),
                         };
                         let response =
                             Arc::new((Mutex::new(false), Mutex::new(None), Condvar::new()));
@@ -7473,6 +7479,40 @@ impl Machine {
         };
 
         unify!(self.machine_st, self.machine_st.registers[3], ints_list);
+    }
+
+    #[inline(always)]
+    pub(crate) fn crypto_hmac(&mut self) {
+        let encoding = cell_as_atom!(self.deref_register(2));
+        let data = self.string_encoding_bytes(self.machine_st.registers[1], encoding);
+
+        let stub_gen = || functor_stub(atom!("crypto_data_hash"), 3);
+
+        let key = self
+            .machine_st
+            .integers_to_bytevec(self.machine_st.registers[3], stub_gen);
+
+        let algorithm = cell_as_atom!(self.deref_register(5));
+        let ralg = match algorithm {
+            atom!("sha256") => hmac::HMAC_SHA256,
+            atom!("sha384") => hmac::HMAC_SHA384,
+            atom!("sha512") => hmac::HMAC_SHA512,
+            _ => {
+                unreachable!()
+            }
+        };
+
+        let rkey = hmac::Key::new(ralg, key.as_ref());
+        let tag = hmac::sign(&rkey, &data);
+
+        let ints_list = heap_loc_as_cell!(iter_to_heap_list(
+            &mut self.machine_st.heap,
+            tag.as_ref()
+                .iter()
+                .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64))),
+        ));
+
+        unify!(self.machine_st, self.machine_st.registers[4], ints_list);
     }
 
     #[inline(always)]

@@ -1,12 +1,18 @@
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   Written 2020-2023 by Markus Triska (triska@metalevel.at)
+   Written 2020-2024 by Markus Triska (triska@metalevel.at)
    Part of Scryer Prolog.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
 /** This library provides predicates for reasoning about time.
 */
 
-:- module(time, [max_sleep_time/1, sleep/1, time/1, current_time/1, format_time//2]).
+:- module(time, [max_sleep_time/1,
+                 sleep/1,
+                 time/1,
+                 current_time/1,
+                 format_time//2,
+                 statistics/2
+                ]).
 
 :- use_module(library(format)).
 :- use_module(library(iso_ext)).
@@ -91,7 +97,16 @@ sleep(T) :-
     ).
 
 
-% '$cpu_now' can be replaced by statistics/2 once that is implemented.
+%% statistics(?Keyword, ?List)
+%
+%  Preliminary support for statistics/2, yielding timing information.
+%  The only supported `Keyword` is `runtime`. The first element of
+%  `List` is the CPU time in milliseconds, the second element is
+%  currently not supported.
+
+statistics(runtime, [T,unsupported]) :-
+        '$cpu_now'(T0),
+        T is T0*1000.
 
 :- meta_predicate time(0).
 

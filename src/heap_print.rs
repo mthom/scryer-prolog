@@ -1221,7 +1221,12 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         let focus = self.iter.focus();
         let mut heap_pstr_iter = HeapPStrIter::new(self.iter.heap, focus.value() as usize);
 
+        let next_h;
+        let next_hare;
+
         if heap_pstr_iter.next().is_some() {
+            next_h = heap_pstr_iter.focus;
+            next_hare = heap_pstr_iter.focus();
             for _ in heap_pstr_iter.by_ref() {}
         } else {
             return self.push_list(max_depth);
@@ -1283,7 +1288,8 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                         // print an extraneous number. pstr offset value cells are never
                         // used by the iterator to mark cyclic terms so the removal is safe.
                         self.iter.pop_stack();
-                        Some(end_h)
+                        Some(next_hare)
+                        // Some(end_h)
                     } else {
                         None
                     };
@@ -1291,7 +1297,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                     if !self.max_depth_exhausted(max_depth) {
                         let pstr = cell_as_string!(self.iter.heap[h]);
                         self.state_stack.push(TokenOrRedirect::CommaSeparatedCharList(CommaSeparatedCharList {
-                            pstr, offset, max_depth, end_cell, end_h,
+                            pstr, offset, max_depth, end_cell: next_h, end_h,
                         }));
                     } else {
                         self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
@@ -1727,7 +1733,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
                        self.print_stream(stream, max_depth);
                    }
                    (ArenaHeaderTag::TcpListener, listener) => {
-                       self.print_tcp_listener(&*listener, max_depth);
+                       self.print_tcp_listener(&listener, max_depth);
                    }
                    (ArenaHeaderTag::Dropped, _value) => {
                        self.print_impromptu_atom(atom!("$dropped_value"));

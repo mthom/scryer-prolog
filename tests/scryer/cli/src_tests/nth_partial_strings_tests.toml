@@ -1,0 +1,1 @@
+args = ["-f", "--no-add-history", "src/tests/nth_partial_strings.pl", "-f", "-g", "use_module(library(nth_partial_strings_tests)),nth_partial_strings_tests:main_quiet(nth_partial_strings_tests)"]

@@ -1,5 +1,5 @@
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   Written 2020-2023 by Markus Triska (triska@metalevel.at)
+   Written 2020-2024 by Markus Triska (triska@metalevel.at)
    Part of Scryer Prolog.
 
 /** Predicates for cryptographic applications.
@@ -10,10 +10,6 @@
 
    Especially for cryptographic applications, it is an advantage that
    using strings leaves little trace of what was processed in the system.
-
-   For predicates that accept an `encoding/1` option to specify the encoding
-   of the input data, if `encoding(octet)` is used, then the input can also
-   be specified as a list of _bytes_, i.e., integers between 0 and 255.
 */
 
 :- module(crypto,
@@ -91,9 +87,36 @@ bytes_hex([B|Bs]) --> [C0,C1],
         },
         bytes_hex(Bs).
 
+char_hexval(C, H) :-
+        integer(H),
+        !,
+        hexval_char(H, C).
 char_hexval(C, H) :- nth0(H, "0123456789abcdef", C), !.
 char_hexval(C, H) :- nth0(H, "0123456789ABCDEF", C), !.
 
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+  We specialize char_hexval/2 for use if the value is given,
+  so that it works in constant time in this case.
+
+  The security of HMAC verification depends on this property.
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
+hexval_char(0, '0').
+hexval_char(1, '1').
+hexval_char(2, '2').
+hexval_char(3, '3').
+hexval_char(4, '4').
+hexval_char(5, '5').
+hexval_char(6, '6').
+hexval_char(7, '7').
+hexval_char(8, '8').
+hexval_char(9, '9').
+hexval_char(0xa, a).
+hexval_char(0xb, b).
+hexval_char(0xc, c).
+hexval_char(0xd, d).
+hexval_char(0xe, e).
+hexval_char(0xf, f).
 
 must_be_bytes(Bytes, Context) :-
         must_be(list, Bytes),
@@ -190,7 +213,19 @@ crypto_random_byte(B) :- '$crypto_random_byte'(B).
 %
 %    - `encoding(+Encoding)`
 %      The default encoding is `utf8`. The alternative is `octet`, to
-%      treat the input as a list of raw bytes.
+%      use the character code of each character in Data as a byte
+%      value.
+%
+%    - `hmac(+Key)`
+%      Compute a hash-based message authentication code (HMAC) using
+%      Key, a list of bytes. This option is currently supported for
+%      algorithms `sha256`, `sha384` and `sha512`. If `Hash` is
+%      instantiated, then it is compared with the computed HMAC
+%      in such a way that no information about the expected HMAC
+%      is revealed, using a comparison of strings that always takes
+%      the same time independent of whether and where the strings
+%      differ. This option can therefore also be used to safely
+%      _verify_ a given HMAC.
 %
 %  Example:
 %
@@ -214,8 +249,33 @@ crypto_data_hash(Data0, Hash, Options0) :-
         (   hash_algorithm(A) -> true
         ;   domain_error(hash_algorithm, A, crypto_data_hash/3)
         ),
-        '$crypto_data_hash'(Data, Encoding, HashBytes, A),
-        hex_bytes(Hash, HashBytes).
+        (   member(HMAC, Options0), nonvar(HMAC), HMAC = hmac(Ks) ->
+            must_be_bytes(Ks, crypto_data_hash/3),
+            hmac_algorithm(A),
+            '$crypto_hmac'(Data, Encoding, Ks, HashBytes, A),
+            (   var(Hash) ->
+                hex_bytes(Hash, HashBytes)
+            ;   must_be(chars, Hash),
+                hex_bytes(HashMAC, HashBytes),
+                chars_equal_constant_time(Hash, HashMAC)
+            )
+        ;   '$crypto_data_hash'(Data, Encoding, HashBytes, A),
+            hex_bytes(Hash, HashBytes)
+        ).
+
+chars_equal_constant_time(As, Bs) :-
+        maplist(chars_xor, As, Bs, Xs),
+        sum_list(Xs, Sum),
+        Sum =:= 0.
+
+chars_xor(A, B, Xor) :-
+        char_code(A, CA),
+        char_code(B, CB),
+        Xor is xor(CA,CB).
+
+hmac_algorithm(sha256).
+hmac_algorithm(sha384).
+hmac_algorithm(sha512).
 
 options_data_chars(Options, Data, Chars, Encoding) :-
         option(encoding(Encoding), Options, utf8),
@@ -271,7 +331,8 @@ hash_algorithm(blake2b512).
 %      default is all zeroes.
 %    - `encoding(+Encoding)`
 %      The default encoding is `utf8`. The alternative is `octet`,
-%      to treat the input as a list of raw bytes.
+%      to use the character code of each character in Data as a byte
+%      value.
 %
 %  The `info/1`  option can be  used to  generate multiple keys  from a
 %  single  master key,  using for  example values  such as  "key" and
@@ -477,8 +538,9 @@ bytes_base64(Bytes, Base64) :-
 %  Options:
 %
 %     - `encoding(+Encoding)`
-%     Encoding to use for PlainText. Default is utf8. The alternative
-%     is octet to treat PlainText as raw bytes.
+%     Encoding to use for PlainText. The default is `utf8`. The
+%     alternative is `octet`, to use the character code of each
+%     character in PlainText as a byte value.
 %
 %     - `tag(-List)`
 %     For authenticated encryption schemes, List is unified with a
@@ -564,8 +626,9 @@ algorithm_key_iv('chacha20-poly1305', Key, IV) :-
 %  Options is a list of:
 %
 %   - `encoding(+Encoding)`
-%   Encoding to use for PlainText. The default is utf8. The
-%   alternative is octet, which is used if the data are raw bytes.
+%   Encoding to use for PlainText. The default is `utf8`. The
+%   alternative is `octet`, to obtain a list of characters where each
+%   character code corresponds to a decrypted octet of CipherText.
 %
 %   - `tag(+Tag)`
 %   For authenticated encryption schemes, the tag must be specified as
@@ -601,6 +664,8 @@ crypto_data_decrypt(CipherText0, Algorithm, Key, IV, PlainText, Options) :-
 encoding_chars(octet, Bs, Cs) :-
         must_be(list, Bs),
         (   maplist(integer, Bs) ->
+            % the ability to use integers is deprecated and a
+            % candidate for removal in the future!
             maplist(char_code, Cs, Bs)
         ;   Bs = Cs
         ),
@@ -687,6 +752,146 @@ ed25519_keypair_public_key(Pair, PublicKey) :-
 %  PKCS#8 v2 format as generated by `ed25519_new_keypair/1`. Sign Data
 %  with Key, yielding Signature as a list of hexadecimal characters.
 
+/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
+   Side-channel attacks on Ed25519 predicates
+   ==========================================
+
+   Ed25519 predicates where the private key occurs as part of the
+   arguments are potentially subject to side-channel attacks, since
+   key pairs are represented as strings in the context of Ed25519.
+
+   The compact string representation used by Scryer Prolog means that
+   different characters may occupy different numbers of bytes: Due
+   to UTF-8 encoding, characters with codes 1..127 occupy exactly 1 byte,
+   characters with codes 128..2047 occupy exactly 2 bytes, and '0'
+   is represented as a list element occupying an entire cell and
+   dedicated list constructor in addition to string termination and
+   possibly padding.
+
+   This difference is located at the level of the Rust engine. To
+   Prolog code, any two characters look conceptually the same (i.e.,
+   they are both atoms of length 1), and the internal difference in
+   representation cannot be observed at all.
+
+   Very precise timing information or other measurements about
+   operations that reason about such strings may yield information
+   that is meant to stay secret. For example, if Ks is a secret key
+   stored as a list of characters, then the time it takes to run
+   phrase(..., Ks) may reveal the number of bytes in Ks that are 0 or
+   greater than 127.
+
+   To test whether it is possible to detect such differences, I use
+   exp(N) which succeeds exactly 2^N times:
+
+        exp(E) :-
+            N is 2^E,
+            between(1, N, _).
+
+   Here is an example query that uses partial_string/1 to traverse
+   various strings consisting uniformly of characters with the same
+   code, such as 0, 32, 255 and others, in the hope to detect
+   differences in timing if only in such extreme cases:
+
+        ?- length(Ls, 256),
+           member(Code, [12,0,55,0,0,32,255,10,0,127,64]),
+           portray_clause(byte=Code),
+           maplist(=(Code), Ls),
+           atom_codes(A, Ls),
+           atom_chars(A, Cs),
+           time((exp(21),partial_string(Cs),false)).
+        %@ byte=12.
+        %@    % CPU time: 1.537s, 14_680_107 inferences
+        %@ byte=0.
+        %@    % CPU time: 1.526s, 14_680_107 inferences
+        %@ byte=55.
+        %@    % CPU time: 1.534s, 14_680_107 inferences
+        %@ byte=0.
+        %@    % CPU time: 1.556s, 14_680_107 inferences
+        %@ byte=0.
+        %@    % CPU time: 1.520s, 14_680_107 inferences
+        %@ byte=32.
+        %@    % CPU time: 1.524s, 14_680_107 inferences
+        %@ byte=255.
+        %@    % CPU time: 1.522s, 14_680_107 inferences
+        %@ byte=10.
+        %@    % CPU time: 1.526s, 14_680_107 inferences
+        %@ byte=0.
+        %@    % CPU time: 1.522s, 14_680_107 inferences
+        %@ byte=127.
+        %@    % CPU time: 1.522s, 14_680_107 inferences
+        %@ byte=64.
+        %@    % CPU time: 1.517s, 14_680_107 inferences
+        %@    false.
+
+   This shows that there is enough variety between runs that
+   traversing a list with 256 elements that are all '\x0\' may even,
+   and unexpectedly, be faster than traversing a list consisting
+   entirely of characters with character code 32, which in turn may be
+   slower than processing a list with 256 characters that all have
+   code 255 and thus occupy twice as much space. This holds even over
+   millions of runs. Reasons for such variety can include CPU power
+   saving mechanisms, dynamic optimizations, prefetching heuristics,
+   branch prediction algorithms, varying system loads etc.
+
+   This gives rise to the suspicion that any such timing differences
+   would be extremely hard to exploit, at least on the architecture I
+   tested it on, also since partial_string/1 is a very low-level
+   operation and any actual processing (using phrase/2 etc.) would
+   introduce additional overheads that in all likelihood far outweigh
+   any differences that can be measured with partial_string/1.
+
+   Any resulting differences in timing and resource use, if they are
+   measurable at all in any way, can at most reveal one bit per byte.
+   Note also that Ed25519 private keys are chosen randomly, and hence
+   half of their bytes are expected to be in 128..255. The predicates
+   remain completely safe to use in all scenarios where no information
+   about the private key can be gathered by unauthorized parties.
+
+   Still, the concern remains: We know that different keys may occupy
+   different numbers of bytes in the internal compact representation
+   of strings used by Scryer Prolog, and it may be possible to exploit
+   these differences to obtain information that is meant to be kept
+   secret. We must therefore keep an eye on this issue. For example,
+   it may become a concern on very slow devices such as ID-cards where
+   Scryer Prolog may be deployed in the future and where such timing
+   differences may be detectable, or if Scryer Prolog itself becomes
+   so fast that the relative overhead of such low-level operations
+   becomes greater and thus more easily measurable.
+
+   Possible mitigations in such situations would be to:
+
+    1. use lists of integers to represent Ed25519 key pairs, resulting
+       in a 24-fold space increase. This may be prohibitive in
+       applications that manage a great number of keys. The Rust code
+       would not be affected by this change, since it already operates
+       on bytes. A Prolog application may implement this privately, and
+       also encourage an API change of this library.
+    2. introduce a compact internal representation for lists of bytes,
+       which appear to Prolog programs as lists of characters.
+
+   (2) seems to be the better solution despite the implementation
+   overhead: In addition to the improved security properties due to
+   the elimination of side-channel attacks when reasoning about keys,
+   all applications that reason about binary data would benefit from a
+   more compact representation of binary data. Such an additional
+   compact representation should only be attempted if the amount of
+   Rust code it impacts is kept to the absolute minimum, certainly
+   much smaller than what the compact string representation as it is
+   currently implemented affects.
+
+   *No* solution would be to:
+
+    - eliminate the compact string representation from the engine and
+      use plain lists of characters to represent Ed25519 key pairs,
+    - continue to use lists of characters for Ed25519 key pairs,
+      and ensure that they are never coalesced into compact strings
+      (a future GC compaction step may need to be adapted for this)
+
+   This is because atom names are still represented in UTF-8 encoding,
+   and are hence also susceptible to side-channel attacks due to their
+   using different numbers of bytes for different codes.
+- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+
 ed25519_sign(KeyPair, Data0, Signature, Options) :-
         must_be_octet_chars(KeyPair, ed25519_sign/4),
         length(Prefix, 16),
@@ -708,7 +913,8 @@ ed25519_sign(KeyPair, Data0, Signature, Options) :-
 %
 %  - `encoding(+Encoding)`
 %    The default encoding of Data is `utf8`. The alternative is `octet`,
-%    which treats Data as a list of raw bytes.
+%    to use the character code of each character in Data as a byte
+%    value.
 
 ed25519_verify(Key, Data0, Signature0, Options) :-
         must_be_octet_chars(Key, ed25519_verify/4),
@@ -814,8 +1020,25 @@ curve_a(curve(_,_,A,_,_,_,_,_), A).
 curve_b(curve(_,_,_,B,_,_,_,_), B).
 curve_field_length(curve(_,_,_,_,_,_,FieldLength,_), FieldLength).
 
+%% crypto_curve_generator(+Curve, -G)
+%
+%  Yields the generator point G of Curve.
+
 crypto_curve_generator(curve(_,_,_,_,G,_,_,_), G).
+
+%% crypto_curve_order(+Curve, -Order)
+%
+%  Yields the order of Curve.
+
 crypto_curve_order(curve(_,_,_,_,_,Order,_,_), Order).
+
+%% crypto_curve_scalar_mult(+Curve, +Scalar, +Point, -Result)
+%
+%  Computes the point _Result = Scalar*Point_. Scalar must be an
+%  integer, and Point must be a point on Curve. This operation can be
+%  used to negotiate a shared secret over a public channel. Consider
+%  using `curve25519_scalar_mult/3` instead for more desirable
+%  security properties.
 
 crypto_curve_scalar_mult(Curve, Scalar, point(X,Y), point(RX, RY)) :-
         must_be(integer, Scalar),
@@ -882,6 +1105,12 @@ fitting_exponent(N, E0, E) :-
         ;   E1 #= E0 + 1,
             fitting_exponent(N, E1, E)
         ).
+
+%% crypto_name_curve(+Name, -Curve)
+%
+%  Yields a representation of the elliptic curve with name Name.
+%  Currently, the only supported name is `secp256k1`, a Koblitz curve
+%  regarded as secure.
 
 crypto_name_curve(secp256k1,
                   curve(secp256k1,
