@@ -126,4 +126,3 @@ when_condition_si((A, B)) :-
 when_condition_si((A ; B)) :-
     when_condition_si(A),
     when_condition_si(B).
-
