@@ -28,7 +28,7 @@ use crate::machine::stack::*;
 use crate::machine::streams::*;
 use crate::machine::{get_structure_index, Machine, VERIFY_ATTR_INTERRUPT_LOC};
 use crate::parser::char_reader::*;
-use crate::parser::dashu::Integer;
+use crate::parser::dashu::{Integer, Rational};
 use crate::read::*;
 use crate::types::*;
 use rand::rngs::StdRng;
@@ -824,25 +824,30 @@ impl MachineState {
     ) {
         let mut seen_set = IndexSet::new();
 
-        {
-            let mut iter =
-                stackful_post_order_iter::<NonListElider>(&mut self.heap, &mut self.stack, term);
+        let outcome = if term.is_ref() {
+            {
+                let mut iter = stackful_post_order_iter::<NonListElider>(
+                    &mut self.heap, &mut self.stack, term.get_value() as usize,
+                );
 
-            while let Some(value) = iter.next() {
-                if iter.parent_stack_len() >= max_depth {
-                    iter.pop_stack();
-                    continue;
-                }
+                while let Some(value) = iter.next() {
+                    if iter.parent_stack_len() >= max_depth {
+                        iter.pop_stack();
+                        continue;
+                    }
 
-                let value = unmark_cell_bits!(value);
+                    let value = unmark_cell_bits!(value);
 
-                if value.is_var() {
-                    seen_set.insert(value);
+                    if value.is_var() {
+                        seen_set.insert(value);
+                    }
                 }
             }
-        }
 
-        let outcome = heap_loc_as_cell!(iter_to_heap_list(&mut self.heap, seen_set.into_iter(),));
+            heap_loc_as_cell!(iter_to_heap_list(&mut self.heap, seen_set.into_iter()))
+        } else {
+            empty_list_as_cell!()
+        };
 
         unify_fn!(*self, list_of_vars, outcome);
     }
@@ -942,36 +947,51 @@ impl MachineState {
                     tokens.reverse();
 
                     match parser.read_term(&op_dir, Tokens::Provided(tokens)) {
-                        Err(err) => {
-                            let err = self.syntax_error(err);
-                            return Err(self.error_form(err, stub_gen()));
-                        }
-                        Ok(Term::Literal(_, Literal::Rational(n))) => {
-                            self.unify_rational(n, nx);
-                        }
-                        Ok(Term::Literal(_, Literal::Float(n))) => {
-                            self.unify_f64(n.as_ptr(), nx);
-                        }
-                        Ok(Term::Literal(_, Literal::Integer(n))) => {
-                            self.unify_big_int(n, nx);
-                        }
-                        Ok(Term::Literal(_, Literal::Fixnum(n))) => {
-                            self.unify_fixnum(n, nx);
-                        }
-                        _ => {
-                            let err = ParserError::ParseBigInt(0, 0);
-                            let err = self.syntax_error(err);
+                        Ok(term) => {
+                            let mut error_gen = || {
+                                let e = ParserError::ParseBigInt(ParserErrorSrc::default());
+                                let e = self.syntax_error(e);
 
-                            return Err(self.error_form(err, stub_gen()));
+                                return Err(self.error_form(e, stub_gen()));
+                            };
+
+                            read_heap_cell!(term.heap[term.focus],
+                                (HeapCellValueTag::Cons, c) => {
+                                    match_untyped_arena_ptr!(c,
+                                       (ArenaHeaderTag::Rational, n) => {
+                                           self.unify_rational(n, nx);
+                                       }
+                                       (ArenaHeaderTag::Integer, n) => {
+                                           self.unify_big_int(n, nx);
+                                       }
+                                       _ => {
+                                           return error_gen();
+                                       }
+                                    )
+                                }
+                                (HeapCellValueTag::F64, n) => {
+                                    self.unify_f64(n, nx);
+                                }
+                                (HeapCellValueTag::Fixnum, n) => {
+                                    self.unify_fixnum(n, nx);
+                                }
+                                _ => {
+                                    return error_gen();
+                                }
+                            );
+                        }
+                        Err(e) => {
+                            let e = self.syntax_error(e);
+                            return Err(self.error_form(e, stub_gen()));
                         }
                     }
 
                     break;
                 }
                 Ok(c) => {
-                    let (line_num, col_num) = (lexer.line_num, lexer.col_num);
+                    let err_src = lexer.loc_to_err_src();
 
-                    let err = ParserError::UnexpectedChar(c, line_num, col_num);
+                    let err = ParserError::UnexpectedChar(c, err_src);
                     let err = self.syntax_error(err);
 
                     return Err(self.error_form(err, stub_gen()));
@@ -1440,6 +1460,8 @@ impl Machine {
             }
         };
 
+        // println!("(fast) calling {}/{}", name.as_str(), arity);
+
         if let Some(code_index) = index_cell {
             if !code_index.is_undefined() {
                 load_registers(&mut self.machine_st, goal, goal_arity);
@@ -1599,12 +1621,12 @@ impl Machine {
 
             let vars: Vec<_> = vars
                 .union(&result.supp_vars) // difference + union does not cancel.
-                .map(|v| Term::Var(Cell::default(), VarPtr::from(format!("_{}", v.get_value()))))
+                .cloned()
                 .collect();
 
             let helper_clause_loc = self.code.len();
 
-            match self.compile_standalone_clause(temp_v!(1), &vars) {
+            match self.compile_standalone_clause(temp_v!(1), vars) {
                 Err(e) => {
                     let err = self.machine_st.session_error(e);
                     let stub = functor_stub(atom!("call"), result.key.1);
@@ -3572,7 +3594,9 @@ impl Machine {
                     }
                     Some(Err(e)) => {
                         let stub = functor_stub(atom!("$get_n_chars"), 3);
-                        let err = self.machine_st.session_error(SessionError::from(e));
+                        let err = self.machine_st.session_error(SessionError::from(
+                            ParserError::IO(e, ParserErrorSrc::default()),
+                        ));
 
                         return Err(self.machine_st.error_form(err, stub));
                     }
@@ -6266,10 +6290,10 @@ impl Machine {
     }
 
     #[inline(always)]
-    fn read_term_and_write_to_heap(
+    fn read_term_from_atom(
         &mut self,
         atom_or_string: AtomOrString,
-    ) -> Result<Option<TermWriteResult>, MachineStub> {
+    ) -> Result<Option<FocusedHeap>, MachineStub> {
         let string = match atom_or_string {
             AtomOrString::Atom(atom!("[]")) => "".to_owned(),
             _ => atom_or_string.into(),
@@ -6279,15 +6303,12 @@ impl Machine {
         let mut parser = Parser::new(chars, &mut self.machine_st);
         let op_dir = CompositeOpDir::new(&self.indices.op_dir, None);
 
-        let term_write_result = parser
+        let term = parser
             .read_term(&op_dir, Tokens::Default)
-            .map_err(|err| error_after_read_term(err, 0, &parser))
-            .and_then(|term| {
-                write_term_to_heap(&term, &mut self.machine_st.heap, &self.machine_st.atom_tbl)
-            });
+            .map_err(|e| error_after_read_term(e, 0));
 
-        match term_write_result {
-            Ok(term_write_result) => Ok(Some(term_write_result)),
+        match term {
+            Ok(term) => Ok(Some(term)),
             Err(CompilationError::ParserError(e)) if e.is_unexpected_eof() => {
                 let value = self.machine_st.registers[2];
                 self.machine_st.unify_atom(atom!("end_of_file"), value);
@@ -6305,42 +6326,50 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn read_from_chars(&mut self) -> CallResult {
-        if let Some(atom_or_string) = self
+        let atom_or_string = self
             .machine_st
             .value_to_str_like(self.machine_st.registers[1])
-        {
-            if let Some(term_write_result) = self.read_term_and_write_to_heap(atom_or_string)? {
-                let result = heap_loc_as_cell!(term_write_result.heap_loc);
-                let var = self.deref_register(2).as_var().unwrap();
+            .unwrap();
 
-                self.machine_st.bind(var, result);
-            }
+        if let Some(mut term) = self.read_term_from_atom(atom_or_string)? {
+            let heap_len = self.machine_st.heap.len();
 
-            Ok(())
-        } else {
-            unreachable!()
+            self.machine_st.heap.extend(
+                copy_and_align_iter(term.heap.drain(..), 0, heap_len as i64),
+            );
+
+            let result = heap_loc_as_cell!(heap_len + term.focus);
+            let var = self.deref_register(2).as_var().unwrap();
+
+            self.machine_st.bind(var, result);
         }
+
+        Ok(())
     }
 
     #[inline(always)]
     pub(crate) fn read_term_from_chars(&mut self) -> CallResult {
-        if let Some(atom_or_string) = self
+        let atom_or_string = self
             .machine_st
             .value_to_str_like(self.machine_st.registers[1])
-        {
-            if let Some(term_write_result) = self.read_term_and_write_to_heap(atom_or_string)? {
-                self.machine_st.read_term_body(term_write_result)
-            } else {
-                if !self.machine_st.fail {
-                    // wrote end_of_file term in this case.
-                    self.machine_st.write_read_term_options(vec![], vec![])?;
-                }
+            .unwrap();
 
-                Ok(())
-            }
-        } else {
-            unreachable!()
-        }
+        let string = match atom_or_string {
+            AtomOrString::Atom(atom!("[]")) => "".to_owned(),
+            _ => atom_or_string.into(),
+        };
+
+        let chars = CharReader::new(ByteStream::from_string(string));
+        let term_write_result = self.machine_st.read(chars, &self.indices.op_dir)
+            .map(|(term, _)| term.to_machine_heap(&mut self.machine_st))
+            .map_err(|e| {
+                let e = self.machine_st.session_error(SessionError::from(e));
+                let stub = functor_stub(atom!("read_term_from_chars"), 3);
+
+                self.machine_st.error_form(e, stub)
+            })?;
+
+        self.machine_st.read_term_body(term_write_result)
     }
 
     #[inline(always)]
@@ -8095,8 +8124,13 @@ impl Machine {
 
         match devour_whitespace(&mut parser) {
             Ok(false) => {
-                // not at EOF.
+                // not at EOF ...
                 stream.add_lines_read(parser.lines_read());
+
+                // ... unless we are.
+                if stream.at_end_of_stream() {
+                    self.machine_st.fail = true;
+                }
             }
             Ok(true) => {
                 stream.add_lines_read(parser.lines_read());

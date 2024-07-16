@@ -1,8 +1,8 @@
 use crate::atom_table::*;
-use crate::parser::ast::*;
-
 use crate::forms::*;
 use crate::instructions::*;
+use crate::parser::ast::*;
+use crate::types::*;
 
 use fxhash::FxBuildHasher;
 use indexmap::IndexMap;
@@ -1491,34 +1491,60 @@ impl<I: Indexer> CodeOffsets<I> {
 
     pub(crate) fn index_term(
         &mut self,
-        optimal_arg: &Term,
+        heap: &[HeapCellValue],
+        optimal_arg: HeapCellValue,
         index: usize,
         clause_index_info: &mut ClauseIndexInfo,
         atom_tbl: &AtomTable,
     ) {
-        match optimal_arg {
-            &Term::Clause(_, atom!("."), ref terms) if terms.len() == 2 => {
+        read_heap_cell!(optimal_arg,
+            (HeapCellValueTag::Str, s) => {
+                let (name, arity) = cell_as_atom_cell!(heap[s]).get_name_and_arity();
+
+                if (name, arity) == (atom!("."), 2) {
+                    clause_index_info.opt_arg_index_key = OptArgIndexKey::List(self.optimal_index, 0);
+                    self.index_list(index);
+                } else {
+                    clause_index_info.opt_arg_index_key =
+                        OptArgIndexKey::Structure(self.optimal_index, 0, name, arity);
+
+                    self.index_structure(name, arity, index);
+                }
+            }
+            (HeapCellValueTag::Atom, (name, arity)) => {
+                debug_assert_eq!(arity, 0);
+
+                let overlapping_constants = self.index_constant(atom_tbl, Literal::Atom(name), index);
+
+                clause_index_info.opt_arg_index_key = OptArgIndexKey::Literal(
+                    self.optimal_index,
+                    0,
+                    Literal::Atom(name),
+                    overlapping_constants,
+                );
+            }
+            (HeapCellValueTag::Lis
+             | HeapCellValueTag::CStr
+             | HeapCellValueTag::PStrLoc) => {
                 clause_index_info.opt_arg_index_key = OptArgIndexKey::List(self.optimal_index, 0);
                 self.index_list(index);
             }
-            &Term::Cons(..) | &Term::Literal(_, Literal::String(_)) | &Term::PartialString(..) => {
-                clause_index_info.opt_arg_index_key = OptArgIndexKey::List(self.optimal_index, 0);
-                self.index_list(index);
-            }
-            &Term::Clause(_, name, ref terms) => {
-                clause_index_info.opt_arg_index_key =
-                    OptArgIndexKey::Structure(self.optimal_index, 0, name, terms.len());
+            _ => {
+                match Literal::try_from(optimal_arg) {
+                    Ok(lit) => {
+                        let overlapping_constants = self.index_constant(atom_tbl, lit, index);
 
-                self.index_structure(name, terms.len(), index);
+                        clause_index_info.opt_arg_index_key = OptArgIndexKey::Literal(
+                            self.optimal_index,
+                            0,
+                            lit,
+                            overlapping_constants,
+                        );
+                    }
+                    _ => {}
+                }
             }
-            &Term::Literal(_, constant) => {
-                let overlapping_constants = self.index_constant(atom_tbl, constant, index);
-
-                clause_index_info.opt_arg_index_key =
-                    OptArgIndexKey::Literal(self.optimal_index, 0, constant, overlapping_constants);
-            }
-            _ => {}
-        }
+        );
     }
 
     pub(crate) fn no_indices(&mut self) -> bool {
