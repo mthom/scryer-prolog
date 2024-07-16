@@ -192,9 +192,9 @@ enum ReplCodePtr {
     DynamicProperty,
     #[strum_discriminants(strum(props(Arity = "3", Name = "$abolish_clause")))]
     AbolishClause,
-    #[strum_discriminants(strum(props(Arity = "3", Name = "$asserta")))]
+    #[strum_discriminants(strum(props(Arity = "2", Name = "$asserta")))]
     Asserta,
-    #[strum_discriminants(strum(props(Arity = "3", Name = "$assertz")))]
+    #[strum_discriminants(strum(props(Arity = "2", Name = "$assertz")))]
     Assertz,
     #[strum_discriminants(strum(props(Arity = "4", Name = "$retract_clause")))]
     Retract,
