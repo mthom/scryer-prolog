@@ -7,6 +7,8 @@ use crate::debray_allocator::*;
 use crate::forms::*;
 use crate::instructions::*;
 use crate::iterators::*;
+use crate::machine::stack::Stack;
+use crate::parser::ast::FocusedHeap;
 use crate::targets::QueryInstruction;
 use crate::types::*;
 
@@ -20,7 +22,6 @@ use dashu::base::BitTest;
 use num_order::NumOrd;
 use ordered_float::{Float, OrderedFloat};
 
-use std::cell::Cell;
 use std::cmp::{max, min, Ordering};
 use std::convert::TryFrom;
 use std::f64;
@@ -51,12 +52,13 @@ impl Default for ArithmeticTerm {
     }
 }
 
+pub(crate) type ArithCont = (CodeDeque, Option<ArithmeticTerm>);
+
+/*
 #[derive(Debug)]
 pub(crate) struct ArithInstructionIterator<'a> {
     state_stack: Vec<TermIterState<'a>>,
 }
-
-pub(crate) type ArithCont = (CodeDeque, Option<ArithmeticTerm>);
 
 impl<'a> ArithInstructionIterator<'a> {
     fn push_subterm(&mut self, lvl: Level, term: &'a Term) {
@@ -134,13 +136,6 @@ impl<'a> Iterator for ArithInstructionIterator<'a> {
     }
 }
 
-#[derive(Debug)]
-pub(crate) struct ArithmeticEvaluator<'a> {
-    marker: &'a mut DebrayAllocator,
-    interm: Vec<ArithmeticTerm>,
-    interm_c: usize,
-}
-
 pub(crate) trait ArithmeticTermIter<'a> {
     type Iter: Iterator<Item = Result<ArithTermRef<'a>, ArithmeticError>>;
 
@@ -154,23 +149,31 @@ impl<'a> ArithmeticTermIter<'a> for &'a Term {
         ArithInstructionIterator::from(self)
     }
 }
+*/
 
-fn push_literal(interm: &mut Vec<ArithmeticTerm>, c: &Literal) -> Result<(), ArithmeticError> {
+#[derive(Debug)]
+pub(crate) struct ArithmeticEvaluator<'a> {
+    marker: &'a mut DebrayAllocator,
+    interm: Vec<ArithmeticTerm>,
+    interm_c: usize,
+}
+
+fn push_literal(interm: &mut Vec<ArithmeticTerm>, c: Literal) -> Result<(), ArithmeticError> {
     match c {
-        Literal::Fixnum(n) => interm.push(ArithmeticTerm::Number(Number::Fixnum(*n))),
-        Literal::Integer(n) => interm.push(ArithmeticTerm::Number(Number::Integer(*n))),
+        Literal::Fixnum(n) => interm.push(ArithmeticTerm::Number(Number::Fixnum(n))),
+        Literal::Integer(n) => interm.push(ArithmeticTerm::Number(Number::Integer(n))),
         Literal::Float(n) => interm.push(ArithmeticTerm::Number(Number::Float(*n.as_ptr()))),
-        Literal::Rational(n) => interm.push(ArithmeticTerm::Number(Number::Rational(*n))),
-        Literal::Atom(name) if name == &atom!("e") => interm.push(ArithmeticTerm::Number(
+        Literal::Rational(n) => interm.push(ArithmeticTerm::Number(Number::Rational(n))),
+        Literal::Atom(name) if name == atom!("e") => interm.push(ArithmeticTerm::Number(
             Number::Float(OrderedFloat(std::f64::consts::E)),
         )),
-        Literal::Atom(name) if name == &atom!("pi") => interm.push(ArithmeticTerm::Number(
+        Literal::Atom(name) if name == atom!("pi") => interm.push(ArithmeticTerm::Number(
             Number::Float(OrderedFloat(std::f64::consts::PI)),
         )),
-        Literal::Atom(name) if name == &atom!("epsilon") => interm.push(ArithmeticTerm::Number(
+        Literal::Atom(name) if name == atom!("epsilon") => interm.push(ArithmeticTerm::Number(
             Number::Float(OrderedFloat(f64::EPSILON)),
         )),
-        _ => return Err(ArithmeticError::NonEvaluableFunctor(*c, 0)),
+        _ => return Err(ArithmeticError::NonEvaluableFunctor(c, 0)),
     }
 
     Ok(())
@@ -309,44 +312,57 @@ impl<'a> ArithmeticEvaluator<'a> {
 
     pub(crate) fn compile_is(
         &mut self,
-        src: &'a Term,
-        term_loc: GenContext,
+        src: &mut FocusedHeap,
+        term_loc: usize,
+        context: GenContext,
         arg: usize,
     ) -> Result<ArithCont, ArithmeticError> {
         let mut code = CodeDeque::new();
+        let mut stack = Stack::uninitialized();
+        let mut iter = query_iterator::<false>(&mut src.heap, &mut stack, term_loc);
 
-        for term_ref in src.iter()? {
-            match term_ref? {
-                ArithTermRef::Literal(c) => push_literal(&mut self.interm, c)?,
-                ArithTermRef::Var(lvl, cell, name) => {
-                    let var_num = name.to_var_num().unwrap();
+        while let Some(term) = iter.next() {
+            read_heap_cell!(term,
+                (HeapCellValueTag::AttrVar | HeapCellValueTag::Var, h) => {
+                    let lvl = iter.level();
+                    let var_ptr = src.var_locs.read_next_var_ptr_at_key(h).unwrap();
+                    let var_num = var_ptr.to_var_num().unwrap();
+                    let old_r = self.marker.get_var_binding(var_num);
 
-                    let r = if lvl == Level::Shallow {
-                        self.marker
-                            .mark_non_callable(var_num, arg, term_loc, cell, &mut code)
-                    } else if term_loc.is_last() || cell.get().norm().reg_num() == 0 {
-                        let r = self.marker.get_binding(var_num);
+                    let r = if lvl == Level::Root {
+                        self.marker.mark_non_callable(var_num, arg, context, &mut code)
+                    } else if context.is_last() || old_r.reg_num() == 0 {
+                        let r = old_r;
 
                         if r.reg_num() == 0 {
                             self.marker.mark_var::<QueryInstruction>(
-                                var_num, lvl, cell, term_loc, &mut code,
-                            );
-                            cell.get().norm()
+                                var_num, lvl, context, &mut code,
+                            )
                         } else {
                             self.marker.increment_running_count(var_num);
                             r
                         }
                     } else {
                         self.marker.increment_running_count(var_num);
-                        cell.get().norm()
+                        old_r
                     };
 
                     self.interm.push(ArithmeticTerm::Reg(r));
                 }
-                ArithTermRef::Op(name, arity) => {
-                    code.push_back(self.instr_from_clause(name, arity)?);
+                (HeapCellValueTag::Atom, (name, arity)) => {
+                    if arity == 0 {
+                        push_literal(&mut self.interm, Literal::Atom(name))?;
+                    } else {
+                        code.push_back(self.instr_from_clause(name, arity)?);
+                    }
                 }
-            }
+                _ => {
+                    match Literal::try_from(term) {
+                        Ok(lit) => push_literal(&mut self.interm, lit)?,
+                        _ => unreachable!()
+                    }
+                }
+            );
         }
 
         Ok((code, self.interm.pop()))

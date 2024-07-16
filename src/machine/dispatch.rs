@@ -2664,6 +2664,8 @@ impl Machine {
                     &Instruction::CallNamed(arity, name, ref idx) => {
                         let idx = idx.get();
 
+                        // println!("calling {}/{}", name.as_str(), arity);
+
                         try_or_throw!(self.machine_st, self.try_call(name, arity, idx));
 
                         if self.machine_st.fail {
@@ -2674,6 +2676,8 @@ impl Machine {
                     }
                     &Instruction::ExecuteNamed(arity, name, ref idx) => {
                         let idx = idx.get();
+
+                        // println!("executing {}/{}", name.as_str(), arity);
 
                         try_or_throw!(self.machine_st, self.try_execute(name, arity, idx));
 
@@ -2686,6 +2690,8 @@ impl Machine {
                     &Instruction::DefaultCallNamed(arity, name, ref idx) => {
                         let idx = idx.get();
 
+                        // println!("calling {}/{}", name.as_str(), arity);
+
                         try_or_throw!(self.machine_st, self.try_call(name, arity, idx));
 
                         if self.machine_st.fail {
@@ -2694,6 +2700,8 @@ impl Machine {
                     }
                     &Instruction::DefaultExecuteNamed(arity, name, ref idx) => {
                         let idx = idx.get();
+
+                        // println!("executing {}/{}", name.as_str(), arity);
 
                         try_or_throw!(self.machine_st, self.try_execute(name, arity, idx));
 
@@ -3511,6 +3519,15 @@ impl Machine {
                             self.dynamic_module_resolution(arity - 2)
                         );
 
+                        /*
+                        println!(
+                            "(slow) calling {}:{}/{}",
+                            module_name.as_str(),
+                            key.0.as_str(),
+                            key.1,
+                        );
+                        */
+
                         try_or_throw!(self.machine_st, self.call_clause(module_name, key));
 
                         if self.machine_st.fail {
@@ -3522,6 +3539,15 @@ impl Machine {
                             self.machine_st,
                             self.dynamic_module_resolution(arity - 2)
                         );
+
+                        /*
+                        println!(
+                            "(slow) executing {}:{}/{}",
+                            module_name.as_str(),
+                            key.0.as_str(),
+                            key.1,
+                        );
+                        */
 
                         try_or_throw!(self.machine_st, self.execute_clause(module_name, key));
 

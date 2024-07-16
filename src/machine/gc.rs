@@ -7,6 +7,9 @@ use crate::types::*;
 #[cfg(test)]
 use crate::heap_iter::{FocusedHeapIter, HeapOrStackTag, IterStackLoc};
 
+#[cfg(test)]
+use std::ops::Deref;
+
 pub(crate) trait UnmarkPolicy {
     fn forward_attr_var(iter: &mut StacklessPreOrderHeapIter<Self>) -> Option<HeapCellValue>
     where
@@ -101,6 +104,15 @@ pub(crate) struct StacklessPreOrderHeapIter<'a, UMP: UnmarkPolicy> {
     current: usize,
     next: u64,
     iter_state: UMP,
+}
+
+#[cfg(test)]
+impl<'a> Deref for StacklessPreOrderHeapIter<'a, IteratorUMP> {
+    type Target = [HeapCellValue];
+
+    fn deref(&self) -> &Self::Target {
+        self.heap
+    }
 }
 
 #[cfg(test)]
