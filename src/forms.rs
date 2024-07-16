@@ -17,7 +17,6 @@ use fxhash::FxBuildHasher;
 use indexmap::{IndexMap, IndexSet};
 use ordered_float::OrderedFloat;
 
-use std::cell::Cell;
 use std::collections::VecDeque;
 use std::convert::TryFrom;
 use std::fmt;
@@ -67,15 +66,6 @@ pub enum Level {
     Shallow,
 }
 
-impl Level {
-    pub(crate) fn child_level(self) -> Level {
-        match self {
-            Level::Root => Level::Shallow,
-            _ => Level::Deep,
-        }
-    }
-}
-
 #[derive(Debug, Clone, Copy)]
 pub enum CallPolicy {
     Default,
@@ -87,19 +77,6 @@ pub enum ChunkType {
     Head,
     Mid,
     Last,
-}
-
-#[derive(Debug)]
-pub enum RootIterationPolicy {
-    Iterated,
-    NotIterated,
-}
-
-impl RootIterationPolicy {
-    #[inline(always)]
-    pub fn iterable(&self) -> bool {
-        matches!(self, RootIterationPolicy::Iterated)
-    }
 }
 
 impl ChunkType {
@@ -183,34 +160,39 @@ impl ChunkedTermVec {
 }
 
 #[derive(Debug)]
-pub enum QueryTerm {
-    // register, clause type, subterms, clause call policy.
-    Clause(Cell<RegType>, ClauseType, Vec<Term>, CallPolicy),
-    Fail,
-    LocalCut { var_num: usize, cut_prev: bool }, // var_num
-    GlobalCut(usize),                            // var_num
-    GetCutPoint { var_num: usize, prev_b: bool },
-    GetLevel(usize), // var_num
+pub struct QueryClause {
+    pub ct: ClauseType,
+    pub arity: usize,
+    pub term: HeapCellValue,
+    pub code_indices: IndexMap<usize, CodeIndex, FxBuildHasher>,
+    pub call_policy: CallPolicy,
 }
 
-impl QueryTerm {
-    pub(crate) fn arity(&self) -> usize {
-        match self {
-            QueryTerm::Clause(_, _, subterms, ..) => subterms.len(),
-            &QueryTerm::GetLevel(_) | &QueryTerm::GetCutPoint { .. } => 1,
-            _ => 0,
-        }
+impl QueryClause {
+    pub fn term_loc(&self) -> usize {
+        self.term.get_value() as usize
     }
 }
 
 #[derive(Debug)]
+pub enum QueryTerm {
+    Clause(QueryClause),
+    Fail,
+    Succeed,
+    LocalCut { var_num: usize, cut_prev: bool },
+    GlobalCut(usize), // var_num
+    GetCutPoint { var_num: usize, prev_b: bool },
+    GetLevel(usize), // var_num
+}
+
+#[derive(Debug)]
 pub struct Fact {
-    pub(crate) head: Term,
+    pub(crate) term: FocusedHeap,
 }
 
 #[derive(Debug)]
 pub struct Rule {
-    pub(crate) head: (Atom, Vec<Term>),
+    pub(crate) term: FocusedHeap,
     pub(crate) clauses: ChunkedTermVec,
 }
 
@@ -253,6 +235,53 @@ impl ClauseInfo for PredicateKey {
     }
 }
 
+fn clause_name(heap: &[HeapCellValue], term_loc: usize) -> Option<Atom> {
+    let name = term_name(heap, term_loc);
+
+    if Some(atom!(":-")) == name && 2 == term_arity(heap, term_loc) {
+        term_nth_arg(heap, term_loc, 1).and_then(|arg_loc| term_name(heap, arg_loc))
+    } else {
+        name
+    }
+}
+
+fn clause_arity(heap: &[HeapCellValue], term_loc: usize) -> usize {
+    let name = term_name(heap, term_loc);
+
+    if Some(atom!(":-")) == name && 2 == term_arity(heap, term_loc) {
+        term_nth_arg(heap, term_loc, 1)
+            .map(|arg_loc| term_arity(heap, arg_loc))
+            .unwrap_or(0)
+    } else {
+        term_arity(heap, term_loc)
+    }
+}
+
+impl ClauseInfo for FocusedHeap {
+    #[inline]
+    fn name(&self) -> Option<Atom> {
+        clause_name(&self.heap, self.focus)
+    }
+
+    #[inline]
+    fn arity(&self) -> usize {
+        clause_arity(&self.heap, self.focus)
+    }
+}
+
+impl<'a> ClauseInfo for FocusedHeapRefMut<'a> {
+    #[inline]
+    fn name(&self) -> Option<Atom> {
+        clause_name(self.heap, self.focus)
+    }
+
+    #[inline]
+    fn arity(&self) -> usize {
+        clause_arity(self.heap, self.focus)
+    }
+}
+
+/*
 impl ClauseInfo for Term {
     fn name(&self) -> Option<Atom> {
         match self {
@@ -287,29 +316,30 @@ impl ClauseInfo for Term {
         }
     }
 }
+*/
 
 impl ClauseInfo for Rule {
     fn name(&self) -> Option<Atom> {
-        Some(self.head.0)
+        self.term.name(self.term.focus)
     }
 
     fn arity(&self) -> usize {
-        self.head.1.len()
+        self.term.arity(self.term.focus)
     }
 }
 
 impl ClauseInfo for PredicateClause {
     fn name(&self) -> Option<Atom> {
         match self {
-            PredicateClause::Fact(ref term, ..) => term.head.name(),
-            PredicateClause::Rule(ref rule, ..) => rule.name(),
+            PredicateClause::Fact(ref fact, ..) => fact.term.name(fact.term.focus),
+            PredicateClause::Rule(ref rule, ..) => rule.term.name(rule.term.focus),
         }
     }
 
     fn arity(&self) -> usize {
         match self {
-            PredicateClause::Fact(ref term, ..) => term.head.arity(),
-            PredicateClause::Rule(ref rule, ..) => rule.arity(),
+            PredicateClause::Fact(ref fact, ..) => fact.term.arity(fact.term.focus),
+            PredicateClause::Rule(ref rule, ..) => rule.term.arity(rule.term.focus),
         }
     }
 }
@@ -321,19 +351,31 @@ pub enum PredicateClause {
 }
 
 impl PredicateClause {
-    pub(crate) fn args(&self) -> Option<&[Term]> {
-        match self {
-            PredicateClause::Fact(term, ..) => match &term.head {
-                Term::Clause(_, _, args) => Some(args),
-                _ => None,
-            },
-            PredicateClause::Rule(rule, ..) => {
-                if rule.head.1.is_empty() {
-                    None
-                } else {
-                    Some(&rule.head.1)
-                }
+    pub(crate) fn args(&self) -> Option<&[HeapCellValue]> {
+        let (term, focus) = match self {
+            PredicateClause::Fact(Fact { term }, _) => (term, term.focus),
+            PredicateClause::Rule(Rule { term, .. }, _) => {
+                let focus = term.nth_arg(term.focus, 1).unwrap();
+                (term, focus)
             }
+        };
+
+        let arity = term.arity(focus);
+
+        read_heap_cell!(term.deref_loc(focus),
+            (HeapCellValueTag::Str, s) => {
+                Some(&term.heap[s+1 .. s+arity+1])
+            }
+            _ => {
+                None
+            }
+        )
+    }
+
+    pub(crate) fn heap(&self) -> &[HeapCellValue] {
+        match self {
+            PredicateClause::Fact(ref fact, ..) => &fact.term.heap,
+            PredicateClause::Rule(ref rule, ..) => &rule.term.heap,
         }
     }
 }

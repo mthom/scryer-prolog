@@ -1,18 +1,19 @@
 use crate::atom_table::*;
 use crate::forms::*;
 use crate::instructions::*;
-use crate::iterators::*;
+use crate::iterators::fact_iterator;
+use crate::machine::Stack;
 use crate::machine::loader::*;
 use crate::machine::machine_errors::CompilationError;
 use crate::machine::preprocessor::*;
 use crate::parser::ast::*;
 use crate::parser::dashu::Rational;
+use crate::types::*;
 use crate::variable_records::*;
 
 use dashu::Integer;
 use indexmap::{IndexMap, IndexSet};
 
-use std::cell::Cell;
 use std::cmp::Ordering;
 use std::collections::VecDeque;
 use std::hash::{Hash, Hasher};
@@ -147,11 +148,21 @@ enum TraversalState {
     // where it leaves off.
     BuildFinalDisjunct(usize),
     Fail,
-    GetCutPoint { var_num: usize, prev_b: bool },
-    Cut { var_num: usize, is_global: bool },
+    Succeed,
+    GetCutPoint {
+        var_num: usize,
+        prev_b: bool,
+    },
+    Cut {
+        var_num: usize,
+        is_global: bool,
+    },
     CutPrev(usize),
     ResetCallPolicy(CallPolicy),
-    Term(Term),
+    Term {
+        subterm: HeapCellValue,
+        term_loc: usize,
+    },
     OverrideGlobalCutVar(usize),
     ResetGlobalCutVarOverride(Option<usize>),
     RemoveBranchNum,            // pop the current_branch_num and from the root set.
@@ -183,7 +194,7 @@ impl VarData {
     fn emit_initial_get_level(&mut self, build_stack: &mut ChunkedTermVec) {
         let global_cut_var_num = if let &Some(global_cut_var_num) = &self.global_cut_var_num {
             match &self.records[global_cut_var_num].allocation {
-                VarAlloc::Perm(..) => Some(global_cut_var_num),
+                VarAlloc::Perm { .. } => Some(global_cut_var_num),
                 VarAlloc::Temp { term_loc, .. } if term_loc.chunk_num() > 0 => {
                     Some(global_cut_var_num)
                 }
@@ -196,7 +207,7 @@ impl VarData {
         if let Some(global_cut_var_num) = global_cut_var_num {
             let term = QueryTerm::GetLevel(global_cut_var_num);
             self.records[global_cut_var_num].allocation =
-                VarAlloc::Perm(0, PermVarAllocation::Pending);
+                VarAlloc::Perm { reg: 0, allocation: PermVarAllocation::Pending };
 
             match build_stack.front_mut() {
                 Some(ChunkedTerms::Branch(_)) => {
@@ -213,8 +224,8 @@ impl VarData {
     }
 }
 
-pub type ClassifyFactResult = (Term, VarData);
-pub type ClassifyRuleResult = (Term, ChunkedTermVec, VarData);
+pub type ClassifyFactResult = VarData;
+pub type ClassifyRuleResult = (ChunkedTermVec, VarData);
 
 fn merge_branch_seq(branches: impl Iterator<Item = BranchInfo>) -> BranchInfo {
     let mut branch_info = BranchInfo::new(BranchNumber::default());
@@ -255,28 +266,32 @@ impl VariableClassifier {
         }
     }
 
-    pub fn classify_fact(mut self, term: Term) -> Result<ClassifyFactResult, CompilationError> {
-        self.classify_head_variables(&term)?;
-        Ok((
-            term,
-            self.branch_map.separate_and_classify_variables(
-                self.var_num,
-                self.global_cut_var_num,
-                self.current_chunk_num,
-            ),
+    pub fn classify_fact(
+        mut self,
+        term: &mut FocusedHeap,
+    ) -> Result<ClassifyFactResult, CompilationError> {
+        let focus = term.focus;
+        self.classify_head_variables(term, focus)?;
+
+        Ok(self.branch_map.separate_and_classify_variables(
+            self.var_num,
+            self.global_cut_var_num,
+            self.current_chunk_num,
         ))
     }
 
     pub fn classify_rule<'a, LS: LoadState<'a>>(
         mut self,
         loader: &mut Loader<'a, LS>,
-        head: Term,
-        body: Term,
+        term: &mut FocusedHeap,
     ) -> Result<ClassifyRuleResult, CompilationError> {
-        self.classify_head_variables(&head)?;
+        let head_loc = term.nth_arg(term.focus, 1).unwrap();
+        let body_loc = term.nth_arg(term.focus, 2).unwrap();
+
+        self.classify_head_variables(term, head_loc)?;
         self.root_set.insert(self.current_branch_num.clone());
 
-        let mut query_terms = self.classify_body_variables(loader, body)?;
+        let mut query_terms = self.classify_body_variables(loader, term, body_loc)?;
 
         self.merge_branches();
 
@@ -288,7 +303,7 @@ impl VariableClassifier {
 
         var_data.emit_initial_get_level(&mut query_terms);
 
-        Ok((head, query_terms, var_data))
+        Ok((query_terms, var_data))
     }
 
     fn merge_branches(&mut self) {
@@ -332,22 +347,39 @@ impl VariableClassifier {
         }
     }
 
-    fn probe_body_term(&mut self, arg_c: usize, arity: usize, term: &Term) {
+    fn probe_body_term(
+        &mut self,
+        arg_c: usize,
+        arity: usize,
+        term: &mut FocusedHeap,
+        term_loc: usize,
+    ) {
         let classify_info = ClassifyInfo { arg_c, arity };
 
+        let mut lvl = Level::Shallow;
+        let mut stack = Stack::uninitialized();
+        let mut iter = fact_iterator::<false>(
+            &mut term.heap,
+            &mut stack,
+            term_loc,
+        );
+
         // second arg is true to iterate the root, which may be a variable
-        for term_ref in breadth_first_iter(term, RootIterationPolicy::Iterated) {
-            if let TermRef::Var(lvl, _, var_ptr) = term_ref {
-                // root terms are shallow here (since we're iterating a
-                // body term) so take the child level.
-                let lvl = lvl.child_level();
-                self.probe_body_var(VarInfo {
-                    var_ptr,
-                    lvl,
-                    classify_info,
-                    chunk_type: self.current_chunk_type,
-                });
+        while let Some(subterm) = iter.next() {
+            if !subterm.is_var() {
+                lvl = Level::Deep;
+                continue;
             }
+
+            let var_loc = subterm.get_value() as usize;
+            let var_ptr = term.var_locs.read_next_var_ptr_at_key(var_loc).unwrap();
+
+            self.probe_body_var(VarInfo {
+                var_ptr: var_ptr.clone(),
+                lvl,
+                classify_info,
+                chunk_type: self.current_chunk_type,
+            });
         }
     }
 
@@ -401,56 +433,79 @@ impl VariableClassifier {
         self.probe_body_var(var_info);
     }
 
-    fn classify_head_variables(&mut self, term: &Term) -> Result<(), CompilationError> {
-        match term {
-            Term::Clause(..) | Term::Literal(_, Literal::Atom(_)) => {}
-            _ => return Err(CompilationError::InvalidRuleHead),
-        }
+    fn classify_head_variables(
+        &mut self,
+        term: &mut FocusedHeap,
+        head_loc: usize,
+    ) -> Result<(), CompilationError> {
+        let arity = read_heap_cell!(term.deref_loc(head_loc),
+            (HeapCellValueTag::Str, s) => {
+                cell_as_atom_cell!(term.heap[s]).get_arity()
+            }
+            (HeapCellValueTag::Atom) => {
+                return Ok(());
+            }
+            _ => {
+                return Err(CompilationError::InvalidRuleHead);
+            }
+        );
 
-        let mut classify_info = ClassifyInfo {
-            arg_c: 1,
-            arity: term.arity(),
-        };
+        let mut classify_info = ClassifyInfo { arg_c: 1, arity };
 
-        if let Term::Clause(_, _, terms) = term {
-            for term in terms.iter() {
-                for term_ref in breadth_first_iter(term, RootIterationPolicy::Iterated) {
-                    if let TermRef::Var(lvl, _, var_ptr) = term_ref {
-                        // a body term, so we need the child level here.
-                        let lvl = lvl.child_level();
+        if arity > 0 {
+            let (_term_loc, value) = subterm_index(&term.heap, head_loc);
+            let str_offset = value.get_value() as usize;
 
-                        // the body of the if let here is an inlined
-                        // "probe_head_var". note the difference between it
-                        // and "probe_body_var".
-                        let branch_info_v = self.branch_map.entry(var_ptr.clone()).or_default();
+            debug_assert_eq!(value.get_tag(), HeapCellValueTag::Str);
 
-                        let needs_new_branch = branch_info_v.is_empty();
+            for idx in str_offset + 1 ..= str_offset + arity {
+                let mut lvl = Level::Shallow;
+                let mut stack = Stack::uninitialized();
+                let mut iter = fact_iterator::<false>(
+                    &mut term.heap,
+                    &mut stack,
+                    idx,
+                );
 
-                        if needs_new_branch {
-                            branch_info_v.push(BranchInfo::new(self.current_branch_num.clone()));
-                        }
-
-                        let branch_info = branch_info_v.last_mut().unwrap();
-                        let needs_new_chunk = branch_info.chunks.is_empty();
-
-                        if needs_new_chunk {
-                            branch_info.chunks.push(ChunkInfo {
-                                chunk_num: self.current_chunk_num,
-                                term_loc: GenContext::Head,
-                                vars: vec![],
-                            });
-                        }
-
-                        let chunk_info = branch_info.chunks.last_mut().unwrap();
-                        let var_info = VarInfo {
-                            var_ptr,
-                            classify_info,
-                            chunk_type: self.current_chunk_type,
-                            lvl,
-                        };
-
-                        chunk_info.vars.push(var_info);
+                while let Some(subterm) = iter.next() {
+                    if !subterm.is_var() {
+                        lvl = Level::Deep;
+                        continue;
                     }
+
+                    let h = subterm.get_value() as usize;
+                    let var_ptr = term.var_locs.read_next_var_ptr_at_key(h).unwrap().clone();
+
+                    // the body of the if let here is an inlined
+                    // "probe_head_var". note the difference between it
+                    // and "probe_body_var".
+                    let branch_info_v = self.branch_map.entry(var_ptr.clone()).or_default();
+                    let needs_new_branch = branch_info_v.is_empty();
+
+                    if needs_new_branch {
+                        branch_info_v.push(BranchInfo::new(self.current_branch_num.clone()));
+                    }
+
+                    let branch_info = branch_info_v.last_mut().unwrap();
+                    let needs_new_chunk = branch_info.chunks.is_empty();
+
+                    if needs_new_chunk {
+                        branch_info.chunks.push(ChunkInfo {
+                            chunk_num: self.current_chunk_num,
+                            term_loc: GenContext::Head,
+                            vars: vec![],
+                        });
+                    }
+
+                    let chunk_info = branch_info.chunks.last_mut().unwrap();
+                    let var_info = VarInfo {
+                        var_ptr,
+                        classify_info,
+                        chunk_type: self.current_chunk_type,
+                        lvl,
+                    };
+
+                    chunk_info.vars.push(var_info);
                 }
 
                 classify_info.arg_c += 1;
@@ -460,17 +515,40 @@ impl VariableClassifier {
         Ok(())
     }
 
+    fn new_cut_state(&mut self) -> TraversalState {
+        let (var_num, is_global) = if let Some(var_num) = self.global_cut_var_num_override {
+            (var_num, false)
+        } else if let Some(var_num) = self.global_cut_var_num {
+            (var_num, true)
+        } else {
+            let var_num = self.var_num;
+
+            self.global_cut_var_num = Some(var_num);
+            self.var_num += 1;
+
+            (var_num, true)
+        };
+
+        self.probe_in_situ_var(var_num);
+
+        TraversalState::Cut { var_num, is_global }
+    }
+
     fn classify_body_variables<'a, LS: LoadState<'a>>(
         &mut self,
         loader: &mut Loader<'a, LS>,
-        term: Term,
+        terms: &mut FocusedHeap,
+        term_loc: usize,
     ) -> Result<ChunkedTermVec, CompilationError> {
-        let mut state_stack = vec![TraversalState::Term(term)];
+        let mut state_stack = vec![TraversalState::Term {
+            subterm: terms.heap[term_loc],
+            term_loc,
+        }];
         let mut build_stack = ChunkedTermVec::new();
 
         self.current_chunk_type = ChunkType::Mid;
 
-        while let Some(traversal_st) = state_stack.pop() {
+        'outer: while let Some(traversal_st) = state_stack.pop() {
             match traversal_st {
                 TraversalState::AddBranchNum(branch_num) => {
                     self.root_set.insert(branch_num.clone());
@@ -544,297 +622,339 @@ impl VariableClassifier {
                 TraversalState::Fail => {
                     build_stack.push_chunk_term(QueryTerm::Fail);
                 }
-                TraversalState::Term(term) => {
+                TraversalState::Succeed => {
+                    build_stack.push_chunk_term(QueryTerm::Succeed);
+                }
+                TraversalState::Term {
+                    mut subterm,
+                    mut term_loc,
+                } => {
                     // return true iff new chunk should be added.
-                    let update_chunk_data = |classifier: &mut Self, predicate_name, arity| {
-                        if ClauseType::is_inlined(predicate_name, arity) {
+                    let update_chunk_data = |classifier: &mut Self, key: PredicateKey| {
+                        if ClauseType::is_inlined(key.0, key.1) {
                             classifier.try_set_chunk_at_inlined_boundary()
                         } else {
                             classifier.try_set_chunk_at_call_boundary()
                         }
                     };
 
-                    let mut add_chunk = |classifier: &mut Self, name: Atom, terms: Vec<Term>| {
-                        if update_chunk_data(classifier, name, terms.len()) {
-                            build_stack.add_chunk();
-                        }
-
-                        for (arg_c, term) in terms.iter().enumerate() {
-                            classifier.probe_body_term(arg_c + 1, terms.len(), term);
-                        }
-
-                        build_stack.push_chunk_term(clause_to_query_term(
-                            loader,
-                            name,
-                            terms,
-                            classifier.call_policy,
-                        ));
-                    };
-
-                    match term {
-                        Term::Clause(
-                            _,
-                            name @ (atom!("->") | atom!(";") | atom!(",")),
-                            mut terms,
-                        ) if terms.len() == 3 => {
-                            if let Some(last_arg) = terms.last() {
-                                if let Term::Literal(_, Literal::CodeIndex(_)) = last_arg {
-                                    terms.pop();
-                                    state_stack.push(TraversalState::Term(Term::Clause(
-                                        Cell::default(),
-                                        name,
-                                        terms,
-                                    )));
-                                } else {
-                                    add_chunk(self, name, terms);
-                                }
-                            }
-                        }
-                        Term::Clause(_, atom!(","), mut terms) if terms.len() == 2 => {
-                            let tail = terms.pop().unwrap();
-                            let head = terms.pop().unwrap();
-
-                            let iter = unfold_by_str(tail, atom!(","))
-                                .into_iter()
-                                .rev()
-                                .chain(std::iter::once(head))
-                                .map(TraversalState::Term);
-
-                            state_stack.extend(iter);
-                        }
-                        Term::Clause(_, atom!(";"), mut terms) if terms.len() == 2 => {
-                            let tail = terms.pop().unwrap();
-                            let head = terms.pop().unwrap();
-
-                            let first_branch_num = self.current_branch_num.split();
-                            let branches: Vec<_> = std::iter::once(head)
-                                .chain(unfold_by_str(tail, atom!(";")).into_iter())
-                                .collect();
-
-                            let mut branch_numbers = vec![first_branch_num];
-
-                            for idx in 1..branches.len() {
-                                let succ_branch_number = branch_numbers[idx - 1].incr_by_delta();
-
-                                branch_numbers.push(if idx + 1 < branches.len() {
-                                    succ_branch_number.split()
-                                } else {
-                                    succ_branch_number
-                                });
+                    macro_rules! add_chunk {
+                        ($classifier:ident, $key:expr, $tag:expr, $term_loc:expr) => {{
+                            if update_chunk_data($classifier, $key) {
+                                build_stack.add_chunk();
                             }
 
-                            let build_stack_len = build_stack.len();
-                            build_stack.reserve_branch(branches.len());
-
-                            state_stack.push(TraversalState::RepBranchNum(
-                                self.current_branch_num.halve_delta(),
-                            ));
-
-                            let iter = branches.into_iter().zip(branch_numbers.into_iter());
-                            let final_disjunct_loc = state_stack.len();
-
-                            for (term, branch_num) in iter.rev() {
-                                state_stack.push(TraversalState::BuildDisjunct(build_stack_len));
-                                state_stack.push(TraversalState::RemoveBranchNum);
-                                state_stack.push(TraversalState::Term(term));
-                                state_stack.push(TraversalState::AddBranchNum(branch_num));
-                            }
-
-                            if let TraversalState::BuildDisjunct(build_stack_len) =
-                                state_stack[final_disjunct_loc]
+                            for (arg_c, term_loc) in
+                                ($term_loc + 1 ..= $term_loc + $key.1).enumerate()
                             {
-                                state_stack[final_disjunct_loc] =
-                                    TraversalState::BuildFinalDisjunct(build_stack_len);
+                                $classifier.probe_body_term(arg_c + 1, $key.1, terms, term_loc);
                             }
 
-                            self.current_chunk_type = ChunkType::Mid;
-                            self.current_chunk_num += 1;
-                        }
-                        Term::Clause(_, atom!("->"), mut terms) if terms.len() == 2 => {
-                            let then_term = terms.pop().unwrap();
-                            let if_term = terms.pop().unwrap();
-
-                            let prev_b = if matches!(
-                                state_stack.last(),
-                                Some(TraversalState::RemoveBranchNum)
-                            ) {
-                                // check if the second-to-last element
-                                // is a regular BuildDisjunct, as we
-                                // don't want to add GetPrevLevel in
-                                // case of a TrustMe.
-                                match state_stack.iter().rev().nth(1) {
-                                    Some(&TraversalState::BuildDisjunct(preceding_len)) => {
-                                        preceding_len + 1 == build_stack.len()
-                                    }
-                                    _ => false,
-                                }
-                            } else {
-                                false
-                            };
-
-                            state_stack.push(TraversalState::Term(then_term));
-                            state_stack.push(TraversalState::Cut {
-                                var_num: self.var_num,
-                                is_global: false,
-                            });
-                            state_stack.push(TraversalState::Term(if_term));
-                            state_stack.push(TraversalState::GetCutPoint {
-                                var_num: self.var_num,
-                                prev_b,
-                            });
-
-                            self.var_num += 1;
-                        }
-                        Term::Clause(_, atom!("\\+"), mut terms) if terms.len() == 1 => {
-                            let not_term = terms.pop().unwrap();
-                            let build_stack_len = build_stack.len();
-
-                            build_stack.reserve_branch(2);
-
-                            state_stack.push(TraversalState::BuildFinalDisjunct(build_stack_len));
-                            state_stack.push(TraversalState::Term(Term::Clause(
-                                Cell::default(),
-                                atom!("$succeed"),
-                                vec![],
+                            build_stack.push_chunk_term(QueryTerm::Clause(clause_to_query_term(
+                                loader,
+                                $key,
+                                terms.as_ref_mut($term_loc),
+                                HeapCellValue::build_with($tag, $term_loc as u64),
+                                $classifier.call_policy,
                             )));
-                            state_stack.push(TraversalState::BuildDisjunct(build_stack_len));
-                            state_stack.push(TraversalState::Fail);
-                            state_stack.push(TraversalState::CutPrev(self.var_num));
-                            state_stack.push(TraversalState::ResetGlobalCutVarOverride(
-                                self.global_cut_var_num_override,
-                            ));
-                            state_stack.push(TraversalState::Term(not_term));
-                            state_stack.push(TraversalState::OverrideGlobalCutVar(self.var_num));
-                            state_stack.push(TraversalState::GetCutPoint {
-                                var_num: self.var_num,
-                                prev_b: false,
-                            });
+                        }};
+                    }
 
-                            self.current_chunk_type = ChunkType::Mid;
-                            self.current_chunk_num += 1;
-
-                            self.var_num += 1;
-                        }
-                        Term::Clause(_, atom!(":"), mut terms) if terms.len() == 2 => {
-                            let predicate_name = terms.pop().unwrap();
-                            let module_name = terms.pop().unwrap();
-
-                            match (module_name, predicate_name) {
-                                (
-                                    Term::Literal(_, Literal::Atom(module_name)),
-                                    Term::Literal(_, Literal::Atom(predicate_name)),
-                                ) => {
-                                    if update_chunk_data(self, predicate_name, 0) {
-                                        build_stack.add_chunk();
-                                    }
-
-                                    build_stack.push_chunk_term(qualified_clause_to_query_term(
-                                        loader,
-                                        module_name,
-                                        predicate_name,
-                                        vec![],
-                                        self.call_policy,
-                                    ));
-                                }
-                                (
-                                    Term::Literal(_, Literal::Atom(module_name)),
-                                    Term::Clause(_, name, terms),
-                                ) => {
-                                    if update_chunk_data(self, name, terms.len()) {
-                                        build_stack.add_chunk();
-                                    }
-
-                                    for (arg_c, term) in terms.iter().enumerate() {
-                                        self.probe_body_term(arg_c + 1, terms.len(), term);
-                                    }
-
-                                    build_stack.push_chunk_term(qualified_clause_to_query_term(
-                                        loader,
-                                        module_name,
-                                        name,
-                                        terms,
-                                        self.call_policy,
-                                    ));
-                                }
-                                (module_name, predicate_name) => {
-                                    if update_chunk_data(self, atom!("call"), 2) {
-                                        build_stack.add_chunk();
-                                    }
-
-                                    self.probe_body_term(1, 0, &module_name);
-                                    self.probe_body_term(2, 0, &predicate_name);
-
-                                    terms.push(module_name);
-                                    terms.push(predicate_name);
-
-                                    build_stack.push_chunk_term(clause_to_query_term(
-                                        loader,
-                                        atom!("call"),
-                                        vec![Term::Clause(Cell::default(), atom!(":"), terms)],
-                                        self.call_policy,
-                                    ));
-                                }
-                            }
-                        }
-                        Term::Clause(_, atom!("$call_with_inference_counting"), mut terms)
-                            if terms.len() == 1 =>
-                        {
-                            state_stack.push(TraversalState::ResetCallPolicy(self.call_policy));
-                            state_stack.push(TraversalState::Term(terms.pop().unwrap()));
-
-                            self.call_policy = CallPolicy::Counted;
-                        }
-                        Term::Clause(_, name, terms) => {
-                            add_chunk(self, name, terms);
-                        }
-                        var @ Term::Var(..) => {
-                            if update_chunk_data(self, atom!("call"), 1) {
+                    macro_rules! add_qualified_chunk {
+                        ($classifier:ident, $module_name:expr, $key:expr, $tag:expr, $term_loc:expr) => {{
+                            if update_chunk_data($classifier, $key) {
                                 build_stack.add_chunk();
                             }
 
-                            self.probe_body_term(1, 1, &var);
+                            for (arg_c, term_loc) in
+                                ($term_loc + 1..$term_loc + $key.1 + 1).enumerate()
+                            {
+                                $classifier.probe_body_term(arg_c + 1, $key.1, terms, term_loc);
+                            }
 
-                            build_stack.push_chunk_term(clause_to_query_term(
-                                loader,
-                                atom!("call"),
-                                vec![var],
-                                self.call_policy,
+                            build_stack.push_chunk_term(QueryTerm::Clause(
+                                qualified_clause_to_query_term(
+                                    loader,
+                                    $key,
+                                    $module_name,
+                                    terms.as_ref_mut($term_loc),
+                                    HeapCellValue::build_with($tag, $term_loc as u64),
+                                    $classifier.call_policy,
+                                ),
                             ));
-                        }
-                        Term::Literal(_, Literal::Atom(atom!("!")) | Literal::Char('!')) => {
-                            let (var_num, is_global) =
-                                if let Some(var_num) = self.global_cut_var_num_override {
-                                    (var_num, false)
-                                } else if let Some(var_num) = self.global_cut_var_num {
-                                    (var_num, true)
+                        }};
+                    }
+
+                    loop {
+                        read_heap_cell!(subterm,
+                            (HeapCellValueTag::Str, subterm_loc) => {
+                                let (name, arity) = cell_as_atom_cell!(terms.heap[subterm_loc])
+                                    .get_name_and_arity();
+
+                                match (name, arity) {
+                                    (atom!("->") | atom!(";") | atom!(","), 3) => {
+                                        if blunt_index_ptr(&mut terms.heap, (name, 2), subterm_loc) {
+                                            subterm = terms.heap[subterm_loc];
+                                            continue;
+                                        }
+
+                                        add_chunk!(self, (name, 2), HeapCellValueTag::Str, subterm_loc);
+                                    }
+                                    (atom!(","), 2) => {
+                                        let head_loc = terms.nth_arg(subterm_loc, 1).unwrap();
+                                        let tail_loc = terms.nth_arg(subterm_loc, 2).unwrap();
+                                        let head = terms.heap[head_loc];
+
+                                        let iter = unfold_by_str_locs(&mut terms.heap, tail_loc, atom!(","))
+                                            .into_iter()
+                                            .rev()
+                                            .chain(std::iter::once((head, head_loc)))
+                                            .map(|(subterm, term_loc)| {
+                                                TraversalState::Term { subterm, term_loc }
+                                            });
+                                        state_stack.extend(iter);
+                                    }
+                                    (atom!(";"), 2) => {
+                                        let head_loc = terms.nth_arg(subterm_loc, 1).unwrap();
+                                        let tail_loc = terms.nth_arg(subterm_loc, 2).unwrap();
+
+                                        let head = terms.heap[head_loc];
+
+                                        let first_branch_num = self.current_branch_num.split();
+                                        let branches: Vec<_> = std::iter::once((head, head_loc))
+                                            .chain(
+                                                unfold_by_str_locs(&mut terms.heap, tail_loc, atom!(";"))
+                                                    .into_iter(),
+                                            )
+                                            .collect();
+
+                                        let mut branch_numbers = vec![first_branch_num];
+
+                                        for idx in 1..branches.len() {
+                                            let succ_branch_number = branch_numbers[idx - 1].incr_by_delta();
+
+                                            branch_numbers.push(if idx + 1 < branches.len() {
+                                                succ_branch_number.split()
+                                            } else {
+                                                succ_branch_number
+                                            });
+                                        }
+
+                                        let build_stack_len = build_stack.len();
+                                        build_stack.reserve_branch(branches.len());
+
+                                        state_stack.push(TraversalState::RepBranchNum(
+                                            self.current_branch_num.halve_delta(),
+                                        ));
+
+                                        let iter = branches.into_iter().zip(branch_numbers.into_iter());
+                                        let final_disjunct_loc = state_stack.len();
+
+                                        for ((subterm, term_loc), branch_num) in iter.rev() {
+                                            state_stack.push(TraversalState::BuildDisjunct(build_stack_len));
+                                            state_stack.push(TraversalState::RemoveBranchNum);
+                                            state_stack.push(TraversalState::Term { subterm, term_loc });
+                                            state_stack.push(TraversalState::AddBranchNum(branch_num));
+                                        }
+
+                                        if let TraversalState::BuildDisjunct(build_stack_len) =
+                                            state_stack[final_disjunct_loc]
+                                        {
+                                            state_stack[final_disjunct_loc] =
+                                                TraversalState::BuildFinalDisjunct(build_stack_len);
+                                        }
+
+                                        self.current_chunk_type = ChunkType::Mid;
+                                        self.current_chunk_num += 1;
+                                    }
+                                    (atom!("->"), 2) => {
+                                        let if_term_loc = terms.nth_arg(subterm_loc, 1).unwrap();
+                                        let then_term_loc = terms.nth_arg(subterm_loc, 2).unwrap();
+
+                                        let if_term = terms.heap[if_term_loc];
+                                        let then_term = terms.heap[then_term_loc];
+
+                                        let prev_b = if matches!(
+                                            state_stack.last(),
+                                            Some(TraversalState::RemoveBranchNum)
+                                        ) {
+                                            // check if the second-to-last element
+                                            // is a regular BuildDisjunct, as we
+                                            // don't want to add GetPrevLevel in
+                                            // case of a TrustMe.
+                                            match state_stack.iter().rev().nth(1) {
+                                                Some(&TraversalState::BuildDisjunct(preceding_len)) => {
+                                                    preceding_len + 1 == build_stack.len()
+                                                }
+                                                _ => false,
+                                            }
+                                        } else {
+                                            false
+                                        };
+
+                                        state_stack.push(TraversalState::Term {
+                                            subterm: then_term,
+                                            term_loc: then_term_loc,
+                                        });
+                                        state_stack.push(TraversalState::Cut {
+                                            var_num: self.var_num,
+                                            is_global: false,
+                                        });
+                                        state_stack.push(TraversalState::Term {
+                                            subterm: if_term,
+                                            term_loc: if_term_loc,
+                                        });
+                                        state_stack.push(TraversalState::GetCutPoint {
+                                            var_num: self.var_num,
+                                            prev_b,
+                                        });
+
+                                        self.var_num += 1;
+                                    }
+                                    (atom!("\\+"), 1) => {
+                                        let not_term_loc = terms.nth_arg(subterm_loc, 1).unwrap();
+                                        let not_term = terms.heap[not_term_loc];
+                                        let build_stack_len = build_stack.len();
+
+                                        build_stack.reserve_branch(2);
+
+                                        let branch_num = self.current_branch_num.split();
+                                        let succ_branch_num = branch_num.incr_by_delta();
+
+                                        state_stack.push(TraversalState::BuildFinalDisjunct(build_stack_len));
+                                        state_stack.push(TraversalState::Succeed);
+                                        state_stack.push(TraversalState::BuildDisjunct(build_stack_len));
+                                        state_stack.push(TraversalState::RepBranchNum(succ_branch_num));
+                                        state_stack.push(TraversalState::Fail);
+                                        state_stack.push(TraversalState::CutPrev(self.var_num));
+                                        state_stack.push(TraversalState::ResetGlobalCutVarOverride(
+                                            self.global_cut_var_num_override,
+                                        ));
+                                        state_stack.push(TraversalState::Term {
+                                            subterm: not_term,
+                                            term_loc: not_term_loc,
+                                        });
+                                        state_stack.push(TraversalState::OverrideGlobalCutVar(self.var_num));
+                                        state_stack.push(TraversalState::GetCutPoint {
+                                            var_num: self.var_num,
+                                            prev_b: false,
+                                        });
+                                        state_stack.push(TraversalState::AddBranchNum(branch_num));
+
+                                        self.current_chunk_type = ChunkType::Mid;
+                                        self.current_chunk_num += 1;
+
+                                        self.var_num += 1;
+                                    }
+                                    (atom!(":"), 2) => {
+                                        let module_name_loc = terms.nth_arg(subterm_loc, 1).unwrap();
+                                        let predicate_term_loc = terms.nth_arg(subterm_loc, 2).unwrap();
+
+                                        let module_name = terms.deref_loc(module_name_loc);
+                                        let predicate_term = terms.deref_loc(predicate_term_loc);
+
+                                        read_heap_cell!(module_name,
+                                            (HeapCellValueTag::Atom, (module_name, arity)) => {
+                                                if arity == 0 {
+                                                    read_heap_cell!(predicate_term,
+                                                        (HeapCellValueTag::Str, s) => {
+                                                            let key = cell_as_atom_cell!(terms.heap[s])
+                                                                .get_name_and_arity();
+
+                                                            add_qualified_chunk!(
+                                                                self,
+                                                                module_name,
+                                                                key,
+                                                                HeapCellValueTag::Str,
+                                                                s
+                                                            );
+                                                        }
+                                                        (HeapCellValueTag::Atom, (predicate_name, predicate_arity)) => {
+                                                            debug_assert_eq!(predicate_arity, 0);
+                                                            let key = (predicate_name, predicate_arity);
+
+                                                            add_qualified_chunk!(
+                                                                self,
+                                                                module_name,
+                                                                key,
+                                                                HeapCellValueTag::Str,
+                                                                predicate_term_loc
+                                                            );
+                                                        }
+                                                        _ => {}
+                                                    );
+
+                                                    continue 'outer;
+                                                }
+                                            }
+                                            _ => {}
+                                        );
+
+                                        if update_chunk_data(self, (atom!("call"), 2)) {
+                                            build_stack.add_chunk();
+                                        }
+
+                                        self.probe_body_term(1, 0, terms, module_name_loc);
+                                        self.probe_body_term(2, 0, terms, predicate_term_loc);
+
+                                        let h = terms.heap.len();
+
+                                        terms.heap.push(atom_as_cell!(atom!("call"), 1));
+                                        terms.heap.push(str_loc_as_cell!(subterm_loc));
+
+                                        build_stack.push_chunk_term(QueryTerm::Clause(clause_to_query_term(
+                                            loader,
+                                            (atom!("call"), 1),
+                                            terms.as_ref_mut(h),
+                                            str_loc_as_cell!(h),
+                                            self.call_policy,
+                                        )));
+                                    }
+                                    (atom!("$call_with_inference_counting"), 1) => {
+                                        let term_loc = terms.nth_arg(subterm_loc, 1).unwrap();
+                                        let subterm  = terms.deref_loc(term_loc);
+
+                                        state_stack.push(TraversalState::ResetCallPolicy(self.call_policy));
+                                        state_stack.push(TraversalState::Term { subterm, term_loc });
+
+                                        self.call_policy = CallPolicy::Counted;
+                                    }
+                                    (name, arity) => {
+                                        add_chunk!(self, (name, arity), HeapCellValueTag::Str, subterm_loc);
+                                    }
+                                }
+                            }
+                            (HeapCellValueTag::Atom, (name, arity)) => {
+                                debug_assert_eq!(arity, 0);
+
+                                if name == atom!("!") {
+                                    state_stack.push(self.new_cut_state());
                                 } else {
-                                    let var_num = self.var_num;
-
-                                    self.global_cut_var_num = Some(var_num);
-                                    self.var_num += 1;
-
-                                    (var_num, true)
-                                };
-
-                            self.probe_in_situ_var(var_num);
-
-                            state_stack.push(TraversalState::Cut { var_num, is_global });
-                        }
-                        Term::Literal(_, Literal::Atom(name)) => {
-                            if update_chunk_data(self, name, 0) {
-                                build_stack.add_chunk();
+                                    add_chunk!(self, (name, 0), HeapCellValueTag::Var, term_loc);
+                                }
                             }
+                            (HeapCellValueTag::Char, c) => {
+                                if c == '!' {
+                                    state_stack.push(self.new_cut_state());
+                                } else {
+                                    return Err(CompilationError::InadmissibleQueryTerm);
+                                }
+                            }
+                            (HeapCellValueTag::AttrVar | HeapCellValueTag::Var, h) => {
+                                if h != term_loc {
+                                    subterm = terms.heap[h];
+                                    term_loc = h;
+                                    continue;
+                                }
 
-                            build_stack.push_chunk_term(clause_to_query_term(
-                                loader,
-                                name,
-                                vec![],
-                                self.call_policy,
-                            ));
-                        }
-                        _ => {
-                            return Err(CompilationError::InadmissibleQueryTerm);
-                        }
+                                add_chunk!(self, (atom!("call"), 1), HeapCellValueTag::Var, h);
+                            }
+                            _ => {
+                                return Err(CompilationError::InadmissibleQueryTerm);
+                            }
+                        );
+
+                        break;
                     }
                 }
             }
@@ -899,7 +1019,8 @@ impl BranchMap {
                     var_data.records[var_num].num_occurrences += chunk.vars.len();
 
                     for var_info in chunk.vars.iter_mut() {
-                        var_info.var_ptr.set(Var::Generated(var_num));
+                        let is_anon = var_info.var_ptr.is_anon();
+                        var_info.var_ptr.set(Var::Generated { is_anon, var_num });
                     }
                 }
             }

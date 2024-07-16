@@ -346,6 +346,11 @@ macro_rules! read_heap_cell_pat_body {
         #[allow(unused_braces)]
         $code
     }};
+    ($cell:ident, Atom, (_, $arity:ident), $code:expr) => {{
+        let $arity = cell_as_atom_cell!($cell).get_arity();
+        #[allow(unused_braces)]
+        $code
+    }};
     ($cell:ident, PStr, $atom:ident, $code:expr) => {{
         let $atom = cell_as_atom!($cell);
         #[allow(unused_braces)]

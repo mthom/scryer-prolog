@@ -1,10 +1,13 @@
 use crate::allocator::*;
+use crate::atom_table::*;
 use crate::codegen::SubsumedBranchHits;
 use crate::forms::Level;
 use crate::instructions::*;
 use crate::machine::disjuncts::VarData;
+use crate::machine::heap::{heap_bound_deref, heap_bound_store};
 use crate::parser::ast::*;
 use crate::targets::*;
+use crate::types::*;
 use crate::variable_records::*;
 
 use bit_set::*;
@@ -12,7 +15,6 @@ use bitvec::prelude::*;
 use fxhash::FxBuildHasher;
 use indexmap::IndexMap;
 
-use std::cell::Cell;
 use std::collections::VecDeque;
 use std::ops::{Deref, DerefMut};
 
@@ -152,6 +154,8 @@ pub(crate) struct DebrayAllocator {
     in_use: BitSet<usize>, // deep and non-var allocations
     temp_free_list: Vec<usize>,
     perm_free_list: VecDeque<(usize, usize)>, // chunk_num, var_num
+    non_var_registers: IndexMap<usize, usize, FxBuildHasher>,
+    non_var_register_heap_locs: IndexMap<usize, usize, FxBuildHasher>,
 }
 
 impl DebrayAllocator {
@@ -168,7 +172,7 @@ impl DebrayAllocator {
 
         for var_num in subsumed_hits {
             match &mut self.var_data.records[var_num].allocation {
-                VarAlloc::Perm(_, ref mut allocation) => {
+                VarAlloc::Perm { ref mut allocation, .. } => {
                     if let PermVarAllocation::Done {
                         shallow_safety,
                         deep_safety,
@@ -229,7 +233,7 @@ impl DebrayAllocator {
             let num_occurrences = self.var_data.records[var_num].num_occurrences;
 
             match &mut self.var_data.records[var_num].allocation {
-                VarAlloc::Perm(_, allocation) => {
+                VarAlloc::Perm { allocation, ..} => {
                     let shallow_safety = VarSafetyStatus::needed_if(
                         shallow_safety.contains(var_num),
                         branch_designator,
@@ -366,7 +370,7 @@ impl DebrayAllocator {
         &mut self,
         chunk_num: usize,
         code: &mut CodeDeque,
-    ) {
+    ) -> Option<RegType> {
         if let Some((var_num, r)) = self.alloc_in_last_goal_hint(chunk_num) {
             let k = self.arg_c;
 
@@ -382,8 +386,12 @@ impl DebrayAllocator {
                     .allocation
                     .set_register(r.reg_num());
                 self.in_use.insert(r.reg_num());
+
+                return Some(r);
             }
         };
+
+        None
     }
 
     fn alloc_reg_to_var<'a, Target: CompilationTarget<'a>>(
@@ -433,6 +441,7 @@ impl DebrayAllocator {
         }
 
         self.temp_lb = final_index + 1;
+
         final_index
     }
 
@@ -456,7 +465,11 @@ impl DebrayAllocator {
             p
         };
 
-        self.var_data.records[var_num].allocation = VarAlloc::Perm(p, PermVarAllocation::done());
+        self.var_data.records[var_num].allocation = VarAlloc::Perm {
+            reg: p,
+            allocation: PermVarAllocation::done(),
+        };
+
         p
     }
 
@@ -472,8 +485,13 @@ impl DebrayAllocator {
     }
 
     #[inline(always)]
-    pub fn get_binding(&self, var_num: usize) -> RegType {
+    pub fn get_var_binding(&self, var_num: usize) -> RegType {
         self.var_data.records[var_num].allocation.as_reg_type()
+    }
+
+    #[inline(always)]
+    pub fn get_non_var_binding(&self, heap_loc: usize) -> RegType {
+        RegType::Temp(self.non_var_registers.get(&heap_loc).cloned().unwrap_or(0))
     }
 
     pub fn num_perm_vars(&self) -> usize {
@@ -485,7 +503,7 @@ impl DebrayAllocator {
     }
 
     fn add_perm_to_free_list(&mut self, chunk_num: usize, var_num: usize) {
-        if let VarAlloc::Perm(..) = &self.var_data.records[var_num].allocation {
+        if let VarAlloc::Perm { .. } = &self.var_data.records[var_num].allocation {
             self.perm_free_list.push_back((chunk_num, var_num));
         }
     }
@@ -496,9 +514,10 @@ impl DebrayAllocator {
                 self.perm_free_list.pop_front();
 
                 match &mut self.var_data.records[var_num].allocation {
-                    VarAlloc::Perm(p, PermVarAllocation::Pending) if *p > 0 => {
-                        return Some(std::mem::replace(p, 0));
-                    }
+                    VarAlloc::Perm { reg: p, allocation: PermVarAllocation::Pending }
+                      if *p > 0 => {
+                          return Some(std::mem::replace(p, 0));
+                      }
                     _ => {}
                 }
             } else {
@@ -510,9 +529,12 @@ impl DebrayAllocator {
     }
 
     pub(crate) fn free_var(&mut self, chunk_num: usize, var_num: usize) {
-        if let VarAlloc::Perm(_, allocation) = &mut self.var_data.records[var_num].allocation {
-            *allocation = PermVarAllocation::Pending;
-            self.add_perm_to_free_list(chunk_num, var_num);
+        match &mut self.var_data.records[var_num].allocation {
+            VarAlloc::Perm { allocation, .. } => {
+                *allocation = PermVarAllocation::Pending;
+                self.add_perm_to_free_list(chunk_num, var_num);
+            }
+            _ => {}
         }
     }
 
@@ -520,14 +542,14 @@ impl DebrayAllocator {
         let branch_designator = self.branch_stack.current_branch_designator();
 
         match &mut self.var_data.records[var_num].allocation {
-            VarAlloc::Perm(
-                _,
-                PermVarAllocation::Done {
+            VarAlloc::Perm {
+                allocation: PermVarAllocation::Done {
                     deep_safety,
                     shallow_safety,
                     ..
                 },
-            ) => {
+                ..
+            } => {
                 *deep_safety = VarSafetyStatus::unneeded(branch_designator);
                 *shallow_safety = VarSafetyStatus::unneeded(branch_designator);
             }
@@ -542,14 +564,14 @@ impl DebrayAllocator {
         let branch_designator = self.branch_stack.current_branch_designator();
 
         match &mut self.var_data.records[var_num].allocation {
-            VarAlloc::Perm(
-                _,
-                PermVarAllocation::Done {
+            VarAlloc::Perm {
+                allocation: PermVarAllocation::Done {
                     deep_safety,
                     shallow_safety,
                     ..
                 },
-            ) => {
+                ..
+            } => {
                 // GetVariable in head chunk is considered safe.
                 if lvl == Level::Deep {
                     *deep_safety = VarSafetyStatus::unneeded(branch_designator);
@@ -586,13 +608,13 @@ impl DebrayAllocator {
         let branch_designator = self.branch_stack.current_branch_designator();
 
         match &mut self.var_data.records[var_num].allocation {
-            VarAlloc::Perm(
-                _,
-                PermVarAllocation::Done {
+            VarAlloc::Perm {
+                allocation: PermVarAllocation::Done {
                     ref mut shallow_safety,
                     ..
                 },
-            ) => {
+                ..
+            } => {
                 if !self.in_tail_position
                     || self
                         .branch_stack
@@ -622,13 +644,13 @@ impl DebrayAllocator {
         let branch_designator = self.branch_stack.current_branch_designator();
 
         match &mut self.var_data.records[var_num].allocation {
-            VarAlloc::Perm(
-                _,
-                PermVarAllocation::Done {
+            VarAlloc::Perm {
+                allocation: PermVarAllocation::Done {
                     ref mut deep_safety,
                     ..
                 },
-            ) => {
+                ..
+            } => {
                 if self
                     .branch_stack
                     .safety_unneeded_in_branch(deep_safety, &branch_designator)
@@ -671,13 +693,15 @@ impl Allocator for DebrayAllocator {
             temp_free_list: vec![],
             perm_free_list: VecDeque::new(),
             branch_stack: BranchStack { stack: vec![] },
+            non_var_registers: IndexMap::with_hasher(FxBuildHasher::default()),
+            non_var_register_heap_locs: IndexMap::with_hasher(FxBuildHasher::default()),
         }
     }
 
     fn mark_anon_var<'a, Target: CompilationTarget<'a>>(
         &mut self,
         lvl: Level,
-        term_loc: GenContext,
+        context: GenContext,
         code: &mut CodeDeque,
     ) {
         let r = RegType::Temp(self.alloc_reg_to_non_var());
@@ -687,7 +711,7 @@ impl Allocator for DebrayAllocator {
             Level::Root | Level::Shallow => {
                 let k = self.arg_c;
 
-                if let GenContext::Last(chunk_num) = term_loc {
+                if let GenContext::Last(chunk_num) = context {
                     self.evacuate_arg::<Target>(chunk_num, code);
                 }
 
@@ -701,55 +725,69 @@ impl Allocator for DebrayAllocator {
     fn mark_non_var<'a, Target: CompilationTarget<'a>>(
         &mut self,
         lvl: Level,
-        term_loc: GenContext,
-        cell: &'a Cell<RegType>,
+        heap_loc: usize,
+        context: GenContext,
         code: &mut CodeDeque,
-    ) {
-        let r = cell.get();
+    ) -> RegType {
+        let r = self.get_non_var_binding(heap_loc);
 
         let r = match lvl {
             Level::Shallow => {
                 let k = self.arg_c;
 
-                if let GenContext::Last(chunk_num) = term_loc {
-                    self.evacuate_arg::<Target>(chunk_num, code);
+                if let GenContext::Last(chunk_num) = context {
+                    if let Some(new_r) = self.evacuate_arg::<Target>(chunk_num, code) {
+                        self.non_var_register_heap_locs
+                            .swap_remove(&k)
+                            .map(|old_heap_loc| {
+                                self.non_var_registers.insert(old_heap_loc, new_r.reg_num());
+                                self.non_var_register_heap_locs
+                                    .insert(new_r.reg_num(), old_heap_loc);
+                            });
+
+                        self.non_var_registers.insert(heap_loc, k);
+                        self.non_var_register_heap_locs.insert(k, heap_loc);
+                    }
                 }
 
                 self.arg_c += 1;
                 RegType::Temp(k)
             }
-            _ if r.reg_num() == 0 => RegType::Temp(self.alloc_reg_to_non_var()),
+            _ if r.reg_num() == 0 => {
+                let r = RegType::Temp(self.alloc_reg_to_non_var());
+                self.non_var_registers.insert(heap_loc, r.reg_num());
+                self.non_var_register_heap_locs
+                    .insert(r.reg_num(), heap_loc);
+                r
+            }
             _ => {
                 self.in_use.insert(r.reg_num());
                 r
             }
         };
 
-        cell.set(r);
+        r
     }
 
     fn mark_var<'a, Target: CompilationTarget<'a>>(
         &mut self,
         var_num: usize,
         lvl: Level,
-        cell: &Cell<VarReg>,
-        term_loc: GenContext,
+        context: GenContext,
         code: &mut CodeDeque,
-    ) {
-        let (r, is_new_var) = match self.get_binding(var_num) {
+    ) -> RegType {
+        let (r, is_new_var) = match self.get_var_binding(var_num) {
             RegType::Temp(0) => {
-                let o = self.alloc_reg_to_var::<Target>(var_num, lvl, term_loc, code);
-                cell.set(VarReg::Norm(RegType::Temp(o)));
+                let o = self.alloc_reg_to_var::<Target>(var_num, lvl, context, code);
                 (RegType::Temp(o), true)
             }
             RegType::Perm(0) => {
-                let p = self.alloc_perm_var(var_num, term_loc.chunk_num());
-                cell.set(VarReg::Norm(RegType::Perm(p)));
+                let p = self.alloc_perm_var(var_num, context.chunk_num());
                 (RegType::Perm(p), true)
             }
             r @ RegType::Perm(_) => {
                 let is_new_var = match &mut self.var_data.records[var_num].allocation {
-                    VarAlloc::Perm(_, allocation) => {
+                    VarAlloc::Perm { allocation, .. } => {
                         if allocation.pending() {
                             *allocation = PermVarAllocation::done();
                             true
@@ -765,32 +803,29 @@ impl Allocator for DebrayAllocator {
             r => (r, false),
         };
 
-        self.mark_reserved_var::<Target>(var_num, lvl, cell, term_loc, code, r, is_new_var);
+        self.mark_reserved_var::<Target>(var_num, lvl, context, code, r, is_new_var)
     }
 
     fn mark_reserved_var<'a, Target: CompilationTarget<'a>>(
         &mut self,
         var_num: usize,
         lvl: Level,
-        cell: &Cell<VarReg>,
-        term_loc: GenContext,
+        context: GenContext,
         code: &mut CodeDeque,
         r: RegType,
         is_new_var: bool,
-    ) {
+    ) -> RegType {
         match lvl {
             Level::Root | Level::Shallow => {
                 let k = self.arg_c;
 
                 if self.is_curr_arg_distinct_from(var_num) {
-                    self.evacuate_arg::<Target>(term_loc.chunk_num(), code);
+                    self.evacuate_arg::<Target>(context.chunk_num(), code);
                 }
 
-                cell.set(VarReg::ArgAndNorm(r, k));
-
-                if !self.in_place(var_num, term_loc, r, k) {
+                if !self.in_place(var_num, context, r, k) {
                     if is_new_var {
-                        self.mark_safe_var(var_num, lvl, term_loc);
+                        self.mark_safe_var(var_num, lvl, context);
                         code.push_back(Target::argument_to_variable(r, k));
                     } else {
                         code.push_back(self.argument_to_value::<Target>(var_num, r, k));
@@ -800,15 +835,15 @@ impl Allocator for DebrayAllocator {
                 self.arg_c += 1;
             }
             Level::Deep if is_new_var => {
-                if let GenContext::Head = term_loc {
+                if let GenContext::Head = context {
                     if self.occurs_shallowly_in_head(var_num, r.reg_num()) {
                         code.push_back(self.subterm_to_value::<Target>(var_num, r));
                     } else {
-                        self.mark_safe_var(var_num, lvl, term_loc);
+                        self.mark_safe_var(var_num, lvl, context);
                         code.push_back(Target::subterm_to_variable(r));
                     }
                 } else {
-                    self.mark_safe_var(var_num, lvl, term_loc);
+                    self.mark_safe_var(var_num, lvl, context);
                     code.push_back(Target::subterm_to_variable(r));
                 }
             }
@@ -830,14 +865,15 @@ impl Allocator for DebrayAllocator {
         if record.running_count < record.num_occurrences {
             record.running_count += 1;
         } else {
-            self.free_var(term_loc.chunk_num(), var_num);
+            self.free_var(context.chunk_num(), var_num);
         }
 
         self.in_use.insert(o);
+        r
     }
 
     fn mark_cut_var(&mut self, var_num: usize, chunk_num: usize) -> RegType {
-        match self.get_binding(var_num) {
+        match self.get_var_binding(var_num) {
             RegType::Perm(0) => RegType::Perm(self.alloc_perm_var(var_num, chunk_num)),
             RegType::Temp(0) => {
                 let t = self.alloc_reg_to_non_var();
@@ -861,6 +897,8 @@ impl Allocator for DebrayAllocator {
     fn reset(&mut self) {
         self.perm_lb = 1;
         self.shallow_temp_mappings.clear();
+        self.non_var_registers.clear();
+        self.non_var_register_heap_locs.clear();
         self.in_use.clear();
         self.temp_free_list.clear();
     }
@@ -868,6 +906,8 @@ impl Allocator for DebrayAllocator {
     fn reset_contents(&mut self) {
         self.in_use.clear();
         self.shallow_temp_mappings.clear();
+        self.non_var_registers.clear();
+        self.non_var_register_heap_locs.clear();
         self.temp_free_list.clear();
     }
 
@@ -875,24 +915,44 @@ impl Allocator for DebrayAllocator {
         self.arg_c += 1;
     }
 
-    fn reset_at_head(&mut self, args: &[Term]) {
-        self.reset_arg(args.len());
-        self.arity = args.len();
+    fn reset_at_head(&mut self, term: &mut FocusedHeap, head_loc: usize) {
+        read_heap_cell!(term.deref_loc(head_loc),
+            (HeapCellValueTag::Str, s) => {
+                let arity = cell_as_atom_cell!(term.heap[s]).get_arity();
 
-        for (idx, arg) in args.iter().enumerate() {
-            if let Term::Var(_, ref var) = arg {
-                let var_num = var.to_var_num().unwrap();
-                let r = self.get_binding(var_num);
+                self.reset_arg(arity);
+                self.arity = arity;
 
-                if !r.is_perm() && r.reg_num() == 0 {
-                    self.in_use.insert(idx + 1);
-                    self.shallow_temp_mappings.insert(idx + 1, var_num);
-                    self.var_data.records[var_num]
-                        .allocation
-                        .set_register(idx + 1);
+                for (idx, arg) in term.heap[s+1 .. s+arity+1].iter().cloned().enumerate() {
+                    if arg.is_var() {
+                        let var = heap_bound_store(
+                            &term.heap,
+                            heap_bound_deref(&term.heap, arg),
+                        );
+
+                        if !var.is_var() {
+                            continue;
+                        }
+
+                        let h = var.get_value() as usize;
+                        let var_ptr = term.var_locs.peek_next_var_ptr_at_key(h).unwrap();
+                        let var_num = var_ptr.to_var_num().unwrap();
+                        let r = self.get_var_binding(var_num);
+
+                        if !r.is_perm() && r.reg_num() == 0 {
+                            self.in_use.insert(idx + 1);
+                            self.shallow_temp_mappings.insert(idx + 1, var_num);
+                            self.var_data.records[var_num]
+                                .allocation
+                                .set_register(idx + 1);
+                        }
+                    }
                 }
             }
-        }
+            _ => {
+                self.reset_arg(0);
+            }
+        );
     }
 
     fn reset_arg(&mut self, arity: usize) {

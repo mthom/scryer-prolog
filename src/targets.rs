@@ -3,17 +3,12 @@ use crate::parser::ast::*;
 use crate::atom_table::*;
 use crate::forms::*;
 use crate::instructions::*;
-use crate::iterators::*;
 use crate::types::*;
 
 pub(crate) struct FactInstruction;
 pub(crate) struct QueryInstruction;
 
 pub(crate) trait CompilationTarget<'a> {
-    type Iterator: Iterator<Item = TermRef<'a>>;
-
-    fn iter(term: &'a Term) -> Self::Iterator;
-
     fn to_constant(lvl: Level, literal: Literal, r: RegType) -> Instruction;
     fn to_list(lvl: Level, r: RegType) -> Instruction;
     fn to_structure(lvl: Level, name: Atom, arity: usize, r: RegType) -> Instruction;
@@ -41,12 +36,6 @@ pub(crate) trait CompilationTarget<'a> {
 }
 
 impl<'a> CompilationTarget<'a> for FactInstruction {
-    type Iterator = FactIterator<'a>;
-
-    fn iter(term: &'a Term) -> Self::Iterator {
-        breadth_first_iter(term, RootIterationPolicy::NotIterated)
-    }
-
     fn to_constant(lvl: Level, constant: Literal, reg: RegType) -> Instruction {
         Instruction::GetConstant(lvl, HeapCellValue::from(constant), reg)
     }
@@ -115,12 +104,6 @@ impl<'a> CompilationTarget<'a> for FactInstruction {
 }
 
 impl<'a> CompilationTarget<'a> for QueryInstruction {
-    type Iterator = QueryIterator<'a>;
-
-    fn iter(term: &'a Term) -> Self::Iterator {
-        post_order_iter(term)
-    }
-
     fn to_structure(_lvl: Level, name: Atom, arity: usize, r: RegType) -> Instruction {
         Instruction::PutStructure(name, arity, r)
     }

@@ -11,7 +11,6 @@ use crate::machine::term_stream::*;
 use crate::machine::*;
 use crate::parser::ast::*;
 
-use std::cell::Cell;
 use std::collections::VecDeque;
 use std::mem;
 use std::ops::Range;
@@ -1233,14 +1232,12 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
 
     fn compile_standalone_clause(
         &mut self,
-        term: Term,
+        term: FocusedHeap,
         settings: CodeGenSettings,
     ) -> Result<StandaloneCompileResult, SessionError> {
         let mut preprocessor = Preprocessor::new(settings);
 
         let clause = self.try_term_to_tl(term, &mut preprocessor)?;
-        // let queue = preprocessor.parse_queue(self)?;
-
         let mut cg = CodeGenerator::new(&LS::machine_st(&mut self.payload).atom_tbl, settings);
 
         let clause_code = cg.compile_predicate(vec![clause])?;
@@ -1272,7 +1269,6 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         }
 
         let mut cg = CodeGenerator::new(&LS::machine_st(&mut self.payload).atom_tbl, settings);
-
         let mut code = cg.compile_predicate(clauses)?;
 
         if settings.is_extensible {
@@ -1470,7 +1466,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
     pub(super) fn incremental_compile_clause(
         &mut self,
         key: PredicateKey,
-        clause: Term,
+        clause: FocusedHeap,
         compilation_target: CompilationTarget,
         non_counted_bt: bool,
         append_or_prepend: AppendOrPrepend,
@@ -2005,16 +2001,13 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
 }
 
 impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
-    pub(super) fn compile_clause_clauses<ClauseIter: Iterator<Item = (Term, Term)>>(
+    pub(super) fn compile_clause_clauses(
         &mut self,
         key: PredicateKey,
         compilation_target: CompilationTarget,
-        clause_clauses: ClauseIter,
+        clause_clauses: Vec<FocusedHeap>,
         append_or_prepend: AppendOrPrepend,
     ) -> Result<(), SessionError> {
-        let clause_predicates = clause_clauses
-            .map(|(head, body)| Term::Clause(Cell::default(), atom!("$clause"), vec![head, body]));
-
         let clause_clause_compilation_target = match compilation_target {
             CompilationTarget::User => CompilationTarget::Module(atom!("builtins")),
             _ => compilation_target,
@@ -2022,7 +2015,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
 
         let mut num_clause_predicates = 0;
 
-        for clause_term in clause_predicates {
+        for clause_term in clause_clauses {
             self.incremental_compile_clause(
                 (atom!("$clause"), 2),
                 clause_term,
@@ -2253,13 +2246,12 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                 .clause_clauses
                 .drain(0..std::cmp::min(predicates_len, clause_clauses_len))
                 .collect();
-
             let compilation_target = self.payload.predicates.compilation_target;
 
             self.compile_clause_clauses(
                 key,
                 compilation_target,
-                clauses_vec.into_iter(),
+                clauses_vec,
                 AppendOrPrepend::Append,
             )?;
         }
@@ -2288,15 +2280,43 @@ impl Machine {
 
     pub(crate) fn compile_standalone_clause(
         &mut self,
-        term_loc: RegType,
-        vars: &[Term],
+        term_reg: RegType,
+        vars: Vec<HeapCellValue>,
     ) -> Result<(), SessionError> {
-        let mut compile = || {
+        let cell = self.machine_st.store(self.machine_st.deref(self.machine_st[term_reg]));
+
+        // append the variables of vars.
+        let focus      = cell.get_value() as usize;
+        let header_loc = term_nth_arg(&self.machine_st.heap, focus, 0).unwrap();
+        let name       = term_name(&self.machine_st.heap, header_loc).unwrap();
+        let old_arity  = term_arity(&self.machine_st.heap, header_loc);
+
+        let new_header_loc = self.machine_st.heap.len();
+        let new_arity = old_arity + vars.len();
+
+        self.machine_st.heap.push(atom_as_cell!(name, new_arity));
+
+        for idx in header_loc + 1 .. header_loc + 1 + old_arity {
+            self.machine_st.heap.push(self.machine_st.heap[idx]);
+        }
+
+        for var in vars {
+            self.machine_st.heap.push(var);
+        }
+
+        let value = if new_arity > 0 {
+            str_loc_as_cell!(new_header_loc)
+        } else {
+            heap_loc_as_cell!(new_header_loc)
+        };
+
+        let mut compile = |cell| {
+            use crate::heap_iter::eager_stackful_preorder_iter;
+
             let mut loader: Loader<'_, InlineLoadState<'_>> =
                 Loader::new(self, InlineTermStream {});
 
-            let term = loader.read_term_from_heap(term_loc);
-            let clause = build_rule_body(vars, term);
+            let mut term = loader.copy_term_from_heap(cell);
 
             let settings = CodeGenSettings {
                 global_clock_tick: None,
@@ -2304,10 +2324,16 @@ impl Machine {
                 non_counted_bt: true,
             };
 
-            loader.compile_standalone_clause(clause, settings)
+            let value = term.heap[term.focus];
+
+            term.var_locs = var_locs_from_iter(
+                eager_stackful_preorder_iter(&mut term.heap, value),
+            );
+
+            loader.compile_standalone_clause(term, settings)
         };
 
-        let StandaloneCompileResult { clause_code, .. } = compile()?;
+        let StandaloneCompileResult { clause_code, .. } = compile(value)?;
         self.code.extend(clause_code);
 
         Ok(())
