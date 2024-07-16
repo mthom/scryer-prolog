@@ -24,7 +24,7 @@ enum ErrorProvenance {
 #[derive(Debug)]
 pub(crate) struct MachineError {
     stub: MachineStub,
-    location: Option<(usize, usize)>, // line_num, col_num
+    location: Option<ParserErrorSrc>,
     from: ErrorProvenance,
 }
 
@@ -649,7 +649,7 @@ impl MachineState {
             stub[1] = err.stub[0];
         }
 
-        if let Some((line_num, _)) = location {
+        if let Some(ParserErrorSrc { line_num, .. }) = location {
             stub.push(atom_as_cell!(atom!(":"), 2));
             stub.push(str_loc_as_cell!(h + 6 + stub_addition_len));
             stub.push(integer_as_cell!(Number::arena_from(
@@ -741,9 +741,9 @@ impl From<ParserError> for CompilationError {
 }
 
 impl CompilationError {
-    pub(crate) fn line_and_col_num(&self) -> Option<(usize, usize)> {
+    pub(crate) fn line_and_col_num(&self) -> Option<ParserErrorSrc> {
         match self {
-            CompilationError::ParserError(err) => err.line_and_col_num(),
+            CompilationError::ParserError(err) => Some(err.err_src()),
             _ => None,
         }
     }
@@ -1042,13 +1042,6 @@ pub enum SessionError {
     NamelessEntry,
     OpIsInfixAndPostFix(Atom),
     PredicateNotMultifileOrDiscontiguous(CompilationTarget, PredicateKey),
-}
-
-impl From<std::io::Error> for SessionError {
-    #[inline]
-    fn from(err: std::io::Error) -> SessionError {
-        SessionError::from(ParserError::from(err))
-    }
 }
 
 impl From<ParserError> for SessionError {
