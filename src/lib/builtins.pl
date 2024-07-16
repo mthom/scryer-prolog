@@ -1175,14 +1175,8 @@ clause(H, B) :-
 % Asserts (inserts) a new clause (rule or fact) into the current module.
 % The clause will be inserted at the beginning of the module.
 asserta(Clause0) :-
-    loader:strip_module(Clause0, Module, Clause),
-    asserta_(Module, Clause).
-
-asserta_(Module, (Head :- Body)) :-
-    !,
-    '$asserta'(Module, Head, Body).
-asserta_(Module, Fact) :-
-    '$asserta'(Module, Fact, true).
+    loader:strip_subst_module(Clause0, user, Module, Clause),
+    '$asserta'(Module, Clause).
 
 :- meta_predicate assertz(:).
 
@@ -1191,14 +1185,8 @@ asserta_(Module, Fact) :-
 % Asserts (inserts) a new clause (rule or fact) into the current module.
 % The clase will be inserted at the end of the module.
 assertz(Clause0) :-
-    loader:strip_module(Clause0, Module, Clause),
-    assertz_(Module, Clause).
-
-assertz_(Module, (Head :- Body)) :-
-    !,
-    '$assertz'(Module, Head, Body).
-assertz_(Module, Fact) :-
-    '$assertz'(Module, Fact, true).
+    loader:strip_subst_module(Clause0, user, Module, Clause),
+    '$assertz'(Module, Clause).
 
 
 :- meta_predicate retract(:).

@@ -87,7 +87,7 @@ pub enum VarAlloc {
         safety: VarSafetyStatus,
         to_perm_var_num: Option<usize>,
     },
-    Perm(usize, PermVarAllocation), // stack offset, allocation info
+    Perm { reg: usize, allocation: PermVarAllocation }, // stack offset, allocation info
 }
 
 impl VarAlloc {
@@ -95,14 +95,14 @@ impl VarAlloc {
     pub(crate) fn as_reg_type(&self) -> RegType {
         match *self {
             VarAlloc::Temp { temp_reg, .. } => RegType::Temp(temp_reg),
-            VarAlloc::Perm(r, _) => RegType::Perm(r),
+            VarAlloc::Perm { reg, .. } => RegType::Perm(reg),
         }
     }
 
     #[inline]
     pub(crate) fn set_register(&mut self, reg_num: usize) {
         match self {
-            VarAlloc::Perm(ref mut p, _) => *p = reg_num,
+            VarAlloc::Perm { ref mut reg, .. } => *reg = reg_num,
             VarAlloc::Temp {
                 ref mut temp_reg, ..
             } => *temp_reg = reg_num,
@@ -151,7 +151,7 @@ pub struct VariableRecord {
 impl Default for VariableRecord {
     fn default() -> Self {
         VariableRecord {
-            allocation: VarAlloc::Perm(0, PermVarAllocation::Pending),
+            allocation: VarAlloc::Perm { reg: 0, allocation: PermVarAllocation::Pending },
             num_occurrences: 0,
             running_count: 0,
         }
