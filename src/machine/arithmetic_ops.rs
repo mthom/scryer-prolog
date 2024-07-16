@@ -1132,8 +1132,17 @@ impl MachineState {
         value: HeapCellValue,
     ) -> Result<Number, MachineStub> {
         let stub_gen = || functor_stub(atom!("is"), 2);
-        let mut iter =
-            stackful_post_order_iter::<NonListElider>(&mut self.heap, &mut self.stack, value);
+
+        let root_loc = if value.is_ref() {
+            value.get_value() as usize
+        } else {
+            let type_error = self.type_error(ValidType::Evaluable, value);
+            return Err(self.error_form(type_error, stub_gen()));
+        };
+
+        let mut iter = stackful_post_order_iter::<NonListElider>(
+            &mut self.heap, &mut self.stack, root_loc,
+        );
 
         while let Some(value) = iter.next() {
             if value.get_forwarding_bit() {

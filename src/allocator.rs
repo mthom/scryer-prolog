@@ -4,8 +4,6 @@ use crate::forms::*;
 use crate::instructions::*;
 use crate::targets::*;
 
-use std::cell::Cell;
-
 pub(crate) trait Allocator {
     fn new() -> Self;
 
@@ -19,22 +17,21 @@ pub(crate) trait Allocator {
     fn mark_non_var<'a, Target: CompilationTarget<'a>>(
         &mut self,
         lvl: Level,
+        heap_loc: usize,
         context: GenContext,
-        cell: &'a Cell<RegType>,
         code: &mut CodeDeque,
-    );
+    ) -> RegType;
 
     #[allow(clippy::too_many_arguments)]
     fn mark_reserved_var<'a, Target: CompilationTarget<'a>>(
         &mut self,
         var_num: usize,
         lvl: Level,
-        cell: &Cell<VarReg>,
-        term_loc: GenContext,
+        context: GenContext,
         code: &mut CodeDeque,
         r: RegType,
         is_new_var: bool,
-    );
+    ) -> RegType;
 
     fn mark_cut_var(&mut self, var_num: usize, chunk_num: usize) -> RegType;
 
@@ -42,14 +39,13 @@ pub(crate) trait Allocator {
         &mut self,
         var_num: usize,
         lvl: Level,
-        cell: &Cell<VarReg>,
         context: GenContext,
         code: &mut CodeDeque,
-    );
+    ) -> RegType;
 
     fn reset(&mut self);
     fn reset_arg(&mut self, arg_num: usize);
-    fn reset_at_head(&mut self, args: &[Term]);
+    fn reset_at_head(&mut self, term: &mut FocusedHeap, head_loc: usize);
     fn reset_contents(&mut self);
 
     fn advance_arg(&mut self);

@@ -24,18 +24,22 @@ pub(crate) struct RawBlock<T: RawBlockTraits> {
 
 impl<T: RawBlockTraits> RawBlock<T> {
     pub(crate) fn new() -> Self {
-        let mut block = RawBlock {
-            size: 0,
-            base: ptr::null(),
-            top: ptr::null(),
-            _marker: PhantomData,
-        };
+        let mut block = Self::uninitialized();
 
         unsafe {
             block.grow();
         }
 
         block
+    }
+
+    pub(crate) fn uninitialized() -> Self {
+        Self {
+            size: 0,
+            base: ptr::null(),
+            top: ptr::null(),
+            _marker: PhantomData,
+        }
     }
 
     unsafe fn init_at_size(&mut self, cap: usize) {
