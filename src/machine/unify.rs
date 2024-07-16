@@ -705,13 +705,16 @@ fn bind_with_occurs_check<U: Unifier>(unifier: &mut U, r: Ref, value: HeapCellVa
 
     let mut occurs_triggered = false;
 
-    if !value.is_constant() {
-        let machine_st: &mut MachineState = unifier.deref_mut();
+    let machine_st: &mut MachineState = unifier.deref_mut();
+    let value = machine_st.store(MachineState::deref(machine_st, value));
+
+    if value.is_ref() && !value.is_stack_var() {
+        let root_loc = value.get_value() as usize;
 
         for cell in stackful_preorder_iter::<NonListElider>(
             &mut machine_st.heap,
             &mut machine_st.stack,
-            value,
+            root_loc, // value,
         ) {
             let cell = unmark_cell_bits!(cell);
 

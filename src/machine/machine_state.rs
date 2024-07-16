@@ -71,7 +71,7 @@ pub struct MachineState {
     pub(super) e: usize,
     pub(super) num_of_args: usize,
     pub(super) cp: usize,
-    pub(super) attr_var_init: AttrVarInitializer,
+    pub(crate) attr_var_init: AttrVarInitializer,
     pub(super) fail: bool,
     pub heap: Heap,
     pub(super) mode: MachineMode,
@@ -200,25 +200,36 @@ pub fn pstr_loc_and_offset(heap: &[HeapCellValue], index: usize) -> (usize, Fixn
     )
 }
 
-fn push_var_eq_functors<'a>(
+fn push_var_eq_functors(
     heap: &mut Heap,
-    iter: impl Iterator<Item = (&'a VarKey, &'a HeapCellValue)>,
+    iter: impl Iterator<Item = (usize, VarPtr)>, // (&'a VarPtr, &'a HeapCellValue)>,
     atom_tbl: &AtomTable,
 ) -> Vec<HeapCellValue> {
     let mut list_of_var_eqs = vec![];
 
-    for (var, binding) in iter {
-        let var_atom = AtomTable::build_with(atom_tbl, &var.to_string());
+    for (var_loc, var_ptr) in iter { // (var, binding) in iter {
+        let var_atom = AtomTable::build_with(atom_tbl, &*var_ptr.borrow().to_string());
         let h = heap.len();
+        let binding = heap[var_loc];
 
         heap.push(atom_as_cell!(atom!("="), 2));
         heap.push(atom_as_cell!(var_atom));
-        heap.push(*binding);
+        heap.push(binding);
 
         list_of_var_eqs.push(str_loc_as_cell!(h));
     }
 
     list_of_var_eqs
+}
+
+
+pub(crate) fn copy_and_align_iter<Iter: Iterator<Item = HeapCellValue>>(
+    iter: Iter,
+    boundary: i64,
+    h: i64,
+) -> impl Iterator<Item = HeapCellValue> {
+    let diff = boundary - h;
+    iter.map(move |heap_value| heap_value - diff)
 }
 
 #[derive(Debug)]
@@ -241,13 +252,7 @@ impl Ball {
     }
 
     pub(super) fn copy_and_align(&self, h: usize) -> Heap {
-        let diff = self.boundary as i64 - h as i64;
-
-        self.stub
-            .iter()
-            .cloned()
-            .map(|heap_value| heap_value - diff)
-            .collect()
+        copy_and_align_iter(self.stub.iter().cloned(), self.boundary as i64, h as i64).collect()
     }
 }
 
@@ -311,7 +316,7 @@ impl<'a> CopierTarget for CopyTerm<'a> {
 }
 
 #[derive(Debug)]
-pub(super) struct CopyBallTerm<'a> {
+pub(crate) struct CopyBallTerm<'a> {
     attr_var_queue: &'a mut Vec<usize>,
     stack: &'a mut Stack,
     heap: &'a mut Heap,
@@ -320,7 +325,7 @@ pub(super) struct CopyBallTerm<'a> {
 }
 
 impl<'a> CopyBallTerm<'a> {
-    pub(super) fn new(
+    pub(crate) fn new(
         attr_var_queue: &'a mut Vec<usize>,
         stack: &'a mut Stack,
         heap: &'a mut Heap,
@@ -536,18 +541,19 @@ impl MachineState {
 
     pub fn write_read_term_options(
         &mut self,
-        mut var_list: Vec<(VarKey, HeapCellValue, usize)>,
+        mut var_list: Vec<(VarPtr, HeapCellValue, usize)>,
         singleton_var_list: Vec<HeapCellValue>,
     ) -> CallResult {
         var_list.sort_by(|(_, _, idx_1), (_, _, idx_2)| idx_1.cmp(idx_2));
 
         let list_of_var_eqs = push_var_eq_functors(
             &mut self.heap,
-            var_list.iter().filter_map(|(var_name, var, _)| {
-                if var_name.is_anon() {
+            var_list.iter().filter_map(|(var_ptr, var, _)| {
+                if var_ptr.is_anon() {
                     None
                 } else {
-                    Some((var_name, var))
+                    let var_loc = var.get_value() as usize;
+                    Some((var_loc, var_ptr.clone()))
                 }
             }),
             &self.atom_tbl,
@@ -586,13 +592,13 @@ impl MachineState {
         Ok(unify_fn!(*self, var_names_offset, var_names_addr))
     }
 
-    pub fn read_term_body(&mut self, mut term_write_result: TermWriteResult) -> CallResult {
-        let heap_loc = read_heap_cell!(self.heap[term_write_result.heap_loc],
+    pub fn read_term_body(&mut self, term: TermWriteResult) -> CallResult {
+        let heap_loc = read_heap_cell!(self.heap[term.heap_loc],
             (HeapCellValueTag::PStr | HeapCellValueTag::PStrOffset) => {
-                pstr_loc_as_cell!(term_write_result.heap_loc)
+                pstr_loc_as_cell!(term.heap_loc)
             }
             _ => {
-                heap_loc_as_cell!(term_write_result.heap_loc)
+                heap_loc_as_cell!(term.heap_loc)
             }
         );
 
@@ -602,15 +608,15 @@ impl MachineState {
             return Ok(());
         }
 
+        /*
         for var in term_write_result.var_dict.values_mut() {
             *var = heap_bound_deref(&self.heap, *var);
         }
+        */
 
         let mut singleton_var_set: IndexMap<Ref, bool> = IndexMap::new();
 
-        for cell in
-            stackful_preorder_iter::<NonListElider>(&mut self.heap, &mut self.stack, heap_loc)
-        {
+        for cell in eager_stackful_preorder_iter(&mut self.heap, heap_loc) {
             let cell = unmark_cell_bits!(cell);
 
             if let Some(var) = cell.as_var() {
@@ -624,34 +630,42 @@ impl MachineState {
 
         let singleton_var_list = push_var_eq_functors(
             &mut self.heap,
-            term_write_result
-                .var_dict
+            term.var_locs
                 .iter()
-                .filter(|(var_name, binding)| {
-                    if var_name.is_anon() {
-                        return false;
+                .filter_map(|(var_loc, var_ptrs)| {
+                    let var_ptr = var_ptrs.front().unwrap();
+
+                    if var_ptr.is_anon() {
+                        return None;
                     }
 
-                    if let Some(r) = binding.as_var() {
-                        *singleton_var_set.get(&r).unwrap_or(&false)
+                    // add h to offset the term variable into its heap location.
+                    let r = Ref::heap_cell(var_loc);
+
+                    if singleton_var_set.get(&r).cloned().unwrap_or(false) {
+                        Some((var_loc, var_ptr.clone()))
                     } else {
-                        false
+                        None
                     }
                 }),
             &self.atom_tbl,
         );
 
+        /*
         for var in term_write_result.var_dict.values_mut() {
             *var = heap_bound_deref(&self.heap, *var);
         }
+        */
 
         let mut var_list = Vec::with_capacity(singleton_var_set.len());
 
-        for (var_name, addr) in term_write_result.var_dict {
-            if let Some(var) = addr.as_var() {
-                if let Some(idx) = singleton_var_set.get_index_of(&var) {
-                    var_list.push((var_name, addr, idx));
-                }
+        for (var_loc, var_ptrs) in term.var_locs.iter() {
+            let var_ptr = var_ptrs.front().unwrap().clone();
+            let r = Ref::heap_cell(var_loc);
+            let cell = self.heap[var_loc];
+
+            if let Some(idx) = singleton_var_set.get_index_of(&r) {
+                var_list.push((var_ptr, cell, idx));
             }
         }
 
@@ -734,8 +748,8 @@ impl MachineState {
         }
 
         loop {
-            match self.read(stream, &indices.op_dir) {
-                Ok(term_write_result) => return self.read_term_body(term_write_result),
+            match self.read_to_heap(stream, &indices.op_dir) {
+                Ok(term) => return self.read_term_body(term),
                 Err(err) => {
                     match &err {
                         CompilationError::ParserError(e) if e.is_unexpected_eof() => {
@@ -881,13 +895,16 @@ impl MachineState {
                     }
                 );
 
+                let h = self.heap.len();
+                self.heap.push(term_to_be_printed);
+
                 let mut printer = HCPrinter::new(
                     &mut self.heap,
                     Arc::clone(&self.atom_tbl),
                     &mut self.stack,
                     op_dir,
                     PrinterOutputter::new(),
-                    term_to_be_printed,
+                    h,
                 );
 
                 printer.ignore_ops = ignore_ops;

@@ -2,15 +2,19 @@
 
 use crate::arena::*;
 use crate::atom_table::*;
+use crate::forms::PredicateKey;
+use crate::machine::copier::*;
+use crate::machine::heap::*;
 use crate::machine::machine_indices::*;
-use crate::parser::char_reader::*;
-use crate::types::HeapCellValueTag;
+use crate::machine::machine_state::*;
+use crate::types::*;
 
-use std::cell::{Cell, Ref, RefCell, RefMut};
+use std::cell::{Ref, RefCell, RefMut};
+use std::collections::VecDeque;
 use std::fmt;
 use std::hash::{Hash, Hasher};
 use std::io::{Error as IOError, ErrorKind};
-use std::ops::{Deref, Neg};
+use std::ops::{Deref, Neg, RangeBounds};
 use std::rc::Rc;
 use std::sync::Arc;
 use std::vec::Vec;
@@ -426,33 +430,40 @@ pub enum ArithmeticError {
     UninstantiatedVar,
 }
 
-#[allow(dead_code)]
+#[derive(Debug, Copy, Clone, Default)]
+pub struct ParserErrorSrc {
+    pub col_num: usize,
+    pub line_num: usize,
+}
+
 #[derive(Debug)]
 pub enum ParserError {
-    BackQuotedString(usize, usize),
-    IO(IOError),
-    IncompleteReduction(usize, usize),
-    InvalidSingleQuotedCharacter(char),
-    LexicalError(lexical::Error),
-    MissingQuote(usize, usize),
-    NonPrologChar(usize, usize),
-    ParseBigInt(usize, usize),
-    UnexpectedChar(char, usize, usize),
+    BackQuotedString(ParserErrorSrc),
+    IO(IOError, ParserErrorSrc),
+    IncompleteReduction(ParserErrorSrc),
+    InvalidSingleQuotedCharacter(char, ParserErrorSrc),
+    LexicalError(lexical::Error, ParserErrorSrc),
+    MissingQuote(ParserErrorSrc),
+    NonPrologChar(ParserErrorSrc),
+    ParseBigInt(ParserErrorSrc),
+    UnexpectedChar(char, ParserErrorSrc),
     // UnexpectedEOF,
-    Utf8Error(usize, usize),
+    Utf8Error(ParserErrorSrc),
 }
 
 impl ParserError {
-    pub fn line_and_col_num(&self) -> Option<(usize, usize)> {
+    pub fn err_src(&self) -> ParserErrorSrc {
         match self {
-            &ParserError::BackQuotedString(line_num, col_num)
-            | &ParserError::IncompleteReduction(line_num, col_num)
-            | &ParserError::MissingQuote(line_num, col_num)
-            | &ParserError::NonPrologChar(line_num, col_num)
-            | &ParserError::ParseBigInt(line_num, col_num)
-            | &ParserError::UnexpectedChar(_, line_num, col_num)
-            | &ParserError::Utf8Error(line_num, col_num) => Some((line_num, col_num)),
-            _ => None,
+            &ParserError::BackQuotedString(err_src)
+            | &ParserError::IO(_, err_src)
+            | &ParserError::IncompleteReduction(err_src)
+            | &ParserError::InvalidSingleQuotedCharacter(_, err_src)
+            | &ParserError::LexicalError(_, err_src)
+            | &ParserError::MissingQuote(err_src)
+            | &ParserError::NonPrologChar(err_src)
+            | &ParserError::ParseBigInt(err_src)
+            | &ParserError::UnexpectedChar(_, err_src)
+            | &ParserError::Utf8Error(err_src) => err_src,
         }
     }
 
@@ -463,14 +474,14 @@ impl ParserError {
             ParserError::InvalidSingleQuotedCharacter(..) => {
                 atom!("invalid_single_quoted_character")
             }
-            ParserError::IO(e) if e.kind() == ErrorKind::UnexpectedEof => {
+            ParserError::IO(e, _) if e.kind() == ErrorKind::UnexpectedEof => {
                 atom!("unexpected_end_of_file")
             }
-            ParserError::IO(e) if e.kind() == ErrorKind::InvalidData => {
+            ParserError::IO(e, _) if e.kind() == ErrorKind::InvalidData => {
                 atom!("invalid_data")
             }
-            ParserError::IO(_) => atom!("input_output_error"),
-            ParserError::LexicalError(_) => atom!("lexical_error"),
+            ParserError::IO(..) => atom!("input_output_error"),
+            ParserError::LexicalError(..) => atom!("lexical_error"),
             ParserError::MissingQuote(..) => atom!("missing_quote"),
             ParserError::NonPrologChar(..) => atom!("non_prolog_character"),
             ParserError::ParseBigInt(..) => atom!("cannot_parse_big_int"),
@@ -480,23 +491,23 @@ impl ParserError {
     }
 
     #[inline]
-    pub fn unexpected_eof() -> Self {
-        ParserError::IO(std::io::Error::from(ErrorKind::UnexpectedEof))
+    pub fn unexpected_eof(err_src: ParserErrorSrc) -> Self {
+        ParserError::IO(std::io::Error::from(ErrorKind::UnexpectedEof), err_src)
     }
 
     #[inline]
     pub fn is_unexpected_eof(&self) -> bool {
-        if let ParserError::IO(e) = self {
+        if let ParserError::IO(e, _) = self {
             e.kind() == ErrorKind::UnexpectedEof
         } else {
             false
         }
     }
 }
-
+/*
 impl From<lexical::Error> for ParserError {
-    fn from(e: lexical::Error) -> ParserError {
-        ParserError::LexicalError(e)
+    fn from((e, err_src): (lexical::Error, ParserErrorSrc)) -> ParserError {
+        ParserError::LexicalError(e, err_src)
     }
 }
 
@@ -515,7 +526,7 @@ impl From<&IOError> for ParserError {
         }
     }
 }
-
+*/
 #[derive(Debug, Clone, Copy)]
 pub struct CompositeOpDir<'a, 'b> {
     pub primary_op_dir: Option<&'b OpDir>,
@@ -689,6 +700,14 @@ impl Deref for VarPtr {
 }
 
 impl VarPtr {
+    #[inline]
+    pub(crate) fn is_anon(&self) -> bool {
+        match *self.borrow() {
+            Var::Anon | Var::Generated { is_anon: true, .. } => true,
+            _ => false,
+        }
+    }
+
     #[inline(always)]
     pub(crate) fn borrow(&self) -> Ref<'_, Var> {
         self.0.borrow()
@@ -701,7 +720,7 @@ impl VarPtr {
 
     pub(crate) fn to_var_num(&self) -> Option<usize> {
         match *self.borrow() {
-            Var::Generated(var_num) => Some(var_num),
+            Var::Generated { var_num, .. } => Some(var_num),
             _ => None,
         }
     }
@@ -735,7 +754,8 @@ impl From<&str> for VarPtr {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Var {
-    Generated(usize),
+    Anon,
+    Generated { is_anon: bool, var_num: usize },
     InSitu(usize),
     Named(String),
 }
@@ -759,12 +779,34 @@ impl Var {
     #[inline(always)]
     pub fn to_string(&self) -> String {
         match self {
-            Var::InSitu(n) | Var::Generated(n) => format!("_{}", n),
+            Var::Anon => "_".to_owned(),
+            Var::InSitu(var_num) | Var::Generated { var_num, .. } => format!("_{}", var_num),
             Var::Named(value) => value.to_owned(),
         }
     }
 }
 
+pub(crate) fn subterm_index(heap: &[HeapCellValue], subterm_loc: usize) -> (usize, HeapCellValue) {
+    let subterm = heap[subterm_loc];
+
+    if subterm.is_ref() {
+        let subterm = heap_bound_deref(heap, subterm);
+        let subterm_loc = subterm.get_value() as usize;
+        let subterm = heap_bound_store(heap, subterm);
+
+        let subterm_loc = if subterm.is_ref() {
+            subterm.get_value() as usize
+        } else {
+            subterm_loc
+        };
+
+        (subterm_loc, subterm)
+    } else {
+        (subterm_loc, subterm)
+    }
+}
+
+/*
 #[derive(Debug, Clone)]
 pub enum Term {
     AnonVar,
@@ -830,4 +872,442 @@ pub fn unfold_by_str(mut term: Term, s: Atom) -> Vec<Term> {
 
     terms.push(term);
     terms
+}
+ */
+
+pub(crate) fn fetch_index_ptr(
+    heap: &[HeapCellValue],
+    arity: usize,
+    term_loc: usize,
+) -> Option<CodeIndex> {
+    if term_loc + arity + 1 >= heap.len() {
+        return None;
+    }
+
+    read_heap_cell!(heap[term_loc + arity + 1],
+        (HeapCellValueTag::Cons, c) => {
+            match_untyped_arena_ptr!(c,
+               (ArenaHeaderTag::IndexPtr, ptr) => {
+                   return Some(CodeIndex::from(ptr));
+               }
+               _ => {}
+            );
+        }
+        _ => {}
+    );
+
+    None
+}
+
+pub(crate) fn blunt_index_ptr(
+    heap: &mut [HeapCellValue],
+    key: PredicateKey,
+    term_loc: usize,
+) -> bool {
+    if fetch_index_ptr(heap, key.1, term_loc).is_some() {
+        heap[term_loc] = atom_as_cell!(key.0, key.1);
+        true
+    } else {
+        false
+    }
+}
+
+pub(crate) fn unfold_by_str_once(
+    heap: &mut [HeapCellValue],
+    start_term: HeapCellValue,
+    atom: Atom,
+) -> Option<usize> {
+    let start_term = heap_bound_store(
+        heap,
+        heap_bound_deref(heap, start_term),
+    );
+
+    if let HeapCellValueTag::Str = start_term.get_tag() {
+        let s = start_term.get_value() as usize;
+
+        let (s_atom, s_arity) = cell_as_atom_cell!(heap[s]).get_name_and_arity();
+        blunt_index_ptr(heap, (s_atom, s_arity), s);
+
+        if (s_atom, s_arity) == (atom, 2) {
+            return Some(s+1);
+        }
+    }
+
+    None
+}
+
+pub fn unfold_by_str(
+    heap: &mut [HeapCellValue],
+    mut start_term: HeapCellValue,
+    atom: Atom,
+) -> Vec<HeapCellValue> {
+    let mut terms = vec![];
+    start_term = heap_bound_store(heap, heap_bound_deref(heap, start_term));
+
+    while let Some(fst_loc) = unfold_by_str_once(heap, start_term, atom) {
+        let (_, snd) = subterm_index(heap, fst_loc + 1);
+        let (_, fst) = subterm_index(heap, fst_loc);
+        terms.push(fst);
+        start_term = snd;
+    }
+
+    terms
+}
+
+/*
+pub fn unfold_by_str_locs(
+    heap: &mut [HeapCellValue],
+    mut term_loc: usize,
+    atom: Atom,
+) -> Vec<(HeapCellValue, usize)> {
+    let mut terms = vec![];
+    let mut current_term = heap_bound_store(
+        heap,
+        heap_bound_deref(heap, heap[term_loc]),
+    );
+
+    while let Some(fst_loc) = unfold_by_str_once(heap, current_term, atom) {
+        (term_loc, current_term) = subterm_index(heap, fst_loc + 1);
+        let (fst_loc, fst) = subterm_index(heap, fst_loc);
+        terms.push((fst, fst_loc));
+    }
+
+    terms.push((current_term, term_loc));
+    terms
+}
+*/
+
+pub fn unfold_by_str_locs(
+    heap: &mut [HeapCellValue],
+    mut term_loc: usize,
+    atom: Atom,
+) -> Vec<(HeapCellValue, usize)> {
+    let mut terms = vec![];
+    let mut current_term = heap[term_loc];
+
+    while let Some(fst_loc) = unfold_by_str_once(heap, current_term, atom) {
+        term_loc = fst_loc+1;
+        current_term = heap[term_loc];
+        let fst = heap[fst_loc];
+        terms.push((fst, fst_loc));
+    }
+
+    terms.push((current_term, term_loc));
+    terms
+}
+
+pub fn term_name(heap: &[HeapCellValue], mut term_loc: usize) -> Option<Atom> {
+    loop {
+        read_heap_cell!(heap[term_loc],
+            (HeapCellValueTag::Atom, (name, _arity)) => {
+                return Some(name);
+            }
+            (HeapCellValueTag::Str, s) => {
+                term_loc = s;
+            }
+            (HeapCellValueTag::AttrVar | HeapCellValueTag::Var, h) => {
+                if h != term_loc {
+                    term_loc = h;
+                } else {
+                    return None;
+                }
+            }
+            _ => {
+                return None;
+            }
+        );
+    }
+}
+
+pub fn term_arity(heap: &[HeapCellValue], mut term_loc: usize) -> usize {
+    loop {
+        read_heap_cell!(heap[term_loc],
+            (HeapCellValueTag::Atom, (_name, arity)) => {
+                return arity;
+            }
+            (HeapCellValueTag::Str, s) => {
+                term_loc = s;
+            }
+            (HeapCellValueTag::Lis) => {
+                return 2;
+            }
+            (HeapCellValueTag::AttrVar | HeapCellValueTag::Var, h) => {
+                if h != term_loc {
+                    term_loc = h;
+                } else {
+                    return 0;
+                }
+            }
+            _ => {
+                return 0;
+            }
+        );
+    }
+}
+
+pub fn var_locs_from_iter<I: Iterator<Item = HeapCellValue>>(iter: I) -> VarLocs {
+    let mut occurrence_set: IndexMap<HeapCellValue, usize, FxBuildHasher> =
+        IndexMap::with_hasher(FxBuildHasher::default());
+
+    for term in iter {
+        if term.is_var() {
+            let var_count = occurrence_set.entry(term).or_insert(0);
+            *var_count += 1;
+        }
+    }
+
+    VarLocs(
+        occurrence_set
+        .into_iter()
+        .map(|(var, count)| {
+            let key = var.get_value() as usize;
+            let queue = if count > 1 {
+                (0 .. count).map(|_| VarPtr::from(format!("_{}", key))).collect()
+            } else {
+                (0 .. count).map(|_| VarPtr::from(Var::Anon)).collect()
+            };
+
+            (key, queue)
+        })
+        .collect()
+    )
+}
+
+/*
+pub fn term_deref(heap: &[HeapCellValue], mut term_loc: usize) -> HeapCellValue {
+    loop {
+        read_heap_cell!(heap[term_loc],
+            (HeapCellValueTag::AttrVar | HeapCellValueTag::Var, h) => {
+                if h != term_loc {
+                    term_loc = h;
+                } else {
+                    return heap[h];
+                }
+            }
+            _ => {
+                return heap[term_loc];
+            }
+        )
+    }
+}
+*/
+
+pub fn term_nth_arg(heap: &[HeapCellValue], mut term_loc: usize, n: usize) -> Option<usize> {
+    loop {
+        read_heap_cell!(heap[term_loc],
+            (HeapCellValueTag::Str, s) => {
+                return if cell_as_atom_cell!(heap[s]).get_arity() >= n {
+                    Some(s+n)
+                } else {
+                    None
+                };
+            }
+            (HeapCellValueTag::Atom, (_name, arity)) => {
+                return if arity >= n {
+                    Some(term_loc + n)
+                } else {
+                    None
+                };
+            }
+            (HeapCellValueTag::Lis, l) => {
+                return if 1 <= n && n <= 2 {
+                    Some(l+n-1)
+                } else if n == 0 {
+                    Some(term_loc)
+                } else {
+                    None
+                };
+            }
+            (HeapCellValueTag::AttrVar | HeapCellValueTag::Var, h) => {
+                if h != term_loc {
+                    term_loc = h;
+                } else {
+                    return None;
+                }
+            }
+            _ => {
+                return None;
+            }
+        );
+    }
+}
+
+pub type VarNamesToLocs = IndexMap<String, HeapCellValue, FxBuildHasher>;
+
+#[derive(Debug, Default)]
+pub struct VarLocs(IndexMap<usize, VecDeque<VarPtr>, FxBuildHasher>);
+
+impl VarLocs {
+    pub fn get(&self, key: usize) -> Option<&VarPtr> {
+        self.0.get(&key)
+            .and_then(|queue| {
+                queue.front()
+            })
+    }
+
+    // if a queue of VarPtr's is stored at location key, pop the front
+    // if it exists and pass it along to wrapper, returning a value of
+    // type R. A return value of None indicates that the key doesn't
+    // exist (the map containing a key necessarily means its queue
+    // value is non-empty).
+    fn rotate_latest_mut<R>(
+        &mut self,
+        key: usize,
+        wrapper: impl FnOnce(&VarPtr) -> R,
+    ) -> Option<R> {
+        self.0.get_mut(&key)
+            .and_then(move |queue| {
+                if let Some(var_ptr) = queue.pop_front() {
+                    let result = wrapper(&var_ptr);
+                    queue.push_back(var_ptr);
+                    Some(result)
+                } else {
+                    None
+                }
+            })
+    }
+
+    pub fn peek_next_var_ptr_at_key(&self, key: usize) -> Option<&VarPtr> {
+        self.0.get(&key).and_then(|queue| queue.front())
+    }
+
+    pub fn read_next_var_ptr_at_key(&mut self, key: usize) -> Option<VarPtr> {
+        self.rotate_latest_mut(key, VarPtr::clone)
+    }
+
+    pub fn push_at_key(&mut self, key: usize, var_ptr: VarPtr) {
+        let entry = self.0.entry(key).or_default();
+        entry.push_back(var_ptr);
+    }
+
+    #[inline]
+    pub fn iter(&self) -> impl Iterator<Item = (usize, &VecDeque<VarPtr>)> {
+        self.0.iter().map(|(&k, v)| (k, v))
+    }
+
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
+    #[inline]
+    pub fn drain<R>(&mut self, range: R) -> indexmap::map::Drain<usize, VecDeque<VarPtr>>
+        where R: RangeBounds<usize>
+    {
+        self.0.drain(range)
+    }
+
+    #[inline]
+    pub fn insert(&mut self, key: usize, var_ptrs: VecDeque<VarPtr>) {
+        self.0.insert(key, var_ptrs);
+    }
+}
+
+#[derive(Debug)]
+pub struct FocusedHeap {
+    pub heap: Vec<HeapCellValue>,
+    pub focus: usize,
+    pub var_locs: VarLocs,
+}
+
+impl FocusedHeap {
+    pub fn empty() -> Self {
+        Self {
+            heap: vec![],
+            focus: 0,
+            var_locs: VarLocs::default(),
+        }
+    }
+
+    pub fn copy_term_from_machine_heap(
+        &mut self,
+        machine_st: &mut MachineState,
+        cell: HeapCellValue,
+    ) {
+        let hb = machine_st.heap.len();
+
+        copy_term(
+            CopyBallTerm::new(
+                &mut machine_st.attr_var_init.attr_var_queue,
+                &mut machine_st.stack,
+                &mut machine_st.heap,
+                &mut self.heap,
+            ),
+            cell,
+            AttrVarPolicy::DeepCopy,
+        );
+
+        for cell in self.heap.iter_mut() {
+            *cell = *cell - hb;
+        }
+    }
+
+    pub fn as_ref_mut(&mut self, focus: usize) -> FocusedHeapRefMut {
+        FocusedHeapRefMut {
+            heap: &mut self.heap,
+            focus,
+            // var_locs: &self.var_locs,
+        }
+    }
+
+    pub fn deref_loc(&self, term_loc: usize) -> HeapCellValue {
+        use crate::machine::heap::*;
+
+        let cell = self.heap[term_loc];
+        heap_bound_store(&self.heap, heap_bound_deref(&self.heap, cell))
+    }
+
+    pub fn name(&self, term_loc: usize) -> Option<Atom> {
+        term_name(&self.heap, term_loc)
+    }
+
+    pub fn arity(&self, term_loc: usize) -> usize {
+        term_arity(&self.heap, term_loc)
+    }
+
+    pub fn nth_arg(&self, term_loc: usize, n: usize) -> Option<usize> {
+        term_nth_arg(&self.heap, term_loc, n)
+    }
+}
+
+pub struct FocusedHeapRefMut<'a> {
+    pub heap: &'a mut Vec<HeapCellValue>,
+    pub focus: usize,
+}
+
+impl<'a> FocusedHeapRefMut<'a> {
+    pub fn name(&self, term_loc: usize) -> Option<Atom> {
+        term_name(&self.heap, term_loc)
+    }
+
+    pub fn arity(&self, term_loc: usize) -> usize {
+        term_arity(&self.heap, term_loc)
+    }
+
+    pub fn deref_loc(&self, term_loc: usize) -> HeapCellValue {
+        use crate::machine::heap::*;
+
+        let cell = self.heap[term_loc];
+        heap_bound_store(&self.heap, heap_bound_deref(&self.heap, cell))
+    }
+
+    pub fn nth_arg(&self, term_loc: usize, n: usize) -> Option<usize> {
+        term_nth_arg(self.heap, term_loc, n)
+    }
+
+    pub fn from_cell(heap: &'a mut Vec<HeapCellValue>, cell: HeapCellValue) -> Self {
+        let focus = read_heap_cell!(cell,
+            (HeapCellValueTag::AttrVar | HeapCellValueTag::Var, h) => {
+                h
+            }
+            _ => {
+                let h = heap.len();
+                heap.push(cell);
+
+                h
+            }
+        );
+
+        Self { heap, focus }
+    }
 }
