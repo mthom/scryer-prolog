@@ -205,6 +205,7 @@ load_loop(Stream, Evacuable) :-
        read_term(Stream, Term, [singletons(Singletons)])
     ;  Term = end_of_file
     ),
+    % write('Term: '), writeq(Term), nl,
     (  Term == end_of_file ->
        close(Stream),
        '$conclude_load'(Evacuable)
@@ -219,6 +220,7 @@ load_loop(Stream, Evacuable) :-
 
 compile_term(Term, Evacuable) :-
     expand_terms_and_goals(Term, Terms),
+    % write('Terms: '), writeq(Terms),nl,
     !,
     (  var(Terms) ->
        instantiation_error(load/1)
