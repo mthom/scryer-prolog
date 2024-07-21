@@ -72,6 +72,13 @@ term_expansion_list([Term|Terms], ExpandedTermsHead, ExpandedTermsTail) :-
 
 :- non_counted_backtracking goal_expansion/3.
 
+goal_expansion(G, user, (Y = Rhs, X is Y)) :-
+    % Additional rule just to replace invalid arithmetic expression with
+    % runtime exception
+    nonvar(G),
+    G = (X is Rhs),
+    nonvar(Rhs),
+    (Rhs == []; Rhs = [_|_]).
 goal_expansion(Goal, Module, ExpandedGoal) :-
     (  atom(Module),
        '$predicate_defined'(Module, goal_expansion, 2),
