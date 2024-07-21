@@ -608,6 +608,8 @@ enum SystemClauseType {
     InferenceLimitExceeded,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$argv")))]
     Argv,
+    #[strum_discriminants(strum(props(Arity = "3", Name = "$jit_compile")))]
+    JitCompile,
     REPL(REPLCodePtr),
 }
 
@@ -1912,6 +1914,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallAddNonCountedBacktracking |
                     &Instruction::CallPopCount |
                     &Instruction::CallArgv |
+		    &Instruction::CallJitCompile |
                     &Instruction::CallEd25519SignRaw |
                     &Instruction::CallEd25519VerifyRaw |
                     &Instruction::CallEd25519SeedToPublicKey => {
@@ -2149,6 +2152,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteAddNonCountedBacktracking |
                     &Instruction::ExecutePopCount |
                     &Instruction::ExecuteArgv |
+		    &Instruction::ExecuteJitCompile |
                     &Instruction::ExecuteEd25519SignRaw |
                     &Instruction::ExecuteEd25519VerifyRaw |
                     &Instruction::ExecuteEd25519SeedToPublicKey => {

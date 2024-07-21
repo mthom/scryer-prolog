@@ -19,6 +19,8 @@ use crate::machine;
 use crate::machine::code_walker::*;
 use crate::machine::copier::*;
 use crate::machine::heap::*;
+#[cfg(feature = "jit")]
+use crate::machine::jit2::*;
 use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
 use crate::machine::machine_state::*;
@@ -4974,6 +4976,86 @@ impl Machine {
         ));
 
         unify!(self.machine_st, args, cell);
+        Ok(())
+    }
+
+    #[cfg(not(feature = "jit"))]
+    #[inline(always)]
+    pub(crate) fn jit_compile(&mut self) -> CallResult {
+	Ok(())
+    }
+
+    // Tries to compile an existing predicate into native code
+    // For this to work: the predicate must be loaded, must use the subset of Prolog supported by the JIT
+    // and every call to a predicate must have been compiled previously
+    #[cfg(feature = "jit")]
+    #[inline(always)]
+    pub(crate) fn jit_compile(&mut self) -> CallResult {
+        let module_name = cell_as_atom!(self.deref_register(1));
+        let name = cell_as_atom!(self.deref_register(2));
+        let arity = self.deref_register(3);
+
+        let arity = match Number::try_from(arity) {
+            Ok(Number::Fixnum(n)) => n.get_num() as usize,
+            Ok(Number::Integer(n)) => {
+                let value: usize = (&*n).try_into().unwrap();
+                value
+            }
+            _ => {
+                unreachable!()
+            }
+        };
+
+        let key = (name, arity);
+
+        let first_idx = match module_name {
+            atom!("user") => self.indices.code_dir.get(&key),
+            _ => match self.indices.modules.get(&module_name) {
+                Some(module) => module.code_dir.get(&key),
+                None => {
+                    let stub = functor_stub(key.0, key.1);
+                    let err = self.machine_st.session_error(SessionError::from(
+                        CompilationError::InvalidModuleResolution(module_name),
+                    ));
+
+                    return Err(self.machine_st.error_form(err, stub));
+                }
+            },
+        };
+
+        let first_idx = match first_idx {
+            Some(idx) if idx.local().is_some() => {
+                if let Some(idx) = idx.local() {
+                    idx
+                } else {
+                    unreachable!()
+                }
+            }
+            _ => {
+                let stub = functor_stub(name, arity);
+                let err = self
+                    .machine_st
+                    .existence_error(ExistenceError::Procedure(name, arity));
+
+                return Err(self.machine_st.error_form(err, stub));
+            }
+        };
+
+	let mut code = vec![];
+	walk_code(&self.code, first_idx, |instr| code.push(instr.clone()));
+
+	match self.jit_machine.compile(&name.as_str(), arity, code) {
+	    Err(JitCompileError::UndefinedPredicate) => {
+		eprintln!("jit_compiler: undefined_predicate");
+		self.machine_st.fail = true;
+	    }
+	    Err(JitCompileError::InstructionNotImplemented) => {
+		eprintln!("jit_compiler: instruction not implemented");
+		self.machine_st.fail = true;
+	    }
+	    _ => {}
+	}
+
         Ok(())
     }
 

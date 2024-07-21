@@ -12,6 +12,8 @@ pub mod disjuncts;
 pub mod dispatch;
 pub mod gc;
 pub mod heap;
+#[cfg(feature = "jit")]
+pub mod jit2;
 pub mod lib_machine;
 pub mod load_state;
 pub mod machine_errors;
@@ -39,6 +41,8 @@ use crate::machine::args::*;
 use crate::machine::compile::*;
 use crate::machine::copier::*;
 use crate::machine::heap::*;
+#[cfg(feature = "jit")]
+use crate::machine::jit2::*;
 use crate::machine::loader::*;
 use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
@@ -80,6 +84,8 @@ pub struct Machine {
     #[cfg(feature = "ffi")]
     pub(super) foreign_function_table: ForeignFunctionTable,
     pub(super) rng: StdRng,
+    #[cfg(feature = "jit")]
+    pub(super) jit_machine: JitMachine,
 }
 
 #[derive(Debug)]
@@ -477,6 +483,8 @@ impl Machine {
             #[cfg(feature = "ffi")]
             foreign_function_table: Default::default(),
             rng: StdRng::from_entropy(),
+	    #[cfg(feature = "jit")]
+	    jit_machine: JitMachine::new(),
         };
 
         let mut lib_path = current_dir();
@@ -1140,9 +1148,18 @@ impl Machine {
         Ok(())
     }
 
+    
     #[inline(always)]
     fn try_execute(&mut self, name: Atom, arity: usize, idx: IndexPtr) -> CallResult {
         let compiled_tl_index = idx.p() as usize;
+
+	#[cfg(feature = "jit")]
+	{
+	    if let Ok(_) = self.jit_machine.exec(&name.as_str(), arity, &mut self.machine_st) {
+		// println!("jit_compiler: executed JIT predicate");
+		return Ok(());
+	    }
+	}
 
         match idx.tag() {
             IndexPtrTag::DynamicUndefined => {
