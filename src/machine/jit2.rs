@@ -163,6 +163,8 @@ impl JitMachine {
 	fn_builder.declare_var(s, types::I64);
 	let fail = Variable::new(2);
 	fn_builder.declare_var(fail, types::I8);
+	let fail_value_init = fn_builder.ins().iconst(types::I8, 0);
+	fn_builder.def_var(fail, fail_value_init);
 	
 	let mut registers = vec![];
 	for i in 1..=arity {
@@ -201,6 +203,9 @@ impl JitMachine {
 	    }
 	}
 
+	/* STORE is an operation that abstracts the access to a data cell. It can return the data cell itself
+	 * or some other data cell if it points to some data cell in the heap
+	 */
 	macro_rules! store {
 	    ($x:expr) => {
 		{
@@ -236,6 +241,9 @@ impl JitMachine {
 	    }
 	}
 
+	/* DEREF is an operation that follows a chain of REF until arriving at a self-referential REF
+	 * (unbounded variable) or something that is not a REF
+	 */
 	macro_rules! deref {
 	    ($x:expr) => {
 		{
@@ -263,9 +271,54 @@ impl JitMachine {
 	    }
 	}
 
+	/* BIND is an operation that takes two data cells, one of them being an unbounded REF / Var
+	 * and makes that REF point the other cell on the heap
+	 */
+	macro_rules! bind {
+	    ($x:expr, $y:expr) => {
+		{
+		    let first_var_block = fn_builder.create_block();
+		    let else_first_var_block = fn_builder.create_block();
+		    let exit_block = fn_builder.create_block();
+		    let heap_ptr = heap_as_ptr!();		    
+		    // check if x is var
+		    let tag = fn_builder.ins().ushr_imm($x, 58);
+		    let is_var = fn_builder.ins().icmp_imm(IntCC::Equal, tag, HeapCellValueTag::Var as i64);
+		    fn_builder.ins().brif(is_var, first_var_block, &[], else_first_var_block, &[]);
+		    // first var block
+		    fn_builder.seal_block(first_var_block);
+		    fn_builder.seal_block(else_first_var_block);
+		    fn_builder.switch_to_block(first_var_block);
+    		    // The order of HeapCellValue is TAG (6), M (1), F (1), VALUE (56)
+		    let idx = fn_builder.ins().ishl_imm($x, 8);
+		    let idx = fn_builder.ins().ushr_imm(idx, 5);
+		    let idx = fn_builder.ins().iadd(heap_ptr, idx);
+		    fn_builder.ins().store(MemFlags::trusted(), $y, idx, Offset32::new(0));
+		    fn_builder.ins().jump(exit_block, &[]);
+		    // else_first_var_block
+		    // suppose the other cell is a var
+		    fn_builder.switch_to_block(else_first_var_block);
+		    let idx = fn_builder.ins().ishl_imm($y, 8);
+		    let idx = fn_builder.ins().ushr_imm(idx, 5);
+		    let idx = fn_builder.ins().iadd(heap_ptr, idx);
+		    fn_builder.ins().store(MemFlags::trusted(), $x, idx, Offset32::new(0));
+		    fn_builder.ins().jump(exit_block, &[]);		    
+		    // exit
+		    fn_builder.seal_block(exit_block);
+		    fn_builder.switch_to_block(exit_block);
+		}
+	    }
+	}
+
+	// TODO: Unify
+
 	for wam_instr in code {
 	    match wam_instr {
 		// TODO Missing RegType Perm
+		/* put_structure is an instruction that puts a new STR in the heap
+		 * (STR cell, plus functor + arity cell)
+		 * It also saves the STR cell into a register
+		 */
 		Instruction::PutStructure(name, arity, reg) => {
 		    let atom_cell = atom_as_cell!(name, arity);
 		    let atom = fn_builder.ins().iconst(types::I64, i64::from_le_bytes(atom_cell.into_bytes()));
@@ -284,12 +337,14 @@ impl JitMachine {
 		    }
 		}
 		// TODO Missing RegType Perm
+		/* set_variable is an instruction that creates a new self-referential REF
+		 * (unbounded variable) in the heap and saves that into a register
+		 */
 		Instruction::SetVariable(reg) => {
 		    let heap_loc_cell = heap_loc_as_cell!(0);
 		    let heap_loc_cell = fn_builder.ins().iconst(types::I64, i64::from_le_bytes(heap_loc_cell.into_bytes()));
 		    let heap_len = heap_len!();
-		    let heap_len_shift = fn_builder.ins().ishl_imm(heap_len, 8);
-		    let heap_loc_cell = fn_builder.ins().bor(heap_len_shift, heap_loc_cell);
+		    let heap_loc_cell = fn_builder.ins().bor(heap_len, heap_loc_cell);
 		    let sig_ref = fn_builder.import_signature(self.heap_push_sig.clone());
 		    let heap_push_fn = fn_builder.ins().iconst(types::I64, self.heap_push as i64);
 		    fn_builder.ins().call_indirect(sig_ref, heap_push_fn, &[heap, heap_loc_cell]);
@@ -301,6 +356,8 @@ impl JitMachine {
 		    }
 		}
 		// TODO: Missing RegType Perm
+		/* set_value is an instruction that pushes a new data cell from a register to the heap
+		 */
 		Instruction::SetValue(reg) => {
 		    let value = match reg {
 			RegType::Temp(x) => {
@@ -315,8 +372,14 @@ impl JitMachine {
 		    fn_builder.ins().call_indirect(sig_ref, heap_push_fn, &[heap, value]);
 		}
 		// TODO: Missing RegType Perm
+		/* get_structure is an instruction that either matches an existing STR or starts writing a new
+		 * STR into the heap. If the cell passed via register is an unbounded REF, we start WRITE mode
+		 * and unify_variable, unify_value behave similar to set_variable, set_value.
+		 * If it's an existing STR, we check functor and arity, set S pointer and start READ mode,
+		 * in that mod unify_variable and unify_value will follow the unification procedure
+		 */
 		Instruction::GetStructure(_lvl, name, arity, reg) => {
-		    /*let xi = match reg {
+		    let xi = match reg {
 			RegType::Temp(x) => {
 			    registers[x]
 			}
@@ -325,32 +388,78 @@ impl JitMachine {
 		    let deref = deref!(xi);
 		    let store = store!(deref);
 
-		    let var_block = fn_builder.create_block();
-		    let str_block = fn_builder.create_block();
-		    let nostr_block = fn_builder.create_block();
-		    let other_block = fn_builder.create_block();
+		    let is_var_block = fn_builder.create_block();
+		    let else_is_var_block = fn_builder.create_block();
+		    let is_str_block = fn_builder.create_block();
+		    let start_read_mode_block = fn_builder.create_block();
+		    let fail_block = fn_builder.create_block();
 		    let exit_block = fn_builder.create_block();
 
-    		    let tag = fn_builder.ins().band_imm(store, 64);
-		    let is_str = fn_builder.ins().icmp_imm(IntCC::Equal, tag, HeapCellValueTag::Str as i64);
-		    fn_builder.ins().brif(is_str, str_block, &[], nostr_block, &[]);
-		    fn_builder.seal_block(str_block);
-		    fn_builder.seal_block(nostr_block);
-		    // str block
-		    fn_builder.switch_to_block(str_block);
-		    let a = fn_builder.ins().ushr_imm(store, 8);
-		    let heap_ptr = heap_as_ptr!();
-		    let a = fn_builder.ins().imul_imm(a, 8);
-		    let idx = fn_builder.ins().iadd(heap_ptr, a);
-		    let atom = fn_builder.ins().load(types::I64, MemFlags::trusted(), idx, Offset32::new(0));*/
-		    // TODO: Check atom values
-		    // TODO: Continue
-		    
+		    let tag = fn_builder.ins().ushr_imm(store, 58);
+		    let is_var = fn_builder.ins().icmp_imm(IntCC::Equal, tag, HeapCellValueTag::Var as i64);
+		    fn_builder.ins().brif(is_var, is_var_block, &[], else_is_var_block, &[]);
+		    fn_builder.seal_block(is_var_block);
+		    fn_builder.seal_block(else_is_var_block);
+		    // is_var_block
+		    fn_builder.switch_to_block(is_var_block);
+		    let sig_ref = fn_builder.import_signature(self.heap_push_sig.clone());
+		    let heap_push_fn = fn_builder.ins().iconst(types::I64, self.heap_push as i64);		    
+		    let str_cell = fn_builder.ins().iconst(types::I64, i64::from_le_bytes(str_loc_as_cell!(0).into_bytes()));
+		    let heap_len = heap_len!();
+		    let heap_len_plus = fn_builder.ins().iadd_imm(heap_len, 1);
+		    let str_cell = fn_builder.ins().bor(heap_len_plus, str_cell);
+		    fn_builder.ins().call_indirect(sig_ref, heap_push_fn, &[heap, str_cell]);
+		    let atom_cell = atom_as_cell!(name, arity);
+		    let atom = fn_builder.ins().iconst(types::I64, i64::from_le_bytes(atom_cell.into_bytes()));
+		    fn_builder.ins().call_indirect(sig_ref, heap_push_fn, &[heap, atom]);
+		    bind!(store, str_cell);
+		    let mode_value = fn_builder.ins().iconst(types::I8, 1);
+		    fn_builder.def_var(mode, mode_value);
+		    fn_builder.ins().jump(exit_block, &[]);
 
+		    // else_is_var_block
+		    fn_builder.switch_to_block(else_is_var_block);
+		    let is_str = fn_builder.ins().icmp_imm(IntCC::Equal, tag, HeapCellValueTag::Str as i64);
+		    fn_builder.ins().brif(is_str, is_str_block, &[], fail_block, &[]);
+		    fn_builder.seal_block(is_str_block);
+
+		    // is_str_block
+		    fn_builder.switch_to_block(is_str_block);
+		    let atom = fn_builder.ins().iconst(types::I64, i64::from_le_bytes(atom_cell.into_bytes()));
+    		    let heap_ptr = heap_as_ptr!();
+		    let idx = fn_builder.ins().ishl_imm(store, 8);
+		    let idx = fn_builder.ins().ushr_imm(idx, 5);
+		    let idx = fn_builder.ins().iadd(heap_ptr, idx);
+		    let heap_value = fn_builder.ins().load(types::I64, MemFlags::trusted(), idx, Offset32::new(0));
+		    let result = fn_builder.ins().icmp(IntCC::Equal, heap_value, atom);
+		    fn_builder.ins().brif(result, start_read_mode_block, &[], fail_block, &[]);
+		    fn_builder.seal_block(start_read_mode_block);
+    		    fn_builder.seal_block(fail_block);
+
+		    // start_read_mode_block
+		    fn_builder.switch_to_block(start_read_mode_block);
+		    let s_ptr = fn_builder.ins().iadd_imm(heap_ptr, 8);
+		    fn_builder.def_var(s, s_ptr);
+		    let mode_value = fn_builder.ins().iconst(types::I8, 0);
+		    fn_builder.def_var(mode, mode_value);
+		    fn_builder.ins().jump(exit_block, &[]);
+
+		    // fail_block
+		    fn_builder.switch_to_block(fail_block);
+		    let fail_value = fn_builder.ins().iconst(types::I8, 1);
+		    fn_builder.def_var(fail, fail_value);
+		    fn_builder.ins().jump(exit_block, &[]);
+
+		    // exit_block
+		    fn_builder.seal_block(exit_block);
+		    fn_builder.switch_to_block(exit_block);
 		    
 		}
 		// TODO: Missing RegType Perm. Let's suppose Mode is local to each predicate
 		// TODO: Missing support for PStr and CStr
+		/* unify_variable is an instruction that in WRITE mode is identical to set_variable but
+		 * in READ mode it reads the data cell from the S pointer to a register
+		 */
 		Instruction::UnifyVariable(reg) => {
 		    let read_block = fn_builder.create_block();
 		    let write_block = fn_builder.create_block();
@@ -412,12 +521,7 @@ impl JitMachine {
 		    let value = store!(value);
 		    // The order of HeapCellValue is TAG (6), M (1), F (1), VALUE (56)
 		    let c = fn_builder.ins().iconst(types::I64, i64::from_le_bytes(c.into_bytes()));
-		    // Let's suppose STORE[addr] is REF
-		    let heap_ptr = heap_as_ptr!();
-		    let idx = fn_builder.ins().ishl_imm(value, 8);
-		    let idx = fn_builder.ins().ushr_imm(idx, 5);
-		    let idx = fn_builder.ins().iadd(heap_ptr, idx);
-		    fn_builder.ins().store(MemFlags::new(), c, idx, Offset32::new(0));
+		    bind!(value, c);
 		}
 		Instruction::Proceed => {
 		    fn_builder.ins().return_(&registers);
