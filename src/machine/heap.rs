@@ -69,8 +69,8 @@ impl TryFrom<HeapCellValue> for Literal {
                      (ArenaHeaderTag::Rational, n) => {
                          Ok(Literal::Rational(n))
                      }
-                     (ArenaHeaderTag::IndexPtr, _ip) => {
-                         Ok(Literal::CodeIndex(CodeIndex::from(cons_ptr)))
+                     (ArenaHeaderTag::IndexPtr, ip) => {
+                         Ok(Literal::CodeIndex(CodeIndex::from(ip)))
                      }
                      _ => {
                          Err(())

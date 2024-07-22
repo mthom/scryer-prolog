@@ -51,6 +51,7 @@ pub enum Strategy {
     Reuse,
 }
 
+#[allow(dead_code)]
 pub struct PrologBenchmark {
     pub name: &'static str,
     pub filename: &'static str,

@@ -39,8 +39,6 @@ use ordered_float::OrderedFloat;
 use fxhash::{FxBuildHasher, FxHasher};
 use indexmap::IndexSet;
 
-pub(crate) use ref_thread_local::RefThreadLocal;
-
 use std::cell::Cell;
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
@@ -102,6 +100,8 @@ use warp::hyper::header::{HeaderName, HeaderValue};
 use warp::hyper::{HeaderMap, Method};
 #[cfg(feature = "http")]
 use warp::{Buf, Filter};
+
+use super::libraries;
 
 #[cfg(feature = "repl")]
 pub(crate) fn get_key() -> KeyEvent {
@@ -4513,7 +4513,8 @@ impl Machine {
             });
 
             let http_listener = HttpListener { incoming: rx };
-            let http_listener = arena_alloc!(http_listener, &mut self.machine_st.arena);
+            let http_listener: TypedArenaPtr<HttpListener> =
+                arena_alloc!(http_listener, &mut self.machine_st.arena);
 
             let addr = self.deref_register(2);
             self.machine_st.bind(
@@ -4578,7 +4579,7 @@ impl Machine {
                 self.indices.streams.insert(stream);
                 let stream = stream_as_cell!(stream);
 
-                                let handle = arena_alloc!(request.response, &mut self.machine_st.arena);
+                                let handle: TypedArenaPtr<HttpResponse> = arena_alloc!(request.response, &mut self.machine_st.arena);
 
                                 self.machine_st.bind(method.as_var().unwrap(), atom_as_cell!(method_atom));
                                 self.machine_st.bind(path.as_var().unwrap(), path_cell);
@@ -6510,32 +6511,33 @@ impl Machine {
             format!("{}:{}", socket_atom.as_str(), port)
         };
 
-        let (tcp_listener, port) = match TcpListener::bind(server_addr).map_err(|e| e.kind()) {
-            Ok(tcp_listener) => {
-                let port = tcp_listener.local_addr().map(|addr| addr.port()).ok();
+        let (tcp_listener, port): (TypedArenaPtr<TcpListener>, _) =
+            match TcpListener::bind(server_addr).map_err(|e| e.kind()) {
+                Ok(tcp_listener) => {
+                    let port = tcp_listener.local_addr().map(|addr| addr.port()).ok();
 
-                if let Some(port) = port {
-                    (
-                        arena_alloc!(tcp_listener, &mut self.machine_st.arena),
-                        port as usize,
-                    )
-                } else {
+                    if let Some(port) = port {
+                        (
+                            arena_alloc!(tcp_listener, &mut self.machine_st.arena),
+                            port as usize,
+                        )
+                    } else {
+                        self.machine_st.fail = true;
+                        return Ok(());
+                    }
+                }
+                Err(ErrorKind::PermissionDenied) => {
+                    return Err(self.machine_st.open_permission_error(
+                        addr,
+                        atom!("socket_server_open"),
+                        2,
+                    ));
+                }
+                _ => {
                     self.machine_st.fail = true;
                     return Ok(());
                 }
-            }
-            Err(ErrorKind::PermissionDenied) => {
-                return Err(self.machine_st.open_permission_error(
-                    addr,
-                    atom!("socket_server_open"),
-                    2,
-                ));
-            }
-            _ => {
-                self.machine_st.fail = true;
-                return Ok(());
-            }
-        };
+            };
 
         let addr = self.deref_register(3);
         self.machine_st.bind(
@@ -6729,12 +6731,8 @@ impl Machine {
             (HeapCellValueTag::Cons, cons_ptr) => {
                 match_untyped_arena_ptr!(cons_ptr,
                     (ArenaHeaderTag::TcpListener, tcp_listener) => {
-                        unsafe {
-                            // dropping closes the instance.
-                            std::ptr::drop_in_place(&mut tcp_listener as *mut _);
-                        }
+                        tcp_listener.drop_payload();
 
-                        tcp_listener.set_tag(ArenaHeaderTag::Dropped);
                         return Ok(());
                     }
                     _ => {
@@ -7990,10 +7988,7 @@ impl Machine {
     pub(crate) fn load_library_as_stream(&mut self) -> CallResult {
         let library_name = cell_as_atom!(self.deref_register(1));
 
-        use crate::machine::LIBRARIES;
-
-        let lib_ref = LIBRARIES.borrow();
-        let lib = lib_ref.get(&*library_name.as_str());
+        let lib = libraries::get(&library_name.as_str());
         match lib {
             Some(library) => {
                 let lib_stream = Stream::from_static_string(library, &mut self.machine_st.arena);

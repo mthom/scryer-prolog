@@ -109,6 +109,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "arcu"
+version = "0.1.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "f8727c0fb4c436605c8f11c579ec86edcb729134aec4ee66e454efd99a91859f"
+
+[[package]]
 name = "arrayvec"
 version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2292,12 +2298,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ref_thread_local"
-version = "0.0.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d813022b2e00774a48eaf43caaa3c20b45f040ba8cbf398e2e8911a06668dbe6"
-
-[[package]]
 name = "regex"
 version = "1.10.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2558,6 +2558,7 @@ dependencies = [
 name = "scryer-prolog"
 version = "0.9.4"
 dependencies = [
+ "arcu",
  "assert_cmd",
  "base64 0.12.3",
  "bit-set",
@@ -2598,7 +2599,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "rand",
- "ref_thread_local",
  "regex",
  "reqwest",
  "ring 0.17.7",

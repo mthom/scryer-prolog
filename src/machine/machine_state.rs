@@ -679,15 +679,13 @@ impl MachineState {
         indices: &mut IndexStore,
     ) -> CallResult {
         if let Stream::Readline(ptr) = stream {
-            unsafe {
-                let readline = ptr.as_ptr().as_mut().unwrap();
-                readline.set_atoms_for_completion(&self.atom_tbl);
-                return self.read_term(
-                    stream,
-                    indices,
-                    MachineState::read_term_from_user_input_eof_handler,
-                );
-            }
+            let readline = unsafe { ptr.as_ptr().as_mut() }.unwrap();
+            readline.set_atoms_for_completion(&self.atom_tbl);
+            return self.read_term(
+                stream,
+                indices,
+                MachineState::read_term_from_user_input_eof_handler,
+            );
         }
 
         if let Stream::Byte(_) = stream {

@@ -1,3 +1,5 @@
+#![allow(clippy::new_without_default)] // annotating structs annotated with #[bitfield] doesn't work
+
 use crate::arena::*;
 use crate::atom_table::*;
 use crate::forms::*;
@@ -88,18 +90,10 @@ impl ConsPtr {
             .with_tag(tag)
     }
 
-    #[cfg(target_pointer_width = "32")]
     #[inline(always)]
     pub fn as_ptr(self) -> *mut u8 {
-        let bytes = self.into_bytes();
-        let raw_ptr_bytes = [bytes[1], bytes[2], bytes[3], bytes[4]];
-        unsafe { mem::transmute(raw_ptr_bytes) }
-    }
-
-    #[cfg(target_pointer_width = "64")]
-    #[inline(always)]
-    pub fn as_ptr(self) -> *mut u8 {
-        self.ptr() as *mut _
+        let addr: u64 = self.ptr();
+        addr as usize as *mut _
     }
 
     #[inline(always)]
@@ -194,7 +188,7 @@ pub enum TrailRef {
     BlackboardOffset(Atom, HeapCellValue), // key atom, key value
 }
 
-#[allow(clippy::enum_variant_names)]
+#[allow(clippy::enum_variant_names)] // allow the common "Trailed" prefix
 #[derive(BitfieldSpecifier, Copy, Clone, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[bits = 6]
 pub(crate) enum TrailEntryTag {
@@ -306,7 +300,10 @@ impl fmt::Debug for HeapCellValue {
     }
 }
 
-impl<T: ArenaAllocated> From<TypedArenaPtr<T>> for HeapCellValue {
+impl<T: ArenaAllocated> From<TypedArenaPtr<T>> for HeapCellValue
+where
+    T::Payload: Sized,
+{
     #[inline]
     fn from(arena_ptr: TypedArenaPtr<T>) -> HeapCellValue {
         HeapCellValue::from(arena_ptr.header_ptr() as u64)
@@ -534,37 +531,13 @@ impl HeapCellValue {
         }
     }
 
-    #[cfg(target_pointer_width = "32")]
     #[inline]
-    pub fn from_raw_ptr_bytes(ptr_bytes: [u8; 4]) -> Self {
-        HeapCellValue::from_bytes([
-            ptr_bytes[0],
-            ptr_bytes[1],
-            ptr_bytes[2],
-            ptr_bytes[3],
-            0,
-            0,
-            0,
-            0,
-        ])
-    }
-    #[cfg(target_pointer_width = "64")]
-    #[inline]
-    pub fn from_raw_ptr_bytes(ptr_bytes: [u8; 8]) -> Self {
-        HeapCellValue::from_bytes(ptr_bytes)
+    pub fn from_ptr_addr(ptr_bytes: usize) -> Self {
+        HeapCellValue::from_bytes((ptr_bytes as u64).to_ne_bytes())
     }
 
-    #[inline]
-    #[cfg(target_pointer_width = "32")]
-    pub fn to_raw_ptr_bytes(self) -> [u8; 4] {
-        let bytes = self.into_bytes();
-        [bytes[0], bytes[1], bytes[2], bytes[3]]
-    }
-
-    #[inline]
-    #[cfg(target_pointer_width = "64")]
-    pub fn to_raw_ptr_bytes(self) -> [u8; 8] {
-        self.into_bytes()
+    pub fn to_ptr_addr(self) -> usize {
+        u64::from_ne_bytes(self.into_bytes()) as usize
     }
 
     #[inline]
@@ -716,18 +689,10 @@ impl UntypedArenaPtr {
         self.set_m(m);
     }
 
-    #[cfg(target_pointer_width = "32")]
     #[inline]
     pub fn get_ptr(self) -> *const u8 {
-        let bytes = self.into_bytes();
-        let raw_ptr_bytes = [bytes[0], bytes[1], bytes[2], bytes[3]];
-        unsafe { mem::transmute(raw_ptr_bytes) }
-    }
-
-    #[cfg(target_pointer_width = "64")]
-    #[inline]
-    pub fn get_ptr(self) -> *const u8 {
-        self.ptr() as *const u8
+        let addr: u64 = self.ptr();
+        addr as usize as *const u8
     }
 
     #[inline]
@@ -741,6 +706,17 @@ impl UntypedArenaPtr {
     #[inline]
     pub fn payload_offset(self) -> *const u8 {
         unsafe { self.get_ptr().add(mem::size_of::<ArenaHeader>()) }
+    }
+
+    /// # Safety
+    /// - this UntypedArenaPtr actuall pointee type is T
+    /// - the pointer must be non-null
+    #[inline]
+    pub unsafe fn as_typed_ptr<T: ?Sized + ArenaAllocated>(self) -> TypedArenaPtr<T>
+    where
+        T::Payload: Sized,
+    {
+        T::typed_ptr(self)
     }
 
     #[inline]

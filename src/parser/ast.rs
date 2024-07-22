@@ -1,3 +1,5 @@
+#![allow(clippy::new_without_default)] // annotating structs annotated with #[bitfield] doesn't work
+
 use crate::arena::*;
 use crate::atom_table::*;
 use crate::machine::machine_indices::*;

@@ -1,6 +1,5 @@
 use lexical::parse_lossy;
 
-use crate::arena::ArenaAllocated;
 use crate::atom_table::*;
 pub use crate::machine::machine_state::*;
 use crate::parser::ast::*;

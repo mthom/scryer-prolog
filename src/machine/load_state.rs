@@ -9,7 +9,6 @@ use crate::parser::ast::*;
 
 use fxhash::FxBuildHasher;
 use indexmap::IndexSet;
-pub use ref_thread_local::RefThreadLocal;
 
 use std::collections::VecDeque;
 use std::fs::File;
@@ -1176,7 +1175,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     ListingSource::File(filename, path_buf),
                 )
             }
-            ModuleSource::Library(library) => match LIBRARIES.borrow().get(&*library.as_str()) {
+            ModuleSource::Library(library) => match libraries::get(&library.as_str()) {
                 Some(code) => {
                     if let Some(module) = self.wam_prelude.indices.modules.get(&library) {
                         if let ListingSource::DynamicallyGenerated = &module.listing_src {
@@ -1257,7 +1256,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     ListingSource::File(filename, path_buf),
                 )
             }
-            ModuleSource::Library(library) => match LIBRARIES.borrow().get(&*library.as_str()) {
+            ModuleSource::Library(library) => match libraries::get(&library.as_str()) {
                 Some(code) => {
                     if self.wam_prelude.indices.modules.contains_key(&library) {
                         return self.import_qualified_module(library, exports);

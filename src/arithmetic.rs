@@ -1,3 +1,5 @@
+#![allow(clippy::new_without_default)] // annotating structs annotated with #[bitfield] doesn't work
+
 use crate::allocator::*;
 use crate::arena::*;
 use crate::atom_table::*;
@@ -166,7 +168,7 @@ fn push_literal(interm: &mut Vec<ArithmeticTerm>, c: &Literal) -> Result<(), Ari
             Number::Float(OrderedFloat(std::f64::consts::PI)),
         )),
         Literal::Atom(name) if name == &atom!("epsilon") => interm.push(ArithmeticTerm::Number(
-            Number::Float(OrderedFloat(std::f64::EPSILON)),
+            Number::Float(OrderedFloat(f64::EPSILON)),
         )),
         _ => return Err(ArithmeticError::NonEvaluableFunctor(*c, 0)),
     }
@@ -545,26 +547,8 @@ impl PartialEq for Number {
             (&Number::Float(n1), Number::Integer(ref n2)) => {
                 n1.eq(&OrderedFloat(n2.to_f64().value()))
             }
-            (Number::Integer(ref n1), Number::Rational(ref n2)) => {
-                #[cfg(feature = "num")]
-                {
-                    &Rational::from(&**n1) == &**n2
-                }
-                #[cfg(not(feature = "num"))]
-                {
-                    n1.num_eq(&**n2)
-                }
-            }
-            (Number::Rational(ref n1), Number::Integer(ref n2)) => {
-                #[cfg(feature = "num")]
-                {
-                    n1 == &Rational::from(&**n2)
-                }
-                #[cfg(not(feature = "num"))]
-                {
-                    n1.num_eq(&**n2)
-                }
-            }
+            (Number::Integer(ref n1), Number::Rational(ref n2)) => n1.num_eq(&**n2),
+            (Number::Rational(ref n1), Number::Integer(ref n2)) => n1.num_eq(&**n2),
             (Number::Rational(ref n1), &Number::Float(n2)) => {
                 OrderedFloat(n1.to_f64().value()).eq(&n2)
             }
@@ -643,24 +627,10 @@ impl Ord for Number {
                 n1.cmp(&OrderedFloat(n2.to_f64().value()))
             }
             (&Number::Integer(n1), &Number::Rational(n2)) => {
-                #[cfg(feature = "num")]
-                {
-                    Rational::from(&**n1).cmp(n2)
-                }
-                #[cfg(not(feature = "num"))]
-                {
-                    (*n1).num_partial_cmp(&*n2).unwrap_or(Ordering::Less)
-                }
+                (*n1).num_partial_cmp(&*n2).unwrap_or(Ordering::Less)
             }
             (&Number::Rational(n1), &Number::Integer(n2)) => {
-                #[cfg(feature = "num")]
-                {
-                    (&**n1).cmp(&Rational::from(&**n2))
-                }
-                #[cfg(not(feature = "num"))]
-                {
-                    (*n1).num_partial_cmp(&*n2).unwrap_or(Ordering::Less)
-                }
+                (*n1).num_partial_cmp(&*n2).unwrap_or(Ordering::Less)
             }
             (&Number::Rational(n1), &Number::Float(n2)) => {
                 OrderedFloat(n1.to_f64().value()).cmp(&n2)

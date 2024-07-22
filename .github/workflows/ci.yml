@@ -39,7 +39,7 @@ jobs:
         include:
           # operating systems
           - { os: windows-latest, rust-version: stable,  target: 'x86_64-pc-windows-msvc',   publish: true }
-          - { os: macos-11,       rust-version: stable,  target: 'x86_64-apple-darwin',      publish: true }
+          - { os: macos-latest,   rust-version: stable,  target: 'x86_64-apple-darwin',      publish: true }
           - { os: ubuntu-20.04,   rust-version: stable,  target: 'x86_64-unknown-linux-gnu', publish: true }
           # architectures
           - { os: ubuntu-22.04,   rust-version: stable,  target: 'x86_64-unknown-linux-gnu', publish: true }
@@ -50,7 +50,7 @@ jobs:
           - { os: ubuntu-22.04,   rust-version: "1.77",  target: 'x86_64-unknown-linux-gnu'}
           # rust versions
           - { os: ubuntu-22.04,   rust-version: beta,    target: 'x86_64-unknown-linux-gnu'}
-          - { os: ubuntu-22.04,   rust-version: nightly, target: 'x86_64-unknown-linux-gnu'}
+          - { os: ubuntu-22.04,   rust-version: nightly, target: 'x86_64-unknown-linux-gnu', miri: true, components: "miri"} 
     defaults:
       run:
         shell: bash
@@ -66,12 +66,17 @@ jobs:
           rust-version: ${{ matrix.rust-version }}
           targets: ${{ matrix.target }}
           cache-context: ${{ matrix.os }}
+          components: ${{ matrix.components }}
 
       # Build and test.
       - name: Build library
         run: cargo build --all-targets --target ${{ matrix.target }} ${{ matrix.args }} --verbose
       - name: Test
         run: cargo test --target ${{ matrix.target }} ${{ matrix.test-args }} --all
+
+      - name: Check miri
+        if: matrix.miri
+        run: cargo miri test
 
       # On stable rust builds, build a binary and publish as a github actions
       # artifact. These binaries could be useful for testing the pipeline but

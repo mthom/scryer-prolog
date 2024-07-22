@@ -379,7 +379,6 @@ mod tests {
     use std::io::Cursor;
 
     #[test]
-    #[cfg_attr(miri, ignore = "slow and not very relevant")]
     fn plain_string() {
         let mut read_string = CharReader::new(Cursor::new("a string"));
 
@@ -392,7 +391,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(miri, ignore = "slow and not very relevant")]
     fn greek_string() {
         let mut read_string = CharReader::new(Cursor::new("λέξη"));
 
@@ -405,7 +403,6 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(miri, ignore = "slow and not very relevant")]
     fn russian_string() {
         let mut read_string = CharReader::new(Cursor::new("слово"));
 
