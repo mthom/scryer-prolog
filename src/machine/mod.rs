@@ -118,6 +118,7 @@ fn current_dir() -> PathBuf {
     }
 }
 
+#[cfg(not(feature = "rust-version-1.80"))]
 mod libraries {
     use indexmap::IndexMap;
     use std::sync::OnceLock;
@@ -139,6 +140,28 @@ mod libraries {
 
     pub(crate) fn get(name: &str) -> Option<&'static str> {
         libraries().get(name).copied()
+    }
+}
+
+#[cfg(feature = "rust-version-1.80")]
+mod libraries {
+    use indexmap::IndexMap;
+    use std::sync::LazyLock;
+
+    static LIBRARIES: LazyLock<IndexMap<&'static str, &'static str>> = OnceLock::new(|| {
+        let mut m = IndexMap::new();
+
+        include!(concat!(env!("OUT_DIR"), "/libraries.rs"));
+
+        m
+    });
+
+    pub(crate) fn contains(name: &str) -> bool {
+        LIBRARIES.contains_key(name)
+    }
+
+    pub(crate) fn get(name: &str) -> Option<&'static str> {
+        LIBRARIES.get(name).copied()
     }
 }
 

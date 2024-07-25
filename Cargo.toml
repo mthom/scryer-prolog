@@ -23,6 +23,7 @@ hostname = ["dep:hostname"]
 tls = ["dep:native-tls"]
 http = ["dep:warp", "dep:reqwest"]
 crypto-full = []
+"rust-version-1.80" = []
 
 [build-dependencies]
 indexmap = "1.0.2"
