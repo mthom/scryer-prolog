@@ -119,7 +119,17 @@ fn current_dir() -> PathBuf {
 }
 
 mod libraries {
-    include!(concat!(env!("OUT_DIR"), "/libraries.rs"));
+    use indexmap::IndexMap;
+
+    std::thread_local! {
+    static LIBRARIES: IndexMap<&'static str, &'static str> = {
+            let mut m = IndexMap::new();
+
+            include!(concat!(env!("OUT_DIR"), "/libraries.rs"));
+
+            m
+        }
+    }
 
     pub(crate) fn contains(name: &str) -> bool {
         LIBRARIES.with(|libs| libs.contains_key(name))
@@ -127,16 +137,6 @@ mod libraries {
 
     pub(crate) fn get(name: &str) -> Option<&'static str> {
         LIBRARIES.with(|libs| libs.get(name).copied())
-    }
-
-    #[cfg(test)]
-    std::thread_local! {
-        #[allow(dead_code)]
-        static LIBRARIES2 : IndexMap<&'static str, &'static str> = {
-            let mut  m = IndexMap::new();
-            m.insert("test", "test2");
-            m
-        };
     }
 }
 

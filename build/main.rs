@@ -58,27 +58,7 @@ fn main() {
     let mut libraries = File::create(dest_path).unwrap();
     let lib_path = Path::new("src").join("lib");
 
-    writeln!(
-        libraries,
-        "\
-use indexmap::IndexMap;
-\
-    "
-    )
-    .unwrap();
-
     let constants = find_prolog_files("", &lib_path);
-
-    writeln!(
-        libraries,
-        "\
-std::thread_local!{{
-    static LIBRARIES: IndexMap<&'static str, &'static str> = {{
-        let mut m = IndexMap::new();
-\
-        "
-    )
-    .unwrap();
 
     let out_dir = std::env::var("OUT_DIR").unwrap();
     let out_dir_path: &Path = out_dir.as_ref();
@@ -104,23 +84,12 @@ std::thread_local!{{
         manifest_dir_path.to_path_buf()
     };
 
+    writeln!(libraries, "{{").unwrap();
     for (name, lib_path) in constants {
         let path: PathBuf = prefix.join(lib_path);
-        writeln!(
-            libraries,
-            "        m.insert(\"{name}\", include_str!({path:?}));"
-        )
-        .unwrap();
+        writeln!(libraries, "m.insert(\"{name}\", include_str!({path:?}));").unwrap();
     }
-
-    writeln!(
-        libraries,
-        "
-        m
-    }};
-}}"
-    )
-    .unwrap();
+    writeln!(libraries, "}}").unwrap();
 
     let instructions_path = Path::new(&out_dir).join("instructions.rs");
     let mut instructions_file = File::create(&instructions_path).unwrap();
