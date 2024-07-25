@@ -808,9 +808,9 @@ standards&nbsp;compliance and warranty.
 
 Successful existing applications of Scryer Prolog include the
 [DocLog](https://github.com/aarroyoc/doclog)&nbsp;system which
-generates Scryer's own documentation and homepage, [Symbolic
-Analysis of Grants](https://www.brz.gv.at/en/BRZ-Tech-Blog/Tech-Blog-7-Symbolic-Analysis-of-Grants.html)
-by the Austrian Federal Computing Center, and parts of the
+generates Scryer's own documentation and homepage, [reasoning
+about business&nbsp;grants](https://arxiv.org/abs/2406.15293)
+in the Austrian public&nbsp;administration, and parts of the
 [precautionary](https://github.com/dcnorris/precautionary/tree/main/exec/prolog)
 package for the analysis of dose-escalation trials in the
 safety-critical and highly regulated domain of oncology

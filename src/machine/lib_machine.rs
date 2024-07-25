@@ -191,7 +191,7 @@ impl Machine {
                 printer.quoted = true;
                 printer.max_depth = 1000; // NOTE: set this to 0 for unbounded depth
                 printer.double_quotes = true;
-                printer.var_names = var_names.clone();
+                printer.var_names.clone_from(&var_names);
 
                 let outputter = printer.print();
 
@@ -238,7 +238,7 @@ mod tests {
     use crate::machine::{QueryMatch, QueryResolution, Value};
 
     #[test]
-    #[cfg_attr(miri, ignore = "blocked on streams.rs UB")]
+    #[cfg_attr(miri, ignore = "it takes too long to run")]
     fn programatic_query() {
         let mut machine = Machine::new_lib();
 
@@ -278,7 +278,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(miri, ignore = "blocked on streams.rs UB")]
+    #[cfg_attr(miri, ignore = "it takes too long to run")]
     fn failing_query() {
         let mut machine = Machine::new_lib();
         let query = String::from(r#"triple("a",P,"b")."#);
@@ -292,7 +292,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(miri, ignore)]
+    #[cfg_attr(miri, ignore = "it takes too long to run")]
     fn complex_results() {
         let mut machine = Machine::new_lib();
         machine.load_module_string(
@@ -349,7 +349,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(miri, ignore = "blocked on streams.rs UB")]
+    #[cfg_attr(miri, ignore = "it takes too long to run")]
     fn empty_predicate() {
         let mut machine = Machine::new_lib();
         machine.load_module_string(
@@ -365,7 +365,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(miri, ignore = "blocked on streams.rs UB")]
+    #[cfg_attr(miri, ignore = "it takes too long to run")]
     fn list_results() {
         let mut machine = Machine::new_lib();
         machine.load_module_string(
@@ -394,7 +394,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(miri, ignore = "blocked on streams.rs UB")]
+    #[cfg_attr(miri, ignore = "it takes too long to run")]
     fn consult() {
         let mut machine = Machine::new_lib();
 
@@ -453,7 +453,7 @@ mod tests {
     }
 
     #[test]
-    #[cfg_attr(miri, ignore = "blocked on streams.rs UB")]
+    #[cfg_attr(miri, ignore = "it takes too long to run")]
     fn integration_test() {
         let mut machine = Machine::new_lib();
 
@@ -488,19 +488,15 @@ mod tests {
             } else if let Some(result) = block.strip_prefix("result") {
                 i += 1;
                 if let Some(Ok(ref last_result)) = last_result {
-                    println!(
-                        "\n\n=====Result No. {}=======\n{}\n===============",
-                        i,
-                        last_result.to_string().trim()
-                    );
-                    assert_eq!(last_result.to_string().trim(), result.to_string().trim(),)
+                    println!("\n\n=====Result No. {i}=======\n{last_result}\n===============");
+                    assert_eq!(last_result.to_string(), result.to_string().trim(),)
                 }
             }
         }
     }
 
     #[test]
-    #[cfg_attr(miri, ignore = "blocked on streams.rs UB")]
+    #[cfg_attr(miri, ignore = "it takes too long to run")]
     fn findall() {
         let mut machine = Machine::new_lib();
 
@@ -533,6 +529,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "it takes too long to run")]
     fn dont_return_partial_matches() {
         let mut machine = Machine::new_lib();
 
@@ -556,6 +553,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "it takes too long to run")]
     fn dont_return_partial_matches_without_discountiguous() {
         let mut machine = Machine::new_lib();
 
@@ -587,6 +585,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "it takes too long to run")]
     fn non_existent_predicate_should_not_cause_panic_when_other_predicates_are_defined() {
         let mut machine = Machine::new_lib();
 
@@ -611,6 +610,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "it takes too long to run")]
     fn issue_2341() {
         let mut machine = Machine::new_lib();
 

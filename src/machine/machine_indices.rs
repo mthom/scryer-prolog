@@ -1,3 +1,5 @@
+#![allow(clippy::new_without_default)] // annotating structs annotated with #[bitfield] doesn't work
+
 use crate::parser::ast::*;
 
 use crate::arena::*;
@@ -154,13 +156,6 @@ impl From<CodeIndex> for UntypedArenaPtr {
     #[inline(always)]
     fn from(ptr: CodeIndex) -> UntypedArenaPtr {
         UntypedArenaPtr::build_with(ptr.0.as_ptr() as usize)
-    }
-}
-
-impl From<UntypedArenaPtr> for CodeIndex {
-    #[inline(always)]
-    fn from(ptr: UntypedArenaPtr) -> CodeIndex {
-        CodeIndex(TypedArenaPtr::new(ptr.get_ptr() as *mut IndexPtr))
     }
 }
 

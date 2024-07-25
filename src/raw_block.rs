@@ -96,9 +96,10 @@ impl<T: RawBlockTraits> RawBlock<T> {
     }
 
     pub unsafe fn alloc(&self, size: usize) -> *mut u8 {
-        if self.free_space() >= size {
+        let aligned_size = size.next_multiple_of(size);
+        if self.free_space() >= aligned_size {
             let ptr = *self.ptr.get();
-            *self.ptr.get() = ptr.add(size) as *mut _;
+            *self.ptr.get() = ptr.add(aligned_size) as *mut _;
             ptr
         } else {
             ptr::null_mut()

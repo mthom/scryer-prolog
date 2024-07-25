@@ -39,8 +39,8 @@ jobs:
         include:
           # operating systems
           - { os: windows-latest, rust-version: stable,  target: 'x86_64-pc-windows-msvc',   publish: true }
-          - { os: macos-11,       rust-version: stable,  target: 'x86_64-apple-darwin',      publish: true }
           - { os: macos-14,       rust-version: stable,  target: 'aarch64-apple-darwin', publish: true }
+          - { os: macos-latest,   rust-version: stable,  target: 'x86_64-apple-darwin',      publish: true }
           - { os: ubuntu-20.04,   rust-version: stable,  target: 'x86_64-unknown-linux-gnu', publish: true }
           # architectures
           - { os: ubuntu-22.04,   rust-version: stable,  target: 'x86_64-unknown-linux-gnu', publish: true }
@@ -51,7 +51,7 @@ jobs:
           - { os: ubuntu-22.04,   rust-version: "1.77",  target: 'x86_64-unknown-linux-gnu'}
           # rust versions
           - { os: ubuntu-22.04,   rust-version: beta,    target: 'x86_64-unknown-linux-gnu'}
-          - { os: ubuntu-22.04,   rust-version: nightly, target: 'x86_64-unknown-linux-gnu'}
+          - { os: ubuntu-22.04,   rust-version: nightly, target: 'x86_64-unknown-linux-gnu', miri: true, components: "miri"} 
     defaults:
       run:
         shell: bash
@@ -67,12 +67,17 @@ jobs:
           rust-version: ${{ matrix.rust-version }}
           targets: ${{ matrix.target }}
           cache-context: ${{ matrix.os }}
+          components: ${{ matrix.components }}
 
       # Build and test.
       - name: Build library
         run: cargo build --all-targets --target ${{ matrix.target }} ${{ matrix.args }} --verbose
       - name: Test
         run: cargo test --target ${{ matrix.target }} ${{ matrix.test-args }} --all
+
+      - name: Check miri
+        if: matrix.miri
+        run: cargo miri test
 
       # On stable rust builds, build a binary and publish as a github actions
       # artifact. These binaries could be useful for testing the pipeline but
@@ -194,7 +199,7 @@ jobs:
       - uses: actions/download-artifact@v4
       - name: Zip binaries for release
         run: |
-          zip scryer-prolog_macos-11.zip ./scryer-prolog_macos-11_x86_64-apple-darwin/scryer-prolog
+          zip scryer-prolog_macos-latest-x86_64.zip ./scryer-prolog_macos-latest_x86_64-apple-darwin/scryer-prolog
           zip scryer-prolog_macos-14.zip ./scryer-prolog_macos-14_aarch64-apple-darwin/scryer-prolog
           zip scryer-prolog_ubuntu-20.04.zip ./scryer-prolog_ubuntu-20.04_x86_64-unknown-linux-gnu/scryer-prolog
           zip scryer-prolog_ubuntu-22.04.zip ./scryer-prolog_ubuntu-22.04_x86_64-unknown-linux-gnu/scryer-prolog
@@ -204,7 +209,7 @@ jobs:
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            scryer-prolog_macos-11.zip
+            scryer-prolog_macos-latest-x86_64.zip
             scryer-prolog_macos-14.zip
             scryer-prolog_ubuntu-20.04.zip
             scryer-prolog_ubuntu-22.04.zip

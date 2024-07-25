@@ -11,34 +11,45 @@ use std::io::Write;
 use std::path::Path;
 use std::process::{Command, Stdio};
 
-fn find_prolog_files(libraries: &mut File, prefix: &str, current_dir: &Path) {
+fn find_prolog_files(
+    libraries: &mut File,
+    path_prefix: &str,
+    const_prefix: &str,
+    current_dir: &Path,
+) -> Vec<(String, String)> {
+    let mut constants = vec![];
+
     let entries = match current_dir.read_dir() {
         Ok(entries) => entries,
-        Err(_) => return,
+        Err(_) => return constants,
     };
 
     for entry in entries.filter_map(Result::ok).map(|e| e.path()) {
         if entry.is_dir() {
             if let Some(file_name) = entry.file_name() {
-                let new_prefix = prefix.to_owned() + file_name.to_str().unwrap() + "/";
-                find_prolog_files(libraries, &new_prefix, &entry);
+                let file_name = file_name.to_str().unwrap();
+                let new_path_prefix = format!("{path_prefix}{file_name}/");
+                let new_const_prefix = format!("{const_prefix}_{}", file_name.to_uppercase());
+                let new_consts =
+                    find_prolog_files(libraries, &new_path_prefix, &new_const_prefix, &entry);
+                constants.extend(new_consts);
             }
         } else if entry.is_file() {
             let ext = std::ffi::OsStr::new("pl");
             if entry.extension() == Some(ext) {
                 let contain = String::from_utf8(fs::read(&entry).unwrap()).unwrap();
                 let name = entry.file_stem().unwrap().to_str().unwrap();
+                let lib_name = format!("{path_prefix}{name}");
+                let const_name = format!("{const_prefix}_{}", name.to_uppercase());
 
-                let line = format!(
-                    "        m.insert(\"{}\",\n{:?});\n",
-                    prefix.to_owned() + name,
-                    contain
-                );
+                writeln!(libraries, "const {const_name}: &str = {contain:?};").unwrap();
 
-                libraries.write_all(line.as_bytes()).unwrap();
+                constants.push((lib_name, const_name));
             }
         }
     }
+
+    constants
 }
 
 fn main() {
@@ -58,16 +69,42 @@ fn main() {
     let mut libraries = File::create(dest_path).unwrap();
     let lib_path = Path::new("src/lib");
 
-    libraries
-        .write_all(
-            b"ref_thread_local::ref_thread_local! {
-    pub(crate) static managed LIBRARIES: IndexMap<&'static str, &'static str> = {
-        let mut m = IndexMap::new();\n",
+    writeln!(
+        libraries,
+        "\
+use indexmap::IndexMap;\
+    "
+    )
+    .unwrap();
+
+    let constants = find_prolog_files(&mut libraries, "", "LIB", lib_path);
+
+    writeln!(
+        libraries,
+        "\
+std::thread_local!{{
+    static LIBRARIES: IndexMap<&'static str, &'static str> = {{
+        let mut m = IndexMap::new();"
+    )
+    .unwrap();
+
+    for (name, constant) in constants {
+        writeln!(
+            libraries,
+            "\
+        m.insert(\"{name}\",{constant});"
         )
         .unwrap();
+    }
 
-    find_prolog_files(&mut libraries, "", lib_path);
-    libraries.write_all(b"\n        m\n    };\n}\n").unwrap();
+    writeln!(
+        libraries,
+        "
+        m
+    }};
+}}"
+    )
+    .unwrap();
 
     let instructions_path = Path::new(&out_dir).join("instructions.rs");
     let mut instructions_file = File::create(&instructions_path).unwrap();

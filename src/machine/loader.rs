@@ -304,11 +304,15 @@ impl<'a> LoadState<'a> for LiveLoadAndMachineState<'a> {
 
     #[inline(always)]
     fn evacuate(mut loader: Loader<'a, Self>) -> Result<Self::Evacuable, SessionError> {
-        loader
-            .payload
-            .load_state
-            .set_tag(ArenaHeaderTag::InactiveLoadState);
-        Ok(loader.payload.load_state)
+        if loader.payload.load_state.get_tag() != ArenaHeaderTag::Dropped {
+            loader
+                .payload
+                .load_state
+                .set_tag(ArenaHeaderTag::InactiveLoadState);
+            Ok(loader.payload.load_state)
+        } else {
+            unreachable!("we never evacuate after dropping")
+        }
     }
 
     #[inline(always)]
@@ -319,7 +323,7 @@ impl<'a> LoadState<'a> for LiveLoadAndMachineState<'a> {
     #[inline(always)]
     fn reset_machine(loader: &mut Loader<'a, Self>) {
         if loader.payload.load_state.get_tag() != ArenaHeaderTag::Dropped {
-            loader.payload.load_state.set_tag(ArenaHeaderTag::Dropped);
+            loader.payload.load_state.drop_payload();
             loader.reset_machine();
         }
     }
@@ -353,7 +357,7 @@ impl<'a> LoadState<'a> for LiveLoadAndMachineState<'a> {
 
     #[inline]
     fn err_on_builtin_module_overwrite(module_name: Atom) -> Result<(), SessionError> {
-        if LIBRARIES.borrow().contains_key(&*module_name.as_str()) {
+        if libraries::contains(&module_name.as_str()) {
             Err(SessionError::CannotOverwriteBuiltInModule(module_name))
         } else {
             Ok(())
@@ -1757,7 +1761,7 @@ impl Machine {
 
     #[inline]
     pub(crate) fn push_load_state_payload(&mut self) {
-        let payload = arena_alloc!(
+        let payload: TypedArenaPtr<LiveLoadState> = arena_alloc!(
             LoadStatePayload::new(self.code.len(), LiveTermStream::new(ListingSource::User),),
             &mut self.machine_st.arena
         );
@@ -1784,11 +1788,8 @@ impl Machine {
             (HeapCellValueTag::Cons, cons_ptr) => {
                 match_untyped_arena_ptr!(cons_ptr,
                     (ArenaHeaderTag::LiveLoadState, payload) => {
-                        unsafe {
-                            std::ptr::drop_in_place(
-                                payload.as_ptr() as *mut LiveLoadState,
-                            );
-                        }
+                        let mut payload = payload;
+                        payload.drop_payload()
                     }
                     _ => {}
                 );
