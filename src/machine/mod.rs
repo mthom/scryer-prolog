@@ -120,23 +120,25 @@ fn current_dir() -> PathBuf {
 
 mod libraries {
     use indexmap::IndexMap;
+    use std::sync::OnceLock;
 
-    std::thread_local! {
-    static LIBRARIES: IndexMap<&'static str, &'static str> = {
+    fn libraries() -> &'static IndexMap<&'static str, &'static str> {
+        static LIBRARIES: OnceLock<IndexMap<&'static str, &'static str>> = OnceLock::new();
+        LIBRARIES.get_or_init(|| {
             let mut m = IndexMap::new();
 
             include!(concat!(env!("OUT_DIR"), "/libraries.rs"));
 
             m
-        }
+        })
     }
 
     pub(crate) fn contains(name: &str) -> bool {
-        LIBRARIES.with(|libs| libs.contains_key(name))
+        libraries().contains_key(name)
     }
 
     pub(crate) fn get(name: &str) -> Option<&'static str> {
-        LIBRARIES.with(|libs| libs.get(name).copied())
+        libraries().get(name).copied()
     }
 }
 
