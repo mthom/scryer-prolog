@@ -148,7 +148,7 @@ mod libraries {
     use indexmap::IndexMap;
     use std::sync::LazyLock;
 
-    static LIBRARIES: LazyLock<IndexMap<&'static str, &'static str>> = OnceLock::new(|| {
+    static LIBRARIES: LazyLock<IndexMap<&'static str, &'static str>> = LazyLock::new(|| {
         let mut m = IndexMap::new();
 
         include!(concat!(env!("OUT_DIR"), "/libraries.rs"));
