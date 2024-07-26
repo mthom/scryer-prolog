@@ -1,4 +1,4 @@
-use bytes::{Bytes, buf::Reader};
+use bytes::{buf::Reader, Bytes};
 use std::sync::{Arc, Condvar, Mutex};
 
 use warp::http;
