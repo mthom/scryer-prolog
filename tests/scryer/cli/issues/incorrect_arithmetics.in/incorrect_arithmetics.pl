@@ -65,8 +65,8 @@ fn(t, expr(A))     :- member(A, [e,pi]).
 fn(t, expr(F,A))   :- member(F, [-(A),sqrt(A),log(A)]).
 fn(t, expr(F,A,B)) :- member(F, [A+B,A-B,A*B,A/B,A^B]).
 fn(f, expr(F))     :- member(F, [[],phi,[_|_]]).
-%fn(f, expr(F,A))   :- member(F, [zeta(A)]).
-%fn(f, expr(F,A,B)) :- member(F, [[A,B]]).
+fn(f, expr(F,A))   :- member(F, [zeta(A)]).
+fn(f, expr(F,A,B)) :- member(F, [[A,B]]).
 
 %% rnd(N).
 %
