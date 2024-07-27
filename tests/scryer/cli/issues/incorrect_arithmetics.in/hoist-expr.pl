@@ -19,8 +19,8 @@ sample(Template, R) :-
     length(Es, L),
     repeat,
     random_integer(0, L, I),
-    format("~n% Info: Selected ~dth out of ~d found aritmetic relations that satisfy ~s template:~n", [I,L,Template]),
-    nth0(I, Es, R).
+    nth0(I, Es, R),
+    format("~n% Info: Selected ~dth out of ~d found aritmetic relations that satisfy ~s template:~n\t~w~n", [I,L,Template,R]).
 
 %% Proof-of-concept arithmetic expression expander
 %
@@ -41,6 +41,8 @@ ex(A, R) --> {ok_var(A,R)} -> proceed(A,R); [R=A].
 proceed(e,e) --> t.
 proceed(pi,pi) --> t.
 proceed(epsilon,epsilon) --> t.
+proceed(A,A) --> {var(A)}.
+proceed(A,A) --> {number(A)}.
 
 ey(-A     ,A, AR,-AR) --> t.
 ey(+A     ,A, AR,+AR) --> t.
