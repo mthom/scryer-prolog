@@ -57,13 +57,13 @@ arith_expression(F) --> func(expr(F,A,B)), arith_expression(A), arith_expression
 func(Expr) --> {fn(T, Expr)}, [T].
 rel(Expr)  --> {rl(T, Expr)}, [T].
 
-rl(t, expr(F,A,B)) :- member(F, [A<B,A=:=B]).
+%rl(t, expr(F,A,B)) :- member(F, [A<B,A=:=B]).
 rl(t, expr(F,A))   :- member(F, [_ is A]).
 
 fn(t, expr(A))     :- rnd(A).
 fn(t, expr(A))     :- member(A, [e,pi]).
-fn(t, expr(F,A))   :- member(F, [-(A),sqrt(A),log(A)]).
-fn(t, expr(F,A,B)) :- member(F, [A+B,A-B,A*B,A/B,A^B]).
+fn(t, expr(F,A))   :- member(F, [-A,sqrt(A),log(A),tan(A),\A,+A]).
+fn(t, expr(F,A,B)) :- member(F, [A+B,A-B,A*B,A/B,A^B,max(A,B)]).
 fn(f, expr(F))     :- member(F, [[],phi,[_|_]]).
 fn(f, expr(F,A))   :- member(F, [zeta(A)]).
 fn(f, expr(F,A,B)) :- member(F, [[A,B]]).
