@@ -289,16 +289,18 @@ fn split_nested_list(input: &str) -> Vec<String> {
     let mut start = 0;
     let mut result = Vec::new();
 
-    for (i, c) in input.chars().enumerate() {
+    let mut end = 0;
+    for c in input.chars() {
         match c {
             '[' => level += 1,
             ']' => level -= 1,
             ',' if level == 0 => {
-                result.push(input[start..i].trim().to_string());
-                start = i + 1;
+                result.push(input[start..end].trim().to_string());
+                start = end + ','.len_utf8();
             }
             _ => {}
         }
+        end += c.len_utf8();
     }
 
     result.push(input[start..].trim().to_string());
