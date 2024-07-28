@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::fmt::Write;
+use std::str::FromStr;
 
 pub type QueryResult = Result<QueryResolution, String>;
 
@@ -130,6 +131,12 @@ pub enum Value {
     List(Vec<Value>),
     Structure(Atom, Vec<Value>),
     Var,
+}
+
+impl Value {
+    pub fn str_literal<S: Into<String>>(s: S) -> Self {
+        Value::String(s.into())
+    }
 }
 
 impl From<BTreeMap<&str, Value>> for QueryMatch {
@@ -269,10 +276,9 @@ impl TryFrom<String> for QueryResolutionLine {
             _ => Ok(QueryResolutionLine::Match(
                 parse_prolog_response(&string)
                     .iter()
-                    .map(|(k, v)| -> Result<(String, Value), ()> {
-                        let key = k.to_string();
-                        let value = v.to_string();
-                        Ok((key, Value::try_from(value)?))
+                    .map(|(key, value)| -> Result<(String, Value), ()> {
+                        let key = key.to_string();
+                        Ok((key, Value::from_str(value)?))
                     })
                     .filter_map(Result::ok)
                     .collect::<BTreeMap<_, _>>(),
@@ -312,9 +318,9 @@ pub(crate) fn strip_delimiters_str<'hay>(haystack: &'hay str, prefix: &str, suff
     haystack.strip_prefix(prefix)?.strip_suffix(suffix)
 }
 
-impl TryFrom<String> for Value {
-    type Error = ();
-    fn try_from(string: String) -> Result<Self, Self::Error> {
+impl FromStr for Value {
+    type Err = ();
+    fn from_str(string: &str) -> Result<Self, Self::Err> {
         let trimmed = string.trim();
 
         if let Ok(float_value) = string.parse::<f64>() {
@@ -330,8 +336,7 @@ impl TryFrom<String> for Value {
 
             let values = split
                 .into_iter()
-                .map(String::from)
-                .map(Value::try_from)
+                .map(Value::from_str)
                 .collect::<Result<Vec<_>, _>>()?;
 
             Ok(Value::List(values))
@@ -342,7 +347,7 @@ impl TryFrom<String> for Value {
             for value in iter {
                 let items: Vec<_> = value.split(':').collect();
                 if let [_key, value] = items.as_slice() {
-                    values.push(Value::try_from(value.to_string())?);
+                    values.push(Value::from_str(value)?);
                 }
             }
 
@@ -354,7 +359,7 @@ impl TryFrom<String> for Value {
             for value in iter {
                 let items: Vec<_> = value.split(':').collect();
                 if let [_key, value] = items.as_slice() {
-                    values.push(Value::try_from(value.to_string())?);
+                    values.push(Value::from_str(value)?);
                 }
             }
 
@@ -367,8 +372,3 @@ impl TryFrom<String> for Value {
     }
 }
 
-impl From<&str> for Value {
-    fn from(str: &str) -> Self {
-        Value::String(str.to_string())
-    }
-}
