@@ -305,6 +305,14 @@ fn split_nested_list(input: &str) -> Vec<String> {
     result
 }
 
+pub(crate) fn strip_delimiters(haystack: &str, prefix: char, suffix: char) -> Option<&str> {
+    haystack.strip_prefix(prefix)?.strip_suffix(suffix)
+}
+
+pub(crate) fn strip_delimiters_str<'hay>(haystack: &'hay str, prefix: &str, suffix: &str) -> Option<&'hay str> {
+    haystack.strip_prefix(prefix)?.strip_suffix(suffix)
+}
+
 impl TryFrom<String> for Value {
     type Error = ();
     fn try_from(string: String) -> Result<Self, Self::Error> {
@@ -314,12 +322,12 @@ impl TryFrom<String> for Value {
             Ok(Value::Float(OrderedFloat(float_value)))
         } else if let Ok(int_value) = string.parse::<i128>() {
             Ok(Value::Integer(int_value.into()))
-        } else if trimmed.starts_with('\'') && trimmed.ends_with('\'')
-            || trimmed.starts_with('"') && trimmed.ends_with('"')
+        } else if let Some(unquoted) =
+            strip_delimiters(trimmed, '\'', '\'').or_else(|| strip_delimiters(trimmed, '"', '"'))
         {
-            Ok(Value::String(trimmed[1..trimmed.len() - 1].into()))
-        } else if trimmed.starts_with('[') && trimmed.ends_with(']') {
-            let split = split_nested_list(&trimmed[1..trimmed.len() - 1]);
+            Ok(Value::String(unquoted.into()))
+        } else if let Some(unbracketed) = strip_delimiters(trimmed, '[', ']') {
+            let split = split_nested_list(unbracketed);
 
             let values = split
                 .into_iter()
@@ -327,8 +335,8 @@ impl TryFrom<String> for Value {
                 .collect::<Result<Vec<_>, _>>()?;
 
             Ok(Value::List(values))
-        } else if trimmed.starts_with('{') && trimmed.ends_with('}') {
-            let iter = trimmed[1..trimmed.len() - 1].split(',');
+        } else if let Some(unbraced) = strip_delimiters(trimmed, '{', '}') {
+            let iter = unbraced.split(',');
             let mut values = vec![];
 
             for value in iter {
