@@ -61,6 +61,7 @@ impl JitMachine {
 	sig.params.push(AbiParam::new(pointer_type));
 	sig.params.push(AbiParam::new(pointer_type));
 	sig.params.push(AbiParam::new(pointer_type));
+	sig.returns.push(AbiParam::new(types::I8));
 	sig.call_conv = call_conv;
 
 	let mut trampolines = vec![];
@@ -82,17 +83,19 @@ impl JitMachine {
 	    params.push(heap);	    
 	    for i in 1..n+1 {
 		jump_sig.params.push(AbiParam::new(types::I64));
-		jump_sig.returns.push(AbiParam::new(types::I64));
+		// jump_sig.returns.push(AbiParam::new(types::I64));
 		let reg_value = fn_builder.ins().load(types::I64, MemFlags::trusted(), registers, Offset32::new((i as i32)*8));
 		params.push(reg_value);
 	    }
+	    jump_sig.returns.push(AbiParam::new(types::I8));
 	    let jump_sig_ref = fn_builder.import_signature(jump_sig);
 	    let jump_call = fn_builder.ins().call_indirect(jump_sig_ref, func_addr, &params);
-	    for i in 0..n {
+	    /*for i in 0..n {
 		let reg_value = fn_builder.inst_results(jump_call)[i];
 		fn_builder.ins().store(MemFlags::trusted(), reg_value, registers, Offset32::new(((i as i32) + 1) * 8));
-	    }
-	    fn_builder.ins().return_(&[]);
+	}*/
+	    let fail = fn_builder.inst_results(jump_call)[0];
+	    fn_builder.ins().return_(&[fail]);
 	    fn_builder.seal_block(block);
 	    fn_builder.finalize();
 
@@ -144,8 +147,9 @@ impl JitMachine {
 	sig.params.push(AbiParam::new(types::I64));
 	for _ in 1..=arity {
 	    sig.params.push(AbiParam::new(types::I64));
-	    sig.returns.push(AbiParam::new(types::I64));
+	    // sig.returns.push(AbiParam::new(types::I64));
 	}
+	sig.returns.push(AbiParam::new(types::I8));
 	sig.call_conv = isa::CallConv::Tail;
 	self.ctx.func.signature = sig.clone();
 	self.ctx.set_disasm(true);
@@ -319,10 +323,7 @@ impl JitMachine {
 	macro_rules! is_var {
 	    ($x:expr) => {
 		{
-		    print_rt!($x);
 		    let tag = fn_builder.ins().ushr_imm($x, 58);
-		    print_rt!(tag);
-		    dbg!(HeapCellValueTag::Var as i64);
 		    fn_builder.ins().icmp_imm(IntCC::Equal, tag, HeapCellValueTag::Var as i64)
 		}
 	    }
@@ -331,10 +332,7 @@ impl JitMachine {
 	macro_rules! is_str {
 	    ($x:expr) => {
 		{
-		    print_rt!($x);
 		    let tag = fn_builder.ins().ushr_imm($x, 58);
-		    print_rt!(tag);
-		    dbg!(HeapCellValueTag::Str as i64);
 		    fn_builder.ins().icmp_imm(IntCC::Equal, tag, HeapCellValueTag::Str as i64)
 		}
 	    }
@@ -606,10 +604,8 @@ impl JitMachine {
 		    fn_builder.seal_block(write_block);
 		    // read
 		    fn_builder.switch_to_block(read_block);
-		    let heap_ptr = heap_as_ptr!();
 		    let s_value = fn_builder.use_var(s);
-		    let idx = fn_builder.ins().iadd(heap_ptr, s_value);
-		    let value = fn_builder.ins().load(types::I64, MemFlags::trusted(), idx, Offset32::new(0));
+		    let value = fn_builder.ins().load(types::I64, MemFlags::trusted(), s_value, Offset32::new(0));
 		    let value = deref!(value);
 		    match reg {
 			RegType::Temp(x) => {
@@ -625,8 +621,7 @@ impl JitMachine {
 		    let heap_loc_cell = heap_loc_as_cell!(0);
 		    let heap_loc_cell = fn_builder.ins().iconst(types::I64, i64::from_le_bytes(heap_loc_cell.into_bytes()));
 		    let heap_len = heap_len!();
-		    let heap_len_shift = fn_builder.ins().ishl_imm(heap_len, 8);
-		    let heap_loc_cell = fn_builder.ins().bor(heap_len_shift, heap_loc_cell);
+		    let heap_loc_cell = fn_builder.ins().bor(heap_len, heap_loc_cell);
 		    let sig_ref = fn_builder.import_signature(self.heap_push_sig.clone());
 		    let heap_push_fn = fn_builder.ins().iconst(types::I64, self.heap_push as i64);
 		    fn_builder.ins().call_indirect(sig_ref, heap_push_fn, &[heap, heap_loc_cell]);
@@ -700,7 +695,10 @@ impl JitMachine {
 		    bind!(value, c);
 		}
 		Instruction::Proceed => {
-		    fn_builder.ins().return_(&registers[0..arity]);
+		    // do we really need to return registers?
+		    //fn_builder.ins().return_(&registers[0..arity]);
+		    let fail_value = fn_builder.use_var(fail);
+		    fn_builder.ins().return_(&[fail_value]);
 		    break;
 	        },
 	        _ => {
@@ -728,11 +726,16 @@ impl JitMachine {
 	let Some(predicate) = self.predicates.get(&(name.to_string(), arity)) else {
 	    return Err(());
 	};
-	let trampoline: extern "C" fn (*const u8, *mut Registers, *const Vec<HeapCellValue>) = unsafe { std::mem::transmute(self.trampolines[arity])};
+	let trampoline: extern "C" fn (*const u8, *mut Registers, *const Vec<HeapCellValue>) -> u8 = unsafe { std::mem::transmute(self.trampolines[arity])};
 	let registers = machine_st.registers.as_ptr() as *mut Registers;
 	let heap = &machine_st.heap as *const Vec<HeapCellValue>;
-	trampoline(*predicate, registers, heap);
+	let fail = trampoline(*predicate, registers, heap);
 	machine_st.p = machine_st.cp;
+	machine_st.fail = if fail == 1 {
+	    true
+	} else {
+	    false
+	};
 	Ok(())
     }
 }
@@ -755,9 +758,10 @@ fn test_put_structure() {
     jit.exec("test_put_structure", 1, &mut machine_st).unwrap();
     let mut machine_st_expected = MachineState::new();
     machine_st_expected.heap.push(atom_as_cell!(atom!("f"), 2));
-    machine_st_expected.registers[1] = str_loc_as_cell!(0);
+    // machine_st_expected.registers[1] = str_loc_as_cell!(0);
     assert_eq!(machine_st.heap, machine_st_expected.heap);
-    assert_eq!(machine_st.registers, machine_st_expected.registers);
+    // assert_eq!(machine_st.registers, machine_st_expected.registers);
+    assert_eq!(machine_st.fail, false);
 }
 
 #[test]
@@ -773,7 +777,8 @@ fn test_set_variable() {
     let mut machine_st_expected = MachineState::new();
     machine_st_expected.heap.push(heap_loc_as_cell!(0));
     assert_eq!(machine_st.heap, machine_st_expected.heap);
-    assert_eq!(machine_st.registers, machine_st_expected.registers);
+    // assert_eq!(machine_st.registers, machine_st_expected.registers);
+    assert_eq!(machine_st.fail, false);
 }
 
 #[test]
@@ -790,6 +795,7 @@ fn test_set_value() {
     let mut machine_st_expected = MachineState::new();
     machine_st_expected.heap.push(atom_as_cell!(atom!("a"), 0));
     assert_eq!(machine_st.heap, machine_st_expected.heap);
+    assert_eq!(machine_st.fail, false);
 }
 
 #[test]
@@ -821,6 +827,7 @@ fn test_fig23_wambook() {
     machine_st_expected.heap.push(str_loc_as_cell!(0));
     machine_st_expected.heap.push(str_loc_as_cell!(3));
     assert_eq!(machine_st.heap, machine_st_expected.heap);
+    assert_eq!(machine_st.fail, false);
 }
 
 #[test]
@@ -839,6 +846,7 @@ fn test_get_structure_read() {
     machine_st_expected.heap.push(atom_as_cell!(atom!("f"), 1));
     machine_st_expected.heap.push(heap_loc_as_cell!(1));
     assert_eq!(machine_st.heap, machine_st_expected.heap);
+    assert_eq!(machine_st.fail, false);
 }
 
 #[test]
@@ -858,6 +866,66 @@ fn test_get_structure_write() {
     machine_st_expected.heap.push(heap_loc_as_cell!(1));
     machine_st_expected.heap.push(atom_as_cell!(atom!("f"), 1));
     assert_eq!(machine_st.heap, machine_st_expected.heap);
+    assert_eq!(machine_st.fail, false);
+}
+
+#[test]
+fn test_get_structure_read_fail() {
+    let code = vec![
+	Instruction::PutStructure(atom!("h"), 1, RegType::Temp(1)),
+	Instruction::SetVariable(RegType::Temp(2)),
+	Instruction::GetStructure(Level::Shallow, atom!("f"), 1, RegType::Temp(1)),
+	Instruction::Proceed
+    ];
+    let mut jit = JitMachine::new();
+    jit.compile("test_get_structure", 0, code).unwrap();
+    let mut machine_st = MachineState::new();
+    jit.exec("test_get_structure", 0, &mut machine_st).unwrap();
+    let mut machine_st_expected = MachineState::new();
+    machine_st_expected.heap.push(atom_as_cell!(atom!("h"), 1));
+    machine_st_expected.heap.push(heap_loc_as_cell!(1));
+    assert_eq!(machine_st.heap, machine_st_expected.heap);
+    assert_eq!(machine_st.fail, true);
+}
+
+#[test]
+fn test_unify_variable_write() {
+    let code = vec![
+	Instruction::SetVariable(RegType::Temp(1)),
+	Instruction::GetStructure(Level::Shallow, atom!("f"), 1, RegType::Temp(1)),
+	Instruction::UnifyVariable(RegType::Temp(2)),
+	Instruction::Proceed
+    ];
+    let mut jit = JitMachine::new();
+    jit.compile("test_unify_variable_write", 0, code).unwrap();
+    let mut machine_st = MachineState::new();
+    jit.exec("test_unify_variable_write", 0, &mut machine_st).unwrap();
+    let mut machine_st_expected = MachineState::new();
+    machine_st_expected.heap.push(str_loc_as_cell!(1));
+    machine_st_expected.heap.push(atom_as_cell!(atom!("f"), 1));
+    machine_st_expected.heap.push(heap_loc_as_cell!(2));
+    assert_eq!(machine_st.heap, machine_st_expected.heap);
+    assert_eq!(machine_st.fail, false);
+}
+
+#[test]
+fn test_unify_variable_read() {
+    let code = vec![
+	Instruction::PutStructure(atom!("f"), 1, RegType::Temp(1)),
+	Instruction::SetVariable(RegType::Temp(2)),
+	Instruction::GetStructure(Level::Shallow, atom!("f"), 1, RegType::Temp(1)),
+	Instruction::UnifyVariable(RegType::Temp(3)),
+	Instruction::Proceed
+    ];
+    let mut jit = JitMachine::new();
+    jit.compile("test_unify_variable_read", 0, code).unwrap();
+    let mut machine_st = MachineState::new();
+    jit.exec("test_unify_variable_read", 0, &mut machine_st).unwrap();
+    let mut machine_st_expected = MachineState::new();
+    machine_st_expected.heap.push(atom_as_cell!(atom!("f"), 1));
+    machine_st_expected.heap.push(heap_loc_as_cell!(1));    
+    assert_eq!(machine_st.heap, machine_st_expected.heap);
+    assert_eq!(machine_st.fail, false);
 }
 
 // TODO: Continue with more tests
