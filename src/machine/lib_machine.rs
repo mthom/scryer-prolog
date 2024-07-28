@@ -1,6 +1,5 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
-use std::str::FromStr as _;
 
 use crate::atom_table;
 use crate::heap_print::{HCPrinter, HCValueOutputter, PrinterOutputter};
@@ -202,7 +201,7 @@ impl Machine {
                 if var_key.to_string() != output {
                     bindings.insert(
                         var_key.to_string(),
-                        Value::from_str(&output).expect("Couldn't convert Houtput to Value"),
+                        output.parse().expect("Couldn't convert Houtput to Value"),
                     );
                 }
             }
