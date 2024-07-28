@@ -206,7 +206,7 @@ fn split_response_string(input: &str) -> Vec<String> {
     let mut start = 0;
     let mut result = Vec::new();
 
-    for (i, c) in input.chars().enumerate() {
+    for (i, c) in input.char_indices() {
         match c {
             '[' => level_bracket += 1,
             ']' => level_bracket -= 1,
@@ -220,7 +220,7 @@ fn split_response_string(input: &str) -> Vec<String> {
                 && !in_single_quotes =>
             {
                 result.push(input[start..i].trim().to_string());
-                start = i + 1;
+                start = i + ','.len_utf8();
             }
             _ => {}
         }
@@ -289,13 +289,13 @@ fn split_nested_list(input: &str) -> Vec<String> {
     let mut start = 0;
     let mut result = Vec::new();
 
-    for (i, c) in input.chars().enumerate() {
+    for (i, c) in input.char_indices() {
         match c {
             '[' => level += 1,
             ']' => level -= 1,
             ',' if level == 0 => {
-                result.push(input[start..i].trim().to_string());
-                start = i + 1;
+                result.push(input[start..i].trim());
+                start = i + ','.len_utf8();
             }
             _ => {}
         }
