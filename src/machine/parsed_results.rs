@@ -278,7 +278,7 @@ impl TryFrom<String> for QueryResolutionLine {
                     .iter()
                     .map(|(key, value)| -> Result<(String, Value), ()> {
                         let key = key.to_string();
-                        Ok((key, Value::from_str(value)?))
+                        Ok((key,value.parse()?))
                     })
                     .filter_map(Result::ok)
                     .collect::<BTreeMap<_, _>>(),
@@ -349,7 +349,7 @@ impl FromStr for Value {
             for value in iter {
                 let items: Vec<_> = value.split(':').collect();
                 if let [_key, value] = items.as_slice() {
-                    values.push(Value::from_str(value)?);
+                    values.push(value.parse()?);
                 }
             }
 
@@ -361,7 +361,7 @@ impl FromStr for Value {
             for value in iter {
                 let items: Vec<_> = value.split(':').collect();
                 if let [_key, value] = items.as_slice() {
-                    values.push(Value::from_str(value)?);
+                    values.push(value.parse()?);
                 }
             }
 
