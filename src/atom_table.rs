@@ -258,15 +258,15 @@ impl Atom {
     }
 
     pub fn defrock_brackets(&self, atom_tbl: &AtomTable) -> Self {
+        use crate::machine::parsed_results::strip_circumfix;
+
         let s = self.as_str();
 
-        let sub_str = if s.starts_with('(') && s.ends_with(')') {
-            &s['('.len_utf8()..s.len() - ')'.len_utf8()]
+        if let Some(unparenthesised) = strip_circumfix(&*s, '(', ')') {
+            AtomTable::build_with(atom_tbl, unparenthesised)
         } else {
-            return *self;
-        };
-
-        AtomTable::build_with(atom_tbl, sub_str)
+            *self
+        }
     }
 }
 
