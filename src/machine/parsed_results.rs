@@ -198,7 +198,7 @@ impl From<Vec<QueryResolutionLine>> for QueryResolution {
     }
 }
 
-fn split_response_string(input: &str) -> Vec<String> {
+fn split_response_string(input: &str) -> Vec<&str> {
     let mut level_bracket = 0;
     let mut level_parenthesis = 0;
     let mut in_double_quotes = false;
@@ -219,26 +219,25 @@ fn split_response_string(input: &str) -> Vec<String> {
                 && !in_double_quotes
                 && !in_single_quotes =>
             {
-                result.push(input[start..i].trim().to_string());
-                start = i + ','.len_utf8();
+                result.push(input[start..i].trim());
+                start = i + 1;
             }
             _ => {}
         }
     }
 
-    result.push(input[start..].trim().to_string());
+    result.push(input[start..].trim());
     result
 }
 
-fn split_key_value_pairs(input: &str) -> Vec<(String, String)> {
+fn split_key_value_pairs(input: &str) -> Vec<(&str, &str)> {
     let items = split_response_string(input);
     let mut result = Vec::new();
 
     for item in items {
-        let parts: Vec<&str> = item.splitn(2, '=').collect();
-        if parts.len() == 2 {
-            let key = parts[0].trim().to_string();
-            let value = parts[1].trim().to_string();
+        if let Some((key, value)) = item.split_once('=') {
+            let key = key.trim();
+            let value = value.trim();
             result.push((key, value));
         }
     }
@@ -246,17 +245,15 @@ fn split_key_value_pairs(input: &str) -> Vec<(String, String)> {
     result
 }
 
-fn parse_prolog_response(input: &str) -> HashMap<String, String> {
-    let mut map: HashMap<String, String> = HashMap::new();
+fn parse_prolog_response(input: &str) -> HashMap<&str, &str> {
+    let mut map: HashMap<_, _> = HashMap::new();
     // Use regex to match strings including commas inside them
-    for result in split_key_value_pairs(input) {
-        let key = result.0;
-        let value = result.1;
+    for (key, value) in split_key_value_pairs(input) {
         // cut off at given characters/strings:
-        let value = value.split('\n').next().unwrap().to_string();
-        let value = value.split(' ').next().unwrap().to_string();
-        let value = value.split('\t').next().unwrap().to_string();
-        let value = value.split("error").next().unwrap().to_string();
+        let value = value.split_once('\n').map_or(value, |(v, _)| v);
+        let value = value.split_once(' ').map_or(value, |(v, _)| v);
+        let value = value.split_once('\t').map_or(value, |(v, _)| v);
+        let value = value.split_once("error").map_or(value, |(v, _)| v);
         map.insert(key, value);
     }
 
@@ -284,7 +281,7 @@ impl TryFrom<String> for QueryResolutionLine {
     }
 }
 
-fn split_nested_list(input: &str) -> Vec<String> {
+fn split_nested_list(input: &str) -> Vec<&str> {
     let mut level = 0;
     let mut start = 0;
     let mut result = Vec::new();
@@ -301,7 +298,7 @@ fn split_nested_list(input: &str) -> Vec<String> {
         }
     }
 
-    result.push(input[start..].trim().to_string());
+    result.push(input[start..].trim());
     result
 }
 
@@ -335,6 +332,7 @@ impl TryFrom<String> for Value {
 
             let values = split
                 .into_iter()
+                .map(String::from)
                 .map(Value::try_from)
                 .collect::<Result<Vec<_>, _>>()?;
 
@@ -345,10 +343,8 @@ impl TryFrom<String> for Value {
 
             for value in iter {
                 let items: Vec<_> = value.split(':').collect();
-                if items.len() == 2 {
-                    let _key = items[0].to_string();
-                    let value = items[1].to_string();
-                    values.push(Value::try_from(value)?);
+                if let [_key, value] = items.as_slice() {
+                    values.push(Value::try_from(value.to_string())?);
                 }
             }
 
@@ -359,10 +355,8 @@ impl TryFrom<String> for Value {
 
             for value in iter {
                 let items: Vec<_> = value.split(':').collect();
-                if items.len() == 2 {
-                    let _key = items[0].to_string();
-                    let value = items[1].to_string();
-                    values.push(Value::try_from(value)?);
+                if let [_key, value] = items.as_slice() {
+                    values.push(Value::try_from(value.to_string())?);
                 }
             }
 
