@@ -278,7 +278,7 @@ impl TryFrom<String> for QueryResolutionLine {
                     .iter()
                     .map(|(key, value)| -> Result<(String, Value), ()> {
                         let key = key.to_string();
-                        Ok((key,value.parse()?))
+                        Ok((key, value.parse()?))
                     })
                     .filter_map(Result::ok)
                     .collect::<BTreeMap<_, _>>(),
@@ -373,4 +373,3 @@ impl FromStr for Value {
         }
     }
 }
-
