@@ -257,10 +257,10 @@ fn parse_prolog_response(input: &str) -> HashMap<&str, &str> {
     // Use regex to match strings including commas inside them
     for (key, value) in split_key_value_pairs(input) {
         // cut off at given characters/strings:
-        let value = value.split_once('\n').map_or(value, |(v,_)|v);
-        let value = value.split_once(' ').map_or(value, |(v,_)|v);
-        let value = value.split_once('\t').map_or(value, |(v,_)|v);
-        let value = value.split_once("error").map_or(value, |(v,_)|v);
+        let value = value.split_once('\n').map_or(value, |(v, _)| v);
+        let value = value.split_once(' ').map_or(value, |(v, _)| v);
+        let value = value.split_once('\t').map_or(value, |(v, _)| v);
+        let value = value.split_once("error").map_or(value, |(v, _)| v);
         map.insert(key, value);
     }
 
@@ -278,7 +278,7 @@ impl TryFrom<String> for QueryResolutionLine {
                     .iter()
                     .map(|(key, value)| -> Result<(String, Value), ()> {
                         let key = key.to_string();
-                        Ok((key,value.parse()?))
+                        Ok((key, value.parse()?))
                     })
                     .filter_map(Result::ok)
                     .collect::<BTreeMap<_, _>>(),
@@ -314,7 +314,11 @@ pub(crate) fn strip_delimiters(haystack: &str, prefix: char, suffix: char) -> Op
     haystack.strip_prefix(prefix)?.strip_suffix(suffix)
 }
 
-pub(crate) fn strip_delimiters_str<'hay>(haystack: &'hay str, prefix: &str, suffix: &str) -> Option<&'hay str> {
+pub(crate) fn strip_delimiters_str<'hay>(
+    haystack: &'hay str,
+    prefix: &str,
+    suffix: &str,
+) -> Option<&'hay str> {
     haystack.strip_prefix(prefix)?.strip_suffix(suffix)
 }
 
@@ -371,4 +375,3 @@ impl FromStr for Value {
         }
     }
 }
-
