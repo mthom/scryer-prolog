@@ -16,30 +16,37 @@ pub(crate) fn to_op_decl(prec: u16, spec: OpDeclSpec, name: Atom) -> OpDecl {
 }
 
 pub(crate) fn to_op_decl_spec(spec: Atom) -> Result<OpDeclSpec, CompilationError> {
-    OpDeclSpec::try_from(spec).map_err(|_err| CompilationError::InconsistentEntry)
+    OpDeclSpec::try_from(spec).map_err(|_err| CompilationError::InvalidOpDeclSpecValue(spec))
 }
 
 fn setup_op_decl(mut terms: Vec<Term>, atom_tbl: &AtomTable) -> Result<OpDecl, CompilationError> {
     let name = match terms.pop().unwrap() {
         Term::Literal(_, Literal::Atom(name)) => name,
         Term::Literal(_, Literal::Char(c)) => AtomTable::build_with(atom_tbl, &c.to_string()),
-        _ => return Err(CompilationError::InconsistentEntry),
+        other => {
+            return Err(CompilationError::InvalidOpDeclName(other));
+        }
     };
 
     let spec = match terms.pop().unwrap() {
         Term::Literal(_, Literal::Atom(name)) => name,
-        Term::Literal(_, Literal::Char(c)) => AtomTable::build_with(atom_tbl, &c.to_string()),
-        _ => return Err(CompilationError::InconsistentEntry),
+        other => {
+            return Err(CompilationError::InvalidOpDeclSpecTerm(other));
+        }
     };
 
     let spec = to_op_decl_spec(spec)?;
 
     let prec = match terms.pop().unwrap() {
-        Term::Literal(_, Literal::Fixnum(bi)) => match u16::try_from(bi.get_num()) {
+        term @ Term::Literal(_, Literal::Fixnum(bi)) => match u16::try_from(bi.get_num()) {
             Ok(n) if n <= 1200 => n,
-            _ => return Err(CompilationError::InconsistentEntry),
+            _ => {
+                return Err(CompilationError::InvalidOpDeclPrec(term));
+            }
         },
-        _ => return Err(CompilationError::InconsistentEntry),
+        other => {
+            return Err(CompilationError::InvalidOpDeclPrec(other));
+        }
     };
 
     Ok(to_op_decl(prec, spec, name))
@@ -327,9 +334,9 @@ pub(super) fn setup_declaration<'a, LS: LoadState<'a>>(
                 let (module_name, name, meta_specs) = setup_meta_predicate(terms, loader)?;
                 Ok(Declaration::MetaPredicate(module_name, name, meta_specs))
             }
-            _ => Err(CompilationError::InconsistentEntry),
+            _ => Err(CompilationError::InvalidDecl(name, terms.len())),
         },
-        _ => Err(CompilationError::InconsistentEntry),
+        other => Err(CompilationError::ExpectedDecl(other)),
     }
 }
 

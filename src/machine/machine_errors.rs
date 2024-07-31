@@ -572,9 +572,10 @@ impl MachineState {
         }
 
         let location = err.line_and_col_num();
-        let stub = err.as_functor();
+        let len = self.heap.len();
+        let stub = err.as_functor(&mut self.heap);
 
-        let stub = functor!(atom!("syntax_error"), [str(self.heap.len(), 0)], [stub]);
+        let stub = functor!(atom!("syntax_error"), [str(len, 0)], [stub]);
 
         MachineError {
             stub,
@@ -690,7 +691,12 @@ pub enum CompilationError {
     ExpectedRel,
     InadmissibleFact,
     InadmissibleQueryTerm,
-    InconsistentEntry,
+    ExpectedDecl(Term),
+    InvalidDecl(Atom, usize /* arity */),
+    InvalidOpDeclName(Term),
+    InvalidOpDeclSpecTerm(Term),
+    InvalidOpDeclSpecValue(Atom),
+    InvalidOpDeclPrec(Term),
     InvalidMetaPredicateDecl,
     InvalidModuleDecl,
     InvalidModuleExport,
@@ -722,7 +728,7 @@ impl CompilationError {
         }
     }
 
-    pub(crate) fn as_functor(&self) -> MachineStub {
+    pub(crate) fn as_functor(&self, heap: &mut Heap) -> MachineStub {
         match self {
             CompilationError::Arithmetic(..) => {
                 functor!(atom!("arithmetic_error"))
@@ -744,8 +750,48 @@ impl CompilationError {
                 // TODO: type_error(callable, _).
                 functor!(atom!("inadmissible_query_term"))
             }
-            CompilationError::InconsistentEntry => {
-                functor!(atom!("inconsistent_entry"))
+            CompilationError::ExpectedDecl(_term) => {
+                functor!(atom!("not_a_declaration"))
+            }
+            CompilationError::InvalidDecl(name, arity) => {
+                let culprit = functor_stub(*name, *arity);
+                functor!(
+                    atom!("existence_error"),
+                    [atom(atom!("declaration")), str(heap.len() + 2, 0)],
+                    [culprit]
+                )
+            }
+            CompilationError::InvalidOpDeclName(_term) => {
+                functor!(
+                    atom!("invalid_op_decl"),
+                    [atom(atom!("name")), atom(atom!("expected_string_or_atom"))]
+                )
+            }
+            CompilationError::InvalidOpDeclSpecTerm(_term) => {
+                functor!(
+                    atom!("invalid_op_decl"),
+                    [
+                        atom(atom!("specification")),
+                        atom(atom!("expected_string_or_atom"))
+                    ]
+                )
+            }
+            CompilationError::InvalidOpDeclSpecValue(spec) => {
+                let functor = functor!(atom!("invalid_value"), [atom(spec)]);
+                functor!(
+                    atom!("invalid_op_decl"),
+                    [atom(atom!("specification")), str(heap.len() + 2, 0)],
+                    [functor]
+                )
+            }
+            CompilationError::InvalidOpDeclPrec(_term) => {
+                functor!(
+                    atom!("invalid_op_decl"),
+                    [
+                        atom(atom!("precedence")),
+                        atom(atom!("expected_integer_in_range_0_to_1200"))
+                    ]
+                )
             }
             CompilationError::InvalidMetaPredicateDecl => {
                 functor!(atom!("invalid_meta_predicate_decl"))
