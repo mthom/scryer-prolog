@@ -43,11 +43,19 @@ maplistdif(G__2, [H1|T1], [H2|T2], L0-LX) :-
     call(G__2, H1, H2, L0-L1),
     maplistdif(G__2, T1, T2, L1-LX).
 
-%% arithmetic_expansion(+Type, Term, -ExpandedTerm, ?ListDifference).
+%% arithmetic_expansion(+Type, Term, -ExpandedTerm, -Unifier-Rest).
 %
-% Recursively traverse `Term` and assemble a list of replacements that makes
-% `ExpandedTerm` a valid arithmetic relation (`Type = rela`) or functional
-% expression (`Type = func`).
+% `ExpandedTerm` is the minimal generalization of `Term` which makes a valid
+% arithmetic relation (`Type = rela`) or functional expression (`Type = func`).
+% That means if all unifications from `Unifier` hold then `ExpandedTerm == Term`.
+% `Unifier-Rest` form together a list difference. `Term` is traversed from left
+% to right, depth-first. As seen in example bellow: given an invalid arithmetic
+% term, `E` becomes valid arithmetic term, `L` - unifier:
+%
+% ```
+% ?- arithmetic_expansion(rela, X is sqrt([]+Y*foo(e/2)), E, L-[]).
+%    E = (X is sqrt(_A+Y*_B)), L = [[]=_A,foo(e/2)=_B].
+% ```
 %
 % NOTE: Order of clauses is important for correctness.
 arithmetic_expansion(func, T, T, L-L) :-
