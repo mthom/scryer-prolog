@@ -35,6 +35,61 @@ write_error(Error) :-
     ),
     write('.').
 
+trace(on).
+
+writeln(X) :-
+    trace(on), write(X), nl.
+x(G_0) :-
+    catch(loader:G_0, E, (loader:writeln(exception:E:G_0),throw(E))).
+w(G_0) :-
+    writeln(call:G_0), x(G_0), writeln(exit:G_0).
+w(_) :-
+    writeln(done).
+
+%% arithmetic_relation_expanded(?Term, ListDifference).
+%
+% Recursively traverse Term and assemble a list of replacements that make a
+% valid aruthmetic relation.
+%
+% Hand-expanded DCG, because library(dcgs) isn't available during goal expansion.
+arithmetic_relation_expanded(T, L1-L2) :-
+    maplist(loader:elaborate(F/2), [T,R], [Ts,Rs]),
+    memberchk(F, [is,>,<,>=,=<,=:=,=\=]),
+    next(ok(Ts,Rs), L1-[R|L2]).
+
+%% next(+Marker, ListDifference).
+%
+% Describes needed replacements according to `Marker`.
+next(nok(T,R), [T=R|L]-L).
+next(ok([],[]), L-L).
+next(ok([T0|Ts],[R0|Rs]), L1-L3) :-
+    arithmetic_function_expanded(T0, R0, L1-L2), next(ok(Ts,Rs), L2-L3).
+
+%% arithmetic_function_expanded(?Term, -ExpandedTerm, ListDifference).
+arithmetic_function_expanded(T, R, LD) :-
+    check(T, R, C), next(C, LD).
+
+%% check(?Term, -ExpandedTerm, -Marker).
+%
+% `Marker` describes what is `Term` in regards to arithmetical function, it is
+% `ok/2` if `Term` is Ok to be a part of arithmetical function and it is `nok/2`
+% if it isn't.
+%
+% NOTE: Order of `check/3` clauses is important for correctness.
+check(T, T, ok([],[])) :- (var(T); number(T)), !.
+check(T, R, ok(Ts,Rs)) :-
+    maplist(loader:elaborate(F/A), [T,R], [Ts,Rs]),
+    arithmetic_functions(A, Fs),
+    member(F, Fs), !.
+check(T, R, nok(T,R)) :- !.
+
+elaborate(Functor/Arity, Term, Args) :-
+    functor(Term, Functor, Arity),
+    Term =.. [Functor|Args].
+
+arithmetic_functions(0, [e,pi,epsilon]).
+arithmetic_functions(1, [+,-,\,sqrt,exp,log,sin,cos,tan,asin,acos,atan,sign,abs,round,ceiling,floor,truncate,float,float_integer_part,float_fractional_part]).
+arithmetic_functions(2, [+,-,/,*,**,^,/\,\/,xor,div,//,rdiv,<<,>>,mod,rem,max,min,gcd,atan2]).
 
 :- non_counted_backtracking '$print_message_and_fail'/1.
 
@@ -42,6 +97,7 @@ write_error(Error) :-
     write_error(Error),
     nl,
     '$fail'.
+
 
 expand_term(Term, ExpandedTerm) :-
     (  '$predicate_defined'(user, term_expansion, 2),
@@ -69,16 +125,13 @@ term_expansion_list([Term|Terms], ExpandedTermsHead, ExpandedTermsTail) :-
        term_expansion_list(Terms, ExpandedTerms0Tail, ExpandedTermsTail)
     ).
 
-
 :- non_counted_backtracking goal_expansion/3.
 
-goal_expansion(G, user, (Y = Rhs, X is Y)) :-
+goal_expansion(G, _, Gx) :-
     % Additional rule just to replace invalid arithmetic expression with
     % runtime exception
     nonvar(G),
-    G = (X is Rhs),
-    nonvar(Rhs),
-    (Rhs == []; Rhs = [_|_]).
+    arithmetic_relation_expanded(G, Gx-[]).
 goal_expansion(Goal, Module, ExpandedGoal) :-
     (  atom(Module),
        '$predicate_defined'(Module, goal_expansion, 2),

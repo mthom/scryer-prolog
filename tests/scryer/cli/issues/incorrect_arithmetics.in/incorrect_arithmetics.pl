@@ -4,37 +4,54 @@
 :- use_module(library(iso_ext)).
 :- use_module(library(format)).
 :- use_module(library(debug)).
+:- use_module(library(time)).
+
+:- dynamic(rznvivy/0).
 
 % Asserting and consulting of erroneous arithmetic relation shall succeed,
 % but then it must fail at runtime.
 main :-
-    template_relation("tttftt", R),
-    findall(T, test(R, T), [assert,consult]).
+    template_relation("tttf", R),
+    ignore_exception(test(R, consult)),
+    ignore_exception(test(R, assert)),
+    true.
 
 test(Relation, TestVariant) :-
-    load_and_call(TestVariant, (rznvivy :- false, Relation), \+rznvivy).
+    load_and_call(TestVariant, rznvivy/0, (rznvivy :- false, Relation), \+rznvivy).
 
-load_and_call(assert, Clause, Query) :-
+load_and_call(assert, PI, Clause, Query) :-
     setup_call_cleanup(
         ignore_exception(assertz(Clause)),
-        $-Query,
-        retract(Clause)
+        callf(PI, Query),
+        $abolish(PI)
     ).
-load_and_call(consult, Clause, Query) :-
+load_and_call(consult, PI, Clause, Query) :-
     T = 'chnytjl.pl',
     setup_call_cleanup(
         open(T, write, S),
         portray_clause(S, Clause),
         close(S)
     ),
-    ignore_exception(consult(T)),
-    $-Query.
+    setup_call_cleanup(
+        ignore_exception(consult(T)),
+        callf(PI, Query),
+        $abolish(PI)
+    ).
+
+callf(PI, G_0) :-
+    clause(rznvivy, I),
+    I \= true,
+    always(ignore_exception(listing(PI))),
+    $G_0.
+
+always(G_0) :- call(G_0).
+always(_).
 
 template_relation(Template, R) :-
-    setof(E, phrase(arith_relation(E), Template), Es),
+    time(setof(E, phrase(arith_relation(E), Template), Es)),
     length(Es, L),
     random_integer(0, L, I),
-    format("% Info: Selected ~dth out of ~d found aritmetic relations that satisfy ~s template:~n\t", [I,L,Template]),
+    format("   % Info: Selected ~d/~d aritmetic terms that satisfy ~s template:~n\t", [I,L,Template]),
     nth0(I, Es, R),
     portray_clause(R).
 
@@ -57,7 +74,7 @@ arith_expression(F) --> func(expr(F,A,B)), arith_expression(A), arith_expression
 func(Expr) --> {fn(T, Expr)}, [T].
 rel(Expr)  --> {rl(T, Expr)}, [T].
 
-%rl(t, expr(F,A,B)) :- member(F, [A<B,A=:=B]).
+rl(t, expr(F,A,B)) :- member(F, [A<B,A=:=B]).
 rl(t, expr(F,A))   :- member(F, [_ is A]).
 
 fn(t, expr(A))     :- rnd(A).
@@ -66,7 +83,7 @@ fn(t, expr(F,A))   :- member(F, [-A,sqrt(A),log(A),tan(A),\A,+A]).
 fn(t, expr(F,A,B)) :- member(F, [A+B,A-B,A*B,A/B,A^B,max(A,B)]).
 fn(f, expr(F))     :- member(F, [[],phi,[_|_]]).
 fn(f, expr(F,A))   :- member(F, [zeta(A)]).
-fn(f, expr(F,A,B)) :- member(F, [[A,B]]).
+fn(f, expr(F,A,B)) :- member(F, [[A,B],[A|B]]).
 
 %% rnd(N).
 %
