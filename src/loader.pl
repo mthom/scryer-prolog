@@ -35,7 +35,9 @@ write_error(Error) :-
     ),
     write('.').
 
+
 :- meta_predicate maplistdif(3, ?, ?, ?).
+
 maplistdif(_, [], [], L-L).
 maplistdif(G__2, [H1|T1], [H2|T2], L0-LX) :-
     call(G__2, H1, H2, L0-L1),
@@ -65,13 +67,13 @@ arithmetic_term(func, 1, [+,-,\,sqrt,exp,log,sin,cos,tan,asin,acos,atan,sign,abs
 arithmetic_term(func, 2, [+,-,/,*,**,^,/\,\/,xor,div,//,rdiv,<<,>>,mod,rem,max,min,gcd,atan2]).
 arithmetic_term(rela, 2, [is,>,<,>=,=<,=:=,=\=]).
 
+
 :- non_counted_backtracking '$print_message_and_fail'/1.
 
 '$print_message_and_fail'(Error) :-
     write_error(Error),
     nl,
     '$fail'.
-
 
 expand_term(Term, ExpandedTerm) :-
     (  '$predicate_defined'(user, term_expansion, 2),
@@ -98,6 +100,7 @@ term_expansion_list([Term|Terms], ExpandedTermsHead, ExpandedTermsTail) :-
     ;  ExpandedTermsHead = [ExpandedTerm0 | ExpandedTerms0Tail],
        term_expansion_list(Terms, ExpandedTerms0Tail, ExpandedTermsTail)
     ).
+
 
 :- non_counted_backtracking goal_expansion/3.
 
