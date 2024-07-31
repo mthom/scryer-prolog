@@ -59,10 +59,10 @@ impl MockWAM {
         print_heap_terms(self.machine_st.heap.iter(), term_write_result.heap_loc);
 
         let var_names = term_write_result
-            .var_locs
+            .inverse_var_locs
             .iter()
-            .map(|(var_loc, var_ptrs)| {
-                (self.machine_st.heap[var_loc], var_ptrs.front().unwrap().clone())
+            .map(|(var_loc, var_name)| {
+                (self.machine_st.heap[*var_loc], var_name.clone())
             })
             .collect();
 
