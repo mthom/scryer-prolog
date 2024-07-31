@@ -10,11 +10,9 @@ use crate::parser::char_reader::*;
 use crate::parser::lexer::*;
 use crate::types::*;
 
-use fxhash::FxBuildHasher;
-use indexmap::IndexMap;
-
 use std::mem;
 use std::ops::Neg;
+use std::rc::Rc;
 
 #[derive(Debug, Clone, Copy, PartialEq)]
 enum TokenType {
@@ -184,7 +182,7 @@ pub struct Parser<'a, R> {
     stack: Vec<TokenDesc>,
     terms: Vec<HeapCellValue>,
     var_locs: VarLocs,
-    var_names_to_locs: VarNamesToLocs,
+    inverse_var_locs: InverseVarLocs,
 }
 
 fn read_tokens<R: CharRead>(lexer: &mut Lexer<R>) -> Result<Vec<Token>, ParserError> {
@@ -326,7 +324,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
             stack: vec![],
             terms: vec![],
             var_locs: VarLocs::default(),
-            var_names_to_locs: IndexMap::with_hasher(FxBuildHasher::default()),
+            inverse_var_locs: InverseVarLocs::default(),
         }
     }
 
@@ -337,7 +335,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
             stack: vec![],
             terms: vec![],
             var_locs: VarLocs::default(),
-            var_names_to_locs: IndexMap::with_hasher(FxBuildHasher::default()),
+            inverse_var_locs: InverseVarLocs::default(),
         }
     }
 
@@ -501,32 +499,28 @@ impl<'a, R: CharRead> Parser<'a, R> {
                 self.terms.push(HeapCellValue::from(c));
                 TokenType::Term { heap_loc }
             }
-            Token::Var(var_string) => match self.var_names_to_locs.get(&var_string).cloned() {
-                Some(heap_loc) => {
-                    let heap_idx = heap_loc.get_value() as usize;
+            Token::Var(var_string) => {
+                let var = Rc::new(var_string);
 
-                    self.var_locs.push_at_key(heap_idx, VarPtr::from(var_string));
-                    self.terms.push(heap_loc);
-
-                    TokenType::Term { heap_loc }
-                }
-                None => {
-                    self.terms.push(heap_loc);
-
-                    if var_string.trim() != "_" {
-                        self.var_names_to_locs.insert(var_string.clone(), heap_loc);
+                match self.var_locs.get(&var).cloned() {
+                    Some(heap_loc) => {
+                        self.terms.push(heap_loc);
+                        TokenType::Term { heap_loc }
                     }
+                    None => {
+                        self.terms.push(heap_loc);
 
-                    self.var_locs.push_at_key(
-                        heap_loc.get_value() as usize,
-                        if var_string.trim() == "_" {
-                            VarPtr::from(Var::Anon)
-                        } else {
-                            VarPtr::from(var_string)
-                        },
-                    );
+                        // if var_string == "_", it not being present
+                        // as a key of self.var_locs means it is
+                        // anonymous.
 
-                    TokenType::Term { heap_loc }
+                        if var.trim() != "_" {
+                            self.var_locs.insert(var.clone(), heap_loc);
+                            self.inverse_var_locs.insert(heap_loc.get_value() as usize, var);
+                        }
+
+                        TokenType::Term { heap_loc }
+                    }
                 }
             },
             Token::Comma => TokenType::Comma,
@@ -755,7 +749,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
 
     pub fn reset(&mut self) {
         self.stack.clear();
-        self.var_names_to_locs.clear();
+        self.var_locs.clear();
     }
 
     fn expand_comma_compacted_terms(&mut self, index: usize) -> usize {
@@ -1356,7 +1350,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
             }) => Ok(FocusedHeap {
                 heap: mem::replace(&mut self.terms, vec![]),
                 focus: heap_loc.get_value() as usize,
-                var_locs: mem::replace(&mut self.var_locs, VarLocs::default()),
+                inverse_var_locs: mem::replace(&mut self.inverse_var_locs, InverseVarLocs::default()),
             }),
             _ => Err(ParserError::IncompleteReduction(
                 self.lexer.loc_to_err_src(),

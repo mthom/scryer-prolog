@@ -9,12 +9,10 @@ use crate::machine::machine_indices::*;
 use crate::machine::machine_state::*;
 use crate::types::*;
 
-use std::cell::{Ref, RefCell, RefMut};
-use std::collections::VecDeque;
 use std::fmt;
-use std::hash::{Hash, Hasher};
+use std::hash::Hash;
 use std::io::{Error as IOError, ErrorKind};
-use std::ops::{Deref, Neg, RangeBounds};
+use std::ops::Neg;
 use std::rc::Rc;
 use std::sync::Arc;
 use std::vec::Vec;
@@ -311,26 +309,11 @@ macro_rules! temp_v {
     };
 }
 
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum GenContext {
-    Head,
-    Mid(usize),
-    Last(usize), // Mid & Last: chunk_num
-}
-
-impl GenContext {
-    #[inline]
-    pub fn chunk_num(self) -> usize {
-        match self {
-            GenContext::Head => 0,
-            GenContext::Mid(cn) | GenContext::Last(cn) => cn,
-        }
-    }
-
-    #[inline]
-    pub fn is_last(self) -> bool {
-        matches!(self, GenContext::Last(_))
-    }
+#[macro_export]
+macro_rules! perm_v {
+    ($x:expr) => {
+        $crate::parser::ast::RegType::Perm($x)
+    };
 }
 
 #[bitfield]
@@ -426,7 +409,7 @@ pub fn default_op_dir() -> OpDir {
 
 #[derive(Debug, Clone)]
 pub enum ArithmeticError {
-    NonEvaluableFunctor(Literal, usize),
+    NonEvaluableFunctor(HeapCellValue, usize),
     UninstantiatedVar,
 }
 
@@ -685,111 +668,7 @@ impl Literal {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct VarPtr(Rc<RefCell<Var>>);
-
-impl Hash for VarPtr {
-    #[inline(always)]
-    fn hash<H: Hasher>(&self, hasher: &mut H) {
-        self.borrow().hash(hasher)
-    }
-}
-
-impl Deref for VarPtr {
-    type Target = RefCell<Var>;
-
-    #[inline(always)]
-    fn deref(&self) -> &Self::Target {
-        self.0.deref()
-    }
-}
-
-impl VarPtr {
-    #[inline]
-    pub(crate) fn is_anon(&self) -> bool {
-        match *self.borrow() {
-            Var::Anon | Var::Generated { is_anon: true, .. } => true,
-            _ => false,
-        }
-    }
-
-    #[inline(always)]
-    pub(crate) fn borrow(&self) -> Ref<'_, Var> {
-        self.0.borrow()
-    }
-
-    #[inline(always)]
-    pub(crate) fn borrow_mut(&self) -> RefMut<'_, Var> {
-        self.0.borrow_mut()
-    }
-
-    pub(crate) fn to_var_num(&self) -> Option<usize> {
-        match *self.borrow() {
-            Var::Generated { var_num, .. } => Some(var_num),
-            _ => None,
-        }
-    }
-
-    pub(crate) fn set(&self, var: Var) {
-        let mut var_ref = self.borrow_mut();
-        *var_ref = var;
-    }
-}
-
-impl From<Var> for VarPtr {
-    #[inline(always)]
-    fn from(value: Var) -> VarPtr {
-        VarPtr(Rc::new(RefCell::new(value)))
-    }
-}
-
-impl From<String> for VarPtr {
-    #[inline(always)]
-    fn from(value: String) -> VarPtr {
-        VarPtr::from(Var::from(value))
-    }
-}
-
-impl From<&str> for VarPtr {
-    #[inline(always)]
-    fn from(value: &str) -> VarPtr {
-        VarPtr::from(value.to_owned())
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum Var {
-    Anon,
-    Generated { is_anon: bool, var_num: usize },
-    InSitu(usize),
-    Named(String),
-}
-
-impl From<String> for Var {
-    #[inline(always)]
-    fn from(value: String) -> Var {
-        Var::Named(value)
-    }
-}
-
-impl From<&str> for Var {
-    #[inline(always)]
-    fn from(value: &str) -> Var {
-        Var::Named(value.to_owned())
-    }
-}
-
-impl Var {
-    #[allow(clippy::inherent_to_string)]
-    #[inline(always)]
-    pub fn to_string(&self) -> String {
-        match self {
-            Var::Anon => "_".to_owned(),
-            Var::InSitu(var_num) | Var::Generated { var_num, .. } => format!("_{}", var_num),
-            Var::Named(value) => value.to_owned(),
-        }
-    }
-}
+pub type Var = Rc<String>;
 
 pub(crate) fn subterm_index(heap: &[HeapCellValue], subterm_loc: usize) -> (usize, HeapCellValue) {
     let subterm = heap[subterm_loc];
@@ -1050,7 +929,7 @@ pub fn term_arity(heap: &[HeapCellValue], mut term_loc: usize) -> usize {
     }
 }
 
-pub fn var_locs_from_iter<I: Iterator<Item = HeapCellValue>>(iter: I) -> VarLocs {
+pub fn inverse_var_locs_from_iter<I: Iterator<Item = HeapCellValue>>(iter: I) -> InverseVarLocs {
     let mut occurrence_set: IndexMap<HeapCellValue, usize, FxBuildHasher> =
         IndexMap::with_hasher(FxBuildHasher::default());
 
@@ -1061,21 +940,20 @@ pub fn var_locs_from_iter<I: Iterator<Item = HeapCellValue>>(iter: I) -> VarLocs
         }
     }
 
-    VarLocs(
-        occurrence_set
-        .into_iter()
-        .map(|(var, count)| {
-            let key = var.get_value() as usize;
-            let queue = if count > 1 {
-                (0 .. count).map(|_| VarPtr::from(format!("_{}", key))).collect()
-            } else {
-                (0 .. count).map(|_| VarPtr::from(Var::Anon)).collect()
-            };
+    let mut inverse_var_locs = InverseVarLocs::default();
 
-            (key, queue)
-        })
-        .collect()
-    )
+    for (var, count) in occurrence_set {
+        let var_loc = var.get_value() as usize;
+
+        if count > 1 {
+            inverse_var_locs.insert(
+                var_loc,
+                Rc::new(format!("_{}", var_loc)),
+            );
+        }
+    }
+
+    inverse_var_locs
 }
 
 /*
@@ -1137,82 +1015,14 @@ pub fn term_nth_arg(heap: &[HeapCellValue], mut term_loc: usize, n: usize) -> Op
     }
 }
 
-pub type VarNamesToLocs = IndexMap<String, HeapCellValue, FxBuildHasher>;
-
-#[derive(Debug, Default)]
-pub struct VarLocs(IndexMap<usize, VecDeque<VarPtr>, FxBuildHasher>);
-
-impl VarLocs {
-    pub fn get(&self, key: usize) -> Option<&VarPtr> {
-        self.0.get(&key)
-            .and_then(|queue| {
-                queue.front()
-            })
-    }
-
-    // if a queue of VarPtr's is stored at location key, pop the front
-    // if it exists and pass it along to wrapper, returning a value of
-    // type R. A return value of None indicates that the key doesn't
-    // exist (the map containing a key necessarily means its queue
-    // value is non-empty).
-    fn rotate_latest_mut<R>(
-        &mut self,
-        key: usize,
-        wrapper: impl FnOnce(&VarPtr) -> R,
-    ) -> Option<R> {
-        self.0.get_mut(&key)
-            .and_then(move |queue| {
-                if let Some(var_ptr) = queue.pop_front() {
-                    let result = wrapper(&var_ptr);
-                    queue.push_back(var_ptr);
-                    Some(result)
-                } else {
-                    None
-                }
-            })
-    }
-
-    pub fn peek_next_var_ptr_at_key(&self, key: usize) -> Option<&VarPtr> {
-        self.0.get(&key).and_then(|queue| queue.front())
-    }
-
-    pub fn read_next_var_ptr_at_key(&mut self, key: usize) -> Option<VarPtr> {
-        self.rotate_latest_mut(key, VarPtr::clone)
-    }
-
-    pub fn push_at_key(&mut self, key: usize, var_ptr: VarPtr) {
-        let entry = self.0.entry(key).or_default();
-        entry.push_back(var_ptr);
-    }
-
-    #[inline]
-    pub fn iter(&self) -> impl Iterator<Item = (usize, &VecDeque<VarPtr>)> {
-        self.0.iter().map(|(&k, v)| (k, v))
-    }
-
-    #[inline]
-    pub fn is_empty(&self) -> bool {
-        self.0.is_empty()
-    }
-
-    #[inline]
-    pub fn drain<R>(&mut self, range: R) -> indexmap::map::Drain<usize, VecDeque<VarPtr>>
-        where R: RangeBounds<usize>
-    {
-        self.0.drain(range)
-    }
-
-    #[inline]
-    pub fn insert(&mut self, key: usize, var_ptrs: VecDeque<VarPtr>) {
-        self.0.insert(key, var_ptrs);
-    }
-}
+pub type VarLocs = IndexMap<Var, HeapCellValue, FxBuildHasher>;
+pub type InverseVarLocs = IndexMap<usize, Var, FxBuildHasher>;
 
 #[derive(Debug)]
 pub struct FocusedHeap {
     pub heap: Vec<HeapCellValue>,
     pub focus: usize,
-    pub var_locs: VarLocs,
+    pub inverse_var_locs: InverseVarLocs,
 }
 
 impl FocusedHeap {
@@ -1220,7 +1030,7 @@ impl FocusedHeap {
         Self {
             heap: vec![],
             focus: 0,
-            var_locs: VarLocs::default(),
+            inverse_var_locs: InverseVarLocs::default(),
         }
     }
 
@@ -1251,7 +1061,6 @@ impl FocusedHeap {
         FocusedHeapRefMut {
             heap: &mut self.heap,
             focus,
-            // var_locs: &self.var_locs,
         }
     }
 
