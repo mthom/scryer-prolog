@@ -35,28 +35,21 @@ write_error(Error) :-
     ),
     write('.').
 
-trace(on).
+:- meta_predicate maplistdif(3, ?, ?, ?).
+maplistdif(_, [], [], L-L).
+maplistdif(G__2, [H1|T1], [H2|T2], L0-LX) :-
+    call(G__2, H1, H2, L0-L1),
+    maplistdif(G__2, T1, T2, L1-LX).
 
-writeln(X) :-
-    trace(on), write(X), nl.
-x(G_0) :-
-    catch(loader:G_0, E, (loader:writeln(exception:E:G_0),throw(E))).
-w(G_0) :-
-    writeln(call:G_0), x(G_0), writeln(exit:G_0).
-
-%% arithmetic_expansion(+Type, ?Term, -ExpandedTerm, ListDifference).
+%% arithmetic_expansion(+Type, Term, -ExpandedTerm, ?ListDifference).
 %
-% Hand-expanded DCG, because library(dcgs) isn't available during goal expansion.
-% Recursively traverse `Term` and assemble a list of replacements that makes up
-% a valid arithmetic relation.
+% Recursively traverse `Term` and assemble a list of replacements that makes
+% `ExpandedTerm` a valid arithmetic relation (`Type = rela`) or functional
+% expression (`Type = func`).
 %
 % NOTE: Order of clauses is important for correctness.
 arithmetic_expansion(func, T, T, L-L) :-
     (var(T); number(T)), !.
-arithmetic_expansion(list, [], [], L-L) :- !.
-arithmetic_expansion(list, [T0|Ts], [R0|Rs], L1-L3) :-
-    arithmetic_expansion(func, T0, R0, L1-L2),
-    arithmetic_expansion(list, Ts, Rs, L2-L3), !.
 arithmetic_expansion(Set, T, R, LD) :-
     functor(T, F, A),
     arithmetic_term(Set, A, Fs),
@@ -64,7 +57,7 @@ arithmetic_expansion(Set, T, R, LD) :-
     functor(R, F, A),
     T =.. [F|Ts],
     R =.. [F|Rs],
-    arithmetic_expansion(list, Ts, Rs, LD).
+    maplistdif(arithmetic_expansion(func), Ts, Rs, LD).
 arithmetic_expansion(func, T, R, [T=R|L]-L).
 
 arithmetic_term(func, 0, [e,pi,epsilon]).
@@ -112,7 +105,7 @@ goal_expansion(G, _, Gx) :-
     % Additional rule just to replace invalid arithmetic expression with
     % runtime exception
     nonvar(G),
-    w(arithmetic_expansion(rela, G, R, Gx-[R])).
+    arithmetic_expansion(rela, G, R, Gx-[R]).
 goal_expansion(Goal, Module, ExpandedGoal) :-
     (  atom(Module),
        '$predicate_defined'(Module, goal_expansion, 2),
