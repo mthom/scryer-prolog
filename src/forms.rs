@@ -72,6 +72,37 @@ pub enum CallPolicy {
     Counted,
 }
 
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum GenContext {
+    Head,
+    Mid(usize),
+    Last(usize), // Mid & Last: chunk_num
+}
+
+impl GenContext {
+    #[inline]
+    pub fn chunk_num(&self) -> usize {
+        match self {
+            GenContext::Head => 0,
+            &GenContext::Mid(cn) | &GenContext::Last(cn) => cn,
+        }
+    }
+
+    #[inline]
+    pub fn chunk_type(&self) -> ChunkType {
+        match self {
+            GenContext::Head    => ChunkType::Head,
+            GenContext::Mid(_)  => ChunkType::Mid,
+            GenContext::Last(_) => ChunkType::Last,
+        }
+    }
+
+    #[inline]
+    pub fn is_last(self) -> bool {
+        matches!(self, GenContext::Last(_))
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ChunkType {
     Head,
@@ -98,12 +129,14 @@ impl ChunkType {
 #[derive(Debug)]
 pub enum ChunkedTerms {
     Branch(Vec<VecDeque<ChunkedTerms>>),
-    Chunk(VecDeque<QueryTerm>),
+    Chunk { chunk_num: usize, terms: VecDeque<QueryTerm> },
 }
 
 #[derive(Debug)]
 pub struct ChunkedTermVec {
     pub chunk_vec: VecDeque<ChunkedTerms>,
+    pub current_chunk_num: usize,
+    pub current_chunk_type: ChunkType,
 }
 
 impl Deref for ChunkedTermVec {
@@ -128,6 +161,8 @@ impl ChunkedTermVec {
     pub fn new() -> Self {
         Self {
             chunk_vec: VecDeque::new(),
+            current_chunk_num: 0,
+            current_chunk_type: ChunkType::Mid,
         }
     }
 
@@ -136,24 +171,70 @@ impl ChunkedTermVec {
             .push_back(ChunkedTerms::Branch(Vec::with_capacity(capacity)));
     }
 
+    pub fn push_branch_arm(&mut self, branch: VecDeque<ChunkedTerms>) {
+        match self.chunk_vec.back_mut().unwrap() {
+            ChunkedTerms::Branch(branches) => {
+                branches.push(branch);
+            }
+            ChunkedTerms::Chunk { .. } => {
+                self.chunk_vec.push_back(ChunkedTerms::Branch(vec![branch]));
+            }
+        }
+    }
+
+    pub fn try_set_chunk_at_inlined_boundary(&mut self) -> bool {
+        if self.current_chunk_type.is_last() {
+            self.current_chunk_type = ChunkType::Mid;
+            self.current_chunk_num += 1;
+            true
+        } else {
+            false
+        }
+    }
+
+    pub fn try_set_chunk_at_call_boundary(&mut self) -> bool {
+        if self.current_chunk_type.is_last() {
+            self.current_chunk_num += 1;
+            true
+        } else {
+            self.current_chunk_type = ChunkType::Last;
+            false
+        }
+    }
+
     #[inline]
     pub fn add_chunk(&mut self) {
-        self.chunk_vec
-            .push_back(ChunkedTerms::Chunk(VecDeque::from(vec![])));
+        let chunk = ChunkedTerms::Chunk {
+            chunk_num: self.current_chunk_num,
+            terms: VecDeque::from(vec![]),
+        };
+        self.chunk_vec.push_back(chunk);
+    }
+
+    pub fn current_gen_context(&self) -> GenContext {
+        self.current_chunk_type.to_gen_context(self.current_chunk_num)
     }
 
     pub fn push_chunk_term(&mut self, term: QueryTerm) {
         match self.chunk_vec.back_mut() {
             Some(ChunkedTerms::Branch(_)) => {
-                self.chunk_vec
-                    .push_back(ChunkedTerms::Chunk(VecDeque::from(vec![term])));
+                let chunk = ChunkedTerms::Chunk {
+                    chunk_num: self.current_chunk_num,
+                    terms: VecDeque::from(vec![term]),
+                };
+
+                self.chunk_vec.push_back(chunk);
             }
-            Some(ChunkedTerms::Chunk(chunk)) => {
-                chunk.push_back(term);
+            Some(ChunkedTerms::Chunk { terms, .. }) => {
+                terms.push_back(term);
             }
             None => {
-                self.chunk_vec
-                    .push_back(ChunkedTerms::Chunk(VecDeque::from(vec![term])));
+                let chunk = ChunkedTerms::Chunk {
+                    chunk_num: self.current_chunk_num,
+                    terms: VecDeque::from(vec![term]),
+                };
+
+                self.chunk_vec.push_back(chunk);
             }
         }
     }
