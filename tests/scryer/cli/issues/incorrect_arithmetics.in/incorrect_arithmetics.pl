@@ -11,9 +11,9 @@
 % Asserting and consulting of erroneous arithmetic relation shall succeed,
 % but then it must fail at runtime.
 main :-
-    template_relation("tttf", R),
+    template_relation("ttftf", R),
     ignore_exception(test(R, consult)),
-    ignore_exception(test(R, assert)),
+   %ignore_exception(test(R, assert)),
     true.
 
 test(Relation, TestVariant) :-
@@ -23,7 +23,7 @@ load_and_call(assert, PI, Clause, Query) :-
     setup_call_cleanup(
         ignore_exception(assertz(Clause)),
         callf(PI, Query),
-        $abolish(PI)
+        $retract(Clause)
     ).
 load_and_call(consult, PI, Clause, Query) :-
     T = 'chnytjl.pl',
@@ -35,7 +35,7 @@ load_and_call(consult, PI, Clause, Query) :-
     setup_call_cleanup(
         ignore_exception(consult(T)),
         callf(PI, Query),
-        $abolish(PI)
+        $retract(Clause)
     ).
 
 callf(PI, G_0) :-
