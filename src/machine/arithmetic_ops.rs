@@ -1156,7 +1156,7 @@ impl MachineState {
     ) -> Result<Number, MachineStub> {
         let stub_gen = || functor_stub(atom!("is"), 2);
 
-        let root_loc = if value.is_ref() {
+        let root_loc = if value.is_ref() && !value.is_stack_var() {
             value.get_value() as usize
         } else {
             let type_error = self.type_error(ValidType::Evaluable, value);
