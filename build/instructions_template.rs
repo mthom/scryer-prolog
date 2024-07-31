@@ -911,7 +911,7 @@ fn generate_instruction_preface() -> TokenStream {
                         functor!(atom!("intermediate"), [fixnum(i)])
                     }
                     ArithmeticTerm::Number(n) => {
-                        vec![HeapCellValue::from((n, arena))]
+                        functor!(atom!("number"), [cell(HeapCellValue::from((n, arena)))])
                     }
                 }
             }

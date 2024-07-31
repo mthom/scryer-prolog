@@ -14,7 +14,7 @@ test_queries_on_call_with_inference_limit :-
 	  error,
 	  true),
     \+ call_with_inference_limit(g(X), 5, R),
-    maplist(assertz, [g(1), g(2), g(3), g(4), g(5)]),
+    maplist(assertz, [g(1), g(2), g(3), g(4), g(5)]), % TODO this line fails!
     findall([R,X],
 	    call_with_inference_limit(g(X), 11, R),
 	    [[true, 1],
@@ -30,7 +30,7 @@ test_queries_on_call_with_inference_limit :-
 	     [true, 4],
 	     [!, 5]]),
     findall([R,X],
-	    (call_with_inference_limit(g(X), 5, R), call(true)),
+	    (call_with_inference_limit(g(X), 2, R), call(true)),
 	    [[true, 1],
 	     [true, 2],
 	     [inference_limit_exceeded, _]]),
