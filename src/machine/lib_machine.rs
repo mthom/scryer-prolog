@@ -4,7 +4,6 @@ use crate::atom_table;
 use crate::heap_print::{HCPrinter, HCValueOutputter, PrinterOutputter};
 use crate::machine::mock_wam::CompositeOpDir;
 use crate::machine::{copy_and_align_iter, BREAK_FROM_DISPATCH_LOOP_LOC, LIB_QUERY_SUCCESS};
-use crate::parser::ast::{Var, VarPtr};
 use crate::parser::parser::{Parser, Tokens};
 use indexmap::IndexMap;
 
@@ -223,20 +222,11 @@ impl Machine {
             .unwrap();
 
         let var_names: IndexMap<_, _> = term
-            .var_locs
+            .inverse_var_locs
             .iter()
-            .map(|(var_loc, var_ptrs)| {
-                let var_loc = var_loc + heap_loc;
-                let cell = self.machine_st.heap[var_loc];
-                let var_ptr = var_ptrs.front().unwrap();
-
-                match &*var_ptr.borrow() {
-                    // NOTE: not the intention behind Var::InSitu here but
-                    // we can hijack it to store anonymous variables
-                    // without creating problems.
-                    Var::Anon => (cell, VarPtr::from(Var::InSitu(var_loc))),
-                    _ => (cell, var_ptr.clone()),
-                }
+            .map(|(var_loc, var)| {
+                let cell = term.heap[*var_loc];
+                (cell + heap_loc, var.clone())
             })
             .collect();
 

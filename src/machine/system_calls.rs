@@ -1466,7 +1466,10 @@ impl Machine {
                                 heap_loc_as_cell!(0),
                             );
 
-                            if (module_loc.is_var() || module_loc == atom_as_cell!(atom!("user"))) && arg_term.is_var() && supp_var.is_var() {
+                            if (module_loc.is_var() || module_loc == atom_as_cell!(atom!("user"))) &&
+                                arg_term.is_var() &&
+                                supp_var.is_var()
+                            {
                                 return arg_term == *supp_var;
                             }
 

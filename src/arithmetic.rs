@@ -7,6 +7,7 @@ use crate::debray_allocator::*;
 use crate::forms::*;
 use crate::instructions::*;
 use crate::iterators::*;
+use crate::machine::disjuncts::*;
 use crate::machine::stack::Stack;
 use crate::parser::ast::FocusedHeap;
 use crate::targets::QueryInstruction;
@@ -173,7 +174,7 @@ fn push_literal(interm: &mut Vec<ArithmeticTerm>, c: Literal) -> Result<(), Arit
         Literal::Atom(name) if name == atom!("epsilon") => interm.push(ArithmeticTerm::Number(
             Number::Float(OrderedFloat(f64::EPSILON)),
         )),
-        _ => return Err(ArithmeticError::NonEvaluableFunctor(c, 0)),
+        _ => return Err(ArithmeticError::NonEvaluableFunctor(HeapCellValue::from(c), 0)),
     }
 
     Ok(())
@@ -216,7 +217,7 @@ impl<'a> ArithmeticEvaluator<'a> {
             atom!("float_fractional_part") => Ok(Instruction::FloatFractionalPart(a1, t)),
             atom!("sign") => Ok(Instruction::Sign(a1, t)),
             atom!("\\") => Ok(Instruction::BitwiseComplement(a1, t)),
-            _ => Err(ArithmeticError::NonEvaluableFunctor(Literal::Atom(name), 1)),
+            _ => Err(ArithmeticError::NonEvaluableFunctor(atom_as_cell!(name), 1)),
         }
     }
 
@@ -248,7 +249,7 @@ impl<'a> ArithmeticEvaluator<'a> {
             atom!("rem") => Ok(Instruction::Rem(a1, a2, t)),
             atom!("gcd") => Ok(Instruction::Gcd(a1, a2, t)),
             atom!("atan2") => Ok(Instruction::ATan2(a1, a2, t)),
-            _ => Err(ArithmeticError::NonEvaluableFunctor(Literal::Atom(name), 2)),
+            _ => Err(ArithmeticError::NonEvaluableFunctor(atom_as_cell!(name), 2)),
         }
     }
 
@@ -304,7 +305,7 @@ impl<'a> ArithmeticEvaluator<'a> {
                 self.get_binary_instr(name, a1, a2, ninterm)
             }
             _ => Err(ArithmeticError::NonEvaluableFunctor(
-                Literal::Atom(name),
+                atom_as_cell!(name),
                 arity,
             )),
         }
@@ -321,30 +322,38 @@ impl<'a> ArithmeticEvaluator<'a> {
         let mut stack = Stack::uninitialized();
         let mut iter = query_iterator::<false>(&mut src.heap, &mut stack, term_loc);
 
+        let chunk_num = context.chunk_num();
+
         while let Some(term) = iter.next() {
             read_heap_cell!(term,
-                (HeapCellValueTag::AttrVar | HeapCellValueTag::Var, h) => {
+                (HeapCellValueTag::AttrVar | HeapCellValueTag::Var, term_loc) => {
                     let lvl = iter.level();
-                    let var_ptr = src.var_locs.read_next_var_ptr_at_key(h).unwrap();
-                    let var_num = var_ptr.to_var_num().unwrap();
-                    let old_r = self.marker.get_var_binding(var_num);
 
-                    let r = if lvl == Level::Root {
-                        self.marker.mark_non_callable(var_num, arg, context, &mut code)
-                    } else if context.is_last() || old_r.reg_num() == 0 {
-                        let r = old_r;
+                    let r = match self.marker.var_data.var_locs_to_nums.get(VarPtrIndex { chunk_num, term_loc }) {
+                        VarPtr::Numbered(var_num) => {
+                            let old_r = self.marker.get_var_binding(var_num);
 
-                        if r.reg_num() == 0 {
-                            self.marker.mark_var::<QueryInstruction>(
-                                var_num, lvl, context, &mut code,
-                            )
-                        } else {
-                            self.marker.increment_running_count(var_num);
-                            r
+                            if lvl == Level::Root {
+                                self.marker.mark_non_callable(var_num, arg, context, &mut code)
+                            } else if context.is_last() || old_r.reg_num() == 0 {
+                                let r = old_r;
+
+                                if r.reg_num() == 0 {
+                                    self.marker.mark_var::<QueryInstruction>(
+                                        var_num, lvl, context, &mut code,
+                                    )
+                                } else {
+                                    self.marker.increment_running_count(var_num);
+                                    r
+                                }
+                            } else {
+                                self.marker.increment_running_count(var_num);
+                                old_r
+                            }
                         }
-                    } else {
-                        self.marker.increment_running_count(var_num);
-                        old_r
+                        VarPtr::Anon => {
+                            self.marker.mark_anon_var::<QueryInstruction>(lvl, context, &mut code)
+                        }
                     };
 
                     self.interm.push(ArithmeticTerm::Reg(r));
@@ -359,7 +368,7 @@ impl<'a> ArithmeticEvaluator<'a> {
                 _ => {
                     match Literal::try_from(term) {
                         Ok(lit) => push_literal(&mut self.interm, lit)?,
-                        _ => unreachable!()
+                        _ => return Err(ArithmeticError::NonEvaluableFunctor(term, 0)),
                     }
                 }
             );
@@ -542,6 +551,7 @@ impl Div<Number> for Number {
     }
 }
 
+
 impl PartialEq for Number {
     fn eq(&self, rhs: &Self) -> bool {
         match (self, rhs) {
@@ -624,6 +634,7 @@ impl PartialOrd for Number {
         Some(self.cmp(rhs))
     }
 }
+
 
 impl Ord for Number {
     fn cmp(&self, rhs: &Number) -> Ordering {
