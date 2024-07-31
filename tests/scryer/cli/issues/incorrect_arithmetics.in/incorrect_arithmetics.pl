@@ -5,47 +5,45 @@
 :- use_module(library(format)).
 :- use_module(library(debug)).
 :- use_module(library(time)).
-
-:- dynamic(rznvivy/0).
+:- use_module(library(gensym)).
 
 % Asserting and consulting of erroneous arithmetic relation shall succeed,
 % but then it must fail at runtime.
 main :-
-    template_relation("ttftf", R),
-    ignore_exception(test(R, consult)),
-   %ignore_exception(test(R, assert)),
-    true.
+    template_relation("tttft", R),
+    load_test(assertz, R),
+    load_test(reconsult, R).
 
-test(Relation, TestVariant) :-
-    load_and_call(TestVariant, rznvivy/0, (rznvivy :- false, Relation), \+rznvivy).
-
-load_and_call(assert, PI, Clause, Query) :-
+load_test(Setup, Body) :-
+    portray_clause(start:Setup),
+    gensym(test, Test),
     setup_call_cleanup(
-        ignore_exception(assertz(Clause)),
-        callf(PI, Query),
-        $retract(Clause)
+        ignore_exception(call(Setup, (Test :- false, Body))),
+        (
+            (ignore_exception(listing(Test/0)),!;true),
+            \+ignore_exception(Test) -> Result = pass; Result = fail
+        ),
+        ignore_exception(retractall(Test))
+    ),
+    portray_clause(Result:Setup).
+
+reconsult(Clause) :-
+    Clause = (Head :- Body),
+    File = 'chnytjl.pl',
+    portray_consult(File, (canary :- Body)),
+    setup_call_cleanup(
+        assertz(Head),
+        portray_consult(File, Clause),
+        retract(Head)
     ).
-load_and_call(consult, PI, Clause, Query) :-
-    T = 'chnytjl.pl',
+
+portray_consult(File, Clause) :-
     setup_call_cleanup(
-        open(T, write, S),
+        open(File, write, S),
         portray_clause(S, Clause),
         close(S)
     ),
-    setup_call_cleanup(
-        ignore_exception(consult(T)),
-        callf(PI, Query),
-        $retract(Clause)
-    ).
-
-callf(PI, G_0) :-
-    clause(rznvivy, I),
-    I \= true,
-    always(ignore_exception(listing(PI))),
-    $G_0.
-
-always(G_0) :- call(G_0).
-always(_).
+    consult(File).
 
 template_relation(Template, R) :-
     time(setof(E, phrase(arith_relation(E), Template), Es)),
