@@ -12,7 +12,7 @@ pub(crate) trait Allocator {
         lvl: Level,
         context: GenContext,
         code: &mut CodeDeque,
-    );
+    ) -> RegType;
 
     fn mark_non_var<'a, Target: CompilationTarget<'a>>(
         &mut self,

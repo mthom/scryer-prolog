@@ -33,10 +33,12 @@ pub(crate) trait UnmarkPolicy {
     }
 }
 
+#[cfg(test)]
 pub(crate) struct IteratorUMP {
     mark_phase: bool,
 }
 
+#[cfg(test)]
 fn invert_marker<UMP: UnmarkPolicy>(iter: &mut StacklessPreOrderHeapIter<UMP>) {
     if iter.heap[iter.start].get_forwarding_bit() {
         while !iter.backward() {}
@@ -50,6 +52,7 @@ fn invert_marker<UMP: UnmarkPolicy>(iter: &mut StacklessPreOrderHeapIter<UMP>) {
     while iter.forward().is_some() {}
 }
 
+#[cfg(test)]
 impl UnmarkPolicy for IteratorUMP {
     #[inline(always)]
     fn forward_attr_var(iter: &mut StacklessPreOrderHeapIter<Self>) -> Option<HeapCellValue> {
@@ -150,8 +153,8 @@ impl<'a> StacklessPreOrderHeapIter<'a, MarkerUMP> {
     }
 }
 
+#[cfg(test)]
 impl<'a> StacklessPreOrderHeapIter<'a, IteratorUMP> {
-    #[cfg(test)]
     pub(crate) fn new(heap: &'a mut [HeapCellValue], start: usize) -> Self {
         heap[start].set_forwarding_bit(true);
         let next = heap[start].get_value();
