@@ -80,9 +80,34 @@ impl BranchNumber {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum ClassifiedVar {
+    Anon { term_loc: usize },
+    InSitu { var_num: usize },
+    Generated { term_loc: usize },
+}
+
+impl ClassifiedVar {
+    fn term_loc(&self) -> Option<usize> {
+        if let &ClassifiedVar::Generated { term_loc } = self {
+            Some(term_loc)
+        } else {
+            None
+        }
+    }
+}
+
+fn to_classified_var(inverse_var_locs: &InverseVarLocs, term_loc: usize) -> ClassifiedVar {
+    if inverse_var_locs.contains_key(&term_loc) {
+        ClassifiedVar::Generated { term_loc }
+    } else {
+        ClassifiedVar::Anon { term_loc }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct VarInfo {
-    var_ptr: VarPtr,
+    var: ClassifiedVar,
     chunk_type: ChunkType,
     classify_info: ClassifyInfo,
     lvl: Level,
@@ -90,7 +115,6 @@ pub struct VarInfo {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct ChunkInfo {
-    chunk_num: usize,
     term_loc: GenContext,
     // pointer to incidence, term occurrence arity.
     vars: Vec<VarInfo>,
@@ -111,7 +135,7 @@ impl BranchInfo {
     }
 }
 
-type BranchMapInt = IndexMap<VarPtr, Vec<BranchInfo>>;
+type BranchMapInt = IndexMap<ClassifiedVar, Vec<BranchInfo>>;
 
 #[derive(Debug, Clone)]
 pub struct BranchMap(BranchMapInt);
@@ -174,8 +198,6 @@ enum TraversalState {
 pub struct VariableClassifier {
     call_policy: CallPolicy,
     current_branch_num: BranchNumber,
-    current_chunk_num: usize,
-    current_chunk_type: ChunkType,
     branch_map: BranchMap,
     var_num: usize,
     root_set: RootSet,
@@ -183,11 +205,42 @@ pub struct VariableClassifier {
     global_cut_var_num_override: Option<usize>,
 }
 
+#[derive(Copy, Clone, Debug, Hash, PartialEq, Eq)]
+pub struct VarPtrIndex {
+    pub chunk_num: usize,
+    pub term_loc: usize,
+}
+
+#[derive(Debug)]
+pub enum VarPtr {
+    Numbered(usize),
+    Anon,
+}
+
+#[derive(Debug, Default)]
+pub struct VarLocsToNums {
+    map: IndexMap<VarPtrIndex, usize>,
+}
+
+impl VarLocsToNums {
+    pub fn insert(&mut self, key: VarPtrIndex, var_num: usize) {
+        self.map.insert(key, var_num);
+    }
+
+    pub fn get(&self, idx: VarPtrIndex) -> VarPtr {
+        self.map.get(&idx)
+            .cloned()
+            .map(VarPtr::Numbered)
+            .unwrap_or_else(|| VarPtr::Anon)
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct VarData {
     pub records: VariableRecords,
     pub global_cut_var_num: Option<usize>,
     pub allocates: bool,
+    pub var_locs_to_nums: VarLocsToNums,
 }
 
 impl VarData {
@@ -211,10 +264,13 @@ impl VarData {
 
             match build_stack.front_mut() {
                 Some(ChunkedTerms::Branch(_)) => {
-                    build_stack.push_front(ChunkedTerms::Chunk(VecDeque::from(vec![term])));
+                    build_stack.push_front(ChunkedTerms::Chunk {
+                        chunk_num: 0,
+                        terms: VecDeque::from(vec![term]),
+                    });
                 }
-                Some(ChunkedTerms::Chunk(chunk)) => {
-                    chunk.push_front(term);
+                Some(ChunkedTerms::Chunk { terms, .. }) => {
+                    terms.push_front(term);
                 }
                 None => {
                     unreachable!()
@@ -256,8 +312,6 @@ impl VariableClassifier {
         Self {
             call_policy,
             current_branch_num: BranchNumber::default(),
-            current_chunk_num: 0,
-            current_chunk_type: ChunkType::Head,
             branch_map: BranchMap(BranchMapInt::new()),
             root_set: RootSet::new(),
             var_num: 0,
@@ -276,7 +330,7 @@ impl VariableClassifier {
         Ok(self.branch_map.separate_and_classify_variables(
             self.var_num,
             self.global_cut_var_num,
-            self.current_chunk_num,
+            0,
         ))
     }
 
@@ -298,7 +352,7 @@ impl VariableClassifier {
         let mut var_data = self.branch_map.separate_and_classify_variables(
             self.var_num,
             self.global_cut_var_num,
-            self.current_chunk_num,
+            query_terms.current_chunk_num,
         );
 
         var_data.emit_initial_get_level(&mut query_terms);
@@ -327,32 +381,13 @@ impl VariableClassifier {
         }
     }
 
-    fn try_set_chunk_at_inlined_boundary(&mut self) -> bool {
-        if self.current_chunk_type.is_last() {
-            self.current_chunk_type = ChunkType::Mid;
-            self.current_chunk_num += 1;
-            true
-        } else {
-            false
-        }
-    }
-
-    fn try_set_chunk_at_call_boundary(&mut self) -> bool {
-        if self.current_chunk_type.is_last() {
-            self.current_chunk_num += 1;
-            true
-        } else {
-            self.current_chunk_type = ChunkType::Last;
-            false
-        }
-    }
-
     fn probe_body_term(
         &mut self,
         arg_c: usize,
         arity: usize,
         term: &mut FocusedHeap,
         term_loc: usize,
+        context: GenContext,
     ) {
         let classify_info = ClassifyInfo { arg_c, arity };
 
@@ -372,23 +407,24 @@ impl VariableClassifier {
             }
 
             let var_loc = subterm.get_value() as usize;
-            let var_ptr = term.var_locs.read_next_var_ptr_at_key(var_loc).unwrap();
+            let var = to_classified_var(&term.inverse_var_locs, var_loc);
 
-            self.probe_body_var(VarInfo {
-                var_ptr: var_ptr.clone(),
-                lvl,
-                classify_info,
-                chunk_type: self.current_chunk_type,
-            });
+            self.probe_body_var(
+                context,
+                VarInfo {
+                    var,
+                    lvl,
+                    classify_info,
+                    chunk_type: context.chunk_type(),
+                },
+            );
         }
     }
 
-    fn probe_body_var(&mut self, var_info: VarInfo) {
-        let term_loc = self
-            .current_chunk_type
-            .to_gen_context(self.current_chunk_num);
-
-        let branch_info_v = self.branch_map.entry(var_info.var_ptr.clone()).or_default();
+    fn probe_body_var(&mut self, context: GenContext, var_info: VarInfo) {
+        let chunk_num = context.chunk_num();
+        let branch_info_v = self.branch_map.entry(var_info.var)
+            .or_default();
 
         let needs_new_branch = if let Some(last_bi) = branch_info_v.last() {
             !self.root_set.contains(&last_bi.branch_num)
@@ -403,15 +439,14 @@ impl VariableClassifier {
         let branch_info = branch_info_v.last_mut().unwrap();
 
         let needs_new_chunk = if let Some(last_ci) = branch_info.chunks.last() {
-            last_ci.chunk_num != self.current_chunk_num
+            last_ci.term_loc.chunk_num() != chunk_num
         } else {
             true
         };
 
         if needs_new_chunk {
             branch_info.chunks.push(ChunkInfo {
-                chunk_num: self.current_chunk_num,
-                term_loc,
+                term_loc: context,
                 vars: vec![],
             });
         }
@@ -420,17 +455,17 @@ impl VariableClassifier {
         chunk_info.vars.push(var_info);
     }
 
-    fn probe_in_situ_var(&mut self, var_num: usize) {
+    fn probe_in_situ_var(&mut self, context: GenContext, var_num: usize) {
         let classify_info = ClassifyInfo { arg_c: 1, arity: 1 };
 
         let var_info = VarInfo {
-            var_ptr: VarPtr::from(Var::InSitu(var_num)),
+            var: ClassifiedVar::InSitu { var_num },
             classify_info,
-            chunk_type: self.current_chunk_type,
+            chunk_type: context.chunk_type(),
             lvl: Level::Shallow,
         };
 
-        self.probe_body_var(var_info);
+        self.probe_body_var(context, var_info);
     }
 
     fn classify_head_variables(
@@ -473,13 +508,13 @@ impl VariableClassifier {
                         continue;
                     }
 
-                    let h = subterm.get_value() as usize;
-                    let var_ptr = term.var_locs.read_next_var_ptr_at_key(h).unwrap().clone();
+                    let term_loc = subterm.get_value() as usize;
+                    let var = to_classified_var(&term.inverse_var_locs, term_loc);
 
                     // the body of the if let here is an inlined
                     // "probe_head_var". note the difference between it
                     // and "probe_body_var".
-                    let branch_info_v = self.branch_map.entry(var_ptr.clone()).or_default();
+                    let branch_info_v = self.branch_map.entry(var).or_default();
                     let needs_new_branch = branch_info_v.is_empty();
 
                     if needs_new_branch {
@@ -491,7 +526,6 @@ impl VariableClassifier {
 
                     if needs_new_chunk {
                         branch_info.chunks.push(ChunkInfo {
-                            chunk_num: self.current_chunk_num,
                             term_loc: GenContext::Head,
                             vars: vec![],
                         });
@@ -499,9 +533,9 @@ impl VariableClassifier {
 
                     let chunk_info = branch_info.chunks.last_mut().unwrap();
                     let var_info = VarInfo {
-                        var_ptr,
+                        var,
                         classify_info,
-                        chunk_type: self.current_chunk_type,
+                        chunk_type: ChunkType::Head,
                         lvl,
                     };
 
@@ -515,7 +549,7 @@ impl VariableClassifier {
         Ok(())
     }
 
-    fn new_cut_state(&mut self) -> TraversalState {
+    fn new_cut_state(&mut self, context: GenContext) -> TraversalState {
         let (var_num, is_global) = if let Some(var_num) = self.global_cut_var_num_override {
             (var_num, false)
         } else if let Some(var_num) = self.global_cut_var_num {
@@ -529,7 +563,7 @@ impl VariableClassifier {
             (var_num, true)
         };
 
-        self.probe_in_situ_var(var_num);
+        self.probe_in_situ_var(context, var_num);
 
         TraversalState::Cut { var_num, is_global }
     }
@@ -545,8 +579,6 @@ impl VariableClassifier {
             term_loc,
         }];
         let mut build_stack = ChunkedTermVec::new();
-
-        self.current_chunk_type = ChunkType::Mid;
 
         'outer: while let Some(traversal_st) = state_stack.pop() {
             match traversal_st {
@@ -568,21 +600,22 @@ impl VariableClassifier {
                 TraversalState::BuildDisjunct(preceding_len) => {
                     flatten_into_disjunct(&mut build_stack, preceding_len);
 
-                    self.current_chunk_type = ChunkType::Mid;
-                    self.current_chunk_num += 1;
+                    build_stack.current_chunk_type = ChunkType::Mid;
+                    build_stack.current_chunk_num += 1;
                 }
                 TraversalState::BuildFinalDisjunct(preceding_len) => {
                     flatten_into_disjunct(&mut build_stack, preceding_len);
 
-                    self.current_chunk_type = ChunkType::Mid;
-                    self.current_chunk_num += 1;
+                    build_stack.current_chunk_type = ChunkType::Mid;
+                    build_stack.current_chunk_num += 1;
                 }
                 TraversalState::GetCutPoint { var_num, prev_b } => {
-                    if self.try_set_chunk_at_inlined_boundary() {
+                    if build_stack.try_set_chunk_at_inlined_boundary() {
                         build_stack.add_chunk();
                     }
 
-                    self.probe_in_situ_var(var_num);
+                    let context = build_stack.current_gen_context();
+                    self.probe_in_situ_var(context, var_num);
                     build_stack.push_chunk_term(QueryTerm::GetCutPoint { var_num, prev_b });
                 }
                 TraversalState::OverrideGlobalCutVar(var_num) => {
@@ -592,11 +625,12 @@ impl VariableClassifier {
                     self.global_cut_var_num_override = old_override;
                 }
                 TraversalState::Cut { var_num, is_global } => {
-                    if self.try_set_chunk_at_inlined_boundary() {
+                    if build_stack.try_set_chunk_at_inlined_boundary() {
                         build_stack.add_chunk();
                     }
 
-                    self.probe_in_situ_var(var_num);
+                    let context = build_stack.current_gen_context();
+                    self.probe_in_situ_var(context, var_num);
 
                     build_stack.push_chunk_term(if is_global {
                         QueryTerm::GlobalCut(var_num)
@@ -608,11 +642,12 @@ impl VariableClassifier {
                     });
                 }
                 TraversalState::CutPrev(var_num) => {
-                    if self.try_set_chunk_at_inlined_boundary() {
+                    if build_stack.try_set_chunk_at_inlined_boundary() {
                         build_stack.add_chunk();
                     }
 
-                    self.probe_in_situ_var(var_num);
+                    let context = build_stack.current_gen_context();
+                    self.probe_in_situ_var(context, var_num);
 
                     build_stack.push_chunk_term(QueryTerm::LocalCut {
                         var_num,
@@ -630,24 +665,26 @@ impl VariableClassifier {
                     mut term_loc,
                 } => {
                     // return true iff new chunk should be added.
-                    let update_chunk_data = |classifier: &mut Self, key: PredicateKey| {
+                    let update_chunk_data = |build_stack: &mut ChunkedTermVec, key: PredicateKey| {
                         if ClauseType::is_inlined(key.0, key.1) {
-                            classifier.try_set_chunk_at_inlined_boundary()
+                            build_stack.try_set_chunk_at_inlined_boundary()
                         } else {
-                            classifier.try_set_chunk_at_call_boundary()
+                            build_stack.try_set_chunk_at_call_boundary()
                         }
                     };
 
                     macro_rules! add_chunk {
-                        ($classifier:ident, $key:expr, $tag:expr, $term_loc:expr) => {{
-                            if update_chunk_data($classifier, $key) {
+                        ($key:expr, $tag:expr, $term_loc:expr) => {{
+                            if update_chunk_data(&mut build_stack, $key) {
                                 build_stack.add_chunk();
                             }
+
+                            let context = build_stack.current_gen_context();
 
                             for (arg_c, term_loc) in
                                 ($term_loc + 1 ..= $term_loc + $key.1).enumerate()
                             {
-                                $classifier.probe_body_term(arg_c + 1, $key.1, terms, term_loc);
+                                self.probe_body_term(arg_c + 1, $key.1, terms, term_loc, context);
                             }
 
                             build_stack.push_chunk_term(QueryTerm::Clause(clause_to_query_term(
@@ -655,21 +692,23 @@ impl VariableClassifier {
                                 $key,
                                 terms.as_ref_mut($term_loc),
                                 HeapCellValue::build_with($tag, $term_loc as u64),
-                                $classifier.call_policy,
+                                self.call_policy,
                             )));
                         }};
                     }
 
                     macro_rules! add_qualified_chunk {
-                        ($classifier:ident, $module_name:expr, $key:expr, $tag:expr, $term_loc:expr) => {{
-                            if update_chunk_data($classifier, $key) {
+                        ($module_name:expr, $key:expr, $tag:expr, $term_loc:expr) => {{
+                            if update_chunk_data(&mut build_stack, $key) {
                                 build_stack.add_chunk();
                             }
+
+                            let context = build_stack.current_gen_context();
 
                             for (arg_c, term_loc) in
                                 ($term_loc + 1..$term_loc + $key.1 + 1).enumerate()
                             {
-                                $classifier.probe_body_term(arg_c + 1, $key.1, terms, term_loc);
+                                self.probe_body_term(arg_c + 1, $key.1, terms, term_loc, context);
                             }
 
                             build_stack.push_chunk_term(QueryTerm::Clause(
@@ -679,7 +718,7 @@ impl VariableClassifier {
                                     $module_name,
                                     terms.as_ref_mut($term_loc),
                                     HeapCellValue::build_with($tag, $term_loc as u64),
-                                    $classifier.call_policy,
+                                    self.call_policy,
                                 ),
                             ));
                         }};
@@ -698,7 +737,7 @@ impl VariableClassifier {
                                             continue;
                                         }
 
-                                        add_chunk!(self, (name, 2), HeapCellValueTag::Str, subterm_loc);
+                                        add_chunk!((name, 2), HeapCellValueTag::Str, subterm_loc);
                                     }
                                     (atom!(","), 2) => {
                                         let head_loc = terms.nth_arg(subterm_loc, 1).unwrap();
@@ -764,8 +803,8 @@ impl VariableClassifier {
                                                 TraversalState::BuildFinalDisjunct(build_stack_len);
                                         }
 
-                                        self.current_chunk_type = ChunkType::Mid;
-                                        self.current_chunk_num += 1;
+                                        build_stack.current_chunk_type = ChunkType::Mid;
+                                        build_stack.current_chunk_num += 1;
                                     }
                                     (atom!("->"), 2) => {
                                         let if_term_loc = terms.nth_arg(subterm_loc, 1).unwrap();
@@ -841,8 +880,8 @@ impl VariableClassifier {
                                         });
                                         state_stack.push(TraversalState::AddBranchNum(branch_num));
 
-                                        self.current_chunk_type = ChunkType::Mid;
-                                        self.current_chunk_num += 1;
+                                        build_stack.current_chunk_type = ChunkType::Mid;
+                                        build_stack.current_chunk_num += 1;
 
                                         self.var_num += 1;
                                     }
@@ -862,7 +901,6 @@ impl VariableClassifier {
                                                                 .get_name_and_arity();
 
                                                             add_qualified_chunk!(
-                                                                self,
                                                                 module_name,
                                                                 key,
                                                                 HeapCellValueTag::Str,
@@ -874,7 +912,6 @@ impl VariableClassifier {
                                                             let key = (predicate_name, predicate_arity);
 
                                                             add_qualified_chunk!(
-                                                                self,
                                                                 module_name,
                                                                 key,
                                                                 HeapCellValueTag::Str,
@@ -890,12 +927,14 @@ impl VariableClassifier {
                                             _ => {}
                                         );
 
-                                        if update_chunk_data(self, (atom!("call"), 2)) {
+                                        if update_chunk_data(&mut build_stack, (atom!("call"), 2)) {
                                             build_stack.add_chunk();
                                         }
 
-                                        self.probe_body_term(1, 0, terms, module_name_loc);
-                                        self.probe_body_term(2, 0, terms, predicate_term_loc);
+                                        let context = build_stack.current_gen_context();
+
+                                        self.probe_body_term(1, 0, terms, module_name_loc, context);
+                                        self.probe_body_term(2, 0, terms, predicate_term_loc, context);
 
                                         let h = terms.heap.len();
 
@@ -920,7 +959,7 @@ impl VariableClassifier {
                                         self.call_policy = CallPolicy::Counted;
                                     }
                                     (name, arity) => {
-                                        add_chunk!(self, (name, arity), HeapCellValueTag::Str, subterm_loc);
+                                        add_chunk!((name, arity), HeapCellValueTag::Str, subterm_loc);
                                     }
                                 }
                             }
@@ -928,14 +967,16 @@ impl VariableClassifier {
                                 debug_assert_eq!(arity, 0);
 
                                 if name == atom!("!") {
-                                    state_stack.push(self.new_cut_state());
+                                    let context = build_stack.current_gen_context();
+                                    state_stack.push(self.new_cut_state(context));
                                 } else {
-                                    add_chunk!(self, (name, 0), HeapCellValueTag::Var, term_loc);
+                                    add_chunk!((name, 0), HeapCellValueTag::Var, term_loc);
                                 }
                             }
                             (HeapCellValueTag::Char, c) => {
                                 if c == '!' {
-                                    state_stack.push(self.new_cut_state());
+                                    let context = build_stack.current_gen_context();
+                                    state_stack.push(self.new_cut_state(context));
                                 } else {
                                     return Err(CompilationError::InadmissibleQueryTerm);
                                 }
@@ -947,7 +988,7 @@ impl VariableClassifier {
                                     continue;
                                 }
 
-                                add_chunk!(self, (atom!("call"), 1), HeapCellValueTag::Var, h);
+                                add_chunk!((atom!("call"), 1), HeapCellValueTag::Var, h);
                             }
                             _ => {
                                 return Err(CompilationError::InadmissibleQueryTerm);
@@ -975,13 +1016,13 @@ impl BranchMap {
             records: VariableRecords::new(var_num),
             global_cut_var_num,
             allocates: current_chunk_num > 0,
+            var_locs_to_nums: VarLocsToNums::default(),
         };
 
         for (var, branches) in self.iter_mut() {
-            let (mut var_num, var_num_incr) = if let Var::InSitu(var_num) = *var.borrow() {
-                (var_num, false)
-            } else {
-                (var_data.records.len(), true)
+            let (mut var_num, var_num_incr) = match var {
+                &ClassifiedVar::InSitu { var_num} => (var_num, false),
+                _ => (var_data.records.len(), true)
             };
 
             for branch in branches.iter_mut() {
@@ -999,10 +1040,13 @@ impl BranchMap {
 
                     for var_info in chunk.vars.iter_mut() {
                         if var_info.lvl == Level::Shallow {
-                            let term_loc = var_info.chunk_type.to_gen_context(chunk.chunk_num);
+                            let context = var_info
+                                .chunk_type
+                                .to_gen_context(chunk.term_loc.chunk_num());
+
                             temp_var_data
                                 .use_set
-                                .insert((term_loc, var_info.classify_info.arg_c));
+                                .insert((context, var_info.classify_info.arg_c));
                         }
                     }
 
@@ -1018,9 +1062,13 @@ impl BranchMap {
                 for chunk in branch.chunks.iter_mut() {
                     var_data.records[var_num].num_occurrences += chunk.vars.len();
 
-                    for var_info in chunk.vars.iter_mut() {
-                        let is_anon = var_info.var_ptr.is_anon();
-                        var_info.var_ptr.set(Var::Generated { is_anon, var_num });
+                    if let Some(term_loc) = var.term_loc() {
+                        let chunk_num = chunk.term_loc.chunk_num();
+
+                        var_data.var_locs_to_nums.insert(
+                            VarPtrIndex { chunk_num, term_loc },
+                            var_num,
+                        );
                     }
                 }
             }

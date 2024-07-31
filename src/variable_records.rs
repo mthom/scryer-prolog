@@ -1,4 +1,5 @@
 use crate::parser::ast::*;
+use crate::forms::GenContext;
 
 use bit_set::*;
 use fxhash::FxBuildHasher;

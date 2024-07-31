@@ -52,15 +52,15 @@ impl FocusedHeap {
         let heap_len = machine_st.heap.len();
         machine_st.heap.extend(copy_and_align_iter(self.heap.drain(..), 0, heap_len as i64));
 
-        let mut var_locs = VarLocs::default();
+        let mut inverse_var_locs = InverseVarLocs::default();
 
-        for (var_loc, var_ptrs) in self.var_locs.drain(..) {
-            var_locs.insert(var_loc + heap_len, var_ptrs);
+        for (var_loc, var_name) in self.inverse_var_locs.drain(..) {
+            inverse_var_locs.insert(var_loc + heap_len, var_name);
         }
 
         TermWriteResult {
             heap_loc: self.focus + heap_len,
-            var_locs,
+            inverse_var_locs,
         }
     }
 }
@@ -309,5 +309,5 @@ impl CharRead for ReadlineStream {
 #[derive(Debug)]
 pub struct TermWriteResult {
     pub heap_loc: usize,
-    pub var_locs: VarLocs,
+    pub inverse_var_locs: InverseVarLocs,
 }

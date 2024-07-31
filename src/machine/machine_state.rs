@@ -22,6 +22,7 @@ use indexmap::IndexMap;
 use std::convert::TryFrom;
 use std::fmt;
 use std::ops::{Index, IndexMut};
+use std::rc::Rc;
 use std::sync::Arc;
 
 pub(crate) type Registers = [HeapCellValue; MAX_ARITY + 1];
@@ -202,13 +203,13 @@ pub fn pstr_loc_and_offset(heap: &[HeapCellValue], index: usize) -> (usize, Fixn
 
 fn push_var_eq_functors(
     heap: &mut Heap,
-    iter: impl Iterator<Item = (usize, VarPtr)>, // (&'a VarPtr, &'a HeapCellValue)>,
+    iter: impl Iterator<Item = (usize, Var)>,
     atom_tbl: &AtomTable,
 ) -> Vec<HeapCellValue> {
     let mut list_of_var_eqs = vec![];
 
-    for (var_loc, var_ptr) in iter { // (var, binding) in iter {
-        let var_atom = AtomTable::build_with(atom_tbl, &*var_ptr.borrow().to_string());
+    for (var_loc, var) in iter { // (var, binding) in iter {
+        let var_atom = AtomTable::build_with(atom_tbl, &var.to_string());
         let h = heap.len();
         let binding = heap[var_loc];
 
@@ -541,20 +542,15 @@ impl MachineState {
 
     pub fn write_read_term_options(
         &mut self,
-        mut var_list: Vec<(VarPtr, HeapCellValue, usize)>,
+        mut var_list: Vec<(Var, HeapCellValue, usize)>,
         singleton_var_list: Vec<HeapCellValue>,
     ) -> CallResult {
         var_list.sort_by(|(_, _, idx_1), (_, _, idx_2)| idx_1.cmp(idx_2));
 
         let list_of_var_eqs = push_var_eq_functors(
             &mut self.heap,
-            var_list.iter().filter_map(|(var_ptr, var, _)| {
-                if var_ptr.is_anon() {
-                    None
-                } else {
-                    let var_loc = var.get_value() as usize;
-                    Some((var_loc, var_ptr.clone()))
-                }
+            var_list.iter().map(|(var_name, var, _)| {
+                (var.get_value() as usize, var_name.clone())
             }),
             &self.atom_tbl,
         );
@@ -630,20 +626,14 @@ impl MachineState {
 
         let singleton_var_list = push_var_eq_functors(
             &mut self.heap,
-            term.var_locs
+            term.inverse_var_locs
                 .iter()
-                .filter_map(|(var_loc, var_ptrs)| {
-                    let var_ptr = var_ptrs.front().unwrap();
-
-                    if var_ptr.is_anon() {
-                        return None;
-                    }
-
+                .filter_map(|(var_loc, var_name)| {
                     // add h to offset the term variable into its heap location.
-                    let r = Ref::heap_cell(var_loc);
+                    let r = Ref::heap_cell(*var_loc);
 
                     if singleton_var_set.get(&r).cloned().unwrap_or(false) {
-                        Some((var_loc, var_ptr.clone()))
+                        Some((*var_loc, var_name.clone()))
                     } else {
                         None
                     }
@@ -659,13 +649,12 @@ impl MachineState {
 
         let mut var_list = Vec::with_capacity(singleton_var_set.len());
 
-        for (var_loc, var_ptrs) in term.var_locs.iter() {
-            let var_ptr = var_ptrs.front().unwrap().clone();
+        for (var_loc, var_name) in term.inverse_var_locs {
             let r = Ref::heap_cell(var_loc);
             let cell = self.heap[var_loc];
 
             if let Some(idx) = singleton_var_set.get_index_of(&r) {
-                var_list.push((var_ptr, cell, idx));
+                var_list.push((var_name, cell, idx));
             }
         }
 
@@ -787,7 +776,7 @@ impl MachineState {
 
         let printer = match self.try_from_list(self.registers[6], stub_gen) {
             Ok(addrs) => {
-                let mut var_names: IndexMap<HeapCellValue, VarPtr> = IndexMap::new();
+                let mut var_names: IndexMap<HeapCellValue, Var> = IndexMap::new();
 
                 for addr in addrs {
                     read_heap_cell!(addr,
@@ -805,18 +794,18 @@ impl MachineState {
 
                                 read_heap_cell!(atom,
                                     (HeapCellValueTag::Char, c) => {
-                                        var_names.insert(var, VarPtr::from(c.to_string()));
+                                        var_names.insert(var, Rc::new(c.to_string()));
                                     }
                                     (HeapCellValueTag::Atom, (name, _arity)) => {
                                         debug_assert_eq!(_arity, 0);
-                                        var_names.insert(var, VarPtr::from(&*name.as_str()));
+                                        var_names.insert(var, Rc::new(name.as_str().to_owned()));
                                     }
                                     (HeapCellValueTag::Str, s) => {
                                         let (name, arity) = cell_as_atom_cell!(self.heap[s])
                                             .get_name_and_arity();
 
                                         debug_assert_eq!(arity, 0);
-                                        var_names.insert(var, VarPtr::from(&*name.as_str()));
+                                        var_names.insert(var, Rc::new(name.as_str().to_owned()));
                                     }
                                     _ => {
                                         unreachable!();
