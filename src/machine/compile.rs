@@ -2283,40 +2283,36 @@ impl Machine {
         term_reg: RegType,
         vars: Vec<HeapCellValue>,
     ) -> Result<(), SessionError> {
-        let cell = self.machine_st.store(self.machine_st.deref(self.machine_st[term_reg]));
-
-        // append the variables of vars.
-        let focus      = cell.get_value() as usize;
-        let header_loc = term_nth_arg(&self.machine_st.heap, focus, 0).unwrap();
-        let name       = term_name(&self.machine_st.heap, header_loc).unwrap();
-        let old_arity  = term_arity(&self.machine_st.heap, header_loc);
+        let body_cell = self.machine_st.store(self.machine_st.deref(self.machine_st[term_reg]));
 
         let new_header_loc = self.machine_st.heap.len();
-        let new_arity = old_arity + vars.len();
+        let arity = vars.len();
 
-        self.machine_st.heap.push(atom_as_cell!(name, new_arity));
-
-        for idx in header_loc + 1 .. header_loc + 1 + old_arity {
-            self.machine_st.heap.push(self.machine_st.heap[idx]);
-        }
+        self.machine_st.heap.push(atom_as_cell!(atom!(""), arity));
 
         for var in vars {
             self.machine_st.heap.push(var);
         }
 
-        let value = if new_arity > 0 {
+        let head_loc = if arity > 0 {
             str_loc_as_cell!(new_header_loc)
         } else {
             heap_loc_as_cell!(new_header_loc)
         };
 
-        let mut compile = |cell| {
+        let term_loc = self.machine_st.heap.len();
+
+        self.machine_st.heap.push(atom_as_cell!(atom!(":-"), 2));
+        self.machine_st.heap.push(head_loc);
+        self.machine_st.heap.push(body_cell);
+
+        let mut compile = || {
             use crate::heap_iter::eager_stackful_preorder_iter;
 
             let mut loader: Loader<'_, InlineLoadState<'_>> =
                 Loader::new(self, InlineTermStream {});
 
-            let mut term = loader.copy_term_from_heap(cell);
+            let mut term = loader.copy_term_from_heap(str_loc_as_cell!(term_loc));
 
             let settings = CodeGenSettings {
                 global_clock_tick: None,
@@ -2326,14 +2322,14 @@ impl Machine {
 
             let value = term.heap[term.focus];
 
-            term.var_locs = var_locs_from_iter(
+            term.inverse_var_locs = inverse_var_locs_from_iter(
                 eager_stackful_preorder_iter(&mut term.heap, value),
             );
 
             loader.compile_standalone_clause(term, settings)
         };
 
-        let StandaloneCompileResult { clause_code, .. } = compile(value)?;
+        let StandaloneCompileResult { clause_code, .. } = compile()?;
         self.code.extend(clause_code);
 
         Ok(())

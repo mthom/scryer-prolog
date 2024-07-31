@@ -472,8 +472,8 @@ impl MachineState {
     fn arithmetic_error(&mut self, err: ArithmeticError) -> MachineError {
         match err {
             ArithmeticError::UninstantiatedVar => self.instantiation_error(),
-            ArithmeticError::NonEvaluableFunctor(literal, arity) => {
-                let culprit = functor!(atom!("/"), [literal(literal), fixnum(arity)]);
+            ArithmeticError::NonEvaluableFunctor(cell, arity) => {
+                let culprit = functor!(atom!("/"), [cell(cell), fixnum(arity)]);
 
                 self.type_error(ValidType::Evaluable, culprit)
             }

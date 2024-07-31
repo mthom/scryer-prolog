@@ -1,9 +1,9 @@
 use crate::allocator::*;
 use crate::atom_table::*;
 use crate::codegen::SubsumedBranchHits;
-use crate::forms::Level;
+use crate::forms::{GenContext, Level};
 use crate::instructions::*;
-use crate::machine::disjuncts::VarData;
+use crate::machine::disjuncts::*;
 use crate::machine::heap::{heap_bound_deref, heap_bound_store};
 use crate::parser::ast::*;
 use crate::targets::*;
@@ -556,7 +556,10 @@ impl DebrayAllocator {
             VarAlloc::Temp { safety, .. } => {
                 *safety = VarSafetyStatus::unneeded(branch_designator);
             }
-            _ => unreachable!(),
+            _ => {
+                // the (permanent) variable might have been freed by
+                // this point, in which case we do nothing.
+            }
         }
     }
 
@@ -703,7 +706,7 @@ impl Allocator for DebrayAllocator {
         lvl: Level,
         context: GenContext,
         code: &mut CodeDeque,
-    ) {
+    ) -> RegType {
         let r = RegType::Temp(self.alloc_reg_to_non_var());
 
         match lvl {
@@ -720,6 +723,8 @@ impl Allocator for DebrayAllocator {
                 code.push_back(Target::argument_to_variable(r, k));
             }
         };
+
+        r
     }
 
     fn mark_non_var<'a, Target: CompilationTarget<'a>>(
@@ -934,17 +939,23 @@ impl Allocator for DebrayAllocator {
                             continue;
                         }
 
-                        let h = var.get_value() as usize;
-                        let var_ptr = term.var_locs.peek_next_var_ptr_at_key(h).unwrap();
-                        let var_num = var_ptr.to_var_num().unwrap();
-                        let r = self.get_var_binding(var_num);
+                        let term_loc = var.get_value() as usize;
 
-                        if !r.is_perm() && r.reg_num() == 0 {
-                            self.in_use.insert(idx + 1);
-                            self.shallow_temp_mappings.insert(idx + 1, var_num);
-                            self.var_data.records[var_num]
-                                .allocation
-                                .set_register(idx + 1);
+                        match self.var_data.var_locs_to_nums.get(
+                            VarPtrIndex { chunk_num: 0, term_loc },
+                        ) {
+                            VarPtr::Numbered(var_num) => {
+                                let r = self.get_var_binding(var_num);
+
+                                if !r.is_perm() && r.reg_num() == 0 {
+                                    self.in_use.insert(idx + 1);
+                                    self.shallow_temp_mappings.insert(idx + 1, var_num);
+                                    self.var_data.records[var_num]
+                                        .allocation
+                                        .set_register(idx + 1);
+                                }
+                            }
+                            VarPtr::Anon => {}
                         }
                     }
                 }
