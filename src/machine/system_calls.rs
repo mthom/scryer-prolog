@@ -24,7 +24,6 @@ use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
 use crate::machine::machine_state::*;
 use crate::machine::partial_string::*;
-use crate::machine::preprocessor::to_op_decl;
 use crate::machine::stack::*;
 use crate::machine::streams::*;
 use crate::machine::{get_structure_index, Machine, VERIFY_ATTR_INTERRUPT_LOC};
@@ -102,6 +101,8 @@ use warp::hyper::{HeaderMap, Method};
 use warp::{Buf, Filter};
 
 use super::libraries;
+use super::preprocessor::to_op_decl;
+use super::preprocessor::to_op_decl_spec;
 
 #[cfg(feature = "repl")]
 pub(crate) fn get_key() -> KeyEvent {
@@ -3987,19 +3988,6 @@ impl Machine {
     pub(crate) fn get_next_op_db_ref(&mut self) {
         let prec = self.deref_register(1);
 
-        fn get_spec(op_spec: u8) -> Atom {
-            match op_spec as u32 {
-                XFX => atom!("xfx"),
-                XFY => atom!("xfy"),
-                YFX => atom!("yfx"),
-                FX => atom!("fx"),
-                FY => atom!("fy"),
-                XF => atom!("xf"),
-                YF => atom!("yf"),
-                _ => unreachable!(),
-            }
-        }
-
         let h = self.machine_st.heap.len();
 
         fn write_op_functors_to_heap(
@@ -4016,7 +4004,7 @@ impl Machine {
                     continue;
                 }
 
-                let spec_atom = get_spec(op_desc.get_spec());
+                let spec_atom = op_desc.get_spec().get_spec();
 
                 heap.extend(functor!(
                     atom!("op"),
@@ -4038,17 +4026,14 @@ impl Machine {
             let orig_op = self.deref_register(3);
 
             let spec_num = if spec.get_tag() == HeapCellValueTag::Atom {
-                (match cell_as_atom!(spec) {
-                    atom!("xfx") => XFX,
-                    atom!("xfy") => XFY,
-                    atom!("yfx") => YFX,
-                    atom!("fx") => FX,
-                    atom!("fy") => FY,
-                    atom!("xf") => XF,
-                    _ => unreachable!(),
-                }) as u8
+                Some(
+                    OpDeclSpec::try_from(cell_as_atom!(spec))
+                        .ok()
+                        .filter(|spec| matches!(spec, XFX | XFY | YFX | FX | FY | XF))
+                        .expect("we should only get valid values != YF here"),
+                )
             } else {
-                0
+                None
             };
 
             let num_functors = if !orig_op.is_var() {
@@ -4111,7 +4096,7 @@ impl Machine {
                     }
 
                     if (!orig_op.is_var() && atom_as_cell!(name) != orig_op)
-                        || (!spec.is_var() && other_spec != spec_num)
+                        || (!spec.is_var() && Some(other_spec) != spec_num)
                     {
                         return None;
                     }
@@ -5051,8 +5036,9 @@ impl Machine {
             }
         );
 
-        let result = to_op_decl(priority, specifier, op)
+        let result = to_op_decl_spec(specifier)
             .map_err(SessionError::from)
+            .map(|specifier| to_op_decl(priority, specifier, op))
             .and_then(|mut op_decl| {
                 if op_decl.op_desc.get_prec() == 0 {
                     op_decl.remove(&mut self.indices.op_dir);

@@ -264,11 +264,11 @@ mod tests {
         let mut wam = MachineState::new();
         let mut op_dir = default_op_dir();
 
-        op_dir.insert((atom!("+"), Fixity::In), OpDesc::build_with(500, YFX as u8));
-        op_dir.insert((atom!("-"), Fixity::In), OpDesc::build_with(500, YFX as u8));
-        op_dir.insert((atom!("*"), Fixity::In), OpDesc::build_with(500, YFX as u8));
-        op_dir.insert((atom!("/"), Fixity::In), OpDesc::build_with(400, YFX as u8));
-        op_dir.insert((atom!("="), Fixity::In), OpDesc::build_with(700, XFX as u8));
+        op_dir.insert((atom!("+"), Fixity::In), OpDesc::build_with(500, YFX));
+        op_dir.insert((atom!("-"), Fixity::In), OpDesc::build_with(500, YFX));
+        op_dir.insert((atom!("*"), Fixity::In), OpDesc::build_with(500, YFX));
+        op_dir.insert((atom!("/"), Fixity::In), OpDesc::build_with(400, YFX));
+        op_dir.insert((atom!("="), Fixity::In), OpDesc::build_with(700, XFX));
 
         {
             parse_and_write_parsed_term_to_heap(&mut wam, "f(X,X).", &op_dir).unwrap();
@@ -485,10 +485,10 @@ mod tests {
         let mut wam = MachineState::new();
         let mut op_dir = default_op_dir();
 
-        op_dir.insert((atom!("+"), Fixity::In), OpDesc::build_with(500, YFX as u8));
-        op_dir.insert((atom!("-"), Fixity::In), OpDesc::build_with(500, YFX as u8));
-        op_dir.insert((atom!("*"), Fixity::In), OpDesc::build_with(400, YFX as u8));
-        op_dir.insert((atom!("/"), Fixity::In), OpDesc::build_with(400, YFX as u8));
+        op_dir.insert((atom!("+"), Fixity::In), OpDesc::build_with(500, YFX));
+        op_dir.insert((atom!("-"), Fixity::In), OpDesc::build_with(500, YFX));
+        op_dir.insert((atom!("*"), Fixity::In), OpDesc::build_with(400, YFX));
+        op_dir.insert((atom!("/"), Fixity::In), OpDesc::build_with(400, YFX));
 
         {
             parse_and_write_parsed_term_to_heap(&mut wam, "f(X,X).", &op_dir).unwrap();

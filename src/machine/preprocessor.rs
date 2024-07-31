@@ -11,18 +11,12 @@ use indexmap::IndexSet;
 
 use std::cell::Cell;
 use std::convert::TryFrom;
+pub(crate) fn to_op_decl(prec: u16, spec: OpDeclSpec, name: Atom) -> OpDecl {
+    OpDecl::new(OpDesc::build_with(prec, spec), name)
+}
 
-pub(crate) fn to_op_decl(prec: u16, spec: Atom, name: Atom) -> Result<OpDecl, CompilationError> {
-    match spec {
-        atom!("xfx") => Ok(OpDecl::new(OpDesc::build_with(prec, XFX as u8), name)),
-        atom!("xfy") => Ok(OpDecl::new(OpDesc::build_with(prec, XFY as u8), name)),
-        atom!("yfx") => Ok(OpDecl::new(OpDesc::build_with(prec, YFX as u8), name)),
-        atom!("fx") => Ok(OpDecl::new(OpDesc::build_with(prec, FX as u8), name)),
-        atom!("fy") => Ok(OpDecl::new(OpDesc::build_with(prec, FY as u8), name)),
-        atom!("xf") => Ok(OpDecl::new(OpDesc::build_with(prec, XF as u8), name)),
-        atom!("yf") => Ok(OpDecl::new(OpDesc::build_with(prec, YF as u8), name)),
-        _ => Err(CompilationError::InconsistentEntry),
-    }
+pub(crate) fn to_op_decl_spec(spec: Atom) -> Result<OpDeclSpec, CompilationError> {
+    OpDeclSpec::try_from(spec).map_err(|_err| CompilationError::InconsistentEntry)
 }
 
 fn setup_op_decl(mut terms: Vec<Term>, atom_tbl: &AtomTable) -> Result<OpDecl, CompilationError> {
@@ -38,6 +32,8 @@ fn setup_op_decl(mut terms: Vec<Term>, atom_tbl: &AtomTable) -> Result<OpDecl, C
         _ => return Err(CompilationError::InconsistentEntry),
     };
 
+    let spec = to_op_decl_spec(spec)?;
+
     let prec = match terms.pop().unwrap() {
         Term::Literal(_, Literal::Fixnum(bi)) => match u16::try_from(bi.get_num()) {
             Ok(n) if n <= 1200 => n,
@@ -46,7 +42,7 @@ fn setup_op_decl(mut terms: Vec<Term>, atom_tbl: &AtomTable) -> Result<OpDecl, C
         _ => return Err(CompilationError::InconsistentEntry),
     };
 
-    to_op_decl(prec, spec, name)
+    Ok(to_op_decl(prec, spec, name))
 }
 
 fn setup_predicate_indicator(term: &mut Term) -> Result<PredicateKey, CompilationError> {
