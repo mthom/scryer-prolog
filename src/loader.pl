@@ -43,7 +43,7 @@ maplistdif(G__2, [H1|T1], [H2|T2], L0-LX) :-
     call(G__2, H1, H2, L0-L1),
     maplistdif(G__2, T1, T2, L1-LX).
 
-%% arithmetic_expansion(+Type, Term, -ExpandedTerm, -Unifier-Rest).
+%% arithmetic_expansion(+Type, ?Term, -ExpandedTerm, -Unifier-Rest).
 %
 % `ExpandedTerm` is the minimal generalization of `Term` which makes a valid
 % arithmetic relation (`Type = rela`) or functional expression (`Type = func`).
