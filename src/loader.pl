@@ -49,8 +49,8 @@ maplistdif(G__2, [H1|T1], [H2|T2], L0-LX) :-
 % arithmetic relation (`Type = rela`) or functional expression (`Type = func`).
 % That means if all unifications from `Unifier` hold then `ExpandedTerm == Term`.
 % `Unifier-Rest` form together a list difference. `Term` is traversed from left
-% to right, depth-first. As seen in example bellow: given an invalid arithmetic
-% term, `E` becomes valid arithmetic term, `L` - unifier:
+% to right, depth-first. Given an invalid arithmetic term, as seen in the
+% example below, `E` becomes valid arithmetic term, `L` - unifier:
 %
 % ```
 % ?- arithmetic_expansion(rela, X is sqrt([]+Y*foo(e/2)), E, L-[]).
