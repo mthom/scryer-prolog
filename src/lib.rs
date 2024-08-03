@@ -56,3 +56,34 @@ pub fn eval_code(s: &str) -> String {
     let bytes = wam.test_load_string(s);
     String::from_utf8_lossy(&bytes).to_string()
 }
+
+#[cfg(not(target_arch = "wasm32"))]
+use std::ffi::{c_char, CStr, CString};
+
+#[cfg(not(target_arch = "wasm32"))]
+#[no_mangle]
+pub extern "C" fn eval_code_c(input: *const c_char) -> *mut c_char {
+    use machine::mock_wam::*;
+
+    let c_str = unsafe {
+        assert!(!input.is_null());
+        CStr::from_ptr(input)
+    };
+    let r_str = c_str.to_str().expect("Not a valid UTF-8 string");
+
+    let mut wam = Machine::with_test_streams();
+    let bytes = wam.test_load_string(r_str);
+    let result_str = String::from_utf8_lossy(&bytes).to_string();
+
+    let c_string = CString::new(result_str).expect("Failed to convert to CString");
+    c_string.into_raw() // convert to raw pointer and prevent Rust from cleaning it up
+}
+#[no_mangle]
+pub extern "C" fn free_c_string(ptr: *mut c_char) {
+    unsafe {
+        if ptr.is_null() {
+            return;
+        }
+        let _ = CString::from_raw(ptr);
+    };
+}
