@@ -707,7 +707,7 @@ pub(crate) fn remove_constant_indices(
                         Some(IndexingCodePtr::DynamicExternal(_))
                         | Some(IndexingCodePtr::External(_))
                         | Some(IndexingCodePtr::Fail) => {
-                            constants.remove(&constant);
+                            constants.swap_remove(&constant);
                             break;
                         }
                         Some(IndexingCodePtr::Internal(o)) => {
@@ -846,7 +846,7 @@ pub(crate) fn remove_structure_index(
                 match structures.get(&(name, arity)).cloned() {
                     Some(IndexingCodePtr::DynamicExternal(_))
                     | Some(IndexingCodePtr::External(_)) => {
-                        structures.remove(&(name, arity));
+                        structures.swap_remove(&(name, arity));
                         break;
                     }
                     Some(IndexingCodePtr::Internal(o)) => {

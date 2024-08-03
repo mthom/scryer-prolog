@@ -1,5 +1,3 @@
-use lexical::parse_lossy;
-
 use crate::atom_table::*;
 pub use crate::machine::machine_state::*;
 use crate::parser::ast::*;
@@ -638,7 +636,9 @@ impl<'a, R: CharRead> Lexer<'a, R> {
 
     fn vacate_with_float(&mut self, mut token: String) -> Result<Token, ParserError> {
         self.return_char(token.pop().unwrap());
-        let n = parse_lossy::<f64, _>(token.as_bytes())?;
+
+        let n = parse_float_lossy(&token)?;
+
         Ok(Token::Literal(Literal::from(float_alloc!(
             n,
             self.machine_st.arena
@@ -756,7 +756,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                             }
                         }
 
-                        let n = parse_lossy::<f64, _>(token.as_bytes())?;
+                        let n = parse_float_lossy(&token)?;
                         Ok(Token::Literal(Literal::from(float_alloc!(
                             n,
                             self.machine_st.arena
@@ -765,7 +765,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                         return self.vacate_with_float(token);
                     }
                 } else {
-                    let n = parse_lossy::<f64, _>(token.as_bytes())?;
+                    let n = parse_float_lossy(&token)?;
                     Ok(Token::Literal(Literal::from(float_alloc!(
                         n,
                         self.machine_st.arena
@@ -1101,4 +1101,14 @@ impl<'a, R: CharRead> Lexer<'a, R> {
             Err(e) => Err(e),
         }
     }
+}
+
+fn parse_float_lossy(token: &str) -> Result<f64, ParserError> {
+    const FORMAT: u128 = lexical::format::STANDARD;
+    let options = lexical::ParseFloatOptions::builder()
+        .lossy(true)
+        .build()
+        .unwrap();
+    let n = lexical::parse_with_options::<f64, _, FORMAT>(token.as_bytes(), &options)?;
+    Ok(n)
 }

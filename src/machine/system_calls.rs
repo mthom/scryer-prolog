@@ -1,6 +1,7 @@
 use crate::parser::ast::*;
 use crate::parser::parser::*;
 
+use base64::Engine;
 use dashu::integer::{Sign, UBig};
 use lazy_static::lazy_static;
 use num_order::NumOrd;
@@ -72,13 +73,13 @@ use crossterm::event::{read, Event, KeyCode, KeyEvent, KeyModifiers};
 #[cfg(feature = "repl")]
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 
-use blake2::{Blake2b, Blake2s};
+use blake2::{Blake2b512, Blake2s256};
 use ring::rand::{SecureRandom, SystemRandom};
 use ring::{digest, hkdf, hmac, pbkdf2};
 
 #[cfg(feature = "crypto-full")]
 use ring::aead;
-use ripemd160::{Digest, Ripemd160};
+use ripemd::{Digest, Ripemd160};
 use sha3::{Sha3_224, Sha3_256, Sha3_384, Sha3_512};
 
 use crrl::{ed25519, secp256k1, x25519};
@@ -3713,14 +3714,9 @@ impl Machine {
     #[cfg(feature = "repl")]
     #[inline(always)]
     pub(crate) fn get_single_char(&mut self) -> CallResult {
-        let ctrl_c = KeyEvent {
-            code: KeyCode::Char('c'),
-            modifiers: KeyModifiers::CONTROL,
-        };
-
         let key = get_key();
 
-        if key == ctrl_c {
+        if key.code == KeyCode::Char('c') && key.modifiers == KeyModifiers::CONTROL {
             let stub = functor_stub(atom!("get_single_char"), 1);
             let err = self.machine_st.interrupt_error();
             let err = self.machine_st.error_form(err, stub);
@@ -3815,7 +3811,7 @@ impl Machine {
 
         if !stream.is_stdin() && !stream.is_stdout() && !stream.is_stderr() {
             if let Some(alias) = stream.options().get_alias() {
-                self.indices.stream_aliases.remove(&alias);
+                self.indices.stream_aliases.swap_remove(&alias);
             }
 
             let close_result = stream.close();
@@ -4301,15 +4297,14 @@ impl Machine {
             let client = reqwest::Client::builder().build().unwrap();
 
             // request
-            let mut req = reqwest::Request::new(method, address);
+            let mut req = client.request(method, address).headers(headers);
 
-            *req.headers_mut() = headers;
             if !bytes.is_empty() {
-                *req.body_mut() = Some(reqwest::Body::from(bytes));
+                req = req.body(bytes);
             }
 
             // do it!
-            match futures::executor::block_on(client.execute(req)) {
+            match futures::executor::block_on(req.send()) {
                 Ok(resp) => {
                     // status code
                     let status = resp.status().as_u16();
@@ -7283,90 +7278,83 @@ impl Machine {
         let ints_list = match algorithm {
             atom!("sha3_224") => {
                 let mut context = Sha3_224::new();
-                context.input(&bytes);
+                context.update(&bytes);
 
                 heap_loc_as_cell!(iter_to_heap_list(
                     &mut self.machine_st.heap,
                     context
-                        .result()
-                        .as_ref()
+                        .finalize()
                         .iter()
                         .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64))),
                 ))
             }
             atom!("sha3_256") => {
                 let mut context = Sha3_256::new();
-                context.input(&bytes);
+                context.update(&bytes);
                 heap_loc_as_cell!(iter_to_heap_list(
                     &mut self.machine_st.heap,
                     context
-                        .result()
-                        .as_ref()
+                        .finalize()
                         .iter()
                         .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64))),
                 ))
             }
             atom!("sha3_384") => {
                 let mut context = Sha3_384::new();
-                context.input(&bytes);
+                context.update(&bytes);
 
                 heap_loc_as_cell!(iter_to_heap_list(
                     &mut self.machine_st.heap,
                     context
-                        .result()
-                        .as_ref()
+                        .finalize()
                         .iter()
                         .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64))),
                 ))
             }
             atom!("sha3_512") => {
                 let mut context = Sha3_512::new();
-                context.input(&bytes);
+                context.update(&bytes);
 
                 heap_loc_as_cell!(iter_to_heap_list(
                     &mut self.machine_st.heap,
                     context
-                        .result()
-                        .as_ref()
+                        .finalize()
                         .iter()
                         .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64))),
                 ))
             }
             atom!("blake2s256") => {
-                let mut context = Blake2s::new();
-                context.input(&bytes);
+                let mut context = Blake2s256::new();
+                context.update(&bytes);
 
                 heap_loc_as_cell!(iter_to_heap_list(
                     &mut self.machine_st.heap,
                     context
-                        .result()
-                        .as_ref()
+                        .finalize()
                         .iter()
                         .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64))),
                 ))
             }
             atom!("blake2b512") => {
-                let mut context = Blake2b::new();
-                context.input(&bytes);
+                let mut context = Blake2b512::new();
+                context.update(&bytes);
 
                 heap_loc_as_cell!(iter_to_heap_list(
                     &mut self.machine_st.heap,
                     context
-                        .result()
-                        .as_ref()
+                        .finalize()
                         .iter()
                         .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64))),
                 ))
             }
             atom!("ripemd160") => {
                 let mut context = Ripemd160::new();
-                context.input(&bytes);
+                context.update(&bytes);
 
                 heap_loc_as_cell!(iter_to_heap_list(
                     &mut self.machine_st.heap,
                     context
-                        .result()
-                        .as_ref()
+                        .finalize()
                         .iter()
                         .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64))),
                 ))
@@ -7938,11 +7926,11 @@ impl Machine {
         let padding = cell_as_atom!(self.deref_register(3));
         let charset = cell_as_atom!(self.deref_register(4));
 
-        let config = match (padding, charset) {
-            (atom!("true"), atom!("standard")) => base64::STANDARD,
-            (atom!("true"), _) => base64::URL_SAFE,
-            (_, atom!("standard")) => base64::STANDARD_NO_PAD,
-            (_, _) => base64::URL_SAFE_NO_PAD,
+        let b64_engine = match (padding, charset) {
+            (atom!("true"), atom!("standard")) => base64::engine::general_purpose::STANDARD,
+            (atom!("true"), _) => base64::engine::general_purpose::URL_SAFE,
+            (_, atom!("standard")) => base64::engine::general_purpose::STANDARD_NO_PAD,
+            (_, _) => base64::engine::general_purpose::URL_SAFE_NO_PAD,
         };
 
         if self.deref_register(1).is_var() {
@@ -7950,7 +7938,8 @@ impl Machine {
                 .machine_st
                 .value_to_str_like(self.machine_st.registers[2])
                 .unwrap();
-            let bytes = base64::decode_config(&*b64.as_str(), config);
+
+            let bytes = b64_engine.decode(&*b64.as_str());
 
             match bytes {
                 Ok(bs) => {
@@ -7975,7 +7964,7 @@ impl Machine {
                 bytes.push(c as u8);
             }
 
-            let b64 = base64::encode_config(bytes, config);
+            let b64 = b64_engine.encode(bytes);
             let string = self.u8s_to_string(b64.as_bytes());
 
             unify!(self.machine_st, self.machine_st.registers[2], string);

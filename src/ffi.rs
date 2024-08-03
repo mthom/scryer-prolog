@@ -150,7 +150,7 @@ impl ForeignFunctionTable {
                     FunctionImpl {
                         cif,
                         args,
-                        code_ptr: CodePtr(code_ptr.into_raw().into_raw() as *mut _),
+                        code_ptr: CodePtr(code_ptr.into_raw().as_raw_ptr()),
                         return_struct_name,
                     },
                 );

@@ -18,7 +18,7 @@ use crate::machine::machine_errors::*;
 use dashu::base::Abs;
 use dashu::base::BitTest;
 use num_order::NumOrd;
-use ordered_float::*;
+use ordered_float::{Float, OrderedFloat};
 
 use std::cell::Cell;
 use std::cmp::{max, min, Ordering};
