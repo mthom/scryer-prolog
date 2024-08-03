@@ -305,8 +305,10 @@ impl<T: ?Sized + ArenaAllocated> TypedArenaPtr<T> {
 
 impl<P, T: ?Sized + ArenaAllocated<Payload = ManuallyDrop<P>>> TypedArenaPtr<T> {
     pub fn drop_payload(&mut self) {
-        self.set_tag(ArenaHeaderTag::Dropped);
-        unsafe { ManuallyDrop::drop(&mut *self.as_ptr()) }
+        if self.get_tag() != ArenaHeaderTag::Dropped {
+            self.set_tag(ArenaHeaderTag::Dropped);
+            unsafe { ManuallyDrop::drop(&mut *self.as_ptr()) }
+        }
     }
 }
 
