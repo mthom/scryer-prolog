@@ -38,10 +38,11 @@ fn setup_op_decl(mut terms: Vec<Term>, atom_tbl: &AtomTable) -> Result<OpDecl, C
     let spec = to_op_decl_spec(spec)?;
 
     let prec = match terms.pop().unwrap() {
-        term @ Term::Literal(_, Literal::Fixnum(bi)) => match u16::try_from(bi.get_num()) {
+        // once msrv is >= 1.78 we can remove the ref and the clone of term below
+        ref term @ Term::Literal(_, Literal::Fixnum(bi)) => match u16::try_from(bi.get_num()) {
             Ok(n) if n <= 1200 => n,
             _ => {
-                return Err(CompilationError::InvalidOpDeclPrec(term));
+                return Err(CompilationError::InvalidOpDeclPrec(term.clone()));
             }
         },
         other => {
