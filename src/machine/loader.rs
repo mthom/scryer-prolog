@@ -323,8 +323,8 @@ impl<'a> LoadState<'a> for LiveLoadAndMachineState<'a> {
     #[inline(always)]
     fn reset_machine(loader: &mut Loader<'a, Self>) {
         if loader.payload.load_state.get_tag() != ArenaHeaderTag::Dropped {
-            loader.payload.load_state.drop_payload();
             loader.reset_machine();
+            loader.payload.load_state.drop_payload();
         }
     }
 
