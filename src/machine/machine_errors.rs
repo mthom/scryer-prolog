@@ -38,6 +38,7 @@ pub(crate) enum ValidType {
     Callable,
     Character,
     Compound,
+    Declaration,
     Evaluable,
     Float,
     InByte,
@@ -73,6 +74,7 @@ impl ValidType {
             //            ValidType::PredicateIndicator => atom!("predicate_indicator"),
             //            ValidType::Variable => atom!("variable")
             ValidType::TcpListener => atom!("tcp_listener"),
+            ValidType::Declaration => atom!("declaration"),
         }
     }
 }
@@ -393,6 +395,21 @@ impl MachineState {
                     from: ErrorProvenance::Constructed,
                 }
             }
+            ExistenceError::Declaration(name, arity) => {
+                let culprit = functor!(atom!("/"), [atom(name), fixnum(arity)]);
+
+                let stub = functor!(
+                    atom!("existence_error"),
+                    [atom(atom!("declaration")), str(self.heap.len(), 0)],
+                    [culprit]
+                );
+
+                MachineError {
+                    stub,
+                    location: None,
+                    from: ErrorProvenance::Constructed,
+                }
+            }
             ExistenceError::ModuleSource(source) => {
                 let source_stub = source.as_functor_stub();
 
@@ -571,9 +588,13 @@ impl MachineState {
             return self.arithmetic_error(err);
         }
 
+        if let CompilationError::InvalidDecl(err) = err {
+            return self.declaration_error(err);
+        }
+
         let location = err.line_and_col_num();
         let len = self.heap.len();
-        let stub = err.as_functor(&mut self.heap);
+        let stub = err.as_functor();
 
         let stub = functor!(atom!("syntax_error"), [str(len, 0)], [stub]);
 
@@ -691,12 +712,7 @@ pub enum CompilationError {
     ExpectedRel,
     InadmissibleFact,
     InadmissibleQueryTerm,
-    ExpectedDecl(Term),
-    InvalidDecl(Atom, usize /* arity */),
-    InvalidOpDeclName(Term),
-    InvalidOpDeclSpecTerm(Term),
-    InvalidOpDeclSpecValue(Atom),
-    InvalidOpDeclPrec(Term),
+    InvalidDecl(DeclarationError),
     InvalidMetaPredicateDecl,
     InvalidModuleDecl,
     InvalidModuleExport,
@@ -704,6 +720,17 @@ pub enum CompilationError {
     InvalidUseModuleDecl,
     InvalidModuleResolution(Atom),
     UnreadableTerm,
+}
+
+#[derive(Debug)]
+pub enum DeclarationError {
+    ExpectedDecl(Term),
+    InvalidDecl(Atom, usize /* arity */),
+    InvalidOpDeclNameType(Term),
+    InvalidOpDeclSpecDomain(Term),
+    InvalidOpDeclSpecValue(Atom),
+    InvalidOpDeclPrecType(Term),
+    InvalidOpDeclPrecDomain(Fixnum),
 }
 
 impl From<ArithmeticError> for CompilationError {
@@ -728,7 +755,7 @@ impl CompilationError {
         }
     }
 
-    pub(crate) fn as_functor(&self, heap: &mut Heap) -> MachineStub {
+    pub(crate) fn as_functor(&self) -> MachineStub {
         match self {
             CompilationError::Arithmetic(..) => {
                 functor!(atom!("arithmetic_error"))
@@ -750,48 +777,8 @@ impl CompilationError {
                 // TODO: type_error(callable, _).
                 functor!(atom!("inadmissible_query_term"))
             }
-            CompilationError::ExpectedDecl(_term) => {
-                functor!(atom!("not_a_declaration"))
-            }
-            CompilationError::InvalidDecl(name, arity) => {
-                let culprit = functor_stub(*name, *arity);
-                functor!(
-                    atom!("existence_error"),
-                    [atom(atom!("declaration")), str(heap.len() + 2, 0)],
-                    [culprit]
-                )
-            }
-            CompilationError::InvalidOpDeclName(_term) => {
-                functor!(
-                    atom!("invalid_op_decl"),
-                    [atom(atom!("name")), atom(atom!("expected_string_or_atom"))]
-                )
-            }
-            CompilationError::InvalidOpDeclSpecTerm(_term) => {
-                functor!(
-                    atom!("invalid_op_decl"),
-                    [
-                        atom(atom!("specification")),
-                        atom(atom!("expected_string_or_atom"))
-                    ]
-                )
-            }
-            CompilationError::InvalidOpDeclSpecValue(spec) => {
-                let functor = functor!(atom!("invalid_value"), [atom(spec)]);
-                functor!(
-                    atom!("invalid_op_decl"),
-                    [atom(atom!("specification")), str(heap.len() + 2, 0)],
-                    [functor]
-                )
-            }
-            CompilationError::InvalidOpDeclPrec(_term) => {
-                functor!(
-                    atom!("invalid_op_decl"),
-                    [
-                        atom(atom!("precedence")),
-                        atom(atom!("expected_integer_in_range_0_to_1200"))
-                    ]
-                )
+            CompilationError::InvalidDecl(_) => {
+                functor!(atom!("declaration_error"))
             }
             CompilationError::InvalidMetaPredicateDecl => {
                 functor!(atom!("invalid_meta_predicate_decl"))
@@ -855,6 +842,8 @@ pub(crate) enum DomainErrorType {
     SourceSink,
     Stream,
     StreamOrAlias,
+    OperatorSpecifier,
+    OperatorPriority,
 }
 
 impl DomainErrorType {
@@ -866,6 +855,8 @@ impl DomainErrorType {
             DomainErrorType::SourceSink => atom!("source_sink"),
             DomainErrorType::Stream => atom!("stream"),
             DomainErrorType::StreamOrAlias => atom!("stream_or_alias"),
+            DomainErrorType::OperatorSpecifier => atom!("operator_specifier"),
+            DomainErrorType::OperatorPriority => atom!("operator_priority"),
         }
     }
 }
@@ -1044,6 +1035,7 @@ pub enum ExistenceError {
     Module(Atom),
     ModuleSource(ModuleSource),
     Procedure(Atom, usize),
+    Declaration(Atom, usize),
     QualifiedProcedure {
         module_name: Atom,
         name: Atom,

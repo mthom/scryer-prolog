@@ -978,6 +978,36 @@ impl MachineState {
             }
         );
     }
+
+    pub(crate) fn declaration_error(&mut self, err: DeclarationError) -> MachineError {
+        match err {
+            DeclarationError::ExpectedDecl(_term) => self.type_error(
+                ValidType::Declaration,
+                atom_as_cell!(atom!("todo_insert_invalid_term_here")),
+            ),
+            DeclarationError::InvalidDecl(name, arity) => {
+                self.existence_error(ExistenceError::Declaration(name, arity))
+            }
+            DeclarationError::InvalidOpDeclNameType(_term) => self.type_error(
+                ValidType::List,
+                atom_as_cell!(atom!("todo_insert_invalid_term_here")),
+            ),
+            DeclarationError::InvalidOpDeclSpecDomain(_term) => self.domain_error(
+                DomainErrorType::OperatorSpecifier,
+                atom_as_cell!(atom!("todo_insert_invalid_term_here")),
+            ),
+            DeclarationError::InvalidOpDeclSpecValue(atom) => {
+                self.domain_error(DomainErrorType::OperatorSpecifier, atom_as_cell!(atom))
+            }
+            DeclarationError::InvalidOpDeclPrecType(_term) => self.type_error(
+                ValidType::Integer,
+                atom_as_cell!(atom!("todo_insert_invalid_term_here")),
+            ),
+            DeclarationError::InvalidOpDeclPrecDomain(num) => {
+                self.domain_error(DomainErrorType::OperatorPriority, fixnum_as_cell!(num))
+            }
+        }
+    }
 }
 
 #[allow(clippy::upper_case_acronyms)]
