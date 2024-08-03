@@ -56,6 +56,18 @@ impl indexmap::Equivalent<Atom> for str {
     }
 }
 
+impl PartialEq<str> for Atom {
+    fn eq(&self, other: &str) -> bool {
+        self.as_str().deref() == other
+    }
+}
+
+impl PartialEq<&str> for Atom {
+    fn eq(&self, &other: &&str) -> bool {
+        self.as_str().deref() == other
+    }
+}
+
 const ATOM_TABLE_INIT_SIZE: usize = 1 << 16;
 const ATOM_TABLE_ALIGN: usize = 8;
 
