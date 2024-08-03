@@ -986,7 +986,7 @@ impl MachineState {
                 atom_as_cell!(atom!("todo_insert_invalid_term_here")),
             ),
             DeclarationError::InvalidDecl(name, arity) => {
-                self.existence_error(ExistenceError::Declaration(name, arity))
+                self.domain_error(DomainErrorType::Declaration, functor_stub(name, arity))
             }
             DeclarationError::InvalidOpDeclNameType(_term) => self.type_error(
                 ValidType::List,
@@ -1005,6 +1005,12 @@ impl MachineState {
             ),
             DeclarationError::InvalidOpDeclPrecDomain(num) => {
                 self.domain_error(DomainErrorType::OperatorPriority, fixnum_as_cell!(num))
+            }
+            DeclarationError::ShallNotCreate(atom) => {
+                self.permission_error(Permission::Create, atom!("operator"), atom)
+            }
+            DeclarationError::ShallNotModify(atom) => {
+                self.permission_error(Permission::Modify, atom!("operator"), atom)
             }
         }
     }

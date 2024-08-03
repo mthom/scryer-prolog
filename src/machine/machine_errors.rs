@@ -268,6 +268,26 @@ impl DomainError for HeapCellValue {
     }
 }
 
+impl DomainError for FunctorStub {
+    fn domain_error(
+        self,
+        machine_st: &mut MachineState,
+        valid_type: DomainErrorType,
+    ) -> MachineError {
+        let stub = functor!(
+            atom!("domain_error"),
+            [atom(valid_type.as_atom()), str(machine_st.heap.len(), 0)],
+            [self]
+        );
+
+        MachineError {
+            stub,
+            location: None,
+            from: ErrorProvenance::Constructed,
+        }
+    }
+}
+
 impl DomainError for Number {
     fn domain_error(self, machine_st: &mut MachineState, error: DomainErrorType) -> MachineError {
         let stub = functor!(
@@ -731,6 +751,8 @@ pub enum DeclarationError {
     InvalidOpDeclSpecValue(Atom),
     InvalidOpDeclPrecType(Term),
     InvalidOpDeclPrecDomain(Fixnum),
+    ShallNotCreate(Atom),
+    ShallNotModify(Atom),
 }
 
 impl From<ArithmeticError> for CompilationError {
@@ -844,6 +866,7 @@ pub(crate) enum DomainErrorType {
     StreamOrAlias,
     OperatorSpecifier,
     OperatorPriority,
+    Declaration,
 }
 
 impl DomainErrorType {
@@ -857,6 +880,7 @@ impl DomainErrorType {
             DomainErrorType::StreamOrAlias => atom!("stream_or_alias"),
             DomainErrorType::OperatorSpecifier => atom!("operator_specifier"),
             DomainErrorType::OperatorPriority => atom!("operator_priority"),
+            DomainErrorType::Declaration => atom!("declaration"),
         }
     }
 }

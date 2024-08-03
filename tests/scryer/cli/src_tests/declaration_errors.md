@@ -18,13 +18,13 @@ $ scryer-prolog -f --no-add-history tests-pl/invalid_decl3.pl -g halt
 
 ```trycmd
 $ scryer-prolog -f --no-add-history tests-pl/invalid_decl4.pl -g halt
-   error(existence_error(declaration,op/4),load/1).
+   error(domain_error(declaration,op/4),load/1).
 
 ```
 
 ```trycmd
 $ scryer-prolog -f --no-add-history tests-pl/invalid_decl5.pl -g halt
-   error(existence_error(declaration,(;)/2),load/1).
+   error(domain_error(declaration,(;)/2),load/1).
 
 ```
 
@@ -66,3 +66,33 @@ The following test doesn't appear to terminate so its moved to a block quote for
 > % Warning: singleton variables Var at line 0 of invalid_decl11.pl
 >    error(instantiation_error,load/1).
 > ```
+
+```trycmd
+$ scryer-prolog -f --no-add-history tests-pl/invalid_decl12.pl -g halt
+   error(permission_error(create,operator,{}),load/1).
+
+```
+
+```trycmd
+$ scryer-prolog -f --no-add-history tests-pl/invalid_decl13.pl -g halt
+   error(permission_error(create,operator,{}),load/1).
+
+```
+
+```trycmd
+$ scryer-prolog -f --no-add-history tests-pl/invalid_decl14.pl -g halt
+   error(permission_error(create,operator,'|'),load/1).
+
+```
+
+```trycmd
+$ scryer-prolog -f --no-add-history tests-pl/invalid_decl15.pl -g halt
+   error(permission_error(create,operator,'|'),load/1).
+
+```
+
+```trycmd
+$ scryer-prolog -f --no-add-history tests-pl/invalid_decl16.pl -g halt
+   error(permission_error(modify,operator,','),load/1).
+
+```

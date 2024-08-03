@@ -60,6 +60,24 @@ fn setup_op_decl(mut terms: Vec<Term>, atom_tbl: &AtomTable) -> Result<OpDecl, C
         }
     };
 
+    if name == "[]" || name == "{}" {
+        return Err(CompilationError::InvalidDecl(
+            DeclarationError::ShallNotCreate(name),
+        ));
+    }
+
+    if name == "," {
+        return Err(CompilationError::InvalidDecl(
+            DeclarationError::ShallNotModify(name),
+        ));
+    }
+
+    if name == "|" && (prec < 1001 || !spec.is_infix()) {
+        return Err(CompilationError::InvalidDecl(
+            DeclarationError::ShallNotCreate(name),
+        ));
+    }
+
     Ok(to_op_decl(prec, spec, name))
 }
 
