@@ -415,21 +415,6 @@ impl MachineState {
                     from: ErrorProvenance::Constructed,
                 }
             }
-            ExistenceError::Declaration(name, arity) => {
-                let culprit = functor!(atom!("/"), [atom(name), fixnum(arity)]);
-
-                let stub = functor!(
-                    atom!("existence_error"),
-                    [atom(atom!("declaration")), str(self.heap.len(), 0)],
-                    [culprit]
-                );
-
-                MachineError {
-                    stub,
-                    location: None,
-                    from: ErrorProvenance::Constructed,
-                }
-            }
             ExistenceError::ModuleSource(source) => {
                 let source_stub = source.as_functor_stub();
 
@@ -1059,7 +1044,6 @@ pub enum ExistenceError {
     Module(Atom),
     ModuleSource(ModuleSource),
     Procedure(Atom, usize),
-    Declaration(Atom, usize),
     QualifiedProcedure {
         module_name: Atom,
         name: Atom,
