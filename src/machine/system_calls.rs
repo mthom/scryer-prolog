@@ -89,7 +89,6 @@ use native_tls::{Identity, TlsAcceptor, TlsConnector};
 
 use base64;
 use roxmltree;
-use select;
 
 #[cfg(feature = "http")]
 use futures::future;
@@ -7772,8 +7771,8 @@ impl Machine {
             .machine_st
             .value_to_str_like(self.machine_st.registers[1])
         {
-            let doc = select::document::Document::from_read(string.as_str().as_bytes()).unwrap();
-            let result = self.html_node_to_term(doc.nth(0).unwrap());
+            let document = scraper::Html::parse_document(&string.as_str());
+            let result = self.html_node_to_term(document.tree.root());
 
             unify!(self.machine_st, self.machine_st.registers[2], result);
         } else {
@@ -8218,17 +8217,20 @@ impl Machine {
         }
     }
 
-    pub(super) fn html_node_to_term(&mut self, node: select::node::Node) -> HeapCellValue {
-        match node.name() {
+    pub(super) fn html_node_to_term(
+        &mut self,
+        node: ego_tree::NodeRef<'_, scraper::Node>,
+    ) -> HeapCellValue {
+        match node.value().as_element() {
             None => put_complete_string(
                 &mut self.machine_st.heap,
-                &node.text(),
+                &node.value().as_text().unwrap().text,
                 &self.machine_st.atom_tbl,
             ),
-            Some(name) => {
+            Some(element) => {
                 let mut avec = Vec::new();
 
-                for attr in node.attrs() {
+                for attr in element.attrs() {
                     let name = AtomTable::build_with(&self.machine_st.atom_tbl, attr.0);
                     let value = put_complete_string(
                         &mut self.machine_st.heap,
@@ -8259,7 +8261,7 @@ impl Machine {
                     cvec.into_iter()
                 ));
 
-                let tag = AtomTable::build_with(&self.machine_st.atom_tbl, name);
+                let tag = AtomTable::build_with(&self.machine_st.atom_tbl, element.name());
                 let result = str_loc_as_cell!(self.machine_st.heap.len());
 
                 self.machine_st
