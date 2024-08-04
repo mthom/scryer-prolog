@@ -17,7 +17,7 @@ pub(crate) fn to_op_decl(prec: u16, spec: OpDeclSpec, name: Atom) -> OpDecl {
 
 pub(crate) fn to_op_decl_spec(spec: Atom) -> Result<OpDeclSpec, CompilationError> {
     OpDeclSpec::try_from(spec).map_err(|_err| {
-        CompilationError::InvalidDecl(DeclarationError::InvalidOpDeclSpecValue(spec))
+        CompilationError::InvalidDirective(DirectiveError::InvalidOpDeclSpecValue(spec))
     })
 }
 
@@ -27,8 +27,8 @@ fn setup_op_decl(mut terms: Vec<Term>, atom_tbl: &AtomTable) -> Result<OpDecl, C
         Term::Literal(_, Literal::Atom(name)) => name,
         Term::Literal(_, Literal::Char(c)) => AtomTable::build_with(atom_tbl, &c.to_string()),
         other => {
-            return Err(CompilationError::InvalidDecl(
-                DeclarationError::InvalidOpDeclNameType(other),
+            return Err(CompilationError::InvalidDirective(
+                DirectiveError::InvalidOpDeclNameType(other),
             ));
         }
     };
@@ -36,8 +36,8 @@ fn setup_op_decl(mut terms: Vec<Term>, atom_tbl: &AtomTable) -> Result<OpDecl, C
     let spec = match terms.pop().unwrap() {
         Term::Literal(_, Literal::Atom(name)) => name,
         other => {
-            return Err(CompilationError::InvalidDecl(
-                DeclarationError::InvalidOpDeclSpecDomain(other),
+            return Err(CompilationError::InvalidDirective(
+                DirectiveError::InvalidOpDeclSpecDomain(other),
             ))
         }
     };
@@ -48,33 +48,33 @@ fn setup_op_decl(mut terms: Vec<Term>, atom_tbl: &AtomTable) -> Result<OpDecl, C
         Term::Literal(_, Literal::Fixnum(bi)) => match u16::try_from(bi.get_num()) {
             Ok(n) if n <= 1200 => n,
             _ => {
-                return Err(CompilationError::InvalidDecl(
-                    DeclarationError::InvalidOpDeclPrecDomain(bi),
+                return Err(CompilationError::InvalidDirective(
+                    DirectiveError::InvalidOpDeclPrecDomain(bi),
                 ));
             }
         },
         other => {
-            return Err(CompilationError::InvalidDecl(
-                DeclarationError::InvalidOpDeclPrecType(other),
+            return Err(CompilationError::InvalidDirective(
+                DirectiveError::InvalidOpDeclPrecType(other),
             ));
         }
     };
 
     if name == "[]" || name == "{}" {
-        return Err(CompilationError::InvalidDecl(
-            DeclarationError::ShallNotCreate(name),
+        return Err(CompilationError::InvalidDirective(
+            DirectiveError::ShallNotCreate(name),
         ));
     }
 
     if name == "," {
-        return Err(CompilationError::InvalidDecl(
-            DeclarationError::ShallNotModify(name),
+        return Err(CompilationError::InvalidDirective(
+            DirectiveError::ShallNotModify(name),
         ));
     }
 
     if name == "|" && (prec < 1001 || !spec.is_infix()) {
-        return Err(CompilationError::InvalidDecl(
-            DeclarationError::ShallNotCreate(name),
+        return Err(CompilationError::InvalidDirective(
+            DirectiveError::ShallNotCreate(name),
         ));
     }
 
@@ -363,12 +363,12 @@ pub(super) fn setup_declaration<'a, LS: LoadState<'a>>(
                 let (module_name, name, meta_specs) = setup_meta_predicate(terms, loader)?;
                 Ok(Declaration::MetaPredicate(module_name, name, meta_specs))
             }
-            _ => Err(CompilationError::InvalidDecl(
-                DeclarationError::InvalidDecl(name, terms.len()),
+            _ => Err(CompilationError::InvalidDirective(
+                DirectiveError::InvalidDirective(name, terms.len()),
             )),
         },
-        other => Err(CompilationError::InvalidDecl(
-            DeclarationError::ExpectedDecl(other),
+        other => Err(CompilationError::InvalidDirective(
+            DirectiveError::ExpectedDirective(other),
         )),
     }
 }

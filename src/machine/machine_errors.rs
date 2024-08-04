@@ -38,7 +38,7 @@ pub(crate) enum ValidType {
     Callable,
     Character,
     Compound,
-    Declaration,
+    Directive,
     Evaluable,
     Float,
     InByte,
@@ -74,7 +74,7 @@ impl ValidType {
             //            ValidType::PredicateIndicator => atom!("predicate_indicator"),
             //            ValidType::Variable => atom!("variable")
             ValidType::TcpListener => atom!("tcp_listener"),
-            ValidType::Declaration => atom!("declaration"),
+            ValidType::Directive => atom!("directive"),
         }
     }
 }
@@ -608,8 +608,8 @@ impl MachineState {
             return self.arithmetic_error(err);
         }
 
-        if let CompilationError::InvalidDecl(err) = err {
-            return self.declaration_error(err);
+        if let CompilationError::InvalidDirective(err) = err {
+            return self.directive_error(err);
         }
 
         let location = err.line_and_col_num();
@@ -732,7 +732,7 @@ pub enum CompilationError {
     ExpectedRel,
     InadmissibleFact,
     InadmissibleQueryTerm,
-    InvalidDecl(DeclarationError),
+    InvalidDirective(DirectiveError),
     InvalidMetaPredicateDecl,
     InvalidModuleDecl,
     InvalidModuleExport,
@@ -743,9 +743,9 @@ pub enum CompilationError {
 }
 
 #[derive(Debug)]
-pub enum DeclarationError {
-    ExpectedDecl(Term),
-    InvalidDecl(Atom, usize /* arity */),
+pub enum DirectiveError {
+    ExpectedDirective(Term),
+    InvalidDirective(Atom, usize /* arity */),
     InvalidOpDeclNameType(Term),
     InvalidOpDeclSpecDomain(Term),
     InvalidOpDeclSpecValue(Atom),
@@ -799,7 +799,7 @@ impl CompilationError {
                 // TODO: type_error(callable, _).
                 functor!(atom!("inadmissible_query_term"))
             }
-            CompilationError::InvalidDecl(_) => {
+            CompilationError::InvalidDirective(_) => {
                 functor!(atom!("declaration_error"))
             }
             CompilationError::InvalidMetaPredicateDecl => {
@@ -866,7 +866,7 @@ pub(crate) enum DomainErrorType {
     StreamOrAlias,
     OperatorSpecifier,
     OperatorPriority,
-    Declaration,
+    Directive,
 }
 
 impl DomainErrorType {
@@ -880,7 +880,7 @@ impl DomainErrorType {
             DomainErrorType::StreamOrAlias => atom!("stream_or_alias"),
             DomainErrorType::OperatorSpecifier => atom!("operator_specifier"),
             DomainErrorType::OperatorPriority => atom!("operator_priority"),
-            DomainErrorType::Declaration => atom!("declaration"),
+            DomainErrorType::Directive => atom!("directive"),
         }
     }
 }

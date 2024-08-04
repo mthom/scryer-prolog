@@ -979,37 +979,37 @@ impl MachineState {
         );
     }
 
-    pub(crate) fn declaration_error(&mut self, err: DeclarationError) -> MachineError {
+    pub(crate) fn directive_error(&mut self, err: DirectiveError) -> MachineError {
         match err {
-            DeclarationError::ExpectedDecl(_term) => self.type_error(
-                ValidType::Declaration,
+            DirectiveError::ExpectedDirective(_term) => self.type_error(
+                ValidType::Directive,
                 atom_as_cell!(atom!("todo_insert_invalid_term_here")),
             ),
-            DeclarationError::InvalidDecl(name, arity) => {
-                self.domain_error(DomainErrorType::Declaration, functor_stub(name, arity))
+            DirectiveError::InvalidDirective(name, arity) => {
+                self.domain_error(DomainErrorType::Directive, functor_stub(name, arity))
             }
-            DeclarationError::InvalidOpDeclNameType(_term) => self.type_error(
+            DirectiveError::InvalidOpDeclNameType(_term) => self.type_error(
                 ValidType::List,
                 atom_as_cell!(atom!("todo_insert_invalid_term_here")),
             ),
-            DeclarationError::InvalidOpDeclSpecDomain(_term) => self.domain_error(
+            DirectiveError::InvalidOpDeclSpecDomain(_term) => self.domain_error(
                 DomainErrorType::OperatorSpecifier,
                 atom_as_cell!(atom!("todo_insert_invalid_term_here")),
             ),
-            DeclarationError::InvalidOpDeclSpecValue(atom) => {
+            DirectiveError::InvalidOpDeclSpecValue(atom) => {
                 self.domain_error(DomainErrorType::OperatorSpecifier, atom_as_cell!(atom))
             }
-            DeclarationError::InvalidOpDeclPrecType(_term) => self.type_error(
+            DirectiveError::InvalidOpDeclPrecType(_term) => self.type_error(
                 ValidType::Integer,
                 atom_as_cell!(atom!("todo_insert_invalid_term_here")),
             ),
-            DeclarationError::InvalidOpDeclPrecDomain(num) => {
+            DirectiveError::InvalidOpDeclPrecDomain(num) => {
                 self.domain_error(DomainErrorType::OperatorPriority, fixnum_as_cell!(num))
             }
-            DeclarationError::ShallNotCreate(atom) => {
+            DirectiveError::ShallNotCreate(atom) => {
                 self.permission_error(Permission::Create, atom!("operator"), atom)
             }
-            DeclarationError::ShallNotModify(atom) => {
+            DirectiveError::ShallNotModify(atom) => {
                 self.permission_error(Permission::Modify, atom!("operator"), atom)
             }
         }

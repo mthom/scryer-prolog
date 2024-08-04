@@ -18,19 +18,19 @@ $ scryer-prolog -f --no-add-history tests-pl/invalid_decl3.pl -g halt
 
 ```trycmd
 $ scryer-prolog -f --no-add-history tests-pl/invalid_decl4.pl -g halt
-   error(domain_error(declaration,op/4),load/1).
+   error(domain_error(directive,op/4),load/1).
 
 ```
 
 ```trycmd
 $ scryer-prolog -f --no-add-history tests-pl/invalid_decl5.pl -g halt
-   error(domain_error(declaration,(;)/2),load/1).
+   error(domain_error(directive,(;)/2),load/1).
 
 ```
 
 ```trycmd
 $ scryer-prolog -f --no-add-history tests-pl/invalid_decl6.pl -g halt
-   error(type_error(declaration,todo_insert_invalid_term_here),load/1).
+   error(type_error(directive,todo_insert_invalid_term_here),load/1).
 
 ```
 
