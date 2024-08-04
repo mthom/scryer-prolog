@@ -785,7 +785,7 @@ impl CompilationError {
                 functor!(atom!("inadmissible_query_term"))
             }
             CompilationError::InvalidDirective(_) => {
-                functor!(atom!("declaration_error"))
+                functor!(atom!("directive_error"))
             }
             CompilationError::InvalidMetaPredicateDecl => {
                 functor!(atom!("invalid_meta_predicate_decl"))
