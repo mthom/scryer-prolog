@@ -981,8 +981,8 @@ impl MachineState {
 
     pub(crate) fn directive_error(&mut self, err: DirectiveError) -> MachineError {
         match err {
-            DirectiveError::ExpectedDirective(_term) => self.type_error(
-                ValidType::Directive,
+            DirectiveError::ExpectedDirective(_term) => self.domain_error(
+                DomainErrorType::Directive,
                 atom_as_cell!(atom!("todo_insert_invalid_term_here")),
             ),
             DirectiveError::InvalidDirective(name, arity) => {

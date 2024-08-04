@@ -38,7 +38,6 @@ pub(crate) enum ValidType {
     Callable,
     Character,
     Compound,
-    Directive,
     Evaluable,
     Float,
     InByte,
@@ -74,7 +73,6 @@ impl ValidType {
             //            ValidType::PredicateIndicator => atom!("predicate_indicator"),
             //            ValidType::Variable => atom!("variable")
             ValidType::TcpListener => atom!("tcp_listener"),
-            ValidType::Directive => atom!("directive"),
         }
     }
 }

@@ -30,7 +30,7 @@ $ scryer-prolog -f --no-add-history tests-pl/invalid_decl5.pl -g halt
 
 ```trycmd
 $ scryer-prolog -f --no-add-history tests-pl/invalid_decl6.pl -g halt
-   error(type_error(directive,todo_insert_invalid_term_here),load/1).
+   error(domain_error(directive,todo_insert_invalid_term_here),load/1).
 
 ```
 
