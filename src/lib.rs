@@ -71,20 +71,27 @@ thread_local! {
 
 #[cfg(not(target_arch = "wasm32"))]
 #[no_mangle]
+/// In order to retain state, the invoking code must call machine_new().
+/// NOTE: it is the responsibility of the invoking code to call machine_free() or expect
+/// memory leaks.
 pub extern "C" fn machine_new() {
-    println!("Engaging the machine!");
     MACHINE.with(|m| *m.borrow_mut() = Some(Machine::new_lib()));
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 #[no_mangle]
+/// The invoking code must call machine_free() exactly once per machine_new() call to deallocate memory
+/// and safely cleanup resources from the machine_new() invocation.
 pub extern "C" fn machine_free() {
-    println!("Releasing the machine!");
     MACHINE.with(|m| *m.borrow_mut() = None);
 }
 
 
 #[no_mangle]
+/// Add source code to the database in the "facts" module.
+/// NOTE: it is the responsibility of the invoking code to clean up the string
+/// returned by this function with the free_c_string() function.
+// is there any reason we would want to make other modules available as places to put facts...?
 pub extern "C" fn load_module_string(input: *const c_char) -> *mut c_char {
     let result = std::panic::catch_unwind(|| {
         let c_str = unsafe {
@@ -97,7 +104,7 @@ pub extern "C" fn load_module_string(input: *const c_char) -> *mut c_char {
             let machine = machine.as_mut().expect("Machine not initialized.");
             machine.load_module_string("facts", r_str.to_owned());
         });
-        true // return true if operation succeeded
+        true
     });
 
     let json_status = match result {
@@ -111,6 +118,10 @@ pub extern "C" fn load_module_string(input: *const c_char) -> *mut c_char {
 
 #[cfg(not(target_arch = "wasm32"))]
 #[no_mangle]
+/// Consult facts.
+/// NOTE: it is the responsibility of the invoking code to clean up the string returned
+/// by this function with the free_c_string() function.
+// I'm not sure if there is a technical difference between consulting and loading facts?
 pub extern "C" fn consult_module_string(input: *const c_char) -> *mut c_char {
     let result = std::panic::catch_unwind(|| {
         let c_str = unsafe {
@@ -123,7 +134,7 @@ pub extern "C" fn consult_module_string(input: *const c_char) -> *mut c_char {
             let machine = machine.as_mut().expect("Machine not initialized.");
             machine.consult_module_string("facts", r_str.to_owned());
         });
-        true // return true if operation succeeded
+        true
     });
 
     let json_status = match result {
@@ -137,6 +148,12 @@ pub extern "C" fn consult_module_string(input: *const c_char) -> *mut c_char {
 
 #[cfg(not(target_arch = "wasm32"))]
 #[no_mangle]
+/// run query, equivalent to preceding the facts with a "?-"
+/// Returns JSON --
+/// status: {"ok", "error","panic"}
+/// <if status="error"> error: string
+/// <if status="ok"> result: List[Map]
+/// <if status="panic"> error: "panic"
 pub extern "C" fn run_query(input: *const c_char) -> *mut c_char {
     let result = std::panic::catch_unwind(|| {
         let c_str = unsafe {
@@ -173,7 +190,11 @@ pub extern "C" fn run_query(input: *const c_char) -> *mut c_char {
     c_string.into_raw()
 }
 
-#[cfg(not(target_arch = "wasm32"))]#[no_mangle]
+#[cfg(not(target_arch = "wasm32"))]
+#[no_mangle]
+/// Make sure to call this after every invocation of `consult_module_string()`,
+/// `load_module_string()`, and `run_query()` to cleanup resources, or
+/// you will have a memory leak!
 pub extern "C" fn free_c_string(ptr: *mut c_char) {
     unsafe {
         if ptr.is_null() {
