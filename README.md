@@ -335,13 +335,13 @@ This table summarizes the Rust functions you provided, detailing their names and
 
 **Example Python Client Implementation**
 
-
 ```python
+# example.py
 import contextlib
 import ctypes
 import json
 
-lib = ctypes.cdll.LoadLibrary("<PATH-TO>/scryer-prolog/target/release/libscryer_prolog.so")
+lib = ctypes.cdll.LoadLibrary("<PATH-TO>/target/release/libscryer_prolog.so")
 
 lib.run_query.argtypes = (ctypes.c_char_p,)
 lib.run_query.restype = ctypes.POINTER(ctypes.c_char)
@@ -356,16 +356,16 @@ lib.machine_free.argtypes = []
 lib.machine_free.restype = None
 
 lib.consult_module_string.argtypes = (ctypes.c_char_p,)
-lib.consult_module_string.restype = None
+lib.consult_module_string.restype = ctypes.POINTER(ctypes.c_char)
 
 lib.load_module_string.argtypes = (ctypes.c_char_p,)
-lib.load_module_string.restype = None
+lib.load_module_string.restype = ctypes.POINTER(ctypes.c_char)
 
 lib.start_new_query_generator.argtypes = (ctypes.c_char_p,)
-lib.start_new_query_generator.restype = None
+lib.start_new_query_generator.restype = ctypes.POINTER(ctypes.c_char)
 
 lib.cleanup_query_generator.argtypes = []
-lib.cleanup_query_generator.restype = None
+lib.cleanup_query_generator.restype = ctypes.POINTER(ctypes.c_char)
 
 lib.run_query_generator.argtypes = []
 lib.run_query_generator.restype = ctypes.POINTER(ctypes.c_char)
@@ -382,7 +382,7 @@ class ScryerError(Exception):
 def handle_scryer_result(result: str):
     result = json.loads(result)
     if result["status"] == "ok":
-        return result["result"]
+        return result["result"] if 'result' in result else True
     elif result["status"] == "error":
         raise ScryerError(result["error"])
     elif result["status"] == "panic":
@@ -423,10 +423,10 @@ def query_generator(query):
                 if answer is False:
                     if seen_answer:
                         break
-                    yield answer
+                    yield answer[0]
                     break
                 seen_answer = True
-                yield answer
+                yield answer[0]
 
         yield generator()
     finally:
@@ -434,11 +434,11 @@ def query_generator(query):
 
 
 def load_facts(facts: str):
-    lib.load_module_string(facts.encode('utf-8'))
+    handle_loader_deloader(lib.load_module_string(facts.encode('utf-8')))
 
 
 def consult(facts: str):
-    lib.consult_module_string(facts.encode('utf-8'))
+    handle_loader_deloader(lib.consult_module_string(facts.encode('utf-8')))
 
 
 def result_set(query, n):
@@ -484,8 +484,12 @@ if __name__ == '__main__':
     sock(1).
     sock(2).
     
+    :- use_module(library(dcgs)).
     
-            '''
+    as --> [].
+    as --> [a], as.
+    
+    '''
     with ScryerMachine(source) as wam:
         for answer in wam.lazy_eval('fact(Fact).'):
             print(answer)
@@ -502,18 +506,19 @@ if __name__ == '__main__':
         wam.eval('assertz(bread(1)).')
         for answer in wam.lazy_eval('bread(Bread).'):
             print(answer)
+
 ```
 
 ```bash
-
-[{'Fact': 1}]
-[{'Fact': 2}]
-[{'Fact': 3}]
-[{'Fact': 7}]
+$ python example.py 
+{'Fact': 1}
+{'Fact': 2}
+{'Fact': 3}
+{'Fact': 7}
 % Warning: overwriting fact/1 because the clauses are discontiguous
-[{'Fact': 4}]
-[{'Sock': 1}]
-[{'Bread': 1}]
+{'Fact': 4}
+{'Sock': 1}
+{'Bread': 1}
 ```
 
 ### Docker Install
