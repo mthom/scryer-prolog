@@ -235,6 +235,225 @@ Then a `pkg` directory will be created, containing everything you need for a web
 
 Then you can serve it with your favorite http server like `python -m http.server` or `npx serve`, and access the page with your browser.
 
+### Shared Library
+
+Conveniently, you can now access many of the important features of Scryer Prolog via dynamic linking
+to a shared library. The following functions are exposed:
+
+## Rust Functions Summary
+
+This table summarizes the Rust functions you provided, detailing their names and descriptions:
+
+
+| Function Name                   | Description                                                                                        |
+|---------------------------------|----------------------------------------------------------------------------------------------------|
+| `machine_new()`                | Initializes a new Prolog machine. It is the responsibility of the caller to call `machine_free()`. |
+| `machine_free()`              | Deallocates memory for the Prolog machine created with `machine_new()`.                             |
+| `start_new_query_generator()` | Initializes a new query generator with provided Prolog source code (C string). Returns JSON status. |
+| `cleanup_query_generator()`    | Cleans up resources associated with the query generator. Returns JSON status.                        |
+| `run_query_generator()`        | Runs the query generator, returning results as JSON. Expects initialization from previous calls.  |
+| `load_module_string()`          | Loads Prolog source code into the "facts" module. Returns JSON status.                             |
+| `consult_module_string()`     | Consults (loads and runs) facts from a C string. Returns JSON status.                           |
+| `run_query()`                 | Executes a single Prolog query with provided C-style string input. Returns JSON results.         |
+| `free_c_string()`              | Frees memory allocated for C strings returned by other functions. **IMPORTANT:** Always call after using the result string! |
+
+
+There are some footguns associated with using the dynamic library that become the responsibility of the client implementation. Rust will cleanup the strings before the client can use them -- to prevent this, we give ownership of the pointer containing the reference to the string to the client. The client can then get the data from the JSON data from the string, but they must *then* deallocate the string pointer by calling `free_c_string()` on the pointer, or there will be a memory leak.
+
+Additionally, in order to efficiently preserve state between calls, a **thread-local** state reference is created using `machine_new()`. This must be cleaned up with `machine_free()` when the client is done with it, or there will be a memory leak.
+
+One you have created a state with `machine_new()`, you may now `consult_module_string()`, `run_query()`, or (slightly more complicted) `start_new_query_generator()`, `run_query_generator()`, and then `cleanup_query_generator()`.  
+
+`consult_module_string()` is the equivalent to providing the source code for Scryer prolog.
+
+`run_query()` runs an exhaustive query and returns all the results at once. Of course, this is not suitable for infinitely generative sequences.
+
+In order to use infinite results (or lazily consume results), you must first create a new query context with `run_query_generator()` -- passing in the query you wish to be evaluated as with `?-`. Then, you call `run_query_generator()` until the JSON object return has `{"status": "ok", "result": ["false"]}`. If you abort the results early, you must call `cleanup_query_generator()`.  If you exhaust the result set, `cleanup_query_generator()` is called internally on its, own (but you should probably call it anyway as a good practice).
+
+Below is a reference Python client implementation using the features above as advised:
+
+
+
+```python
+import contextlib
+import ctypes
+import json
+
+lib = ctypes.cdll.LoadLibrary("<PATH-TO>/scryer-prolog/target/release/libscryer_prolog.so")
+
+lib.run_query.argtypes = (ctypes.c_char_p,)
+lib.run_query.restype = ctypes.POINTER(ctypes.c_char)
+
+lib.free_c_string.argtypes = (ctypes.POINTER(ctypes.c_char),)
+lib.free_c_string.restype = None
+
+lib.machine_new.argtypes = []
+lib.machine_new.restype = None
+
+lib.machine_free.argtypes = []
+lib.machine_free.restype = None
+
+lib.consult_module_string.argtypes = (ctypes.c_char_p,)
+lib.consult_module_string.restype = None
+
+lib.load_module_string.argtypes = (ctypes.c_char_p,)
+lib.load_module_string.restype = None
+
+lib.start_new_query_generator.argtypes = (ctypes.c_char_p,)
+lib.start_new_query_generator.restype = None
+
+lib.cleanup_query_generator.argtypes = []
+lib.cleanup_query_generator.restype = None
+
+lib.run_query_generator.argtypes = []
+lib.run_query_generator.restype = ctypes.POINTER(ctypes.c_char)
+
+
+class ScryerPanicException(RuntimeError):
+    pass
+
+
+class ScryerError(Exception):
+    pass
+
+
+def handle_scryer_result(result: str):
+    result = json.loads(result)
+    if result["status"] == "ok":
+        return result["result"]
+    elif result["status"] == "error":
+        raise ScryerError(result["error"])
+    elif result["status"] == "panic":
+        raise ScryerPanicException()
+
+
+def eval_and_free(query: str):
+    res_ptr = lib.run_query(query.encode('utf-8'))
+    res = ctypes.cast(res_ptr, ctypes.c_char_p).value.decode('utf-8')
+    lib.free_c_string(res_ptr)
+    return handle_scryer_result(res)
+
+
+def run_generator_step():
+    res_ptr = lib.run_query_generator()
+    res = ctypes.cast(res_ptr, ctypes.c_char_p).value.decode('utf-8')
+    lib.free_c_string(res_ptr)
+    return handle_scryer_result(res)
+
+
+def handle_loader_deloader(ptr):
+    res = ctypes.cast(ptr, ctypes.c_char_p).value.decode('utf-8')
+    try:
+        return handle_scryer_result(res)
+    finally:
+        lib.free_c_string(ptr)
+
+
+@contextlib.contextmanager
+def query_generator(query):
+    try:
+        lib.start_new_query_generator(query.encode('utf-8'))
+
+        def generator():
+            seen_answer = False
+            while True:
+                answer = run_generator_step()
+                if answer is False:
+                    if seen_answer:
+                        break
+                    yield answer
+                    break
+                seen_answer = True
+                yield answer
+
+        yield generator()
+    finally:
+        lib.cleanup_query_generator()
+
+
+def load_facts(facts: str):
+    lib.load_module_string(facts.encode('utf-8'))
+
+
+def consult(facts: str):
+    lib.consult_module_string(facts.encode('utf-8'))
+
+
+def result_set(query, n):
+    return f"Result Set {n}:\n{eval_and_free(query)}"
+
+
+class ScryerMachine:
+
+    def __init__(self, source=None):
+        self.source = source
+
+    def __enter__(self, query: str = None):
+        lib.machine_new()
+        if self.source:
+            load_facts(self.source)
+        if query:
+            return self.lazy_eval(query)
+        return self
+
+    def __exit__(self, *_):
+        lib.machine_free()
+
+    def lazy_eval(self, query):
+        with query_generator(query) as g:
+            for answer in g:
+                yield answer
+
+    def consult(self, facts):
+        consult(facts)
+
+    def eval(self, fact):
+        return eval_and_free(fact)
+
+
+if __name__ == '__main__':
+    source = '''
+    dynamic(fact/1).
+    dynamic(bread/1).
+    fact(1).
+    fact(2).
+    fact(3).
+    fact(7).
+    sock(1).
+    sock(2).
+    
+    
+            '''
+    with ScryerMachine(source) as wam:
+        for answer in wam.lazy_eval('fact(Fact).'):
+            print(answer)
+
+        wam.consult('fact(4). fact(5).')
+        for answer in wam.lazy_eval('fact(Fact).'):
+            print(answer)
+            break
+
+        for answer in wam.lazy_eval('sock(Sock).'):
+            print(answer)
+            break
+
+        wam.eval('assertz(bread(1)).')
+        for answer in wam.lazy_eval('bread(Bread).'):
+            print(answer)
+```
+
+```bash
+
+[{'Fact': 1}]
+[{'Fact': 2}]
+[{'Fact': 3}]
+[{'Fact': 7}]
+% Warning: overwriting fact/1 because the clauses are discontiguous
+[{'Fact': 4}]
+[{'Sock': 1}]
+[{'Bread': 1}]
+```
+
 ### Docker Install
 
 First, install [Docker](https://docs.docker.com/get-docker/) on Linux,
