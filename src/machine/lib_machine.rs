@@ -201,7 +201,7 @@ impl Machine {
                 if var_key.to_string() != output {
                     bindings.insert(
                         var_key.to_string(),
-                        Value::try_from(output).expect("Couldn't convert Houtput to Value"),
+                        output.parse().expect("Couldn't convert Houtput to Value"),
                     );
                 }
             }
@@ -258,10 +258,10 @@ mod tests {
             output,
             Ok(QueryResolution::Matches(vec![
                 QueryMatch::from(btreemap! {
-                    "P" => Value::from("p1"),
+                    "P" => Value::str_literal("p1"),
                 }),
                 QueryMatch::from(btreemap! {
-                    "P" => Value::from("p2"),
+                    "P" => Value::str_literal("p2"),
                 }),
             ]))
         );
@@ -315,8 +315,8 @@ mod tests {
             result,
             Ok(QueryResolution::Matches(vec![QueryMatch::from(
                 btreemap! {
-                    "C" => Value::from("c"),
-                    "Actions" => Value::from("[{action: \"addLink\", source: \"this\", predicate: \"todo://state\", target: \"todo://ready\"}]"),
+                    "C" => Value::str_literal("c"),
+                    "Actions" => Value::str_literal("[{action: \"addLink\", source: \"this\", predicate: \"todo://state\", target: \"todo://ready\"}]"),
                 }
             ),]))
         );
@@ -328,8 +328,8 @@ mod tests {
             result,
             Ok(QueryResolution::Matches(vec![QueryMatch::from(
                 btreemap! {
-                    "C" => Value::from("xyz"),
-                    "Actions" => Value::from("[{action: \"addLink\", source: \"this\", predicate: \"recipe://title\", target: \"literal://string:Meta%20Muffins\"}]"),
+                    "C" => Value::str_literal("xyz"),
+                    "Actions" => Value::str_literal("[{action: \"addLink\", source: \"this\", predicate: \"recipe://title\", target: \"literal://string:Meta%20Muffins\"}]"),
                 }
             ),]))
         );
@@ -339,10 +339,10 @@ mod tests {
             result,
             Ok(QueryResolution::Matches(vec![
                 QueryMatch::from(btreemap! {
-                    "Class" => Value::from("Todo")
+                    "Class" => Value::str_literal("Todo")
                 }),
                 QueryMatch::from(btreemap! {
-                    "Class" => Value::from("Recipe")
+                    "Class" => Value::str_literal("Recipe")
                 }),
             ]))
         );
@@ -414,10 +414,10 @@ mod tests {
             output,
             Ok(QueryResolution::Matches(vec![
                 QueryMatch::from(btreemap! {
-                    "P" => Value::from("p1"),
+                    "P" => Value::str_literal("p1"),
                 }),
                 QueryMatch::from(btreemap! {
-                    "P" => Value::from("p2"),
+                    "P" => Value::str_literal("p2"),
                 }),
             ]))
         );
@@ -519,8 +519,8 @@ mod tests {
                 btreemap! {
                     "Result" => Value::List(
                         Vec::from([
-                            Value::List([Value::from("p1"), Value::from("b")].into()),
-                            Value::List([Value::from("p2"), Value::from("b")].into()),
+                            Value::List([Value::str_literal("p1"), Value::str_literal("b")].into()),
+                            Value::List([Value::str_literal("p2"), Value::str_literal("b")].into()),
                         ])
                     ),
                 }

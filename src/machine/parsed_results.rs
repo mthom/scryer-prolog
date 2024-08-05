@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::fmt::Write;
+use std::str::FromStr;
 
 pub type QueryResult = Result<QueryResolution, String>;
 
@@ -132,6 +133,12 @@ pub enum Value {
     Var,
 }
 
+impl Value {
+    pub fn str_literal<S: Into<String>>(s: S) -> Self {
+        Value::String(s.into())
+    }
+}
+
 impl From<BTreeMap<&str, Value>> for QueryMatch {
     fn from(bindings: BTreeMap<&str, Value>) -> Self {
         QueryMatch {
@@ -198,7 +205,7 @@ impl From<Vec<QueryResolutionLine>> for QueryResolution {
     }
 }
 
-fn split_response_string(input: &str) -> Vec<String> {
+fn split_response_string(input: &str) -> Vec<&str> {
     let mut level_bracket = 0;
     let mut level_parenthesis = 0;
     let mut in_double_quotes = false;
@@ -219,26 +226,25 @@ fn split_response_string(input: &str) -> Vec<String> {
                 && !in_double_quotes
                 && !in_single_quotes =>
             {
-                result.push(input[start..i].trim().to_string());
+                result.push(input[start..i].trim());
                 start = i + 1;
             }
             _ => {}
         }
     }
 
-    result.push(input[start..].trim().to_string());
+    result.push(input[start..].trim());
     result
 }
 
-fn split_key_value_pairs(input: &str) -> Vec<(String, String)> {
+fn split_key_value_pairs(input: &str) -> Vec<(&str, &str)> {
     let items = split_response_string(input);
     let mut result = Vec::new();
 
     for item in items {
-        let parts: Vec<&str> = item.splitn(2, '=').collect();
-        if parts.len() == 2 {
-            let key = parts[0].trim().to_string();
-            let value = parts[1].trim().to_string();
+        if let Some((key, value)) = item.split_once('=') {
+            let key = key.trim();
+            let value = value.trim();
             result.push((key, value));
         }
     }
@@ -246,17 +252,15 @@ fn split_key_value_pairs(input: &str) -> Vec<(String, String)> {
     result
 }
 
-fn parse_prolog_response(input: &str) -> HashMap<String, String> {
-    let mut map: HashMap<String, String> = HashMap::new();
+fn parse_prolog_response(input: &str) -> HashMap<&str, &str> {
+    let mut map: HashMap<_, _> = HashMap::new();
     // Use regex to match strings including commas inside them
-    for result in split_key_value_pairs(input) {
-        let key = result.0;
-        let value = result.1;
+    for (key, value) in split_key_value_pairs(input) {
         // cut off at given characters/strings:
-        let value = value.split('\n').next().unwrap().to_string();
-        let value = value.split(' ').next().unwrap().to_string();
-        let value = value.split('\t').next().unwrap().to_string();
-        let value = value.split("error").next().unwrap().to_string();
+        let value = value.split_once('\n').map_or(value, |(v, _)| v);
+        let value = value.split_once(' ').map_or(value, |(v, _)| v);
+        let value = value.split_once('\t').map_or(value, |(v, _)| v);
+        let value = value.split_once("error").map_or(value, |(v, _)| v);
         map.insert(key, value);
     }
 
@@ -272,10 +276,9 @@ impl TryFrom<String> for QueryResolutionLine {
             _ => Ok(QueryResolutionLine::Match(
                 parse_prolog_response(&string)
                     .iter()
-                    .map(|(k, v)| -> Result<(String, Value), ()> {
-                        let key = k.to_string();
-                        let value = v.to_string();
-                        Ok((key, Value::try_from(value)?))
+                    .map(|(key, value)| -> Result<(String, Value), ()> {
+                        let key = key.to_string();
+                        Ok((key, value.parse()?))
                     })
                     .filter_map(Result::ok)
                     .collect::<BTreeMap<_, _>>(),
@@ -284,73 +287,83 @@ impl TryFrom<String> for QueryResolutionLine {
     }
 }
 
-fn split_nested_list(input: &str) -> Vec<String> {
+fn split_nested_list(input: &str) -> Vec<&str> {
     let mut level = 0;
     let mut start = 0;
     let mut result = Vec::new();
 
-    for (i, c) in input.chars().enumerate() {
+    let mut end = 0;
+    for c in input.chars() {
         match c {
             '[' => level += 1,
             ']' => level -= 1,
             ',' if level == 0 => {
-                result.push(input[start..i].trim().to_string());
-                start = i + 1;
+                result.push(input[start..end].trim());
+                start = end + ','.len_utf8();
             }
             _ => {}
         }
+        end += c.len_utf8();
     }
 
-    result.push(input[start..].trim().to_string());
+    result.push(input[start..].trim());
     result
 }
 
-impl TryFrom<String> for Value {
-    type Error = ();
-    fn try_from(string: String) -> Result<Self, Self::Error> {
+pub(crate) fn strip_delimiters(haystack: &str, prefix: char, suffix: char) -> Option<&str> {
+    haystack.strip_prefix(prefix)?.strip_suffix(suffix)
+}
+
+pub(crate) fn strip_delimiters_str<'hay>(
+    haystack: &'hay str,
+    prefix: &str,
+    suffix: &str,
+) -> Option<&'hay str> {
+    haystack.strip_prefix(prefix)?.strip_suffix(suffix)
+}
+
+impl FromStr for Value {
+    type Err = ();
+    fn from_str(string: &str) -> Result<Self, Self::Err> {
         let trimmed = string.trim();
 
         if let Ok(float_value) = string.parse::<f64>() {
             Ok(Value::Float(OrderedFloat(float_value)))
         } else if let Ok(int_value) = string.parse::<i128>() {
             Ok(Value::Integer(int_value.into()))
-        } else if trimmed.starts_with('\'') && trimmed.ends_with('\'')
-            || trimmed.starts_with('"') && trimmed.ends_with('"')
+        } else if let Some(unquoted) =
+            strip_delimiters(trimmed, '\'', '\'').or_else(|| strip_delimiters(trimmed, '"', '"'))
         {
-            Ok(Value::String(trimmed[1..trimmed.len() - 1].into()))
-        } else if trimmed.starts_with('[') && trimmed.ends_with(']') {
-            let split = split_nested_list(&trimmed[1..trimmed.len() - 1]);
+            Ok(Value::String(unquoted.into()))
+        } else if let Some(unbracketed) = strip_delimiters(trimmed, '[', ']') {
+            let split = split_nested_list(unbracketed);
 
             let values = split
                 .into_iter()
-                .map(Value::try_from)
+                .map(Value::from_str)
                 .collect::<Result<Vec<_>, _>>()?;
 
             Ok(Value::List(values))
-        } else if trimmed.starts_with('{') && trimmed.ends_with('}') {
-            let iter = trimmed[1..trimmed.len() - 1].split(',');
+        } else if let Some(unbraced) = strip_delimiters(trimmed, '{', '}') {
+            let iter = unbraced.split(',');
             let mut values = vec![];
 
             for value in iter {
                 let items: Vec<_> = value.split(':').collect();
-                if items.len() == 2 {
-                    let _key = items[0].to_string();
-                    let value = items[1].to_string();
-                    values.push(Value::try_from(value)?);
+                if let [_key, value] = items.as_slice() {
+                    values.push(value.parse()?);
                 }
             }
 
             Ok(Value::Structure(atom!("{}"), values))
-        } else if trimmed.starts_with("<<") && trimmed.ends_with(">>") {
-            let iter = trimmed[2..trimmed.len() - 2].split(',');
+        } else if let Some(un_double_angle_bracketed) = strip_delimiters_str(trimmed, "<<", ">>") {
+            let iter = un_double_angle_bracketed.split(',');
             let mut values = vec![];
 
             for value in iter {
                 let items: Vec<_> = value.split(':').collect();
-                if items.len() == 2 {
-                    let _key = items[0].to_string();
-                    let value = items[1].to_string();
-                    values.push(Value::try_from(value)?);
+                if let [_key, value] = items.as_slice() {
+                    values.push(value.parse()?);
                 }
             }
 
@@ -360,11 +373,5 @@ impl TryFrom<String> for Value {
         } else {
             Err(())
         }
-    }
-}
-
-impl From<&str> for Value {
-    fn from(str: &str) -> Self {
-        Value::String(str.to_string())
     }
 }
