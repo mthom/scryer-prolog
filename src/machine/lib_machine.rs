@@ -292,6 +292,13 @@ impl Machine {
 
     }
 
+    /// This is intended to be called at the end of the `run_generator_query()`
+    /// process, emulating the behavior of `run_query()` to deallocate the stub choice point
+    /// in the event that the query generator was terminated early.
+    pub fn cleanup_query_generator(&mut self) {
+        self.trust_me()
+    }
+
     /// Must call `start_new_query_generator()` first to create a new state
     pub fn run_query_generator(&mut self, query_state: &mut QueryState) -> QueryResult {
         let qs = query_state;
@@ -302,7 +309,6 @@ impl Machine {
         if self.machine_st.p == 1 {
             return Ok(QueryResolution::from(matches))
         }
-
 
         loop {
             self.dispatch_loop();
