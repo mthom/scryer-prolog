@@ -235,12 +235,53 @@ Then a `pkg` directory will be created, containing everything you need for a web
 
 Then you can serve it with your favorite http server like `python -m http.server` or `npx serve`, and access the page with your browser.
 
-### Shared Library
 
-Conveniently, you can now access many of the important features of Scryer Prolog via dynamic linking
-to a shared library. The following functions are exposed:
+### Using Scryer Prolog as a Shared Library
 
-## Rust Functions Summary
+Think of a shared library like a toolbox filled with pre-built tools (functions) that other programs can use without needing to rebuild everything from scratch. In our case, `libscryer_prolog.XXX` is the toolbox containing Scryer Prolog's powerful logic engine.
+
+
+**Steps to Use the Shared Library:**
+
+1. **Locate the Library:** After building Scryer Prolog, you'll find the shared library in:
+
+   `<PATH-TO>/scryer-prolog/target/release`. 
+   
+   Replace `<PATH-TO>` with the actual path where you installed Scryer Prolog on your computer. The library will have a name like `libscryer_prolog.so` (Linux), `libscryer_prolog.dylib` (macOS), or `scryer_prolog.dll` (Windows).
+
+2. **Load the Library:**  Here are basic examples for common languages:
+
+   * **C/C++ (Linux/macOS):**
+     ```c++
+     #include <dlfcn.h>
+
+     void* handle = dlopen("libscryer_prolog.so", RTLD_LAZY); // Load the library
+     if (!handle) {
+         // Handle error: library not found
+     }
+
+     // ... Get function pointers from the loaded library ...
+     ```
+
+   * **Python:** You'll typically use libraries like `ctypes`:
+      ```python
+      import ctypes
+
+      lib = ctypes.cdll("./libscryer_prolog.so") # Replace with correct path
+
+      # ... Access functions in lib ...
+      ```
+3. **Access Functions:** Once the library is loaded, you can call its functions (like `consult_module_string`, `run_query`) just like you would any other function in your code. See the Python reference implementation below.
+
+
+ **Important Notes:**
+
+* **Memory Management:** Be extra careful about memory management when interacting with C libraries from other languages (especially strings). See below.
+
+
+The following functions are exposed:
+
+#### Shared Library Functions Summary
 
 This table summarizes the Rust functions you provided, detailing their names and descriptions:
 
@@ -257,21 +298,42 @@ This table summarizes the Rust functions you provided, detailing their names and
 | `run_query()`                 | Executes a single Prolog query with provided C-style string input. Returns JSON results.         |
 | `free_c_string()`              | Frees memory allocated for C strings returned by other functions. **IMPORTANT:** Always call after using the result string! |
 
+**Shared Library Memory Management Considerations and Usage Overview**
 
-There are some footguns associated with using the dynamic library that become the responsibility of the client implementation. Rust will cleanup the strings before the client can use them -- to prevent this, we give ownership of the pointer containing the reference to the string to the client. The client can then get the data from the JSON data from the string, but they must *then* deallocate the string pointer by calling `free_c_string()` on the pointer, or there will be a memory leak.
 
-Additionally, in order to efficiently preserve state between calls, a **thread-local** state reference is created using `machine_new()`. This must be cleaned up with `machine_free()` when the client is done with it, or there will be a memory leak.
+* **Ownership Transfer:**
 
-One you have created a state with `machine_new()`, you may now `consult_module_string()`, `run_query()`, or (slightly more complicted) `start_new_query_generator()`, `run_query_generator()`, and then `cleanup_query_generator()`.  
+   The Rust library uses C-style strings (`CString`) to return data. To avoid premature cleanup by Rust's garbage collector, ownership of the string pointer is transferred to the client application. This means the client becomes responsible for freeing the memory using `free_c_string()`. Failure to do so will cause memory leaks.
 
-`consult_module_string()` is the equivalent to providing the source code for Scryer prolog.
+* **Thread-Local State:**
 
-`run_query()` runs an exhaustive query and returns all the results at once. Of course, this is not suitable for infinitely generative sequences.
+   The library utilizes thread-local storage (`thread_local!`) to maintain state between function calls within the same thread. You must initialize this state with `machine_new()` and release it with `machine_free()` when finished. Neglecting to call `machine_free()` will also lead to memory leaks.
 
-In order to use infinite results (or lazily consume results), you must first create a new query context with `run_query_generator()` -- passing in the query you wish to be evaluated as with `?-`. Then, you call `run_query_generator()` until the JSON object return has `{"status": "ok", "result": ["false"]}`. If you abort the results early, you must call `cleanup_query_generator()`.  If you exhaust the result set, `cleanup_query_generator()` is called internally on its, own (but you should probably call it anyway as a good practice).
+**Using the Library: A Step-by-Step Guide**
 
-Below is a reference Python client implementation using the features above as advised:
 
+
+1. **Initialization (`machine_new()`):** Before using any other function, initialize the Prolog machine using `machine_new()`. This creates a thread-local state object necessary for subsequent operations.
+
+2. **Loading Data:** You have two options for loading Prolog data:
+   * **Direct Consultation:** Use `consult_module_string()` to load and immediately run Prolog source code from a C string. Think of it as directly providing the source code to Scryer Prolog.
+   * **Query Generation:**
+
+     - Start a new query generator using  `start_new_query_generator()`, passing your query (in the form `?- ...`) as input.
+     - Use `run_query_generator()` repeatedly until it returns `{ "status": "ok", "result": ["false"] }`. This indicates that all results have been generated.
+
+3. **Running Queries:**
+
+   * For non-generative queries (those with finite results), use `run_query()`.
+   * For potentially infinite result sets, utilize the query generator approach described above.
+
+4. **Cleanup:**
+
+   * Always call `cleanup_query_generator()` after finishing with a query generator to release associated resources (unless it's done internally for you).
+   * Call `machine_free()` once you are done using the Prolog machine, regardless of the loading and querying methods used.
+
+
+**Example Python Client Implementation**
 
 
 ```python
