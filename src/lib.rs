@@ -62,6 +62,7 @@ pub fn eval_code(s: &str) -> String {
 use std::ffi::{c_char, CStr, CString};
 
 use machine::mock_wam::*;
+use crate::machine::lib_machine::QueryState;
 
 #[cfg(not(target_arch = "wasm32"))]
 thread_local! {
@@ -84,6 +85,32 @@ pub extern "C" fn machine_new() {
 /// and safely cleanup resources from the machine_new() invocation.
 pub extern "C" fn machine_free() {
     MACHINE.with(|m| *m.borrow_mut() = None);
+}
+
+
+#[cfg(not(target_arch = "wasm32"))]
+thread_local! {
+    pub static QUERY_STATE: RefCell<Option<QueryState>> = RefCell::new(None);
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[no_mangle]
+pub fn cleanup_query_generator() -> () {
+        QUERY_STATE.with(|m| *m.borrow_mut() = None);
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+#[no_mangle]
+pub fn start_new_query_generator(input: *const c_char) -> () {
+    let c_str = unsafe {
+        assert!(!input.is_null());
+        CStr::from_ptr(input)
+    };
+    let r_str = c_str.to_str().expect("Not a valid UTF-8 string").to_owned();
+    QUERY_STATE.with(|qs| *qs.borrow_mut() =
+        MACHINE.with(|m| {
+            Some(m.borrow_mut().as_mut().expect("Machine not initialized!").start_new_query_generator(r_str))
+        }))
 }
 
 
@@ -154,6 +181,49 @@ pub extern "C" fn consult_module_string(input: *const c_char) -> *mut c_char {
 /// <if status="error"> error: string
 /// <if status="ok"> result: List[Map]
 /// <if status="panic"> error: "panic"
+pub extern "C" fn run_query_generator() -> *mut c_char {
+    let result = std::panic::catch_unwind(|| {
+        QUERY_STATE.with(|q| {
+            let mut qs = q.borrow_mut();
+            let qs = qs.as_mut().expect("QueryState not initialized!");
+            MACHINE.with(|m| {
+                let mut machine = m.borrow_mut();
+                let machine = machine.as_mut().expect("Machine not initialized.");
+                machine.run_query_generator(qs)
+            })
+        })
+    });
+
+    let output_string: String = match result {
+        Ok(query_resolution) => {
+            // Handling Result type
+            match query_resolution {
+                Ok(query_resolution) => {
+                    let value: serde_json::Value = serde_json::from_str(&format!("{}", query_resolution)).unwrap();
+                    serde_json::to_string(&serde_json::json!({"status": "ok", "result": value})).unwrap()
+                }
+                Err(e_str) => {
+                    serde_json::to_string(&serde_json::json!({"status": "error", "error": &e_str})).unwrap()
+                }
+            }
+        }
+        Err(_) => {
+            serde_json::to_string(&serde_json::json!({"status": "panic", "error": "panic"})).unwrap()
+        }
+    };
+    let c_string = CString::new(output_string).unwrap();
+    c_string.into_raw()
+}
+
+
+#[cfg(not(target_arch = "wasm32"))]
+#[no_mangle]
+/// run query, equivalent to preceding the facts with a "?-"
+/// Returns JSON --
+/// status: {"ok", "error","panic"}
+/// <if status="error"> error: string
+/// <if status="ok"> result: List[Map]
+/// <if status="panic"> error: "panic"
 pub extern "C" fn run_query(input: *const c_char) -> *mut c_char {
     let result = std::panic::catch_unwind(|| {
         let c_str = unsafe {
@@ -174,7 +244,8 @@ pub extern "C" fn run_query(input: *const c_char) -> *mut c_char {
             // Handling Result type
             match query_resolution {
                 Ok(query_resolution) => {
-                    serde_json::to_string(&serde_json::json!({"status": "ok", "result": format!("{}", query_resolution)})).unwrap()
+                    let value: serde_json::Value = serde_json::from_str(&format!("{}", query_resolution)).unwrap();
+                    serde_json::to_string(&serde_json::json!({"status": "ok", "result": value})).unwrap()
                 }
                 Err(e_str) => {
                     serde_json::to_string(&serde_json::json!({"status": "error", "error": &e_str})).unwrap()
@@ -189,6 +260,11 @@ pub extern "C" fn run_query(input: *const c_char) -> *mut c_char {
     let c_string = CString::new(output_string).unwrap();
     c_string.into_raw()
 }
+
+
+
+
+
 
 #[cfg(not(target_arch = "wasm32"))]
 #[no_mangle]
