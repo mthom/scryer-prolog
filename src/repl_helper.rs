@@ -93,8 +93,8 @@ impl Highlighter for Helper {
         self.highligher.highlight(line, pos)
     }
 
-    fn highlight_char(&self, line: &str, pos: usize) -> bool {
-        self.highligher.highlight_char(line, pos)
+    fn highlight_char(&self, line: &str, pos: usize, forced: bool) -> bool {
+        self.highligher.highlight_char(line, pos, forced)
     }
 }
 

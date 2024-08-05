@@ -26,70 +26,75 @@ crypto-full = []
 "rust-version-1.80" = []
 
 [build-dependencies]
-indexmap = "1.0.2"
-proc-macro2 = "1.0.36"
-quote = "1.0.15"
-strum = "0.23"
-strum_macros = "0.23"
-syn = { version = "2.0.32", features = ['full', 'visit', 'extra-traits'] }
+indexmap = "2.3.0"
+proc-macro2 = "1.0.86"
+quote = "1.0.36"
+strum = "0.26"
+strum_macros = "0.26"
+syn = { version = "2.0.72", features = ['full', 'visit', 'extra-traits'] }
 to-syn-value = "0.1.1"
 to-syn-value_derive = "0.1.1"
 walkdir = "2"
 
 [dependencies]
-base64 = "0.12.3"
-bit-set = "0.5.3"
+arcu = { version = "0.1.1", features = ["thread_local_counter"] }
+base64 = "0.22.1"
+bit-set = "0.8.0"
 bitvec = "1"
-blake2 = "0.8.1"
+blake2 = "0.10.6"
 bytes = "1"
-chrono = "0.4.11"
+chrono = "0.4.38"
 cpu-time = "1.0.0"
-crrl = "0.6.0"
-dashu = "0.4.0"
-derive_deref = "1.1.1"
+crrl = "0.9.0"
+dashu = "0.4.2"
+derive_more = "0.99.18"
 dirs-next = "2.0.0"
-divrem = "0.1.0"
+divrem = "1.0.0"
 futures = "0.3"
 fxhash = "0.2.1"
-git-version = "0.3.4"
-indexmap = "1.0.2"
-lazy_static = "1.4.0"
-lexical = "5.2.2"
-libc = "0.2.62"
-libloading = "0.7"
+git-version = "0.3.9"
+indexmap = "2.3.0"
+lazy_static = "1.5.0"
+lexical = "6.1.1"
+libc = "0.2.155"
+libloading = "0.8"
 scryer-modular-bitfield = "0.11.4"
 num-order = { version = "1.2.0" }
-ordered-float = "2.6.0"
-phf = { version = "0.9", features = ["macros"] }
+ordered-float = "4.2.2"
+phf = { version = "0.11", features = ["macros"] }
 rand = "0.8.5"
-regex = "1.9.1"
-ring = { version = "0.17.5", features = ["wasm32_unknown_unknown_js"] }
-ripemd160 = "0.8.0"
-roxmltree = "0.11.0"
-ryu = "1.0.9"
-select = "0.6.0"
-sha3 = "0.8.2"
-smallvec = "1.8.0"
+regex = "1.10.6"
+ring = { version = "0.17.8", features = ["wasm32_unknown_unknown_js"] }
+ripemd = "0.1.3"
+roxmltree = "0.20.0"
+ryu = "1.0.18"
+sha3 = "0.10.8"
+smallvec = "1.13.2"
 static_assertions = "1.1.0"
 
-serde_json = "1.0.95"
-serde = "1.0.159"
-arcu = { version = "0.1.1", features = ["thread_local_counter"] }
+scraper = { version = "0.19.1", default-features = false, features = [
+    "errors",
+] }
+ego-tree = "0.6.2"
+
+
+serde_json = "1.0.122"
+serde = "1.0.204"
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
-crossterm = { version = "0.20.0", optional = true }
-ctrlc = { version = "3.2.2", optional = true }
-hostname = { version = "0.3.1", optional = true }
+crossterm = { version = "0.28.1", optional = true }
+ctrlc = { version = "3.4.4", optional = true }
+hostname = { version = "0.4.0", optional = true }
 libffi = { version = "3.2.0", optional = true }
-native-tls = { version = "0.2.4", optional = true }
-reqwest = { version = "0.11.18", optional = true }
-rustyline = { version = "12.0.0", optional = true }
-tokio = { version = "1.28.2", features = ["full"] }
-warp = { version = "=0.3.5", features = ["tls"], optional = true }
+native-tls = { version = "0.2.12", optional = true }
+reqwest = { version = "0.11.27", optional = true }
+rustyline = { version = "14.0.0", optional = true }
+tokio = { version = "1.39.2", features = ["full"] }
+warp = { version = "0.3.7", features = ["tls"], optional = true }
 
 [target.'cfg(target_arch = "wasm32")'.dependencies]
-getrandom = { version = "0.2.10", features = ["js"] }
-tokio = { version = "1.28.2", features = [
+getrandom = { version = "0.2.15", features = ["js"] }
+tokio = { version = "1.39.2", features = [
     "sync",
     "macros",
     "io-util",
@@ -99,9 +104,9 @@ tokio = { version = "1.28.2", features = [
 
 [target.'cfg(all(target_arch = "wasm32", target_os = "unknown"))'.dependencies]
 console_error_panic_hook = "0.1"
-wasm-bindgen = "0.2.87"
+wasm-bindgen = "0.2.92"
 wasm-bindgen-futures = "0.4"
-serde-wasm-bindgen = "0.5"
+serde-wasm-bindgen = "0.6"
 web-sys = { version = "0.3", features = [
     "Document",
     "Window",
@@ -112,14 +117,14 @@ js-sys = "0.3"
 
 [dev-dependencies]
 maplit = "1.0.2"
-predicates-core = "1.0.2"
-serial_test = "2.0.0"
+predicates-core = "1.0.8"
+serial_test = "3.1.1"
 
 [target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dev-dependencies]
-assert_cmd = "1.0.3"
+assert_cmd = "2.0.15"
 criterion = "0.5.1"
-iai-callgrind = "0.9.0"
-trycmd = "0.14.19"
+iai-callgrind = "0.12.1"
+trycmd = "0.15.6"
 
 [target.'cfg(not(any(target_os = "windows", all(target_arch = "wasm32", target_os = "unknown"))))'.dev-dependencies]
 pprof = { version = "0.13.0", features = ["criterion", "flamegraph"] }

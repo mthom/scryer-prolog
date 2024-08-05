@@ -397,10 +397,10 @@ impl IndexStore {
         key: &PredicateKey,
     ) -> Option<PredicateSkeleton> {
         match compilation_target {
-            CompilationTarget::User => self.extensible_predicates.remove(key),
+            CompilationTarget::User => self.extensible_predicates.swap_remove(key),
             CompilationTarget::Module(ref module_name) => {
                 if let Some(module) = self.modules.get_mut(module_name) {
-                    module.extensible_predicates.remove(key)
+                    module.extensible_predicates.swap_remove(key)
                 } else {
                     None
                 }

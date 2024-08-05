@@ -574,7 +574,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                 RetractionRecord::AddedMetaPredicate(target_module_name, key) => {
                     match target_module_name {
                         atom!("user") => {
-                            self.wam_prelude.indices.meta_predicates.remove(&key);
+                            self.wam_prelude.indices.meta_predicates.swap_remove(&key);
                         }
                         _ => match self
                             .wam_prelude
@@ -583,7 +583,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                             .get_mut(&target_module_name)
                         {
                             Some(ref mut module) => {
-                                module.meta_predicates.remove(&key);
+                                module.meta_predicates.swap_remove(&key);
                             }
                             _ => {
                                 unreachable!()
@@ -617,7 +617,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     }
                 }
                 RetractionRecord::AddedModule(module_name) => {
-                    self.wam_prelude.indices.modules.remove(&module_name);
+                    self.wam_prelude.indices.modules.swap_remove(&module_name);
                 }
                 RetractionRecord::ReplacedModule(
                     module_decl,
@@ -713,7 +713,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     if let Some(ref mut module) =
                         self.wam_prelude.indices.modules.get_mut(&module_name)
                     {
-                        module.code_dir.remove(&key);
+                        module.code_dir.swap_remove(&key);
                     }
                 }
                 RetractionRecord::ReplacedModulePredicate(module_name, key, old_code_idx) => {
@@ -738,7 +738,7 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                     op_decl.insert_into_op_dir(&mut self.wam_prelude.indices.op_dir);
                 }
                 RetractionRecord::AddedUserPredicate(key) => {
-                    self.wam_prelude.indices.code_dir.remove(&key);
+                    self.wam_prelude.indices.code_dir.swap_remove(&key);
                 }
                 RetractionRecord::ReplacedUserPredicate(key, old_code_idx) => {
                     if let Some(code_idx) = self.wam_prelude.indices.code_dir.get_mut(&key) {

@@ -17,7 +17,7 @@ use crate::types::*;
 
 use crate::fixnum;
 
-use ordered_float::*;
+use ordered_float::{Float, OrderedFloat};
 
 use std::cmp;
 use std::convert::TryFrom;
