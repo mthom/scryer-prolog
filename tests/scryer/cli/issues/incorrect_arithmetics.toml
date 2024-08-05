@@ -1,0 +1,6 @@
+args = [
+    "-f",
+    "--no-add-history",
+    "-g", "main,halt",
+    "incorrect_arithmetics.pl"
+]

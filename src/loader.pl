@@ -36,6 +36,46 @@ write_error(Error) :-
     write('.').
 
 
+:- meta_predicate maplistdif(3, ?, ?, ?).
+
+maplistdif(_, [], [], L-L).
+maplistdif(G__2, [H1|T1], [H2|T2], L0-LX) :-
+    call(G__2, H1, H2, L0-L1),
+    maplistdif(G__2, T1, T2, L1-LX).
+
+%% arithmetic_expansion(+Type, ?Term, -ExpandedTerm, -Unifier-Rest).
+%
+% `ExpandedTerm` is the minimal generalization of `Term` which makes a valid
+% arithmetic relation (`Type = rela`) or functional expression (`Type = func`).
+% That means if all unifications from `Unifier` hold then `ExpandedTerm == Term`.
+% `Unifier-Rest` form together a list difference. `Term` is traversed from left
+% to right, depth-first. Given an invalid arithmetic term, as seen in the
+% example below, `E` becomes valid arithmetic term, `L` - unifier:
+%
+% ```
+% ?- arithmetic_expansion(rela, X is sqrt([]+Y*foo(e/2)), E, L-[]).
+%    E = (X is sqrt(_A+Y*_B)), L = [[]=_A,foo(e/2)=_B].
+% ```
+%
+% NOTE: Order of clauses is important for correctness.
+arithmetic_expansion(func, T, T, L-L) :-
+    (var(T); number(T)), !.
+arithmetic_expansion(Set, T, R, LD) :-
+    functor(T, F, A),
+    arithmetic_term(Set, A, Fs),
+    member(F, Fs), !,
+    functor(R, F, A),
+    T =.. [F|Ts],
+    R =.. [F|Rs],
+    maplistdif(arithmetic_expansion(func), Ts, Rs, LD).
+arithmetic_expansion(func, T, R, [T=R|L]-L).
+
+arithmetic_term(func, 0, [e,pi,epsilon]).
+arithmetic_term(func, 1, [+,-,\,sqrt,exp,log,sin,cos,tan,asin,acos,atan,sign,abs,round,ceiling,floor,truncate,float,float_integer_part,float_fractional_part]).
+arithmetic_term(func, 2, [+,-,/,*,**,^,/\,\/,xor,div,//,rdiv,<<,>>,mod,rem,max,min,gcd,atan2]).
+arithmetic_term(rela, 2, [is,>,<,>=,=<,=:=,=\=]).
+
+
 :- non_counted_backtracking '$print_message_and_fail'/1.
 
 '$print_message_and_fail'(Error) :-
@@ -72,6 +112,11 @@ term_expansion_list([Term|Terms], ExpandedTermsHead, ExpandedTermsTail) :-
 
 :- non_counted_backtracking goal_expansion/3.
 
+goal_expansion(G, _, Gx) :-
+    % Additional rule just to replace invalid arithmetic expression with
+    % runtime exception
+    nonvar(G),
+    arithmetic_expansion(rela, G, R, Gx-[R]).
 goal_expansion(Goal, Module, ExpandedGoal) :-
     (  atom(Module),
        '$predicate_defined'(Module, goal_expansion, 2),
