@@ -555,10 +555,8 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
                         }
                     }
                     ModuleExport::OpDecl(op_decl) => {
-                        let op_dir_value_opt = op_dir.swap_remove(&(
-                            op_decl.name,
-                            fixity(op_decl.op_desc.get_spec() as u32),
-                        ));
+                        let op_dir_value_opt = op_dir
+                            .swap_remove(&(op_decl.name, op_decl.op_desc.get_spec().fixity()));
 
                         if let Some(op_desc) = op_dir_value_opt {
                             retraction_info.push_record(op_retractor(*op_decl, op_desc));

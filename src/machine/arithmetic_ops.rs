@@ -1419,11 +1419,11 @@ mod tests {
         let mut wam = MachineState::new();
         let mut op_dir = default_op_dir();
 
-        op_dir.insert((atom!("+"), Fixity::In), OpDesc::build_with(500, YFX as u8));
-        op_dir.insert((atom!("-"), Fixity::In), OpDesc::build_with(500, YFX as u8));
-        op_dir.insert((atom!("-"), Fixity::Pre), OpDesc::build_with(200, FY as u8));
-        op_dir.insert((atom!("*"), Fixity::In), OpDesc::build_with(400, YFX as u8));
-        op_dir.insert((atom!("/"), Fixity::In), OpDesc::build_with(400, YFX as u8));
+        op_dir.insert((atom!("+"), Fixity::In), OpDesc::build_with(500, YFX));
+        op_dir.insert((atom!("-"), Fixity::In), OpDesc::build_with(500, YFX));
+        op_dir.insert((atom!("-"), Fixity::Pre), OpDesc::build_with(200, FY));
+        op_dir.insert((atom!("*"), Fixity::In), OpDesc::build_with(400, YFX));
+        op_dir.insert((atom!("/"), Fixity::In), OpDesc::build_with(400, YFX));
 
         let term_write_result =
             parse_and_write_parsed_term_to_heap(&mut wam, "3 + 4 - 1 + 2.", &op_dir).unwrap();

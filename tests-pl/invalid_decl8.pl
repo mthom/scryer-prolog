@@ -1,0 +1,1 @@
+:- op(10, Var, example).

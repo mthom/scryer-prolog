@@ -978,6 +978,42 @@ impl MachineState {
             }
         );
     }
+
+    pub(crate) fn directive_error(&mut self, err: DirectiveError) -> MachineError {
+        match err {
+            DirectiveError::ExpectedDirective(_term) => self.domain_error(
+                DomainErrorType::Directive,
+                atom_as_cell!(atom!("todo_insert_invalid_term_here")),
+            ),
+            DirectiveError::InvalidDirective(name, arity) => {
+                self.domain_error(DomainErrorType::Directive, functor_stub(name, arity))
+            }
+            DirectiveError::InvalidOpDeclNameType(_term) => self.type_error(
+                ValidType::List,
+                atom_as_cell!(atom!("todo_insert_invalid_term_here")),
+            ),
+            DirectiveError::InvalidOpDeclSpecDomain(_term) => self.domain_error(
+                DomainErrorType::OperatorSpecifier,
+                atom_as_cell!(atom!("todo_insert_invalid_term_here")),
+            ),
+            DirectiveError::InvalidOpDeclSpecValue(atom) => {
+                self.domain_error(DomainErrorType::OperatorSpecifier, atom_as_cell!(atom))
+            }
+            DirectiveError::InvalidOpDeclPrecType(_term) => self.type_error(
+                ValidType::Integer,
+                atom_as_cell!(atom!("todo_insert_invalid_term_here")),
+            ),
+            DirectiveError::InvalidOpDeclPrecDomain(num) => {
+                self.domain_error(DomainErrorType::OperatorPriority, fixnum_as_cell!(num))
+            }
+            DirectiveError::ShallNotCreate(atom) => {
+                self.permission_error(Permission::Create, atom!("operator"), atom)
+            }
+            DirectiveError::ShallNotModify(atom) => {
+                self.permission_error(Permission::Modify, atom!("operator"), atom)
+            }
+        }
+    }
 }
 
 #[allow(clippy::upper_case_acronyms)]

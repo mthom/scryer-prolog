@@ -266,6 +266,26 @@ impl DomainError for HeapCellValue {
     }
 }
 
+impl DomainError for FunctorStub {
+    fn domain_error(
+        self,
+        machine_st: &mut MachineState,
+        valid_type: DomainErrorType,
+    ) -> MachineError {
+        let stub = functor!(
+            atom!("domain_error"),
+            [atom(valid_type.as_atom()), str(machine_st.heap.len(), 0)],
+            [self]
+        );
+
+        MachineError {
+            stub,
+            location: None,
+            from: ErrorProvenance::Constructed,
+        }
+    }
+}
+
 impl DomainError for Number {
     fn domain_error(self, machine_st: &mut MachineState, error: DomainErrorType) -> MachineError {
         let stub = functor!(
@@ -571,10 +591,15 @@ impl MachineState {
             return self.arithmetic_error(err);
         }
 
+        if let CompilationError::InvalidDirective(err) = err {
+            return self.directive_error(err);
+        }
+
         let location = err.line_and_col_num();
+        let len = self.heap.len();
         let stub = err.as_functor();
 
-        let stub = functor!(atom!("syntax_error"), [str(self.heap.len(), 0)], [stub]);
+        let stub = functor!(atom!("syntax_error"), [str(len, 0)], [stub]);
 
         MachineError {
             stub,
@@ -690,7 +715,7 @@ pub enum CompilationError {
     ExpectedRel,
     InadmissibleFact,
     InadmissibleQueryTerm,
-    InconsistentEntry,
+    InvalidDirective(DirectiveError),
     InvalidMetaPredicateDecl,
     InvalidModuleDecl,
     InvalidModuleExport,
@@ -698,6 +723,19 @@ pub enum CompilationError {
     InvalidUseModuleDecl,
     InvalidModuleResolution(Atom),
     UnreadableTerm,
+}
+
+#[derive(Debug)]
+pub enum DirectiveError {
+    ExpectedDirective(Term),
+    InvalidDirective(Atom, usize /* arity */),
+    InvalidOpDeclNameType(Term),
+    InvalidOpDeclSpecDomain(Term),
+    InvalidOpDeclSpecValue(Atom),
+    InvalidOpDeclPrecType(Term),
+    InvalidOpDeclPrecDomain(Fixnum),
+    ShallNotCreate(Atom),
+    ShallNotModify(Atom),
 }
 
 impl From<ArithmeticError> for CompilationError {
@@ -744,8 +782,8 @@ impl CompilationError {
                 // TODO: type_error(callable, _).
                 functor!(atom!("inadmissible_query_term"))
             }
-            CompilationError::InconsistentEntry => {
-                functor!(atom!("inconsistent_entry"))
+            CompilationError::InvalidDirective(_) => {
+                functor!(atom!("directive_error"))
             }
             CompilationError::InvalidMetaPredicateDecl => {
                 functor!(atom!("invalid_meta_predicate_decl"))
@@ -809,6 +847,9 @@ pub(crate) enum DomainErrorType {
     SourceSink,
     Stream,
     StreamOrAlias,
+    OperatorSpecifier,
+    OperatorPriority,
+    Directive,
 }
 
 impl DomainErrorType {
@@ -820,6 +861,9 @@ impl DomainErrorType {
             DomainErrorType::SourceSink => atom!("source_sink"),
             DomainErrorType::Stream => atom!("stream"),
             DomainErrorType::StreamOrAlias => atom!("stream_or_alias"),
+            DomainErrorType::OperatorSpecifier => atom!("operator_specifier"),
+            DomainErrorType::OperatorPriority => atom!("operator_priority"),
+            DomainErrorType::Directive => atom!("directive"),
         }
     }
 }

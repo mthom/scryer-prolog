@@ -385,10 +385,10 @@ impl<'a, R: CharRead> Parser<'a, R> {
         }
     }
 
-    fn push_unary_op(&mut self, td: TokenDesc, spec: Specifier, assoc: u32) {
+    fn push_unary_op(&mut self, td: TokenDesc, spec: Specifier, assoc: OpDeclSpec) {
         if let Some(mut arg1) = self.terms.pop() {
             if let Some(mut name) = self.terms.pop() {
-                if is_postfix!(assoc) {
+                if assoc.is_postfix() {
                     mem::swap(&mut arg1, &mut name);
                 }
 
@@ -912,7 +912,11 @@ impl<'a, R: CharRead> Parser<'a, R> {
                         // can't be prefix, so either inf == 0
                         // or post == 0.
                         self.reduce_op(inf + post);
-                        self.promote_atom_op(name, inf + post, spec & (XFX | XFY | YFX | YF | XF));
+                        self.promote_atom_op(
+                            name,
+                            inf + post,
+                            spec & (XFX as u32 | XFY as u32 | YFX as u32 | YF as u32 | XF as u32),
+                        );
                     }
                     _ => {
                         self.reduce_op(inf + post);
@@ -923,14 +927,22 @@ impl<'a, R: CharRead> Parser<'a, R> {
                                 self.promote_atom_op(
                                     name,
                                     inf + post,
-                                    spec & (XFX | XFY | YFX | XF | YF),
+                                    spec & (XFX as u32
+                                        | XFY as u32
+                                        | YFX as u32
+                                        | XF as u32
+                                        | YF as u32),
                                 );
 
                                 return Ok(true);
                             }
                         }
 
-                        self.promote_atom_op(name, pre, spec & (FX | FY | NEGATIVE_SIGN));
+                        self.promote_atom_op(
+                            name,
+                            pre,
+                            spec & (FX as u32 | FY as u32 | NEGATIVE_SIGN),
+                        );
                     }
                 }
             } else {
@@ -1066,7 +1078,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
             }
             Token::Comma => {
                 self.reduce_op(1000);
-                self.shift(Token::Comma, 1000, XFY);
+                self.shift(Token::Comma, 1000, XFY as u32);
             }
             Token::End => match self.stack.last().map(|t| t.tt) {
                 Some(TokenType::Open)

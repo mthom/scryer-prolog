@@ -11,42 +11,74 @@ use indexmap::IndexSet;
 
 use std::cell::Cell;
 use std::convert::TryFrom;
+pub(crate) fn to_op_decl(prec: u16, spec: OpDeclSpec, name: Atom) -> OpDecl {
+    OpDecl::new(OpDesc::build_with(prec, spec), name)
+}
 
-pub(crate) fn to_op_decl(prec: u16, spec: Atom, name: Atom) -> Result<OpDecl, CompilationError> {
-    match spec {
-        atom!("xfx") => Ok(OpDecl::new(OpDesc::build_with(prec, XFX as u8), name)),
-        atom!("xfy") => Ok(OpDecl::new(OpDesc::build_with(prec, XFY as u8), name)),
-        atom!("yfx") => Ok(OpDecl::new(OpDesc::build_with(prec, YFX as u8), name)),
-        atom!("fx") => Ok(OpDecl::new(OpDesc::build_with(prec, FX as u8), name)),
-        atom!("fy") => Ok(OpDecl::new(OpDesc::build_with(prec, FY as u8), name)),
-        atom!("xf") => Ok(OpDecl::new(OpDesc::build_with(prec, XF as u8), name)),
-        atom!("yf") => Ok(OpDecl::new(OpDesc::build_with(prec, YF as u8), name)),
-        _ => Err(CompilationError::InconsistentEntry),
-    }
+pub(crate) fn to_op_decl_spec(spec: Atom) -> Result<OpDeclSpec, CompilationError> {
+    OpDeclSpec::try_from(spec).map_err(|_err| {
+        CompilationError::InvalidDirective(DirectiveError::InvalidOpDeclSpecValue(spec))
+    })
 }
 
 fn setup_op_decl(mut terms: Vec<Term>, atom_tbl: &AtomTable) -> Result<OpDecl, CompilationError> {
+    // should allow non-partial lists?
     let name = match terms.pop().unwrap() {
         Term::Literal(_, Literal::Atom(name)) => name,
         Term::Literal(_, Literal::Char(c)) => AtomTable::build_with(atom_tbl, &c.to_string()),
-        _ => return Err(CompilationError::InconsistentEntry),
+        other => {
+            return Err(CompilationError::InvalidDirective(
+                DirectiveError::InvalidOpDeclNameType(other),
+            ));
+        }
     };
 
     let spec = match terms.pop().unwrap() {
         Term::Literal(_, Literal::Atom(name)) => name,
-        Term::Literal(_, Literal::Char(c)) => AtomTable::build_with(atom_tbl, &c.to_string()),
-        _ => return Err(CompilationError::InconsistentEntry),
+        other => {
+            return Err(CompilationError::InvalidDirective(
+                DirectiveError::InvalidOpDeclSpecDomain(other),
+            ))
+        }
     };
+
+    let spec = to_op_decl_spec(spec)?;
 
     let prec = match terms.pop().unwrap() {
         Term::Literal(_, Literal::Fixnum(bi)) => match u16::try_from(bi.get_num()) {
             Ok(n) if n <= 1200 => n,
-            _ => return Err(CompilationError::InconsistentEntry),
+            _ => {
+                return Err(CompilationError::InvalidDirective(
+                    DirectiveError::InvalidOpDeclPrecDomain(bi),
+                ));
+            }
         },
-        _ => return Err(CompilationError::InconsistentEntry),
+        other => {
+            return Err(CompilationError::InvalidDirective(
+                DirectiveError::InvalidOpDeclPrecType(other),
+            ));
+        }
     };
 
-    to_op_decl(prec, spec, name)
+    if name == "[]" || name == "{}" {
+        return Err(CompilationError::InvalidDirective(
+            DirectiveError::ShallNotCreate(name),
+        ));
+    }
+
+    if name == "," {
+        return Err(CompilationError::InvalidDirective(
+            DirectiveError::ShallNotModify(name),
+        ));
+    }
+
+    if name == "|" && (prec < 1001 || !spec.is_infix()) {
+        return Err(CompilationError::InvalidDirective(
+            DirectiveError::ShallNotCreate(name),
+        ));
+    }
+
+    Ok(to_op_decl(prec, spec, name))
 }
 
 fn setup_predicate_indicator(term: &mut Term) -> Result<PredicateKey, CompilationError> {
@@ -331,9 +363,13 @@ pub(super) fn setup_declaration<'a, LS: LoadState<'a>>(
                 let (module_name, name, meta_specs) = setup_meta_predicate(terms, loader)?;
                 Ok(Declaration::MetaPredicate(module_name, name, meta_specs))
             }
-            _ => Err(CompilationError::InconsistentEntry),
+            _ => Err(CompilationError::InvalidDirective(
+                DirectiveError::InvalidDirective(name, terms.len()),
+            )),
         },
-        _ => Err(CompilationError::InconsistentEntry),
+        other => Err(CompilationError::InvalidDirective(
+            DirectiveError::ExpectedDirective(other),
+        )),
     }
 }
 

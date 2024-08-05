@@ -1,0 +1,1 @@
+:- op(Var, xf, example).
