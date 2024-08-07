@@ -26,7 +26,7 @@ cargo bench --bench run_criterion -- --profile-time <time>
 
 # to run iai, you need valgrind installed and to install iai-callgrind-runner
 # at the same version as is in Cargo.toml:
-cargo install iai-callgrind-runner --version 0.7.3
+cargo install iai-callgrind-runner --version 0.9.0
 
 cargo bench --bench run_iai
 ```
