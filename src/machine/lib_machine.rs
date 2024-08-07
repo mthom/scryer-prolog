@@ -16,10 +16,12 @@ use super::{
     QueryResolution, QueryResolutionLine, QueryResult, Value,
 };
 
+#[repr(C)]
 pub struct QueryState {
     term: TermWriteResult,
     stub_b: usize,
-    var_names: IndexMap<HeapCellValue, VarPtr>
+    var_names: IndexMap<HeapCellValue, VarPtr>,
+    called: bool
 }
 
 
@@ -288,6 +290,7 @@ impl Machine {
             term: term_write_result,
             stub_b: self.machine_st.b,
             var_names,
+            called: false
         }
 
     }
@@ -304,12 +307,10 @@ impl Machine {
         let qs = query_state;
         let var_names = &qs.var_names;
         let term_write_result = &qs.term;
-        let stub_b = qs.stub_b;
         let mut matches: Vec<QueryResolutionLine> = Vec::new();
         if self.machine_st.p == 1 {
             return Ok(QueryResolution::from(matches))
         }
-
         loop {
             self.dispatch_loop();
 
@@ -414,9 +415,9 @@ impl Machine {
         }
 
         // NOTE: deallocate stub choice point
-        if self.machine_st.b == stub_b {
-            self.trust_me();
-        }
+        // if self.machine_st.b == stub_b {
+        //     self.trust_me();
+        // }
 
         return Ok(QueryResolution::from(matches))
     }

@@ -80,86 +80,54 @@ thread_local! {
 /// In order to retain state, the invoking code must call machine_new().
 /// NOTE: it is the responsibility of the invoking code to call machine_free() or expect
 /// memory leaks.
-pub extern "C" fn machine_new() {
-    MACHINE.with(|m| *m.borrow_mut() = Some(Machine::new_lib()));
+pub extern "C" fn machine_new() -> *mut Machine {
+    let machine = Box::into_raw(Box::new(Machine::new_lib()));
+    machine // This returns a raw pointer
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 #[no_mangle]
-/// The invoking code must call machine_free() exactly once per machine_new() call to deallocate memory
-/// and safely cleanup resources from the machine_new() invocation.
-pub extern "C" fn machine_free() {
-    MACHINE.with(|m| *m.borrow_mut() = None);
+/// Free the machine. Don't do it twice!
+pub extern "C" fn machine_free(ptr: *mut Machine) {
+    unsafe { drop(Box::from_raw(ptr)); }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 #[no_mangle]
-/// Initializes a new query generator with the provided Prolog source code string and returns a status JSON object.
-/// The source code is expected to be a null-terminated C string.
-///
-/// Response Format (JSON):
-/// json
-/// {
-///   "status": "ok" // if successful
-/// } or
-/// {
-///    "status": "error",
-///    "error": "..."
-/// // Error message
-/// }
-pub fn start_new_query_generator(input: *const c_char) -> *mut c_char {
-    let result = std::panic::catch_unwind(|| {
-        let c_str = unsafe {
+pub extern "C" fn start_new_query_generator(machine: *mut Machine, input: *const c_char) -> *mut QueryState {
+    let result = std::panic::catch_unwind(|| unsafe {
+        let c_str = {
             assert!(!input.is_null());
             CStr::from_ptr(input)
         };
-        let r_str = c_str.to_str().expect("Not a valid UTF-8 string").to_owned();
-        QUERY_STATE.with(|qs| *qs.borrow_mut() =
-            MACHINE.with(|m| {
-                Some(m.borrow_mut().as_mut().expect("Machine not initialized!").start_new_query_generator(r_str))
-            }));
-        true
+        c_str.to_str().expect("Not a valid UTF-8 string").to_owned()
     });
-    let json_status = match result {
-        Ok(_) => serde_json::to_string(&serde_json::json!({"status": "ok"})).unwrap(), // if the operation was successful
-        Err(e) => serde_json::to_string(&serde_json::json!({"status": "error", "error": format!("{:?}", e)})).unwrap(), // if there was a panic
-    };
 
-    let c_string = CString::new(json_status).unwrap();
-    c_string.into_raw()
+    match result {
+        Ok(r_str) => {
+            let query_state = unsafe {
+                (*machine).start_new_query_generator(r_str)
+            };
+            Box::into_raw(Box::new(query_state))
+        }
+        Err(e) => {
+            println!("Panic: {:?}", e);
+            std::ptr::null_mut()
+        }
+    }
 }
 
 #[cfg(not(target_arch = "wasm32"))]
 #[no_mangle]
-/// Cleans up resources associated with the query generator and returns a status JSON object.
-/// This function should be called after you are finished using `run_query_generator()` to release
-/// any allocated memory.
-/// **Response Format (JSON):**
-/// ```json
-/// {
-///   "status": "ok" // if successful
-/// } or
-/// {
-///    "status": "error",
-///    "error": "..." // Error message
-/// }
-/// ```
-pub fn cleanup_query_generator() -> *mut c_char {
-    let result = std::panic::catch_unwind(|| {
-        MACHINE.with(|m| {
-            let mut machine = m.borrow_mut();
-            let machine = machine.as_mut().expect("Machine not initialized!");
-            machine.cleanup_query_generator();
-            QUERY_STATE.with(|q| *q.borrow_mut() = None);
-        })
-    });
-
-    let json_status = match result {
-        Ok(_) => serde_json::to_string(&serde_json::json!({"status": "ok"})).unwrap(), // if the operation was successful
-        Err(e) => serde_json::to_string(&serde_json::json!({"status": "error", "error": format!("{:?}", e)})).unwrap(), // if there was a panic
+pub extern "C" fn cleanup_query_generator(machine: *mut Machine, query_state: *mut QueryState) -> *mut c_char {
+    unsafe {
+        if !query_state.is_null() {
+            drop(Box::from_raw(query_state));
+        }
+        (*machine).cleanup_query_generator();
+        true
     };
-
-    let c_string = CString::new(json_status).unwrap();
+    let c_string = CString::new(serde_json::to_string(&serde_json::json!({"status": "ok"})).unwrap()).unwrap();
     c_string.into_raw()
 }
 
@@ -167,85 +135,48 @@ pub fn cleanup_query_generator() -> *mut c_char {
 #[no_mangle]
 /// Runs the query generator, equivalent to preceding facts with "?-" and returns results as JSON.
 ///
-/// **Expected Usage:**
-/// This function is intended for use as part of a shared library binding. It assumes that
-/// `machine_new()` and `start_new_query_generator()` have already been called to initialize the
-/// necessary structures.
-/// **Response Format (JSON):** (per call)
-/// ```json
-/// [{
-///   "status": "ok",  // or "error", or "panic"
-///   "result": [ // present only if status is "ok" -- there will only be a single result per
-///               // invocation
-///     { ... }, // Each element is a Map representing a query result.
-///   ],
-///   "error": "..." // present only if status is "error"
-/// }]
-/// ```
-/// When the answers are exhausted, the function returns a false `result` array and sets
-/// the `status` to `"ok"`. The consuming code should handle this as a termination condition.
-pub extern "C" fn run_query_generator() -> *mut c_char {
-    let result = std::panic::catch_unwind(|| {
-        QUERY_STATE.with(|q| {
-            let mut qs = q.borrow_mut();
-            let qs = qs.as_mut().expect("QueryState not initialized!");
-            MACHINE.with(|m| {
-                let mut machine = m.borrow_mut();
-                let machine = machine.as_mut().expect("Machine not initialized.");
-                machine.run_query_generator(qs)
-            })
-        })
-    });
+/// **Expected Usage:** This function is intended for use as part of a shared library binding. It assumes that
+/// `machine_new()` and `start_new_query_generator()` have already been called to initialize the necessary structures.
+pub extern "C" fn run_query_generator(machine: *mut Machine, query_state: *mut QueryState) -> *mut c_char {
 
-    let output_string: String = match result {
-        Ok(query_resolution) => {
-            // Handling Result type
-            match query_resolution {
-                Ok(query_resolution) => {
-                    let value: serde_json::Value = serde_json::from_str(&format!("{}", query_resolution)).unwrap();
-                    serde_json::to_string(&serde_json::json!({"status": "ok", "result": value})).unwrap()
-                }
-                Err(e_str) => {
-                    serde_json::to_string(&serde_json::json!({"status": "error", "error": &e_str})).unwrap()
-                }
-            }
-        }
-        Err(_) => {
-            serde_json::to_string(&serde_json::json!({"status": "panic", "error": "panic"})).unwrap()
-        }
-    };
-    let c_string = CString::new(output_string).unwrap();
-    c_string.into_raw()
+
+    unsafe {
+        let machine = &mut *machine;
+        let query_state = &mut *(query_state);
+        let query_resolution = machine.run_query_generator(query_state);
+        let value: serde_json::Value = serde_json::from_str(&format!("{}", query_resolution.expect("Oh noes!"))).unwrap();
+        let output_string = serde_json::to_string(&serde_json::json!({"status": "ok", "result": value})).unwrap();
+        let c_string = CString::new(output_string).unwrap();
+        c_string.into_raw()
+    }
 }
 
 
+#[cfg(not(target_arch = "wasm32"))]
 #[no_mangle]
 /// Add source code to the database in the "facts" module.
 ///
 /// NOTE: It is the responsibility of the invoking code to free the string returned by this function using the free_c_string() function.
 /// This function expects a null-terminated C string containing Prolog source code.
-// is there any reason we would want to make other modules available as places to put facts...?
-pub extern "C" fn load_module_string(input: *const c_char) -> *mut c_char {
-    let result = std::panic::catch_unwind(|| {
-        let c_str = unsafe {
-            assert!(!input.is_null());
-            CStr::from_ptr(input)
-        };
-        let r_str = c_str.to_str().expect("Not a valid UTF-8 string");
-        MACHINE.with(|m| {
-            let mut machine = m.borrow_mut();
-            let machine = machine.as_mut().expect("Machine not initialized.");
-            machine.load_module_string("facts", r_str.to_owned());
-        });
-        true
+pub extern "C" fn load_module_string(machine: *mut Machine, input: *const c_char) -> *mut c_char {
+    let result = std::panic::catch_unwind(|| unsafe {
+        assert!(!input.is_null());
+        CStr::from_ptr(input).to_str().expect("Not a valid UTF-8 string")
     });
 
-    let json_status = match result {
-        Ok(_) => serde_json::to_string(&serde_json::json!({"status": "ok"})).unwrap(), // if the operation was successful
-        Err(e) => serde_json::to_string(&serde_json::json!({"status": "error", "error": format!("{:?}", e)})).unwrap(), // if there was a panic
+    let output_string = unsafe {
+        match result {
+            Ok(r_str) => {
+                (*machine).load_module_string("facts", r_str.to_owned());
+                serde_json::to_string(&serde_json::json!({"status": "ok"})).unwrap()
+            }
+            Err(e_str) => {
+                serde_json::to_string(&serde_json::json!({"status": "error", "error": format!("{:?}", &e_str)})).unwrap()
+            }
+        }
     };
 
-    let c_string = CString::new(json_status).unwrap();
+    let c_string = CString::new(output_string).unwrap();
     c_string.into_raw()
 }
 
@@ -256,27 +187,25 @@ pub extern "C" fn load_module_string(input: *const c_char) -> *mut c_char {
 /// NOTE: it is the responsibility of the invoking code to clean up the string returned
 /// by this function with the free_c_string() function.
 // I'm not sure if there is a technical difference between consulting and loading facts?
-pub extern "C" fn consult_module_string(input: *const c_char) -> *mut c_char {
-    let result = std::panic::catch_unwind(|| {
-        let c_str = unsafe {
-            assert!(!input.is_null());
-            CStr::from_ptr(input)
-        };
-        let r_str = c_str.to_str().expect("Not a valid UTF-8 string");
-        MACHINE.with(|m| {
-            let mut machine = m.borrow_mut();
-            let machine = machine.as_mut().expect("Machine not initialized.");
-            machine.consult_module_string("facts", r_str.to_owned());
-        });
-        true
+pub extern "C" fn consult_module_string(machine: *mut Machine, input: *const c_char) -> *mut c_char {
+    let result = std::panic::catch_unwind(|| unsafe {
+        CStr::from_ptr(input).to_str().expect("Not a valid UTF-8 string")
     });
 
-    let json_status = match result {
-        Ok(_) => serde_json::to_string(&serde_json::json!({"status": "ok"})).unwrap(), // if the operation was successful
-        Err(e) => serde_json::to_string(&serde_json::json!({"status": "error", "error": format!("{:?}", e)})).unwrap(), // if there was a panic
+    let output_string = unsafe {
+        match result {
+            Ok(r_str) => {
+                let query_resolution = (*machine).consult_module_string("facts", r_str.to_owned());
+                let value: serde_json::Value = serde_json::from_str(&format!("{:?}", query_resolution)).unwrap();
+                serde_json::to_string(&serde_json::json!({"status": "ok", "result": value})).unwrap()
+            }
+            Err(e_str) => {
+                serde_json::to_string(&serde_json::json!({"status": "error", "error": format!("{:?}", &e_str)})).unwrap()
+            }
+        }
     };
 
-    let c_string = CString::new(json_status).unwrap();
+    let c_string = CString::new(output_string).unwrap();
     c_string.into_raw()
 }
 
@@ -298,39 +227,24 @@ pub extern "C" fn consult_module_string(input: *const c_char) -> *mut c_char {
 /// }
 /// ```
 /// **Warning:** Non-terminating queries will cause the thread to lock indefinitely.
-pub extern "C" fn run_query(input: *const c_char) -> *mut c_char {
-    let result = std::panic::catch_unwind(|| {
-        let c_str = unsafe {
-            assert!(!input.is_null());
-            CStr::from_ptr(input)
-        };
-        let r_str = c_str.to_str().expect("Not a valid UTF-8 string");
-
-        MACHINE.with(|m| {
-            let mut machine = m.borrow_mut();
-            let machine = machine.as_mut().expect("Machine not initialized.");
-            machine.run_query(r_str.to_owned())
-        })
+pub extern "C" fn run_query(machine: *mut Machine, input: *const c_char) -> *mut c_char {
+    let result = std::panic::catch_unwind(|| unsafe {
+        CStr::from_ptr(input).to_str().expect("Not a valid UTF-8 string")
     });
 
-    let output_string: String = match result {
-        Ok(query_resolution) => {
-            // Handling Result type
-            match query_resolution {
-                Ok(query_resolution) => {
-                    let value: serde_json::Value = serde_json::from_str(&format!("{}", query_resolution)).unwrap();
-                    serde_json::to_string(&serde_json::json!({"status": "ok", "result": value})).unwrap()
-                }
-                Err(e_str) => {
-                    serde_json::to_string(&serde_json::json!({"status": "error", "error": &e_str})).unwrap()
-                }
+    let output_string = unsafe {
+        match result {
+            Ok(r_str) => {
+                let query_resolution = (*machine).run_query(r_str.to_owned());
+                let value: serde_json::Value = serde_json::from_str(&format!("{}", query_resolution.expect("Oh noes!"))).unwrap();
+                let r = serde_json::to_string(&serde_json::json!({"status": "ok", "result": value})).unwrap();
+                r
+            }
+            Err(e_str) => {
+                serde_json::to_string(&serde_json::json!({"status": "error", "error": format!("{:?}", &e_str)})).unwrap()
             }
         }
-        Err(_) => {
-            serde_json::to_string(&serde_json::json!({"status": "panic", "error": "panic"})).unwrap()
-        }
     };
-
     let c_string = CString::new(output_string).unwrap();
     c_string.into_raw()
 }
