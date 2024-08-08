@@ -79,6 +79,7 @@ impl ValidType {
 
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum ResourceError {
+    HeapLimit,
     FiniteMemory(HeapCellValue),
     OutOfFiles,
 }
@@ -344,6 +345,15 @@ impl MachineState {
             }
             ResourceError::OutOfFiles => {
                 functor!(atom!("resource_error"), [atom(atom!("file_descriptors"))])
+            }
+            ResourceError::HeapLimit => {
+                functor!(
+                    atom!("resource_error"),
+                    [
+                        atom(atom!("heap_limit")),
+                        fixnum(self.heap_limit.expect("should have heap limit"))
+                    ]
+                )
             }
         };
 
@@ -692,7 +702,7 @@ impl MachineState {
 }
 
 impl MachineError {
-    fn into_iter(self, offset: usize) -> Box<dyn Iterator<Item = HeapCellValue>> {
+    pub(super) fn into_iter(self, offset: usize) -> Box<dyn Iterator<Item = HeapCellValue>> {
         match self.from {
             ErrorProvenance::Constructed => {
                 Box::new(self.stub.into_iter().map(move |hcv| hcv + offset))
