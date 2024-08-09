@@ -82,6 +82,32 @@ pub mod lib {
             unsafe { drop(Box::from_raw(ptr)); }
         }
 
+        /// This function initiates a new query on the provided machine instance with the given 
+        /// Prolog string query as input. It uses FFI and is expected to be called from other 
+        /// languages, and thus works with raw (C) pointers.
+        /// 
+        /// the provided C string is not a valid UTF-8 string, the function panics with an error 
+        /// message. After successfully converting the C string to a Rust UTF-8 string, a new query
+        /// is started on the machine instance.
+        ///
+        /// In case of a panic during the execution, the function prints "Panic: " followed by the panic
+        /// information, and returns a null pointer. Otherwise, it returns a raw pointer to the created
+        /// QueryState.
+        ///
+        /// # Safety
+        ///
+        /// This function contains unsafe Rust code blocks, caveat emptor. The behavior is undefined if:
+        /// * `machine` is not a valid pointer to a life-alive `Machine` instance.
+        /// * `input` is not a null-terminated array.
+        ///
+        /// # Parameters
+        ///
+        /// * `machine`: Raw mutable pointer to a `Machine` instance.
+        /// * `input`:   Raw immutable pointer to a C string containing the Prolog string query.
+        ///
+        /// # Returns
+        ///
+        /// A raw pointer (`*mut QueryState`) to the created `QueryState` or a null pointer in case of a panic.
         #[no_mangle]
         pub extern "C" fn scryer_start_new_query_generator(machine: *mut Machine, input: *const c_char) -> *mut QueryState {
             let result = std::panic::catch_unwind(|| {
@@ -104,7 +130,7 @@ pub mod lib {
                     Box::into_raw(Box::new(query_state))
                 }
                 Err(e) => {
-                    println!("Panic: {:?}", e);
+                    eprintln!("Panic: {:?}", e);
                     std::ptr::null_mut()
                 }
             }
