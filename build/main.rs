@@ -53,17 +53,9 @@ fn main() {
         println!("Failed to run rustfmt, will skip formatting generated files.")
     }
 
-    // Check if cbindgen is installed
-    let has_cbindgen = Command::new("cbindgen")
-        .arg("--version")
-        .stdin(Stdio::inherit())
-        .status()
-        .is_ok();
-
-    if !has_cbindgen {
-        println!("Failed to run cbindgen, will skip generating C bindings.")
-    }
-
+println!("cargo:rerun-if-changed=cbindgen.toml");
+let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+cbindgen::generate(&manifest_dir).unwrap().write_to_file("path/to/file.h")
     let out_dir = env::var("OUT_DIR").unwrap();
     let dest_path = Path::new(&out_dir).join("libraries.rs");
 
