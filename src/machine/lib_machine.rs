@@ -414,10 +414,6 @@ impl Machine {
             break;
         }
 
-        // NOTE: deallocate stub choice point
-        // if self.machine_st.b == stub_b {
-        //     self.trust_me();
-        // }
 
         return Ok(QueryResolution::from(matches))
     }
