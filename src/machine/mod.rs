@@ -70,7 +70,6 @@ lazy_static! {
 }
 
 #[derive(Debug)]
-#[repr(C)]
 pub struct Machine {
     pub(super) machine_st: MachineState,
     pub(super) indices: IndexStore,
