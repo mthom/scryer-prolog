@@ -10,6 +10,7 @@ use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
+use cbindgen::generate_with_config;
 
 fn find_prolog_files(path_prefix: &str, current_dir: &Path) -> Vec<(String, PathBuf)> {
     let mut libraries = vec![];
@@ -52,6 +53,17 @@ fn main() {
         println!("Failed to run rustfmt, will skip formatting generated files.")
     }
 
+    // Check if cbindgen is installed
+    let has_cbindgen = Command::new("cbindgen")
+        .arg("--version")
+        .stdin(Stdio::inherit())
+        .status()
+        .is_ok();
+
+    if !has_cbindgen {
+        println!("Failed to run cbindgen, will skip generating C bindings.")
+    }
+
     let out_dir = env::var("OUT_DIR").unwrap();
     let dest_path = Path::new(&out_dir).join("libraries.rs");
 
@@ -59,8 +71,7 @@ fn main() {
     let lib_path = Path::new("src").join("lib");
 
     let constants = find_prolog_files("", &lib_path);
-
-    let out_dir = std::env::var("OUT_DIR").unwrap();
+    
     let out_dir_path: &Path = out_dir.as_ref();
     let manifest_dir = &std::env::var("CARGO_MANIFEST_DIR").unwrap();
     let manifest_dir_path: &Path = manifest_dir.as_ref();
@@ -117,7 +128,22 @@ fn main() {
         format_generated_file(static_atoms_path.as_path());
     }
 
+    // Generate C bindings with cbindgen if it is available
+    if has_cbindgen {
+        generate_c_bindings();
+    }
+
     println!("cargo:rerun-if-changed=src/");
+}
+
+// Function to generate C bindings using cbindgen
+fn generate_c_bindings() {
+    let bindings = generate_with_config("./", cbindgen::Config::from_file("./.cbindgen.toml").unwrap())
+        .expect("Unable to generate bindings");
+
+    // Write bindings to the docs/shared_library/libscryer_prolog.h file.
+    let out_path = PathBuf::from("./docs/shared_library/");
+    bindings.write_to_file(out_path.join("libscryer_prolog.h"));
 }
 
 fn format_generated_file(path: &Path) {

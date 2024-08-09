@@ -35,6 +35,7 @@ syn = { version = "2.0.32", features = ['full', 'visit', 'extra-traits'] }
 to-syn-value = "0.1.1"
 to-syn-value_derive = "0.1.1"
 walkdir = "2"
+cbindgen = "0.26.0"
 
 [dependencies]
 base64 = "0.12.3"
