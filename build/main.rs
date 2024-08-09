@@ -54,7 +54,8 @@ fn main() {
 
     println!("cargo:rerun-if-changed=.cbindgen.toml");
     let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
-    cbindgen::generate(&manifest_dir).unwrap().write_to_file("docs/shared_library/libscryer_prolog.h");
+    let headers_dir = Path::new(&manifest_dir).join("docs/shared_library/libscryer_prolog.h");
+    cbindgen::generate(&manifest_dir).unwrap().write_to_file(headers_dir);
 
     let out_dir = env::var("OUT_DIR").unwrap();
     let dest_path = Path::new(&out_dir).join("libraries.rs");
