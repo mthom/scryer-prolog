@@ -101,7 +101,7 @@ pub mod lib {
         /// }
         /// ```
         #[no_mangle]
-        pub extern "C" fn scryer_machine_free(ptr: *mut Machine) {
+        pub unsafe extern "C" fn scryer_machine_free(ptr: *mut Machine) {
             unsafe { drop(Box::from_raw(ptr)); }
         }
 
