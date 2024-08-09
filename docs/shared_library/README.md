@@ -209,7 +209,7 @@ def query_generator(machine: MACHINE_PTR, query: str):
 # ...snip...
 ```
 
-See `scryer_python.py` for a complete example.
+See [`scryer_python.py`](scryer_python.py) for a complete example.
   
   * Note that the JSON printer returns results that are not completely accurate when it comes to differentiating strings from symbols, e.g.:
     
