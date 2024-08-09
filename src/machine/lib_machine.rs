@@ -16,7 +16,6 @@ use super::{
     QueryResolution, QueryResolutionLine, QueryResult, Value,
 };
 
-#[repr(C)]
 pub struct QueryState {
     term: TermWriteResult,
     stub_b: usize,
