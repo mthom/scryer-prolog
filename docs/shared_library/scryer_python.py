@@ -3,6 +3,30 @@ import ctypes
 import json
 import os
 import platform
+from typing import TypedDict, Union, List, Literal, Dict, ContextManager, Generator
+
+
+class OkListResult(TypedDict):
+    status: Literal["ok"]
+    result: List[Dict[str, str]]
+
+
+class OkBoolResult(TypedDict):
+    status: Literal["ok"]
+    result: bool
+
+
+class ErrorResult(TypedDict):
+    status: Literal["error"]
+    error: str
+
+
+class PanicResult(TypedDict):
+    status: Literal["panic"]
+    error: Literal["panic"]
+
+
+SCRYER_QUERY_RESULT = Union[OkListResult, OkBoolResult, ErrorResult, PanicResult]
 
 install_location = os.getenv("SCRYER_HOME")  # wherever you installed scryer
 
@@ -23,6 +47,9 @@ lib = ctypes.cdll.LoadLibrary(shared_library_path)
 QUERY_STATE_PTR = MACHINE_PTR = ctypes.POINTER(ctypes.c_void_p)
 UTF8_BYTES = ctypes.c_char_p
 SCRYER_UTF8_PTR = ctypes.POINTER(ctypes.c_char)
+INT32 = ctypes.c_int32
+
+
 
 lib.scryer_run_query.argtypes = (MACHINE_PTR, UTF8_BYTES,)
 lib.scryer_run_query.restype = SCRYER_UTF8_PTR
@@ -37,16 +64,16 @@ lib.scryer_machine_free.argtypes = (MACHINE_PTR,)
 lib.scryer_machine_free.restype = None
 
 lib.scryer_consult_module_string.argtypes = (MACHINE_PTR, UTF8_BYTES)
-lib.scryer_consult_module_string.restype = SCRYER_UTF8_PTR
+lib.scryer_consult_module_string.restype = INT32
 
 lib.scryer_load_module_string.argtypes = (MACHINE_PTR, UTF8_BYTES,)
-lib.scryer_load_module_string.restype = SCRYER_UTF8_PTR
+lib.scryer_load_module_string.restype = INT32
 
 lib.scryer_start_new_query_generator.argtypes = (MACHINE_PTR, UTF8_BYTES,)
 lib.scryer_start_new_query_generator.restype = QUERY_STATE_PTR
 
 lib.scryer_cleanup_query_generator.argtypes = (MACHINE_PTR, QUERY_STATE_PTR)
-lib.scryer_cleanup_query_generator.restype = SCRYER_UTF8_PTR
+lib.scryer_cleanup_query_generator.restype = INT32
 
 lib.scryer_run_query_generator.argtypes = (MACHINE_PTR, QUERY_STATE_PTR)
 lib.scryer_run_query_generator.restype = SCRYER_UTF8_PTR
@@ -60,17 +87,7 @@ class ScryerError(Exception):
     pass
 
 
-def handle_scryer_result(result: str):
-    """
-    Handle the result returned by the Scryer API.
-
-    :param result: The result returned by the Scryer API.
-    :type result: str
-    :return: The result if the status is "ok", or True if the result is missing.
-    :rtype: Any
-    :raise ScryerError: If the status is "error".
-    :raise ScryerPanicException: If the status is "panic".
-    """
+def handle_scryer_result(result: str) -> SCRYER_QUERY_RESULT:
     result = json.loads(result)
     if result["status"] == "ok":
         return result["result"] if 'result' in result else True
@@ -80,52 +97,35 @@ def handle_scryer_result(result: str):
         raise ScryerPanicException()
 
 
-def eval_and_free(machine: MACHINE_PTR, query: str):
-    """
-    Evaluate the given query on the specified machine and free the allocated memory.
-
-    :param machine: A pointer to the machine object.
-    :param query: The query string to be evaluated.
-    :return: The result of the query evaluation.
-    """
+def eval_and_free(machine: MACHINE_PTR, query: str) -> SCRYER_QUERY_RESULT:
     res_ptr = lib.scryer_run_query(machine, query.encode('utf-8'))
     res = ctypes.cast(res_ptr, UTF8_BYTES).value.decode('utf-8')
     lib.scryer_free_c_string(res_ptr)
     return handle_scryer_result(res)
 
 
-def run_generator_step(machine: MACHINE_PTR, qs: QUERY_STATE_PTR):
-    """
-    This method runs a query generator on the given machine and query state. It returns the result of running the generator as a string.
-
-    :param machine: A pointer to the machine object.
-    :param qs: A pointer to the query state object.
-    :return: The result of running the query generator as a string.
-    """
+def run_generator_step(machine: MACHINE_PTR, qs: QUERY_STATE_PTR) -> SCRYER_QUERY_RESULT:
     res_ptr = lib.scryer_run_query_generator(machine, qs)
     res = ctypes.cast(res_ptr, UTF8_BYTES).value.decode('utf-8')
     lib.scryer_free_c_string(res_ptr)
     return handle_scryer_result(res)
 
 
-def handle_loader_deloader(ptr):
+def handle_loader_deloader(ret_val: INT32, message: str=None):
     """
     Deal with functions which have no return value, such as resource deallocators. This will
     throw an error if there was an error.
 
     :param ptr: A pointer to a memory location
     :return: The result of handling the scryer result
-
     """
-    res = ctypes.cast(ptr, UTF8_BYTES).value.decode('utf-8')
-    try:
-        return handle_scryer_result(res)
-    finally:
-        lib.scryer_free_c_string(ptr)
+    if ret_val == 1:
+        raise ScryerError(message) if message else ScryerError()
+
 
 
 @contextlib.contextmanager
-def query_generator(machine: MACHINE_PTR, query: str):
+def query_generator(machine: MACHINE_PTR, query: str) -> ContextManager[Generator[SCRYER_QUERY_RESULT, None, None]]:
     """
     Generates a query generator for a given machine and query.
 
