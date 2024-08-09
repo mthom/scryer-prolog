@@ -52,6 +52,9 @@ fn main() {
         println!("Failed to run rustfmt, will skip formatting generated files.")
     }
 
+    println!("cargo:rerun-if-changed=.cbindgen.toml");
+    generate_c_bindings();
+
     let out_dir = env::var("OUT_DIR").unwrap();
     let dest_path = Path::new(&out_dir).join("libraries.rs");
 
@@ -118,6 +121,12 @@ fn main() {
     }
 
     println!("cargo:rerun-if-changed=src/");
+}
+
+fn generate_c_bindings() {
+    let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+    let headers_dir = Path::new(&manifest_dir).join("docs/shared_library/libscryer_prolog.h");
+    cbindgen::generate(&manifest_dir).unwrap().write_to_file(headers_dir);
 }
 
 fn format_generated_file(path: &Path) {
