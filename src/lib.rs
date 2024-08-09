@@ -76,8 +76,31 @@ pub mod lib {
         }
 
 
+        /// Frees the memory occupied by a `Machine` object.
+        ///
+        /// # Safety
+        ///
+        /// The function is marked as unsafe because it dereferences a raw pointer and assumes ownership of the object pointed to.
+        /// It relies on the `Drop` implementation of `Box` to deallocate the memory.
+        ///
+        /// # Parameters
+        ///
+        /// - `ptr`: A mutable raw pointer to a `Machine` object.
+        ///
+        /// # Example
+        ///
+        /// ```rust
+        /// use std::ptr;
+        ///
+        /// // Assume `machine_ptr` is a valid raw pointer to a `Machine` object
+        ///
+        /// unsafe {
+        ///     let machine_ptr: *mut Machine = ...;
+        ///     scryer_machine_free(machine_ptr);
+        ///     // The memory occupied by the `Machine` object is now freed
+        /// }
+        /// ```
         #[no_mangle]
-        /// Free the machine. Don't do it twice!
         pub extern "C" fn scryer_machine_free(ptr: *mut Machine) {
             unsafe { drop(Box::from_raw(ptr)); }
         }
