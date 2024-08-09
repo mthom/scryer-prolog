@@ -63,7 +63,8 @@ fn main() {
     let lib_path = Path::new("src").join("lib");
 
     let constants = find_prolog_files("", &lib_path);
-    
+
+    let out_dir = std::env::var("OUT_DIR").unwrap();
     let out_dir_path: &Path = out_dir.as_ref();
     let manifest_dir = &std::env::var("CARGO_MANIFEST_DIR").unwrap();
     let manifest_dir_path: &Path = manifest_dir.as_ref();
