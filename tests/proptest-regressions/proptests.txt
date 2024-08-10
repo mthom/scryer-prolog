@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 776c0a9a265b5c528867150fa9a6069b45e52f7cb8f2d490f748ea2b49c68f3b # shrinks to query_result = Matches([QueryMatch { bindings: {"A": Structure(Atom { index: 6864 }, [])} }])
+cc 763dda9ce302dc4cc20ad2cafc4af80275d7af890519073e09a1697fa2f9a9be # shrinks to query_result = Matches([QueryMatch { bindings: {"_": Var, "_0": Var} }])
