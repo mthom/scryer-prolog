@@ -119,6 +119,7 @@ js-sys = "0.3"
 maplit = "1.0.2"
 predicates-core = "1.0.8"
 serial_test = "3.1.1"
+proptest = "1.5.0"
 
 [target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dev-dependencies]
 assert_cmd = "2.0.15"
