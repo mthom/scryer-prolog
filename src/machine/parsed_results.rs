@@ -15,24 +15,72 @@ pub enum QueryResolution {
     False,
     Matches(Vec<QueryMatch>),
 }
-pub fn write_str_as_json<W: Write>(writer: &mut W, val: &str) -> Result<(), std::fmt::Error> {
+
+pub fn write_literal_str_as_json_str<W: Write>(
+    writer: &mut W,
+    val: &str,
+) -> Result<(), std::fmt::Error> {
     writer.write_char('"')?;
 
     for c in val.chars() {
-        match c {
-            '"' => writer.write_str(r#"\""#)?,
-            '\\' => writer.write_str(r"\\")?,
-            '\u{0008}' => writer.write_str(r"\b")?,
-            '\u{000C}' => writer.write_str(r"\f")?,
-            '\n' => writer.write_str(r"\n")?,
-            '\r' => writer.write_str(r"\r")?,
-            '\t' => writer.write_str(r"\t")?,
-            '\u{0000}'..='\u{001F}' => write!(writer, "\\u{:04X}", c as u32)?,
-            ' '..='\u{10FFFF}' => writer.write_char(c)?,
-        }
+        write_char_to_json_str(c, writer)?;
     }
 
     writer.write_char('"')
+}
+
+pub fn write_prolog_str_as_rust_str<W: Write>(
+    writer: &mut W,
+    val: &str,
+) -> Result<(), std::fmt::Error> {
+    let mut chars = val.chars();
+    while let Some(c) = chars.next() {
+        match c {
+            // re-escape prolog escape sequences to json escape sequences
+            '\\' => match chars
+                .next()
+                .expect("a prolog string shouldn't end with the start of an escape sequence")
+            {
+                'a' => writer.write_char('\u{0007}')?,
+                'b' => writer.write_char('\u{0008}')?,
+                'f' => writer.write_char('\u{000C}')?,
+                'n' => writer.write_char('\n')?,
+                'r' => writer.write_char('\r')?,
+                's' => writer.write_char(' ')?,
+                't' => writer.write_char('\t')?,
+                'v' => writer.write_char('\u{000B}')?,
+                'x' => todo!(r"hexadecimal escape of the form \xXX..\ are currently not supported"),
+                'u' => todo!(r"unicode escape of the form \uXXXX are currently not supported"),
+                'U' => todo!(r"unicode escape of the form \UXXXXXXXX are currently not supported"),
+                // \40 octal escape ?
+                '\\' => writer.write_char('\\')?,
+                '"' => writer.write_char('"')?,
+                '\'' => writer.write_char('\'')?,
+                '`' => writer.write_char('`')?,
+                other => panic!("Unrecognized escape sequence begining with \\{other}"),
+            },
+            _ => writer.write_char(c)?,
+        }
+    }
+    Ok(())
+}
+
+#[inline]
+fn write_char_to_json_str<W: std::fmt::Write>(
+    c: char,
+    writer: &mut W,
+) -> Result<(), std::fmt::Error> {
+    Ok(match c {
+        '"' => writer.write_str(r#"\""#)?,
+        '\\' => writer.write_str(r"\\")?,
+        '\u{0008}' => writer.write_str(r"\b")?,
+        '\u{000C}' => writer.write_str(r"\f")?,
+        '\n' => writer.write_str(r"\n")?,
+        '\r' => writer.write_str(r"\r")?,
+        '\t' => writer.write_str(r"\t")?,
+        '\u{0000}'..='\u{001F}' => write!(writer, "\\u{:04X}", c as u32)?,
+        ' '..='\u{10FFFF}' => writer.write_char(c)?,
+    })
 }
 
 pub fn write_prolog_value_as_json<W: Write>(
@@ -49,8 +97,8 @@ pub fn write_prolog_value_as_json<W: Write>(
                 write!(writer, "\"{r}\"")
             }
         }
-        Value::Atom(a) => write_str_as_json(writer, &a.as_str()),
-        Value::String(s) => write_str_as_json(writer, s),
+        Value::Atom(a) => write_literal_str_as_json_str(writer, &a.as_str()),
+        Value::String(s) => write_literal_str_as_json_str(writer, s),
         Value::List(l) => {
             writer.write_char('[')?;
             if let Some((first, rest)) = l.split_first() {
@@ -65,7 +113,7 @@ pub fn write_prolog_value_as_json<W: Write>(
         }
         Value::Structure(s, l) => {
             writer.write_char('{')?;
-            write_str_as_json(writer, &s.as_str())?;
+            write_literal_str_as_json_str(writer, &s.as_str())?;
             writer.write_str(":[")?;
 
             if let Some((first, rest)) = l.split_first() {
@@ -89,13 +137,13 @@ fn write_prolog_match_as_json<W: std::fmt::Write>(
     let mut iter = query_match.bindings.iter();
 
     if let Some((k, v)) = iter.next() {
-        write_str_as_json(writer, k)?;
+        write_literal_str_as_json_str(writer, k)?;
         writer.write_char(':')?;
         write_prolog_value_as_json(writer, v)?;
 
         for (k, v) in iter {
             writer.write_char(',')?;
-            write_str_as_json(writer, k)?;
+            write_literal_str_as_json_str(writer, k)?;
             writer.write_char(':')?;
             write_prolog_value_as_json(writer, v)?;
         }
@@ -233,28 +281,34 @@ fn split_response_string(input: &str) -> Vec<&str> {
     let mut in_single_quotes = false;
     let mut start = 0;
     let mut result = Vec::new();
+    let mut escape_next = false;
 
     for (i, c) in input.char_indices() {
+        let in_quotes = in_single_quotes | in_double_quotes;
+        let escaped = escape_next;
+        escape_next = false;
+
         match c {
-            '[' => level_bracket += 1,
-            ']' => level_bracket -= 1,
-            '(' => level_parenthesis += 1,
-            ')' => level_parenthesis -= 1,
-            '"' => in_double_quotes = !in_double_quotes,
-            '\'' => in_single_quotes = !in_single_quotes,
-            ',' if level_bracket == 0
-                && level_parenthesis == 0
-                && !in_double_quotes
-                && !in_single_quotes =>
-            {
+            '[' if !in_quotes => level_bracket += 1,
+            ']' if !in_quotes => level_bracket -= 1,
+            '(' if !in_quotes => level_parenthesis += 1,
+            ')' if !in_quotes => level_parenthesis -= 1,
+            // FIXME hex escape sequenches of the form \xXX..\ at the end of a string arn't handled properly
+            // the ending \ can cause the closing quote to be ignored
+            '\\' if in_quotes && !escaped => escape_next = true,
+            '"' if !in_single_quotes && !escaped => in_double_quotes = !in_double_quotes,
+            '\'' if !in_double_quotes && !escaped => in_single_quotes = !in_single_quotes,
+            ',' if level_bracket == 0 && level_parenthesis == 0 && !in_quotes => {
                 result.push(input[start..i].trim());
-                start = i + 1;
+                start = i + ','.len_utf8();
             }
             _ => {}
         }
     }
-
-    result.push(input[start..].trim());
+    let remainder = input[start..].trim();
+    if !remainder.is_empty() {
+        result.push(remainder);
+    }
     result
 }
 
@@ -308,27 +362,6 @@ impl TryFrom<String> for QueryResolutionLine {
     }
 }
 
-fn split_nested_list(input: &str) -> Vec<&str> {
-    let mut level = 0;
-    let mut start = 0;
-    let mut result = Vec::new();
-
-    for (i, c) in input.char_indices() {
-        match c {
-            '[' => level += 1,
-            ']' => level -= 1,
-            ',' if level == 0 => {
-                result.push(input[start..i].trim());
-                start = i + ','.len_utf8();
-            }
-            _ => {}
-        }
-    }
-
-    result.push(input[start..].trim());
-    result
-}
-
 pub(crate) fn strip_circumfix(haystack: &str, prefix: char, suffix: char) -> Option<&str> {
     haystack.strip_prefix(prefix)?.strip_suffix(suffix)
 }
@@ -353,9 +386,15 @@ impl FromStr for Value {
         } else if let Some(unquoted) =
             strip_circumfix(trimmed, '\'', '\'').or_else(|| strip_circumfix(trimmed, '"', '"'))
         {
-            Ok(Value::String(unquoted.into()))
+            // pre-allocate enough capacity in case nothing needs to be un-escaped
+            // this will over allocate in case the string contains escape sequences
+            let mut str = String::with_capacity(unquoted.len());
+            write_prolog_str_as_rust_str(&mut str, unquoted)
+                .expect("writing to a string shouldn't fail");
+
+            Ok(Value::String(str))
         } else if let Some(unbracketed) = strip_circumfix(trimmed, '[', ']') {
-            let split = split_nested_list(unbracketed);
+            let split = split_response_string(unbracketed);
 
             let values = split
                 .into_iter()
@@ -364,7 +403,7 @@ impl FromStr for Value {
 
             Ok(Value::List(values))
         } else if let Some(unbraced) = strip_circumfix(trimmed, '{', '}') {
-            let iter = unbraced.split(',');
+            let iter = split_response_string(unbraced);
             let mut values = vec![];
 
             for value in iter {
@@ -376,7 +415,7 @@ impl FromStr for Value {
 
             Ok(Value::Structure(atom!("{}"), values))
         } else if let Some(un_double_angle_bracketed) = strip_circumfix_str(trimmed, "<<", ">>") {
-            let iter = un_double_angle_bracketed.split(',');
+            let iter = split_response_string(un_double_angle_bracketed);
             let mut values = vec![];
 
             for value in iter {
