@@ -103,23 +103,30 @@ fn write_prolog_match_as_json<W: std::fmt::Write>(
     writer.write_char('}')
 }
 
+fn write_prolog_query_resolution_as_json<W: std::fmt::Write>(
+    resolution: &QueryResolution,
+    f: &mut W,
+) -> Result<(), std::fmt::Error> {
+    match resolution {
+        QueryResolution::True => f.write_str("true"),
+        QueryResolution::False => f.write_str("false"),
+        QueryResolution::Matches(matches) => {
+            f.write_char('[')?;
+            if let Some((first, rest)) = matches.split_first() {
+                write_prolog_match_as_json(f, first)?;
+                for other in rest {
+                    f.write_char(',')?;
+                    write_prolog_match_as_json(f, other)?;
+                }
+            }
+            f.write_char(']')
+        }
+    }
+}
+
 impl Display for QueryResolution {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            QueryResolution::True => f.write_str("true"),
-            QueryResolution::False => f.write_str("false"),
-            QueryResolution::Matches(matches) => {
-                f.write_char('[')?;
-                if let Some((first, rest)) = matches.split_first() {
-                    write_prolog_match_as_json(f, first)?;
-                    for other in rest {
-                        f.write_char(',')?;
-                        write_prolog_match_as_json(f, other)?;
-                    }
-                }
-                f.write_char(']')
-            }
-        }
+        write_prolog_query_resolution_as_json(self, f)
     }
 }
 
