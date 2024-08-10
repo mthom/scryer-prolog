@@ -630,4 +630,84 @@ mod tests {
 
         assert_eq!(output, Ok(QueryResolution::False));
     }
+
+    #[test]
+    #[cfg_attr(miri, ignore = "it takes too long to run")]
+    #[ignore = "broken"]
+    fn mischivious_string1() {
+        let mut machine = Machine::new_lib();
+
+        let result = machine.run_query(String::from(r##"A = [ "[", "", "]" ]."##));
+
+        assert_eq!(
+            result,
+            Ok(QueryResolution::Matches(vec![QueryMatch {
+                bindings: BTreeMap::from([(
+                    String::from("A"),
+                    Value::List(vec![
+                        Value::str_literal("["),
+                        Value::str_literal(""),
+                        Value::str_literal("]")
+                    ])
+                )])
+            }]))
+        );
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore = "it takes too long to run")]
+    #[ignore = "broken"]
+    fn mischivious_string2() {
+        let mut machine = Machine::new_lib();
+
+        let result = machine.run_query(String::from(r##"A = [ "\",", "Test", ",\"" ]."##));
+
+        assert_eq!(
+            result,
+            Ok(QueryResolution::Matches(vec![QueryMatch {
+                bindings: BTreeMap::from([(
+                    String::from("A"),
+                    Value::List(vec![
+                        Value::str_literal("\","),
+                        Value::str_literal("Test"),
+                        Value::str_literal(",\"")
+                    ])
+                )])
+            }]))
+        );
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore = "it takes too long to run")]
+    #[ignore = "broken"]
+    fn mischivious_strings() {
+        let mut machine = Machine::new_lib();
+
+        let result = machine.run_query(String::from(
+            r##"A = [ '"', "'", "[","{", { "{" :  [ "]", "}", "]" ] } ]."##,
+        ));
+
+        assert_eq!(
+            result,
+            Ok(QueryResolution::Matches(vec![QueryMatch {
+                bindings: BTreeMap::from([(
+                    String::from("A"),
+                    Value::List(vec![
+                        Value::str_literal("\""),
+                        Value::str_literal("'"),
+                        Value::str_literal("["),
+                        Value::str_literal("{"),
+                        Value::Structure(
+                            atom!("{}"),
+                            vec![Value::List(vec![
+                                Value::str_literal("]"),
+                                Value::str_literal("}"),
+                                Value::str_literal("]"),
+                            ])]
+                        )
+                    ])
+                )])
+            }]))
+        );
+    }
 }
