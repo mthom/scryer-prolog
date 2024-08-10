@@ -50,8 +50,16 @@ fn generate_value() -> impl Strategy<Value = Value> {
 #[test]
 fn result_is_valid_json() {
     let table = AtomTable::new();
-
     proptest! {
+        (if cfg!(miri) {
+            ProptestConfig {
+                failure_persistence: None,
+                cases: 5,
+                ..ProptestConfig::default()
+            }
+        } else {
+            ProptestConfig::default()
+        }),
         |(query_result in generate_query_resolution())|{
             let json_str = format!("{query_result}");
             if let Err(err) = serde_json::Value::from_str(&json_str) {
