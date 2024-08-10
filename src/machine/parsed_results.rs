@@ -15,33 +15,42 @@ pub enum QueryResolution {
     False,
     Matches(Vec<QueryMatch>),
 }
+pub fn write_str_as_json<W: Write>(writer: &mut W, val: &str) -> Result<(), std::fmt::Error> {
+    writer.write_char('"')?;
+
+    for c in val.chars() {
+        match c {
+            '"' => writer.write_str(r#"\""#)?,
+            '\\' => writer.write_str(r"\\")?,
+            '\u{0008}' => writer.write_str(r"\b")?,
+            '\u{000C}' => writer.write_str(r"\f")?,
+            '\n' => writer.write_str(r"\n")?,
+            '\r' => writer.write_str(r"\r")?,
+            '\t' => writer.write_str(r"\t")?,
+            '\u{0000}'..='\u{001F}' => write!(writer, "\\u{:04X}", c as u32)?,
+            ' '..='\u{10FFFF}' => writer.write_char(c)?,
+        }
+    }
+
+    writer.write_char('"')
+}
 
 pub fn write_prolog_value_as_json<W: Write>(
     writer: &mut W,
     value: &Value,
 ) -> Result<(), std::fmt::Error> {
     match value {
-        Value::Integer(i) => write!(writer, "{}", i),
-        Value::Float(f) => write!(writer, "{}", f),
-        Value::Rational(r) => write!(writer, "{}", r),
-        Value::Atom(a) => writer.write_str(&a.as_str()),
-        Value::String(s) => {
-            if let Err(_e) = serde_json::from_str::<serde_json::Value>(s.as_str()) {
-                //treat as string literal
-                //escape double quotes
-                write!(
-                    writer,
-                    "\"{}\"",
-                    s.replace('\"', "\\\"")
-                        .replace('\n', "\\n")
-                        .replace('\t', "\\t")
-                        .replace('\r', "\\r")
-                )
+        Value::Integer(i) => write!(writer, "{i}"),
+        Value::Float(f) => write!(writer, "{f}"),
+        Value::Rational(r) => {
+            if r.is_int() {
+                write!(writer, "{r}")
             } else {
-                //return valid json string
-                writer.write_str(s)
+                write!(writer, "\"{r}\"")
             }
         }
+        Value::Atom(a) => write_str_as_json(writer, &a.as_str()),
+        Value::String(s) => write_str_as_json(writer, s),
         Value::List(l) => {
             writer.write_char('[')?;
             if let Some((first, rest)) = l.split_first() {
@@ -55,7 +64,9 @@ pub fn write_prolog_value_as_json<W: Write>(
             writer.write_char(']')
         }
         Value::Structure(s, l) => {
-            write!(writer, "\"{}\":[", s.as_str())?;
+            writer.write_char('{')?;
+            write_str_as_json(writer, &s.as_str())?;
+            writer.write_str(":[")?;
 
             if let Some((first, rest)) = l.split_first() {
                 write_prolog_value_as_json(writer, first)?;
@@ -64,9 +75,9 @@ pub fn write_prolog_value_as_json<W: Write>(
                     write_prolog_value_as_json(writer, other)?;
                 }
             }
-            writer.write_char(']')
+            writer.write_str("]}")
         }
-        _ => writer.write_str("null"),
+        Value::Var => writer.write_str("null"),
     }
 }
 
@@ -78,11 +89,14 @@ fn write_prolog_match_as_json<W: std::fmt::Write>(
     let mut iter = query_match.bindings.iter();
 
     if let Some((k, v)) = iter.next() {
-        write!(writer, "\"{k}\":")?;
+        write_str_as_json(writer, k)?;
+        writer.write_char(':')?;
         write_prolog_value_as_json(writer, v)?;
 
         for (k, v) in iter {
-            write!(writer, ",\"{k}\":")?;
+            writer.write_char(',')?;
+            write_str_as_json(writer, k)?;
+            writer.write_char(':')?;
             write_prolog_value_as_json(writer, v)?;
         }
     }
