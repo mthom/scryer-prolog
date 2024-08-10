@@ -965,11 +965,11 @@ subject_class("Todo", C), property_getter(C, "literal://string:construct%20test"
 =====query
 subject_class("Todo", C), collection_getter(C, "literal://string:construct%20test", "comments", Value).
 =====result
-[{"C":"c","Value":[""]}]
+[{"C":"c","Value":[]}]
 =====query
 subject_class("Todo", C), collection_getter(C, "literal://string:construct%20test", "comments", Value).
 =====result
-[{"C":"c","Value":[""]}]
+[{"C":"c","Value":[]}]
 =====consult
 :- discontiguous(triple/3).
 :- discontiguous(link/5).
@@ -1371,7 +1371,7 @@ collection_setter(c, "likedMessagess", '[{action: "collectionSetter", source: "t
 =====query
 subject_class("Todo", C), collection_getter(C, "literal://string:construct%20test", "comments", Value).
 =====result
-[{"C":"c","Value":[""]}]
+[{"C":"c","Value":[]}]
 =====consult
 :- discontiguous(triple/3).
 :- discontiguous(link/5).
@@ -2084,7 +2084,7 @@ false
 =====query
 subject_class("Todo", C), collection_getter(C, "literal://string:Decorated%20class%20construction%20test", "comments", Value).
 =====result
-[{"C":"c","Value":[""]}]
+[{"C":"c","Value":[]}]
 =====consult
 :- discontiguous(triple/3).
 :- discontiguous(link/5).
@@ -2232,7 +2232,7 @@ subject_class("Todo", C), property_getter(C, "literal://string:Decorated%20class
 =====query
 subject_class("Todo", C), collection_getter(C, "literal://string:Decorated%20class%20construction%20test", "comments", Value).
 =====result
-[{"C":"c","Value":[""]}]
+[{"C":"c","Value":[]}]
 =====consult
 :- discontiguous(triple/3).
 :- discontiguous(link/5).
@@ -4531,7 +4531,7 @@ property_getter(srksdbln, Base, "number", Value) :- triple(Base, "test://test_nu
 =====query
 subject_class("Todo", C), property_getter(C, "literal://string:Custom%20getter%20test", "isLiked", Value).
 =====result
-[{"C":"c","Value":true}]
+[{"C":"c","Value":"true"}]
 =====consult
 :- discontiguous(triple/3).
 :- discontiguous(link/5).
@@ -7026,7 +7026,7 @@ subject_class("Recipe", C), collection(C, Collection).
 =====query
 subject_class("Recipe", C), collection_getter(C, "literal://string:Active%20record%20implementation%20test", "entries", Value).
 =====result
-[{"C":"nzkpcwbu","Value":[""]}]
+[{"C":"nzkpcwbu","Value":[]}]
 =====query
 subject_class("Recipe", C), collection_getter(C, "literal://string:Active%20record%20implementation%20test", "ingredients", Value).
 =====result
@@ -7034,7 +7034,7 @@ false
 =====query
 subject_class("Recipe", C), collection_getter(C, "literal://string:Active%20record%20implementation%20test", "comments", Value).
 =====result
-[{"C":"nzkpcwbu","Value":[""]}]
+[{"C":"nzkpcwbu","Value":[]}]
 =====query
 subject_class(Class, C), property(C, "type"), property(C, "name"), property(C, "local"), property_setter(C, "name", _), property_setter(C, "local", _), collection_adder(C, "entriess", _), collection_adder(C, "ingredientss", _), collection_adder(C, "commentss", _), collection_remover(C, "entriess", _), collection_remover(C, "ingredientss", _), collection_remover(C, "commentss", _), collection_setter(C, "entriess", _), collection_setter(C, "ingredientss", _), collection_setter(C, "commentss", _).
 =====result
@@ -7078,7 +7078,7 @@ subject_class("Recipe", C), collection(C, Collection).
 =====query
 subject_class("Recipe", C), collection_getter(C, "literal://string:Active%20record%20implementation%20test", "entries", Value).
 =====result
-[{"C":"nzkpcwbu","Value":[""]}]
+[{"C":"nzkpcwbu","Value":[]}]
 =====query
 subject_class("Recipe", C), collection_getter(C, "literal://string:Active%20record%20implementation%20test", "ingredients", Value).
 =====result
@@ -7086,7 +7086,7 @@ false
 =====query
 subject_class("Recipe", C), collection_getter(C, "literal://string:Active%20record%20implementation%20test", "comments", Value).
 =====result
-[{"C":"nzkpcwbu","Value":[""]}]
+[{"C":"nzkpcwbu","Value":[]}]
 =====query
 subject_class(Class, C), property(C, "type"), property(C, "name"), property(C, "local"), property_setter(C, "name", _), property_setter(C, "local", _), collection_adder(C, "entriess", _), collection_adder(C, "ingredientss", _), collection_adder(C, "commentss", _), collection_remover(C, "entriess", _), collection_remover(C, "ingredientss", _), collection_remover(C, "commentss", _), collection_setter(C, "entriess", _), collection_setter(C, "ingredientss", _), collection_setter(C, "commentss", _).
 =====result
@@ -7422,7 +7422,7 @@ subject_class("Recipe", C), collection(C, Collection).
 =====query
 subject_class("Recipe", C), collection_getter(C, "literal://string:Active%20record%20implementation%20test", "entries", Value).
 =====result
-[{"C":"nzkpcwbu","Value":[""]}]
+[{"C":"nzkpcwbu","Value":[]}]
 =====query
 subject_class("Recipe", C), collection_getter(C, "literal://string:Active%20record%20implementation%20test", "ingredients", Value).
 =====result
@@ -7430,7 +7430,7 @@ false
 =====query
 subject_class("Recipe", C), collection_getter(C, "literal://string:Active%20record%20implementation%20test", "comments", Value).
 =====result
-[{"C":"nzkpcwbu","Value":[""]}]
+[{"C":"nzkpcwbu","Value":[]}]
 =====query
 subject_class(Class, C), property(C, "type"), property(C, "name"), property(C, "local"), property_setter(C, "name", _), property_setter(C, "local", _), collection_adder(C, "entriess", _), collection_adder(C, "ingredientss", _), collection_adder(C, "commentss", _), collection_remover(C, "entriess", _), collection_remover(C, "ingredientss", _), collection_remover(C, "commentss", _), collection_setter(C, "entriess", _), collection_setter(C, "ingredientss", _), collection_setter(C, "commentss", _).
 =====result
@@ -7474,7 +7474,7 @@ subject_class("Recipe", C), collection(C, Collection).
 =====query
 subject_class("Recipe", C), collection_getter(C, "literal://string:Active%20record%20implementation%20test", "entries", Value).
 =====result
-[{"C":"nzkpcwbu","Value":[""]}]
+[{"C":"nzkpcwbu","Value":[]}]
 =====query
 subject_class("Recipe", C), collection_getter(C, "literal://string:Active%20record%20implementation%20test", "ingredients", Value).
 =====result
@@ -7482,7 +7482,7 @@ false
 =====query
 subject_class("Recipe", C), collection_getter(C, "literal://string:Active%20record%20implementation%20test", "comments", Value).
 =====result
-[{"C":"nzkpcwbu","Value":[""]}]
+[{"C":"nzkpcwbu","Value":[]}]
 =====query
 subject_class(Class, C), property(C, "className"), property(C, "generateSDNA").
 =====result
@@ -7534,7 +7534,7 @@ subject_class("Recipe", C), collection(C, Collection).
 =====query
 subject_class("Recipe", C), collection_getter(C, "literal://string:Active%20record%20implementation%20test", "entries", Value).
 =====result
-[{"C":"nzkpcwbu","Value":[""]}]
+[{"C":"nzkpcwbu","Value":[]}]
 =====query
 subject_class("Recipe", C), collection_getter(C, "literal://string:Active%20record%20implementation%20test", "ingredients", Value).
 =====result
@@ -7542,7 +7542,7 @@ false
 =====query
 subject_class("Recipe", C), collection_getter(C, "literal://string:Active%20record%20implementation%20test", "comments", Value).
 =====result
-[{"C":"nzkpcwbu","Value":[""]}]
+[{"C":"nzkpcwbu","Value":[]}]
 =====query
 subject_class(Class, C), property(C, "type"), property(C, "name"), property(C, "local"), property_setter(C, "name", _), property_setter(C, "local", _), collection_adder(C, "entriess", _), collection_adder(C, "ingredientss", _), collection_adder(C, "commentss", _), collection_remover(C, "entriess", _), collection_remover(C, "ingredientss", _), collection_remover(C, "commentss", _), collection_setter(C, "entriess", _), collection_setter(C, "ingredientss", _), collection_setter(C, "commentss", _).
 =====result
@@ -8812,7 +8812,7 @@ subject_class("Recipe", C), collection(C, Collection).
 =====query
 subject_class("Recipe", C), collection_getter(C, "literal://string:Active%20record%20implementation%20collection%20test", "entries", Value).
 =====result
-[{"C":"nzkpcwbu","Value":[""]}]
+[{"C":"nzkpcwbu","Value":[]}]
 =====query
 subject_class("Recipe", C), collection_getter(C, "literal://string:Active%20record%20implementation%20collection%20test", "ingredients", Value).
 =====result
@@ -8864,7 +8864,7 @@ subject_class("Recipe", C), collection(C, Collection).
 =====query
 subject_class("Recipe", C), collection_getter(C, "literal://string:Active%20record%20implementation%20collection%20test", "entries", Value).
 =====result
-[{"C":"nzkpcwbu","Value":[""]}]
+[{"C":"nzkpcwbu","Value":[]}]
 =====query
 subject_class("Recipe", C), collection_getter(C, "literal://string:Active%20record%20implementation%20collection%20test", "ingredients", Value).
 =====result
@@ -10200,7 +10200,7 @@ subject_class("Recipe", C), collection(C, Collection).
 =====query
 subject_class("Recipe", C), collection_getter(C, "literal://string:Active%20record%20implementation%20test%20local%20link", "entries", Value).
 =====result
-[{"C":"nzkpcwbu","Value":[""]}]
+[{"C":"nzkpcwbu","Value":[]}]
 =====query
 subject_class("Recipe", C), collection_getter(C, "literal://string:Active%20record%20implementation%20test%20local%20link", "ingredients", Value).
 =====result
@@ -10208,7 +10208,7 @@ false
 =====query
 subject_class("Recipe", C), collection_getter(C, "literal://string:Active%20record%20implementation%20test%20local%20link", "comments", Value).
 =====result
-[{"C":"nzkpcwbu","Value":[""]}]
+[{"C":"nzkpcwbu","Value":[]}]
 =====query
 subject_class(Class, C), property(C, "type"), property(C, "name"), property(C, "local"), property_setter(C, "name", _), property_setter(C, "local", _), collection_adder(C, "entriess", _), collection_adder(C, "ingredientss", _), collection_adder(C, "commentss", _), collection_remover(C, "entriess", _), collection_remover(C, "ingredientss", _), collection_remover(C, "commentss", _), collection_setter(C, "entriess", _), collection_setter(C, "ingredientss", _), collection_setter(C, "commentss", _).
 =====result
@@ -10252,7 +10252,7 @@ subject_class("Recipe", C), collection(C, Collection).
 =====query
 subject_class("Recipe", C), collection_getter(C, "literal://string:Active%20record%20implementation%20test%20local%20link", "entries", Value).
 =====result
-[{"C":"nzkpcwbu","Value":[""]}]
+[{"C":"nzkpcwbu","Value":[]}]
 =====query
 subject_class("Recipe", C), collection_getter(C, "literal://string:Active%20record%20implementation%20test%20local%20link", "ingredients", Value).
 =====result
@@ -10260,7 +10260,7 @@ false
 =====query
 subject_class("Recipe", C), collection_getter(C, "literal://string:Active%20record%20implementation%20test%20local%20link", "comments", Value).
 =====result
-[{"C":"nzkpcwbu","Value":[""]}]
+[{"C":"nzkpcwbu","Value":[]}]
 =====query
 subject_class(Class, C), property(C, "className"), property(C, "generateSDNA").
 =====result
@@ -10334,9 +10334,9 @@ subject_class("Recipe", C), collection_getter(C, "literal://string:Active%20reco
 =====query
 subject_class("Recipe", C), collection_getter(C, "literal://string:Active%20record%20implementation%20collection%20test", "entries", Value).
 =====result
-[{"C":"nzkpcwbu","Value":[""]}]
+[{"C":"nzkpcwbu","Value":[]}]
 =====result
-[{"C":"nzkpcwbu","Value":[""]}]
+[{"C":"nzkpcwbu","Value":[]}]
 =====query
 subject_class("Recipe", C), collection_getter(C, "literal://string:Active%20record%20implementation%20collection%20test", "ingredients", Value).
 =====query
@@ -10352,7 +10352,7 @@ subject_class("Recipe", C), collection_getter(C, "literal://string:Active%20reco
 =====query
 subject_class("Recipe", C), collection_getter(C, "literal://string:Active%20record%20implementation%20test%20local%20link", "comments", Value).
 =====result
-[{"C":"nzkpcwbu","Value":[""]}]
+[{"C":"nzkpcwbu","Value":[]}]
 =====query
 subject_class(Class, C), property(C, "className"), property(C, "generateSDNA").
 =====result
@@ -10408,7 +10408,7 @@ subject_class("Recipe", C), collection(C, Collection).
 =====query
 subject_class("Recipe", C), collection_getter(C, "literal://string:Active%20record%20implementation%20collection%20test", "entries", Value).
 =====result
-[{"C":"nzkpcwbu","Value":[""]}]
+[{"C":"nzkpcwbu","Value":[]}]
 =====query
 subject_class("Recipe", C), collection_getter(C, "literal://string:Active%20record%20implementation%20collection%20test", "ingredients", Value).
 =====result
@@ -10468,7 +10468,7 @@ subject_class("Recipe", C), collection(C, Collection).
 =====query
 subject_class("Recipe", C), collection_getter(C, "literal://string:Active%20record%20implementation%20test", "entries", Value).
 =====result
-[{"C":"nzkpcwbu","Value":[""]}]
+[{"C":"nzkpcwbu","Value":[]}]
 =====query
 subject_class("Recipe", C), collection_getter(C, "literal://string:Active%20record%20implementation%20test", "ingredients", Value).
 =====result
@@ -10476,7 +10476,7 @@ false
 =====query
 subject_class("Recipe", C), collection_getter(C, "literal://string:Active%20record%20implementation%20test", "comments", Value).
 =====result
-[{"C":"nzkpcwbu","Value":[""]}]
+[{"C":"nzkpcwbu","Value":[]}]
 =====query
 subject_class(Class, C), property(C, "type"), property(C, "name"), property(C, "local"), property_setter(C, "name", _), property_setter(C, "local", _), collection_adder(C, "entriess", _), collection_adder(C, "ingredientss", _), collection_adder(C, "commentss", _), collection_remover(C, "entriess", _), collection_remover(C, "ingredientss", _), collection_remover(C, "commentss", _), collection_setter(C, "entriess", _), collection_setter(C, "ingredientss", _), collection_setter(C, "commentss", _).
 =====result
@@ -10520,7 +10520,7 @@ subject_class("Recipe", C), collection(C, Collection).
 =====query
 subject_class("Recipe", C), collection_getter(C, "literal://string:Active%20record%20implementation%20collection%20test", "entries", Value).
 =====result
-[{"C":"nzkpcwbu","Value":[""]}]
+[{"C":"nzkpcwbu","Value":[]}]
 =====query
 subject_class("Recipe", C), collection_getter(C, "literal://string:Active%20record%20implementation%20collection%20test", "ingredients", Value).
 =====result
@@ -10572,7 +10572,7 @@ subject_class("Recipe", C), collection(C, Collection).
 =====query
 subject_class("Recipe", C), collection_getter(C, "literal://string:Active%20record%20implementation%20test%20local%20link", "entries", Value).
 =====result
-[{"C":"nzkpcwbu","Value":[""]}]
+[{"C":"nzkpcwbu","Value":[]}]
 =====query
 subject_class("Recipe", C), collection_getter(C, "literal://string:Active%20record%20implementation%20test%20local%20link", "ingredients", Value).
 =====result
@@ -10580,7 +10580,7 @@ false
 =====query
 subject_class("Recipe", C), collection_getter(C, "literal://string:Active%20record%20implementation%20test%20local%20link", "comments", Value).
 =====result
-[{"C":"nzkpcwbu","Value":[""]}]
+[{"C":"nzkpcwbu","Value":[]}]
 =====query
 subject_class(Class, C), property(C, "type"), property(C, "name"), property(C, "local"), property_setter(C, "name", _), property_setter(C, "local", _), collection_adder(C, "entriess", _), collection_adder(C, "ingredientss", _), collection_adder(C, "commentss", _), collection_remover(C, "entriess", _), collection_remover(C, "ingredientss", _), collection_remover(C, "commentss", _), collection_setter(C, "entriess", _), collection_setter(C, "ingredientss", _), collection_setter(C, "commentss", _).
 =====result
@@ -10938,7 +10938,7 @@ subject_class("Recipe", C), collection(C, Collection).
 =====query
 subject_class("Recipe", C), collection_getter(C, "literal://string:Active%20record%20implementation%20collection%20test", "entries", Value).
 =====result
-[{"C":"nzkpcwbu","Value":[""]}]
+[{"C":"nzkpcwbu","Value":[]}]
 =====query
 subject_class("Recipe", C), collection_getter(C, "literal://string:Active%20record%20implementation%20collection%20test", "ingredients", Value).
 =====result
@@ -10990,7 +10990,7 @@ subject_class("Recipe", C), collection(C, Collection).
 =====query
 subject_class("Recipe", C), collection_getter(C, "literal://string:Active%20record%20implementation%20test%20local%20link", "entries", Value).
 =====result
-[{"C":"nzkpcwbu","Value":[""]}]
+[{"C":"nzkpcwbu","Value":[]}]
 =====query
 subject_class("Recipe", C), collection_getter(C, "literal://string:Active%20record%20implementation%20test%20local%20link", "ingredients", Value).
 =====result
@@ -10998,7 +10998,7 @@ false
 =====query
 subject_class("Recipe", C), collection_getter(C, "literal://string:Active%20record%20implementation%20test%20local%20link", "comments", Value).
 =====result
-[{"C":"nzkpcwbu","Value":[""]}]
+[{"C":"nzkpcwbu","Value":[]}]
 =====query
 subject_class(Class, C), property(C, "type"), property(C, "name"), property(C, "local"), property_setter(C, "name", _), property_setter(C, "local", _), collection_adder(C, "entriess", _), collection_adder(C, "ingredientss", _), collection_adder(C, "commentss", _), collection_remover(C, "entriess", _), collection_remover(C, "ingredientss", _), collection_remover(C, "commentss", _), collection_setter(C, "entriess", _), collection_setter(C, "ingredientss", _), collection_setter(C, "commentss", _).
 =====result
