@@ -1,6 +1,6 @@
 use crate::atom_table::*;
-use crate::heap_print::PrinterOutputter;
-use crate::heap_print::{HCPrinter, HCValueOutputter};
+use crate::heap_iter::{stackful_post_order_iter, NonListElider};
+use crate::machine::{F64Offset, F64Ptr, Fixnum, HeapCellValueTag};
 use crate::parser::ast;
 use dashu::*;
 use indexmap::IndexMap;
@@ -10,10 +10,9 @@ use std::collections::HashMap;
 use std::fmt::Display;
 use std::fmt::Write;
 use std::iter::FromIterator;
-use std::sync::Arc;
 
-use super::HeapCellValue;
 use super::Machine;
+use super::{HeapCellValue, Number};
 
 pub type QueryResult = Result<QueryResolution, String>;
 
@@ -32,7 +31,7 @@ pub fn write_prolog_value_as_json<W: Write>(
         Value::Integer(i) => write!(writer, "{}", i),
         Value::Float(f) => write!(writer, "{}", f),
         Value::Rational(r) => write!(writer, "{}", r),
-        Value::Atom(a) => writer.write_str(&a.as_str()),
+        Value::Atom(a) => writer.write_str(a.as_str()),
         Value::String(s) => {
             if let Err(_e) = serde_json::from_str::<serde_json::Value>(s.as_str()) {
                 //treat as string literal
@@ -134,39 +133,191 @@ pub enum Value {
     Integer(Integer),
     Rational(Rational),
     Float(OrderedFloat<f64>),
-    Atom(Atom),
+    Atom(String),
     String(String),
     List(Vec<Value>),
-    Structure(Atom, Vec<Value>),
-    Var,
+    Structure(String, Vec<Value>),
+    Var(String),
+    AnonVar,
 }
 
 impl Value {
     pub(crate) fn from_heapcell(
         machine: &mut Machine,
-        heap_cell: &HeapCellValue,
+        heap_cell: HeapCellValue,
         var_names: &IndexMap<HeapCellValue, ast::VarPtr>,
     ) -> Self {
-        let mut printer = HCPrinter::new(
+        // Adapted from MachineState::read_term_from_heap
+        let mut term_stack = vec![];
+        let iter = stackful_post_order_iter::<NonListElider>(
             &mut machine.machine_st.heap,
-            Arc::clone(&machine.machine_st.atom_tbl),
             &mut machine.machine_st.stack,
-            &machine.indices.op_dir,
-            PrinterOutputter::new(),
-            *heap_cell,
+            heap_cell,
         );
 
-        printer.ignore_ops = false;
-        printer.numbervars = true;
-        printer.quoted = true;
-        printer.max_depth = 1000; // NOTE: set this to 0 for unbounded depth
-        printer.double_quotes = true;
-        printer.var_names.clone_from(var_names);
+        for addr in iter {
+            let addr = unmark_cell_bits!(addr);
 
-        let outputter = printer.print();
+            read_heap_cell!(addr,
+                (HeapCellValueTag::Lis) => {
+                    let tail = term_stack.pop().unwrap();
+                    let head = term_stack.pop().unwrap();
 
-        let output: String = outputter.result();
-        Value::try_from(output).expect("Couldn't convert Houtput to Value")
+                    let list = match tail {
+                        Value::List(mut elems) => {
+                            elems.insert(0, head);
+                            Value::List(elems)
+                        },
+                        Value::String(mut elems) => match head {
+                            Value::Atom(ref a) if a.chars().collect::<Vec<_>>().len() == 1 => {
+                                // Handle lists of char as strings
+                                elems.insert(0, a.chars().next().unwrap());
+                                Value::String(elems)
+                            },
+                            _ => {
+                                let mut elems: Vec<Value> = elems
+                                    .chars()
+                                    .map(|x| Value::Atom(x.into()))
+                                    .collect();
+                                elems.insert(0, head);
+                                Value::List(elems)
+                            }
+                        },
+                        Value::Atom(atom) if atom == "[]" =>  match head {
+                            Value::Atom(ref a) if a.chars().collect::<Vec<_>>().len() == 1 => {
+                                // Handle lists of char as strings
+                                Value::String(a.to_string())
+                            }
+                            _ => Value::List(vec![head]),
+                        },
+                        _ => Value::Structure(".".into(), vec![head, tail]),
+                    };
+                    term_stack.push(list);
+                }
+                (HeapCellValueTag::Var | HeapCellValueTag::AttrVar | HeapCellValueTag::StackVar) => {
+                    if let Some(ast::Var::Named(name)) = var_names.get(&addr).map(|x| x.borrow().clone()) {
+                        term_stack.push(Value::Var(name));
+                    } else {
+                        // TODO: These variables aren't actually anonymous, they just aren't in the
+                        // query. Give names to them to differentiate distinct variables.
+                        term_stack.push(Value::AnonVar);
+                    }
+                }
+                //(HeapCellValueTag::Cons | HeapCellValueTag::CStr | HeapCellValueTag::Fixnum |
+                // HeapCellValueTag::Char | HeapCellValueTag::F64) => {
+                //    term_stack.push(Term::Literal(Cell::default(), Literal::try_from(addr).unwrap()));
+                //}
+                (HeapCellValueTag::F64, f) => {
+                    term_stack.push(Value::Float(*f));
+                }
+                (HeapCellValueTag::Char, c) => {
+                    term_stack.push(Value::Atom(c.into()));
+                }
+                (HeapCellValueTag::Fixnum, n) => {
+                    term_stack.push(Value::Integer(n.into()));
+                }
+                (HeapCellValueTag::Cons) => {
+                    match Number::try_from(addr) {
+                        Ok(Number::Integer(i)) => term_stack.push(Value::Integer((*i).clone())),
+                        Ok(Number::Rational(r)) => term_stack.push(Value::Rational((*r).clone())),
+                        _ => {}
+                    }
+                }
+                (HeapCellValueTag::CStr, s) => {
+                    term_stack.push(Value::String(s.as_str().to_string()));
+                }
+                (HeapCellValueTag::Atom, (name, arity)) => {
+                    //let h = iter.focus().value() as usize;
+                    //let mut arity = arity;
+
+                    // Not sure why/if this is needed.
+                    // Might find out with better testing later.
+                    /*
+                    if iter.heap.len() > h + arity + 1 {
+                        let value = iter.heap[h + arity + 1];
+
+                        if let Some(idx) = get_structure_index(value) {
+                            // in the second condition, arity == 0,
+                            // meaning idx cannot pertain to this atom
+                            // if it is the direct subterm of a larger
+                            // structure.
+                            if arity > 0 || !iter.direct_subterm_of_str(h) {
+                                term_stack.push(
+                                    Term::Literal(Cell::default(), Literal::CodeIndex(idx))
+                                );
+
+                                arity += 1;
+                            }
+                        }
+                    }
+                    */
+
+                    if arity == 0 {
+                        term_stack.push(Value::Atom(name.as_str().to_string()));
+                    } else {
+                        let subterms = term_stack
+                            .drain(term_stack.len() - arity ..)
+                            .collect();
+
+                        term_stack.push(Value::Structure(name.as_str().to_string(), subterms));
+                    }
+                }
+                (HeapCellValueTag::PStr, atom) => {
+                    let tail = term_stack.pop().unwrap();
+
+                    if let Value::Atom(atom) = tail {
+                        if atom == "[]" {
+                            term_stack.push(Value::String(atom.as_str().to_string()));
+                        }
+                    } else {
+                        let mut list: Vec<Value> = atom
+                            .as_str()
+                            .to_string()
+                            .chars()
+                            .map(|x| Value::Atom(x.to_string()))
+                            .collect();
+
+                        let mut partial_list = Value::Structure(
+                            ".".into(),
+                            vec![
+                                list.pop().unwrap(),
+                                tail,
+                            ],
+                        );
+
+                        while let Some(last) = list.pop() {
+                            partial_list = Value::Structure(
+                                ".".into(),
+                                vec![
+                                    last,
+                                    partial_list,
+                                ],
+                            );
+                        }
+
+                        term_stack.push(partial_list);
+                    }
+                }
+                // I dont know if this is needed here.
+                /*
+                (HeapCellValueTag::PStrLoc, h) => {
+                    let atom = cell_as_atom_cell!(iter.heap[h]).get_name();
+                    let tail = term_stack.pop().unwrap();
+
+                    term_stack.push(Term::PartialString(
+                        Cell::default(),
+                        atom.as_str().to_owned(),
+                        Box::new(tail),
+                    ));
+                }
+                */
+                _ => {
+                }
+            );
+        }
+
+        debug_assert_eq!(term_stack.len(), 1);
+        term_stack.pop().unwrap()
     }
 }
 
@@ -386,7 +537,7 @@ impl TryFrom<String> for Value {
                 }
             }
 
-            Ok(Value::Structure(atom!("{}"), values))
+            Ok(Value::Structure("{}".into(), values))
         } else if trimmed.starts_with("<<") && trimmed.ends_with(">>") {
             let iter = trimmed[2..trimmed.len() - 2].split(',');
             let mut values = vec![];
@@ -400,7 +551,7 @@ impl TryFrom<String> for Value {
                 }
             }
 
-            Ok(Value::Structure(atom!("<<>>"), values))
+            Ok(Value::Structure("<<>>".into(), values))
         } else if !trimmed.contains(',') && !trimmed.contains('\'') && !trimmed.contains('"') {
             Ok(Value::String(trimmed.into()))
         } else {

@@ -13,21 +13,21 @@ pub fn prolog_benches() -> BTreeMap<&'static str, PrologBenchmark> {
             "benches/edges.pl", // name of the prolog module file to load. use the same file in multiple benchmarks
             "independent_set_count(ky, Count).", // query to benchmark in the context of the loaded module. consider making the query adjustable to tune the run time to ~0.1s
             Strategy::Reuse,
-            btreemap! { "Count" => Value::try_from("2869176".to_string()).unwrap() },
+            btreemap! { "Count" => Value::Integer(2869176.into()) },
         ),
         (
             "numlist",
             "benches/numlist.pl",
             "run_numlist(1000000, Head).",
             Strategy::Reuse,
-            btreemap! { "Head" => Value::try_from("1".to_string()).unwrap()},
+            btreemap! { "Head" => Value::Integer(1.into())},
         ),
         (
             "csv_codename",
             "benches/csv.pl",
             "get_codename(\"0020\",Name).",
             Strategy::Reuse,
-            btreemap! { "Name" => Value::try_from("SPACE".to_string()).unwrap()},
+            btreemap! { "Name" => Value::String("SPACE".into())},
         ),
     ]
     .map(|b| {

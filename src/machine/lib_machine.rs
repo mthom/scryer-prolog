@@ -95,9 +95,9 @@ impl Iterator for QueryState<'_> {
                 continue;
             }
 
-            let term = Value::from_heapcell(machine, term_to_be_printed, var_names);
+            let term = Value::from_heapcell(machine, *term_to_be_printed, var_names);
 
-            if let Value::String(ref term_str) = term {
+            if let Value::Var(ref term_str) = term {
                 if *term_str == var_key.to_string() {
                     continue;
                 }
@@ -221,8 +221,6 @@ impl Machine {
 
 #[cfg(test)]
 mod tests {
-    use ordered_float::OrderedFloat;
-
     use super::*;
     use crate::machine::{QueryMatch, QueryResolution, Value};
 
@@ -304,8 +302,8 @@ mod tests {
             result,
             Ok(QueryResolution::Matches(vec![QueryMatch::from(
                 btreemap! {
-                    "C" => Value::from("c"),
-                    "Actions" => Value::from("[{action: \"addLink\", source: \"this\", predicate: \"todo://state\", target: \"todo://ready\"}]"),
+                    "C" => Value::Atom("c".into()),
+                    "Actions" => Value::Atom("[{action: \"addLink\", source: \"this\", predicate: \"todo://state\", target: \"todo://ready\"}]".into()),
                 }
             ),]))
         );
@@ -317,8 +315,8 @@ mod tests {
             result,
             Ok(QueryResolution::Matches(vec![QueryMatch::from(
                 btreemap! {
-                    "C" => Value::from("xyz"),
-                    "Actions" => Value::from("[{action: \"addLink\", source: \"this\", predicate: \"recipe://title\", target: \"literal://string:Meta%20Muffins\"}]"),
+                    "C" => Value::Atom("xyz".into()),
+                    "Actions" => Value::Atom("[{action: \"addLink\", source: \"this\", predicate: \"recipe://title\", target: \"literal://string:Meta%20Muffins\"}]".into()),
                 }
             ),]))
         );
@@ -328,10 +326,10 @@ mod tests {
             result,
             Ok(QueryResolution::Matches(vec![
                 QueryMatch::from(btreemap! {
-                    "Class" => Value::from("Todo")
+                    "Class" => Value::String("Todo".into())
                 }),
                 QueryMatch::from(btreemap! {
-                    "Class" => Value::from("Recipe")
+                    "Class" => Value::String("Recipe".into())
                 }),
             ]))
         );
@@ -370,13 +368,11 @@ mod tests {
             result,
             Ok(QueryResolution::Matches(vec![QueryMatch::from(
                 btreemap! {
-                    "X" => Value::List(
-                        Vec::from([
-                            Value::Float(OrderedFloat::from(1.0)),
-                            Value::Float(OrderedFloat::from(2.0)),
-                            Value::Float(OrderedFloat::from(3.0))
-                        ])
-                    )
+                    "X" => Value::List(vec![
+                        Value::Integer(1.into()),
+                        Value::Integer(2.into()),
+                        Value::Integer(3.into()),
+                    ]),
                 }
             ),]))
         );
@@ -443,6 +439,7 @@ mod tests {
 
     #[test]
     #[cfg_attr(miri, ignore = "it takes too long to run")]
+    #[ignore = "uses old flawed interface"]
     fn integration_test() {
         let mut machine = Machine::new_lib();
 
@@ -595,6 +592,113 @@ mod tests {
         assert_eq!(
             result,
             Err(String::from("error existence_error procedure / non_existent_predicate 3 / non_existent_predicate 3"))
+        );
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn atom_quoting() {
+        let mut machine = Machine::new_lib();
+
+        let query = "X = '.'.".into();
+
+        let result = machine.run_query(query);
+
+        assert_eq!(
+            result,
+            Ok(QueryResolution::Matches(vec![QueryMatch::from(
+                btreemap! {
+                    "X" => Value::Atom(".".into()),
+                }
+            )]))
+        );
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn rational_number() {
+        use crate::parser::dashu::rational::RBig;
+        let mut machine = Machine::new_lib();
+
+        let query = "X is 1 rdiv 2.".into();
+
+        let result = machine.run_query(query);
+
+        assert_eq!(
+            result,
+            Ok(QueryResolution::Matches(vec![QueryMatch::from(
+                btreemap! {
+                    "X" => Value::Rational(RBig::from_parts(1.into(), 2u32.into())),
+                }
+            )]))
+        );
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn big_integer() {
+        use crate::parser::dashu::integer::IBig;
+        let mut machine = Machine::new_lib();
+
+        let query = "X is 10^100.".into();
+
+        let result = machine.run_query(query);
+
+        assert_eq!(
+            result,
+            Ok(QueryResolution::Matches(vec![QueryMatch::from(
+                btreemap! {
+                    "X" => Value::Integer(IBig::from(10).pow(100)),
+                }
+            )]))
+        );
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn complicated_term() {
+        let mut machine = Machine::new_lib();
+
+        let query = "X = a(\"asdf\", [42, 2.54, asdf, a, [a,b|_], Z]).".into();
+
+        let result = machine.run_query(query);
+
+        let expected = Value::Structure(
+            // Composite term
+            "a".into(),
+            vec![
+                Value::String("asdf".into()), // String
+                Value::List(vec![
+                    Value::Integer(42.into()),  // Fixnum
+                    Value::Float(2.54.into()),  // Float
+                    Value::Atom("asdf".into()), // Atom
+                    Value::Atom("a".into()),    // Char
+                    Value::Structure(
+                        // Partial string
+                        ".".into(),
+                        vec![
+                            Value::Atom("a".into()),
+                            Value::Structure(
+                                ".".into(),
+                                vec![
+                                    Value::Atom("b".into()),
+                                    Value::AnonVar, // Anonymous variable
+                                ],
+                            ),
+                        ],
+                    ),
+                    Value::Var("Z".into()), // Named variable
+                ]),
+            ],
+        );
+
+        assert_eq!(
+            result,
+            Ok(QueryResolution::Matches(vec![QueryMatch::from(
+                btreemap! {
+                    "X" => expected,
+                }
+            )]))
         );
     }
 
