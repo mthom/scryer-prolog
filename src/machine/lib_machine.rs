@@ -1,8 +1,6 @@
 use std::collections::BTreeMap;
-use std::sync::Arc;
 
 use crate::atom_table;
-use crate::heap_print::{HCPrinter, HCValueOutputter, PrinterOutputter};
 use crate::machine::machine_indices::VarKey;
 use crate::machine::mock_wam::CompositeOpDir;
 use crate::machine::{BREAK_FROM_DISPATCH_LOOP_LOC, LIB_QUERY_SUCCESS};
@@ -96,32 +94,16 @@ impl Iterator for QueryState<'_> {
             if var_key.to_string().starts_with('_') {
                 continue;
             }
-            let mut printer = HCPrinter::new(
-                &mut machine.machine_st.heap,
-                Arc::clone(&machine.machine_st.atom_tbl),
-                &mut machine.machine_st.stack,
-                &machine.indices.op_dir,
-                PrinterOutputter::new(),
-                *term_to_be_printed,
-            );
 
-            printer.ignore_ops = false;
-            printer.numbervars = true;
-            printer.quoted = true;
-            printer.max_depth = 1000; // NOTE: set this to 0 for unbounded depth
-            printer.double_quotes = true;
-            printer.var_names.clone_from(var_names);
+            let term = Value::from_heapcell(machine, term_to_be_printed, var_names);
 
-            let outputter = printer.print();
-
-            let output: String = outputter.result();
-
-            if var_key.to_string() != output {
-                bindings.insert(
-                    var_key.to_string(),
-                    Value::try_from(output).expect("Couldn't convert Houtput to Value"),
-                );
+            if let Value::String(ref term_str) = term {
+                if *term_str == var_key.to_string() {
+                    continue;
+                }
             }
+
+            bindings.insert(var_key.to_string(), term);
         }
 
         // NOTE: there are outstanding choicepoints, backtrack

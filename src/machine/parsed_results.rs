@@ -1,11 +1,19 @@
 use crate::atom_table::*;
+use crate::heap_print::PrinterOutputter;
+use crate::heap_print::{HCPrinter, HCValueOutputter};
+use crate::parser::ast;
 use dashu::*;
+use indexmap::IndexMap;
 use ordered_float::OrderedFloat;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::fmt::Write;
 use std::iter::FromIterator;
+use std::sync::Arc;
+
+use super::HeapCellValue;
+use super::Machine;
 
 pub type QueryResult = Result<QueryResolution, String>;
 
@@ -131,6 +139,35 @@ pub enum Value {
     List(Vec<Value>),
     Structure(Atom, Vec<Value>),
     Var,
+}
+
+impl Value {
+    pub(crate) fn from_heapcell(
+        machine: &mut Machine,
+        heap_cell: &HeapCellValue,
+        var_names: &IndexMap<HeapCellValue, ast::VarPtr>,
+    ) -> Self {
+        let mut printer = HCPrinter::new(
+            &mut machine.machine_st.heap,
+            Arc::clone(&machine.machine_st.atom_tbl),
+            &mut machine.machine_st.stack,
+            &machine.indices.op_dir,
+            PrinterOutputter::new(),
+            *heap_cell,
+        );
+
+        printer.ignore_ops = false;
+        printer.numbervars = true;
+        printer.quoted = true;
+        printer.max_depth = 1000; // NOTE: set this to 0 for unbounded depth
+        printer.double_quotes = true;
+        printer.var_names.clone_from(var_names);
+
+        let outputter = printer.print();
+
+        let output: String = outputter.result();
+        Value::try_from(output).expect("Couldn't convert Houtput to Value")
+    }
 }
 
 impl From<BTreeMap<&str, Value>> for QueryMatch {
