@@ -43,7 +43,10 @@ impl<T: RawBlockTraits> RawBlock<T> {
         let layout = alloc::Layout::from_size_align_unchecked(cap, T::align());
         let new_base = alloc::alloc(layout).cast_const();
         if new_base.is_null() {
-            panic!("failed to allocate for init_at_size");
+            panic!(
+                "failed to allocate in init_at_size for {}",
+                std::any::type_name::<Self>()
+            );
         }
         self.base = new_base;
         self.top = self.base.add(cap);
