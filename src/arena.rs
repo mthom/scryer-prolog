@@ -371,7 +371,8 @@ impl<P, T: ArenaAllocated<Payload = P>> AllocateInArena<T> for P {
     }
 }
 
-/* apparently this overlaps the planket impl above somehow
+/* this isn't allowed due to https://github.com/rust-lang/rust/issues/20400 I think,
+   though P == ManuallyDrop<P> might also be a problem event though that shouldn't be possible
 impl<P, T: ArenaAllocated<Payload = ManuallyDrop<P>>> AllocateInArena<T> for P {
     fn arena_allocate(self, arena: &mut Arena) -> TypedArenaPtr<T> {
         T::alloc(arena, ManuallyDrop::new(self))
