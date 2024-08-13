@@ -8,7 +8,7 @@ use crate::parser::ast::*;
 
 use cranelift::prelude::*;
 use cranelift_jit::{JITBuilder, JITModule};
-use cranelift_module::{Linkage, Module};
+use cranelift_module::{Linkage, Module, FuncId};
 use cranelift_codegen::{ir::stackslot::*, ir::entities::*, Context};
 use cranelift::prelude::codegen::ir::immediates::Offset32;
 
@@ -32,7 +32,15 @@ pub struct JitMachine {
     vec_push_sig: Signature,
     vec_len: *const u8,
     vec_len_sig: Signature,
-    predicates: HashMap<(String, usize), *const u8>,
+    print_func: FuncId,
+    print_func8: FuncId,
+    vec_pop: FuncId,
+    predicates: HashMap<(String, usize), JitPredicate>,
+}
+
+pub struct JitPredicate {
+    code_ptr: *const u8,
+    func_id: FuncId,
 }
 
 impl std::fmt::Debug for JitMachine {
@@ -114,6 +122,25 @@ impl JitMachine {
 	    let code_ptr: *const u8 = unsafe { std::mem::transmute(module.get_finalized_function(func)) };	    
 	    trampolines.push(code_ptr);
 	}
+
+	let mut print_func_sig = module.make_signature();
+        print_func_sig.params.push(AbiParam::new(types::I64));
+        let print_func = module
+            .declare_function("print_func", Linkage::Import, &print_func_sig)
+            .unwrap();
+	let mut print_func_sig8 = module.make_signature();
+        print_func_sig8.params.push(AbiParam::new(types::I8));
+        let print_func8 = module
+            .declare_function("print_func8", Linkage::Import, &print_func_sig8)
+            .unwrap();	
+	
+	let mut vec_pop_sig = module.make_signature();
+	vec_pop_sig.params.push(AbiParam::new(pointer_type));
+	vec_pop_sig.returns.push(AbiParam::new(types::I64));
+	let vec_pop = module
+	    .declare_function("vec_pop", Linkage::Import, &vec_pop_sig)
+	    .unwrap();
+	
 	let vec_as_ptr = Vec::<HeapCellValue>::as_ptr as *const u8;
 	let mut vec_as_ptr_sig = module.make_signature();
 	vec_as_ptr_sig.params.push(AbiParam::new(pointer_type));
@@ -139,28 +166,14 @@ impl JitMachine {
 	    vec_push_sig,
 	    vec_len,
 	    vec_len_sig,
+	    print_func,
+	    print_func8,
+	    vec_pop,
 	    predicates
 	}
     }
 
     pub fn compile(&mut self, name: &str, arity: usize, code: Code) -> Result<(), JitCompileError> {
-	let mut print_func_sig = self.module.make_signature();
-        print_func_sig.params.push(AbiParam::new(types::I64));
-        let print_func = self.module
-            .declare_function("print_func", Linkage::Import, &print_func_sig)
-            .unwrap();	
-	let mut print_func_sig8 = self.module.make_signature();
-        print_func_sig8.params.push(AbiParam::new(types::I8));
-        let print_func8 = self.module
-            .declare_function("print_func8", Linkage::Import, &print_func_sig8)
-            .unwrap();	
-	
-	let mut vec_pop_sig = self.module.make_signature();
-	vec_pop_sig.params.push(AbiParam::new(self.module.target_config().pointer_type()));
-	vec_pop_sig.returns.push(AbiParam::new(types::I64));
-	let vec_pop = self.module
-	    .declare_function("vec_pop", Linkage::Import, &vec_pop_sig)
-	    .unwrap();
 
 	let mut sig = self.module.make_signature();
 	sig.params.push(AbiParam::new(types::I64));
@@ -206,7 +219,7 @@ impl JitMachine {
 	macro_rules! print_rt {
 	    ($x:expr) => {
 		{
-		    let print_func_fn = self.module.declare_func_in_func(print_func, &mut fn_builder.func);
+		    let print_func_fn = self.module.declare_func_in_func(self.print_func, &mut fn_builder.func);
 		    fn_builder.ins().call(print_func_fn, &[$x]);
 		}
 	    }
@@ -215,7 +228,7 @@ impl JitMachine {
 	macro_rules! print_rt8 {
 	    ($x:expr) => {
 		{
-		    let print_func_fn = self.module.declare_func_in_func(print_func8, &mut fn_builder.func);
+		    let print_func_fn = self.module.declare_func_in_func(self.print_func8, &mut fn_builder.func);
 		    fn_builder.ins().call(print_func_fn, &[$x]);
 		}
 	    }
@@ -234,7 +247,7 @@ impl JitMachine {
 	macro_rules! vec_pop {
 	    ($x:expr) => {
 		{
-		    let vec_pop_fn = self.module.declare_func_in_func(vec_pop, &mut fn_builder.func);
+		    let vec_pop_fn = self.module.declare_func_in_func(self.vec_pop, &mut fn_builder.func);
 		    let call_vec_pop = fn_builder.ins().call(vec_pop_fn, &[$x]);
 		    let value = fn_builder.inst_results(call_vec_pop)[0];
 		    value
@@ -746,6 +759,47 @@ impl JitMachine {
 		    fn_builder.switch_to_block(exit_block);
 		    
 		}
+		/* put_variable works similar to set_variable, but it stores the cell in two registers,
+		 * Xi normal register and Ai argument register
+		 */
+		Instruction::PutVariable(reg, arg) => {
+		    let heap_loc_cell = heap_loc_as_cell!(0);
+		    let heap_loc_cell = fn_builder.ins().iconst(types::I64, i64::from_le_bytes(heap_loc_cell.into_bytes()));
+		    let vec_len = vec_len!(heap);
+		    let heap_loc_cell = fn_builder.ins().bor(vec_len, heap_loc_cell);
+		    let sig_ref = fn_builder.import_signature(self.vec_push_sig.clone());
+		    let vec_push_fn = fn_builder.ins().iconst(types::I64, self.vec_push as i64);
+		    fn_builder.ins().call_indirect(sig_ref, vec_push_fn, &[heap, heap_loc_cell]);
+		    match reg {
+			RegType::Temp(x) => {
+			    registers[x-1] = heap_loc_cell;
+			}
+			_ => unimplemented!()
+		    }
+		    registers[arg - 1] = heap_loc_cell;
+		}
+		/* put_value moves the content from Xi to Ai
+		 */
+		Instruction::PutValue(reg, arg) => {
+		    registers[arg - 1] = match reg {
+			RegType::Temp(x) => {
+			    registers[x-1]
+			}
+			_ => unimplemented!()
+		    };
+		}
+		/* get_variable moves the content from Ai to Xi
+		 */
+		Instruction::GetVariable(reg, arg) => {
+		    match reg {
+			RegType::Temp(x) => {
+			    registers[x-1] = registers[arg - 1];
+			}
+			_ => unimplemented!()
+		    }
+		}
+		/* get_value perform unification between Xi and Ai
+		 */
 		Instruction::GetValue(reg1, reg2) => {
 		    let reg1 = match reg1 {
 			RegType::Temp(x) => {
@@ -756,6 +810,41 @@ impl JitMachine {
 		    let reg2 = registers[reg2 - 1];
 		    unify!(reg1, reg2);
 		    
+		}
+		Instruction::CallNamed(arity, name, _ ) => {
+let Some(predicate) = self.predicates.get(&(name.as_str().to_string(), arity)) else {
+			return Err(JitCompileError::UndefinedPredicate);
+		    };
+		    let func = self.module.declare_func_in_func(predicate.func_id, fn_builder.func);
+		    let mut args = vec![];
+		    args.push(heap);
+		    args.push(pdl);
+		    for i in 1..=arity {
+			args.push(registers[i-1]);
+		    }
+		    let call = fn_builder.ins().call(func, &args);
+		    let fail_status = fn_builder.inst_results(call)[0];
+		    let exit_early = fn_builder.create_block();
+		    let resume = fn_builder.create_block();
+		    fn_builder.ins().brif(fail_status, exit_early, &[], resume, &[]);
+		    fn_builder.seal_block(exit_early);
+		    fn_builder.seal_block(resume);
+		    fn_builder.switch_to_block(exit_early);
+    		    fn_builder.ins().return_(&[fail_status]);
+		    fn_builder.switch_to_block(resume);
+		}
+		Instruction::ExecuteNamed(arity, name, _) => {
+		    let Some(predicate) = self.predicates.get(&(name.as_str().to_string(), arity)) else {
+			return Err(JitCompileError::UndefinedPredicate);
+		    };
+		    let func = self.module.declare_func_in_func(predicate.func_id, fn_builder.func);
+		    let mut args = vec![];
+		    args.push(heap);
+		    args.push(pdl);
+		    for i in 1..=arity {
+			args.push(registers[i-1]);
+		    }
+		    fn_builder.ins().return_call(func, &args);
 		}
 		// TODO: Manage RegType Perm
 		// TODO: manage NonVar cases
@@ -782,6 +871,7 @@ impl JitMachine {
 		    break;
 	        },
 	        _ => {
+		    dbg!(wam_instr);
 		    fn_builder.finalize();
 	            self.module.clear_context(&mut self.ctx);	
 		    return Err(JitCompileError::InstructionNotImplemented);
@@ -791,12 +881,15 @@ impl JitMachine {
 	fn_builder.seal_all_blocks();
 	fn_builder.finalize();
 
-	let func = self.module.declare_function(name, Linkage::Local, &sig).unwrap();
-	self.module.define_function(func, &mut self.ctx).unwrap();
+	let func_id = self.module.declare_function(&format!("{}/{}", name, arity), Linkage::Local, &sig).unwrap();
+	self.module.define_function(func_id, &mut self.ctx).unwrap();
 	println!("{}", self.ctx.func.display());
 	self.module.finalize_definitions().unwrap();	
-	let code_ptr = self.module.get_finalized_function(func);
-	self.predicates.insert((name.to_string(), arity), code_ptr);
+	let code_ptr = self.module.get_finalized_function(func_id);
+	self.predicates.insert((name.to_string(), arity), JitPredicate {
+	    code_ptr,
+	    func_id
+	});
 	println!("{}", self.ctx.compiled_code().unwrap().vcode.clone().unwrap());
 	self.module.clear_context(&mut self.ctx);
 	Ok(())
@@ -810,7 +903,7 @@ impl JitMachine {
 	let registers = machine_st.registers.as_ptr() as *mut Registers;
 	let heap = &machine_st.heap as *const Vec<HeapCellValue>;
 	let pdl = &machine_st.pdl as *const Vec<HeapCellValue>;
-	let fail = trampoline(*predicate, registers, heap, pdl);
+	let fail = trampoline(predicate.code_ptr, registers, heap, pdl);
 	machine_st.p = machine_st.cp;
 	machine_st.fail = if fail == 1 {
 	    true
@@ -1161,5 +1254,26 @@ fn test_unify_value_read_fail() {
     machine_st_expected.heap.push(str_loc_as_cell!(3));    
     assert_eq!(machine_st.heap, machine_st_expected.heap);
     assert_eq!(machine_st.fail, true);
+}
+
+#[test]
+fn test_execute_named() {
+    let mut machine_st = MachineState::new();    
+    let code_b = vec![
+	Instruction::GetConstant(Level::Shallow, atom_as_cell!(atom!("f"), 0), RegType::Temp(1)),
+	Instruction::Proceed
+    ];
+    let code_a = vec![
+	Instruction::PutVariable(RegType::Temp(1), 1),
+	Instruction::ExecuteNamed(1, atom!("b"), CodeIndex::default(&mut machine_st.arena)),
+    ];
+    let mut jit = JitMachine::new();
+    jit.compile("b", 1, code_b).unwrap();
+    jit.compile("a", 0, code_a).unwrap();
+    jit.exec("a", 0, &mut machine_st).unwrap();
+    let mut machine_st_expected = MachineState::new();
+    machine_st_expected.heap.push(atom_as_cell!(atom!("f"), 0));
+    assert_eq!(machine_st.heap, machine_st_expected.heap);
+    assert_eq!(machine_st.fail, false);
 }
 // TODO: Continue with more tests
