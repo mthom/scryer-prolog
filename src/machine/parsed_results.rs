@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::fmt::Write;
+use std::iter::FromIterator;
 
 pub type QueryResult = Result<QueryResolution, String>;
 
@@ -195,6 +196,14 @@ impl From<Vec<QueryResolutionLine>> for QueryResolution {
         }
 
         QueryResolution::False
+    }
+}
+
+impl FromIterator<QueryResolutionLine> for QueryResolution {
+    fn from_iter<I: IntoIterator<Item = QueryResolutionLine>>(iter: I) -> Self {
+        // TODO: Probably a good idea to implement From<Vec<QueryResolutionLine>> based on this
+        // instead.
+        iter.into_iter().collect::<Vec<_>>().into()
     }
 }
 
