@@ -24,14 +24,18 @@
     op(950, fy, *),
     (*)/1,
     ($)/1,
-    ($-)/1
+    ($-)/1,
+    ($)//1,
+    ($-)//1
 ]).
 
+:- use_module(library(dcgs), [phrase/3]).
 :- use_module(library(format), [portray_clause/1]).
+:- use_module(library(lambda), [(\)/3,(^)/3,(^)/4]).
 
-:- meta_predicate *(0).
-:- meta_predicate $(0).
-:- meta_predicate $-(0).
+:- meta_predicate(*(0)).
+:- meta_predicate($(0)).
+:- meta_predicate($-(0)).
 
 %% $-(Goal)
 %
@@ -54,3 +58,18 @@ $(G_0) :-
 %  Generalize away Goal.
 
 *(_).
+
+% Equivalent DCG rules
+:- meta_predicate($(2, ?, ?)).
+:- meta_predicate($-(2, ?, ?)).
+
+$-G_2 --> \Xs0^Xs^
+   catch(phrase(G_2, Xs0, Xs), Ex, (
+      portray_clause(exception:Ex:G_2=(Xs0, Xs)), throw(Ex)
+   )).
+
+$G_2 --> \Xs0^Xs^(
+   portray_clause(call:G_2=(Xs0, Xs)),
+   phrase($-G_2, Xs0, Xs),
+   portray_clause(exit:G_2=(Xs0, Xs))
+).
