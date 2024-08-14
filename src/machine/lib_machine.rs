@@ -637,4 +637,45 @@ mod tests {
 
         assert_eq!(output, Ok(QueryResolution::False));
     }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn query_iterator_determinism() {
+        let mut machine = Machine::new_lib();
+
+        {
+            let mut iterator = machine.run_query_iter("X = 1.".into());
+
+            iterator.next();
+            assert_eq!(iterator.next(), None);
+        }
+
+        {
+            let mut iterator = machine.run_query_iter("X = 1 ; false.".into());
+
+            iterator.next();
+
+            assert_eq!(iterator.next(), Some(Ok(QueryResolutionLine::False)));
+            assert_eq!(iterator.next(), None);
+        }
+
+        {
+            let mut iterator = machine.run_query_iter("false.".into());
+
+            assert_eq!(iterator.next(), Some(Ok(QueryResolutionLine::False)));
+            assert_eq!(iterator.next(), None);
+        }
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn query_iterator_backtracking_when_no_variables() {
+        let mut machine = Machine::new_lib();
+
+        let mut iterator = machine.run_query_iter("true;false.".into());
+
+        assert_eq!(iterator.next(), Some(Ok(QueryResolutionLine::True)));
+        assert_eq!(iterator.next(), Some(Ok(QueryResolutionLine::False)));
+        assert_eq!(iterator.next(), None);
+    }
 }
