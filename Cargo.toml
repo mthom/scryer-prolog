@@ -12,7 +12,7 @@ categories = ["command-line-utilities"]
 build = "build/main.rs"
 rust-version = "1.77"
 
-[lib]s
+[lib]
 crate-type = ["cdylib", "rlib"]
 
 [features]
