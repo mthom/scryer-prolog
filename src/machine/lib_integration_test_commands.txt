@@ -4531,7 +4531,7 @@ property_getter(srksdbln, Base, "number", Value) :- triple(Base, "test://test_nu
 =====query
 subject_class("Todo", C), property_getter(C, "literal://string:Custom%20getter%20test", "isLiked", Value).
 =====result
-[{"C":"c","Value":true}]
+[{"C":"c","Value":"true"}]
 =====consult
 :- discontiguous(triple/3).
 :- discontiguous(link/5).
