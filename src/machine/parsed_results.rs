@@ -61,6 +61,8 @@ pub fn write_prolog_value_as_json<W: Write>(
                 write!(writer, "\"{r}\"")
             }
         }
+        Value::Atom(a) if *a == atom!("true") => writer.write_str("true"),
+        Value::Atom(a) if *a == atom!("false") => writer.write_str("false"),
         Value::Atom(a) => write_literal_str_as_json_str(writer, &a.as_str()),
         Value::String(s) => write_literal_str_as_json_str(writer, s),
         Value::List(l) => {
