@@ -8,13 +8,131 @@ use crate::machine::mock_wam::CompositeOpDir;
 use crate::machine::{BREAK_FROM_DISPATCH_LOOP_LOC, LIB_QUERY_SUCCESS};
 use crate::parser::ast::{Var, VarPtr};
 use crate::parser::parser::{Parser, Tokens};
-use crate::read::write_term_to_heap;
+use crate::read::{write_term_to_heap, TermWriteResult};
 use indexmap::IndexMap;
 
 use super::{
     streams::Stream, Atom, AtomCell, HeapCellValue, HeapCellValueTag, Machine, MachineConfig,
-    QueryResolution, QueryResolutionLine, QueryResult, Value,
+    QueryResolutionLine, QueryResult, Value,
 };
+
+pub struct QueryState<'a> {
+    machine: &'a mut Machine,
+    term: TermWriteResult,
+    stub_b: usize,
+    var_names: IndexMap<HeapCellValue, VarPtr>,
+    called: bool,
+}
+
+impl Drop for QueryState<'_> {
+    fn drop(&mut self) {
+        // This may be wrong if the iterator is not fully consumend, but from testing it seems
+        // fine.
+        self.machine.trust_me();
+    }
+}
+
+impl Iterator for QueryState<'_> {
+    type Item = Result<QueryResolutionLine, String>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let var_names = &self.var_names;
+        let term_write_result = &self.term;
+        let machine = &mut self.machine;
+
+        // No more choicepoints, end iteration
+        if self.called && machine.machine_st.b <= self.stub_b {
+            return None;
+        }
+
+        machine.dispatch_loop();
+
+        self.called = true;
+
+        if !machine.machine_st.ball.stub.is_empty() {
+            // NOTE: this means an exception was thrown, at which
+            // point we backtracked to the stub choice point.
+            // this should halt the search for solutions as it
+            // does in the Scryer top-level. the exception term is
+            // contained in self.machine_st.ball.
+            let error_string = self
+                .machine
+                .machine_st
+                .ball
+                .stub
+                .iter()
+                .filter(|h| {
+                    matches!(
+                        h.get_tag(),
+                        HeapCellValueTag::Atom | HeapCellValueTag::Fixnum
+                    )
+                })
+                .map(|h| match h.get_tag() {
+                    HeapCellValueTag::Atom => {
+                        let (name, _) = cell_as_atom_cell!(h).get_name_and_arity();
+                        name.as_str().to_string()
+                    }
+                    HeapCellValueTag::Fixnum => h.get_value().clone().to_string(),
+                    _ => unreachable!(),
+                })
+                .collect::<Vec<String>>()
+                .join(" ");
+
+            return Some(Err(error_string));
+        }
+
+        if machine.machine_st.p == LIB_QUERY_SUCCESS {
+            if term_write_result.var_dict.is_empty() {
+                self.machine.machine_st.backtrack();
+                return Some(Ok(QueryResolutionLine::True));
+            }
+        } else if machine.machine_st.p == BREAK_FROM_DISPATCH_LOOP_LOC {
+            return Some(Ok(QueryResolutionLine::False));
+        }
+
+        let mut bindings: BTreeMap<String, Value> = BTreeMap::new();
+
+        for (var_key, term_to_be_printed) in &term_write_result.var_dict {
+            if var_key.to_string().starts_with('_') {
+                continue;
+            }
+            let mut printer = HCPrinter::new(
+                &mut machine.machine_st.heap,
+                Arc::clone(&machine.machine_st.atom_tbl),
+                &mut machine.machine_st.stack,
+                &machine.indices.op_dir,
+                PrinterOutputter::new(),
+                *term_to_be_printed,
+            );
+
+            printer.ignore_ops = false;
+            printer.numbervars = true;
+            printer.quoted = true;
+            printer.max_depth = 1000; // NOTE: set this to 0 for unbounded depth
+            printer.double_quotes = true;
+            printer.var_names.clone_from(var_names);
+
+            let outputter = printer.print();
+
+            let output: String = outputter.result();
+
+            if var_key.to_string() != output {
+                bindings.insert(
+                    var_key.to_string(),
+                    Value::try_from(output).expect("Couldn't convert Houtput to Value"),
+                );
+            }
+        }
+
+        // NOTE: there are outstanding choicepoints, backtrack
+        // through them for further solutions. if
+        // self.machine_st.b == stub_b we've backtracked to the stub
+        // choice point, so we should break.
+        self.machine.machine_st.backtrack();
+
+        Some(Ok(QueryResolutionLine::Match(bindings)))
+    }
+}
 
 impl Machine {
     pub fn new_lib() -> Self {
@@ -62,8 +180,10 @@ impl Machine {
     }
 
     pub fn run_query(&mut self, query: String) -> QueryResult {
-        // println!("Query: {}", query);
-        // Parse the query so we can analyze and then call the term
+        self.run_query_iter(query).collect()
+    }
+
+    pub fn run_query_iter(&mut self, query: String) -> QueryState {
         let mut parser = Parser::new(
             Stream::from_owned_string(query, &mut self.machine_st.arena),
             &mut self.machine_st,
@@ -107,126 +227,13 @@ impl Machine {
         self.machine_st.execute_at_index(1, call_index_p);
 
         let stub_b = self.machine_st.b;
-
-        let mut matches: Vec<QueryResolutionLine> = Vec::new();
-        // Call the term
-        loop {
-            self.dispatch_loop();
-
-            //println!("b: {}", self.machine_st.b);
-            //println!("stub_b: {}", stub_b);
-            //println!("fail: {}", self.machine_st.fail);
-
-            if !self.machine_st.ball.stub.is_empty() {
-                // NOTE: this means an exception was thrown, at which
-                // point we backtracked to the stub choice point.
-                // this should halt the search for solutions as it
-                // does in the Scryer top-level. the exception term is
-                // contained in self.machine_st.ball.
-                let error_string = self
-                    .machine_st
-                    .ball
-                    .stub
-                    .iter()
-                    .filter(|h| {
-                        matches!(
-                            h.get_tag(),
-                            HeapCellValueTag::Atom | HeapCellValueTag::Fixnum
-                        )
-                    })
-                    .map(|h| match h.get_tag() {
-                        HeapCellValueTag::Atom => {
-                            let (name, _) = cell_as_atom_cell!(h).get_name_and_arity();
-                            name.as_str().to_string()
-                        }
-                        HeapCellValueTag::Fixnum => h.get_value().clone().to_string(),
-                        _ => unreachable!(),
-                    })
-                    .collect::<Vec<String>>()
-                    .join(" ");
-
-                return Err(error_string);
-            }
-
-            /*
-            if self.machine_st.fail {
-                // NOTE: only print results on success
-                self.machine_st.fail = false;
-                println!("fail!");
-                matches.push(QueryResolutionLine::False);
-                break;
-            };
-            */
-
-            if self.machine_st.p == LIB_QUERY_SUCCESS {
-                if term_write_result.var_dict.is_empty() {
-                    matches.push(QueryResolutionLine::True);
-                    break;
-                }
-            } else if self.machine_st.p == BREAK_FROM_DISPATCH_LOOP_LOC {
-                // NOTE: only print results on success
-                // self.machine_st.fail = false;
-                // println!("b == stub_b");
-                matches.push(QueryResolutionLine::False);
-                break;
-            }
-
-            let mut bindings: BTreeMap<String, Value> = BTreeMap::new();
-
-            for (var_key, term_to_be_printed) in &term_write_result.var_dict {
-                if var_key.to_string().starts_with('_') {
-                    continue;
-                }
-                let mut printer = HCPrinter::new(
-                    &mut self.machine_st.heap,
-                    Arc::clone(&self.machine_st.atom_tbl),
-                    &mut self.machine_st.stack,
-                    &self.indices.op_dir,
-                    PrinterOutputter::new(),
-                    *term_to_be_printed,
-                );
-
-                printer.ignore_ops = false;
-                printer.numbervars = true;
-                printer.quoted = true;
-                printer.max_depth = 1000; // NOTE: set this to 0 for unbounded depth
-                printer.double_quotes = true;
-                printer.var_names.clone_from(&var_names);
-
-                let outputter = printer.print();
-
-                let output: String = outputter.result();
-                // println!("Result: {} = {}", var_key.to_string(), output);
-
-                if var_key.to_string() != output {
-                    bindings.insert(
-                        var_key.to_string(),
-                        Value::try_from(output).expect("Couldn't convert Houtput to Value"),
-                    );
-                }
-            }
-
-            matches.push(QueryResolutionLine::Match(bindings));
-
-            // NOTE: there are outstanding choicepoints, backtrack
-            // through them for further solutions. if
-            // self.machine_st.b == stub_b we've backtracked to the stub
-            // choice point, so we should break.
-            self.machine_st.backtrack();
-
-            if self.machine_st.b <= stub_b {
-                // NOTE: out of choicepoints to backtrack through, no
-                // more solutions to gather.
-                break;
-            }
+        QueryState {
+            machine: self,
+            term: term_write_result,
+            stub_b,
+            var_names,
+            called: false,
         }
-
-        // NOTE: deallocate stub choice point
-        if self.machine_st.b == stub_b {
-            self.trust_me();
-        }
-
-        Ok(QueryResolution::from(matches))
     }
 }
 
@@ -629,5 +636,46 @@ mod tests {
         let output = machine.run_query(query);
 
         assert_eq!(output, Ok(QueryResolution::False));
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn query_iterator_determinism() {
+        let mut machine = Machine::new_lib();
+
+        {
+            let mut iterator = machine.run_query_iter("X = 1.".into());
+
+            iterator.next();
+            assert_eq!(iterator.next(), None);
+        }
+
+        {
+            let mut iterator = machine.run_query_iter("X = 1 ; false.".into());
+
+            iterator.next();
+
+            assert_eq!(iterator.next(), Some(Ok(QueryResolutionLine::False)));
+            assert_eq!(iterator.next(), None);
+        }
+
+        {
+            let mut iterator = machine.run_query_iter("false.".into());
+
+            assert_eq!(iterator.next(), Some(Ok(QueryResolutionLine::False)));
+            assert_eq!(iterator.next(), None);
+        }
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn query_iterator_backtracking_when_no_variables() {
+        let mut machine = Machine::new_lib();
+
+        let mut iterator = machine.run_query_iter("true;false.".into());
+
+        assert_eq!(iterator.next(), Some(Ok(QueryResolutionLine::True)));
+        assert_eq!(iterator.next(), Some(Ok(QueryResolutionLine::False)));
+        assert_eq!(iterator.next(), None);
     }
 }
