@@ -34,7 +34,7 @@ impl Iterator for QueryState<'_> {
     type Item = Result<QueryResolutionLine, String>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let var_names = &self.var_names;
+        let var_names = &mut self.var_names;
         let term_write_result = &self.term;
         let machine = &mut self.machine;
 
@@ -91,11 +91,18 @@ impl Iterator for QueryState<'_> {
         let mut bindings: BTreeMap<String, Value> = BTreeMap::new();
 
         for (var_key, term_to_be_printed) in &term_write_result.var_dict {
-            if var_key.to_string().starts_with('_') {
-                continue;
+            let var_name = var_key.to_string();
+            if var_name.starts_with('_') {
+                let should_print = var_names.values().any(|x| match x.borrow().clone() {
+                    Var::Named(v) => v == var_name,
+                    _ => false,
+                });
+                if !should_print {
+                    continue;
+                }
             }
 
-            let term = Value::from_heapcell(machine, *term_to_be_printed, var_names);
+            let term = Value::from_heapcell(machine, *term_to_be_printed, &mut var_names.clone());
 
             if let Value::Var(ref term_str) = term {
                 if *term_str == var_key.to_string() {
@@ -682,7 +689,7 @@ mod tests {
                                 ".".into(),
                                 vec![
                                     Value::Atom("b".into()),
-                                    Value::AnonVar, // Anonymous variable
+                                    Value::Var("_A".into()), // Anonymous variable
                                 ],
                             ),
                         ],
@@ -763,5 +770,26 @@ mod tests {
         assert_eq!(iterator.next(), Some(Ok(QueryResolutionLine::True)));
         assert_eq!(iterator.next(), Some(Ok(QueryResolutionLine::False)));
         assert_eq!(iterator.next(), None);
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn differentiate_anonymous_variables() {
+        let mut machine = Machine::new_lib();
+
+        let result = machine.run_query("A = [_,_], _B = 1 ; B = [_,_].".into());
+
+        assert_eq!(
+            result,
+            Ok(QueryResolution::Matches(vec![
+                QueryMatch::from(btreemap! {
+                    "A" => Value::List(vec![Value::Var("_A".into()), Value::Var("_C".into())]),
+                    "_B" => Value::Integer(1.into()),
+                }),
+                QueryMatch::from(btreemap! {
+                    "B" => Value::List(vec![Value::Var("_A".into()), Value::Var("_C".into())]),
+                }),
+            ]))
+        );
     }
 }

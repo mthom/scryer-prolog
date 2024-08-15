@@ -1,10 +1,11 @@
 use crate::atom_table::*;
 use crate::heap_iter::{stackful_post_order_iter, NonListElider};
 use crate::machine::{F64Offset, F64Ptr, Fixnum, HeapCellValueTag};
-use crate::parser::ast;
+use crate::parser::ast::{Var, VarPtr};
 use dashu::*;
 use indexmap::IndexMap;
 use ordered_float::OrderedFloat;
+use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::fmt::Display;
@@ -138,14 +139,31 @@ pub enum Value {
     List(Vec<Value>),
     Structure(String, Vec<Value>),
     Var(String),
-    AnonVar,
+}
+
+/// This is an auxiliary function to turn a count into names of anonymous variables like _A, _B,
+/// _AB, etc...
+fn count_to_letter_code(mut count: usize) -> String {
+    let mut letters = Vec::new();
+
+    loop {
+        let letter_idx = (count % 26) as u32;
+        letters.push(char::from_u32('A' as u32 + letter_idx).unwrap());
+        count /= 26;
+
+        if count == 0 {
+            break;
+        }
+    }
+
+    letters.into_iter().chain("_".chars()).rev().collect()
 }
 
 impl Value {
     pub(crate) fn from_heapcell(
         machine: &mut Machine,
         heap_cell: HeapCellValue,
-        var_names: &IndexMap<HeapCellValue, ast::VarPtr>,
+        var_names: &mut IndexMap<HeapCellValue, VarPtr>,
     ) -> Self {
         // Adapted from MachineState::read_term_from_heap
         let mut term_stack = vec![];
@@ -154,6 +172,18 @@ impl Value {
             &mut machine.machine_st.stack,
             heap_cell,
         );
+
+        let mut anon_count: usize = 0;
+        let var_ptr_cmp = |a, b| match a {
+            Var::Named(name_a) => match b {
+                Var::Named(name_b) => name_a.cmp(&name_b),
+                _ => Ordering::Less,
+            },
+            _ => match b {
+                Var::Named(_) => Ordering::Greater,
+                _ => Ordering::Equal,
+            },
+        };
 
         for addr in iter {
             let addr = unmark_cell_bits!(addr);
@@ -195,18 +225,37 @@ impl Value {
                     term_stack.push(list);
                 }
                 (HeapCellValueTag::Var | HeapCellValueTag::AttrVar | HeapCellValueTag::StackVar) => {
-                    if let Some(ast::Var::Named(name)) = var_names.get(&addr).map(|x| x.borrow().clone()) {
-                        term_stack.push(Value::Var(name));
-                    } else {
-                        // TODO: These variables aren't actually anonymous, they just aren't in the
-                        // query. Give names to them to differentiate distinct variables.
-                        term_stack.push(Value::AnonVar);
+                    let var = var_names.get(&addr).map(|x| x.borrow().clone());
+                    match var {
+                        Some(Var::Named(name)) => term_stack.push(Value::Var(name)),
+                        _ => {
+                            let anon_name = loop {
+                                // Generate a name for the anonymous variable
+                                let anon_name = count_to_letter_code(anon_count);
+
+                                // Find if this name is already being used
+                                var_names.sort_by(|_, a, _, b| {
+                                    var_ptr_cmp(a.borrow().clone(), b.borrow().clone())
+                                });
+                                let binary_result = var_names.binary_search_by(|_,a| {
+                                    let var_ptr = Var::Named(anon_name.clone());
+                                    var_ptr_cmp(a.borrow().clone(), var_ptr.clone())
+                                });
+
+                                match binary_result {
+                                    Ok(_) => anon_count += 1, // Name already used
+                                    Err(_) => {
+                                        // Name not used, assign it to this variable
+                                        let var_ptr = VarPtr::from(Var::Named(anon_name.clone()));
+                                        var_names.insert(addr, var_ptr);
+                                        break anon_name;
+                                    },
+                                }
+                            };
+                            term_stack.push(Value::Var(anon_name));
+                        },
                     }
                 }
-                //(HeapCellValueTag::Cons | HeapCellValueTag::CStr | HeapCellValueTag::Fixnum |
-                // HeapCellValueTag::Char | HeapCellValueTag::F64) => {
-                //    term_stack.push(Term::Literal(Cell::default(), Literal::try_from(addr).unwrap()));
-                //}
                 (HeapCellValueTag::F64, f) => {
                     term_stack.push(Value::Float(*f));
                 }
