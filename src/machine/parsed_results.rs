@@ -211,10 +211,30 @@ impl Serialize for Value {
             Value::String(s) => serializer.serialize_str(s),
             Value::List(l) => l.serialize(serializer),
             Value::Structure(f, args) => {
-                let mut map = serializer.serialize_map(Some(2))?;
-                map.serialize_entry("functor", f)?;
-                map.serialize_entry("args", args)?;
-                map.end()
+                if f == "," && args.len() == 2 {
+                    // Conjunction syntax sugar
+                    let mut conj = vec![args[0].clone()];
+                    let mut curr_val = args[1].clone();
+                    loop {
+                        if let Value::Structure(f, args) = &curr_val {
+                            if f == "," && args.len() == 2 {
+                                conj.push(args[0].clone());
+                                curr_val = args[1].clone();
+                                continue;
+                            }
+                        }
+                        conj.push(curr_val);
+                        break;
+                    }
+                    let mut map = serializer.serialize_map(Some(1))?;
+                    map.serialize_entry("conjunction", &conj)?;
+                    map.end()
+                } else {
+                    let mut map = serializer.serialize_map(Some(2))?;
+                    map.serialize_entry("functor", f)?;
+                    map.serialize_entry("args", args)?;
+                    map.end()
+                }
             }
             Value::Var(v) => {
                 let mut map = serializer.serialize_map(Some(1))?;
@@ -775,23 +795,32 @@ mod tests {
     }
 
     #[test]
-    #[ignore]
     fn value_json_serialize_conjuntions() {
-        // Do we really want that?
-        let prolog_value = Value::Structure(
-            ",".into(),
-            vec![
-                Value::Integer(1.into()),
-                Value::Structure(
-                    ",".into(),
-                    vec![Value::String("asdf".into()), Value::Atom("fdsa".into())],
-                ),
-            ],
-        );
+        let prolog_value = Value::List(vec![
+            Value::Structure(
+                ",".into(),
+                vec![
+                    Value::Integer(1.into()),
+                    Value::Structure(
+                        ",".into(),
+                        vec![Value::String("asdf".into()), Value::Atom("fdsa".into())],
+                    ),
+                ],
+            ),
+            Value::Structure(
+                ",".into(),
+                vec![
+                    Value::Integer(1.into()),
+                    Value::String("asdf".into()),
+                    Value::Atom("fdsa".into()),
+                ],
+            ),
+        ]);
 
-        let json_value = json!({
-            "conjunction": [1,"asdf", { "atom": "fdsa" }],
-        });
+        let json_value = json!([
+            { "conjunction": [1, "asdf", { "atom": "fdsa" }] },
+            { "functor": ",", "args": [1, "asdf", { "atom": "fdsa" }] },
+        ]);
 
         assert_eq!(json_value, serde_json::to_value(prolog_value).unwrap());
     }
