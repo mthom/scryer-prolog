@@ -26,10 +26,63 @@ use serde::Serializer;
 pub type QueryResult = Result<QueryResolution, String>;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct QueryMatch {
+    pub bindings: BTreeMap<String, Value>,
+}
+
+impl Serialize for QueryMatch {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut map = serializer.serialize_map(Some(1))?;
+        map.serialize_entry("bindings", &self.bindings)?;
+        map.end()
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum QueryResolutionLine {
+    True,
+    False,
+    Match(BTreeMap<String, Value>),
+}
+
+impl Serialize for QueryResolutionLine {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            QueryResolutionLine::True => serializer.serialize_bool(true),
+            QueryResolutionLine::False => serializer.serialize_bool(false),
+            QueryResolutionLine::Match(m) => {
+                let mut map = serializer.serialize_map(Some(1))?;
+                map.serialize_entry("bindings", m)?;
+                map.end()
+            }
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum QueryResolution {
     True,
     False,
     Matches(Vec<QueryMatch>),
+}
+
+impl Serialize for QueryResolution {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            QueryResolution::True => serializer.serialize_bool(true),
+            QueryResolution::False => serializer.serialize_bool(false),
+            QueryResolution::Matches(matches) => matches.serialize(serializer),
+        }
+    }
 }
 
 pub fn write_prolog_value_as_json<W: Write>(
@@ -126,18 +179,6 @@ impl Display for QueryResolution {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct QueryMatch {
-    pub bindings: BTreeMap<String, Value>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum QueryResolutionLine {
-    True,
-    False,
-    Match(BTreeMap<String, Value>),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Value {
     Integer(Integer),
     Rational(Rational),
@@ -147,6 +188,91 @@ pub enum Value {
     List(Vec<Value>),
     Structure(String, Vec<Value>),
     Var(String),
+}
+
+impl Value {
+    pub fn conjunction(conj: &[Value]) -> Value {
+        if conj.is_empty() {
+            panic!("can't create empty conjunction");
+        } else if conj.len() == 1 {
+            return conj[0].clone();
+        }
+
+        let mut conj_rev = conj.iter().rev();
+
+        let last = conj_rev.next().unwrap().clone();
+        let beflast = conj_rev.next().unwrap().clone();
+        let mut conj_term = Value::Structure(",".into(), vec![beflast, last]);
+
+        for val in conj_rev {
+            conj_term = Value::Structure(",".into(), vec![val.clone(), conj_term]);
+        }
+
+        conj_term
+    }
+
+    pub fn disjunction(disj: &[Value]) -> Value {
+        if disj.is_empty() {
+            panic!("can't create empty disjunction");
+        } else if disj.len() == 1 {
+            return disj[0].clone();
+        }
+
+        let mut disj_rev = disj.iter().rev();
+
+        let last = disj_rev.next().unwrap().clone();
+        let beflast = disj_rev.next().unwrap().clone();
+        let mut disj_term = Value::Structure(";".into(), vec![beflast, last]);
+
+        for val in disj_rev {
+            disj_term = Value::Structure(";".into(), vec![val.clone(), disj_term]);
+        }
+
+        disj_term
+    }
+}
+
+impl From<&QueryResolutionLine> for Value {
+    fn from(qrl: &QueryResolutionLine) -> Self {
+        match qrl {
+            QueryResolutionLine::True => Value::Atom("true".into()),
+            QueryResolutionLine::False => Value::Atom("false".into()),
+            QueryResolutionLine::Match(m) => Value::conjunction(
+                &m.iter()
+                    .map(|(k, v)| {
+                        Value::Structure("=".into(), vec![Value::Var(k.clone()), v.clone()])
+                    })
+                    .collect::<Vec<_>>(),
+            ),
+        }
+    }
+}
+
+impl From<&QueryResolution> for Value {
+    fn from(qr: &QueryResolution) -> Self {
+        match qr {
+            QueryResolution::True => Value::Atom("true".into()),
+            QueryResolution::False => Value::Atom("false".into()),
+            QueryResolution::Matches(matches) => Value::disjunction(
+                &matches
+                    .iter()
+                    .map(|m| {
+                        Value::conjunction(
+                            &m.bindings
+                                .iter()
+                                .map(|(k, v)| {
+                                    Value::Structure(
+                                        "=".into(),
+                                        vec![Value::Var(k.clone()), v.clone()],
+                                    )
+                                })
+                                .collect::<Vec<_>>(),
+                        )
+                    })
+                    .collect::<Vec<_>>(),
+            ),
+        }
+    }
 }
 
 struct ValueRationalInner {
@@ -872,5 +998,63 @@ mod tests {
         ]);
 
         assert_eq!(json_value, serde_json::to_value(prolog_value).unwrap());
+    }
+
+    #[test]
+    fn query_resolution_line_json() {
+        let qrl = QueryResolutionLine::True;
+        let json_value = json!(true);
+        assert_eq!(json_value, serde_json::to_value(qrl).unwrap());
+
+        let qrl = QueryResolutionLine::False;
+        let json_value = json!(false);
+        assert_eq!(json_value, serde_json::to_value(qrl).unwrap());
+
+        let qrl = QueryResolutionLine::Match(btreemap! {
+            "X".into() => Value::Atom("asdf".into()),
+            "Y".into() => Value::String("fdsa".into()),
+        });
+        let json_value = json!({
+            "bindings": {
+                "X": { "atom": "asdf" },
+                "Y": "fdsa",
+            },
+        });
+        assert_eq!(json_value, serde_json::to_value(qrl).unwrap());
+    }
+
+    #[test]
+    fn query_resolution_json() {
+        let qrl = QueryResolution::True;
+        let json_value = json!(true);
+        assert_eq!(json_value, serde_json::to_value(qrl).unwrap());
+
+        let qrl = QueryResolution::False;
+        let json_value = json!(false);
+        assert_eq!(json_value, serde_json::to_value(qrl).unwrap());
+
+        let qrl = QueryResolution::Matches(vec![
+            QueryMatch::from(btreemap! {
+                "X" => Value::Atom("a".into()),
+            }),
+            QueryMatch::from(btreemap! {
+                "X" => Value::Atom("b".into()),
+                "Y" => Value::Atom("c".into()),
+            }),
+        ]);
+        let json_value = json!([
+            {
+                "bindings": {
+                    "X": { "atom": "a" },
+                },
+            },
+            {
+                "bindings": {
+                    "X": { "atom": "b" },
+                    "Y": { "atom": "c" },
+                },
+            },
+        ]);
+        assert_eq!(json_value, serde_json::to_value(qrl).unwrap());
     }
 }
