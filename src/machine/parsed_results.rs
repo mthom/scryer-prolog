@@ -302,7 +302,12 @@ impl Value {
                     */
 
                     if arity == 0 {
-                        term_stack.push(Value::Atom(name.as_str().to_string()));
+                        let atom_name = name.as_str().to_string();
+                        if atom_name == "[]" {
+                            term_stack.push(Value::List(vec![]));
+                        } else {
+                            term_stack.push(Value::Atom(atom_name));
+                        }
                     } else {
                         let subterms = term_stack
                             .drain(term_stack.len() - arity ..)
