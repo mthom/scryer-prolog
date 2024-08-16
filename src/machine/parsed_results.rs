@@ -725,3 +725,74 @@ impl From<&str> for Value {
         Value::String(str.to_string())
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use rational::RBig;
+    use serde_json::json;
+
+    use super::*;
+
+    #[test]
+    fn value_json_serialize() {
+        let ibig = IBig::from(10).pow(100);
+        let ubig = UBig::from(7u32).pow(100);
+        let prolog_value = Value::Structure(
+            "a".into(),
+            vec![
+                Value::Atom("asdf".into()),
+                Value::Atom("true".into()),
+                Value::Atom("false".into()),
+                Value::String("fdsa".into()),
+                Value::List(vec![Value::Integer(1.into()), Value::Float(2.43.into())]),
+                Value::Integer(ibig.clone()),
+                Value::Rational(RBig::from_parts(1.into(), 7u32.into())),
+                Value::Rational(RBig::from_parts(ibig.clone(), 7u32.into())),
+                Value::Rational(RBig::from_parts(1.into(), ubig.clone())),
+                Value::Rational(RBig::from_parts(ibig.clone(), ubig.clone())),
+                Value::Var("X".into()),
+            ],
+        );
+
+        let json_value = json!({
+            "functor": "a",
+            "args": [
+                { "atom": "asdf" },
+                true,
+                false,
+                "fdsa",
+                [1, 2.43],
+                { "integer": ibig.to_string() },
+                { "rational": [1, 7] },
+                { "rational": [ibig.to_string(), 7] },
+                { "rational": [1, ubig.to_string()] },
+                { "rational": [ibig.to_string(), ubig.to_string()] },
+                { "variable": "X" },
+            ],
+        });
+
+        assert_eq!(json_value, serde_json::to_value(prolog_value).unwrap());
+    }
+
+    #[test]
+    #[ignore]
+    fn value_json_serialize_conjuntions() {
+        // Do we really want that?
+        let prolog_value = Value::Structure(
+            ",".into(),
+            vec![
+                Value::Integer(1.into()),
+                Value::Structure(
+                    ",".into(),
+                    vec![Value::String("asdf".into()), Value::Atom("fdsa".into())],
+                ),
+            ],
+        );
+
+        let json_value = json!({
+            "conjunction": [1,"asdf", { "atom": "fdsa" }],
+        });
+
+        assert_eq!(json_value, serde_json::to_value(prolog_value).unwrap());
+    }
+}
