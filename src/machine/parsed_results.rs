@@ -194,6 +194,20 @@ impl Value {
                     let head = term_stack.pop().unwrap();
 
                     let list = match tail {
+                        Value::Atom(atom) if atom == "[]" => match head {
+                            Value::Atom(ref a) if a.chars().collect::<Vec<_>>().len() == 1 => {
+                                // Handle lists of char as strings
+                                Value::String(a.to_string())
+                            }
+                            _ => Value::List(vec![head]),
+                        },
+                        Value::List(elems) if elems.is_empty() => match head {
+                            Value::Atom(ref a) if a.chars().collect::<Vec<_>>().len() == 1 => {
+                                // Handle lists of char as strings
+                                Value::String(a.to_string())
+                            },
+                            _ => Value::List(vec![head]),
+                        },
                         Value::List(mut elems) => {
                             elems.insert(0, head);
                             Value::List(elems)
@@ -212,13 +226,6 @@ impl Value {
                                 elems.insert(0, head);
                                 Value::List(elems)
                             }
-                        },
-                        Value::Atom(atom) if atom == "[]" =>  match head {
-                            Value::Atom(ref a) if a.chars().collect::<Vec<_>>().len() == 1 => {
-                                // Handle lists of char as strings
-                                Value::String(a.to_string())
-                            }
-                            _ => Value::List(vec![head]),
                         },
                         _ => Value::Structure(".".into(), vec![head, tail]),
                     };
