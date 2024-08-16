@@ -1,10 +1,3 @@
-use crate::atom_table::*;
-use crate::heap_iter::{stackful_post_order_iter, NonListElider};
-use crate::machine::{F64Offset, F64Ptr, Fixnum, HeapCellValueTag};
-use crate::parser::ast::{Var, VarPtr};
-use dashu::*;
-use indexmap::IndexMap;
-use ordered_float::OrderedFloat;
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
@@ -14,6 +7,21 @@ use std::iter::FromIterator;
 
 use super::Machine;
 use super::{HeapCellValue, Number};
+use crate::atom_table::*;
+use crate::heap_iter::{stackful_post_order_iter, NonListElider};
+use crate::machine::{F64Offset, F64Ptr, Fixnum, HeapCellValueTag};
+use crate::parser::ast::{Var, VarPtr};
+
+use dashu::*;
+use indexmap::IndexMap;
+use integer::IBig;
+use integer::UBig;
+use num_traits::cast::ToPrimitive;
+use ordered_float::OrderedFloat;
+use serde::ser::SerializeMap;
+use serde::ser::SerializeSeq;
+use serde::Serialize;
+use serde::Serializer;
 
 pub type QueryResult = Result<QueryResolution, String>;
 
@@ -139,6 +147,82 @@ pub enum Value {
     List(Vec<Value>),
     Structure(String, Vec<Value>),
     Var(String),
+}
+
+struct ValueRationalInner {
+    up: IBig,
+    down: UBig,
+}
+
+impl Serialize for ValueRationalInner {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut seq = serializer.serialize_seq(Some(2))?;
+        match self.up.to_i64() {
+            Some(small) => seq.serialize_element(&small)?,
+            None => seq.serialize_element(&self.up.to_string())?,
+        }
+        match self.down.to_i64() {
+            Some(small) => seq.serialize_element(&small)?,
+            None => seq.serialize_element(&self.down.to_string())?,
+        }
+        seq.end()
+    }
+}
+
+impl Serialize for Value {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            Value::Integer(i) => match i.to_i64() {
+                Some(small) => serializer.serialize_i64(small),
+                None => {
+                    let mut map = serializer.serialize_map(Some(1))?;
+                    map.serialize_entry("integer", &i.to_string())?;
+                    map.end()
+                }
+            },
+            Value::Rational(r) => {
+                let (up, down) = r.clone().into_parts();
+                let mut map = serializer.serialize_map(Some(1))?;
+                map.serialize_entry("rational", &ValueRationalInner { up, down })?;
+                map.end()
+            }
+            Value::Float(f) => serializer.serialize_f64(f.into_inner()),
+            Value::Atom(a) => match a.as_str() {
+                "true" => serializer.serialize_bool(true),
+                "false" => serializer.serialize_bool(false),
+                "[]" => {
+                    // This should never be reached if this was obtained from run_query_iter(),
+                    // but is here for completeness.
+                    let seq = serializer.serialize_seq(Some(0))?;
+                    seq.end()
+                }
+                _ => {
+                    let mut map = serializer.serialize_map(Some(1))?;
+                    map.serialize_entry("atom", a)?;
+                    map.end()
+                }
+            },
+            Value::String(s) => serializer.serialize_str(s),
+            Value::List(l) => l.serialize(serializer),
+            Value::Structure(f, args) => {
+                let mut map = serializer.serialize_map(Some(2))?;
+                map.serialize_entry("functor", f)?;
+                map.serialize_entry("args", args)?;
+                map.end()
+            }
+            Value::Var(v) => {
+                let mut map = serializer.serialize_map(Some(1))?;
+                map.serialize_entry("variable", v)?;
+                map.end()
+            }
+        }
+    }
 }
 
 /// This is an auxiliary function to turn a count into names of anonymous variables like _A, _B,

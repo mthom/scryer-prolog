@@ -631,6 +631,7 @@ dependencies = [
  "dashu-int",
  "num-modular",
  "num-order",
+ "num-traits",
  "rustversion",
  "static_assertions",
 ]
@@ -645,6 +646,7 @@ dependencies = [
  "dashu-base",
  "num-modular",
  "num-order",
+ "num-traits",
  "rustversion",
  "static_assertions",
 ]
@@ -676,6 +678,7 @@ dependencies = [
  "dashu-int",
  "num-modular",
  "num-order",
+ "num-traits",
  "rustversion",
 ]
 
@@ -2576,6 +2579,7 @@ dependencies = [
  "maplit",
  "native-tls",
  "num-order",
+ "num-traits",
  "ordered-float",
  "phf 0.11.2",
  "pprof",
