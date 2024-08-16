@@ -227,7 +227,9 @@ impl Value {
                                 Value::List(elems)
                             }
                         },
-                        _ => Value::Structure(".".into(), vec![head, tail]),
+                        _ => {
+                            Value::Structure(".".into(), vec![head, tail])
+                        }
                     };
                     term_stack.push(list);
                 }
@@ -326,37 +328,50 @@ impl Value {
                 (HeapCellValueTag::PStr, atom) => {
                     let tail = term_stack.pop().unwrap();
 
-                    if let Value::Atom(atom) = tail {
-                        if atom == "[]" {
-                            term_stack.push(Value::String(atom.as_str().to_string()));
-                        }
-                    } else {
-                        let mut list: Vec<Value> = atom
-                            .as_str()
-                            .to_string()
-                            .chars()
-                            .map(|x| Value::Atom(x.to_string()))
-                            .collect();
+                    match tail {
+                        Value::Atom(atom) => {
+                            if atom == "[]" {
+                                term_stack.push(Value::String(atom.as_str().to_string()));
+                            }
+                        },
+                        Value::List(l) => {
+                            let mut list: Vec<Value> = atom
+                                .as_str()
+                                .to_string()
+                                .chars()
+                                .map(|x| Value::Atom(x.to_string()))
+                                .collect();
+                            list.extend(l.into_iter());
+                            term_stack.push(Value::List(list));
+                        },
+                        _ => {
+                            let mut list: Vec<Value> = atom
+                                .as_str()
+                                .to_string()
+                                .chars()
+                                .map(|x| Value::Atom(x.to_string()))
+                                .collect();
 
-                        let mut partial_list = Value::Structure(
-                            ".".into(),
-                            vec![
-                                list.pop().unwrap(),
-                                tail,
-                            ],
-                        );
-
-                        while let Some(last) = list.pop() {
-                            partial_list = Value::Structure(
+                            let mut partial_list = Value::Structure(
                                 ".".into(),
                                 vec![
-                                    last,
-                                    partial_list,
+                                    list.pop().unwrap(),
+                                    tail,
                                 ],
                             );
-                        }
 
-                        term_stack.push(partial_list);
+                            while let Some(last) = list.pop() {
+                                partial_list = Value::Structure(
+                                    ".".into(),
+                                    vec![
+                                        last,
+                                        partial_list,
+                                    ],
+                                );
+                            }
+
+                            term_stack.push(partial_list);
+                        }
                     }
                 }
                 // I dont know if this is needed here.
