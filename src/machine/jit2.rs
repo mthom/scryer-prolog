@@ -32,6 +32,8 @@ pub struct JitMachine {
     vec_push_sig: Signature,
     vec_len: *const u8,
     vec_len_sig: Signature,
+    vec_truncate: *const u8,
+    vec_truncate_sig: Signature,
     print_func: FuncId,
     print_func8: FuncId,
     vec_pop: FuncId,
@@ -73,6 +75,7 @@ impl JitMachine {
 	sig.params.push(AbiParam::new(pointer_type));
 	sig.params.push(AbiParam::new(pointer_type));
 	sig.params.push(AbiParam::new(pointer_type));
+	sig.params.push(AbiParam::new(pointer_type));
 	sig.returns.push(AbiParam::new(types::I8));
 	sig.call_conv = call_conv;
 
@@ -89,13 +92,19 @@ impl JitMachine {
 	    let registers = fn_builder.block_params(block)[1];
 	    let heap = fn_builder.block_params(block)[2];
 	    let pdl = fn_builder.block_params(block)[3];
+	    let stack = fn_builder.block_params(block)[4];
+	    let e_pointer = fn_builder.ins().iconst(types::I64, 0);
 	    let mut jump_sig = module.make_signature();
 	    jump_sig.call_conv = isa::CallConv::Tail;
+	    jump_sig.params.push(AbiParam::new(types::I64));
+	    jump_sig.params.push(AbiParam::new(types::I64));
 	    jump_sig.params.push(AbiParam::new(types::I64));
 	    jump_sig.params.push(AbiParam::new(types::I64));
 	    let mut params = vec![];
 	    params.push(heap);
 	    params.push(pdl);
+	    params.push(stack);
+	    params.push(e_pointer);
 	    for i in 1..=n {
 		jump_sig.params.push(AbiParam::new(types::I64));
 		// jump_sig.returns.push(AbiParam::new(types::I64));
@@ -153,6 +162,10 @@ impl JitMachine {
 	let mut vec_len_sig = module.make_signature();
 	vec_len_sig.params.push(AbiParam::new(pointer_type));
 	vec_len_sig.returns.push(AbiParam::new(types::I64));
+	let vec_truncate = Vec::<HeapCellValue>::truncate as *const u8;
+	let mut vec_truncate_sig = module.make_signature();
+	vec_truncate_sig.params.push(AbiParam::new(pointer_type));
+	vec_truncate_sig.params.push(AbiParam::new(types::I64));
 
 	let predicates = HashMap::new();
 	JitMachine {
@@ -166,6 +179,8 @@ impl JitMachine {
 	    vec_push_sig,
 	    vec_len,
 	    vec_len_sig,
+	    vec_truncate,
+	    vec_truncate_sig,
 	    print_func,
 	    print_func8,
 	    vec_pop,
@@ -176,6 +191,8 @@ impl JitMachine {
     pub fn compile(&mut self, name: &str, arity: usize, code: Code) -> Result<(), JitCompileError> {
 
 	let mut sig = self.module.make_signature();
+	sig.params.push(AbiParam::new(types::I64));
+	sig.params.push(AbiParam::new(types::I64));
 	sig.params.push(AbiParam::new(types::I64));
 	sig.params.push(AbiParam::new(types::I64));
 	for _ in 1..=arity {
@@ -195,6 +212,8 @@ impl JitMachine {
 
 	let heap = fn_builder.block_params(block)[0];
 	let pdl = fn_builder.block_params(block)[1];
+	let stack = fn_builder.block_params(block)[2];
+	let e_pointer = fn_builder.block_params(block)[3];
 	let mode = Variable::new(0);
 	fn_builder.declare_var(mode, types::I8);
 	let s = Variable::new(1);
@@ -203,12 +222,15 @@ impl JitMachine {
 	fn_builder.declare_var(fail, types::I8);
 	let fail_value_init = fn_builder.ins().iconst(types::I8, 0);
 	fn_builder.def_var(fail, fail_value_init);
+	let e = Variable::new(3);
+	fn_builder.declare_var(e, types::I64);
+	fn_builder.def_var(e, e_pointer);
 	
 	let mut registers = vec![];
 	// TODO: This could be optimized more, we know the maximum register we're using
 	for i in 1..MAX_ARITY {
 	    if i <= arity {
-	        let reg = fn_builder.block_params(block)[i + 1];
+	        let reg = fn_builder.block_params(block)[i + 3];
 	        registers.push(reg);
 	    } else {
 		let reg = fn_builder.ins().iconst(types::I64, 0);
@@ -261,6 +283,16 @@ impl JitMachine {
 		    let sig_ref = fn_builder.import_signature(self.vec_push_sig.clone());
 		    let vec_push_fn = fn_builder.ins().iconst(types::I64, self.vec_push as i64);
 		    fn_builder.ins().call_indirect(sig_ref, vec_push_fn, &[$x, $y]);
+		}
+	    }
+	}
+
+	macro_rules! vec_truncate {
+	    ($x:expr, $y:expr) => {
+		{
+		    let sig_ref = fn_builder.import_signature(self.vec_truncate_sig.clone());
+		    let vec_truncate_fn = fn_builder.ins().iconst(types::I64, self.vec_truncate as i64);
+		    fn_builder.ins().call_indirect(sig_ref, vec_truncate_fn, &[$x, $y]);
 		}
 	    }
 	}
@@ -532,9 +564,40 @@ impl JitMachine {
 	    }
 	}
 
+	macro_rules! read_reg {
+	    ($x:expr) => {
+		{
+                    match $x {
+			RegType::Temp(x) => {
+			    registers[x-1]
+			}
+			RegType::Perm(y) => {
+			    let idy = ((y as i32) + 1) * 8;
+			    let stack_frame = fn_builder.use_var(e);
+			    fn_builder.ins().load(types::I64, MemFlags::trusted(), stack_frame, Offset32::new(idy))
+			}
+		    }
+		}
+	    }
+	}
+
+	macro_rules! write_reg {
+	    ($x:expr, $y:expr) => {
+		match $x {
+		    RegType::Temp(x) => {
+			registers[x-1] = $y;
+		    }
+		    RegType::Perm(y) => {
+			let idy = ((y as i32) + 1) * 8;
+			let stack_frame = fn_builder.use_var(e);
+			fn_builder.ins().store(MemFlags::trusted(), $y, stack_frame, Offset32::new(idy));
+		    }
+		}
+	    }
+	}
+
 	for wam_instr in code {
 	    match wam_instr {
-		// TODO Missing RegType Perm
 		/* put_structure is an instruction that puts a new STR in the heap
 		 * (STR cell, plus functor + arity cell)
 		 * It also saves the STR cell into a register
@@ -550,14 +613,8 @@ impl JitMachine {
 		    vec_push!(heap, str_cell);
 		    vec_push!(heap, atom);
 
-		    match reg {
-			RegType::Temp(x) => {
-			    registers[x-1] = str_cell;
-			}
-			_ => unimplemented!()
-		    }
+		    write_reg!(reg, str_cell);
 		}
-		// TODO Missing RegType Perm
 		/* set_variable is an instruction that creates a new self-referential REF
 		 * (unbounded variable) in the heap and saves that into a register
 		 */
@@ -566,33 +623,16 @@ impl JitMachine {
 		    let heap_loc_cell = fn_builder.ins().iconst(types::I64, i64::from_le_bytes(heap_loc_cell.into_bytes()));
 		    let vec_len = vec_len!(heap);
 		    let heap_loc_cell = fn_builder.ins().bor(vec_len, heap_loc_cell);
-		    let sig_ref = fn_builder.import_signature(self.vec_push_sig.clone());
-		    let vec_push_fn = fn_builder.ins().iconst(types::I64, self.vec_push as i64);
-		    fn_builder.ins().call_indirect(sig_ref, vec_push_fn, &[heap, heap_loc_cell]);
-		    match reg {
-			RegType::Temp(x) => {
-			    registers[x-1] = heap_loc_cell;
-			}
-			_ => unimplemented!()
-		    }
+		    vec_push!(heap, heap_loc_cell);
+		    write_reg!(reg, heap_loc_cell);
 		}
-		// TODO: Missing RegType Perm
 		/* set_value is an instruction that pushes a new data cell from a register to the heap
 		 */
 		Instruction::SetValue(reg) => {
-		    let value = match reg {
-			RegType::Temp(x) => {
-			    registers[x-1]
-			},
-			_ => unimplemented!()
-		    };
+		    let value = read_reg!(reg);
 		    let value = store!(value);
-		    
-		    let sig_ref = fn_builder.import_signature(self.vec_push_sig.clone());
-		    let vec_push_fn = fn_builder.ins().iconst(types::I64, self.vec_push as i64);
-		    fn_builder.ins().call_indirect(sig_ref, vec_push_fn, &[heap, value]);
+		    vec_push!(heap, value);
 		}
-		// TODO: Missing RegType Perm
 		/* get_structure is an instruction that either matches an existing STR or starts writing a new
 		 * STR into the heap. If the cell passed via register is an unbounded REF, we start WRITE mode
 		 * and unify_variable, unify_value behave similar to set_variable, set_value.
@@ -600,12 +640,7 @@ impl JitMachine {
 		 * in that mod unify_variable and unify_value will follow the unification procedure
 		 */
 		Instruction::GetStructure(_lvl, name, arity, reg) => {
-		    let xi = match reg {
-			RegType::Temp(x) => {
-			    registers[x-1]
-			}
-			_ => unimplemented!()
-		    };
+		    let xi = read_reg!(reg);
 		    let deref = deref!(xi);
 		    let store = store!(deref);
 
@@ -673,7 +708,6 @@ impl JitMachine {
 		    fn_builder.switch_to_block(exit_block);
 		    
 		}
-		// TODO: Missing RegType Perm. Let's suppose Mode is local to each predicate
 		// TODO: Missing support for PStr and CStr
 		/* unify_variable is an instruction that in WRITE mode is identical to set_variable but
 		 * in READ mode it reads the data cell from the S pointer to a register
@@ -691,12 +725,7 @@ impl JitMachine {
 		    let s_value = fn_builder.use_var(s);
 		    let value = fn_builder.ins().load(types::I64, MemFlags::trusted(), s_value, Offset32::new(0));
 		    let value = deref!(value);
-		    match reg {
-			RegType::Temp(x) => {
-			    registers[x-1] = value;
-			},
-			_ => unimplemented!()
-		    }
+		    write_reg!(reg, value);
 		    let sum_s = fn_builder.ins().iadd_imm(s_value, 8);
 		    fn_builder.def_var(s, sum_s);
 		    fn_builder.ins().jump(exit_block, &[]);
@@ -706,15 +735,8 @@ impl JitMachine {
 		    let heap_loc_cell = fn_builder.ins().iconst(types::I64, i64::from_le_bytes(heap_loc_cell.into_bytes()));
 		    let vec_len = vec_len!(heap);
 		    let heap_loc_cell = fn_builder.ins().bor(vec_len, heap_loc_cell);
-		    let sig_ref = fn_builder.import_signature(self.vec_push_sig.clone());
-		    let vec_push_fn = fn_builder.ins().iconst(types::I64, self.vec_push as i64);
-		    fn_builder.ins().call_indirect(sig_ref, vec_push_fn, &[heap, heap_loc_cell]);
-		    match reg {
-			RegType::Temp(x) => {
-			    registers[x-1] = heap_loc_cell;
-			}
-			_ => unimplemented!()
-		    }
+		    vec_push!(heap, heap_loc_cell);
+		    write_reg!(reg, heap_loc_cell);
 		    fn_builder.ins().jump(exit_block, &[]);
 		    // exit
 		    fn_builder.switch_to_block(exit_block);
@@ -724,14 +746,8 @@ impl JitMachine {
 		/* unify_value is an instruction that on WRITE mode behaves like set_value, and in READ mode
 		 * executes unification
 		 */
-		// TODO: Manage RegType Perm
 		Instruction::UnifyValue(reg) => {
-		    let reg = match reg {
-			RegType::Temp(x) => {
-			    registers[x-1]
-			}
-			_ => unimplemented!()
-		    };
+		    let reg = read_reg!(reg);
     		    let read_block = fn_builder.create_block();
 		    let write_block = fn_builder.create_block();
 		    let exit_block = fn_builder.create_block();
@@ -749,9 +765,7 @@ impl JitMachine {
 		    fn_builder.ins().jump(exit_block, &[]);
 		    // write
 		    fn_builder.switch_to_block(write_block);
-    		    let sig_ref = fn_builder.import_signature(self.vec_push_sig.clone());
-		    let vec_push_fn = fn_builder.ins().iconst(types::I64, self.vec_push as i64);
-		    fn_builder.ins().call_indirect(sig_ref, vec_push_fn, &[heap, reg]);
+		    vec_push!(heap, reg);
 		    fn_builder.ins().jump(exit_block, &[]);
 		    fn_builder.seal_block(exit_block);
 
@@ -767,58 +781,42 @@ impl JitMachine {
 		    let heap_loc_cell = fn_builder.ins().iconst(types::I64, i64::from_le_bytes(heap_loc_cell.into_bytes()));
 		    let vec_len = vec_len!(heap);
 		    let heap_loc_cell = fn_builder.ins().bor(vec_len, heap_loc_cell);
-		    let sig_ref = fn_builder.import_signature(self.vec_push_sig.clone());
-		    let vec_push_fn = fn_builder.ins().iconst(types::I64, self.vec_push as i64);
-		    fn_builder.ins().call_indirect(sig_ref, vec_push_fn, &[heap, heap_loc_cell]);
-		    match reg {
-			RegType::Temp(x) => {
-			    registers[x-1] = heap_loc_cell;
-			}
-			_ => unimplemented!()
-		    }
+		    vec_push!(heap, heap_loc_cell);
+		    write_reg!(reg, heap_loc_cell);
 		    registers[arg - 1] = heap_loc_cell;
 		}
 		/* put_value moves the content from Xi to Ai
 		 */
 		Instruction::PutValue(reg, arg) => {
-		    registers[arg - 1] = match reg {
-			RegType::Temp(x) => {
-			    registers[x-1]
-			}
-			_ => unimplemented!()
-		    };
+		    registers[arg - 1] = read_reg!(reg);
 		}
 		/* get_variable moves the content from Ai to Xi
 		 */
 		Instruction::GetVariable(reg, arg) => {
-		    match reg {
-			RegType::Temp(x) => {
-			    registers[x-1] = registers[arg - 1];
-			}
-			_ => unimplemented!()
-		    }
+		    write_reg!(reg, registers[arg - 1]);
 		}
 		/* get_value perform unification between Xi and Ai
 		 */
 		Instruction::GetValue(reg1, reg2) => {
-		    let reg1 = match reg1 {
-			RegType::Temp(x) => {
-			    registers[x-1]
-			}
-			_ => unimplemented!()
-		    };
+		    let reg1 = read_reg!(reg1);
 		    let reg2 = registers[reg2 - 1];
 		    unify!(reg1, reg2);
 		    
 		}
+		/* call executes another predicate in a normal way. It passes all the argument registers
+		 * as function arguments
+		 */
 		Instruction::CallNamed(arity, name, _ ) => {
 let Some(predicate) = self.predicates.get(&(name.as_str().to_string(), arity)) else {
 			return Err(JitCompileError::UndefinedPredicate);
-		    };
+};
+		    let e_value = fn_builder.use_var(e);
 		    let func = self.module.declare_func_in_func(predicate.func_id, fn_builder.func);
 		    let mut args = vec![];
 		    args.push(heap);
 		    args.push(pdl);
+		    args.push(stack);
+		    args.push(e_value);
 		    for i in 1..=arity {
 			args.push(registers[i-1]);
 		    }
@@ -833,30 +831,61 @@ let Some(predicate) = self.predicates.get(&(name.as_str().to_string(), arity)) e
     		    fn_builder.ins().return_(&[fail_status]);
 		    fn_builder.switch_to_block(resume);
 		}
+		/* execute does a tail call instead of a normal call
+		 */
 		Instruction::ExecuteNamed(arity, name, _) => {
 		    let Some(predicate) = self.predicates.get(&(name.as_str().to_string(), arity)) else {
 			return Err(JitCompileError::UndefinedPredicate);
 		    };
+		    let e_value = fn_builder.use_var(e);
 		    let func = self.module.declare_func_in_func(predicate.func_id, fn_builder.func);
 		    let mut args = vec![];
 		    args.push(heap);
 		    args.push(pdl);
+		    args.push(stack);
+		    args.push(e_value);
 		    for i in 1..=arity {
 			args.push(registers[i-1]);
 		    }
 		    fn_builder.ins().return_call(func, &args);
 		}
-		// TODO: Manage RegType Perm
+		/* allocate creates a new environment frame (ANDFrame). Every frame contains a pointer
+		 * to the previous frame start, the continuation pointer (in this case we do not store it
+		 * as we have a tree of calls with Cranelift managing this for us), the number of permanent
+		 * variables and the permanent variables themselves.
+		 */
+		Instruction::Allocate(n) => {
+		    let new_e_value = vec_len!(stack);
+		    let stack_ptr = vec_as_ptr!(stack);
+		    let new_e_value = fn_builder.ins().imul_imm(new_e_value, 8);
+		    let new_e_value = fn_builder.ins().iadd(stack_ptr, new_e_value);
+		    let e_value = fn_builder.use_var(e);
+		    vec_push!(stack, e_value);
+		    let n_value = fn_builder.ins().iconst(types::I64, n as i64);
+		    vec_push!(stack, n_value);
+		    let zero = fn_builder.ins().iconst(types::I64, 0);
+		    for _ in 0..n {
+			vec_push!(stack, zero);
+		    }
+		    fn_builder.def_var(e, new_e_value);
+		}
+		/* deallocate restores the previous frame, freeing the current frame
+		 */
+	        Instruction::Deallocate => {
+		    let e_value = fn_builder.use_var(e);
+		    let allocated = fn_builder.ins().load(types::I64, MemFlags::trusted(), e_value, Offset32::new(8));
+		    let allocated = fn_builder.ins().iadd_imm(allocated, 2);
+		    let new_e_value = fn_builder.ins().load(types::I64, MemFlags::trusted(), e_value, Offset32::new(0));
+		    let stack_len = vec_len!(stack);
+		    let new_stack_len = fn_builder.ins().isub(stack_len, allocated);
+		    vec_truncate!(stack, new_stack_len);
+		    fn_builder.def_var(e, new_e_value);
+		}
 		// TODO: manage NonVar cases
 		// TODO: Manage unification case
 		// TODO: manage STORE[addr] is not REF
 		Instruction::GetConstant(_, c, reg) => {
-		    let value = match reg {
-			RegType::Temp(x) => {
-			    registers[x-1]
-			}
-			_ => unimplemented!()
-		    };
+		    let value = read_reg!(reg);
 		    let value = deref!(value);
 		    let value = store!(value);
 		    // The order of HeapCellValue is TAG (6), M (1), F (1), VALUE (56)
@@ -899,11 +928,13 @@ let Some(predicate) = self.predicates.get(&(name.as_str().to_string(), arity)) e
 	let Some(predicate) = self.predicates.get(&(name.to_string(), arity)) else {
 	    return Err(());
 	};
-	let trampoline: extern "C" fn (*const u8, *mut Registers, *const Vec<HeapCellValue>, *const Vec<HeapCellValue>) -> u8 = unsafe { std::mem::transmute(self.trampolines[arity])};
+	let trampoline: extern "C" fn (*const u8, *mut Registers, *const Vec<HeapCellValue>, *const Vec<HeapCellValue>, *const Vec<i64>) -> u8 = unsafe { std::mem::transmute(self.trampolines[arity])};
 	let registers = machine_st.registers.as_ptr() as *mut Registers;
 	let heap = &machine_st.heap as *const Vec<HeapCellValue>;
 	let pdl = &machine_st.pdl as *const Vec<HeapCellValue>;
-	let fail = trampoline(predicate.code_ptr, registers, heap, pdl);
+	let stack_vec: Vec<i64> = Vec::with_capacity(1024);
+	let stack = &stack_vec as *const Vec<i64>;
+	let fail = trampoline(predicate.code_ptr, registers, heap, pdl, stack);
 	machine_st.p = machine_st.cp;
 	machine_st.fail = if fail == 1 {
 	    true
@@ -1275,5 +1306,44 @@ fn test_execute_named() {
     machine_st_expected.heap.push(atom_as_cell!(atom!("f"), 0));
     assert_eq!(machine_st.heap, machine_st_expected.heap);
     assert_eq!(machine_st.fail, false);
+}
+
+#[test]
+fn test_allocate() {
+    let mut machine_st = MachineState::new();
+    let code_a = vec![
+	Instruction::GetConstant(Level::Shallow, atom_as_cell!(atom!("a"), 0), RegType::Temp(1)),
+	Instruction::Proceed
+    ];
+    let code_b = vec![
+	Instruction::GetConstant(Level::Shallow, atom_as_cell!(atom!("b"), 0), RegType::Temp(1)),
+	Instruction::Proceed
+    ];
+    let code_c = vec![
+	Instruction::Allocate(1),
+	Instruction::GetVariable(RegType::Perm(1), 2),
+	Instruction::CallNamed(1, atom!("a"), CodeIndex::default(&mut machine_st.arena)),
+	Instruction::PutValue(RegType::Perm(1), 1),
+	Instruction::Deallocate,
+	Instruction::ExecuteNamed(1, atom!("b"), CodeIndex::default(&mut machine_st.arena)),
+    ];
+    let x = heap_loc_as_cell!(0);
+    let y = heap_loc_as_cell!(1);
+    machine_st.registers[1] = x;
+    machine_st.registers[2] = y;
+    machine_st.heap.push(x);
+    machine_st.heap.push(y);
+    let mut jit = JitMachine::new();
+    jit.compile("a", 1, code_a).unwrap();
+    jit.compile("b", 1, code_b).unwrap();
+    jit.compile("c", 2, code_c).unwrap();
+    jit.exec("c", 2, &mut machine_st).unwrap();
+    let mut machine_st_expected = MachineState::new();
+    machine_st_expected.heap.push(atom_as_cell!(atom!("a"), 0));
+    machine_st_expected.heap.push(atom_as_cell!(atom!("b"), 0));    
+    assert_eq!(machine_st.heap, machine_st_expected.heap);
+    assert_eq!(machine_st.fail, false);
+    
+    
 }
 // TODO: Continue with more tests
