@@ -87,6 +87,8 @@ ctrlc = { version = "3.4.4", optional = true }
 hostname = { version = "0.4.0", optional = true }
 libffi = { version = "3.2.0", optional = true }
 native-tls = { version = "0.2.12", optional = true }
+// allow dependent crates to pick the patch version that works with other
+// dependencies, while also updating to latest when possible
 reqwest = { version = "0.11.*", optional = true }
 rustyline = { version = "14.0.0", optional = true }
 tokio = { version = "1.39.2", features = ["full"] }
