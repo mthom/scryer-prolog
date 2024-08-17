@@ -59,13 +59,14 @@ $ scryer-prolog -f --no-add-history tests-pl/invalid_decl10.pl -g halt
 
 ```
 
-The following test doesn't appear to terminate so its moved to a block quote for now
+FIXME I belive the following test should result in a `error(instantiation_error,load/1)` error instead of the current error.
 
-> ```trycmd
-> $ scryer-prolog -f --no-add-history tests-pl/invalid_decl11.pl -g halt
-> % Warning: singleton variables Var at line 0 of invalid_decl11.pl
->    error(instantiation_error,load/1).
-> ```
+```trycmd
+$ scryer-prolog -f --no-add-history tests-pl/invalid_decl11.pl -g halt
+% Warning: singleton variables Var at line 0 of invalid_decl11.pl
+   error(type_error(list,todo_insert_invalid_term_here),load/1).
+
+```
 
 ```trycmd
 $ scryer-prolog -f --no-add-history tests-pl/invalid_decl12.pl -g halt
@@ -94,5 +95,13 @@ $ scryer-prolog -f --no-add-history tests-pl/invalid_decl15.pl -g halt
 ```trycmd
 $ scryer-prolog -f --no-add-history tests-pl/invalid_decl16.pl -g halt
    error(permission_error(modify,operator,','),load/1).
+
+```
+
+
+```trycmd
+$ scryer-prolog -f --no-add-history tests-pl/invalid_decl_issue2467.pl -g halt
+% Warning: singleton variables D at line 0 of invalid_decl_issue2467.pl
+   error(instantiation_error,load/1).
 
 ```
