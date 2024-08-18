@@ -41,22 +41,35 @@ impl<T: RawBlockTraits> RawBlock<T> {
 
     unsafe fn init_at_size(&mut self, cap: usize) {
         let layout = alloc::Layout::from_size_align_unchecked(cap, T::align());
-
-        self.base = alloc::alloc(layout) as *const _;
+        let new_base = alloc::alloc(layout).cast_const();
+        if new_base.is_null() {
+            panic!(
+                "failed to allocate in init_at_size for {}",
+                std::any::type_name::<Self>()
+            );
+        }
+        self.base = new_base;
         self.top = self.base.add(cap);
-        *self.ptr.get_mut() = self.base as *mut _;
+        *self.ptr.get_mut() = self.base.cast_mut();
     }
 
-    pub unsafe fn grow(&mut self) {
+    pub unsafe fn grow(&mut self) -> bool {
         if self.base.is_null() {
             self.init_at_size(T::init_size());
+            true
         } else {
             let size = self.size();
             let layout = alloc::Layout::from_size_align_unchecked(size, T::align());
 
-            self.base = alloc::realloc(self.base as *mut _, layout, size * 2) as *const _;
-            self.top = (self.base as usize + size * 2) as *const _;
-            *self.ptr.get_mut() = (self.base as usize + size) as *mut _;
+            let new_base = alloc::realloc(self.base.cast_mut(), layout, size * 2).cast_const();
+            if new_base.is_null() {
+                false
+            } else {
+                self.base = new_base;
+                self.top = (self.base as usize + size * 2) as *const _;
+                *self.ptr.get_mut() = (self.base as usize + size) as *mut _;
+                true
+            }
         }
     }
 

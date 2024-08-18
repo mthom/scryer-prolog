@@ -174,7 +174,9 @@ impl Stack {
             let ptr = self.buf.alloc(frame_size);
 
             if ptr.is_null() {
-                self.buf.grow();
+                if !self.buf.grow() {
+                    panic!("growing the stack failed")
+                }
             } else {
                 return ptr;
             }
