@@ -168,7 +168,9 @@ repl :-
 %% Enable op declarations with lists of operands, i.e.,
 %% :- op(900, fy, [$,@]).
 
-user:term_expansion((:- op(Pred, Spec, [Op | OtherOps])), OpResults) :-
+user:term_expansion((:- op(Pred, Spec, Ops)), OpResults) :- 
+    ground(Ops), 
+    Ops = [Op | OtherOps],
     expand_op_list([Op | OtherOps], Pred, Spec, OpResults).
 
 expand_op_list([], _, _, []).
