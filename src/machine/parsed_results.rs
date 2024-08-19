@@ -1,11 +1,19 @@
 use crate::atom_table::*;
+use crate::heap_iter::{stackful_post_order_iter, NonListElider};
+use crate::machine::{F64Offset, F64Ptr, Fixnum, HeapCellValueTag};
+use crate::parser::ast::{Var, VarPtr};
 use dashu::*;
+use indexmap::IndexMap;
 use ordered_float::OrderedFloat;
+use std::cmp::Ordering;
 use std::collections::BTreeMap;
 use std::collections::HashMap;
 use std::fmt::Display;
 use std::fmt::Write;
 use std::iter::FromIterator;
+
+use super::Machine;
+use super::{HeapCellValue, Number};
 
 pub type QueryResult = Result<QueryResolution, String>;
 
@@ -24,7 +32,7 @@ pub fn write_prolog_value_as_json<W: Write>(
         Value::Integer(i) => write!(writer, "{}", i),
         Value::Float(f) => write!(writer, "{}", f),
         Value::Rational(r) => write!(writer, "{}", r),
-        Value::Atom(a) => writer.write_str(&a.as_str()),
+        Value::Atom(a) => writer.write_str(a.as_str()),
         Value::String(s) => {
             if let Err(_e) = serde_json::from_str::<serde_json::Value>(s.as_str()) {
                 //treat as string literal
@@ -126,11 +134,267 @@ pub enum Value {
     Integer(Integer),
     Rational(Rational),
     Float(OrderedFloat<f64>),
-    Atom(Atom),
+    Atom(String),
     String(String),
     List(Vec<Value>),
-    Structure(Atom, Vec<Value>),
-    Var,
+    Structure(String, Vec<Value>),
+    Var(String),
+}
+
+/// This is an auxiliary function to turn a count into names of anonymous variables like _A, _B,
+/// _AB, etc...
+fn count_to_letter_code(mut count: usize) -> String {
+    let mut letters = Vec::new();
+
+    loop {
+        let letter_idx = (count % 26) as u32;
+        letters.push(char::from_u32('A' as u32 + letter_idx).unwrap());
+        count /= 26;
+
+        if count == 0 {
+            break;
+        }
+    }
+
+    letters.into_iter().chain("_".chars()).rev().collect()
+}
+
+impl Value {
+    pub(crate) fn from_heapcell(
+        machine: &mut Machine,
+        heap_cell: HeapCellValue,
+        var_names: &mut IndexMap<HeapCellValue, VarPtr>,
+    ) -> Self {
+        // Adapted from MachineState::read_term_from_heap
+        let mut term_stack = vec![];
+        let iter = stackful_post_order_iter::<NonListElider>(
+            &mut machine.machine_st.heap,
+            &mut machine.machine_st.stack,
+            heap_cell,
+        );
+
+        let mut anon_count: usize = 0;
+        let var_ptr_cmp = |a, b| match a {
+            Var::Named(name_a) => match b {
+                Var::Named(name_b) => name_a.cmp(&name_b),
+                _ => Ordering::Less,
+            },
+            _ => match b {
+                Var::Named(_) => Ordering::Greater,
+                _ => Ordering::Equal,
+            },
+        };
+
+        for addr in iter {
+            let addr = unmark_cell_bits!(addr);
+
+            read_heap_cell!(addr,
+                (HeapCellValueTag::Lis) => {
+                    let tail = term_stack.pop().unwrap();
+                    let head = term_stack.pop().unwrap();
+
+                    let list = match tail {
+                        Value::Atom(atom) if atom == "[]" => match head {
+                            Value::Atom(ref a) if a.chars().collect::<Vec<_>>().len() == 1 => {
+                                // Handle lists of char as strings
+                                Value::String(a.to_string())
+                            }
+                            _ => Value::List(vec![head]),
+                        },
+                        Value::List(elems) if elems.is_empty() => match head {
+                            Value::Atom(ref a) if a.chars().collect::<Vec<_>>().len() == 1 => {
+                                // Handle lists of char as strings
+                                Value::String(a.to_string())
+                            },
+                            _ => Value::List(vec![head]),
+                        },
+                        Value::List(mut elems) => {
+                            elems.insert(0, head);
+                            Value::List(elems)
+                        },
+                        Value::String(mut elems) => match head {
+                            Value::Atom(ref a) if a.chars().collect::<Vec<_>>().len() == 1 => {
+                                // Handle lists of char as strings
+                                elems.insert(0, a.chars().next().unwrap());
+                                Value::String(elems)
+                            },
+                            _ => {
+                                let mut elems: Vec<Value> = elems
+                                    .chars()
+                                    .map(|x| Value::Atom(x.into()))
+                                    .collect();
+                                elems.insert(0, head);
+                                Value::List(elems)
+                            }
+                        },
+                        _ => {
+                            Value::Structure(".".into(), vec![head, tail])
+                        }
+                    };
+                    term_stack.push(list);
+                }
+                (HeapCellValueTag::Var | HeapCellValueTag::AttrVar | HeapCellValueTag::StackVar) => {
+                    let var = var_names.get(&addr).map(|x| x.borrow().clone());
+                    match var {
+                        Some(Var::Named(name)) => term_stack.push(Value::Var(name)),
+                        _ => {
+                            let anon_name = loop {
+                                // Generate a name for the anonymous variable
+                                let anon_name = count_to_letter_code(anon_count);
+
+                                // Find if this name is already being used
+                                var_names.sort_by(|_, a, _, b| {
+                                    var_ptr_cmp(a.borrow().clone(), b.borrow().clone())
+                                });
+                                let binary_result = var_names.binary_search_by(|_,a| {
+                                    let var_ptr = Var::Named(anon_name.clone());
+                                    var_ptr_cmp(a.borrow().clone(), var_ptr.clone())
+                                });
+
+                                match binary_result {
+                                    Ok(_) => anon_count += 1, // Name already used
+                                    Err(_) => {
+                                        // Name not used, assign it to this variable
+                                        let var_ptr = VarPtr::from(Var::Named(anon_name.clone()));
+                                        var_names.insert(addr, var_ptr);
+                                        break anon_name;
+                                    },
+                                }
+                            };
+                            term_stack.push(Value::Var(anon_name));
+                        },
+                    }
+                }
+                (HeapCellValueTag::F64, f) => {
+                    term_stack.push(Value::Float(*f));
+                }
+                (HeapCellValueTag::Char, c) => {
+                    term_stack.push(Value::Atom(c.into()));
+                }
+                (HeapCellValueTag::Fixnum, n) => {
+                    term_stack.push(Value::Integer(n.into()));
+                }
+                (HeapCellValueTag::Cons) => {
+                    match Number::try_from(addr) {
+                        Ok(Number::Integer(i)) => term_stack.push(Value::Integer((*i).clone())),
+                        Ok(Number::Rational(r)) => term_stack.push(Value::Rational((*r).clone())),
+                        _ => {}
+                    }
+                }
+                (HeapCellValueTag::CStr, s) => {
+                    term_stack.push(Value::String(s.as_str().to_string()));
+                }
+                (HeapCellValueTag::Atom, (name, arity)) => {
+                    //let h = iter.focus().value() as usize;
+                    //let mut arity = arity;
+
+                    // Not sure why/if this is needed.
+                    // Might find out with better testing later.
+                    /*
+                    if iter.heap.len() > h + arity + 1 {
+                        let value = iter.heap[h + arity + 1];
+
+                        if let Some(idx) = get_structure_index(value) {
+                            // in the second condition, arity == 0,
+                            // meaning idx cannot pertain to this atom
+                            // if it is the direct subterm of a larger
+                            // structure.
+                            if arity > 0 || !iter.direct_subterm_of_str(h) {
+                                term_stack.push(
+                                    Term::Literal(Cell::default(), Literal::CodeIndex(idx))
+                                );
+
+                                arity += 1;
+                            }
+                        }
+                    }
+                    */
+
+                    if arity == 0 {
+                        let atom_name = name.as_str().to_string();
+                        if atom_name == "[]" {
+                            term_stack.push(Value::List(vec![]));
+                        } else {
+                            term_stack.push(Value::Atom(atom_name));
+                        }
+                    } else {
+                        let subterms = term_stack
+                            .drain(term_stack.len() - arity ..)
+                            .collect();
+
+                        term_stack.push(Value::Structure(name.as_str().to_string(), subterms));
+                    }
+                }
+                (HeapCellValueTag::PStr, atom) => {
+                    let tail = term_stack.pop().unwrap();
+
+                    match tail {
+                        Value::Atom(atom) => {
+                            if atom == "[]" {
+                                term_stack.push(Value::String(atom.as_str().to_string()));
+                            }
+                        },
+                        Value::List(l) => {
+                            let mut list: Vec<Value> = atom
+                                .as_str()
+                                .to_string()
+                                .chars()
+                                .map(|x| Value::Atom(x.to_string()))
+                                .collect();
+                            list.extend(l.into_iter());
+                            term_stack.push(Value::List(list));
+                        },
+                        _ => {
+                            let mut list: Vec<Value> = atom
+                                .as_str()
+                                .to_string()
+                                .chars()
+                                .map(|x| Value::Atom(x.to_string()))
+                                .collect();
+
+                            let mut partial_list = Value::Structure(
+                                ".".into(),
+                                vec![
+                                    list.pop().unwrap(),
+                                    tail,
+                                ],
+                            );
+
+                            while let Some(last) = list.pop() {
+                                partial_list = Value::Structure(
+                                    ".".into(),
+                                    vec![
+                                        last,
+                                        partial_list,
+                                    ],
+                                );
+                            }
+
+                            term_stack.push(partial_list);
+                        }
+                    }
+                }
+                // I dont know if this is needed here.
+                /*
+                (HeapCellValueTag::PStrLoc, h) => {
+                    let atom = cell_as_atom_cell!(iter.heap[h]).get_name();
+                    let tail = term_stack.pop().unwrap();
+
+                    term_stack.push(Term::PartialString(
+                        Cell::default(),
+                        atom.as_str().to_owned(),
+                        Box::new(tail),
+                    ));
+                }
+                */
+                _ => {
+                }
+            );
+        }
+
+        debug_assert_eq!(term_stack.len(), 1);
+        term_stack.pop().unwrap()
+    }
 }
 
 impl From<BTreeMap<&str, Value>> for QueryMatch {
@@ -349,7 +613,7 @@ impl TryFrom<String> for Value {
                 }
             }
 
-            Ok(Value::Structure(atom!("{}"), values))
+            Ok(Value::Structure("{}".into(), values))
         } else if trimmed.starts_with("<<") && trimmed.ends_with(">>") {
             let iter = trimmed[2..trimmed.len() - 2].split(',');
             let mut values = vec![];
@@ -363,7 +627,7 @@ impl TryFrom<String> for Value {
                 }
             }
 
-            Ok(Value::Structure(atom!("<<>>"), values))
+            Ok(Value::Structure("<<>>".into(), values))
         } else if !trimmed.contains(',') && !trimmed.contains('\'') && !trimmed.contains('"') {
             Ok(Value::String(trimmed.into()))
         } else {

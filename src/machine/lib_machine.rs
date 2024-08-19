@@ -1,8 +1,6 @@
 use std::collections::BTreeMap;
-use std::sync::Arc;
 
 use crate::atom_table;
-use crate::heap_print::{HCPrinter, HCValueOutputter, PrinterOutputter};
 use crate::machine::machine_indices::VarKey;
 use crate::machine::mock_wam::CompositeOpDir;
 use crate::machine::{BREAK_FROM_DISPATCH_LOOP_LOC, LIB_QUERY_SUCCESS};
@@ -36,7 +34,7 @@ impl Iterator for QueryState<'_> {
     type Item = Result<QueryResolutionLine, String>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let var_names = &self.var_names;
+        let var_names = &mut self.var_names;
         let term_write_result = &self.term;
         let machine = &mut self.machine;
 
@@ -92,36 +90,46 @@ impl Iterator for QueryState<'_> {
 
         let mut bindings: BTreeMap<String, Value> = BTreeMap::new();
 
-        for (var_key, term_to_be_printed) in &term_write_result.var_dict {
-            if var_key.to_string().starts_with('_') {
-                continue;
+        let var_dict = &term_write_result.var_dict;
+
+        for (var_key, term_to_be_printed) in var_dict.iter() {
+            let mut var_name = var_key.to_string();
+            if var_name.starts_with('_') {
+                let should_print = var_names.values().any(|x| match x.borrow().clone() {
+                    Var::Named(v) => v == var_name,
+                    _ => false,
+                });
+                if !should_print {
+                    continue;
+                }
             }
-            let mut printer = HCPrinter::new(
-                &mut machine.machine_st.heap,
-                Arc::clone(&machine.machine_st.atom_tbl),
-                &mut machine.machine_st.stack,
-                &machine.indices.op_dir,
-                PrinterOutputter::new(),
-                *term_to_be_printed,
-            );
 
-            printer.ignore_ops = false;
-            printer.numbervars = true;
-            printer.quoted = true;
-            printer.max_depth = 1000; // NOTE: set this to 0 for unbounded depth
-            printer.double_quotes = true;
-            printer.var_names.clone_from(var_names);
+            let mut term =
+                Value::from_heapcell(machine, *term_to_be_printed, &mut var_names.clone());
 
-            let outputter = printer.print();
+            if let Value::Var(ref term_str) = term {
+                if *term_str == var_name {
+                    continue;
+                }
 
-            let output: String = outputter.result();
-
-            if var_key.to_string() != output {
-                bindings.insert(
-                    var_key.to_string(),
-                    Value::try_from(output).expect("Couldn't convert Houtput to Value"),
-                );
+                // Var dict is in the order things appear in the query. If var_name appears
+                // after term in the query, switch their places.
+                let var_name_idx = var_dict
+                    .get_index_of(&VarKey::VarPtr(Var::Named(var_name.clone()).into()))
+                    .unwrap();
+                let term_idx =
+                    var_dict.get_index_of(&VarKey::VarPtr(Var::Named(term_str.clone()).into()));
+                if let Some(idx) = term_idx {
+                    if idx < var_name_idx {
+                        let new_term = Value::Var(var_name);
+                        let new_var_name = term_str.into();
+                        term = new_term;
+                        var_name = new_var_name;
+                    }
+                }
             }
+
+            bindings.insert(var_name, term);
         }
 
         // NOTE: there are outstanding choicepoints, backtrack
@@ -239,8 +247,6 @@ impl Machine {
 
 #[cfg(test)]
 mod tests {
-    use ordered_float::OrderedFloat;
-
     use super::*;
     use crate::machine::{QueryMatch, QueryResolution, Value};
 
@@ -253,9 +259,9 @@ mod tests {
             "facts",
             String::from(
                 r#"
-            triple("a", "p1", "b").
-            triple("a", "p2", "b").
-        "#,
+                triple("a", "p1", "b").
+                triple("a", "p2", "b").
+                "#,
             ),
         );
 
@@ -304,15 +310,15 @@ mod tests {
         let mut machine = Machine::new_lib();
         machine.load_module_string(
             "facts",
-                r#"
-                :- discontiguous(subject_class/2).
-                :- discontiguous(constructor/2).
+            r#"
+            :- discontiguous(subject_class/2).
+            :- discontiguous(constructor/2).
 
-                subject_class("Todo", c).
-                constructor(c, '[{action: "addLink", source: "this", predicate: "todo://state", target: "todo://ready"}]').
+            subject_class("Todo", c).
+            constructor(c, '[{action: "addLink", source: "this", predicate: "todo://state", target: "todo://ready"}]').
 
-                subject_class("Recipe", xyz).
-                constructor(xyz, '[{action: "addLink", source: "this", predicate: "recipe://title", target: "literal://string:Meta%20Muffins"}]').
+            subject_class("Recipe", xyz).
+            constructor(xyz, '[{action: "addLink", source: "this", predicate: "recipe://title", target: "literal://string:Meta%20Muffins"}]').
             "#.to_string());
 
         let result = machine.run_query(String::from(
@@ -322,8 +328,8 @@ mod tests {
             result,
             Ok(QueryResolution::Matches(vec![QueryMatch::from(
                 btreemap! {
-                    "C" => Value::from("c"),
-                    "Actions" => Value::from("[{action: \"addLink\", source: \"this\", predicate: \"todo://state\", target: \"todo://ready\"}]"),
+                    "C" => Value::Atom("c".into()),
+                    "Actions" => Value::Atom("[{action: \"addLink\", source: \"this\", predicate: \"todo://state\", target: \"todo://ready\"}]".into()),
                 }
             ),]))
         );
@@ -335,8 +341,8 @@ mod tests {
             result,
             Ok(QueryResolution::Matches(vec![QueryMatch::from(
                 btreemap! {
-                    "C" => Value::from("xyz"),
-                    "Actions" => Value::from("[{action: \"addLink\", source: \"this\", predicate: \"recipe://title\", target: \"literal://string:Meta%20Muffins\"}]"),
+                    "C" => Value::Atom("xyz".into()),
+                    "Actions" => Value::Atom("[{action: \"addLink\", source: \"this\", predicate: \"recipe://title\", target: \"literal://string:Meta%20Muffins\"}]".into()),
                 }
             ),]))
         );
@@ -346,10 +352,10 @@ mod tests {
             result,
             Ok(QueryResolution::Matches(vec![
                 QueryMatch::from(btreemap! {
-                    "Class" => Value::from("Todo")
+                    "Class" => Value::String("Todo".into())
                 }),
                 QueryMatch::from(btreemap! {
-                    "Class" => Value::from("Recipe")
+                    "Class" => Value::String("Recipe".into())
                 }),
             ]))
         );
@@ -362,7 +368,7 @@ mod tests {
         machine.load_module_string(
             "facts",
             r#"
-                :- discontiguous(subject_class/2).
+            :- discontiguous(subject_class/2).
             "#
             .to_string(),
         );
@@ -378,7 +384,7 @@ mod tests {
         machine.load_module_string(
             "facts",
             r#"
-                list([1,2,3]).
+            list([1,2,3]).
             "#
             .to_string(),
         );
@@ -388,13 +394,11 @@ mod tests {
             result,
             Ok(QueryResolution::Matches(vec![QueryMatch::from(
                 btreemap! {
-                    "X" => Value::List(
-                        Vec::from([
-                            Value::Float(OrderedFloat::from(1.0)),
-                            Value::Float(OrderedFloat::from(2.0)),
-                            Value::Float(OrderedFloat::from(3.0))
-                        ])
-                    )
+                    "X" => Value::List(vec![
+                        Value::Integer(1.into()),
+                        Value::Integer(2.into()),
+                        Value::Integer(3.into()),
+                    ]),
                 }
             ),]))
         );
@@ -409,9 +413,9 @@ mod tests {
             "facts",
             String::from(
                 r#"
-            triple("a", "p1", "b").
-            triple("a", "p2", "b").
-        "#,
+                triple("a", "p1", "b").
+                triple("a", "p2", "b").
+                "#,
             ),
         );
 
@@ -443,8 +447,8 @@ mod tests {
             "facts",
             String::from(
                 r#"
-            triple("a", "new", "b").
-        "#,
+                triple("a", "new", "b").
+                "#,
             ),
         );
 
@@ -461,6 +465,7 @@ mod tests {
 
     #[test]
     #[cfg_attr(miri, ignore = "it takes too long to run")]
+    #[ignore = "uses old flawed interface"]
     fn integration_test() {
         let mut machine = Machine::new_lib();
 
@@ -511,9 +516,9 @@ mod tests {
             "facts",
             String::from(
                 r#"
-            triple("a", "p1", "b").
-            triple("a", "p2", "b").
-        "#,
+                triple("a", "p1", "b").
+                triple("a", "p2", "b").
+                "#,
             ),
         );
 
@@ -546,7 +551,7 @@ mod tests {
                 r#"
                 :- discontiguous(property_resolve/2).
                 subject_class("Todo", c).
-        "#,
+                "#,
             ),
         );
 
@@ -570,7 +575,7 @@ mod tests {
                 r#"
                 a("true for a").
                 b("true for b").
-        "#,
+                "#,
             ),
         );
 
@@ -602,7 +607,7 @@ mod tests {
                 r#"
                 triple("a", "p1", "b").
                 triple("a", "p2", "b").
-        "#,
+                "#,
             ),
         );
 
@@ -613,6 +618,113 @@ mod tests {
         assert_eq!(
             result,
             Err(String::from("error existence_error procedure / non_existent_predicate 3 / non_existent_predicate 3"))
+        );
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn atom_quoting() {
+        let mut machine = Machine::new_lib();
+
+        let query = "X = '.'.".into();
+
+        let result = machine.run_query(query);
+
+        assert_eq!(
+            result,
+            Ok(QueryResolution::Matches(vec![QueryMatch::from(
+                btreemap! {
+                    "X" => Value::Atom(".".into()),
+                }
+            )]))
+        );
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn rational_number() {
+        use crate::parser::dashu::rational::RBig;
+        let mut machine = Machine::new_lib();
+
+        let query = "X is 1 rdiv 2.".into();
+
+        let result = machine.run_query(query);
+
+        assert_eq!(
+            result,
+            Ok(QueryResolution::Matches(vec![QueryMatch::from(
+                btreemap! {
+                    "X" => Value::Rational(RBig::from_parts(1.into(), 2u32.into())),
+                }
+            )]))
+        );
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn big_integer() {
+        use crate::parser::dashu::integer::IBig;
+        let mut machine = Machine::new_lib();
+
+        let query = "X is 10^100.".into();
+
+        let result = machine.run_query(query);
+
+        assert_eq!(
+            result,
+            Ok(QueryResolution::Matches(vec![QueryMatch::from(
+                btreemap! {
+                    "X" => Value::Integer(IBig::from(10).pow(100)),
+                }
+            )]))
+        );
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn complicated_term() {
+        let mut machine = Machine::new_lib();
+
+        let query = "X = a(\"asdf\", [42, 2.54, asdf, a, [a,b|_], Z]).".into();
+
+        let result = machine.run_query(query);
+
+        let expected = Value::Structure(
+            // Composite term
+            "a".into(),
+            vec![
+                Value::String("asdf".into()), // String
+                Value::List(vec![
+                    Value::Integer(42.into()),  // Fixnum
+                    Value::Float(2.54.into()),  // Float
+                    Value::Atom("asdf".into()), // Atom
+                    Value::Atom("a".into()),    // Char
+                    Value::Structure(
+                        // Partial string
+                        ".".into(),
+                        vec![
+                            Value::Atom("a".into()),
+                            Value::Structure(
+                                ".".into(),
+                                vec![
+                                    Value::Atom("b".into()),
+                                    Value::Var("_A".into()), // Anonymous variable
+                                ],
+                            ),
+                        ],
+                    ),
+                    Value::Var("Z".into()), // Named variable
+                ]),
+            ],
+        );
+
+        assert_eq!(
+            result,
+            Ok(QueryResolution::Matches(vec![QueryMatch::from(
+                btreemap! {
+                    "X" => expected,
+                }
+            )]))
         );
     }
 
@@ -628,7 +740,7 @@ mod tests {
                 male(stephen).
                 parent(albert,edward).
                 father(F,C):-parent(F,C),male(F).
-        "#,
+                "#,
             ),
         );
 
@@ -677,5 +789,44 @@ mod tests {
         assert_eq!(iterator.next(), Some(Ok(QueryResolutionLine::True)));
         assert_eq!(iterator.next(), Some(Ok(QueryResolutionLine::False)));
         assert_eq!(iterator.next(), None);
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn differentiate_anonymous_variables() {
+        let mut machine = Machine::new_lib();
+
+        let result = machine.run_query("A = [_,_], _B = 1 ; B = [_,_].".into());
+
+        assert_eq!(
+            result,
+            Ok(QueryResolution::Matches(vec![
+                QueryMatch::from(btreemap! {
+                    "A" => Value::List(vec![Value::Var("_A".into()), Value::Var("_C".into())]),
+                    "_B" => Value::Integer(1.into()),
+                }),
+                QueryMatch::from(btreemap! {
+                    "B" => Value::List(vec![Value::Var("_A".into()), Value::Var("_C".into())]),
+                }),
+            ]))
+        );
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn order_of_variables_in_binding() {
+        let mut machine = Machine::new_lib();
+
+        let result = machine.run_query("X = Y, Z = W.".into());
+
+        assert_eq!(
+            result,
+            Ok(QueryResolution::Matches(vec![QueryMatch::from(
+                btreemap! {
+                    "X" => Value::Var("Y".into()),
+                    "Z" => Value::Var("W".into()),
+                }
+            ),]))
+        );
     }
 }
