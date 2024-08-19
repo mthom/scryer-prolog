@@ -1,10 +1,9 @@
-use serde_json;
 use scryer_prolog::machine::Machine;
+use serde_json;
 
 #[test]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
-#[ignore = "uses old flawed interface"]
-fn integration_test() {
+fn lib_integration_test() {
     let mut machine = Machine::new_lib();
 
     // File with test commands, i.e. program code to consult and queries to run
@@ -38,11 +37,13 @@ fn integration_test() {
         } else if let Some(result) = block.strip_prefix("result") {
             i += 1;
             if let Some(Ok(ref last_result)) = last_result {
-                let _ = result;
-                let _ = i;
-                let _ = last_result;
+                let last_result_str = serde_json::to_string(last_result).unwrap();
                 //println!("\n\n=====Result No. {i}=======\n{last_result}\n===============");
-                //assert_eq!(last_result.to_string(), result.to_string().trim(),)
+                println!("=====Result No. {i}=======");
+                println!("{last_result_str}");
+                println!("===============");
+                println!();
+                assert_eq!(last_result_str, result.to_string().trim());
             }
         }
     }
