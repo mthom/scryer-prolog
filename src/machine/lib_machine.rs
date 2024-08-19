@@ -9,6 +9,7 @@ use crate::parser::parser::{Parser, Tokens};
 use crate::read::{write_term_to_heap, TermWriteResult};
 use indexmap::IndexMap;
 
+use super::QueryMatch;
 use super::{
     streams::Stream, Atom, AtomCell, HeapCellValue, HeapCellValueTag, Machine, MachineConfig,
     QueryResolutionLine, QueryResult, Value,
@@ -138,7 +139,7 @@ impl Iterator for QueryState<'_> {
         // choice point, so we should break.
         self.machine.machine_st.backtrack();
 
-        Some(Ok(QueryResolutionLine::Match(bindings)))
+        Some(Ok(QueryResolutionLine::Match(QueryMatch { bindings })))
     }
 }
 

@@ -22,27 +22,16 @@ use serde::Serializer;
 
 pub type QueryResult = Result<QueryResolution, String>;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct QueryMatch {
     pub bindings: BTreeMap<String, Value>,
-}
-
-impl Serialize for QueryMatch {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-    where
-        S: Serializer,
-    {
-        let mut map = serializer.serialize_map(Some(1))?;
-        map.serialize_entry("bindings", &self.bindings)?;
-        map.end()
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum QueryResolutionLine {
     True,
     False,
-    Match(BTreeMap<String, Value>),
+    Match(QueryMatch),
 }
 
 impl Serialize for QueryResolutionLine {
@@ -53,11 +42,7 @@ impl Serialize for QueryResolutionLine {
         match self {
             QueryResolutionLine::True => serializer.serialize_bool(true),
             QueryResolutionLine::False => serializer.serialize_bool(false),
-            QueryResolutionLine::Match(m) => {
-                let mut map = serializer.serialize_map(Some(1))?;
-                map.serialize_entry("bindings", m)?;
-                map.end()
-            }
+            QueryResolutionLine::Match(m) => m.serialize(serializer),
         }
     }
 }
@@ -142,7 +127,8 @@ impl From<&QueryResolutionLine> for Value {
             QueryResolutionLine::True => Value::Atom("true".into()),
             QueryResolutionLine::False => Value::Atom("false".into()),
             QueryResolutionLine::Match(m) => Value::conjunction(
-                &m.iter()
+                &m.bindings
+                    .iter()
                     .map(|(k, v)| {
                         Value::Structure("=".into(), vec![Value::Var(k.clone()), v.clone()])
                     })
@@ -580,7 +566,7 @@ impl From<Vec<QueryResolutionLine>> for QueryResolution {
         // If there is only one line, and it is an empty match, return false.
         if query_result_lines.len() == 1 {
             if let QueryResolutionLine::Match(m) = query_result_lines[0].clone() {
-                if m.is_empty() {
+                if m.bindings.is_empty() {
                     return QueryResolution::False;
                 }
             }
@@ -600,10 +586,9 @@ impl From<Vec<QueryResolutionLine>> for QueryResolution {
         // If there is at least one match, return all matches.
         let all_matches = query_result_lines
             .into_iter()
-            .filter(|l| matches!(l, QueryResolutionLine::Match(_)))
-            .map(|l| match l {
-                QueryResolutionLine::Match(m) => QueryMatch::from(m),
-                _ => unreachable!(),
+            .filter_map(|l| match l {
+                QueryResolutionLine::Match(m) => Some(m),
+                _ => None,
             })
             .collect::<Vec<_>>();
 
@@ -743,10 +728,10 @@ mod tests {
         let json_value = json!(false);
         assert_eq!(json_value, serde_json::to_value(qrl).unwrap());
 
-        let qrl = QueryResolutionLine::Match(btreemap! {
-            "X".into() => Value::Atom("asdf".into()),
-            "Y".into() => Value::String("fdsa".into()),
-        });
+        let qrl = QueryResolutionLine::Match(QueryMatch::from(btreemap! {
+            "X" => Value::Atom("asdf".into()),
+            "Y" => Value::String("fdsa".into()),
+        }));
         let json_value = json!({
             "bindings": {
                 "X": { "atom": "asdf" },

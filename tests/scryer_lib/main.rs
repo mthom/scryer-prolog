@@ -1,5 +1,4 @@
 use scryer_prolog::machine::Machine;
-use serde_json;
 
 #[test]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
