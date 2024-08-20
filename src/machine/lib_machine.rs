@@ -647,7 +647,7 @@ mod tests {
         let result = machine.run_query(query);
 
         let expected = Value::Structure(
-            // Composite term
+            // Compound term
             "a".into(),
             vec![
                 Value::String("asdf".into()), // String

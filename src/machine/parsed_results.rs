@@ -166,8 +166,8 @@ impl From<&QueryResolution> for Value {
 }
 
 struct ValueRationalInner {
-    up: IBig,
-    down: UBig,
+    numerator: IBig,
+    denominator: UBig,
 }
 
 impl Serialize for ValueRationalInner {
@@ -176,13 +176,13 @@ impl Serialize for ValueRationalInner {
         S: Serializer,
     {
         let mut seq = serializer.serialize_seq(Some(2))?;
-        match self.up.to_i64() {
+        match self.numerator.to_i64() {
             Some(small) => seq.serialize_element(&small)?,
-            None => seq.serialize_element(&self.up.to_string())?,
+            None => seq.serialize_element(&self.numerator.to_string())?,
         }
-        match self.down.to_i64() {
+        match self.denominator.to_u64() {
             Some(small) => seq.serialize_element(&small)?,
-            None => seq.serialize_element(&self.down.to_string())?,
+            None => seq.serialize_element(&self.denominator.to_string())?,
         }
         seq.end()
     }
@@ -203,9 +203,15 @@ impl Serialize for Value {
                 }
             },
             Value::Rational(r) => {
-                let (up, down) = r.clone().into_parts();
+                let (numerator, denominator) = r.clone().into_parts();
                 let mut map = serializer.serialize_map(Some(1))?;
-                map.serialize_entry("rational", &ValueRationalInner { up, down })?;
+                map.serialize_entry(
+                    "rational",
+                    &ValueRationalInner {
+                        numerator,
+                        denominator,
+                    },
+                )?;
                 map.end()
             }
             Value::Float(f) => serializer.serialize_f64(f.into_inner()),
