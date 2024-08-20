@@ -89,7 +89,9 @@ libffi = { version = "3.2.0", optional = true }
 native-tls = { version = "0.2.12", optional = true }
 # allow dependent crates to pick the patch version that works with other
 # dependencies, while also updating to latest when possible
-reqwest = { version = "0.11.*", optional = true }
+# the version requirement of reqwest is kept low for compatibility with old deno versions 
+# that pin request to 0.11.20
+reqwest = { version = "0.11.0", optional = true }
 rustyline = { version = "14.0.0", optional = true }
 tokio = { version = "1.39.2", features = ["full"] }
 warp = { version = "0.3.7", features = ["tls"], optional = true }
