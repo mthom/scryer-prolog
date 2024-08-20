@@ -24,7 +24,7 @@ pub enum QueryResolution {
     Matches(Vec<QueryMatch>),
 }
 
-pub fn write_prolog_value_as_json<W: Write>(
+fn write_prolog_value_as_json<W: Write>(
     writer: &mut W,
     value: &Value,
 ) -> Result<(), std::fmt::Error> {

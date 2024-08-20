@@ -250,7 +250,7 @@ pub(crate) fn get_structure_index(value: HeapCellValue) -> Option<CodeIndex> {
 
 impl Machine {
     #[inline]
-    pub fn prelude_view_and_machine_st(&mut self) -> (MachinePreludeView, &mut MachineState) {
+    fn prelude_view_and_machine_st(&mut self) -> (MachinePreludeView, &mut MachineState) {
         (
             MachinePreludeView {
                 indices: &mut self.indices,
@@ -270,7 +270,7 @@ impl Machine {
             .unwrap()
     }
 
-    pub fn throw_session_error(&mut self, err: SessionError, key: PredicateKey) {
+    fn throw_session_error(&mut self, err: SessionError, key: PredicateKey) {
         let err = self.machine_st.session_error(err);
         let stub = functor_stub(key.0, key.1);
         let err = self.machine_st.error_form(err, stub);
@@ -278,7 +278,7 @@ impl Machine {
         self.machine_st.throw_exception(err);
     }
 
-    pub fn run_module_predicate(
+    pub(crate) fn run_module_predicate(
         &mut self,
         module_name: Atom,
         key: PredicateKey,
@@ -297,7 +297,7 @@ impl Machine {
         unreachable!();
     }
 
-    pub fn load_file(&mut self, path: &str, stream: Stream) {
+    fn load_file(&mut self, path: &str, stream: Stream) {
         self.machine_st.registers[1] = stream_as_cell!(stream);
         self.machine_st.registers[2] =
             atom_as_cell!(AtomTable::build_with(&self.machine_st.atom_tbl, path));
@@ -357,11 +357,11 @@ impl Machine {
         }
     }
 
-    pub fn set_user_input(&mut self, input: String) {
+    fn set_user_input(&mut self, input: String) {
         self.user_input = Stream::from_owned_string(input, &mut self.machine_st.arena);
     }
 
-    pub fn get_user_output(&self) -> String {
+    fn get_user_output(&self) -> String {
         let output_bytes: Vec<_> = self.user_output.bytes().map(|b| b.unwrap()).collect();
         String::from_utf8(output_bytes).unwrap()
     }

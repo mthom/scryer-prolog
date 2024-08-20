@@ -26,7 +26,7 @@ impl Expectable for &[u8] {
 /// Tests whether the file can be successfully loaded
 /// and produces the expected output during it
 pub(crate) fn load_module_test<T: Expectable>(file: &str, expected: T) {
-    use scryer_prolog::machine::mock_wam::*;
+    use scryer_prolog::Machine;
 
     let mut wam = Machine::with_test_streams();
     expected.assert_eq(wam.test_load_file(file).as_slice());
