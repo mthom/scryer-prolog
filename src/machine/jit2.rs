@@ -218,10 +218,6 @@ impl JitMachine {
 	fn_builder.declare_var(mode, types::I8);
 	let s = Variable::new(1);
 	fn_builder.declare_var(s, types::I64);
-	let fail = Variable::new(2);
-	fn_builder.declare_var(fail, types::I8);
-	let fail_value_init = fn_builder.ins().iconst(types::I8, 0);
-	fn_builder.def_var(fail, fail_value_init);
 	let e = Variable::new(3);
 	fn_builder.declare_var(e, types::I64);
 	fn_builder.def_var(e, e_pointer);
@@ -444,7 +440,7 @@ impl JitMachine {
 		    vec_push!(pdl, $x);
 		    vec_push!(pdl, $y);
 		    let pdl_size = fn_builder.ins().iconst(types::I64, 2);
-		    let fail_status = fn_builder.use_var(fail);
+		    let fail_status = fn_builder.ins().iconst(types::I8, 0);
 
 		    let pre_loop_block = fn_builder.create_block();
 		    fn_builder.append_block_param(pre_loop_block, types::I64); // pdl_size
@@ -559,7 +555,14 @@ impl JitMachine {
 		    // exit
 		    fn_builder.switch_to_block(exit);
 		    let fail_status = fn_builder.block_params(exit)[0];
-		    fn_builder.def_var(fail, fail_status);
+		    let exit_early = fn_builder.create_block();
+		    let exit_normal = fn_builder.create_block();
+		    fn_builder.ins().brif(fail_status, exit_early, &[], exit_normal, &[]);
+		    fn_builder.seal_block(exit_early);
+		    fn_builder.seal_block(exit_normal);
+		    fn_builder.switch_to_block(exit_early);
+		    fn_builder.ins().return_(&[fail_status]);
+		    fn_builder.switch_to_block(exit_normal);
 		}
 	    }
 	}
@@ -700,8 +703,7 @@ impl JitMachine {
 		    // fail_block
 		    fn_builder.switch_to_block(fail_block);
 		    let fail_value = fn_builder.ins().iconst(types::I8, 1);
-		    fn_builder.def_var(fail, fail_value);
-		    fn_builder.ins().jump(exit_block, &[]);
+		    fn_builder.ins().return_(&[fail_value]);
 
 		    // exit_block
 		    fn_builder.seal_block(exit_block);
@@ -801,7 +803,6 @@ impl JitMachine {
 		    let reg1 = read_reg!(reg1);
 		    let reg2 = registers[reg2 - 1];
 		    unify!(reg1, reg2);
-		    
 		}
 		/* call executes another predicate in a normal way. It passes all the argument registers
 		 * as function arguments
@@ -895,7 +896,8 @@ let Some(predicate) = self.predicates.get(&(name.as_str().to_string(), arity)) e
 		Instruction::Proceed => {
 		    // do we really need to return registers?
 		    //fn_builder.ins().return_(&registers[0..arity]);
-		    let fail_value = fn_builder.use_var(fail);
+		    let fail_value = fn_builder.ins().iconst(types::I8, 0);
+		    // if we exit here, it's because it succeeded
 		    fn_builder.ins().return_(&[fail_value]);
 		    break;
 	        },
