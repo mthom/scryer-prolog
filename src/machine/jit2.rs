@@ -6,7 +6,7 @@ use crate::instructions::*;
 use crate::machine::*;
 use crate::parser::ast::*;
 
-use cranelift::prelude::*;
+use cranelift::prelude::{*, Value};
 use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{Linkage, Module, FuncId};
 use cranelift_codegen::{ir::stackslot::*, ir::entities::*, Context};
@@ -34,6 +34,10 @@ pub struct JitMachine {
     vec_len_sig: Signature,
     vec_truncate: *const u8,
     vec_truncate_sig: Signature,
+    vec_reserve: *const u8,
+    vec_reserve_sig: Signature,
+    vec_capacity: *const u8,
+    vec_capacity_sig: Signature,
     print_func: FuncId,
     print_func8: FuncId,
     vec_pop: FuncId,
@@ -43,6 +47,12 @@ pub struct JitMachine {
 pub struct JitPredicate {
     code_ptr: *const u8,
     func_id: FuncId,
+}
+
+struct Backtrack {
+    block: Block,
+    trail_len_at_start: Value,
+    heap_len_at_start: Value,
 }
 
 impl std::fmt::Debug for JitMachine {
@@ -76,6 +86,7 @@ impl JitMachine {
 	sig.params.push(AbiParam::new(pointer_type));
 	sig.params.push(AbiParam::new(pointer_type));
 	sig.params.push(AbiParam::new(pointer_type));
+	sig.params.push(AbiParam::new(pointer_type));
 	sig.returns.push(AbiParam::new(types::I8));
 	sig.call_conv = call_conv;
 
@@ -93,9 +104,11 @@ impl JitMachine {
 	    let heap = fn_builder.block_params(block)[2];
 	    let pdl = fn_builder.block_params(block)[3];
 	    let stack = fn_builder.block_params(block)[4];
-	    let e_pointer = fn_builder.ins().iconst(types::I64, 0);
+	    let stack_size = fn_builder.ins().iconst(types::I64, 0);
+	    let trail = fn_builder.block_params(block)[5];
 	    let mut jump_sig = module.make_signature();
 	    jump_sig.call_conv = isa::CallConv::Tail;
+	    jump_sig.params.push(AbiParam::new(types::I64));
 	    jump_sig.params.push(AbiParam::new(types::I64));
 	    jump_sig.params.push(AbiParam::new(types::I64));
 	    jump_sig.params.push(AbiParam::new(types::I64));
@@ -104,7 +117,8 @@ impl JitMachine {
 	    params.push(heap);
 	    params.push(pdl);
 	    params.push(stack);
-	    params.push(e_pointer);
+	    params.push(stack_size);
+	    params.push(trail);
 	    for i in 1..=n {
 		jump_sig.params.push(AbiParam::new(types::I64));
 		// jump_sig.returns.push(AbiParam::new(types::I64));
@@ -166,6 +180,14 @@ impl JitMachine {
 	let mut vec_truncate_sig = module.make_signature();
 	vec_truncate_sig.params.push(AbiParam::new(pointer_type));
 	vec_truncate_sig.params.push(AbiParam::new(types::I64));
+	let vec_reserve = Vec::<HeapCellValue>::reserve as *const u8;
+	let mut vec_reserve_sig = module.make_signature();
+	vec_reserve_sig.params.push(AbiParam::new(pointer_type));
+	vec_reserve_sig.params.push(AbiParam::new(types::I64));
+	let vec_capacity = Vec::<HeapCellValue>::capacity as *const u8;
+	let mut vec_capacity_sig = module.make_signature();
+	vec_capacity_sig.params.push(AbiParam::new(pointer_type));
+	vec_capacity_sig.returns.push(AbiParam::new(types::I64));
 
 	let predicates = HashMap::new();
 	JitMachine {
@@ -181,6 +203,10 @@ impl JitMachine {
 	    vec_len_sig,
 	    vec_truncate,
 	    vec_truncate_sig,
+	    vec_reserve,
+	    vec_reserve_sig,
+	    vec_capacity,
+	    vec_capacity_sig,
 	    print_func,
 	    print_func8,
 	    vec_pop,
@@ -195,6 +221,7 @@ impl JitMachine {
 	sig.params.push(AbiParam::new(types::I64));
 	sig.params.push(AbiParam::new(types::I64));
 	sig.params.push(AbiParam::new(types::I64));
+	sig.params.push(AbiParam::new(types::I64));	
 	for _ in 1..=arity {
 	    sig.params.push(AbiParam::new(types::I64));
 	    // sig.returns.push(AbiParam::new(types::I64));
@@ -213,20 +240,22 @@ impl JitMachine {
 	let heap = fn_builder.block_params(block)[0];
 	let pdl = fn_builder.block_params(block)[1];
 	let stack = fn_builder.block_params(block)[2];
-	let e_pointer = fn_builder.block_params(block)[3];
+	let stack_size = fn_builder.block_params(block)[3];
+	let trail = fn_builder.block_params(block)[4];
 	let mode = Variable::new(0);
 	fn_builder.declare_var(mode, types::I8);
 	let s = Variable::new(1);
 	fn_builder.declare_var(s, types::I64);
-	let e = Variable::new(3);
+	let e = Variable::new(2);
 	fn_builder.declare_var(e, types::I64);
-	fn_builder.def_var(e, e_pointer);
+
+	let mut backtracks: Vec<Backtrack> = vec![];
 	
 	let mut registers = vec![];
 	// TODO: This could be optimized more, we know the maximum register we're using
 	for i in 1..MAX_ARITY {
 	    if i <= arity {
-	        let reg = fn_builder.block_params(block)[i + 3];
+	        let reg = fn_builder.block_params(block)[i + 4];
 	        registers.push(reg);
 	    } else {
 		let reg = fn_builder.ins().iconst(types::I64, 0);
@@ -289,6 +318,27 @@ impl JitMachine {
 		    let sig_ref = fn_builder.import_signature(self.vec_truncate_sig.clone());
 		    let vec_truncate_fn = fn_builder.ins().iconst(types::I64, self.vec_truncate as i64);
 		    fn_builder.ins().call_indirect(sig_ref, vec_truncate_fn, &[$x, $y]);
+		}
+	    }
+	}
+
+	macro_rules! vec_reserve {
+	    ($x:expr, $y:expr) => {
+		{
+		    let sig_ref = fn_builder.import_signature(self.vec_reserve_sig.clone());
+		    let vec_reserve_fn = fn_builder.ins().iconst(types::I64, self.vec_reserve as i64);
+		    fn_builder.ins().call_indirect(sig_ref, vec_reserve_fn, &[$x, $y]);
+		}
+	    }
+	}
+
+        macro_rules! vec_capacity {
+	    ($x:expr, $y:expr) => {
+		{
+		    let sig_ref = fn_builder.import_signature(self.vec_capacity_sig.clone());
+		    let vec_capacity_fn = fn_builder.ins().iconst(types::I64, self.vec_capacity as i64);
+		    let call = fn_builder.ins().call_indirect(sig_ref, vec_capacity_fn, &[$x]);
+		    fn_builder.inst_results(call)[0]
 		}
 	    }
 	}
@@ -396,6 +446,7 @@ impl JitMachine {
 		    let idx = fn_builder.ins().ushr_imm(idx, 5);
 		    let idx = fn_builder.ins().iadd(heap_ptr, idx);
 		    fn_builder.ins().store(MemFlags::trusted(), $y, idx, Offset32::new(0));
+		    trail!($x);
 		    fn_builder.ins().jump(exit_block, &[]);
 		    // else_first_var_block
 		    // suppose the other cell is a var
@@ -404,10 +455,73 @@ impl JitMachine {
 		    let idx = fn_builder.ins().ushr_imm(idx, 5);
 		    let idx = fn_builder.ins().iadd(heap_ptr, idx);
 		    fn_builder.ins().store(MemFlags::trusted(), $x, idx, Offset32::new(0));
+		    trail!($y);
 		    fn_builder.ins().jump(exit_block, &[]);		    
 		    // exit
 		    fn_builder.seal_block(exit_block);
 		    fn_builder.switch_to_block(exit_block);
+		}
+	    }
+	}
+	// TODO: Modify Bind to check address
+
+	// TODO: Manage stack vars
+	// Stack vars are always cleaned. If there was an allocation after a choicepoint, they need to be removed. If there was
+	// an allocation before a choicepoint, the vars used need to be cleaned up.
+	// As we now allocate everything at the beginning, we can just clean everything at RetryMeElse and TrustMe
+	// However, we need to differentiate StackVar from Vars
+	macro_rules! trail {
+	    ($x:expr) => {
+		if !backtracks.is_empty() {
+		    let push_var = fn_builder.create_block();
+		    let exit = fn_builder.create_block();
+		    let current_frame = backtracks.get(backtracks.len() - 1).unwrap();
+		    let idx = fn_builder.ins().ishl_imm($x, 8);
+		    let idx = fn_builder.ins().ushr_imm(idx, 8);
+		    let var_is_older = fn_builder.ins().icmp(IntCC::SignedLessThan, idx, current_frame.heap_len_at_start);
+		    fn_builder.ins().brif(var_is_older, push_var, &[], exit, &[]);
+		    fn_builder.seal_block(push_var);
+		    fn_builder.switch_to_block(push_var);
+		    vec_push!(trail, $x);
+		    fn_builder.ins().jump(exit, &[]);
+		    fn_builder.seal_block(exit);
+		    fn_builder.switch_to_block(exit);
+		}
+	    }
+	}
+
+	macro_rules! unwind_trail {
+	    () => {
+		{
+		    if !backtracks.is_empty() {
+			let heap_ptr = vec_as_ptr!(heap);
+			let current_frame = backtracks.get(backtracks.len() - 1).unwrap();
+			let trail_len_at_start = current_frame.trail_len_at_start;
+			let trail_len_now = vec_len!(trail);
+			let num_items = fn_builder.ins().isub(trail_len_now, trail_len_at_start);
+			let check_loop = fn_builder.create_block();
+			fn_builder.append_block_param(check_loop, types::I64);
+			let exit = fn_builder.create_block();
+			let loop_body = fn_builder.create_block();
+			fn_builder.ins().jump(check_loop, &[num_items]);
+			fn_builder.switch_to_block(check_loop);
+			let num_items = fn_builder.block_params(check_loop)[0];
+			let is_zero = fn_builder.ins().icmp_imm(IntCC::Equal, num_items, 0);
+			fn_builder.ins().brif(is_zero, exit, &[], loop_body, &[]);
+			fn_builder.seal_block(exit);
+			fn_builder.seal_block(loop_body);
+			fn_builder.switch_to_block(loop_body);
+			// unwind here
+			let cell = vec_pop!(trail);
+			let idx = fn_builder.ins().ishl_imm(cell, 8);
+			let idx = fn_builder.ins().ushr_imm(idx, 5);
+			let idx = fn_builder.ins().iadd(heap_ptr, idx);
+			fn_builder.ins().store(MemFlags::trusted(), cell, idx, Offset32::new(0));
+			let num_items = fn_builder.ins().iadd_imm(num_items, -1);
+			fn_builder.ins().jump(check_loop, &[num_items]);
+			fn_builder.seal_block(check_loop);
+			fn_builder.switch_to_block(exit);
+		    }
 		}
 	    }
 	}
@@ -417,6 +531,15 @@ impl JitMachine {
 		{
 		    let tag = fn_builder.ins().ushr_imm($x, 58);
 		    fn_builder.ins().icmp_imm(IntCC::Equal, tag, HeapCellValueTag::Var as i64)
+		}
+	    }
+	}
+
+	macro_rules! is_stack_var {
+	    ($x:expr) => {
+		{
+		    let tag = fn_builder.ins().ushr_imm($x, 58);
+		    fn_builder.ins().icmp_imm(IntCC::Equal, tag, HeapCellValueTag::StackVar as i64)
 		}
 	    }
 	}
@@ -575,7 +698,7 @@ impl JitMachine {
 			    registers[x-1]
 			}
 			RegType::Perm(y) => {
-			    let idy = ((y as i32) + 1) * 8;
+			    let idy = ((y as i32) - 1) * 8;
 			    let stack_frame = fn_builder.use_var(e);
 			    fn_builder.ins().load(types::I64, MemFlags::trusted(), stack_frame, Offset32::new(idy))
 			}
@@ -591,13 +714,29 @@ impl JitMachine {
 			registers[x-1] = $y;
 		    }
 		    RegType::Perm(y) => {
-			let idy = ((y as i32) + 1) * 8;
+			let idy = ((y as i32) - 1) * 8;
 			let stack_frame = fn_builder.use_var(e);
 			fn_builder.ins().store(MemFlags::trusted(), $y, stack_frame, Offset32::new(idy));
 		    }
 		}
 	    }
 	}
+
+	// reserve all allocations at once
+	let mut allocation_size: i64 = 0;
+	for wam_instr in &code {
+	    if let Instruction::Allocate(n) = wam_instr {
+		allocation_size = i64::max(allocation_size, *n as i64);
+	    }
+	}
+	
+	let allocation_size_value = fn_builder.ins().iconst(types::I64, allocation_size);
+	let new_stack_size = fn_builder.ins().iadd(stack_size, allocation_size_value);
+	vec_reserve!(stack, new_stack_size);
+	let stack_ptr = vec_as_ptr!(stack);
+	let stack_size_bytes = fn_builder.ins().imul_imm(stack_size, 8);
+	let env_ptr = fn_builder.ins().iadd(stack_ptr, stack_size_bytes);
+	fn_builder.def_var(e, env_ptr);
 
 	for wam_instr in code {
 	    match wam_instr {
@@ -811,13 +950,13 @@ impl JitMachine {
 let Some(predicate) = self.predicates.get(&(name.as_str().to_string(), arity)) else {
 			return Err(JitCompileError::UndefinedPredicate);
 };
-		    let e_value = fn_builder.use_var(e);
 		    let func = self.module.declare_func_in_func(predicate.func_id, fn_builder.func);
 		    let mut args = vec![];
 		    args.push(heap);
 		    args.push(pdl);
 		    args.push(stack);
-		    args.push(e_value);
+		    args.push(new_stack_size);
+		    args.push(trail);
 		    for i in 1..=arity {
 			args.push(registers[i-1]);
 		    }
@@ -829,7 +968,13 @@ let Some(predicate) = self.predicates.get(&(name.as_str().to_string(), arity)) e
 		    fn_builder.seal_block(exit_early);
 		    fn_builder.seal_block(resume);
 		    fn_builder.switch_to_block(exit_early);
-    		    fn_builder.ins().return_(&[fail_status]);
+		    if backtracks.is_empty() {
+			fn_builder.ins().return_(&[fail_status]);
+		    } else {
+			//let last_backtrack = backtracks[backtracks.len() -1 ];
+			// TODO: Clean TRAIL
+			//fn_builder.ins().jump(last_backtrack.next_block, &[]);
+		    }
 		    fn_builder.switch_to_block(resume);
 		}
 		/* execute does a tail call instead of a normal call
@@ -838,49 +983,45 @@ let Some(predicate) = self.predicates.get(&(name.as_str().to_string(), arity)) e
 		    let Some(predicate) = self.predicates.get(&(name.as_str().to_string(), arity)) else {
 			return Err(JitCompileError::UndefinedPredicate);
 		    };
-		    let e_value = fn_builder.use_var(e);
 		    let func = self.module.declare_func_in_func(predicate.func_id, fn_builder.func);
 		    let mut args = vec![];
 		    args.push(heap);
 		    args.push(pdl);
 		    args.push(stack);
-		    args.push(e_value);
+		    args.push(stack_size);
+		    args.push(trail);
 		    for i in 1..=arity {
 			args.push(registers[i-1]);
 		    }
-		    fn_builder.ins().return_call(func, &args);
+		    if backtracks.is_empty() {
+			// we can only optimize tail calls if there's no backtracking in this level
+			fn_builder.ins().return_call(func, &args);
+		    } else {
+			// TODO CLEAN TRAIL
+			let backtrack = backtracks.get(backtracks.len() -1 ).unwrap();			
+			let call = fn_builder.ins().call(func, &args);
+			let fail_status = fn_builder.inst_results(call)[0];
+			let exit_normal = fn_builder.create_block();
+			fn_builder.ins().brif(fail_status, backtrack.block, &[], exit_normal, &[]);
+			fn_builder.seal_block(exit_normal);
+			fn_builder.switch_to_block(exit_normal);
+			let fail_value = fn_builder.ins().iconst(types::I8, 0);
+		        // if we exit here, it's because it succeeded
+			fn_builder.ins().return_(&[fail_value]);
+		    }
 		}
 		/* allocate creates a new environment frame (ANDFrame). Every frame contains a pointer
 		 * to the previous frame start, the continuation pointer (in this case we do not store it
 		 * as we have a tree of calls with Cranelift managing this for us), the number of permanent
 		 * variables and the permanent variables themselves.
 		 */
-		Instruction::Allocate(n) => {
-		    let new_e_value = vec_len!(stack);
-		    let stack_ptr = vec_as_ptr!(stack);
-		    let new_e_value = fn_builder.ins().imul_imm(new_e_value, 8);
-		    let new_e_value = fn_builder.ins().iadd(stack_ptr, new_e_value);
-		    let e_value = fn_builder.use_var(e);
-		    vec_push!(stack, e_value);
-		    let n_value = fn_builder.ins().iconst(types::I64, n as i64);
-		    vec_push!(stack, n_value);
-		    let zero = fn_builder.ins().iconst(types::I64, 0);
-		    for _ in 0..n {
-			vec_push!(stack, zero);
-		    }
-		    fn_builder.def_var(e, new_e_value);
+		Instruction::Allocate(_n) => {
+		    
 		}
 		/* deallocate restores the previous frame, freeing the current frame
 		 */
 	        Instruction::Deallocate => {
-		    let e_value = fn_builder.use_var(e);
-		    let allocated = fn_builder.ins().load(types::I64, MemFlags::trusted(), e_value, Offset32::new(8));
-		    let allocated = fn_builder.ins().iadd_imm(allocated, 2);
-		    let new_e_value = fn_builder.ins().load(types::I64, MemFlags::trusted(), e_value, Offset32::new(0));
-		    let stack_len = vec_len!(stack);
-		    let new_stack_len = fn_builder.ins().isub(stack_len, allocated);
-		    vec_truncate!(stack, new_stack_len);
-		    fn_builder.def_var(e, new_e_value);
+
 		}
 		// TODO: manage NonVar cases
 		// TODO: Manage unification case
@@ -901,6 +1042,38 @@ let Some(predicate) = self.predicates.get(&(name.as_str().to_string(), arity)) e
 		    fn_builder.ins().return_(&[fail_value]);
 		    break;
 	        },
+		Instruction::TryMeElse(_offset) => {
+		    let block = fn_builder.create_block();
+		    let heap_len_at_start = vec_len!(heap);
+		    let trail_len_at_start = vec_len!(trail);
+		    backtracks.push(Backtrack {
+			block,
+			heap_len_at_start,
+			trail_len_at_start,
+		    });
+		}
+		Instruction::RetryMeElse(_offset) => {
+		    let continuation = backtracks.get(backtracks.len() - 1).unwrap();		    
+		    fn_builder.seal_block(continuation.block);
+		    fn_builder.switch_to_block(continuation.block);
+		    let heap_len_at_start = continuation.heap_len_at_start;
+		    let trail_len_at_start = continuation.trail_len_at_start;		    
+		    unwind_trail!();
+		    backtracks.truncate(backtracks.len() - 1);		    
+		    let block = fn_builder.create_block();
+		    backtracks.push(Backtrack {
+			block,
+			heap_len_at_start,
+			trail_len_at_start,
+		    });
+		}
+		Instruction::TrustMe(_) => {
+		    let continuation = backtracks.get(backtracks.len() - 1).unwrap();
+		    fn_builder.seal_block(continuation.block);
+		    fn_builder.switch_to_block(continuation.block);
+		    unwind_trail!();
+		    backtracks.truncate(backtracks.len() - 1);
+		}
 	        _ => {
 		    dbg!(wam_instr);
 		    fn_builder.finalize();
@@ -930,13 +1103,15 @@ let Some(predicate) = self.predicates.get(&(name.as_str().to_string(), arity)) e
 	let Some(predicate) = self.predicates.get(&(name.to_string(), arity)) else {
 	    return Err(());
 	};
-	let trampoline: extern "C" fn (*const u8, *mut Registers, *const Vec<HeapCellValue>, *const Vec<HeapCellValue>, *const Vec<i64>) -> u8 = unsafe { std::mem::transmute(self.trampolines[arity])};
+	let trampoline: extern "C" fn (*const u8, *mut Registers, *const Vec<HeapCellValue>, *const Vec<HeapCellValue>, *const Vec<i64>, *const Vec<i64>) -> u8 = unsafe { std::mem::transmute(self.trampolines[arity])};
 	let registers = machine_st.registers.as_ptr() as *mut Registers;
 	let heap = &machine_st.heap as *const Vec<HeapCellValue>;
 	let pdl = &machine_st.pdl as *const Vec<HeapCellValue>;
 	let stack_vec: Vec<i64> = Vec::with_capacity(1024);
 	let stack = &stack_vec as *const Vec<i64>;
-	let fail = trampoline(predicate.code_ptr, registers, heap, pdl, stack);
+	let trail_vec: Vec<i64> = Vec::with_capacity(1024);
+	let trail = &trail_vec as *const Vec<i64>;
+	let fail = trampoline(predicate.code_ptr, registers, heap, pdl, stack, trail);
 	machine_st.p = machine_st.cp;
 	machine_st.fail = if fail == 1 {
 	    true
@@ -1348,4 +1523,139 @@ fn test_allocate() {
     
     
 }
+
+#[test]
+fn test_backtracking_1() {
+    let mut machine_st = MachineState::new();
+    let code_fail = vec![
+	Instruction::PutStructure(atom!("f"), 0, RegType::Temp(2)),
+	Instruction::GetStructure(Level::Shallow, atom!("h"), 1, RegType::Temp(2)),
+	Instruction::Proceed
+    ];
+    let code_ok = vec![
+	Instruction::GetConstant(Level::Shallow, atom_as_cell!(atom!("a"), 0), RegType::Temp(1)),
+	Instruction::Proceed
+    ];
+    let code = vec![
+	Instruction::Allocate(1),
+	Instruction::GetVariable(RegType::Perm(1), 1),
+	Instruction::TryMeElse(4),
+	Instruction::PutValue(RegType::Perm(1), 1),
+	Instruction::Deallocate,
+	Instruction::ExecuteNamed(1, atom!("a"), CodeIndex::default(&mut machine_st.arena)),
+	Instruction::RetryMeElse(4),
+	Instruction::PutValue(RegType::Perm(1), 1),
+	Instruction::Deallocate,
+	Instruction::ExecuteNamed(1, atom!("b"), CodeIndex::default(&mut machine_st.arena)),
+	Instruction::TrustMe(0),
+	Instruction::PutValue(RegType::Perm(1), 1),
+	Instruction::Deallocate,
+	Instruction::ExecuteNamed(1, atom!("c"), CodeIndex::default(&mut machine_st.arena))
+    ];
+    let x = heap_loc_as_cell!(0);
+    machine_st.registers[1] = x;
+    machine_st.heap.push(x);
+    let mut jit = JitMachine::new();
+    jit.compile("a", 1, code_fail.clone()).unwrap();
+    jit.compile("b", 1, code_fail).unwrap();
+    jit.compile("c", 1, code_ok).unwrap();
+    jit.compile("d", 1, code).unwrap();
+    jit.exec("d", 1, &mut machine_st).unwrap();
+    let mut machine_st_expected = MachineState::new();
+    machine_st_expected.heap.push(atom_as_cell!(atom!("a"), 0));
+    machine_st_expected.heap.push(str_loc_as_cell!(2));
+    machine_st_expected.heap.push(atom_as_cell!(atom!("f"), 0));
+    machine_st_expected.heap.push(str_loc_as_cell!(4));
+    machine_st_expected.heap.push(atom_as_cell!(atom!("f"), 0));
+    assert_eq!(machine_st.heap, machine_st_expected.heap);
+    assert_eq!(machine_st.fail, false);
+}
+
+
+#[test]
+fn test_backtracking_2() {
+    let mut machine_st = MachineState::new();
+    let code_fail = vec![
+	Instruction::PutStructure(atom!("f"), 0, RegType::Temp(2)),
+	Instruction::GetStructure(Level::Shallow, atom!("h"), 1, RegType::Temp(2)),
+	Instruction::Proceed
+    ];
+    let code = vec![
+	Instruction::TryMeElse(0),
+	Instruction::GetConstant(Level::Shallow, atom_as_cell!(atom!("a"), 0), RegType::Temp(1)),
+	Instruction::ExecuteNamed(0, atom!("f"), CodeIndex::default(&mut machine_st.arena)),
+	Instruction::RetryMeElse(0),
+	Instruction::GetConstant(Level::Shallow, atom_as_cell!(atom!("b"), 0), RegType::Temp(1)),
+	Instruction::ExecuteNamed(0, atom!("f"), CodeIndex::default(&mut machine_st.arena)),
+	Instruction::RetryMeElse(0),
+	Instruction::GetConstant(Level::Shallow, atom_as_cell!(atom!("c"), 0), RegType::Temp(1)),
+	Instruction::ExecuteNamed(0, atom!("f"), CodeIndex::default(&mut machine_st.arena)),	
+	Instruction::TrustMe(0),
+	Instruction::GetConstant(Level::Shallow, atom_as_cell!(atom!("d"), 0), RegType::Temp(1)),
+	Instruction::Proceed
+    ];
+    let mut jit = JitMachine::new();
+    jit.compile("f", 0, code_fail).unwrap();
+    jit.compile("a", 1, code).unwrap();
+    let x = heap_loc_as_cell!(0);
+    machine_st.registers[1] = x;
+    machine_st.heap.push(x);
+    jit.exec("a", 1, &mut machine_st).unwrap();
+    let mut machine_st_expected = MachineState::new();
+    machine_st_expected.heap.push(atom_as_cell!(atom!("d"), 0));
+    machine_st_expected.heap.push(str_loc_as_cell!(2));
+    machine_st_expected.heap.push(atom_as_cell!(atom!("f"), 0));
+    machine_st_expected.heap.push(str_loc_as_cell!(4));
+    machine_st_expected.heap.push(atom_as_cell!(atom!("f"), 0));
+    machine_st_expected.heap.push(str_loc_as_cell!(6));
+    machine_st_expected.heap.push(atom_as_cell!(atom!("f"), 0));
+    assert_eq!(machine_st.heap, machine_st_expected.heap);
+    assert_eq!(machine_st.fail, false);
+}
+
+#[test]
+fn test_backtracking_3() {
+    let mut machine_st = MachineState::new();
+    let code_fail = vec![
+	Instruction::PutStructure(atom!("f"), 0, RegType::Temp(2)),
+	Instruction::GetStructure(Level::Shallow, atom!("h"), 1, RegType::Temp(2)),
+	Instruction::Proceed
+    ];
+    let code = vec![
+	Instruction::TryMeElse(0),
+	Instruction::GetConstant(Level::Shallow, atom_as_cell!(atom!("a"), 0), RegType::Temp(1)),
+	Instruction::ExecuteNamed(0, atom!("f"), CodeIndex::default(&mut machine_st.arena)),
+	Instruction::RetryMeElse(0),
+	Instruction::GetConstant(Level::Shallow, atom_as_cell!(atom!("b"), 0), RegType::Temp(1)),
+	Instruction::ExecuteNamed(0, atom!("f"), CodeIndex::default(&mut machine_st.arena)),
+	Instruction::RetryMeElse(0),
+	Instruction::GetConstant(Level::Shallow, atom_as_cell!(atom!("c"), 0), RegType::Temp(1)),
+	Instruction::ExecuteNamed(0, atom!("f"), CodeIndex::default(&mut machine_st.arena)),	
+	Instruction::TrustMe(0),
+	Instruction::Proceed
+    ];
+    let mut jit = JitMachine::new();
+    jit.compile("f", 0, code_fail).unwrap();
+    jit.compile("a", 1, code).unwrap();
+    let x = heap_loc_as_cell!(0);
+    machine_st.registers[1] = x;
+    machine_st.heap.push(x);
+    jit.exec("a", 1, &mut machine_st).unwrap();
+    let mut machine_st_expected = MachineState::new();
+    machine_st_expected.heap.push(heap_loc_as_cell!(0));
+    machine_st_expected.heap.push(str_loc_as_cell!(2));
+    machine_st_expected.heap.push(atom_as_cell!(atom!("f"), 0));
+    machine_st_expected.heap.push(str_loc_as_cell!(4));
+    machine_st_expected.heap.push(atom_as_cell!(atom!("f"), 0));
+    machine_st_expected.heap.push(str_loc_as_cell!(6));
+    machine_st_expected.heap.push(atom_as_cell!(atom!("f"), 0));
+    assert_eq!(machine_st.heap, machine_st_expected.heap);
+    assert_eq!(machine_st.fail, false);
+}
+// TODO: Backtracking 4 test stack trail
+
 // TODO: Continue with more tests
+// One option is to only deallocate at the end of functions, taking into account how many allocations took place
+// Other option is to store deallocation info in backtracks
+
+// TODO: Move heap, stack, pdl and trail to GlobalValue
