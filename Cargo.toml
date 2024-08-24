@@ -35,6 +35,7 @@ syn = { version = "2.0.72", features = ['full', 'visit', 'extra-traits'] }
 to-syn-value = "0.1.1"
 to-syn-value_derive = "0.1.1"
 walkdir = "2"
+cbindgen = { version = "0.27.0", default-features = false }
 
 [dependencies]
 arcu = { version = "0.1.1", features = ["thread_local_counter"] }

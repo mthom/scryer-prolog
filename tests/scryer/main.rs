@@ -1,5 +1,6 @@
 mod helper;
 mod issues;
+mod shared_library_tests;
 mod src_tests;
 
 /// To add new cli test copy an existing .toml file in `tests/scryer/cli/issues/` or `tests/scryer/cli/issues/src_tests/`,

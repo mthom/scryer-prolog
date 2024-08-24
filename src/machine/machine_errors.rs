@@ -2,9 +2,9 @@ use crate::arena::*;
 use crate::atom_table::*;
 use crate::parser::ast::*;
 
-#[cfg(feature = "ffi")]
-use crate::ffi::FFIError;
 use crate::forms::*;
+#[cfg(feature = "ffi")]
+use crate::machine::ffi::FFIError;
 use crate::machine::heap::*;
 use crate::machine::loader::CompilationTarget;
 use crate::machine::machine_state::*;

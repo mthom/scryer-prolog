@@ -28,16 +28,19 @@ pub mod system_calls;
 pub mod term_stream;
 pub mod unify;
 
+#[cfg(feature = "ffi")]
+mod ffi;
+
 use crate::arena::*;
 use crate::arithmetic::*;
 use crate::atom_table::*;
-#[cfg(feature = "ffi")]
-use crate::ffi::ForeignFunctionTable;
 use crate::forms::*;
 use crate::instructions::*;
 use crate::machine::args::*;
 use crate::machine::compile::*;
 use crate::machine::copier::*;
+#[cfg(feature = "ffi")]
+use crate::machine::ffi::ForeignFunctionTable;
 use crate::machine::heap::*;
 use crate::machine::loader::*;
 use crate::machine::machine_errors::*;
