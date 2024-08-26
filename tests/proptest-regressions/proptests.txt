@@ -1,0 +1,8 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc e78140d68e76d599e9de573d3125eac84d2d00fbccfebe83867919ba5ddef2a3 # shrinks to original_value = Integer(9223372036854775808)
+cc ff982e5fed9f086656d4afc515ad55c02f3c4b965cef2c48183eb3cd3d91dbaf # shrinks to original_value = Matches([QueryMatch { bindings: {"": Atom("")} }])

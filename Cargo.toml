@@ -126,6 +126,7 @@ assert_cmd = "2.0.15"
 criterion = "0.5.1"
 iai-callgrind = "0.12.1"
 trycmd = "0.15.6"
+proptest = "1.5.0"
 
 [target.'cfg(not(any(target_os = "windows", all(target_arch = "wasm32", target_os = "unknown"))))'.dev-dependencies]
 pprof = { version = "0.13.0", features = ["criterion", "flamegraph"] }
