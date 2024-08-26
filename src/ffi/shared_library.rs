@@ -2,10 +2,10 @@
 
 use std::ffi::{c_char, CStr, CString};
 
+use serde_json::json;
+
 use crate::machine::lib_machine::QueryState;
-use crate::machine::parsed_results::QueryResolution;
 use crate::machine::Machine;
-use serde_json::{json, Value};
 
 /// Create a new instance of the Scryer Machine.
 ///
@@ -106,13 +106,13 @@ pub extern "C" fn run_query_next(query_state: &mut QueryState) -> *mut c_char {
     match query_state.next() {
         None => std::ptr::null_mut(),
         Some(Ok(query_resolution_line)) => {
-            let v = QueryResolution::from(vec![query_resolution_line]).to_string();
+            // let v = QueryResolution::from(vec![query_resolution_line]).to_string();
 
-            let obj = serde_json::from_str::<serde_json::Value>(&v).expect("Bad JSON");
+            // let obj = serde_json::from_str::<serde_json::Value>(query_resolution_line).expect("Bad JSON");
 
             let output_string = json!({
                 "status": "ok",
-                "result": obj
+                "result": query_resolution_line
             })
             .to_string();
 
@@ -222,10 +222,11 @@ pub unsafe extern "C" fn run_query(machine: &mut Machine, input: *const c_char) 
 
     let output_string: String = match query_resolution {
         Ok(query_resolution_line) => {
-            let value: Value = serde_json::from_str(&format!("{}", query_resolution_line)).unwrap();
+            // let value: Value =
+            //     serde_json::from_str(&format!("{:?}", query_resolution_line)).unwrap();
             json!( {
                 "status": "ok",
-                "result": value
+                "result": query_resolution_line
             })
             .to_string()
         }

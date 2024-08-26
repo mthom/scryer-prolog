@@ -7,9 +7,6 @@ mod shared_library_tests {
         run_query, run_query_iter, run_query_next,
     };
     use serde_json::{json, Value};
-    // uncomment if we can figure out why this isn't working
-    // use crate::lib::dll::{machine_free};
-
     use scryer_prolog::machine::Machine;
 
     #[test]
@@ -19,18 +16,27 @@ mod shared_library_tests {
             CString::new("false.").unwrap(),
             CString::new("X=2.").unwrap(),
             CString::new("member(a, [a, b, c]).").unwrap(),
-            CString::new(r#"member(A, [a, b, c, "a", "b", "c", f(a), "f(a)"])."#).unwrap(),
+            CString::new(r#"member(A, [a, b, c, "a", "b", "c", f(a), "f(a)", [1, 2, 3]])."#).unwrap(),
         ];
 
         let expected_results = vec![
             json!({"status": "ok", "result": true}),
             json!({"status": "ok", "result": false}),
-            json!({"status": "ok", "result": [{"X":2}]}),
+            json!({"status": "ok", "result": [{"bindings": {"X":2}}]}),
             json!({"status": "ok", "result": true}),
-            json!({"status": "ok", "result": [{"A": "a"}, {"A": "b"}, {"A": "c"},
-            {"A": "\"a\""}, {"A": "\"b\""}, {"A": "\"c\""}, {"A": "f(a)"}, {"A": "\"f(a)\""}]}
-            ),
-        ];
+            json!({"status": "ok", "result": [
+                {"bindings": {"A": {"atom": "a"}}},
+                {"bindings": {"A": {"atom": "b"}}},
+                {"bindings": {"A": {"atom": "c"}}},
+                {"bindings": {"A": "a"}}, 
+                {"bindings": {"A": "b"}}, 
+                {"bindings": {"A": "c"}}, 
+                {"bindings": {"A": {"args": [{"atom": "a"}], "functor": "f"}}},
+                {"bindings": {"A": "f(a)"}},
+                {"bindings": {"A": [1, 2, 3]}}
+                ]})];
+
+
 
         let machine_ptr: *mut Machine = machine_new();
         let module_name = CString::new("tests").unwrap();
@@ -71,8 +77,8 @@ mod shared_library_tests {
         // should be X=Y not Y=X, see https://github.com/mthom/scryer-prolog/pull/2465#issuecomment-2294961856
         // expected fix with https://github.com/mthom/scryer-prolog/pull/2475
         let expected_results = [
-            r#"{"result":[{"Y":"X"}],"status":"ok"}"#, // should be:
-                                                       // "{\"result\":[{\"X\":\"Y\"}],\"status\":\"ok\"}"
+            r#"{"result":{"bindings": {"X":{"variable": "Y"}}},"status":"ok"}"#, 
+                                                       
         ];
 
         let query_state_ref = unsafe { &mut *query_state };
@@ -84,7 +90,7 @@ mod shared_library_tests {
             let expected_obj =
                 serde_json::from_str::<serde_json::Value>(expected).expect("Bad JSON");
             println!("{result_s:?}");
-            assert_eq!(result_obj, expected_obj);
+            assert_eq!(expected_obj, result_obj);
             unsafe {
                 free_c_string(result_ptr);
             }
@@ -110,16 +116,19 @@ mod shared_library_tests {
         }
         let query_state = unsafe { run_query_iter(&mut *machine_ptr, query.as_ptr()) };
 
-        let expected_results = [
-            r#"{"result":[{"X":"a"}],"status":"ok"}"#,
-            r#"{"result":[{"X":"\"a\""}],"status":"ok"}"#,
-            r#"{"result":[{"X":"f(a)"}],"status":"ok"}"#,
-            r#"{"result":[{"X":"\"f(a)\""}],"status":"ok"}"#,
-            r#"{"result":[{"X": true}],"status":"ok"}"#,
-            r#"{"result":[{"X":"\"true\""}],"status":"ok"}"#,
-            r#"{"result":[{"X": false}],"status":"ok"}"#,
-            r#"{"result":[{"X":"\"false\""}],"status":"ok"}"#,
-        ];
+
+        
+        let expected_results = vec![
+            json!({"status": "ok", "result": {"bindings": {"X": {"atom": "a"}}}}),
+            json!({"status": "ok", "result": {"bindings": {"X": "a"}}}),
+            json!({"status": "ok", "result": {"bindings": {"X": {"args": [{"atom": "a"}], "functor": "f"}}}}),
+            json!({"status": "ok", "result": {"bindings": {"X": "f(a)"}}}),
+            json!({"status": "ok", "result": {"bindings": {"X": true}}}),
+            json!({"status": "ok", "result": {"bindings": {"X": "true"}}}),
+            json!({"status": "ok", "result": {"bindings": {"X": false}}}),
+            json!({"status": "ok", "result": {"bindings": {"X": "false"}}}),
+            ];
+
 
         let query_state_ref = unsafe { &mut *query_state };
         for expected in &expected_results {
@@ -128,9 +137,7 @@ mod shared_library_tests {
             let result_s = result_char.to_str().unwrap();
             let result_obj =
                 serde_json::from_str::<serde_json::Value>(&result_s).expect("Bad JSON");
-            let expected_obj =
-                serde_json::from_str::<serde_json::Value>(&expected).expect("Bad JSON");
-            assert_eq!(result_obj, expected_obj);
+            assert_eq!(expected, &result_obj);
             unsafe {
                 free_c_string(result_ptr);
             }
@@ -206,20 +213,58 @@ solve(N, Moves) :-
         }
         let query_state = unsafe { run_query_iter(&mut *machine_ptr, query.as_ptr()) };
 
-        let expected_results =
-            [r#"{"status": "ok", "results": [{"Moves": ["\"from_to(a,c)\""]}]}"#];
+        let expected_results = [
+            r#"{"status": "ok", "result": {"bindings": {"Moves": [{"args": [{"atom": "a"}, {"atom": "c"}], "functor": "from_to"}], "N": 1}}}"#,
+        ];
 
         let query_state_ref = unsafe { &mut *query_state };
         for expected in &expected_results {
             let result_ptr = run_query_next(query_state_ref);
             let result_char = unsafe { CStr::from_ptr(result_ptr) };
             let result_s = result_char.to_str().unwrap();
+            println!("{result_s}");
             let result_obj =
                 serde_json::from_str::<serde_json::Value>(&result_s).expect("Bad JSON");
             println!("{result_obj}");
             let expected_obj =
                 serde_json::from_str::<serde_json::Value>(&expected).expect("Bad JSON");
             assert_eq!(result_obj, expected_obj);
+            unsafe {
+                free_c_string(result_ptr);
+            }
+        }
+        unsafe { query_state_free(query_state) }
+        unsafe { machine_free(machine_ptr) };
+    }
+
+    #[test]
+    fn test_scryer_run_query_clpz() {
+        let program = CString::new(":- use_module(library(clpz)).").unwrap();
+        let module_name = CString::new("facts").unwrap();
+        let query = CString::new(r#"X in 1 .. 3."#).unwrap();
+        let machine_ptr: *mut Machine = machine_new();
+        unsafe {
+            consult_module_string(&mut *machine_ptr, module_name.as_ptr(), program.as_ptr());
+        }
+        let query_state = unsafe { run_query_iter(&mut *machine_ptr, query.as_ptr()) };
+
+        let expected_results =
+        // should be
+        // [r#"{"status": "ok", "result": {"args":  [{"variable":  "X"}, {"args":  [1, 5], "functor":  ".."}], "functor": "in"}}"#];
+        [r#"{"status": "ok", "result": {"bindings": {"X": {"variable": "_A"}}}}"#]; // incorrect
+
+        let query_state_ref = unsafe { &mut *query_state };
+        for expected in &expected_results {
+            let result_ptr = run_query_next(query_state_ref);
+            let result_char = unsafe { CStr::from_ptr(result_ptr) };
+            let result_s = result_char.to_str().unwrap();
+            println!("{result_s}");
+            let result_obj =
+                serde_json::from_str::<serde_json::Value>(&result_s).expect("Bad JSON");
+            println!("{result_obj}");
+            let expected_obj =
+                serde_json::from_str::<serde_json::Value>(&expected).expect("Bad JSON");
+            assert_eq!(expected_obj, result_obj);
             unsafe {
                 free_c_string(result_ptr);
             }
