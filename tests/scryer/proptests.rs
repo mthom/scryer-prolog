@@ -54,6 +54,18 @@ fn generate_value() -> impl Strategy<Value = Value> {
 }
 
 proptest! {
+    #![proptest_config(
+        if cfg!(miri) {
+            ProptestConfig {
+                failure_persistence: None,
+                cases: 5,
+                ..ProptestConfig::default()
+            }
+        } else {
+            ProptestConfig::default()
+        }
+    )]
+
 
     // test that we can sucessfully serialize and then deserialize a value
     #[test]
@@ -64,8 +76,6 @@ proptest! {
         prop_assert_eq!(original_value, roundtrip_value);
     }
 
-    // TODO add QueryResolution roundtrip test using generate_query_resolution
-    // test that we can sucessfully serialize and then deserialize a value
     #[test]
     fn query_resolution_serde(original_value in generate_query_resolution()) {
         let json = serde_json::to_string(&original_value).unwrap();
