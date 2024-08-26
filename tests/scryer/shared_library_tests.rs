@@ -6,8 +6,8 @@ mod shared_library_tests {
         consult_module_string, free_c_string, machine_free, machine_new, query_state_free,
         run_query, run_query_iter, run_query_next,
     };
-    use serde_json::{json, Value};
     use scryer_prolog::machine::Machine;
+    use serde_json::{json, Value};
 
     #[test]
     fn test_scryer_run_multiple_queries_greedy_evaluation() {
@@ -16,7 +16,8 @@ mod shared_library_tests {
             CString::new("false.").unwrap(),
             CString::new("X=2.").unwrap(),
             CString::new("member(a, [a, b, c]).").unwrap(),
-            CString::new(r#"member(A, [a, b, c, "a", "b", "c", f(a), "f(a)", [1, 2, 3]])."#).unwrap(),
+            CString::new(r#"member(A, [a, b, c, "a", "b", "c", f(a), "f(a)", [1, 2, 3]])."#)
+                .unwrap(),
         ];
 
         let expected_results = vec![
@@ -25,18 +26,17 @@ mod shared_library_tests {
             json!({"status": "ok", "result": [{"bindings": {"X":2}}]}),
             json!({"status": "ok", "result": true}),
             json!({"status": "ok", "result": [
-                {"bindings": {"A": {"atom": "a"}}},
-                {"bindings": {"A": {"atom": "b"}}},
-                {"bindings": {"A": {"atom": "c"}}},
-                {"bindings": {"A": "a"}}, 
-                {"bindings": {"A": "b"}}, 
-                {"bindings": {"A": "c"}}, 
-                {"bindings": {"A": {"args": [{"atom": "a"}], "functor": "f"}}},
-                {"bindings": {"A": "f(a)"}},
-                {"bindings": {"A": [1, 2, 3]}}
-                ]})];
-
-
+            {"bindings": {"A": {"atom": "a"}}},
+            {"bindings": {"A": {"atom": "b"}}},
+            {"bindings": {"A": {"atom": "c"}}},
+            {"bindings": {"A": "a"}},
+            {"bindings": {"A": "b"}},
+            {"bindings": {"A": "c"}},
+            {"bindings": {"A": {"args": [{"atom": "a"}], "functor": "f"}}},
+            {"bindings": {"A": "f(a)"}},
+            {"bindings": {"A": [1, 2, 3]}}
+            ]}),
+        ];
 
         let machine_ptr: *mut Machine = machine_new();
         let module_name = CString::new("tests").unwrap();
@@ -54,7 +54,6 @@ mod shared_library_tests {
             unsafe { free_c_string(result) };
         }
 
-        // breaks if uncommented
         unsafe {
             machine_free(machine_ptr);
         }
@@ -67,19 +66,15 @@ mod shared_library_tests {
         let module_name = CString::new("facts").unwrap();
         let query = CString::new("X=Y.").unwrap();
         let machine_ptr: *mut Machine = machine_new();
-        // Check if pointer is not null
+
         assert!(!machine_ptr.is_null());
         unsafe {
             consult_module_string(&mut *machine_ptr, module_name.as_ptr(), program.as_ptr());
         }
         let query_state = unsafe { run_query_iter(&mut *machine_ptr, query.as_ptr()) };
 
-        // should be X=Y not Y=X, see https://github.com/mthom/scryer-prolog/pull/2465#issuecomment-2294961856
-        // expected fix with https://github.com/mthom/scryer-prolog/pull/2475
-        let expected_results = [
-            r#"{"result":{"bindings": {"X":{"variable": "Y"}}},"status":"ok"}"#, 
-                                                       
-        ];
+        let expected_results =
+            [r#"{"result":{"bindings": {"X":{"variable": "Y"}}},"status":"ok"}"#];
 
         let query_state_ref = unsafe { &mut *query_state };
         for expected in &expected_results {
@@ -116,8 +111,6 @@ mod shared_library_tests {
         }
         let query_state = unsafe { run_query_iter(&mut *machine_ptr, query.as_ptr()) };
 
-
-        
         let expected_results = vec![
             json!({"status": "ok", "result": {"bindings": {"X": {"atom": "a"}}}}),
             json!({"status": "ok", "result": {"bindings": {"X": "a"}}}),
@@ -127,8 +120,7 @@ mod shared_library_tests {
             json!({"status": "ok", "result": {"bindings": {"X": "true"}}}),
             json!({"status": "ok", "result": {"bindings": {"X": false}}}),
             json!({"status": "ok", "result": {"bindings": {"X": "false"}}}),
-            ];
-
+        ];
 
         let query_state_ref = unsafe { &mut *query_state };
         for expected in &expected_results {
@@ -148,7 +140,7 @@ mod shared_library_tests {
     fn test_scryer_run_query_jug_test() {
         let program = CString::new(
             "/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   sparrows over iggles
+   Sparrows over Eagles
    https://www.youtube.com/watch?v=vdabv9EkYrY
 
    jug(ID,Capacity,Fill) represents a jug
@@ -156,8 +148,7 @@ mod shared_library_tests {
    general pattern:
 
    moves(StateList) --> [ <MOVE> ],
-   { preconditions },
-   { postconditions},
+   { preconditions*, postconditions* },
    <recursive call to moves(UpdatedStateList)>
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
@@ -179,20 +170,11 @@ moves(Js0) --> [empty(ID)],
         moves([jug(ID,C,0)|Js]).
 
 moves(Js0) --> [from_to(F,T)],
-        { 
-          
-          /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-             preconditions
-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+        {
           select(jug(F,FC,FF0), Js0, Js1), % remove jug(F,FC,FF0) from Js0 resulting in Js1
           select(jug(T,TC,TF0), Js1, Js) , % remove jug(T,TC,TF0) from Js1 resulting in Js2
           FF0  #> 0,             % source/from jug shouldn't be empty
           TF0 #< TC,             % target/to jug should not be full
-
-          /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-             postconditions / effects
-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
-          
           M #= min(FF0, TC-TF0), % pour it all in (FF0) or top it up (TC-TF0)
           FF #= FF0 - M,         % reflect the water poured out from source jug
           TF #= TF0 + M },       % reflect the water poured into the source jug
@@ -222,10 +204,8 @@ solve(N, Moves) :-
             let result_ptr = run_query_next(query_state_ref);
             let result_char = unsafe { CStr::from_ptr(result_ptr) };
             let result_s = result_char.to_str().unwrap();
-            println!("{result_s}");
             let result_obj =
                 serde_json::from_str::<serde_json::Value>(&result_s).expect("Bad JSON");
-            println!("{result_obj}");
             let expected_obj =
                 serde_json::from_str::<serde_json::Value>(&expected).expect("Bad JSON");
             assert_eq!(result_obj, expected_obj);
@@ -249,19 +229,15 @@ solve(N, Moves) :-
         let query_state = unsafe { run_query_iter(&mut *machine_ptr, query.as_ptr()) };
 
         let expected_results =
-        // should be
-        // [r#"{"status": "ok", "result": {"args":  [{"variable":  "X"}, {"args":  [1, 5], "functor":  ".."}], "functor": "in"}}"#];
-        [r#"{"status": "ok", "result": {"bindings": {"X": {"variable": "_A"}}}}"#]; // incorrect
+            [r#"{"status": "ok", "result": {"bindings": {"X": {"variable": "_A"}}}}"#]; // incorrect
 
         let query_state_ref = unsafe { &mut *query_state };
         for expected in &expected_results {
             let result_ptr = run_query_next(query_state_ref);
             let result_char = unsafe { CStr::from_ptr(result_ptr) };
             let result_s = result_char.to_str().unwrap();
-            println!("{result_s}");
             let result_obj =
                 serde_json::from_str::<serde_json::Value>(&result_s).expect("Bad JSON");
-            println!("{result_obj}");
             let expected_obj =
                 serde_json::from_str::<serde_json::Value>(&expected).expect("Bad JSON");
             assert_eq!(expected_obj, result_obj);
@@ -271,5 +247,34 @@ solve(N, Moves) :-
         }
         unsafe { query_state_free(query_state) }
         unsafe { machine_free(machine_ptr) };
+    }
+
+    #[test]
+    fn test_scryer_run_query_partial_list() {
+        let program = CString::new(":- use_module(library(lists)).").unwrap();
+        let module_name = CString::new("facts").unwrap();
+        let query = CString::new(r#"member(X, [["ab" | "dd"]])."#).unwrap();
+        let machine_ptr: *mut Machine = machine_new();
+        unsafe {
+            consult_module_string(&mut *machine_ptr, module_name.as_ptr(), program.as_ptr());
+        }
+        let query_state = unsafe { run_query_iter(&mut *machine_ptr, query.as_ptr()) };
+
+        let expected_results = vec![
+            json!({"status": "ok", "result": {"bindings": {"X": ["ab", {"atom": "d"}, {"atom": "d"}]}}}),
+        ];
+
+        let query_state_ref = unsafe { &mut *query_state };
+        for expected in &expected_results {
+            let result_ptr = run_query_next(query_state_ref);
+            let result_char = unsafe { CStr::from_ptr(result_ptr) };
+            let result_s = result_char.to_str().unwrap();
+            let result_obj =
+                serde_json::from_str::<serde_json::Value>(&result_s).expect("Bad JSON");
+            assert_eq!(expected, &result_obj);
+            unsafe {
+                free_c_string(result_ptr);
+            }
+        }
     }
 }
