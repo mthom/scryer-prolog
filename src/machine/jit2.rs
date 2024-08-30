@@ -432,38 +432,60 @@ impl JitMachine {
 		    let first_var_block = fn_builder.create_block();
 		    let else_first_var_block = fn_builder.create_block();
 		    let exit_block = fn_builder.create_block();
-		    let heap_ptr = vec_as_ptr!(heap);		    
-		    // check if x is var
-		    let tag = fn_builder.ins().ushr_imm($x, 58);
-		    let is_var = fn_builder.ins().icmp_imm(IntCC::Equal, tag, HeapCellValueTag::Var as i64);
-		    fn_builder.ins().brif(is_var, first_var_block, &[], else_first_var_block, &[]);
+		    let second_check_block = fn_builder.create_block();
+		    let third_check_block = fn_builder.create_block();
+		    let push_var_y = fn_builder.create_block();
+		    let push_stackvar_y = fn_builder.create_block();
+		    let heap_ptr = vec_as_ptr!(heap);
+		    let stack_ptr = vec_as_ptr!(stack);
+    		    // The order of HeapCellValue is TAG (6), M (1), F (1), VALUE (56)		    
+		    let idx = fn_builder.ins().ishl_imm($x, 8);
+		    let idx = fn_builder.ins().ushr_imm(idx, 5);
+		    let idx = fn_builder.ins().iadd(heap_ptr, idx);
+		    let idy = fn_builder.ins().ishl_imm($y, 8);
+		    let idy = fn_builder.ins().ushr_imm(idy, 5);
+		    let heap_idy = fn_builder.ins().iadd(heap_ptr, idy);
+		    let stack_idy = fn_builder.ins().iadd(stack_ptr, idy);
+		    // first case: X is a var, Y is not a stack var, (if Y is a var too, it should be lower)
+		    // second case: else
+		    let x_is_var = is_var!($x);
+		    let y_is_stack_var = is_stack_var!($y);
+		    let y_is_var = is_var!($y);
+		    let y_is_lower_than_x = fn_builder.ins().icmp(IntCC::SignedLessThan, heap_idy, idx);
+		    let check = fn_builder.ins().band_not(x_is_var, y_is_stack_var);
+		    fn_builder.ins().brif(check, second_check_block, &[], else_first_var_block, &[]);
+		    fn_builder.seal_block(second_check_block);
+		    fn_builder.switch_to_block(second_check_block);
+		    fn_builder.ins().brif(y_is_var, third_check_block, &[], first_var_block, &[]);
+		    fn_builder.seal_block(third_check_block);
+		    fn_builder.switch_to_block(third_check_block);
+		    fn_builder.ins().brif(y_is_lower_than_x, first_var_block, &[], else_first_var_block, &[]);
 		    // first var block
 		    fn_builder.seal_block(first_var_block);
 		    fn_builder.seal_block(else_first_var_block);
 		    fn_builder.switch_to_block(first_var_block);
-    		    // The order of HeapCellValue is TAG (6), M (1), F (1), VALUE (56)
-		    let idx = fn_builder.ins().ishl_imm($x, 8);
-		    let idx = fn_builder.ins().ushr_imm(idx, 5);
-		    let idx = fn_builder.ins().iadd(heap_ptr, idx);
 		    fn_builder.ins().store(MemFlags::trusted(), $y, idx, Offset32::new(0));
 		    trail!($x);
 		    fn_builder.ins().jump(exit_block, &[]);
 		    // else_first_var_block
-		    // suppose the other cell is a var
 		    fn_builder.switch_to_block(else_first_var_block);
-		    let idx = fn_builder.ins().ishl_imm($y, 8);
-		    let idx = fn_builder.ins().ushr_imm(idx, 5);
-		    let idx = fn_builder.ins().iadd(heap_ptr, idx);
-		    fn_builder.ins().store(MemFlags::trusted(), $x, idx, Offset32::new(0));
+		    fn_builder.ins().brif(y_is_var, push_var_y, &[], push_stackvar_y, &[]);
+		    fn_builder.seal_block(push_var_y);
+		    fn_builder.seal_block(push_stackvar_y);
+		    fn_builder.switch_to_block(push_var_y);
+		    fn_builder.ins().store(MemFlags::trusted(), $x, heap_idy, Offset32::new(0));
 		    trail!($y);
-		    fn_builder.ins().jump(exit_block, &[]);		    
+		    fn_builder.ins().jump(exit_block, &[]);
+		    fn_builder.switch_to_block(push_stackvar_y);
+		    fn_builder.ins().store(MemFlags::trusted(), $x, stack_idy, Offset32::new(0));
+		    trail!($y);
+		    fn_builder.ins().jump(exit_block, &[]);
 		    // exit
 		    fn_builder.seal_block(exit_block);
 		    fn_builder.switch_to_block(exit_block);
 		}
 	    }
 	}
-	// TODO: Modify Bind to check address
 
 	// TODO: Manage stack vars
 	// Stack vars are always cleaned. If there was an allocation after a choicepoint, they need to be removed. If there was
@@ -474,16 +496,23 @@ impl JitMachine {
 	    ($x:expr) => {
 		if !backtracks.is_empty() {
 		    let push_var = fn_builder.create_block();
+		    let check_push_stack_var = fn_builder.create_block();
 		    let exit = fn_builder.create_block();
 		    let current_frame = backtracks.get(backtracks.len() - 1).unwrap();
 		    let idx = fn_builder.ins().ishl_imm($x, 8);
 		    let idx = fn_builder.ins().ushr_imm(idx, 8);
 		    let var_is_older = fn_builder.ins().icmp(IntCC::SignedLessThan, idx, current_frame.heap_len_at_start);
-		    fn_builder.ins().brif(var_is_older, push_var, &[], exit, &[]);
-		    fn_builder.seal_block(push_var);
+		    let x_is_var = is_var!($x);
+		    let var_is_older_and_var = fn_builder.ins().band(var_is_older, x_is_var);
+		    fn_builder.ins().brif(var_is_older_and_var, push_var, &[], check_push_stack_var, &[]);
+		    fn_builder.seal_block(check_push_stack_var);
 		    fn_builder.switch_to_block(push_var);
 		    vec_push!(trail, $x);
 		    fn_builder.ins().jump(exit, &[]);
+		    fn_builder.switch_to_block(check_push_stack_var);
+		    let var_is_older = fn_builder.ins().icmp(IntCC::SignedLessThan, idx, stack_size);
+		    fn_builder.ins().brif(var_is_older, push_var, &[], exit, &[]);
+		    fn_builder.seal_block(push_var);
 		    fn_builder.seal_block(exit);
 		    fn_builder.switch_to_block(exit);
 		}
@@ -495,6 +524,7 @@ impl JitMachine {
 		{
 		    if !backtracks.is_empty() {
 			let heap_ptr = vec_as_ptr!(heap);
+			let stack_ptr = vec_as_ptr!(stack);
 			let current_frame = backtracks.get(backtracks.len() - 1).unwrap();
 			let trail_len_at_start = current_frame.trail_len_at_start;
 			let trail_len_now = vec_len!(trail);
@@ -513,12 +543,30 @@ impl JitMachine {
 			fn_builder.switch_to_block(loop_body);
 			// unwind here
 			let cell = vec_pop!(trail);
+			let is_var = is_var!(cell);
+			let restore_var = fn_builder.create_block();
+			fn_builder.append_block_param(restore_var, types::I64);
+			let restore_stack_var = fn_builder.create_block();
+			fn_builder.append_block_param(restore_stack_var, types::I64);			
+			fn_builder.ins().brif(is_var, restore_var, &[num_items], restore_stack_var, &[num_items]);
+			fn_builder.seal_block(restore_var);
+			fn_builder.seal_block(restore_stack_var);
+			fn_builder.switch_to_block(restore_var);
+			let num_items = fn_builder.block_params(restore_var)[0];
 			let idx = fn_builder.ins().ishl_imm(cell, 8);
 			let idx = fn_builder.ins().ushr_imm(idx, 5);
 			let idx = fn_builder.ins().iadd(heap_ptr, idx);
 			fn_builder.ins().store(MemFlags::trusted(), cell, idx, Offset32::new(0));
 			let num_items = fn_builder.ins().iadd_imm(num_items, -1);
 			fn_builder.ins().jump(check_loop, &[num_items]);
+			fn_builder.switch_to_block(restore_stack_var);
+			let num_items = fn_builder.block_params(restore_stack_var)[0];			
+			let idx = fn_builder.ins().ishl_imm(cell, 8);
+			let idx = fn_builder.ins().ushr_imm(idx, 5);
+			let idx = fn_builder.ins().iadd(stack_ptr, idx);
+			fn_builder.ins().store(MemFlags::trusted(), cell, idx, Offset32::new(0));
+			let num_items = fn_builder.ins().iadd_imm(num_items, -1);
+			fn_builder.ins().jump(check_loop, &[num_items]);			
 			fn_builder.seal_block(check_loop);
 			fn_builder.switch_to_block(exit);
 		    }
@@ -918,13 +966,23 @@ impl JitMachine {
 		 * Xi normal register and Ai argument register
 		 */
 		Instruction::PutVariable(reg, arg) => {
-		    let heap_loc_cell = heap_loc_as_cell!(0);
-		    let heap_loc_cell = fn_builder.ins().iconst(types::I64, i64::from_le_bytes(heap_loc_cell.into_bytes()));
-		    let vec_len = vec_len!(heap);
-		    let heap_loc_cell = fn_builder.ins().bor(vec_len, heap_loc_cell);
-		    vec_push!(heap, heap_loc_cell);
-		    write_reg!(reg, heap_loc_cell);
-		    registers[arg - 1] = heap_loc_cell;
+		    match reg {
+			RegType::Temp(_) => {
+			    let heap_loc_cell = heap_loc_as_cell!(0);
+			    let heap_loc_cell = fn_builder.ins().iconst(types::I64, i64::from_le_bytes(heap_loc_cell.into_bytes()));
+			    let vec_len = vec_len!(heap);
+			    let heap_loc_cell = fn_builder.ins().bor(vec_len, heap_loc_cell);
+			    vec_push!(heap, heap_loc_cell);
+			    write_reg!(reg, heap_loc_cell);
+			    registers[arg - 1] = heap_loc_cell;
+			}
+			RegType::Perm(y) => {
+			    let stack_loc_cell = stack_loc_as_cell!(y - 1);
+			    let stack_loc_cell = fn_builder.ins().iconst(types::I64, i64::from_le_bytes(stack_loc_cell.into_bytes()));
+			    write_reg!(reg, stack_loc_cell);
+			    registers[arg - 1] = stack_loc_cell;
+			}
+		    }
 		}
 		/* put_value moves the content from Xi to Ai
 		 */
@@ -1389,8 +1447,8 @@ fn test_unify_value_read_str_3() {
     let mut machine_st_expected = MachineState::new();
     machine_st_expected.heap.push(str_loc_as_cell!(1));
     machine_st_expected.heap.push(atom_as_cell!(atom!("f"), 1));
-    machine_st_expected.heap.push(heap_loc_as_cell!(3));
-    machine_st_expected.heap.push(heap_loc_as_cell!(3));
+    machine_st_expected.heap.push(heap_loc_as_cell!(2));
+    machine_st_expected.heap.push(heap_loc_as_cell!(2));
     assert_eq!(machine_st.heap, machine_st_expected.heap);
     assert_eq!(machine_st.fail, false);
 
@@ -1652,10 +1710,43 @@ fn test_backtracking_3() {
     assert_eq!(machine_st.heap, machine_st_expected.heap);
     assert_eq!(machine_st.fail, false);
 }
+
+/*#[test]
+fn test_backtracking_4() {
+    let mut machine_st = MachineState::new();
+    let code_fail = vec![
+	Instruction::PutStructure(atom!("f"), 0, RegType::Temp(2)),
+	Instruction::GetStructure(Level::Shallow, atom!("h"), 1, RegType::Temp(2)),
+	Instruction::Proceed
+    ];
+    let code = vec![
+	Instruction::Allocate(1),
+	Instruction::PutVariable(RegType::Perm(1), 1),
+	Instruction::TryMeElse(0),
+	Instruction::GetConstant(Level::Shallow, atom_as_cell!(atom!("a"), 0), RegType::Perm(1)),
+	Instruction::ExecuteNamed(0, atom!("f"), CodeIndex::default(&mut machine_st.arena)),
+	Instruction::RetryMeElse(0),
+	Instruction::GetConstant(Level::Shallow, atom_as_cell!(atom!("b"), 0), RegType::Perm(1)),
+	Instruction::ExecuteNamed(0, atom!("f"), CodeIndex::default(&mut machine_st.arena)),
+	Instruction::TrustMe(0),
+	Instruction::GetConstant(Level::Shallow, atom_as_cell!(atom!("c"), 0), RegType::Perm(1)),
+	Instruction::GetVariable(RegType::Temp(1), 1),
+	Instruction::SetValue(RegType::Temp(1)),
+	Instruction::Proceed
+    ];
+    let mut jit = JitMachine::new();
+    jit.compile("f", 0, code_fail).unwrap();
+    jit.compile("a", 1, code).unwrap();
+    let x = heap_loc_as_cell!(0);
+    machine_st.registers[1] = x;
+    machine_st.heap.push(x);
+    jit.exec("a", 1, &mut machine_st).unwrap();
+    let mut machine_st_expected = MachineState::new();
+    assert_eq!(machine_st.heap, machine_st_expected.heap);
+    assert_eq!(machine_st.fail, false);
+}*/
 // TODO: Backtracking 4 test stack trail
 
 // TODO: Continue with more tests
-// One option is to only deallocate at the end of functions, taking into account how many allocations took place
-// Other option is to store deallocation info in backtracks
 
 // TODO: Move heap, stack, pdl and trail to GlobalValue
