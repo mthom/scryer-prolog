@@ -2,6 +2,10 @@ mod helper;
 mod issues;
 mod src_tests;
 
+// a proptest dep doesn't compile on wasm
+#[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
+mod proptests;
+
 /// To add new cli test copy an existing .toml file in `tests/scryer/cli/issues/` or `tests/scryer/cli/issues/src_tests/`,
 /// adjust as necessary the `-f` and `--no-add-history` args should be kept but additional args may be added.
 /// For input on stdin add a .stdin file with the same filename.
