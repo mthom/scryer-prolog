@@ -9,6 +9,8 @@
 :- use_module(library(si)).
 :- use_module(library(os)).
 
+:- use_module(library(format)).
+
 :- use_module(library('$project_atts')).
 :- use_module(library('$atts')).
 
@@ -191,7 +193,8 @@ instruction_match(Term, VarList) :-
           (  Item == user ->
              catch(load(user_input), E, print_exception_with_check(E))
           ;
-             submit_query_and_print_results(consult(Item), [])
+             %submit_query_and_print_results(consult(Item), [])
+             submit_query_and_print_results2(consult(Item), [])
           )
        ;  catch(type_error(atom, Item, repl/0),
                 E,
@@ -200,9 +203,144 @@ instruction_match(Term, VarList) :-
     ;  Term = end_of_file ->
        halt
     ;
-       submit_query_and_print_results(Term, VarList)
+        %submit_query_and_print_results(Term, VarList)
+       submit_query_and_print_results2(Term, VarList)
     ).
 
+run_query(Query, Callback_1) :-
+    read_term_from_chars(Query, QueryTerm, [variable_names(VarNames)]),
+    run_query_term(QueryTerm, VarNames, Callback_1).
+
+run_query_term(QueryTerm, VarNames, Callback_1) :-
+    % The b value in the WAM basically represents which choicepoint we are at.
+    % By recording it before and after we can then compare the values to know
+    % if we are still inside the query or not.
+    '$get_b_value'(B0),
+    catch(call_residue_vars(user:QueryTerm, ResVars), Exception, Excepted = true),
+    gather_query_vars(VarNames, Vars0),
+    '$term_variables_under_max_depth'(Vars0, 22, Vars1),
+    '$project_atts':project_attributes(Vars1, ResVars),
+    '$get_b_value'(B),
+    (   B0 == B ->
+        % We are out of the choicepoint, ignore tail false
+        !
+    ;   Pending = true
+    ),
+    (   Excepted == true ->
+        !,
+        call(Callback_1, final(exception(Exception)))
+    ;   (   VarNames == [], ResGoals == [] ->
+            (   Pending == true ->
+                call(Callback_1, pending(true))
+            ;   call(Callback_1, final(true))
+            )
+        ;   copy_term([Vars1, ResVars], [Vars1, ResVars], ResGoals),
+            term_variables(ResGoals, ResGoalVars),
+            append([Vars1, ResGoalVars, ResVars], Vars2),
+            charsio:extend_var_list(Vars2, VarNames, NewVarNames, fabricated),
+            gather_equations(NewVarNames, Vars0, Bindings),
+            maplist(\Term^Vs^term_variables_under_max_depth(Term, 22, Vs), Bindings, BindingVars),
+            append([ResGoalVars | BindingVars], Vars3),
+            term_variables(Vars3, Vars4), % deduplicate vars of Vars1 but preserve their order.
+            charsio:extend_var_list(Vars4, VarNames, NewVarNames1, fabricated),
+            (   Pending == true ->
+                call(Callback_1, pending(leaf_answer(Bindings, ResGoals, NewVarNames1)))
+            ;   call(Callback_1, final(leaf_answer(Bindings, ResGoals, NewVarNames1)))
+            )
+        )
+    ).
+run_query_term(_, _, Callback_1) :-
+    % If the whole query failed or we didn't cut in the previous definition of
+    % run_query_term/3 (which means  we are still in the query but it has failed)
+    % then we get here so we have a (tail) false.
+    call(Callback_1, final(false)).
+
+
+submit_query_and_print_results2(QueryTerm, VarNames) :-
+    bb_put('$answer_count', 0),
+    bb_put('$report_all', false),
+    bb_put('$report_n_more', 0),
+    catch(
+        run_query_term(QueryTerm, VarNames, toplevel_query_callback),
+        '$stop_query',
+        true
+    ).
+
+handle_first_answer :-
+    (   bb_get('$answer_count', 0) ->
+        write('   ')
+    ;   true
+    ).
+
+increment_answer_count :-
+    bb_get('$answer_count', Count0),
+    Count is Count0 + 1,
+    bb_put('$answer_count', Count).
+
+toplevel_query_callback(pending(LeafAnswer)) :-
+    handle_first_answer,
+    increment_answer_count,
+    show_leaf_answer(LeafAnswer, []),
+    read_input2(LeafAnswer).
+toplevel_query_callback(final(LeafAnswer)) :-
+    (   subsumes_term(exception(_), LeafAnswer) ->
+        exception(Exception) = LeafAnswer,
+        print_exception(Exception)
+    ;   handle_first_answer,
+        increment_answer_count,
+        show_leaf_answer(LeafAnswer, []),
+        write('.'), nl
+    ).
+
+show_leaf_answer(true, _) :- write(true).
+show_leaf_answer(false, _) :- write(false).
+show_leaf_answer(leaf_answer(Bindings, ResGoals, VarNames), Options) :-
+    append(Bindings, ResGoals, LeafGoals),
+    loader:thread_goals(LeafGoals, ThreadedGoals, (',')),
+    (   member(depth(deep), Options) ->
+        write_eq(ThreadedGoals, VarNames, 0)
+    ;   write_eq(ThreadedGoals, VarNames, 20)
+    ).
+
+read_input2(LeafAnswer) :-
+    (  bb_get('$report_all', true) ->
+       C = n
+    ;  bb_get('$report_n_more', N), N > 1 ->
+       N1 is N - 1,
+       bb_put('$report_n_more', N1),
+       C = n
+    ;  get_single_char(C)
+    ),
+    (  C = w ->
+       nl,
+       write('   '),
+       show_leaf_answer(LeafAnswer, [depth(deep)]),
+       %write_eq(ThreadedGoals, NewVarList, 20),
+       read_input2(LeafAnswer)
+    ;  C = p ->
+       nl,
+       write('   '),
+       show_leaf_answer(LeafAnswer, [depth(shallow)]),
+       %write_eq(ThreadedGoals, NewVarList, 20),
+       read_input2(LeafAnswer)
+    ;  member(C, [';', ' ', n]) ->
+       nl, write(';  ')
+    ;  C = h ->
+       help_message,
+       read_input2(LeafAnswer)
+    ;  member(C, ['\n', .]) ->
+       nl, write(';  ... .'), nl,
+       throw('$stop_query')
+    ;  C = a ->
+       bb_put('$report_all', true),
+       nl, write(';  ')
+    ;  C = f ->
+       bb_get('$answer_count', Count),
+       More is 5 - Count mod 5,
+       bb_put('$report_n_more', More),
+       nl, write(';  ')
+    ;  read_input2(LeafAnswer)
+    ).
 
 submit_query_and_print_results_(Term, VarList) :-
     '$get_b_value'(B),
