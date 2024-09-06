@@ -3281,14 +3281,14 @@ pub fn generate_instructions_rs() -> TokenStream {
             }
         }
 
-        #[macro_export]
         macro_rules! _instr {
             #(
                 #instr_macro_arms
             );*
         }
 
-        pub use _instr as instr; // https://github.com/rust-lang/rust/pull/52234#issuecomment-976702997
+        // https://github.com/rust-lang/rust/pull/52234#issuecomment-976702997
+        pub(crate) use _instr as instr;
     }
 }
 

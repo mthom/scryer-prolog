@@ -124,7 +124,6 @@ impl Hash for Atom {
     }
 }
 
-#[macro_export]
 macro_rules! is_char {
     ($s:expr) => {
         !$s.is_empty() && $s.chars().nth(1).is_none()

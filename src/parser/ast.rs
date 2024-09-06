@@ -139,7 +139,6 @@ pub const BTERM: u32 = 0x11000;
 
 pub const NEGATIVE_SIGN: u32 = 0x0200;
 
-#[macro_export]
 macro_rules! fixnum {
     ($wrapper:tt, $n:expr, $arena:expr) => {
         Fixnum::build_with_checked($n)
@@ -180,21 +179,18 @@ macro_rules! is_negate {
     };
 }
 
-#[macro_export]
 macro_rules! is_prefix {
     ($x:expr) => {
         $x as u32 & ($crate::parser::ast::FX as u32 | $crate::parser::ast::FY as u32) != 0
     };
 }
 
-#[macro_export]
 macro_rules! is_postfix {
     ($x:expr) => {
         $x as u32 & ($crate::parser::ast::XF as u32 | $crate::parser::ast::YF as u32) != 0
     };
 }
 
-#[macro_export]
 macro_rules! is_infix {
     ($x:expr) => {
         ($x as u32
@@ -205,48 +201,41 @@ macro_rules! is_infix {
     };
 }
 
-#[macro_export]
 macro_rules! is_xfx {
     ($x:expr) => {
         ($x as u32 & $crate::parser::ast::XFX as u32) != 0
     };
 }
 
-#[macro_export]
 macro_rules! is_xfy {
     ($x:expr) => {
         ($x as u32 & $crate::parser::ast::XFY as u32) != 0
     };
 }
 
-#[macro_export]
 macro_rules! is_yfx {
     ($x:expr) => {
         ($x as u32 & $crate::parser::ast::YFX as u32) != 0
     };
 }
-#[macro_export]
 macro_rules! is_yf {
     ($x:expr) => {
         ($x as u32 & $crate::parser::ast::YF as u32) != 0
     };
 }
 
-#[macro_export]
 macro_rules! is_xf {
     ($x:expr) => {
         ($x as u32 & $crate::parser::ast::XF as u32) != 0
     };
 }
 
-#[macro_export]
 macro_rules! is_fx {
     ($x:expr) => {
         ($x as u32 & $crate::parser::ast::FX as u32) != 0
     };
 }
 
-#[macro_export]
 macro_rules! is_fy {
     ($x:expr) => {
         ($x as u32 & $crate::parser::ast::FY as u32) != 0
@@ -317,14 +306,12 @@ impl Default for VarReg {
     }
 }
 
-#[macro_export]
 macro_rules! temp_v {
     ($x:expr) => {
         $crate::parser::ast::RegType::Temp($x)
     };
 }
 
-#[macro_export]
 macro_rules! perm_v {
     ($x:expr) => {
         $crate::parser::ast::RegType::Perm($x)

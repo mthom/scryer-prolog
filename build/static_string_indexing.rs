@@ -164,7 +164,6 @@ pub fn index_static_strings(instruction_rs_path: &std::path::Path) -> TokenStrea
             )*
         ];
 
-        #[macro_export]
         macro_rules! atom {
             #((#static_strs) => { Atom { index: #indices_iter } };)*
         }

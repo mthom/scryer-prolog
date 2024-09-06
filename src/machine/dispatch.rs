@@ -7,8 +7,6 @@ use crate::machine::machine_state::*;
 use crate::machine::*;
 use crate::types::*;
 
-use crate::try_numeric_result;
-
 use fxhash::FxBuildHasher;
 
 macro_rules! step_or_fail {

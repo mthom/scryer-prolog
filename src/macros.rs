@@ -144,7 +144,6 @@ macro_rules! stack_loc_as_cell {
     };
 }
 
-#[macro_export]
 macro_rules! heap_loc_as_cell {
     ($h:expr) => {
         HeapCellValue::build_with(HeapCellValueTag::Var, $h as u64)

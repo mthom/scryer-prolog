@@ -1,4 +1,5 @@
 pub mod args;
+#[macro_use]
 pub mod arithmetic_ops;
 pub mod attributed_variables;
 pub mod code_walker;

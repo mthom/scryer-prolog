@@ -7,8 +7,6 @@ use crate::parser::ast::*;
 use crate::parser::parser::*;
 use crate::read::devour_whitespace;
 
-use crate::predicate_queue;
-
 use fxhash::FxBuildHasher;
 use indexmap::IndexSet;
 

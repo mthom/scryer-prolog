@@ -4,11 +4,6 @@ use crate::parser::ast::*;
 use crate::parser::dashu::base::RemEuclid;
 use crate::parser::dashu::integer::Sign;
 use crate::parser::dashu::{ibig, Integer, Rational};
-use crate::{
-    alpha_numeric_char, capital_letter_char, cut_char, decimal_digit_char, graphic_token_char,
-    semicolon_char, sign_char, single_quote_char, small_letter_char, solo_char,
-    variable_indicator_char,
-};
 
 use crate::forms::*;
 use crate::heap_iter::*;

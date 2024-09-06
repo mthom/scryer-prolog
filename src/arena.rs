@@ -29,7 +29,6 @@ use std::ptr::addr_of_mut;
 use std::ptr::NonNull;
 use std::sync::RwLock;
 
-#[macro_export]
 macro_rules! arena_alloc {
     ($e:expr, $arena:expr) => {{
         let result = $e;
@@ -37,7 +36,6 @@ macro_rules! arena_alloc {
     }};
 }
 
-#[macro_export]
 macro_rules! float_alloc {
     ($e:expr, $arena:expr) => {{
         let result = $e;

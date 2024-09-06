@@ -8,11 +8,9 @@ use crate::instructions::*;
 use crate::iterators::*;
 use crate::parser::ast::*;
 use crate::targets::*;
-use crate::temp_v;
 use crate::types::*;
 use crate::variable_records::*;
 
-use crate::instr;
 use crate::machine::disjuncts::*;
 use crate::machine::machine_errors::*;
 
