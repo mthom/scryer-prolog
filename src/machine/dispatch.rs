@@ -4611,11 +4611,11 @@ impl Machine {
                         self.shell();
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallPID => {
+                    &Instruction::CallPid => {
                         self.pid();
                         step_or_fail!(self, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecutePID => {
+                    &Instruction::ExecutePid => {
                         self.pid();
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                     }

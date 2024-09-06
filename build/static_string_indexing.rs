@@ -156,8 +156,6 @@ pub fn index_static_strings(instruction_rs_path: &std::path::Path) -> TokenStrea
     let static_strs: &Vec<_> = &visitor.static_strs.into_iter().collect();
 
     quote! {
-        use phf;
-
         static STRINGS: [&str; #static_strs_len] = [
             #(
                 #static_strs,

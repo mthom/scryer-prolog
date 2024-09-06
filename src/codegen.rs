@@ -557,14 +557,14 @@ impl<'b> CodeGenerator<'b> {
         match call_policy {
             CallPolicy::Default => {
                 if self.marker.in_tail_position {
-                    code.push_back(call_instr.to_execute().to_default());
+                    code.push_back(call_instr.into_execute().into_default());
                 } else {
-                    code.push_back(call_instr.to_default())
+                    code.push_back(call_instr.into_default())
                 }
             }
             CallPolicy::Counted => {
                 if self.marker.in_tail_position {
-                    code.push_back(call_instr.to_execute());
+                    code.push_back(call_instr.into_execute());
                 } else {
                     code.push_back(call_instr)
                 }

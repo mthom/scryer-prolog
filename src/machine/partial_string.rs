@@ -213,8 +213,7 @@ impl<'a> HeapPStrIter<'a> {
         self.brent_st.hare = orig_hare;
     }
 
-    #[allow(clippy::inherent_to_string)]
-    pub fn to_string(&mut self) -> String {
+    pub fn to_string_mut(&mut self) -> String {
         let mut buf = String::with_capacity(32);
 
         for iteratee in self.by_ref() {

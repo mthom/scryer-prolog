@@ -26,6 +26,7 @@ pub type Specifier = u32;
 
 pub const MAX_ARITY: usize = 1023;
 
+#[allow(clippy::upper_case_acronyms)]
 #[derive(Debug, Clone, Copy, Eq, PartialEq)]
 pub enum OpDeclSpec {
     XFX = 0x0001,
@@ -660,7 +661,7 @@ impl fmt::Display for Literal {
 }
 
 impl Literal {
-    pub fn to_atom(&self, atom_tbl: &Arc<AtomTable>) -> Option<Atom> {
+    pub fn as_atom(&self, atom_tbl: &Arc<AtomTable>) -> Option<Atom> {
         match self {
             Literal::Atom(atom) => Some(atom.defrock_brackets(atom_tbl)),
             _ => None,
