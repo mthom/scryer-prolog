@@ -790,7 +790,7 @@ qualified_spec((:)).
 qualified_spec(MS) :- integer(MS), MS >= 0.
 
 
-:- non_counted_backtracking expand_meta_predicate_subgoals/5.
+:- non_counted_backtracking expand_meta_predicate_subgoals/6.
 
 expand_meta_predicate_subgoals([SG | SGs], [MS | MSs], M, [ESG | ESGs], HeadVars, TGs) :-
     (  var(SG) ->
