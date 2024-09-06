@@ -3252,6 +3252,7 @@ pub fn generate_instructions_rs() -> TokenStream {
                 )
             }
 
+            #[allow(dead_code)]
             pub fn is_ctrl_instr(&self) -> bool {
                 matches!(self,
                     Instruction::Allocate(_) |
@@ -3262,6 +3263,7 @@ pub fn generate_instructions_rs() -> TokenStream {
                 )
             }
 
+            #[allow(dead_code)]
             pub fn is_query_instr(&self) -> bool {
                 matches!(self,
                     &Instruction::GetVariable(..) |

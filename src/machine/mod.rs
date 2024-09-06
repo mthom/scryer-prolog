@@ -271,14 +271,6 @@ impl Machine {
             .unwrap()
     }
 
-    fn throw_session_error(&mut self, err: SessionError, key: PredicateKey) {
-        let err = self.machine_st.session_error(err);
-        let stub = functor_stub(key.0, key.1);
-        let err = self.machine_st.error_form(err, stub);
-
-        self.machine_st.throw_exception(err);
-    }
-
     pub(crate) fn run_module_predicate(
         &mut self,
         module_name: Atom,
@@ -356,15 +348,6 @@ impl Machine {
                 self.machine_st.attr_var_init.verify_attrs_loc = code_index.local().unwrap();
             }
         }
-    }
-
-    fn set_user_input(&mut self, input: String) {
-        self.user_input = Stream::from_owned_string(input, &mut self.machine_st.arena);
-    }
-
-    fn get_user_output(&self) -> String {
-        let output_bytes: Vec<_> = self.user_output.bytes().map(|b| b.unwrap()).collect();
-        String::from_utf8(output_bytes).unwrap()
     }
 
     pub(crate) fn configure_modules(&mut self) {

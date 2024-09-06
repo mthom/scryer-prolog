@@ -529,11 +529,6 @@ impl From<TypedArenaPtr<ReadlineStream>> for Stream {
 
 impl Stream {
     #[inline]
-    pub fn from_readline_stream(stream: ReadlineStream, arena: &mut Arena) -> Stream {
-        Stream::Readline(arena_alloc!(StreamLayout::new(stream), arena))
-    }
-
-    #[inline]
     pub fn from_owned_string(string: String, arena: &mut Arena) -> Stream {
         Stream::Byte(arena_alloc!(
             StreamLayout::new(CharReader::new(ByteStream(Cursor::new(

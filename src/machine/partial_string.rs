@@ -104,11 +104,6 @@ impl<'a> HeapPStrIter<'a> {
     }
 
     #[inline(always)]
-    pub fn num_steps(&self) -> usize {
-        self.brent_st.num_steps()
-    }
-
-    #[inline(always)]
     pub fn chars(mut self) -> PStrCharsIter<'a> {
         let item = self.next();
         PStrCharsIter { iter: self, item }

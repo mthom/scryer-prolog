@@ -185,12 +185,6 @@ macro_rules! is_prefix {
     };
 }
 
-macro_rules! is_postfix {
-    ($x:expr) => {
-        $x as u32 & ($crate::parser::ast::XF as u32 | $crate::parser::ast::YF as u32) != 0
-    };
-}
-
 macro_rules! is_infix {
     ($x:expr) => {
         ($x as u32
@@ -312,12 +306,6 @@ macro_rules! temp_v {
     };
 }
 
-macro_rules! perm_v {
-    ($x:expr) => {
-        $crate::parser::ast::RegType::Perm($x)
-    };
-}
-
 #[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub enum GenContext {
     Head,
@@ -407,10 +395,6 @@ impl DoubleQuotes {
         matches!(self, DoubleQuotes::Chars)
     }
 
-    pub fn is_atom(self) -> bool {
-        matches!(self, DoubleQuotes::Atom)
-    }
-
     pub fn is_codes(self) -> bool {
         matches!(self, DoubleQuotes::Codes)
     }
@@ -422,20 +406,6 @@ pub enum Unknown {
     Error,
     Fail,
     Warn,
-}
-
-impl Unknown {
-    pub fn is_error(self) -> bool {
-        matches!(self, Unknown::Error)
-    }
-
-    pub fn is_fail(self) -> bool {
-        matches!(self, Unknown::Fail)
-    }
-
-    pub fn is_warn(self) -> bool {
-        matches!(self, Unknown::Warn)
-    }
 }
 
 pub fn default_op_dir() -> OpDir {
@@ -455,6 +425,7 @@ pub enum ArithmeticError {
     UninstantiatedVar,
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub enum ParserError {
     BackQuotedString(usize, usize),
@@ -783,14 +754,6 @@ impl From<&str> for Var {
 }
 
 impl Var {
-    #[inline(always)]
-    pub fn as_str(&self) -> Option<&str> {
-        match self {
-            Var::Named(value) => Some(value),
-            _ => None,
-        }
-    }
-
     #[allow(clippy::inherent_to_string)]
     #[inline(always)]
     pub fn to_string(&self) -> String {
@@ -815,26 +778,10 @@ pub enum Term {
 }
 
 impl Term {
-    pub fn into_literal(self) -> Option<Literal> {
-        match self {
-            Term::Literal(_, c) => Some(c),
-            _ => None,
-        }
-    }
-
     pub fn first_arg(&self) -> Option<&Term> {
         match self {
             Term::Clause(_, _, ref terms) => terms.first(),
             _ => None,
-        }
-    }
-
-    pub fn set_name(&mut self, new_name: Atom) {
-        match self {
-            Term::Literal(_, Literal::Atom(ref mut atom)) | Term::Clause(_, ref mut atom, ..) => {
-                *atom = new_name;
-            }
-            _ => {}
         }
     }
 
@@ -853,15 +800,6 @@ impl Term {
             _ => 0,
         }
     }
-}
-
-#[inline]
-pub fn source_arity(terms: &[Term]) -> usize {
-    if let Some(Term::Literal(_, Literal::CodeIndex(_))) = terms.last() {
-        return terms.len() - 1;
-    }
-
-    terms.len()
 }
 
 pub(crate) fn unfold_by_str_once(term: &mut Term, s: Atom) -> Option<(Term, Term)> {

@@ -53,11 +53,6 @@ impl<R> CharReader<R> {
     }
 
     #[inline]
-    pub fn inner(&self) -> &R {
-        &self.inner
-    }
-
-    #[inline]
     pub fn inner_mut(&mut self) -> &mut R {
         &mut self.inner
     }
@@ -98,10 +93,6 @@ impl<R> CharReader<R> {
 
     pub fn buffer(&self) -> &[u8] {
         &self.buf[self.pos..]
-    }
-
-    pub fn into_inner(self) -> R {
-        self.inner
     }
 
     pub fn reset_buffer(&mut self) {

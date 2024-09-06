@@ -124,12 +124,6 @@ impl Hash for Atom {
     }
 }
 
-macro_rules! is_char {
-    ($s:expr) => {
-        !$s.is_empty() && $s.chars().nth(1).is_none()
-    };
-}
-
 pub enum AtomString<'a> {
     Static(&'a str),
     Dynamic(AtomTableRef<str>),

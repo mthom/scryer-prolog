@@ -1,9 +1,6 @@
-pub use crate::arena::*;
-pub use crate::atom_table::*;
 use crate::heap_print::*;
 pub use crate::machine::heap::*;
 pub use crate::machine::machine_state::*;
-pub use crate::machine::stack::*;
 pub use crate::machine::streams::*;
 pub use crate::machine::*;
 pub use crate::parser::ast::*;
@@ -23,9 +20,10 @@ use std::ops::{Deref, DerefMut, Index, IndexMut};
 pub struct MockWAM {
     pub machine_st: MachineState,
     pub op_dir: OpDir,
-    pub flags: MachineFlags,
+    //pub flags: MachineFlags,
 }
 
+#[allow(dead_code)]
 impl MockWAM {
     pub fn new() -> Self {
         let op_dir = default_op_dir();
@@ -33,7 +31,7 @@ impl MockWAM {
         Self {
             machine_st: MachineState::new(),
             op_dir,
-            flags: MachineFlags::default(),
+            //flags: MachineFlags::default(),
         }
     }
 

@@ -40,8 +40,6 @@ mod repl_helper;
 mod targets;
 pub(crate) mod types;
 
-use instructions::instr;
-
 #[cfg(target_arch = "wasm32")]
 use wasm_bindgen::prelude::*;
 

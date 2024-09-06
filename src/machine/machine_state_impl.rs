@@ -256,29 +256,14 @@ impl MachineState {
         unifier.unify_internal();
     }
 
-    pub fn unify_structure(&mut self, s1: usize, value: HeapCellValue) {
-        let mut unifier = DefaultUnifier::from(self);
-        unifier.unify_structure(s1, value);
-    }
-
     pub fn unify_atom(&mut self, atom: Atom, value: HeapCellValue) {
         let mut unifier = DefaultUnifier::from(self);
         unifier.unify_atom(atom, value);
     }
 
-    pub fn unify_list(&mut self, l1: usize, value: HeapCellValue) {
-        let mut unifier = DefaultUnifier::from(self);
-        unifier.unify_list(l1, value);
-    }
-
     pub fn unify_complete_string(&mut self, atom: Atom, value: HeapCellValue) {
         let mut unifier = DefaultUnifier::from(self);
         unifier.unify_complete_string(atom, value);
-    }
-
-    pub fn unify_partial_string(&mut self, value_1: HeapCellValue, value_2: HeapCellValue) {
-        let mut unifier = DefaultUnifier::from(self);
-        unifier.unify_partial_string(value_1, value_2);
     }
 
     pub fn unify_char(&mut self, c: char, value: HeapCellValue) {

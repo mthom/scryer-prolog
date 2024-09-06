@@ -894,6 +894,8 @@ const_assert!(mem::size_of::<OrderedFloat<f64>>() == 8);
 mod tests {
     use std::ops::Deref;
 
+    use crate::arena::*;
+    use crate::atom_table::*;
     use crate::machine::mock_wam::*;
     use crate::machine::partial_string::*;
 

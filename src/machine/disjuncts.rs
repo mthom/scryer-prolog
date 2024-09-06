@@ -95,11 +95,6 @@ pub struct ChunkInfo {
     vars: Vec<VarInfo>,
 }
 
-#[derive(Debug)]
-pub struct BranchArm {
-    pub arm_terms: Vec<QueryTerm>,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct BranchInfo {
     branch_num: BranchNumber,

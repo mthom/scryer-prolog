@@ -159,17 +159,6 @@ impl ChunkedTermVec {
             .push_back(ChunkedTerms::Branch(Vec::with_capacity(capacity)));
     }
 
-    pub fn push_branch_arm(&mut self, branch: VecDeque<ChunkedTerms>) {
-        match self.chunk_vec.back_mut().unwrap() {
-            ChunkedTerms::Branch(branches) => {
-                branches.push(branch);
-            }
-            ChunkedTerms::Chunk(_) => {
-                self.chunk_vec.push_back(ChunkedTerms::Branch(vec![branch]));
-            }
-        }
-    }
-
     #[inline]
     pub fn add_chunk(&mut self) {
         self.chunk_vec
