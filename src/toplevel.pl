@@ -205,10 +205,40 @@ instruction_match(Term, VarList) :-
        submit_query_and_print_results(Term, VarList)
     ).
 
-run_query(Query, Callback_1, Options) :-
-    read_term_from_chars(Query, QueryTerm, [variable_names(VarNames)]),
-    run_query_goal(QueryTerm, VarNames, Callback_1, Options).
+%% run_query(+QueryChars, +Callback_1, +Options)
+%
+% Runs a query from a string of chars, calling `Callback_1` on each leaf answer.
+% See `run_query_goal/4` for details.
+run_query(QueryChars, Callback_1, Options) :-
+    read_term_from_chars(QueryChars, QueryGoal, [variable_names(VarNames)]),
+    run_query_goal(QueryGoal, VarNames, Callback_1, Options).
 
+%% run_query_goal(+QueryGoal, +VarNames, +Callback_1, +Options)
+%
+% Run a query from a goal, calling `Callback_1 on each leaf answer.
+% `VarNames` needs to have the same format as the one from the `variable_names(-VarNames)`
+% option in `read_term/3`. That is, a list of terms of the form `Name=Var`, where `Name`
+% is an atom and `Var` is a variable. The possible arguments to `Callback_1` are:
+%
+% - `final(false)`
+% - `final(exception(Exception))`, where `Exception` is the exception thrown
+% - `final(true)`
+% - `final(leaf_answer(Bindings, ResidualGoals, VarNames))`, where:
+%   
+%   - `Bindings` is a list of terms of the form `Var=Term`, where `Var` is a
+%     variable.
+%   - `ResidualGoals` is a list of the residual goals from the query.
+%   - `VarNames` is a list of `Name=Var` terms where `Name` is an atom and `Var` is a
+%     variable.
+% - `pending(true)`
+% - `pending(leaf_answer(Bindings, ResidualGoals, VarNames)`, see `final(leaf_answer(_,_,_))`
+%   above.
+%
+% The variants with principal functor `final/1` mean that there will be no more leaf answers,
+% and the ones with `pending/1` mean that there will be more leaf answers.
+%
+% `Option` is a list of options. There are none currently, but in the future support for
+% inference limits and timeouts may be implemented.
 run_query_goal(QueryGoal, VarNames, Callback_1, _) :-
     % The b value in the WAM basically represents which choicepoint we are at.
     % By recording it before and after we can then compare the values to know
