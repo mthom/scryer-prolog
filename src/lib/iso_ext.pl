@@ -223,7 +223,6 @@ run_cleaners_without_handling(Cp) :-
 %% call_with_inference_limit(Goal, Limit, Result).
 %
 % Similar to `call(Goal)` but it limits the number of inferences for each solution of Goal.
-% Calls to it may be nested, but only the last limit will be in power.
 call_with_inference_limit(G, L, R) :-
     (  integer(L) ->
        (  L < 0 ->
