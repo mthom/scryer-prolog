@@ -11,7 +11,7 @@ use indexmap::IndexMap;
 
 use super::{
     streams::Stream, Atom, AtomCell, HeapCellValue, HeapCellValueTag, Machine, MachineConfig,
-    QueryResolutionLine, QueryResult, PrologTerm,
+    LeafAnswer, PrologTerm,
 };
 
 pub struct QueryState<'a> {
@@ -31,7 +31,7 @@ impl Drop for QueryState<'_> {
 }
 
 impl Iterator for QueryState<'_> {
-    type Item = Result<QueryResolutionLine, String>;
+    type Item = Result<LeafAnswer, String>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let var_names = &mut self.var_names;
@@ -82,10 +82,10 @@ impl Iterator for QueryState<'_> {
         if machine.machine_st.p == LIB_QUERY_SUCCESS {
             if term_write_result.var_dict.is_empty() {
                 self.machine.machine_st.backtrack();
-                return Some(Ok(QueryResolutionLine::True));
+                return Some(Ok(LeafAnswer::True));
             }
         } else if machine.machine_st.p == BREAK_FROM_DISPATCH_LOOP_LOC {
-            return Some(Ok(QueryResolutionLine::False));
+            return Some(Ok(LeafAnswer::False));
         }
 
         let mut bindings: BTreeMap<String, PrologTerm> = BTreeMap::new();
@@ -138,7 +138,7 @@ impl Iterator for QueryState<'_> {
         // choice point, so we should break.
         self.machine.machine_st.backtrack();
 
-        Some(Ok(QueryResolutionLine::Match(bindings)))
+        Some(Ok(LeafAnswer::LeafAnswer { bindings: bindings, residual_goals: vec![] }))
     }
 }
 
@@ -187,11 +187,7 @@ impl Machine {
         self.machine_st.block = stub_b;
     }
 
-    pub fn run_query(&mut self, query: String) -> QueryResult {
-        self.run_query_iter(query).collect()
-    }
-
-    pub fn run_query_iter(&mut self, query: String) -> QueryState {
+    pub fn run_query(&mut self, query: String) -> QueryState {
         let mut parser = Parser::new(
             Stream::from_owned_string(query, &mut self.machine_st.arena),
             &mut self.machine_st,
@@ -767,14 +763,14 @@ mod tests {
 
             iterator.next();
 
-            assert_eq!(iterator.next(), Some(Ok(QueryResolutionLine::False)));
+            assert_eq!(iterator.next(), Some(Ok(LeafAnswer::False)));
             assert_eq!(iterator.next(), None);
         }
 
         {
             let mut iterator = machine.run_query_iter("false.".into());
 
-            assert_eq!(iterator.next(), Some(Ok(QueryResolutionLine::False)));
+            assert_eq!(iterator.next(), Some(Ok(LeafAnswer::False)));
             assert_eq!(iterator.next(), None);
         }
     }
@@ -786,8 +782,8 @@ mod tests {
 
         let mut iterator = machine.run_query_iter("true;false.".into());
 
-        assert_eq!(iterator.next(), Some(Ok(QueryResolutionLine::True)));
-        assert_eq!(iterator.next(), Some(Ok(QueryResolutionLine::False)));
+        assert_eq!(iterator.next(), Some(Ok(LeafAnswer::True)));
+        assert_eq!(iterator.next(), Some(Ok(LeafAnswer::False)));
         assert_eq!(iterator.next(), None);
     }
 
