@@ -5,13 +5,16 @@
 
 :- op(1199, fx, meta_predicate).
 
-% Declarative operator used to implement `call_with_inference_limit/3` and
-% `setup_call_cleanup/3`. Compiler switches to the default trust_me, retry_me_else
-% and some other instructions for all predicates the marked with it. Indexing
-% choice instructions are unchanged.
+% Implementation specific declarative operator used to implement
+% call_with_inference_limit/3 and setup_call_cleanup/3. Compiler switches
+% to the default trust_me, retry_me_else and some other instructions for all
+% predicates that are marked with it. Indexing choice instructions are unchanged.
 %
-% Default instructins are not subject to inference counting, so their execution
-% will not be considered if they happen to be called by `call_with_inference_limit/3`.
+% Implementation details:
+% Default instructions are not subject to inference counting, so their
+% execution will not be considered if they happen to be called by
+% call_with_inference_limit/3.
+%
 :- op(700, fx, non_counted_backtracking).
 
 % arithmetic operators.
