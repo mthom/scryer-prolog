@@ -26,14 +26,14 @@ pub enum QueryResolution {
 
 fn write_prolog_value_as_json<W: Write>(
     writer: &mut W,
-    value: &Value,
+    value: &PrologTerm,
 ) -> Result<(), std::fmt::Error> {
     match value {
-        Value::Integer(i) => write!(writer, "{}", i),
-        Value::Float(f) => write!(writer, "{}", f),
-        Value::Rational(r) => write!(writer, "{}", r),
-        Value::Atom(a) => writer.write_str(a.as_str()),
-        Value::String(s) => {
+        PrologTerm::Integer(i) => write!(writer, "{}", i),
+        PrologTerm::Float(f) => write!(writer, "{}", f),
+        PrologTerm::Rational(r) => write!(writer, "{}", r),
+        PrologTerm::Atom(a) => writer.write_str(a.as_str()),
+        PrologTerm::String(s) => {
             if let Err(_e) = serde_json::from_str::<serde_json::Value>(s.as_str()) {
                 //treat as string literal
                 //escape double quotes
@@ -50,7 +50,7 @@ fn write_prolog_value_as_json<W: Write>(
                 writer.write_str(s)
             }
         }
-        Value::List(l) => {
+        PrologTerm::List(l) => {
             writer.write_char('[')?;
             if let Some((first, rest)) = l.split_first() {
                 write_prolog_value_as_json(writer, first)?;
@@ -62,7 +62,7 @@ fn write_prolog_value_as_json<W: Write>(
             }
             writer.write_char(']')
         }
-        Value::Structure(s, l) => {
+        PrologTerm::Structure(s, l) => {
             write!(writer, "\"{}\":[", s.as_str())?;
 
             if let Some((first, rest)) = l.split_first() {
@@ -119,25 +119,25 @@ impl Display for QueryResolution {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct QueryMatch {
-    pub bindings: BTreeMap<String, Value>,
+    pub bindings: BTreeMap<String, PrologTerm>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum QueryResolutionLine {
     True,
     False,
-    Match(BTreeMap<String, Value>),
+    Match(BTreeMap<String, PrologTerm>),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Value {
+pub enum PrologTerm {
     Integer(Integer),
     Rational(Rational),
     Float(OrderedFloat<f64>),
     Atom(String),
     String(String),
-    List(Vec<Value>),
-    Structure(String, Vec<Value>),
+    List(Vec<PrologTerm>),
+    Structure(String, Vec<PrologTerm>),
     Var(String),
 }
 
@@ -159,7 +159,7 @@ fn count_to_letter_code(mut count: usize) -> String {
     letters.into_iter().chain("_".chars()).rev().collect()
 }
 
-impl Value {
+impl PrologTerm {
     pub(crate) fn from_heapcell(
         machine: &mut Machine,
         heap_cell: HeapCellValue,
@@ -194,41 +194,41 @@ impl Value {
                     let head = term_stack.pop().unwrap();
 
                     let list = match tail {
-                        Value::Atom(atom) if atom == "[]" => match head {
-                            Value::Atom(ref a) if a.chars().collect::<Vec<_>>().len() == 1 => {
+                        PrologTerm::Atom(atom) if atom == "[]" => match head {
+                            PrologTerm::Atom(ref a) if a.chars().collect::<Vec<_>>().len() == 1 => {
                                 // Handle lists of char as strings
-                                Value::String(a.to_string())
+                                PrologTerm::String(a.to_string())
                             }
-                            _ => Value::List(vec![head]),
+                            _ => PrologTerm::List(vec![head]),
                         },
-                        Value::List(elems) if elems.is_empty() => match head {
-                            Value::Atom(ref a) if a.chars().collect::<Vec<_>>().len() == 1 => {
+                        PrologTerm::List(elems) if elems.is_empty() => match head {
+                            PrologTerm::Atom(ref a) if a.chars().collect::<Vec<_>>().len() == 1 => {
                                 // Handle lists of char as strings
-                                Value::String(a.to_string())
+                                PrologTerm::String(a.to_string())
                             },
-                            _ => Value::List(vec![head]),
+                            _ => PrologTerm::List(vec![head]),
                         },
-                        Value::List(mut elems) => {
+                        PrologTerm::List(mut elems) => {
                             elems.insert(0, head);
-                            Value::List(elems)
+                            PrologTerm::List(elems)
                         },
-                        Value::String(mut elems) => match head {
-                            Value::Atom(ref a) if a.chars().collect::<Vec<_>>().len() == 1 => {
+                        PrologTerm::String(mut elems) => match head {
+                            PrologTerm::Atom(ref a) if a.chars().collect::<Vec<_>>().len() == 1 => {
                                 // Handle lists of char as strings
                                 elems.insert(0, a.chars().next().unwrap());
-                                Value::String(elems)
+                                PrologTerm::String(elems)
                             },
                             _ => {
-                                let mut elems: Vec<Value> = elems
+                                let mut elems: Vec<PrologTerm> = elems
                                     .chars()
-                                    .map(|x| Value::Atom(x.into()))
+                                    .map(|x| PrologTerm::Atom(x.into()))
                                     .collect();
                                 elems.insert(0, head);
-                                Value::List(elems)
+                                PrologTerm::List(elems)
                             }
                         },
                         _ => {
-                            Value::Structure(".".into(), vec![head, tail])
+                            PrologTerm::Structure(".".into(), vec![head, tail])
                         }
                     };
                     term_stack.push(list);
@@ -236,7 +236,7 @@ impl Value {
                 (HeapCellValueTag::Var | HeapCellValueTag::AttrVar | HeapCellValueTag::StackVar) => {
                     let var = var_names.get(&addr).map(|x| x.borrow().clone());
                     match var {
-                        Some(Var::Named(name)) => term_stack.push(Value::Var(name)),
+                        Some(Var::Named(name)) => term_stack.push(PrologTerm::Var(name)),
                         _ => {
                             let anon_name = loop {
                                 // Generate a name for the anonymous variable
@@ -261,28 +261,28 @@ impl Value {
                                     },
                                 }
                             };
-                            term_stack.push(Value::Var(anon_name));
+                            term_stack.push(PrologTerm::Var(anon_name));
                         },
                     }
                 }
                 (HeapCellValueTag::F64, f) => {
-                    term_stack.push(Value::Float(*f));
+                    term_stack.push(PrologTerm::Float(*f));
                 }
                 (HeapCellValueTag::Char, c) => {
-                    term_stack.push(Value::Atom(c.into()));
+                    term_stack.push(PrologTerm::Atom(c.into()));
                 }
                 (HeapCellValueTag::Fixnum, n) => {
-                    term_stack.push(Value::Integer(n.into()));
+                    term_stack.push(PrologTerm::Integer(n.into()));
                 }
                 (HeapCellValueTag::Cons) => {
                     match Number::try_from(addr) {
-                        Ok(Number::Integer(i)) => term_stack.push(Value::Integer((*i).clone())),
-                        Ok(Number::Rational(r)) => term_stack.push(Value::Rational((*r).clone())),
+                        Ok(Number::Integer(i)) => term_stack.push(PrologTerm::Integer((*i).clone())),
+                        Ok(Number::Rational(r)) => term_stack.push(PrologTerm::Rational((*r).clone())),
                         _ => {}
                     }
                 }
                 (HeapCellValueTag::CStr, s) => {
-                    term_stack.push(Value::String(s.as_str().to_string()));
+                    term_stack.push(PrologTerm::String(s.as_str().to_string()));
                 }
                 (HeapCellValueTag::Atom, (name, arity)) => {
                     //let h = iter.focus().value() as usize;
@@ -313,46 +313,46 @@ impl Value {
                     if arity == 0 {
                         let atom_name = name.as_str().to_string();
                         if atom_name == "[]" {
-                            term_stack.push(Value::List(vec![]));
+                            term_stack.push(PrologTerm::List(vec![]));
                         } else {
-                            term_stack.push(Value::Atom(atom_name));
+                            term_stack.push(PrologTerm::Atom(atom_name));
                         }
                     } else {
                         let subterms = term_stack
                             .drain(term_stack.len() - arity ..)
                             .collect();
 
-                        term_stack.push(Value::Structure(name.as_str().to_string(), subterms));
+                        term_stack.push(PrologTerm::Structure(name.as_str().to_string(), subterms));
                     }
                 }
                 (HeapCellValueTag::PStr, atom) => {
                     let tail = term_stack.pop().unwrap();
 
                     match tail {
-                        Value::Atom(atom) => {
+                        PrologTerm::Atom(atom) => {
                             if atom == "[]" {
-                                term_stack.push(Value::String(atom.as_str().to_string()));
+                                term_stack.push(PrologTerm::String(atom.as_str().to_string()));
                             }
                         },
-                        Value::List(l) => {
-                            let mut list: Vec<Value> = atom
+                        PrologTerm::List(l) => {
+                            let mut list: Vec<PrologTerm> = atom
                                 .as_str()
                                 .to_string()
                                 .chars()
-                                .map(|x| Value::Atom(x.to_string()))
+                                .map(|x| PrologTerm::Atom(x.to_string()))
                                 .collect();
                             list.extend(l.into_iter());
-                            term_stack.push(Value::List(list));
+                            term_stack.push(PrologTerm::List(list));
                         },
                         _ => {
-                            let mut list: Vec<Value> = atom
+                            let mut list: Vec<PrologTerm> = atom
                                 .as_str()
                                 .to_string()
                                 .chars()
-                                .map(|x| Value::Atom(x.to_string()))
+                                .map(|x| PrologTerm::Atom(x.to_string()))
                                 .collect();
 
-                            let mut partial_list = Value::Structure(
+                            let mut partial_list = PrologTerm::Structure(
                                 ".".into(),
                                 vec![
                                     list.pop().unwrap(),
@@ -361,7 +361,7 @@ impl Value {
                             );
 
                             while let Some(last) = list.pop() {
-                                partial_list = Value::Structure(
+                                partial_list = PrologTerm::Structure(
                                     ".".into(),
                                     vec![
                                         last,
@@ -397,8 +397,8 @@ impl Value {
     }
 }
 
-impl From<BTreeMap<&str, Value>> for QueryMatch {
-    fn from(bindings: BTreeMap<&str, Value>) -> Self {
+impl From<BTreeMap<&str, PrologTerm>> for QueryMatch {
+    fn from(bindings: BTreeMap<&str, PrologTerm>) -> Self {
         QueryMatch {
             bindings: bindings
                 .into_iter()
@@ -408,8 +408,8 @@ impl From<BTreeMap<&str, Value>> for QueryMatch {
     }
 }
 
-impl From<BTreeMap<String, Value>> for QueryMatch {
-    fn from(bindings: BTreeMap<String, Value>) -> Self {
+impl From<BTreeMap<String, PrologTerm>> for QueryMatch {
+    fn from(bindings: BTreeMap<String, PrologTerm>) -> Self {
         QueryMatch { bindings }
     }
 }
@@ -545,10 +545,10 @@ impl TryFrom<String> for QueryResolutionLine {
             _ => Ok(QueryResolutionLine::Match(
                 parse_prolog_response(&string)
                     .iter()
-                    .map(|(k, v)| -> Result<(String, Value), ()> {
+                    .map(|(k, v)| -> Result<(String, PrologTerm), ()> {
                         let key = k.to_string();
                         let value = v.to_string();
-                        Ok((key, Value::try_from(value)?))
+                        Ok((key, PrologTerm::try_from(value)?))
                     })
                     .filter_map(Result::ok)
                     .collect::<BTreeMap<_, _>>(),
@@ -578,28 +578,28 @@ fn split_nested_list(input: &str) -> Vec<String> {
     result
 }
 
-impl TryFrom<String> for Value {
+impl TryFrom<String> for PrologTerm {
     type Error = ();
     fn try_from(string: String) -> Result<Self, Self::Error> {
         let trimmed = string.trim();
 
         if let Ok(float_value) = string.parse::<f64>() {
-            Ok(Value::Float(OrderedFloat(float_value)))
+            Ok(PrologTerm::Float(OrderedFloat(float_value)))
         } else if let Ok(int_value) = string.parse::<i128>() {
-            Ok(Value::Integer(int_value.into()))
+            Ok(PrologTerm::Integer(int_value.into()))
         } else if trimmed.starts_with('\'') && trimmed.ends_with('\'')
             || trimmed.starts_with('"') && trimmed.ends_with('"')
         {
-            Ok(Value::String(trimmed[1..trimmed.len() - 1].into()))
+            Ok(PrologTerm::String(trimmed[1..trimmed.len() - 1].into()))
         } else if trimmed.starts_with('[') && trimmed.ends_with(']') {
             let split = split_nested_list(&trimmed[1..trimmed.len() - 1]);
 
             let values = split
                 .into_iter()
-                .map(Value::try_from)
+                .map(PrologTerm::try_from)
                 .collect::<Result<Vec<_>, _>>()?;
 
-            Ok(Value::List(values))
+            Ok(PrologTerm::List(values))
         } else if trimmed.starts_with('{') && trimmed.ends_with('}') {
             let iter = trimmed[1..trimmed.len() - 1].split(',');
             let mut values = vec![];
@@ -609,11 +609,11 @@ impl TryFrom<String> for Value {
                 if items.len() == 2 {
                     let _key = items[0].to_string();
                     let value = items[1].to_string();
-                    values.push(Value::try_from(value)?);
+                    values.push(PrologTerm::try_from(value)?);
                 }
             }
 
-            Ok(Value::Structure("{}".into(), values))
+            Ok(PrologTerm::Structure("{}".into(), values))
         } else if trimmed.starts_with("<<") && trimmed.ends_with(">>") {
             let iter = trimmed[2..trimmed.len() - 2].split(',');
             let mut values = vec![];
@@ -623,21 +623,21 @@ impl TryFrom<String> for Value {
                 if items.len() == 2 {
                     let _key = items[0].to_string();
                     let value = items[1].to_string();
-                    values.push(Value::try_from(value)?);
+                    values.push(PrologTerm::try_from(value)?);
                 }
             }
 
-            Ok(Value::Structure("<<>>".into(), values))
+            Ok(PrologTerm::Structure("<<>>".into(), values))
         } else if !trimmed.contains(',') && !trimmed.contains('\'') && !trimmed.contains('"') {
-            Ok(Value::String(trimmed.into()))
+            Ok(PrologTerm::String(trimmed.into()))
         } else {
             Err(())
         }
     }
 }
 
-impl From<&str> for Value {
+impl From<&str> for PrologTerm {
     fn from(str: &str) -> Self {
-        Value::String(str.to_string())
+        PrologTerm::String(str.to_string())
     }
 }
