@@ -192,8 +192,7 @@ instruction_match(Term, VarList) :-
        (  atom(Item) ->
           (  Item == user ->
              catch(load(user_input), E, print_exception_with_check(E))
-          ;
-             submit_query_and_print_results(consult(Item), [])
+          ;  submit_query_and_print_results(consult(Item), [])
           )
        ;  catch(type_error(atom, Item, repl/0),
                 E,
@@ -201,24 +200,24 @@ instruction_match(Term, VarList) :-
        )
     ;  Term = end_of_file ->
        halt
-    ;
-       submit_query_and_print_results(Term, VarList)
+    ;  submit_query_and_print_results(Term, VarList)
     ).
 
-%% run_query(+QueryChars, +Callback_2, +Options)
+%% run_query(+QueryChars, +Callback_3, +Options)
 %
-% Runs a query from a string of chars, calling `Callback_2` on each leaf answer.
+% Runs a query from a string of chars, calling `Callback_3` on each leaf answer.
 % See `run_query_goal/4` for details.
-run_query(QueryChars, Callback_2, Options) :-
+run_query(QueryChars, Callback_3, Options) :-
     read_term_from_chars(QueryChars, QueryGoal, [variable_names(VarNames)]),
-    run_query_goal(QueryGoal, VarNames, Callback_2, Options).
+    run_query_goal(QueryGoal, VarNames, Callback_3, Options).
 
-%% run_query_goal(+QueryGoal, +VarNames, +Callback_2, +Options)
+%% run_query_goal(+QueryGoal, +VarNames, +Callback_3, +Options)
 %
-% Run a query from a goal, calling `Callback_2` on each leaf answer.
+% Run a query from a goal, calling `Callback_3` on each leaf answer.
 % `VarNames` needs to have the same format as the one from the `variable_names(-VarNames)`
 % option in `read_term/3`. That is, a list of terms of the form `Name=Var`, where `Name`
-% is an atom and `Var` is a variable. The possible first arguments to `Callback_2` are:
+% is an atom and `Var` is a variable. `Callback_3` should have the form
+% `callback(+LeafAnswer, +Info, -Stop)`, where `LeafAnswer` will be one of those:
 %
 % - `final(false)`
 % - `final(exception(Exception))`, where `Exception` is the exception thrown
@@ -237,11 +236,13 @@ run_query(QueryChars, Callback_2, Options) :-
 % The variants with principal functor `final/1` mean that there will be no more leaf answers,
 % and the ones with `pending/1` mean that there will be more leaf answers.
 %
-% The second argument is a list with extra information that can be activated with options.
+% The second argument of the callback (`Info`) is a list with extra information that can
+% be activated with options. The third argument `Stop` controls whether the query will continue
+% or stop, and should be instantiated by the callback to either `continue` or `stop`.
 %
 % `Option` is a list of options. There are none currently, but in the future support for
 % inference limits and timeouts may be implemented.
-run_query_goal(QueryGoal, VarNames, Callback_2, _) :-
+run_query_goal(QueryGoal, VarNames, Callback_3, _) :-
     % The b value in the WAM basically represents which choicepoint we are at.
     % By recording it before and after we can then compare the values to know
     % if we are still inside the query or not.
@@ -258,11 +259,15 @@ run_query_goal(QueryGoal, VarNames, Callback_2, _) :-
     ),
     (   Excepted == true ->
         !,
-        call(Callback_2, final(exception(Exception)), [])
+        call(Callback_3, final(exception(Exception)), [], _)
     ;   (   VarNames == [], ResGoals == [] ->
             (   Pending == true ->
-                call(Callback_2, pending(true), [])
-            ;   call(Callback_2, final(true), [])
+                call(Callback_3, pending(true), [], Stop),
+                (   Stop == stop -> !
+                ;   Stop == continue -> true
+                ;   domain_error(stop_or_continue, Stop, run_query_goal/4)
+                )
+            ;   call(Callback_3, final(true), [], _)
             )
         ;   copy_term([Vars1, ResVars], [Vars1, ResVars], ResGoals),
             term_variables(ResGoals, ResGoalVars),
@@ -274,26 +279,31 @@ run_query_goal(QueryGoal, VarNames, Callback_2, _) :-
             term_variables(Vars3, Vars4), % deduplicate vars of Vars1 but preserve their order.
             charsio:extend_var_list(Vars4, VarNames, NewVarNames1, fabricated),
             (   Pending == true ->
-                call(Callback_2, pending(leaf_answer(Bindings, ResGoals, NewVarNames1)), [])
-            ;   call(Callback_2, final(leaf_answer(Bindings, ResGoals, NewVarNames1)), [])
+                call(
+                    Callback_3,
+                    pending(leaf_answer(Bindings, ResGoals, NewVarNames1)),
+                    [],
+                    Stop
+                ),
+                (   Stop == stop -> !
+                ;   Stop == continue -> true
+                ;   domain_error(stop_or_continue, Stop, run_query_goal/4)
+                )
+            ;   call(Callback_3, final(leaf_answer(Bindings, ResGoals, NewVarNames1)), [], _)
             )
         )
     ).
-run_query_goal(_, _, Callback_2, _) :-
+run_query_goal(_, _, Callback_3, _) :-
     % If the whole query failed or we didn't cut in the previous definition of
     % run_query_goal/4 (which means  we are still in the query but it has failed)
     % then we get here so we have a (tail) false.
-    call(Callback_2, final(false), []).
+    call(Callback_3, final(false), [], _).
 
 submit_query_and_print_results(QueryTerm, VarNames) :-
     bb_put('$answer_count', 0),
     bb_put('$report_all', false),
     bb_put('$report_n_more', 0),
-    catch(
-        run_query_goal(QueryTerm, VarNames, toplevel_query_callback, []),
-        '$stop_query',
-        true
-    ).
+    run_query_goal(QueryTerm, VarNames, toplevel_query_callback, []).
 
 handle_first_answer :-
     (   bb_get('$answer_count', 0) ->
@@ -306,12 +316,12 @@ increment_answer_count :-
     Count is Count0 + 1,
     bb_put('$answer_count', Count).
 
-toplevel_query_callback(pending(LeafAnswer), _) :-
+toplevel_query_callback(pending(LeafAnswer), _, Stop) :-
     handle_first_answer,
     increment_answer_count,
     write_leaf_answer(LeafAnswer, []),
-    read_input(LeafAnswer).
-toplevel_query_callback(final(LeafAnswer), _) :-
+    read_input(LeafAnswer, Stop).
+toplevel_query_callback(final(LeafAnswer), _, continue) :-
     (   exception(Exception) = LeafAnswer ->
         print_exception(Exception)
     ;   handle_first_answer,
@@ -330,7 +340,7 @@ write_leaf_answer(leaf_answer(Bindings, ResGoals, VarNames), Options) :-
     ;   write_eq(ThreadedGoals, VarNames, 20)
     ).
 
-read_input(LeafAnswer) :-
+read_input(LeafAnswer, Stop) :-
     (  bb_get('$report_all', true) ->
        C = n
     ;  bb_get('$report_n_more', N), N > 1 ->
@@ -339,33 +349,35 @@ read_input(LeafAnswer) :-
        C = n
     ;  get_single_char(C)
     ),
-    (  C = w ->
-       nl,
-       write('   '),
-       write_leaf_answer(LeafAnswer, [depth(deep)]),
-       read_input(LeafAnswer)
-    ;  C = p ->
-       nl,
-       write('   '),
-       write_leaf_answer(LeafAnswer, [depth(shallow)]),
-       read_input(LeafAnswer)
-    ;  member(C, [';', ' ', n]) ->
-       nl, write(';  ')
-    ;  C = h ->
-       help_message,
-       read_input(LeafAnswer)
-    ;  member(C, ['\n', .]) ->
+    (  member(C, ['\n', .]) ->
        nl, write(';  ... .'), nl,
-       throw('$stop_query')
-    ;  C = a ->
-       bb_put('$report_all', true),
-       nl, write(';  ')
-    ;  C = f ->
-       bb_get('$answer_count', Count),
-       More is 5 - Count mod 5,
-       bb_put('$report_n_more', More),
-       nl, write(';  ')
-    ;  read_input(LeafAnswer)
+       Stop = stop
+    ;  Stop = continue,
+       (  C = w ->
+          nl,
+          write('   '),
+          write_leaf_answer(LeafAnswer, [depth(deep)]),
+          read_input(LeafAnswer)
+       ;  C = p ->
+          nl,
+          write('   '),
+          write_leaf_answer(LeafAnswer, [depth(shallow)]),
+          read_input(LeafAnswer)
+       ;  member(C, [';', ' ', n]) ->
+          nl, write(';  ')
+       ;  C = h ->
+          help_message,
+          read_input(LeafAnswer)
+       ;  C = a ->
+          bb_put('$report_all', true),
+          nl, write(';  ')
+       ;  C = f ->
+          bb_get('$answer_count', Count),
+          More is 5 - Count mod 5,
+          bb_put('$report_n_more', More),
+          nl, write(';  ')
+       ;  read_input(LeafAnswer)
+       )
     ).
 
 needs_bracketing(Value, Op) :-
