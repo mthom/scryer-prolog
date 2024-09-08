@@ -1,0 +1,6 @@
+   true.
+   G = /p.
+   error(existence_error(procedure,q/0),q/0).
+   G = /q.
+   G = / (b:q).
+   G = b: /q.

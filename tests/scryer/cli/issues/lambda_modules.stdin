@@ -1,0 +1,6 @@
+use_module(a).
+make_goal_a(G), call(G).
+make_goal_b_raw(G), call(G).
+make_goal_b_raw(G), call(b:G).
+make_goal_b_scoped(G), call(G).
+make_goal_b_scoped_alt(G), call(G).
