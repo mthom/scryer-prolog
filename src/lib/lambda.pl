@@ -219,14 +219,22 @@ Further discussions
 % likely the result of an insufficient number of arguments.
 
 no_hat_call(MGoal_0) :-
-   strip_module(MGoal_0, _, Goal_0),
-   (  nonvar(Goal_0),
-      Goal_0 = (_^_)
+   strip_module(MGoal_0, _, GoalNaked_0),
+   % Strip just the automatically added lambda module prefix if needed
+   (    MGoal_0 = lambda:Goal_0 ->
+        true
+   ;    Goal_0 = MGoal_0
+   ),
+   (  nonvar(GoalNaked_0),
+      GoalNaked_0 = (_^_)
    -> throw(
 			error(
-				existence_error(lambda_parameter,MGoal_0),
+				existence_error(lambda_parameter,Goal_0),
 				_))
-	;	call(MGoal_0)
+	; % This calls the lambda at user scope, it can be overriden by 
+      % giving an explicit scope in Goal_0, because user:another_module:Goal
+      % is executed at another_module scope.
+      call(user:Goal_0)
    ).
 
 % I would like to replace this by:
