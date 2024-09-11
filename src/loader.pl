@@ -15,26 +15,198 @@
 :- use_module(library(lists)).
 :- use_module(library(pairs)).
 
-write_error(Error) :-
+write_term_dq(Term, DQ) :-
+    write_term(Term, [ignore_ops(false), numbervars(true), quoted(true), double_quotes(DQ)]).
+
+first_answer_indentation :-
     % '$fetch_global_var' is the core system call of bb_get/2, but
     % bb_get may not exist when write_error is first called, so fall
     % back on '$fetch_global_var'.
-    (  '$fetch_global_var'('$first_answer', false) ->
-       true
-    ;  write('   ') % if '$first_answer' isn't defined yet or true,
-                    % print indentation.
-    ),
+    (   '$fetch_global_var'('$answer_count', N), N > 0 ->
+        true
+    ;   % if '$answer_count' isn't defined yet or 0, print indentation.
+        write('   ') 
+    ).
+
+non_first_answer_indentation :-
+    ( '$fetch_global_var'('$answer_count', N), N > 0 -> write('   ') ; true).
+
+write_error(Error) :-
+    first_answer_indentation,
     (  current_prolog_flag(double_quotes, chars) ->
        DQ = true
     ;  DQ = false
     ),
     (  nonvar(Error),
        functor(Error, error, 2) ->
-       write_term(Error, [ignore_ops(false), numbervars(true), quoted(true), double_quotes(DQ)])
-    ;  write_term(throw(Error), [ignore_ops(false), numbervars(true), quoted(true), double_quotes(DQ)])
+       write_error_pretty(Error, DQ)
+    ;  true
     ),
+    write_term_dq(throw(Error), DQ),
     write('.').
 
+color_active :- catch(user:color_terminal, error(existence_error(_,_),_), false).
+
+ansi(Command) :- ( color_active -> ansi_(Command) ; true ).
+ansi_(reset) :- write('\33\[0m').
+ansi_(bold) :- write('\33\[1m').
+ansi_(black) :- write('\33\[30m').
+ansi_(red) :- write('\33\[31m').
+ansi_(green) :- write('\33\[32m').
+ansi_(yellow) :- write('\33\[33m').
+ansi_(blue) :- write('\33\[34m').
+ansi_(magenta) :- write('\33\[35m').
+ansi_(cyan) :- write('\33\[36m').
+ansi_(white) :- write('\33\[37m').
+
+write_error_pretty(error(Error, Extra), DQ) :-
+    (   Error == '$interrupt_thrown', Extra == repl/0 ->
+        write('\b\b\33\[K') % Delete ^C
+    ;   true
+    ),
+    (   nonvar(Error) ->
+        functor(Error, Functor, Arity),
+        write('% '), ansi(red), ansi(bold), write('Error'), ansi(white), write(': '),
+        write_term_dq(Functor/Arity, DQ), ansi(reset),
+        nl, write('   '),
+        (   write_error_(Error, Extra, DQ) ->
+            true
+        ;   % Fallback for unknown errors
+            Error =.. [_|Args],
+            write_error_pretty_list([arguments-Args,extra-Extra], DQ) 
+        ),
+        nl, write('   ')
+    ;   true
+    ).
+
+% This will get more elaborate when we have better errors
+write_error_(instantiation_error, Extra, DQ) :-
+    write_error_pretty_list([source-Extra], DQ).
+write_error_(type_error(ValidType, Culprit), Extra, DQ) :-
+    write_error_pretty_list([
+        'expected type'-ValidType,
+        culprit-Culprit,
+        source-Extra
+    ], DQ).
+write_error_(domain_error(ValidDomain, Culprit), Extra, DQ) :-
+    write_error_pretty_list([
+        'expected domain'-ValidDomain,
+        culprit-Culprit,
+        source-Extra
+    ], DQ).
+write_error_(existence_error(ObjectType, Culprit), Extra, DQ) :-
+    write_error_pretty_list([
+        'object type'-ObjectType,
+        culprit-Culprit,
+        source-Extra
+    ], DQ).
+write_error_(permission_error(Operation, PermissionType, Culprit), Extra, DQ) :-
+    write_error_pretty_list([
+        operation-Operation,
+        'permission type'-PermissionType,
+        culprit-Culprit,
+        source-Extra
+    ], DQ).
+write_error_(representation_error(Flag), Extra, DQ) :-
+    write_error_pretty_list([
+        flag-Flag,
+        source-Extra
+    ], DQ).
+write_error_(evaluation_error(E), Extra, DQ) :-
+    write_error_pretty_list([
+        error-E,
+        source-Extra
+    ], DQ).
+write_error_(resource_error(Resource), Extra, DQ) :-
+    write_error_pretty_list([
+        resource-Resource,
+        source-Extra
+    ], DQ).
+write_error_(syntax_error(E), Extra, DQ) :-
+    Extra = Source:Line,
+    write_error_pretty_list([
+        error-E,
+        source-Source,
+        line-Line
+    ], DQ),
+    % Diagnostic example, this could get much more elaborate.
+    (   E == incomplete_reduction ->
+        nl, write('   % '),
+        ansi(bold), write('Note: '), ansi(reset),
+        write('This usually happens because of an trailing or missing comma'),
+        nl, write('   %       '),
+        write('or other operators. Also, Scryer Prolog currently doesn''t'),
+        nl, write('   %       '),
+        write('give precise syntax error locations, so look in the clause'),
+        nl, write('   %       '),
+        write('immediately before the line indicated in the error.'),
+        nl, write('   %       '),
+        write('Related issue: <https://github.com/mthom/scryer-prolog/issues/302>')
+    ;   true
+    ).
+write_error_(system_error, Extra, DQ) :-
+    write_error_pretty_list([source-Extra], DQ).
+write_error_('$interrupt_thrown', Extra, DQ) :-
+    write_error_pretty_list([source-Extra], DQ).
+
+write_error_pretty_list([], _).
+write_error_pretty_list([L|Ls], DQ) :-
+    write_error_pretty_list_(Ls, L, DQ).
+
+write_error_property(Label, Term, DQ) :-
+    write('% '), ansi(bold), ansi(red), write('| '),
+    ansi(blue), write(Label), ansi(white), write(': '),
+    write_term_dq(Term, DQ), ansi(reset).
+
+write_error_pretty_list_([], Label-Term, DQ) :-
+    write_error_property(Label, Term, DQ).
+write_error_pretty_list_([L|Ls], Label-Term, DQ) :-
+    write_error_property(Label, Term, DQ),
+    nl, write('   '),
+    write_error_pretty_list_(Ls, L, DQ).
+
+write_warning(Warning) :-
+    first_answer_indentation,
+    (  current_prolog_flag(double_quotes, chars) ->
+       DQ = true
+    ;  DQ = false
+    ),
+    write('% '),
+    ansi(yellow), ansi(bold),
+    write('Warning'),
+    ansi(white), write(': '), ansi(reset),
+    write_warning_(Warning, DQ),
+    nl, non_first_answer_indentation.
+
+write_warning_(initialization_fail(Goal), DQ) :-
+    ansi(bold), write('initialization/1'), ansi(reset),
+    write(' failed for: '),
+    ansi(bold), write_term_dq(Goal, DQ), ansi(reset).
+write_warning_(goal_failed(Goal), DQ) :-
+    write('failed running goal: '),
+    ansi(bold), write_term_dq(Goal, DQ), ansi(reset).
+write_warning_(singletons(VarEqs, LinesRead, File), DQ) :-
+   write('singleton variables '),
+   ansi(bold),
+   write_comma_separated_vars(VarEqs),
+   ansi(reset),
+   write(' at line '),
+   ansi(bold), write(LinesRead), ansi(reset),
+   write(' of '),
+   ansi(bold), write(File), ansi(reset).
+write_warning_(goal_expansion(Pred), DQ) :-
+    write('clause body goal expansion failed because '),
+    ansi(bold), write_term_dq(Pred, DQ), ansi(reset),
+    write(' is not callable.').
+
+write_comma_separated_vars([L|Ls]) :-
+    write_comma_separated_vars_(Ls, L).
+
+write_comma_separated_vars_([], VN=_) :- write(VN).
+write_comma_separated_vars_([L|Ls], VN=_) :-
+    write(VN),
+    write(', '),
+    write_comma_separated_vars_(Ls, L).
 
 :- non_counted_backtracking '$print_message_and_fail'/1.
 
@@ -112,9 +284,7 @@ success_or_warning(Goal) :-
     (   call(Goal) ->
         true
     ;   %% initialization goals can fail without thwarting the load.
-        write('% Warning: initialization/1 failed for: '),
-        writeq(Goal),
-        nl
+        write_warning(initialization_fail(Goal))
     ).
 
 run_initialization_goals :-
@@ -167,14 +337,6 @@ load(Stream) :-
 load(_).
 
 
-print_comma_separated_list([VN=_]) :-
-    write(VN),
-    !.
-print_comma_separated_list([VN=_, VNEq | VNEqs]) :-
-    write(VN),
-    write(', '),
-    print_comma_separated_list([VNEq | VNEqs]).
-
 
 filter_anonymous_vars([], []).
 filter_anonymous_vars([VN=V | VNEqs0], VNEqs) :-
@@ -188,14 +350,8 @@ warn_about_singletons([], _).
 warn_about_singletons([Singleton|Singletons], LinesRead) :-
     (  filter_anonymous_vars([Singleton|Singletons], VarEqs),
        VarEqs \== [] ->
-       write('% Warning: singleton variables '),
-       print_comma_separated_list(VarEqs),
-       write(' at line '),
-       write(LinesRead),
-       write(' of '),
        prolog_load_context(file, File),
-       write(File),
-       nl
+       write_warning(singletons(VarEqs, LinesRead, File))
     ;  true
     ).
 
@@ -283,14 +439,6 @@ module_expanded_head_variables(Head, HeadVars) :-
     ;  HeadVars = []
     ).
 
-
-print_goal_expansion_warning(Pred) :-
-    nl,
-    write('% Warning: clause body goal expansion failed because '),
-    writeq(Pred),
-    write(' is not callable.'),
-    nl.
-
 expand_term_goals(Terms0, Terms) :-
     (  Terms0 = (Head1 :- Body0) ->
        (  var(Head1) ->
@@ -301,7 +449,7 @@ expand_term_goals(Terms0, Terms) :-
              module_expanded_head_variables(Head2, HeadVars),
              catch(expand_goal(Body0, Target, Body1, HeadVars, []),
                    error(type_error(callable, Pred), _),
-                   (  loader:print_goal_expansion_warning(Pred),
+                   (  loader:write_warning(goal_expansion(Pred)),
                       builtins:(Body1 = Body0)
                    )),
              Terms = (Module:Head2 :- Body1)
@@ -311,7 +459,7 @@ expand_term_goals(Terms0, Terms) :-
           prolog_load_context(module, Target),
           catch(expand_goal(Body0, Target, Body1, HeadVars, []),
                 error(type_error(callable, Pred), _),
-                (  loader:print_goal_expansion_warning(Pred),
+                (  loader:write_warning(goal_expansion(Pred)),
                    builtins:(Body1 = Body0)
                 )),
           Terms = (Head1 :- Body1)

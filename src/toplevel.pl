@@ -8,6 +8,7 @@
 :- use_module(library(lists)).
 :- use_module(library(si)).
 :- use_module(library(os)).
+:- use_module(library(ffi)).
 
 :- use_module(library('$project_atts')).
 :- use_module(library('$atts')).
@@ -28,6 +29,12 @@ load_scryerrc :-
 
 '$repl' :-
     asserta('$toplevel':started),
+    (   use_foreign_module("libc.so.6", [isatty([sint32], sint32)]),
+        ffi:isatty(1,1)
+    ->  % Stdout is a terminal, only works on UNIX I think
+        assertz(user:color_terminal)
+    ;   true
+    ),
     raw_argv(Args0),
     (   append(Args1, ["--"|_], Args0) ->
         Args = Args1
@@ -142,16 +149,13 @@ run_goals([g(Gs0)|Goals]) :- !,
                   write_term(Exception, [double_quotes(DQ)]), nl % halt?
               )
         ) -> true
-    ;   write('% Warning: initialization failed for: '),
-        write_term(Goal, [variable_names(VNs),double_quotes(DQ)]), nl
+    ;   loader:write_warning(goal_failed(Goal))
     ),
     run_goals(Goals).
 run_goals([c(Mod)|Goals]) :- !,
     (   catch(consult(Mod), E, print_exception(E)) ->
         true
-    ;   write('% Warning: initialization failed for: '),
-        double_quotes_option(DQ),
-        write_term(consult(Mod), [double_quotes(DQ)]), nl
+    ;   loader:write_warning(goal_failed(consult(Mod)))
     ),
     run_goals(Goals).
 run_goals([Goal|_]) :-
@@ -366,7 +370,9 @@ write_eqs_and_read_input(B, VarList, AttrVars) :-
        )
     ;  loader:thread_goals(Goals, ThreadedGoals, (',')),
        write_eq(ThreadedGoals, NewVarList0, 20),
-       read_input(ThreadedGoals, NewVarList0)
+       % This is for correct printing if you Ctrl-C while the toplevel is waiting
+       % for a command.
+       catch(read_input(ThreadedGoals, NewVarList0), E, (nl, write(';  '), print_exception(E)))
     ).
 
 read_input(ThreadedGoals, NewVarList) :-
