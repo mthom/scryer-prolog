@@ -35,7 +35,7 @@ fn hello_world() {
 fn syntax_error() {
     load_module_test(
         "tests-pl/syntax_error.pl",
-        "   error(syntax_error(incomplete_reduction),read_term/3:6).\n",
+        "   % Error: syntax_error/1\n   % | error: incomplete_reduction\n   % | source: read_term/3\n   % | line: 6\n   % Note: This usually happens because of an trailing or missing comma\n   %       or other operators. Also, Scryer Prolog currently doesn't\n   %       give precise syntax error locations, so look in the clause\n   %       immediately before the line indicated in the error.\n   %       Related issue: <https://github.com/mthom/scryer-prolog/issues/302>\n   throw(error(syntax_error(incomplete_reduction),read_term/3:6)).\n",
     );
 }
 
