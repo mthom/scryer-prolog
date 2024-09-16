@@ -14,31 +14,29 @@
 :- meta_predicate check_(1, ?, ?).
 
 
-/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   must_be(Type, Term)
-
-   This predicate is intended for type-checks of built-in predicates.
-
-   It asserts that Term is:
-
-       1) instantiated *and*
-       2) instantiated to an instance of the given Type.
-
-   It corresponds to usage mode +Term.
-
-   Currently, the following types are supported:
-
-       - atom
-       - boolean
-       - character
-       - chars
-       - in_character
-       - integer
-       - list
-       - octet_character
-       - octet_chars
-       - term
-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
+%% must_be(Type, Term)
+%
+% This predicate is intended for type-checks of built-in predicates.
+%
+% It asserts that Term is:
+%
+%     1) instantiated *and*
+%     2) instantiated to an instance of the given Type.
+%
+% It corresponds to usage mode +Term.
+%
+% Currently, the following types are supported:
+%
+%     - atom
+%     - boolean
+%     - character
+%     - chars
+%     - in_character
+%     - integer
+%     - list
+%     - octet_character
+%     - octet_chars
+%     - term
 
 must_be(Type, Term) :-
         must_be_(type, Type),
@@ -142,19 +140,16 @@ type(boolean).
 type(term).
 type(not_less_than_zero).
 
-/* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   can_be(Type, Term)
-
-   This predicate is intended for type-checks of built-in predicates.
-
-   It asserts that there is a substitution which, if applied to Term,
-   makes it an instance of Type.
-
-   It corresponds to usage mode ?Term.
-
-   It supports the same types as must_be/2.
-- - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
-
+%% can_be(Type, Term)
+%
+% This predicate is intended for type-checks of built-in predicates.
+%
+% It asserts that there is a substitution which, if applied to Term,
+% makes it an instance of Type.
+%
+% It corresponds to usage mode ?Term.
+%
+% It supports the same types as must_be/2.
 
 can_be(Type, Term) :-
         must_be(type, Type),
