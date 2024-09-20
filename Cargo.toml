@@ -35,6 +35,7 @@ syn = { version = "2.0.72", features = ['full', 'visit', 'extra-traits'] }
 to-syn-value = "0.1.1"
 to-syn-value_derive = "0.1.1"
 walkdir = "2"
+cbindgen = { version = "0.27.0", default-features = false }
 
 [dependencies]
 arcu = { version = "0.1.1", features = ["thread_local_counter"] }
@@ -46,7 +47,7 @@ bytes = "1"
 chrono = "0.4.38"
 cpu-time = "1.0.0"
 crrl = "0.9.0"
-dashu = "0.4.2"
+dashu = { version = "0.4.2", features = ["num-traits"] }
 derive_more = "0.99.18"
 dirs-next = "2.0.0"
 divrem = "1.0.0"
@@ -71,6 +72,7 @@ ryu = "1.0.18"
 sha3 = "0.10.8"
 smallvec = "1.13.2"
 static_assertions = "1.1.0"
+num-traits = "0.2.19"
 
 scraper = { version = "0.19.1", default-features = false, features = [
     "errors",
@@ -79,7 +81,7 @@ ego-tree = "0.6.2"
 
 
 serde_json = "1.0.122"
-serde = "1.0.204"
+serde = { version="1.0.204", features = ["derive"] }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 crossterm = { version = "0.28.1", optional = true }

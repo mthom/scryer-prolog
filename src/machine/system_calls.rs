@@ -8,8 +8,6 @@ use num_order::NumOrd;
 
 use crate::arena::*;
 use crate::atom_table::*;
-#[cfg(feature = "ffi")]
-use crate::ffi::*;
 use crate::forms::*;
 use crate::heap_iter::*;
 use crate::heap_print::*;
@@ -19,6 +17,8 @@ use crate::instructions::*;
 use crate::machine;
 use crate::machine::code_walker::*;
 use crate::machine::copier::*;
+#[cfg(feature = "ffi")]
+use crate::machine::ffi::*;
 use crate::machine::heap::*;
 use crate::machine::machine_errors::*;
 use crate::machine::machine_indices::*;
@@ -4745,7 +4745,10 @@ impl Machine {
         let return_value = self.deref_register(3);
         if let Some(function_name) = self.machine_st.value_to_str_like(function_name) {
             let stub_gen = || functor_stub(atom!("foreign_call"), 3);
-            fn map_arg(machine_st: &mut MachineState, source: HeapCellValue) -> crate::ffi::Value {
+            fn map_arg(
+                machine_st: &mut MachineState,
+                source: HeapCellValue,
+            ) -> crate::machine::ffi::Value {
                 match Number::try_from(source) {
                     Ok(Number::Fixnum(n)) => Value::Int(n.get_num()),
                     Ok(Number::Float(n)) => Value::Float(n.into_inner()),

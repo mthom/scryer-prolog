@@ -9,6 +9,7 @@ use crate::parser::parser::{Parser, Tokens};
 use crate::read::{write_term_to_heap, TermWriteResult};
 use indexmap::IndexMap;
 
+use super::QueryMatch;
 use super::{
     streams::Stream, Atom, AtomCell, HeapCellValue, HeapCellValueTag, Machine, MachineConfig,
     QueryResolutionLine, QueryResult, Value,
@@ -138,7 +139,7 @@ impl Iterator for QueryState<'_> {
         // choice point, so we should break.
         self.machine.machine_st.backtrack();
 
-        Some(Ok(QueryResolutionLine::Match(bindings)))
+        Some(Ok(QueryResolutionLine::Match(QueryMatch { bindings })))
     }
 }
 
@@ -271,10 +272,10 @@ mod tests {
             output,
             Ok(QueryResolution::Matches(vec![
                 QueryMatch::from(btreemap! {
-                    "P" => Value::from("p1"),
+                    "P" => Value::String("p1".into()),
                 }),
                 QueryMatch::from(btreemap! {
-                    "P" => Value::from("p2"),
+                    "P" => Value::String("p2".into()),
                 }),
             ]))
         );
@@ -425,10 +426,10 @@ mod tests {
             output,
             Ok(QueryResolution::Matches(vec![
                 QueryMatch::from(btreemap! {
-                    "P" => Value::from("p1"),
+                    "P" => Value::String("p1".into()),
                 }),
                 QueryMatch::from(btreemap! {
-                    "P" => Value::from("p2"),
+                    "P" => Value::String("p2".into()),
                 }),
             ]))
         );
@@ -465,50 +466,6 @@ mod tests {
 
     #[test]
     #[cfg_attr(miri, ignore = "it takes too long to run")]
-    #[ignore = "uses old flawed interface"]
-    fn integration_test() {
-        let mut machine = Machine::new_lib();
-
-        // File with test commands, i.e. program code to consult and queries to run
-        let code = include_str!("./lib_integration_test_commands.txt");
-
-        // Split the code into blocks
-        let blocks = code.split("=====");
-
-        let mut i = 0;
-        let mut last_result: Option<_> = None;
-        // Iterate over the blocks
-        for block in blocks {
-            // Trim the block to remove any leading or trailing whitespace
-            let block = block.trim();
-
-            // Skip empty blocks
-            if block.is_empty() {
-                continue;
-            }
-
-            // Check if the block is a query
-            if let Some(query) = block.strip_prefix("query") {
-                // Parse and execute the query
-                let result = machine.run_query(query.to_string());
-                assert!(result.is_ok());
-
-                last_result = Some(result);
-            } else if let Some(code) = block.strip_prefix("consult") {
-                // Load the code into the machine
-                machine.consult_module_string("facts", code.to_string());
-            } else if let Some(result) = block.strip_prefix("result") {
-                i += 1;
-                if let Some(Ok(ref last_result)) = last_result {
-                    println!("\n\n=====Result No. {i}=======\n{last_result}\n===============");
-                    assert_eq!(last_result.to_string(), result.to_string().trim(),)
-                }
-            }
-        }
-    }
-
-    #[test]
-    #[cfg_attr(miri, ignore = "it takes too long to run")]
     fn findall() {
         let mut machine = Machine::new_lib();
 
@@ -531,8 +488,8 @@ mod tests {
                 btreemap! {
                     "Result" => Value::List(
                         Vec::from([
-                            Value::List([Value::from("p1"), Value::from("b")].into()),
-                            Value::List([Value::from("p2"), Value::from("b")].into()),
+                            Value::List([Value::String("p1".into()), Value::String("b".into())].into()),
+                            Value::List([Value::String("p2".into()), Value::String("b".into())].into()),
                         ])
                     ),
                 }
@@ -690,7 +647,7 @@ mod tests {
         let result = machine.run_query(query);
 
         let expected = Value::Structure(
-            // Composite term
+            // Compound term
             "a".into(),
             vec![
                 Value::String("asdf".into()), // String

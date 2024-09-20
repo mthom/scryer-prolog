@@ -1,123 +1,28 @@
-use crate::atom_table::*;
-use crate::heap_iter::{stackful_post_order_iter, NonListElider};
-use crate::machine::{F64Offset, F64Ptr, Fixnum, HeapCellValueTag};
-use crate::parser::ast::{Var, VarPtr};
-use dashu::*;
-use indexmap::IndexMap;
-use ordered_float::OrderedFloat;
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
-use std::collections::HashMap;
-use std::fmt::Display;
-use std::fmt::Write;
 use std::iter::FromIterator;
 
 use super::Machine;
 use super::{HeapCellValue, Number};
+use crate::atom_table::*;
+use crate::heap_iter::{stackful_post_order_iter, NonListElider};
+use crate::machine::{F64Offset, F64Ptr, Fixnum, HeapCellValueTag};
+use crate::parser::ast::{Var, VarPtr};
+
+use dashu::*;
+use indexmap::IndexMap;
+use integer::IBig;
+use integer::UBig;
+use num_traits::cast::ToPrimitive;
+use ordered_float::OrderedFloat;
+use serde::ser::SerializeMap;
+use serde::ser::SerializeSeq;
+use serde::Serialize;
+use serde::Serializer;
 
 pub type QueryResult = Result<QueryResolution, String>;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum QueryResolution {
-    True,
-    False,
-    Matches(Vec<QueryMatch>),
-}
-
-pub fn write_prolog_value_as_json<W: Write>(
-    writer: &mut W,
-    value: &Value,
-) -> Result<(), std::fmt::Error> {
-    match value {
-        Value::Integer(i) => write!(writer, "{}", i),
-        Value::Float(f) => write!(writer, "{}", f),
-        Value::Rational(r) => write!(writer, "{}", r),
-        Value::Atom(a) => writer.write_str(a.as_str()),
-        Value::String(s) => {
-            if let Err(_e) = serde_json::from_str::<serde_json::Value>(s.as_str()) {
-                //treat as string literal
-                //escape double quotes
-                write!(
-                    writer,
-                    "\"{}\"",
-                    s.replace('\"', "\\\"")
-                        .replace('\n', "\\n")
-                        .replace('\t', "\\t")
-                        .replace('\r', "\\r")
-                )
-            } else {
-                //return valid json string
-                writer.write_str(s)
-            }
-        }
-        Value::List(l) => {
-            writer.write_char('[')?;
-            if let Some((first, rest)) = l.split_first() {
-                write_prolog_value_as_json(writer, first)?;
-
-                for other in rest {
-                    writer.write_char(',')?;
-                    write_prolog_value_as_json(writer, other)?;
-                }
-            }
-            writer.write_char(']')
-        }
-        Value::Structure(s, l) => {
-            write!(writer, "\"{}\":[", s.as_str())?;
-
-            if let Some((first, rest)) = l.split_first() {
-                write_prolog_value_as_json(writer, first)?;
-                for other in rest {
-                    writer.write_char(',')?;
-                    write_prolog_value_as_json(writer, other)?;
-                }
-            }
-            writer.write_char(']')
-        }
-        _ => writer.write_str("null"),
-    }
-}
-
-fn write_prolog_match_as_json<W: std::fmt::Write>(
-    writer: &mut W,
-    query_match: &QueryMatch,
-) -> Result<(), std::fmt::Error> {
-    writer.write_char('{')?;
-    let mut iter = query_match.bindings.iter();
-
-    if let Some((k, v)) = iter.next() {
-        write!(writer, "\"{k}\":")?;
-        write_prolog_value_as_json(writer, v)?;
-
-        for (k, v) in iter {
-            write!(writer, ",\"{k}\":")?;
-            write_prolog_value_as_json(writer, v)?;
-        }
-    }
-    writer.write_char('}')
-}
-
-impl Display for QueryResolution {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            QueryResolution::True => f.write_str("true"),
-            QueryResolution::False => f.write_str("false"),
-            QueryResolution::Matches(matches) => {
-                f.write_char('[')?;
-                if let Some((first, rest)) = matches.split_first() {
-                    write_prolog_match_as_json(f, first)?;
-                    for other in rest {
-                        f.write_char(',')?;
-                        write_prolog_match_as_json(f, other)?;
-                    }
-                }
-                f.write_char(']')
-            }
-        }
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 pub struct QueryMatch {
     pub bindings: BTreeMap<String, Value>,
 }
@@ -126,7 +31,40 @@ pub struct QueryMatch {
 pub enum QueryResolutionLine {
     True,
     False,
-    Match(BTreeMap<String, Value>),
+    Match(QueryMatch),
+}
+
+impl Serialize for QueryResolutionLine {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            QueryResolutionLine::True => serializer.serialize_bool(true),
+            QueryResolutionLine::False => serializer.serialize_bool(false),
+            QueryResolutionLine::Match(m) => m.serialize(serializer),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum QueryResolution {
+    True,
+    False,
+    Matches(Vec<QueryMatch>),
+}
+
+impl Serialize for QueryResolution {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            QueryResolution::True => serializer.serialize_bool(true),
+            QueryResolution::False => serializer.serialize_bool(false),
+            QueryResolution::Matches(matches) => matches.serialize(serializer),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -139,6 +77,212 @@ pub enum Value {
     List(Vec<Value>),
     Structure(String, Vec<Value>),
     Var(String),
+}
+
+impl Value {
+    pub fn conjunction(conj: &[Value]) -> Value {
+        if conj.is_empty() {
+            panic!("can't create empty conjunction");
+        } else if conj.len() == 1 {
+            return conj[0].clone();
+        }
+
+        let mut conj_rev = conj.iter().rev();
+
+        let last = conj_rev.next().unwrap().clone();
+        let beflast = conj_rev.next().unwrap().clone();
+        let mut conj_term = Value::Structure(",".into(), vec![beflast, last]);
+
+        for val in conj_rev {
+            conj_term = Value::Structure(",".into(), vec![val.clone(), conj_term]);
+        }
+
+        conj_term
+    }
+
+    pub fn disjunction(disj: &[Value]) -> Value {
+        if disj.is_empty() {
+            panic!("can't create empty disjunction");
+        } else if disj.len() == 1 {
+            return disj[0].clone();
+        }
+
+        let mut disj_rev = disj.iter().rev();
+
+        let last = disj_rev.next().unwrap().clone();
+        let beflast = disj_rev.next().unwrap().clone();
+        let mut disj_term = Value::Structure(";".into(), vec![beflast, last]);
+
+        for val in disj_rev {
+            disj_term = Value::Structure(";".into(), vec![val.clone(), disj_term]);
+        }
+
+        disj_term
+    }
+}
+
+impl From<&QueryResolutionLine> for Value {
+    fn from(qrl: &QueryResolutionLine) -> Self {
+        match qrl {
+            QueryResolutionLine::True => Value::Atom("true".into()),
+            QueryResolutionLine::False => Value::Atom("false".into()),
+            QueryResolutionLine::Match(m) => Value::conjunction(
+                &m.bindings
+                    .iter()
+                    .map(|(k, v)| {
+                        Value::Structure("=".into(), vec![Value::Var(k.clone()), v.clone()])
+                    })
+                    .collect::<Vec<_>>(),
+            ),
+        }
+    }
+}
+
+impl From<&QueryResolution> for Value {
+    fn from(qr: &QueryResolution) -> Self {
+        match qr {
+            QueryResolution::True => Value::Atom("true".into()),
+            QueryResolution::False => Value::Atom("false".into()),
+            QueryResolution::Matches(matches) => Value::disjunction(
+                &matches
+                    .iter()
+                    .map(|m| {
+                        Value::conjunction(
+                            &m.bindings
+                                .iter()
+                                .map(|(k, v)| {
+                                    Value::Structure(
+                                        "=".into(),
+                                        vec![Value::Var(k.clone()), v.clone()],
+                                    )
+                                })
+                                .collect::<Vec<_>>(),
+                        )
+                    })
+                    .collect::<Vec<_>>(),
+            ),
+        }
+    }
+}
+
+struct ValueRationalInner {
+    numerator: IBig,
+    denominator: UBig,
+}
+
+impl Serialize for ValueRationalInner {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut seq = serializer.serialize_seq(Some(2))?;
+        match self.numerator.to_i64() {
+            Some(small) => seq.serialize_element(&small)?,
+            None => seq.serialize_element(&self.numerator.to_string())?,
+        }
+        match self.denominator.to_u64() {
+            Some(small) => seq.serialize_element(&small)?,
+            None => seq.serialize_element(&self.denominator.to_string())?,
+        }
+        seq.end()
+    }
+}
+
+impl Serialize for Value {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            Value::Integer(i) => match i.to_i64() {
+                Some(small) => serializer.serialize_i64(small),
+                None => {
+                    let mut map = serializer.serialize_map(Some(1))?;
+                    map.serialize_entry("integer", &i.to_string())?;
+                    map.end()
+                }
+            },
+            Value::Rational(r) => {
+                let (numerator, denominator) = r.clone().into_parts();
+                let mut map = serializer.serialize_map(Some(1))?;
+                map.serialize_entry(
+                    "rational",
+                    &ValueRationalInner {
+                        numerator,
+                        denominator,
+                    },
+                )?;
+                map.end()
+            }
+            Value::Float(f) => serializer.serialize_f64(f.into_inner()),
+            Value::Atom(a) => match a.as_str() {
+                "true" => serializer.serialize_bool(true),
+                "false" => serializer.serialize_bool(false),
+                "[]" => {
+                    // This should never be reached if this was obtained from run_query_iter(),
+                    // but is here for completeness.
+                    let seq = serializer.serialize_seq(Some(0))?;
+                    seq.end()
+                }
+                _ => {
+                    let mut map = serializer.serialize_map(Some(1))?;
+                    map.serialize_entry("atom", a)?;
+                    map.end()
+                }
+            },
+            Value::String(s) => serializer.serialize_str(s),
+            Value::List(l) => l.serialize(serializer),
+            Value::Structure(f, args) => {
+                if f == "," && args.len() == 2 {
+                    // Conjunction syntax sugar
+                    let mut conj = vec![args[0].clone()];
+                    let mut curr_val = args[1].clone();
+                    loop {
+                        if let Value::Structure(f, args) = &curr_val {
+                            if f == "," && args.len() == 2 {
+                                conj.push(args[0].clone());
+                                curr_val = args[1].clone();
+                                continue;
+                            }
+                        }
+                        conj.push(curr_val);
+                        break;
+                    }
+                    let mut map = serializer.serialize_map(Some(1))?;
+                    map.serialize_entry("conjunction", &conj)?;
+                    map.end()
+                } else if f == ";" && args.len() == 2 {
+                    // Disjunction syntax sugar
+                    let mut disj = vec![args[0].clone()];
+                    let mut curr_val = args[1].clone();
+                    loop {
+                        if let Value::Structure(f, args) = &curr_val {
+                            if f == ";" && args.len() == 2 {
+                                disj.push(args[0].clone());
+                                curr_val = args[1].clone();
+                                continue;
+                            }
+                        }
+                        disj.push(curr_val);
+                        break;
+                    }
+                    let mut map = serializer.serialize_map(Some(1))?;
+                    map.serialize_entry("disjunction", &disj)?;
+                    map.end()
+                } else {
+                    let mut map = serializer.serialize_map(Some(2))?;
+                    map.serialize_entry("functor", f)?;
+                    map.serialize_entry("args", args)?;
+                    map.end()
+                }
+            }
+            Value::Var(v) => {
+                let mut map = serializer.serialize_map(Some(1))?;
+                map.serialize_entry("variable", v)?;
+                map.end()
+            }
+        }
+    }
 }
 
 /// This is an auxiliary function to turn a count into names of anonymous variables like _A, _B,
@@ -428,7 +572,7 @@ impl From<Vec<QueryResolutionLine>> for QueryResolution {
         // If there is only one line, and it is an empty match, return false.
         if query_result_lines.len() == 1 {
             if let QueryResolutionLine::Match(m) = query_result_lines[0].clone() {
-                if m.is_empty() {
+                if m.bindings.is_empty() {
                     return QueryResolution::False;
                 }
             }
@@ -448,10 +592,9 @@ impl From<Vec<QueryResolutionLine>> for QueryResolution {
         // If there is at least one match, return all matches.
         let all_matches = query_result_lines
             .into_iter()
-            .filter(|l| matches!(l, QueryResolutionLine::Match(_)))
-            .map(|l| match l {
-                QueryResolutionLine::Match(m) => QueryMatch::from(m),
-                _ => unreachable!(),
+            .filter_map(|l| match l {
+                QueryResolutionLine::Match(m) => Some(m),
+                _ => None,
             })
             .collect::<Vec<_>>();
 
@@ -471,173 +614,171 @@ impl FromIterator<QueryResolutionLine> for QueryResolution {
     }
 }
 
-fn split_response_string(input: &str) -> Vec<String> {
-    let mut level_bracket = 0;
-    let mut level_parenthesis = 0;
-    let mut in_double_quotes = false;
-    let mut in_single_quotes = false;
-    let mut start = 0;
-    let mut result = Vec::new();
+#[cfg(test)]
+mod tests {
+    use rational::RBig;
+    use serde_json::json;
 
-    for (i, c) in input.chars().enumerate() {
-        match c {
-            '[' => level_bracket += 1,
-            ']' => level_bracket -= 1,
-            '(' => level_parenthesis += 1,
-            ')' => level_parenthesis -= 1,
-            '"' => in_double_quotes = !in_double_quotes,
-            '\'' => in_single_quotes = !in_single_quotes,
-            ',' if level_bracket == 0
-                && level_parenthesis == 0
-                && !in_double_quotes
-                && !in_single_quotes =>
+    use super::*;
+
+    #[test]
+    fn value_json_serialize() {
+        let ibig = IBig::from(10).pow(100);
+        let ubig = UBig::from(7u32).pow(100);
+        let prolog_value = Value::Structure(
+            "a".into(),
+            vec![
+                Value::Atom("asdf".into()),
+                Value::Atom("true".into()),
+                Value::Atom("false".into()),
+                Value::String("fdsa".into()),
+                Value::List(vec![Value::Integer(1.into()), Value::Float(2.43.into())]),
+                Value::Integer(ibig.clone()),
+                Value::Rational(RBig::from_parts(1.into(), 7u32.into())),
+                Value::Rational(RBig::from_parts(ibig.clone(), 7u32.into())),
+                Value::Rational(RBig::from_parts(1.into(), ubig.clone())),
+                Value::Rational(RBig::from_parts(ibig.clone(), ubig.clone())),
+                Value::Var("X".into()),
+            ],
+        );
+
+        let json_value = json!({
+            "functor": "a",
+            "args": [
+                { "atom": "asdf" },
+                true,
+                false,
+                "fdsa",
+                [1, 2.43],
+                { "integer": ibig.to_string() },
+                { "rational": [1, 7] },
+                { "rational": [ibig.to_string(), 7] },
+                { "rational": [1, ubig.to_string()] },
+                { "rational": [ibig.to_string(), ubig.to_string()] },
+                { "variable": "X" },
+            ],
+        });
+
+        assert_eq!(json_value, serde_json::to_value(prolog_value).unwrap());
+    }
+
+    #[test]
+    fn value_json_serialize_conjuntions() {
+        let prolog_value = Value::List(vec![
+            Value::Structure(
+                ",".into(),
+                vec![
+                    Value::Integer(1.into()),
+                    Value::Structure(
+                        ",".into(),
+                        vec![Value::String("asdf".into()), Value::Atom("fdsa".into())],
+                    ),
+                ],
+            ),
+            Value::Structure(
+                ",".into(),
+                vec![
+                    Value::Integer(1.into()),
+                    Value::String("asdf".into()),
+                    Value::Atom("fdsa".into()),
+                ],
+            ),
+        ]);
+
+        let json_value = json!([
+            { "conjunction": [1, "asdf", { "atom": "fdsa" }] },
+            { "functor": ",", "args": [1, "asdf", { "atom": "fdsa" }] },
+        ]);
+
+        assert_eq!(json_value, serde_json::to_value(prolog_value).unwrap());
+    }
+
+    #[test]
+    fn value_json_serialize_disjunctions() {
+        let prolog_value = Value::List(vec![
+            Value::Structure(
+                ";".into(),
+                vec![
+                    Value::Integer(1.into()),
+                    Value::Structure(
+                        ";".into(),
+                        vec![Value::String("asdf".into()), Value::Atom("fdsa".into())],
+                    ),
+                ],
+            ),
+            Value::Structure(
+                ";".into(),
+                vec![
+                    Value::Integer(1.into()),
+                    Value::String("asdf".into()),
+                    Value::Atom("fdsa".into()),
+                ],
+            ),
+        ]);
+
+        let json_value = json!([
+            { "disjunction": [1, "asdf", { "atom": "fdsa" }] },
+            { "functor": ";", "args": [1, "asdf", { "atom": "fdsa" }] },
+        ]);
+
+        assert_eq!(json_value, serde_json::to_value(prolog_value).unwrap());
+    }
+
+    #[test]
+    fn query_resolution_line_json() {
+        let qrl = QueryResolutionLine::True;
+        let json_value = json!(true);
+        assert_eq!(json_value, serde_json::to_value(qrl).unwrap());
+
+        let qrl = QueryResolutionLine::False;
+        let json_value = json!(false);
+        assert_eq!(json_value, serde_json::to_value(qrl).unwrap());
+
+        let qrl = QueryResolutionLine::Match(QueryMatch::from(btreemap! {
+            "X" => Value::Atom("asdf".into()),
+            "Y" => Value::String("fdsa".into()),
+        }));
+        let json_value = json!({
+            "bindings": {
+                "X": { "atom": "asdf" },
+                "Y": "fdsa",
+            },
+        });
+        assert_eq!(json_value, serde_json::to_value(qrl).unwrap());
+    }
+
+    #[test]
+    fn query_resolution_json() {
+        let qrl = QueryResolution::True;
+        let json_value = json!(true);
+        assert_eq!(json_value, serde_json::to_value(qrl).unwrap());
+
+        let qrl = QueryResolution::False;
+        let json_value = json!(false);
+        assert_eq!(json_value, serde_json::to_value(qrl).unwrap());
+
+        let qrl = QueryResolution::Matches(vec![
+            QueryMatch::from(btreemap! {
+                "X" => Value::Atom("a".into()),
+            }),
+            QueryMatch::from(btreemap! {
+                "X" => Value::Atom("b".into()),
+                "Y" => Value::Atom("c".into()),
+            }),
+        ]);
+        let json_value = json!([
             {
-                result.push(input[start..i].trim().to_string());
-                start = i + 1;
-            }
-            _ => {}
-        }
-    }
-
-    result.push(input[start..].trim().to_string());
-    result
-}
-
-fn split_key_value_pairs(input: &str) -> Vec<(String, String)> {
-    let items = split_response_string(input);
-    let mut result = Vec::new();
-
-    for item in items {
-        let parts: Vec<&str> = item.splitn(2, '=').collect();
-        if parts.len() == 2 {
-            let key = parts[0].trim().to_string();
-            let value = parts[1].trim().to_string();
-            result.push((key, value));
-        }
-    }
-
-    result
-}
-
-fn parse_prolog_response(input: &str) -> HashMap<String, String> {
-    let mut map: HashMap<String, String> = HashMap::new();
-    // Use regex to match strings including commas inside them
-    for result in split_key_value_pairs(input) {
-        let key = result.0;
-        let value = result.1;
-        // cut off at given characters/strings:
-        let value = value.split('\n').next().unwrap().to_string();
-        let value = value.split(' ').next().unwrap().to_string();
-        let value = value.split('\t').next().unwrap().to_string();
-        let value = value.split("error").next().unwrap().to_string();
-        map.insert(key, value);
-    }
-
-    map
-}
-
-impl TryFrom<String> for QueryResolutionLine {
-    type Error = ();
-    fn try_from(string: String) -> Result<Self, Self::Error> {
-        match string.as_str() {
-            "true" => Ok(QueryResolutionLine::True),
-            "false" => Ok(QueryResolutionLine::False),
-            _ => Ok(QueryResolutionLine::Match(
-                parse_prolog_response(&string)
-                    .iter()
-                    .map(|(k, v)| -> Result<(String, Value), ()> {
-                        let key = k.to_string();
-                        let value = v.to_string();
-                        Ok((key, Value::try_from(value)?))
-                    })
-                    .filter_map(Result::ok)
-                    .collect::<BTreeMap<_, _>>(),
-            )),
-        }
-    }
-}
-
-fn split_nested_list(input: &str) -> Vec<String> {
-    let mut level = 0;
-    let mut start = 0;
-    let mut result = Vec::new();
-
-    for (i, c) in input.chars().enumerate() {
-        match c {
-            '[' => level += 1,
-            ']' => level -= 1,
-            ',' if level == 0 => {
-                result.push(input[start..i].trim().to_string());
-                start = i + 1;
-            }
-            _ => {}
-        }
-    }
-
-    result.push(input[start..].trim().to_string());
-    result
-}
-
-impl TryFrom<String> for Value {
-    type Error = ();
-    fn try_from(string: String) -> Result<Self, Self::Error> {
-        let trimmed = string.trim();
-
-        if let Ok(float_value) = string.parse::<f64>() {
-            Ok(Value::Float(OrderedFloat(float_value)))
-        } else if let Ok(int_value) = string.parse::<i128>() {
-            Ok(Value::Integer(int_value.into()))
-        } else if trimmed.starts_with('\'') && trimmed.ends_with('\'')
-            || trimmed.starts_with('"') && trimmed.ends_with('"')
-        {
-            Ok(Value::String(trimmed[1..trimmed.len() - 1].into()))
-        } else if trimmed.starts_with('[') && trimmed.ends_with(']') {
-            let split = split_nested_list(&trimmed[1..trimmed.len() - 1]);
-
-            let values = split
-                .into_iter()
-                .map(Value::try_from)
-                .collect::<Result<Vec<_>, _>>()?;
-
-            Ok(Value::List(values))
-        } else if trimmed.starts_with('{') && trimmed.ends_with('}') {
-            let iter = trimmed[1..trimmed.len() - 1].split(',');
-            let mut values = vec![];
-
-            for value in iter {
-                let items: Vec<_> = value.split(':').collect();
-                if items.len() == 2 {
-                    let _key = items[0].to_string();
-                    let value = items[1].to_string();
-                    values.push(Value::try_from(value)?);
-                }
-            }
-
-            Ok(Value::Structure("{}".into(), values))
-        } else if trimmed.starts_with("<<") && trimmed.ends_with(">>") {
-            let iter = trimmed[2..trimmed.len() - 2].split(',');
-            let mut values = vec![];
-
-            for value in iter {
-                let items: Vec<_> = value.split(':').collect();
-                if items.len() == 2 {
-                    let _key = items[0].to_string();
-                    let value = items[1].to_string();
-                    values.push(Value::try_from(value)?);
-                }
-            }
-
-            Ok(Value::Structure("<<>>".into(), values))
-        } else if !trimmed.contains(',') && !trimmed.contains('\'') && !trimmed.contains('"') {
-            Ok(Value::String(trimmed.into()))
-        } else {
-            Err(())
-        }
-    }
-}
-
-impl From<&str> for Value {
-    fn from(str: &str) -> Self {
-        Value::String(str.to_string())
+                "bindings": {
+                    "X": { "atom": "a" },
+                },
+            },
+            {
+                "bindings": {
+                    "X": { "atom": "b" },
+                    "Y": { "atom": "c" },
+                },
+            },
+        ]);
+        assert_eq!(json_value, serde_json::to_value(qrl).unwrap());
     }
 }
