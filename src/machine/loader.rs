@@ -211,7 +211,6 @@ impl PredicateQueue {
     }
 }
 
-#[macro_export]
 macro_rules! predicate_queue {
     [$($v:expr),*] => (
         PredicateQueue {

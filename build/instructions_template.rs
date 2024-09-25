@@ -137,7 +137,7 @@ enum InlinedClauseType {
 #[allow(dead_code)]
 #[derive(ToDeriveInput, EnumDiscriminants)]
 #[strum_discriminants(derive(EnumProperty, EnumString))]
-enum REPLCodePtr {
+enum ReplCodePtr {
     #[strum_discriminants(strum(props(Arity = "4", Name = "$add_discontiguous_predicate")))]
     AddDiscontiguousPredicate,
     #[strum_discriminants(strum(props(Arity = "4", Name = "$add_dynamic_predicate")))]
@@ -534,7 +534,7 @@ enum SystemClauseType {
     #[strum_discriminants(strum(props(Arity = "2", Name = "$shell")))]
     Shell,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$pid")))]
-    PID,
+    Pid,
     #[strum_discriminants(strum(props(Arity = "4", Name = "$chars_base64")))]
     CharsBase64,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$devour_whitespace")))]
@@ -608,7 +608,7 @@ enum SystemClauseType {
     InferenceLimitExceeded,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$argv")))]
     Argv,
-    REPL(REPLCodePtr),
+    Repl(ReplCodePtr),
 }
 
 #[allow(dead_code)]
@@ -811,7 +811,7 @@ fn derive_input(ty: &Type) -> Option<DeriveInput> {
     let system_clause_type: Type = parse_quote! { SystemClauseType };
     let compare_term_type: Type = parse_quote! { CompareTerm };
     let compare_number_type: Type = parse_quote! { CompareNumber };
-    let repl_code_ptr_type: Type = parse_quote! { REPLCodePtr };
+    let repl_code_ptr_type: Type = parse_quote! { ReplCodePtr };
 
     if ty == &clause_type {
         Some(ClauseType::to_derive_input())
@@ -826,7 +826,7 @@ fn derive_input(ty: &Type) -> Option<DeriveInput> {
     } else if ty == &compare_term_type {
         Some(CompareTerm::to_derive_input())
     } else if ty == &repl_code_ptr_type {
-        Some(REPLCodePtr::to_derive_input())
+        Some(ReplCodePtr::to_derive_input())
     } else {
         None
     }
@@ -983,6 +983,7 @@ fn generate_instruction_preface() -> TokenStream {
         }
 
         /// `IndexingInstruction` cf. page 110 of wambook.
+        #[allow(clippy::enum_variant_names)]
         #[derive(Clone, Debug)]
         pub enum IndexingInstruction {
             // The first index is the optimal argument being indexed.
@@ -1867,7 +1868,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallSetEnv |
                     &Instruction::CallUnsetEnv |
                     &Instruction::CallShell |
-                    &Instruction::CallPID |
+                    &Instruction::CallPid |
                     &Instruction::CallCharsBase64 |
                     &Instruction::CallDevourWhitespace |
                     &Instruction::CallIsSTOEnabled |
@@ -2104,7 +2105,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteSetEnv |
                     &Instruction::ExecuteUnsetEnv |
                     &Instruction::ExecuteShell |
-                    &Instruction::ExecutePID |
+                    &Instruction::ExecutePid |
                     &Instruction::ExecuteCharsBase64 |
                     &Instruction::ExecuteDevourWhitespace |
                     &Instruction::ExecuteIsSTOEnabled |
@@ -2357,7 +2358,7 @@ pub fn generate_instructions_rs() -> TokenStream {
     let builtin_type_variants = attributeless_enum::<BuiltInClauseType>();
     let inlined_type_variants = attributeless_enum::<InlinedClauseType>();
     let system_clause_type_variants = attributeless_enum::<SystemClauseType>();
-    let repl_code_ptr_variants = attributeless_enum::<REPLCodePtr>();
+    let repl_code_ptr_variants = attributeless_enum::<ReplCodePtr>();
     let compare_number_variants = attributeless_enum::<CompareNumber>();
     let compare_term_variants = attributeless_enum::<CompareTerm>();
 
@@ -2708,14 +2709,14 @@ pub fn generate_instructions_rs() -> TokenStream {
 
         clause_type_from_name_and_arity_arms.push(if !variant_fields.is_empty() {
             quote! {
-                (atom!(#name), #arity) => ClauseType::System(SystemClauseType::REPL(
-                    REPLCodePtr::#ident(#(#variant_fields),*)
+                (atom!(#name), #arity) => ClauseType::System(SystemClauseType::Repl(
+                    ReplCodePtr::#ident(#(#variant_fields),*)
                 ))
             }
         } else {
             quote! {
-                (atom!(#name), #arity) => ClauseType::System(SystemClauseType::REPL(
-                    REPLCodePtr::#ident
+                (atom!(#name), #arity) => ClauseType::System(SystemClauseType::Repl(
+                    ReplCodePtr::#ident
                 ))
             }
         });
@@ -2723,13 +2724,13 @@ pub fn generate_instructions_rs() -> TokenStream {
         clause_type_name_arms.push(if !variant_fields.is_empty() {
             quote! {
                 ClauseType::System(
-                    SystemClauseType::REPL(REPLCodePtr::#ident(..))
+                    SystemClauseType::Repl(ReplCodePtr::#ident(..))
                 ) => atom!(#name)
             }
         } else {
             quote! {
                 ClauseType::System(
-                    SystemClauseType::REPL(REPLCodePtr::#ident)
+                    SystemClauseType::Repl(ReplCodePtr::#ident)
                 ) => atom!(#name)
             }
         });
@@ -2743,14 +2744,14 @@ pub fn generate_instructions_rs() -> TokenStream {
 
         clause_type_to_instr_arms.push(if !variant_fields.is_empty() {
             quote! {
-                ClauseType::System(SystemClauseType::REPL(
-                    REPLCodePtr::#ident(#(#placeholder_ids),*)
+                ClauseType::System(SystemClauseType::Repl(
+                    ReplCodePtr::#ident(#(#placeholder_ids),*)
                 )) => Instruction::#instr_ident(#(*#placeholder_ids),*)
             }
         } else {
             quote! {
-                ClauseType::System(SystemClauseType::REPL(
-                    REPLCodePtr::#ident
+                ClauseType::System(SystemClauseType::Repl(
+                    ReplCodePtr::#ident
                 )) => Instruction::#instr_ident
             }
         });
@@ -3109,6 +3110,7 @@ pub fn generate_instructions_rs() -> TokenStream {
     quote! {
         #preface_tokens
 
+        #[allow(clippy::enum_variant_names)]
         #[derive(Clone, Debug)]
         pub enum CompareTerm {
             #(
@@ -3116,6 +3118,7 @@ pub fn generate_instructions_rs() -> TokenStream {
             )*
         }
 
+        #[allow(clippy::enum_variant_names)]
         #[derive(Clone, Copy, Debug)]
         pub enum CompareNumber {
             #(
@@ -3161,7 +3164,7 @@ pub fn generate_instructions_rs() -> TokenStream {
         }
 
         #[derive(Clone, Debug)]
-        pub enum REPLCodePtr {
+        pub enum ReplCodePtr {
             #(
                 #repl_code_ptr_variants,
             )*
@@ -3228,7 +3231,7 @@ pub fn generate_instructions_rs() -> TokenStream {
                 }
             }
 
-            pub fn to_default(self) -> Instruction {
+            pub fn into_default(self) -> Instruction {
                 match self {
                     #(
                         #to_default_arms,
@@ -3237,7 +3240,7 @@ pub fn generate_instructions_rs() -> TokenStream {
                 }
             }
 
-            pub fn to_execute(self) -> Instruction {
+            pub fn into_execute(self) -> Instruction {
                 match self {
                     #(
                         #to_execute_arms,
@@ -3252,6 +3255,7 @@ pub fn generate_instructions_rs() -> TokenStream {
                 )
             }
 
+            #[allow(dead_code)]
             pub fn is_ctrl_instr(&self) -> bool {
                 matches!(self,
                     Instruction::Allocate(_) |
@@ -3262,6 +3266,7 @@ pub fn generate_instructions_rs() -> TokenStream {
                 )
             }
 
+            #[allow(dead_code)]
             pub fn is_query_instr(&self) -> bool {
                 matches!(self,
                     &Instruction::GetVariable(..) |
@@ -3281,14 +3286,14 @@ pub fn generate_instructions_rs() -> TokenStream {
             }
         }
 
-        #[macro_export]
         macro_rules! _instr {
             #(
                 #instr_macro_arms
             );*
         }
 
-        pub use _instr as instr; // https://github.com/rust-lang/rust/pull/52234#issuecomment-976702997
+        // https://github.com/rust-lang/rust/pull/52234#issuecomment-976702997
+        pub(crate) use _instr as instr;
     }
 }
 
@@ -3416,8 +3421,8 @@ impl InstructionData {
             );
 
             (name, arity, CountableInference::NotCounted)
-        } else if id == "REPLCodePtr" {
-            let (name, arity) = add_discriminant_data::<REPLCodePtrDiscriminants>(
+        } else if id == "ReplCodePtr" {
+            let (name, arity) = add_discriminant_data::<ReplCodePtrDiscriminants>(
                 &variant,
                 prefix,
                 &mut self.repl_code_ptr_variants,

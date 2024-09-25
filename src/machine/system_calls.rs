@@ -1040,7 +1040,7 @@ impl MachineState {
                 self.heap.push(value);
 
                 let mut iter = HeapPStrIter::new(&self.heap, h);
-                let string = iter.to_string();
+                let string = iter.to_string_mut();
                 let at_terminator = iter.at_string_terminator();
 
                 self.heap.pop();

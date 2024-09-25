@@ -15,8 +15,6 @@ use crate::parser::ast::*;
 use crate::parser::dashu::{Integer, Rational};
 use crate::types::*;
 
-use crate::fixnum;
-
 use ordered_float::{Float, OrderedFloat};
 
 use std::cmp;
@@ -24,7 +22,6 @@ use std::convert::TryFrom;
 use std::f64;
 use std::mem;
 
-#[macro_export]
 macro_rules! try_numeric_result {
     ($e: expr, $stub_gen: expr) => {
         match $e {

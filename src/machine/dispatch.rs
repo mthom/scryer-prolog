@@ -7,8 +7,6 @@ use crate::machine::machine_state::*;
 use crate::machine::*;
 use crate::types::*;
 
-use crate::try_numeric_result;
-
 use fxhash::FxBuildHasher;
 
 macro_rules! step_or_fail {
@@ -4613,11 +4611,11 @@ impl Machine {
                         self.shell();
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallPID => {
+                    &Instruction::CallPid => {
                         self.pid();
                         step_or_fail!(self, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecutePID => {
+                    &Instruction::ExecutePid => {
                         self.pid();
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                     }

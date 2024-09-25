@@ -1194,11 +1194,8 @@ fn print_overwrite_warning(
     key: PredicateKey,
     is_dynamic: bool,
 ) {
-    if let CompilationTarget::Module(module_name) = compilation_target {
-        match module_name {
-            atom!("builtins") | atom!("loader") => return,
-            _ => {}
-        }
+    if let CompilationTarget::Module(atom!("builtins") | atom!("loader")) = compilation_target {
+        return;
     }
 
     match code_ptr.tag() {

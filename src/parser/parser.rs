@@ -180,31 +180,6 @@ pub fn get_op_desc(name: Atom, op_dir: &CompositeOpDir) -> Option<CompositeOpDes
     }
 }
 
-pub fn get_clause_spec(name: Atom, arity: usize, op_dir: &CompositeOpDir) -> Option<OpDesc> {
-    match arity {
-        1 => {
-            /* This is a clause with an operator principal functor. Prefix operators
-            are supposed over post.
-             */
-            if let Some(cell) = op_dir.get(name, Fixity::Pre) {
-                return Some(cell);
-            }
-
-            if let Some(cell) = op_dir.get(name, Fixity::Post) {
-                return Some(cell);
-            }
-        }
-        2 => {
-            if let Some(cell) = op_dir.get(name, Fixity::In) {
-                return Some(cell);
-            }
-        }
-        _ => {}
-    };
-
-    None
-}
-
 fn affirm_xfx(priority: usize, d2: TokenDesc, d3: TokenDesc, d1: TokenDesc) -> bool {
     d2.priority <= priority
         && is_term!(d3.spec)
@@ -339,16 +314,6 @@ impl<'a, R: CharRead> Parser<'a, R> {
             TokenType::End => Some(atom!(".")),
             _ => None,
         }
-    }
-
-    #[inline]
-    pub fn line_num(&self) -> usize {
-        self.lexer.line_num
-    }
-
-    #[inline]
-    pub fn col_num(&self) -> usize {
-        self.lexer.col_num
     }
 
     fn get_term_name(&mut self, td: TokenDesc) -> Option<Atom> {

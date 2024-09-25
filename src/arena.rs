@@ -29,7 +29,6 @@ use std::ptr::addr_of_mut;
 use std::ptr::NonNull;
 use std::sync::RwLock;
 
-#[macro_export]
 macro_rules! arena_alloc {
     ($e:expr, $arena:expr) => {{
         let result = $e;
@@ -37,7 +36,6 @@ macro_rules! arena_alloc {
     }};
 }
 
-#[macro_export]
 macro_rules! float_alloc {
     ($e:expr, $arena:expr) => {{
         let result = $e;
@@ -896,6 +894,8 @@ const_assert!(mem::size_of::<OrderedFloat<f64>>() == 8);
 mod tests {
     use std::ops::Deref;
 
+    use crate::arena::*;
+    use crate::atom_table::*;
     use crate::machine::mock_wam::*;
     use crate::machine::partial_string::*;
 

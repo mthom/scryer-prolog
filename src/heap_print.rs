@@ -4,11 +4,6 @@ use crate::parser::ast::*;
 use crate::parser::dashu::base::RemEuclid;
 use crate::parser::dashu::integer::Sign;
 use crate::parser::dashu::{ibig, Integer, Rational};
-use crate::{
-    alpha_numeric_char, capital_letter_char, cut_char, decimal_digit_char, graphic_token_char,
-    semicolon_char, sign_char, single_quote_char, small_letter_char, solo_char,
-    variable_indicator_char,
-};
 
 use crate::forms::*;
 use crate::heap_iter::*;
@@ -332,8 +327,6 @@ pub trait HCValueOutputter {
     fn new() -> Self;
     fn push_char(&mut self, c: char);
     fn append(&mut self, s: &str);
-    fn begin_new_var(&mut self);
-    fn insert(&mut self, index: usize, c: char);
     fn result(self) -> Self::Output;
     fn ends_with(&self, s: &str) -> bool;
     fn len(&self) -> usize;
@@ -365,16 +358,6 @@ impl HCValueOutputter for PrinterOutputter {
 
     fn push_char(&mut self, c: char) {
         self.contents.push(c);
-    }
-
-    fn begin_new_var(&mut self) {
-        if !self.contents.is_empty() {
-            self.contents += ", ";
-        }
-    }
-
-    fn insert(&mut self, idx: usize, c: char) {
-        self.contents.insert(idx, c);
     }
 
     fn result(self) -> Self::Output {
@@ -501,7 +484,6 @@ pub struct HCPrinter<'a, Outputter> {
     pub numbervars: bool,
     pub quoted: bool,
     pub ignore_ops: bool,
-    pub print_strings_as_strs: bool,
     pub max_depth: usize,
     pub double_quotes: bool,
 }
@@ -566,7 +548,6 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             quoted: false,
             ignore_ops: false,
             var_names: IndexMap::new(),
-            print_strings_as_strs: false,
             max_depth: 0,
             double_quotes: false,
         }

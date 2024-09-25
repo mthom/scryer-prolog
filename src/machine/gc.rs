@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use crate::atom_table::*;
 use crate::machine::heap::*;
 use crate::types::*;

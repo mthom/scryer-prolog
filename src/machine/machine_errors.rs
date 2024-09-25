@@ -572,15 +572,6 @@ impl MachineState {
                     stub,
                 )
             }
-            SessionError::QueryCannotBeDefinedAsFact => {
-                let error_atom = atom!("query_cannot_be_defined_as_fact");
-
-                self.permission_error(
-                    Permission::Create,
-                    atom!("static_procedure"),
-                    functor!(error_atom),
-                )
-            }
         }
     }
 
@@ -710,9 +701,7 @@ impl MachineError {
 pub enum CompilationError {
     Arithmetic(ArithmeticError),
     ParserError(ParserError),
-    CannotParseCyclicTerm,
     ExceededMaxArity,
-    ExpectedRel,
     InadmissibleFact,
     InadmissibleQueryTerm,
     InvalidDirective(DirectiveError),
@@ -722,7 +711,6 @@ pub enum CompilationError {
     InvalidRuleHead,
     InvalidUseModuleDecl,
     InvalidModuleResolution(Atom),
-    UnreadableTerm,
 }
 
 #[derive(Debug)]
@@ -765,14 +753,8 @@ impl CompilationError {
             CompilationError::Arithmetic(..) => {
                 functor!(atom!("arithmetic_error"))
             }
-            CompilationError::CannotParseCyclicTerm => {
-                functor!(atom!("cannot_parse_cyclic_term"))
-            }
             CompilationError::ExceededMaxArity => {
                 functor!(atom!("exceeded_max_arity"))
-            }
-            CompilationError::ExpectedRel => {
-                functor!(atom!("expected_relation"))
             }
             CompilationError::InadmissibleFact => {
                 // TODO: type_error(callable, _).
@@ -805,9 +787,6 @@ impl CompilationError {
             }
             CompilationError::ParserError(ref err) => {
                 functor!(err.as_atom())
-            }
-            CompilationError::UnreadableTerm => {
-                functor!(atom!("unreadable_term"))
             }
         }
     }
@@ -1063,7 +1042,6 @@ pub enum SessionError {
     NamelessEntry,
     OpIsInfixAndPostFix(Atom),
     PredicateNotMultifileOrDiscontiguous(CompilationTarget, PredicateKey),
-    QueryCannotBeDefinedAsFact,
 }
 
 impl From<std::io::Error> for SessionError {

@@ -1,7 +1,6 @@
 use crate::heap_iter::*;
 use crate::machine::*;
 use crate::parser::ast::*;
-use crate::temp_v;
 use crate::types::*;
 
 use indexmap::IndexSet;
