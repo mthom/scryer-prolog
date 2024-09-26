@@ -122,7 +122,7 @@ strings.
 Precompiled binaries for several platforms are available for download
 at:
 
-**https://github.com/mthom/scryer-prolog/releases/tag/v0.9.3**
+**https://github.com/mthom/scryer-prolog/releases/latest**
 
 ### Native Compilation
 
