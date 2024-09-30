@@ -1772,7 +1772,7 @@ impl Machine {
         self.machine_st.fail = true;
     }
 
-    #[cfg(not(target_arch = "wasm32"))]
+    #[cfg(all(not(target_arch = "wasm32"), feature = "hostname"))]
     #[inline(always)]
     pub(crate) fn current_hostname(&mut self) {
         if let Ok(host) = hostname::get() {
@@ -1789,7 +1789,7 @@ impl Machine {
         self.machine_st.fail = true;
     }
 
-    #[cfg(target_arch = "wasm32")]
+    #[cfg(any(target_arch = "wasm32", not(feature = "hostname")))]
     pub(crate) fn current_hostname(&mut self) {
         unimplemented!()
     }
