@@ -1,17 +1,17 @@
 use std::collections::BTreeMap;
 
-use crate::{atom_table, StreamConfig};
 use crate::machine::machine_indices::VarKey;
 use crate::machine::mock_wam::CompositeOpDir;
 use crate::machine::{BREAK_FROM_DISPATCH_LOOP_LOC, LIB_QUERY_SUCCESS};
 use crate::parser::ast::{Var, VarPtr};
 use crate::parser::parser::{Parser, Tokens};
 use crate::read::{write_term_to_heap, TermWriteResult};
+use crate::{atom_table, StreamConfig};
 use indexmap::IndexMap;
 
 use super::{
-    streams::Stream, Atom, AtomCell, HeapCellValue, HeapCellValueTag, Machine, MachineConfig,
-    LeafAnswer, PrologTerm,
+    streams::Stream, Atom, AtomCell, HeapCellValue, HeapCellValueTag, LeafAnswer, Machine,
+    MachineConfig, PrologTerm,
 };
 
 pub struct QueryState<'a> {
@@ -138,7 +138,10 @@ impl Iterator for QueryState<'_> {
         // choice point, so we should break.
         self.machine.machine_st.backtrack();
 
-        Some(Ok(LeafAnswer::LeafAnswer { bindings: bindings, residual_goals: vec![] }))
+        Some(Ok(LeafAnswer::LeafAnswer {
+            bindings: bindings,
+            residual_goals: vec![],
+        }))
     }
 }
 
