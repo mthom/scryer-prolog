@@ -23,6 +23,25 @@ pub struct QueryState<'a> {
     called: bool,
 }
 
+impl QueryState<'_> {
+    /// True if the query fails.
+    ///
+    /// Consumes the query. Gives [`false`] if an exception occurs.
+    pub fn fails(&mut self) -> bool {
+        todo!()
+    }
+
+    /// True if the query maybe succeeded.
+    ///
+    /// If a leaf answer has residual goals, it's only successful if the constraints they represent
+    /// are satisfiable.
+    ///
+    /// Consumes the query. Gives [`false`] if an exception occurs.
+    pub fn maybe_suceeded() -> bool {
+        todo!()
+    }
+}
+
 impl Drop for QueryState<'_> {
     fn drop(&mut self) {
         // This may be wrong if the iterator is not fully consumend, but from testing it seems
