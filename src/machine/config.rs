@@ -1,4 +1,4 @@
-/// Describes how the streams of a `crate::Machine` will be handled.
+/// Describes how the streams of a [`Machine`](crate::Machine) will be handled.
 ///
 /// Defaults to using standard IO.
 pub struct StreamConfig {
@@ -34,7 +34,7 @@ pub(crate) enum StreamConfigInner {
     Memory,
 }
 
-/// Describes how a `crate::Machine` will be configured.
+/// Describes how a [`Machine`](crate::Machine) will be configured.
 pub struct MachineConfig {
     pub(crate) streams: StreamConfig,
     pub(crate) toplevel: &'static str,
