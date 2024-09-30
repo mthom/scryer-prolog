@@ -82,6 +82,54 @@ impl PrologTerm {
     pub fn variable(value: impl Into<String>) -> Self {
         PrologTerm::Var(value.into())
     }
+
+    /// Creates a conjunction, giving the atom `true` if empty.
+    pub fn conjunction(value: impl IntoIterator<Item = PrologTerm>) -> Self {
+        PrologTerm::try_conjunction(value).unwrap_or(PrologTerm::atom("true"))
+    }
+
+    /// Creates a conjunction, giving `None` if empty.
+    pub fn try_conjunction(value: impl IntoIterator<Item = PrologTerm>) -> Option<Self> {
+        let mut iter = value.into_iter();
+        iter.next()
+            .map(|first| {
+                PrologTerm::try_conjunction(iter)
+                    .map(|rest| PrologTerm::compound(",", [first.clone(), rest]))
+                    .unwrap_or(first)
+            })
+    }
+
+    /// Creates a disjunction, giving the atom `false` if empty.
+    pub fn disjunction(value: impl IntoIterator<Item = PrologTerm>) -> Self {
+        PrologTerm::try_disjunction(value).unwrap_or(PrologTerm::atom("false"))
+    }
+
+    /// Creates a disjunction, giving `None` if empty.
+    pub fn try_disjunction(value: impl IntoIterator<Item = PrologTerm>) -> Option<Self> {
+        let mut iter = value.into_iter();
+        iter.next()
+            .map(|first| {
+                PrologTerm::try_disjunction(iter)
+                    .map(|rest| PrologTerm::compound(";", [first.clone(), rest]))
+                    .unwrap_or(first)
+            })
+    }
+}
+
+impl From<LeafAnswer> for PrologTerm {
+    fn from(value: LeafAnswer) -> Self {
+        match value {
+            LeafAnswer::True => PrologTerm::atom("true"),
+            LeafAnswer::False => PrologTerm::atom("false"),
+            LeafAnswer::Exception(inner) => match inner.clone() {
+                PrologTerm::Compound(functor, args) if functor == "error" && args.len() == 2 => inner,
+                _ => PrologTerm::compound("throw", [inner]),
+            },
+            LeafAnswer::LeafAnswer { bindings: _, residual_goals: _ } => {
+                todo!()
+            },
+        }
+    }
 }
 
 /// This is an auxiliary function to turn a count into names of anonymous variables like _A, _B,
