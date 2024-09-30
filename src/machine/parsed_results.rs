@@ -101,12 +101,11 @@ impl PrologTerm {
     /// Creates a conjunction, giving `None` if empty.
     pub fn try_conjunction(value: impl IntoIterator<Item = PrologTerm>) -> Option<Self> {
         let mut iter = value.into_iter();
-        iter.next()
-            .map(|first| {
-                PrologTerm::try_conjunction(iter)
-                    .map(|rest| PrologTerm::compound(",", [first.clone(), rest]))
-                    .unwrap_or(first)
-            })
+        iter.next().map(|first| {
+            PrologTerm::try_conjunction(iter)
+                .map(|rest| PrologTerm::compound(",", [first.clone(), rest]))
+                .unwrap_or(first)
+        })
     }
 
     /// Creates a disjunction, giving the atom `false` if empty.
@@ -117,12 +116,11 @@ impl PrologTerm {
     /// Creates a disjunction, giving `None` if empty.
     pub fn try_disjunction(value: impl IntoIterator<Item = PrologTerm>) -> Option<Self> {
         let mut iter = value.into_iter();
-        iter.next()
-            .map(|first| {
-                PrologTerm::try_disjunction(iter)
-                    .map(|rest| PrologTerm::compound(";", [first.clone(), rest]))
-                    .unwrap_or(first)
-            })
+        iter.next().map(|first| {
+            PrologTerm::try_disjunction(iter)
+                .map(|rest| PrologTerm::compound(";", [first.clone(), rest]))
+                .unwrap_or(first)
+        })
     }
 }
 
@@ -132,12 +130,17 @@ impl From<LeafAnswer> for PrologTerm {
             LeafAnswer::True => PrologTerm::atom("true"),
             LeafAnswer::False => PrologTerm::atom("false"),
             LeafAnswer::Exception(inner) => match inner.clone() {
-                PrologTerm::Compound(functor, args) if functor == "error" && args.len() == 2 => inner,
+                PrologTerm::Compound(functor, args) if functor == "error" && args.len() == 2 => {
+                    inner
+                }
                 _ => PrologTerm::compound("throw", [inner]),
             },
-            LeafAnswer::LeafAnswer { bindings: _, residual_goals: _ } => {
+            LeafAnswer::LeafAnswer {
+                bindings: _,
+                residual_goals: _,
+            } => {
                 todo!()
-            },
+            }
         }
     }
 }
