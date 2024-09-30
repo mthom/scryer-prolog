@@ -23,10 +23,14 @@ pub enum LeafAnswer {
     /// An exception leaf answer.
     Exception(PrologTerm),
     /// A leaf answer with bindings and residual goals.
-    ///
-    /// Both bindings and residual goals can be empty.
     LeafAnswer {
+        /// The bindings of variables in the query.
+        ///
+        /// Can be empty.
         bindings: BTreeMap<String, PrologTerm>,
+        /// Residual goals.
+        ///
+        /// Can be empty.
         residual_goals: Vec<PrologTerm>,
     },
 }
