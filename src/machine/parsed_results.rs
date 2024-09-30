@@ -14,13 +14,45 @@ use super::{HeapCellValue, Number};
 /// Represents a leaf answer from a query.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LeafAnswer {
+    /// A `true` leaf answer.
     True,
+    /// A `false` leaf answer.
+    ///
+    /// This means that there are no more answers for the query.
     False,
+    /// An exception leaf answer.
     Exception(PrologTerm),
+    /// A leaf answer with bindings and residual goals.
+    ///
+    /// Both bindings and residual goals can be empty.
     LeafAnswer {
         bindings: BTreeMap<String, PrologTerm>,
         residual_goals: Vec<PrologTerm>,
     },
+}
+
+impl LeafAnswer {
+    /// True if leaf answer failed.
+    ///
+    /// This gives [`false`] for exceptions.
+    pub fn failed(&self) -> bool {
+        match self {
+            LeafAnswer::False => true,
+            _ => false,
+        }
+    }
+
+    /// True if leaf answer may have succeeded.
+    ///
+    /// When a leaf answer has residual goals the success is conditional on the satisfiability of
+    /// the contraints they represent. This gives [`false`] for exceptions.
+    pub fn maybe_succeeded(&self) -> bool {
+        match self {
+            LeafAnswer::True => true,
+            LeafAnswer::LeafAnswer { .. } => true,
+            _ => false,
+        }
+    }
 }
 
 /// Represents a Prolog term.
