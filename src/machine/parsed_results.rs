@@ -33,8 +33,55 @@ pub enum PrologTerm {
     Atom(String),
     String(String),
     List(Vec<PrologTerm>),
-    Structure(String, Vec<PrologTerm>),
+    Compound(String, Vec<PrologTerm>),
     Var(String),
+}
+
+impl PrologTerm {
+    /// Creates an integer term.
+    pub fn integer(value: impl Into<Integer>) -> Self {
+        PrologTerm::Integer(value.into())
+    }
+
+    /// Creates a rational term.
+    pub fn rational(value: impl Into<Rational>) -> Self {
+        PrologTerm::Rational(value.into())
+    }
+
+    /// Creates a float term.
+    pub fn float(value: impl Into<OrderedFloat<f64>>) -> Self {
+        PrologTerm::Float(value.into())
+    }
+
+    /// Creates an atom term.
+    pub fn atom(value: impl Into<String>) -> Self {
+        PrologTerm::Atom(value.into())
+    }
+
+    /// Creates a string term.
+    ///
+    /// In specific, this represents a list of chars in Prolog.
+    pub fn string(value: impl Into<String>) -> Self {
+        PrologTerm::String(value.into())
+    }
+
+    /// Creates a list term.
+    pub fn list(value: impl IntoIterator<Item = PrologTerm>) -> Self {
+        PrologTerm::List(value.into_iter().collect())
+    }
+
+    /// Creates a compound term.
+    pub fn compound(
+        functor: impl Into<String>,
+        args: impl IntoIterator<Item = PrologTerm>,
+    ) -> Self {
+        PrologTerm::Compound(functor.into(), args.into_iter().collect())
+    }
+
+    /// Creates a variable.
+    pub fn variable(value: impl Into<String>) -> Self {
+        PrologTerm::Var(value.into())
+    }
 }
 
 /// This is an auxiliary function to turn a count into names of anonymous variables like _A, _B,
@@ -124,7 +171,7 @@ impl PrologTerm {
                             }
                         },
                         _ => {
-                            PrologTerm::Structure(".".into(), vec![head, tail])
+                            PrologTerm::Compound(".".into(), vec![head, tail])
                         }
                     };
                     term_stack.push(list);
@@ -218,7 +265,7 @@ impl PrologTerm {
                             .drain(term_stack.len() - arity ..)
                             .collect();
 
-                        term_stack.push(PrologTerm::Structure(name.as_str().to_string(), subterms));
+                        term_stack.push(PrologTerm::Compound(name.as_str().to_string(), subterms));
                     }
                 }
                 (HeapCellValueTag::PStr, atom) => {
@@ -248,7 +295,7 @@ impl PrologTerm {
                                 .map(|x| PrologTerm::Atom(x.to_string()))
                                 .collect();
 
-                            let mut partial_list = PrologTerm::Structure(
+                            let mut partial_list = PrologTerm::Compound(
                                 ".".into(),
                                 vec![
                                     list.pop().unwrap(),
@@ -257,7 +304,7 @@ impl PrologTerm {
                             );
 
                             while let Some(last) = list.pop() {
-                                partial_list = PrologTerm::Structure(
+                                partial_list = PrologTerm::Compound(
                                     ".".into(),
                                     vec![
                                         last,
