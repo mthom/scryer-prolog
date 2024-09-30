@@ -14,6 +14,7 @@ use super::{
     MachineConfig, PrologTerm,
 };
 
+/// An iterator though the leaf answers of a query.
 pub struct QueryState<'a> {
     machine: &'a mut Machine,
     term: TermWriteResult,
@@ -146,17 +147,20 @@ impl Iterator for QueryState<'_> {
 }
 
 impl Machine {
+    /// Creates a new [`Machine`] configured for use as a library.
     pub fn new_lib() -> Self {
         Machine::new(MachineConfig::default().with_streams(StreamConfig::in_memory()))
     }
 
-    pub fn load_module_string(&mut self, module_name: &str, program: String) {
-        let stream = Stream::from_owned_string(program, &mut self.machine_st.arena);
+    /// Loads a module into the [`Machine`] from a string.
+    pub fn load_module_string(&mut self, module_name: &str, program: impl Into<String>) {
+        let stream = Stream::from_owned_string(program.into(), &mut self.machine_st.arena);
         self.load_file(module_name, stream);
     }
 
-    pub fn consult_module_string(&mut self, module_name: &str, program: String) {
-        let stream = Stream::from_owned_string(program, &mut self.machine_st.arena);
+    /// Consults a module into the [`Machine`] from a string.
+    pub fn consult_module_string(&mut self, module_name: &str, program: impl Into<String>) {
+        let stream = Stream::from_owned_string(program.into(), &mut self.machine_st.arena);
         self.machine_st.registers[1] = stream_as_cell!(stream);
         self.machine_st.registers[2] = atom_as_cell!(&atom_table::AtomTable::build_with(
             &self.machine_st.atom_tbl,
@@ -190,9 +194,10 @@ impl Machine {
         self.machine_st.block = stub_b;
     }
 
-    pub fn run_query(&mut self, query: String) -> QueryState {
+    /// Runs a query.
+    pub fn run_query(&mut self, query: impl Into<String>) -> QueryState {
         let mut parser = Parser::new(
-            Stream::from_owned_string(query, &mut self.machine_st.arena),
+            Stream::from_owned_string(query.into(), &mut self.machine_st.arena),
             &mut self.machine_st,
         );
         let op_dir = CompositeOpDir::new(&self.indices.op_dir, None);

@@ -70,6 +70,7 @@ lazy_static! {
     pub static ref INTERRUPT: AtomicBool = AtomicBool::new(false);
 }
 
+/// An instance of Scryer Prolog.
 #[derive(Debug)]
 pub struct Machine {
     pub(super) machine_st: MachineState,
@@ -262,6 +263,7 @@ impl Machine {
         )
     }
 
+    /// Gets the current inference count.
     pub fn get_inference_count(&mut self) -> u64 {
         self.machine_st
             .cwil
@@ -480,6 +482,7 @@ impl Machine {
         }
     }
 
+    /// Creates a new [`Machine`] from a [`MachineConfig`].
     #[allow(clippy::new_without_default)]
     pub fn new(config: MachineConfig) -> Self {
         let args = MachineArgs::new();
