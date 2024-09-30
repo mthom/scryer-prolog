@@ -11,6 +11,7 @@ use std::collections::BTreeMap;
 use super::Machine;
 use super::{HeapCellValue, Number};
 
+/// Represents a leaf answer from a query.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum LeafAnswer {
     True,
@@ -22,6 +23,8 @@ pub enum LeafAnswer {
     },
 }
 
+/// Represents a Prolog term.
+#[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PrologTerm {
     Integer(Integer),
