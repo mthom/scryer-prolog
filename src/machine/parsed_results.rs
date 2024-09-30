@@ -27,13 +27,23 @@ pub enum LeafAnswer {
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PrologTerm {
+    /// An arbitrary precision integer.
     Integer(Integer),
+    /// An arbitrary precision rational.
     Rational(Rational),
+    /// A float.
     Float(OrderedFloat<f64>),
+    /// A Prolog atom.
     Atom(String),
+    /// A Prolog string.
+    ///
+    /// In particular, this represents Prolog lists of characters.
     String(String),
+    /// A Prolog list.
     List(Vec<PrologTerm>),
+    /// A Prolog compound term.
     Compound(String, Vec<PrologTerm>),
+    /// A Prolog variable.
     Var(String),
 }
 
