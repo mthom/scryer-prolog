@@ -485,13 +485,13 @@ impl Machine {
         let args = MachineArgs::new();
         let mut machine_st = MachineState::new();
 
-        let (user_input, user_output, user_error) = match config.streams {
-            config::StreamConfig::Stdio => (
+        let (user_input, user_output, user_error) = match config.streams.inner {
+            config::StreamConfigInner::Stdio => (
                 Stream::stdin(&mut machine_st.arena, args.add_history),
                 Stream::stdout(&mut machine_st.arena),
                 Stream::stderr(&mut machine_st.arena),
             ),
-            config::StreamConfig::Memory => (
+            config::StreamConfigInner::Memory => (
                 Stream::Null(StreamOptions::default()),
                 Stream::from_owned_string("".to_owned(), &mut machine_st.arena),
                 Stream::stderr(&mut machine_st.arena),

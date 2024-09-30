@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use crate::atom_table;
+use crate::{atom_table, StreamConfig};
 use crate::machine::machine_indices::VarKey;
 use crate::machine::mock_wam::CompositeOpDir;
 use crate::machine::{BREAK_FROM_DISPATCH_LOOP_LOC, LIB_QUERY_SUCCESS};
@@ -144,7 +144,7 @@ impl Iterator for QueryState<'_> {
 
 impl Machine {
     pub fn new_lib() -> Self {
-        Machine::new(MachineConfig::in_memory())
+        Machine::new(MachineConfig::default().with_streams(StreamConfig::in_memory()))
     }
 
     pub fn load_module_string(&mut self, module_name: &str, program: String) {
