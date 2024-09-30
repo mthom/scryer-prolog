@@ -55,7 +55,7 @@ impl MachineConfig {
         Default::default()
     }
 
-    /// Uses the given `crate::StreamConfig` in this configuration. 
+    /// Uses the given `crate::StreamConfig` in this configuration.
     pub fn with_streams(mut self, streams: StreamConfig) -> Self {
         self.streams = streams;
         self
