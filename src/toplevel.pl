@@ -170,8 +170,8 @@ repl :-
 %% Enable op declarations with lists of operands, i.e.,
 %% :- op(900, fy, [$,@]).
 
-user:term_expansion((:- op(Pred, Spec, Ops)), OpResults) :- 
-    ground(Ops), 
+user:term_expansion((:- op(Pred, Spec, Ops)), OpResults) :-
+    ground(Ops),
     Ops = [Op | OtherOps],
     expand_op_list([Op | OtherOps], Pred, Spec, OpResults).
 
@@ -223,7 +223,7 @@ run_query(QueryChars, Callback_3, Options) :-
 % - `final(exception(Exception))`, where `Exception` is the exception thrown
 % - `final(true)`
 % - `final(leaf_answer(Bindings, ResidualGoals, VarNames))`, where:
-%   
+%
 %   - `Bindings` is a list of terms of the form `Var=Term`, where `Var` is a
 %     variable.
 %   - `ResidualGoals` is a list of the residual goals from the query.
