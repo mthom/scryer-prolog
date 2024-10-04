@@ -1,5 +1,5 @@
-use std::sync::{Arc, Mutex, Condvar};
-use std::io::BufRead;
+use bytes::{buf::Reader, Bytes};
+use std::sync::{Arc, Condvar, Mutex};
 
 use warp::http;
 
@@ -19,5 +19,5 @@ pub struct HttpRequestData {
     pub headers: http::HeaderMap,
     pub path: String,
     pub query: String,
-    pub body: Box<dyn BufRead + Send>,
+    pub body: Reader<Bytes>,
 }

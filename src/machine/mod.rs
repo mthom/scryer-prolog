@@ -1,4 +1,5 @@
 pub mod args;
+#[macro_use]
 pub mod arithmetic_ops;
 pub mod attributed_variables;
 pub mod code_walker;
@@ -53,16 +54,17 @@ use indexmap::IndexMap;
 use lazy_static::lazy_static;
 use ordered_float::OrderedFloat;
 
+use rand::rngs::StdRng;
+use rand::SeedableRng;
 use std::cmp::Ordering;
 use std::env;
 use std::io::Read;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
+use std::sync::OnceLock;
 
 use self::config::MachineConfig;
 use self::parsed_results::*;
-use rand::rngs::StdRng;
-use rand::SeedableRng;
 
 lazy_static! {
     pub static ref INTERRUPT: AtomicBool = AtomicBool::new(false);
@@ -110,10 +112,59 @@ impl LoadContext {
 
 #[inline]
 fn current_dir() -> PathBuf {
-    env::current_dir().unwrap_or(PathBuf::from("./"))
+    if !cfg!(miri) {
+        env::current_dir().unwrap_or(PathBuf::from("./"))
+    } else {
+        PathBuf::from("./")
+    }
 }
 
-include!(concat!(env!("OUT_DIR"), "/libraries.rs"));
+#[cfg(not(feature = "rust-version-1.80"))]
+mod libraries {
+    use indexmap::IndexMap;
+    use std::sync::OnceLock;
+
+    fn libraries() -> &'static IndexMap<&'static str, &'static str> {
+        static LIBRARIES: OnceLock<IndexMap<&'static str, &'static str>> = OnceLock::new();
+        LIBRARIES.get_or_init(|| {
+            let mut m = IndexMap::new();
+
+            include!(concat!(env!("OUT_DIR"), "/libraries.rs"));
+
+            m
+        })
+    }
+
+    pub(crate) fn contains(name: &str) -> bool {
+        libraries().contains_key(name)
+    }
+
+    pub(crate) fn get(name: &str) -> Option<&'static str> {
+        libraries().get(name).copied()
+    }
+}
+
+#[cfg(feature = "rust-version-1.80")]
+mod libraries {
+    use indexmap::IndexMap;
+    use std::sync::LazyLock;
+
+    static LIBRARIES: LazyLock<IndexMap<&'static str, &'static str>> = LazyLock::new(|| {
+        let mut m = IndexMap::new();
+
+        include!(concat!(env!("OUT_DIR"), "/libraries.rs"));
+
+        m
+    });
+
+    pub(crate) fn contains(name: &str) -> bool {
+        LIBRARIES.contains_key(name)
+    }
+
+    pub(crate) fn get(name: &str) -> Option<&'static str> {
+        LIBRARIES.get(name).copied()
+    }
+}
 
 pub static BREAK_FROM_DISPATCH_LOOP_LOC: usize = 0;
 pub static INSTALL_VERIFY_ATTR_INTERRUPT: usize = 1;
@@ -172,7 +223,7 @@ pub(crate) fn import_builtin_impls(code_dir: &CodeDir, builtins: &mut Module) {
 
     for key in keys {
         let idx = code_dir.get(&key).unwrap();
-        builtins.code_dir.insert(key, idx.clone());
+        builtins.code_dir.insert(key, *idx);
         builtins
             .module_decl
             .exports
@@ -200,7 +251,7 @@ pub(crate) fn get_structure_index(value: HeapCellValue) -> Option<CodeIndex> {
 
 impl Machine {
     #[inline]
-    pub fn prelude_view_and_machine_st(&mut self) -> (MachinePreludeView, &mut MachineState) {
+    fn prelude_view_and_machine_st(&mut self) -> (MachinePreludeView, &mut MachineState) {
         (
             MachinePreludeView {
                 indices: &mut self.indices,
@@ -211,21 +262,22 @@ impl Machine {
         )
     }
 
-    pub fn throw_session_error(&mut self, err: SessionError, key: PredicateKey) {
-        let err = self.machine_st.session_error(err);
-        let stub = functor_stub(key.0, key.1);
-        let err = self.machine_st.error_form(err, stub);
-
-        self.machine_st.throw_exception(err);
+    pub fn get_inference_count(&mut self) -> u64 {
+        self.machine_st
+            .cwil
+            .global_count
+            .clone()
+            .try_into()
+            .unwrap()
     }
 
-    fn run_module_predicate(
+    pub(crate) fn run_module_predicate(
         &mut self,
         module_name: Atom,
         key: PredicateKey,
     ) -> std::process::ExitCode {
         if let Some(module) = self.indices.modules.get(&module_name) {
-            if let Some(ref code_index) = module.code_dir.get(&key) {
+            if let Some(code_index) = module.code_dir.get(&key) {
                 let p = code_index.local().unwrap();
 
                 self.machine_st.cp = BREAK_FROM_DISPATCH_LOOP_LOC;
@@ -238,7 +290,7 @@ impl Machine {
         unreachable!();
     }
 
-    pub fn load_file(&mut self, path: &str, stream: Stream) {
+    fn load_file(&mut self, path: &str, stream: Stream) {
         self.machine_st.registers[1] = stream_as_cell!(stream);
         self.machine_st.registers[2] =
             atom_as_cell!(AtomTable::build_with(&self.machine_st.atom_tbl, path));
@@ -252,9 +304,7 @@ impl Machine {
         path_buf.push("src/toplevel.pl");
 
         let path = path_buf.to_str().unwrap();
-        let toplevel_stream = 
-            Stream::from_static_string(program, &mut self.machine_st.arena);
-
+        let toplevel_stream = Stream::from_static_string(program, &mut self.machine_st.arena);
 
         self.load_file(path, toplevel_stream);
 
@@ -298,34 +348,6 @@ impl Machine {
                 self.machine_st.attr_var_init.verify_attrs_loc = code_index.local().unwrap();
             }
         }
-    }
-
-    pub fn run_top_level(&mut self, module_name: Atom, key: PredicateKey) -> std::process::ExitCode {
-        let mut arg_pstrs = vec![];
-
-        for arg in env::args() {
-            arg_pstrs.push(put_complete_string(
-                &mut self.machine_st.heap,
-                &arg,
-                &self.machine_st.atom_tbl,
-            ));
-        }
-
-        self.machine_st.registers[1] = heap_loc_as_cell!(iter_to_heap_list(
-            &mut self.machine_st.heap,
-            arg_pstrs.into_iter()
-        ));
-
-        self.run_module_predicate(module_name, key)
-    }
-
-    pub fn set_user_input(&mut self, input: String) {
-        self.user_input = Stream::from_owned_string(input, &mut self.machine_st.arena);
-    }
-
-    pub fn get_user_output(&self) -> String {
-        let output_bytes: Vec<_> = self.user_output.bytes().map(|b| b.unwrap()).collect();
-        String::from_utf8(output_bytes).unwrap()
     }
 
     pub(crate) fn configure_modules(&mut self) {
@@ -400,57 +422,51 @@ impl Machine {
     pub(crate) fn add_impls_to_indices(&mut self) {
         let impls_offset = self.code.len() + 4;
 
-        self.code.extend(
-            vec![
-                Instruction::BreakFromDispatchLoop,
-                Instruction::InstallVerifyAttr,
-                Instruction::VerifyAttrInterrupt,
-                Instruction::BreakFromDispatchLoop, // the location of LIB_QUERY_SUCCESS
-                Instruction::ExecuteTermGreaterThan,
-                Instruction::ExecuteTermLessThan,
-                Instruction::ExecuteTermGreaterThanOrEqual,
-                Instruction::ExecuteTermLessThanOrEqual,
-                Instruction::ExecuteTermEqual,
-                Instruction::ExecuteTermNotEqual,
-                Instruction::ExecuteNumberGreaterThan(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
-                Instruction::ExecuteNumberLessThan(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
-                Instruction::ExecuteNumberGreaterThanOrEqual(
-                    ar_reg!(temp_v!(1)),
-                    ar_reg!(temp_v!(2)),
-                ),
-                Instruction::ExecuteNumberLessThanOrEqual(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
-                Instruction::ExecuteNumberEqual(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
-                Instruction::ExecuteNumberNotEqual(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
-                Instruction::ExecuteIs(temp_v!(1), ar_reg!(temp_v!(2))),
-                Instruction::ExecuteAcyclicTerm,
-                Instruction::ExecuteArg,
-                Instruction::ExecuteCompare,
-                Instruction::ExecuteCopyTerm,
-                Instruction::ExecuteFunctor,
-                Instruction::ExecuteGround,
-                Instruction::ExecuteKeySort,
-                Instruction::ExecuteSort,
-                Instruction::ExecuteN(1),
-                Instruction::ExecuteN(2),
-                Instruction::ExecuteN(3),
-                Instruction::ExecuteN(4),
-                Instruction::ExecuteN(5),
-                Instruction::ExecuteN(6),
-                Instruction::ExecuteN(7),
-                Instruction::ExecuteN(8),
-                Instruction::ExecuteN(9),
-                Instruction::ExecuteIsAtom(temp_v!(1)),
-                Instruction::ExecuteIsAtomic(temp_v!(1)),
-                Instruction::ExecuteIsCompound(temp_v!(1)),
-                Instruction::ExecuteIsInteger(temp_v!(1)),
-                Instruction::ExecuteIsNumber(temp_v!(1)),
-                Instruction::ExecuteIsRational(temp_v!(1)),
-                Instruction::ExecuteIsFloat(temp_v!(1)),
-                Instruction::ExecuteIsNonVar(temp_v!(1)),
-                Instruction::ExecuteIsVar(temp_v!(1)),
-            ]
-            .into_iter(),
-        );
+        self.code.extend(vec![
+            Instruction::BreakFromDispatchLoop,
+            Instruction::InstallVerifyAttr,
+            Instruction::VerifyAttrInterrupt(0),
+            Instruction::BreakFromDispatchLoop, // the location of LIB_QUERY_SUCCESS
+            Instruction::ExecuteTermGreaterThan,
+            Instruction::ExecuteTermLessThan,
+            Instruction::ExecuteTermGreaterThanOrEqual,
+            Instruction::ExecuteTermLessThanOrEqual,
+            Instruction::ExecuteTermEqual,
+            Instruction::ExecuteTermNotEqual,
+            Instruction::ExecuteNumberGreaterThan(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
+            Instruction::ExecuteNumberLessThan(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
+            Instruction::ExecuteNumberGreaterThanOrEqual(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
+            Instruction::ExecuteNumberLessThanOrEqual(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
+            Instruction::ExecuteNumberEqual(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
+            Instruction::ExecuteNumberNotEqual(ar_reg!(temp_v!(1)), ar_reg!(temp_v!(2))),
+            Instruction::ExecuteIs(temp_v!(1), ar_reg!(temp_v!(2))),
+            Instruction::ExecuteAcyclicTerm,
+            Instruction::ExecuteArg,
+            Instruction::ExecuteCompare,
+            Instruction::ExecuteCopyTerm,
+            Instruction::ExecuteFunctor,
+            Instruction::ExecuteGround,
+            Instruction::ExecuteKeySort,
+            Instruction::ExecuteSort,
+            Instruction::ExecuteN(1),
+            Instruction::ExecuteN(2),
+            Instruction::ExecuteN(3),
+            Instruction::ExecuteN(4),
+            Instruction::ExecuteN(5),
+            Instruction::ExecuteN(6),
+            Instruction::ExecuteN(7),
+            Instruction::ExecuteN(8),
+            Instruction::ExecuteN(9),
+            Instruction::ExecuteIsAtom(temp_v!(1)),
+            Instruction::ExecuteIsAtomic(temp_v!(1)),
+            Instruction::ExecuteIsCompound(temp_v!(1)),
+            Instruction::ExecuteIsInteger(temp_v!(1)),
+            Instruction::ExecuteIsNumber(temp_v!(1)),
+            Instruction::ExecuteIsRational(temp_v!(1)),
+            Instruction::ExecuteIsFloat(temp_v!(1)),
+            Instruction::ExecuteIsNonVar(temp_v!(1)),
+            Instruction::ExecuteIsVar(temp_v!(1)),
+        ]);
 
         for (p, instr) in self.code[impls_offset..].iter().enumerate() {
             let key = instr.to_name_and_arity();
@@ -464,9 +480,8 @@ impl Machine {
         }
     }
 
+    #[allow(clippy::new_without_default)]
     pub fn new(config: MachineConfig) -> Self {
-        use ref_thread_local::RefThreadLocal;
-
         let args = MachineArgs::new();
         let mut machine_st = MachineState::new();
 
@@ -505,7 +520,8 @@ impl Machine {
 
         bootstrapping_compile(
             Stream::from_static_string(
-                LIBRARIES.borrow()["ops_and_meta_predicates"],
+                libraries::get("ops_and_meta_predicates")
+                    .expect("library ops_and_meta_predicates should exist"),
                 &mut wam.machine_st.arena,
             ),
             &mut wam,
@@ -517,7 +533,10 @@ impl Machine {
         .unwrap();
 
         bootstrapping_compile(
-            Stream::from_static_string(LIBRARIES.borrow()["builtins"], &mut wam.machine_st.arena),
+            Stream::from_static_string(
+                libraries::get("builtins").expect("library builtins should exist"),
+                &mut wam.machine_st.arena,
+            ),
             &mut wam,
             ListingSource::from_file_and_path(atom!("builtins.pl"), lib_path.clone()),
         )
@@ -919,8 +938,8 @@ impl Machine {
 
             self.machine_st.hb = self.machine_st.heap.len();
 
-            self.machine_st.oip = 0;
-            self.machine_st.iip = 0;
+            // self.machine_st.oip = 0;
+            // self.machine_st.iip = 0;
         }
 
         self.machine_st.p += offset;
@@ -1004,8 +1023,22 @@ impl Machine {
 
             self.machine_st.heap.truncate(target_h);
 
-            self.machine_st.oip = 0;
-            self.machine_st.iip = 0;
+            // these registers don't need to be reset here and MUST
+            // NOT be (nor in indexed_try! trust_epilogue is an
+            // exception, see next paragraph)! oip could be reset
+            // without any adverse effects but iip is needed by
+            // get_clause_p to find the last executed clause/2 clause.
+
+            // trust_epilogue must reset these for the sake of
+            // subsequent predicates beginning with
+            // switch_to_term. get_clause_p copes by checking
+            // self.machine_st.b > self.machine.e: if true, it is safe
+            // to use self.machine_st.iip; if false, use the choice
+            // point left at the top of the stack by '$clause'
+            // (specifically its biip value).
+
+            // self.machine_st.oip = 0;
+            // self.machine_st.iip = 0;
         } else {
             self.trust_epilogue(offset);
         }
@@ -1048,7 +1081,7 @@ impl Machine {
         self.reset_attr_var_state(or_frame.prelude.attr_var_queue_len);
 
         self.machine_st.hb = target_h;
-        self.machine_st.p = self.machine_st.p + offset;
+        self.machine_st.p += offset;
 
         self.machine_st.stack.truncate(b);
         self.machine_st.heap.truncate(target_h);
@@ -1110,7 +1143,7 @@ impl Machine {
             }
             Unknown::Warn => {
                 println!(
-                    "warning: predicate {}/{} is undefined",
+                    "% Warning: predicate {}/{} is undefined",
                     name.as_str(),
                     arity
                 );
@@ -1174,21 +1207,23 @@ impl Machine {
             } else {
                 Err(self.machine_st.throw_undefined_error(name, arity))
             }
-        } else {
-            if let Some(module) = self.indices.modules.get(&module_name) {
-                if let Some(idx) = module.code_dir.get(&(name, arity)).cloned() {
-                    self.try_call(name, arity, idx.get())
-                } else {
-                    self.undefined_procedure(name, arity)
-                }
+        } else if let Some(module) = self.indices.modules.get(&module_name) {
+            if let Some(idx) = module.code_dir.get(&(name, arity)).cloned() {
+                self.try_call(name, arity, idx.get())
             } else {
-                let stub = functor_stub(name, arity);
-                let err = self
-                    .machine_st
-                    .existence_error(ExistenceError::QualifiedProcedure { module_name, name, arity });
-
-                Err(self.machine_st.error_form(err, stub))
+                self.undefined_procedure(name, arity)
             }
+        } else {
+            let stub = functor_stub(name, arity);
+            let err = self
+                .machine_st
+                .existence_error(ExistenceError::QualifiedProcedure {
+                    module_name,
+                    name,
+                    arity,
+                });
+
+            Err(self.machine_st.error_form(err, stub))
         }
     }
 
@@ -1202,21 +1237,23 @@ impl Machine {
             } else {
                 self.undefined_procedure(name, arity)
             }
-        } else {
-            if let Some(module) = self.indices.modules.get(&module_name) {
-                if let Some(idx) = module.code_dir.get(&(name, arity)).cloned() {
-                    self.try_execute(name, arity, idx.get())
-                } else {
-                    self.undefined_procedure(name, arity)
-                }
+        } else if let Some(module) = self.indices.modules.get(&module_name) {
+            if let Some(idx) = module.code_dir.get(&(name, arity)).cloned() {
+                self.try_execute(name, arity, idx.get())
             } else {
-                let stub = functor_stub(name, arity);
-                let err = self
-                    .machine_st
-                    .existence_error(ExistenceError::QualifiedProcedure { module_name, name, arity });
-
-                Err(self.machine_st.error_form(err, stub))
+                self.undefined_procedure(name, arity)
             }
+        } else {
+            let stub = functor_stub(name, arity);
+            let err = self
+                .machine_st
+                .existence_error(ExistenceError::QualifiedProcedure {
+                    module_name,
+                    name,
+                    arity,
+                });
+
+            Err(self.machine_st.error_form(err, stub))
         }
     }
 
@@ -1234,33 +1271,25 @@ impl Machine {
 
     #[inline(always)]
     fn run_cleaners(&mut self) -> bool {
-        use std::sync::Once;
+        static CLEANER_INIT: OnceLock<(usize, usize)> = OnceLock::new();
 
-        static CLEANER_INIT: Once = Once::new();
+        let (r_c_w_h, r_c_wo_h) = *CLEANER_INIT.get_or_init(|| {
+            let r_c_w_h_atom = atom!("run_cleaners_with_handling");
+            let r_c_wo_h_atom = atom!("run_cleaners_without_handling");
+            let iso_ext = atom!("iso_ext");
 
-        static mut RCWH: usize = 0;
-        static mut RCWOH: usize = 0;
-
-        let (r_c_w_h, r_c_wo_h) = unsafe {
-            CLEANER_INIT.call_once(|| {
-                let r_c_w_h_atom = atom!("run_cleaners_with_handling");
-                let r_c_wo_h_atom = atom!("run_cleaners_without_handling");
-                let iso_ext = atom!("iso_ext");
-
-                RCWH = self
-                    .indices
-                    .get_predicate_code_index(r_c_w_h_atom, 0, iso_ext)
-                    .and_then(|item| item.local())
-                    .unwrap();
-                RCWOH = self
-                    .indices
-                    .get_predicate_code_index(r_c_wo_h_atom, 1, iso_ext)
-                    .and_then(|item| item.local())
-                    .unwrap();
-            });
-
-            (RCWH, RCWOH)
-        };
+            let r_c_w_h = self
+                .indices
+                .get_predicate_code_index(r_c_w_h_atom, 0, iso_ext)
+                .and_then(|item| item.local())
+                .unwrap();
+            let r_c_wo_h = self
+                .indices
+                .get_predicate_code_index(r_c_wo_h_atom, 1, iso_ext)
+                .and_then(|item| item.local())
+                .unwrap();
+            (r_c_w_h, r_c_wo_h)
+        });
 
         if let Some(&(_, b_cutoff, prev_block)) = self.machine_st.cont_pts.last() {
             if self.machine_st.b < b_cutoff {

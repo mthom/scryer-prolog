@@ -1,9 +1,6 @@
-pub use crate::arena::*;
-pub use crate::atom_table::*;
 use crate::heap_print::*;
 pub use crate::machine::heap::*;
 pub use crate::machine::machine_state::*;
-pub use crate::machine::stack::*;
 pub use crate::machine::streams::*;
 pub use crate::machine::*;
 pub use crate::parser::ast::*;
@@ -23,9 +20,10 @@ use std::ops::{Deref, DerefMut, Index, IndexMut};
 pub struct MockWAM {
     pub machine_st: MachineState,
     pub op_dir: OpDir,
-    pub flags: MachineFlags,
+    //pub flags: MachineFlags,
 }
 
+#[allow(dead_code)]
 impl MockWAM {
     pub fn new() -> Self {
         let op_dir = default_op_dir();
@@ -33,7 +31,7 @@ impl MockWAM {
         Self {
             machine_st: MachineState::new(),
             op_dir,
-            flags: MachineFlags::default(),
+            //flags: MachineFlags::default(),
         }
     }
 
@@ -82,6 +80,12 @@ impl MockWAM {
     }
 }
 
+impl Default for MockWAM {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
 #[cfg(test)]
 pub struct TermCopyingMockWAM<'a> {
     pub wam: &'a mut MockWAM,
@@ -109,14 +113,14 @@ impl<'a> Deref for TermCopyingMockWAM<'a> {
     type Target = MockWAM;
 
     fn deref(&self) -> &Self::Target {
-        &self.wam
+        self.wam
     }
 }
 
 #[cfg(test)]
 impl<'a> DerefMut for TermCopyingMockWAM<'a> {
     fn deref_mut(&mut self) -> &mut Self::Target {
-        &mut self.wam
+        self.wam
     }
 }
 
@@ -153,6 +157,14 @@ impl<'a> CopierTarget for TermCopyingMockWAM<'a> {
         self.wam.machine_st.heap.push(val);
     }
 
+    fn push_attr_var_queue(&mut self, attr_var_loc: usize) {
+        self.wam
+            .machine_st
+            .attr_var_init
+            .attr_var_queue
+            .push(attr_var_loc);
+    }
+
     fn stack(&mut self) -> &mut Stack {
         &mut self.wam.machine_st.stack
     }
@@ -165,9 +177,8 @@ impl<'a> CopierTarget for TermCopyingMockWAM<'a> {
 #[cfg(test)]
 pub fn all_cells_marked_and_unforwarded(heap: &[HeapCellValue]) {
     for (idx, cell) in heap.iter().enumerate() {
-        assert_eq!(
+        assert!(
             cell.get_mark_bit(),
-            true,
             "cell {:?} at index {} is not marked",
             cell,
             idx
@@ -230,20 +241,16 @@ impl Machine {
             &mut self.machine_st.arena,
         );
 
-        self.load_file(file.into(), stream);
+        self.load_file(file, stream);
         self.user_output.bytes().map(|b| b.unwrap()).collect()
     }
 
     pub fn test_load_string(&mut self, code: &str) -> Vec<u8> {
-        let stream = Stream::from_owned_string(
-            code.to_owned(),
-            &mut self.machine_st.arena,
-        );
+        let stream = Stream::from_owned_string(code.to_owned(), &mut self.machine_st.arena);
 
-        self.load_file("<stdin>".into(), stream);
+        self.load_file("<stdin>", stream);
         self.user_output.bytes().map(|b| b.unwrap()).collect()
     }
-
 }
 
 #[cfg(test)]
@@ -255,11 +262,11 @@ mod tests {
         let mut wam = MachineState::new();
         let mut op_dir = default_op_dir();
 
-        op_dir.insert((atom!("+"), Fixity::In), OpDesc::build_with(500, YFX as u8));
-        op_dir.insert((atom!("-"), Fixity::In), OpDesc::build_with(500, YFX as u8));
-        op_dir.insert((atom!("*"), Fixity::In), OpDesc::build_with(500, YFX as u8));
-        op_dir.insert((atom!("/"), Fixity::In), OpDesc::build_with(400, YFX as u8));
-        op_dir.insert((atom!("="), Fixity::In), OpDesc::build_with(700, XFX as u8));
+        op_dir.insert((atom!("+"), Fixity::In), OpDesc::build_with(500, YFX));
+        op_dir.insert((atom!("-"), Fixity::In), OpDesc::build_with(500, YFX));
+        op_dir.insert((atom!("*"), Fixity::In), OpDesc::build_with(500, YFX));
+        op_dir.insert((atom!("/"), Fixity::In), OpDesc::build_with(400, YFX));
+        op_dir.insert((atom!("="), Fixity::In), OpDesc::build_with(700, XFX));
 
         {
             parse_and_write_parsed_term_to_heap(&mut wam, "f(X,X).", &op_dir).unwrap();
@@ -476,10 +483,10 @@ mod tests {
         let mut wam = MachineState::new();
         let mut op_dir = default_op_dir();
 
-        op_dir.insert((atom!("+"), Fixity::In), OpDesc::build_with(500, YFX as u8));
-        op_dir.insert((atom!("-"), Fixity::In), OpDesc::build_with(500, YFX as u8));
-        op_dir.insert((atom!("*"), Fixity::In), OpDesc::build_with(400, YFX as u8));
-        op_dir.insert((atom!("/"), Fixity::In), OpDesc::build_with(400, YFX as u8));
+        op_dir.insert((atom!("+"), Fixity::In), OpDesc::build_with(500, YFX));
+        op_dir.insert((atom!("-"), Fixity::In), OpDesc::build_with(500, YFX));
+        op_dir.insert((atom!("*"), Fixity::In), OpDesc::build_with(400, YFX));
+        op_dir.insert((atom!("/"), Fixity::In), OpDesc::build_with(400, YFX));
 
         {
             parse_and_write_parsed_term_to_heap(&mut wam, "f(X,X).", &op_dir).unwrap();

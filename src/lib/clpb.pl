@@ -189,18 +189,18 @@ A _Boolean expression_ is one of:
 | `1`                | true                                 |
 | _variable_         | unknown truth value                  |
 | _atom_             | universally quantified variable      |
-| ~ _Expr_           | logical NOT                          |
-| _Expr_ + _Expr_    | logical OR                           |
-| _Expr_ * _Expr_    | logical AND                          |
-| _Expr_ # _Expr_    | exclusive OR                         |
-| _Var_ ^ _Expr_     | existential quantification           |
-| _Expr_ =:= _Expr_  | equality                             |
-| _Expr_ =\= _Expr_  | disequality (same as #)              |
-| _Expr_ =< _Expr_   | less or equal (implication)          |
-| _Expr_ >= _Expr_   | greater or equal                     |
-| _Expr_ < _Expr_    | less than                            |
-| _Expr_ > _Expr_    | greater than                         |
-| card(Is,Exprs)     | cardinality constraint (_see below_) |
+| `~` _Expr_           | logical NOT                          |
+| _Expr_ `+` _Expr_    | logical OR                           |
+| _Expr_ `*` _Expr_    | logical AND                          |
+| _Expr_ `#` _Expr_    | exclusive OR                         |
+| _Var_ `^` _Expr_     | existential quantification           |
+| _Expr_ `=:=` _Expr_  | equality                             |
+| _Expr_ `=\=` _Expr_  | disequality (same as #)              |
+| _Expr_ `=<` _Expr_   | less or equal (implication)          |
+| _Expr_ `>=` _Expr_   | greater or equal                     |
+| _Expr_ `<` _Expr_    | less than                            |
+| _Expr_ `>` _Expr_    | greater than                         |
+| `card(Is,Exprs)`     | cardinality constraint (_see below_) |
 | `+(Exprs)`         | n-fold disjunction (_see below_)     |
 | `*(Exprs)`         | n-fold conjunction (_see below_)     |
 
@@ -1251,7 +1251,7 @@ bdd_restriction_(Node, VI, Value, Res) -->
                   node_id(Node, ID) },
                 (   { I0 =:= VI } ->
                     (   { Value =:= 0 } -> { Res = Low }
-                    ;   { Value =:= 1 } -> { Res = High }
+                    ;   { Res = High }
                     )
                 ;   { I0 > VI } -> { Res = Node }
                 ;   state(G0), { get_assoc(ID, G0, Res) } -> []

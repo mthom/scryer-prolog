@@ -1,46 +1,58 @@
+#![allow(clippy::new_without_default)] // annotating structs annotated with #[bitfield] doesn't work
+
 #[cfg(feature = "http")]
 use crate::http::{HttpListener, HttpResponse};
 use crate::machine::loader::LiveLoadState;
 use crate::machine::machine_indices::*;
 use crate::machine::streams::*;
 use crate::raw_block::*;
-use crate::rcu::Rcu;
-use crate::rcu::RcuRef;
 use crate::read::*;
+use crate::types::UntypedArenaPtr;
 
 use crate::parser::dashu::{Integer, Rational};
+use arcu::atomic::Arcu;
+use arcu::epoch_counters::GlobalEpochCounterPool;
+use arcu::rcu_ref::RcuRef;
+use arcu::Rcu;
 use ordered_float::OrderedFloat;
 
-use std::alloc;
 use std::cell::UnsafeCell;
 use std::fmt;
+use std::fmt::Debug;
 use std::hash::{Hash, Hasher};
 use std::mem;
+use std::mem::ManuallyDrop;
 use std::net::TcpListener;
 use std::ops::{Deref, DerefMut};
 use std::ptr;
+use std::ptr::addr_of_mut;
+use std::ptr::NonNull;
 use std::sync::RwLock;
 
-#[macro_export]
 macro_rules! arena_alloc {
     ($e:expr, $arena:expr) => {{
         let result = $e;
-        #[allow(unused_unsafe)]
-        unsafe {
-            ArenaAllocated::alloc($arena, result)
-        }
+        $crate::arena::AllocateInArena::arena_allocate(result, $arena)
     }};
 }
 
-#[macro_export]
 macro_rules! float_alloc {
     ($e:expr, $arena:expr) => {{
         let result = $e;
-        #[allow(unused_unsafe)]
-        unsafe {
-            $arena.f64_tbl.build_with(result).as_ptr()
-        }
+        unsafe { $arena.f64_tbl.build_with(result).as_ptr() }
     }};
+}
+
+pub fn header_offset_from_payload<T: ?Sized + ArenaAllocated>() -> usize
+where
+    T::Payload: Sized,
+{
+    let payload_offset = mem::offset_of!(TypedAllocSlab<T>, payload);
+    let slab_offset = mem::offset_of!(TypedAllocSlab<T>, slab);
+    let header_offset = slab_offset + mem::offset_of!(AllocSlab, header);
+
+    debug_assert!(payload_offset > header_offset);
+    payload_offset - header_offset
 }
 
 use std::sync::Arc;
@@ -52,19 +64,8 @@ const F64_TABLE_ALIGN: usize = 8;
 
 #[inline(always)]
 fn global_f64table() -> &'static RwLock<Weak<F64Table>> {
-    #[cfg(feature = "rust_beta_channel")]
-    {
-        // const Weak::new will be stabilized in 1.73 which is currently in beta,
-        // till then we need a OnceLock for initialization
-        static GLOBAL_ATOM_TABLE: RwLock<Weak<F64Table>> = RwLock::const_new(Weak::new());
-        &GLOBAL_ATOM_TABLE
-    }
-    #[cfg(not(feature = "rust_beta_channel"))]
-    {
-        use std::sync::OnceLock;
-        static GLOBAL_ATOM_TABLE: OnceLock<RwLock<Weak<F64Table>>> = OnceLock::new();
-        GLOBAL_ATOM_TABLE.get_or_init(|| RwLock::new(Weak::new()))
-    }
+    static GLOBAL_ATOM_TABLE: RwLock<Weak<F64Table>> = RwLock::new(Weak::new());
+    &GLOBAL_ATOM_TABLE
 }
 
 impl RawBlockTraits for F64Table {
@@ -81,7 +82,7 @@ impl RawBlockTraits for F64Table {
 
 #[derive(Debug)]
 pub struct F64Table {
-    block: Rcu<RawBlock<F64Table>>,
+    block: Arcu<RawBlock<F64Table>, GlobalEpochCounterPool>,
     update: Mutex<()>,
 }
 
@@ -91,14 +92,14 @@ pub fn lookup_float(
 ) -> RcuRef<RawBlock<F64Table>, UnsafeCell<OrderedFloat<f64>>> {
     let f64table = global_f64table()
         .read()
-	.unwrap()
+        .unwrap()
         .upgrade()
         .expect("We should only be looking up floats while there is a float table");
 
-    RcuRef::try_map(f64table.block.active_epoch(), |raw_block| unsafe {
+    RcuRef::try_map(f64table.block.read(), |raw_block| unsafe {
         raw_block
             .base
-            .offset(offset.0 as isize)
+            .add(offset.0)
             .cast_mut()
             .cast::<UnsafeCell<OrderedFloat<f64>>>()
             .as_ref()
@@ -120,7 +121,7 @@ impl F64Table {
                 atom_table
             } else {
                 let atom_table = Arc::new(Self {
-                    block: Rcu::new(RawBlock::new()),
+                    block: Arcu::new(RawBlock::new(), GlobalEpochCounterPool),
                     update: Mutex::new(()),
                 });
                 *guard = Arc::downgrade(&atom_table);
@@ -129,12 +130,13 @@ impl F64Table {
         }
     }
 
+    #[allow(clippy::missing_safety_doc)]
     pub unsafe fn build_with(&self, value: f64) -> F64Offset {
         let update_guard = self.update.lock();
 
         // we don't have an index table for lookups as AtomTable does so
         // just get the epoch after we take the upgrade lock
-        let mut block_epoch = self.block.active_epoch();
+        let mut block_epoch = self.block.read();
 
         let mut ptr;
 
@@ -144,7 +146,7 @@ impl F64Table {
             if ptr.is_null() {
                 let new_block = block_epoch.grow_new().unwrap();
                 self.block.replace(new_block);
-                block_epoch = self.block.active_epoch();
+                block_epoch = self.block.read();
             } else {
                 break;
             }
@@ -152,9 +154,7 @@ impl F64Table {
 
         ptr::write(ptr as *mut OrderedFloat<f64>, OrderedFloat(value));
 
-        let float = F64Offset {
-            0: ptr as usize - block_epoch.base as usize,
-        };
+        let float = F64Offset(ptr as usize - block_epoch.base as usize);
 
         // atometable would have to update the index table at this point
 
@@ -195,8 +195,10 @@ pub enum ArenaHeaderTag {
 }
 
 #[bitfield]
+#[repr(align(8))]
 #[derive(Copy, Clone, Debug)]
 pub struct ArenaHeader {
+    #[allow(dead_code)]
     size: B56,
     m: bool,
     tag: ArenaHeaderTag,
@@ -220,88 +222,106 @@ impl ArenaHeader {
 }
 
 #[derive(Debug)]
-pub struct TypedArenaPtr<T: ?Sized>(ptr::NonNull<T>);
+pub struct TypedArenaPtr<T: ?Sized + ArenaAllocated>(ptr::NonNull<T::Payload>);
 
-impl<T: ?Sized + PartialOrd> PartialOrd for TypedArenaPtr<T> {
+impl<T: ?Sized + ArenaAllocated> PartialOrd for TypedArenaPtr<T>
+where
+    T::Payload: PartialOrd,
+{
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
         (**self).partial_cmp(&**other)
     }
 }
 
-impl<T: ?Sized + PartialEq> PartialEq for TypedArenaPtr<T> {
+impl<T: ?Sized + ArenaAllocated> PartialEq for TypedArenaPtr<T>
+where
+    T::Payload: PartialEq,
+{
     fn eq(&self, other: &TypedArenaPtr<T>) -> bool {
-        self.0 == other.0 || &**self == &**other
+        std::ptr::addr_eq(self.0.as_ptr(), other.0.as_ptr()) || **self == **other
     }
 }
 
-impl<T: ?Sized + PartialEq> Eq for TypedArenaPtr<T> {}
+impl<T: ?Sized + ArenaAllocated> Eq for TypedArenaPtr<T> where T::Payload: Eq {}
 
-impl<T: ?Sized + Ord> Ord for TypedArenaPtr<T> {
+impl<T: ?Sized + ArenaAllocated> Ord for TypedArenaPtr<T>
+where
+    T::Payload: Ord,
+{
     fn cmp(&self, other: &Self) -> std::cmp::Ordering {
         (**self).cmp(&**other)
     }
 }
 
-impl<T: ?Sized + Hash> Hash for TypedArenaPtr<T> {
+impl<T: ?Sized + ArenaAllocated> Hash for TypedArenaPtr<T>
+where
+    T::Payload: Hash,
+{
     #[inline(always)]
     fn hash<H: Hasher>(&self, hasher: &mut H) {
-        (&*self as &T).hash(hasher)
+        (self as &T::Payload).hash(hasher)
     }
 }
 
-impl<T: ?Sized> Clone for TypedArenaPtr<T> {
+impl<T: ?Sized + ArenaAllocated> Clone for TypedArenaPtr<T> {
     fn clone(&self) -> Self {
-        TypedArenaPtr(self.0)
+        *self
     }
 }
 
-impl<T: ?Sized> Copy for TypedArenaPtr<T> {}
+impl<T: ?Sized + ArenaAllocated> Copy for TypedArenaPtr<T> {}
 
-impl<T: ?Sized> Deref for TypedArenaPtr<T> {
-    type Target = T;
+impl<T: ?Sized + ArenaAllocated> Deref for TypedArenaPtr<T> {
+    type Target = T::Payload;
 
     fn deref(&self) -> &Self::Target {
         unsafe { self.0.as_ref() }
     }
 }
 
-impl<T: ?Sized> DerefMut for TypedArenaPtr<T> {
+impl<T: ?Sized + ArenaAllocated> DerefMut for TypedArenaPtr<T> {
     fn deref_mut(&mut self) -> &mut Self::Target {
         unsafe { self.0.as_mut() }
     }
 }
 
-impl<T: fmt::Display> fmt::Display for TypedArenaPtr<T> {
+impl<T: ArenaAllocated> fmt::Display for TypedArenaPtr<T>
+where
+    T::Payload: fmt::Display,
+{
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", **self)
+        write!(f, "{}", (self as &T::Payload))
     }
 }
 
 impl<T: ?Sized + ArenaAllocated> TypedArenaPtr<T> {
-    // data must be allocated in the arena already.
     #[inline]
-    pub const fn new(data: *mut T) -> Self {
-        let result = unsafe { TypedArenaPtr(ptr::NonNull::new_unchecked(data)) };
-        result
-    }
-
-    #[inline]
-    pub fn as_ptr(&self) -> *mut T {
+    pub fn as_ptr(&self) -> *mut T::Payload {
         self.0.as_ptr()
     }
+}
 
+impl<P, T: ?Sized + ArenaAllocated<Payload = ManuallyDrop<P>>> TypedArenaPtr<T> {
+    pub fn drop_payload(&mut self) {
+        if self.get_tag() != ArenaHeaderTag::Dropped {
+            self.set_tag(ArenaHeaderTag::Dropped);
+            unsafe { ManuallyDrop::drop(&mut *self.as_ptr()) }
+        }
+    }
+}
+
+impl<T: ?Sized + ArenaAllocated> TypedArenaPtr<T>
+where
+    T::Payload: Sized,
+{
     #[inline]
     pub fn header_ptr(&self) -> *const ArenaHeader {
-        let mut ptr = self.as_ptr() as *const u8 as usize;
-        ptr -= T::header_offset_from_payload(); // mem::size_of::<*const ArenaHeader>();
-        ptr as *const ArenaHeader
+        unsafe { self.as_ptr().byte_sub(T::header_offset_from_payload()) as *const _ }
     }
 
     #[inline]
     fn header_ptr_mut(&mut self) -> *mut ArenaHeader {
-        let mut ptr = self.as_ptr() as *const u8 as usize;
-        ptr -= T::header_offset_from_payload(); // mem::size_of::<*const ArenaHeader>();
-        ptr as *mut ArenaHeader
+        unsafe { self.as_ptr().byte_sub(T::header_offset_from_payload()) as *mut _ }
     }
 
     #[inline]
@@ -336,38 +356,77 @@ impl<T: ?Sized + ArenaAllocated> TypedArenaPtr<T> {
     }
 }
 
-pub trait ArenaAllocated: Sized {
-    type PtrToAllocated;
+pub trait AllocateInArena<AllocFor>
+where
+    AllocFor: ArenaAllocated,
+{
+    fn arena_allocate(self, arena: &mut Arena) -> TypedArenaPtr<AllocFor>;
+}
+
+impl<P, T: ArenaAllocated<Payload = P>> AllocateInArena<T> for P {
+    fn arena_allocate(self, arena: &mut Arena) -> TypedArenaPtr<T> {
+        T::alloc(arena, self)
+    }
+}
+
+/* this isn't allowed due to https://github.com/rust-lang/rust/issues/20400 I think,
+   though P == ManuallyDrop<P> might also be a problem event though that shouldn't be possible
+impl<P, T: ArenaAllocated<Payload = ManuallyDrop<P>>> AllocateInArena<T> for P {
+    fn arena_allocate(self, arena: &mut Arena) -> TypedArenaPtr<T> {
+        T::alloc(arena, ManuallyDrop::new(self))
+    }
+}
+*/
+
+pub trait ArenaAllocated {
+    type Payload: ?Sized;
 
     fn tag() -> ArenaHeaderTag;
-    fn size(&self) -> usize;
-    fn copy_to_arena(self, dst: *mut Self) -> Self::PtrToAllocated;
 
-    fn header_offset_from_payload() -> usize {
-        mem::size_of::<ArenaHeader>()
+    fn header_offset_from_payload() -> usize
+    where
+        Self::Payload: Sized,
+    {
+        header_offset_from_payload::<Self>()
     }
 
-    unsafe fn alloc(arena: &mut Arena, value: Self) -> Self::PtrToAllocated {
-        let size = value.size() + mem::size_of::<AllocSlab>();
+    /// #  Safety
+    /// - the caller must guarantee that the pointee type of UntypedArenaPtr is Self
+    /// - the pointer must be non-null
+    unsafe fn typed_ptr(ptr: UntypedArenaPtr) -> TypedArenaPtr<Self>
+    where
+        Self::Payload: Sized,
+    {
+        TypedArenaPtr(NonNull::new_unchecked(
+            ptr.payload_offset().cast_mut().cast::<Self::Payload>(),
+        ))
+    }
 
-        #[cfg(target_pointer_width = "32")]
-        let align = mem::align_of::<AllocSlab>() * 2;
+    #[allow(clippy::missing_safety_doc)]
+    fn alloc(arena: &mut Arena, value: Self::Payload) -> TypedArenaPtr<Self>
+    where
+        Self::Payload: Sized,
+    {
+        let size = mem::size_of::<TypedAllocSlab<Self>>();
+        let slab = Box::new(TypedAllocSlab {
+            slab: AllocSlab {
+                next: arena.base.take(),
+                header: ArenaHeader::build_with(size as u64, Self::tag()),
+            },
+            payload: value,
+        });
 
-        #[cfg(target_pointer_width = "64")]
-        let align = mem::align_of::<AllocSlab>();
-        let layout = alloc::Layout::from_size_align_unchecked(size, align);
+        let (allocated_ptr, untyped_slab) = slab.to_untyped();
 
-        let slab = alloc::alloc(layout) as *mut AllocSlab;
+        arena.base = Some(untyped_slab);
 
-        (*slab).next = arena.base;
-        (*slab).header = ArenaHeader::build_with(value.size() as u64, Self::tag());
+        allocated_ptr
+    }
 
-        let offset = (*slab).payload_offset();
-        let result = value.copy_to_arena(offset as *mut Self);
-
-        arena.base = slab;
-
-        result
+    /// # Safety
+    /// - ptr points to an allocated slab of the correct kind
+    unsafe fn dealloc(ptr: NonNull<TypedAllocSlab<Self>>) {
+        drop(unsafe { Box::from_raw(ptr.as_ptr()) });
     }
 }
 
@@ -390,7 +449,7 @@ impl Eq for F64Ptr {}
 
 impl PartialOrd for F64Ptr {
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        (**self).partial_cmp(&**other)
+        Some(self.cmp(other))
     }
 }
 
@@ -403,13 +462,13 @@ impl Ord for F64Ptr {
 impl Hash for F64Ptr {
     #[inline(always)]
     fn hash<H: Hasher>(&self, hasher: &mut H) {
-        (&*self as &OrderedFloat<f64>).hash(hasher)
+        (self as &OrderedFloat<f64>).hash(hasher)
     }
 }
 
 impl fmt::Display for F64Ptr {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", *self)
+        write!(f, "{}", self as &OrderedFloat<f64>)
     }
 }
 
@@ -418,7 +477,7 @@ impl Deref for F64Ptr {
 
     #[inline]
     fn deref(&self) -> &Self::Target {
-        unsafe { &*self.0.get().as_ref().unwrap() }
+        unsafe { self.0.get().as_ref().unwrap() }
     }
 }
 
@@ -478,7 +537,7 @@ impl Eq for F64Offset {}
 impl PartialOrd for F64Offset {
     #[inline(always)]
     fn partial_cmp(&self, other: &Self) -> Option<std::cmp::Ordering> {
-        self.as_ptr().partial_cmp(&other.as_ptr())
+        Some(self.cmp(other))
     }
 }
 
@@ -503,158 +562,87 @@ impl fmt::Display for F64Offset {
 }
 
 impl ArenaAllocated for Integer {
-    type PtrToAllocated = TypedArenaPtr<Integer>;
-
+    type Payload = Self;
     #[inline]
     fn tag() -> ArenaHeaderTag {
         ArenaHeaderTag::Integer
     }
-
-    #[inline]
-    fn size(&self) -> usize {
-        mem::size_of::<Self>()
-    }
-
-    #[inline]
-    fn copy_to_arena(self, dst: *mut Self) -> Self::PtrToAllocated {
-        unsafe {
-            ptr::write(dst, self);
-            TypedArenaPtr::new(dst as *mut Self)
-        }
-    }
 }
 
 impl ArenaAllocated for Rational {
-    type PtrToAllocated = TypedArenaPtr<Rational>;
-
+    type Payload = Self;
     #[inline]
     fn tag() -> ArenaHeaderTag {
         ArenaHeaderTag::Rational
     }
+}
 
-    #[inline]
-    fn size(&self) -> usize {
-        mem::size_of::<Self>()
-    }
-
-    #[inline]
-    fn copy_to_arena(self, dst: *mut Self) -> Self::PtrToAllocated {
-        unsafe {
-            ptr::write(dst, self);
-            TypedArenaPtr::new(dst as *mut Self)
-        }
+impl AllocateInArena<LiveLoadState> for LiveLoadState {
+    fn arena_allocate(self, arena: &mut Arena) -> TypedArenaPtr<LiveLoadState> {
+        LiveLoadState::alloc(arena, ManuallyDrop::new(self))
     }
 }
 
 impl ArenaAllocated for LiveLoadState {
-    type PtrToAllocated = TypedArenaPtr<LiveLoadState>;
-
+    type Payload = ManuallyDrop<Self>;
     #[inline]
     fn tag() -> ArenaHeaderTag {
         ArenaHeaderTag::LiveLoadState
     }
 
-    #[inline]
-    fn size(&self) -> usize {
-        mem::size_of::<Self>()
-    }
+    unsafe fn dealloc(ptr: NonNull<TypedAllocSlab<Self>>) {
+        let mut slab = unsafe { Box::from_raw(ptr.as_ptr()) };
 
-    #[inline]
-    fn copy_to_arena(self, dst: *mut Self) -> Self::PtrToAllocated {
-        unsafe {
-            ptr::write(dst, self);
-            TypedArenaPtr::new(dst as *mut Self)
+        match slab.tag() {
+            ArenaHeaderTag::LiveLoadState | ArenaHeaderTag::InactiveLoadState => {
+                unsafe { ManuallyDrop::drop(&mut slab.payload) };
+            }
+            ArenaHeaderTag::Dropped => {}
+            _ => {
+                unreachable!()
+            }
         }
+        drop(slab);
+    }
+}
+
+impl AllocateInArena<TcpListener> for TcpListener {
+    fn arena_allocate(self, arena: &mut Arena) -> TypedArenaPtr<TcpListener> {
+        TcpListener::alloc(arena, ManuallyDrop::new(self))
     }
 }
 
 impl ArenaAllocated for TcpListener {
-    type PtrToAllocated = TypedArenaPtr<TcpListener>;
-
+    type Payload = ManuallyDrop<Self>;
     #[inline]
     fn tag() -> ArenaHeaderTag {
         ArenaHeaderTag::TcpListener
-    }
-
-    #[inline]
-    fn size(&self) -> usize {
-        mem::size_of::<Self>()
-    }
-
-    #[inline]
-    fn copy_to_arena(self, dst: *mut Self) -> Self::PtrToAllocated {
-        unsafe {
-            ptr::write(dst, self);
-            TypedArenaPtr::new(dst as *mut Self)
-        }
     }
 }
 
 #[cfg(feature = "http")]
 impl ArenaAllocated for HttpListener {
-    type PtrToAllocated = TypedArenaPtr<HttpListener>;
-
+    type Payload = Self;
     #[inline]
     fn tag() -> ArenaHeaderTag {
         ArenaHeaderTag::HttpListener
-    }
-
-    #[inline]
-    fn size(&self) -> usize {
-        mem::size_of::<Self>()
-    }
-
-    #[inline]
-    fn copy_to_arena(self, dst: *mut Self) -> Self::PtrToAllocated {
-        unsafe {
-            ptr::write(dst, self);
-            TypedArenaPtr::new(dst as *mut Self)
-        }
     }
 }
 
 #[cfg(feature = "http")]
 impl ArenaAllocated for HttpResponse {
-    type PtrToAllocated = TypedArenaPtr<HttpResponse>;
-
+    type Payload = Self;
     #[inline]
     fn tag() -> ArenaHeaderTag {
         ArenaHeaderTag::HttpResponse
     }
-
-    #[inline]
-    fn size(&self) -> usize {
-        mem::size_of::<Self>()
-    }
-
-    #[inline]
-    fn copy_to_arena(self, dst: *mut Self) -> Self::PtrToAllocated {
-        unsafe {
-            ptr::write(dst, self);
-            TypedArenaPtr::new(dst as *mut Self)
-        }
-    }
 }
 
 impl ArenaAllocated for IndexPtr {
-    type PtrToAllocated = TypedArenaPtr<IndexPtr>;
-
+    type Payload = Self;
     #[inline]
     fn tag() -> ArenaHeaderTag {
         ArenaHeaderTag::IndexPtrUndefined
-    }
-
-    #[inline]
-    fn size(&self) -> usize {
-        mem::size_of::<Self>()
-    }
-
-    #[inline]
-    fn copy_to_arena(self, dst: *mut Self) -> Self::PtrToAllocated {
-        unsafe {
-            ptr::write(dst, self);
-            TypedArenaPtr::new(dst as *mut Self)
-        }
     }
 
     #[inline]
@@ -662,166 +650,252 @@ impl ArenaAllocated for IndexPtr {
         0
     }
 
-    unsafe fn alloc(arena: &mut Arena, value: Self) -> Self::PtrToAllocated {
-        let size = mem::size_of::<AllocSlab>();
+    /// #  Safety
+    /// - the caller must guarantee that the pointee type of UntypedArenaPtr is T
+    /// - the pointer must be non-null
+    unsafe fn typed_ptr(ptr: UntypedArenaPtr) -> TypedArenaPtr<Self> {
+        TypedArenaPtr(NonNull::new_unchecked(
+            ptr.get_ptr().cast_mut().cast::<IndexPtr>(),
+        ))
+    }
 
-        let align = mem::align_of::<AllocSlab>();
-        let layout = alloc::Layout::from_size_align_unchecked(size, align);
+    #[inline]
+    fn alloc(arena: &mut Arena, value: Self) -> TypedArenaPtr<Self> {
+        let slab = Box::new(IndexPtrSlab {
+            next: arena.base.take(),
+            index_ptr: value,
+        });
 
-        let slab = alloc::alloc(layout) as *mut AllocSlab;
+        let (allocated_ptr, untyped_slab) = slab.to_untyped();
+        arena.base = Some(untyped_slab);
+        allocated_ptr
+    }
 
-        (*slab).next = arena.base;
-
-        let result = value.copy_to_arena(mem::transmute::<_, *mut IndexPtr>(&(*slab).header));
-        arena.base = slab;
-
-        result
+    /// # Safety
+    /// - ptr points to an allocated slab of the correct kind
+    unsafe fn dealloc(ptr: NonNull<TypedAllocSlab<Self>>) {
+        drop(unsafe { Box::from_raw(ptr.as_ptr().cast::<IndexPtrSlab>()) });
     }
 }
 
 #[repr(C)]
-#[derive(Clone, Copy, Debug)]
-struct AllocSlab {
-    next: *mut AllocSlab,
-    #[cfg(target_pointer_width = "32")]
-    _padding: u32,
+#[derive(Debug)]
+pub struct AllocSlab {
+    next: Option<UntypedArenaSlab>,
     header: ArenaHeader,
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct IndexPtrSlab {
+    next: Option<UntypedArenaSlab>,
+    index_ptr: IndexPtr,
+}
+
+const _: () = {
+    if std::mem::align_of::<AllocSlab>() < std::mem::align_of::<*const ()>() {
+        panic!("alignment of AllocSlab is too low");
+    }
+
+    if std::mem::offset_of!(AllocSlab, header) % std::mem::align_of::<*const ()>() != 0 {
+        panic!("alignment of header not a multiple of pointers alignment");
+    }
+
+    if std::mem::offset_of!(AllocSlab, header) != std::mem::offset_of!(IndexPtrSlab, index_ptr) {
+        panic!("IndexPtrSlab.index_ptr and AllocSlab.header are at different offsets");
+    }
+};
+
+impl IndexPtrSlab {
+    #[inline]
+    pub fn to_untyped(self: Box<Self>) -> (TypedArenaPtr<IndexPtr>, UntypedArenaSlab) {
+        let raw_box = Box::into_raw(self);
+
+        // safety: the pointer from Box::into_raw fullfills addr_of_mut's saftey requirements
+        let index_ptr_ptr = unsafe { ptr::addr_of_mut!((*raw_box).index_ptr) };
+        let allocated_ptr = TypedArenaPtr(
+            // safety: the pointer points into a valid allocation so it is non null
+            unsafe { NonNull::new_unchecked(index_ptr_ptr) },
+        );
+
+        let untyped_arena = UntypedArenaSlab {
+            // safety: pointer from Box::into_raw is never null
+            slab: unsafe { NonNull::new_unchecked(raw_box.cast::<AllocSlab>()) },
+            tag: <IndexPtr as ArenaAllocated>::tag(),
+        };
+
+        (allocated_ptr, untyped_arena)
+    }
+}
+
+#[repr(C)]
+#[derive(Debug)]
+pub struct TypedAllocSlab<T: ?Sized + ArenaAllocated> {
+    slab: AllocSlab,
+    payload: T::Payload,
+}
+
+impl<T: ?Sized + ArenaAllocated> TypedAllocSlab<T> {
+    pub fn tag(&self) -> ArenaHeaderTag {
+        self.slab.header.tag()
+    }
+
+    pub fn payload(&mut self) -> &mut T::Payload {
+        &mut self.payload
+    }
+
+    #[inline]
+    pub fn to_untyped(self: Box<Self>) -> (TypedArenaPtr<T>, UntypedArenaSlab) {
+        let raw_box = Box::into_raw(self);
+
+        // safety: the pointer from Box::into_raw fullfills addr_of_mut's saftey requirements
+        let payload_ptr = unsafe { addr_of_mut!((*raw_box).payload) };
+
+        (
+            TypedArenaPtr(unsafe {
+                // safety: the pointer points into a valid allocation so it is non null
+                ptr::NonNull::new_unchecked(payload_ptr)
+            }),
+            UntypedArenaSlab {
+                // safety: pointer from Box::into_raw is never null
+                slab: unsafe { NonNull::new_unchecked(raw_box.cast::<AllocSlab>()) },
+                tag: T::tag(),
+            },
+        )
+    }
+}
+
+#[derive(Debug)]
+pub struct UntypedArenaSlab {
+    slab: NonNull<AllocSlab>,
+    tag: ArenaHeaderTag,
+}
+
+impl Drop for UntypedArenaSlab {
+    fn drop(&mut self) {
+        unsafe { drop_slab_in_place(self.slab, self.tag) };
+    }
 }
 
 #[derive(Debug)]
 pub struct Arena {
-    base: *mut AllocSlab,
+    base: Option<UntypedArenaSlab>,
     pub f64_tbl: Arc<F64Table>,
 }
 
 unsafe impl Send for Arena {}
 unsafe impl Sync for Arena {}
 
+#[allow(clippy::new_without_default)]
 impl Arena {
     #[inline]
     pub fn new() -> Self {
         Arena {
-            base: ptr::null_mut(),
+            base: None,
             f64_tbl: F64Table::new(),
         }
     }
 }
 
-unsafe fn drop_slab_in_place(value: &mut AllocSlab) {
-    use crate::parser::char_reader::CharReader;
+unsafe fn drop_slab_in_place(value: NonNull<AllocSlab>, tag: ArenaHeaderTag) {
+    macro_rules! drop_typed_slab_in_place {
+        ($payload: ty, $value: expr) => {
+            <$payload as ArenaAllocated>::dealloc($value.cast::<TypedAllocSlab<$payload>>())
+        };
+    }
 
-    match value.header.tag() {
+    match tag {
         ArenaHeaderTag::Integer => {
-            ptr::drop_in_place(value.payload_offset::<Integer>());
+            drop_typed_slab_in_place!(Integer, value);
         }
         ArenaHeaderTag::Rational => {
-            ptr::drop_in_place(value.payload_offset::<Rational>());
+            drop_typed_slab_in_place!(Rational, value);
         }
         ArenaHeaderTag::InputFileStream => {
-            ptr::drop_in_place(value.payload_offset::<StreamLayout<CharReader<InputFileStream>>>());
+            drop_typed_slab_in_place!(InputFileStream, value);
         }
         ArenaHeaderTag::OutputFileStream => {
-            ptr::drop_in_place(value.payload_offset::<StreamLayout<OutputFileStream>>());
+            drop_typed_slab_in_place!(OutputFileStream, value);
         }
         ArenaHeaderTag::NamedTcpStream => {
-            ptr::drop_in_place(value.payload_offset::<StreamLayout<CharReader<NamedTcpStream>>>());
+            drop_typed_slab_in_place!(NamedTcpStream, value);
         }
         ArenaHeaderTag::NamedTlsStream => {
             #[cfg(feature = "tls")]
-            ptr::drop_in_place(value.payload_offset::<StreamLayout<CharReader<NamedTlsStream>>>());
+            drop_typed_slab_in_place!(NamedTlsStream, value);
         }
         ArenaHeaderTag::HttpReadStream => {
             #[cfg(feature = "http")]
-            ptr::drop_in_place(value.payload_offset::<StreamLayout<CharReader<HttpReadStream>>>());
+            drop_typed_slab_in_place!(HttpReadStream, value);
         }
         ArenaHeaderTag::HttpWriteStream => {
             #[cfg(feature = "http")]
-            ptr::drop_in_place(value.payload_offset::<StreamLayout<CharReader<HttpWriteStream>>>());
+            drop_typed_slab_in_place!(HttpWriteStream, value);
         }
         ArenaHeaderTag::ReadlineStream => {
-            ptr::drop_in_place(value.payload_offset::<StreamLayout<ReadlineStream>>());
+            drop_typed_slab_in_place!(ReadlineStream, value);
         }
         ArenaHeaderTag::StaticStringStream => {
-            ptr::drop_in_place(value.payload_offset::<StreamLayout<StaticStringStream>>());
+            drop_typed_slab_in_place!(StaticStringStream, value);
         }
         ArenaHeaderTag::ByteStream => {
-            ptr::drop_in_place(value.payload_offset::<StreamLayout<CharReader<ByteStream>>>());
+            drop_typed_slab_in_place!(ByteStream, value);
         }
         ArenaHeaderTag::LiveLoadState | ArenaHeaderTag::InactiveLoadState => {
-            ptr::drop_in_place(value.payload_offset::<LiveLoadState>());
+            drop_typed_slab_in_place!(LiveLoadState, value);
         }
         ArenaHeaderTag::Dropped => {}
         ArenaHeaderTag::TcpListener => {
-            ptr::drop_in_place(value.payload_offset::<TcpListener>());
+            drop_typed_slab_in_place!(TcpListener, value);
         }
         ArenaHeaderTag::HttpListener => {
             #[cfg(feature = "http")]
-            ptr::drop_in_place(value.payload_offset::<HttpListener>());
+            drop_typed_slab_in_place!(HttpListener, value);
         }
         ArenaHeaderTag::HttpResponse => {
             #[cfg(feature = "http")]
-            ptr::drop_in_place(value.payload_offset::<HttpResponse>());
+            drop_typed_slab_in_place!(HttpResponse, value);
         }
         ArenaHeaderTag::StandardOutputStream => {
-            ptr::drop_in_place(value.payload_offset::<StreamLayout<StandardOutputStream>>());
+            drop_typed_slab_in_place!(StandardOutputStream, value);
         }
         ArenaHeaderTag::StandardErrorStream => {
-            ptr::drop_in_place(value.payload_offset::<StreamLayout<StandardErrorStream>>());
+            drop_typed_slab_in_place!(StandardErrorStream, value);
         }
-        ArenaHeaderTag::NullStream
-        | ArenaHeaderTag::IndexPtrUndefined
+        ArenaHeaderTag::IndexPtrUndefined
         | ArenaHeaderTag::IndexPtrDynamicUndefined
         | ArenaHeaderTag::IndexPtrDynamicIndex
-        | ArenaHeaderTag::IndexPtrIndex => {}
+        | ArenaHeaderTag::IndexPtrIndex => {
+            drop_typed_slab_in_place!(IndexPtr, value);
+        }
+        ArenaHeaderTag::NullStream => {
+            unreachable!("NullStream is never arena allocated!");
+        }
     }
 }
 
 impl Drop for Arena {
     fn drop(&mut self) {
-        let mut ptr = self.base;
+        // we un-nest UntypedArenaSlab to prevent stackoverflow due to the recursive drop
 
-        while !ptr.is_null() {
-            unsafe {
-                let ptr_r = &*ptr;
+        let mut ptr = self.base.take();
 
-                let layout = alloc::Layout::from_size_align_unchecked(
-                    ptr_r.slab_size(),
-                    mem::align_of::<AllocSlab>(),
-                );
-
-                drop_slab_in_place(&mut *ptr);
-
-                let next_ptr = ptr_r.next;
-                alloc::dealloc(ptr as *mut u8, layout);
-                ptr = next_ptr;
-            }
+        while let Some(mut slab) = ptr {
+            ptr = unsafe { slab.slab.as_mut() }.next.take();
+            drop(slab);
         }
-
-        self.base = ptr::null_mut();
     }
 }
 
-const_assert!(mem::size_of::<AllocSlab>() == 16);
-
-impl AllocSlab {
-    #[inline]
-    fn slab_size(&self) -> usize {
-        self.header.size() as usize + mem::size_of::<AllocSlab>()
-    }
-
-    fn payload_offset<T>(&self) -> *mut T {
-        let mut ptr = (self as *const AllocSlab) as usize;
-        ptr += mem::size_of::<AllocSlab>();
-        ptr as *mut T
-    }
-}
-
+const_assert!(mem::size_of::<AllocSlab>() <= 24);
 const_assert!(mem::size_of::<OrderedFloat<f64>>() == 8);
 
 #[cfg(test)]
 mod tests {
     use std::ops::Deref;
 
+    use crate::arena::*;
+    use crate::atom_table::*;
     use crate::machine::mock_wam::*;
     use crate::machine::partial_string::*;
 
@@ -837,12 +911,12 @@ mod tests {
         let mut cell = HeapCellValue::from(fp.clone());
 
         assert_eq!(cell.get_tag(), HeapCellValueTag::F64);
-        assert_eq!(cell.get_mark_bit(), false);
+        assert!(!cell.get_mark_bit());
         assert_eq!(fp.deref(), &OrderedFloat(f));
 
         cell.set_mark_bit(true);
 
-        assert_eq!(cell.get_mark_bit(), true);
+        assert!(cell.get_mark_bit());
 
         read_heap_cell!(cell,
             (HeapCellValueTag::F64, ptr) => {
@@ -874,7 +948,7 @@ mod tests {
                 );
             }
             None => {
-                assert!(false);
+                unreachable!();
             }
         }
 
@@ -890,7 +964,7 @@ mod tests {
                 );
             }
             None => {
-                assert!(false);
+                unreachable!();
             }
         }
     }
@@ -912,7 +986,6 @@ mod tests {
         let untyped_arena_ptr = match cell.to_untyped_arena_ptr() {
             Some(ptr) => ptr,
             None => {
-                assert!(false);
                 unreachable!()
             }
         };
@@ -954,7 +1027,7 @@ mod tests {
                 );
             }
             None => {
-                assert!(false); // we fail.
+                unreachable!();
             }
         }
 
@@ -991,7 +1064,7 @@ mod tests {
                 assert_eq!(&*atom.as_str(), "f");
             }
             None => {
-                assert!(false);
+                unreachable!();
             }
         }
 
@@ -1026,7 +1099,7 @@ mod tests {
                 assert_eq!(&*pstr.as_str_from(0), "ronan");
             }
             None => {
-                assert!(false);
+                unreachable!();
             }
         }
 
@@ -1046,7 +1119,7 @@ mod tests {
 
         match fixnum_cell.to_fixnum() {
             Some(n) => assert_eq!(n.get_num(), 3),
-            None => assert!(false),
+            None => unreachable!(),
         }
 
         read_heap_cell!(fixnum_cell,
@@ -1062,52 +1135,48 @@ mod tests {
 
         match fixnum_b_cell.to_fixnum() {
             Some(n) => assert_eq!(n.get_num(), 1 << 54),
-            None => assert!(false),
+            None => unreachable!(),
         }
 
-        match Fixnum::build_with_checked(1 << 56) {
-            Ok(_) => assert!(false),
-            _ => assert!(true),
+        if Fixnum::build_with_checked(1 << 56).is_ok() {
+            unreachable!()
         }
 
-        match Fixnum::build_with_checked(i64::MAX) {
-            Ok(_) => assert!(false),
-            _ => assert!(true),
+        if Fixnum::build_with_checked(i64::MAX).is_ok() {
+            unreachable!()
         }
 
-        match Fixnum::build_with_checked(i64::MIN) {
-            Ok(_) => assert!(false),
-            _ => assert!(true),
+        if Fixnum::build_with_checked(i64::MIN).is_ok() {
+            unreachable!()
         }
 
         match Fixnum::build_with_checked(-1) {
             Ok(n) => assert_eq!(n.get_num(), -1),
-            _ => assert!(false),
+            _ => unreachable!(),
         }
 
         match Fixnum::build_with_checked((1 << 55) - 1) {
             Ok(n) => assert_eq!(n.get_num(), (1 << 55) - 1),
-            _ => assert!(false),
+            _ => unreachable!(),
         }
 
         match Fixnum::build_with_checked(-(1 << 55)) {
             Ok(n) => assert_eq!(n.get_num(), -(1 << 55)),
-            _ => assert!(false),
+            _ => unreachable!(),
         }
 
-        match Fixnum::build_with_checked(-(1 << 55) - 1) {
-            Ok(_n) => assert!(false),
-            _ => assert!(true),
+        if Fixnum::build_with_checked(-(1 << 55) - 1).is_ok() {
+            unreachable!()
         }
 
         match Fixnum::build_with_checked(-1) {
             Ok(n) => assert_eq!(-n, Fixnum::build_with(1)),
-            _ => assert!(false),
+            _ => unreachable!(),
         }
 
         // float
 
-        let float = 3.1415926f64;
+        let float = std::f64::consts::PI;
         let float_ptr = float_alloc!(float, wam.machine_st.arena);
         let cell = HeapCellValue::from(float_ptr);
 

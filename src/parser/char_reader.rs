@@ -53,11 +53,6 @@ impl<R> CharReader<R> {
     }
 
     #[inline]
-    pub fn inner(&self) -> &R {
-        &self.inner
-    }
-
-    #[inline]
     pub fn inner_mut(&mut self) -> &mut R {
         &mut self.inner
     }
@@ -100,10 +95,6 @@ impl<R> CharReader<R> {
         &self.buf[self.pos..]
     }
 
-    pub fn into_inner(self) -> R {
-        self.inner
-    }
-
     pub fn reset_buffer(&mut self) {
         self.buf.clear();
         self.pos = 0;
@@ -131,15 +122,9 @@ impl<R: Read> CharReader<R> {
 
     pub fn peek_byte(&mut self) -> Option<io::Result<u8>> {
         match self.refresh_buffer() {
-            Ok(_buf) => {}
-            Err(e) => return Some(Err(e)),
+            Ok(_buf) => _buf.first().cloned().map(Ok),
+            Err(e) => Some(Err(e)),
         }
-
-        return if let Some(b) = self.buf.get(0).cloned() {
-            Some(Ok(b))
-        } else {
-            None
-        };
     }
 }
 
@@ -149,6 +134,35 @@ impl<R: Read> CharRead for CharReader<R> {
             Ok(_buf) => {}
             Err(e) => return Some(Err(e)),
         }
+
+        let bad_bytes_error = |buf: &[u8]| {
+            // If we have 4 bytes that still don't make up
+            // a valid code point, then we have garbage.
+
+            // We have bad data in the buffer. Remove
+            // leading bytes until either the buffer is
+            // empty, or we have a valid code point.
+
+            let mut split_point = 1;
+            let mut badbytes = vec![];
+
+            loop {
+                let (bad, rest) = buf.split_at(split_point);
+
+                if rest.is_empty() || str::from_utf8(rest).is_ok() {
+                    badbytes.extend_from_slice(bad);
+                    break;
+                }
+
+                split_point += 1;
+            }
+
+            // Raise the error. If we still have data in
+            // the buffer, it will be returned on the next
+            // loop.
+
+            io::Error::new(io::ErrorKind::InvalidData, BadUtf8Error { bytes: badbytes })
+        };
 
         loop {
             let buf = &self.buf[self.pos..];
@@ -165,77 +179,51 @@ impl<R: Read> CharRead for CharReader<R> {
                 };
 
                 if buf.len() - e.valid_up_to() >= 4 {
-                    // If we have 4 bytes that still don't make up
-                    // a valid code point, then we have garbage.
+                    return Some(Err(bad_bytes_error(buf)));
+                } else if self.pos >= self.buf.len() {
+                    return None;
+                } else if self.buf.len() - self.pos >= 4 && self.pos < e.valid_up_to() {
+                    return match str::from_utf8(&self.buf[self.pos..self.pos + e.valid_up_to()]) {
+                        Ok(s) => {
+                            let mut chars = s.chars();
+                            let c = chars.next().unwrap();
 
-                    // We have bad data in the buffer. Remove
-                    // leading bytes until either the buffer is
-                    // empty, or we have a valid code point.
-
-                    let mut split_point = 1;
-                    let mut badbytes = vec![];
-
-                    loop {
-                        let (bad, rest) = buf.split_at(split_point);
-
-                        if rest.is_empty() || str::from_utf8(rest).is_ok() {
-                            badbytes.extend_from_slice(bad);
-                            break;
+                            Some(Ok(c))
                         }
+                        Err(e) => {
+                            let badbytes = self.buf[self.pos..self.pos + e.valid_up_to()].to_vec();
 
-                        split_point += 1;
+                            Some(Err(io::Error::new(
+                                io::ErrorKind::InvalidData,
+                                BadUtf8Error { bytes: badbytes },
+                            )))
+                        }
+                    };
+                } else {
+                    let buf_len = self.buf.len();
+
+                    for (c, idx) in (self.pos..buf_len).enumerate() {
+                        self.buf[c] = self.buf[idx];
                     }
 
-                    // Raise the error. If we still have data in
-                    // the buffer, it will be returned on the next
-                    // loop.
+                    self.buf.truncate(buf_len - self.pos);
 
-                    return Some(Err(io::Error::new(
-                        io::ErrorKind::InvalidData,
-                        BadUtf8Error { bytes: badbytes },
-                    )));
-                } else {
-                    if self.pos >= self.buf.len() {
-                        return None;
-                    } else if self.buf.len() - self.pos >= 4 {
-                        return match str::from_utf8(&self.buf[self.pos..e.valid_up_to()]) {
-                            Ok(s) => {
-                                let mut chars = s.chars();
-                                let c = chars.next().unwrap();
+                    let buf_len = self.buf.len();
+                    self.pos = 0;
 
-                                Some(Ok(c))
-                            }
-                            Err(e) => {
-                                let badbytes = self.buf[self.pos..e.valid_up_to()].to_vec();
+                    if buf_len >= 4 {
+                        continue;
+                    }
 
-                                Some(Err(io::Error::new(
-                                    io::ErrorKind::InvalidData,
-                                    BadUtf8Error { bytes: badbytes },
-                                )))
-                            }
-                        };
-                    } else {
-                        let buf_len = self.buf.len();
+                    let mut word = [0u8; 4];
+                    let word_slice = &mut word[buf_len..4];
 
-                        for (c, idx) in (self.pos..buf_len).enumerate() {
-                            self.buf[c] = self.buf[idx];
+                    match self.inner.read(word_slice) {
+                        Err(e) => return Some(Err(e)),
+                        Ok(0) => return Some(Err(bad_bytes_error(&self.buf))),
+                        Ok(nread) => {
+                            self.buf.extend_from_slice(&word_slice[0..nread]);
                         }
-
-                        self.buf.truncate(buf_len - self.pos);
-
-                        let buf_len = self.buf.len();
-
-                        let mut word = [0u8; 4];
-                        let word_slice = &mut word[buf_len..4];
-
-                        match self.inner.read(word_slice) {
-                            Err(e) => return Some(Err(e)),
-                            Ok(nread) => {
-                                self.buf.extend_from_slice(&word_slice[0..nread]);
-                            }
-                        }
-
-                        self.pos = 0;
                     }
                 }
             } else {
@@ -330,12 +318,11 @@ impl<R: Read> Read for CharReader<R> {
             return self.inner.read_vectored(bufs);
         }
 
-        let nread = {
-            self.refresh_buffer()?;
-            (&self.buf[self.pos..]).read_vectored(bufs)?
-        };
+        self.refresh_buffer()?;
 
+        let nread = (&self.buf[self.pos..]).read_vectored(bufs)?;
         self.consume(nread);
+
         Ok(nread)
     }
 }
@@ -419,6 +406,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "slow and not very relevant")]
     fn greek_lorem_ipsum() {
         let lorem_ipsum = "Λορεμ ιπσθμ δολορ σιτ αμετ, οφφενδιτ
     εφφιcιενδι σιτ ει, ηαρθμ λεγερε qθαερενδθμ ιθσ νε. Ηασ νο εροσ
@@ -490,6 +478,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "slow and not very relevant")]
     fn armenian_lorem_ipsum() {
         let lorem_ipsum = "լոռեմ իպսում դոլոռ սիթ ամեթ, նովում գռաեծո
         սեա եա, աբհոռռեանթ դիսպութանդո եի քուի. իդ քուոդ ինդոծթում
@@ -563,6 +552,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(miri, ignore = "slow and not very relevant")]
     fn russian_lorem_ipsum() {
         let lorem_ipsum = "Лорем ипсум долор сит амет, атяуи дицам еи
         сит, ид сеа фацилис елаборарет. Меа еу яуас алияуид, те яуи

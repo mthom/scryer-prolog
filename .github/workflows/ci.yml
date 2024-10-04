@@ -10,7 +10,27 @@ on:
     - cron: '0 0 * * 3' # At 12:00 AM, only on Wednesday
   workflow_dispatch:
 
+permissions:
+  checks: write
+
 jobs:
+  style:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          rust-version: stable
+          targets: x86_64-unknown-linux-gnu
+          components: clippy, rustfmt
+          cache-context: style
+
+      - name: Check formatting
+        run: cargo fmt --check
+      - name: Check clippy
+        run: cargo clippy --no-deps --all-targets
+
   build-test:
     runs-on: ${{ matrix.os }}
     strategy:
@@ -18,79 +38,45 @@ jobs:
       matrix:
         include:
           # operating systems
-          - { os: windows-latest, rust-version: stable,  publish: true, target: 'x86_64-pc-windows-msvc'}
-          - { os: macos-11,       rust-version: stable,  publish: true, target: 'x86_64-apple-darwin' }
-          - { os: ubuntu-20.04,   rust-version: stable,  publish: true, target: 'x86_64-unknown-linux-gnu' }
+          - { os: windows-latest, rust-version: stable,  target: 'x86_64-pc-windows-msvc',   publish: true }
+          - { os: macos-latest,   rust-version: stable,  target: 'x86_64-apple-darwin',      publish: true }
+          - { os: ubuntu-20.04,   rust-version: stable,  target: 'x86_64-unknown-linux-gnu', publish: true }
           # architectures
-          - { os: ubuntu-22.04,   rust-version: stable,  publish: true, target: 'x86_64-unknown-linux-gnu', extra: true }
-          - { os: ubuntu-22.04,   rust-version: stable,  publish: true, target: 'i686-unknown-linux-gnu' }
-          - { os: ubuntu-22.04,   rust-version: nightly, publish: true, target: 'wasm32-unknown-unknown', args: '--no-default-features' }
+          - { os: ubuntu-22.04,   rust-version: stable,  target: 'x86_64-unknown-linux-gnu', publish: true }
+          - { os: ubuntu-22.04,   rust-version: stable,  target: 'i686-unknown-linux-gnu',   publish: true }
+          # FIXME(issue #2138): run wasm tests, failing to run since https://github.com/mthom/scryer-prolog/pull/2137 removed wasm-pack
+          - { os: ubuntu-22.04,   rust-version: nightly, target: 'wasm32-unknown-unknown',   publish: true, args: '--no-default-features' , test-args: '--no-run --no-default-features', use_swap: true }
+          # Cargo.toml rust-version
+          - { os: ubuntu-22.04,   rust-version: "1.77",  target: 'x86_64-unknown-linux-gnu'}
           # rust versions
-          - { os: ubuntu-22.04,   rust-version: "1.70",  target: 'x86_64-unknown-linux-gnu'}
           - { os: ubuntu-22.04,   rust-version: beta,    target: 'x86_64-unknown-linux-gnu'}
-          - { os: ubuntu-22.04,   rust-version: nightly, target: 'x86_64-unknown-linux-gnu'}
+          - { os: ubuntu-22.04,   rust-version: nightly, target: 'x86_64-unknown-linux-gnu', miri: true, components: "miri"} 
     defaults:
       run:
         shell: bash
     steps:
       - uses: actions/checkout@v3
-      - uses: dtolnay/rust-toolchain@master
-        id: toolchain
+      - uses: actionhippie/swap-space@v1
+        if: matrix.use_swap
         with:
-          toolchain: ${{ matrix.rust-version }}
+          size: 10G
+      - name: Setup Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          rust-version: ${{ matrix.rust-version }}
           targets: ${{ matrix.target }}
-          components: clippy, rustfmt
-      - name: Install i686 dependencies
-        if: "contains(matrix.target,'i686')"
-        run: |
-          sudo dpkg --add-architecture i386
-          sudo apt-get update
-          sudo apt-get install libssl-dev:i386 gcc-multilib clang -y
-          echo "CC=clang" >> $GITHUB_ENV
-          echo "PKG_CONFIG_SYSROOT_DIR=/" >> $GITHUB_ENV
-      - uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cargo/bin/
-            ~/.cargo/registry/index/
-            ~/.cargo/registry/cache/
-            ~/.cargo/git/db/
-            target/
-          key: ${{ matrix.os }}_${{ matrix.target }}_rustc-${{ steps.toolchain.outputs.cachekey }}_cargo-${{ hashFiles('**/Cargo.lock') }}
+          cache-context: ${{ matrix.os }}
+          components: ${{ matrix.components }}
 
       # Build and test.
       - name: Build library
-        run: cargo rustc --lib --target ${{ matrix.target }} ${{ matrix.args }} --verbose
+        run: cargo build --all-targets --target ${{ matrix.target }} ${{ matrix.args }} --verbose
       - name: Test
-        if: "!matrix.extra"
-        run: cargo test --target ${{ matrix.target }} ${{ matrix.args }} --all --verbose || echo "::warning ::Tests failed"
+        run: cargo test --target ${{ matrix.target }} ${{ matrix.test-args }} --all
 
-      # Extra steps only run once to avoid duplication, when matrix.extra is true
-      - name: Test and report
-        if: matrix.extra
-        run: |
-          cargo install cargo2junit --force
-          RUSTC_BOOTSTRAP=1 cargo test --all -- -Z unstable-options --format json --report-time | cargo2junit > cargo_test_results.xml
-      - name: Publish cargo test results artifact
-        if: matrix.extra
-        uses: actions/upload-artifact@v3
-        with:
-          name: cargo-test-results
-          path: cargo_test_results.xml
-      - name: Publish cargo test summary
-        if: matrix.extra
-        uses: EnricoMi/publish-unit-test-result-action/composite@master
-        with:
-          check_name: Cargo test summary
-          files: cargo_test_results.xml
-          fail_on: nothing
-          comment_mode: off
-      - name: Check formatting
-        if: matrix.extra
-        run: cargo fmt --check || echo "::warning ::cargo fmt found some formatting changes that may improve readability"
-      - name: Check clippy
-        if: matrix.extra
-        run: cargo clippy --no-deps || echo "::warning ::cargo clippy found some code style changes that may be more idiomatic"
+      - name: Check miri
+        if: matrix.miri
+        run: cargo miri test
 
       # On stable rust builds, build a binary and publish as a github actions
       # artifact. These binaries could be useful for testing the pipeline but
@@ -153,6 +139,55 @@ jobs:
           files: '${{ env.LOGTALKUSER }}/tests/prolog/**/*.xml'
           fail_on: nothing
           comment_mode: off
+
+  report:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v3
+      - name: Setup Rust
+        uses: ./.github/actions/setup-rust
+        with:
+          rust-version: stable
+          targets: x86_64-unknown-linux-gnu
+          cache-context: report
+      - name: Install CLI tools
+        run: |
+          cargo install cargo2junit --force
+          version=`yq -ptoml -oy -r '.target.*.dev-dependencies.iai-callgrind|select(.)' Cargo.toml`
+          echo installing iai-callgrind "$version"
+          cargo install iai-callgrind-runner --force --version "$version"
+          sudo apt install valgrind -y
+
+      - name: Test and report
+        run: |
+          RUSTC_BOOTSTRAP=1 cargo test --all -- -Z unstable-options --format json --report-time | cargo2junit > cargo_test_results.xml
+      - name: Publish cargo test results artifact
+        uses: actions/upload-artifact@v3
+        with:
+          name: cargo-test-results
+          path: cargo_test_results.xml
+      - name: Publish cargo test summary
+        uses: EnricoMi/publish-unit-test-result-action/composite@master
+        with:
+          check_name: Cargo test summary
+          files: cargo_test_results.xml
+          fail_on: nothing
+          comment_mode: off
+
+      - run: cargo build --all-targets --release
+      - run: cargo test --bench setup --release
+      - run: cargo bench --bench run_iai -- --save-summary=json
+      - run: cargo bench --bench run_criterion
+      - run: cargo bench --bench run_criterion -- --profile-time 60
+
+      - name: Publish benchmark results
+        uses: actions/upload-artifact@v3
+        with:
+          name: benchmark-results
+          path: |
+            target/criterion/*
+            target/iai/*
+            target/benchmark_inference_counts.json
 
   # Publish binaries when building for a tag
   release:

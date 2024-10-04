@@ -7,8 +7,6 @@ use crate::machine::machine_state::*;
 use crate::machine::*;
 use crate::types::*;
 
-use crate::try_numeric_result;
-
 use fxhash::FxBuildHasher;
 
 macro_rules! step_or_fail {
@@ -36,7 +34,7 @@ macro_rules! try_or_throw {
 
 macro_rules! increment_call_count {
     ($s:expr) => {{
-        if !($s.increment_call_count_fn)(&mut $s) {
+        if !$s.increment_call_count() {
             $s.backtrack();
             continue;
         }
@@ -208,6 +206,7 @@ impl MachineState {
                 l
             }
             (HeapCellValueTag::Fixnum |
+             HeapCellValueTag::CutPoint |
              HeapCellValueTag::Char |
              HeapCellValueTag::F64) => {
                 c
@@ -268,7 +267,16 @@ impl MachineState {
                         Literal::Rational(r)
                     }
                     (ArenaHeaderTag::Integer, n) => {
-                        Literal::Integer(n)
+                        let result = (&*n).try_into();
+
+                        match result {
+                            Ok(fixnum) => if let Ok(n) = Fixnum::build_with_checked(fixnum) {
+                                Literal::Fixnum(n)
+                            } else {
+                                Literal::Integer(n)
+                            },
+                            Err(_) => Literal::Integer(n)
+                        }
                     }
                     _ => {
                         unreachable!()
@@ -313,8 +321,8 @@ impl MachineState {
 impl Machine {
     pub(super) fn find_living_dynamic_else(&self, mut p: usize) -> Option<(usize, usize)> {
         loop {
-            match &self.code[p] {
-                &Instruction::DynamicElse(birth, death, NextOrFail::Next(i)) => {
+            match self.code[p] {
+                Instruction::DynamicElse(birth, death, NextOrFail::Next(i)) => {
                     if birth < self.machine_st.cc && Death::Finite(self.machine_st.cc) <= death {
                         return Some((p, i));
                     } else if i > 0 {
@@ -323,14 +331,14 @@ impl Machine {
                         return None;
                     }
                 }
-                &Instruction::DynamicElse(birth, death, NextOrFail::Fail(_)) => {
+                Instruction::DynamicElse(birth, death, NextOrFail::Fail(_)) => {
                     if birth < self.machine_st.cc && Death::Finite(self.machine_st.cc) <= death {
                         return Some((p, 0));
                     } else {
                         return None;
                     }
                 }
-                &Instruction::DynamicInternalElse(birth, death, NextOrFail::Next(i)) => {
+                Instruction::DynamicInternalElse(birth, death, NextOrFail::Next(i)) => {
                     if birth < self.machine_st.cc && Death::Finite(self.machine_st.cc) <= death {
                         return Some((p, i));
                     } else if i > 0 {
@@ -339,14 +347,14 @@ impl Machine {
                         return None;
                     }
                 }
-                &Instruction::DynamicInternalElse(birth, death, NextOrFail::Fail(_)) => {
+                Instruction::DynamicInternalElse(birth, death, NextOrFail::Fail(_)) => {
                     if birth < self.machine_st.cc && Death::Finite(self.machine_st.cc) <= death {
                         return Some((p, 0));
                     } else {
                         return None;
                     }
                 }
-                &Instruction::RevJmpBy(i) => {
+                Instruction::RevJmpBy(i) => {
                     p -= i;
                 }
                 _ => {
@@ -395,25 +403,14 @@ impl Machine {
     fn execute_switch_on_term(&mut self) {
         #[inline(always)]
         fn dynamic_external_of_clause_is_valid(machine: &mut Machine, p: usize) -> bool {
-            match &machine.code[p] {
-                Instruction::DynamicInternalElse(..) => {
-                    machine.machine_st.dynamic_mode = FirstOrNext::First;
-                    return true;
-                }
-                _ => {}
+            if let Instruction::DynamicInternalElse(..) = machine.code[p] {
+                machine.machine_st.dynamic_mode = FirstOrNext::First;
+                return true;
             }
 
-            match &machine.code[p - 1] {
-                &Instruction::DynamicInternalElse(birth, death, _) => {
-                    if birth < machine.machine_st.cc
-                        && Death::Finite(machine.machine_st.cc) <= death
-                    {
-                        return true;
-                    } else {
-                        return false;
-                    }
-                }
-                _ => {}
+            if let Instruction::DynamicInternalElse(birth, death, _) = machine.code[p - 1] {
+                return birth < machine.machine_st.cc
+                    && Death::Finite(machine.machine_st.cc) <= death;
             }
 
             true
@@ -567,20 +564,29 @@ impl Machine {
                         }
 
                         let mut p = self.machine_st.p;
+                        let mut arity = 0;
 
                         while self.code[p].is_head_instr() {
+                            for r in self.code[p].registers() {
+                                if let RegType::Temp(t) = r {
+                                    arity = std::cmp::max(arity, t);
+                                }
+                            }
+
                             p += 1;
                         }
 
-                        let instr =
-                            std::mem::replace(&mut self.code[p], Instruction::VerifyAttrInterrupt);
+                        let instr = std::mem::replace(
+                            &mut self.code[p],
+                            Instruction::VerifyAttrInterrupt(arity),
+                        );
 
                         self.code[VERIFY_ATTR_INTERRUPT_LOC] = instr;
                         self.machine_st.attr_var_init.cp = p;
                     }
-                    &Instruction::VerifyAttrInterrupt => {
-                        let (_, arity) = self.code[VERIFY_ATTR_INTERRUPT_LOC].to_name_and_arity();
-                        let arity = std::cmp::max(arity, self.machine_st.num_of_args);
+                    &Instruction::VerifyAttrInterrupt(arity) => {
+                        // let (_, arity) = self.code[VERIFY_ATTR_INTERRUPT_LOC].to_name_and_arity();
+                        // let arity = std::cmp::max(arity, self.machine_st.num_of_args);
                         self.run_verify_attr_interrupt(arity);
                     }
                     &Instruction::Add(ref a1, ref a2, t) => {
@@ -1896,7 +1902,7 @@ impl Machine {
                             self.machine_st.backtrack();
                         }
                     }
-                    &Instruction::CallNumberLessThanOrEqual(ref at_1, ref at_2) => {
+                    Instruction::CallNumberLessThanOrEqual(ref at_1, ref at_2) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_2));
 
@@ -1910,7 +1916,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::ExecuteNumberLessThanOrEqual(ref at_1, ref at_2) => {
+                    Instruction::ExecuteNumberLessThanOrEqual(ref at_1, ref at_2) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_2));
 
@@ -1924,7 +1930,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::CallNumberEqual(ref at_1, ref at_2) => {
+                    Instruction::CallNumberEqual(ref at_1, ref at_2) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_2));
 
@@ -1938,7 +1944,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::ExecuteNumberEqual(ref at_1, ref at_2) => {
+                    Instruction::ExecuteNumberEqual(ref at_1, ref at_2) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_2));
 
@@ -1952,7 +1958,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::CallNumberNotEqual(ref at_1, ref at_2) => {
+                    Instruction::CallNumberNotEqual(ref at_1, ref at_2) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_2));
 
@@ -1966,7 +1972,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::ExecuteNumberNotEqual(ref at_1, ref at_2) => {
+                    Instruction::ExecuteNumberNotEqual(ref at_1, ref at_2) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_2));
 
@@ -1980,7 +1986,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::CallNumberGreaterThanOrEqual(ref at_1, ref at_2) => {
+                    Instruction::CallNumberGreaterThanOrEqual(ref at_1, ref at_2) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_2));
 
@@ -1994,7 +2000,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::ExecuteNumberGreaterThanOrEqual(ref at_1, ref at_2) => {
+                    Instruction::ExecuteNumberGreaterThanOrEqual(ref at_1, ref at_2) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_2));
 
@@ -2008,7 +2014,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::CallNumberGreaterThan(ref at_1, ref at_2) => {
+                    Instruction::CallNumberGreaterThan(ref at_1, ref at_2) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_2));
 
@@ -2022,7 +2028,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::ExecuteNumberGreaterThan(ref at_1, ref at_2) => {
+                    Instruction::ExecuteNumberGreaterThan(ref at_1, ref at_2) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_2));
 
@@ -2036,7 +2042,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::CallNumberLessThan(ref at_1, ref at_2) => {
+                    Instruction::CallNumberLessThan(ref at_1, ref at_2) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_2));
 
@@ -2050,7 +2056,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::ExecuteNumberLessThan(ref at_1, ref at_2) => {
+                    Instruction::ExecuteNumberLessThan(ref at_1, ref at_2) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_2));
 
@@ -2064,7 +2070,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::DefaultCallNumberLessThanOrEqual(ref at_1, ref at_2) => {
+                    Instruction::DefaultCallNumberLessThanOrEqual(ref at_1, ref at_2) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_2));
 
@@ -2077,7 +2083,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::DefaultExecuteNumberLessThanOrEqual(ref at_1, ref at_2) => {
+                    Instruction::DefaultExecuteNumberLessThanOrEqual(ref at_1, ref at_2) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_2));
 
@@ -2090,7 +2096,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::DefaultCallNumberNotEqual(ref at_1, ref at_2) => {
+                    Instruction::DefaultCallNumberNotEqual(ref at_1, ref at_2) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_2));
 
@@ -2103,7 +2109,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::DefaultExecuteNumberNotEqual(ref at_1, ref at_2) => {
+                    Instruction::DefaultExecuteNumberNotEqual(ref at_1, ref at_2) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_2));
 
@@ -2116,7 +2122,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::DefaultCallNumberEqual(ref at_1, ref at_2) => {
+                    Instruction::DefaultCallNumberEqual(ref at_1, ref at_2) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_2));
 
@@ -2129,7 +2135,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::DefaultExecuteNumberEqual(ref at_1, ref at_2) => {
+                    Instruction::DefaultExecuteNumberEqual(ref at_1, ref at_2) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_2));
 
@@ -2142,7 +2148,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::DefaultCallNumberGreaterThanOrEqual(ref at_1, ref at_2) => {
+                    Instruction::DefaultCallNumberGreaterThanOrEqual(ref at_1, ref at_2) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_2));
 
@@ -2155,7 +2161,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::DefaultExecuteNumberGreaterThanOrEqual(ref at_1, ref at_2) => {
+                    Instruction::DefaultExecuteNumberGreaterThanOrEqual(ref at_1, ref at_2) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_2));
 
@@ -2168,7 +2174,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::DefaultCallNumberGreaterThan(ref at_1, ref at_2) => {
+                    Instruction::DefaultCallNumberGreaterThan(ref at_1, ref at_2) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_2));
 
@@ -2181,7 +2187,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::DefaultExecuteNumberGreaterThan(ref at_1, ref at_2) => {
+                    Instruction::DefaultExecuteNumberGreaterThan(ref at_1, ref at_2) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_2));
 
@@ -2194,7 +2200,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::DefaultCallNumberLessThan(ref at_1, ref at_2) => {
+                    Instruction::DefaultCallNumberLessThan(ref at_1, ref at_2) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_2));
 
@@ -2207,7 +2213,7 @@ impl Machine {
                             }
                         }
                     }
-                    &Instruction::DefaultExecuteNumberLessThan(ref at_1, ref at_2) => {
+                    Instruction::DefaultExecuteNumberLessThan(ref at_1, ref at_2) => {
                         let n1 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_1));
                         let n2 = try_or_throw!(self.machine_st, self.machine_st.get_number(at_2));
 
@@ -2955,7 +2961,7 @@ impl Machine {
 
                         self.machine_st.p += 1;
                     }
-                    &Instruction::IndexingCode(ref indexing_lines) => {
+                    Instruction::IndexingCode(ref indexing_lines) => {
                         match &indexing_lines[self.machine_st.oip as usize] {
                             IndexingLine::Indexing(_) => {
                                 self.execute_switch_on_term();
@@ -2965,22 +2971,22 @@ impl Machine {
                                 }
                             }
                             IndexingLine::IndexedChoice(ref indexed_choice) => {
-                                match &indexed_choice[self.machine_st.iip as usize] {
-                                    &IndexedChoiceInstruction::Try(offset) => {
+                                match indexed_choice[self.machine_st.iip as usize] {
+                                    IndexedChoiceInstruction::Try(offset) => {
                                         self.indexed_try(offset);
                                     }
-                                    &IndexedChoiceInstruction::Retry(l) => {
+                                    IndexedChoiceInstruction::Retry(l) => {
                                         self.retry(l);
                                         increment_call_count!(self.machine_st);
                                     }
-                                    &IndexedChoiceInstruction::DefaultRetry(l) => {
+                                    IndexedChoiceInstruction::DefaultRetry(l) => {
                                         self.retry(l);
                                     }
-                                    &IndexedChoiceInstruction::Trust(l) => {
+                                    IndexedChoiceInstruction::Trust(l) => {
                                         self.trust(l);
                                         increment_call_count!(self.machine_st);
                                     }
-                                    &IndexedChoiceInstruction::DefaultTrust(l) => {
+                                    IndexedChoiceInstruction::DefaultTrust(l) => {
                                         self.trust(l);
                                     }
                                 }
@@ -3686,6 +3692,16 @@ impl Machine {
                         try_or_throw!(self.machine_st, self.install_inference_counter());
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                     }
+                    &Instruction::CallInferenceCount => {
+                        let global_count = self.machine_st.cwil.global_count.clone();
+                        self.inference_count(self.machine_st.registers[1], global_count);
+                        step_or_fail!(self, self.machine_st.p += 1);
+                    }
+                    &Instruction::ExecuteInferenceCount => {
+                        let global_count = self.machine_st.cwil.global_count.clone();
+                        self.inference_count(self.machine_st.registers[1], global_count);
+                        step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+                    }
                     &Instruction::CallLiftedHeapLength => {
                         self.lifted_heap_length();
                         step_or_fail!(self, self.machine_st.p += 1);
@@ -4139,6 +4155,22 @@ impl Machine {
                         try_or_throw!(self.machine_st, self.define_foreign_struct());
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                     }
+                    &Instruction::CallJsEval => {
+                        try_or_throw!(self.machine_st, self.js_eval());
+                        step_or_fail!(self, self.machine_st.p += 1);
+                    }
+                    &Instruction::ExecuteJsEval => {
+                        try_or_throw!(self.machine_st, self.js_eval());
+                        step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+                    }
+                    &Instruction::CallArgv => {
+                        try_or_throw!(self.machine_st, self.argv());
+                        step_or_fail!(self, self.machine_st.p += 1);
+                    }
+                    &Instruction::ExecuteArgv => {
+                        try_or_throw!(self.machine_st, self.argv());
+                        step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+                    }
                     &Instruction::CallCurrentTime => {
                         self.current_time();
                         step_or_fail!(self, self.machine_st.p += 1);
@@ -4439,6 +4471,14 @@ impl Machine {
                         self.crypto_data_hash();
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                     }
+                    &Instruction::CallCryptoHMAC => {
+                        self.crypto_hmac();
+                        step_or_fail!(self, self.machine_st.p += 1);
+                    }
+                    &Instruction::ExecuteCryptoHMAC => {
+                        self.crypto_hmac();
+                        step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+                    }
                     &Instruction::CallCryptoDataHKDF => {
                         self.crypto_data_hkdf();
                         step_or_fail!(self, self.machine_st.p += 1);
@@ -4483,44 +4523,28 @@ impl Machine {
                         self.crypto_curve_scalar_mult();
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                     }
-                    #[cfg(feature = "crypto-full")]
-                    &Instruction::CallEd25519Sign => {
-                        self.ed25519_sign();
+                    &Instruction::CallEd25519SignRaw => {
+                        self.ed25519_sign_raw();
                         step_or_fail!(self, self.machine_st.p += 1);
                     }
-                    #[cfg(feature = "crypto-full")]
-                    &Instruction::ExecuteEd25519Sign => {
-                        self.ed25519_sign();
+                    &Instruction::ExecuteEd25519SignRaw => {
+                        self.ed25519_sign_raw();
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                     }
-                    #[cfg(feature = "crypto-full")]
-                    &Instruction::CallEd25519Verify => {
-                        self.ed25519_verify();
+                    &Instruction::CallEd25519VerifyRaw => {
+                        self.ed25519_verify_raw();
                         step_or_fail!(self, self.machine_st.p += 1);
                     }
-                    #[cfg(feature = "crypto-full")]
-                    &Instruction::ExecuteEd25519Verify => {
-                        self.ed25519_verify();
+                    &Instruction::ExecuteEd25519VerifyRaw => {
+                        self.ed25519_verify_raw();
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                     }
-                    #[cfg(feature = "crypto-full")]
-                    &Instruction::CallEd25519NewKeyPair => {
-                        self.ed25519_new_key_pair();
+                    &Instruction::CallEd25519SeedToPublicKey => {
+                        self.ed25519_seed_to_public_key();
                         step_or_fail!(self, self.machine_st.p += 1);
                     }
-                    #[cfg(feature = "crypto-full")]
-                    &Instruction::ExecuteEd25519NewKeyPair => {
-                        self.ed25519_new_key_pair();
-                        step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
-                    }
-                    #[cfg(feature = "crypto-full")]
-                    &Instruction::CallEd25519KeyPairPublicKey => {
-                        self.ed25519_key_pair_public_key();
-                        step_or_fail!(self, self.machine_st.p += 1);
-                    }
-                    #[cfg(feature = "crypto-full")]
-                    &Instruction::ExecuteEd25519KeyPairPublicKey => {
-                        self.ed25519_key_pair_public_key();
+                    &Instruction::ExecuteEd25519SeedToPublicKey => {
+                        self.ed25519_seed_to_public_key();
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                     }
                     &Instruction::CallCurve25519ScalarMult => {
@@ -4587,11 +4611,11 @@ impl Machine {
                         self.shell();
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                     }
-                    &Instruction::CallPID => {
+                    &Instruction::CallPid => {
                         self.pid();
                         step_or_fail!(self, self.machine_st.p += 1);
                     }
-                    &Instruction::ExecutePID => {
+                    &Instruction::ExecutePid => {
                         self.pid();
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                     }
@@ -5089,16 +5113,13 @@ impl Machine {
                             .get_predicate_skeleton_mut(&compilation_target, &key)
                             .unwrap();
 
-                        match skeleton.target_pos_of_clause_clause_loc(l) {
-                            Some(n) => {
-                                let r = self
-                                    .machine_st
-                                    .store(self.machine_st.deref(self.machine_st.registers[5]));
+                        if let Some(n) = skeleton.target_pos_of_clause_clause_loc(l) {
+                            let r = self
+                                .machine_st
+                                .store(self.machine_st.deref(self.machine_st.registers[5]));
 
-                                self.machine_st
-                                    .unify_fixnum(Fixnum::build_with(n as i64), r);
-                            }
-                            None => {}
+                            self.machine_st
+                                .unify_fixnum(Fixnum::build_with(n as i64), r);
                         }
 
                         self.machine_st.call_at_index(2, p);
@@ -5135,16 +5156,13 @@ impl Machine {
                             .get_predicate_skeleton_mut(&compilation_target, &key)
                             .unwrap();
 
-                        match skeleton.target_pos_of_clause_clause_loc(l) {
-                            Some(n) => {
-                                let r = self
-                                    .machine_st
-                                    .store(self.machine_st.deref(self.machine_st.registers[5]));
+                        if let Some(n) = skeleton.target_pos_of_clause_clause_loc(l) {
+                            let r = self
+                                .machine_st
+                                .store(self.machine_st.deref(self.machine_st.registers[5]));
 
-                                self.machine_st
-                                    .unify_fixnum(Fixnum::build_with(n as i64), r);
-                            }
-                            None => {}
+                            self.machine_st
+                                .unify_fixnum(Fixnum::build_with(n as i64), r);
                         }
 
                         self.machine_st.execute_at_index(2, p);
@@ -5226,7 +5244,7 @@ impl Machine {
                         // So we only have access to a runtime handle in here and can't shut it down.
                         // Since I'm not aware of the consequences of deactivating this new code which came in while PR 1880
                         // was not merged, I'm only deactivating it for now.
-                        
+
                         //#[cfg(not(target_arch = "wasm32"))]
                         //let runtime = tokio::runtime::Runtime::new().unwrap();
                         //#[cfg(target_arch = "wasm32")]

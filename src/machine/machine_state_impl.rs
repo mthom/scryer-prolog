@@ -60,7 +60,6 @@ impl MachineState {
             unify_fn: MachineState::unify,
             bind_fn: MachineState::bind,
             run_cleaners_fn: |_| false,
-            increment_call_count_fn: |_| true,
         }
     }
 
@@ -149,7 +148,7 @@ impl MachineState {
             TrailRef::BlackboardEntry(key_atom) => {
                 self.trail.push(TrailEntry::build_with(
                     TrailEntryTag::TrailedBlackboardEntry,
-                    key_atom.index as u64,
+                    key_atom.index,
                 ));
 
                 self.tr += 1;
@@ -157,7 +156,7 @@ impl MachineState {
             TrailRef::BlackboardOffset(key_atom, value_cell) => {
                 self.trail.push(TrailEntry::build_with(
                     TrailEntryTag::TrailedBlackboardOffset,
-                    key_atom.index as u64,
+                    key_atom.index,
                 ));
 
                 self.trail
@@ -257,29 +256,14 @@ impl MachineState {
         unifier.unify_internal();
     }
 
-    pub fn unify_structure(&mut self, s1: usize, value: HeapCellValue) {
-        let mut unifier = DefaultUnifier::from(self);
-        unifier.unify_structure(s1, value);
-    }
-
     pub fn unify_atom(&mut self, atom: Atom, value: HeapCellValue) {
         let mut unifier = DefaultUnifier::from(self);
         unifier.unify_atom(atom, value);
     }
 
-    pub fn unify_list(&mut self, l1: usize, value: HeapCellValue) {
-        let mut unifier = DefaultUnifier::from(self);
-        unifier.unify_list(l1, value);
-    }
-
     pub fn unify_complete_string(&mut self, atom: Atom, value: HeapCellValue) {
         let mut unifier = DefaultUnifier::from(self);
         unifier.unify_complete_string(atom, value);
-    }
-
-    pub fn unify_partial_string(&mut self, value_1: HeapCellValue, value_2: HeapCellValue) {
-        let mut unifier = DefaultUnifier::from(self);
-        unifier.unify_partial_string(value_1, value_2);
     }
 
     pub fn unify_char(&mut self, c: char, value: HeapCellValue) {
@@ -335,7 +319,12 @@ impl MachineState {
         self.ball.boundary = self.heap.len();
 
         copy_term(
-            CopyBallTerm::new(&mut self.stack, &mut self.heap, &mut self.ball.stub),
+            CopyBallTerm::new(
+                &mut self.attr_var_init.attr_var_queue,
+                &mut self.stack,
+                &mut self.heap,
+                &mut self.ball.stub,
+            ),
             addr,
             AttrVarPolicy::DeepCopy,
         );
@@ -432,8 +421,7 @@ impl MachineState {
     pub fn compare_term_test(&mut self, var_comparison: VarComparison) -> Option<Ordering> {
         let mut tabu_list = IndexSet::new();
 
-        while !self.pdl.is_empty() {
-            let s1 = self.pdl.pop().unwrap();
+        while let Some(s1) = self.pdl.pop() {
             let s1 = self.deref(s1);
 
             let s2 = self.pdl.pop().unwrap();
@@ -896,7 +884,7 @@ impl MachineState {
 
         let s = string.as_str();
 
-        match heap_pstr_iter.compare_pstr_to_string(&*s) {
+        match heap_pstr_iter.compare_pstr_to_string(&s) {
             Some(PStrPrefixCmpResult {
                 focus,
                 offset,
@@ -1142,7 +1130,7 @@ impl MachineState {
 
         let cycle_found = {
             let mut iter = cycle_detecting_stackless_preorder_iter(&mut self.heap, h);
-            while let Some(_) = iter.next() {}
+            for _ in iter.by_ref() {}
             iter.cycle_found()
         };
 
@@ -1376,7 +1364,7 @@ impl MachineState {
 
                 let mut type_error = |arity| {
                     let err = self.type_error(ValidType::Integer, arity);
-                    return Err(self.error_form(err, stub_gen()));
+                    Err(self.error_form(err, stub_gen()))
                 };
 
                 let arity = match Number::try_from(arity) {
@@ -1447,10 +1435,15 @@ impl MachineState {
                             a1.as_var().unwrap(),
                         );
                     }
+                    (HeapCellValueTag::Cons | HeapCellValueTag::Fixnum |
+                     HeapCellValueTag::F64) if arity != 0 => {
+                        let err = self.type_error(ValidType::Atom, store_name);
+                        return Err(self.error_form(err, stub_gen())); // 8.5.1.3 e)
+                    }
                     _ => {
                         let err = self.type_error(ValidType::Atomic, store_name);
-                        return Err(self.error_form(err, stub_gen()));
-                    } // 8.5.1.3 c)
+                        return Err(self.error_form(err, stub_gen())); // 8.5.1.3 c)
+                    }
                 );
             }
             _ => {
@@ -1573,7 +1566,7 @@ impl MachineState {
     ) -> Result<Vec<HeapCellValue>, MachineStub> {
         let mut heap_pstr_iter = HeapPStrIter::new(&self.heap, h);
 
-        while let Some(iteratee) = heap_pstr_iter.next() {
+        for iteratee in heap_pstr_iter.by_ref() {
             match iteratee {
                 PStrIteratee::Char(_, c) => chars.push(char_as_cell!(c)),
                 PStrIteratee::PStrSegment(_, pstr_atom, n) => {
@@ -1644,10 +1637,11 @@ impl MachineState {
                     let addr = self.store(self.deref(addr));
 
                     match Number::try_from(addr) {
-                        Ok(Number::Fixnum(n)) => match u8::try_from(n.get_num()) {
-                            Ok(b) => bytes.push(b),
-                            Err(_) => {}
-                        },
+                        Ok(Number::Fixnum(n)) => {
+                            if let Ok(b) = u8::try_from(n.get_num()) {
+                                bytes.push(b)
+                            }
+                        }
                         Ok(Number::Integer(n)) => {
                             let b: u8 = (&*n).try_into().unwrap();
 

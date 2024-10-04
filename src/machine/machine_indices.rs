@@ -1,3 +1,5 @@
+#![allow(clippy::new_without_default)] // annotating structs annotated with #[bitfield] doesn't work
+
 use crate::parser::ast::*;
 
 use crate::arena::*;
@@ -10,16 +12,14 @@ use crate::machine::ClauseType;
 
 use fxhash::FxBuildHasher;
 use indexmap::{IndexMap, IndexSet};
-use modular_bitfield::specifiers::*;
-use modular_bitfield::{bitfield, BitfieldSpecifier};
+use scryer_modular_bitfield::specifiers::*;
+use scryer_modular_bitfield::{bitfield, BitfieldSpecifier};
 
 use std::cmp::Ordering;
 use std::collections::BTreeSet;
 use std::ops::{Deref, DerefMut};
 
 use crate::types::*;
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub(crate) struct OrderedOpDirKey(pub(crate) Atom, pub(crate) Fixity);
 
 // 7.2
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -118,18 +118,12 @@ impl IndexPtr {
 
     #[inline(always)]
     pub(crate) fn is_undefined(&self) -> bool {
-        match self.tag() {
-            IndexPtrTag::Undefined => true,
-            _ => false,
-        }
+        matches!(self.tag(), IndexPtrTag::Undefined)
     }
 
     #[inline(always)]
     pub(crate) fn is_dynamic_undefined(&self) -> bool {
-        match self.tag() {
-            IndexPtrTag::DynamicUndefined => true,
-            _ => false,
-        }
+        matches!(self.tag(), IndexPtrTag::DynamicUndefined)
     }
 }
 
@@ -162,13 +156,6 @@ impl From<CodeIndex> for UntypedArenaPtr {
     #[inline(always)]
     fn from(ptr: CodeIndex) -> UntypedArenaPtr {
         UntypedArenaPtr::build_with(ptr.0.as_ptr() as usize)
-    }
-}
-
-impl From<UntypedArenaPtr> for CodeIndex {
-    #[inline(always)]
-    fn from(ptr: UntypedArenaPtr) -> CodeIndex {
-        CodeIndex(TypedArenaPtr::new(ptr.get_ptr() as *mut IndexPtr))
     }
 }
 
@@ -231,6 +218,7 @@ pub enum VarKey {
 }
 
 impl VarKey {
+    #[allow(clippy::inherent_to_string)]
     #[inline]
     pub(crate) fn to_string(&self) -> String {
         match self {
@@ -241,11 +229,7 @@ impl VarKey {
 
     #[inline(always)]
     pub(crate) fn is_anon(&self) -> bool {
-        if let VarKey::AnonVar(_) = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, VarKey::AnonVar(_))
     }
 }
 
@@ -296,8 +280,27 @@ impl IndexStore {
     }
 
     #[inline(always)]
-    pub(crate) fn goal_expansion_defined(&self, key: PredicateKey) -> bool {
-        self.goal_expansion_indices.contains(&key)
+    pub(crate) fn goal_expansion_defined(&self, key: PredicateKey, module_name: Atom) -> bool {
+        let compilation_target = match module_name {
+            atom!("user") => CompilationTarget::User,
+            _ => CompilationTarget::Module(module_name),
+        };
+
+        match key {
+            _ if self.goal_expansion_indices.contains(&key) => true,
+            _ => self
+                .get_meta_predicate_spec(key.0, key.1, &compilation_target)
+                .map(|meta_specs| {
+                    meta_specs.iter().find(|meta_spec| {
+                        matches!(
+                            meta_spec,
+                            MetaSpec::Colon | MetaSpec::RequiresExpansionWithArgument(_)
+                        )
+                    })
+                })
+                .map(|meta_spec_opt| meta_spec_opt.is_some())
+                .unwrap_or(false),
+        }
     }
 
     pub(crate) fn get_predicate_skeleton_mut(
@@ -394,10 +397,10 @@ impl IndexStore {
         key: &PredicateKey,
     ) -> Option<PredicateSkeleton> {
         match compilation_target {
-            CompilationTarget::User => self.extensible_predicates.remove(key),
+            CompilationTarget::User => self.extensible_predicates.swap_remove(key),
             CompilationTarget::Module(ref module_name) => {
                 if let Some(module) = self.modules.get_mut(module_name) {
-                    module.extensible_predicates.remove(key)
+                    module.extensible_predicates.swap_remove(key)
                 } else {
                     None
                 }
@@ -429,9 +432,9 @@ impl IndexStore {
         match compilation_target {
             CompilationTarget::User => self.meta_predicates.get(&(name, arity)),
             CompilationTarget::Module(ref module_name) => match self.modules.get(module_name) {
-                Some(ref module) => module
+                Some(module) => module
                     .meta_predicates
-                    .get(&(name.clone(), arity))
+                    .get(&(name, arity))
                     .or_else(|| self.meta_predicates.get(&(name, arity))),
                 None => self.meta_predicates.get(&(name, arity)),
             },
@@ -446,7 +449,7 @@ impl IndexStore {
                 .map(|skeleton| skeleton.core.is_dynamic)
                 .unwrap_or(false),
             _ => match self.modules.get(&module_name) {
-                Some(ref module) => module
+                Some(module) => module
                     .extensible_predicates
                     .get(&key)
                     .map(|skeleton| skeleton.core.is_dynamic)

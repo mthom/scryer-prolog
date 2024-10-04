@@ -1,3 +1,12 @@
+# Announcing the Scryer Prolog Meetup 2024
+
+This year we will meet at the Hotel Stefanie in Vienna to discuss
+present and future developments in the Scryer Prolog system.
+
+Details here: [https://www.digitalaustria.gv.at/eng/insights/Digital-Austria-Events-EN/Scryer-Prolog-Meetup-2024.html](https://www.digitalaustria.gv.at/eng/insights/Digital-Austria-Events-EN/Scryer-Prolog-Meetup-2024.html).
+
+Many thanks to the Austrian Federal Ministry of Finance for hosting
+the event!
 
 # Scryer Prolog
 
@@ -6,7 +15,10 @@ source industrial strength production environment that is also a
 testbed for bleeding edge research in logic and constraint
 programming, which is itself written in a high-level language.
 
-As of July 2023, **Scryer Prolog passes all [syntactic conformity&nbsp;tests](https://www.complang.tuwien.ac.at/ulrich/iso-prolog/conformity_testing)**.
+**Scryer Prolog passes all tests** of
+[syntactic&nbsp;conformity](https://www.complang.tuwien.ac.at/ulrich/iso-prolog/conformity_testing),
+[`variable_names/1`](https://www.complang.tuwien.ac.at/ulrich/iso-prolog/variable_names) and
+[`dif/2`](https://www.complang.tuwien.ac.at/ulrich/iso-prolog/dif).
 
 The homepage of the project is: [**https://www.scryer.pl**](https://www.scryer.pl)
 
@@ -110,7 +122,7 @@ strings.
 Precompiled binaries for several platforms are available for download
 at:
 
-**https://github.com/mthom/scryer-prolog/releases/tag/v0.9.2**
+**https://github.com/mthom/scryer-prolog/releases/latest**
 
 ### Native Compilation
 
@@ -312,6 +324,35 @@ To quit Scryer Prolog, use the standard predicate `halt/0`:
 ```
 ?- halt.
 ```
+
+### Starting Scryer Prolog
+
+Scryer Prolog can be started from the command line by specifying
+options, files and additional arguments. All components are optional:
+
+<pre>
+scryer-prolog [OPTIONS] [FILES] [-- ARGUMENTS]
+</pre>
+
+The supported options are:
+
+```
+   -h, --help             Display help message
+   -v, --version          Print version information and exit
+   -g, --goal GOAL        Run the query GOAL after consulting files
+   -f                     Fast startup. Do not load initialization file (~/.scryerrc)
+   --no-add-history       Prevent adding input to history file (~/.scryer_history)
+```
+
+All specified Prolog files are consulted.
+
+After Prolog files, application-specific arguments can be specified on
+the command line. These arguments can be accessed from within Prolog
+applications with the predicate&nbsp;`argv/1`, which yields the list
+of arguments represented as strings.
+
+Prolog files can also be turned into *shell&nbsp;scripts* as explained in
+https://github.com/mthom/scryer-prolog/issues/2170#issuecomment-1821713993.
 
 ### Dynamic operators
 
@@ -767,13 +808,14 @@ standards&nbsp;compliance and warranty.
 
 Successful existing applications of Scryer Prolog include the
 [DocLog](https://github.com/aarroyoc/doclog)&nbsp;system which
-generates Scryer's own documentation and homepage, [Symbolic
-Analysis of Grants](https://www.brz.gv.at/en/BRZ-Tech-Blog/Tech-Blog-7-Symbolic-Analysis-of-Grants.html)
-by the Austrian Federal Computing Center, and parts of the
+generates Scryer's own documentation and homepage, [reasoning
+about business&nbsp;grants](https://arxiv.org/abs/2406.15293)
+in the Austrian public&nbsp;administration, and parts of the
 [precautionary](https://github.com/dcnorris/precautionary/tree/main/exec/prolog)
 package for the analysis of dose-escalation trials in the
 safety-critical and highly regulated domain of oncology
-trial&nbsp;design.
+trial&nbsp;design, described in [*An Executable Specification of
+Oncology Dose-Escalation Protocols with&nbsp;Prolog*](https://arxiv.org/abs/2402.08334).
 
 Scryer Prolog is also very well suited for teaching and learning
 Prolog, and for testing syntactic conformance and hence portability of

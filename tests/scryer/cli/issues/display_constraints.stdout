@@ -1,0 +1,4 @@
+   X = 1.
+   true.
+   X = 1.
+   dif:dif(X,1).

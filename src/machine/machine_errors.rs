@@ -80,7 +80,7 @@ impl ValidType {
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum ResourceError {
     FiniteMemory(HeapCellValue),
-    OutOfFiles
+    OutOfFiles,
 }
 
 pub(crate) trait TypeError {
@@ -170,7 +170,11 @@ impl PermissionError for Atom {
     ) -> MachineError {
         let stub = functor!(
             atom!("permission_error"),
-            [atom(perm.as_atom()), atom(index_atom), cell(atom_as_cell!(self))]
+            [
+                atom(perm.as_atom()),
+                atom(index_atom),
+                cell(atom_as_cell!(self))
+            ]
         );
 
         MachineError {
@@ -262,6 +266,26 @@ impl DomainError for HeapCellValue {
     }
 }
 
+impl DomainError for FunctorStub {
+    fn domain_error(
+        self,
+        machine_st: &mut MachineState,
+        valid_type: DomainErrorType,
+    ) -> MachineError {
+        let stub = functor!(
+            atom!("domain_error"),
+            [atom(valid_type.as_atom()), str(machine_st.heap.len(), 0)],
+            [self]
+        );
+
+        MachineError {
+            stub,
+            location: None,
+            from: ErrorProvenance::Constructed,
+        }
+    }
+}
+
 impl DomainError for Number {
     fn domain_error(self, machine_st: &mut MachineState, error: DomainErrorType) -> MachineError {
         let stub = functor!(
@@ -319,10 +343,7 @@ impl MachineState {
                 )
             }
             ResourceError::OutOfFiles => {
-                functor!(
-                    atom!("resource_error"),
-                    [atom(atom!("file_descriptors"))]
-                )
+                functor!(atom!("resource_error"), [atom(atom!("file_descriptors"))])
             }
         };
 
@@ -355,13 +376,21 @@ impl MachineState {
                     from: ErrorProvenance::Received,
                 }
             }
-            ExistenceError::QualifiedProcedure { module_name, name, arity } => {
+            ExistenceError::QualifiedProcedure {
+                module_name,
+                name,
+                arity,
+            } => {
                 let h = self.heap.len();
 
                 let ind_stub = functor!(atom!("/"), [atom(name), fixnum(arity)]);
                 let res_stub = functor!(atom!(":"), [atom(module_name), str(h + 3, 0)], [ind_stub]);
 
-                let stub = functor!(atom!("existence_error"), [atom(atom!("procedure")), str(h, 0)], [res_stub]);
+                let stub = functor!(
+                    atom!("existence_error"),
+                    [atom(atom!("procedure")), str(h, 0)],
+                    [res_stub]
+                );
 
                 MachineError {
                     stub,
@@ -472,31 +501,34 @@ impl MachineState {
 
     pub(super) fn session_error(&mut self, err: SessionError) -> MachineError {
         match err {
-            SessionError::CannotOverwriteBuiltIn(key) => {
-                self.permission_error(
-                    Permission::Modify,
-                    atom!("static_procedure"),
-                    functor_stub(key.0, key.1)
-                        .into_iter()
-                        .collect::<MachineStub>(),
-                )
-            }
+            SessionError::CannotOverwriteBuiltIn(key) => self.permission_error(
+                Permission::Modify,
+                atom!("static_procedure"),
+                functor_stub(key.0, key.1)
+                    .into_iter()
+                    .collect::<MachineStub>(),
+            ),
+            SessionError::CannotOverwriteStaticProcedure(key) => self.permission_error(
+                Permission::Modify,
+                atom!("static_procedure"),
+                functor_stub(key.0, key.1)
+                    .into_iter()
+                    .collect::<MachineStub>(),
+            ),
             SessionError::CannotOverwriteBuiltInModule(module) => {
-                self.permission_error(
-                    Permission::Modify,
-                    atom!("static_module"),
-                    module,
-                )
+                self.permission_error(Permission::Modify, atom!("static_module"), module)
             }
             SessionError::ExistenceError(err) => self.existence_error(err),
-            SessionError::ModuleDoesNotContainExport(..) => {
-                let error_atom = atom!("module_does_not_contain_claimed_export");
+            SessionError::ModuleDoesNotContainExport(module_name, key) => {
+                let functor_stub = functor_stub(key.0, key.1);
 
-                self.permission_error(
-                    Permission::Access,
-                    atom!("private_procedure"),
-                    functor!(error_atom),
-                )
+                let stub = functor!(
+                    atom!("module_does_not_contain_claimed_export"),
+                    [atom(module_name), str(self.heap.len() + 4, 0)],
+                    [functor_stub]
+                );
+
+                self.permission_error(Permission::Access, atom!("private_procedure"), stub)
             }
             SessionError::ModuleCannotImportSelf(module_name) => {
                 let error_atom = atom!("module_cannot_import_self");
@@ -540,15 +572,6 @@ impl MachineState {
                     stub,
                 )
             }
-            SessionError::QueryCannotBeDefinedAsFact => {
-                let error_atom = atom!("query_cannot_be_defined_as_fact");
-
-                self.permission_error(
-                    Permission::Create,
-                    atom!("static_procedure"),
-                    functor!(error_atom),
-                )
-            }
         }
     }
 
@@ -559,10 +582,15 @@ impl MachineState {
             return self.arithmetic_error(err);
         }
 
+        if let CompilationError::InvalidDirective(err) = err {
+            return self.directive_error(err);
+        }
+
         let location = err.line_and_col_num();
+        let len = self.heap.len();
         let stub = err.as_functor();
 
-        let stub = functor!(atom!("syntax_error"), [str(self.heap.len(), 0)], [stub]);
+        let stub = functor!(atom!("syntax_error"), [str(len, 0)], [stub]);
 
         MachineError {
             stub,
@@ -641,7 +669,7 @@ impl MachineState {
         self.ball.boundary = 0;
         self.ball.stub.truncate(0);
 
-        self.heap.extend(err.into_iter());
+        self.heap.extend(err);
 
         self.registers[1] = if err_len == 1 {
             heap_loc_as_cell!(h)
@@ -673,19 +701,29 @@ impl MachineError {
 pub enum CompilationError {
     Arithmetic(ArithmeticError),
     ParserError(ParserError),
-    CannotParseCyclicTerm,
     ExceededMaxArity,
-    ExpectedRel,
     InadmissibleFact,
     InadmissibleQueryTerm,
-    InconsistentEntry,
+    InvalidDirective(DirectiveError),
     InvalidMetaPredicateDecl,
     InvalidModuleDecl,
     InvalidModuleExport,
     InvalidRuleHead,
     InvalidUseModuleDecl,
     InvalidModuleResolution(Atom),
-    UnreadableTerm,
+}
+
+#[derive(Debug)]
+pub enum DirectiveError {
+    ExpectedDirective(Term),
+    InvalidDirective(Atom, usize /* arity */),
+    InvalidOpDeclNameType(Term),
+    InvalidOpDeclSpecDomain(Term),
+    InvalidOpDeclSpecValue(Atom),
+    InvalidOpDeclPrecType(Term),
+    InvalidOpDeclPrecDomain(Fixnum),
+    ShallNotCreate(Atom),
+    ShallNotModify(Atom),
 }
 
 impl From<ArithmeticError> for CompilationError {
@@ -705,59 +743,50 @@ impl From<ParserError> for CompilationError {
 impl CompilationError {
     pub(crate) fn line_and_col_num(&self) -> Option<(usize, usize)> {
         match self {
-            &CompilationError::ParserError(ref err) => err.line_and_col_num(),
+            CompilationError::ParserError(err) => err.line_and_col_num(),
             _ => None,
         }
     }
 
     pub(crate) fn as_functor(&self) -> MachineStub {
         match self {
-            &CompilationError::Arithmetic(..) => {
+            CompilationError::Arithmetic(..) => {
                 functor!(atom!("arithmetic_error"))
             }
-            &CompilationError::CannotParseCyclicTerm => {
-                functor!(atom!("cannot_parse_cyclic_term"))
-            }
-            &CompilationError::ExceededMaxArity => {
+            CompilationError::ExceededMaxArity => {
                 functor!(atom!("exceeded_max_arity"))
             }
-            &CompilationError::ExpectedRel => {
-                functor!(atom!("expected_relation"))
-            }
-            &CompilationError::InadmissibleFact => {
+            CompilationError::InadmissibleFact => {
                 // TODO: type_error(callable, _).
                 functor!(atom!("inadmissible_fact"))
             }
-            &CompilationError::InadmissibleQueryTerm => {
+            CompilationError::InadmissibleQueryTerm => {
                 // TODO: type_error(callable, _).
                 functor!(atom!("inadmissible_query_term"))
             }
-            &CompilationError::InconsistentEntry => {
-                functor!(atom!("inconsistent_entry"))
+            CompilationError::InvalidDirective(_) => {
+                functor!(atom!("directive_error"))
             }
-            &CompilationError::InvalidMetaPredicateDecl => {
+            CompilationError::InvalidMetaPredicateDecl => {
                 functor!(atom!("invalid_meta_predicate_decl"))
             }
-            &CompilationError::InvalidModuleDecl => {
+            CompilationError::InvalidModuleDecl => {
                 functor!(atom!("invalid_module_declaration"))
             }
-            &CompilationError::InvalidModuleExport => {
+            CompilationError::InvalidModuleExport => {
                 functor!(atom!("invalid_module_export"))
             }
-            &CompilationError::InvalidModuleResolution(ref module_name) => {
+            CompilationError::InvalidModuleResolution(ref module_name) => {
                 functor!(atom!("no_such_module"), [atom(module_name)])
             }
-            &CompilationError::InvalidRuleHead => {
+            CompilationError::InvalidRuleHead => {
                 functor!(atom!("invalid_head_of_rule")) // TODO: type_error(callable, _).
             }
-            &CompilationError::InvalidUseModuleDecl => {
+            CompilationError::InvalidUseModuleDecl => {
                 functor!(atom!("invalid_use_module_declaration"))
             }
-            &CompilationError::ParserError(ref err) => {
+            CompilationError::ParserError(ref err) => {
                 functor!(err.as_atom())
-            }
-            &CompilationError::UnreadableTerm => {
-                functor!(atom!("unreadable_term"))
             }
         }
     }
@@ -797,6 +826,9 @@ pub(crate) enum DomainErrorType {
     SourceSink,
     Stream,
     StreamOrAlias,
+    OperatorSpecifier,
+    OperatorPriority,
+    Directive,
 }
 
 impl DomainErrorType {
@@ -808,6 +840,9 @@ impl DomainErrorType {
             DomainErrorType::SourceSink => atom!("source_sink"),
             DomainErrorType::Stream => atom!("stream"),
             DomainErrorType::StreamOrAlias => atom!("stream_or_alias"),
+            DomainErrorType::OperatorSpecifier => atom!("operator_specifier"),
+            DomainErrorType::OperatorPriority => atom!("operator_priority"),
+            DomainErrorType::Directive => atom!("directive"),
         }
     }
 }
@@ -986,7 +1021,11 @@ pub enum ExistenceError {
     Module(Atom),
     ModuleSource(ModuleSource),
     Procedure(Atom, usize),
-    QualifiedProcedure { module_name: Atom, name: Atom, arity: usize },
+    QualifiedProcedure {
+        module_name: Atom,
+        name: Atom,
+        arity: usize,
+    },
     SourceSink(HeapCellValue),
     Stream(HeapCellValue),
 }
@@ -996,26 +1035,13 @@ pub enum SessionError {
     CompilationError(CompilationError),
     CannotOverwriteBuiltIn(PredicateKey),
     CannotOverwriteBuiltInModule(Atom),
+    CannotOverwriteStaticProcedure(PredicateKey),
     ExistenceError(ExistenceError),
     ModuleDoesNotContainExport(Atom, PredicateKey),
     ModuleCannotImportSelf(Atom),
     NamelessEntry,
     OpIsInfixAndPostFix(Atom),
     PredicateNotMultifileOrDiscontiguous(CompilationTarget, PredicateKey),
-    QueryCannotBeDefinedAsFact,
-}
-
-#[derive(Debug)]
-pub(crate) enum EvalSession {
-    // EntrySuccess,
-    Error(SessionError),
-}
-
-impl From<SessionError> for EvalSession {
-    #[inline]
-    fn from(err: SessionError) -> Self {
-        EvalSession::Error(err)
-    }
 }
 
 impl From<std::io::Error> for SessionError {
@@ -1036,12 +1062,5 @@ impl From<CompilationError> for SessionError {
     #[inline]
     fn from(err: CompilationError) -> Self {
         SessionError::CompilationError(err)
-    }
-}
-
-impl From<ParserError> for EvalSession {
-    #[inline]
-    fn from(err: ParserError) -> Self {
-        EvalSession::from(SessionError::from(err))
     }
 }

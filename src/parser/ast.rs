@@ -1,3 +1,5 @@
+#![allow(clippy::new_without_default)] // annotating structs annotated with #[bitfield] doesn't work
+
 use crate::arena::*;
 use crate::atom_table::*;
 use crate::machine::machine_indices::*;
@@ -17,20 +19,120 @@ use crate::parser::dashu::{Integer, Rational};
 
 use fxhash::FxBuildHasher;
 use indexmap::IndexMap;
-use modular_bitfield::error::OutOfBounds;
-use modular_bitfield::prelude::*;
+use scryer_modular_bitfield::error::OutOfBounds;
+use scryer_modular_bitfield::prelude::*;
 
 pub type Specifier = u32;
 
 pub const MAX_ARITY: usize = 1023;
 
-pub const XFX: u32 = 0x0001;
-pub const XFY: u32 = 0x0002;
-pub const YFX: u32 = 0x0004;
-pub const XF: u32 = 0x0010;
-pub const YF: u32 = 0x0020;
-pub const FX: u32 = 0x0040;
-pub const FY: u32 = 0x0080;
+#[allow(clippy::upper_case_acronyms)]
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+pub enum OpDeclSpec {
+    XFX = 0x0001,
+    XFY = 0x0002,
+    YFX = 0x0004,
+    XF = 0x0010,
+    YF = 0x0020,
+    FX = 0x0040,
+    FY = 0x0080,
+}
+
+pub use OpDeclSpec::*;
+
+impl OpDeclSpec {
+    pub const fn value(self) -> u32 {
+        self as u32
+    }
+
+    pub fn get_spec(self) -> Atom {
+        match self {
+            XFX => atom!("xfx"),
+            XFY => atom!("xfy"),
+            YFX => atom!("yfx"),
+            FX => atom!("fx"),
+            FY => atom!("fy"),
+            XF => atom!("xf"),
+            YF => atom!("yf"),
+        }
+    }
+
+    pub const fn is_prefix(self) -> bool {
+        matches!(self, Self::FX | Self::FY)
+    }
+
+    pub const fn is_postfix(self) -> bool {
+        matches!(self, Self::XF | Self::YF)
+    }
+
+    pub const fn is_infix(self) -> bool {
+        matches!(self, Self::XFX | Self::XFY | Self::YFX)
+    }
+
+    pub const fn is_strict_left(self) -> bool {
+        matches!(self, Self::XFX | Self::XFY | Self::XF)
+    }
+
+    pub const fn is_strict_right(self) -> bool {
+        matches!(self, Self::XFX | Self::YFX | Self::FX)
+    }
+
+    #[inline(always)]
+    pub(crate) fn fixity(self) -> Fixity {
+        match self {
+            XFY | XFX | YFX => Fixity::In,
+            XF | YF => Fixity::Post,
+            FX | FY => Fixity::Pre,
+        }
+    }
+}
+
+impl From<OpDeclSpec> for u8 {
+    fn from(value: OpDeclSpec) -> Self {
+        value as u8
+    }
+}
+
+impl From<OpDeclSpec> for u32 {
+    fn from(value: OpDeclSpec) -> Self {
+        value as u32
+    }
+}
+
+impl TryFrom<u8> for OpDeclSpec {
+    type Error = ();
+
+    fn try_from(value: u8) -> Result<Self, Self::Error> {
+        Ok(match value {
+            0x0001 => XFX,
+            0x0002 => XFY,
+            0x0004 => YFX,
+            0x0010 => XF,
+            0x0020 => YF,
+            0x0040 => FX,
+            0x0080 => FY,
+            _ => return Err(()),
+        })
+    }
+}
+
+impl TryFrom<Atom> for OpDeclSpec {
+    type Error = ();
+
+    fn try_from(value: Atom) -> Result<Self, Self::Error> {
+        Ok(match value {
+            atom!("xfx") => Self::XFX,
+            atom!("xfy") => Self::XFY,
+            atom!("yfx") => Self::YFX,
+            atom!("fx") => Self::FX,
+            atom!("fy") => Self::FY,
+            atom!("xf") => Self::XF,
+            atom!("yf") => Self::YF,
+            _ => return Err(()),
+        })
+    }
+}
+
 pub const DELIMITER: u32 = 0x0100;
 pub const TERM: u32 = 0x1000;
 pub const LTERM: u32 = 0x3000;
@@ -38,7 +140,6 @@ pub const BTERM: u32 = 0x11000;
 
 pub const NEGATIVE_SIGN: u32 = 0x0200;
 
-#[macro_export]
 macro_rules! fixnum {
     ($wrapper:tt, $n:expr, $arena:expr) => {
         Fixnum::build_with_checked($n)
@@ -49,26 +150,26 @@ macro_rules! fixnum {
 
 macro_rules! is_term {
     ($x:expr) => {
-        ($x as u32 & $crate::parser::ast::TERM) != 0
+        ($x as u32 & $crate::parser::ast::TERM) != 0 || is_negate!($x)
     };
 }
 
 macro_rules! is_lterm {
     ($x:expr) => {
-        ($x as u32 & $crate::parser::ast::LTERM) != 0
+        ($x as u32 & $crate::parser::ast::LTERM) != 0 || is_negate!($x)
     };
 }
 
 macro_rules! is_op {
     ($x:expr) => {
         $x as u32
-            & ($crate::parser::ast::XF
-                | $crate::parser::ast::YF
-                | $crate::parser::ast::FX
-                | $crate::parser::ast::FY
-                | $crate::parser::ast::XFX
-                | $crate::parser::ast::XFY
-                | $crate::parser::ast::YFX)
+            & ($crate::parser::ast::XF as u32
+                | $crate::parser::ast::YF as u32
+                | $crate::parser::ast::FX as u32
+                | $crate::parser::ast::FY as u32
+                | $crate::parser::ast::XFX as u32
+                | $crate::parser::ast::XFY as u32
+                | $crate::parser::ast::YFX as u32)
             != 0
     };
 }
@@ -79,75 +180,60 @@ macro_rules! is_negate {
     };
 }
 
-#[macro_export]
 macro_rules! is_prefix {
     ($x:expr) => {
-        $x as u32 & ($crate::parser::ast::FX | $crate::parser::ast::FY) != 0
+        $x as u32 & ($crate::parser::ast::FX as u32 | $crate::parser::ast::FY as u32) != 0
     };
 }
 
-#[macro_export]
-macro_rules! is_postfix {
-    ($x:expr) => {
-        $x as u32 & ($crate::parser::ast::XF | $crate::parser::ast::YF) != 0
-    };
-}
-
-#[macro_export]
 macro_rules! is_infix {
     ($x:expr) => {
         ($x as u32
-            & ($crate::parser::ast::XFX | $crate::parser::ast::XFY | $crate::parser::ast::YFX))
+            & ($crate::parser::ast::XFX as u32
+                | $crate::parser::ast::XFY as u32
+                | $crate::parser::ast::YFX as u32))
             != 0
     };
 }
 
-#[macro_export]
 macro_rules! is_xfx {
     ($x:expr) => {
-        ($x as u32 & $crate::parser::ast::XFX) != 0
+        ($x as u32 & $crate::parser::ast::XFX as u32) != 0
     };
 }
 
-#[macro_export]
 macro_rules! is_xfy {
     ($x:expr) => {
-        ($x as u32 & $crate::parser::ast::XFY) != 0
+        ($x as u32 & $crate::parser::ast::XFY as u32) != 0
     };
 }
 
-#[macro_export]
 macro_rules! is_yfx {
     ($x:expr) => {
-        ($x as u32 & $crate::parser::ast::YFX) != 0
+        ($x as u32 & $crate::parser::ast::YFX as u32) != 0
     };
 }
-
-#[macro_export]
 macro_rules! is_yf {
     ($x:expr) => {
-        ($x as u32 & $crate::parser::ast::YF) != 0
+        ($x as u32 & $crate::parser::ast::YF as u32) != 0
     };
 }
 
-#[macro_export]
 macro_rules! is_xf {
     ($x:expr) => {
-        ($x as u32 & $crate::parser::ast::XF) != 0
+        ($x as u32 & $crate::parser::ast::XF as u32) != 0
     };
 }
 
-#[macro_export]
 macro_rules! is_fx {
     ($x:expr) => {
-        ($x as u32 & $crate::parser::ast::FX) != 0
+        ($x as u32 & $crate::parser::ast::FX as u32) != 0
     };
 }
 
-#[macro_export]
 macro_rules! is_fy {
     ($x:expr) => {
-        ($x as u32 & $crate::parser::ast::FY) != 0
+        ($x as u32 & $crate::parser::ast::FY as u32) != 0
     };
 }
 
@@ -215,17 +301,9 @@ impl Default for VarReg {
     }
 }
 
-#[macro_export]
 macro_rules! temp_v {
     ($x:expr) => {
         $crate::parser::ast::RegType::Temp($x)
-    };
-}
-
-#[macro_export]
-macro_rules! perm_v {
-    ($x:expr) => {
-        $crate::parser::ast::RegType::Perm($x)
     };
 }
 
@@ -247,11 +325,7 @@ impl GenContext {
 
     #[inline]
     pub fn is_last(self) -> bool {
-        if let GenContext::Last(_) = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, GenContext::Last(_))
     }
 }
 
@@ -266,18 +340,18 @@ pub struct OpDesc {
 
 impl OpDesc {
     #[inline]
-    pub fn build_with(prec: u16, spec: u8) -> Self {
-        OpDesc::new().with_spec(spec).with_prec(prec)
+    pub fn build_with(prec: u16, spec: OpDeclSpec) -> Self {
+        OpDesc::new().with_spec(spec as u8).with_prec(prec)
     }
 
     #[inline]
-    pub fn get(self) -> (u16, u8) {
-        (self.prec(), self.spec())
+    pub fn get(self) -> (u16, OpDeclSpec) {
+        (self.prec(), self.get_spec())
     }
 
-    pub fn set(&mut self, prec: u16, spec: u8) {
+    pub fn set(&mut self, prec: u16, spec: OpDeclSpec) {
         self.set_prec(prec);
-        self.set_spec(spec);
+        self.set_spec(spec as u8);
     }
 
     #[inline]
@@ -286,13 +360,13 @@ impl OpDesc {
     }
 
     #[inline]
-    pub fn get_spec(self) -> u8 {
-        self.spec()
+    pub fn get_spec(self) -> OpDeclSpec {
+        OpDeclSpec::try_from(self.spec()).expect("OpDecl always contains a valud OpDeclSpec")
     }
 
     #[inline]
     pub fn arity(self) -> usize {
-        if self.spec() as u32 & (XFX | XFY | YFX) == 0 {
+        if !self.get_spec().is_infix() {
             1
         } else {
             2
@@ -303,24 +377,16 @@ impl OpDesc {
 // name and fixity -> operator type and precedence.
 pub type OpDir = IndexMap<(Atom, Fixity), OpDesc, FxBuildHasher>;
 
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Default, Clone, Copy)]
 pub struct MachineFlags {
     pub double_quotes: DoubleQuotes,
     pub unknown: Unknown,
 }
 
-impl Default for MachineFlags {
-    fn default() -> Self {
-        MachineFlags {
-            double_quotes: DoubleQuotes::default(),
-            unknown: Unknown::default(),
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Debug, Default, Clone, Copy, PartialEq)]
 pub enum DoubleQuotes {
     Atom,
+    #[default]
     Chars,
     Codes,
 }
@@ -330,68 +396,26 @@ impl DoubleQuotes {
         matches!(self, DoubleQuotes::Chars)
     }
 
-    pub fn is_atom(self) -> bool {
-        matches!(self, DoubleQuotes::Atom)
-    }
-
     pub fn is_codes(self) -> bool {
         matches!(self, DoubleQuotes::Codes)
     }
 }
 
-impl Default for DoubleQuotes {
-    fn default() -> Self {
-        DoubleQuotes::Chars
-    }
-}
-
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone, Copy, Default)]
 pub enum Unknown {
+    #[default]
     Error,
     Fail,
     Warn,
 }
 
-impl Unknown {
-    pub fn is_error(self) -> bool {
-        matches!(self, Unknown::Error)
-    }
-
-    pub fn is_fail(self) -> bool {
-        matches!(self, Unknown::Fail)
-    }
-
-    pub fn is_warn(self) -> bool {
-        matches!(self, Unknown::Warn)
-    }
-}
-
-impl Default for Unknown {
-    #[inline]
-    fn default() -> Self {
-        Unknown::Error
-    }
-}
-
 pub fn default_op_dir() -> OpDir {
     let mut op_dir = OpDir::with_hasher(FxBuildHasher::default());
 
-    op_dir.insert(
-        (atom!(":-"), Fixity::In),
-        OpDesc::build_with(1200, XFX as u8),
-    );
-    op_dir.insert(
-        (atom!(":-"), Fixity::Pre),
-        OpDesc::build_with(1200, FX as u8),
-    );
-    op_dir.insert(
-        (atom!("?-"), Fixity::Pre),
-        OpDesc::build_with(1200, FX as u8),
-    );
-    op_dir.insert(
-        (atom!(","), Fixity::In),
-        OpDesc::build_with(1000, XFY as u8),
-    );
+    op_dir.insert((atom!(":-"), Fixity::In), OpDesc::build_with(1200, XFX));
+    op_dir.insert((atom!(":-"), Fixity::Pre), OpDesc::build_with(1200, FX));
+    op_dir.insert((atom!("?-"), Fixity::Pre), OpDesc::build_with(1200, FX));
+    op_dir.insert((atom!(","), Fixity::In), OpDesc::build_with(1000, XFY));
 
     op_dir
 }
@@ -402,6 +426,7 @@ pub enum ArithmeticError {
     UninstantiatedVar,
 }
 
+#[allow(dead_code)]
 #[derive(Debug)]
 pub enum ParserError {
     BackQuotedString(usize, usize),
@@ -440,6 +465,9 @@ impl ParserError {
             }
             ParserError::IO(e) if e.kind() == ErrorKind::UnexpectedEof => {
                 atom!("unexpected_end_of_file")
+            }
+            ParserError::IO(e) if e.kind() == ErrorKind::InvalidData => {
+                atom!("invalid_data")
             }
             ParserError::IO(_) => atom!("input_output_error"),
             ParserError::LexicalError(_) => atom!("lexical_error"),
@@ -505,7 +533,7 @@ impl<'a, 'b> CompositeOpDir<'a, 'b> {
 
     #[inline]
     pub(crate) fn get(&self, name: Atom, fixity: Fixity) -> Option<OpDesc> {
-        let entry = if let Some(ref primary_op_dir) = &self.primary_op_dir {
+        let entry = if let Some(primary_op_dir) = &self.primary_op_dir {
             primary_op_dir.get(&(name, fixity))
         } else {
             None
@@ -558,7 +586,7 @@ impl Fixnum {
 
     #[inline]
     pub fn get_tag(&self) -> HeapCellValueTag {
-        use modular_bitfield::Specifier;
+        use scryer_modular_bitfield::Specifier;
         HeapCellValueTag::from_bytes(self.tag()).unwrap()
     }
 
@@ -567,7 +595,7 @@ impl Fixnum {
         const UPPER_BOUND: i64 = (1 << 55) - 1;
         const LOWER_BOUND: i64 = -(1 << 55);
 
-        if LOWER_BOUND <= num && num <= UPPER_BOUND {
+        if (LOWER_BOUND..=UPPER_BOUND).contains(&num) {
             Ok(Fixnum::new()
                 .with_m(false)
                 .with_f(false)
@@ -582,7 +610,7 @@ impl Fixnum {
     pub fn get_num(self) -> i64 {
         let n = self.num() as i64;
         let (n, overflowed) = (n << 8).overflowing_shr(8);
-        debug_assert_eq!(overflowed, false);
+        debug_assert!(!overflowed);
         n
     }
 }
@@ -633,7 +661,7 @@ impl fmt::Display for Literal {
 }
 
 impl Literal {
-    pub fn to_atom(&self, atom_tbl: &Arc<AtomTable>) -> Option<Atom> {
+    pub fn as_atom(&self, atom_tbl: &Arc<AtomTable>) -> Option<Atom> {
         match self {
             Literal::Atom(atom) => Some(atom.defrock_brackets(atom_tbl)),
             _ => None,
@@ -727,14 +755,7 @@ impl From<&str> for Var {
 }
 
 impl Var {
-    #[inline(always)]
-    pub fn as_str(&self) -> Option<&str> {
-        match self {
-            Var::Named(value) => Some(&value),
-            _ => None,
-        }
-    }
-
+    #[allow(clippy::inherent_to_string)]
     #[inline(always)]
     pub fn to_string(&self) -> String {
         match self {
@@ -758,26 +779,10 @@ pub enum Term {
 }
 
 impl Term {
-    pub fn into_literal(self) -> Option<Literal> {
-        match self {
-            Term::Literal(_, c) => Some(c),
-            _ => None,
-        }
-    }
-
     pub fn first_arg(&self) -> Option<&Term> {
         match self {
             Term::Clause(_, _, ref terms) => terms.first(),
             _ => None,
-        }
-    }
-
-    pub fn set_name(&mut self, new_name: Atom) {
-        match self {
-            Term::Literal(_, Literal::Atom(ref mut atom)) | Term::Clause(_, ref mut atom, ..) => {
-                *atom = new_name;
-            }
-            _ => {}
         }
     }
 
@@ -798,23 +803,10 @@ impl Term {
     }
 }
 
-#[inline]
-pub fn source_arity(terms: &[Term]) -> usize {
-    if let Some(last_arg) = terms.last() {
-        if let Term::Literal(_, Literal::CodeIndex(_)) = last_arg {
-            return terms.len() - 1;
-        }
-    }
-
-    terms.len()
-}
-
 pub(crate) fn unfold_by_str_once(term: &mut Term, s: Atom) -> Option<(Term, Term)> {
     if let Term::Clause(_, ref name, ref mut subterms) = term {
-        if let Some(last_arg) = subterms.last() {
-            if let Term::Literal(_, Literal::CodeIndex(_)) = last_arg {
-                subterms.pop();
-            }
+        if let Some(Term::Literal(_, Literal::CodeIndex(_))) = subterms.last() {
+            subterms.pop();
         }
 
         if name == &s && subterms.len() == 2 {

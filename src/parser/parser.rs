@@ -97,14 +97,19 @@ pub(crate) fn as_partial_string(
                         string.push(*c);
                     }
                     _ => {
-                        return Err(Term::Cons(Cell::default(), Box::new(head), orig_tail));
+                        tail = Term::Cons(
+                            Cell::default(),
+                            Box::new((**prev).clone()),
+                            Box::new((**succ).clone()),
+                        );
+                        break;
                     }
                 }
 
                 tail_ref = succ;
             }
             Term::PartialString(_, pstr, tail) => {
-                string += &pstr;
+                string += pstr;
                 tail_ref = tail;
             }
             Term::CompleteString(_, cstr) => {
@@ -145,6 +150,7 @@ pub fn get_op_desc(name: Atom, op_dir: &CompositeOpDir) -> Option<CompositeOpDes
             op_desc.pre = pri as usize;
             op_desc.spec |= spec as u32;
         } else if name == atom!("-") {
+            // used to denote a negative sign that should be treated as an atom and not an operator
             op_desc.spec |= NEGATIVE_SIGN;
         }
     }
@@ -172,31 +178,6 @@ pub fn get_op_desc(name: Atom, op_dir: &CompositeOpDir) -> Option<CompositeOpDes
     } else {
         Some(op_desc)
     }
-}
-
-pub fn get_clause_spec(name: Atom, arity: usize, op_dir: &CompositeOpDir) -> Option<OpDesc> {
-    match arity {
-        1 => {
-            /* This is a clause with an operator principal functor. Prefix operators
-            are supposed over post.
-             */
-            if let Some(cell) = op_dir.get(name, Fixity::Pre) {
-                return Some(cell);
-            }
-
-            if let Some(cell) = op_dir.get(name, Fixity::Post) {
-                return Some(cell);
-            }
-        }
-        2 => {
-            if let Some(cell) = op_dir.get(name, Fixity::In) {
-                return Some(cell);
-            }
-        }
-        _ => {}
-    };
-
-    None
 }
 
 fn affirm_xfx(priority: usize, d2: TokenDesc, d3: TokenDesc, d1: TokenDesc) -> bool {
@@ -335,16 +316,6 @@ impl<'a, R: CharRead> Parser<'a, R> {
         }
     }
 
-    #[inline]
-    pub fn line_num(&self) -> usize {
-        self.lexer.line_num
-    }
-
-    #[inline]
-    pub fn col_num(&self) -> usize {
-        self.lexer.col_num
-    }
-
     fn get_term_name(&mut self, td: TokenDesc) -> Option<Atom> {
         match td.tt {
             TokenType::HeadTailSeparator => Some(atom!("|")),
@@ -379,10 +350,10 @@ impl<'a, R: CharRead> Parser<'a, R> {
         }
     }
 
-    fn push_unary_op(&mut self, td: TokenDesc, spec: Specifier, assoc: u32) {
+    fn push_unary_op(&mut self, td: TokenDesc, spec: Specifier, assoc: OpDeclSpec) {
         if let Some(mut arg1) = self.terms.pop() {
             if let Some(mut name) = self.terms.pop() {
-                if is_postfix!(assoc) {
+                if assoc.is_postfix() {
                     mem::swap(&mut arg1, &mut name);
                 }
 
@@ -464,7 +435,12 @@ impl<'a, R: CharRead> Parser<'a, R> {
             Token::End => TokenType::End,
         };
 
-        self.stack.push(TokenDesc { tt, priority, spec, unfold_bounds: 0, });
+        self.stack.push(TokenDesc {
+            tt,
+            priority,
+            spec,
+            unfold_bounds: 0,
+        });
     }
 
     fn reduce_op(&mut self, priority: usize) {
@@ -472,10 +448,9 @@ impl<'a, R: CharRead> Parser<'a, R> {
             if let Some(desc1) = self.stack.pop() {
                 if let Some(desc2) = self.stack.pop() {
                     if let Some(desc3) = self.stack.pop() {
-                        if is_xfx!(desc2.spec) && affirm_xfx(priority, desc2, desc3, desc1) {
-                            self.push_binary_op(desc2, LTERM);
-                            continue;
-                        } else if is_yfx!(desc2.spec) && affirm_yfx(priority, desc2, desc3, desc1) {
+                        if is_xfx!(desc2.spec) && affirm_xfx(priority, desc2, desc3, desc1)
+                            || is_yfx!(desc2.spec) && affirm_yfx(priority, desc2, desc3, desc1)
+                        {
                             self.push_binary_op(desc2, LTERM);
                             continue;
                         } else if is_xfy!(desc2.spec) && affirm_xfy(priority, desc2, desc3, desc1) {
@@ -555,10 +530,12 @@ impl<'a, R: CharRead> Parser<'a, R> {
         if self.stack.len() > 2 * arity {
             let idx = self.stack.len() - 2 * arity - 1;
 
-            if is_infix!(self.stack[idx].spec) && idx > 0 {
-                if !is_op!(self.stack[idx - 1].spec) && !self.stack[idx - 1].tt.is_sep() {
-                    return false;
-                }
+            if is_infix!(self.stack[idx].spec)
+                && idx > 0
+                && !is_op!(self.stack[idx - 1].spec)
+                && !self.stack[idx - 1].tt.is_sep()
+            {
+                return false;
             }
         } else {
             return false;
@@ -571,59 +548,57 @@ impl<'a, R: CharRead> Parser<'a, R> {
         let stack_len = self.stack.len() - 2 * arity - 1;
         let idx = self.terms.len() - arity;
 
-        if TokenType::Term == self.stack[stack_len].tt {
-            if atomize_term(&self.lexer.machine_st.atom_tbl, &self.terms[idx - 1]).is_some() {
-                self.stack.truncate(stack_len + 1);
+        if TokenType::Term == self.stack[stack_len].tt
+            && atomize_term(&self.lexer.machine_st.atom_tbl, &self.terms[idx - 1]).is_some()
+        {
+            self.stack.truncate(stack_len + 1);
 
-                let mut subterms: Vec<_> = self.terms.drain(idx..).collect();
+            let mut subterms: Vec<_> = self.terms.drain(idx..).collect();
 
-                if let Some(name) = self
-                    .terms
-                    .pop()
-                    .and_then(|t| atomize_term(&self.lexer.machine_st.atom_tbl, &t))
-                {
-                    // reduce the '.' functor to a cons cell if it applies.
-                    if name == atom!(".") && subterms.len() == 2 {
-                        let tail = subterms.pop().unwrap();
-                        let head = subterms.pop().unwrap();
+            if let Some(name) = self
+                .terms
+                .pop()
+                .and_then(|t| atomize_term(&self.lexer.machine_st.atom_tbl, &t))
+            {
+                // reduce the '.' functor to a cons cell if it applies.
+                if name == atom!(".") && subterms.len() == 2 {
+                    let tail = subterms.pop().unwrap();
+                    let head = subterms.pop().unwrap();
 
-                        self.terms.push(match as_partial_string(head, tail) {
-                            Ok((string_buf, Some(tail))) => {
-                                Term::PartialString(Cell::default(), string_buf, tail)
-                            }
-                            Ok((string_buf, None)) => {
-                                let atom = AtomTable::build_with(
-                                    &self.lexer.machine_st.atom_tbl,
-                                    &string_buf,
-                                );
-                                Term::CompleteString(Cell::default(), atom)
-                            }
-                            Err(term) => term,
-                        });
-                    } else {
-                        self.terms
-                            .push(Term::Clause(Cell::default(), name, subterms));
-                    }
-
-                    if let Some(&mut TokenDesc {
-                        ref mut tt,
-                        ref mut priority,
-                        ref mut spec,
-                        ref mut unfold_bounds,
-                    }) = self.stack.last_mut()
-                    {
-                        if *spec == BTERM {
-                            return false;
+                    self.terms.push(match as_partial_string(head, tail) {
+                        Ok((string_buf, Some(tail))) => {
+                            Term::PartialString(Cell::default(), string_buf, tail)
                         }
+                        Ok((string_buf, None)) => {
+                            let atom =
+                                AtomTable::build_with(&self.lexer.machine_st.atom_tbl, &string_buf);
+                            Term::CompleteString(Cell::default(), atom)
+                        }
+                        Err(term) => term,
+                    });
+                } else {
+                    self.terms
+                        .push(Term::Clause(Cell::default(), name, subterms));
+                }
 
-                        *tt = TokenType::Term;
-                        *priority = 0;
-                        *spec = TERM;
-                        *unfold_bounds = 0;
+                if let Some(&mut TokenDesc {
+                    ref mut tt,
+                    ref mut priority,
+                    ref mut spec,
+                    ref mut unfold_bounds,
+                }) = self.stack.last_mut()
+                {
+                    if *spec == BTERM {
+                        return false;
                     }
 
-                    return true;
+                    *tt = TokenType::Term;
+                    *priority = 0;
+                    *spec = TERM;
+                    *unfold_bounds = 0;
                 }
+
+                return true;
             }
         }
 
@@ -642,34 +617,31 @@ impl<'a, R: CharRead> Parser<'a, R> {
                 /* '|' is a head-tail separator here, not
                  * an operator, so expand the
                  * terms it compacted out again. */
-                match (term.name(), term.arity()) {
-                    (Some(name), 2) if name == atom!(",") => {
-                        let terms = if op_desc.unfold_bounds == 0 {
-                            unfold_by_str(term, atom!(","))
-                        } else {
-                            let mut terms = vec![];
+                if let (Some(atom!(",")), 2) = (term.name(), term.arity()) {
+                    let terms = if op_desc.unfold_bounds == 0 {
+                        unfold_by_str(term, atom!(","))
+                    } else {
+                        let mut terms = vec![];
 
-                            while let Some((fst, snd)) = unfold_by_str_once(&mut term, atom!(",")) {
-                                terms.push(fst);
-                                term = snd;
+                        while let Some((fst, snd)) = unfold_by_str_once(&mut term, atom!(",")) {
+                            terms.push(fst);
+                            term = snd;
 
-                                op_desc.unfold_bounds -= 2;
+                            op_desc.unfold_bounds -= 2;
 
-                                if op_desc.unfold_bounds == 0 {
-                                    break;
-                                }
+                            if op_desc.unfold_bounds == 0 {
+                                break;
                             }
+                        }
 
-                            terms.push(term);
-                            terms
-                        };
+                        terms.push(term);
+                        terms
+                    };
 
-                        let arity = terms.len() - 1;
+                    let arity = terms.len() - 1;
 
-                        self.terms.extend(terms.into_iter());
-                        return arity;
-                    }
-                    _ => {}
+                    self.terms.extend(terms);
+                    return arity;
                 }
             }
 
@@ -687,23 +659,20 @@ impl<'a, R: CharRead> Parser<'a, R> {
                 // expect a term or non-comma operator.
                 if let TokenType::Comma = desc.tt {
                     return None;
-                } else if is_term!(desc.spec) || is_op!(desc.spec) {
+                } else if is_term!(desc.spec) || is_op!(desc.spec) || is_negate!(desc.spec) {
                     arity += 1;
                 } else {
                     return None;
                 }
-            } else {
-                if desc.tt == TokenType::HeadTailSeparator {
-                    if arity == 1 {
-                        continue;
-                    }
-
-                    return None;
-                } else if desc.tt == TokenType::OpenList {
-                    return Some(arity);
-                } else if desc.tt != TokenType::Comma {
-                    return None;
+            } else if desc.tt == TokenType::HeadTailSeparator {
+                if arity == 1 {
+                    continue;
                 }
+                return None;
+            } else if desc.tt == TokenType::OpenList {
+                return Some(arity);
+            } else if desc.tt != TokenType::Comma {
+                return None;
             }
         }
 
@@ -882,7 +851,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
                         .push(Term::Literal(Cell::default(), Literal::Atom(atom)));
                 }
 
-                self.stack[idx].spec = if self.stack[idx].priority > 0 { TERM } else { BTERM };
+                self.stack[idx].spec = BTERM;
                 self.stack[idx].tt = TokenType::Term;
                 self.stack[idx].priority = 0;
 
@@ -908,10 +877,11 @@ impl<'a, R: CharRead> Parser<'a, R> {
                         // can't be prefix, so either inf == 0
                         // or post == 0.
                         self.reduce_op(inf + post);
-
-                        // let fixity = if inf > 0 { Fixity::In } else { Fixity::Post };
-
-                        self.promote_atom_op(name, inf + post, spec & (XFX | XFY | YFX | YF | XF));
+                        self.promote_atom_op(
+                            name,
+                            inf + post,
+                            spec & (XFX as u32 | XFY as u32 | YFX as u32 | YF as u32 | XF as u32),
+                        );
                     }
                     _ => {
                         self.reduce_op(inf + post);
@@ -922,14 +892,22 @@ impl<'a, R: CharRead> Parser<'a, R> {
                                 self.promote_atom_op(
                                     name,
                                     inf + post,
-                                    spec & (XFX | XFY | YFX | XF | YF),
+                                    spec & (XFX as u32
+                                        | XFY as u32
+                                        | YFX as u32
+                                        | XF as u32
+                                        | YF as u32),
                                 );
-                            } else {
-                                self.promote_atom_op(name, pre, spec & (FX | FY | NEGATIVE_SIGN));
+
+                                return Ok(true);
                             }
-                        } else {
-                            self.promote_atom_op(name, pre, spec & (FX | FY | NEGATIVE_SIGN));
                         }
+
+                        self.promote_atom_op(
+                            name,
+                            pre,
+                            spec & (FX as u32 | FY as u32 | NEGATIVE_SIGN),
+                        );
                     }
                 }
             } else {
@@ -1018,13 +996,11 @@ impl<'a, R: CharRead> Parser<'a, R> {
             Token::Open => self.shift(Token::Open, 1300, DELIMITER),
             Token::OpenCT => self.shift(Token::OpenCT, 1300, DELIMITER),
             Token::Close => {
-                if !self.reduce_term() {
-                    if !self.reduce_brackets() {
-                        return Err(ParserError::IncompleteReduction(
-                            self.lexer.line_num,
-                            self.lexer.col_num,
-                        ));
-                    }
+                if !self.reduce_term() && !self.reduce_brackets() {
+                    return Err(ParserError::IncompleteReduction(
+                        self.lexer.line_num,
+                        self.lexer.col_num,
+                    ));
                 }
             }
             Token::OpenList => self.shift(Token::OpenList, 1300, DELIMITER),
@@ -1067,7 +1043,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
             }
             Token::Comma => {
                 self.reduce_op(1000);
-                self.shift(Token::Comma, 1000, XFY);
+                self.shift(Token::Comma, 1000, XFY as u32);
             }
             Token::End => match self.stack.last().map(|t| t.tt) {
                 Some(TokenType::Open)

@@ -34,10 +34,10 @@ impl From<Atom> for PartialString {
     }
 }
 
-impl Into<Atom> for PartialString {
+impl From<PartialString> for Atom {
     #[inline]
-    fn into(self: Self) -> Atom {
-        self.0
+    fn from(val: PartialString) -> Self {
+        val.0
     }
 }
 
@@ -45,7 +45,7 @@ impl PartialString {
     #[inline]
     pub(super) fn new<'a>(src: &'a str, atom_tbl: &AtomTable) -> Option<(Self, &'a str)> {
         let terminator_idx = scan_for_terminator(src.chars());
-        let pstr = PartialString(AtomTable::build_with(&atom_tbl, &src[..terminator_idx]));
+        let pstr = PartialString(AtomTable::build_with(atom_tbl, &src[..terminator_idx]));
         Some(if terminator_idx < src.as_bytes().len() {
             (pstr, &src[terminator_idx + 1..])
         } else {
@@ -68,7 +68,7 @@ pub struct HeapPStrIter<'a> {
     stepper: fn(&mut HeapPStrIter<'a>) -> Option<PStrIteratee>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct PStrPrefixCmpResult {
     pub focus: usize,
     pub offset: usize,
@@ -101,11 +101,6 @@ impl<'a> HeapPStrIter<'a> {
     #[inline(always)]
     pub fn at_string_terminator(&self) -> bool {
         self.focus.is_string_terminator(self.heap)
-    }
-
-    #[inline(always)]
-    pub fn num_steps(&self) -> usize {
-        self.brent_st.num_steps()
     }
 
     #[inline(always)]
@@ -154,13 +149,13 @@ impl<'a> HeapPStrIter<'a> {
                     let s = &s[result.prefix_len..];
 
                     if s.len() >= t.len() {
-                        if (&*s).starts_with(&*t) {
+                        if s.starts_with(&*t) {
                             result.prefix_len += t.len();
                             result.offset += t.len();
                         } else {
                             return None;
                         }
-                    } else if t.starts_with(&s) {
+                    } else if t.starts_with(s) {
                         result.prefix_len += s.len();
                         result.offset += s.len();
 
@@ -193,7 +188,7 @@ impl<'a> HeapPStrIter<'a> {
             }
         }
 
-        final_result
+        Some(result)
     }
 
     fn walk_hare_to_cycle_end(&mut self) {
@@ -218,10 +213,10 @@ impl<'a> HeapPStrIter<'a> {
         self.brent_st.hare = orig_hare;
     }
 
-    pub fn to_string(&mut self) -> String {
+    pub fn to_string_mut(&mut self) -> String {
         let mut buf = String::with_capacity(32);
 
-        while let Some(iteratee) = self.next() {
+        for iteratee in self.by_ref() {
             match iteratee {
                 PStrIteratee::Char(_, c) => {
                     buf.push(c);
@@ -334,14 +329,10 @@ impl<'a> HeapPStrIter<'a> {
                         heap_bound_deref(self.heap, self.heap[h]),
                     );
 
-                    return if let Some(c) = value.as_char() {
-                        Some(PStrIterStep {
-                            iteratee: PStrIteratee::Char(curr_hare, c),
-                            next_hare: h+1,
-                        })
-                    } else {
-                        None
-                    };
+                    return value.as_char().map(|c| PStrIterStep {
+                        iteratee: PStrIteratee::Char(curr_hare, c),
+                        next_hare: h+1,
+                    });
                 }
                 (HeapCellValueTag::Str, s) => {
                     let (name, arity) = cell_as_atom_cell!(self.heap[s])
@@ -353,14 +344,10 @@ impl<'a> HeapPStrIter<'a> {
                             heap_bound_deref(self.heap, self.heap[s+1]),
                         );
 
-                        if let Some(c) = value.as_char() {
-                            Some(PStrIterStep {
-                                iteratee: PStrIteratee::Char(curr_hare, c),
-                                next_hare: s+2,
-                            })
-                        } else {
-                            None
-                        }
+                        value.as_char().map(|c| PStrIterStep {
+                            iteratee: PStrIteratee::Char(curr_hare, c),
+                            next_hare: s+2,
+                        })
                     } else {
                         None
                     };
@@ -405,10 +392,7 @@ impl<'a> HeapPStrIter<'a> {
 
         match self.brent_st.step(next_hare) {
             Some(cycle_result) => {
-                debug_assert!(match cycle_result {
-                    CycleSearchResult::Cyclic(..) => true,
-                    _ => false,
-                });
+                debug_assert!(matches!(cycle_result, CycleSearchResult::Cyclic(..)));
 
                 self.walk_hare_to_cycle_end();
                 self.stepper = HeapPStrIter::post_cycle_discovery_stepper;
@@ -550,11 +534,7 @@ pub enum PStrCmpResult {
 impl PStrCmpResult {
     #[inline]
     pub fn is_second_iter(&self) -> bool {
-        if let PStrCmpResult::SecondIterContinuable(_) = self {
-            true
-        } else {
-            false
-        }
+        matches!(self, PStrCmpResult::SecondIterContinuable(_))
     }
 }
 
@@ -600,8 +580,8 @@ pub fn compare_pstr_prefixes<'a>(
                             return PStrCmpResult::Ordered(c1.cmp(&c2));
                         }
 
-                        cycle_detection_step(i1, i2, &step_1);
-                        let both_cyclic = cycle_detection_step(i2, i1, &step_2);
+                        cycle_detection_step(i1, i2, step_1);
+                        let both_cyclic = cycle_detection_step(i2, i1, step_2);
 
                         r1 = step(i1, i1.brent_st.hare);
                         r2 = step(i2, i2.brent_st.hare);
@@ -623,15 +603,15 @@ pub fn compare_pstr_prefixes<'a>(
                             if n1 < pstr_atom.len() {
                                 step_2.iteratee = PStrIteratee::PStrSegment(f2, pstr_atom, n1);
 
-                                let c1_result = cycle_detection_step(i1, i2, &step_1);
+                                let c1_result = cycle_detection_step(i1, i2, step_1);
                                 r1 = step(i1, i1.brent_st.hare);
 
                                 if !c1_result {
                                     continue;
                                 }
                             } else {
-                                cycle_detection_step(i1, i2, &step_1);
-                                let both_cyclic = cycle_detection_step(i2, i1, &step_2);
+                                cycle_detection_step(i1, i2, step_1);
+                                let both_cyclic = cycle_detection_step(i2, i1, step_2);
 
                                 r1 = step(i1, i1.brent_st.hare);
                                 r2 = step(i2, i2.brent_st.hare);
@@ -641,7 +621,7 @@ pub fn compare_pstr_prefixes<'a>(
                                 }
                             }
                         } else {
-                            let c2_result = cycle_detection_step(i2, i1, &step_2);
+                            let c2_result = cycle_detection_step(i2, i1, step_2);
                             r2 = step(i2, i2.brent_st.hare);
 
                             if !c2_result {
@@ -662,15 +642,15 @@ pub fn compare_pstr_prefixes<'a>(
                             if n1 < pstr_atom.len() {
                                 step_1.iteratee = PStrIteratee::PStrSegment(f1, pstr_atom, n1);
 
-                                let c2_result = cycle_detection_step(i2, i1, &step_2);
+                                let c2_result = cycle_detection_step(i2, i1, step_2);
                                 r2 = step(i2, step_2.next_hare);
 
                                 if !c2_result {
                                     continue;
                                 }
                             } else {
-                                cycle_detection_step(i1, i2, &step_1);
-                                let both_cyclic = cycle_detection_step(i2, i1, &step_2);
+                                cycle_detection_step(i1, i2, step_1);
+                                let both_cyclic = cycle_detection_step(i2, i1, step_2);
 
                                 r1 = step(i1, i1.brent_st.hare);
                                 r2 = step(i2, i2.brent_st.hare);
@@ -680,7 +660,7 @@ pub fn compare_pstr_prefixes<'a>(
                                 }
                             }
                         } else {
-                            let c1_result = cycle_detection_step(i1, i2, &step_1);
+                            let c1_result = cycle_detection_step(i1, i2, step_1);
                             r1 = step(i1, i1.brent_st.hare);
 
                             if !c1_result {
@@ -693,8 +673,8 @@ pub fn compare_pstr_prefixes<'a>(
                         PStrIteratee::PStrSegment(f2, pstr2_atom, n2),
                     ) => {
                         if pstr1_atom == pstr2_atom && n1 == n2 {
-                            cycle_detection_step(i1, i2, &step_1);
-                            let both_cyclic = cycle_detection_step(i2, i1, &step_2);
+                            cycle_detection_step(i1, i2, step_1);
+                            let both_cyclic = cycle_detection_step(i2, i1, step_2);
 
                             r1 = step(i1, i1.brent_st.hare);
                             r2 = step(i2, i2.brent_st.hare);
@@ -713,9 +693,9 @@ pub fn compare_pstr_prefixes<'a>(
                         let str2 = pstr2.as_str_from(n2);
 
                         match str1.len().cmp(&str2.len()) {
-                            Ordering::Equal if &*str1 == &*str2 => {
-                                cycle_detection_step(i1, i2, &step_1);
-                                let both_cyclic = cycle_detection_step(i2, i1, &step_2);
+                            Ordering::Equal if *str1 == *str2 => {
+                                cycle_detection_step(i1, i2, step_1);
+                                let both_cyclic = cycle_detection_step(i2, i1, step_2);
 
                                 r1 = step(i1, i1.brent_st.hare);
                                 r2 = step(i2, i2.brent_st.hare);
@@ -727,7 +707,7 @@ pub fn compare_pstr_prefixes<'a>(
                             Ordering::Less if str2.starts_with(&*str1) => {
                                 step_2.iteratee =
                                     PStrIteratee::PStrSegment(f2, pstr2_atom, n2 + str1.len());
-                                let c1_result = cycle_detection_step(i1, i2, &step_1);
+                                let c1_result = cycle_detection_step(i1, i2, step_1);
                                 r1 = step(i1, i1.brent_st.hare);
 
                                 if !c1_result {
@@ -737,7 +717,7 @@ pub fn compare_pstr_prefixes<'a>(
                             Ordering::Greater if str1.starts_with(&*str2) => {
                                 step_1.iteratee =
                                     PStrIteratee::PStrSegment(f1, pstr1_atom, n1 + str2.len());
-                                let c2_result = cycle_detection_step(i2, i1, &step_2);
+                                let c2_result = cycle_detection_step(i2, i1, step_2);
                                 r2 = step(i2, i2.brent_st.hare);
 
                                 if !c2_result {
@@ -778,20 +758,34 @@ pub fn compare_pstr_prefixes<'a>(
         if i1.focus == empty_list_as_cell!() {
             PStrCmpResult::Ordered(Ordering::Less)
         } else {
-            PStrCmpResult::SecondIterContinuable(r2.unwrap().iteratee)
+            let r2_step = r2.unwrap();
+
+            // advance i2 to the next character so the same character
+            // isn't repeated
+            if matches!(r2_step.iteratee, PStrIteratee::Char(..)) {
+                cycle_detection_step(i2, i1, &r2_step);
+            }
+
+            PStrCmpResult::SecondIterContinuable(r2_step.iteratee)
         }
     } else if r2_at_end {
         if i2.focus == empty_list_as_cell!() {
             PStrCmpResult::Ordered(Ordering::Greater)
         } else {
-            PStrCmpResult::FirstIterContinuable(r1.unwrap().iteratee)
+            let r1_step = r1.unwrap();
+
+            // advance i1 to the next character so the same character
+            // isn't repeated
+            if matches!(r1_step.iteratee, PStrIteratee::Char(..)) {
+                cycle_detection_step(i1, i2, &r1_step);
+            }
+
+            PStrCmpResult::FirstIterContinuable(r1_step.iteratee)
         }
+    } else if i1.is_continuable() && i2.is_continuable() {
+        PStrCmpResult::Ordered(Ordering::Equal)
     } else {
-        if i1.is_continuable() && i2.is_continuable() {
-            PStrCmpResult::Ordered(Ordering::Equal)
-        } else {
-            PStrCmpResult::Unordered
-        }
+        PStrCmpResult::Unordered
     }
 }
 
@@ -801,6 +795,7 @@ mod test {
     use crate::machine::mock_wam::*;
 
     #[test]
+    #[cfg_attr(miri, ignore = "it takes too long to run")]
     fn pstr_iter_tests() {
         let mut wam = MockWAM::new();
 
@@ -885,7 +880,7 @@ mod test {
         {
             let mut iter = HeapPStrIter::new(&wam.machine_st.heap, 0);
 
-            while let Some(_) = iter.next() {}
+            for _ in iter.by_ref() {}
 
             assert!(!iter.at_string_terminator());
         }
@@ -1009,7 +1004,7 @@ mod test {
 
         unify!(wam.machine_st, cstr_var_cell, heap_loc_as_cell!(1));
 
-        assert_eq!(wam.machine_st.fail, false);
+        assert!(!wam.machine_st.fail);
 
         assert_eq!(wam.machine_st.heap[2], char_as_cell!('a'),);
 
@@ -1032,7 +1027,7 @@ mod test {
 
         unify!(wam.machine_st, cstr_var_cell, heap_loc_as_cell!(1));
 
-        assert_eq!(wam.machine_st.fail, false);
+        assert!(!wam.machine_st.fail);
 
         // test "abc" = [X,b,Z].
 
@@ -1054,7 +1049,7 @@ mod test {
 
         unify!(wam.machine_st, cstr_var_cell, heap_loc_as_cell!(1));
 
-        assert_eq!(wam.machine_st.fail, false);
+        assert!(!wam.machine_st.fail);
 
         assert_eq!(wam.machine_st.heap[2], char_as_cell!('a'),);
 
@@ -1075,7 +1070,7 @@ mod test {
 
         print_heap_terms(wam.machine_st.heap.iter(), 0);
 
-        assert_eq!(wam.machine_st.fail, false);
+        assert!(!wam.machine_st.fail);
 
         assert_eq!(wam.machine_st.heap[2], pstr_loc_as_cell!(5));
         assert_eq!(wam.machine_st.heap[3], pstr_loc_as_cell!(1));
@@ -1105,9 +1100,119 @@ mod test {
                 Some(PStrIteratee::PStrSegment(2, atom!("abc"), 1))
             );
 
-            // assert!(iter.next().is_none());
-
-            while let Some(_) = iter.next() {}
+            for _ in iter {}
         }
+
+        // #2293, test1.
+
+        wam.machine_st.heap.clear();
+
+        wam.machine_st.heap.push(atom_as_cstr_cell!(atom!("a ")));
+        wam.machine_st.heap.push(heap_loc_as_cell!(1));
+        wam.machine_st.heap.push(list_loc_as_cell!(3));
+        wam.machine_st.heap.push(char_as_cell!(' '));
+        wam.machine_st.heap.push(empty_list_as_cell!());
+
+        unify!(wam.machine_st, list_loc_as_cell!(1), heap_loc_as_cell!(0));
+
+        assert!(!wam.machine_st.fail);
+
+        // #2293, test2.
+
+        wam.machine_st.heap.clear();
+
+        wam.machine_st.heap.push(atom_as_cstr_cell!(atom!(" a")));
+        wam.machine_st.heap.push(char_as_cell!(' '));
+        wam.machine_st.heap.push(list_loc_as_cell!(3));
+        wam.machine_st.heap.push(heap_loc_as_cell!(3));
+        wam.machine_st.heap.push(empty_list_as_cell!());
+
+        unify!(wam.machine_st, list_loc_as_cell!(1), heap_loc_as_cell!(0));
+
+        assert!(!wam.machine_st.fail);
+
+        // #2293, test3.
+
+        wam.machine_st.heap.clear();
+
+        wam.machine_st.heap.push(atom_as_cstr_cell!(atom!("a b")));
+        wam.machine_st.heap.push(heap_loc_as_cell!(1));
+        wam.machine_st.heap.push(list_loc_as_cell!(3));
+        wam.machine_st.heap.push(char_as_cell!(' '));
+        wam.machine_st.heap.push(list_loc_as_cell!(5));
+        wam.machine_st.heap.push(heap_loc_as_cell!(5));
+        wam.machine_st.heap.push(empty_list_as_cell!());
+
+        unify!(wam.machine_st, list_loc_as_cell!(1), heap_loc_as_cell!(0));
+
+        assert!(!wam.machine_st.fail);
+
+        // #2293, test4.
+
+        wam.machine_st.heap.clear();
+
+        wam.machine_st.heap.push(atom_as_cstr_cell!(atom!(" a ")));
+        wam.machine_st.heap.push(char_as_cell!(' '));
+        wam.machine_st.heap.push(list_loc_as_cell!(3));
+        wam.machine_st.heap.push(heap_loc_as_cell!(3));
+        wam.machine_st.heap.push(list_loc_as_cell!(5));
+        wam.machine_st.heap.push(char_as_cell!(' '));
+        wam.machine_st.heap.push(empty_list_as_cell!());
+
+        unify!(wam.machine_st, list_loc_as_cell!(1), heap_loc_as_cell!(0));
+
+        assert!(!wam.machine_st.fail);
+
+        // #2293, test5.
+
+        wam.machine_st.heap.clear();
+
+        wam.machine_st.heap.push(atom_as_cstr_cell!(atom!(" a bc")));
+        wam.machine_st.heap.push(char_as_cell!(' '));
+        wam.machine_st.heap.push(list_loc_as_cell!(3));
+        wam.machine_st.heap.push(heap_loc_as_cell!(3));
+        wam.machine_st.heap.push(list_loc_as_cell!(5));
+        wam.machine_st.heap.push(char_as_cell!(' '));
+        wam.machine_st.heap.push(heap_loc_as_cell!(6));
+
+        unify!(wam.machine_st, list_loc_as_cell!(1), heap_loc_as_cell!(0));
+
+        assert!(!wam.machine_st.fail);
+
+        // #2293, test6.
+
+        wam.machine_st.heap.clear();
+
+        wam.machine_st.heap.push(atom_as_cstr_cell!(atom!("abc")));
+        wam.machine_st.heap.push(heap_loc_as_cell!(1));
+        wam.machine_st.heap.push(list_loc_as_cell!(3));
+        wam.machine_st.heap.push(char_as_cell!('b'));
+        wam.machine_st.heap.push(list_loc_as_cell!(5));
+        wam.machine_st.heap.push(heap_loc_as_cell!(5));
+        wam.machine_st.heap.push(empty_list_as_cell!());
+
+        unify!(wam.machine_st, list_loc_as_cell!(1), heap_loc_as_cell!(0));
+
+        assert!(!wam.machine_st.fail);
+
+        // #2293, test7.
+
+        wam.machine_st.heap.clear();
+
+        wam.machine_st.heap.push(atom_as_cstr_cell!(atom!("abcde")));
+        wam.machine_st.heap.push(char_as_cell!('a'));
+        wam.machine_st.heap.push(list_loc_as_cell!(3));
+        wam.machine_st.heap.push(heap_loc_as_cell!(3));
+        wam.machine_st.heap.push(list_loc_as_cell!(5));
+        wam.machine_st.heap.push(char_as_cell!('c'));
+        wam.machine_st.heap.push(list_loc_as_cell!(7));
+        wam.machine_st.heap.push(heap_loc_as_cell!(7));
+        wam.machine_st.heap.push(list_loc_as_cell!(9));
+        wam.machine_st.heap.push(char_as_cell!('e'));
+        wam.machine_st.heap.push(empty_list_as_cell!());
+
+        unify!(wam.machine_st, list_loc_as_cell!(1), heap_loc_as_cell!(0));
+
+        assert!(!wam.machine_st.fail);
     }
 }

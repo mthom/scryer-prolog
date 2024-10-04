@@ -1,7 +1,6 @@
 use crate::heap_iter::*;
 use crate::machine::*;
 use crate::parser::ast::*;
-use crate::temp_v;
 use crate::types::*;
 
 use indexmap::IndexSet;
@@ -133,8 +132,8 @@ impl MachineState {
         let mut seen_set = IndexSet::new();
         let mut seen_vars = vec![];
 
-        let mut iter = stackful_preorder_iter::<NonListElider>
-            (&mut self.heap, &mut self.stack, cell);
+        let mut iter =
+            stackful_preorder_iter::<NonListElider>(&mut self.heap, &mut self.stack, cell);
 
         while let Some(value) = iter.next() {
             read_heap_cell!(value,

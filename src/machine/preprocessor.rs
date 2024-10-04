@@ -11,42 +11,74 @@ use indexmap::IndexSet;
 
 use std::cell::Cell;
 use std::convert::TryFrom;
+pub(crate) fn to_op_decl(prec: u16, spec: OpDeclSpec, name: Atom) -> OpDecl {
+    OpDecl::new(OpDesc::build_with(prec, spec), name)
+}
 
-pub(crate) fn to_op_decl(prec: u16, spec: Atom, name: Atom) -> Result<OpDecl, CompilationError> {
-    match spec {
-        atom!("xfx") => Ok(OpDecl::new(OpDesc::build_with(prec, XFX as u8), name)),
-        atom!("xfy") => Ok(OpDecl::new(OpDesc::build_with(prec, XFY as u8), name)),
-        atom!("yfx") => Ok(OpDecl::new(OpDesc::build_with(prec, YFX as u8), name)),
-        atom!("fx") => Ok(OpDecl::new(OpDesc::build_with(prec, FX as u8), name)),
-        atom!("fy") => Ok(OpDecl::new(OpDesc::build_with(prec, FY as u8), name)),
-        atom!("xf") => Ok(OpDecl::new(OpDesc::build_with(prec, XF as u8), name)),
-        atom!("yf") => Ok(OpDecl::new(OpDesc::build_with(prec, YF as u8), name)),
-        _ => Err(CompilationError::InconsistentEntry),
-    }
+pub(crate) fn to_op_decl_spec(spec: Atom) -> Result<OpDeclSpec, CompilationError> {
+    OpDeclSpec::try_from(spec).map_err(|_err| {
+        CompilationError::InvalidDirective(DirectiveError::InvalidOpDeclSpecValue(spec))
+    })
 }
 
 fn setup_op_decl(mut terms: Vec<Term>, atom_tbl: &AtomTable) -> Result<OpDecl, CompilationError> {
+    // should allow non-partial lists?
     let name = match terms.pop().unwrap() {
         Term::Literal(_, Literal::Atom(name)) => name,
         Term::Literal(_, Literal::Char(c)) => AtomTable::build_with(atom_tbl, &c.to_string()),
-        _ => return Err(CompilationError::InconsistentEntry),
+        other => {
+            return Err(CompilationError::InvalidDirective(
+                DirectiveError::InvalidOpDeclNameType(other),
+            ));
+        }
     };
 
     let spec = match terms.pop().unwrap() {
         Term::Literal(_, Literal::Atom(name)) => name,
-        Term::Literal(_, Literal::Char(c)) => AtomTable::build_with(atom_tbl, &c.to_string()),
-        _ => return Err(CompilationError::InconsistentEntry),
+        other => {
+            return Err(CompilationError::InvalidDirective(
+                DirectiveError::InvalidOpDeclSpecDomain(other),
+            ))
+        }
     };
+
+    let spec = to_op_decl_spec(spec)?;
 
     let prec = match terms.pop().unwrap() {
         Term::Literal(_, Literal::Fixnum(bi)) => match u16::try_from(bi.get_num()) {
             Ok(n) if n <= 1200 => n,
-            _ => return Err(CompilationError::InconsistentEntry),
+            _ => {
+                return Err(CompilationError::InvalidDirective(
+                    DirectiveError::InvalidOpDeclPrecDomain(bi),
+                ));
+            }
         },
-        _ => return Err(CompilationError::InconsistentEntry),
+        other => {
+            return Err(CompilationError::InvalidDirective(
+                DirectiveError::InvalidOpDeclPrecType(other),
+            ));
+        }
     };
 
-    to_op_decl(prec, spec, name)
+    if name == "[]" || name == "{}" {
+        return Err(CompilationError::InvalidDirective(
+            DirectiveError::ShallNotCreate(name),
+        ));
+    }
+
+    if name == "," {
+        return Err(CompilationError::InvalidDirective(
+            DirectiveError::ShallNotModify(name),
+        ));
+    }
+
+    if name == "|" && (prec < 1001 || !spec.is_infix()) {
+        return Err(CompilationError::InvalidDirective(
+            DirectiveError::ShallNotCreate(name),
+        ));
+    }
+
+    Ok(to_op_decl(prec, spec, name))
 }
 
 fn setup_predicate_indicator(term: &mut Term) -> Result<PredicateKey, CompilationError> {
@@ -100,7 +132,7 @@ fn setup_module_export(
 }
 
 pub(crate) fn build_rule_body(vars: &[Term], body_term: Term) -> Term {
-    let head_term = Term::Clause(Cell::default(), atom!(""), vars.iter().cloned().collect());
+    let head_term = Term::Clause(Cell::default(), atom!(""), vars.to_vec());
     let rule = vec![head_term, body_term];
 
     Term::Clause(Cell::default(), atom!(":-"), rule)
@@ -238,7 +270,7 @@ fn setup_meta_predicate<'a, LS: LoadState<'a>>(
     ) -> Result<(Atom, Vec<MetaSpec>), CompilationError> {
         let mut meta_specs = vec![];
 
-        for meta_spec in terms.into_iter() {
+        for meta_spec in terms.iter_mut() {
             match meta_spec {
                 Term::Literal(_, Literal::Atom(meta_spec)) => {
                     let meta_spec = match meta_spec {
@@ -310,11 +342,11 @@ pub(super) fn setup_declaration<'a, LS: LoadState<'a>>(
             }
             (atom!("module"), 2) => {
                 let atom_tbl = &mut LS::machine_st(&mut loader.payload).atom_tbl;
-                Ok(Declaration::Module(setup_module_decl(terms, &atom_tbl)?))
+                Ok(Declaration::Module(setup_module_decl(terms, atom_tbl)?))
             }
             (atom!("op"), 3) => {
                 let atom_tbl = &mut LS::machine_st(&mut loader.payload).atom_tbl;
-                Ok(Declaration::Op(setup_op_decl(terms, &atom_tbl)?))
+                Ok(Declaration::Op(setup_op_decl(terms, atom_tbl)?))
             }
             (atom!("non_counted_backtracking"), 1) => {
                 let (name, arity) = setup_predicate_indicator(&mut terms.pop().unwrap())?;
@@ -323,7 +355,7 @@ pub(super) fn setup_declaration<'a, LS: LoadState<'a>>(
             (atom!("use_module"), 1) => Ok(Declaration::UseModule(setup_use_module_decl(terms)?)),
             (atom!("use_module"), 2) => {
                 let atom_tbl = &mut LS::machine_st(&mut loader.payload).atom_tbl;
-                let (name, exports) = setup_qualified_import(terms, &atom_tbl)?;
+                let (name, exports) = setup_qualified_import(terms, atom_tbl)?;
 
                 Ok(Declaration::UseQualifiedModule(name, exports))
             }
@@ -331,9 +363,13 @@ pub(super) fn setup_declaration<'a, LS: LoadState<'a>>(
                 let (module_name, name, meta_specs) = setup_meta_predicate(terms, loader)?;
                 Ok(Declaration::MetaPredicate(module_name, name, meta_specs))
             }
-            _ => Err(CompilationError::InconsistentEntry),
+            _ => Err(CompilationError::InvalidDirective(
+                DirectiveError::InvalidDirective(name, terms.len()),
+            )),
         },
-        _ => Err(CompilationError::InconsistentEntry),
+        other => Err(CompilationError::InvalidDirective(
+            DirectiveError::ExpectedDirective(other),
+        )),
     }
 }
 
@@ -565,21 +601,6 @@ impl Preprocessor {
         }
     }
 
-    /*
-    fn try_term_to_query<'a, LS: LoadState<'a>>(
-        &mut self,
-        loader: &mut Loader<'a, LS>,
-        terms: Vec<Term>,
-        cut_context: CutContext,
-    ) -> Result<TopLevel, CompilationError> {
-        Ok(TopLevel::Query(self.setup_query(
-            loader,
-            terms,
-            cut_context,
-        )?))
-    }
-    */
-
     pub(super) fn try_term_to_tl<'a, LS: LoadState<'a>>(
         &mut self,
         loader: &mut Loader<'a, LS>,
@@ -607,20 +628,4 @@ impl Preprocessor {
             }
         }
     }
-
-    /*
-    fn try_terms_to_tls<'a, I: IntoIterator<Item = Term>, LS: LoadState<'a>>(
-        &mut self,
-        loader: &mut Loader<'a, LS>,
-        terms: I,
-    ) -> Result<VecDeque<TopLevel>, CompilationError> {
-        let mut results = VecDeque::new();
-
-        for term in terms.into_iter() {
-            results.push_back(self.try_term_to_tl(loader, term)?);
-        }
-
-        Ok(results)
-    }
-    */
 }

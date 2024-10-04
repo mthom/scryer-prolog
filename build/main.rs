@@ -5,40 +5,40 @@ use instructions_template::generate_instructions_rs;
 use static_string_indexing::index_static_strings;
 
 use std::env;
-use std::fs;
 use std::fs::File;
 use std::io::Write;
 use std::path::Path;
+use std::path::PathBuf;
 use std::process::{Command, Stdio};
 
-fn find_prolog_files(libraries: &mut File, prefix: &str, current_dir: &Path) {
+fn find_prolog_files(path_prefix: &str, current_dir: &Path) -> Vec<(String, PathBuf)> {
+    let mut libraries = vec![];
+
     let entries = match current_dir.read_dir() {
         Ok(entries) => entries,
-        Err(_) => return,
+        Err(_) => return libraries,
     };
 
     for entry in entries.filter_map(Result::ok).map(|e| e.path()) {
         if entry.is_dir() {
             if let Some(file_name) = entry.file_name() {
-                let new_prefix = prefix.to_owned() + file_name.to_str().unwrap() + "/";
-                find_prolog_files(libraries, &new_prefix, &entry);
+                let file_name = file_name.to_str().unwrap();
+                let new_path_prefix = format!("{path_prefix}{file_name}/");
+                let new_libs = find_prolog_files(&new_path_prefix, &entry);
+                libraries.extend(new_libs);
             }
         } else if entry.is_file() {
             let ext = std::ffi::OsStr::new("pl");
             if entry.extension() == Some(ext) {
-                let contain = String::from_utf8(fs::read(&entry).unwrap()).unwrap();
                 let name = entry.file_stem().unwrap().to_str().unwrap();
+                let lib_name = format!("{path_prefix}{name}");
 
-                let line = format!(
-                    "        m.insert(\"{}\",\n{:?});\n",
-                    prefix.to_owned() + name,
-                    contain
-                );
-
-                libraries.write_all(line.as_bytes()).unwrap();
+                libraries.push((lib_name, entry));
             }
         }
     }
+
+    libraries
 }
 
 fn main() {
@@ -55,19 +55,41 @@ fn main() {
     let out_dir = env::var("OUT_DIR").unwrap();
     let dest_path = Path::new(&out_dir).join("libraries.rs");
 
-    let mut libraries = File::create(&dest_path).unwrap();
-    let lib_path = Path::new("src/lib");
+    let mut libraries = File::create(dest_path).unwrap();
+    let lib_path = Path::new("src").join("lib");
 
-    libraries
-        .write_all(
-            b"ref_thread_local::ref_thread_local! {
-    pub(crate) static managed LIBRARIES: IndexMap<&'static str, &'static str> = {
-        let mut m = IndexMap::new();\n",
-        )
-        .unwrap();
+    let constants = find_prolog_files("", &lib_path);
 
-    find_prolog_files(&mut libraries, "", &lib_path);
-    libraries.write_all(b"\n        m\n    };\n}\n").unwrap();
+    let out_dir = std::env::var("OUT_DIR").unwrap();
+    let out_dir_path: &Path = out_dir.as_ref();
+    let manifest_dir = &std::env::var("CARGO_MANIFEST_DIR").unwrap();
+    let manifest_dir_path: &Path = manifest_dir.as_ref();
+
+    let prefix: PathBuf = if let Ok(diff) = out_dir_path.strip_prefix(manifest_dir_path) {
+        let mut path = PathBuf::from(".");
+        for comp in diff.components() {
+            match comp {
+                std::path::Component::Normal(_) => path.push(".."),
+                std::path::Component::CurDir => (),
+                std::path::Component::Prefix(_)
+                | std::path::Component::RootDir
+                | std::path::Component::ParentDir => {
+                    path = manifest_dir_path.to_path_buf();
+                    break;
+                }
+            }
+        }
+        path
+    } else {
+        manifest_dir_path.to_path_buf()
+    };
+
+    writeln!(libraries, "{{").unwrap();
+    for (name, lib_path) in constants {
+        let path: PathBuf = prefix.join(lib_path);
+        writeln!(libraries, "m.insert(\"{name}\", include_str!({path:?}));").unwrap();
+    }
+    writeln!(libraries, "}}").unwrap();
 
     let instructions_path = Path::new(&out_dir).join("instructions.rs");
     let mut instructions_file = File::create(&instructions_path).unwrap();

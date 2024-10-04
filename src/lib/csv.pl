@@ -221,7 +221,7 @@ row([X | Y], Opt) -->
   !,
   ( separator(Opt) ->
     row(Y, Opt)
-  ; end_token ->
+  ; end_token,
     { Y = [] }).
 
 

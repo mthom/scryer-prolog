@@ -1,0 +1,1 @@
+:- op(5, xfx, example, too_many_arguments).

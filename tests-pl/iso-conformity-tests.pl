@@ -230,13 +230,16 @@ test_61 :- integer('-'/*.*/1).
 
 test_62 :- atom(-/*.*/-).
 
-test_63_180_64 :- setup_call_cleanup((  current_op(P,fy,-),
-                                        op(0,fy,-)
-                                     ),
-                                     (  integer(-1),
-                                        integer(- 1)
-                                     ),
-                                     op(P,fy,-)).
+test_63_180_64_328 :- setup_call_cleanup((  current_op(P,fy,-),
+                                            op(0,fy,-)
+                                         ),
+                                         (  integer(-1),
+                                            integer(- 1),
+                                            read_from_chars("writeq_term_to_chars([-]).", Writer),
+                                            call(Writer, Cs),
+                                            Cs == "[-]"
+                                         ),
+                                         op(P,fy,-)).
 
 test_135 :- writeq_term_to_chars(-(1), Chars),
             Chars == "- (1)".
@@ -783,10 +786,10 @@ test_217_181_290_317 :-
                         (  op(1105,xfy,'|'),
                            read_from_chars("(a-->b,c|d).", T0),
                            writeq_term_to_chars(T0, C0),
-                           C0 == "a-->b,c | d",
+                           C0 == "a-->b,c|d",
                            read_from_chars("[(a|b)].", T1),
                            writeq_term_to_chars(T1, C1),
-                           C1 == "[(a | b)]",
+                           C1 == "[(a|b)]",
                            read_from_chars("[a,(b,c)|[]].", T2),
                            writeq_term_to_chars(T2, C2),
                            C2 == "[a,(b,c)]"
@@ -1004,6 +1007,18 @@ test_311 :- test_syntax_error("Finis ().", syntax_error(incomplete_reduction)).
 
 test_318 :- writeq_term_to_chars(+((1*2)^3), C),
             C == "+ (1*2)^3".
+
+test_320 :- writeq_term_to_chars([a|\+2], C),
+            C == "[a|\\+2]".
+
+test_321 :- test_syntax_error("writeq((a)(b)).", syntax_error(incomplete_reduction)).
+
+test_324 :- writeq_term_to_chars('%', C),
+            C == "'%'".
+
+test_325 :- test_syntax_error("writeq({[y}]).", syntax_error(incomplete_reduction)).
+
+test_326 :- test_syntax_error("(>)(1,2).", syntax_error(incomplete_reduction)).
 
 run_tests([Test|Tests]) -->
     (  { call(Test) } ->
