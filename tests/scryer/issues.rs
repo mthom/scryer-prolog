@@ -13,6 +13,7 @@ fn call_0() {
 }
 
 #[test]
+#[cfg_attr(miri, ignore = "unsupported operation when isolation is enabled")]
 fn issue2588_load_html() {
     load_module_test("tests-pl/issue2588.pl", "[element(html,[],[element(head,[],[element(title,[],[[H,e,l,l,o,!]])]),element(body,[],[])])]");
 }
