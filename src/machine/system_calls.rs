@@ -7758,7 +7758,7 @@ impl Machine {
             .value_to_str_like(self.machine_st.registers[1])
         {
             let document = scraper::Html::parse_document(&string.as_str());
-            let result = self.html_node_to_term(document.tree.root());
+            let result = self.html_node_to_term(document.tree.root().first_child().unwrap());
 
             unify!(self.machine_st, self.machine_st.registers[2], result);
         } else {
