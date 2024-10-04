@@ -170,3 +170,8 @@ fn call_0() {
         "   error(existence_error(procedure,call/0),call/0).\n",
     );
 }
+
+#[test]
+fn issue2588_load_html() {
+    load_module_test("tests-pl/issue2588.pl", "[element(html,[],[element(head,[],[element(title,[],[[H,e,l,l,o,!]])]),element(body,[],[])])]");
+}
