@@ -2,6 +2,7 @@
 
 :- use_module(library(lists)).
 :- use_module(library(format)).
+:- use_module(library(pio)).
 
 %% warnings:output(+OutputStream).
 %
@@ -31,7 +32,8 @@ warn(Format, Vars) :-
     output(S),
     prolog_load_context(file, F),
     prolog_load_context(term_position, position_and_lines_read(_,L)),
-    append(["% Warning: ", Format, " at line ~d of ~a~n"], FullFormat),
-    append(Vars, [L,F], AllVars),
-    format(S, FullFormat, AllVars),
+    phrase_to_stream(
+        ("% Warning: ", format_(Format, Vars), format_(" at line ~d of ~a~n", [L,F])),
+        S
+    ),
     false.
