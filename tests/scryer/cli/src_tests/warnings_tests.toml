@@ -1,0 +1,5 @@
+args = [
+    "-f",
+    "--no-add-history",
+    "src/tests/warnings.pl",
+    "-g", "halt"]
