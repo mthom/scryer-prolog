@@ -848,6 +848,10 @@ expand_goal(UnexpandedGoals, Module, ExpandedGoals) :-
 :- non_counted_backtracking expand_goal/5.
 
 expand_goal(UnexpandedGoals, Module, ExpandedGoals, HeadVars, TGs) :-
+    (  catch(warnings:expansion_hook(UnexpandedGoals, HeadVars), _, true) ->
+       true
+    ;  true
+    ),
     (  var(UnexpandedGoals) ->
        expand_module_names(call(UnexpandedGoals), [0], Module, ExpandedGoals, HeadVars, TGs)
     ;  goal_expansion(UnexpandedGoals, Module, UnexpandedGoals1),

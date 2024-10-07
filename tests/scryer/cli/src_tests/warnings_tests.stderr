@@ -1,4 +1,7 @@
-% Warning: integer/1 is a constant source of wrong results, use integer_si/1 from library(si) at line 6 of warnings.pl
-% Warning: Nested negations can be reduced at line 9 of warnings.pl
+% Warning: integer/1 is a constant source of wrong results, use integer_si/1 from library(si) at line 8 of warnings.pl
+% Warning: Nested negations can be reduced at line 12 of warnings.pl
+% Warning: Meta-predicate detected, but no qualified variables found at line 15 of warnings.pl
+% Warning: Meta-predicate detected, but no qualified variables found at line 16 of warnings.pl
+% Warning: Meta-predicate detected, but no qualified variables found at line 17 of warnings.pl
 % Warning: (b,c) attempts to re-define (,)/2 at line 6 of warnings1.pl
 % Warning: (/+c) attempts to re-define (/+)/1 at line 6 of warnings2.pl

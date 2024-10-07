@@ -2,6 +2,7 @@
 
 :- use_module(library(format)).
 :- use_module(library(pio)).
+:- use_module(library(lists)).
 
 warn(Format, Vars) :-
     warn(user_error, Format, Vars).
@@ -49,6 +50,30 @@ term_warning(goal, Term, "~q is a constant source of wrong results, use ~a_si/1 
 % use-case, but I don't think that more nested negations are ever useful.
 %
 term_warning(goal, \+ \+ \+_, "Nested negations can be reduced", []).
+
+%% expansion_hook(?Goal, +MetaVarSpecs).
+%
+% TLDR: Warn if currently expanded predicate calls one of its arguments, but it
+% isn't declared as a meta-predicate.
+%
+% This hook is invoked just before goal expansion. `Goal` is an unexpanded
+% goal, same as first argument of goal_expansion/2. `MetaVarSpecs` is a list of
+% pairs of callable variables together with their qualifiers extracted from
+% meta-predicate declaration of currently processed clause. In particular if it
+% is an empty list then current head doesn't have any such variables: it is
+% either not declared as a meta-predicate or its meta-predicate specification
+% doesn't specify any callable variables (like `p(?)`).
+%
+% TODO: Be smarter and detect wrong meta-predicate declarations.
+%
+expansion_hook(Goal, []) :-
+    % Detect if calling Goal leads to calling a free variable
+    (   var(Goal) ->
+        true
+    ;   % Goal is a meta-predicate that calls free variable
+        loader:module_expanded_head_variables(Goal, [_|_])
+    ),
+    warn("Meta-predicate detected, but no qualified variables found", []).
 
 expansion_warning(ExpansionKind, Term) :-
     nonvar(Term),
