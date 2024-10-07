@@ -48,3 +48,11 @@ user:goal_expansion(G, _) :-
     unsound_type_test(G),
     functor(G, F, 1),
     warn_fail("~q is a constant source of bugs, use ~a_si/1 from library(si)", [F/1,F]).
+
+% Warn when more than 2 negations are nested. Double negation has legit
+% use-case, but I don't think that more nested negations are ever useful.
+%
+user:goal_expansion(G, _) :-
+    nonvar(G),
+    G = (\+ \+ \+ _),
+    warn_fail("Nested negations can be reduced", []).
