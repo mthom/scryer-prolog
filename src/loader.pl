@@ -19,10 +19,9 @@ write_error(Error) :-
     % '$fetch_global_var' is the core system call of bb_get/2, but
     % bb_get may not exist when write_error is first called, so fall
     % back on '$fetch_global_var'.
-    (  '$fetch_global_var'('$first_answer', false) ->
+    (  '$fetch_global_var'('$answer_count', C), C =\= 0 ->
        true
-    ;  write('   ') % if '$first_answer' isn't defined yet or true,
-                    % print indentation.
+    ;  write('   ') % if still in the first answer print indentation.
     ),
     (  current_prolog_flag(double_quotes, chars) ->
        DQ = true
