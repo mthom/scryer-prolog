@@ -70,6 +70,7 @@ lazy_static! {
     pub static ref INTERRUPT: AtomicBool = AtomicBool::new(false);
 }
 
+/// An instance of Scryer Prolog.
 #[derive(Debug)]
 pub struct Machine {
     pub(super) machine_st: MachineState,
@@ -262,6 +263,7 @@ impl Machine {
         )
     }
 
+    /// Gets the current inference count.
     pub fn get_inference_count(&mut self) -> u64 {
         self.machine_st
             .cwil
@@ -480,18 +482,19 @@ impl Machine {
         }
     }
 
+    /// Creates a new [`Machine`] from a [`MachineConfig`].
     #[allow(clippy::new_without_default)]
     pub fn new(config: MachineConfig) -> Self {
         let args = MachineArgs::new();
         let mut machine_st = MachineState::new();
 
-        let (user_input, user_output, user_error) = match config.streams {
-            config::StreamConfig::Stdio => (
+        let (user_input, user_output, user_error) = match config.streams.inner {
+            config::StreamConfigInner::Stdio => (
                 Stream::stdin(&mut machine_st.arena, args.add_history),
                 Stream::stdout(&mut machine_st.arena),
                 Stream::stderr(&mut machine_st.arena),
             ),
-            config::StreamConfig::Memory => (
+            config::StreamConfigInner::Memory => (
                 Stream::Null(StreamOptions::default()),
                 Stream::from_owned_string("".to_owned(), &mut machine_st.arena),
                 Stream::stderr(&mut machine_st.arena),

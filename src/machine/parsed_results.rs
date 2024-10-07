@@ -7,138 +7,178 @@ use indexmap::IndexMap;
 use ordered_float::OrderedFloat;
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
-use std::collections::HashMap;
-use std::fmt::Display;
-use std::fmt::Write;
-use std::iter::FromIterator;
 
 use super::Machine;
 use super::{HeapCellValue, Number};
 
-pub type QueryResult = Result<QueryResolution, String>;
-
+/// Represents a leaf answer from a query.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum QueryResolution {
+pub enum LeafAnswer {
+    /// A `true` leaf answer.
     True,
+    /// A `false` leaf answer.
+    ///
+    /// This means that there are no more answers for the query.
     False,
-    Matches(Vec<QueryMatch>),
+    /// An exception leaf answer.
+    Exception(PrologTerm),
+    /// A leaf answer with bindings and residual goals.
+    LeafAnswer {
+        /// The bindings of variables in the query.
+        ///
+        /// Can be empty.
+        bindings: BTreeMap<String, PrologTerm>,
+        /// Residual goals.
+        ///
+        /// Can be empty.
+        residual_goals: Vec<PrologTerm>,
+    },
 }
 
-fn write_prolog_value_as_json<W: Write>(
-    writer: &mut W,
-    value: &Value,
-) -> Result<(), std::fmt::Error> {
-    match value {
-        Value::Integer(i) => write!(writer, "{}", i),
-        Value::Float(f) => write!(writer, "{}", f),
-        Value::Rational(r) => write!(writer, "{}", r),
-        Value::Atom(a) => writer.write_str(a.as_str()),
-        Value::String(s) => {
-            if let Err(_e) = serde_json::from_str::<serde_json::Value>(s.as_str()) {
-                //treat as string literal
-                //escape double quotes
-                write!(
-                    writer,
-                    "\"{}\"",
-                    s.replace('\"', "\\\"")
-                        .replace('\n', "\\n")
-                        .replace('\t', "\\t")
-                        .replace('\r', "\\r")
-                )
-            } else {
-                //return valid json string
-                writer.write_str(s)
-            }
-        }
-        Value::List(l) => {
-            writer.write_char('[')?;
-            if let Some((first, rest)) = l.split_first() {
-                write_prolog_value_as_json(writer, first)?;
-
-                for other in rest {
-                    writer.write_char(',')?;
-                    write_prolog_value_as_json(writer, other)?;
-                }
-            }
-            writer.write_char(']')
-        }
-        Value::Structure(s, l) => {
-            write!(writer, "\"{}\":[", s.as_str())?;
-
-            if let Some((first, rest)) = l.split_first() {
-                write_prolog_value_as_json(writer, first)?;
-                for other in rest {
-                    writer.write_char(',')?;
-                    write_prolog_value_as_json(writer, other)?;
-                }
-            }
-            writer.write_char(']')
-        }
-        _ => writer.write_str("null"),
-    }
-}
-
-fn write_prolog_match_as_json<W: std::fmt::Write>(
-    writer: &mut W,
-    query_match: &QueryMatch,
-) -> Result<(), std::fmt::Error> {
-    writer.write_char('{')?;
-    let mut iter = query_match.bindings.iter();
-
-    if let Some((k, v)) = iter.next() {
-        write!(writer, "\"{k}\":")?;
-        write_prolog_value_as_json(writer, v)?;
-
-        for (k, v) in iter {
-            write!(writer, ",\"{k}\":")?;
-            write_prolog_value_as_json(writer, v)?;
-        }
-    }
-    writer.write_char('}')
-}
-
-impl Display for QueryResolution {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl LeafAnswer {
+    /// True if leaf answer failed.
+    ///
+    /// This gives [`false`] for exceptions.
+    pub fn failed(&self) -> bool {
         match self {
-            QueryResolution::True => f.write_str("true"),
-            QueryResolution::False => f.write_str("false"),
-            QueryResolution::Matches(matches) => {
-                f.write_char('[')?;
-                if let Some((first, rest)) = matches.split_first() {
-                    write_prolog_match_as_json(f, first)?;
-                    for other in rest {
-                        f.write_char(',')?;
-                        write_prolog_match_as_json(f, other)?;
-                    }
-                }
-                f.write_char(']')
-            }
+            LeafAnswer::False => true,
+            _ => false,
+        }
+    }
+
+    /// True if leaf answer may have succeeded.
+    ///
+    /// When a leaf answer has residual goals the success is conditional on the satisfiability of
+    /// the contraints they represent. This gives [`false`] for exceptions.
+    pub fn maybe_succeeded(&self) -> bool {
+        match self {
+            LeafAnswer::True => true,
+            LeafAnswer::LeafAnswer { .. } => true,
+            _ => false,
         }
     }
 }
 
+/// Represents a Prolog term.
+#[non_exhaustive]
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct QueryMatch {
-    pub bindings: BTreeMap<String, Value>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum QueryResolutionLine {
-    True,
-    False,
-    Match(BTreeMap<String, Value>),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Value {
+pub enum PrologTerm {
+    /// An arbitrary precision integer.
     Integer(Integer),
+    /// An arbitrary precision rational.
     Rational(Rational),
+    /// A float.
     Float(OrderedFloat<f64>),
+    /// A Prolog atom.
     Atom(String),
+    /// A Prolog string.
+    ///
+    /// In particular, this represents Prolog lists of characters.
     String(String),
-    List(Vec<Value>),
-    Structure(String, Vec<Value>),
+    /// A Prolog list.
+    List(Vec<PrologTerm>),
+    /// A Prolog compound term.
+    Compound(String, Vec<PrologTerm>),
+    /// A Prolog variable.
     Var(String),
+}
+
+impl PrologTerm {
+    /// Creates an integer term.
+    pub fn integer(value: impl Into<Integer>) -> Self {
+        PrologTerm::Integer(value.into())
+    }
+
+    /// Creates a rational term.
+    pub fn rational(value: impl Into<Rational>) -> Self {
+        PrologTerm::Rational(value.into())
+    }
+
+    /// Creates a float term.
+    pub fn float(value: impl Into<OrderedFloat<f64>>) -> Self {
+        PrologTerm::Float(value.into())
+    }
+
+    /// Creates an atom term.
+    pub fn atom(value: impl Into<String>) -> Self {
+        PrologTerm::Atom(value.into())
+    }
+
+    /// Creates a string term.
+    ///
+    /// In specific, this represents a list of chars in Prolog.
+    pub fn string(value: impl Into<String>) -> Self {
+        PrologTerm::String(value.into())
+    }
+
+    /// Creates a list term.
+    pub fn list(value: impl IntoIterator<Item = PrologTerm>) -> Self {
+        PrologTerm::List(value.into_iter().collect())
+    }
+
+    /// Creates a compound term.
+    pub fn compound(
+        functor: impl Into<String>,
+        args: impl IntoIterator<Item = PrologTerm>,
+    ) -> Self {
+        PrologTerm::Compound(functor.into(), args.into_iter().collect())
+    }
+
+    /// Creates a variable.
+    pub fn variable(value: impl Into<String>) -> Self {
+        PrologTerm::Var(value.into())
+    }
+
+    /// Creates a conjunction, giving the atom `true` if empty.
+    pub fn conjunction(value: impl IntoIterator<Item = PrologTerm>) -> Self {
+        PrologTerm::try_conjunction(value).unwrap_or(PrologTerm::atom("true"))
+    }
+
+    /// Creates a conjunction, giving `None` if empty.
+    pub fn try_conjunction(value: impl IntoIterator<Item = PrologTerm>) -> Option<Self> {
+        let mut iter = value.into_iter();
+        iter.next().map(|first| {
+            PrologTerm::try_conjunction(iter)
+                .map(|rest| PrologTerm::compound(",", [first.clone(), rest]))
+                .unwrap_or(first)
+        })
+    }
+
+    /// Creates a disjunction, giving the atom `false` if empty.
+    pub fn disjunction(value: impl IntoIterator<Item = PrologTerm>) -> Self {
+        PrologTerm::try_disjunction(value).unwrap_or(PrologTerm::atom("false"))
+    }
+
+    /// Creates a disjunction, giving `None` if empty.
+    pub fn try_disjunction(value: impl IntoIterator<Item = PrologTerm>) -> Option<Self> {
+        let mut iter = value.into_iter();
+        iter.next().map(|first| {
+            PrologTerm::try_disjunction(iter)
+                .map(|rest| PrologTerm::compound(";", [first.clone(), rest]))
+                .unwrap_or(first)
+        })
+    }
+}
+
+impl From<LeafAnswer> for PrologTerm {
+    fn from(value: LeafAnswer) -> Self {
+        match value {
+            LeafAnswer::True => PrologTerm::atom("true"),
+            LeafAnswer::False => PrologTerm::atom("false"),
+            LeafAnswer::Exception(inner) => match inner.clone() {
+                PrologTerm::Compound(functor, args) if functor == "error" && args.len() == 2 => {
+                    inner
+                }
+                _ => PrologTerm::compound("throw", [inner]),
+            },
+            LeafAnswer::LeafAnswer {
+                bindings: _,
+                residual_goals: _,
+            } => {
+                todo!()
+            }
+        }
+    }
 }
 
 /// This is an auxiliary function to turn a count into names of anonymous variables like _A, _B,
@@ -159,7 +199,7 @@ fn count_to_letter_code(mut count: usize) -> String {
     letters.into_iter().chain("_".chars()).rev().collect()
 }
 
-impl Value {
+impl PrologTerm {
     pub(crate) fn from_heapcell(
         machine: &mut Machine,
         heap_cell: HeapCellValue,
@@ -194,41 +234,41 @@ impl Value {
                     let head = term_stack.pop().unwrap();
 
                     let list = match tail {
-                        Value::Atom(atom) if atom == "[]" => match head {
-                            Value::Atom(ref a) if a.chars().collect::<Vec<_>>().len() == 1 => {
+                        PrologTerm::Atom(atom) if atom == "[]" => match head {
+                            PrologTerm::Atom(ref a) if a.chars().collect::<Vec<_>>().len() == 1 => {
                                 // Handle lists of char as strings
-                                Value::String(a.to_string())
+                                PrologTerm::String(a.to_string())
                             }
-                            _ => Value::List(vec![head]),
+                            _ => PrologTerm::List(vec![head]),
                         },
-                        Value::List(elems) if elems.is_empty() => match head {
-                            Value::Atom(ref a) if a.chars().collect::<Vec<_>>().len() == 1 => {
+                        PrologTerm::List(elems) if elems.is_empty() => match head {
+                            PrologTerm::Atom(ref a) if a.chars().collect::<Vec<_>>().len() == 1 => {
                                 // Handle lists of char as strings
-                                Value::String(a.to_string())
+                                PrologTerm::String(a.to_string())
                             },
-                            _ => Value::List(vec![head]),
+                            _ => PrologTerm::List(vec![head]),
                         },
-                        Value::List(mut elems) => {
+                        PrologTerm::List(mut elems) => {
                             elems.insert(0, head);
-                            Value::List(elems)
+                            PrologTerm::List(elems)
                         },
-                        Value::String(mut elems) => match head {
-                            Value::Atom(ref a) if a.chars().collect::<Vec<_>>().len() == 1 => {
+                        PrologTerm::String(mut elems) => match head {
+                            PrologTerm::Atom(ref a) if a.chars().collect::<Vec<_>>().len() == 1 => {
                                 // Handle lists of char as strings
                                 elems.insert(0, a.chars().next().unwrap());
-                                Value::String(elems)
+                                PrologTerm::String(elems)
                             },
                             _ => {
-                                let mut elems: Vec<Value> = elems
+                                let mut elems: Vec<PrologTerm> = elems
                                     .chars()
-                                    .map(|x| Value::Atom(x.into()))
+                                    .map(|x| PrologTerm::Atom(x.into()))
                                     .collect();
                                 elems.insert(0, head);
-                                Value::List(elems)
+                                PrologTerm::List(elems)
                             }
                         },
                         _ => {
-                            Value::Structure(".".into(), vec![head, tail])
+                            PrologTerm::Compound(".".into(), vec![head, tail])
                         }
                     };
                     term_stack.push(list);
@@ -236,7 +276,7 @@ impl Value {
                 (HeapCellValueTag::Var | HeapCellValueTag::AttrVar | HeapCellValueTag::StackVar) => {
                     let var = var_names.get(&addr).map(|x| x.borrow().clone());
                     match var {
-                        Some(Var::Named(name)) => term_stack.push(Value::Var(name)),
+                        Some(Var::Named(name)) => term_stack.push(PrologTerm::Var(name)),
                         _ => {
                             let anon_name = loop {
                                 // Generate a name for the anonymous variable
@@ -261,28 +301,28 @@ impl Value {
                                     },
                                 }
                             };
-                            term_stack.push(Value::Var(anon_name));
+                            term_stack.push(PrologTerm::Var(anon_name));
                         },
                     }
                 }
                 (HeapCellValueTag::F64, f) => {
-                    term_stack.push(Value::Float(*f));
+                    term_stack.push(PrologTerm::Float(*f));
                 }
                 (HeapCellValueTag::Char, c) => {
-                    term_stack.push(Value::Atom(c.into()));
+                    term_stack.push(PrologTerm::Atom(c.into()));
                 }
                 (HeapCellValueTag::Fixnum, n) => {
-                    term_stack.push(Value::Integer(n.into()));
+                    term_stack.push(PrologTerm::Integer(n.into()));
                 }
                 (HeapCellValueTag::Cons) => {
                     match Number::try_from(addr) {
-                        Ok(Number::Integer(i)) => term_stack.push(Value::Integer((*i).clone())),
-                        Ok(Number::Rational(r)) => term_stack.push(Value::Rational((*r).clone())),
+                        Ok(Number::Integer(i)) => term_stack.push(PrologTerm::Integer((*i).clone())),
+                        Ok(Number::Rational(r)) => term_stack.push(PrologTerm::Rational((*r).clone())),
                         _ => {}
                     }
                 }
                 (HeapCellValueTag::CStr, s) => {
-                    term_stack.push(Value::String(s.as_str().to_string()));
+                    term_stack.push(PrologTerm::String(s.as_str().to_string()));
                 }
                 (HeapCellValueTag::Atom, (name, arity)) => {
                     //let h = iter.focus().value() as usize;
@@ -313,46 +353,46 @@ impl Value {
                     if arity == 0 {
                         let atom_name = name.as_str().to_string();
                         if atom_name == "[]" {
-                            term_stack.push(Value::List(vec![]));
+                            term_stack.push(PrologTerm::List(vec![]));
                         } else {
-                            term_stack.push(Value::Atom(atom_name));
+                            term_stack.push(PrologTerm::Atom(atom_name));
                         }
                     } else {
                         let subterms = term_stack
                             .drain(term_stack.len() - arity ..)
                             .collect();
 
-                        term_stack.push(Value::Structure(name.as_str().to_string(), subterms));
+                        term_stack.push(PrologTerm::Compound(name.as_str().to_string(), subterms));
                     }
                 }
                 (HeapCellValueTag::PStr, atom) => {
                     let tail = term_stack.pop().unwrap();
 
                     match tail {
-                        Value::Atom(atom) => {
+                        PrologTerm::Atom(atom) => {
                             if atom == "[]" {
-                                term_stack.push(Value::String(atom.as_str().to_string()));
+                                term_stack.push(PrologTerm::String(atom.as_str().to_string()));
                             }
                         },
-                        Value::List(l) => {
-                            let mut list: Vec<Value> = atom
+                        PrologTerm::List(l) => {
+                            let mut list: Vec<PrologTerm> = atom
                                 .as_str()
                                 .to_string()
                                 .chars()
-                                .map(|x| Value::Atom(x.to_string()))
+                                .map(|x| PrologTerm::Atom(x.to_string()))
                                 .collect();
                             list.extend(l.into_iter());
-                            term_stack.push(Value::List(list));
+                            term_stack.push(PrologTerm::List(list));
                         },
                         _ => {
-                            let mut list: Vec<Value> = atom
+                            let mut list: Vec<PrologTerm> = atom
                                 .as_str()
                                 .to_string()
                                 .chars()
-                                .map(|x| Value::Atom(x.to_string()))
+                                .map(|x| PrologTerm::Atom(x.to_string()))
                                 .collect();
 
-                            let mut partial_list = Value::Structure(
+                            let mut partial_list = PrologTerm::Compound(
                                 ".".into(),
                                 vec![
                                     list.pop().unwrap(),
@@ -361,7 +401,7 @@ impl Value {
                             );
 
                             while let Some(last) = list.pop() {
-                                partial_list = Value::Structure(
+                                partial_list = PrologTerm::Compound(
                                     ".".into(),
                                     vec![
                                         last,
@@ -394,250 +434,5 @@ impl Value {
 
         debug_assert_eq!(term_stack.len(), 1);
         term_stack.pop().unwrap()
-    }
-}
-
-impl From<BTreeMap<&str, Value>> for QueryMatch {
-    fn from(bindings: BTreeMap<&str, Value>) -> Self {
-        QueryMatch {
-            bindings: bindings
-                .into_iter()
-                .map(|(k, v)| (k.to_string(), v))
-                .collect::<BTreeMap<_, _>>(),
-        }
-    }
-}
-
-impl From<BTreeMap<String, Value>> for QueryMatch {
-    fn from(bindings: BTreeMap<String, Value>) -> Self {
-        QueryMatch { bindings }
-    }
-}
-
-impl From<Vec<QueryResolutionLine>> for QueryResolution {
-    fn from(query_result_lines: Vec<QueryResolutionLine>) -> Self {
-        // If there is only one line, and it is true or false, return that.
-        if query_result_lines.len() == 1 {
-            match query_result_lines[0].clone() {
-                QueryResolutionLine::True => return QueryResolution::True,
-                QueryResolutionLine::False => return QueryResolution::False,
-                _ => {}
-            }
-        }
-
-        // If there is only one line, and it is an empty match, return false.
-        if query_result_lines.len() == 1 {
-            if let QueryResolutionLine::Match(m) = query_result_lines[0].clone() {
-                if m.is_empty() {
-                    return QueryResolution::False;
-                }
-            }
-        }
-
-        // If there is at least one line with true and no matches, return true.
-        if query_result_lines
-            .iter()
-            .any(|l| l == &QueryResolutionLine::True)
-            && !query_result_lines
-                .iter()
-                .any(|l| matches!(l, QueryResolutionLine::Match(_)))
-        {
-            return QueryResolution::True;
-        }
-
-        // If there is at least one match, return all matches.
-        let all_matches = query_result_lines
-            .into_iter()
-            .filter(|l| matches!(l, QueryResolutionLine::Match(_)))
-            .map(|l| match l {
-                QueryResolutionLine::Match(m) => QueryMatch::from(m),
-                _ => unreachable!(),
-            })
-            .collect::<Vec<_>>();
-
-        if !all_matches.is_empty() {
-            return QueryResolution::Matches(all_matches);
-        }
-
-        QueryResolution::False
-    }
-}
-
-impl FromIterator<QueryResolutionLine> for QueryResolution {
-    fn from_iter<I: IntoIterator<Item = QueryResolutionLine>>(iter: I) -> Self {
-        // TODO: Probably a good idea to implement From<Vec<QueryResolutionLine>> based on this
-        // instead.
-        iter.into_iter().collect::<Vec<_>>().into()
-    }
-}
-
-fn split_response_string(input: &str) -> Vec<String> {
-    let mut level_bracket = 0;
-    let mut level_parenthesis = 0;
-    let mut in_double_quotes = false;
-    let mut in_single_quotes = false;
-    let mut start = 0;
-    let mut result = Vec::new();
-
-    for (i, c) in input.chars().enumerate() {
-        match c {
-            '[' => level_bracket += 1,
-            ']' => level_bracket -= 1,
-            '(' => level_parenthesis += 1,
-            ')' => level_parenthesis -= 1,
-            '"' => in_double_quotes = !in_double_quotes,
-            '\'' => in_single_quotes = !in_single_quotes,
-            ',' if level_bracket == 0
-                && level_parenthesis == 0
-                && !in_double_quotes
-                && !in_single_quotes =>
-            {
-                result.push(input[start..i].trim().to_string());
-                start = i + 1;
-            }
-            _ => {}
-        }
-    }
-
-    result.push(input[start..].trim().to_string());
-    result
-}
-
-fn split_key_value_pairs(input: &str) -> Vec<(String, String)> {
-    let items = split_response_string(input);
-    let mut result = Vec::new();
-
-    for item in items {
-        let parts: Vec<&str> = item.splitn(2, '=').collect();
-        if parts.len() == 2 {
-            let key = parts[0].trim().to_string();
-            let value = parts[1].trim().to_string();
-            result.push((key, value));
-        }
-    }
-
-    result
-}
-
-fn parse_prolog_response(input: &str) -> HashMap<String, String> {
-    let mut map: HashMap<String, String> = HashMap::new();
-    // Use regex to match strings including commas inside them
-    for result in split_key_value_pairs(input) {
-        let key = result.0;
-        let value = result.1;
-        // cut off at given characters/strings:
-        let value = value.split('\n').next().unwrap().to_string();
-        let value = value.split(' ').next().unwrap().to_string();
-        let value = value.split('\t').next().unwrap().to_string();
-        let value = value.split("error").next().unwrap().to_string();
-        map.insert(key, value);
-    }
-
-    map
-}
-
-impl TryFrom<String> for QueryResolutionLine {
-    type Error = ();
-    fn try_from(string: String) -> Result<Self, Self::Error> {
-        match string.as_str() {
-            "true" => Ok(QueryResolutionLine::True),
-            "false" => Ok(QueryResolutionLine::False),
-            _ => Ok(QueryResolutionLine::Match(
-                parse_prolog_response(&string)
-                    .iter()
-                    .map(|(k, v)| -> Result<(String, Value), ()> {
-                        let key = k.to_string();
-                        let value = v.to_string();
-                        Ok((key, Value::try_from(value)?))
-                    })
-                    .filter_map(Result::ok)
-                    .collect::<BTreeMap<_, _>>(),
-            )),
-        }
-    }
-}
-
-fn split_nested_list(input: &str) -> Vec<String> {
-    let mut level = 0;
-    let mut start = 0;
-    let mut result = Vec::new();
-
-    for (i, c) in input.chars().enumerate() {
-        match c {
-            '[' => level += 1,
-            ']' => level -= 1,
-            ',' if level == 0 => {
-                result.push(input[start..i].trim().to_string());
-                start = i + 1;
-            }
-            _ => {}
-        }
-    }
-
-    result.push(input[start..].trim().to_string());
-    result
-}
-
-impl TryFrom<String> for Value {
-    type Error = ();
-    fn try_from(string: String) -> Result<Self, Self::Error> {
-        let trimmed = string.trim();
-
-        if let Ok(float_value) = string.parse::<f64>() {
-            Ok(Value::Float(OrderedFloat(float_value)))
-        } else if let Ok(int_value) = string.parse::<i128>() {
-            Ok(Value::Integer(int_value.into()))
-        } else if trimmed.starts_with('\'') && trimmed.ends_with('\'')
-            || trimmed.starts_with('"') && trimmed.ends_with('"')
-        {
-            Ok(Value::String(trimmed[1..trimmed.len() - 1].into()))
-        } else if trimmed.starts_with('[') && trimmed.ends_with(']') {
-            let split = split_nested_list(&trimmed[1..trimmed.len() - 1]);
-
-            let values = split
-                .into_iter()
-                .map(Value::try_from)
-                .collect::<Result<Vec<_>, _>>()?;
-
-            Ok(Value::List(values))
-        } else if trimmed.starts_with('{') && trimmed.ends_with('}') {
-            let iter = trimmed[1..trimmed.len() - 1].split(',');
-            let mut values = vec![];
-
-            for value in iter {
-                let items: Vec<_> = value.split(':').collect();
-                if items.len() == 2 {
-                    let _key = items[0].to_string();
-                    let value = items[1].to_string();
-                    values.push(Value::try_from(value)?);
-                }
-            }
-
-            Ok(Value::Structure("{}".into(), values))
-        } else if trimmed.starts_with("<<") && trimmed.ends_with(">>") {
-            let iter = trimmed[2..trimmed.len() - 2].split(',');
-            let mut values = vec![];
-
-            for value in iter {
-                let items: Vec<_> = value.split(':').collect();
-                if items.len() == 2 {
-                    let _key = items[0].to_string();
-                    let value = items[1].to_string();
-                    values.push(Value::try_from(value)?);
-                }
-            }
-
-            Ok(Value::Structure("<<>>".into(), values))
-        } else if !trimmed.contains(',') && !trimmed.contains('\'') && !trimmed.contains('"') {
-            Ok(Value::String(trimmed.into()))
-        } else {
-            Err(())
-        }
-    }
-}
-
-impl From<&str> for Value {
-    fn from(str: &str) -> Self {
-        Value::String(str.to_string())
     }
 }

@@ -1,4 +1,6 @@
+//! A free software ISO Prolog system.
 #![recursion_limit = "4112"]
+#![deny(missing_docs)]
 
 #[macro_use]
 extern crate static_assertions;
@@ -61,6 +63,7 @@ pub fn eval_code(s: &str) -> String {
     String::from_utf8_lossy(&bytes).to_string()
 }
 
+/// The entry point for the Scryer Prolog CLI.
 pub fn run_binary() -> std::process::ExitCode {
     use crate::atom_table::Atom;
     use crate::machine::{Machine, INTERRUPT};

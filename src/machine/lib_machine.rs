@@ -1,25 +1,45 @@
 use std::collections::BTreeMap;
 
-use crate::atom_table;
 use crate::machine::machine_indices::VarKey;
 use crate::machine::mock_wam::CompositeOpDir;
 use crate::machine::{BREAK_FROM_DISPATCH_LOOP_LOC, LIB_QUERY_SUCCESS};
 use crate::parser::ast::{Var, VarPtr};
 use crate::parser::parser::{Parser, Tokens};
 use crate::read::{write_term_to_heap, TermWriteResult};
+use crate::{atom_table, StreamConfig};
 use indexmap::IndexMap;
 
 use super::{
-    streams::Stream, Atom, AtomCell, HeapCellValue, HeapCellValueTag, Machine, MachineConfig,
-    QueryResolutionLine, QueryResult, Value,
+    streams::Stream, Atom, AtomCell, HeapCellValue, HeapCellValueTag, LeafAnswer, Machine,
+    MachineConfig, PrologTerm,
 };
 
+/// An iterator though the leaf answers of a query.
 pub struct QueryState<'a> {
     machine: &'a mut Machine,
     term: TermWriteResult,
     stub_b: usize,
     var_names: IndexMap<HeapCellValue, VarPtr>,
     called: bool,
+}
+
+impl QueryState<'_> {
+    /// True if the query fails.
+    ///
+    /// Consumes the query. Gives [`false`] if an exception occurs.
+    pub fn fails(&mut self) -> bool {
+        todo!()
+    }
+
+    /// True if the query maybe succeeded.
+    ///
+    /// If a leaf answer has residual goals, it's only successful if the constraints they represent
+    /// are satisfiable.
+    ///
+    /// Consumes the query. Gives [`false`] if an exception occurs.
+    pub fn maybe_suceeded() -> bool {
+        todo!()
+    }
 }
 
 impl Drop for QueryState<'_> {
@@ -31,7 +51,7 @@ impl Drop for QueryState<'_> {
 }
 
 impl Iterator for QueryState<'_> {
-    type Item = Result<QueryResolutionLine, String>;
+    type Item = Result<LeafAnswer, String>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let var_names = &mut self.var_names;
@@ -82,13 +102,13 @@ impl Iterator for QueryState<'_> {
         if machine.machine_st.p == LIB_QUERY_SUCCESS {
             if term_write_result.var_dict.is_empty() {
                 self.machine.machine_st.backtrack();
-                return Some(Ok(QueryResolutionLine::True));
+                return Some(Ok(LeafAnswer::True));
             }
         } else if machine.machine_st.p == BREAK_FROM_DISPATCH_LOOP_LOC {
-            return Some(Ok(QueryResolutionLine::False));
+            return Some(Ok(LeafAnswer::False));
         }
 
-        let mut bindings: BTreeMap<String, Value> = BTreeMap::new();
+        let mut bindings: BTreeMap<String, PrologTerm> = BTreeMap::new();
 
         let var_dict = &term_write_result.var_dict;
 
@@ -105,9 +125,9 @@ impl Iterator for QueryState<'_> {
             }
 
             let mut term =
-                Value::from_heapcell(machine, *term_to_be_printed, &mut var_names.clone());
+                PrologTerm::from_heapcell(machine, *term_to_be_printed, &mut var_names.clone());
 
-            if let Value::Var(ref term_str) = term {
+            if let PrologTerm::Var(ref term_str) = term {
                 if *term_str == var_name {
                     continue;
                 }
@@ -121,7 +141,7 @@ impl Iterator for QueryState<'_> {
                     var_dict.get_index_of(&VarKey::VarPtr(Var::Named(term_str.clone()).into()));
                 if let Some(idx) = term_idx {
                     if idx < var_name_idx {
-                        let new_term = Value::Var(var_name);
+                        let new_term = PrologTerm::Var(var_name);
                         let new_var_name = term_str.into();
                         term = new_term;
                         var_name = new_var_name;
@@ -138,22 +158,28 @@ impl Iterator for QueryState<'_> {
         // choice point, so we should break.
         self.machine.machine_st.backtrack();
 
-        Some(Ok(QueryResolutionLine::Match(bindings)))
+        Some(Ok(LeafAnswer::LeafAnswer {
+            bindings: bindings,
+            residual_goals: vec![],
+        }))
     }
 }
 
 impl Machine {
+    /// Creates a new [`Machine`] configured for use as a library.
     pub fn new_lib() -> Self {
-        Machine::new(MachineConfig::in_memory())
+        Machine::new(MachineConfig::default().with_streams(StreamConfig::in_memory()))
     }
 
-    pub fn load_module_string(&mut self, module_name: &str, program: String) {
-        let stream = Stream::from_owned_string(program, &mut self.machine_st.arena);
+    /// Loads a module into the [`Machine`] from a string.
+    pub fn load_module_string(&mut self, module_name: &str, program: impl Into<String>) {
+        let stream = Stream::from_owned_string(program.into(), &mut self.machine_st.arena);
         self.load_file(module_name, stream);
     }
 
-    pub fn consult_module_string(&mut self, module_name: &str, program: String) {
-        let stream = Stream::from_owned_string(program, &mut self.machine_st.arena);
+    /// Consults a module into the [`Machine`] from a string.
+    pub fn consult_module_string(&mut self, module_name: &str, program: impl Into<String>) {
+        let stream = Stream::from_owned_string(program.into(), &mut self.machine_st.arena);
         self.machine_st.registers[1] = stream_as_cell!(stream);
         self.machine_st.registers[2] = atom_as_cell!(&atom_table::AtomTable::build_with(
             &self.machine_st.atom_tbl,
@@ -187,13 +213,10 @@ impl Machine {
         self.machine_st.block = stub_b;
     }
 
-    pub fn run_query(&mut self, query: String) -> QueryResult {
-        self.run_query_iter(query).collect()
-    }
-
-    pub fn run_query_iter(&mut self, query: String) -> QueryState {
+    /// Runs a query.
+    pub fn run_query(&mut self, query: impl Into<String>) -> QueryState {
         let mut parser = Parser::new(
-            Stream::from_owned_string(query, &mut self.machine_st.arena),
+            Stream::from_owned_string(query.into(), &mut self.machine_st.arena),
             &mut self.machine_st,
         );
         let op_dir = CompositeOpDir::new(&self.indices.op_dir, None);
@@ -248,7 +271,7 @@ impl Machine {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::machine::{QueryMatch, QueryResolution, Value};
+    use crate::machine::{QueryMatch, QueryResolution, Term};
 
     #[test]
     #[cfg_attr(miri, ignore = "it takes too long to run")]
@@ -271,10 +294,10 @@ mod tests {
             output,
             Ok(QueryResolution::Matches(vec![
                 QueryMatch::from(btreemap! {
-                    "P" => Value::from("p1"),
+                    "P" => Term::from("p1"),
                 }),
                 QueryMatch::from(btreemap! {
-                    "P" => Value::from("p2"),
+                    "P" => Term::from("p2"),
                 }),
             ]))
         );
@@ -328,8 +351,8 @@ mod tests {
             result,
             Ok(QueryResolution::Matches(vec![QueryMatch::from(
                 btreemap! {
-                    "C" => Value::Atom("c".into()),
-                    "Actions" => Value::Atom("[{action: \"addLink\", source: \"this\", predicate: \"todo://state\", target: \"todo://ready\"}]".into()),
+                    "C" => Term::Atom("c".into()),
+                    "Actions" => Term::Atom("[{action: \"addLink\", source: \"this\", predicate: \"todo://state\", target: \"todo://ready\"}]".into()),
                 }
             ),]))
         );
@@ -341,8 +364,8 @@ mod tests {
             result,
             Ok(QueryResolution::Matches(vec![QueryMatch::from(
                 btreemap! {
-                    "C" => Value::Atom("xyz".into()),
-                    "Actions" => Value::Atom("[{action: \"addLink\", source: \"this\", predicate: \"recipe://title\", target: \"literal://string:Meta%20Muffins\"}]".into()),
+                    "C" => Term::Atom("xyz".into()),
+                    "Actions" => Term::Atom("[{action: \"addLink\", source: \"this\", predicate: \"recipe://title\", target: \"literal://string:Meta%20Muffins\"}]".into()),
                 }
             ),]))
         );
@@ -352,10 +375,10 @@ mod tests {
             result,
             Ok(QueryResolution::Matches(vec![
                 QueryMatch::from(btreemap! {
-                    "Class" => Value::String("Todo".into())
+                    "Class" => Term::String("Todo".into())
                 }),
                 QueryMatch::from(btreemap! {
-                    "Class" => Value::String("Recipe".into())
+                    "Class" => Term::String("Recipe".into())
                 }),
             ]))
         );
@@ -394,10 +417,10 @@ mod tests {
             result,
             Ok(QueryResolution::Matches(vec![QueryMatch::from(
                 btreemap! {
-                    "X" => Value::List(vec![
-                        Value::Integer(1.into()),
-                        Value::Integer(2.into()),
-                        Value::Integer(3.into()),
+                    "X" => Term::List(vec![
+                        Term::Integer(1.into()),
+                        Term::Integer(2.into()),
+                        Term::Integer(3.into()),
                     ]),
                 }
             ),]))
@@ -425,10 +448,10 @@ mod tests {
             output,
             Ok(QueryResolution::Matches(vec![
                 QueryMatch::from(btreemap! {
-                    "P" => Value::from("p1"),
+                    "P" => Term::from("p1"),
                 }),
                 QueryMatch::from(btreemap! {
-                    "P" => Value::from("p2"),
+                    "P" => Term::from("p2"),
                 }),
             ]))
         );
@@ -529,10 +552,10 @@ mod tests {
             output,
             Ok(QueryResolution::Matches(vec![QueryMatch::from(
                 btreemap! {
-                    "Result" => Value::List(
+                    "Result" => Term::List(
                         Vec::from([
-                            Value::List([Value::from("p1"), Value::from("b")].into()),
-                            Value::List([Value::from("p2"), Value::from("b")].into()),
+                            Term::List([Term::from("p1"), Term::from("b")].into()),
+                            Term::List([Term::from("p2"), Term::from("b")].into()),
                         ])
                     ),
                 }
@@ -634,7 +657,7 @@ mod tests {
             result,
             Ok(QueryResolution::Matches(vec![QueryMatch::from(
                 btreemap! {
-                    "X" => Value::Atom(".".into()),
+                    "X" => Term::Atom(".".into()),
                 }
             )]))
         );
@@ -654,7 +677,7 @@ mod tests {
             result,
             Ok(QueryResolution::Matches(vec![QueryMatch::from(
                 btreemap! {
-                    "X" => Value::Rational(RBig::from_parts(1.into(), 2u32.into())),
+                    "X" => Term::Rational(RBig::from_parts(1.into(), 2u32.into())),
                 }
             )]))
         );
@@ -674,7 +697,7 @@ mod tests {
             result,
             Ok(QueryResolution::Matches(vec![QueryMatch::from(
                 btreemap! {
-                    "X" => Value::Integer(IBig::from(10).pow(100)),
+                    "X" => Term::Integer(IBig::from(10).pow(100)),
                 }
             )]))
         );
@@ -689,31 +712,31 @@ mod tests {
 
         let result = machine.run_query(query);
 
-        let expected = Value::Structure(
+        let expected = Term::Structure(
             // Composite term
             "a".into(),
             vec![
-                Value::String("asdf".into()), // String
-                Value::List(vec![
-                    Value::Integer(42.into()),  // Fixnum
-                    Value::Float(2.54.into()),  // Float
-                    Value::Atom("asdf".into()), // Atom
-                    Value::Atom("a".into()),    // Char
-                    Value::Structure(
+                Term::String("asdf".into()), // String
+                Term::List(vec![
+                    Term::Integer(42.into()),  // Fixnum
+                    Term::Float(2.54.into()),  // Float
+                    Term::Atom("asdf".into()), // Atom
+                    Term::Atom("a".into()),    // Char
+                    Term::Structure(
                         // Partial string
                         ".".into(),
                         vec![
-                            Value::Atom("a".into()),
-                            Value::Structure(
+                            Term::Atom("a".into()),
+                            Term::Structure(
                                 ".".into(),
                                 vec![
-                                    Value::Atom("b".into()),
-                                    Value::Var("_A".into()), // Anonymous variable
+                                    Term::Atom("b".into()),
+                                    Term::Var("_A".into()), // Anonymous variable
                                 ],
                             ),
                         ],
                     ),
-                    Value::Var("Z".into()), // Named variable
+                    Term::Var("Z".into()), // Named variable
                 ]),
             ],
         );
@@ -767,14 +790,14 @@ mod tests {
 
             iterator.next();
 
-            assert_eq!(iterator.next(), Some(Ok(QueryResolutionLine::False)));
+            assert_eq!(iterator.next(), Some(Ok(LeafAnswer::False)));
             assert_eq!(iterator.next(), None);
         }
 
         {
             let mut iterator = machine.run_query_iter("false.".into());
 
-            assert_eq!(iterator.next(), Some(Ok(QueryResolutionLine::False)));
+            assert_eq!(iterator.next(), Some(Ok(LeafAnswer::False)));
             assert_eq!(iterator.next(), None);
         }
     }
@@ -786,8 +809,8 @@ mod tests {
 
         let mut iterator = machine.run_query_iter("true;false.".into());
 
-        assert_eq!(iterator.next(), Some(Ok(QueryResolutionLine::True)));
-        assert_eq!(iterator.next(), Some(Ok(QueryResolutionLine::False)));
+        assert_eq!(iterator.next(), Some(Ok(LeafAnswer::True)));
+        assert_eq!(iterator.next(), Some(Ok(LeafAnswer::False)));
         assert_eq!(iterator.next(), None);
     }
 
@@ -802,11 +825,11 @@ mod tests {
             result,
             Ok(QueryResolution::Matches(vec![
                 QueryMatch::from(btreemap! {
-                    "A" => Value::List(vec![Value::Var("_A".into()), Value::Var("_C".into())]),
-                    "_B" => Value::Integer(1.into()),
+                    "A" => Term::List(vec![Term::Var("_A".into()), Term::Var("_C".into())]),
+                    "_B" => Term::Integer(1.into()),
                 }),
                 QueryMatch::from(btreemap! {
-                    "B" => Value::List(vec![Value::Var("_A".into()), Value::Var("_C".into())]),
+                    "B" => Term::List(vec![Term::Var("_A".into()), Term::Var("_C".into())]),
                 }),
             ]))
         );
@@ -823,8 +846,8 @@ mod tests {
             result,
             Ok(QueryResolution::Matches(vec![QueryMatch::from(
                 btreemap! {
-                    "X" => Value::Var("Y".into()),
-                    "Z" => Value::Var("W".into()),
+                    "X" => Term::Var("Y".into()),
+                    "Z" => Term::Var("W".into()),
                 }
             ),]))
         );
