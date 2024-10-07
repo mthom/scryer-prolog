@@ -1,3 +1,5 @@
+% This file is only for test cases that don't break compilation
+
 :- use_module(library(warnings)).
 
 t :-
@@ -5,8 +7,3 @@ t :-
 
 n :-
     \+ \+ \+ foo(_).
-
-x :-
-    a.
-    b,
-    c.

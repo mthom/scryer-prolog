@@ -1,1 +1,2 @@
    error(permission_error(modify,static_procedure,(',')/2),load/1).
+   error(permission_error(modify,static_procedure,(/+)/1),load/1).

@@ -2,4 +2,7 @@ args = [
     "-f",
     "--no-add-history",
     "src/tests/warnings.pl",
-    "-g", "halt"]
+    "src/tests/warnings1.pl",
+    "src/tests/warnings2.pl",
+    "-g", "halt"
+]

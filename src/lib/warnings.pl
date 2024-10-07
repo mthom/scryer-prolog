@@ -19,6 +19,7 @@ warn(Stream, Format, Vars) :-
 builtin((_;_)).
 builtin((_,_)).
 builtin((_->_)).
+builtin(\+_).
 
 unsound_type_test(atom(_)).
 unsound_type_test(atomic(_)).
@@ -28,9 +29,9 @@ unsound_type_test(integer(_)).
 % example:
 %     x :- a. b, c.
 %
-term_warning(term, Term, "(~q) attempts to re-define ~w", [Term,F/2]) :-
+term_warning(term, Term, "(~q) attempts to re-define ~w", [Term,F/A]) :-
     builtin(Term),
-    functor(Term, F, 2).
+    functor(Term, F, A).
 
 % Warn about unsound type test predicates and suggest using library(si).
 % Observe that following queries yield different results:
