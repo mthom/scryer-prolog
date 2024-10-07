@@ -21,6 +21,10 @@ builtin((_;_)).
 builtin((_,_)).
 builtin((_->_)).
 
+unsound_type_test(atom(_)).
+unsound_type_test(atomic(_)).
+unsound_type_test(integer(_)).
+
 % Warn about builtin predicates re-definition. It can happen by mistake for
 % example:
 %     x :- a. b, c.
@@ -28,5 +32,19 @@ builtin((_->_)).
 user:term_expansion(G, _) :-
     nonvar(G),
     builtin(G),
-    functor(G, O, 2),
-    warn_fail("(~q) attempts to re-define ~w", [G, O/2]).
+    functor(G, F, 2),
+    warn_fail("(~q) attempts to re-define ~w", [G, F/2]).
+
+% Warn about unsound type test predicates and suggest using library(si).
+% Observe that following queries yield different results:
+%
+%     ?- X=1, integer(X).
+%        true.
+%     ?- integer(X), X=1.
+%        false.
+%
+user:goal_expansion(G, _) :-
+    nonvar(G),
+    unsound_type_test(G),
+    functor(G, F, 1),
+    warn_fail("~q is a constant source of bugs, use ~a_si/1 from library(si)", [F/1,F]).

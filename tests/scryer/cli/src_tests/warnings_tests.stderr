@@ -1,1 +1,2 @@
-% Warning: (b,c) attempts to re-define (,)/2 at line 6 of warnings.pl
+% Warning: integer/1 is a constant source of bugs, use integer_si/1 from library(si) at line 4 of warnings.pl
+% Warning: (b,c) attempts to re-define (,)/2 at line 9 of warnings.pl
