@@ -4,5 +4,6 @@ args = [
     "src/tests/warnings.pl",
     "src/tests/warnings1.pl",
     "src/tests/warnings2.pl",
+    "src/tests/warnings3.pl",
     "-g", "halt"
 ]

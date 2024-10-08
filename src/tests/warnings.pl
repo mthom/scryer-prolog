@@ -18,3 +18,6 @@ z(G) :- maplist(G, "abc").
 
 % Shouldn't trigger meta-predicate warning
 a(L) :- maplist(=(_), L).
+
+% Shouldn't trigger invalid arithmetic expression warning
+l :- _ is 1+2.

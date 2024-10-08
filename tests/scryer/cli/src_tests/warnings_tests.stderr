@@ -5,3 +5,4 @@
 % Warning: Meta-predicate detected, but no qualified variables found at line 17 of warnings.pl
 % Warning: (b,c) attempts to re-define (,)/2 at line 6 of warnings1.pl
 % Warning: (/+c) attempts to re-define (/+)/1 at line 6 of warnings2.pl
+% Warning: Arithmetic expression A is B+sqrt(-C*D+E) contains invalid terms [[1]=B,phi=C,max(3+5)=E] at line 4 of warnings3.pl

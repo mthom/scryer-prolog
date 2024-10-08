@@ -26,6 +26,45 @@ unsound_type_test(atom(_)).
 unsound_type_test(atomic(_)).
 unsound_type_test(integer(_)).
 
+:- meta_predicate maplistdif(3, ?, ?, ?).
+
+maplistdif(_, [], [], L-L).
+maplistdif(G__2, [H1|T1], [H2|T2], L0-LX) :-
+    call(G__2, H1, H2, L0-L1),
+    maplistdif(G__2, T1, T2, L1-LX).
+
+%% arithmetic_expansion(+Type, ?Term, -ExpandedTerm, -Unifier-Rest).
+%
+% `ExpandedTerm` is the minimal generalization of `Term` which makes a valid
+% arithmetic relation (`Type = rela`) or functional expression (`Type = func`).
+% That means if all unifications from `Unifier` hold then `ExpandedTerm == Term`.
+% `Unifier-Rest` form together a list difference. `Term` is traversed from left
+% to right, depth-first. Given an invalid arithmetic term, as seen in the
+% example below, `E` becomes valid arithmetic term, `L` - unifier:
+%
+% ```
+% ?- arithmetic_expansion(rela, X is sqrt([]+Y*foo(e/2)), E, L-[]).
+%    E = (X is sqrt(_A+Y*_B)), L = [[]=_A,foo(e/2)=_B].
+% ```
+%
+% NOTE: Order of clauses is important for correctness.
+arithmetic_expansion(func, T, T, L-L) :-
+    (var(T); number(T)), !.
+arithmetic_expansion(Set, T, R, LD) :-
+    functor(T, F, A),
+    arithmetic_term(Set, A, Fs),
+    member(F, Fs), !,
+    functor(R, F, A),
+    T =.. [F|Ts],
+    R =.. [F|Rs],
+    maplistdif(arithmetic_expansion(func), Ts, Rs, LD).
+arithmetic_expansion(func, T, R, [T=R|L]-L).
+
+arithmetic_term(func, 0, [e,pi,epsilon]).
+arithmetic_term(func, 1, [+,-,\,sqrt,exp,log,sin,cos,tan,asin,acos,atan,sign,abs,round,ceiling,floor,truncate,float,float_integer_part,float_fractional_part]).
+arithmetic_term(func, 2, [+,-,/,*,**,^,/\,\/,xor,div,//,rdiv,<<,>>,mod,rem,max,min,gcd,atan2]).
+arithmetic_term(rela, 2, [is,>,<,>=,=<,=:=,=\=]).
+
 % Warn about builtin predicates re-definition. It can happen by mistake for
 % example:
 %     x :- a. b, c.
@@ -50,6 +89,10 @@ term_warning(goal, Term, "~q is a constant source of wrong results, use ~a_si/1 
 % use-case, but I don't think that more nested negations are ever useful.
 %
 term_warning(goal, \+ \+ \+_, "Nested negations can be reduced", []).
+
+% Warn about invalid arithmetic relation and show all incorrect sub-expression
+term_warning(goal, Term, "Arithmetic expression ~w contains invalid terms ~q", [R, [H|T]]) :-
+    arithmetic_expansion(rela, Term, R, [H|T]-[]).
 
 %% expansion_hook(?Goal, +MetaVarSpecs).
 %
@@ -77,7 +120,7 @@ expansion_hook(Goal, []) :-
 
 expansion_warning(ExpansionKind, Term) :-
     nonvar(Term),
-    term_warning(ExpansionKind, Term, Msg, Vars),
+    once(term_warning(ExpansionKind, Term, Msg, Vars)),
     warn(Msg, Vars),
     false.
 
