@@ -1,10 +1,10 @@
 use super::*;
-use crate::machine::{QueryMatch, QueryResolution, Term};
+use crate::MachineBuilder;
 
 #[test]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
 fn programatic_query() {
-    let mut machine = Machine::new_lib();
+    let mut machine = MachineBuilder::default().build();
 
     machine.load_module_string(
         "facts",
@@ -16,39 +16,36 @@ fn programatic_query() {
         ),
     );
 
-    let query = String::from(r#"triple("a",P,"b")."#);
-    let output = machine.run_query(query);
-    assert_eq!(
-        output,
-        Ok(QueryResolution::Matches(vec![
-            QueryMatch::from(btreemap! {
-                "P" => Term::from("p1"),
-            }),
-            QueryMatch::from(btreemap! {
-                "P" => Term::from("p2"),
-            }),
-        ]))
-    );
+    let query = r#"triple("a",P,"b")."#;
+    let complete_answer: Vec<_> = machine.run_query(query).collect::<Result<_, _>>().unwrap();
 
     assert_eq!(
-        machine.run_query(String::from(r#"triple("a","p1","b")."#)),
-        Ok(QueryResolution::True)
+        complete_answer,
+        [
+            LeafAnswer::from_bindings([("P", Term::string("p1")),]),
+            LeafAnswer::from_bindings([("P", Term::string("p2")),]),
+        ],
     );
 
-    assert_eq!(
-        machine.run_query(String::from(r#"triple("x","y","z")."#)),
-        Ok(QueryResolution::False)
-    );
+    let query = r#"triple("a","p1","b")."#;
+    let complete_answer: Vec<_> = machine.run_query(query).collect::<Result<_, _>>().unwrap();
+
+    assert_eq!(complete_answer, [LeafAnswer::True],);
+
+    let query = r#"triple("x","y","z")."#;
+    let complete_answer: Vec<_> = machine.run_query(query).collect::<Result<_, _>>().unwrap();
+
+    assert_eq!(complete_answer, [LeafAnswer::False],);
 }
 
 #[test]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
 fn failing_query() {
-    let mut machine = Machine::new_lib();
-    let query = String::from(r#"triple("a",P,"b")."#);
-    let output = machine.run_query(query);
+    let mut machine = MachineBuilder::default().build();
+    let query = r#"triple("a",P,"b")."#;
+    let complete_answer: Result<Vec<_>, _> = machine.run_query(query).collect();
     assert_eq!(
-        output,
+        complete_answer,
         Err(String::from(
             "error existence_error procedure / triple 3 / triple 3"
         ))
@@ -58,7 +55,7 @@ fn failing_query() {
 #[test]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
 fn complex_results() {
-    let mut machine = Machine::new_lib();
+    let mut machine = MachineBuilder::default().build();
     machine.load_module_string(
         "facts",
         r#"
@@ -70,155 +67,151 @@ fn complex_results() {
 
         subject_class("Recipe", xyz).
         constructor(xyz, '[{action: "addLink", source: "this", predicate: "recipe://title", target: "literal://string:Meta%20Muffins"}]').
-        "#.to_string());
-
-    let result = machine.run_query(String::from(
-        "subject_class(\"Todo\", C), constructor(C, Actions).",
-    ));
-    assert_eq!(
-        result,
-        Ok(QueryResolution::Matches(vec![QueryMatch::from(
-            btreemap! {
-                "C" => Term::Atom("c".into()),
-                "Actions" => Term::Atom("[{action: \"addLink\", source: \"this\", predicate: \"todo://state\", target: \"todo://ready\"}]".into()),
-            }
-        ),]))
+        "#,
     );
 
-    let result = machine.run_query(String::from(
-        "subject_class(\"Recipe\", C), constructor(C, Actions).",
-    ));
+    let complete_answer: Vec<_> = machine
+        .run_query(r#"subject_class("Todo", C), constructor(C, Actions)."#)
+        .collect::<Result<_, _>>()
+        .unwrap();
     assert_eq!(
-        result,
-        Ok(QueryResolution::Matches(vec![QueryMatch::from(
-            btreemap! {
-                "C" => Term::Atom("xyz".into()),
-                "Actions" => Term::Atom("[{action: \"addLink\", source: \"this\", predicate: \"recipe://title\", target: \"literal://string:Meta%20Muffins\"}]".into()),
-            }
-        ),]))
+        complete_answer,
+        [LeafAnswer::from_bindings([
+            ("C", Term::atom("c")),
+            (
+                "Actions",
+                Term::atom(
+                    r#"[{action: "addLink", source: "this", predicate: "todo://state", target: "todo://ready"}]"#
+                )
+            ),
+        ])],
     );
 
-    let result = machine.run_query(String::from("subject_class(Class, _)."));
+    let complete_answer: Vec<_> = machine
+        .run_query(r#"subject_class("Recipe", C), constructor(C, Actions)."#)
+        .collect::<Result<_, _>>()
+        .unwrap();
     assert_eq!(
-        result,
-        Ok(QueryResolution::Matches(vec![
-            QueryMatch::from(btreemap! {
-                "Class" => Term::String("Todo".into())
-            }),
-            QueryMatch::from(btreemap! {
-                "Class" => Term::String("Recipe".into())
-            }),
-        ]))
+        complete_answer,
+        [LeafAnswer::from_bindings([
+            ("C", Term::atom("xyz")),
+            (
+                "Actions",
+                Term::atom(
+                    r#"[{action: "addLink", source: "this", predicate: "recipe://title", target: "literal://string:Meta%20Muffins"}]"#
+                )
+            ),
+        ])],
+    );
+
+    let complete_answer: Vec<_> = machine
+        .run_query("subject_class(Class, _).")
+        .collect::<Result<_, _>>()
+        .unwrap();
+    assert_eq!(
+        complete_answer,
+        [
+            LeafAnswer::from_bindings([("Class", Term::string("Todo"))]),
+            LeafAnswer::from_bindings([("Class", Term::string("Recipe"))]),
+        ],
     );
 }
 
 #[test]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
 fn empty_predicate() {
-    let mut machine = Machine::new_lib();
+    let mut machine = MachineBuilder::default().build();
     machine.load_module_string(
         "facts",
         r#"
         :- discontiguous(subject_class/2).
-        "#
-        .to_string(),
+        "#,
     );
 
-    let result = machine.run_query(String::from("subject_class(X, _)."));
-    assert_eq!(result, Ok(QueryResolution::False));
+    let complete_answer: Vec<_> = machine
+        .run_query("subject_class(X, _).")
+        .collect::<Result<_, _>>()
+        .unwrap();
+    assert_eq!(complete_answer, [LeafAnswer::False]);
 }
 
 #[test]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
 fn list_results() {
-    let mut machine = Machine::new_lib();
+    let mut machine = MachineBuilder::default().build();
     machine.load_module_string(
         "facts",
         r#"
         list([1,2,3]).
-        "#
-        .to_string(),
+        "#,
     );
 
-    let result = machine.run_query(String::from("list(X)."));
+    let complete_answer: Vec<_> = machine
+        .run_query("list(X).")
+        .collect::<Result<_, _>>()
+        .unwrap();
     assert_eq!(
-        result,
-        Ok(QueryResolution::Matches(vec![QueryMatch::from(
-            btreemap! {
-                "X" => Term::List(vec![
-                    Term::Integer(1.into()),
-                    Term::Integer(2.into()),
-                    Term::Integer(3.into()),
-                ]),
-            }
-        ),]))
+        complete_answer,
+        [LeafAnswer::from_bindings([(
+            "X",
+            Term::list([Term::integer(1), Term::integer(2), Term::integer(3)]),
+        )])],
     );
 }
 
 #[test]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
 fn consult() {
-    let mut machine = Machine::new_lib();
+    let mut machine = MachineBuilder::default().build();
 
     machine.consult_module_string(
         "facts",
-        String::from(
-            r#"
-            triple("a", "p1", "b").
-            triple("a", "p2", "b").
-            "#,
-        ),
+        r#"
+        triple("a", "p1", "b").
+        triple("a", "p2", "b").
+        "#,
     );
 
-    let query = String::from(r#"triple("a",P,"b")."#);
-    let output = machine.run_query(query);
+    let query = r#"triple("a",P,"b")."#;
+    let complete_answer: Vec<_> = machine.run_query(query).collect::<Result<_, _>>().unwrap();
     assert_eq!(
-        output,
-        Ok(QueryResolution::Matches(vec![
-            QueryMatch::from(btreemap! {
-                "P" => Term::from("p1"),
-            }),
-            QueryMatch::from(btreemap! {
-                "P" => Term::from("p2"),
-            }),
-        ]))
+        complete_answer,
+        [
+            LeafAnswer::from_bindings([("P", Term::string("p1"))]),
+            LeafAnswer::from_bindings([("P", Term::string("p2"))]),
+        ],
     );
 
-    assert_eq!(
-        machine.run_query(String::from(r#"triple("a","p1","b")."#)),
-        Ok(QueryResolution::True)
-    );
+    let query = r#"triple("a","p1","b")."#;
+    let complete_answer: Vec<_> = machine.run_query(query).collect::<Result<_, _>>().unwrap();
+    assert_eq!(complete_answer, [LeafAnswer::True],);
 
-    assert_eq!(
-        machine.run_query(String::from(r#"triple("x","y","z")."#)),
-        Ok(QueryResolution::False)
-    );
+    let query = r#"triple("x","y","z")."#;
+    let complete_answer: Vec<_> = machine.run_query(query).collect::<Result<_, _>>().unwrap();
+    assert_eq!(complete_answer, [LeafAnswer::False],);
 
     machine.consult_module_string(
         "facts",
-        String::from(
-            r#"
+        r#"
             triple("a", "new", "b").
             "#,
-        ),
     );
 
-    assert_eq!(
-        machine.run_query(String::from(r#"triple("a","p1","b")."#)),
-        Ok(QueryResolution::False)
-    );
+    let query = r#"triple("a","p1","b")."#;
+    let complete_answer: Vec<_> = machine.run_query(query).collect::<Result<_, _>>().unwrap();
+    assert_eq!(complete_answer, [LeafAnswer::False],);
 
-    assert_eq!(
-        machine.run_query(String::from(r#"triple("a","new","b")."#)),
-        Ok(QueryResolution::True)
-    );
+    let query = r#"triple("a","new","b")."#;
+    let complete_answer: Vec<_> = machine.run_query(query).collect::<Result<_, _>>().unwrap();
+    assert_eq!(complete_answer, [LeafAnswer::True]);
 }
 
+/*
 #[test]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
 #[ignore = "uses old flawed interface"]
 fn integration_test() {
-    let mut machine = Machine::new_lib();
+    let mut machine = MachineBuilder::default().build();
 
     // File with test commands, i.e. program code to consult and queries to run
     let code = include_str!("./lib_integration_test_commands.txt");
@@ -257,137 +250,122 @@ fn integration_test() {
         }
     }
 }
+*/
 
 #[test]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
 fn findall() {
-    let mut machine = Machine::new_lib();
+    let mut machine = MachineBuilder::default().build();
 
     machine.consult_module_string(
         "facts",
-        String::from(
-            r#"
-            triple("a", "p1", "b").
-            triple("a", "p2", "b").
-            "#,
-        ),
+        r#"
+        triple("a", "p1", "b").
+        triple("a", "p2", "b").
+        "#,
     );
 
-    let query =
-        String::from(r#"findall([Predicate, Target], triple(_,Predicate,Target), Result)."#);
-    let output = machine.run_query(query);
+    let query = r#"findall([Predicate, Target], triple(_,Predicate,Target), Result)."#;
+    let complete_answer: Vec<_> = machine.run_query(query).collect::<Result<_, _>>().unwrap();
     assert_eq!(
-        output,
-        Ok(QueryResolution::Matches(vec![QueryMatch::from(
-            btreemap! {
-                "Result" => Term::List(
-                    Vec::from([
-                        Term::List([Term::from("p1"), Term::from("b")].into()),
-                        Term::List([Term::from("p2"), Term::from("b")].into()),
-                    ])
-                ),
-            }
-        ),]))
+        complete_answer,
+        [LeafAnswer::from_bindings([(
+            "Result",
+            Term::list([
+                Term::list([Term::string("p1"), Term::string("b")]),
+                Term::list([Term::string("p2"), Term::string("b")]),
+            ])
+        )])]
     );
 }
 
 #[test]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
 fn dont_return_partial_matches() {
-    let mut machine = Machine::new_lib();
+    let mut machine = MachineBuilder::default().build();
 
     machine.consult_module_string(
         "facts",
-        String::from(
-            r#"
-            :- discontiguous(property_resolve/2).
-            subject_class("Todo", c).
-            "#,
-        ),
+        r#"
+        :- discontiguous(property_resolve/2).
+        subject_class("Todo", c).
+        "#,
     );
 
-    let query = String::from(r#"property_resolve(C, "isLiked"), subject_class("Todo", C)."#);
-    let output = machine.run_query(query);
-    assert_eq!(output, Ok(QueryResolution::False));
+    let query = r#"property_resolve(C, "isLiked"), subject_class("Todo", C)."#;
+    let complete_answer: Vec<_> = machine.run_query(query).collect::<Result<_, _>>().unwrap();
+    assert_eq!(complete_answer, [LeafAnswer::False]);
 
-    let query = String::from(r#"subject_class("Todo", C), property_resolve(C, "isLiked")."#);
-    let output = machine.run_query(query);
-    assert_eq!(output, Ok(QueryResolution::False));
+    let query = r#"subject_class("Todo", C), property_resolve(C, "isLiked")."#;
+    let complete_answer: Vec<_> = machine.run_query(query).collect::<Result<_, _>>().unwrap();
+    assert_eq!(complete_answer, [LeafAnswer::False]);
 }
 
 #[test]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
 fn dont_return_partial_matches_without_discountiguous() {
-    let mut machine = Machine::new_lib();
+    let mut machine = MachineBuilder::default().build();
 
     machine.consult_module_string(
         "facts",
-        String::from(
-            r#"
-            a("true for a").
-            b("true for b").
-            "#,
-        ),
+        r#"
+        a("true for a").
+        b("true for b").
+        "#,
     );
 
-    let query = String::from(r#"a("true for a")."#);
-    let output = machine.run_query(query);
-    assert_eq!(output, Ok(QueryResolution::True));
+    let query = r#"a("true for a")."#;
+    let complete_answer: Vec<_> = machine.run_query(query).collect::<Result<_, _>>().unwrap();
+    assert_eq!(complete_answer, [LeafAnswer::True]);
 
-    let query = String::from(r#"a("true for a"), b("true for b")."#);
-    let output = machine.run_query(query);
-    assert_eq!(output, Ok(QueryResolution::True));
+    let query = r#"a("true for a"), b("true for b")."#;
+    let complete_answer: Vec<_> = machine.run_query(query).collect::<Result<_, _>>().unwrap();
+    assert_eq!(complete_answer, [LeafAnswer::True]);
 
-    let query = String::from(r#"a("true for b"), b("true for b")."#);
-    let output = machine.run_query(query);
-    assert_eq!(output, Ok(QueryResolution::False));
+    let query = r#"a("true for b"), b("true for b")."#;
+    let complete_answer: Vec<_> = machine.run_query(query).collect::<Result<_, _>>().unwrap();
+    assert_eq!(complete_answer, [LeafAnswer::False]);
 
-    let query = String::from(r#"a("true for a"), b("true for a")."#);
-    let output = machine.run_query(query);
-    assert_eq!(output, Ok(QueryResolution::False));
+    let query = r#"a("true for a"), b("true for a")."#;
+    let complete_answer: Vec<_> = machine.run_query(query).collect::<Result<_, _>>().unwrap();
+    assert_eq!(complete_answer, [LeafAnswer::False]);
 }
 
 #[test]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
 fn non_existent_predicate_should_not_cause_panic_when_other_predicates_are_defined() {
-    let mut machine = Machine::new_lib();
+    let mut machine = MachineBuilder::default().build();
 
     machine.consult_module_string(
         "facts",
-        String::from(
-            r#"
-            triple("a", "p1", "b").
-            triple("a", "p2", "b").
-            "#,
-        ),
+        r#"
+        triple("a", "p1", "b").
+        triple("a", "p2", "b").
+        "#,
     );
 
-    let query = String::from("non_existent_predicate(\"a\",\"p1\",\"b\").");
-
-    let result = machine.run_query(query);
+    let query = r#"non_existent_predicate("a","p1","b")."#;
+    let complete_answer: Result<Vec<_>, _> = machine.run_query(query).collect();
 
     assert_eq!(
-        result,
-        Err(String::from("error existence_error procedure / non_existent_predicate 3 / non_existent_predicate 3"))
+        complete_answer,
+        Err(String::from(
+            "error existence_error procedure / non_existent_predicate 3 / non_existent_predicate 3"
+        ))
     );
 }
 
 #[test]
 #[cfg_attr(miri, ignore)]
 fn atom_quoting() {
-    let mut machine = Machine::new_lib();
+    let mut machine = MachineBuilder::default().build();
 
-    let query = "X = '.'.".into();
-
-    let result = machine.run_query(query);
+    let query = "X = '.'.";
+    let complete_answer: Vec<_> = machine.run_query(query).collect::<Result<_, _>>().unwrap();
 
     assert_eq!(
-        result,
-        Ok(QueryResolution::Matches(vec![QueryMatch::from(
-            btreemap! {
-                "X" => Term::Atom(".".into()),
-            }
-        )]))
+        complete_answer,
+        [LeafAnswer::from_bindings([("X", Term::atom("."))])]
     );
 }
 
@@ -395,19 +373,17 @@ fn atom_quoting() {
 #[cfg_attr(miri, ignore)]
 fn rational_number() {
     use crate::parser::dashu::rational::RBig;
-    let mut machine = Machine::new_lib();
+    let mut machine = MachineBuilder::default().build();
 
-    let query = "X is 1 rdiv 2.".into();
-
-    let result = machine.run_query(query);
+    let query = "X is 1 rdiv 2.";
+    let complete_answer: Vec<_> = machine.run_query(query).collect::<Result<_, _>>().unwrap();
 
     assert_eq!(
-        result,
-        Ok(QueryResolution::Matches(vec![QueryMatch::from(
-            btreemap! {
-                "X" => Term::Rational(RBig::from_parts(1.into(), 2u32.into())),
-            }
-        )]))
+        complete_answer,
+        [LeafAnswer::from_bindings([(
+            "X",
+            Term::rational(RBig::from_parts(1.into(), 2u32.into()))
+        )])]
     );
 }
 
@@ -415,33 +391,30 @@ fn rational_number() {
 #[cfg_attr(miri, ignore)]
 fn big_integer() {
     use crate::parser::dashu::integer::IBig;
-    let mut machine = Machine::new_lib();
+    let mut machine = MachineBuilder::default().build();
 
-    let query = "X is 10^100.".into();
-
-    let result = machine.run_query(query);
+    let query = "X is 10^100.";
+    let complete_answer: Vec<_> = machine.run_query(query).collect::<Result<_, _>>().unwrap();
 
     assert_eq!(
-        result,
-        Ok(QueryResolution::Matches(vec![QueryMatch::from(
-            btreemap! {
-                "X" => Term::Integer(IBig::from(10).pow(100)),
-            }
-        )]))
+        complete_answer,
+        [LeafAnswer::from_bindings([(
+            "X",
+            Term::integer(IBig::from(10).pow(100))
+        )])],
     );
 }
 
 #[test]
 #[cfg_attr(miri, ignore)]
 fn complicated_term() {
-    let mut machine = Machine::new_lib();
+    let mut machine = MachineBuilder::default().build();
 
-    let query = "X = a(\"asdf\", [42, 2.54, asdf, a, [a,b|_], Z]).".into();
+    let query = r#"X = a("asdf", [42, 2.54, asdf, a, [a,b|_], Z])."#;
+    let complete_answer: Vec<_> = machine.run_query(query).collect::<Result<_, _>>().unwrap();
 
-    let result = machine.run_query(query);
-
-    let expected = Term::Structure(
-        // Composite term
+    let expected = Term::Compound(
+        // Compound term
         "a".into(),
         vec![
             Term::String("asdf".into()), // String
@@ -450,12 +423,12 @@ fn complicated_term() {
                 Term::Float(2.54.into()),  // Float
                 Term::Atom("asdf".into()), // Atom
                 Term::Atom("a".into()),    // Char
-                Term::Structure(
+                Term::Compound(
                     // Partial string
                     ".".into(),
                     vec![
                         Term::Atom("a".into()),
-                        Term::Structure(
+                        Term::Compound(
                             ".".into(),
                             vec![
                                 Term::Atom("b".into()),
@@ -470,51 +443,45 @@ fn complicated_term() {
     );
 
     assert_eq!(
-        result,
-        Ok(QueryResolution::Matches(vec![QueryMatch::from(
-            btreemap! {
-                "X" => expected,
-            }
-        )]))
+        complete_answer,
+        [LeafAnswer::from_bindings([("X", expected)])]
     );
 }
 
 #[test]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
 fn issue_2341() {
-    let mut machine = Machine::new_lib();
+    let mut machine = MachineBuilder::default().build();
 
     machine.load_module_string(
         "facts",
-        String::from(
-            r#"
-            male(stephen).
-            parent(albert,edward).
-            father(F,C):-parent(F,C),male(F).
-            "#,
-        ),
+        r#"
+        male(stephen).
+        parent(albert,edward).
+        father(F,C):-parent(F,C),male(F).
+        "#,
     );
 
-    let query = String::from(r#"father(F,C)."#);
-    let output = machine.run_query(query);
+    let query = r#"father(F,C)."#;
+    let complete_answer: Vec<_> = machine.run_query(query).collect::<Result<_, _>>().unwrap();
 
-    assert_eq!(output, Ok(QueryResolution::False));
+    assert_eq!(complete_answer, [LeafAnswer::False]);
 }
 
 #[test]
 #[cfg_attr(miri, ignore)]
 fn query_iterator_determinism() {
-    let mut machine = Machine::new_lib();
+    let mut machine = MachineBuilder::default().build();
 
     {
-        let mut iterator = machine.run_query_iter("X = 1.".into());
+        let mut iterator = machine.run_query("X = 1.");
 
         iterator.next();
         assert_eq!(iterator.next(), None);
     }
 
     {
-        let mut iterator = machine.run_query_iter("X = 1 ; false.".into());
+        let mut iterator = machine.run_query("X = 1 ; false.");
 
         iterator.next();
 
@@ -523,7 +490,7 @@ fn query_iterator_determinism() {
     }
 
     {
-        let mut iterator = machine.run_query_iter("false.".into());
+        let mut iterator = machine.run_query("false.");
 
         assert_eq!(iterator.next(), Some(Ok(LeafAnswer::False)));
         assert_eq!(iterator.next(), None);
@@ -533,9 +500,9 @@ fn query_iterator_determinism() {
 #[test]
 #[cfg_attr(miri, ignore)]
 fn query_iterator_backtracking_when_no_variables() {
-    let mut machine = Machine::new_lib();
+    let mut machine = MachineBuilder::default().build();
 
-    let mut iterator = machine.run_query_iter("true;false.".into());
+    let mut iterator = machine.run_query("true;false.");
 
     assert_eq!(iterator.next(), Some(Ok(LeafAnswer::True)));
     assert_eq!(iterator.next(), Some(Ok(LeafAnswer::False)));
@@ -545,39 +512,43 @@ fn query_iterator_backtracking_when_no_variables() {
 #[test]
 #[cfg_attr(miri, ignore)]
 fn differentiate_anonymous_variables() {
-    let mut machine = Machine::new_lib();
+    let mut machine = MachineBuilder::default().build();
 
-    let result = machine.run_query("A = [_,_], _B = 1 ; B = [_,_].".into());
+    let complete_answer: Vec<_> = machine
+        .run_query("A = [_,_], _B = 1 ; B = [_,_].")
+        .collect::<Result<_, _>>()
+        .unwrap();
 
     assert_eq!(
-        result,
-        Ok(QueryResolution::Matches(vec![
-            QueryMatch::from(btreemap! {
-                "A" => Term::List(vec![Term::Var("_A".into()), Term::Var("_C".into())]),
-                "_B" => Term::Integer(1.into()),
-            }),
-            QueryMatch::from(btreemap! {
-                "B" => Term::List(vec![Term::Var("_A".into()), Term::Var("_C".into())]),
-            }),
-        ]))
+        complete_answer,
+        [
+            LeafAnswer::from_bindings([
+                (
+                    "A",
+                    Term::list([Term::variable("_A"), Term::variable("_C")])
+                ),
+                ("_B", Term::integer(1)),
+            ]),
+            LeafAnswer::from_bindings([(
+                "B",
+                Term::list([Term::variable("_A"), Term::variable("_C")])
+            ),]),
+        ]
     );
 }
 
 #[test]
 #[cfg_attr(miri, ignore)]
 fn order_of_variables_in_binding() {
-    let mut machine = Machine::new_lib();
+    let mut machine = MachineBuilder::default().build();
 
-    let result = machine.run_query("X = Y, Z = W.".into());
+    let complete_answer: Vec<_> = machine.run_query("X = Y, Z = W.").collect::<Result<_,_>>().unwrap();
 
     assert_eq!(
-        result,
-        Ok(QueryResolution::Matches(vec![QueryMatch::from(
-            btreemap! {
-                "X" => Term::Var("Y".into()),
-                "Z" => Term::Var("W".into()),
-            }
-        ),]))
+        complete_answer,
+        [LeafAnswer::from_bindings([
+            ("X", Term::variable("Y")),
+            ("Z", Term::variable("W")),
+        ])]
     );
 }
-
