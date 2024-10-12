@@ -1,17 +1,17 @@
 use std::collections::BTreeMap;
 
+use crate::atom_table;
 use crate::machine::machine_indices::VarKey;
 use crate::machine::mock_wam::CompositeOpDir;
 use crate::machine::{BREAK_FROM_DISPATCH_LOOP_LOC, LIB_QUERY_SUCCESS};
 use crate::parser::ast::{Var, VarPtr};
 use crate::parser::parser::{Parser, Tokens};
 use crate::read::{write_term_to_heap, TermWriteResult};
-use crate::{atom_table, StreamConfig};
 use indexmap::IndexMap;
 
 use super::{
     streams::Stream, Atom, AtomCell, HeapCellValue, HeapCellValueTag, LeafAnswer, Machine,
-    MachineConfig, PrologTerm,
+    PrologTerm,
 };
 
 /// An iterator though the leaf answers of a query.
@@ -166,11 +166,6 @@ impl Iterator for QueryState<'_> {
 }
 
 impl Machine {
-    /// Creates a new [`Machine`] configured for use as a library.
-    pub fn new_lib() -> Self {
-        Machine::new(MachineConfig::default().with_streams(StreamConfig::in_memory()))
-    }
-
     /// Loads a module into the [`Machine`] from a string.
     pub fn load_module_string(&mut self, module_name: &str, program: impl Into<String>) {
         let stream = Stream::from_owned_string(program.into(), &mut self.machine_st.arena);
