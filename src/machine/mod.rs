@@ -20,7 +20,6 @@ pub mod machine_indices;
 pub mod machine_state;
 pub mod machine_state_impl;
 pub mod mock_wam;
-pub mod parsed_results;
 pub mod partial_string;
 pub mod preprocessor;
 pub mod stack;
@@ -61,8 +60,6 @@ use std::io::Read;
 use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::OnceLock;
-
-use self::parsed_results::*;
 
 lazy_static! {
     pub static ref INTERRUPT: AtomicBool = AtomicBool::new(false);
