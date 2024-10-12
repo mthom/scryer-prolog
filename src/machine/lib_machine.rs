@@ -41,23 +41,6 @@ pub enum LeafAnswer {
     },
 }
 
-impl LeafAnswer {
-    /// True if leaf answer failed.
-    ///
-    /// This gives [`false`] for exceptions.
-    pub fn failed(&self) -> bool {
-        matches!(self, LeafAnswer::False)
-    }
-
-    /// True if leaf answer may have succeeded.
-    ///
-    /// When a leaf answer has residual goals the success is conditional on the satisfiability of
-    /// the contraints they represent. This gives [`false`] for exceptions.
-    pub fn maybe_succeeded(&self) -> bool {
-        matches!(self, LeafAnswer::True | LeafAnswer::LeafAnswer { .. })
-    }
-}
-
 /// Represents a Prolog term.
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq)]
@@ -153,25 +136,6 @@ impl Term {
                 .map(|rest| Term::compound(";", [first.clone(), rest]))
                 .unwrap_or(first)
         })
-    }
-}
-
-impl From<LeafAnswer> for Term {
-    fn from(value: LeafAnswer) -> Self {
-        match value {
-            LeafAnswer::True => Term::atom("true"),
-            LeafAnswer::False => Term::atom("false"),
-            LeafAnswer::Exception(inner) => match inner.clone() {
-                Term::Compound(functor, args) if functor == "error" && args.len() == 2 => inner,
-                _ => Term::compound("throw", [inner]),
-            },
-            LeafAnswer::LeafAnswer {
-                bindings: _,
-                residual_goals: _,
-            } => {
-                todo!()
-            }
-        }
     }
 }
 
