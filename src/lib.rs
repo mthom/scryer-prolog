@@ -48,7 +48,6 @@ use wasm_bindgen::prelude::*;
 // Re-exports
 pub use machine::config::*;
 pub use machine::lib_machine::*;
-pub use machine::parsed_results::*;
 pub use machine::Machine;
 
 #[cfg(target_arch = "wasm32")]
