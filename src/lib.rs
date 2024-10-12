@@ -4,9 +4,6 @@
 
 #[macro_use]
 extern crate static_assertions;
-#[cfg(test)]
-#[macro_use]
-extern crate maplit;
 
 #[macro_use]
 pub(crate) mod macros;
@@ -50,6 +47,7 @@ pub use machine::config::*;
 pub use machine::lib_machine::*;
 pub use machine::Machine;
 
+/// Eval a source file in Wasm.
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]
 pub fn eval_code(s: &str) -> String {
@@ -57,7 +55,7 @@ pub fn eval_code(s: &str) -> String {
 
     console_error_panic_hook::set_once();
 
-    let mut wam = Machine::with_test_streams();
+    let mut wam = MachineBuilder::default().build();
     let bytes = wam.test_load_string(s);
     String::from_utf8_lossy(&bytes).to_string()
 }

@@ -420,7 +420,7 @@ fn complicated_term() {
             Term::String("asdf".into()), // String
             Term::List(vec![
                 Term::Integer(42.into()),  // Fixnum
-                Term::Float(2.54.into()),  // Float
+                Term::Float(2.54),         // Float
                 Term::Atom("asdf".into()), // Atom
                 Term::Atom("a".into()),    // Char
                 Term::Compound(
@@ -542,7 +542,10 @@ fn differentiate_anonymous_variables() {
 fn order_of_variables_in_binding() {
     let mut machine = MachineBuilder::default().build();
 
-    let complete_answer: Vec<_> = machine.run_query("X = Y, Z = W.").collect::<Result<_,_>>().unwrap();
+    let complete_answer: Vec<_> = machine
+        .run_query("X = Y, Z = W.")
+        .collect::<Result<_, _>>()
+        .unwrap();
 
     assert_eq!(
         complete_answer,
