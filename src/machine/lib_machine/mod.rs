@@ -44,6 +44,16 @@ pub enum LeafAnswer {
     },
 }
 
+impl LeafAnswer {
+    /// Creates a leaf answer with no residual goals.
+    pub fn from_bindings<S: Into<String>>(bindings: impl IntoIterator<Item = (S, Term)>) -> Self {
+        LeafAnswer::LeafAnswer {
+            bindings: bindings.into_iter().map(|(k, v)| (k.into(), v)).collect(),
+            residual_goals: Vec::new(),
+        }
+    }
+}
+
 /// Represents a Prolog term.
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq)]
