@@ -66,7 +66,7 @@ pub fn eval_code(s: &str) -> String {
 /// The entry point for the Scryer Prolog CLI.
 pub fn run_binary() -> std::process::ExitCode {
     use crate::atom_table::Atom;
-    use crate::machine::{Machine, INTERRUPT};
+    use crate::machine::INTERRUPT;
 
     #[cfg(feature = "repl")]
     ctrlc::set_handler(move || {
@@ -87,7 +87,9 @@ pub fn run_binary() -> std::process::ExitCode {
         .unwrap();
 
     runtime.block_on(async move {
-        let mut wam = Machine::new(Default::default());
+        let mut wam = MachineBuilder::default()
+            .with_streams(StreamConfig::stdio())
+            .build();
         wam.run_module_predicate(atom!("$toplevel"), (atom!("$repl"), 0))
     })
 }

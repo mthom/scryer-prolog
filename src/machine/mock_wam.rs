@@ -6,7 +6,6 @@ pub use crate::machine::*;
 pub use crate::parser::ast::*;
 use crate::read::*;
 pub use crate::types::*;
-use crate::StreamConfig;
 
 use std::sync::Arc;
 
@@ -232,11 +231,6 @@ pub(crate) fn parse_and_write_parsed_term_to_heap(
 }
 
 impl Machine {
-    /// For use in tests.
-    pub fn with_test_streams() -> Self {
-        Machine::new(MachineConfig::default().with_streams(StreamConfig::in_memory()))
-    }
-
     /// For use in tests.
     pub fn test_load_file(&mut self, file: &str) -> Vec<u8> {
         let stream = Stream::from_owned_string(
