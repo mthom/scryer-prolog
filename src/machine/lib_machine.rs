@@ -27,17 +27,17 @@ pub enum LeafAnswer {
     /// This means that there are no more answers for the query.
     False,
     /// An exception leaf answer.
-    Exception(PrologTerm),
+    Exception(Term),
     /// A leaf answer with bindings and residual goals.
     LeafAnswer {
         /// The bindings of variables in the query.
         ///
         /// Can be empty.
-        bindings: BTreeMap<String, PrologTerm>,
+        bindings: BTreeMap<String, Term>,
         /// Residual goals.
         ///
         /// Can be empty.
-        residual_goals: Vec<PrologTerm>,
+        residual_goals: Vec<Term>,
     },
 }
 
@@ -61,7 +61,7 @@ impl LeafAnswer {
 /// Represents a Prolog term.
 #[non_exhaustive]
 #[derive(Debug, Clone, PartialEq)]
-pub enum PrologTerm {
+pub enum Term {
     /// An arbitrary precision integer.
     Integer(Integer),
     /// An arbitrary precision rational.
@@ -75,100 +75,95 @@ pub enum PrologTerm {
     /// In particular, this represents Prolog lists of characters.
     String(String),
     /// A Prolog list.
-    List(Vec<PrologTerm>),
+    List(Vec<Term>),
     /// A Prolog compound term.
-    Compound(String, Vec<PrologTerm>),
+    Compound(String, Vec<Term>),
     /// A Prolog variable.
     Var(String),
 }
 
-impl PrologTerm {
+impl Term {
     /// Creates an integer term.
     pub fn integer(value: impl Into<Integer>) -> Self {
-        PrologTerm::Integer(value.into())
+        Term::Integer(value.into())
     }
 
     /// Creates a rational term.
     pub fn rational(value: impl Into<Rational>) -> Self {
-        PrologTerm::Rational(value.into())
+        Term::Rational(value.into())
     }
 
     /// Creates a float term.
     pub fn float(value: impl Into<f64>) -> Self {
-        PrologTerm::Float(value.into())
+        Term::Float(value.into())
     }
 
     /// Creates an atom term.
     pub fn atom(value: impl Into<String>) -> Self {
-        PrologTerm::Atom(value.into())
+        Term::Atom(value.into())
     }
 
     /// Creates a string term.
     ///
     /// In specific, this represents a list of chars in Prolog.
     pub fn string(value: impl Into<String>) -> Self {
-        PrologTerm::String(value.into())
+        Term::String(value.into())
     }
 
     /// Creates a list term.
-    pub fn list(value: impl IntoIterator<Item = PrologTerm>) -> Self {
-        PrologTerm::List(value.into_iter().collect())
+    pub fn list(value: impl IntoIterator<Item = Term>) -> Self {
+        Term::List(value.into_iter().collect())
     }
 
     /// Creates a compound term.
-    pub fn compound(
-        functor: impl Into<String>,
-        args: impl IntoIterator<Item = PrologTerm>,
-    ) -> Self {
-        PrologTerm::Compound(functor.into(), args.into_iter().collect())
+    pub fn compound(functor: impl Into<String>, args: impl IntoIterator<Item = Term>) -> Self {
+        Term::Compound(functor.into(), args.into_iter().collect())
     }
 
     /// Creates a variable.
     pub fn variable(value: impl Into<String>) -> Self {
-        PrologTerm::Var(value.into())
+        Term::Var(value.into())
     }
 
     /// Creates a conjunction, giving the atom `true` if empty.
-    pub fn conjunction(value: impl IntoIterator<Item = PrologTerm>) -> Self {
-        PrologTerm::try_conjunction(value).unwrap_or(PrologTerm::atom("true"))
+    pub fn conjunction(value: impl IntoIterator<Item = Term>) -> Self {
+        Term::try_conjunction(value).unwrap_or(Term::atom("true"))
     }
 
     /// Creates a conjunction, giving `None` if empty.
-    pub fn try_conjunction(value: impl IntoIterator<Item = PrologTerm>) -> Option<Self> {
+    pub fn try_conjunction(value: impl IntoIterator<Item = Term>) -> Option<Self> {
         let mut iter = value.into_iter();
         iter.next().map(|first| {
-            PrologTerm::try_conjunction(iter)
-                .map(|rest| PrologTerm::compound(",", [first.clone(), rest]))
+            Term::try_conjunction(iter)
+                .map(|rest| Term::compound(",", [first.clone(), rest]))
                 .unwrap_or(first)
         })
     }
 
     /// Creates a disjunction, giving the atom `false` if empty.
-    pub fn disjunction(value: impl IntoIterator<Item = PrologTerm>) -> Self {
-        PrologTerm::try_disjunction(value).unwrap_or(PrologTerm::atom("false"))
+    pub fn disjunction(value: impl IntoIterator<Item = Term>) -> Self {
+        Term::try_disjunction(value).unwrap_or(Term::atom("false"))
     }
 
     /// Creates a disjunction, giving `None` if empty.
-    pub fn try_disjunction(value: impl IntoIterator<Item = PrologTerm>) -> Option<Self> {
+    pub fn try_disjunction(value: impl IntoIterator<Item = Term>) -> Option<Self> {
         let mut iter = value.into_iter();
         iter.next().map(|first| {
-            PrologTerm::try_disjunction(iter)
-                .map(|rest| PrologTerm::compound(";", [first.clone(), rest]))
+            Term::try_disjunction(iter)
+                .map(|rest| Term::compound(";", [first.clone(), rest]))
                 .unwrap_or(first)
         })
     }
 }
 
-impl From<LeafAnswer> for PrologTerm {
+impl From<LeafAnswer> for Term {
     fn from(value: LeafAnswer) -> Self {
         match value {
-            LeafAnswer::True => PrologTerm::atom("true"),
-            LeafAnswer::False => PrologTerm::atom("false"),
+            LeafAnswer::True => Term::atom("true"),
+            LeafAnswer::False => Term::atom("false"),
             LeafAnswer::Exception(inner) => match inner.clone() {
-                PrologTerm::Compound(functor, args) if functor == "error" && args.len() == 2 => {
-                    inner
-                }
-                _ => PrologTerm::compound("throw", [inner]),
+                Term::Compound(functor, args) if functor == "error" && args.len() == 2 => inner,
+                _ => Term::compound("throw", [inner]),
             },
             LeafAnswer::LeafAnswer {
                 bindings: _,
@@ -198,7 +193,7 @@ fn count_to_letter_code(mut count: usize) -> String {
     letters.into_iter().chain("_".chars()).rev().collect()
 }
 
-impl PrologTerm {
+impl Term {
     pub(crate) fn from_heapcell(
         machine: &mut Machine,
         heap_cell: HeapCellValue,
@@ -233,41 +228,41 @@ impl PrologTerm {
                     let head = term_stack.pop().unwrap();
 
                     let list = match tail {
-                        PrologTerm::Atom(atom) if atom == "[]" => match head {
-                            PrologTerm::Atom(ref a) if a.chars().collect::<Vec<_>>().len() == 1 => {
+                        Term::Atom(atom) if atom == "[]" => match head {
+                            Term::Atom(ref a) if a.chars().collect::<Vec<_>>().len() == 1 => {
                                 // Handle lists of char as strings
-                                PrologTerm::String(a.to_string())
+                                Term::String(a.to_string())
                             }
-                            _ => PrologTerm::List(vec![head]),
+                            _ => Term::List(vec![head]),
                         },
-                        PrologTerm::List(elems) if elems.is_empty() => match head {
-                            PrologTerm::Atom(ref a) if a.chars().collect::<Vec<_>>().len() == 1 => {
+                        Term::List(elems) if elems.is_empty() => match head {
+                            Term::Atom(ref a) if a.chars().collect::<Vec<_>>().len() == 1 => {
                                 // Handle lists of char as strings
-                                PrologTerm::String(a.to_string())
+                                Term::String(a.to_string())
                             },
-                            _ => PrologTerm::List(vec![head]),
+                            _ => Term::List(vec![head]),
                         },
-                        PrologTerm::List(mut elems) => {
+                        Term::List(mut elems) => {
                             elems.insert(0, head);
-                            PrologTerm::List(elems)
+                            Term::List(elems)
                         },
-                        PrologTerm::String(mut elems) => match head {
-                            PrologTerm::Atom(ref a) if a.chars().collect::<Vec<_>>().len() == 1 => {
+                        Term::String(mut elems) => match head {
+                            Term::Atom(ref a) if a.chars().collect::<Vec<_>>().len() == 1 => {
                                 // Handle lists of char as strings
                                 elems.insert(0, a.chars().next().unwrap());
-                                PrologTerm::String(elems)
+                                Term::String(elems)
                             },
                             _ => {
-                                let mut elems: Vec<PrologTerm> = elems
+                                let mut elems: Vec<Term> = elems
                                     .chars()
-                                    .map(|x| PrologTerm::Atom(x.into()))
+                                    .map(|x| Term::Atom(x.into()))
                                     .collect();
                                 elems.insert(0, head);
-                                PrologTerm::List(elems)
+                                Term::List(elems)
                             }
                         },
                         _ => {
-                            PrologTerm::Compound(".".into(), vec![head, tail])
+                            Term::Compound(".".into(), vec![head, tail])
                         }
                     };
                     term_stack.push(list);
@@ -275,7 +270,7 @@ impl PrologTerm {
                 (HeapCellValueTag::Var | HeapCellValueTag::AttrVar | HeapCellValueTag::StackVar) => {
                     let var = var_names.get(&addr).map(|x| x.borrow().clone());
                     match var {
-                        Some(Var::Named(name)) => term_stack.push(PrologTerm::Var(name)),
+                        Some(Var::Named(name)) => term_stack.push(Term::Var(name)),
                         _ => {
                             let anon_name = loop {
                                 // Generate a name for the anonymous variable
@@ -300,28 +295,28 @@ impl PrologTerm {
                                     },
                                 }
                             };
-                            term_stack.push(PrologTerm::Var(anon_name));
+                            term_stack.push(Term::Var(anon_name));
                         },
                     }
                 }
                 (HeapCellValueTag::F64, f) => {
-                    term_stack.push(PrologTerm::Float((*f).into()));
+                    term_stack.push(Term::Float((*f).into()));
                 }
                 (HeapCellValueTag::Char, c) => {
-                    term_stack.push(PrologTerm::Atom(c.into()));
+                    term_stack.push(Term::Atom(c.into()));
                 }
                 (HeapCellValueTag::Fixnum, n) => {
-                    term_stack.push(PrologTerm::Integer(n.into()));
+                    term_stack.push(Term::Integer(n.into()));
                 }
                 (HeapCellValueTag::Cons) => {
                     match Number::try_from(addr) {
-                        Ok(Number::Integer(i)) => term_stack.push(PrologTerm::Integer((*i).clone())),
-                        Ok(Number::Rational(r)) => term_stack.push(PrologTerm::Rational((*r).clone())),
+                        Ok(Number::Integer(i)) => term_stack.push(Term::Integer((*i).clone())),
+                        Ok(Number::Rational(r)) => term_stack.push(Term::Rational((*r).clone())),
                         _ => {}
                     }
                 }
                 (HeapCellValueTag::CStr, s) => {
-                    term_stack.push(PrologTerm::String(s.as_str().to_string()));
+                    term_stack.push(Term::String(s.as_str().to_string()));
                 }
                 (HeapCellValueTag::Atom, (name, arity)) => {
                     //let h = iter.focus().value() as usize;
@@ -352,46 +347,46 @@ impl PrologTerm {
                     if arity == 0 {
                         let atom_name = name.as_str().to_string();
                         if atom_name == "[]" {
-                            term_stack.push(PrologTerm::List(vec![]));
+                            term_stack.push(Term::List(vec![]));
                         } else {
-                            term_stack.push(PrologTerm::Atom(atom_name));
+                            term_stack.push(Term::Atom(atom_name));
                         }
                     } else {
                         let subterms = term_stack
                             .drain(term_stack.len() - arity ..)
                             .collect();
 
-                        term_stack.push(PrologTerm::Compound(name.as_str().to_string(), subterms));
+                        term_stack.push(Term::Compound(name.as_str().to_string(), subterms));
                     }
                 }
                 (HeapCellValueTag::PStr, atom) => {
                     let tail = term_stack.pop().unwrap();
 
                     match tail {
-                        PrologTerm::Atom(atom) => {
+                        Term::Atom(atom) => {
                             if atom == "[]" {
-                                term_stack.push(PrologTerm::String(atom.as_str().to_string()));
+                                term_stack.push(Term::String(atom.as_str().to_string()));
                             }
                         },
-                        PrologTerm::List(l) => {
-                            let mut list: Vec<PrologTerm> = atom
+                        Term::List(l) => {
+                            let mut list: Vec<Term> = atom
                                 .as_str()
                                 .to_string()
                                 .chars()
-                                .map(|x| PrologTerm::Atom(x.to_string()))
+                                .map(|x| Term::Atom(x.to_string()))
                                 .collect();
                             list.extend(l.into_iter());
-                            term_stack.push(PrologTerm::List(list));
+                            term_stack.push(Term::List(list));
                         },
                         _ => {
-                            let mut list: Vec<PrologTerm> = atom
+                            let mut list: Vec<Term> = atom
                                 .as_str()
                                 .to_string()
                                 .chars()
-                                .map(|x| PrologTerm::Atom(x.to_string()))
+                                .map(|x| Term::Atom(x.to_string()))
                                 .collect();
 
-                            let mut partial_list = PrologTerm::Compound(
+                            let mut partial_list = Term::Compound(
                                 ".".into(),
                                 vec![
                                     list.pop().unwrap(),
@@ -400,7 +395,7 @@ impl PrologTerm {
                             );
 
                             while let Some(last) = list.pop() {
-                                partial_list = PrologTerm::Compound(
+                                partial_list = Term::Compound(
                                     ".".into(),
                                     vec![
                                         last,
@@ -511,7 +506,7 @@ impl Iterator for QueryState<'_> {
             return Some(Ok(LeafAnswer::False));
         }
 
-        let mut bindings: BTreeMap<String, PrologTerm> = BTreeMap::new();
+        let mut bindings: BTreeMap<String, Term> = BTreeMap::new();
 
         let var_dict = &term_write_result.var_dict;
 
@@ -528,9 +523,9 @@ impl Iterator for QueryState<'_> {
             }
 
             let mut term =
-                PrologTerm::from_heapcell(machine, *term_to_be_printed, &mut var_names.clone());
+                Term::from_heapcell(machine, *term_to_be_printed, &mut var_names.clone());
 
-            if let PrologTerm::Var(ref term_str) = term {
+            if let Term::Var(ref term_str) = term {
                 if *term_str == var_name {
                     continue;
                 }
@@ -544,7 +539,7 @@ impl Iterator for QueryState<'_> {
                     var_dict.get_index_of(&VarKey::VarPtr(Var::Named(term_str.clone()).into()));
                 if let Some(idx) = term_idx {
                     if idx < var_name_idx {
-                        let new_term = PrologTerm::Var(var_name);
+                        let new_term = Term::Var(var_name);
                         let new_var_name = term_str.into();
                         term = new_term;
                         var_name = new_var_name;
