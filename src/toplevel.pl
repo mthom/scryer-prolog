@@ -170,14 +170,14 @@ repl :-
 %% Enable op declarations with lists of operands, i.e.,
 %% :- op(900, fy, [$,@]).
 
-user:term_expansion((:- op(Pred, Spec, Ops)), OpResults) :-
+user:term_expansion((:- op(Pri, Spec, Ops)), OpResults) :-
     ground(Ops),
     Ops = [Op | OtherOps],
-    expand_op_list([Op | OtherOps], Pred, Spec, OpResults).
+    expand_op_list([Op | OtherOps], Pri, Spec, OpResults).
 
 expand_op_list([], _, _, []).
-expand_op_list([Op | OtherOps], Pred, Spec, [(:- op(Pred, Spec, Op)) | OtherResults]) :-
-    expand_op_list(OtherOps, Pred, Spec, OtherResults).
+expand_op_list([Op | OtherOps], Pri, Spec, [(:- op(Pri, Spec, Op)) | OtherResults]) :-
+    expand_op_list(OtherOps, Pri, Spec, OtherResults).
 
 
 read_and_match :-
