@@ -9,6 +9,8 @@
 :- use_module(library(si)).
 :- use_module(library(os)).
 
+:- use_module(library(format)).
+
 :- use_module(library('$project_atts')).
 :- use_module(library('$atts')).
 
@@ -168,14 +170,14 @@ repl :-
 %% Enable op declarations with lists of operands, i.e.,
 %% :- op(900, fy, [$,@]).
 
-user:term_expansion((:- op(Pred, Spec, Ops)), OpResults) :- 
-    ground(Ops), 
+user:term_expansion((:- op(Pri, Spec, Ops)), OpResults) :-
+    ground(Ops),
     Ops = [Op | OtherOps],
-    expand_op_list([Op | OtherOps], Pred, Spec, OpResults).
+    expand_op_list([Op | OtherOps], Pri, Spec, OpResults).
 
 expand_op_list([], _, _, []).
-expand_op_list([Op | OtherOps], Pred, Spec, [(:- op(Pred, Spec, Op)) | OtherResults]) :-
-    expand_op_list(OtherOps, Pred, Spec, OtherResults).
+expand_op_list([Op | OtherOps], Pri, Spec, [(:- op(Pri, Spec, Op)) | OtherResults]) :-
+    expand_op_list(OtherOps, Pri, Spec, OtherResults).
 
 
 read_and_match :-
@@ -190,8 +192,7 @@ instruction_match(Term, VarList) :-
        (  atom(Item) ->
           (  Item == user ->
              catch(load(user_input), E, print_exception_with_check(E))
-          ;
-             submit_query_and_print_results(consult(Item), [])
+          ;  submit_query_and_print_results(consult(Item), [])
           )
        ;  catch(type_error(atom, Item, repl/0),
                 E,
@@ -199,37 +200,185 @@ instruction_match(Term, VarList) :-
        )
     ;  Term = end_of_file ->
        halt
-    ;
-       submit_query_and_print_results(Term, VarList)
+    ;  submit_query_and_print_results(Term, VarList)
     ).
 
+%% run_query(+QueryChars, +Callback_3, +Options)
+%
+% Runs a query from a string of chars, calling `Callback_3` on each leaf answer.
+% See `run_query_goal/4` for details.
+run_query(QueryChars, Callback_3, Options) :-
+    read_term_from_chars(QueryChars, QueryGoal, [variable_names(VarNames)]),
+    run_query_goal(QueryGoal, VarNames, Callback_3, Options).
 
-submit_query_and_print_results_(Term, VarList) :-
+%% run_query_goal(+QueryGoal, +VarNames, +Callback_3, +Options)
+%
+% Run a query from a goal, calling `Callback_3` on each leaf answer.
+% `VarNames` needs to have the same format as the one from the `variable_names(-VarNames)`
+% option in `read_term/3`. That is, a list of terms of the form `Name=Var`, where `Name`
+% is an atom and `Var` is a variable. `Callback_3` should have the form
+% `callback(+LeafAnswer, +Info, -Stop)`, where `LeafAnswer` will be one of those:
+%
+% - `final(false)`
+% - `final(exception(Exception))`, where `Exception` is the exception thrown
+% - `final(true)`
+% - `final(leaf_answer(Bindings, ResidualGoals, VarNames))`, where:
+%
+%   - `Bindings` is a list of terms of the form `Var=Term`, where `Var` is a
+%     variable.
+%   - `ResidualGoals` is a list of the residual goals from the query.
+%   - `VarNames` is a list of `Name=Var` terms where `Name` is an atom and `Var` is a
+%     variable.
+% - `pending(true)`
+% - `pending(leaf_answer(Bindings, ResidualGoals, VarNames)`, see `final(leaf_answer(_,_,_))`
+%   above.
+%
+% The variants with principal functor `final/1` mean that there will be no more leaf answers,
+% and the ones with `pending/1` mean that there will be more leaf answers.
+%
+% The second argument of the callback (`Info`) is a list with extra information that can
+% be activated with options. The third argument `Stop` controls whether the query will continue
+% or stop, and should be instantiated by the callback to either `continue` or `stop`.
+%
+% `Option` is a list of options. There are none currently, but in the future support for
+% inference limits and timeouts may be implemented.
+run_query_goal(QueryGoal, VarNames, Callback_3, _) :-
+    % The b value in the WAM basically represents which choicepoint we are at.
+    % By recording it before and after we can then compare the values to know
+    % if we are still inside the query or not.
+    '$get_b_value'(B0),
+    catch(call_residue_vars(user:QueryGoal, ResVars), Exception, Excepted = true),
+    gather_query_vars(VarNames, Vars0),
+    '$term_variables_under_max_depth'(Vars0, 22, Vars1),
+    '$project_atts':project_attributes(Vars1, ResVars),
     '$get_b_value'(B),
+    (   B0 == B ->
+        % We are out of the choicepoint, ignore tail false
+        !
+    ;   Pending = true
+    ),
+    (   Excepted == true ->
+        !,
+        call(Callback_3, final(exception(Exception)), [], _)
+    ;   (   VarNames == [], ResGoals == [] ->
+            (   Pending == true ->
+                call(Callback_3, pending(true), [], Stop),
+                (   Stop == stop -> !
+                ;   Stop == continue -> true
+                ;   domain_error(stop_or_continue, Stop, run_query_goal/4)
+                )
+            ;   call(Callback_3, final(true), [], _)
+            )
+        ;   copy_term([Vars1, ResVars], [Vars1, ResVars], ResGoals),
+            term_variables(ResGoals, ResGoalVars),
+            append([Vars1, ResGoalVars, ResVars], Vars2),
+            charsio:extend_var_list(Vars2, VarNames, NewVarNames, fabricated),
+            gather_equations(NewVarNames, Vars0, Bindings),
+            maplist(\Term^Vs^term_variables_under_max_depth(Term, 22, Vs), Bindings, BindingVars),
+            append([ResGoalVars | BindingVars], Vars3),
+            term_variables(Vars3, Vars4), % deduplicate vars of Vars1 but preserve their order.
+            charsio:extend_var_list(Vars4, VarNames, NewVarNames1, fabricated),
+            (   Pending == true ->
+                call(
+                    Callback_3,
+                    pending(leaf_answer(Bindings, ResGoals, NewVarNames1)),
+                    [],
+                    Stop
+                ),
+                (   Stop == stop -> !
+                ;   Stop == continue -> true
+                ;   domain_error(stop_or_continue, Stop, run_query_goal/4)
+                )
+            ;   call(Callback_3, final(leaf_answer(Bindings, ResGoals, NewVarNames1)), [], _)
+            )
+        )
+    ).
+run_query_goal(_, _, Callback_3, _) :-
+    % If the whole query failed or we didn't cut in the previous definition of
+    % run_query_goal/4 (which means  we are still in the query but it has failed)
+    % then we get here so we have a (tail) false.
+    call(Callback_3, final(false), [], _).
+
+submit_query_and_print_results(QueryTerm, VarNames) :-
+    bb_put('$answer_count', 0),
     bb_put('$report_all', false),
     bb_put('$report_n_more', 0),
-    expand_goal(Term, user, Term0),
-    call_residue_vars(user:Term0, AttrVars),
-    write_eqs_and_read_input(B, VarList, AttrVars),
-    !.
-submit_query_and_print_results_(_, _) :-
+    run_query_goal(QueryTerm, VarNames, toplevel_query_callback, []).
+
+handle_first_answer :-
     (   bb_get('$answer_count', 0) ->
         write('   ')
     ;   true
+    ).
+
+increment_answer_count :-
+    bb_get('$answer_count', Count0),
+    Count is Count0 + 1,
+    bb_put('$answer_count', Count).
+
+toplevel_query_callback(pending(LeafAnswer), _, Stop) :-
+    handle_first_answer,
+    increment_answer_count,
+    write_leaf_answer(LeafAnswer, []),
+    read_input(LeafAnswer, Stop).
+toplevel_query_callback(final(LeafAnswer), _, continue) :-
+    (   exception(Exception) = LeafAnswer ->
+        print_exception(Exception)
+    ;   handle_first_answer,
+        increment_answer_count,
+        write_leaf_answer(LeafAnswer, []),
+        write('.'), nl
+    ).
+
+write_leaf_answer(true, _) :- write(true).
+write_leaf_answer(false, _) :- write(false).
+write_leaf_answer(leaf_answer(Bindings, ResGoals, VarNames), Options) :-
+    append(Bindings, ResGoals, LeafGoals),
+    loader:thread_goals(LeafGoals, ThreadedGoals, (',')),
+    (   member(depth(deep), Options) ->
+        write_eq(ThreadedGoals, VarNames, 0)
+    ;   write_eq(ThreadedGoals, VarNames, 20)
+    ).
+
+read_input(LeafAnswer, Stop) :-
+    (  bb_get('$report_all', true) ->
+       C = n
+    ;  bb_get('$report_n_more', N), N > 1 ->
+       N1 is N - 1,
+       bb_put('$report_n_more', N1),
+       C = n
+    ;  get_single_char(C)
     ),
-    write('false.'),
-    nl.
-
-
-submit_query_and_print_results(Term, VarList) :-
-    % (  functor(Term0, call, _) ->
-    %    Term = Term0 % prevent pre-mature expansion of incomplete goal
-    %                 % in the first argument, which is done by call/N
-    % ;  expand_goal(Term0, user, Term)
-    % ),
-    bb_put('$answer_count', 0),
-    submit_query_and_print_results_(Term, VarList).
-
+    (  member(C, ['\n', .]) ->
+       nl, write(';  ... .'), nl,
+       Stop = stop
+    ;  Stop = continue,
+       (  C = w ->
+          nl,
+          write('   '),
+          write_leaf_answer(LeafAnswer, [depth(deep)]),
+          read_input(LeafAnswer)
+       ;  C = p ->
+          nl,
+          write('   '),
+          write_leaf_answer(LeafAnswer, [depth(shallow)]),
+          read_input(LeafAnswer)
+       ;  member(C, [';', ' ', n]) ->
+          nl, write(';  ')
+       ;  C = h ->
+          help_message,
+          read_input(LeafAnswer)
+       ;  C = a ->
+          bb_put('$report_all', true),
+          nl, write(';  ')
+       ;  C = f ->
+          bb_get('$answer_count', Count),
+          More is 5 - Count mod 5,
+          bb_put('$report_n_more', More),
+          nl, write(';  ')
+       ;  read_input(LeafAnswer)
+       )
+    ).
 
 needs_bracketing(Value, Op) :-
     nonvar(Value),
@@ -326,85 +475,6 @@ trailing_period_is_ambiguous(Value) :-
 
 term_variables_under_max_depth(Term, MaxDepth, Vars) :-
     '$term_variables_under_max_depth'(Term, MaxDepth, Vars).
-
-write_eqs_and_read_input(B, VarList, AttrVars) :-
-    gather_query_vars(VarList, OrigVars),
-    % one layer of depth added for (=/2) functor
-    '$term_variables_under_max_depth'(OrigVars, 22, Vars0),
-    '$project_atts':project_attributes(Vars0, AttrVars),
-    % Need to copy all the visible Vars here so that they appear
-    % properly in AttrGoals, even the non-attributed. Need to also
-    % copy all the attributed variables here so that anonymous
-    % attributed variables also appear properly in AttrGoals.
-    copy_term([Vars0, AttrVars], [Vars0, AttrVars], AttrGoals),
-    term_variables(AttrGoals, AttrGoalVars),
-    append([Vars0, AttrGoalVars, AttrVars], Vars),
-    charsio:extend_var_list(Vars, VarList, NewVarList, fabricated),
-    '$get_b_value'(B0),
-    gather_equations(NewVarList, OrigVars, Equations),
-    append(Equations, AttrGoals, Goals),
-    % one layer of depth added for (=/2) functor
-    maplist(\Term^Vs^term_variables_under_max_depth(Term, 22, Vs), Equations, EquationVars),
-    % maplist(term_variables_under_max_depth(22), Equations, EquationVars),
-    append([AttrGoalVars | EquationVars], Vars1),
-    term_variables(Vars1, Vars2), % deduplicate vars of Vars1 but preserve their order.
-    charsio:extend_var_list(Vars2, VarList, NewVarList0, fabricated),
-    bb_get('$answer_count', Count),
-    (   Count =:= 0 ->
-        write('   ')
-    ;   true
-    ),
-    Count1 is Count + 1,
-    bb_put('$answer_count', Count1),
-    (  B0 == B ->
-       (  Goals == [] ->
-          write('true.'), nl
-       ;  loader:thread_goals(Goals, ThreadedGoals, (',')),
-          write_eq(ThreadedGoals, NewVarList0, 20),
-          write('.'),
-          nl
-       )
-    ;  loader:thread_goals(Goals, ThreadedGoals, (',')),
-       write_eq(ThreadedGoals, NewVarList0, 20),
-       read_input(ThreadedGoals, NewVarList0)
-    ).
-
-read_input(ThreadedGoals, NewVarList) :-
-    (  bb_get('$report_all', true) ->
-       C = n
-    ;  bb_get('$report_n_more', N), N > 1 ->
-       N1 is N - 1,
-       bb_put('$report_n_more', N1),
-       C = n
-    ;  get_single_char(C)
-    ),
-    (  C = w ->
-       nl,
-       write('   '),
-       write_eq(ThreadedGoals, NewVarList, 0),
-       read_input(ThreadedGoals, NewVarList)
-    ;  C = p ->
-       nl,
-       write('   '),
-       write_eq(ThreadedGoals, NewVarList, 20),
-       read_input(ThreadedGoals, NewVarList)
-    ;  member(C, [';', ' ', n]) ->
-       nl, write(';  '), false
-    ;  C = h ->
-       help_message,
-       read_input(ThreadedGoals, NewVarList)
-    ;  member(C, ['\n', .]) ->
-       nl, write(';  ... .'), nl
-    ;  C = a ->
-       bb_put('$report_all', true),
-       nl, write(';  '), false
-    ;  C = f ->
-       bb_get('$answer_count', Count),
-       More is 5 - Count mod 5,
-       bb_put('$report_n_more', More),
-       nl, write(';  '), false
-    ;  read_input(ThreadedGoals, NewVarList)
-    ).
 
 help_message :-
     nl, nl,
