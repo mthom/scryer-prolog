@@ -231,10 +231,7 @@ pub(crate) fn parse_and_write_parsed_term_to_heap(
 }
 
 impl Machine {
-    pub fn with_test_streams() -> Self {
-        Machine::new(MachineConfig::in_memory())
-    }
-
+    /// For use in tests.
     pub fn test_load_file(&mut self, file: &str) -> Vec<u8> {
         let stream = Stream::from_owned_string(
             std::fs::read_to_string(AsRef::<std::path::Path>::as_ref(file)).unwrap(),
@@ -245,6 +242,7 @@ impl Machine {
         self.user_output.bytes().map(|b| b.unwrap()).collect()
     }
 
+    /// For use in tests.
     pub fn test_load_string(&mut self, code: &str) -> Vec<u8> {
         let stream = Stream::from_owned_string(code.to_owned(), &mut self.machine_st.arena);
 

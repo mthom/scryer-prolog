@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, fs, path::Path};
 
 use maplit::btreemap;
-use scryer_prolog::{Machine, QueryResolution, Value};
+use scryer_prolog::{LeafAnswer, Machine, MachineBuilder, Term};
 
 pub fn prolog_benches() -> BTreeMap<&'static str, PrologBenchmark> {
     [
@@ -10,21 +10,21 @@ pub fn prolog_benches() -> BTreeMap<&'static str, PrologBenchmark> {
             "benches/edges.pl", // name of the prolog module file to load. use the same file in multiple benchmarks
             "independent_set_count(ky, Count).", // query to benchmark in the context of the loaded module. consider making the query adjustable to tune the run time to ~0.1s
             Strategy::Reuse,
-            btreemap! { "Count" => Value::Integer(2869176.into()) },
+            btreemap! { "Count" => Term::integer(2869176) },
         ),
         (
             "numlist",
             "benches/numlist.pl",
             "run_numlist(1000000, Head).",
             Strategy::Reuse,
-            btreemap! { "Head" => Value::Integer(1.into())},
+            btreemap! { "Head" => Term::integer(1) },
         ),
         (
             "csv_codename",
             "benches/csv.pl",
             "get_codename(\"0020\",Name).",
             Strategy::Reuse,
-            btreemap! { "Name" => Value::String("SPACE".into())},
+            btreemap! { "Name" => Term::string("SPACE") },
         ),
     ]
     .map(|b| {
@@ -54,7 +54,7 @@ pub struct PrologBenchmark {
     pub filename: &'static str,
     pub query: &'static str,
     pub strategy: Strategy,
-    pub bindings: BTreeMap<&'static str, Value>,
+    pub bindings: BTreeMap<&'static str, Term>,
 }
 
 impl PrologBenchmark {
@@ -64,28 +64,34 @@ impl PrologBenchmark {
             .file_stem()
             .and_then(|s| s.to_str())
             .unwrap();
-        let mut machine = Machine::new_lib();
+        let mut machine = MachineBuilder::default().build();
         machine.load_module_string(module_name, program);
         machine
     }
 
     #[cfg(not(all(target_arch = "wasm32", target_os = "unknown")))]
-    pub fn setup(&self) -> impl FnMut() -> QueryResolution {
+    pub fn setup(&self) -> impl FnMut() -> Vec<LeafAnswer> {
         let mut machine = self.make_machine();
         let query = self.query;
         move || {
             use criterion::black_box;
-            black_box(machine.run_query(black_box(query.to_string()))).unwrap()
+            black_box(
+                machine
+                    .run_query(black_box(query))
+                    .collect::<Result<Vec<_>, _>>()
+                    .unwrap(),
+            )
         }
     }
 }
 
 #[cfg(test)]
 mod test {
+
     #[test]
     fn validate_benchmarks() {
         use super::prolog_benches;
-        use scryer_prolog::{QueryMatch, QueryResolution};
+        use scryer_prolog::LeafAnswer;
         use std::{fmt::Write, fs};
 
         struct BenchResult {
@@ -100,10 +106,13 @@ mod test {
             let mut machine = r.make_machine();
             let setup_inference_count = machine.get_inference_count();
 
-            let result = machine.run_query(r.query.to_string()).unwrap();
+            let result: Vec<_> = machine
+                .run_query(r.query)
+                .collect::<Result<_, _>>()
+                .unwrap();
             let query_inference_count = machine.get_inference_count() - setup_inference_count;
 
-            let expected = QueryResolution::Matches(vec![QueryMatch::from(r.bindings.clone())]);
+            let expected = [LeafAnswer::from_bindings(r.bindings.clone())];
             assert_eq!(result, expected, "validating benchmark {}", r.name);
 
             results.push(BenchResult {
