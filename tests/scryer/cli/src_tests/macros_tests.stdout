@@ -1,0 +1,17 @@
+example(formated_string(A)) :-
+   A="This is my term foo(1)".
+example(bignum_example(A,B,C)) :-
+   (  A<B,
+      !,
+      A>0
+   ;  B+1<C
+   ),
+   compute(A,B).
+example(numeric_enum_example) :-
+   foo(101).
+example(ascii_examples) :-
+   foo([0]),
+   foo([7]),
+   foo([8]).
+example(base_conversion) :-
+   foo([171,205,239,1,35,69,96]).
