@@ -62,6 +62,8 @@ pub(crate) struct ArithmeticEvaluator<'a> {
 }
 
 fn push_literal(interm: &mut Vec<ArithmeticTerm>, c: HeapCellValue) -> Result<(), ArithmeticError> {
+    let c = unmark_cell_bits!(c);
+
     read_heap_cell!(c,
         (HeapCellValueTag::Fixnum, n) => {
             interm.push(ArithmeticTerm::Number(Number::Fixnum(n)))
