@@ -237,6 +237,12 @@ Then you can serve it with your favorite http server like `python -m http.server
 
 ### Docker Install
 
+Pre-built [Docker images are available on Docker Hub](https://hub.docker.com/r/mjt128/scryer-prolog/tags).
+The `latest` tag reflects the state on `master`, which might be unstable. 
+There are also tags for Scryer releases 0.9.2 and up. 
+Note though, that the base images are not kept up to date at the moment, 
+so be wary of security vulnerabilities (see [#2646](https://github.com/mthom/scryer-prolog/issues/2646)).
+
 First, install [Docker](https://docs.docker.com/get-docker/) on Linux,
 Windows, or Mac.
 
