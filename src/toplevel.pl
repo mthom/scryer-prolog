@@ -357,17 +357,17 @@ read_input(LeafAnswer, Stop) :-
           nl,
           write('   '),
           write_leaf_answer(LeafAnswer, [depth(deep)]),
-          read_input(LeafAnswer)
+          read_input(LeafAnswer, Stop)
        ;  C = p ->
           nl,
           write('   '),
           write_leaf_answer(LeafAnswer, [depth(shallow)]),
-          read_input(LeafAnswer)
+          read_input(LeafAnswer, Stop)
        ;  member(C, [';', ' ', n]) ->
           nl, write(';  ')
        ;  C = h ->
           help_message,
-          read_input(LeafAnswer)
+          read_input(LeafAnswer, Stop)
        ;  C = a ->
           bb_put('$report_all', true),
           nl, write(';  ')
@@ -376,7 +376,7 @@ read_input(LeafAnswer, Stop) :-
           More is 5 - Count mod 5,
           bb_put('$report_n_more', More),
           nl, write(';  ')
-       ;  read_input(LeafAnswer)
+       ;  read_input(LeafAnswer, Stop)
        )
     ).
 
