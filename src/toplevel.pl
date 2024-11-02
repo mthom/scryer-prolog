@@ -352,8 +352,7 @@ read_input(LeafAnswer, Stop) :-
     (  member(C, ['\n', .]) ->
        nl, write(';  ... .'), nl,
        Stop = stop
-    ;  Stop = continue,
-       (  C = w ->
+    ;  (  C = w ->
           nl,
           write('   '),
           write_leaf_answer(LeafAnswer, [depth(deep)]),
@@ -364,6 +363,7 @@ read_input(LeafAnswer, Stop) :-
           write_leaf_answer(LeafAnswer, [depth(shallow)]),
           read_input(LeafAnswer, Stop)
        ;  member(C, [';', ' ', n]) ->
+          Stop = continue,
           nl, write(';  ')
        ;  C = h ->
           help_message,
