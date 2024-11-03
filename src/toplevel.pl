@@ -352,32 +352,33 @@ read_input(LeafAnswer, Stop) :-
     (  member(C, ['\n', .]) ->
        nl, write(';  ... .'), nl,
        Stop = stop
-    ;  (  C = w ->
-          nl,
-          write('   '),
-          write_leaf_answer(LeafAnswer, [depth(deep)]),
-          read_input(LeafAnswer, Stop)
-       ;  C = p ->
-          nl,
-          write('   '),
-          write_leaf_answer(LeafAnswer, [depth(shallow)]),
-          read_input(LeafAnswer, Stop)
-       ;  member(C, [';', ' ', n]) ->
-          Stop = continue,
-          nl, write(';  ')
-       ;  C = h ->
-          help_message,
-          read_input(LeafAnswer, Stop)
-       ;  C = a ->
-          bb_put('$report_all', true),
-          nl, write(';  ')
-       ;  C = f ->
-          bb_get('$answer_count', Count),
-          More is 5 - Count mod 5,
-          bb_put('$report_n_more', More),
-          nl, write(';  ')
-       ;  read_input(LeafAnswer, Stop)
-       )
+    ;  C = w ->
+       nl,
+       write('   '),
+       write_leaf_answer(LeafAnswer, [depth(deep)]),
+       read_input(LeafAnswer, Stop)
+    ;  C = p ->
+       nl,
+       write('   '),
+       write_leaf_answer(LeafAnswer, [depth(shallow)]),
+       read_input(LeafAnswer, Stop)
+    ;  member(C, [';', ' ', n]) ->
+       nl, write(';  '),
+       Stop = continue
+    ;  C = h ->
+       help_message,
+       read_input(LeafAnswer, Stop)
+    ;  C = a ->
+       bb_put('$report_all', true),
+       nl, write(';  '),
+       Stop = continue
+    ;  C = f ->
+       bb_get('$answer_count', Count),
+       More is 5 - Count mod 5,
+       bb_put('$report_n_more', More),
+       nl, write(';  '),
+       Stop = continue
+    ;  read_input(LeafAnswer, Stop)
     ).
 
 needs_bracketing(Value, Op) :-
