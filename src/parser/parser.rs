@@ -1282,9 +1282,9 @@ impl<'a, R: CharRead> LexerParser<'a, R> {
         };
 
         // the parser uses conditional indirection in many places so
-        // the reserved size should be at least 3 * term_byte_size
+        // the reserved size should be at least 4 * term_byte_size
         // so all cells are accounted for.
-        let writer = match self.machine_st.heap.reserve(cell_index!(3 * term_byte_size)) {
+        let writer = match self.machine_st.heap.reserve(cell_index!(4 * term_byte_size)) {
             Ok(term) => term,
             Err(_err_loc) => {
                 return Err(ParserError::ResourceError(self.loc_to_err_src()));
@@ -1313,7 +1313,7 @@ impl<'a, R: CharRead> LexerParser<'a, R> {
 
         let after_len = parser_impl.terms.cell_len();
 
-        debug_assert!(after_len - before_len <= cell_index!(3 * term_byte_size));
+        debug_assert!(after_len - before_len <= cell_index!(4 * term_byte_size));
 
         if parser_impl.stack.len() > 1 || parser_impl.terms.is_empty() {
             return Err(ParserError::IncompleteReduction(
