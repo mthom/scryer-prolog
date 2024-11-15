@@ -4026,12 +4026,7 @@ impl Machine {
             let orig_op = self.deref_register(3);
 
             let spec_num = if spec.get_tag() == HeapCellValueTag::Atom {
-                Some(
-                    OpDeclSpec::try_from(cell_as_atom!(spec))
-                        .ok()
-                        .filter(|spec| matches!(spec, XFX | XFY | YFX | FX | FY | XF))
-                        .expect("we should only get valid values != YF here"),
-                )
+                OpDeclSpec::try_from(cell_as_atom!(spec)).ok()
             } else {
                 None
             };
