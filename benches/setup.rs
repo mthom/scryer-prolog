@@ -26,6 +26,27 @@ pub fn prolog_benches() -> BTreeMap<&'static str, PrologBenchmark> {
             Strategy::Reuse,
             btreemap! { "Name" => Value::String("SPACE".into())},
         ),
+        (
+            "memberbench_baseline",
+            "benches/reif.pl",
+            "run(memberchk,4).",
+            Strategy::Reuse,
+            btreemap! {},
+        ),
+        (
+            "memberbench_if_expanded",
+            "benches/reif.pl",
+            "run(memberd_ifc,4).",
+            Strategy::Reuse,
+            btreemap! {},
+        ),
+        (
+            "memberbench_if_not_expanded",
+            "benches/reif.pl",
+            "run(memberd_fif,4).",
+            Strategy::Reuse,
+            btreemap! {},
+        ),
     ]
     .map(|b| {
         (
