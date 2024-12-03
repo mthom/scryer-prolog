@@ -1,0 +1,6 @@
+args = [
+    "-f",
+    "--no-add-history",
+    "-g", "halt",
+    "src/tests/interface/test.pl"
+]
