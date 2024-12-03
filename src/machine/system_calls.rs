@@ -68,7 +68,7 @@ use cpu_time::ProcessTime;
 use std::time::{Duration, SystemTime};
 
 #[cfg(feature = "repl")]
-use crossterm::event::{read, Event, KeyCode, KeyEvent, KeyModifiers};
+use crossterm::event::{read, Event, KeyCode, KeyEvent, KeyEventKind, KeyModifiers};
 #[cfg(feature = "repl")]
 use crossterm::terminal::{disable_raw_mode, enable_raw_mode};
 
@@ -111,12 +111,14 @@ pub(crate) fn get_key() -> KeyEvent {
     loop {
         let key_ = read();
         if let Ok(Event::Key(key_)) = key_ {
-            match key_.code {
-                KeyCode::Char(_) | KeyCode::Enter | KeyCode::Tab => {
-                    key = key_;
-                    break;
+            if key_.kind != KeyEventKind::Release {
+                match key_.code {
+                    KeyCode::Char(_) | KeyCode::Enter | KeyCode::Tab => {
+                        key = key_;
+                        break;
+                    }
+                    _ => (),
                 }
-                _ => (),
             }
         }
     }
