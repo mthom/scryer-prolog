@@ -28,7 +28,7 @@
 :- use_module(library(between)).
 :- use_module(library(pio)).
 
-%% format_(+FormatString, +Arguments)//
+%% format_/(+FormatString, +Arguments)
 %
 % Usage:
 %
