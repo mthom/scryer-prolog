@@ -219,7 +219,13 @@ dcg_cbody(( GRIf -> GRThen ), S0, S, ( If -> Then )) :-
 
 user:term_expansion(Term0, Term) :-
     nonvar(Term0),
-    catch(dcg_rule(Term0, Term), E, (Term = null, format("   ~q~n", [E]))).
+    catch(
+        dcg_rule(Term0, Term),
+        error(representation_error(T), X),
+        (   Term = null,
+            format("   ~q~n", [error(representation_error(T),X)])
+        )
+    ).
 
 
 %% seq(Seq)//
