@@ -1,0 +1,1 @@
+   error(representation_error(dcg_body),[culprit-({true}->[])]).

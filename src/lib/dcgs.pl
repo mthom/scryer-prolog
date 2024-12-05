@@ -214,10 +214,13 @@ dcg_cbody(( GRIf -> GRThen ), S0, S, ( If -> Then )) :-
     dcg_body(GRIf, S0, S1, If),
     dcg_body(GRThen, S1, S, Then).
 
+
+% When DCG expansion throws an exception – remove offending term and rethrow.
+user:term_expansion(throw_dcg_expansion_error(E), _) :-
+    throw(E).
 user:term_expansion(Term0, Term) :-
     nonvar(Term0),
-    dcg_rule(Term0, Term).
-
+    catch(dcg_rule(Term0, Term), E, Term = throw_dcg_expansion_error(E)).
 
 %% seq(Seq)//
 % 
