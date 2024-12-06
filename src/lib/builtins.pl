@@ -130,7 +130,7 @@ call(_, _, _, _, _, _, _, _, _).
 %    to `false` since it supports unbounded integer arithmethic. Read only.
 %  * `integer_rounding_function`: Describes the rounding donde by `//` and `rem` functions. On Scryer is
 %    always set to `toward_zero`. Read only
-%  * `double_quotes`: Determines how double quoted strings are red by Prolog. Scryer uses `chars` by default
+%  * `double_quotes`: Determines how double quoted strings are read by Prolog. Scryer uses `chars` by default
 %    which is a list of one-character atoms. Other values are codes (list of integers representing characters),
 %    and atom which creates a whole atom for the string value. Read and write.
 %  * `max_integer`: Maximum integer supported by the system. As Scryer Prolog has unbounded integer arithmethic,
