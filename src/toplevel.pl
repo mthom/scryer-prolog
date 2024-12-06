@@ -1,4 +1,4 @@
-:- module('$toplevel', []).
+:- module('$toplevel', [repl/0]).
 
 :- use_module(library(charsio)).
 :- use_module(library(error)).
