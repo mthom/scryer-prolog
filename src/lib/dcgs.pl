@@ -25,6 +25,9 @@ to learn more about them.
 :- use_module(library(lists), [append/3, member/2]).
 :- use_module(library(loader), [strip_module/3]).
 
+:- dynamic(null/0).
+:- initialization(abolish(null/0)).
+
 :- meta_predicate phrase(2, ?).
 
 :- meta_predicate phrase(2, ?, ?).
@@ -216,7 +219,13 @@ dcg_cbody(( GRIf -> GRThen ), S0, S, ( If -> Then )) :-
 
 user:term_expansion(Term0, Term) :-
     nonvar(Term0),
-    dcg_rule(Term0, Term).
+    catch(
+        dcg_rule(Term0, Term),
+        error(representation_error(T), X),
+        (   Term = null,
+            format("   ~q~n", [error(representation_error(T),X)])
+        )
+    ).
 
 
 %% seq(Seq)//
