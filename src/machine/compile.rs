@@ -2102,19 +2102,13 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
     }
 
     pub(super) fn compile_and_submit(&mut self) -> Result<(), SessionError> {
-        let key = match self
-            .payload
-            .predicates
-            .first()
-            .map(|term| term.focus) {
-                Some(focus) => {
-                    clause_predicate_key(self.machine_heap(), focus)
-                        .ok_or(SessionError::NamelessEntry)?
-                }
-                None => {
-                    return Err(SessionError::NamelessEntry);
-                }
-            };
+        let key = match self.payload.predicates.first().map(|term| term.focus) {
+            Some(focus) => clause_predicate_key(self.machine_heap(), focus)
+                .ok_or(SessionError::NamelessEntry)?,
+            None => {
+                return Err(SessionError::NamelessEntry);
+            }
+        };
 
         let listing_src_file_name = self.listing_src_file_name();
 
@@ -2290,13 +2284,18 @@ impl Machine {
         term_reg: RegType,
         vars: Vec<HeapCellValue>,
     ) -> Result<(), SessionError> {
-        let body_cell = self.machine_st.store(self.machine_st.deref(self.machine_st[term_reg]));
+        let body_cell = self
+            .machine_st
+            .store(self.machine_st.deref(self.machine_st[term_reg]));
 
         let new_header_loc = self.machine_st.heap.cell_len();
         let arity = vars.len();
         let term_loc = self.machine_st.heap.cell_len() + 1 + arity;
 
-        let mut writer = self.machine_st.heap.reserve(4 + arity)
+        let mut writer = self
+            .machine_st
+            .heap
+            .reserve(4 + arity)
             .map_err(|_err_loc| ParserError::ResourceError(ParserErrorSrc::default()))?;
 
         writer.write_with(move |section| {
