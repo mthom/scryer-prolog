@@ -327,9 +327,9 @@ impl MachineState {
         self.ball.reset();
 
         let addr = self.registers[1];
-        let ball_boundary = self.heap.cell_len();
 
-        step_or_resource_error!(
+        self.ball.boundary = self.heap.cell_len();
+        self.ball.pstr_boundary = step_or_resource_error!(
             self,
             copy_term(
                 CopyBallTerm::new(
@@ -342,8 +342,6 @@ impl MachineState {
                 AttrVarPolicy::DeepCopy,
             )
         );
-
-        self.ball.boundary = ball_boundary;
     }
 
     #[inline(always)]
@@ -359,14 +357,14 @@ impl MachineState {
             HeapPtr::PStr(h) => {
                 let mut char_iter = self.heap.char_iter(h);
 
-                if self.s_offset == 0 { // read the car of the list
+                if self.s_offset == 0 {
+                    // read the car of the list
                     let c = char_iter.next().unwrap();
                     char_as_cell!(c)
-                } else { // read the (self.s_offset)^{th} cdr of the list
-                    let byte_offset: usize = char_iter
-                        .take(self.s_offset)
-                        .map(|c| c.len_utf8())
-                        .sum();
+                } else {
+                    // read the (self.s_offset)^{th} cdr of the list
+                    let byte_offset: usize =
+                        char_iter.take(self.s_offset).map(|c| c.len_utf8()).sum();
                     let new_h = h + byte_offset;
 
                     self.s_offset = 0;
@@ -375,7 +373,7 @@ impl MachineState {
                         self.s = HeapPtr::PStr(new_h);
                         pstr_loc_as_cell!(new_h)
                     } else {
-                        let h = Heap::neighboring_cell_offset(new_h);
+                        let h = Heap::pstr_tail_idx(new_h);
                         self.s = HeapPtr::HeapCell(h);
                         self.deref(heap_loc_as_cell!(h))
                     }
@@ -946,7 +944,7 @@ impl MachineState {
                                     if char_iter.next().is_some() {
                                         unify_fn!(*self, pstr_loc_as_cell!(pstr_loc + c.len_utf8()), a3);
                                     } else {
-                                        let tail_idx = Heap::neighboring_cell_offset(pstr_loc);
+                                        let tail_idx = Heap::pstr_tail_idx(pstr_loc);
                                         unify_fn!(*self, self.heap[tail_idx]);
                                     }
 
@@ -1044,7 +1042,12 @@ impl MachineState {
         }
     }
 
-    fn try_functor_fabricate_struct(&mut self, name: Atom, arity: usize, r: Ref) -> Result<(), usize> {
+    fn try_functor_fabricate_struct(
+        &mut self,
+        name: Atom,
+        arity: usize,
+        r: Ref,
+    ) -> Result<(), usize> {
         let h = self.heap.cell_len();
         let mut writer = self.heap.reserve(arity + 1)?;
 
@@ -1144,7 +1147,7 @@ impl MachineState {
                 };
 
                 read_heap_cell!(store_name,
-                    (HeapCellValueTag::Cons | HeapCellValueTag::Fixnum | // HeapCellValueTag::Char | 
+                    (HeapCellValueTag::Cons | HeapCellValueTag::Fixnum | // HeapCellValueTag::Char |
                      HeapCellValueTag::F64) if arity == 0 => {
                         self.bind(a1.as_var().unwrap(), deref_name);
                     }

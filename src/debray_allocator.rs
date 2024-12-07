@@ -172,7 +172,9 @@ impl DebrayAllocator {
 
         for var_num in subsumed_hits {
             match &mut self.var_data.records[var_num].allocation {
-                VarAlloc::Perm { ref mut allocation, .. } => {
+                VarAlloc::Perm {
+                    ref mut allocation, ..
+                } => {
                     if let PermVarAllocation::Done {
                         shallow_safety,
                         deep_safety,
@@ -233,7 +235,7 @@ impl DebrayAllocator {
             let num_occurrences = self.var_data.records[var_num].num_occurrences;
 
             match &mut self.var_data.records[var_num].allocation {
-                VarAlloc::Perm { allocation, ..} => {
+                VarAlloc::Perm { allocation, .. } => {
                     let shallow_safety = VarSafetyStatus::needed_if(
                         shallow_safety.contains(var_num),
                         branch_designator,
@@ -514,10 +516,12 @@ impl DebrayAllocator {
                 self.perm_free_list.pop_front();
 
                 match &mut self.var_data.records[var_num].allocation {
-                    VarAlloc::Perm { reg: p, allocation: PermVarAllocation::Pending }
-                      if *p > 0 => {
-                          return Some(std::mem::replace(p, 0));
-                      }
+                    VarAlloc::Perm {
+                        reg: p,
+                        allocation: PermVarAllocation::Pending,
+                    } if *p > 0 => {
+                        return Some(std::mem::replace(p, 0));
+                    }
                     _ => {}
                 }
             } else {
@@ -543,11 +547,12 @@ impl DebrayAllocator {
 
         match &mut self.var_data.records[var_num].allocation {
             VarAlloc::Perm {
-                allocation: PermVarAllocation::Done {
-                    deep_safety,
-                    shallow_safety,
-                    ..
-                },
+                allocation:
+                    PermVarAllocation::Done {
+                        deep_safety,
+                        shallow_safety,
+                        ..
+                    },
                 ..
             } => {
                 *deep_safety = VarSafetyStatus::unneeded(branch_designator);
@@ -568,11 +573,12 @@ impl DebrayAllocator {
 
         match &mut self.var_data.records[var_num].allocation {
             VarAlloc::Perm {
-                allocation: PermVarAllocation::Done {
-                    deep_safety,
-                    shallow_safety,
-                    ..
-                },
+                allocation:
+                    PermVarAllocation::Done {
+                        deep_safety,
+                        shallow_safety,
+                        ..
+                    },
                 ..
             } => {
                 // GetVariable in head chunk is considered safe.
@@ -612,10 +618,11 @@ impl DebrayAllocator {
 
         match &mut self.var_data.records[var_num].allocation {
             VarAlloc::Perm {
-                allocation: PermVarAllocation::Done {
-                    ref mut shallow_safety,
-                    ..
-                },
+                allocation:
+                    PermVarAllocation::Done {
+                        ref mut shallow_safety,
+                        ..
+                    },
                 ..
             } => {
                 if !self.in_tail_position
@@ -648,10 +655,11 @@ impl DebrayAllocator {
 
         match &mut self.var_data.records[var_num].allocation {
             VarAlloc::Perm {
-                allocation: PermVarAllocation::Done {
-                    ref mut deep_safety,
-                    ..
-                },
+                allocation:
+                    PermVarAllocation::Done {
+                        ref mut deep_safety,
+                        ..
+                    },
                 ..
             } => {
                 if self
@@ -921,10 +929,7 @@ impl Allocator for DebrayAllocator {
     }
 
     fn reset_at_head(&mut self, heap: &mut Heap, head_loc: usize) {
-        let head_cell = heap_bound_store(
-            heap,
-            heap_bound_deref(heap, heap_loc_as_cell!(head_loc)),
-        );
+        let head_cell = heap_bound_store(heap, heap_bound_deref(heap, heap_loc_as_cell!(head_loc)));
 
         read_heap_cell!(head_cell,
             (HeapCellValueTag::Str, s) => {
@@ -933,7 +938,9 @@ impl Allocator for DebrayAllocator {
                 self.reset_arg(arity);
                 self.arity = arity;
 
-                for (idx, arg) in heap.splice(s+1 ..= s+arity).enumerate() {
+                for (c_idx, heap_idx) in (s+1 ..= s+arity).enumerate() {
+                    let arg = heap[heap_idx];
+
                     if arg.is_var() {
                         let var = heap_bound_store(
                             heap,
@@ -953,11 +960,11 @@ impl Allocator for DebrayAllocator {
                                 let r = self.get_var_binding(var_num);
 
                                 if !r.is_perm() && r.reg_num() == 0 {
-                                    self.in_use.insert(idx + 1);
-                                    self.shallow_temp_mappings.insert(idx + 1, var_num);
+                                    self.in_use.insert(c_idx + 1);
+                                    self.shallow_temp_mappings.insert(c_idx + 1, var_num);
                                     self.var_data.records[var_num]
                                         .allocation
-                                        .set_register(idx + 1);
+                                        .set_register(c_idx + 1);
                                 }
                             }
                             VarPtr::Anon => {}

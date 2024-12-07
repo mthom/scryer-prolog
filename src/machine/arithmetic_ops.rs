@@ -1165,9 +1165,8 @@ impl MachineState {
             return Err(self.error_form(type_error, stub_gen()));
         };
 
-        let mut iter = stackful_post_order_iter::<NonListElider>(
-            &mut self.heap, &mut self.stack, root_loc,
-        );
+        let mut iter =
+            stackful_post_order_iter::<NonListElider>(&mut self.heap, &mut self.stack, root_loc);
 
         while let Some(value) = iter.next() {
             if value.get_forwarding_bit() {

@@ -40,15 +40,10 @@ macro_rules! empty_list_as_cell {
 
 macro_rules! atom_as_cell {
     ($atom:expr) => {
-        HeapCellValue::from_bytes(
-            AtomCell::build_with($atom.index, 0).into_bytes(),
-        )
+        HeapCellValue::from_bytes(AtomCell::build_with($atom.index, 0).into_bytes())
     };
     ($atom:expr, $arity:expr) => {
-        HeapCellValue::from_bytes(
-            AtomCell::build_with($atom.index, $arity as u8)
-                .into_bytes(),
-        )
+        HeapCellValue::from_bytes(AtomCell::build_with($atom.index, $arity as u8).into_bytes())
     };
 }
 
@@ -499,9 +494,13 @@ macro_rules! resource_error_call_result {
 }
 
 macro_rules! heap_index {
-    ($idx:expr) => {($idx) * std::mem::size_of::<HeapCellValue>()};
+    ($idx:expr) => {
+        ($idx) * std::mem::size_of::<HeapCellValue>()
+    };
 }
 
 macro_rules! cell_index {
-    ($idx:expr) => {(($idx) / std::mem::size_of::<HeapCellValue>())};
+    ($idx:expr) => {
+        (($idx) / std::mem::size_of::<HeapCellValue>())
+    };
 }
