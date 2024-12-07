@@ -51,14 +51,12 @@ impl MockWAM {
     ) -> Result<String, CompilationError> {
         let term_write_result = self.parse_and_write_parsed_term_to_heap(term_string)?;
 
-        print_heap_terms(self.machine_st.heap.splice(..), term_write_result.focus);
+        print_heap_terms(&self.machine_st.heap, term_write_result.focus);
 
         let var_names = term_write_result
             .inverse_var_locs
             .iter()
-            .map(|(var_loc, var_name)| {
-                (self.machine_st.heap[*var_loc], var_name.clone())
-            })
+            .map(|(var_loc, var_name)| (self.machine_st.heap[*var_loc], var_name.clone()))
             .collect();
 
         let mut printer = HCPrinter::new(
@@ -90,6 +88,7 @@ pub struct TermCopyingMockWAM<'a> {
 impl<'a> Index<usize> for TermCopyingMockWAM<'a> {
     type Output = HeapCellValue;
 
+    #[inline]
     fn index(&self, index: usize) -> &HeapCellValue {
         &self.wam.machine_st.heap[index]
     }
@@ -107,6 +106,7 @@ impl<'a> IndexMut<usize> for TermCopyingMockWAM<'a> {
 impl<'a> Deref for TermCopyingMockWAM<'a> {
     type Target = MockWAM;
 
+    #[inline]
     fn deref(&self) -> &Self::Target {
         self.wam
     }
@@ -114,6 +114,7 @@ impl<'a> Deref for TermCopyingMockWAM<'a> {
 
 #[cfg(test)]
 impl<'a> DerefMut for TermCopyingMockWAM<'a> {
+    #[inline]
     fn deref_mut(&mut self) -> &mut Self::Target {
         self.wam
     }
@@ -170,26 +171,8 @@ impl<'a> CopierTarget for TermCopyingMockWAM<'a> {
     }
 
     #[inline(always)]
-    fn pstr_head_cell_index(&self, pstr_loc: usize) -> usize {
-        self.wam.machine_st.heap.pstr_vec()[0 .. cell_index!(pstr_loc)]
-            .last_zero()
-            .map(|idx| idx + 1)
-            .unwrap_or(0)
-    }
-
-    #[inline(always)]
-    fn pstr_at(&self, loc: usize) -> bool {
-        self.wam.machine_st.heap.pstr_vec()[loc]
-    }
-
-    #[inline(always)]
-    fn next_non_pstr_cell_index(&self, loc: usize) -> usize {
-        // unwrap is safe here because a partial string is always
-        // followed by a tail cell, i.e. a non-pstr cell, supposing
-        // self.machine_st.heap[loc] is a pstr cell
-        self.wam.machine_st.heap.pstr_vec()[loc ..].first_zero()
-            .map(|idx| idx + loc)
-            .unwrap()
+    fn as_slice_from<'b>(&'b self, from: usize) -> Box<dyn Iterator<Item = u8> + 'b> {
+        Box::new(self.wam.machine_st.heap.as_slice()[from..].iter().cloned())
     }
 
     #[inline(always)]
@@ -204,20 +187,9 @@ impl<'a> CopierTarget for TermCopyingMockWAM<'a> {
 }
 
 #[cfg(test)]
-pub fn all_cells_marked_and_unforwarded(iter: impl SizedHeap) {
-    let mut idx = 0;
-    let cell_len = iter.cell_len();
-
-    while idx < cell_len {
-        let curr_idx = idx;
-        let cell = if iter.pstr_at(idx) {
-            let (_s, last_cell_loc) = iter.scan_slice_to_str(heap_index!(idx));
-            idx = last_cell_loc;
-            iter[last_cell_loc - 1]
-        } else {
-            idx += 1;
-            iter[curr_idx]
-        };
+pub fn all_cells_marked_and_unforwarded(heap: &Heap, offset: usize) {
+    for curr_idx in offset..heap.cell_len() {
+        let cell = heap[curr_idx];
 
         assert!(
             cell.get_mark_bit(),
@@ -235,43 +207,21 @@ pub fn all_cells_marked_and_unforwarded(iter: impl SizedHeap) {
 }
 
 #[cfg(test)]
-pub fn unmark_all_cells(mut iter: impl SizedHeapMut) {
-    let mut idx = 0;
-    let cell_len = iter.cell_len();
-
-    while idx < cell_len {
-        if iter.pstr_at(idx) {
-            iter[idx].set_mark_bit(false);
-
-            let last_cell_loc = {
-                let (_s, last_cell_loc) = iter.scan_slice_to_str(heap_index!(idx));
-                last_cell_loc
-            };
-
-            iter[last_cell_loc].set_mark_bit(false);
-            idx = last_cell_loc;
-        } else {
-            iter[idx].set_mark_bit(false);
-            idx += 1;
-        }
+pub fn unmark_all_cells(heap: &mut Heap, offset: usize) {
+    for idx in offset..heap.cell_len() {
+        heap[idx].set_mark_bit(false);
     }
 }
 
 #[cfg(test)]
-pub fn all_cells_unmarked(iter: impl SizedHeap) {
+pub fn all_cells_unmarked(iter: &impl SizedHeap) {
     let mut idx = 0;
     let cell_len = iter.cell_len();
 
     while idx < cell_len {
         let curr_idx = idx;
-        let cell = if iter.pstr_at(idx) {
-            let (_s, last_cell_loc) = iter.scan_slice_to_str(heap_index!(idx));
-            idx = last_cell_loc;
-            iter[last_cell_loc - 1]
-        } else {
-            idx += 1;
-            iter[curr_idx]
-        };
+        idx += 1;
+        let cell = iter[curr_idx];
 
         assert!(
             !cell.get_mark_bit(),
@@ -354,7 +304,7 @@ mod tests {
             assert!(wam.fail);
         }
 
-        all_cells_unmarked(wam.heap.splice(..));
+        all_cells_unmarked(&wam.heap);
 
         wam.fail = false;
         wam.heap.clear();
@@ -375,7 +325,7 @@ mod tests {
             assert!(!wam.fail);
         }
 
-        all_cells_unmarked(wam.heap.splice(..));
+        all_cells_unmarked(&wam.heap);
 
         wam.fail = false;
         wam.heap.clear();
@@ -396,7 +346,7 @@ mod tests {
             assert!(!wam.fail);
         }
 
-        all_cells_unmarked(wam.heap.splice(..));
+        all_cells_unmarked(&wam.heap);
 
         wam.fail = false;
         wam.heap.clear();
@@ -417,7 +367,7 @@ mod tests {
             assert!(!wam.fail);
         }
 
-        all_cells_unmarked(wam.heap.splice(..));
+        all_cells_unmarked(&wam.heap);
 
         wam.fail = false;
         wam.heap.clear();
@@ -438,7 +388,7 @@ mod tests {
             assert!(!wam.fail);
         }
 
-        all_cells_unmarked(wam.heap.splice(..));
+        all_cells_unmarked(&wam.heap);
 
         wam.fail = false;
         wam.heap.clear();
@@ -450,7 +400,7 @@ mod tests {
             let term_write_result_2 =
                 parse_and_write_parsed_term_to_heap(&mut wam, "f(A,f(A)).", &op_dir).unwrap();
 
-            all_cells_unmarked(wam.heap.splice(..));
+            all_cells_unmarked(&wam.heap);
 
             unify!(
                 wam,
@@ -461,7 +411,7 @@ mod tests {
             assert!(!wam.fail);
         }
 
-        all_cells_unmarked(wam.heap.splice(..));
+        all_cells_unmarked(&wam.heap);
 
         wam.heap.clear();
 
@@ -489,9 +439,15 @@ mod tests {
 
         assert!(!wam.fail);
 
+        assert_eq!(wam.heap.slice_to_str(heap_index!(0), "this is a string".len()),
+                   "this is a string");
         assert_eq!(wam.heap[3], pstr_loc_as_cell!(heap_index!(8)));
-
-        all_cells_unmarked(wam.heap.splice(..));
+        assert_eq!(wam.heap.slice_to_str(heap_index!(4), "this is a string".len()),
+                   "this is a string");
+        assert_eq!(wam.heap[7], pstr_loc_as_cell!(heap_index!(8)));
+        assert_eq!(wam.heap.slice_to_str(heap_index!(8), "this is a string".len()),
+                   "this is a string");
+        assert_eq!(wam.heap[11], pstr_loc_as_cell!(heap_index!(8)));
 
         wam.heap.clear();
 
@@ -515,7 +471,7 @@ mod tests {
 
         assert!(!wam.fail);
 
-        all_cells_unmarked(wam.heap.splice(..));
+        all_cells_unmarked(&wam.heap);
 
         wam.heap.clear();
 
@@ -540,7 +496,7 @@ mod tests {
         assert!(wam.fail);
 
         wam.fail = false;
-        all_cells_unmarked(wam.heap.splice(..));
+        all_cells_unmarked(&wam.heap);
 
         wam.heap.clear();
 
@@ -562,7 +518,7 @@ mod tests {
 
         unify!(wam, heap_loc_as_cell!(0), heap_loc_as_cell!(5));
         assert!(!wam.fail);
-        all_cells_unmarked(wam.heap.splice(..));
+        all_cells_unmarked(&wam.heap);
     }
 
     #[test]
@@ -581,7 +537,7 @@ mod tests {
             let term_write_result_2 =
                 parse_and_write_parsed_term_to_heap(&mut wam, "f(A,f(A)).", &op_dir).unwrap();
 
-            all_cells_unmarked(wam.heap.splice(..));
+            all_cells_unmarked(&wam.heap);
 
             unify_with_occurs_check!(
                 wam,
@@ -632,11 +588,7 @@ mod tests {
         let cstr_cell = wam.allocate_cstr("string").unwrap();
 
         assert_eq!(
-            compare_term_test!(
-                wam,
-                atom_as_cell!(atom!("atom")),
-                cstr_cell
-            ),
+            compare_term_test!(wam, atom_as_cell!(atom!("atom")), cstr_cell),
             Some(Ordering::Less)
         );
 
@@ -735,11 +687,7 @@ mod tests {
         let cstr_cell = wam.allocate_cstr("string").unwrap();
 
         assert_eq!(
-            compare_term_test!(
-                wam,
-                empty_list_as_cell!(),
-                cstr_cell
-            ),
+            compare_term_test!(wam, empty_list_as_cell!(), cstr_cell),
             Some(Ordering::Less)
         );
 
@@ -782,16 +730,13 @@ mod tests {
         assert!(!wam.is_cyclic_term(1));
         assert!(!wam.is_cyclic_term(2));
 
-        all_cells_unmarked(wam.heap.splice(..));
+        all_cells_unmarked(&wam.heap);
         wam.heap.clear();
 
-        let mut functor_writer = Heap::functor_writer(
-            functor!(
-                atom!("f"),
-                [atom_as_cell((atom!("a"))),
-                 atom_as_cell((atom!("b")))]
-            ),
-        );
+        let mut functor_writer = Heap::functor_writer(functor!(
+            atom!("f"),
+            [atom_as_cell((atom!("a"))), atom_as_cell((atom!("b")))]
+        ));
 
         functor_writer(&mut wam.heap).unwrap();
 
@@ -800,30 +745,30 @@ mod tests {
 
         assert!(!wam.is_cyclic_term(h));
 
-        all_cells_unmarked(wam.heap.splice(..));
+        all_cells_unmarked(&wam.heap);
 
         assert!(!wam.is_cyclic_term(1));
 
-        all_cells_unmarked(wam.heap.splice(..));
+        all_cells_unmarked(&wam.heap);
 
         assert!(!wam.is_cyclic_term(2));
 
-        all_cells_unmarked(wam.heap.splice(..));
+        all_cells_unmarked(&wam.heap);
 
         wam.heap[2] = str_loc_as_cell!(0);
 
-        print_heap_terms(wam.heap.iter(), 0);
+        print_heap_terms(&wam.heap, 0);
 
         assert!(wam.is_cyclic_term(2));
 
-        all_cells_unmarked(wam.heap.splice(..));
+        all_cells_unmarked(&wam.heap);
 
         wam.heap[2] = atom_as_cell!(atom!("b"));
         wam.heap[1] = str_loc_as_cell!(0);
 
         assert!(wam.is_cyclic_term(1));
 
-        all_cells_unmarked(wam.heap.splice(..));
+        all_cells_unmarked(&wam.heap);
 
         wam.heap.clear();
 

@@ -508,7 +508,8 @@ impl Machine {
                                 s,
                             )) => {
                                 cell = self.deref_register(arg);
-                                self.machine_st.select_switch_on_term_index(cell, v, c, l, s)
+                                self.machine_st
+                                    .select_switch_on_term_index(cell, v, c, l, s)
                             }
                             IndexingLine::Indexing(IndexingInstruction::SwitchOnConstant(hm)) => {
                                 // let lit = self.machine_st.constant_to_literal(cell);
@@ -1113,6 +1114,7 @@ impl Machine {
             if let Some(idx) = self.indices.code_dir.get(&(name, arity)).cloned() {
                 self.try_execute(name, arity, idx.get())
             } else {
+                println!("aaand undefined!");
                 self.undefined_procedure(name, arity)
             }
         } else if let Some(module) = self.indices.modules.get(&module_name) {

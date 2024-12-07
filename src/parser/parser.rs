@@ -187,7 +187,9 @@ struct Parser<'a> {
     inverse_var_locs: InverseVarLocs,
 }
 
-pub fn read_tokens<R: CharRead>(lexer: &mut LexerParser<R>) -> Result<(Vec<Token>, usize), ParserError> {
+pub fn read_tokens<R: CharRead>(
+    lexer: &mut LexerParser<R>,
+) -> Result<(Vec<Token>, usize), ParserError> {
     let mut tokens = vec![];
     let mut term_size = 0;
 
@@ -264,9 +266,9 @@ pub(crate) fn as_partial_string(
                tail = heap[l+1];
            }
            (HeapCellValueTag::PStrLoc, l) => {
-               let (pstr, tail_loc) = heap.scan_slice_to_str(l);
+               let HeapStringScan { string: pstr, tail_idx } = heap.scan_slice_to_str(l);
                string += pstr;
-               tail = heap[tail_loc];
+               tail = heap[tail_idx];
            }
            (HeapCellValueTag::AttrVar | HeapCellValueTag::Var, h) => {
                if heap[h] != tail {
@@ -306,8 +308,7 @@ impl<'a> Parser<'a> {
             TokenType::Comma => Some(atom!(",")),
             TokenType::Term { heap_loc } => {
                 if heap_loc.is_ref() {
-                    term_predicate_key(&self.terms, heap_loc.get_value() as usize)
-                        .map(|key| key.0)
+                    term_predicate_key(&self.terms, heap_loc.get_value() as usize).map(|key| key.0)
                 } else {
                     None
                 }
@@ -392,7 +393,8 @@ impl<'a> Parser<'a> {
 
     fn promote_atom_op(&mut self, atom: Atom, priority: usize, assoc: u32) {
         let h = self.terms.cell_len();
-        self.terms.write_with(|section| section.push_cell(atom_as_cell!(atom)));
+        self.terms
+            .write_with(|section| section.push_cell(atom_as_cell!(atom)));
         self.stack.push(TokenDesc {
             tt: TokenType::Term {
                 heap_loc: heap_loc_as_cell!(h),
@@ -438,10 +440,12 @@ impl<'a> Parser<'a> {
                         section.push_cell(list_loc_as_cell!(h));
                     });
 
-                    TokenType::Term { heap_loc: heap_loc_as_cell!(h + 2) }
+                    TokenType::Term {
+                        heap_loc: heap_loc_as_cell!(h + 2),
+                    }
                 } else {
-                    self.terms.write_with(|section| {
-                        match section.push_pstr(&s) {
+                    self.terms
+                        .write_with(|section| match section.push_pstr(&s) {
                             Some(pstr_loc_cell) => {
                                 section.push_cell(empty_list_as_cell!());
                                 let h = section.cell_len();
@@ -451,10 +455,11 @@ impl<'a> Parser<'a> {
                             None => {
                                 section.push_cell(empty_list_as_cell!());
                             }
-                        }
-                    });
+                        });
 
-                    TokenType::Term { heap_loc: pstr_cell }
+                    TokenType::Term {
+                        heap_loc: pstr_cell,
+                    }
                 }
             }
             Token::Literal(c) => {
@@ -478,13 +483,14 @@ impl<'a> Parser<'a> {
 
                         if var.trim() != "_" {
                             self.var_locs.insert(var.clone(), heap_loc);
-                            self.inverse_var_locs.insert(heap_loc.get_value() as usize, var);
+                            self.inverse_var_locs
+                                .insert(heap_loc.get_value() as usize, var);
                         }
 
                         TokenType::Term { heap_loc }
                     }
                 }
-            },
+            }
             Token::Comma => TokenType::Comma,
             Token::Open => TokenType::Open,
             Token::Close => TokenType::Close,
@@ -619,15 +625,21 @@ impl<'a> Parser<'a> {
         let term_idx = self.terms.cell_len();
 
         let push_structure = |parser: &mut Self, name: Atom| -> TokenType {
-            parser.terms.write_with(|section| section.push_cell(atom_as_cell!(name, arity)));
+            parser
+                .terms
+                .write_with(|section| section.push_cell(atom_as_cell!(name, arity)));
 
             for idx in (stack_len + 2..parser.stack.len()).step_by(2) {
                 let subterm = parser.term_from_stack(idx).unwrap();
-                parser.terms.write_with(|section| section.push_cell(subterm));
+                parser
+                    .terms
+                    .write_with(|section| section.push_cell(subterm));
             }
 
             let str_loc_idx = parser.terms.cell_len();
-            parser.terms.write_with(|section| section.push_cell(str_loc_as_cell!(term_idx)));
+            parser
+                .terms
+                .write_with(|section| section.push_cell(str_loc_as_cell!(term_idx)));
 
             TokenType::Term {
                 heap_loc: heap_loc_as_cell!(str_loc_idx),
@@ -709,23 +721,20 @@ impl<'a> Parser<'a> {
     }
 
     fn loc_to_err_src(&self) -> ParserErrorSrc {
-        ParserErrorSrc { line_num: *self.line_num, col_num: *self.col_num }
+        ParserErrorSrc {
+            line_num: *self.line_num,
+            col_num: *self.col_num,
+        }
     }
 
     fn expand_comma_compacted_terms(&mut self, index: usize) -> usize {
         if let Some(term) = self.term_from_stack(index - 1) {
             let mut op_desc = self.stack[index - 1];
-            let mut term = heap_bound_store(
-                &self.terms,
-                heap_bound_deref(
-                    &self.terms,
-                    term,
-                ),
-            );
+            let mut term = heap_bound_store(&self.terms, heap_bound_deref(&self.terms, term));
 
-            if term.is_ref() &&
-               0 < op_desc.priority &&
-               op_desc.priority < self.stack[index].priority
+            if term.is_ref()
+                && 0 < op_desc.priority
+                && op_desc.priority < self.stack[index].priority
             {
                 /* '|' is a head-tail separator here, not
                  * an operator, so expand the
@@ -740,11 +749,9 @@ impl<'a> Parser<'a> {
                     } else {
                         let mut terms = vec![];
 
-                        while let Some(fst_loc) = unfold_by_str_once(
-                            &mut self.terms,
-                            term,
-                            atom!(","),
-                        ) {
+                        while let Some(fst_loc) =
+                            unfold_by_str_once(&mut self.terms, term, atom!(","))
+                        {
                             let (_, snd) = subterm_index(&self.terms, fst_loc + 1);
                             let (_, fst) = subterm_index(&self.terms, fst_loc);
 
@@ -763,14 +770,13 @@ impl<'a> Parser<'a> {
                     };
 
                     let arity = terms.len() - 1;
-                    self.stack.extend(terms.into_iter().map(|heap_loc| {
-                        TokenDesc {
+                    self.stack
+                        .extend(terms.into_iter().map(|heap_loc| TokenDesc {
                             tt: TokenType::Term { heap_loc },
                             priority: 0,
                             spec: 0,
                             unfold_bounds: 0,
-                        }
-                    }));
+                        }));
                     return arity;
                 }
             }
@@ -816,7 +822,8 @@ impl<'a> Parser<'a> {
             // parsed an empty list token
             if td.tt == TokenType::OpenList {
                 let h = self.terms.cell_len();
-                self.terms.write_with(|section| section.push_cell(empty_list_as_cell!()));
+                self.terms
+                    .write_with(|section| section.push_cell(empty_list_as_cell!()));
 
                 td.spec = TERM;
                 td.tt = TokenType::Term {
@@ -845,9 +852,7 @@ impl<'a> Parser<'a> {
             let tail_term = match self.term_from_stack(idx + 1) {
                 Some(term) => term,
                 None => {
-                    return Err(ParserError::IncompleteReduction(
-                        self.loc_to_err_src(),
-                    ));
+                    return Err(ParserError::IncompleteReduction(self.loc_to_err_src()));
                 }
             };
 
@@ -863,18 +868,14 @@ impl<'a> Parser<'a> {
         };
 
         if arity > self.terms.cell_len() {
-            return Err(ParserError::IncompleteReduction(
-                self.loc_to_err_src(),
-            ));
+            return Err(ParserError::IncompleteReduction(self.loc_to_err_src()));
         }
 
         let pre_terms_len = self.terms.cell_len();
 
         while let Some(token_desc) = self.stack.pop() {
             let subterm = match token_desc.tt {
-                TokenType::Term { heap_loc } => {
-                    heap_loc
-                }
+                TokenType::Term { heap_loc } => heap_loc,
                 _ => {
                     continue;
                 }
@@ -942,7 +943,8 @@ impl<'a> Parser<'a> {
             if td.tt == TokenType::OpenCurly {
                 let h = self.terms.cell_len();
 
-                self.terms.write_with(|section| section.push_cell(atom_as_cell!(atom!("{}"))));
+                self.terms
+                    .write_with(|section| section.push_cell(atom_as_cell!(atom!("{}"))));
 
                 td.tt = TokenType::Term {
                     heap_loc: heap_loc_as_cell!(h),
@@ -1160,61 +1162,53 @@ impl<'a> Parser<'a> {
             Token::String(string) => {
                 self.shift(Token::String(string), 0, TERM);
             }
-            Token::Literal(c) => {
-                match Number::try_from(c) {
-                    Ok(Number::Integer(n)) => {
-                        self.negate_number(n, negate_int_rc, |n, _| typed_arena_ptr_as_cell!(n))
-                    }
-                    Ok(Number::Rational(n)) => {
-                        self.negate_number(n, negate_rat_rc, |r, _| typed_arena_ptr_as_cell!(r))
-                    }
-                    Ok(Number::Float(n)) => {
-                        use ordered_float::OrderedFloat;
+            Token::Literal(c) => match Number::try_from(c) {
+                Ok(Number::Integer(n)) => {
+                    self.negate_number(n, negate_int_rc, |n, _| typed_arena_ptr_as_cell!(n))
+                }
+                Ok(Number::Rational(n)) => {
+                    self.negate_number(n, negate_rat_rc, |r, _| typed_arena_ptr_as_cell!(r))
+                }
+                Ok(Number::Float(n)) => {
+                    use ordered_float::OrderedFloat;
 
-                        self.negate_number(
-                            n,
-                            |n, _| -n,
-                            |OrderedFloat(n), arena| HeapCellValue::from(float_alloc!(n, arena)),
-                        )
-                    }
-                    Ok(Number::Fixnum(n)) => {
-                        self.negate_number(n, |n, _| -n, |n, _| fixnum_as_cell!(n))
-                    }
-                    Err(_) => {
-                        if let Some(name) = c.to_atom() {
-                            if !self.shift_op(name, op_dir)? {
-                                self.shift(Token::Literal(c), 0, TERM);
-                            }
-                        } else {
+                    self.negate_number(
+                        n,
+                        |n, _| -n,
+                        |OrderedFloat(n), arena| HeapCellValue::from(float_alloc!(n, arena)),
+                    )
+                }
+                Ok(Number::Fixnum(n)) => {
+                    self.negate_number(n, |n, _| -n, |n, _| fixnum_as_cell!(n))
+                }
+                Err(_) => {
+                    if let Some(name) = c.to_atom() {
+                        if !self.shift_op(name, op_dir)? {
                             self.shift(Token::Literal(c), 0, TERM);
                         }
+                    } else {
+                        self.shift(Token::Literal(c), 0, TERM);
                     }
                 }
-            }
+            },
             Token::Var(v) => self.shift(Token::Var(v), 0, TERM),
             Token::Open => self.shift(Token::Open, 1300, DELIMITER),
             Token::OpenCT => self.shift(Token::OpenCT, 1300, DELIMITER),
             Token::Close => {
                 if !self.reduce_term() && !self.reduce_brackets() {
-                    return Err(ParserError::IncompleteReduction(
-                        self.loc_to_err_src(),
-                    ));
+                    return Err(ParserError::IncompleteReduction(self.loc_to_err_src()));
                 }
             }
             Token::OpenList => self.shift(Token::OpenList, 1300, DELIMITER),
             Token::CloseList => {
                 if !self.reduce_list()? {
-                    return Err(ParserError::IncompleteReduction(
-                        self.loc_to_err_src(),
-                    ));
+                    return Err(ParserError::IncompleteReduction(self.loc_to_err_src()));
                 }
             }
             Token::OpenCurly => self.shift(Token::OpenCurly, 1300, DELIMITER),
             Token::CloseCurly => {
                 if !self.reduce_curly()? {
-                    return Err(ParserError::IncompleteReduction(
-                        self.loc_to_err_src(),
-                    ));
+                    return Err(ParserError::IncompleteReduction(self.loc_to_err_src()));
                 }
             }
             Token::HeadTailSeparator => {
@@ -1248,9 +1242,7 @@ impl<'a> Parser<'a> {
                 | Some(TokenType::OpenCurly)
                 | Some(TokenType::HeadTailSeparator)
                 | Some(TokenType::Comma) => {
-                    return Err(ParserError::IncompleteReduction(
-                        self.loc_to_err_src(),
-                    ))
+                    return Err(ParserError::IncompleteReduction(self.loc_to_err_src()))
                 }
                 _ => {}
             },
@@ -1267,7 +1259,10 @@ impl<'a, R: CharRead> LexerParser<'a, R> {
     }
 
     pub fn loc_to_err_src(&self) -> ParserErrorSrc {
-        ParserErrorSrc { line_num: self.line_num, col_num: self.col_num }
+        ParserErrorSrc {
+            line_num: self.line_num,
+            col_num: self.col_num,
+        }
     }
 
     // on success, returns the parsed term and the number of lines read.
@@ -1284,7 +1279,11 @@ impl<'a, R: CharRead> LexerParser<'a, R> {
         // the parser uses conditional indirection in many places so
         // the reserved size should be at least 4 * term_byte_size
         // so all cells are accounted for.
-        let writer = match self.machine_st.heap.reserve(cell_index!(4 * term_byte_size)) {
+        let writer = match self
+            .machine_st
+            .heap
+            .reserve(cell_index!(4 * term_byte_size))
+        {
             Ok(term) => term,
             Err(_err_loc) => {
                 return Err(ParserError::ResourceError(self.loc_to_err_src()));

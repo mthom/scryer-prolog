@@ -568,6 +568,7 @@ parse_options_list(Options, Selector, DefaultPairs, OptionValues, Stub) :-
                                                 % maplist isn't
                                                 % declared as a
                                                 % meta-predicate yet
+       '$debug_hook',
        catch(lists:maplist(Selector, Options, OptionPairs0),
              error(E, _),
              builtins:throw(error(E, Stub))) ->

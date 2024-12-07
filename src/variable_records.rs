@@ -1,5 +1,5 @@
-use crate::parser::ast::*;
 use crate::forms::GenContext;
+use crate::parser::ast::*;
 
 use bit_set::*;
 use fxhash::FxBuildHasher;
@@ -88,7 +88,10 @@ pub enum VarAlloc {
         safety: VarSafetyStatus,
         to_perm_var_num: Option<usize>,
     },
-    Perm { reg: usize, allocation: PermVarAllocation }, // stack offset, allocation info
+    Perm {
+        reg: usize,
+        allocation: PermVarAllocation,
+    }, // stack offset, allocation info
 }
 
 impl VarAlloc {
@@ -152,7 +155,10 @@ pub struct VariableRecord {
 impl Default for VariableRecord {
     fn default() -> Self {
         VariableRecord {
-            allocation: VarAlloc::Perm { reg: 0, allocation: PermVarAllocation::Pending },
+            allocation: VarAlloc::Perm {
+                reg: 0,
+                allocation: PermVarAllocation::Pending,
+            },
             num_occurrences: 0,
             running_count: 0,
         }
