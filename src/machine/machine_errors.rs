@@ -187,7 +187,11 @@ impl PermissionError for HeapCellValue {
 
         let stub = functor!(
             atom!("permission_error"),
-            [atom_as_cell((perm.as_atom())), atom_as_cell(index_atom), cell(cell)]
+            [
+                atom_as_cell((perm.as_atom())),
+                atom_as_cell(index_atom),
+                cell(cell)
+            ]
         );
 
         MachineError {
@@ -226,7 +230,10 @@ pub(super) trait DomainError {
 
 impl DomainError for HeapCellValue {
     fn domain_error(self, _machine_st: &mut MachineState, error: DomainErrorType) -> MachineError {
-        let stub = functor!(atom!("domain_error"), [atom_as_cell((error.as_atom())), cell(self)]);
+        let stub = functor!(
+            atom!("domain_error"),
+            [atom_as_cell((error.as_atom())), cell(self)]
+        );
 
         MachineError {
             stub,
@@ -239,7 +246,10 @@ impl DomainError for Number {
     fn domain_error(self, machine_st: &mut MachineState, error: DomainErrorType) -> MachineError {
         let stub = functor!(
             atom!("domain_error"),
-            [atom_as_cell((error.as_atom())), number(self, (&mut machine_st.arena))]
+            [
+                atom_as_cell((error.as_atom())),
+                number(self, (&mut machine_st.arena))
+            ]
         );
 
         MachineError {
@@ -280,7 +290,10 @@ impl MachineState {
     }
 
     pub(super) fn evaluation_error(&mut self, eval_error: EvalError) -> MachineError {
-        let stub = functor!(atom!("evaluation_error"), [atom_as_cell((eval_error.as_atom()))]);
+        let stub = functor!(
+            atom!("evaluation_error"),
+            [atom_as_cell((eval_error.as_atom()))]
+        );
 
         MachineError {
             stub,
@@ -297,7 +310,10 @@ impl MachineState {
                 )
             }
             ResourceError::OutOfFiles => {
-                functor!(atom!("resource_error"), [atom_as_cell((atom!("file_descriptors")))])
+                functor!(
+                    atom!("resource_error"),
+                    [atom_as_cell((atom!("file_descriptors")))]
+                )
             }
         };
 
@@ -480,12 +496,12 @@ impl MachineState {
             SessionError::CannotOverwriteBuiltIn(key) => self.permission_error(
                 Permission::Modify,
                 atom!("static_procedure"),
-                functor_stub(key.0, key.1)
+                functor_stub(key.0, key.1),
             ),
             SessionError::CannotOverwriteStaticProcedure(key) => self.permission_error(
                 Permission::Modify,
                 atom!("static_procedure"),
-                functor_stub(key.0, key.1)
+                functor_stub(key.0, key.1),
             ),
             SessionError::CannotOverwriteBuiltInModule(module) => {
                 self.permission_error(Permission::Modify, atom!("static_module"), module)
@@ -559,14 +575,14 @@ impl MachineState {
 
         let stub = functor!(atom!("syntax_error"), [functor(stub)]);
 
-        MachineError {
-            stub,
-            location,
-        }
+        MachineError { stub, location }
     }
 
     pub(super) fn representation_error(&self, flag: RepFlag) -> MachineError {
-        let stub = functor!(atom!("representation_error"), [atom_as_cell((flag.as_atom()))]);
+        let stub = functor!(
+            atom!("representation_error"),
+            [atom_as_cell((flag.as_atom()))]
+        );
 
         MachineError {
             stub,
@@ -593,13 +609,19 @@ impl MachineState {
     }
 
     pub(super) fn error_form(&mut self, err: MachineError, src: MachineStub) -> MachineStub {
-        if let Some(ParserErrorSrc { line_num,  .. }) = err.location {
-            functor!(atom!("error"), [functor((err.stub)),
-                                      functor((atom!(":")), [functor(src),
-                                                             number(line_num, (&mut self.arena))])])
+        if let Some(ParserErrorSrc { line_num, .. }) = err.location {
+            functor!(
+                atom!("error"),
+                [
+                    functor((err.stub)),
+                    functor(
+                        (atom!(":")),
+                        [functor(src), number(line_num, (&mut self.arena))]
+                    )
+                ]
+            )
         } else {
-            functor!(atom!("error"), [functor((err.stub)),
-                                      functor(src)])
+            functor!(atom!("error"), [functor((err.stub)), functor(src)])
         }
     }
 
@@ -826,13 +848,29 @@ impl EvalError {
 // used by '$skip_max_list'.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CycleSearchResult {
-    Cyclic { lambda: usize }, // number of steps
+    Cyclic {
+        lambda: usize,
+    }, // number of steps
     EmptyList,
-    NotList { num_steps: usize, heap_loc: HeapCellValue },
-    PartialList { num_steps: usize, heap_loc: HeapCellValue },
-    ProperList { num_steps: usize },
-    PStrLocation { num_steps: usize, pstr_loc: HeapCellValue },
-    UntouchedList { num_steps: usize, list_loc: usize },
+    NotList {
+        num_steps: usize,
+        heap_loc: HeapCellValue,
+    },
+    PartialList {
+        num_steps: usize,
+        heap_loc: HeapCellValue,
+    },
+    ProperList {
+        num_steps: usize,
+    },
+    PStrLocation {
+        num_steps: usize,
+        pstr_loc: HeapCellValue,
+    },
+    UntouchedList {
+        num_steps: usize,
+        list_loc: usize,
+    },
 }
 
 impl MachineState {
@@ -856,7 +894,9 @@ impl MachineState {
         };
 
         match BrentAlgState::detect_cycles(&self.heap, sorted) {
-            CycleSearchResult::NotList { .. } | CycleSearchResult::Cyclic { .. } if !sorted.is_var() => {
+            CycleSearchResult::NotList { .. } | CycleSearchResult::Cyclic { .. }
+                if !sorted.is_var() =>
+            {
                 let err = self.type_error(ValidType::List, sorted);
                 Err(self.error_form(err, stub_gen()))
             }
@@ -868,7 +908,9 @@ impl MachineState {
         let stub_gen = || functor_stub(atom!("keysort"), 2);
 
         match BrentAlgState::detect_cycles(&self.heap, list) {
-            CycleSearchResult::NotList { .. } | CycleSearchResult::Cyclic { .. } if !list.is_var() => {
+            CycleSearchResult::NotList { .. } | CycleSearchResult::Cyclic { .. }
+                if !list.is_var() =>
+            {
                 let err = self.type_error(ValidType::List, list);
                 Err(self.error_form(err, stub_gen()))
             }

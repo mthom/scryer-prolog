@@ -1,4 +1,3 @@
-use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
 use crate::atom_table;
@@ -442,7 +441,7 @@ impl Iterator for QueryState<'_> {
             if let Err(resource_err_loc) = machine
                 .machine_st
                 .heap
-                .append(machine.machine_st.ball.stub.splice(..))
+                .append(&machine.machine_st.ball.stub)
             {
                 return Some(Err(Term::from_heapcell(
                     machine,
@@ -531,9 +530,9 @@ impl Machine {
     pub fn consult_module_string(&mut self, module_name: &str, program: impl Into<String>) {
         let stream = Stream::from_owned_string(program.into(), &mut self.machine_st.arena);
         self.machine_st.registers[1] = stream_as_cell!(stream);
-        self.machine_st.registers[2] = atom_as_cell!(&atom_table::AtomTable::build_with(
+        self.machine_st.registers[2] = atom_as_cell!(atom_table::AtomTable::build_with(
             &self.machine_st.atom_tbl,
-            module_name
+            module_name,
         ));
 
         self.run_module_predicate(atom!("loader"), (atom!("consult_stream"), 2));

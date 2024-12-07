@@ -145,7 +145,9 @@ impl MachineState {
         };
 
         let mut iter = stackful_preorder_iter::<NonListElider>(
-            &mut self.heap, &mut self.stack, root_loc, // cell,
+            &mut self.heap,
+            &mut self.stack,
+            root_loc, // cell,
         );
 
         while let Some(value) = iter.next() {
