@@ -116,10 +116,10 @@ impl<'a> EagerStackfulPreOrderHeapIter<'a> {
                     }
                 }
                 (HeapCellValueTag::PStrLoc, h) => {
-                    let (_, tail_loc) = self.heap.scan_slice_to_str(h);
+                    let tail_idx = self.heap.scan_slice_to_str(h).tail_idx;
 
-                    self.heap[tail_loc].set_mark_bit(self.mark_phase);
-                    self.iter_stack.push(self.heap[tail_loc]);
+                    self.heap[tail_idx].set_mark_bit(self.mark_phase);
+                    self.iter_stack.push(self.heap[tail_idx]);
                 }
                 _ => {
                 }
@@ -452,12 +452,12 @@ impl<'a, ElideLists: ListElisionPolicy> StackfulPreOrderHeapIter<'a, ElideLists>
                }
                (HeapCellValueTag::PStrLoc, vh) => {
                    let cell = *cell;
-                   let (_, tail_loc) = self.heap.scan_slice_to_str(vh);
+                   let tail_idx = self.heap.scan_slice_to_str(vh).tail_idx;
 
                    // forward the current PStrLoc cell if the zero
                    // byte at the end of the string buffer
                    // is marked
-                   let buf_bytes = self.heap[tail_loc - 1].into_bytes();
+                   let buf_bytes = self.heap[tail_idx - 1].into_bytes();
 
                    if buf_bytes[7] != 0u8 {
                        let cell = self.read_cell_mut(h);
@@ -469,9 +469,9 @@ impl<'a, ElideLists: ListElisionPolicy> StackfulPreOrderHeapIter<'a, ElideLists>
                    // is never inspected, which it isn't.
 
                    self.push_if_unmarked(
-                       IterStackLoc::iterable_loc(tail_loc - 1, HeapOrStackTag::Heap),
+                       IterStackLoc::iterable_loc(tail_idx - 1, HeapOrStackTag::Heap),
                    );
-                   self.stack.push(IterStackLoc::mark_loc(tail_loc, HeapOrStackTag::Heap));
+                   self.stack.push(IterStackLoc::mark_loc(tail_idx, HeapOrStackTag::Heap));
 
                    return Some(cell);
                }
@@ -501,7 +501,6 @@ impl<'a, ElideLists: ListElisionPolicy> StackfulPreOrderHeapIter<'a, ElideLists>
         None
     }
 }
-
 
 impl<'a, ElideLists: ListElisionPolicy> Iterator for StackfulPreOrderHeapIter<'a, ElideLists> {
     type Item = HeapCellValue;
@@ -707,9 +706,8 @@ mod tests {
 
         let mut functor_writer = Heap::functor_writer(functor!(
             f_atom,
-            [atom_as_cell(a_atom),
-             atom_as_cell(b_atom)]),
-        );
+            [atom_as_cell(a_atom), atom_as_cell(b_atom)]
+        ));
 
         let cell = functor_writer(&mut wam.machine_st.heap).unwrap();
         wam.machine_st.heap.push_cell(cell).unwrap();
@@ -733,7 +731,7 @@ mod tests {
             assert_eq!(iter.next(), None);
         }
 
-        all_cells_unmarked(wam.machine_st.heap.splice(..));
+        all_cells_unmarked(&wam.machine_st.heap);
 
         wam.machine_st.heap.clear();
 
@@ -758,10 +756,7 @@ mod tests {
                 unmark_cell_bits!(iter.next().unwrap()),
                 atom_as_cell!(f_atom, 4)
             );
-            assert_eq!(
-                unmark_cell_bits!(iter.next().unwrap()),
-                str_loc_as_cell!(0)
-            );
+            assert_eq!(unmark_cell_bits!(iter.next().unwrap()), str_loc_as_cell!(0));
             assert_eq!(
                 unmark_cell_bits!(iter.next().unwrap()),
                 atom_as_cell!(a_atom)
@@ -778,7 +773,7 @@ mod tests {
             assert_eq!(iter.next(), None);
         }
 
-        all_cells_unmarked(wam.machine_st.heap.splice(..));
+        all_cells_unmarked(&wam.machine_st.heap);
 
         wam.machine_st.heap.clear();
 
@@ -794,7 +789,7 @@ mod tests {
             assert_eq!(iter.next(), None);
         }
 
-        all_cells_unmarked(wam.machine_st.heap.splice(..));
+        all_cells_unmarked(&wam.machine_st.heap);
 
         wam.machine_st.heap.clear();
 
@@ -837,7 +832,7 @@ mod tests {
             assert_eq!(iter.next(), None);
         }
 
-        all_cells_unmarked(wam.machine_st.heap.splice(..));
+        all_cells_unmarked(&wam.machine_st.heap);
 
         // now make the list cyclic.
         wam.machine_st.heap[4] = heap_loc_as_cell!(0);
@@ -939,8 +934,6 @@ mod tests {
             assert_eq!(iter.next(), None);
         }
 
-        all_cells_unmarked(wam.machine_st.heap.splice(..));
-
         wam.machine_st.heap.clear();
 
         let mut writer = wam.machine_st.heap.reserve(96).unwrap();
@@ -955,9 +948,11 @@ mod tests {
 
         let mut functor_writer = Heap::functor_writer(functor!(
             f_atom,
-            [atom_as_cell(a_atom),
-             atom_as_cell(b_atom),
-             atom_as_cell(b_atom)]
+            [
+                atom_as_cell(a_atom),
+                atom_as_cell(b_atom),
+                atom_as_cell(b_atom)
+            ]
         ));
 
         functor_writer(&mut wam.machine_st.heap).unwrap();
@@ -1003,7 +998,7 @@ mod tests {
             assert_eq!(iter.next(), None);
         }
 
-        all_cells_unmarked(wam.machine_st.heap.splice(..));
+        all_cells_unmarked(&wam.machine_st.heap);
 
         {
             let mut iter = stackless_preorder_iter(&mut wam.machine_st.heap, 0);
@@ -1044,7 +1039,7 @@ mod tests {
             // instance.
         }
 
-        all_cells_unmarked(wam.machine_st.heap.splice(..));
+        all_cells_unmarked(&wam.machine_st.heap);
 
         assert_eq!(wam.machine_st.heap[0], list_loc_as_cell!(1));
         assert_eq!(wam.machine_st.heap[1], str_loc_as_cell!(5));
@@ -1074,7 +1069,7 @@ mod tests {
             // instance.
         }
 
-        all_cells_unmarked(wam.machine_st.heap.splice(..));
+        all_cells_unmarked(&wam.machine_st.heap);
 
         assert_eq!(wam.machine_st.heap[0], list_loc_as_cell!(1));
         assert_eq!(wam.machine_st.heap[1], str_loc_as_cell!(5));
@@ -1126,7 +1121,7 @@ mod tests {
             assert_eq!(iter.next(), None);
         }
 
-        all_cells_unmarked(wam.machine_st.heap.splice(..));
+        all_cells_unmarked(&wam.machine_st.heap);
 
         wam.machine_st.heap.clear();
 
@@ -1147,7 +1142,7 @@ mod tests {
             assert_eq!(iter.next(), None);
         }
 
-        all_cells_unmarked(wam.machine_st.heap.splice(..));
+        all_cells_unmarked(&wam.machine_st.heap);
 
         assert_eq!(
             unmark_cell_bits!(wam.machine_st.heap[0]),
@@ -1193,7 +1188,7 @@ mod tests {
             assert_eq!(iter.next(), None);
         }
 
-        all_cells_unmarked(wam.machine_st.heap.splice(..));
+        all_cells_unmarked(&wam.machine_st.heap);
 
         assert_eq!(
             unmark_cell_bits!(wam.machine_st.heap[0]),
@@ -1427,7 +1422,10 @@ mod tests {
         wam.machine_st.heap.clear();
 
         {
-            wam.machine_st.heap.push_cell(fixnum_as_cell!(Fixnum::build_with(0))).unwrap();
+            wam.machine_st
+                .heap
+                .push_cell(fixnum_as_cell!(Fixnum::build_with(0)))
+                .unwrap();
 
             let mut iter = stackless_preorder_iter(&mut wam.machine_st.heap, 0);
 
@@ -1439,7 +1437,7 @@ mod tests {
             assert_eq!(iter.next(), None);
         }
 
-        all_cells_unmarked(wam.machine_st.heap.splice(..));
+        all_cells_unmarked(&wam.machine_st.heap);
 
         wam.machine_st.heap.clear();
 
@@ -1473,7 +1471,7 @@ mod tests {
             assert!(iter.next().is_none());
         }
 
-        all_cells_unmarked(wam.machine_st.heap.splice(..));
+        all_cells_unmarked(&wam.machine_st.heap);
 
         wam.machine_st.heap.clear();
 
@@ -1504,7 +1502,7 @@ mod tests {
             assert!(iter.next().is_none());
         }
 
-        all_cells_unmarked(wam.machine_st.heap.splice(..));
+        all_cells_unmarked(&wam.machine_st.heap);
 
         wam.machine_st.heap.clear();
 
@@ -1564,7 +1562,7 @@ mod tests {
             assert!(iter.next().is_none());
         }
 
-        all_cells_unmarked(wam.machine_st.heap.splice(..));
+        all_cells_unmarked(&wam.machine_st.heap);
 
         assert_eq!(wam.machine_st.heap[0], str_loc_as_cell!(1));
         assert_eq!(wam.machine_st.heap[1], atom_as_cell!(atom!("g"), 2));
@@ -1634,13 +1632,6 @@ mod tests {
         {
             let mut iter = stackless_preorder_iter(&mut wam.machine_st.heap, 9);
 
-            /*
-            while let Some(_) = iter.next() {
-                print_heap_terms(iter.heap.iter(), 0);
-                println!("");
-            }
-            */
-
             assert_eq!(
                 unmark_cell_bits!(iter.next().unwrap()),
                 list_loc_as_cell!(7)
@@ -1693,9 +1684,8 @@ mod tests {
 
         let mut functor_writer = Heap::functor_writer(functor!(
             f_atom,
-            [atom_as_cell(a_atom),
-             atom_as_cell(b_atom)]),
-        );
+            [atom_as_cell(a_atom), atom_as_cell(b_atom)]
+        ));
 
         let cell = functor_writer(&mut wam.machine_st.heap).unwrap();
         let h = wam.machine_st.heap.cell_len();
@@ -1924,7 +1914,7 @@ mod tests {
             );
         }
 
-        all_cells_unmarked(wam.machine_st.heap.splice(..));
+        all_cells_unmarked(&wam.machine_st.heap);
 
         assert_eq!(wam.machine_st.heap[0], list_loc_as_cell!(1));
         assert_eq!(wam.machine_st.heap[1], atom_as_cell!(a_atom));
@@ -2021,7 +2011,11 @@ mod tests {
 
         let functor = functor!(
             f_atom,
-            [atom_as_cell(a_atom), atom_as_cell(b_atom), atom_as_cell(b_atom)]
+            [
+                atom_as_cell(a_atom),
+                atom_as_cell(b_atom),
+                atom_as_cell(b_atom)
+            ]
         );
 
         let mut writer = wam.machine_st.heap.reserve(96).unwrap();
@@ -2098,7 +2092,7 @@ mod tests {
             assert_eq!(iter.next(), None);
         }
 
-        all_cells_unmarked(wam.machine_st.heap.splice(..));
+        all_cells_unmarked(&wam.machine_st.heap);
 
         wam.machine_st.heap[4] = list_loc_as_cell!(1);
 
@@ -2163,7 +2157,7 @@ mod tests {
             assert_eq!(iter.next(), None);
         }
 
-        all_cells_unmarked(wam.machine_st.heap.splice(..));
+        all_cells_unmarked(&wam.machine_st.heap);
 
         wam.machine_st.heap.clear();
 
@@ -2202,7 +2196,7 @@ mod tests {
             assert_eq!(iter.next(), None);
         }
 
-        all_cells_unmarked(wam.machine_st.heap.splice(..));
+        all_cells_unmarked(&wam.machine_st.heap);
 
         wam.machine_st.heap.clear();
 
@@ -2221,18 +2215,18 @@ mod tests {
                 2,
             );
 
-            assert_eq!(
-                iter.heap.slice_to_str(0, "a string".len()),
-                "a string"
-            );
-            assert_eq!(
-                iter.next().unwrap(),
-                empty_list_as_cell!()
-            );
+            assert_eq!(iter.heap.slice_to_str(0, "a string".len()), "a string");
+            assert_eq!(iter.next().unwrap(), empty_list_as_cell!());
             assert_eq!(iter.next(), None);
         }
 
-        all_cells_unmarked(wam.machine_st.heap.splice(..));
+        assert_eq!(wam.machine_st.heap.slice_to_str(0, "a string".len()), "a string");
+        assert_eq!(wam.machine_st.heap[1], HeapCellValue::build_with(HeapCellValueTag::Cons, 0));
+
+        for idx in 2 ..= 3 {
+            assert!(!wam.machine_st.heap[idx].get_mark_bit());
+            assert!(!wam.machine_st.heap[idx].get_forwarding_bit());
+        }
 
         wam.machine_st.heap.clear();
 
@@ -2291,9 +2285,8 @@ mod tests {
 
         let mut functor_writer = Heap::functor_writer(functor!(
             f_atom,
-            [atom_as_cell(a_atom),
-             atom_as_cell(b_atom)]),
-        );
+            [atom_as_cell(a_atom), atom_as_cell(b_atom)]
+        ));
 
         let cell = functor_writer(&mut wam.machine_st.heap).unwrap();
         let h = wam.machine_st.heap.cell_len();
@@ -2324,7 +2317,6 @@ mod tests {
         }
 
         wam.machine_st.heap.clear();
-
 
         let mut functor_writer = Heap::functor_writer(functor!(
             f_atom,
@@ -2361,10 +2353,7 @@ mod tests {
                 unmark_cell_bits!(iter.next().unwrap()),
                 atom_as_cell!(a_atom)
             );
-            assert_eq!(
-                unmark_cell_bits!(iter.next().unwrap()),
-                str_loc_as_cell!(0)
-            );
+            assert_eq!(unmark_cell_bits!(iter.next().unwrap()), str_loc_as_cell!(0));
             assert_eq!(
                 unmark_cell_bits!(iter.next().unwrap()),
                 atom_as_cell!(f_atom, 4)
@@ -2519,7 +2508,7 @@ mod tests {
             );
         }
 
-        all_cells_unmarked(wam.machine_st.heap.splice(..));
+        all_cells_unmarked(&wam.machine_st.heap);
 
         assert_eq!(wam.machine_st.heap[0], list_loc_as_cell!(1));
         assert_eq!(wam.machine_st.heap[1], atom_as_cell!(a_atom));
@@ -2616,7 +2605,11 @@ mod tests {
 
         let functor = functor!(
             f_atom,
-            [atom_as_cell(a_atom), atom_as_cell(b_atom), atom_as_cell(b_atom)]
+            [
+                atom_as_cell(a_atom),
+                atom_as_cell(b_atom),
+                atom_as_cell(b_atom)
+            ]
         );
 
         let mut writer = wam.machine_st.heap.reserve(96).unwrap();
@@ -2694,7 +2687,7 @@ mod tests {
             assert_eq!(iter.next(), None);
         }
 
-        all_cells_unmarked(wam.machine_st.heap.splice(..));
+        all_cells_unmarked(&wam.machine_st.heap);
 
         wam.machine_st.heap[4] = list_loc_as_cell!(1);
 
@@ -2761,7 +2754,7 @@ mod tests {
             assert_eq!(iter.next(), None);
         }
 
-        all_cells_unmarked(wam.machine_st.heap.splice(..));
+        all_cells_unmarked(&wam.machine_st.heap);
         wam.machine_st.heap.clear();
     }
 
@@ -2778,9 +2771,8 @@ mod tests {
 
         let mut functor_writer = Heap::functor_writer(functor!(
             f_atom,
-            [atom_as_cell(a_atom),
-             atom_as_cell(b_atom)]),
-        );
+            [atom_as_cell(a_atom), atom_as_cell(b_atom)]
+        ));
 
         let cell = functor_writer(&mut wam.machine_st.heap).unwrap();
         wam.machine_st.heap.push_cell(cell).unwrap();
@@ -2969,7 +2961,7 @@ mod tests {
             );
         }
 
-        all_cells_unmarked(wam.machine_st.heap.splice(..));
+        all_cells_unmarked(&wam.machine_st.heap);
 
         assert_eq!(wam.machine_st.heap[0], list_loc_as_cell!(1));
         assert_eq!(wam.machine_st.heap[1], atom_as_cell!(a_atom));
@@ -3039,7 +3031,7 @@ mod tests {
             assert_eq!(iter.next(), None);
         }
 
-        all_cells_unmarked(wam.machine_st.heap.splice(..));
+        all_cells_unmarked(&wam.machine_st.heap);
 
         wam.machine_st.heap[4] = pstr_loc_as_cell!(heap_index!(3) + 2);
 
@@ -3053,11 +3045,18 @@ mod tests {
             assert_eq!(iter.next(), None);
         }
 
-        all_cells_unmarked(wam.machine_st.heap.splice(..));
+        all_cells_unmarked(&wam.machine_st.heap);
 
         wam.machine_st.heap.clear();
 
-        let functor = functor!(f_atom, [atom_as_cell(a_atom), atom_as_cell(b_atom), atom_as_cell(b_atom)]);
+        let functor = functor!(
+            f_atom,
+            [
+                atom_as_cell(a_atom),
+                atom_as_cell(b_atom),
+                atom_as_cell(b_atom)
+            ]
+        );
 
         let mut writer = wam.machine_st.heap.reserve(96).unwrap();
 
@@ -3116,7 +3115,7 @@ mod tests {
             assert_eq!(iter.next(), None);
         }
 
-        all_cells_unmarked(wam.machine_st.heap.splice(..));
+        all_cells_unmarked(&wam.machine_st.heap);
 
         wam.machine_st.heap[4] = list_loc_as_cell!(1);
 
@@ -3164,6 +3163,6 @@ mod tests {
             assert_eq!(iter.next(), None);
         }
 
-        all_cells_unmarked(wam.machine_st.heap.splice(..));
+        all_cells_unmarked(&wam.machine_st.heap);
     }
 }

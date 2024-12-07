@@ -141,7 +141,11 @@ macro_rules! fixnum {
     ($n:expr, $arena:expr) => {
         Fixnum::build_with_checked($n)
             .map(|n| fixnum_as_cell!(n))
-            .unwrap_or_else(|_| typed_arena_ptr_as_cell!(arena_alloc!(Integer::from($n), $arena) as TypedArenaPtr<Integer>))
+            .unwrap_or_else(|_| {
+                typed_arena_ptr_as_cell!(
+                    arena_alloc!(Integer::from($n), $arena) as TypedArenaPtr<Integer>
+                )
+            })
     };
     ($wrapper:ty, $n:expr, $arena:expr) => {
         Fixnum::build_with_checked($n)
@@ -614,10 +618,7 @@ impl Literal {
 
 pub type Var = Rc<String>;
 
-pub(crate) fn subterm_index(
-    heap: &impl SizedHeap,
-    subterm_loc: usize,
-) -> (usize, HeapCellValue) {
+pub(crate) fn subterm_index(heap: &impl SizedHeap, subterm_loc: usize) -> (usize, HeapCellValue) {
     let subterm = heap[subterm_loc];
 
     if subterm.is_ref() {
@@ -710,16 +711,10 @@ pub fn unfold_by_str(mut term: Term, s: Atom) -> Vec<Term> {
 }
  */
 
-pub(crate) fn fetch_index_ptr(
-    heap: &impl SizedHeap,
-    arity: usize,
-    term_loc: usize,
-) -> Option<CodeIndex> {
-    if term_loc + arity + 1 >= heap.cell_len() || heap.pstr_at(term_loc + arity + 1) {
-        return None;
-    }
+pub(crate) fn fetch_index_ptr(heap: &impl SizedHeap, term_loc: usize) -> Option<CodeIndex> {
+    let index_cell_loc = term_loc.saturating_sub(1);
 
-    read_heap_cell!(heap[term_loc + arity + 1],
+    read_heap_cell!(heap[index_cell_loc],
         (HeapCellValueTag::Cons, c) => {
             match_untyped_arena_ptr!(c,
                (ArenaHeaderTag::IndexPtr, ptr) => {
@@ -739,7 +734,7 @@ pub(crate) fn blunt_index_ptr(
     key: PredicateKey,
     term_loc: usize,
 ) -> bool {
-    if fetch_index_ptr(heap, key.1, term_loc).is_some() {
+    if fetch_index_ptr(heap, term_loc).is_some() {
         heap[term_loc] = atom_as_cell!(key.0, key.1);
         true
     } else {
@@ -752,10 +747,7 @@ pub(crate) fn unfold_by_str_once(
     start_term: HeapCellValue,
     atom: Atom,
 ) -> Option<usize> {
-    let start_term = heap_bound_store(
-        heap,
-        heap_bound_deref(heap, start_term),
-    );
+    let start_term = heap_bound_store(heap, heap_bound_deref(heap, start_term));
 
     if let HeapCellValueTag::Str = start_term.get_tag() {
         let s = start_term.get_value() as usize;
@@ -764,7 +756,7 @@ pub(crate) fn unfold_by_str_once(
         blunt_index_ptr(heap, (s_atom, s_arity), s);
 
         if (s_atom, s_arity) == (atom, 2) {
-            return Some(s+1);
+            return Some(s + 1);
         }
     }
 
@@ -821,7 +813,7 @@ pub fn unfold_by_str_locs(
     let mut current_term = heap[term_loc];
 
     while let Some(fst_loc) = unfold_by_str_once(heap, current_term, atom) {
-        term_loc = fst_loc+1;
+        term_loc = fst_loc + 1;
         current_term = heap[term_loc];
         let fst = heap[fst_loc];
         terms.push((fst, fst_loc));
@@ -831,10 +823,7 @@ pub fn unfold_by_str_locs(
     terms
 }
 
-pub fn term_predicate_key(
-    heap: &impl SizedHeap,
-    mut term_loc: usize,
-) -> Option<PredicateKey> {
+pub fn term_predicate_key(heap: &impl SizedHeap, mut term_loc: usize) -> Option<PredicateKey> {
     loop {
         read_heap_cell!(heap[term_loc],
             (HeapCellValueTag::Atom, (name, arity)) => {
@@ -874,10 +863,7 @@ pub fn inverse_var_locs_from_iter<I: Iterator<Item = HeapCellValue>>(iter: I) ->
         let var_loc = var.get_value() as usize;
 
         if count > 1 {
-            inverse_var_locs.insert(
-                var_loc,
-                Rc::new(format!("_{}", var_loc)),
-            );
+            inverse_var_locs.insert(var_loc, Rc::new(format!("_{}", var_loc)));
         }
     }
 

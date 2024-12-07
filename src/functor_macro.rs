@@ -1,3 +1,6 @@
+//! A macro to construct functor terms ready to be written to the WAM
+//! heap.
+
 use crate::atom_table::*;
 use crate::instructions::IndexingCodePtr;
 use crate::machine::heap::Heap;
@@ -5,7 +8,7 @@ use crate::parser::ast::Fixnum;
 use crate::types::*;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum FunctorElement {
+pub(crate) enum FunctorElement {
     AbsoluteCell(HeapCellValue),
     Cell(HeapCellValue),
     InnerFunctor(u64, Vec<FunctorElement>),
@@ -190,19 +193,19 @@ pub(crate) fn variadic_functor(
     let num_items = key_value_pairs.len();
 
     for (idx, _) in key_value_pairs.iter().enumerate() {
-        arg_vec.push(FunctorElement::Cell(str_loc_as_cell!(2 + num_items * 2 + idx)));
+        arg_vec.push(FunctorElement::Cell(str_loc_as_cell!(
+            2 + num_items * 2 + idx
+        )));
         arg_vec.push(FunctorElement::Cell(list_loc_as_cell!(5 + idx)));
     }
 
     arg_vec.pop();
     arg_vec.push(FunctorElement::Cell(empty_list_as_cell!()));
 
-    arg_vec.extend(key_value_pairs
-        .into_iter()
-        .map(|kv_func| {
-            let inner_functor_size = cell_index!(Heap::compute_functor_byte_size(&kv_func));
-            FunctorElement::InnerFunctor(inner_functor_size as u64, kv_func)
-        }));
+    arg_vec.extend(key_value_pairs.into_iter().map(|kv_func| {
+        let inner_functor_size = cell_index!(Heap::compute_functor_byte_size(&kv_func));
+        FunctorElement::InnerFunctor(inner_functor_size as u64, kv_func)
+    }));
 
     arg_vec
 }
@@ -211,13 +214,15 @@ pub(crate) fn variadic_functor(
 #[allow(unused_parens)]
 mod tests {
     use super::*;
-    use FunctorElement::*;
     use std::string::String;
+    use FunctorElement::*;
 
     #[test]
     fn basic_terms() {
-        let functor = functor!(atom!("first"), [atom_as_cell((atom!("a"))),
-                                                char_as_cell('c')]);
+        let functor = functor!(
+            atom!("first"),
+            [atom_as_cell((atom!("a"))), char_as_cell('c')]
+        );
 
         assert_eq!(functor.len(), 3);
 
@@ -225,10 +230,14 @@ mod tests {
         assert_eq!(functor[1], Cell(atom_as_cell!(atom!("a"))));
         assert_eq!(functor[2], Cell(char_as_cell!('c')));
 
-        let functor = functor!(atom!("second"), [atom_as_cell((atom!("a"))),
-                                                 functor((atom!("b")), [fixnum(1),
-                                                                        fixnum(2)]),
-                                                 char_as_cell('c')]);
+        let functor = functor!(
+            atom!("second"),
+            [
+                atom_as_cell((atom!("a"))),
+                functor((atom!("b")), [fixnum(1), fixnum(2)]),
+                char_as_cell('c')
+            ]
+        );
 
         assert_eq!(functor.len(), 5);
 
@@ -236,13 +245,20 @@ mod tests {
         assert_eq!(functor[1], Cell(atom_as_cell!(atom!("a"))));
         assert_eq!(functor[2], Cell(str_loc_as_cell!(4)));
         assert_eq!(functor[3], Cell(char_as_cell!('c')));
-        assert_eq!(functor[4], InnerFunctor(3, functor!(atom!("b"), [fixnum(1),
-                                                                     fixnum(2)])));
+        assert_eq!(
+            functor[4],
+            InnerFunctor(3, functor!(atom!("b"), [fixnum(1), fixnum(2)]))
+        );
 
-        let functor = functor!(atom!("third"), [atom_as_cell((atom!("a"))),
-                                                functor((atom!("b")), [fixnum(1), fixnum(2)]),
-                                                functor((atom!("c")), [fixnum(1), fixnum(2)]),
-                                   char_as_cell('c')]);
+        let functor = functor!(
+            atom!("third"),
+            [
+                atom_as_cell((atom!("a"))),
+                functor((atom!("b")), [fixnum(1), fixnum(2)]),
+                functor((atom!("c")), [fixnum(1), fixnum(2)]),
+                char_as_cell('c')
+            ]
+        );
 
         assert_eq!(functor.len(), 7);
 
@@ -251,14 +267,25 @@ mod tests {
         assert_eq!(functor[2], Cell(str_loc_as_cell!(5)));
         assert_eq!(functor[3], Cell(str_loc_as_cell!(8)));
         assert_eq!(functor[4], Cell(char_as_cell!('c')));
-        assert_eq!(functor[5], InnerFunctor(3, functor!(atom!("b"), [fixnum(1), fixnum(2)])));
-        assert_eq!(functor[6], InnerFunctor(3, functor!(atom!("c"), [fixnum(1), fixnum(2)])));
+        assert_eq!(
+            functor[5],
+            InnerFunctor(3, functor!(atom!("b"), [fixnum(1), fixnum(2)]))
+        );
+        assert_eq!(
+            functor[6],
+            InnerFunctor(3, functor!(atom!("c"), [fixnum(1), fixnum(2)]))
+        );
 
-        let functor = functor!(atom!("fourth"), [atom_as_cell((atom!("a"))),
-                                                 functor((atom!("b")), [fixnum(1), fixnum(2)]),
-                                                 functor((atom!("c")), [fixnum(1)]),
-                                                 functor((atom!("d")), [fixnum(453), fixnum(2)]),
-                                                 char_as_cell('c')]);
+        let functor = functor!(
+            atom!("fourth"),
+            [
+                atom_as_cell((atom!("a"))),
+                functor((atom!("b")), [fixnum(1), fixnum(2)]),
+                functor((atom!("c")), [fixnum(1)]),
+                functor((atom!("d")), [fixnum(453), fixnum(2)]),
+                char_as_cell('c')
+            ]
+        );
 
         assert_eq!(functor.len(), 9);
 
@@ -268,14 +295,26 @@ mod tests {
         assert_eq!(functor[3], Cell(str_loc_as_cell!(9)));
         assert_eq!(functor[4], Cell(str_loc_as_cell!(11)));
         assert_eq!(functor[5], Cell(char_as_cell!('c')));
-        assert_eq!(functor[6], InnerFunctor(3, functor!(atom!("b"), [fixnum(1), fixnum(2)])));
-        assert_eq!(functor[7], InnerFunctor(2, functor!(atom!("c"), [fixnum(1)])));
-        assert_eq!(functor[8], InnerFunctor(3, functor!(atom!("d"), [fixnum(453), fixnum(2)])));
+        assert_eq!(
+            functor[6],
+            InnerFunctor(3, functor!(atom!("b"), [fixnum(1), fixnum(2)]))
+        );
+        assert_eq!(
+            functor[7],
+            InnerFunctor(2, functor!(atom!("c"), [fixnum(1)]))
+        );
+        assert_eq!(
+            functor[8],
+            InnerFunctor(3, functor!(atom!("d"), [fixnum(453), fixnum(2)]))
+        );
     }
 
     #[test]
     fn basic_terms_in_heap() {
-        let functor = functor!(atom!("first"), [atom_as_cell((atom!("a"))), char_as_cell('b')]);
+        let functor = functor!(
+            atom!("first"),
+            [atom_as_cell((atom!("a"))), char_as_cell('b')]
+        );
 
         assert_eq!(functor.len(), 3);
 
@@ -291,10 +330,15 @@ mod tests {
 
         heap.truncate(2);
 
-        let functor = functor!(atom!("second"), [atom_as_cell((atom!("a"))),
-                                                 functor((atom!("b")), [fixnum(1), fixnum(2)]),
-                                                 functor((atom!("c")), [fixnum(1), fixnum(2)]),
-                                                 char_as_cell('b')]);
+        let functor = functor!(
+            atom!("second"),
+            [
+                atom_as_cell((atom!("a"))),
+                functor((atom!("b")), [fixnum(1), fixnum(2)]),
+                functor((atom!("c")), [fixnum(1), fixnum(2)]),
+                char_as_cell('b')
+            ]
+        );
 
         assert_eq!(functor.len(), 7);
 
@@ -318,14 +362,24 @@ mod tests {
 
     #[test]
     fn nested_functors() {
-        let functor = functor!(atom!("first"), [atom_as_cell((atom!("a"))),
-                                                functor((atom!("d")), [fixnum(1),
-                                                                      functor((atom!("b")),
-                                                                              [atom_as_cell((atom!("c"))),
-                                                                               char_as_cell('c')])]),
-                                                        functor((atom!("e")), [fixnum(453),
-                                                                               fixnum(2)]),
-                                                        char_as_cell('b')]);
+        let functor = functor!(
+            atom!("first"),
+            [
+                atom_as_cell((atom!("a"))),
+                functor(
+                    (atom!("d")),
+                    [
+                        fixnum(1),
+                        functor(
+                            (atom!("b")),
+                            [atom_as_cell((atom!("c"))), char_as_cell('c')]
+                        )
+                    ]
+                ),
+                functor((atom!("e")), [fixnum(453), fixnum(2)]),
+                char_as_cell('b')
+            ]
+        );
 
         assert_eq!(functor.len(), 7);
 
@@ -334,24 +388,47 @@ mod tests {
         assert_eq!(functor[2], Cell(str_loc_as_cell!(5)));
         assert_eq!(functor[3], Cell(str_loc_as_cell!(11)));
         assert_eq!(functor[4], Cell(char_as_cell!('b')));
-        assert_eq!(functor[5], InnerFunctor(6, vec![Cell(atom_as_cell!(atom!("d"), 2)),
-                                                    Cell(fixnum_as_cell!(Fixnum::build_with(1))),
-                                                    Cell(str_loc_as_cell!(3)),
-                                                    InnerFunctor(3, functor!(atom!("b"), [atom_as_cell((atom!("c"))),
-                                                                                          char_as_cell('c')]))]));
-        assert_eq!(functor[6], InnerFunctor(3, functor!(atom!("e"), [fixnum(453),
-                                                                     fixnum(2)])));
+        assert_eq!(
+            functor[5],
+            InnerFunctor(
+                6,
+                vec![
+                    Cell(atom_as_cell!(atom!("d"), 2)),
+                    Cell(fixnum_as_cell!(Fixnum::build_with(1))),
+                    Cell(str_loc_as_cell!(3)),
+                    InnerFunctor(
+                        3,
+                        functor!(atom!("b"), [atom_as_cell((atom!("c"))), char_as_cell('c')])
+                    )
+                ]
+            )
+        );
+        assert_eq!(
+            functor[6],
+            InnerFunctor(3, functor!(atom!("e"), [fixnum(453), fixnum(2)]))
+        );
     }
-
 
     #[test]
     fn nested_functors_in_heap() {
-        let functor = functor!(atom!("first"), [atom_as_cell((atom!("a"))),
-                                                functor((atom!("second")), [fixnum(1),
-                                                                            functor((atom!("third")), [atom_as_cell((atom!("b"))),
-                                                                                                       char_as_cell('c')])]),
-                                                functor((atom!("fourth")), [fixnum(453), fixnum(2)]),
-                                                char_as_cell('b')]);
+        let functor = functor!(
+            atom!("first"),
+            [
+                atom_as_cell((atom!("a"))),
+                functor(
+                    (atom!("second")),
+                    [
+                        fixnum(1),
+                        functor(
+                            (atom!("third")),
+                            [atom_as_cell((atom!("b"))), char_as_cell('c')]
+                        )
+                    ]
+                ),
+                functor((atom!("fourth")), [fixnum(453), fixnum(2)]),
+                char_as_cell('b')
+            ]
+        );
 
         let mut heap = Heap::new();
         let mut functor_writer = Heap::functor_writer(functor);
@@ -392,33 +469,43 @@ mod tests {
 
         assert_eq!(heap[0], atom_as_cell!(atom!("first"), 1));
         assert_eq!(heap[1], pstr_loc_as_cell!(heap_index!(2)));
-        assert_eq!(heap.slice_to_str(heap_index!(2), "a string".len()), "a string");
+        assert_eq!(
+            heap.slice_to_str(heap_index!(2), "a string".len()),
+            "a string"
+        );
         assert_eq!(heap[4], empty_list_as_cell!());
 
         heap.truncate(0);
 
-        let functor = functor!(atom!("second"), [string((String::from("a stuttered\0 string")))]);
+        let functor = functor!(
+            atom!("second"),
+            [string((String::from("a stuttered\0 string")))]
+        );
 
         let mut functor_writer = Heap::functor_writer(functor);
         functor_writer(&mut heap).unwrap();
 
-        assert_eq!(heap.cell_len(), 7);
+        assert_eq!(heap.cell_len(), 8);
 
         assert_eq!(heap[0], atom_as_cell!(atom!("second"), 1));
         assert_eq!(heap[1], pstr_loc_as_cell!(heap_index!(2)));
-        assert_eq!(heap.slice_to_str(heap_index!(2), "a stuttered".len()), "a stuttered");
+        assert_eq!(
+            heap.slice_to_str(heap_index!(2), "a stuttered".len()),
+            "a stuttered"
+        );
         assert_eq!(heap[4], pstr_loc_as_cell!(heap_index!(5)));
-        assert_eq!(heap.slice_to_str(heap_index!(5), " string".len()), " string");
-        assert_eq!(heap[6], empty_list_as_cell!());
+        assert_eq!(
+            heap.slice_to_str(heap_index!(5), " string".len()),
+            " string"
+        );
+        assert_eq!(heap[7], empty_list_as_cell!());
     }
 
     #[test]
     fn functors_with_lists_in_heap() {
         let functor = functor!(
             atom!("first"),
-            [list([fixnum(1),
-                   atom_as_cell((atom!("a"))),
-                   fixnum(2)])]
+            [list([fixnum(1), atom_as_cell((atom!("a"))), fixnum(2)])]
         );
 
         assert_eq!(functor.len(), 3);
@@ -462,8 +549,10 @@ mod tests {
         let code_ptr = IndexingCodePtr::Internal(0);
         let functor = functor!(
             atom!("first"),
-            [string((String::from("a string"))),
-             indexing_code_ptr(code_ptr)]
+            [
+                string((String::from("a string"))),
+                indexing_code_ptr(code_ptr)
+            ]
         );
 
         let mut heap = Heap::new();
@@ -476,18 +565,30 @@ mod tests {
         assert_eq!(heap[0], atom_as_cell!(atom!("first"), 2));
         assert_eq!(heap[1], pstr_loc_as_cell!(heap_index!(3)));
         assert_eq!(heap[2], str_loc_as_cell!(6));
-        assert_eq!(heap.slice_to_str(heap_index!(3), "a string".len()), "a string");
+        assert_eq!(
+            heap.slice_to_str(heap_index!(3), "a string".len()),
+            "a string"
+        );
         assert_eq!(heap[5], empty_list_as_cell!());
         assert_eq!(heap[6], atom_as_cell!(atom!("internal"), 1));
         assert_eq!(heap[7], fixnum_as_cell!(Fixnum::build_with(0)));
 
         heap.truncate(0);
 
-        let functor = functor!(atom!("second"),
-                               [string((String::from("a string"))),
-                                functor((atom!("third")), [atom_as_cell((atom!("a"))),
-                                                           string((String::from("another string"))),
-                                                           indexing_code_ptr(code_ptr)])]);
+        let functor = functor!(
+            atom!("second"),
+            [
+                string((String::from("a string"))),
+                functor(
+                    (atom!("third")),
+                    [
+                        atom_as_cell((atom!("a"))),
+                        string((String::from("another string"))),
+                        indexing_code_ptr(code_ptr)
+                    ]
+                )
+            ]
+        );
 
         let mut functor_writer = Heap::functor_writer(functor);
         functor_writer(&mut heap).unwrap();
@@ -497,24 +598,43 @@ mod tests {
         assert_eq!(heap[0], atom_as_cell!(atom!("second"), 2));
         assert_eq!(heap[1], pstr_loc_as_cell!(heap_index!(3)));
         assert_eq!(heap[2], str_loc_as_cell!(6));
-        assert_eq!(heap.slice_to_str(heap_index!(3), "a string".len()), "a string");
+        assert_eq!(
+            heap.slice_to_str(heap_index!(3), "a string".len()),
+            "a string"
+        );
         assert_eq!(heap[5], empty_list_as_cell!());
         assert_eq!(heap[6], atom_as_cell!(atom!("third"), 3));
         assert_eq!(heap[7], atom_as_cell!(atom!("a")));
         assert_eq!(heap[8], pstr_loc_as_cell!(heap_index!(10)));
         assert_eq!(heap[9], str_loc_as_cell!(13));
-        assert_eq!(heap.slice_to_str(heap_index!(10), "another string".len()), "another string");
+        assert_eq!(
+            heap.slice_to_str(heap_index!(10), "another string".len()),
+            "another string"
+        );
         assert_eq!(heap[12], empty_list_as_cell!());
         assert_eq!(heap[13], atom_as_cell!(atom!("internal"), 1));
         assert_eq!(heap[14], fixnum_as_cell!(Fixnum::build_with(0)));
 
-        let functor = functor!(atom!("fourth"),
-                               [string((String::from("a string"))),
-                                functor((atom!("a")),
-                                        [functor((atom!("fifth")), [fixnum(5),
-                                                                    string((String::from("another string"))),
-                                                                    indexing_code_ptr(code_ptr)]),
-                                         string((String::from("and another")))])]);
+        let functor = functor!(
+            atom!("fourth"),
+            [
+                string((String::from("a string"))),
+                functor(
+                    (atom!("a")),
+                    [
+                        functor(
+                            (atom!("fifth")),
+                            [
+                                fixnum(5),
+                                string((String::from("another string"))),
+                                indexing_code_ptr(code_ptr)
+                            ]
+                        ),
+                        string((String::from("and another")))
+                    ]
+                )
+            ]
+        );
 
         heap.truncate(0);
 
@@ -526,7 +646,10 @@ mod tests {
         assert_eq!(heap[0], atom_as_cell!(atom!("fourth"), 2));
         assert_eq!(heap[1], pstr_loc_as_cell!(heap_index!(3)));
         assert_eq!(heap[2], str_loc_as_cell!(6));
-        assert_eq!(heap.slice_to_str(heap_index!(3), "a string".len()), "a string");
+        assert_eq!(
+            heap.slice_to_str(heap_index!(3), "a string".len()),
+            "a string"
+        );
         assert_eq!(heap[5], empty_list_as_cell!());
         assert_eq!(heap[6], atom_as_cell!(atom!("a"), 2));
         assert_eq!(heap[7], str_loc_as_cell!(9));
@@ -535,11 +658,17 @@ mod tests {
         assert_eq!(heap[10], fixnum_as_cell!(Fixnum::build_with(5)));
         assert_eq!(heap[11], pstr_loc_as_cell!(heap_index!(13)));
         assert_eq!(heap[12], str_loc_as_cell!(16));
-        assert_eq!(heap.slice_to_str(heap_index!(13), "another string".len()), "another string");
+        assert_eq!(
+            heap.slice_to_str(heap_index!(13), "another string".len()),
+            "another string"
+        );
         assert_eq!(heap[15], empty_list_as_cell!());
         assert_eq!(heap[16], atom_as_cell!(atom!("internal"), 1));
         assert_eq!(heap[17], fixnum_as_cell!(Fixnum::build_with(0)));
-        assert_eq!(heap.slice_to_str(heap_index!(18), "and another".len()), "and another");
+        assert_eq!(
+            heap.slice_to_str(heap_index!(18), "and another".len()),
+            "and another"
+        );
         assert_eq!(heap[20], empty_list_as_cell!());
     }
 
@@ -550,17 +679,16 @@ mod tests {
 
         let stub = functor!(
             atom!("existence_error"),
-            [atom_as_cell((atom!("procedure"))), functor((culprit.clone()))]
+            [
+                atom_as_cell((atom!("procedure"))),
+                functor((culprit.clone()))
+            ]
         );
 
         println!("{:?}", stub);
 
         // now the error form
-        let lineless_error_form = functor!(
-            atom!("error"),
-            [functor(stub),
-             functor(culprit)]
-        );
+        let lineless_error_form = functor!(atom!("error"), [functor(stub), functor(culprit)]);
 
         println!("{:?}", lineless_error_form);
 

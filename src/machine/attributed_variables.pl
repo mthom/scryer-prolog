@@ -38,7 +38,6 @@ verify_attrs([], _, _, []).
 
 
 call_goals([ListOfGoalLists | ListsCubed]) :-
-    '$debug_hook',
     call_goals_0(ListOfGoalLists),
     call_goals(ListsCubed).
 call_goals([]).
