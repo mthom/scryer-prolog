@@ -206,9 +206,9 @@ impl<'a, const STOP_AT_CYCLES: bool> CycleDetectingIter<'a, STOP_AT_CYCLES> {
                     }
                     HeapCellValueTag::PStrLoc => {
                         let h = self.next as usize;
-                        let (_, last_cell_loc) = self.heap.scan_slice_to_str(h);
+                        let tail_idx = self.heap.scan_slice_to_str(h).tail_idx;
 
-                        if self.heap[last_cell_loc].get_forwarding_bit() {
+                        if self.heap[tail_idx].get_forwarding_bit() {
                             if self.cycle_detection_active() {
                                 self.cycle_found = true;
                                 return None;
@@ -219,11 +219,11 @@ impl<'a, const STOP_AT_CYCLES: bool> CycleDetectingIter<'a, STOP_AT_CYCLES> {
                             continue;
                         }
 
-                        self.heap[last_cell_loc].set_forwarding_bit(true);
+                        self.heap[tail_idx].set_forwarding_bit(true);
 
-                        self.next = self.heap[last_cell_loc].get_value();
-                        self.heap[last_cell_loc].set_value(self.current as u64);
-                        self.current = last_cell_loc;
+                        self.next = self.heap[tail_idx].get_value();
+                        self.heap[tail_idx].set_value(self.current as u64);
+                        self.current = tail_idx;
 
                         return Some(pstr_loc_as_cell!(h));
                     }

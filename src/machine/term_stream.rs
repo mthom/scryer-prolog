@@ -44,14 +44,19 @@ impl<'a> BootstrappingTermStream<'a> {
         listing_src: ListingSource,
     ) -> Self {
         let lexer_parser = LexerParser::new(stream, machine_st);
-        Self { lexer_parser, listing_src }
+        Self {
+            lexer_parser,
+            listing_src,
+        }
     }
 }
 
 impl<'a> TermStream for BootstrappingTermStream<'a> {
     #[inline]
     fn next(&mut self, op_dir: &CompositeOpDir) -> Result<TermWriteResult, CompilationError> {
-        let result = self.lexer_parser.read_term(op_dir, Tokens::Default)
+        let result = self
+            .lexer_parser
+            .read_term(op_dir, Tokens::Default)
             .map_err(CompilationError::from);
 
         result
@@ -125,7 +130,9 @@ pub struct InlineTermStream {}
 
 impl TermStream for InlineTermStream {
     fn next(&mut self, _: &CompositeOpDir) -> Result<TermWriteResult, CompilationError> {
-        Err(CompilationError::from(ParserError::unexpected_eof(ParserErrorSrc::default())))
+        Err(CompilationError::from(ParserError::unexpected_eof(
+            ParserErrorSrc::default(),
+        )))
     }
 
     fn eof(&mut self) -> Result<bool, CompilationError> {
