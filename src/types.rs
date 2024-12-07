@@ -369,8 +369,8 @@ impl HeapCellValue {
                     name == atom!("[]") && arity == 0
                 }
                 (HeapCellValueTag::PStrLoc, h) => {
-                    let (_s, tail_loc) = heap.scan_slice_to_str(h);
-                    self = heap[tail_loc];
+                    let HeapStringScan { tail_idx, .. } = heap.scan_slice_to_str(h);
+                    self = heap[tail_idx];
                     continue;
                 }
                 (HeapCellValueTag::AttrVar | HeapCellValueTag::Var, h) => {
@@ -399,8 +399,7 @@ impl HeapCellValue {
                 | HeapCellValueTag::Var
                 | HeapCellValueTag::StackVar
                 | HeapCellValueTag::AttrVar
-                | HeapCellValueTag::PStrLoc
-                // | HeapCellValueTag::PStrOffset
+                | HeapCellValueTag::PStrLoc // | HeapCellValueTag::PStrOffset
         )
     }
 
@@ -503,9 +502,7 @@ impl HeapCellValue {
     #[inline]
     pub fn to_atom(self) -> Option<Atom> {
         match self.get_tag() {
-            HeapCellValueTag::Atom => {
-                Some(AtomCell::from_bytes(self.into_bytes()).get_name())
-            }
+            HeapCellValueTag::Atom => Some(AtomCell::from_bytes(self.into_bytes()).get_name()),
             _ => None,
         }
     }
@@ -773,7 +770,8 @@ impl Sub<i64> for HeapCellValue {
                     HeapCellValue::build_with(tag, self.get_value() + rhs.unsigned_abs())
                 }
                 tag @ HeapCellValueTag::PStrLoc => {
-                    let value = self.get_value() as usize + heap_index!(rhs.unsigned_abs() as usize);
+                    let value =
+                        self.get_value() as usize + heap_index!(rhs.unsigned_abs() as usize);
                     HeapCellValue::build_with(tag, value as u64)
                 }
                 _ => self,

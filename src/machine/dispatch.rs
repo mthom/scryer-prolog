@@ -140,10 +140,7 @@ impl MachineState {
         let a1 = self.registers[1];
         let a2 = self.registers[2];
 
-        step_or_resource_error!(
-            self,
-            copy_term(CopyTerm::new(self), a1, attr_var_policy)
-        );
+        step_or_resource_error!(self, copy_term(CopyTerm::new(self), a1, attr_var_policy));
 
         unify_fn!(*self, heap_loc_as_cell!(old_h), a2);
     }
@@ -162,11 +159,7 @@ impl MachineState {
 
         let heap_addr = resource_error_call_result!(
             self,
-            sized_iter_to_heap_list(
-                &mut self.heap,
-                list.len(),
-                list.into_iter(),
-            )
+            sized_iter_to_heap_list(&mut self.heap, list.len(), list.into_iter(),)
         );
 
         let target_addr = self.registers[2];
@@ -5155,9 +5148,8 @@ impl Machine {
                         let r = self.machine_st.registers[2];
                         let r = self.machine_st.store(self.machine_st.deref(r));
 
-                        let mut writer = Heap::functor_writer(
-                            functor!(atom!("-"), [fixnum(n), fixnum(p)]),
-                        );
+                        let mut writer =
+                            Heap::functor_writer(functor!(atom!("-"), [fixnum(n), fixnum(p)]));
 
                         let str_cell = backtrack_on_resource_error!(
                             &mut self.machine_st,
@@ -5178,9 +5170,8 @@ impl Machine {
                         let r = self.machine_st.registers[2];
                         let r = self.machine_st.store(self.machine_st.deref(r));
 
-                        let mut writer = Heap::functor_writer(
-                            functor!(atom!("-"), [fixnum(n), fixnum(p)]),
-                        );
+                        let mut writer =
+                            Heap::functor_writer(functor!(atom!("-"), [fixnum(n), fixnum(p)]));
 
                         let str_cell = backtrack_on_resource_error!(
                             &mut self.machine_st,

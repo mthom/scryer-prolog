@@ -486,7 +486,12 @@ pub struct HCPrinter<'a, Outputter> {
     pub double_quotes: bool,
 }
 
-fn ambiguity_check(outputter: &impl HCValueOutputter, quoted: bool, last_item_idx: usize, atom: &str) -> bool {
+fn ambiguity_check(
+    outputter: &impl HCValueOutputter,
+    quoted: bool,
+    last_item_idx: usize,
+    atom: &str,
+) -> bool {
     let tail = &outputter.as_str()[last_item_idx..];
 
     if atom == "," || !quoted || non_quoted_token(atom.chars()) {
@@ -1132,7 +1137,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             }
 
             macro_rules! emit_char {
-                ($c:expr) => ({
+                ($c:expr) => {{
                     append_str!(self, "'.'");
                     push_char!(self, '(');
 
@@ -1141,14 +1146,17 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
                     self.state_stack.push(TokenOrRedirect::Close);
                     char_count += 1;
-                });
+                }};
             }
 
             match iteratee {
                 PStrIteratee::Char { value, .. } => {
                     emit_char!(value);
                 }
-                PStrIteratee::PStrSlice { slice_loc, slice_len } => {
+                PStrIteratee::PStrSlice {
+                    slice_loc,
+                    slice_len,
+                } => {
                     let s = iter.heap.slice_to_str(slice_loc, slice_len);
 
                     for c in s.chars() {
@@ -1181,10 +1189,11 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         if max_depth == 0 {
             while let Some(iteratee) = iter.next() {
                 let iter: Box<dyn Iterator<Item = char>> = match iteratee {
-                    PStrIteratee::Char { value: c, .. } => {
-                        Box::new(std::iter::once(c))
-                    }
-                    PStrIteratee::PStrSlice { slice_loc, slice_len } => {
+                    PStrIteratee::Char { value: c, .. } => Box::new(std::iter::once(c)),
+                    PStrIteratee::PStrSlice {
+                        slice_loc,
+                        slice_len,
+                    } => {
                         let s = iter.heap.slice_to_str(slice_loc, slice_len);
                         Box::new(s.chars())
                     }
@@ -1201,10 +1210,11 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
             while let Some(iteratee) = iter.next() {
                 let iter: Box<dyn Iterator<Item = char>> = match iteratee {
-                    PStrIteratee::Char { value: c, .. } => {
-                        Box::new(std::iter::once(c))
-                    }
-                    PStrIteratee::PStrSlice { slice_loc, slice_len } => {
+                    PStrIteratee::Char { value: c, .. } => Box::new(std::iter::once(c)),
+                    PStrIteratee::PStrSlice {
+                        slice_loc,
+                        slice_len,
+                    } => {
                         let s = iter.heap.slice_to_str(slice_loc, slice_len);
                         Box::new(s.chars())
                     }
@@ -1583,22 +1593,8 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             self.state_stack.push(TokenOrRedirect::Atom(atom!("...")));
             self.state_stack.push(TokenOrRedirect::HeadTailSeparator);
         } else {
-            /*
-            let end_cell_h = Heap::neighboring_cell_offset(pstr_loc);
-            let end_cell = self.iter.heap[end_cell_h];
-            let end_cell = heap_bound_store(
-                self.iter.heap,
-                heap_bound_deref(self.iter.heap, end_cell),
-            );
-
-            if end_cell != empty_list_as_cell!() {
-                self.iter.push_stack(
-                    IterStackLoc::iterable_loc(end_cell_h, HeapOrStackTag::Heap),
-                );
-            }
-            */
-
-            self.state_stack.push(TokenOrRedirect::FunctorRedirect(max_depth + 1));
+            self.state_stack
+                .push(TokenOrRedirect::FunctorRedirect(max_depth + 1));
             self.state_stack.push(TokenOrRedirect::HeadTailSeparator);
         }
     }
@@ -1872,9 +1868,8 @@ mod tests {
 
         let mut functor_writer = Heap::functor_writer(functor!(
             f_atom,
-            [atom_as_cell(a_atom),
-             atom_as_cell(b_atom)]),
-        );
+            [atom_as_cell(a_atom), atom_as_cell(b_atom)]
+        ));
 
         let cell = functor_writer(&mut wam.machine_st.heap).unwrap();
         wam.machine_st.heap.push_cell(cell).unwrap();
@@ -1893,7 +1888,7 @@ mod tests {
             assert_eq!(output.result(), "f(a,b)");
         }
 
-        all_cells_unmarked(wam.machine_st.heap.splice(..));
+        all_cells_unmarked(&wam.machine_st.heap);
 
         wam.machine_st.heap.clear();
 
@@ -1925,7 +1920,7 @@ mod tests {
             assert_eq!(output.result(), "f(a,b,a,...)");
         }
 
-        all_cells_unmarked(wam.machine_st.heap.splice(..));
+        all_cells_unmarked(&wam.machine_st.heap);
 
         wam.machine_st.heap.clear();
 
@@ -1968,7 +1963,7 @@ mod tests {
             assert_eq!(output.result(), "[L|L]");
         }
 
-        all_cells_unmarked(wam.machine_st.heap.splice(..));
+        all_cells_unmarked(&wam.machine_st.heap);
 
         wam.machine_st.heap.clear();
 
@@ -1984,9 +1979,11 @@ mod tests {
 
         let mut functor_writer = Heap::functor_writer(functor!(
             f_atom,
-            [atom_as_cell(a_atom),
-             atom_as_cell(b_atom),
-             atom_as_cell(b_atom)]
+            [
+                atom_as_cell(a_atom),
+                atom_as_cell(b_atom),
+                atom_as_cell(b_atom)
+            ]
         ));
 
         functor_writer(&mut wam.machine_st.heap).unwrap();
@@ -2005,7 +2002,7 @@ mod tests {
             assert_eq!(output.result(), "[f(a,b,b),f(a,b,b)]");
         }
 
-        all_cells_unmarked(wam.machine_st.heap.splice(..));
+        all_cells_unmarked(&wam.machine_st.heap);
 
         wam.machine_st.heap[4] = list_loc_as_cell!(1);
 
@@ -2023,7 +2020,7 @@ mod tests {
             assert_eq!(output.result(), "[f(a,b,b),f(a,b,b)|...]");
         }
 
-        all_cells_unmarked(wam.machine_st.heap.splice(..));
+        all_cells_unmarked(&wam.machine_st.heap);
 
         {
             let mut printer = HCPrinter::new(
@@ -2043,7 +2040,7 @@ mod tests {
             assert_eq!(output.result(), "[f(a,b,b),f(a,b,b)|L]");
         }
 
-        all_cells_unmarked(wam.machine_st.heap.splice(..));
+        all_cells_unmarked(&wam.machine_st.heap);
 
         // issue #382
         wam.machine_st.heap.clear();
@@ -2077,7 +2074,7 @@ mod tests {
             assert_eq!(output.result(), "[_1,_3,_5,_7,_9|...]");
         }
 
-        all_cells_unmarked(wam.machine_st.heap.splice(..));
+        all_cells_unmarked(&wam.machine_st.heap);
 
         wam.machine_st.heap.clear();
 
@@ -2100,7 +2097,7 @@ mod tests {
             assert_eq!(output.result(), "[a,b,c|_1]");
         }
 
-        all_cells_unmarked(wam.machine_st.heap.splice(..));
+        all_cells_unmarked(&wam.machine_st.heap);
 
         let mut writer = wam.machine_st.heap.reserve(96).unwrap();
 
@@ -2131,7 +2128,7 @@ mod tests {
             assert_eq!(output.result(), "\"abcabc\"");
         }
 
-        all_cells_unmarked(wam.machine_st.heap.splice(..));
+        all_cells_unmarked(&wam.machine_st.heap);
 
         wam.machine_st.heap.clear();
 
@@ -2140,14 +2137,14 @@ mod tests {
             "=(X,[a,b,c|X])"
         );
 
-        all_cells_unmarked(wam.machine_st.heap.splice(..));
+        all_cells_unmarked(&wam.machine_st.heap);
 
         assert_eq!(
             &wam.parse_and_print_term("[a,b,\"a\",[a,b,c]].").unwrap(),
             "[a,b,[a],[a,b,c]]"
         );
 
-        all_cells_unmarked(wam.machine_st.heap.splice(..));
+        all_cells_unmarked(&wam.machine_st.heap);
 
         assert_eq!(
             &wam.parse_and_print_term("[\"abc\",e,f,[g,e,h,Y,v|[X,Y]]].")
@@ -2155,11 +2152,11 @@ mod tests {
             "[[a,b,c],e,f,[g,e,h,Y,v,X,Y]]"
         );
 
-        all_cells_unmarked(wam.machine_st.heap.splice(..));
+        all_cells_unmarked(&wam.machine_st.heap);
 
         assert_eq!(&wam.parse_and_print_term("f((a,b)).").unwrap(), "f((a,b))");
 
-        all_cells_unmarked(wam.machine_st.heap.splice(..));
+        all_cells_unmarked(&wam.machine_st.heap);
 
         wam.op_dir
             .insert((atom!("+"), Fixity::In), OpDesc::build_with(500, YFX));
@@ -2171,14 +2168,14 @@ mod tests {
             "[a|[]+b]"
         );
 
-        all_cells_unmarked(wam.machine_st.heap.splice(..));
+        all_cells_unmarked(&wam.machine_st.heap);
 
         assert_eq!(
             &wam.parse_and_print_term("[a|[b|c]*d].").unwrap(),
             "[a|[b|c]*d]"
         );
 
-        all_cells_unmarked(wam.machine_st.heap.splice(..));
+        all_cells_unmarked(&wam.machine_st.heap);
 
         wam.op_dir
             .insert((atom!("fy"), Fixity::Pre), OpDesc::build_with(9, FY));
