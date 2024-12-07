@@ -56,22 +56,18 @@ impl Token {
             Token::String(string) if flags.double_quotes.is_codes() => {
                 2 * string.chars().count() + 1
             }
-            Token::String(string) => {
-                Heap::compute_pstr_size(&string)
-            }
-            Token::Literal(_) |
-            Token::Comma |
-            Token::HeadTailSeparator |
-            Token::Open |
-            Token::OpenCT |
-            Token::OpenCurly |
-            Token::OpenList |
-            Token::Var(_) => {
+            Token::String(string) => Heap::compute_pstr_size(&string),
+            Token::Literal(_)
+            | Token::Comma
+            | Token::HeadTailSeparator
+            | Token::Open
+            | Token::OpenCT
+            | Token::OpenCurly
+            | Token::OpenList
+            | Token::Var(_) => {
                 heap_index!(1)
             }
-            _ => {
-                0
-            }
+            _ => 0,
         }
     }
 
@@ -462,10 +458,7 @@ impl<'a, R: CharRead> LexerParser<'a, R> {
             self.skip_char(c);
             u32::from_str_radix(&token, radix).map_or_else(
                 |_| Err(ParserError::ParseBigInt(self.loc_to_err_src())),
-                |n| {
-                    char::try_from(n)
-                        .map_err(|_| ParserError::Utf8Error(self.loc_to_err_src()))
-                },
+                |n| char::try_from(n).map_err(|_| ParserError::Utf8Error(self.loc_to_err_src())),
             )
         } else {
             Err(ParserError::IncompleteReduction(self.loc_to_err_src()))
@@ -657,7 +650,9 @@ impl<'a, R: CharRead> LexerParser<'a, R> {
                     }
                 }
             } else {
-                return Err(ParserError::InvalidSingleQuotedCharacter(self.loc_to_err_src()));
+                return Err(ParserError::InvalidSingleQuotedCharacter(
+                    self.loc_to_err_src(),
+                ));
             }
         } else {
             match self.get_back_quoted_string() {

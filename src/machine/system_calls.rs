@@ -181,10 +181,7 @@ fn pstr_segment_char_count_and_tail(heap: &Heap, pstr_loc: usize) -> (usize, usi
         byte_offset += c.len_utf8();
     }
 
-    (
-        char_count,
-        Heap::neighboring_cell_offset(pstr_loc + byte_offset),
-    )
+    (char_count, Heap::pstr_tail_idx(pstr_loc + byte_offset))
 }
 
 fn pstr_segment_char_count_up_to(
@@ -217,10 +214,9 @@ fn pstr_segment_char_count_up_to(
             pstr_loc: pstr_loc + byte_offset,
         }
     } else {
-        let tail_loc = Heap::neighboring_cell_offset(pstr_loc + byte_offset);
         PStrSegmentCountResult::End {
             char_count,
-            tail_loc,
+            tail_loc: Heap::pstr_tail_idx(pstr_loc + byte_offset),
         }
     }
 }
@@ -567,6 +563,12 @@ struct AttrListMatch {
     prev_tail: Option<usize>,
 }
 
+#[derive(Debug)]
+pub(crate) struct FindallCopyInfo {
+    offset: usize,
+    pstr_threshold: usize,
+}
+
 impl MachineState {
     #[inline(always)]
     pub(crate) fn unattributed_var(&mut self) {
@@ -648,9 +650,8 @@ impl MachineState {
             loop {
                 read_heap_cell!(value,
                     (HeapCellValueTag::PStrLoc, h) => {
-                        let (_, tail) = heap.scan_slice_to_str(h);
-                        // let (h_offset, _) = pstr_loc_and_offset(heap, h);
-                        return tail;
+                        let HeapStringScan { tail_idx, .. } = heap.scan_slice_to_str(h);
+                        return tail_idx;
                     }
                     (HeapCellValueTag::Lis, h) => {
                         return h+1;
@@ -855,17 +856,10 @@ impl MachineState {
         &mut self,
         lh_offset: usize,
         copy_target: HeapCellValue,
-    ) -> Result<usize, usize> {
+    ) -> Result<FindallCopyInfo, usize> {
         let threshold = self.lifted_heap.cell_len() - lh_offset;
 
-        let mut copy_ball_term = CopyBallTerm::new(
-            &mut self.attr_var_init.attr_var_queue,
-            &mut self.stack,
-            &mut self.heap,
-            &mut self.lifted_heap,
-        );
-
-        let mut writer = copy_ball_term.reserve(3)?;
+        let mut writer = self.lifted_heap.reserve(3)?;
 
         writer.write_with(|section| {
             section.push_cell(list_loc_as_cell!(threshold + 1));
@@ -873,9 +867,21 @@ impl MachineState {
             section.push_cell(heap_loc_as_cell!(threshold + 2));
         });
 
-        copy_term(copy_ball_term, copy_target, AttrVarPolicy::DeepCopy)?;
+        let old_lifted_cell_len = self.lifted_heap.cell_len();
 
-        Ok(threshold + lh_offset + 2)
+        let copy_ball_term = CopyBallTerm::new(
+            &mut self.attr_var_init.attr_var_queue,
+            &mut self.stack,
+            &mut self.heap,
+            &mut self.lifted_heap,
+        );
+
+        let pstr_boundary = copy_term(copy_ball_term, copy_target, AttrVarPolicy::DeepCopy)?;
+
+        Ok(FindallCopyInfo {
+            offset: threshold + lh_offset + 2,
+            pstr_threshold: pstr_boundary + old_lifted_cell_len,
+        })
     }
 
     #[inline(always)]
@@ -1045,18 +1051,6 @@ impl MachineState {
 
     pub fn value_to_str_like(&mut self, value: HeapCellValue) -> Option<AtomOrString> {
         read_heap_cell!(value,
-            /*
-            (HeapCellValueTag::CStr, cstr_atom) => {
-                // avoid allocating a String if possible:
-                // We must be careful to preserve the string "[]" as is,
-                // instead of turning it into the atom [], i.e., "".
-                if cstr_atom == atom!("[]") {
-                    Some(AtomOrString::String("[]".to_string()))
-                } else {
-                    Some(AtomOrString::Atom(cstr_atom))
-                }
-            }
-            */
             (HeapCellValueTag::Atom, (atom, arity)) => {
                 if arity == 0 {
                     // ... likewise.
@@ -1389,15 +1383,7 @@ impl Machine {
                 let (name, arity) = cell_as_atom_cell!(self.machine_st.heap[s])
                     .get_name_and_arity();
 
-                (name, arity, if self.machine_st.heap.cell_len() > s + arity + 1 {
-                    if !self.machine_st.heap.pstr_at(s + arity + 1) {
-                        get_structure_index(self.machine_st.heap[s + arity + 1])
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                })
+                (name, arity, get_structure_index(self.machine_st.heap[s.saturating_sub(1)]))
             }
             (HeapCellValueTag::Atom, (name, arity)) => {
                 debug_assert_eq!(arity, 0);
@@ -1457,7 +1443,6 @@ impl Machine {
 
         if let Some(code_index) = index_cell {
             if !code_index.is_undefined() {
-                // println!("(fast) calling {}/{}", name.as_str(), arity);
                 load_registers(&mut self.machine_st, goal, goal_arity);
                 self.machine_st.neck_cut();
                 return call_at_index(self, name, arity, code_index.get());
@@ -1481,6 +1466,7 @@ impl Machine {
             .variable_set(&mut supp_vars, self.machine_st.registers[2]);
 
         struct GoalAnalysisResult {
+            index_ptr_loc: usize,
             is_simple_goal: bool,
             goal: HeapCellValue,
             key: PredicateKey,
@@ -1496,7 +1482,7 @@ impl Machine {
 
                 // fill expanded_vars with variables of the partial
                 // goal pre-completion by complete_partial_goal.
-                for idx in s + 1 .. s + arity - supp_vars.len() + 1 {
+                for idx in s + 1 ..= s + arity - supp_vars.len() {
                     self.machine_st.variable_set(&mut expanded_vars, self.machine_st.heap[idx]);
                 }
 
@@ -1510,7 +1496,8 @@ impl Machine {
                     // disjoint from them. if they are not, the
                     // expanded goal is not simple.
 
-                    let post_supp_args = self.machine_st.heap.splice(s+arity-supp_vars.len()+1 .. s+arity+1);
+                    let post_supp_args = (s+arity-supp_vars.len()+1 ..= s+arity)
+                        .map(|idx| self.machine_st.heap[idx]);
 
                     post_supp_args
                         .zip(supp_vars.iter())
@@ -1535,27 +1522,33 @@ impl Machine {
                     false
                 };
 
-                let goal = if is_simple_goal {
+                let (index_ptr_loc, goal) = if is_simple_goal {
                     let h = self.machine_st.heap.cell_len();
                     let arity = arity - supp_vars.len();
 
                     resource_error_call_result!(
                         self.machine_st,
+                        self.machine_st.heap.push_cell(empty_list_as_cell!())
+                    );
+
+                    resource_error_call_result!(
+                        self.machine_st,
                         self.machine_st.heap.copy_slice_to_end(
-                            s .. s + arity + 1
+                            s ..= s + arity,
                         )
                     );
 
-                    self.machine_st.heap[h] = atom_as_cell!(name, arity);
+                    self.machine_st.heap[h+1] = atom_as_cell!(name, arity);
 
                     // even if arity == 0, goal must be a Str cell,
                     // since an index is about to appended to it.
-                    str_loc_as_cell!(h)
+                    (h, str_loc_as_cell!(h+1))
                 } else {
-                    goal
+                    (0, goal)
                 };
 
                 GoalAnalysisResult {
+                    index_ptr_loc,
                     is_simple_goal,
                     goal,
                     key: (name, arity),
@@ -1566,36 +1559,25 @@ impl Machine {
                 debug_assert_eq!(arity, 0);
 
                 let h = self.machine_st.heap.cell_len();
-                resource_error_call_result!(
+
+                let mut writer = resource_error_call_result!(
                     self.machine_st,
-                    self.machine_st.heap.push_cell(goal)
+                    self.machine_st.heap.reserve(2)
                 );
 
+                writer.write_with(|section| {
+                    section.push_cell(empty_list_as_cell!());
+                    section.push_cell(goal);
+                });
+
                 GoalAnalysisResult {
+                    index_ptr_loc: h,
                     is_simple_goal: true,
-                    goal: str_loc_as_cell!(h),
+                    goal: str_loc_as_cell!(h+1),
                     key: (name, 0),
                     supp_vars,
                 }
             }
-            /*
-            (HeapCellValueTag::Char, c) => {
-                let name = AtomTable::build_with(&self.machine_st.atom_tbl,&c.to_string());
-                let h = self.machine_st.heap.cell_len();
-
-                resource_error_call_result!(
-                    self.machine_st,
-                    self.machine_st.heap.push_cell(atom_as_cell!(name))
-                );
-
-                GoalAnalysisResult {
-                    is_simple_goal: true,
-                    goal: str_loc_as_cell!(h),
-                    key: (name, 0),
-                    supp_vars,
-                }
-            }
-            */
             _ => {
                 self.machine_st.fail = true;
                 return Ok(());
@@ -1609,14 +1591,8 @@ impl Machine {
 
         let expanded_term = if result.is_simple_goal {
             let idx = self.get_or_insert_qualified_code_index(module_name, result.key);
-
-            resource_error_call_result!(
-                self.machine_st,
-                self.machine_st
-                    .heap
-                    .push_cell(untyped_arena_ptr_as_cell!(UntypedArenaPtr::from(idx)))
-            );
-
+            self.machine_st.heap[result.index_ptr_loc] =
+                untyped_arena_ptr_as_cell!(UntypedArenaPtr::from(idx));
             result.goal
         } else {
             let mut unexpanded_vars = IndexSet::with_hasher(FxBuildHasher::default());
@@ -1648,29 +1624,24 @@ impl Machine {
                         self.machine_st.heap.reserve(unexpanded_vars.len() + 2)
                     );
 
-                    writer.write_with(|section| {
-                        section.push_cell(atom_as_cell!(atom!("$aux"), 0));
-
-                        for value in unexpanded_vars.difference(&result.supp_vars).cloned() {
-                            section.push_cell(value);
-                        }
-
-                        section.push_cell(atom_as_cell!(atom!("[]")));
-                    });
-
-                    let anon_str_arity = self.machine_st.heap.cell_len() - h - 2;
-                    self.machine_st.heap[h] = atom_as_cell!(atom!("$aux"), anon_str_arity);
-
                     let idx = CodeIndex::new(
                         IndexPtr::index(helper_clause_loc),
                         &mut self.machine_st.arena,
                     );
 
-                    self.machine_st.heap.last_cell_mut().map(|cell| {
-                        *cell = untyped_arena_ptr_as_cell!(UntypedArenaPtr::from(idx));
+                    writer.write_with(|section| {
+                        section.push_cell(untyped_arena_ptr_as_cell!(UntypedArenaPtr::from(idx)));
+                        section.push_cell(atom_as_cell!(atom!("$aux"), 0));
+
+                        for value in unexpanded_vars.difference(&result.supp_vars).cloned() {
+                            section.push_cell(value);
+                        }
                     });
 
-                    str_loc_as_cell!(h)
+                    let anon_str_arity = self.machine_st.heap.cell_len() - h - 2;
+                    self.machine_st.heap[h + 1] = atom_as_cell!(atom!("$aux"), anon_str_arity);
+
+                    str_loc_as_cell!(h + 1)
                 }
             }
         };
@@ -1688,28 +1659,22 @@ impl Machine {
 
         if HeapCellValueTag::Str == qualified_goal.get_tag() {
             let s = qualified_goal.get_value() as usize;
-            let (name, arity) = cell_as_atom_cell!(self.machine_st.heap[s]).get_name_and_arity();
+            let name = cell_as_atom_cell!(self.machine_st.heap[s]).get_name();
 
             if name == atom!("$call") {
                 return false;
             }
 
-            if self.machine_st.heap.cell_len() > s + 1 + arity {
-                if self.machine_st.heap.pstr_at(s + 1 + arity) {
-                    return false;
-                }
+            let idx_cell = self.machine_st.heap[s.saturating_sub(1)];
 
-                let idx_cell = self.machine_st.heap[s + 1 + arity];
-
-                if HeapCellValueTag::Cons == idx_cell.get_tag() {
-                    match_untyped_arena_ptr!(cell_as_untyped_arena_ptr!(idx_cell),
-                        (ArenaHeaderTag::IndexPtr, _ip) => {
-                            return true;
-                        }
-                        _ => {
-                        }
-                    );
-                }
+            if HeapCellValueTag::Cons == idx_cell.get_tag() {
+                match_untyped_arena_ptr!(cell_as_untyped_arena_ptr!(idx_cell),
+                     (ArenaHeaderTag::IndexPtr, _ip) => {
+                         return true;
+                     }
+                     _ => {
+                     }
+                );
             }
         }
 
@@ -2312,27 +2277,6 @@ impl Machine {
         let a1 = self.deref_register(1);
 
         read_heap_cell!(a1,
-            /*
-            (HeapCellValueTag::Char) => {
-                let h = self.machine_st.heap.cell_len();
-
-                let mut writer = resource_error_call_result!(
-                    self.machine_st,
-                    self.machine_st.heap.reserve(2)
-                );
-
-                step_or_resource_error!(
-                    self.machine_st,
-                    writer.write_with(|section| {
-                        section.push_cell(a1);
-                        section.push_cell(empty_list_as_cell!());
-                        Ok::<(), usize>(())
-                    })
-                );
-
-                unify!(self.machine_st, self.machine_st.registers[2], list_loc_as_cell!(h));
-            }
-            */
             (HeapCellValueTag::Atom, (name, arity)) => {
                 debug_assert_eq!(arity, 0);
 
@@ -2542,7 +2486,7 @@ impl Machine {
             self.machine_st.allocate_pstr(&*atom.as_str())
         );
 
-        let tail_loc = Heap::neighboring_cell_offset(atom.as_str().len() + heap_index!(pstr_h));
+        let tail_loc = Heap::pstr_tail_idx(atom.as_str().len() + heap_index!(pstr_h));
 
         step_or_resource_error!(
             self.machine_st,
@@ -2585,8 +2529,8 @@ impl Machine {
 
         read_heap_cell!(pstr,
             (HeapCellValueTag::PStrLoc, h) => {
-                let (_, tail_loc) = self.machine_st.heap.scan_slice_to_str(h);
-                unify_fn!(self.machine_st, heap_loc_as_cell!(tail_loc), a2);
+                let HeapStringScan { tail_idx, .. } = self.machine_st.heap.scan_slice_to_str(h);
+                unify_fn!(self.machine_st, heap_loc_as_cell!(tail_idx), a2);
             }
             (HeapCellValueTag::Lis, h) => {
                 unify_fn!(
@@ -3970,7 +3914,10 @@ impl Machine {
     pub(crate) fn copy_to_lifted_heap(&mut self) {
         let lh_offset = cell_as_fixnum!(self.deref_register(1)).get_num() as usize;
         let copy_target = self.machine_st.registers[2];
-        let old_threshold = step_or_resource_error!(
+        let FindallCopyInfo {
+            offset: old_threshold,
+            pstr_threshold,
+        } = step_or_resource_error!(
             self.machine_st,
             self.machine_st
                 .copy_findall_solution(lh_offset, copy_target)
@@ -3980,8 +3927,20 @@ impl Machine {
 
         self.machine_st.lifted_heap[old_threshold] = heap_loc_as_cell!(new_threshold);
 
-        for addr in &mut self.machine_st.lifted_heap.splice_mut(old_threshold + 1..) {
-            *addr -= self.machine_st.heap.cell_len() + lh_offset;
+        for idx in old_threshold + 1..pstr_threshold {
+            self.machine_st.lifted_heap[idx] -= self.machine_st.heap.cell_len() + lh_offset;
+        }
+
+        let mut pstr_threshold = heap_index!(pstr_threshold);
+
+        while pstr_threshold < heap_index!(self.machine_st.lifted_heap.cell_len()) {
+            let HeapStringScan { tail_idx, .. } = self
+                .machine_st
+                .lifted_heap
+                .scan_slice_to_str(pstr_threshold);
+
+            self.machine_st.lifted_heap[tail_idx] -= self.machine_st.heap.cell_len() + lh_offset;
+            pstr_threshold = heap_index!(tail_idx + 1);
         }
     }
 
@@ -5797,17 +5756,18 @@ impl Machine {
             unify_fn!(self.machine_st, solutions, diff);
         } else {
             let h = self.machine_st.heap.cell_len();
+            let reserve_size = self.machine_st.lifted_heap.cell_len() - lh_offset;
 
-            step_or_resource_error!(
+            let mut writer = step_or_resource_error!(
                 self.machine_st,
-                self.machine_st
-                    .heap
-                    .append(self.machine_st.lifted_heap.splice(lh_offset..),)
+                self.machine_st.heap.reserve(reserve_size)
             );
 
-            for cell in &mut self.machine_st.heap.splice_mut(h..) {
-                *cell = *cell + h;
-            }
+            writer.write_with(|section| {
+                for idx in lh_offset..self.machine_st.lifted_heap.cell_len() {
+                    section.push_cell(self.machine_st.lifted_heap[idx] + h);
+                }
+            });
 
             let diff = self.machine_st.registers[3];
             unify_fn!(
@@ -5834,17 +5794,18 @@ impl Machine {
             unify_fn!(self.machine_st, solutions, empty_list_as_cell!());
         } else {
             let h = self.machine_st.heap.cell_len();
+            let reserve_size = self.machine_st.lifted_heap.cell_len() - lh_offset;
 
-            step_or_resource_error!(
+            let mut writer = step_or_resource_error!(
                 self.machine_st,
-                self.machine_st
-                    .heap
-                    .append(self.machine_st.lifted_heap.splice(lh_offset..),)
+                self.machine_st.heap.reserve(reserve_size)
             );
 
-            for cell in &mut self.machine_st.heap.splice_mut(h..) {
-                *cell = *cell + h;
-            }
+            writer.write_with(|section| {
+                for idx in lh_offset..self.machine_st.lifted_heap.cell_len() {
+                    section.push_cell(self.machine_st.lifted_heap[idx] + h);
+                }
+            });
 
             self.machine_st.lifted_heap.truncate(lh_offset);
 
@@ -7223,8 +7184,7 @@ impl Machine {
         let mut ball = Ball::new();
 
         ball.boundary = self.machine_st.heap.cell_len();
-
-        step_or_resource_error!(
+        ball.pstr_boundary = step_or_resource_error!(
             self.machine_st,
             copy_term(
                 CopyBallTerm::new(
