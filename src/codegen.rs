@@ -295,8 +295,10 @@ impl DebrayAllocator {
                     self.mark_var::<QueryInstruction>(var_num, Level::Shallow, context, code);
                     temp_v!(arg)
                 } else {
-                    if let VarAlloc::Perm { allocation: PermVarAllocation::Pending, .. } =
-                        &self.var_data.records[var_num].allocation
+                    if let VarAlloc::Perm {
+                        allocation: PermVarAllocation::Pending,
+                        ..
+                    } = &self.var_data.records[var_num].allocation
                     {
                         self.mark_var::<QueryInstruction>(var_num, Level::Shallow, context, code);
                     } else {
@@ -337,21 +339,15 @@ impl<'a> AddToFreeList<'a, QueryInstruction> for CodeGenerator {
 fn add_index_ptr<'a, Target: crate::targets::CompilationTarget<'a>>(
     index_ptrs: &IndexMap<usize, CodeIndex, FxBuildHasher>,
     heap: &Heap,
-    arity: usize,
     heap_loc: usize,
 ) -> Option<Instruction> {
-    match fetch_index_ptr(heap, arity, heap_loc) {
-        Some(index_ptr) => {
+    if let Some(index_ptr) = index_ptrs.get(&heap_loc) {
+        let subterm = HeapCellValue::from(*index_ptr);
+        return Some(Target::constant_subterm(subterm));
+    } else if !heap[heap_loc.saturating_sub(1)].get_mark_bit() {
+        if let Some(index_ptr) = fetch_index_ptr(heap, heap_loc) {
             let subterm = HeapCellValue::from(index_ptr);
             return Some(Target::constant_subterm(subterm));
-        }
-        None => {
-            // if Level::Shallow == lvl {
-                if let Some(index_ptr) = index_ptrs.get(&heap_loc) {
-                    let subterm = HeapCellValue::from(*index_ptr);
-                    return Some(Target::constant_subterm(subterm));
-                }
-            // }
         }
     }
 
@@ -495,22 +491,27 @@ impl CodeGenerator {
                     let (heap_loc, _) = subterm_index(iter.deref(), heap_loc);
 
                     if arity == 0 {
-                        if let Some(instr) = add_index_ptr::<Target>(index_ptrs, &iter, arity, heap_loc) {
+                        if let Some(instr) = add_index_ptr::<Target>(index_ptrs, &iter, heap_loc) {
                             let r = self.marker.mark_non_var::<Target>(lvl, heap_loc, context, &mut target);
-                            target.push_back(Target::to_structure(lvl, name, 0, r));
                             target.push_back(instr);
+                            target.push_back(Target::to_structure(lvl, name, 0, r));
                         } else if lvl == Level::Shallow {
                             let r = self.marker.mark_non_var::<Target>(lvl, heap_loc, context, &mut target);
                             target.push_back(Target::to_constant(lvl, atom_as_cell!(name), r));
                         }
                     } else {
                         let r = self.marker.mark_non_var::<Target>(lvl, heap_loc, context, &mut target);
-                        target.push_back(Target::to_structure(lvl, name, arity, r));
 
                         <CodeGenerator as AddToFreeList<'a, Target>>::add_term_to_free_list(
                             self,
                             r,
                         );
+
+                        if let Some(instr) = add_index_ptr::<Target>(index_ptrs, &iter, heap_loc) {
+                            target.push_back(instr);
+                        }
+
+                        target.push_back(Target::to_structure(lvl, name, arity, r));
 
                         let free_list_regs: Vec<_> = (heap_loc + 1 ..= heap_loc + arity)
                             .map(|subterm_loc| {
@@ -521,10 +522,6 @@ impl CodeGenerator {
                                 )
                             })
                             .collect();
-
-                        if let Some(instr) = add_index_ptr::<Target>(index_ptrs, &iter, arity, heap_loc) {
-                            target.push_back(instr);
-                        }
 
                         for r_opt in free_list_regs {
                             if let Some(r) = r_opt {
@@ -583,11 +580,11 @@ impl CodeGenerator {
                     let heap_loc = iter.focus().value() as usize;
                     let (heap_loc, _) = subterm_index(iter.deref(), heap_loc);
                     let r = self.marker.mark_non_var::<Target>(lvl, heap_loc, context, &mut target);
-                    let (pstr_str, tail_loc) = iter.scan_slice_to_str(pstr_loc);
+                    let HeapStringScan { string, tail_idx } = iter.scan_slice_to_str(pstr_loc);
 
-                    target.push_back(Target::to_pstr(lvl, Rc::new(pstr_str.to_owned()), r));
+                    target.push_back(Target::to_pstr(lvl, Rc::new(string.to_owned()), r));
 
-                    let (tail_loc, tail) = subterm_index(iter.deref(), tail_loc);
+                    let (tail_loc, tail) = subterm_index(iter.deref(), tail_idx);
                     self.subterm_to_instr::<Target>(
                         tail, tail_loc, context, index_ptrs, &mut target,
                     );
@@ -676,12 +673,11 @@ impl CodeGenerator {
             &InlinedClauseType::CompareNumber(mut cmp) => {
                 self.marker.reset_arg(2);
 
-                let (mut lcode, at_1) =
-                    if let Some(r) = variable_marker(&mut self.marker) {
-                        (CodeDeque::default(), Some(ArithmeticTerm::Reg(r)))
-                    } else {
-                        self.compile_arith_expr(terms, first_arg_loc, 1, context, 1)?
-                    };
+                let (mut lcode, at_1) = if let Some(r) = variable_marker(&mut self.marker) {
+                    (CodeDeque::default(), Some(ArithmeticTerm::Reg(r)))
+                } else {
+                    self.compile_arith_expr(terms, first_arg_loc, 1, context, 1)?
+                };
 
                 let (mut rcode, at_2) =
                     self.compile_arith_expr(terms, first_arg_loc + 1, 2, context, 2)?;
@@ -720,41 +716,41 @@ impl CodeGenerator {
                 if let Some(r) = variable_marker(&mut self.marker) {
                     instr!("atomic", r)
                 } else {
-                   read_heap_cell!(first_arg,
-                       (HeapCellValueTag::Fixnum |
-                        HeapCellValueTag::F64) => {
-                           instr!("$succeed")
-                       }
-                       (HeapCellValueTag::Cons, cons_ptr) => {
-                           match cons_ptr.get_tag() {
-                               ArenaHeaderTag::Integer | ArenaHeaderTag::Rational => {
-                                   instr!("$succeed")
-                               }
-                               _ => {
-                                   instr!("$fail")
-                               }
-                           }
-                       }
-                       (HeapCellValueTag::Atom, (_name, arity)) => {
-                           if arity == 0 {
-                               instr!("$succeed")
-                           } else {
-                               instr!("$fail")
-                           }
-                       }
-                       (HeapCellValueTag::Lis
-                        | HeapCellValueTag::Str
-                        | HeapCellValueTag::PStrLoc) => {
-                           instr!("$fail")
-                       }
-                       _ => {
-                           if first_arg.is_constant() {
-                               instr!("$succeed")
-                           } else {
-                               instr!("$fail")
-                           }
-                       }
-                   )
+                    read_heap_cell!(first_arg,
+                        (HeapCellValueTag::Fixnum |
+                         HeapCellValueTag::F64) => {
+                            instr!("$succeed")
+                        }
+                        (HeapCellValueTag::Cons, cons_ptr) => {
+                            match cons_ptr.get_tag() {
+                                ArenaHeaderTag::Integer | ArenaHeaderTag::Rational => {
+                                    instr!("$succeed")
+                                }
+                                _ => {
+                                    instr!("$fail")
+                                }
+                            }
+                        }
+                        (HeapCellValueTag::Atom, (_name, arity)) => {
+                            if arity == 0 {
+                                instr!("$succeed")
+                            } else {
+                                instr!("$fail")
+                            }
+                        }
+                        (HeapCellValueTag::Lis
+                         | HeapCellValueTag::Str
+                         | HeapCellValueTag::PStrLoc) => {
+                            instr!("$fail")
+                        }
+                        _ => {
+                            if first_arg.is_constant() {
+                                instr!("$succeed")
+                            } else {
+                                instr!("$fail")
+                            }
+                        }
+                    )
                 }
             }
             InlinedClauseType::IsCompound(..) => {
@@ -860,7 +856,7 @@ impl CodeGenerator {
                         }
                     }
                 }
-            },
+            }
             InlinedClauseType::IsVar(..) => {
                 self.marker.reset_arg(1);
 
@@ -871,7 +867,7 @@ impl CodeGenerator {
                 } else {
                     instr!("$fail")
                 }
-            },
+            }
         };
 
         // inlined predicates are never counted, so this overrides nothing.
@@ -901,8 +897,7 @@ impl CodeGenerator {
     ) -> Result<(), CompilationError> {
         macro_rules! compile_expr {
             ($self:expr, $terms:expr, $context:expr, $code:expr) => {{
-                let (acode, at) =
-                    $self.compile_arith_expr($terms, term_loc + 2, 1, $context, 2)?;
+                let (acode, at) = $self.compile_arith_expr($terms, term_loc + 2, 1, $context, 2)?;
                 $code.extend(acode.into_iter());
                 at
             }};
@@ -1067,13 +1062,11 @@ impl CodeGenerator {
                                     code.push_back(instr!("deallocate"));
                                 }
 
-                                code.push_back(
-                                    if self.marker.in_tail_position {
-                                        instr!("$succeed").into_execute()
-                                    } else {
-                                        instr!("$succeed")
-                                    },
-                                );
+                                code.push_back(if self.marker.in_tail_position {
+                                    instr!("$succeed").into_execute()
+                                } else {
+                                    instr!("$succeed")
+                                });
                             }
                             QueryTerm::Clause(clause) => {
                                 self.compile_query_line(
@@ -1145,7 +1138,10 @@ impl CodeGenerator {
 
         self.marker.var_data = var_data;
 
-        let term = FocusedHeapRefMut { heap, focus: *term_loc };
+        let term = FocusedHeapRefMut {
+            heap,
+            focus: *term_loc,
+        };
         let mut code = VecDeque::new();
 
         let head_loc = term.nth_arg(term.focus, 1).unwrap();
@@ -1216,11 +1212,7 @@ impl CodeGenerator {
         let mut stack = Stack::uninitialized();
         let iter = query_iterator::<true>(&mut term.heap, &mut stack, clause.term_loc());
 
-        let query = self.compile_target::<QueryInstruction, _>(
-            iter,
-            &clause.code_indices,
-            context,
-        );
+        let query = self.compile_target::<QueryInstruction, _>(iter, &clause.code_indices, context);
 
         code.extend(query);
         self.add_call(code, clause.ct.to_instr(), clause.call_policy);
@@ -1342,20 +1334,14 @@ impl CodeGenerator {
                 skip_stub_try_me_else = !self.settings.is_dynamic();
             }
 
-            let arg = clause.args(heap)
-                .map(|r| heap[r.start() + optimal_index]);
+            let arg = clause.args(heap).map(|r| heap[r.start() + optimal_index]);
 
             if let Some(arg) = arg {
                 let index = code.len();
 
                 if clauses_len > 1 || self.settings.is_extensible {
                     let arg = heap_bound_store(heap, heap_bound_deref(heap, arg));
-                    code_offsets.index_term(
-                        heap,
-                        arg,
-                        index,
-                        &mut clause_index_info,
-                    );
+                    code_offsets.index_term(heap, arg, index, &mut clause_index_info);
                 }
             }
 
