@@ -4061,6 +4061,14 @@ impl Machine {
                             .install_new_block(self.machine_st.registers[1]);
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                     }
+                    &Instruction::CallRandomInteger => {
+                        self.random_integer();
+                        step_or_fail!(self, self.machine_st.p += 1);
+                    }
+                    &Instruction::ExecuteRandomInteger => {
+                        self.random_integer();
+                        step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+                    }
                     &Instruction::CallMaybe => {
                         self.maybe();
                         step_or_fail!(self, self.machine_st.p += 1);
