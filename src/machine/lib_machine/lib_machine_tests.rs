@@ -44,10 +44,21 @@ fn failing_query() {
     let mut machine = MachineBuilder::default().build();
     let query = r#"triple("a",P,"b")."#;
     let complete_answer: Result<Vec<_>, _> = machine.run_query(query).collect();
+
     assert_eq!(
         complete_answer,
-        Err(String::from(
-            "error existence_error procedure / triple 3 / triple 3"
+        Err(Term::compound(
+            "error",
+            [
+                Term::compound(
+                    "existence_error",
+                    [
+                        Term::atom("procedure"),
+                        Term::compound("/", [Term::atom("triple"), Term::integer(3)]),
+                    ]
+                ),
+                Term::compound("/", [Term::atom("triple"), Term::integer(3)]),
+            ],
         ))
     );
 }
@@ -349,8 +360,24 @@ fn non_existent_predicate_should_not_cause_panic_when_other_predicates_are_defin
 
     assert_eq!(
         complete_answer,
-        Err(String::from(
-            "error existence_error procedure / non_existent_predicate 3 / non_existent_predicate 3"
+        Err(Term::compound(
+            "error",
+            [
+                Term::compound(
+                    "existence_error",
+                    [
+                        Term::atom("procedure"),
+                        Term::compound(
+                            "/",
+                            [Term::atom("non_existent_predicate"), Term::integer(3)],
+                        ),
+                    ],
+                ),
+                Term::compound(
+                    "/",
+                    [Term::atom("non_existent_predicate"), Term::integer(3)]
+                ),
+            ],
         ))
     );
 }
@@ -553,5 +580,31 @@ fn order_of_variables_in_binding() {
             ("X", Term::variable("Y")),
             ("Z", Term::variable("W")),
         ])]
+    );
+}
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn errors_and_exceptions() {
+    let mut machine = MachineBuilder::default().build();
+
+    let complete_answer: Vec<_> = machine.run_query("functor(_,_,_).").collect();
+
+    assert_eq!(
+        complete_answer,
+        [Err(Term::compound(
+            "error",
+            [
+                Term::atom("instantiation_error"),
+                Term::compound("/", [Term::atom("functor"), Term::integer(3)]),
+            ],
+        ))]
+    );
+
+    let complete_answer: Vec<_> = machine.run_query("throw(a).").collect();
+
+    assert_eq!(
+        complete_answer,
+        [Ok(LeafAnswer::Exception(Term::atom("a")))]
     );
 }

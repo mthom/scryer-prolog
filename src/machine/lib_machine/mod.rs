@@ -426,7 +426,7 @@ impl Drop for QueryState<'_> {
 }
 
 impl Iterator for QueryState<'_> {
-    type Item = Result<LeafAnswer, String>;
+    type Item = Result<LeafAnswer, Term>;
 
     fn next(&mut self) -> Option<Self::Item> {
         let var_names = &mut self.var_names;
@@ -448,30 +448,23 @@ impl Iterator for QueryState<'_> {
             // this should halt the search for solutions as it
             // does in the Scryer top-level. the exception term is
             // contained in self.machine_st.ball.
-            let error_string = self
-                .machine
+            let h = machine.machine_st.heap.len();
+            machine
                 .machine_st
-                .ball
-                .stub
-                .iter()
-                .filter(|h| {
-                    matches!(
-                        h.get_tag(),
-                        HeapCellValueTag::Atom | HeapCellValueTag::Fixnum
-                    )
-                })
-                .map(|h| match h.get_tag() {
-                    HeapCellValueTag::Atom => {
-                        let (name, _) = cell_as_atom_cell!(h).get_name_and_arity();
-                        name.as_str().to_string()
-                    }
-                    HeapCellValueTag::Fixnum => h.get_value().clone().to_string(),
-                    _ => unreachable!(),
-                })
-                .collect::<Vec<String>>()
-                .join(" ");
+                .heap
+                .extend(machine.machine_st.ball.stub.clone());
+            let exception_term =
+                Term::from_heapcell(machine, machine.machine_st.heap[h], &mut var_names.clone());
 
-            return Some(Err(error_string));
+            if let Term::Compound(functor, args) = &exception_term {
+                if functor == "error" && args.len() == 2 {
+                    // We have an error
+                    return Some(Err(exception_term));
+                }
+            }
+
+            // We have an exception that is not an error
+            return Some(Ok(LeafAnswer::Exception(exception_term)));
         }
 
         if machine.machine_st.p == LIB_QUERY_SUCCESS {
