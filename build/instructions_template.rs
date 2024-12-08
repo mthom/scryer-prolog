@@ -419,6 +419,8 @@ enum SystemClauseType {
     GetUnknown,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$install_new_block")))]
     InstallNewBlock,
+    #[strum_discriminants(strum(props(Arity = "3", Name = "$random_integer")))]
+    RandomInteger,
     #[strum_discriminants(strum(props(Arity = "0", Name = "$maybe")))]
     Maybe,
     #[strum_discriminants(strum(props(Arity = "1", Name = "$current_time")))]
@@ -1805,6 +1807,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallGetDoubleQuotes |
                     &Instruction::CallGetUnknown |
                     &Instruction::CallInstallNewBlock |
+                    &Instruction::CallRandomInteger |
                     &Instruction::CallMaybe |
                     &Instruction::CallCpuNow |
                     &Instruction::CallDeterministicLengthRundown |
@@ -2042,6 +2045,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteGetDoubleQuotes |
                     &Instruction::ExecuteGetUnknown |
                     &Instruction::ExecuteInstallNewBlock |
+                    &Instruction::ExecuteRandomInteger |
                     &Instruction::ExecuteMaybe |
                     &Instruction::ExecuteCpuNow |
                     &Instruction::ExecuteDeterministicLengthRundown |
