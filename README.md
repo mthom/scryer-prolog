@@ -1,13 +1,3 @@
-# Announcing the Scryer Prolog Meetup 2024
-
-This year we will meet at the Hotel Stefanie in Vienna to discuss
-present and future developments in the Scryer Prolog system.
-
-Details here: [https://www.digitalaustria.gv.at/eng/insights/Digital-Austria-Events-EN/Scryer-Prolog-Meetup-2024.html](https://www.digitalaustria.gv.at/eng/insights/Digital-Austria-Events-EN/Scryer-Prolog-Meetup-2024.html).
-
-Many thanks to the Austrian Federal Ministry of Finance for hosting
-the event!
-
 # Scryer Prolog
 
 Scryer Prolog aims to become to ISO Prolog what GHC is to Haskell: an open
