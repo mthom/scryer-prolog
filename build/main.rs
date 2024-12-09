@@ -9,6 +9,7 @@ use std::fs::File;
 use std::io::Write;
 use std::path::Path;
 use std::path::PathBuf;
+use std::path::MAIN_SEPARATOR_STR;
 use std::process::{Command, Stdio};
 
 fn find_prolog_files(path_prefix: &str, current_dir: &Path) -> Vec<(String, PathBuf)> {
@@ -61,33 +62,15 @@ fn main() {
     let constants = find_prolog_files("", &lib_path);
 
     let out_dir = std::env::var("OUT_DIR").unwrap();
-    let out_dir_path: &Path = out_dir.as_ref();
-    let manifest_dir = &std::env::var("CARGO_MANIFEST_DIR").unwrap();
-    let manifest_dir_path: &Path = manifest_dir.as_ref();
-
-    let prefix: PathBuf = if let Ok(diff) = out_dir_path.strip_prefix(manifest_dir_path) {
-        let mut path = PathBuf::from(".");
-        for comp in diff.components() {
-            match comp {
-                std::path::Component::Normal(_) => path.push(".."),
-                std::path::Component::CurDir => (),
-                std::path::Component::Prefix(_)
-                | std::path::Component::RootDir
-                | std::path::Component::ParentDir => {
-                    path = manifest_dir_path.to_path_buf();
-                    break;
-                }
-            }
-        }
-        path
-    } else {
-        manifest_dir_path.to_path_buf()
-    };
 
     writeln!(libraries, "{{").unwrap();
     for (name, lib_path) in constants {
-        let path: PathBuf = prefix.join(lib_path);
-        writeln!(libraries, "m.insert(\"{name}\", include_str!({path:?}));").unwrap();
+        let path = format!("{}{}", MAIN_SEPARATOR_STR, lib_path.display());
+        writeln!(
+            libraries,
+            "m.insert(\"{name}\", include_str!(concat!(env!(\"CARGO_MANIFEST_DIR\"), {path:?})));"
+        )
+        .unwrap();
     }
     writeln!(libraries, "}}").unwrap();
 
