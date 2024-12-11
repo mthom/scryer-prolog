@@ -768,8 +768,7 @@ read(Term) :-
 
 %% read(+Stream, -Term).
 %
-% Read Term from the stream Stream with default options. **NOTE** This is not a general predicate
-% to read input from a file or the user. Use other predicates like `phrase_from_file/2` for that.
+% Same as read_term/3 with all default options.
 read(Stream, Term) :-
     read_term(Stream, Term, []).
 
