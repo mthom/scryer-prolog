@@ -1,7 +1,7 @@
 /** Tabling, also called SLG resolution.
 
     SLG resolution is an alternative execution strategy that sometimes
-    helps to improve termination and performance characters of Prolog
+    helps to improve termination and performance characteristics of Prolog
     predicates.
 
     To enable this execution strategy for a Prolog predicate, add a
