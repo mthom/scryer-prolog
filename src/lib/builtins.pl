@@ -2228,7 +2228,7 @@ set_stream_position(S_or_a, Position) :-
 
 %% callable(X).
 %
-% True iff X is bound to an atom or a compund term.
+% True iff X is bound to an atom or a compound term.
 
 :- non_counted_backtracking callable/1.
 
