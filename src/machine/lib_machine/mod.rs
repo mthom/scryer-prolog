@@ -414,8 +414,8 @@ pub struct QueryState<'a> {
 
 impl Drop for QueryState<'_> {
     fn drop(&mut self) {
-        // This may be wrong if the iterator is not fully consumend, but from testing it seems
-        // fine.
+        // FIXME: This may be wrong if the iterator is not fully consumend, but from testing it
+        // seems fine. Is this really ok?
         self.machine.trust_me();
     }
 }
@@ -523,7 +523,6 @@ impl Iterator for QueryState<'_> {
 
         Some(Ok(LeafAnswer::LeafAnswer {
             bindings,
-            residual_goals: vec![],
         }))
     }
 }
