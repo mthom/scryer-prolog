@@ -8,15 +8,9 @@ use super::{
 };
 
 /// Describes how the streams of a [`Machine`](crate::Machine) will be handled.
+#[derive(Default)]
 pub struct StreamConfig {
     inner: StreamConfigInner,
-}
-
-impl Default for StreamConfig {
-    /// Defaults to using in-memory streams.
-    fn default() -> Self {
-        Self::in_memory()
-    }
 }
 
 impl StreamConfig {
@@ -37,8 +31,10 @@ impl StreamConfig {
     }
 }
 
+#[derive(Default)]
 enum StreamConfigInner {
     Stdio,
+    #[default]
     Memory,
 }
 
