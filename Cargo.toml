@@ -125,7 +125,7 @@ serial_test = "3.1.1"
 [target.'cfg(not(all(target_arch = "wasm32", target_os = "unknown")))'.dev-dependencies]
 assert_cmd = "2.0.15"
 criterion = "0.5.1"
-iai-callgrind = "0.12.1"
+iai-callgrind = "0.13.0"
 trycmd = "0.15.6"
 
 [target.'cfg(not(any(target_os = "windows", all(target_arch = "wasm32", target_os = "unknown"))))'.dev-dependencies]
