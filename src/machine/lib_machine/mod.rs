@@ -521,9 +521,7 @@ impl Iterator for QueryState<'_> {
         // choice point, so we should break.
         self.machine.machine_st.backtrack();
 
-        Some(Ok(LeafAnswer::LeafAnswer {
-            bindings,
-        }))
+        Some(Ok(LeafAnswer::LeafAnswer { bindings }))
     }
 }
 
