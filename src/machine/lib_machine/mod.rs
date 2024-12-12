@@ -18,7 +18,7 @@ use indexmap::IndexMap;
 use super::{streams::Stream, Atom, AtomCell, HeapCellValue, HeapCellValueTag, Machine};
 
 #[cfg(test)]
-mod lib_machine_tests;
+mod tests;
 
 /// Represents a leaf answer from a query.
 #[derive(Debug, Clone, PartialEq)]
