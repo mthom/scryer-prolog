@@ -31,16 +31,12 @@ pub enum LeafAnswer {
     False,
     /// An exception leaf answer.
     Exception(Term),
-    /// A leaf answer with bindings and residual goals.
+    /// A leaf answer with bindings.
+    #[non_exhaustive]
     LeafAnswer {
         /// The bindings of variables in the query.
-        ///
-        /// Can be empty.
         bindings: BTreeMap<String, Term>,
-        /// Residual goals.
-        ///
-        /// Can be empty.
-        residual_goals: Vec<Term>,
+        //residual_goals: Vec<Term>,
     },
 }
 
@@ -49,7 +45,6 @@ impl LeafAnswer {
     pub fn from_bindings<S: Into<String>>(bindings: impl IntoIterator<Item = (S, Term)>) -> Self {
         LeafAnswer::LeafAnswer {
             bindings: bindings.into_iter().map(|(k, v)| (k.into(), v)).collect(),
-            residual_goals: Vec::new(),
         }
     }
 }
