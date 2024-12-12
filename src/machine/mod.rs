@@ -54,6 +54,7 @@ use lazy_static::lazy_static;
 use ordered_float::OrderedFloat;
 
 use rand::rngs::StdRng;
+use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::env;
 use std::io::Read;
@@ -297,13 +298,16 @@ impl Machine {
         self.run_module_predicate(atom!("loader"), (atom!("file_load"), 2));
     }
 
-    fn load_top_level(&mut self, program: &'static str) {
+    fn load_top_level(&mut self, program: Cow<'static, str>) {
         let mut path_buf = current_dir();
 
         path_buf.push("src/toplevel.pl");
 
         let path = path_buf.to_str().unwrap();
-        let toplevel_stream = Stream::from_static_string(program, &mut self.machine_st.arena);
+        let toplevel_stream = match program {
+            Cow::Borrowed(s) => Stream::from_static_string(s, &mut self.machine_st.arena),
+            Cow::Owned(s) => Stream::from_owned_string(s, &mut self.machine_st.arena),
+        };
 
         self.load_file(path, toplevel_stream);
 

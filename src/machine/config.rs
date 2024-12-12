@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use rand::{rngs::StdRng, SeedableRng};
 
 use crate::Machine;
@@ -41,7 +43,7 @@ enum StreamConfigInner {
 /// Describes how a [`Machine`](crate::Machine) will be configured.
 pub struct MachineBuilder {
     pub(crate) streams: StreamConfig,
-    pub(crate) toplevel: &'static str,
+    pub(crate) toplevel: Cow<'static, str>,
 }
 
 impl Default for MachineBuilder {
@@ -49,7 +51,7 @@ impl Default for MachineBuilder {
     fn default() -> Self {
         MachineBuilder {
             streams: Default::default(),
-            toplevel: default_toplevel(),
+            toplevel: default_toplevel().into(),
         }
     }
 }
@@ -67,8 +69,8 @@ impl MachineBuilder {
     }
 
     /// Uses the given toplevel in this configuration.
-    pub fn with_toplevel(mut self, toplevel: &'static str) -> Self {
-        self.toplevel = toplevel;
+    pub fn with_toplevel(mut self, toplevel: impl Into<Cow<'static, str>>) -> Self {
+        self.toplevel = toplevel.into();
         self
     }
 
