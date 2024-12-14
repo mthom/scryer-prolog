@@ -766,6 +766,9 @@ read(Term) :-
     read_term(Stream, Term, []).
     % read(Stream, Term).
 
+%% read(+Stream, -Term).
+%
+% Same as read_term/3 with all default options.
 read(Stream, Term) :-
     read_term(Stream, Term, []).
 
