@@ -1,3 +1,7 @@
+use dashu::integer::{IBig, UBig};
+use dashu::rational::RBig;
+use serde_json::json;
+
 use super::*;
 use crate::MachineBuilder;
 
@@ -607,4 +611,84 @@ fn errors_and_exceptions() {
         complete_answer,
         [Ok(LeafAnswer::Exception(Term::atom("a")))]
     );
+}
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn term_json_serialize() {
+    let ibig = IBig::from(10).pow(100);
+    let ubig = UBig::from(7u32).pow(100);
+    let prolog_value = Term::compound(
+        "a",
+        [
+            Term::atom("asdf"),
+            Term::atom("true"),
+            Term::atom("false"),
+            Term::string("fdsa"),
+            Term::list([Term::integer(1), Term::float(2.43)]),
+            Term::integer(ibig.clone()),
+            Term::rational(RBig::from_parts(1.into(), 7u32.into())),
+            Term::rational(RBig::from_parts(ibig.clone(), 7u32.into())),
+            Term::rational(RBig::from_parts(1.into(), ubig.clone())),
+            Term::rational(RBig::from_parts(ibig.clone(), ubig.clone())),
+            Term::variable("X"),
+        ],
+    );
+
+    let json_value = json!({
+        "functor": "a",
+        "args": [
+            { "atom": "asdf" },
+            true,
+            false,
+            "fdsa",
+            [1, 2.43],
+            { "integer": ibig.to_string() },
+            { "rational": { "numerator": 1, "denominator": 7} },
+            { "rational": { "numerator": ibig.to_string(), "denominator": 7} },
+            { "rational": { "numerator": 1, "denominator": ubig.to_string()} },
+            { "rational": { "numerator": ibig.to_string(), "denominator": ubig.to_string()} },
+            { "variable": "X" },
+        ],
+    });
+
+    assert_eq!(json_value, serde_json::to_value(prolog_value).unwrap());
+}
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn term_json_serialize_conjuntions() {
+    let prolog_value = Term::list([
+        Term::conjunction([Term::integer(1), Term::string("asdf"), Term::atom("fdsa")]),
+        Term::compound(
+            ",",
+            [Term::integer(1), Term::string("asdf"), Term::atom("fdsa")],
+        ),
+    ]);
+
+    let json_value = json!([
+        { "conjunction": [1, "asdf", { "atom": "fdsa" }] },
+        { "functor": ",", "args": [1, "asdf", { "atom": "fdsa" }] },
+    ]);
+
+    assert_eq!(json_value, serde_json::to_value(prolog_value).unwrap());
+}
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn term_json_serialize_disjunctions() {
+    let prolog_value = Term::list([
+        Term::disjunction([Term::integer(1), Term::string("asdf"), Term::atom("fdsa")]),
+        Term::compound(
+            ";",
+            [Term::integer(1), Term::string("asdf"), Term::atom("fdsa")],
+        ),
+    ]);
+
+    let json_value = json!([
+        { "disjunction": [1, "asdf", { "atom": "fdsa" }] },
+        { "functor": ";", "args": [1, "asdf", { "atom": "fdsa" }] },
+    ]);
+
+    assert_eq!(json_value, serde_json::to_value(prolog_value).unwrap());
 }

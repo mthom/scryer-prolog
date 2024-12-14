@@ -12,6 +12,10 @@ use crate::parser::ast::{Var, VarPtr};
 use crate::parser::parser::{Parser, Tokens};
 use crate::read::{write_term_to_heap, TermWriteResult};
 
+use ::num_traits::cast::ToPrimitive;
+use ::serde::ser::{SerializeMap, SerializeSeq};
+use ::serde::{Serialize, Serializer};
+use dashu::integer::{IBig, UBig};
 use dashu::{Integer, Rational};
 use indexmap::IndexMap;
 
@@ -71,6 +75,124 @@ pub enum Term {
     Compound(String, Vec<Term>),
     /// A Prolog variable.
     Var(String),
+}
+
+struct RationalInner {
+    numerator: IBig,
+    denominator: UBig,
+}
+
+impl Serialize for RationalInner {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        let mut map = serializer.serialize_map(Some(2))?;
+        match self.numerator.to_i64() {
+            Some(small) => map.serialize_entry("numerator", &small)?,
+            None => map.serialize_entry("numerator", &self.numerator.to_string())?,
+        }
+        match self.denominator.to_u64() {
+            Some(small) => map.serialize_entry("denominator", &small)?,
+            None => map.serialize_entry("denominator", &self.denominator.to_string())?,
+        }
+        map.end()
+    }
+}
+
+impl Serialize for Term {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            Term::Integer(i) => match i.to_i64() {
+                Some(small) => serializer.serialize_i64(small),
+                None => {
+                    let mut map = serializer.serialize_map(Some(1))?;
+                    map.serialize_entry("integer", &i.to_string())?;
+                    map.end()
+                }
+            },
+            Term::Rational(r) => {
+                let (numerator, denominator) = r.clone().into_parts();
+                let mut map = serializer.serialize_map(Some(1))?;
+                map.serialize_entry(
+                    "rational",
+                    &RationalInner {
+                        numerator,
+                        denominator,
+                    },
+                )?;
+                map.end()
+            }
+            Term::Float(f) => serializer.serialize_f64(*f),
+            Term::Atom(a) => match a.as_str() {
+                "true" => serializer.serialize_bool(true),
+                "false" => serializer.serialize_bool(false),
+                "[]" => {
+                    let seq = serializer.serialize_seq(Some(0))?;
+                    seq.end()
+                }
+                _ => {
+                    let mut map = serializer.serialize_map(Some(1))?;
+                    map.serialize_entry("atom", a)?;
+                    map.end()
+                }
+            },
+            Term::String(s) => serializer.serialize_str(s),
+            Term::List(l) => l.serialize(serializer),
+            Term::Compound(f, args) => {
+                if f == "," && args.len() == 2 {
+                    // Conjunction syntax sugar
+                    let mut conj = vec![args[0].clone()];
+                    let mut curr_val = args[1].clone();
+                    loop {
+                        if let Term::Compound(f, args) = &curr_val {
+                            if f == "," && args.len() == 2 {
+                                conj.push(args[0].clone());
+                                curr_val = args[1].clone();
+                                continue;
+                            }
+                        }
+                        conj.push(curr_val);
+                        break;
+                    }
+                    let mut map = serializer.serialize_map(Some(1))?;
+                    map.serialize_entry("conjunction", &conj)?;
+                    map.end()
+                } else if f == ";" && args.len() == 2 {
+                    // Disjunction syntax sugar
+                    let mut disj = vec![args[0].clone()];
+                    let mut curr_val = args[1].clone();
+                    loop {
+                        if let Term::Compound(f, args) = &curr_val {
+                            if f == ";" && args.len() == 2 {
+                                disj.push(args[0].clone());
+                                curr_val = args[1].clone();
+                                continue;
+                            }
+                        }
+                        disj.push(curr_val);
+                        break;
+                    }
+                    let mut map = serializer.serialize_map(Some(1))?;
+                    map.serialize_entry("disjunction", &disj)?;
+                    map.end()
+                } else {
+                    let mut map = serializer.serialize_map(Some(2))?;
+                    map.serialize_entry("functor", f)?;
+                    map.serialize_entry("args", args)?;
+                    map.end()
+                }
+            }
+            Term::Var(v) => {
+                let mut map = serializer.serialize_map(Some(1))?;
+                map.serialize_entry("variable", v)?;
+                map.end()
+            }
+        }
+    }
 }
 
 impl Term {
