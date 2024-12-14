@@ -661,7 +661,7 @@ write_term(Term, Options) :-
 
 %% write_term(+Stream, +Term, +Options).
 %
-% Write Term to the stream Stream according to some output syntax options. The options avaibale are:
+% Write Term to the stream Stream according to some output syntax options. The options available are:
 %
 %  * `ignore_ops(+Boolean)` if `true`, the generic term representation is used everywhere. In `false`
 %    (default), operators do not use that generic term representation.
