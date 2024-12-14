@@ -692,3 +692,26 @@ fn term_json_serialize_disjunctions() {
 
     assert_eq!(json_value, serde_json::to_value(prolog_value).unwrap());
 }
+
+#[test]
+#[cfg_attr(miri, ignore)]
+fn leaf_answer_json_serialize() {
+    let leaf_answers = [
+        LeafAnswer::True,
+        LeafAnswer::False,
+        LeafAnswer::Exception(Term::atom("a")),
+        LeafAnswer::from_bindings([("X", Term::atom("a")), ("Y", Term::string("b"))]),
+    ];
+
+    let json_value = json!([
+        true,
+        false,
+        { "exception": { "atom": "a" } },
+        { "bindings": {
+            "X": { "atom": "a" },
+            "Y": "b",
+        }},
+    ]);
+
+    assert_eq!(json_value, serde_json::to_value(leaf_answers).unwrap());
+}

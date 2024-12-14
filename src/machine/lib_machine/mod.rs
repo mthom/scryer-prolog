@@ -44,6 +44,28 @@ pub enum LeafAnswer {
     },
 }
 
+impl Serialize for LeafAnswer {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+    where
+        S: Serializer,
+    {
+        match self {
+            LeafAnswer::True => serializer.serialize_bool(true),
+            LeafAnswer::False => serializer.serialize_bool(false),
+            LeafAnswer::Exception(e) => {
+                let mut map = serializer.serialize_map(Some(1))?;
+                map.serialize_entry("exception", &e)?;
+                map.end()
+            }
+            LeafAnswer::LeafAnswer { bindings } => {
+                let mut map = serializer.serialize_map(Some(1))?;
+                map.serialize_entry("bindings", &bindings)?;
+                map.end()
+            }
+        }
+    }
+}
+
 impl LeafAnswer {
     /// Creates a leaf answer with no residual goals.
     pub fn from_bindings<S: Into<String>>(bindings: impl IntoIterator<Item = (S, Term)>) -> Self {
