@@ -20,7 +20,6 @@ pub mod machine_indices;
 pub mod machine_state;
 pub mod machine_state_impl;
 pub mod mock_wam;
-pub mod parsed_results;
 pub mod partial_string;
 pub mod preprocessor;
 pub mod stack;
@@ -55,7 +54,7 @@ use lazy_static::lazy_static;
 use ordered_float::OrderedFloat;
 
 use rand::rngs::StdRng;
-use rand::SeedableRng;
+use std::borrow::Cow;
 use std::cmp::Ordering;
 use std::env;
 use std::io::Read;
@@ -63,13 +62,13 @@ use std::path::PathBuf;
 use std::sync::atomic::AtomicBool;
 use std::sync::OnceLock;
 
-use self::config::MachineConfig;
-use self::parsed_results::*;
-
 lazy_static! {
     pub static ref INTERRUPT: AtomicBool = AtomicBool::new(false);
 }
 
+/// An instance of Scryer Prolog.
+///
+/// Created with [`MachineBuilder::build`](crate::machine::config::MachineBuilder::build).
 #[derive(Debug)]
 pub struct Machine {
     pub(super) machine_st: MachineState,
@@ -262,6 +261,7 @@ impl Machine {
         )
     }
 
+    /// Gets the current inference count.
     pub fn get_inference_count(&mut self) -> u64 {
         self.machine_st
             .cwil
@@ -298,13 +298,16 @@ impl Machine {
         self.run_module_predicate(atom!("loader"), (atom!("file_load"), 2));
     }
 
-    fn load_top_level(&mut self, program: &'static str) {
+    fn load_top_level(&mut self, program: Cow<'static, str>) {
         let mut path_buf = current_dir();
 
         path_buf.push("src/toplevel.pl");
 
         let path = path_buf.to_str().unwrap();
-        let toplevel_stream = Stream::from_static_string(program, &mut self.machine_st.arena);
+        let toplevel_stream = match program {
+            Cow::Borrowed(s) => Stream::from_static_string(s, &mut self.machine_st.arena),
+            Cow::Owned(s) => Stream::from_owned_string(s, &mut self.machine_st.arena),
+        };
 
         self.load_file(path, toplevel_stream);
 
@@ -478,114 +481,6 @@ impl Machine {
                 ),
             );
         }
-    }
-
-    #[allow(clippy::new_without_default)]
-    pub fn new(config: MachineConfig) -> Self {
-        let args = MachineArgs::new();
-        let mut machine_st = MachineState::new();
-
-        let (user_input, user_output, user_error) = match config.streams {
-            config::StreamConfig::Stdio => (
-                Stream::stdin(&mut machine_st.arena, args.add_history),
-                Stream::stdout(&mut machine_st.arena),
-                Stream::stderr(&mut machine_st.arena),
-            ),
-            config::StreamConfig::Memory => (
-                Stream::Null(StreamOptions::default()),
-                Stream::from_owned_string("".to_owned(), &mut machine_st.arena),
-                Stream::stderr(&mut machine_st.arena),
-            ),
-        };
-
-        let mut wam = Machine {
-            machine_st,
-            indices: IndexStore::new(),
-            code: vec![],
-            user_input,
-            user_output,
-            user_error,
-            load_contexts: vec![],
-            #[cfg(feature = "ffi")]
-            foreign_function_table: Default::default(),
-            rng: StdRng::from_entropy(),
-        };
-
-        let mut lib_path = current_dir();
-
-        lib_path.pop();
-        lib_path.push("lib");
-
-        wam.add_impls_to_indices();
-
-        bootstrapping_compile(
-            Stream::from_static_string(
-                libraries::get("ops_and_meta_predicates")
-                    .expect("library ops_and_meta_predicates should exist"),
-                &mut wam.machine_st.arena,
-            ),
-            &mut wam,
-            ListingSource::from_file_and_path(
-                atom!("ops_and_meta_predicates.pl"),
-                lib_path.clone(),
-            ),
-        )
-        .unwrap();
-
-        bootstrapping_compile(
-            Stream::from_static_string(
-                libraries::get("builtins").expect("library builtins should exist"),
-                &mut wam.machine_st.arena,
-            ),
-            &mut wam,
-            ListingSource::from_file_and_path(atom!("builtins.pl"), lib_path.clone()),
-        )
-        .unwrap();
-
-        if let Some(builtins) = wam.indices.modules.get_mut(&atom!("builtins")) {
-            load_module(
-                &mut wam.machine_st,
-                &mut wam.indices.code_dir,
-                &mut wam.indices.op_dir,
-                &mut wam.indices.meta_predicates,
-                &CompilationTarget::User,
-                builtins,
-            );
-
-            import_builtin_impls(&wam.indices.code_dir, builtins);
-        } else {
-            unreachable!()
-        }
-
-        lib_path.pop(); // remove the "lib" at the end
-
-        bootstrapping_compile(
-            Stream::from_static_string(include_str!("../loader.pl"), &mut wam.machine_st.arena),
-            &mut wam,
-            ListingSource::from_file_and_path(atom!("loader.pl"), lib_path.clone()),
-        )
-        .unwrap();
-
-        wam.configure_modules();
-
-        if let Some(loader) = wam.indices.modules.get(&atom!("loader")) {
-            load_module(
-                &mut wam.machine_st,
-                &mut wam.indices.code_dir,
-                &mut wam.indices.op_dir,
-                &mut wam.indices.meta_predicates,
-                &CompilationTarget::User,
-                loader,
-            );
-        } else {
-            unreachable!()
-        }
-
-        wam.load_special_forms();
-        wam.load_top_level(config.toplevel);
-        wam.configure_streams();
-
-        wam
     }
 
     pub(crate) fn configure_streams(&mut self) {
