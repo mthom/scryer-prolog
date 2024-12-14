@@ -46,7 +46,7 @@ bytes = "1"
 chrono = "0.4.38"
 cpu-time = "1.0.0"
 crrl = "0.9.0"
-dashu = { version = "0.4.2", features = ["rand"] }
+dashu = { version = "0.4.2", features = ["rand", "num-traits"] }
 derive_more = "0.99.18"
 dirs-next = "2.0.0"
 divrem = "1.0.0"
@@ -71,6 +71,7 @@ ryu = "1.0.18"
 sha3 = "0.10.8"
 smallvec = "1.13.2"
 static_assertions = "1.1.0"
+num-traits = "0.2.19"
 
 scraper = { version = "0.19.1", default-features = false, features = [
     "errors",
