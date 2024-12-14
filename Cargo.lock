@@ -631,6 +631,7 @@ dependencies = [
  "dashu-int",
  "num-modular",
  "num-order",
+ "rand",
  "rustversion",
  "static_assertions",
 ]
@@ -645,6 +646,7 @@ dependencies = [
  "dashu-base",
  "num-modular",
  "num-order",
+ "rand",
  "rustversion",
  "static_assertions",
 ]
@@ -676,6 +678,7 @@ dependencies = [
  "dashu-int",
  "num-modular",
  "num-order",
+ "rand",
  "rustversion",
 ]
 

@@ -4158,6 +4158,63 @@ impl Machine {
     }
 
     #[inline(always)]
+    pub(crate) fn random_integer(&mut self) {
+        let a1 = self.deref_register(1);
+        let a2 = self.deref_register(2);
+        let value = match (Number::try_from(a1), Number::try_from(a2)) {
+            (Ok(Number::Fixnum(lower)), Ok(Number::Fixnum(upper))) => {
+                let (lower, upper) = (lower.get_num(), upper.get_num());
+                if lower >= upper {
+                    self.machine_st.fail = true;
+                    return;
+                }
+                let value = self.rng.gen_range(lower..upper);
+                Number::Fixnum(Fixnum::build_with(value))
+            }
+            (Ok(Number::Fixnum(lower)), Ok(Number::Integer(upper))) => {
+                let lower = Integer::from(lower);
+                if &lower >= &*upper {
+                    self.machine_st.fail = true;
+                    return;
+                }
+                let value = self.rng.gen_range(lower..(&*upper).clone());
+                Number::arena_from(value, &mut self.machine_st.arena)
+            }
+            (Ok(Number::Integer(lower)), Ok(Number::Fixnum(upper))) => {
+                let upper = Integer::from(upper);
+                if &*lower >= &upper {
+                    self.machine_st.fail = true;
+                    return;
+                }
+                let value = self.rng.gen_range((&*lower).clone()..upper);
+                Number::arena_from(value, &mut self.machine_st.arena)
+            }
+            (Ok(Number::Integer(lower)), Ok(Number::Integer(upper))) => {
+                if &*lower >= &*upper {
+                    self.machine_st.fail = true;
+                    return;
+                }
+                let value = self.rng.gen_range((&*lower).clone()..(&*upper).clone());
+                Number::arena_from(value, &mut self.machine_st.arena)
+            }
+            _ => {
+                self.machine_st.fail = true;
+                return;
+            }
+        };
+        let a3 = self.deref_register(3);
+        match value {
+            Number::Fixnum(n) => {
+                self.machine_st.unify_fixnum(n, a3);
+            }
+            Number::Integer(n) => {
+                self.machine_st.unify_big_int(n, a3);
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    #[inline(always)]
     pub(crate) fn maybe(&mut self) {
         self.machine_st.fail = self.rng.gen();
     }
