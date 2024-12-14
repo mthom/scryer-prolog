@@ -1550,10 +1550,14 @@ random_bindings(VNum, Node) -->
         { node_var_low_high(Node, Var, Low, High),
           bdd_count(Node, VNum, Total),
           bdd_count(Low, VNum, LCount) },
-        (   { maybe(LCount, Total) } ->
+        (   { weighted_maybe(LCount, Total) } ->
             [Var=0], random_bindings(VNum, Low)
         ;   [Var=1], random_bindings(VNum, High)
         ).
+
+weighted_maybe(K, N) :-
+        random_integer(0, N, X),
+        X < K.
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
    Find solutions with maximum weight.
