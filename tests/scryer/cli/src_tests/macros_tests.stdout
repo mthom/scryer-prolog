@@ -8,10 +8,20 @@ example(bignum_example(A,B,C)) :-
    ),
    compute(A,B).
 example(numeric_enum_example) :-
-   foo(101).
+   foo(100,101),
+   bar([110,111|A]).
 example(ascii_examples) :-
-   foo([0]),
-   foo([7]),
-   foo([8]).
+   (  foo([0]) ->
+      foo([7])
+   ;  foo([8])
+   ).
 example(base_conversion) :-
    foo([171,205,239,1,35,69,96]).
+example(quotated_goals_are_not_expanded(A)) :-
+   quote#bignum#(A<2).
+example(quotation_works_in_nested_terms(A)) :-
+   A=[111,B,quote#fep#putb].
+example(expands_arithmetic_functions(A,B)) :-
+   B is A+113/24.
+example(doesnt_expand_uninstantiated_macros(A)) :-
+   B=fep#A.

@@ -24,9 +24,13 @@ bignum#(A > B) ==> N :-
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+double(A, B) :- B is 2 * A.
+
 :- dynamic(example/1).
 example(formated_string(X)) :-
-    X = inline_last#(\L^phrase(format_("This is my term ~w", [foo(1)]), L)).
+    expand#(
+        X = inline_last#(\L^phrase(format_("This is my term ~w", [foo(1)]), L))
+    ).
 example(bignum_example(A,B,P)) :-
     bignum#(
         A < B,
@@ -36,10 +40,29 @@ example(bignum_example(A,B,P)) :-
     ),
     compute(A,B).
 example(numeric_enum_example) :-
-    foo(fep#create).
+    expand#(
+        foo(fep#window, fep#create),
+        bar([fep#getl, fep#putb|_])
+    ).
 example(ascii_examples) :-
-    foo(tel#null),
-    foo(tel#bell),
-    foo(tel#bs).
+    expand#(
+        foo(tel#null) -> foo(tel#bell); foo(tel#bs)
+    ).
 example(base_conversion) :-
-    foo(16#"ABCDEF01234560").
+    expand#(
+        foo(16#"ABCDEF01234560")
+    ).
+example(quotated_goals_are_not_expanded(A)) :-
+    quote#(bignum#(A<2)).
+example(quotation_works_in_nested_terms(A)) :-
+    expand#(
+        A = [fep#putb,_,quote#fep#putb]
+    ).
+example(expands_arithmetic_functions(A,B)) :-
+    expand#(
+        B is A + fep#beep / inline_last#double(12)
+    ).
+example(doesnt_expand_uninstantiated_macros(X)) :-
+    expand#(
+        _ = fep#X
+    ).
