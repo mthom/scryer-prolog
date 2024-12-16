@@ -67,7 +67,8 @@ Free contains variables that are valid outside the scope of the lambda
 expression. They are thus free variables within.
 
 All other variables of Goal are considered local variables. They must
-not appear outside the lambda expression. This restriction is
+not appear outside the lambda expression, as lambda does not introduce 
+a new scope or shadow existing bindings. This restriction is
 currently not checked. Violations may lead to unexpected bindings.
 
 In the following example the parentheses around X>3 are necessary.
