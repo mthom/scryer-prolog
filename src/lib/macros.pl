@@ -12,8 +12,11 @@
 :- discontiguous(macro/3).
 :- multifile(macro/3).
 
-user:term_expansion((M#A ==> B), (macros:macro(M, A, H) :- G)) :- nonvar(B), B = (H :- G).
-user:term_expansion((M#A ==> B),  macros:macro(M, A, B)      ).
+user:term_expansion((M#A ==> B), X) :-
+    nonvar(B),
+    B = (H :- G) ->
+        X = (macros:macro(M, A, H) :- G)
+    ;   X =  macros:macro(M, A, B).
 
 
 % Capturing erroneous expansions.
