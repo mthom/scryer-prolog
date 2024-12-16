@@ -25,3 +25,7 @@ example(expands_arithmetic_functions(A,B)) :-
    B is A+113/24.
 example(doesnt_expand_uninstantiated_macros(A)) :-
    B=fep#A.
+example(compilation([A,B,C])) :-
+   A=24,
+   B=36,
+   C=72.

@@ -24,7 +24,10 @@ bignum#(A > B) ==> N :-
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+% Test functions
 double(A, B) :- B is 2 * A.
+baz(A, B, C, D) :- B is 2 * A, C is 3 * A, D is 3 * B.
+
 
 :- dynamic(example/1).
 example(formated_string(X)) :-
@@ -66,3 +69,5 @@ example(doesnt_expand_uninstantiated_macros(X)) :-
     expand#(
         _ = fep#X
     ).
+example(compilation([A,B,C])) :-
+    compile#baz(12, A, B, C).
