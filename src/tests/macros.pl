@@ -79,7 +79,7 @@ example(doesnt_expand_uninstantiated_macros(X)) :-
     ).
 example(compilation([A,B,C])) :-
     compile#baz(12, A, B, C).
-% What is a prefere operator precedence? Should parenthesis be required?
+% What is the prefered operator precedence? Should parenthesis be required here?
 example(modules(L)) :-
     compile#(lists:length(L, 5)).
 example(clpz_operators_compatibility(X,Y)) :-
