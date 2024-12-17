@@ -27,7 +27,7 @@ bignum#(A > B) ==> N :-
 % time, compile time or runtime?
 bad#macro ==> 1 :- _.
 
-% TODO: Should implementation detect discontiguous macro definitions?
+% TODO: Should implementation detect discontinuous macro definitions?
 fep#too_late ==> 999.
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
@@ -79,7 +79,7 @@ example(doesnt_expand_uninstantiated_macros(X)) :-
     ).
 example(compilation([A,B,C])) :-
     compile#baz(12, A, B, C).
-% What is the prefered operator precedence? Should parenthesis be required here?
+% What is the preferred operator precedence? Should parenthesis be required here?
 example(modules(L)) :-
     compile#(lists:length(L, 5)).
 example(clpz_operators_compatibility(X,Y)) :-
@@ -97,7 +97,7 @@ example(incorrect_macros) :-
     fep#_.
 example(tbd) :-
     a(b#c)#d, % <- Should it expand b#c? if b/0 and a/1 are registered macros?
-    a#b#c#d. % <- In which order macros should be epxanded?
+    a#b#c#d. % <- In which order macros should be expanded?
 
 % Should macros be expanded in clauses heads?
 example(macro_in_heads(16#"ABCD")).
