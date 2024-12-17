@@ -4,12 +4,13 @@
    error(existence_error(macro/3,goal_expansion/2),[culprit-foo#fep#window]).
    error(instantiation_error,functor/3).
    error(instantiation_error,when_si/2).
+   error(existence_error(macro/3,goal_expansion/2),[culprit-a#b#c#d]).
 example(formated_string(A)) :-
    A="This is my term foo(1)".
 example(bignum_example(A,B,C)) :-
    (  bignum_lt(A,B),
       !,
-      A>0
+      bignum_gt(A,0)
    ;  bignum_lt(B+1,C)
    ),
    compute(A,B).
@@ -62,3 +63,7 @@ example(incorrect_macros) :-
    b(A)#x,
    B#t,
    fep#C.
+example(tbd) :-
+   a(b#c)#d,
+   a#b#c#d.
+example(macro_in_heads(16#"ABCD")).

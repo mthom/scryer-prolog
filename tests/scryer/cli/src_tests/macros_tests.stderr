@@ -1,3 +1,4 @@
-% Warning: Unknown macro fep # hello at line 91 of macros.pl
-% Warning: Unknown macro foo # bar at line 91 of macros.pl
-% Warning: Unknown macro foo # fep#window at line 91 of macros.pl
+% Warning: Unknown macro fep # hello at line 93 of macros.pl
+% Warning: Unknown macro foo # bar at line 93 of macros.pl
+% Warning: Unknown macro foo # fep#window at line 93 of macros.pl
+% Warning: Unknown macro a # b#c#d at line 101 of macros.pl

@@ -23,9 +23,10 @@ string_num.
 bignum#(A < B) ==> N :-
     string_num -> N = bignum_lt(A,B); N = (A < B).
 bignum#(A > B) ==> N :-
-    \+string_num -> N = bignum_gt(A,B); N = (A > B).
+    \+string_num -> N = (A > B); N = bignum_gt(A,B).
 
-
+% Should bad macro bodies generate exceptions? If so at which point: expansion
+% time, compile time or runtime?
 bad#macro ==> 1 :- _.
 
 % TODO: Should implementation detect discontiguous macro definitions?
@@ -80,6 +81,7 @@ example(doesnt_expand_uninstantiated_macros(X)) :-
     ).
 example(compilation([A,B,C])) :-
     compile#baz(12, A, B, C).
+% What is a prefere operator precedence? Should parenthesis be required?
 example(modules(L)) :-
     compile#(lists:length(L, 5)).
 example(clpz_operators_compatibility(X,Y)) :-
@@ -91,10 +93,20 @@ example(unknown_macros) :-
     foo#bar,
     foo#fep#window. % <- Should it expand fep#window if foo is unknown?
 example(incorrect_macros) :-
-    b(a)#x,
+    b(a)#x, % <- Is it a good idea to support any ground term as a macro name?
     b(_)#x,
     _#t,
     fep#_.
-% Future tests:
-% a(b#c)#d - Should it expand b#c?
-% a#b#c#d - In which order macros should be epxanded?
+example(tbd) :-
+    a(b#c)#d, % <- Should it expand b#c? if b/0 and a/1 are registered macros?
+    a#b#c#d. % <- In which order macros should be epxanded?
+
+% Should macros be expanded in clauses heads?
+example(macro_in_heads(16#"ABCD")).
+
+% Should it be possible to rename predicate name using macros?
+(my_macro#example(macro_names)) :-
+    write('Hello'), nl.
+
+% Should it be possible to expand whole clauses in-place?
+my_macro#(my_example(X) :- hello(X)).
