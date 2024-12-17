@@ -6,8 +6,6 @@
 :- use_module(library(macros)).
 :- use_module(library(clpz)).
 
-clpz:monotonic.
-
 % Numeric enums
 fep#window                  ==> 100.
     fep#create              ==> 101.
