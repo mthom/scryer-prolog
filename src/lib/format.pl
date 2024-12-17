@@ -593,7 +593,15 @@ portray_clause_(Term) -->
 
 literal(Lit, VNs) -->
         { write_term_to_chars(Lit, [quoted(true),variable_names(VNs),double_quotes(true)], Ls) },
-        seq(Ls).
+        (   { nonvar(Lit),
+              functor(Lit, F, A),
+              current_op(Pri, _, F),
+              (   A =:= 0
+              ;   Pri >= 1000
+              ) } ->
+            "(", seq(Ls), ")"
+        ;   seq(Ls)
+        ).
 
 literal_(Lit, VNs) -->
         { phrase(literal(Lit, VNs), Ls) },
