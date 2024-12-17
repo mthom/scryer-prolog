@@ -60,5 +60,6 @@ macro_wrapper(M, A, _) :-
 
 user:goal_expansion(M#A, X) :-
     atomic_si(M),
-    when_si(nonvar(A), true),
-    macro_wrapper(M, A, X).
+    when_si(nonvar(A),
+        macro_wrapper(M, A, X)
+    ).
