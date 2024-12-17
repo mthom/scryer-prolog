@@ -22,7 +22,9 @@ call_unifiers(G_0, Us) :-
 %% expand_sub_goals(?M, ?A, -X).
 %
 % Similar to expand_goal/3, but recursively tries to expand every sub-term.
+%
 % TODO: Try to make it more generic, don't rely on (#)/2.
+% FIXME: Using expand_goal/2  may be quite unpredictable, consider using something else.
 expand_subgoals(M, A, X) :-
     nonvar(A) ->
         (   functor(A, (#), 2) ->

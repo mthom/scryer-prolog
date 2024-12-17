@@ -1,3 +1,54 @@
+/** Macro system inspired by KL1 and PMOS from 5th Gen Computer Systems.
+
+Define your own:
+
+    number#one ==> 1.
+
+It will replace all occurrences of number#one with an actual number 1.
+
+You can have a more complex rules too:
+
+    math#double(X) ==> Y :- Y is 2 * X.
+
+It will replace all occurrences of math#double(...) with computed concrete value.
+
+You can use them by simply referencing in a goal:
+
+    print#S ==> format("~s", [S]).
+
+    predicate(X) :-
+        print#"STRING",
+        my_macro#atom,
+        expand#(
+            X = number#one
+        ).
+
+That code will be expanded to:
+
+    predicate(X) :-
+        format("~s", ["STRING"]),
+        my_macro#atom,
+        X = 1.
+
+Please notice that unknown macros (my_macro) will be left intact and you will
+observe a compilation warning.
+
+You can disable macro expansion by quoting it:
+
+    predicate(X, Y) :-
+        expand#(
+            X = quote#math#double(42),
+            Y = math#double(23)
+        ).
+
+That clause will be expanded to:
+
+    predicate(X, Y) :-
+        X = quote#math#double(42),
+        Y = 46.
+*/
+
+
 :- module(macros, [
     op(199, xfy, (#)),
     op(1200, xfy, (==>)),
@@ -20,30 +71,71 @@ user:term_expansion((M#A ==> B), X) :-
     ;   X =  macros:macro(M, A, B).
 
 
-% Basic
+% All macros distribute over common operators.
 M#(A,B)  ==> M#A, M#B.
 M#(A;B)  ==> M#A; M#B.
 M#(A->B) ==> M#A -> M#B.
 M#(\+ A) ==> \+ M#A.
 M#{A}    ==> {M#A}.
-_#!      ==> !.
+
+% Cut is never expanded.
+_#! ==> !.
+
+% Sub-goal expansion.
+%
+% Wrap any expression to recursively expand any found macros, used explicitly
+% to avoid heavy penalty of scanning all terms for possible macros:
+%
+%     expand#(
+%         X = foo#42,
+%         bar#baz(X),
+%         \+ some#macro
+%     );
+%
+% All following examples assume they are wrapped in expand#(...).
+%
+expand#A ==> X :-
+    expand_subgoals(_, A, X).
 
 
-% Compile time computation: Inline last argument
+% Inline last argument at compile time.
+%
+% Useful if you want to have a formatted string as a variable
+%
+%     Greeting = inline_last#phrase(format_("Hello ~s~a", ["World",!])).
+%     ==>
+%     Greeting = "Hello World!".
+%
+% Perform some numeric calculations at compile time to avoid doing them in runtime:
+%
+%     Solution is pi * inline_last#slow_computation(1234, 2^1024).
+%     ==>
+%     Solution is pi * 42.
+%
+%
+% It even works with CLP(Z):
+%
+%    #X #= inline_last#my_value * #Y.
+%    ==>
+%    #X #= 2354235 * #Y.
+%
 inline_last#G ==> [X] :-
     load_module_context(M),
     M:call(G, X).
 
 
-% Evaluates G and if it succeeds replaces it with solutions.
+% Evaluates G and if it succeeds replaces it with a first solution represented
+% as a sequence of unifications. For example:
+%
+%   compile#my_goal(A, B, C).
+%   ==>
+%   A = 1,
+%   B = 2,
+%   C = 3.
+%
 compile#G ==> Us :-
     load_module_context(M),
     call_unifiers(M:G, Us).
-
-
-% Sub-goal expansion
-expand#A ==> X :-
-    expand_subgoals(_, A, X).
 
 
 load_module_context(Module) :- prolog_load_context(module, Module), !.
