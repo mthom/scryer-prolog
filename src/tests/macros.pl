@@ -4,6 +4,9 @@
 
 :- use_module(library(string_macros)).
 :- use_module(library(macros)).
+:- use_module(library(clpz)).
+
+clpz:monotonic.
 
 % Numeric enums
 fep#window                  ==> 100.
@@ -16,11 +19,11 @@ fep#window                  ==> 100.
         fep#beep            ==> 113.
 
 % Conditional compilation
-%string_num.
+string_num.
 bignum#(A < B) ==> N :-
-    catch(string_num, _, false) -> N = bignum_lt(A,B); N = (A < B).
+    string_num -> N = bignum_lt(A,B); N = (A < B).
 bignum#(A > B) ==> N :-
-    catch(string_num, _, false) -> N = bignum_gt(A,B); N = (A > B).
+    \+string_num -> N = bignum_gt(A,B); N = (A > B).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
@@ -71,3 +74,9 @@ example(doesnt_expand_uninstantiated_macros(X)) :-
     ).
 example(compilation([A,B,C])) :-
     compile#baz(12, A, B, C).
+example(modules(L)) :-
+    compile#(lists:length(L, 5)).
+example(clpz_operators_compatibility(X,Y)) :-
+    expand#(
+        #X #= #Y * inline_last#double(4)
+    ).
