@@ -595,6 +595,14 @@ literal(Lit, VNs) -->
         { write_term_to_chars(Lit, [quoted(true),variable_names(VNs),double_quotes(true)], Ls) },
         seq(Ls).
 
+literal_(Lit, VNs) -->
+        { phrase(literal(Lit, VNs), Ls) },
+        seq(Ls),
+        (   { phrase((...,[Last]), Ls), char_type(Last, graphic_token) } ->
+            " "
+        ;   ""
+        ).
+
 portray_(Var, VNs) --> { var(Var) }, !, literal(Var, VNs).
 portray_((Head :- Body), VNs) --> !,
         literal(Head, VNs), " :-\n",
@@ -602,7 +610,7 @@ portray_((Head :- Body), VNs) --> !,
 portray_((Head --> Body), VNs) --> !,
         literal(Head, VNs), " -->\n",
         body_(Body, 0, 3, VNs).
-portray_(Any, VNs) --> literal(Any, VNs).
+portray_(Any, VNs) --> literal_(Any, VNs).
 
 
 body_(Var, C, I, VNs) --> { var(Var) }, !,
@@ -627,7 +635,7 @@ body_((A;B), C, I, VNs) --> !,
         body_(A, C1, C1, VNs), "\n",
         else_branch(B, I, VNs).
 body_(Goal, C, I, VNs) -->
-        indent_to(C, I), literal(Goal, VNs).
+        indent_to(C, I), literal_(Goal, VNs).
 
 
 % True iff Body has the shape ( If -> Then ; Else ).
