@@ -1,3 +1,7 @@
+   error(instantiation_error,when_si/2).
+   error(existence_error(macro/3,goal_expansion/2),[culprit-fep#hello]).
+   error(existence_error(macro/3,goal_expansion/2),[culprit-foo#bar]).
+   error(existence_error(macro/3,goal_expansion/2),[culprit-foo#fep#window]).
 example(formated_string(A)) :-
    A="This is my term foo(1)".
 example(bignum_example(A,B,C)) :-
@@ -47,3 +51,7 @@ example(clpz_operators_compatibility(A,B)) :-
       )
    ;  clpz:clpz_equal(#A,#B*8)
    ).
+example(unknown_macros) :-
+   fep#hello,
+   foo#bar,
+   foo#fep#window.

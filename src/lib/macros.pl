@@ -4,10 +4,11 @@
     macro/3
 ]).
 
-:- use_module(library(si), [atomic_si/1]).
+:- use_module(library(si), [atomic_si/1,when_si/2]).
 :- use_module(library(error), [instantiation_error/1]).
 :- use_module(library(loader), [prolog_load_context/2]).
 :- use_module(library(goals), [call_unifiers/2,expand_subgoals/3]).
+:- use_module(library(warnings), [warn/2]).
 
 :- discontiguous(macro/3).
 :- multifile(macro/3).
@@ -19,13 +20,6 @@ user:term_expansion((M#A ==> B), X) :-
     ;   X =  macros:macro(M, A, B).
 
 
-% Capturing erroneous expansions.
-% It slows down expansion, but it will produce (more) meaningful error if some
-% user macro happens to be poorly written.
-% IMPORTANT: Must be the first macro definition seen by compiler
-M#A ==> _  :-
-    (var(M); var(A)), instantiation_error(M#A).
-
 % Basic
 M#(A,B)  ==> M#A, M#B.
 M#(A;B)  ==> M#A; M#B.
@@ -33,12 +27,6 @@ M#(A->B) ==> M#A -> M#B.
 M#(\+ A) ==> \+ M#A.
 M#{A}    ==> {M#A}.
 _#!      ==> !.
-
-
-% Controlling macro expansion.
-% Any unrecognized macro will be left as it were, but by using quote you can
-% be sure that no other macro definition will be invoked
-quote#_   ==> _ :- !, false.
 
 
 % Compile time computation: Inline last argument
@@ -64,7 +52,13 @@ load_module_context(user).
 
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
+macro_wrapper(quote, _, _) :- !, false.
+macro_wrapper(M, A, X) :- macro(M, A, X).
+macro_wrapper(M, A, _) :-
+    warn("Unknown macro ~a # ~q", [M,A]),
+    throw(error(existence_error(macro/3, goal_expansion/2), [culprit-(M#A)])).
+
 user:goal_expansion(M#A, X) :-
     atomic_si(M),
-    nonvar(A),
-    macro(M, A, X).
+    when_si(nonvar(A), true),
+    macro_wrapper(M, A, X).

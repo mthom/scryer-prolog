@@ -25,6 +25,9 @@ bignum#(A < B) ==> N :-
 bignum#(A > B) ==> N :-
     \+string_num -> N = bignum_gt(A,B); N = (A > B).
 
+
+bad#macro ==> 1 :- _.
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % Test functions
@@ -80,3 +83,7 @@ example(clpz_operators_compatibility(X,Y)) :-
     expand#(
         #X #= #Y * inline_last#double(4)
     ).
+example(unknown_macros) :-
+    fep#hello,
+    foo#bar,
+    foo#fep#window.
