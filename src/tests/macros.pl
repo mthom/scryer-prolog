@@ -28,6 +28,9 @@ bignum#(A > B) ==> N :-
 
 bad#macro ==> 1 :- _.
 
+% TODO: Should implementation detect discontiguous macro definitions?
+fep#too_late ==> 999.
+
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 % Test functions
@@ -86,4 +89,12 @@ example(clpz_operators_compatibility(X,Y)) :-
 example(unknown_macros) :-
     fep#hello,
     foo#bar,
-    foo#fep#window.
+    foo#fep#window. % <- Should it expand fep#window if foo is unknown?
+example(incorrect_macros) :-
+    b(a)#x,
+    b(_)#x,
+    _#t,
+    fep#_.
+% Future tests:
+% a(b#c)#d - Should it expand b#c?
+% a#b#c#d - In which order macros should be epxanded?
