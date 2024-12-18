@@ -104,6 +104,33 @@ use super::libraries;
 use super::preprocessor::to_op_decl;
 use super::preprocessor::to_op_decl_spec;
 
+#[derive(Debug)]
+pub(crate) enum ModuleQuantification {
+    Specified(HeapCellValue),
+    Unspecified
+}
+
+impl ModuleQuantification {
+    fn to_functor(&self) -> (Vec<HeapCellValue>, HeapCellValueTag) {
+        match self {
+            &ModuleQuantification::Specified(cell) => {
+                (functor!(atom!("specified"), [cell(cell)]), HeapCellValueTag::Str)
+            }
+            ModuleQuantification::Unspecified => {
+                (functor!(atom!("unspecified")), HeapCellValueTag::Var)
+            }
+        }
+    }
+
+    #[inline]
+    fn specified(&self) -> Option<HeapCellValue> {
+        match self {
+            &ModuleQuantification::Specified(cell) => Some(cell),
+            ModuleQuantification::Unspecified => None,
+        }
+    }
+}
+
 #[cfg(feature = "repl")]
 pub(crate) fn get_key() -> KeyEvent {
     let key;
@@ -1101,8 +1128,9 @@ impl MachineState {
     pub(crate) fn strip_module(
         &self,
         mut qualified_goal: HeapCellValue,
-        mut module_loc: HeapCellValue,
-    ) -> (HeapCellValue, HeapCellValue) {
+    ) -> (ModuleQuantification, HeapCellValue) {
+        let mut module_quantification = ModuleQuantification::Unspecified;
+
         loop {
             read_heap_cell!(qualified_goal,
                 (HeapCellValueTag::Str, s) => {
@@ -1110,7 +1138,12 @@ impl MachineState {
                         .get_name_and_arity();
 
                     if name == atom!(":") && arity == 2 {
-                        module_loc = self.heap[s+1];
+                        let module_loc = self.heap[s+1];
+
+                        module_quantification = ModuleQuantification::Specified(
+                            module_loc,
+                        );
+
                         qualified_goal = self.heap[s+2];
                     } else {
                         break;
@@ -1129,7 +1162,7 @@ impl MachineState {
             );
         }
 
-        (module_loc, qualified_goal)
+        (module_quantification, qualified_goal)
     }
 }
 
@@ -1274,17 +1307,35 @@ impl Machine {
             .store(self.machine_st.deref(self.machine_st.registers[i]))
     }
 
+    fn quantification_to_module_name(
+        &mut self,
+        quantification: ModuleQuantification,
+        src: HeapCellValue,
+    ) -> Result<Atom, MachineError> {
+        match quantification.specified() {
+            Some(module_name) => {
+                let module_name = self.machine_st.store(self.machine_st.deref(module_name));
+
+                if module_name.get_tag() == HeapCellValueTag::Atom {
+                    Ok(cell_as_atom!(module_name))
+                } else {
+                    Err(self.machine_st.type_error(ValidType::Atom, src))
+                }
+            }
+            None => Ok(if let Some(load_context) = self.load_contexts.last() {
+                load_context.module
+            } else {
+                atom!("user")
+            }),
+        }
+    }
+
     #[inline(always)]
     pub(crate) fn fast_call(
         &mut self,
         arity: usize,
         call_at_index: impl Fn(&mut Machine, Atom, usize, IndexPtr) -> CallResult,
     ) -> CallResult {
-        let arity = arity - 1;
-        let (mut module_name, mut goal) = self
-            .machine_st
-            .strip_module(self.machine_st.registers[1], heap_loc_as_cell!(0));
-
         let load_registers = |machine_st: &mut MachineState,
                               goal: HeapCellValue,
                               goal_arity: usize| {
@@ -1310,9 +1361,15 @@ impl Machine {
             )
         };
 
+        let arity = arity - 1;
+        let (mut module_quantification, mut goal) = self
+            .machine_st
+            .strip_module(self.machine_st.registers[1]);
+
         let (mut name, mut goal_arity, index_cell_opt) = read_heap_cell!(goal,
             (HeapCellValueTag::Str, s) => {
-                let (name, arity) = cell_as_atom_cell!(self.machine_st.heap[s]).get_name_and_arity();
+                let (name, arity) = cell_as_atom_cell!(self.machine_st.heap[s])
+                    .get_name_and_arity();
 
                 (name, arity, if self.machine_st.heap.len() > s + arity + 1 {
                     get_structure_index(self.machine_st.heap[s + arity + 1])
@@ -1331,54 +1388,45 @@ impl Machine {
         );
 
         let mut arity = arity + goal_arity;
+        let mut module_name = self.quantification_to_module_name(
+            module_quantification,
+            self.machine_st.registers[1],
+        ).map_err(|err| {
+            let stub = functor_stub(atom!("call"), arity);
+            self.machine_st.error_form(err, stub)
+        })?;
 
-        let index_cell = index_cell_opt.or_else(|| {
+        let index_cell = if index_cell_opt.is_some() {
+            index_cell_opt
+        } else {
             let is_internal_call = name == atom!("$call") && goal_arity > 0;
-
-            if !is_internal_call {
-                let module_name = if module_name.get_tag() == HeapCellValueTag::Atom {
-                    cell_as_atom!(module_name)
-                } else {
-                    atom!("user")
-                };
-
-                if self
-                    .indices
-                    .goal_expansion_defined((name, arity), module_name)
-                {
-                    return None;
-                }
-            }
 
             if is_internal_call {
                 debug_assert_eq!(goal.get_tag(), HeapCellValueTag::Str);
                 goal = self.machine_st.heap[goal.get_value() as usize + 1];
-                (module_name, goal) = self.machine_st.strip_module(goal, module_name);
 
-                if let Some((inner_name, inner_arity)) =
-                    self.machine_st.name_and_arity_from_heap(goal)
-                {
+                (module_quantification, goal) = self.machine_st.strip_module(goal);
+
+                if let Some((inner_name, inner_arity)) = self.machine_st.name_and_arity_from_heap(goal) {
+                    module_name = self.quantification_to_module_name(
+                        module_quantification,
+                        self.machine_st.registers[1],
+                    ).unwrap_or(module_name);
+
                     arity -= goal_arity;
                     (name, goal_arity) = (inner_name, inner_arity);
                     arity += goal_arity;
-                } else {
-                    return None;
-                }
-            }
 
-            let module_name = if module_name.get_tag() != HeapCellValueTag::Atom {
-                if let Some(load_context) = self.load_contexts.last() {
-                    load_context.module
+                    self.indices.get_predicate_code_index(name, arity, module_name)
                 } else {
-                    atom!("user")
+                    None
                 }
+            } else if self.indices.goal_expansion_defined((name, arity), module_name) {
+                None
             } else {
-                cell_as_atom!(module_name)
-            };
-
-            self.indices
-                .get_predicate_code_index(name, arity, module_name)
-        });
+                self.indices.get_predicate_code_index(name, arity, module_name)
+            }
+        };
 
         if let Some(code_index) = index_cell {
             if !code_index.is_undefined() {
@@ -1401,8 +1449,7 @@ impl Machine {
         // complete_partial_goal prior to goal_expansion.
         let mut supp_vars = IndexSet::with_hasher(FxBuildHasher::default());
 
-        self.machine_st
-            .variable_set(&mut supp_vars, self.machine_st.registers[2]);
+        self.machine_st.variable_set(&mut supp_vars, self.machine_st.registers[2]);
 
         struct GoalAnalysisResult {
             is_simple_goal: bool,
@@ -1441,12 +1488,17 @@ impl Machine {
                     post_supp_args
                         .zip(supp_vars.iter())
                         .all(|(arg_term, supp_var)| {
-                            let (module_loc, arg_term) = self.machine_st.strip_module(
-                                arg_term,
-                                heap_loc_as_cell!(0),
-                            );
+                            let (quantification, arg_term) = self.machine_st.strip_module(arg_term);
 
-                            if (module_loc.is_var() || module_loc == atom_as_cell!(atom!("user"))) && arg_term.is_var() && supp_var.is_var() {
+                            let is_simple_module_quantification = match quantification {
+                                ModuleQuantification::Unspecified => true,
+                                ModuleQuantification::Specified(module_name) => {
+                                    let module_name = self.machine_st.store(self.machine_st.deref(module_name));
+                                    module_name == atom_as_cell!(atom!("user"))
+                                }
+                            };
+
+                            if is_simple_module_quantification && arg_term.is_var() && supp_var.is_var() {
                                 return arg_term == *supp_var;
                             }
 
@@ -1524,8 +1576,7 @@ impl Machine {
             result.goal
         } else {
             let mut unexpanded_vars = IndexSet::with_hasher(FxBuildHasher::default());
-            self.machine_st
-                .variable_set(&mut unexpanded_vars, self.machine_st.registers[5]);
+            self.machine_st.variable_set(&mut unexpanded_vars, self.machine_st.registers[5]);
 
             // all supp_vars must appear later!
             let vars = IndexSet::<HeapCellValue, BuildHasherDefault<FxHasher>>::from_iter(
@@ -1581,9 +1632,9 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn is_expanded_or_inlined(&self) -> bool {
-        let (_module_loc, qualified_goal) = self
+        let (_quantification, qualified_goal) = self
             .machine_st
-            .strip_module(self.machine_st.registers[1], empty_list_as_cell!());
+            .strip_module(self.machine_st.registers[1]);
 
         if HeapCellValueTag::Str == qualified_goal.get_tag() {
             let s = qualified_goal.get_value() as usize;
@@ -1613,13 +1664,20 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn strip_module(&mut self) {
-        let (module_loc, qualified_goal) = self
+        let (module_quantification, qualified_goal) = self
             .machine_st
-            .strip_module(self.machine_st.registers[1], self.machine_st.registers[2]);
+            .strip_module(self.machine_st.registers[1]);
 
         let target_module_loc = self.machine_st.registers[2];
 
-        unify_fn!(&mut self.machine_st, module_loc, target_module_loc);
+        let (functor_stub, ref_cell_tag) = module_quantification.to_functor();
+
+        let h = self.machine_st.heap.len();
+        let ref_cell = HeapCellValue::build_with(ref_cell_tag, h as u64);
+
+        self.machine_st.heap.extend(functor_stub.into_iter());
+
+        unify_fn!(&mut self.machine_st, ref_cell, target_module_loc);
 
         let target_qualified_goal = self.machine_st.registers[3];
 
@@ -1692,20 +1750,15 @@ impl Machine {
                 debug_assert_eq!(_arity, 0);
                 module_name
             }
-            _ if module_name.is_var() => {
-                if let Some(load_context) = self.load_contexts.last() {
-                    load_context.module
-                } else {
-                    atom!("user")
-                }
-            }
             _ => {
                 let h = self.machine_st.heap.len();
                 let call_form = functor!(atom!(":"), [cell(module_name), cell(self.machine_st.registers[2])]);
+
                 self.machine_st.heap.extend(call_form);
 
+                let err  = self.machine_st.type_error(ValidType::Callable, str_loc_as_cell!(h));
                 let stub = functor_stub(atom!("call"), narity + 1);
-                let err = self.machine_st.type_error(ValidType::Callable, str_loc_as_cell!(h));
+
                 return Err(self.machine_st.error_form(err, stub));
             }
         );
@@ -5203,7 +5256,7 @@ impl Machine {
                 } else {
                     let (_, qualified_goal) = self
                         .machine_st
-                        .strip_module(list_head, empty_list_as_cell!());
+                        .strip_module(list_head);
 
                     unify!(self.machine_st, qualified_goal, attr);
                 }
@@ -5399,16 +5452,16 @@ impl Machine {
                         list_head = self.machine_st.heap[h];
                     }
                     (HeapCellValueTag::Str | HeapCellValueTag::Atom) => {
-                        let (module_loc, qualified_goal) = self.machine_st.strip_module(
-                            list_head,
-                            empty_list_as_cell!(),
-                        );
+                        let (quantification, qualified_goal) = self.machine_st.strip_module(list_head);
 
                         let (t_name, t_arity) = self.machine_st
                             .name_and_arity_from_heap(qualified_goal)
                             .unwrap();
 
-                        if module == module_loc && name == t_name && arity == t_arity {
+                        if Some(module) == quantification.specified() &&
+                            name == t_name &&
+                            arity == t_arity
+                        {
                             return Some(AttrListMatch {
                                 match_site: MatchSite::Match(attrs_list.get_value() as usize),
                                 prev_tail,

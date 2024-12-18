@@ -1393,7 +1393,10 @@ impl MachineState {
                         Err(cons_term) => term_stack.push(cons_term),
                     }
                 }
-                (HeapCellValueTag::Var | HeapCellValueTag::AttrVar | HeapCellValueTag::StackVar, h) => {
+                (HeapCellValueTag::StackVar, h) => {
+                    term_stack.push(Term::Var(Cell::default(), VarPtr::from(format!("s_{}", h))));
+                }
+                (HeapCellValueTag::Var | HeapCellValueTag::AttrVar, h) => {
                     term_stack.push(Term::Var(Cell::default(), VarPtr::from(format!("_{}", h))));
                 }
                 (HeapCellValueTag::Cons | HeapCellValueTag::CStr | HeapCellValueTag::Fixnum |

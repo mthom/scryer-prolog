@@ -691,16 +691,22 @@ predicate_property(Callable, Property) :-
     ).
 
 strip_module(Goal, M, G) :-
-    '$strip_module'(Goal, M, G).
+    '$strip_module'(Goal, MQ, G),
+    (  MQ = specified(M) ->
+       true
+    ;  MQ = unspecified,
+       true
+    ).
 
 
 :- non_counted_backtracking strip_subst_module/4.
 
 strip_subst_module(Goal, M1, M2, G) :-
-    '$strip_module'(Goal, M2, G),
-    (  var(M2), \+ functor(Goal, (:), 2) ->
-       M2 = M1
-    ;  true
+    '$strip_module'(Goal, MQ, G),
+    (  MQ = specified(M2) ->
+       true
+    ;  MQ = unspecified,
+       M1 = M2
     ).
 
 /*
@@ -844,12 +850,6 @@ expand_goal(UnexpandedGoals, Module, ExpandedGoals) :-
           UnexpandedGoals = ExpandedGoals),
     !.
 
-module_instantiated(M, EM) :-
-    (  var(M) ->
-       EM = user
-    ;  M = EM
-    ).
-
 :- non_counted_backtracking expand_goal/5.
 
 expand_goal(UnexpandedGoals, Module, ExpandedGoals, HeadVars, TGs) :-
@@ -862,10 +862,9 @@ expand_goal(UnexpandedGoals, Module, ExpandedGoals, HeadVars, TGs) :-
        ),
        (  expand_goal_cases(Goals, Module, ExpandedGoals, HeadVars, TGs) ->
           true
-       ;  module_instantiated(Module, InstantiatedModule),
-          predicate_property(InstantiatedModule:Goals, meta_predicate(MetaSpecs0)),
+       ;  predicate_property(Module:Goals, meta_predicate(MetaSpecs0)),
           MetaSpecs0 =.. [_ | MetaSpecs] ->
-          expand_module_names(Goals, MetaSpecs, InstantiatedModule, ExpandedGoals, HeadVars, TGs)
+          expand_module_names(Goals, MetaSpecs, Module, ExpandedGoals, HeadVars, TGs)
        ;  thread_goals(Goals, ExpandedGoals, (','))
        ;  Goals = ExpandedGoals
        )
@@ -896,10 +895,9 @@ expand_call_goal_(UnexpandedGoals, Module, ExpandedGoals) :-
           goal_expansion(UnexpandedGoals1, user, Goals)
        ;  Goals = UnexpandedGoals1
        ),
-       module_instantiated(Module, InstantiatedModule),
-       (  predicate_property(InstantiatedModule:Goals, meta_predicate(MetaSpecs0)),
+       (  predicate_property(Module:Goals, meta_predicate(MetaSpecs0)),
           MetaSpecs0 =.. [_ | MetaSpecs] ->
-          expand_module_names(Goals, MetaSpecs, InstantiatedModule, ExpandedGoals, [], [])
+          expand_module_names(Goals, MetaSpecs, Module, ExpandedGoals, [], [])
        ;  ExpandedGoals = Goals
        )
     ;  ExpandedGoals = UnexpandedGoals1
@@ -982,17 +980,16 @@ thread_goals(Goals0, Goals1, Hole, Functor) :-
 %     length(Args, N),
 %     Head =.. [call, G | Args],
 %     N1 is N + 1,
-%     StripModule =.. ['$strip_module', G, M1, G1],
+%     CallModule = call_module(G, M0, G0),
 %     FastCall =.. ['$fast_call', G | Args],
-%     PrepareCallClause =.. [ '$prepare_call_clause', G2, G1 | Args],
-%     ModuleCall =.. ['$module_call', M2, G4],
+%     PrepareCallClause =.. [ '$prepare_call_clause', G1, G0 | Args],
+%     ModuleCall =.. ['$module_call', M2, G3],
 %     Clauses = [(Head :- var(G),
 %                         instantiation_error(call/N1)),
 %                (Head :- FastCall),
-%                (Head :- StripModule,
-%                         PrepareCallClause,
-%                         expand_call_goal(G2, M1, G3),
-%                         strip_subst_module(G3, M1, M2, G4),
+%                (Head :- PrepareCallClause,
+%                         expand_call_goal(G1, M1, G2),
+%                         strip_subst_module(G2, M1, M2, G3),
 %                         ModuleCall)].
 %
 % generate_call_forms :-
@@ -1009,15 +1006,21 @@ thread_goals(Goals0, Goals1, Hole, Functor) :-
 % The '$call' functor is an escape hatch from goal expansion. So far,
 % it is used only to avoid infinite recursion into expand_call_goal/3.
 
-:- non_counted_backtracking call/1.
+call_module(G0, M, G1) :-
+    '$strip_module'(G0, MQ, G1),
+    (  MQ = specified(M) ->
+       true
+    ;  load_context(M)
+    ).
 
+:- non_counted_backtracking call/1.
 call(G) :-
     var(G),
     instantiation_error(call/1).
 call(G) :-
     '$fast_call'(G).
 call(G0) :-
-    '$strip_module'(G0, M0, G1),
+    call_module(G0, M0, G1),
     expand_call_goal(G1, M0, G2),
     strip_subst_module(G2, M0, M1, G3),
     '$module_call'(M1, G3).
@@ -1029,7 +1032,7 @@ call(A,B) :-
 call(A,B) :-
    '$fast_call'(A,B).
 call(A,B) :-
-   '$strip_module'(A,C,D),
+   call_module(A,C,D),
    '$prepare_call_clause'(E,D,B),
    expand_call_goal(E,C,F),
    strip_subst_module(F,C,G,H),
@@ -1042,7 +1045,7 @@ call(A,B,C) :-
 call(A,B,C) :-
    '$fast_call'(A,B,C).
 call(A,B,C) :-
-   '$strip_module'(A,D,E),
+   call_module(A,D,E),
    '$prepare_call_clause'(F,E,B,C),
    expand_call_goal(F,D,G),
    strip_subst_module(G,D,H,I),
@@ -1055,7 +1058,7 @@ call(A,B,C,D) :-
 call(A,B,C,D) :-
    '$fast_call'(A,B,C,D).
 call(A,B,C,D) :-
-   '$strip_module'(A,E,F),
+   call_module(A,E,F),
    '$prepare_call_clause'(G,F,B,C,D),
    expand_call_goal(G,E,H),
    strip_subst_module(H,E,I,J),
@@ -1068,7 +1071,7 @@ call(A,B,C,D,E) :-
 call(A,B,C,D,E) :-
    '$fast_call'(A,B,C,D,E).
 call(A,B,C,D,E) :-
-   '$strip_module'(A,F,G),
+   call_module(A,F,G),
    '$prepare_call_clause'(H,G,B,C,D,E),
    expand_call_goal(H,F,I),
    strip_subst_module(I,F,J,K),
@@ -1081,7 +1084,7 @@ call(A,B,C,D,E,F) :-
 call(A,B,C,D,E,F) :-
    '$fast_call'(A,B,C,D,E,F).
 call(A,B,C,D,E,F) :-
-   '$strip_module'(A,G,H),
+   call_module(A,G,H),
    '$prepare_call_clause'(I,H,B,C,D,E,F),
    expand_call_goal(I,G,J),
    strip_subst_module(J,G,K,L),
@@ -1094,7 +1097,7 @@ call(A,B,C,D,E,F,G) :-
 call(A,B,C,D,E,F,G) :-
    '$fast_call'(A,B,C,D,E,F,G).
 call(A,B,C,D,E,F,G) :-
-   '$strip_module'(A,H,I),
+   call_module(A,H,I),
    '$prepare_call_clause'(J,I,B,C,D,E,F,G),
    expand_call_goal(J,H,K),
    strip_subst_module(K,H,L,M),
@@ -1107,7 +1110,7 @@ call(A,B,C,D,E,F,G,H) :-
 call(A,B,C,D,E,F,G,H) :-
    '$fast_call'(A,B,C,D,E,F,G,H).
 call(A,B,C,D,E,F,G,H) :-
-   '$strip_module'(A,I,J),
+   call_module(A,I,J),
    '$prepare_call_clause'(K,J,B,C,D,E,F,G,H),
    expand_call_goal(K,I,L),
    strip_subst_module(L,I,M,N),
@@ -1120,7 +1123,7 @@ call(A,B,C,D,E,F,G,H,I) :-
 call(A,B,C,D,E,F,G,H,I) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I).
 call(A,B,C,D,E,F,G,H,I) :-
-   '$strip_module'(A,J,K),
+   call_module(A,J,K),
    '$prepare_call_clause'(L,K,B,C,D,E,F,G,H,I),
    expand_call_goal(L,J,M),
    strip_subst_module(M,J,N,O),
@@ -1133,7 +1136,7 @@ call(A,B,C,D,E,F,G,H,I,J) :-
 call(A,B,C,D,E,F,G,H,I,J) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J).
 call(A,B,C,D,E,F,G,H,I,J) :-
-   '$strip_module'(A,K,L),
+   call_module(A,K,L),
    '$prepare_call_clause'(M,L,B,C,D,E,F,G,H,I,J),
    expand_call_goal(M,K,N),
    strip_subst_module(N,K,O,P),
@@ -1146,7 +1149,7 @@ call(A,B,C,D,E,F,G,H,I,J,K) :-
 call(A,B,C,D,E,F,G,H,I,J,K) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K).
 call(A,B,C,D,E,F,G,H,I,J,K) :-
-   '$strip_module'(A,L,M),
+   call_module(A,L,M),
    '$prepare_call_clause'(N,M,B,C,D,E,F,G,H,I,J,K),
    expand_call_goal(N,L,O),
    strip_subst_module(O,L,P,Q),
@@ -1159,7 +1162,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L) :-
 call(A,B,C,D,E,F,G,H,I,J,K,L) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L).
 call(A,B,C,D,E,F,G,H,I,J,K,L) :-
-   '$strip_module'(A,M,N),
+   call_module(A,M,N),
    '$prepare_call_clause'(O,N,B,C,D,E,F,G,H,I,J,K,L),
    expand_call_goal(O,M,P),
    strip_subst_module(P,M,Q,R),
@@ -1172,7 +1175,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M) :-
 call(A,B,C,D,E,F,G,H,I,J,K,L,M) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M) :-
-   '$strip_module'(A,N,O),
+   call_module(A,N,O),
    '$prepare_call_clause'(P,O,B,C,D,E,F,G,H,I,J,K,L,M),
    expand_call_goal(P,N,Q),
    strip_subst_module(Q,N,R,S),
@@ -1185,7 +1188,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N) :-
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N) :-
-   '$strip_module'(A,O,P),
+   call_module(A,O,P),
    '$prepare_call_clause'(Q,P,B,C,D,E,F,G,H,I,J,K,L,M,N),
    expand_call_goal(Q,O,R),
    strip_subst_module(R,O,S,T),
@@ -1198,7 +1201,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O) :-
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O) :-
-   '$strip_module'(A,P,Q),
+   call_module(A,P,Q),
    '$prepare_call_clause'(R,Q,B,C,D,E,F,G,H,I,J,K,L,M,N,O),
    expand_call_goal(R,P,S),
    strip_subst_module(S,P,T,U),
@@ -1211,7 +1214,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P) :-
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P) :-
-   '$strip_module'(A,Q,R),
+   call_module(A,Q,R),
    '$prepare_call_clause'(S,R,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P),
    expand_call_goal(S,Q,T),
    strip_subst_module(T,Q,U,V),
@@ -1224,7 +1227,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q) :-
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q) :-
-   '$strip_module'(A,R,S),
+   call_module(A,R,S),
    '$prepare_call_clause'(T,S,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q),
    expand_call_goal(T,R,U),
    strip_subst_module(U,R,V,W),
@@ -1237,7 +1240,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R) :-
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R) :-
-   '$strip_module'(A,S,T),
+   call_module(A,S,T),
    '$prepare_call_clause'(U,T,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R),
    expand_call_goal(U,S,V),
    strip_subst_module(V,S,W,X),
@@ -1250,7 +1253,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S) :-
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S) :-
-   '$strip_module'(A,T,U),
+   call_module(A,T,U),
    '$prepare_call_clause'(V,U,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S),
    expand_call_goal(V,T,W),
    strip_subst_module(W,T,X,Y),
@@ -1263,7 +1266,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T) :-
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T) :-
-   '$strip_module'(A,U,V),
+   call_module(A,U,V),
    '$prepare_call_clause'(W,V,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T),
    expand_call_goal(W,U,X),
    strip_subst_module(X,U,Y,Z),
@@ -1276,7 +1279,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U) :-
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U) :-
-   '$strip_module'(A,V,W),
+   call_module(A,V,W),
    '$prepare_call_clause'(X,W,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U),
    expand_call_goal(X,V,Y),
    strip_subst_module(Y,V,Z,A1),
@@ -1289,7 +1292,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V) :-
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V) :-
-   '$strip_module'(A,W,X),
+   call_module(A,W,X),
    '$prepare_call_clause'(Y,X,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V),
    expand_call_goal(Y,W,Z),
    strip_subst_module(Z,W,A1,B1),
@@ -1302,7 +1305,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W) :-
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W) :-
-   '$strip_module'(A,X,Y),
+   call_module(A,X,Y),
    '$prepare_call_clause'(Z,Y,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W),
    expand_call_goal(Z,X,A1),
    strip_subst_module(A1,X,B1,C1),
@@ -1315,7 +1318,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X) :-
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X) :-
-   '$strip_module'(A,Y,Z),
+   call_module(A,Y,Z),
    '$prepare_call_clause'(A1,Z,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X),
    expand_call_goal(A1,Y,B1),
    strip_subst_module(B1,Y,C1,D1),
@@ -1328,7 +1331,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y) :-
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y) :-
-   '$strip_module'(A,Z,A1),
+   call_module(A,Z,A1),
    '$prepare_call_clause'(B1,A1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y),
    expand_call_goal(B1,Z,C1),
    strip_subst_module(C1,Z,D1,E1),
@@ -1341,7 +1344,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z) :-
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z) :-
-   '$strip_module'(A,A1,B1),
+   call_module(A,A1,B1),
    '$prepare_call_clause'(C1,B1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z),
    expand_call_goal(C1,A1,D1),
    strip_subst_module(D1,A1,E1,F1),
@@ -1354,7 +1357,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1) :-
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1) :-
-   '$strip_module'(A,B1,C1),
+   call_module(A,B1,C1),
    '$prepare_call_clause'(D1,C1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1),
    expand_call_goal(D1,B1,E1),
    strip_subst_module(E1,B1,F1,G1),
@@ -1367,7 +1370,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1) :-
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1) :-
-   '$strip_module'(A,C1,D1),
+   call_module(A,C1,D1),
    '$prepare_call_clause'(E1,D1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1),
    expand_call_goal(E1,C1,F1),
    strip_subst_module(F1,C1,G1,H1),
@@ -1380,7 +1383,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1) :-
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1) :-
-   '$strip_module'(A,D1,E1),
+   call_module(A,D1,E1),
    '$prepare_call_clause'(F1,E1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1),
    expand_call_goal(F1,D1,G1),
    strip_subst_module(G1,D1,H1,I1),
@@ -1393,7 +1396,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1) :-
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1) :-
-   '$strip_module'(A,E1,F1),
+   call_module(A,E1,F1),
    '$prepare_call_clause'(G1,F1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1),
    expand_call_goal(G1,E1,H1),
    strip_subst_module(H1,E1,I1,J1),
@@ -1406,7 +1409,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1) :-
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1) :-
-   '$strip_module'(A,F1,G1),
+   call_module(A,F1,G1),
    '$prepare_call_clause'(H1,G1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1),
    expand_call_goal(H1,F1,I1),
    strip_subst_module(I1,F1,J1,K1),
@@ -1419,7 +1422,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1) :-
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1) :-
-   '$strip_module'(A,G1,H1),
+   call_module(A,G1,H1),
    '$prepare_call_clause'(I1,H1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1),
    expand_call_goal(I1,G1,J1),
    strip_subst_module(J1,G1,K1,L1),
@@ -1432,7 +1435,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1) :
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1) :-
-   '$strip_module'(A,H1,I1),
+   call_module(A,H1,I1),
    '$prepare_call_clause'(J1,I1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1),
    expand_call_goal(J1,H1,K1),
    strip_subst_module(K1,H1,L1,M1),
@@ -1445,7 +1448,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1) :-
-   '$strip_module'(A,I1,J1),
+   call_module(A,I1,J1),
    '$prepare_call_clause'(K1,J1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1),
    expand_call_goal(K1,I1,L1),
    strip_subst_module(L1,I1,M1,N1),
@@ -1458,7 +1461,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1) :-
-   '$strip_module'(A,J1,K1),
+   call_module(A,J1,K1),
    '$prepare_call_clause'(L1,K1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1),
    expand_call_goal(L1,J1,M1),
    strip_subst_module(M1,J1,N1,O1),
@@ -1471,7 +1474,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1) :-
-   '$strip_module'(A,K1,L1),
+   call_module(A,K1,L1),
    '$prepare_call_clause'(M1,L1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1),
    expand_call_goal(M1,K1,N1),
    strip_subst_module(N1,K1,O1,P1),
@@ -1484,7 +1487,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1) :-
-   '$strip_module'(A,L1,M1),
+   call_module(A,L1,M1),
    '$prepare_call_clause'(N1,M1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1),
    expand_call_goal(N1,L1,O1),
    strip_subst_module(O1,L1,P1,Q1),
@@ -1497,7 +1500,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1) :-
-   '$strip_module'(A,M1,N1),
+   call_module(A,M1,N1),
    '$prepare_call_clause'(O1,N1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1),
    expand_call_goal(O1,M1,P1),
    strip_subst_module(P1,M1,Q1,R1),
@@ -1510,7 +1513,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1) :-
-   '$strip_module'(A,N1,O1),
+   call_module(A,N1,O1),
    '$prepare_call_clause'(P1,O1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1),
    expand_call_goal(P1,N1,Q1),
    strip_subst_module(Q1,N1,R1,S1),
@@ -1523,7 +1526,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1) :-
-   '$strip_module'(A,O1,P1),
+   call_module(A,O1,P1),
    '$prepare_call_clause'(Q1,P1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1),
    expand_call_goal(Q1,O1,R1),
    strip_subst_module(R1,O1,S1,T1),
@@ -1536,7 +1539,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1) :-
-   '$strip_module'(A,P1,Q1),
+   call_module(A,P1,Q1),
    '$prepare_call_clause'(R1,Q1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1),
    expand_call_goal(R1,P1,S1),
    strip_subst_module(S1,P1,T1,U1),
@@ -1549,7 +1552,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1) :-
-   '$strip_module'(A,Q1,R1),
+   call_module(A,Q1,R1),
    '$prepare_call_clause'(S1,R1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1),
    expand_call_goal(S1,Q1,T1),
    strip_subst_module(T1,Q1,U1,V1),
@@ -1562,7 +1565,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1) :-
-   '$strip_module'(A,R1,S1),
+   call_module(A,R1,S1),
    '$prepare_call_clause'(T1,S1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1),
    expand_call_goal(T1,R1,U1),
    strip_subst_module(U1,R1,V1,W1),
@@ -1575,7 +1578,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1) :-
-   '$strip_module'(A,S1,T1),
+   call_module(A,S1,T1),
    '$prepare_call_clause'(U1,T1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1),
    expand_call_goal(U1,S1,V1),
    strip_subst_module(V1,S1,W1,X1),
@@ -1588,7 +1591,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1) :-
-   '$strip_module'(A,T1,U1),
+   call_module(A,T1,U1),
    '$prepare_call_clause'(V1,U1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1),
    expand_call_goal(V1,T1,W1),
    strip_subst_module(W1,T1,X1,Y1),
@@ -1601,7 +1604,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1) :-
-   '$strip_module'(A,U1,V1),
+   call_module(A,U1,V1),
    '$prepare_call_clause'(W1,V1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1),
    expand_call_goal(W1,U1,X1),
    strip_subst_module(X1,U1,Y1,Z1),
@@ -1614,7 +1617,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1) :-
-   '$strip_module'(A,V1,W1),
+   call_module(A,V1,W1),
    '$prepare_call_clause'(X1,W1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1),
    expand_call_goal(X1,V1,Y1),
    strip_subst_module(Y1,V1,Z1,A2),
@@ -1627,7 +1630,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1) :-
-   '$strip_module'(A,W1,X1),
+   call_module(A,W1,X1),
    '$prepare_call_clause'(Y1,X1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1),
    expand_call_goal(Y1,W1,Z1),
    strip_subst_module(Z1,W1,A2,B2),
@@ -1640,7 +1643,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1) :-
-   '$strip_module'(A,X1,Y1),
+   call_module(A,X1,Y1),
    '$prepare_call_clause'(Z1,Y1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1),
    expand_call_goal(Z1,X1,A2),
    strip_subst_module(A2,X1,B2,C2),
@@ -1653,7 +1656,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1) :-
-   '$strip_module'(A,Y1,Z1),
+   call_module(A,Y1,Z1),
    '$prepare_call_clause'(A2,Z1,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1),
    expand_call_goal(A2,Y1,B2),
    strip_subst_module(B2,Y1,C2,D2),
@@ -1666,7 +1669,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1) :-
-   '$strip_module'(A,Z1,A2),
+   call_module(A,Z1,A2),
    '$prepare_call_clause'(B2,A2,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1),
    expand_call_goal(B2,Z1,C2),
    strip_subst_module(C2,Z1,D2,E2),
@@ -1679,7 +1682,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1) :-
-   '$strip_module'(A,A2,B2),
+   call_module(A,A2,B2),
    '$prepare_call_clause'(C2,B2,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1),
    expand_call_goal(C2,A2,D2),
    strip_subst_module(D2,A2,E2,F2),
@@ -1692,7 +1695,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2) :-
-   '$strip_module'(A,B2,C2),
+   call_module(A,B2,C2),
    '$prepare_call_clause'(D2,C2,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2),
    expand_call_goal(D2,B2,E2),
    strip_subst_module(E2,B2,F2,G2),
@@ -1705,7 +1708,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2) :-
-   '$strip_module'(A,C2,D2),
+   call_module(A,C2,D2),
    '$prepare_call_clause'(E2,D2,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2),
    expand_call_goal(E2,C2,F2),
    strip_subst_module(F2,C2,G2,H2),
@@ -1718,7 +1721,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2) :-
-   '$strip_module'(A,D2,E2),
+   call_module(A,D2,E2),
    '$prepare_call_clause'(F2,E2,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2),
    expand_call_goal(F2,D2,G2),
    strip_subst_module(G2,D2,H2,I2),
@@ -1731,7 +1734,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2) :-
-   '$strip_module'(A,E2,F2),
+   call_module(A,E2,F2),
    '$prepare_call_clause'(G2,F2,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2),
    expand_call_goal(G2,E2,H2),
    strip_subst_module(H2,E2,I2,J2),
@@ -1744,7 +1747,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2) :-
-   '$strip_module'(A,F2,G2),
+   call_module(A,F2,G2),
    '$prepare_call_clause'(H2,G2,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2),
    expand_call_goal(H2,F2,I2),
    strip_subst_module(I2,F2,J2,K2),
@@ -1757,7 +1760,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2) :-
-   '$strip_module'(A,G2,H2),
+   call_module(A,G2,H2),
    '$prepare_call_clause'(I2,H2,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2),
    expand_call_goal(I2,G2,J2),
    strip_subst_module(J2,G2,K2,L2),
@@ -1770,7 +1773,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2) :-
-   '$strip_module'(A,H2,I2),
+   call_module(A,H2,I2),
    '$prepare_call_clause'(J2,I2,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2),
    expand_call_goal(J2,H2,K2),
    strip_subst_module(K2,H2,L2,M2),
@@ -1783,7 +1786,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2) :-
-   '$strip_module'(A,I2,J2),
+   call_module(A,I2,J2),
    '$prepare_call_clause'(K2,J2,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2),
    expand_call_goal(K2,I2,L2),
    strip_subst_module(L2,I2,M2,N2),
@@ -1796,7 +1799,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2) :-
-   '$strip_module'(A,J2,K2),
+   call_module(A,J2,K2),
    '$prepare_call_clause'(L2,K2,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2),
    expand_call_goal(L2,J2,M2),
    strip_subst_module(M2,J2,N2,O2),
@@ -1809,7 +1812,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2,J2) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2,J2).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2,J2) :-
-   '$strip_module'(A,K2,L2),
+   call_module(A,K2,L2),
    '$prepare_call_clause'(M2,L2,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2,J2),
    expand_call_goal(M2,K2,N2),
    strip_subst_module(N2,K2,O2,P2),
@@ -1822,7 +1825,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2,J2,K2) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2,J2,K2).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2,J2,K2) :-
-   '$strip_module'(A,L2,M2),
+   call_module(A,L2,M2),
    '$prepare_call_clause'(N2,M2,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2,J2,K2),
    expand_call_goal(N2,L2,O2),
    strip_subst_module(O2,L2,P2,Q2),
@@ -1835,7 +1838,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2,J2,K2,L2) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2,J2,K2,L2).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2,J2,K2,L2) :-
-   '$strip_module'(A,M2,N2),
+   call_module(A,M2,N2),
    '$prepare_call_clause'(O2,N2,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2,J2,K2,L2),
    expand_call_goal(O2,M2,P2),
    strip_subst_module(P2,M2,Q2,R2),
@@ -1848,7 +1851,7 @@ call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2,J2,K2,L2,M2) :-
    '$fast_call'(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2,J2,K2,L2,M2).
 call(A,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2,J2,K2,L2,M2) :-
-   '$strip_module'(A,N2,O2),
+   call_module(A,N2,O2),
    '$prepare_call_clause'(P2,O2,B,C,D,E,F,G,H,I,J,K,L,M,N,O,P,Q,R,S,T,U,V,W,X,Y,Z,A1,B1,C1,D1,E1,F1,G1,H1,I1,J1,K1,L1,M1,N1,O1,P1,Q1,R1,S1,T1,U1,V1,W1,X1,Y1,Z1,A2,B2,C2,D2,E2,F2,G2,H2,I2,J2,K2,L2,M2),
    expand_call_goal(P2,N2,Q2),
    strip_subst_module(Q2,N2,R2,S2),

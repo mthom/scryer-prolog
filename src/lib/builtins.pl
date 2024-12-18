@@ -364,7 +364,7 @@ cont_list_goal(Conts, '$call'(builtins:dispatch_call_list(Conts))).
 
 dispatch_prep(Gs, B, Conts) :-
     (  callable(Gs) ->
-       strip_module(Gs, M, Gs0),
+       loader:strip_module(Gs, M, Gs0),
        (  nonvar(Gs0),
           dispatch_prep_(Gs0, B, Conts) ->
           true
@@ -1373,7 +1373,7 @@ current_predicate(Pred) :-
     (  var(Pred) ->
        '$get_db_refs'(_, _, _, PIs),
        lists:member(Pred, PIs)
-    ;  '$strip_module'(Pred, Module, UnqualifiedPred),
+    ;  loader:strip_module(Pred, Module, UnqualifiedPred),
        (  var(Module),
           \+ functor(Pred, (:), 2)
        ;  atom(Module)
