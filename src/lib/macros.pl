@@ -1,11 +1,5 @@
 /** Macro system inspired by KL1 and PMOS from 5th Gen Computer Systems.
 
-I was recently reading sources from
-[Fifth Generation Computer Systems](https://en.wikipedia.org/wiki/Fifth_Generation_Computer_Systems)
-project and I found that KL1 language actually supported some sort of macros using
-`(#)/2` term. This is how macro definitions look like.
-
-
 ## Quick tutorial
 
 Define your own:
