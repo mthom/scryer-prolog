@@ -98,7 +98,7 @@ example(incorrect_macros) :-
     _#t,
     fep#_.
 example(tbd) :-
-    a(b#c)#d, % <- Should it expand b#c? if b/0 and a/1 are registered macros?
+    a(b#c)#d, % <- Should it expand b#c? If b/0 and a/1 are registered macros?
     a#b#c#d. % <- In which order macros should be expanded?
 
 % Should macros be expanded in clauses heads?

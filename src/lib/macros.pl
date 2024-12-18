@@ -71,7 +71,7 @@ You can selectively import macros from any module that defines them:
 :- use_module(macros_collection, [number/0, double/0]).
 ```
 
-It will enable only macros that were explictily imported, and warn if you use
+It will enable only macros that were explicitly imported, and warn if you use
 others.
 
 There is a little quirk though: if your macro has a numeric name, then it will
