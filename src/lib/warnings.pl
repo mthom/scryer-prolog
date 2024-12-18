@@ -8,7 +8,8 @@
 
 %% warn(+Format, ?Vars).
 %
-% Same as warn/3 using default user_error stream.
+% Same as `warn/3` using default user_error stream.
+%
 warn(Format, Vars) :-
     warn(user_error, Format, Vars).
 
@@ -17,6 +18,7 @@ warn(Format, Vars) :-
 %
 % Print a warning message to Stream. Predicate is provided for uniformity of
 % warning messages throughout the codebase.
+%
 warn(Stream, Format, Vars) :-
     prolog_load_context(file, File),
     prolog_load_context(term_position, position_and_lines_read(_,Line)),

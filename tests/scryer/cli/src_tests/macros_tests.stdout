@@ -54,6 +54,8 @@ example(clpz_operators_compatibility(A,B)) :-
       )
    ;  clpz:clpz_equal(#A,#B*8)
    ).
+example(concatenation(A)) :-
+   write(['H',e,l,l,o,' '|A]).
 example(unknown_macros) :-
    fep#hello,
    foo#bar,

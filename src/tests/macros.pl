@@ -2,7 +2,7 @@
 :- use_module(library(dcgs)).
 :- use_module(library(lambda)).
 
-:- use_module(library(string_macros), [tel/0]). % <- Macros can be imported selectively
+:- use_module(library(string_macros), [tel/0,cat/0]). % <- Macros can be imported selectively
 :- use_module(library(macros)).
 :- use_module(library(clpz)).
 
@@ -86,6 +86,8 @@ example(clpz_operators_compatibility(X,Y)) :-
     expand#(
         #X #= #Y * inline_last#double(4)
     ).
+example(concatenation(Name)) :-
+    expand#write(cat#("Hello "-Name)).
 example(unknown_macros) :-
     fep#hello,
     foo#bar,

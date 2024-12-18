@@ -1,45 +1,63 @@
 /** Macro system inspired by KL1 and PMOS from 5th Gen Computer Systems.
 
+I was recently reading sources from
+[Fifth Generation Computer Systems](https://en.wikipedia.org/wiki/Fifth_Generation_Computer_Systems)
+project and I found that KL1 language actually supported some sort of macros using
+`(#)/2` term. This is how macro definitions look like.
+
+
+## Quick tutorial
+
 Define your own:
 
-    number#one ==> 1.
+```
+number#one ==> 1.
+```
 
-It will replace all occurrences of number#one with an actual number 1.
+It will replace all occurrences of `number#one` with an actual number `1`.
 
 You can have a more complex rules too:
 
-    math#double(X) ==> Y :- Y is 2 * X.
+```
+math#double(X) ==> Y :- Y is 2 * X.
+```
 
-It will replace all occurrences of math#double(...) with computed concrete value.
+It will replace all occurrences of `math#double(...)` with computed concrete value.
 
 You can use them by simply referencing in a goal:
 
-    print#S ==> format("~s", [S]).
+```
+print#S ==> format("~s", [S]).
 
-    predicate(X) :-
-        print#"STRING",
-        my_macro#atom,
-        expand#(
-            X = number#one
-        ).
+predicate(X) :-
+    print#"STRING",
+    my_macro#atom,
+    expand#(
+        X = number#one
+    ).
+```
 
 That code will be expanded to:
 
-    predicate(X) :-
-        format("~s", ["STRING"]),
-        my_macro#atom,
-        X = 1.
+```
+predicate(X) :-
+    format("~s", ["STRING"]),
+    my_macro#atom,
+    X = 1.
+```
 
-Please notice that unknown macros (my_macro) will be left intact and you will
+Please notice that unknown macros (`my_macro`) will be left intact and you will
 observe a compilation warning.
 
 You can disable macro expansion by quoting it:
 
-    predicate(X, Y) :-
-        expand#(
-            X = quote#math#double(42),
-            Y = math#double(23)
-        ).
+```
+predicate(X, Y) :-
+    expand#(
+        X = quote#math#double(42),
+        Y = math#double(23)
+    ).
+```
 
 That clause will be expanded to:
 
@@ -47,23 +65,29 @@ That clause will be expanded to:
         X = quote#math#double(42),
         Y = 46.
 
- You can selectively import macros from any module that defines them:
+You can selectively import macros from any module that defines them:
 
-     :- use_module(macros_collection, [number/0, double/0]).
+```
+:- use_module(macros_collection, [number/0, double/0]).
+```
 
- It will enable only macros that were explictily imported, and warn if you use
- others.
+It will enable only macros that were explictily imported, and warn if you use
+others.
 
- There is a little quirk though: if your macro has a numeric name, then it will
- be always imported. For example the following macro will always be imported if
- you import a module containing it:
+There is a little quirk though: if your macro has a numeric name, then it will
+be always imported. For example the following macro will always be imported if
+you import a module containing it:
 
-     8#String ==> Bytes :- octal_bytes(String, Bytes).
+```
+8#String ==> Bytes :- octal_bytes(String, Bytes).
+```
 
- The only way to make it go away is to disable all macros from that module
- completely:
+The only way to make it go away is to disable all macros from that module
+completely:
 
-     :- use_module(my_macros, []).
+```
+:- use_module(my_macros, []).
+```
 
 */
 
@@ -71,7 +95,6 @@ That clause will be expanded to:
 :- module(macros, [
     op(199, xfy, (#)),
     op(1200, xfy, (==>)),
-    macro/3,
     expand/0,
     inline_last/0,
     compile/0
@@ -129,57 +152,75 @@ M#{A}    ==> {M#A}.
 % Cut is never expanded.
 _#! ==> !.
 
+%% expand # ?G_0.
+%
 % Sub-goal expansion.
 %
 % Wrap any expression to recursively expand any found macros, used explicitly
 % to avoid heavy penalty of scanning all terms for possible macros:
 %
+% ```
 %     expand#(
 %         X = foo#42,
 %         bar#baz(X),
 %         \+ some#macro
 %     );
+% ```
 %
-% All following examples assume they are wrapped in expand#(...).
+% All following examples assume they are wrapped in `expand#(...)`.
 %
 expand#A ==> X :-
     expand_subgoals(_, A, X).
 
 
+%% inline_last # ?G_1.
+%
 % Inline last argument at compile time.
 %
-% Useful if you want to have a formatted string as a variable
+% Useful if you want to have a formatted string as a variable:
 %
+% ```
 %     Greeting = inline_last#phrase(format_("Hello ~s~a", ["World",!])).
-%     ==>
+% ==>
 %     Greeting = "Hello World!".
+% ```
 %
 % Perform some numeric calculations at compile time to avoid doing them in runtime:
 %
-%     Solution is pi * inline_last#slow_computation(1234, 2^1024).
-%     ==>
-%     Solution is pi * 42.
+% Two machines with with cycle time 7 and 5 need to start a task simultaneously.
+% Find the next start time:
 %
+% ```
+%     Time is inline_last#lcm(7, 5).
+% ==>
+%     Time is 35.
+% ```
 %
 % It even works with CLP(Z):
 %
-%    #X #= inline_last#my_value * #Y.
-%    ==>
-%    #X #= 2354235 * #Y.
+% ```
+%     #X #= inline_last#my_value * #Y.
+% ==>
+%     #X #= 2354235 * #Y.
+% ```
 %
 inline_last#G ==> [X] :-
     load_module_context(M),
     M:call(G, X).
 
 
+%% compile # ?G_0.
+%
 % Evaluates G and if it succeeds replaces it with a first solution represented
 % as a sequence of unifications. For example:
 %
-%   compile#my_goal(A, B, C).
-%   ==>
-%   A = 1,
-%   B = 2,
-%   C = 3.
+% ```
+%     compile#my_goal(A, B, C).
+% ==>
+%     A = 1,
+%     B = 2,
+%     C = 3.
+% ```
 %
 compile#G ==> Us :-
     load_module_context(M),
