@@ -299,7 +299,7 @@ map_assoc_(t(Key,Val,B,L0,R0), Pred, t(Key,Ans,B,L1,R1)) :-
     map_assoc_(R0, Pred, R1).
 
 
-%%  max_assoc(+Assoc, -Key, -Value) is semidet.
+%% max_assoc(+Assoc, -Key, -Value) is semidet.
 %
 % True if Key-Value is in Assoc and Key is the largest key.
 
