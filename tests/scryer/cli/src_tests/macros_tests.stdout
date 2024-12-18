@@ -1,10 +1,10 @@
    error(instantiation_error,when_si/2).
    error(existence_error(macro/3,goal_expansion/2),[culprit-fep#hello]).
-   error(existence_error(macro/3,goal_expansion/2),[culprit-foo#bar]).
-   error(existence_error(macro/3,goal_expansion/2),[culprit-foo#fep#window]).
+   error(existence_error(procedure,foo/0),foo/0).
+   error(existence_error(procedure,foo/0),foo/0).
    error(instantiation_error,functor/3).
    error(instantiation_error,when_si/2).
-   error(existence_error(macro/3,goal_expansion/2),[culprit-a#b#c#d]).
+   error(existence_error(procedure,a/0),a/0).
 example(formated_string(A)) :-
    A="This is my term foo(1)".
 example(bignum_example(A,B,C)) :-

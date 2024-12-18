@@ -2,7 +2,7 @@
 :- use_module(library(dcgs)).
 :- use_module(library(lambda)).
 
-:- use_module(library(string_macros)).
+:- use_module(library(string_macros), [tel/0]). % <- Macros can be imported selectively
 :- use_module(library(macros)).
 :- use_module(library(clpz)).
 

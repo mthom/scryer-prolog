@@ -46,13 +46,35 @@ That clause will be expanded to:
     predicate(X, Y) :-
         X = quote#math#double(42),
         Y = 46.
+
+ You can selectively import macros from any module that defines them:
+
+     :- use_module(macros_collection, [number/0, double/0]).
+
+ It will enable only macros that were explictily imported, and warn if you use
+ others.
+
+ There is a little quirk though: if your macro has a numeric name, then it will
+ be always imported. For example the following macro will always be imported if
+ you import a module containing it:
+
+     8#String ==> Bytes :- octal_bytes(String, Bytes).
+
+ The only way to make it go away is to disable all macros from that module
+ completely:
+
+     :- use_module(my_macros, []).
+
 */
 
 
 :- module(macros, [
     op(199, xfy, (#)),
     op(1200, xfy, (==>)),
-    macro/3
+    macro/3,
+    expand/0,
+    inline_last/0,
+    compile/0
 ]).
 
 :- use_module(library(si), [atomic_si/1,when_si/2]).
@@ -60,15 +82,41 @@ That clause will be expanded to:
 :- use_module(library(loader), [prolog_load_context/2]).
 :- use_module(library(goals), [call_unifiers/2,expand_subgoals/3]).
 :- use_module(library(warnings), [warn/2]).
+:- use_module(library(debug)).
 
 :- discontiguous(macro/3).
 :- multifile(macro/3).
 
+load_module_context(Module) :- prolog_load_context(module, Module), !.
+load_module_context(user).
+
+
+% FIXME: Rework this mess
 user:term_expansion((M#A ==> B), X) :-
-    nonvar(B),
-    B = (H :- G) ->
-        X = (macros:macro(M, A, H) :- G)
-    ;   X =  macros:macro(M, A, B).
+    (var(M); number(M)),
+    (   nonvar(B),
+        B = (H :- G) ->
+            X = (macros:macro(M, A, H) :- G)
+        ;   X =  macros:macro(M, A, B)
+    ).
+user:term_expansion((M#A ==> B), [Module:M,X]) :-
+    atom(M),
+    load_module_context(Module),
+    \+ catch(Module:M, error(existence_error(_,_),_), false),
+    (   nonvar(B),
+        B = (H :- G) ->
+            X = (macros:macro(M, A, H) :- G)
+        ;   X =  macros:macro(M, A, B)
+    ).
+user:term_expansion((M#A ==> B), X) :-
+    atom(M),
+    load_module_context(Module),
+    call(Module:M),
+    (   nonvar(B),
+        B = (H :- G) ->
+            X = (macros:macro(M, A, H) :- G)
+        ;   X =  macros:macro(M, A, B)
+    ).
 
 
 % All macros distribute over common operators.
@@ -138,14 +186,13 @@ compile#G ==> Us :-
     call_unifiers(M:G, Us).
 
 
-load_module_context(Module) :- prolog_load_context(module, Module), !.
-load_module_context(user).
-
-
 %%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
 
 macro_wrapper(quote, _, _) :- !, false.
-macro_wrapper(M, A, X) :- macro(M, A, X).
+macro_wrapper(M, A, X) :-
+    load_module_context(Module),
+    (atom(M) -> Module:M; true),
+    macro(M, A, X).
 macro_wrapper(M, A, _) :-
     warn("Unknown macro ~a # ~q", [M,A]),
     throw(error(existence_error(macro/3, goal_expansion/2), [culprit-(M#A)])).

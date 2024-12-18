@@ -6,7 +6,8 @@
 
 
 :- module(string_macros, [
-    macro/3
+    macro/3,
+    tel/0
 ]).
 
 :- use_module(library(si), [list_si/1]).
