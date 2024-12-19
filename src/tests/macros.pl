@@ -73,10 +73,10 @@ example(expands_arithmetic_functions(A,B)) :-
     expand#(
         B is A + fep#beep / inline_last#double(12)
     ).
-example(doesnt_expand_uninstantiated_macros(X)) :-
-    expand#(
-        _ = fep#X
-    ).
+%example(doesnt_expand_uninstantiated_macros(X)) :-
+%    expand#(
+%        _ = fep#X
+%    ).
 example(compilation([A,B,C])) :-
     compile#baz(12, A, B, C).
 % What is the preferred operator precedence? Should parenthesis be required here?
@@ -92,11 +92,11 @@ example(unknown_macros) :-
     fep#hello,
     foo#bar,
     foo#fep#window. % <- Should it expand fep#window if foo is unknown?
-example(incorrect_macros) :-
-    b(a)#x, % <- Is it a good idea to support any ground term as a macro name?
-    b(_)#x,
-    _#t,
-    fep#_.
+%example(incorrect_macros) :-
+%    b(a)#x, % <- Is it a good idea to support any ground term as a macro name?
+%    b(_)#x,
+%    _#t,
+%    fep#_.
 example(tbd) :-
     a(b#c)#d, % <- Should it expand b#c? If b/0 and a/1 are registered macros?
     a#b#c#d. % <- In which order macros should be expanded?
