@@ -15,14 +15,14 @@
 %        fep#putb            ==> 111.
 %        fep#flush           ==> 112.
 %        fep#beep            ==> 113.
-%
+
 %% Conditional compilation
-%string_num.
-%bignum#(A < B) ==> N :-
-%    string_num -> N = bignum_lt(A,B); N = (A < B).
-%bignum#(A > B) ==> N :-
-%    \+string_num -> N = (A > B); N = bignum_gt(A,B).
-%
+string_num.
+bignum#(A < B) ==> N :-
+    string_num -> N = bignum_lt(A,B); N = (A < B).
+bignum#(A > B) ==> N :-
+    \+string_num -> N = (A > B); N = bignum_gt(A,B).
+
 %% Should bad macro bodies generate exceptions? If so at which point: expansion
 %% time, compile time or runtime?
 %bad#macro ==> 1 :- _.
@@ -30,28 +30,27 @@
 %% TODO: Should implementation detect discontinuous macro definitions?
 %fep#too_late ==> 999.
 %
-%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
-%
-%% Test functions
-%double(A, B) :- B is 2 * A.
-%baz(A, B, C, D) :- B is 2 * A, C is 3 * A, D is 3 * B.
-%
-%
+%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%
+
+% Test functions
+double(A, B) :- B is 2 * A.
+baz(A, B, C, D) :- B is 2 * A, C is 3 * A, D is 3 * B.
+
+
 :- dynamic(example/1).
 
-example(dummy).
-%example(formated_string(X)) :-
-%    expand#(
-%        X = inline_last#(\L^phrase(format_("This is my term ~w", [foo(1)]), L))
-%    ).
-%example(bignum_example(A,B,P)) :-
-%    bignum#(
-%        A < B,
-%        !,
-%        A > 0;
-%        B + 1 < P
-%    ),
-%    compute(A,B).
+example(formated_string(X)) :-
+    expand#(
+        X = inline_last#(\L^phrase(format_("This is my term ~w", [foo(1)]), L))
+    ).
+example(bignum_example(A,B,P)) :-
+    bignum#(
+        A < B,
+        !,
+        A > 0;
+        B + 1 < P
+    ),
+    compute(A,B).
 %example(numeric_enum_example) :-
 %    expand#(
 %        foo(fep#window, fep#create),
