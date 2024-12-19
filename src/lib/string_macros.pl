@@ -1,7 +1,4 @@
-/** Commonly useful string macros
- *
- *  TODO: Add more base conversions
- *  TODO: Add enum for every common ASCII name
+/** Commonly useful string macros.
  */
 
 
@@ -19,11 +16,15 @@
 %
 % Expands `Hexes` string to a list of integers (bytes).
 %
+% *TODO*: Add more base conversions
+%
 16#H ==> [B] :- list_si(H), hex_bytes(H, B).
 
 %% tel # +Mnemonic.
 %
 % Expands common ASCII characters mnemonics to actual integer value.
+%
+% *TODO*: Add enum for every common ASCII name
 %
 tel#null ==> 16#"00".
 tel#bell ==> 16#"07".

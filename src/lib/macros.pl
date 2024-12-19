@@ -21,23 +21,19 @@ It will replace all occurrences of `math#double(...)` with computed concrete val
 You can use them by simply referencing in a goal:
 
 ```
-print#S ==> format("~s", [S]).
+    print#S ==> format("~s", [S]).
 
-predicate(X) :-
-    print#"STRING",
-    my_macro#atom,
-    expand#(
-        X = number#one
-    ).
-```
-
-That code will be expanded to:
-
-```
-predicate(X) :-
-    format("~s", ["STRING"]),
-    my_macro#atom,
-    X = 1.
+    predicate(X) :-
+        print#"STRING",
+        my_macro#atom,
+        expand#(
+            X = number#one
+        ).
+==>
+    predicate(X) :-
+        format("~s", ["STRING"]),
+        my_macro#atom,
+        X = 1.
 ```
 
 Please notice that unknown macros (`my_macro`) will be left intact and you will
@@ -46,18 +42,16 @@ observe a compilation warning.
 You can disable macro expansion by quoting it:
 
 ```
-predicate(X, Y) :-
-    expand#(
-        X = quote#math#double(42),
-        Y = math#double(23)
-    ).
-```
-
-That clause will be expanded to:
-
+    predicate(X, Y) :-
+        expand#(
+            X = quote#math#double(42),
+            Y = math#double(23)
+        ).
+==>
     predicate(X, Y) :-
         X = quote#math#double(42),
         Y = 46.
+````
 
 You can selectively import macros from any module that defines them:
 
