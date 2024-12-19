@@ -1,6 +1,7 @@
 args = [
     "-f",
     "--no-add-history",
-    "-g", "listing(example/1),halt",
+    "-g", "use_module(library(format)),listing(example/1)",
+    "-g", "halt",
     "src/tests/macros.pl"
 ]
