@@ -6,15 +6,15 @@
 :- use_module(library(macros)).
 :- use_module(library(clpz)).
 
-%% Numeric enums
-%fep#window                  ==> 100.
-%    fep#create              ==> 101.
-%    fep#create_with_buffer  ==> 102.
-%    fep#get_max_size        ==> 103.
-%        fep#getl            ==> 110.
-%        fep#putb            ==> 111.
-%        fep#flush           ==> 112.
-%        fep#beep            ==> 113.
+% Numeric enums
+fep#window                  ==> 100.
+    fep#create              ==> 101.
+    fep#create_with_buffer  ==> 102.
+    fep#get_max_size        ==> 103.
+        fep#getl            ==> 110.
+        fep#putb            ==> 111.
+        fep#flush           ==> 112.
+        fep#beep            ==> 113.
 
 %% Conditional compilation
 string_num.
@@ -51,11 +51,11 @@ example(bignum_example(A,B,P)) :-
         B + 1 < P
     ),
     compute(A,B).
-%example(numeric_enum_example) :-
-%    expand#(
-%        foo(fep#window, fep#create),
-%        bar([fep#getl, fep#putb|_])
-%    ).
+example(numeric_enum_example) :-
+    expand#(
+        foo(fep#window, fep#create),
+        bar([fep#getl, fep#putb|_])
+    ).
 %example(ascii_examples) :-
 %    expand#(
 %        foo(tel#null) -> foo(tel#bell); foo(tel#bs)
