@@ -1,0 +1,7 @@
+# issue 2675
+args = [
+    "-f",
+    "--no-add-history",
+    "-g", "halt",
+     "main.pl"
+]
