@@ -1311,17 +1311,22 @@ impl Machine {
     fn quantification_to_module_name(
         &mut self,
         quantification: ModuleQuantification,
-        src: HeapCellValue,
     ) -> Result<Atom, MachineError> {
         match quantification.specified() {
             Some(module_name) => {
                 let module_name = self.machine_st.store(self.machine_st.deref(module_name));
 
-                if module_name.get_tag() == HeapCellValueTag::Atom {
-                    Ok(cell_as_atom!(module_name))
-                } else {
-                    Err(self.machine_st.type_error(ValidType::Atom, src))
-                }
+                read_heap_cell!(module_name,
+                    (HeapCellValueTag::Atom, (module_name, _arity)) => {
+                        Ok(module_name)
+                    }
+                    (HeapCellValueTag::Var) => {
+                        Err(self.machine_st.instantiation_error())
+                    }
+                    _ => {
+                        Err(self.machine_st.type_error(ValidType::Atom, module_name))
+                    }
+                )
             }
             None => Ok(if let Some(load_context) = self.load_contexts.last() {
                 load_context.module
@@ -1389,7 +1394,7 @@ impl Machine {
 
         let mut arity = arity + goal_arity;
         let mut module_name = self
-            .quantification_to_module_name(module_quantification, self.machine_st.registers[1])
+            .quantification_to_module_name(module_quantification)
             .map_err(|err| {
                 let stub = functor_stub(atom!("call"), arity);
                 self.machine_st.error_form(err, stub)
@@ -1410,10 +1415,7 @@ impl Machine {
                     self.machine_st.name_and_arity_from_heap(goal)
                 {
                     module_name = self
-                        .quantification_to_module_name(
-                            module_quantification,
-                            self.machine_st.registers[1],
-                        )
+                        .quantification_to_module_name(module_quantification)
                         .unwrap_or(module_name);
 
                     arity -= goal_arity;
