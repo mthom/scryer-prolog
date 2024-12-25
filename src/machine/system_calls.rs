@@ -107,15 +107,16 @@ use super::preprocessor::to_op_decl_spec;
 #[derive(Debug)]
 pub(crate) enum ModuleQuantification {
     Specified(HeapCellValue),
-    Unspecified
+    Unspecified,
 }
 
 impl ModuleQuantification {
     fn to_functor(&self) -> (Vec<HeapCellValue>, HeapCellValueTag) {
         match self {
-            &ModuleQuantification::Specified(cell) => {
-                (functor!(atom!("specified"), [cell(cell)]), HeapCellValueTag::Str)
-            }
+            &ModuleQuantification::Specified(cell) => (
+                functor!(atom!("specified"), [cell(cell)]),
+                HeapCellValueTag::Str,
+            ),
             ModuleQuantification::Unspecified => {
                 (functor!(atom!("unspecified")), HeapCellValueTag::Var)
             }
@@ -1362,9 +1363,8 @@ impl Machine {
         };
 
         let arity = arity - 1;
-        let (mut module_quantification, mut goal) = self
-            .machine_st
-            .strip_module(self.machine_st.registers[1]);
+        let (mut module_quantification, mut goal) =
+            self.machine_st.strip_module(self.machine_st.registers[1]);
 
         let (mut name, mut goal_arity, index_cell_opt) = read_heap_cell!(goal,
             (HeapCellValueTag::Str, s) => {
@@ -1388,13 +1388,12 @@ impl Machine {
         );
 
         let mut arity = arity + goal_arity;
-        let mut module_name = self.quantification_to_module_name(
-            module_quantification,
-            self.machine_st.registers[1],
-        ).map_err(|err| {
-            let stub = functor_stub(atom!("call"), arity);
-            self.machine_st.error_form(err, stub)
-        })?;
+        let mut module_name = self
+            .quantification_to_module_name(module_quantification, self.machine_st.registers[1])
+            .map_err(|err| {
+                let stub = functor_stub(atom!("call"), arity);
+                self.machine_st.error_form(err, stub)
+            })?;
 
         let index_cell = if index_cell_opt.is_some() {
             index_cell_opt
@@ -1407,24 +1406,33 @@ impl Machine {
 
                 (module_quantification, goal) = self.machine_st.strip_module(goal);
 
-                if let Some((inner_name, inner_arity)) = self.machine_st.name_and_arity_from_heap(goal) {
-                    module_name = self.quantification_to_module_name(
-                        module_quantification,
-                        self.machine_st.registers[1],
-                    ).unwrap_or(module_name);
+                if let Some((inner_name, inner_arity)) =
+                    self.machine_st.name_and_arity_from_heap(goal)
+                {
+                    module_name = self
+                        .quantification_to_module_name(
+                            module_quantification,
+                            self.machine_st.registers[1],
+                        )
+                        .unwrap_or(module_name);
 
                     arity -= goal_arity;
                     (name, goal_arity) = (inner_name, inner_arity);
                     arity += goal_arity;
 
-                    self.indices.get_predicate_code_index(name, arity, module_name)
+                    self.indices
+                        .get_predicate_code_index(name, arity, module_name)
                 } else {
                     None
                 }
-            } else if self.indices.goal_expansion_defined((name, arity), module_name) {
+            } else if self
+                .indices
+                .goal_expansion_defined((name, arity), module_name)
+            {
                 None
             } else {
-                self.indices.get_predicate_code_index(name, arity, module_name)
+                self.indices
+                    .get_predicate_code_index(name, arity, module_name)
             }
         };
 
@@ -1449,7 +1457,8 @@ impl Machine {
         // complete_partial_goal prior to goal_expansion.
         let mut supp_vars = IndexSet::with_hasher(FxBuildHasher::default());
 
-        self.machine_st.variable_set(&mut supp_vars, self.machine_st.registers[2]);
+        self.machine_st
+            .variable_set(&mut supp_vars, self.machine_st.registers[2]);
 
         struct GoalAnalysisResult {
             is_simple_goal: bool,
@@ -1576,7 +1585,8 @@ impl Machine {
             result.goal
         } else {
             let mut unexpanded_vars = IndexSet::with_hasher(FxBuildHasher::default());
-            self.machine_st.variable_set(&mut unexpanded_vars, self.machine_st.registers[5]);
+            self.machine_st
+                .variable_set(&mut unexpanded_vars, self.machine_st.registers[5]);
 
             // all supp_vars must appear later!
             let vars = IndexSet::<HeapCellValue, BuildHasherDefault<FxHasher>>::from_iter(
@@ -1632,9 +1642,8 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn is_expanded_or_inlined(&self) -> bool {
-        let (_quantification, qualified_goal) = self
-            .machine_st
-            .strip_module(self.machine_st.registers[1]);
+        let (_quantification, qualified_goal) =
+            self.machine_st.strip_module(self.machine_st.registers[1]);
 
         if HeapCellValueTag::Str == qualified_goal.get_tag() {
             let s = qualified_goal.get_value() as usize;
@@ -1664,9 +1673,8 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn strip_module(&mut self) {
-        let (module_quantification, qualified_goal) = self
-            .machine_st
-            .strip_module(self.machine_st.registers[1]);
+        let (module_quantification, qualified_goal) =
+            self.machine_st.strip_module(self.machine_st.registers[1]);
 
         let target_module_loc = self.machine_st.registers[2];
 
@@ -5254,9 +5262,7 @@ impl Machine {
                     // at the end of the list, no match found in this case.
                     self.machine_st.fail = true;
                 } else {
-                    let (_, qualified_goal) = self
-                        .machine_st
-                        .strip_module(list_head);
+                    let (_, qualified_goal) = self.machine_st.strip_module(list_head);
 
                     unify!(self.machine_st, qualified_goal, attr);
                 }
