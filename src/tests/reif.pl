@@ -110,6 +110,39 @@ test("non-callable branch throws meaningful error", (
     Solutions == [if_(1=1,a=a,2), error(type_error(callable,2),call/1)]
 )).
 
+test(W, loader:call(T)) :-
+    member(T, [
+        cuts_outside(!),
+        cuts_outside(foo:!),
+        cuts_outside((a,!)),
+        cuts_outside((!;b(_))),
+        cuts_outside(((a;b(_,_);c),!,d)),
+        \+ cuts_outside(call((a,!))),
+        \+ cuts_outside(((a;b;c),\+ !,d)),
+        \+ cuts_outside((! -> a; b)),
+        \+ cuts_outside(((x,!;y) -> a; b)),
+        catch((cuts_outside(_),false),   E0, E0  = stop(type_error(callable,_))),
+        catch((cuts_outside(2),false),   E1, E1 == stop(type_error(callable,2))),
+        catch((cuts_outside(1:!),false), E2, E2 == stop(type_error(atom,1))),
+        catch((cuts_outside(_:!),false), E3, E3  = stop(type_error(atom,_))),
+        (G0 = a(G0), catch((cuts_outside(G0),false), E4, E4 = stop(type_error(acyclic_term,_)))),
+        (G1 = m:G1,  catch((cuts_outside(G1),false), E5, E5 = stop(type_error(acyclic_term,_)))),
+        catch((cuts_outside((6->a)),false),   E6, E6 == stop(type_error(callable,6))),
+        (goal_sanitized(a, X0), X0 == a),
+        (goal_sanitized(!, X1), X1 == call(!)),
+        (goal_sanitized((a,b;c,d), X2), X2 == (a,b;c,d)),
+        (goal_sanitized((\+ \+ a), X3), X3 == (\+ \+ a)),
+        % Questionable test case, see #2739
+        (goal_sanitized((!,a->c;d), X4), X4 == (!,a->c;d)),
+        (goal_sanitized((x,a->!;d), X5), X5 == call((x,a->!;d))),
+        (goal_sanitized((a,b,c,!), X6), X6 == call((a,b,c,!))),
+        \+ goal_sanitized(0, _),
+        \+ goal_sanitized(_, _),
+        \+ goal_sanitized((a,_), _),
+        \+ goal_sanitized((a,b;1), _)
+    ]),
+    phrase(format_("callable cut: ~q", [T]), W).
+
 result_or_exception(Goal, Result) :-
     catch((Goal,Result=Goal), Result, true).
 

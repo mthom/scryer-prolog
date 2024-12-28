@@ -24,6 +24,7 @@ U. Neumerkel and S. Kral. https://arxiv.org/abs/1607.01590 [cs.PL]. July 2016.
 */
 
 :- use_module(library(dif)).
+:- use_module(library(loader), [goal_sanitized/2]).
 
 :- meta_predicate(if_(1, 0, 0)).
 :- meta_predicate(cond_t(1, 0, ?)).
@@ -91,11 +92,6 @@ sameargs(N0, S, T) :-
 sameargs(0, _, _).
 
 
-/*
-  no !s that cut outside.
-  no variables in place of goals
-  no malformed goals like integers
-*/
 
 
 /* 2do: unqualified If_1: error
@@ -103,7 +99,9 @@ sameargs(0, _, _).
 
 %
 user:goal_expansion(if_(If_1, Then_0, Else_0), G_0) :-
-   ugoal_expansion(if_(If_1, Then_0, Else_0), G_0).
+   goal_sanitized(Then_0, SanitizedThen_0),
+   goal_sanitized(Else_0, SanitizedElse_0),
+   ugoal_expansion(if_(If_1, SanitizedThen_0, SanitizedElse_0), G_0).
 
 %
 %
