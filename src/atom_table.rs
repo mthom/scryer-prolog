@@ -317,7 +317,7 @@ impl Atom {
             AtomTableRef::try_map(atom_table.inner.read(), |buf| {
                 let table_offset = self.flat_index() as usize - STRINGS.len();
                 assert!(
-                    table_offset < buf.block.size(),
+                    table_offset < buf.block.len(),
                     "{self:?} is invalid: out of bound"
                 );
                 assert!(
@@ -327,17 +327,15 @@ impl Atom {
 
                 let ptr = buf.block.get(table_offset)?;
 
+                // SAFETY:
+                // - Asserted: `ptr` is a valid pointer to memory.
+                // - Asserted: `table_offset` is aligned to `ATOM_TABLE_ALIGN`
+                // - Asserted: `ATOM_TABLE_ALIGN` is a multiple of `align_of::<AtomData>()`
+                // - Assumed: `block` contains a valid AtomData at `table_offset`
+                // Thus, `ptr` points to a valid `AtomData`.
+                //
+                // TODO: verify that the last assumption above is correct
                 unsafe {
-                    // SAFETY:
-                    // - Proved: `ptr` is a valid pointer to memory.
-                    // - Invariant: from `RawBlock`, `block.base` is aligned to `ATOM_TABLE_ALIGN`
-                    // - Asserted: `table_offset` is aligned to `ATOM_TABLE_ALIGN`
-                    // - Assumed: `block` contains a valid AtomData at `table_offset`
-                    // - Assumed: `ATOM_TABLE_ALIGN` is a multiple of `align_of::<AtomData>()`
-                    // Thus, `ptr` points to a valid `AtomData`.
-                    //
-                    // TODO: verify that the assumptions above are correct
-
                     // SAFETY:
                     // - Proved: `ptr` points to a valid `AtomData`
                     // - Invariant: `offset_of!(AtomData, header) == 0`

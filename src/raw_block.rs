@@ -1,7 +1,7 @@
 use core::marker::PhantomData;
 
 use std::alloc;
-use std::cell::UnsafeCell;
+use std::cell::Cell;
 use std::ptr;
 
 pub trait RawBlockTraits {
@@ -11,19 +11,28 @@ pub trait RawBlockTraits {
     const ALIGN: usize;
 }
 
-/// A handle to an allocated region of bytes, which is used to store an array of
-/// DSTs.
-///
-/// # Safety
-/// - `base`, `top` and `ptr` are guaranteed to be aligned to [`T::ALIGN`](RawBlockTraits::ALIGN).
-/// - `base` points to the start of the allocated region and `top` to the end of it.
-/// - `top - base < isize::MAX`
-/// - `ptr` points to the last unused byte of the allocated region (aligned to `T::ALIGN`).
+/// A handle to an allocated region of bytes, which is used to store an array of DSTs.
 #[derive(Debug)]
 pub struct RawBlock<T: RawBlockTraits> {
+    /// # Safety
+    ///
+    /// Should be aligned to [`T::ALIGN`](RawBlockTraits::ALIGN).
+    ///
+    /// Should point to the start of the currently-allocated region.
     base: *const u8,
+
+    /// # Safety
+    ///
+    /// Should be aligned to [`T::ALIGN`](RawBlockTraits::ALIGN).
+    ///
+    /// Should point to the end of the currently-allocated region.
     top: *const u8,
-    ptr: UnsafeCell<*mut u8>,
+
+    /// # Safety
+    ///
+    /// `head <= self.capacity()`
+    head: Cell<usize>,
+
     _marker: PhantomData<T>,
 }
 
@@ -33,7 +42,7 @@ impl<T: RawBlockTraits> RawBlock<T> {
         RawBlock {
             base: ptr::null(),
             top: ptr::null(),
-            ptr: UnsafeCell::new(ptr::null_mut()),
+            head: Cell::new(0),
             _marker: PhantomData,
         }
     }
@@ -91,6 +100,7 @@ impl<T: RawBlockTraits> RawBlock<T> {
     ///
     /// The caller is responsible for ensuring that the return value points to
     /// valid objects, and that no other mutable or immutable access may happen on it.
+    #[allow(dead_code)]
     pub fn get_mut(&mut self, offset: usize) -> Option<*mut u8> {
         self.get(offset).map(|ptr| ptr.cast_mut())
     }
@@ -152,7 +162,7 @@ impl<T: RawBlockTraits> RawBlock<T> {
         }
         self.base = new_base;
         self.top = self.base.add(cap);
-        *self.ptr.get_mut() = self.base.cast_mut();
+        self.head.set(0);
     }
 
     pub unsafe fn grow(&mut self) -> bool {
@@ -160,20 +170,19 @@ impl<T: RawBlockTraits> RawBlock<T> {
             self.init_at_size(T::init_size());
             true
         } else {
-            let size = self.size();
-            debug_assert!(size % T::ALIGN == 0);
+            let capacity = self.capacity();
+            debug_assert!(capacity % T::ALIGN == 0);
 
-            let layout = alloc::Layout::from_size_align_unchecked(size, T::ALIGN);
+            let layout = alloc::Layout::from_size_align_unchecked(capacity, T::ALIGN);
 
-            debug_assert!(size < isize::MAX as usize / 2);
+            debug_assert!(capacity < isize::MAX as usize / 2);
 
-            let new_base = alloc::realloc(self.base.cast_mut(), layout, size * 2).cast_const();
+            let new_base = alloc::realloc(self.base.cast_mut(), layout, capacity * 2).cast_const();
             if new_base.is_null() {
                 false
             } else {
                 self.base = new_base;
-                self.top = (self.base as usize + size * 2) as *const _;
-                *self.ptr.get_mut() = (self.base as usize + size) as *mut _;
+                self.top = self.base.add(capacity * 2);
                 true
             }
         }
@@ -184,51 +193,32 @@ impl<T: RawBlockTraits> RawBlock<T> {
             Some(Self::new())
         } else {
             let mut new_block = Self::empty_block();
-            new_block.init_at_size(self.size() * 2);
+            new_block.init_at_size(self.capacity() * 2);
             if new_block.base.is_null() {
                 // allocation failed
                 None
             } else {
-                let allocated = (*self.ptr.get()) as usize - self.base as usize;
+                let allocated = self.len();
                 self.base.copy_to(new_block.base.cast_mut(), allocated);
-                *new_block.ptr.get_mut() = new_block.base.add(allocated).cast_mut();
+                new_block.head.set(allocated);
                 Some(new_block)
             }
         }
     }
 
-    #[inline]
-    #[deprecated(note = "Use RawBlock::capacity() instead")]
-    pub fn size(&self) -> usize {
-        self.capacity()
-    }
-
+    #[inline(always)]
     pub fn capacity(&self) -> usize {
         self.top as usize - self.base as usize
     }
 
-    /// SAFETY: Assumes that no mutable borrow of `self.ptr` exists at this time.
     #[inline(always)]
-    unsafe fn free_space(&self) -> usize {
-        debug_assert!(
-            *self.ptr.get() as *const _ >= self.base,
-            "self.ptr = {:?} < {:?} = self.base",
-            *self.ptr.get(),
-            self.base
-        );
-
-        self.top as usize - (*self.ptr.get()) as usize
+    fn free_space(&self) -> usize {
+        self.capacity() - self.len()
     }
 
     #[inline(always)]
-    pub unsafe fn len(&self) -> usize {
-        unsafe {
-            // SAFETY:
-            // - Invariant: `self.ptr` is between `self.base` and `self.top`
-            // - Invariant: `self.base` and `self.top` belong to the same allocation
-            // - Assumed: no other mutable borrow are currently active for `self.ptr`
-            (*self.ptr.get()).cast_const().offset_from(self.base) as usize
-        }
+    pub fn len(&self) -> usize {
+        self.head.get()
     }
 
     /// The reverse operation of [`alloc()`](RawBlock::alloc):
@@ -240,10 +230,9 @@ impl<T: RawBlockTraits> RawBlock<T> {
     ///
     /// Does not resize the allocated region of memory.
     pub unsafe fn truncate(&mut self, new_len: usize) {
-        let new_ptr = self.get_mut(new_len).unwrap();
-
-        if new_ptr < *self.ptr.get_mut() {
-            *self.ptr.get_mut() = new_ptr as *mut _;
+        let head = self.head.get_mut();
+        if new_len < *head {
+            *head = new_len;
         }
     }
 
@@ -259,9 +248,9 @@ impl<T: RawBlockTraits> RawBlock<T> {
         let aligned_size = size.next_multiple_of(T::ALIGN);
 
         if self.free_space() >= aligned_size {
-            let ptr = *self.ptr.get();
-            *self.ptr.get() = ptr.add(aligned_size) as *mut _;
-            ptr
+            let head = self.head.get();
+            self.head.set(head + aligned_size);
+            unsafe { self.get_unchecked(head).cast_mut() }
         } else {
             ptr::null_mut()
         }
@@ -272,13 +261,13 @@ impl<T: RawBlockTraits> Drop for RawBlock<T> {
     fn drop(&mut self) {
         if !self.base.is_null() {
             unsafe {
-                let layout = alloc::Layout::from_size_align_unchecked(self.size(), T::ALIGN);
+                let layout = alloc::Layout::from_size_align_unchecked(self.capacity(), T::ALIGN);
                 alloc::dealloc(self.base as *mut _, layout);
             }
 
             self.top = ptr::null();
             self.base = ptr::null();
-            *self.ptr.get_mut() = ptr::null_mut();
+            self.head.set(0);
         }
     }
 }

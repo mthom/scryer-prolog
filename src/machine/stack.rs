@@ -224,7 +224,7 @@ impl Stack {
     }
 
     pub(crate) fn top(&self) -> usize {
-        unsafe { self.buf.len() }
+        self.buf.len()
     }
 
     pub(crate) fn allocate_or_frame(&mut self, num_cells: usize) -> usize {
