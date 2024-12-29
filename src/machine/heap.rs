@@ -24,17 +24,29 @@ pub struct Heap {
 
 impl Drop for Heap {
     fn drop(&mut self) {
-        unsafe {
-            let layout = alloc::Layout::array::<u8>(self.inner.byte_cap).unwrap();
-            alloc::dealloc(self.inner.ptr, layout);
+        if !self.inner.ptr.is_null() {
+            unsafe {
+                let layout = alloc::Layout::array::<u8>(self.inner.byte_cap).unwrap();
+                alloc::dealloc(self.inner.ptr, layout);
+            }
         }
     }
 }
 
+// TODO: verify the soundness of the various accesses to `ptr`,
+// or rely on a Vec-like library with fallible allocations.
 #[derive(Debug)]
 struct InnerHeap {
     ptr: *mut u8,
+
+    /// # Safety
+    ///
+    /// Must be equal to zero when `ptr.is_null()`.
     byte_len: usize,
+
+    /// # Safety
+    ///
+    /// Must be equal to zero when `ptr.is_null()`.
     byte_cap: usize,
 }
 
