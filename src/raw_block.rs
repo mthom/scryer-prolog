@@ -5,10 +5,20 @@ use std::cell::UnsafeCell;
 use std::ptr;
 
 pub trait RawBlockTraits {
+    /// Must be a multiple of `ALIGN`.
     fn init_size() -> usize;
-    fn align() -> usize;
+
+    const ALIGN: usize;
 }
 
+/// A handle to an allocated region of bytes, which is used to store an array of
+/// DSTs.
+///
+/// # Safety
+/// - `base`, `top` and `ptr` are guaranteed to be aligned to [`T::ALIGN`](RawBlockTraits::ALIGN).
+/// - `base` points to the start of the allocated region and `top` to the end of it.
+/// - `top - base < isize::MAX`
+/// - `ptr` points to the last unused byte of the allocated region (aligned to `T::ALIGN`).
 #[derive(Debug)]
 pub struct RawBlock<T: RawBlockTraits> {
     pub base: *const u8,
@@ -40,7 +50,7 @@ impl<T: RawBlockTraits> RawBlock<T> {
     }
 
     unsafe fn init_at_size(&mut self, cap: usize) {
-        let layout = alloc::Layout::from_size_align_unchecked(cap, T::align());
+        let layout = alloc::Layout::from_size_align_unchecked(cap, T::ALIGN);
         let new_base = alloc::alloc(layout).cast_const();
         if new_base.is_null() {
             panic!(
@@ -59,7 +69,10 @@ impl<T: RawBlockTraits> RawBlock<T> {
             true
         } else {
             let size = self.size();
-            let layout = alloc::Layout::from_size_align_unchecked(size, T::align());
+            let layout = alloc::Layout::from_size_align_unchecked(size, T::ALIGN);
+
+            debug_assert!(size % T::ALIGN == 0);
+            debug_assert!(size < isize::MAX as usize / 2);
 
             let new_base = alloc::realloc(self.base.cast_mut(), layout, size * 2).cast_const();
             if new_base.is_null() {
@@ -96,6 +109,7 @@ impl<T: RawBlockTraits> RawBlock<T> {
         self.top as usize - self.base as usize
     }
 
+    /// SAFETY: Assumes that no mutable borrow of `self.ptr` exists at this time.
     #[inline(always)]
     unsafe fn free_space(&self) -> usize {
         debug_assert!(
@@ -124,7 +138,7 @@ impl<T: RawBlockTraits> Drop for RawBlock<T> {
     fn drop(&mut self) {
         if !self.base.is_null() {
             unsafe {
-                let layout = alloc::Layout::from_size_align_unchecked(self.size(), T::align());
+                let layout = alloc::Layout::from_size_align_unchecked(self.size(), T::ALIGN);
                 alloc::dealloc(self.base as *mut _, layout);
             }
 

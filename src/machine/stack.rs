@@ -7,18 +7,26 @@ use std::mem;
 use std::ops::{Index, IndexMut};
 use std::ptr;
 
+/// TODO: remove this in favor of [`Ord::max`] once const fns
+/// can be added in traits (https://github.com/rust-lang/rust/issues/67792)
+const fn usize_max(lhs: usize, rhs: usize) -> usize {
+    if lhs > rhs {
+        lhs
+    } else {
+        rhs
+    }
+}
+
 impl RawBlockTraits for Stack {
     #[inline]
     fn init_size() -> usize {
         10 * 1024 * 1024
     }
 
-    #[inline]
-    fn align() -> usize {
-        mem::align_of::<OrFrame>()
-            .max(mem::align_of::<AndFrame>())
-            .max(mem::align_of::<HeapCellValue>())
-    }
+    const ALIGN: usize = usize_max(
+        usize_max(mem::align_of::<OrFrame>(), mem::align_of::<AndFrame>()),
+        mem::align_of::<HeapCellValue>(),
+    );
 }
 
 #[inline(always)]

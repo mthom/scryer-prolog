@@ -179,10 +179,7 @@ impl RawBlockTraits for AtomTable {
         ATOM_TABLE_INIT_SIZE
     }
 
-    #[inline]
-    fn align() -> usize {
-        ATOM_TABLE_ALIGN
-    }
+    const ALIGN: usize = ATOM_TABLE_ALIGN;
 }
 
 #[bitfield]
@@ -552,7 +549,7 @@ impl AtomTable {
             }
 
             let size = mem::size_of::<AtomHeader>() + string.len();
-            let size = size.next_multiple_of(AtomTable::align());
+            let size = size.next_multiple_of(AtomTable::ALIGN);
 
             unsafe {
                 let len_ptr = loop {

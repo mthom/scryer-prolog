@@ -74,10 +74,7 @@ impl RawBlockTraits for F64Table {
         F64_TABLE_INIT_SIZE
     }
 
-    #[inline]
-    fn align() -> usize {
-        F64_TABLE_ALIGN
-    }
+    const ALIGN: usize = F64_TABLE_ALIGN;
 }
 
 #[derive(Debug)]
