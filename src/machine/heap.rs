@@ -353,15 +353,7 @@ impl<'a> ReservedHeapSection<'a> {
 
             let zero_region_idx = heap_index!(self.heap_cell_len) + str_byte_len;
 
-            let align_offset = self.heap_ptr
-                .add(zero_region_idx)
-                .align_offset(ALIGN_CELL);
-
-            let align_offset = if align_offset == 0 {
-                ALIGN_CELL
-            } else {
-                align_offset
-            };
+            let align_offset = pstr_sentinel_length(zero_region_idx);
 
             ptr::write_bytes(
                 self.heap_ptr.add(zero_region_idx),
@@ -478,6 +470,22 @@ impl<'a> Index<usize> for ReservedHeapSection<'a> {
         unsafe {
             &*(self.heap_ptr.add(heap_index!(idx)) as *const HeapCellValue)
         }
+    }
+}
+
+/// Computes the number of bytes required to pad a string of length `chunk_len`
+/// with zeroes, such that `chunk_len + pstr_sentinel_length(chunk_len)` is a
+/// multiple of `Heap::heap_cell_alignement()`.
+fn pstr_sentinel_length(chunk_len: usize) -> usize {
+    const ALIGN: usize = Heap::heap_cell_alignment();
+
+    let res = chunk_len.next_multiple_of(ALIGN) - chunk_len;
+
+    // No bytes available in last chunk
+    if res == 0 {
+        ALIGN
+    } else {
+        res
     }
 }
 
@@ -635,7 +643,7 @@ impl Heap {
                 if self.free_space() >= len {
                     section = ReservedHeapSection {
                         heap_ptr: self.inner.ptr,
-                        heap_cell_len: cell_index!(self.inner.byte_len),
+                        heap_cell_len: self.cell_len(),
                         pstr_vec: &mut self.pstr_vec,
                     };
                     break;
@@ -810,6 +818,11 @@ impl Heap {
                 }
             }
 
+            // SAFETY:
+            // - Postcondition: from `self.grow()`, `self.inner.byte_len + size_of::<HeapCellValue>()`
+            //   is strictly less than `self.inner.byte_cap`.
+            // - Asserted: `self.cell_len() * size_of::<HeapCellvalue>() <= self.inner.byte_cap`.
+            // - Invariant: from `InnerHeap`, `self.inner.byte_cap < isize::MAX`.
             let cell_ptr = (self.inner.ptr as *mut HeapCellValue).add(self.cell_len());
             cell_ptr.write(cell);
             self.pstr_vec.push(false);
@@ -967,17 +980,7 @@ impl Heap {
 
         const ALIGN_CELL: usize = Heap::heap_cell_alignment();
 
-        let align_offset = unsafe {
-            self.inner.ptr
-                .add(self.inner.byte_len + s_len)
-                .align_offset(ALIGN_CELL)
-        };
-
-        let align_offset = if align_offset == 0 {
-            ALIGN_CELL
-        } else {
-            align_offset
-        };
+        let align_offset = pstr_sentinel_length(s_len);
 
         let copy_size = s_len + align_offset;
 
@@ -1040,8 +1043,9 @@ impl Heap {
         Ok(())
     }
 
-    // assumes the string will be allocated on a ALIGN_CELL-byte boundary
-    pub(crate) const fn compute_pstr_size(src: &str) -> usize {
+    /// Returns the number of bytes needed to store `src` as a `PStr`.
+    /// Assumes the string will be allocated on a ALIGN_CELL-byte boundary.
+    pub(crate) fn compute_pstr_size(src: &str) -> usize {
         const ALIGN_CELL: usize = Heap::heap_cell_alignment();
 
         if src.is_empty() {
@@ -1062,7 +1066,7 @@ impl Heap {
                 null_idx += 1;
             }
 
-            byte_size += (null_idx & !(ALIGN_CELL - 1)) + ALIGN_CELL;
+            byte_size += null_idx.next_multiple_of(ALIGN_CELL);
 
             if (null_idx + 1) % ALIGN_CELL == 0 {
                 byte_size += 2 * mem::size_of::<HeapCellValue>();
