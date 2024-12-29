@@ -547,7 +547,7 @@ impl AtomTable {
             let size = size.next_multiple_of(AtomTable::ALIGN);
 
             unsafe {
-                let len_ptr = loop {
+                let atom_data_ptr = loop {
                     let ptr = block_epoch.block.alloc(size);
 
                     if ptr.is_null() {
@@ -566,10 +566,19 @@ impl AtomTable {
                     }
                 };
 
-                let offset = block_epoch.block.offset_of_unchecked(len_ptr);
+                // SAFETY:
+                // - Asserted: `atom_data_ptr` is a return value of `RawBlock::alloc(..., size = size)`
+                // - Asserted: `atom_data_ptr` is not null.
+                let offset = block_epoch.block.offset_of_unchecked(atom_data_ptr);
 
-                // SAFETY: TODO
-                write_to_ptr(string, len_ptr);
+                // SAFETY:
+                // - Asserted: `atom_data_ptr` is a return value of `RawBlock::alloc(..., size = size)`
+                // - Asserted: `atom_data_ptr` is not null.
+                // - Postcondition: `atom_data_ptr` is aligned to `ATOM_TABLE_ALIGN`.
+                // - Postcondition: `atom_data_ptr` points to at least `size` unused bytes.
+                // - Asserted: `size == size_of::<AtomHeader>() + string.len()`.
+                // Since `atom_data_ptr` points to unused bytes, it cannot overlap with `string`.
+                write_to_ptr(string, atom_data_ptr);
 
                 let atom = AtomCell::new()
                     .with_name((STRINGS.len() + offset) as u64)

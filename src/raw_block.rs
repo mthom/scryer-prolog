@@ -247,6 +247,14 @@ impl<T: RawBlockTraits> RawBlock<T> {
         }
     }
 
+    /// Allocates `size` bytes into the buffer, returning a mutable
+    /// pointer to beginning of them. If there are not enough bytes available,
+    /// returns [`ptr::null_mut()`].
+    ///
+    /// If non-null, the return value is guaranteed to point to
+    /// at least `size` bytes of unused memory.
+    ///
+    /// The return value is aligned to [`T::ALIGN`](RawBlockTraits::ALIGN).
     pub unsafe fn alloc(&self, size: usize) -> *mut u8 {
         let aligned_size = size.next_multiple_of(T::ALIGN);
 
