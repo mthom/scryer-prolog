@@ -62,6 +62,11 @@ impl Index<usize> for AndFrame {
     type Output = HeapCellValue;
 
     fn index(&self, index: usize) -> &Self::Output {
+        assert!(
+            index > 0 && index <= self.prelude.num_cells,
+            "Invalid index within AndFrame: {index} not in 1..={}",
+            self.prelude.num_cells
+        );
         let prelude_offset = prelude_size::<AndFramePrelude>();
         let index_offset = (index - 1) * mem::size_of::<HeapCellValue>();
 
@@ -76,6 +81,11 @@ impl Index<usize> for AndFrame {
 
 impl IndexMut<usize> for AndFrame {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        assert!(
+            index > 0 && index <= self.prelude.num_cells,
+            "Invalid index within AndFrame: {index} not in 1..={}",
+            self.prelude.num_cells
+        );
         let prelude_offset = prelude_size::<AndFramePrelude>();
         let index_offset = (index - 1) * mem::size_of::<HeapCellValue>();
 
@@ -95,7 +105,7 @@ impl Index<usize> for Stack {
     fn index(&self, index: usize) -> &Self::Output {
         unsafe {
             // TODO: implement some mechanism to verify soundness
-            let ptr = self.buf.get_unchecked(index);
+            let ptr = self.buf.get(index).unwrap();
             &*(ptr as *const HeapCellValue)
         }
     }
@@ -136,6 +146,11 @@ impl Index<usize> for OrFrame {
 
     #[inline]
     fn index(&self, index: usize) -> &Self::Output {
+        assert!(
+            index < self.prelude.num_cells,
+            "Invalid index within OrFrame: {index} not in 0..{}",
+            self.prelude.num_cells
+        );
         let prelude_offset = prelude_size::<OrFramePrelude>();
         let index_offset = index * mem::size_of::<HeapCellValue>();
 
@@ -151,6 +166,11 @@ impl Index<usize> for OrFrame {
 impl IndexMut<usize> for OrFrame {
     #[inline]
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        assert!(
+            index < self.prelude.num_cells,
+            "Invalid index within OrFrame: {index} not in 0..{}",
+            self.prelude.num_cells
+        );
         let prelude_offset = prelude_size::<OrFramePrelude>();
         let index_offset = index * mem::size_of::<HeapCellValue>();
 
@@ -202,6 +222,7 @@ impl Stack {
     pub(crate) fn allocate_and_frame(&mut self, num_cells: usize) -> usize {
         let frame_size = AndFrame::size_of(num_cells);
 
+        // TODO: prove safety of this block and prove that it upholds the invariants of `Stack`.
         unsafe {
             let e = self.buf.len();
             let new_ptr = self.alloc(frame_size);
@@ -230,6 +251,7 @@ impl Stack {
     pub(crate) fn allocate_or_frame(&mut self, num_cells: usize) -> usize {
         let frame_size = OrFrame::size_of(num_cells);
 
+        // TODO: prove safety of this block and prove that it upholds the invariants of `Stack`.
         unsafe {
             let b = self.buf.len();
             let new_ptr = self.alloc(frame_size);
@@ -237,7 +259,7 @@ impl Stack {
 
             for idx in 0..num_cells {
                 ptr::write(
-                    (new_ptr as usize + offset) as *mut HeapCellValue,
+                    new_ptr.add(offset).cast::<HeapCellValue>(),
                     stack_loc_as_cell!(OrFrame, b, idx),
                 );
 
@@ -254,7 +276,8 @@ impl Stack {
     #[inline(always)]
     pub(crate) fn index_and_frame(&self, e: usize) -> &AndFrame {
         unsafe {
-            let ptr = self.buf.get_unchecked(e);
+            let ptr = self.buf.get(e).unwrap();
+            // TODO: ensure safety of this cast
             &*(ptr as *const AndFrame)
         }
     }
@@ -263,7 +286,8 @@ impl Stack {
     pub(crate) fn index_and_frame_mut(&mut self, e: usize) -> &mut AndFrame {
         unsafe {
             // This is doing alignment wrong
-            let ptr = self.buf.get_unchecked(e);
+            let ptr = self.buf.get(e).unwrap();
+            // TODO: ensure safety of this cast
             &mut *(ptr as *mut AndFrame)
         }
     }
@@ -271,7 +295,8 @@ impl Stack {
     #[inline(always)]
     pub(crate) fn index_or_frame(&self, b: usize) -> &OrFrame {
         unsafe {
-            let ptr = self.buf.get_unchecked(b);
+            let ptr = self.buf.get(b).unwrap();
+            // TODO: ensure safety of this cast
             &*(ptr as *const OrFrame)
         }
     }
@@ -299,14 +324,23 @@ impl Stack {
     pub(crate) fn index_or_frame_mut(&mut self, b: usize) -> &mut OrFrame {
         unsafe {
             let ptr = self.buf.get_mut_unchecked(b);
+            // TODO: ensure safety of this cast
             &mut *(ptr as *mut OrFrame)
         }
     }
 
+    /// Panics if `byte_offset` is not aligned to [`Stack::ALIGN`].
+    ///
+    /// Frames beyond `byte_offset` become invalidated after a call to this function.
     #[inline(always)]
-    pub(crate) fn truncate(&mut self, b: usize) {
+    pub(crate) fn truncate(&mut self, byte_offset: usize) {
         unsafe {
-            self.buf.truncate(b);
+            // TODO: implement a way to mitigate indexing to invalidated frames,
+            // and/or mark this function as unsafe.
+            //
+            // I think that one could also create a safer abstraction for the
+            // "store offset, do work, truncate to offset" kind of tasks.
+            self.buf.truncate(byte_offset);
         }
     }
 }

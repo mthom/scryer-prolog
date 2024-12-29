@@ -31,6 +31,8 @@ pub struct RawBlock<T: RawBlockTraits> {
     /// # Safety
     ///
     /// `head <= self.capacity()`
+    ///
+    /// `head` must always be a multiple of [`T::ALIGN`](RawBlockTraits::ALIGN).
     head: Cell<usize>,
 
     _marker: PhantomData<T>,
@@ -233,7 +235,16 @@ impl<T: RawBlockTraits> RawBlock<T> {
     /// this function is marked as unsafe.
     ///
     /// Does not resize the allocated region of memory.
+    ///
+    /// Panics if `new_len` is not a multiple of [`T::ALIGN`](RawBlockTraits::ALIGN).
     pub unsafe fn truncate(&mut self, new_len: usize) {
+        assert_eq!(
+            new_len % T::ALIGN,
+            0,
+            "RawBlock::truncate(new_len = {new_len}) requires new_len to be aligned to {}",
+            T::ALIGN
+        );
+
         let head = self.head.get_mut();
         if new_len < *head {
             *head = new_len;
