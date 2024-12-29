@@ -325,14 +325,9 @@ impl Atom {
                     "{self:?} is invalid: bad alignment"
                 );
 
-                unsafe {
-                    // SAFETY:
-                    // - Asserted: `block.base + table_offset` is smaller than `block.top`
-                    // - Invariant: `block.top` points to the end of the buffer
-                    // Thus `table_offset` fits in an `isize` and within the allocation region
-                    // of the buffer in `block`.
-                    let ptr = buf.block.base.add(table_offset);
+                let ptr = buf.block.get(table_offset)?;
 
+                unsafe {
                     // SAFETY:
                     // - Proved: `ptr` is a valid pointer to memory.
                     // - Invariant: from `RawBlock`, `block.base` is aligned to `ATOM_TABLE_ALIGN`
@@ -571,12 +566,13 @@ impl AtomTable {
                     }
                 };
 
-                let ptr_base = block_epoch.block.base as usize;
+                let offset = block_epoch.block.offset_of_unchecked(len_ptr);
 
+                // SAFETY: TODO
                 write_to_ptr(string, len_ptr);
 
                 let atom = AtomCell::new()
-                    .with_name((STRINGS.len() + len_ptr as usize - ptr_base) as u64)
+                    .with_name((STRINGS.len() + offset) as u64)
                     .with_arity(0)
                     .with_f(false)
                     .with_m(false)

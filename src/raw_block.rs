@@ -21,9 +21,9 @@ pub trait RawBlockTraits {
 /// - `ptr` points to the last unused byte of the allocated region (aligned to `T::ALIGN`).
 #[derive(Debug)]
 pub struct RawBlock<T: RawBlockTraits> {
-    pub base: *const u8,
-    pub top: *const u8,
-    pub ptr: UnsafeCell<*mut u8>,
+    base: *const u8,
+    top: *const u8,
+    ptr: UnsafeCell<*mut u8>,
     _marker: PhantomData<T>,
 }
 
@@ -40,13 +40,105 @@ impl<T: RawBlockTraits> RawBlock<T> {
 
     #[allow(clippy::new_without_default)]
     pub fn new() -> Self {
+        Self::with_capacity(T::init_size())
+    }
+
+    pub fn with_capacity(cap: usize) -> Self {
         let mut block = Self::empty_block();
 
         unsafe {
-            block.grow();
+            block.init_at_size(cap);
         }
 
         block
+    }
+
+    /// Returns a pointer to the data at `offset` within the allocated region.
+    ///
+    /// The returned pointer is invalidated by operations like [`grow`](Self::grow).
+    ///
+    /// The caller is responsible for ensuring that the return value points to
+    /// valid objects, and that no mutable access may happen on it.
+    pub fn get(&self, offset: usize) -> Option<*const u8> {
+        if offset < self.capacity() {
+            Some(unsafe {
+                // SAFETY: Asserted: `offset < self.capacity()`.
+                self.get_unchecked(offset)
+            })
+        } else {
+            None
+        }
+    }
+
+    /// The unchecked variant of [`RawBlock::get`].
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that `offset < self.capacity()`
+    pub unsafe fn get_unchecked(&self, offset: usize) -> *const u8 {
+        // SAFETY:
+        // - Invariant: `self.base + self.size() == self.top` is the top bound of
+        //   the allocated region.
+        // - Assumed: `offset < self.capacity()`
+        // Thus `self.base + offset` is within the allocated region.
+        self.base.add(offset)
+    }
+
+    /// The mutable equivalent of [`RawBlock::get`].
+    /// Returns a pointer to the data at `offset` within the allocated region.
+    ///
+    /// The returned pointer is invalidated by operations like [`grow`](Self::grow).
+    ///
+    /// The caller is responsible for ensuring that the return value points to
+    /// valid objects, and that no other mutable or immutable access may happen on it.
+    pub fn get_mut(&mut self, offset: usize) -> Option<*mut u8> {
+        self.get(offset).map(|ptr| ptr.cast_mut())
+    }
+
+    /// The unchecked variant of [`RawBlock::get_mut`].
+    ///
+    /// # Safety
+    ///
+    /// The caller must ensure that `offset < self.capacity()`
+    pub unsafe fn get_mut_unchecked(&mut self, offset: usize) -> *mut u8 {
+        unsafe {
+            // SAFETY: Assumed: `offset < self.capacity()`
+            self.get_unchecked(offset).cast_mut()
+        }
+    }
+
+    /// Returns true iff `ptr` is within the allocated region of memory.
+    pub fn contains(&self, ptr: *const u8) -> bool {
+        (self.base..self.top).contains(&ptr)
+    }
+
+    /// Returns the offset of the pointer `ptr` within the allocated region.
+    ///
+    /// If `ptr` is not within the allocated region, returns `None`.
+    pub fn offset_of(&self, ptr: *const u8) -> Option<usize> {
+        if self.contains(ptr) {
+            unsafe {
+                // SAFETY: Asserted: `ptr` is between `self.start` and `self.end`.
+                Some(self.offset_of_unchecked(ptr))
+            }
+        } else {
+            None
+        }
+    }
+
+    /// Returns the offset of the pointer `ptr` within the allocated region.
+    ///
+    /// # Safety
+    ///
+    /// Requires that `ptr` is between `self.start` and `self.end`.
+    pub unsafe fn offset_of_unchecked(&self, ptr: *const u8) -> usize {
+        unsafe {
+            // SAFETY:
+            // - Assumed: `ptr` is between `self.start` and `self.end`.
+            // - Invariant: `self.start` and `self.end` are within the same allocated region.
+            // Thus `ptr` is within the same allocated region as `ptr`.
+            ptr.offset_from(self.base) as usize
+        }
     }
 
     unsafe fn init_at_size(&mut self, cap: usize) {
@@ -69,9 +161,10 @@ impl<T: RawBlockTraits> RawBlock<T> {
             true
         } else {
             let size = self.size();
+            debug_assert!(size % T::ALIGN == 0);
+
             let layout = alloc::Layout::from_size_align_unchecked(size, T::ALIGN);
 
-            debug_assert!(size % T::ALIGN == 0);
             debug_assert!(size < isize::MAX as usize / 2);
 
             let new_base = alloc::realloc(self.base.cast_mut(), layout, size * 2).cast_const();
@@ -105,7 +198,12 @@ impl<T: RawBlockTraits> RawBlock<T> {
     }
 
     #[inline]
+    #[deprecated(note = "Use RawBlock::capacity() instead")]
     pub fn size(&self) -> usize {
+        self.capacity()
+    }
+
+    pub fn capacity(&self) -> usize {
         self.top as usize - self.base as usize
     }
 
@@ -120,6 +218,33 @@ impl<T: RawBlockTraits> RawBlock<T> {
         );
 
         self.top as usize - (*self.ptr.get()) as usize
+    }
+
+    #[inline(always)]
+    pub unsafe fn len(&self) -> usize {
+        unsafe {
+            // SAFETY:
+            // - Invariant: `self.ptr` is between `self.base` and `self.top`
+            // - Invariant: `self.base` and `self.top` belong to the same allocation
+            // - Assumed: no other mutable borrow are currently active for `self.ptr`
+            (*self.ptr.get()).cast_const().offset_from(self.base) as usize
+        }
+    }
+
+    /// The reverse operation of [`alloc()`](RawBlock::alloc):
+    /// moves the pointer to the first unused byte back.
+    ///
+    /// Subsequent calls to `alloc()` will re-use those bytes,
+    /// invalidating any previously-stored data. For this reason,
+    /// this function is marked as unsafe.
+    ///
+    /// Does not resize the allocated region of memory.
+    pub unsafe fn truncate(&mut self, new_len: usize) {
+        let new_ptr = self.get_mut(new_len).unwrap();
+
+        if new_ptr < *self.ptr.get_mut() {
+            *self.ptr.get_mut() = new_ptr as *mut _;
+        }
     }
 
     pub unsafe fn alloc(&self, size: usize) -> *mut u8 {

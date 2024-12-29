@@ -94,7 +94,8 @@ impl Index<usize> for Stack {
     #[inline]
     fn index(&self, index: usize) -> &Self::Output {
         unsafe {
-            let ptr = self.buf.base as usize + index;
+            // TODO: implement some mechanism to verify soundness
+            let ptr = self.buf.get_unchecked(index);
             &*(ptr as *const HeapCellValue)
         }
     }
@@ -104,7 +105,7 @@ impl IndexMut<usize> for Stack {
     #[inline]
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         unsafe {
-            let ptr = self.buf.base as usize + index;
+            let ptr = self.buf.get_mut_unchecked(index);
             &mut *(ptr as *mut HeapCellValue)
         }
     }
@@ -202,7 +203,7 @@ impl Stack {
         let frame_size = AndFrame::size_of(num_cells);
 
         unsafe {
-            let e = (*self.buf.ptr.get_mut()) as usize - self.buf.base as usize;
+            let e = self.buf.len();
             let new_ptr = self.alloc(frame_size);
             let mut offset = prelude_size::<AndFramePrelude>();
 
@@ -223,14 +224,14 @@ impl Stack {
     }
 
     pub(crate) fn top(&self) -> usize {
-        unsafe { (*self.buf.ptr.get()) as usize - self.buf.base as usize }
+        unsafe { self.buf.len() }
     }
 
     pub(crate) fn allocate_or_frame(&mut self, num_cells: usize) -> usize {
         let frame_size = OrFrame::size_of(num_cells);
 
         unsafe {
-            let b = (*self.buf.ptr.get_mut()) as usize - self.buf.base as usize;
+            let b = self.buf.len();
             let new_ptr = self.alloc(frame_size);
             let mut offset = prelude_size::<OrFramePrelude>();
 
@@ -253,7 +254,7 @@ impl Stack {
     #[inline(always)]
     pub(crate) fn index_and_frame(&self, e: usize) -> &AndFrame {
         unsafe {
-            let ptr = self.buf.base as usize + e;
+            let ptr = self.buf.get_unchecked(e);
             &*(ptr as *const AndFrame)
         }
     }
@@ -262,7 +263,7 @@ impl Stack {
     pub(crate) fn index_and_frame_mut(&mut self, e: usize) -> &mut AndFrame {
         unsafe {
             // This is doing alignment wrong
-            let ptr = self.buf.base.add(e);
+            let ptr = self.buf.get_unchecked(e);
             &mut *(ptr as *mut AndFrame)
         }
     }
@@ -270,7 +271,7 @@ impl Stack {
     #[inline(always)]
     pub(crate) fn index_or_frame(&self, b: usize) -> &OrFrame {
         unsafe {
-            let ptr = self.buf.base as usize + b;
+            let ptr = self.buf.get_unchecked(b);
             &*(ptr as *const OrFrame)
         }
     }
@@ -278,17 +279,15 @@ impl Stack {
     #[inline(always)]
     pub(crate) fn index_or_frame_mut(&mut self, b: usize) -> &mut OrFrame {
         unsafe {
-            let ptr = self.buf.base as usize + b;
+            let ptr = self.buf.get_mut_unchecked(b);
             &mut *(ptr as *mut OrFrame)
         }
     }
 
     #[inline(always)]
     pub(crate) fn truncate(&mut self, b: usize) {
-        let base = self.buf.base as usize + b;
-
-        if base < (*self.buf.ptr.get_mut()) as usize {
-            *self.buf.ptr.get_mut() = base as *mut _;
+        unsafe {
+            self.buf.truncate(b);
         }
     }
 }
