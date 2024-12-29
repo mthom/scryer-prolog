@@ -128,6 +128,9 @@ pub struct Atom {
     pub index: u64,
 }
 
+const ATOM_TABLE_INIT_SIZE: usize = 1 << 16;
+const ATOM_TABLE_ALIGN: usize = 8;
+
 include!(concat!(env!("OUT_DIR"), "/static_atoms.rs"));
 
 // populate these in STRINGS so they can be used from build_functor
@@ -159,9 +162,6 @@ impl PartialEq<&str> for Atom {
     }
 }
 
-const ATOM_TABLE_INIT_SIZE: usize = 1 << 16;
-const ATOM_TABLE_ALIGN: usize = 8;
-
 #[inline(always)]
 fn global_atom_table() -> &'static RwLock<Weak<AtomTable>> {
     static GLOBAL_ATOM_TABLE: RwLock<Weak<AtomTable>> = RwLock::new(Weak::new());
@@ -190,16 +190,33 @@ impl RawBlockTraits for AtomTable {
 struct AtomHeader {
     #[allow(unused)]
     m: bool,
+    /// SAFETY: must be equal to the length of the string of the described `AtomData`.
     len: B50,
     #[allow(unused)]
     padding: B13,
 }
 
+/// The underlying value of an `Atom`.
+///
+/// ## Representation
+///
+/// The header is stored immediately before the data iself,
+/// and contains the length of the data.
+///
+/// ```no_rust
+/// +---------+---------+
+/// | header  |   data  |
+/// | 64 bits | n bytes |
+/// +---------+---------+
+/// ```
 #[repr(C)]
 pub struct AtomData {
     header: AtomHeader,
     data: str,
 }
+
+// NOTE: Other parts of the code assume that the following is true:
+const_assert!(mem::offset_of!(AtomData, header) == 0);
 
 impl AtomHeader {
     fn build_with(len: u64) -> Self {
@@ -300,15 +317,52 @@ impl Atom {
             let atom_table =
                 arc_atom_table().expect("We should only have an Atom while there is an AtomTable");
 
-            AtomTableRef::try_map(atom_table.inner.read(), |buf| unsafe {
-                let ptr = buf
-                    .block
-                    .base
-                    .add(self.flat_index() as usize - STRINGS.len());
-                // TODO use std::ptr::from_raw_parts instead when feature ptr_metadata is stable rust-lang/rust#81513
-                let atom_data = &*(std::ptr::slice_from_raw_parts(ptr, 0) as *const AtomData);
-                let len = atom_data.header.len();
-                Some(&*(std::ptr::slice_from_raw_parts(ptr, len as usize) as *const AtomData))
+            AtomTableRef::try_map(atom_table.inner.read(), |buf| {
+                let table_offset = self.flat_index() as usize - STRINGS.len();
+                assert!(
+                    table_offset < buf.block.size(),
+                    "{self:?} is invalid: out of bound"
+                );
+                assert!(
+                    table_offset % ATOM_TABLE_ALIGN == 0,
+                    "{self:?} is invalid: bad alignment"
+                );
+
+                unsafe {
+                    // SAFETY:
+                    // - Asserted: `block.base + table_offset` is smaller than `block.top`
+                    // - Invariant: `block.top` points to the end of the buffer
+                    // Thus `table_offset` fits in an `isize` and within the allocation region
+                    // of the buffer in `block`.
+                    let ptr = buf.block.base.add(table_offset);
+
+                    // SAFETY:
+                    // - Proved: `ptr` is a valid pointer to memory.
+                    // - Invariant: from `RawBlock`, `block.base` is aligned to `ATOM_TABLE_ALIGN`
+                    // - Asserted: `table_offset` is aligned to `ATOM_TABLE_ALIGN`
+                    // - Assumed: `block` contains a valid AtomData at `table_offset`
+                    // - Assumed: `ATOM_TABLE_ALIGN` is a multiple of `align_of::<AtomData>()`
+                    // Thus, `ptr` points to a valid `AtomData`.
+                    //
+                    // TODO: verify that the assumptions above are correct
+
+                    // SAFETY:
+                    // - Proved: `ptr` points to a valid `AtomData`
+                    // - Invariant: `offset_of!(AtomData, header) == 0`
+                    // Thus `ptr` points to a valid `AtomHeader`.
+                    let atom_header = *(ptr as *const AtomHeader);
+
+                    let len = atom_header.len() as usize;
+
+                    // NOTE: this is relying on the fact that pointer conversion of slice-like DSTs
+                    // preserve the fat pointer metadata. Here `len` does *not* refer to the physical
+                    // size of `atom_data`, but to the length of `atom_data.data.len()`.
+                    //
+                    // TODO: use std::ptr::from_raw_parts instead when feature ptr_metadata is stable rust-lang/rust#81513
+                    let atom_data = &*(std::ptr::slice_from_raw_parts(ptr, len) as *const AtomData);
+
+                    Some(atom_data)
+                }
             })
         }
     }
@@ -385,7 +439,15 @@ impl Atom {
     }
 }
 
+/// SAFETY:
+/// - Assumes that `ptr` does not overlap with `string`.
+/// - Assumes that `ptr` is aligned to `ATOM_TABLE_ALIGN`.
+/// - Assumes that `ptr` points to enough free memory to store an `AtomHeader`
+///   as well as `str.len()`.
 unsafe fn write_to_ptr(string: &str, ptr: *mut u8) {
+    debug_assert!(!string.as_bytes().as_ptr_range().contains(&ptr.cast_const()));
+    debug_assert!(ptr as usize % ATOM_TABLE_ALIGN == 0);
+
     ptr::write(ptr as *mut _, AtomHeader::build_with(string.len() as u64));
     let str_ptr = ptr.add(mem::size_of::<AtomHeader>());
     ptr::copy_nonoverlapping(string.as_ptr(), str_ptr, string.len());
