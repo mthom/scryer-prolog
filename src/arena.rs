@@ -95,8 +95,8 @@ pub fn lookup_float(
 
     RcuRef::try_map(f64table.block.read(), |raw_block| unsafe {
         raw_block
-            .base
-            .add(offset.0)
+            .get(offset.0)
+            .unwrap()
             .cast_mut()
             .cast::<UnsafeCell<OrderedFloat<f64>>>()
             .as_ref()
@@ -151,7 +151,7 @@ impl F64Table {
 
         ptr::write(ptr as *mut OrderedFloat<f64>, OrderedFloat(value));
 
-        let float = F64Offset(ptr as usize - block_epoch.base as usize);
+        let float = F64Offset(block_epoch.offset_of_unchecked(ptr));
 
         // atometable would have to update the index table at this point
 
@@ -493,7 +493,11 @@ impl F64Ptr {
 
     #[inline(always)]
     pub fn as_offset(&self) -> F64Offset {
-        F64Offset(self.0.get() as usize - RcuRef::get_root(&self.0).base as usize)
+        F64Offset(
+            RcuRef::get_root(&self.0)
+                .offset_of(self.0.get().cast_const().cast::<u8>())
+                .unwrap(),
+        )
     }
 }
 

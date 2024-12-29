@@ -298,10 +298,18 @@ impl Atom {
                 arc_atom_table().expect("We should only have an Atom while there is an AtomTable");
 
             AtomTableRef::try_map(atom_table.inner.read(), |buf| unsafe {
-                let ptr = buf
-                    .block
-                    .base
-                    .add(self.flat_index() as usize - STRINGS.len());
+                let table_offset = self.flat_index() as usize - STRINGS.len();
+                assert!(
+                    table_offset < buf.block.len(),
+                    "{self:?} is invalid: out of bound"
+                );
+                assert!(
+                    table_offset % ATOM_TABLE_ALIGN == 0,
+                    "{self:?} is invalid: bad alignment"
+                );
+
+                let ptr = buf.block.get(table_offset).unwrap();
+
                 // TODO use std::ptr::from_raw_parts instead when feature ptr_metadata is stable rust-lang/rust#81513
                 let atom_data = &*(std::ptr::slice_from_raw_parts(ptr, 0) as *const AtomData);
                 let len = atom_data.header.len();
@@ -509,12 +517,13 @@ impl AtomTable {
                     }
                 };
 
-                let ptr_base = block_epoch.block.base as usize;
+                let offset = block_epoch.block.offset_of_unchecked(len_ptr);
 
+                // SAFETY: TODO
                 write_to_ptr(string, len_ptr);
 
                 let atom = AtomCell::new()
-                    .with_name((STRINGS.len() + len_ptr as usize - ptr_base) as u64)
+                    .with_name((STRINGS.len() + offset) as u64)
                     .with_arity(0)
                     .with_f(false)
                     .with_m(false)
