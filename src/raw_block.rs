@@ -71,9 +71,9 @@ impl<T: RawBlockTraits> RawBlock<T> {
     /// The caller is responsible for ensuring that the return value points to
     /// valid objects, and that no mutable access may happen on it.
     pub fn get(&self, offset: usize) -> Option<*const u8> {
-        if offset < self.capacity() {
+        if offset < self.len() {
             Some(unsafe {
-                // SAFETY: Asserted: `offset < self.capacity()`.
+                // SAFETY: Asserted: `offset < self.len()`.
                 self.get_unchecked(offset)
             })
         } else {
@@ -85,12 +85,12 @@ impl<T: RawBlockTraits> RawBlock<T> {
     ///
     /// # Safety
     ///
-    /// The caller must ensure that `offset < self.capacity()`
+    /// The caller must ensure that `offset < self.len()`
     pub unsafe fn get_unchecked(&self, offset: usize) -> *const u8 {
         // SAFETY:
         // - Invariant: `self.base + self.size() == self.top` is the top bound of
         //   the allocated region.
-        // - Assumed: `offset < self.capacity()`
+        // - Assumed: `offset < self.len()`
         // Thus `self.base + offset` is within the allocated region.
         self.base.add(offset)
     }
@@ -111,10 +111,10 @@ impl<T: RawBlockTraits> RawBlock<T> {
     ///
     /// # Safety
     ///
-    /// The caller must ensure that `offset < self.capacity()`
+    /// The caller must ensure that `offset < self.len()`
     pub unsafe fn get_mut_unchecked(&mut self, offset: usize) -> *mut u8 {
         unsafe {
-            // SAFETY: Assumed: `offset < self.capacity()`
+            // SAFETY: Assumed: `offset < self.len()`
             self.get_unchecked(offset).cast_mut()
         }
     }
