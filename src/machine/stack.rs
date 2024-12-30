@@ -284,10 +284,18 @@ impl Stack {
         }
     }
 
+    /// Panics if `byte_offset` is not aligned to [`Stack::ALIGN`].
+    ///
+    /// Frames beyond `byte_offset` become invalidated after a call to this function.
     #[inline(always)]
-    pub(crate) fn truncate(&mut self, b: usize) {
+    pub(crate) fn truncate(&mut self, byte_offset: usize) {
         unsafe {
-            self.buf.truncate(b);
+            // TODO: implement a way to mitigate indexing to invalidated frames,
+            // and/or mark this function as unsafe.
+            //
+            // I think that one could also create a safer abstraction for the
+            // "store offset, do work, truncate to offset" kind of tasks.
+            self.buf.truncate(byte_offset);
         }
     }
 }
