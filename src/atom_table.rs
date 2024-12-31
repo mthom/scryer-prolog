@@ -460,7 +460,9 @@ impl Ord for Atom {
 #[derive(Debug)]
 pub struct InnerAtomTable {
     block: RawBlock<AtomTable>,
-    pub table: Arcu<IndexSet<Atom>, GlobalEpochCounterPool>,
+    /// Table used to verify that a new atom doesn't need to be created if it already exists
+    /// within the atom table.
+    hash_set: Arcu<IndexSet<Atom>, GlobalEpochCounterPool>,
 }
 
 #[derive(Debug)]
@@ -478,7 +480,7 @@ impl InnerAtomTable {
         STATIC_ATOMS_MAP
             .get(string)
             .cloned()
-            .or_else(|| self.table.read().get(string).cloned())
+            .or_else(|| self.hash_set.read().get(string).cloned())
     }
 }
 
@@ -499,7 +501,7 @@ impl AtomTable {
                     inner: Arcu::new(
                         InnerAtomTable {
                             block: RawBlock::new(),
-                            table: Arcu::new(IndexSet::new(), GlobalEpochCounterPool),
+                            hash_set: Arcu::new(IndexSet::new(), GlobalEpochCounterPool),
                         },
                         GlobalEpochCounterPool,
                     ),
@@ -512,7 +514,7 @@ impl AtomTable {
     }
 
     pub fn active_table(&self) -> RcuRef<IndexSet<Atom>, IndexSet<Atom>> {
-        self.inner.read().table.read()
+        self.inner.read().hash_set.read()
     }
 
     pub fn build_with(atom_table: &AtomTable, string: &str) -> Atom {
@@ -521,20 +523,20 @@ impl AtomTable {
         }
 
         loop {
-            let mut block_epoch = atom_table.inner.read();
-            let mut table_epoch = block_epoch.table.read();
+            let mut inner_table = atom_table.inner.read();
+            let mut hash_set = inner_table.hash_set.read();
 
-            if let Some(atom) = block_epoch.lookup_str(string) {
+            if let Some(atom) = inner_table.lookup_str(string) {
                 return atom;
             }
 
             // take a lock to prevent concurrent updates
             let update_guard = atom_table.update.lock().unwrap();
 
-            let is_same_allocation = RcuRef::same_epoch(&block_epoch, &atom_table.inner.read());
-            let is_same_atom_list = RcuRef::same_epoch(&table_epoch, &block_epoch.table.read());
+            let is_same_inner_table = RcuRef::same_epoch(&inner_table, &atom_table.inner.read());
+            let is_same_hash_set = RcuRef::same_epoch(&hash_set, &inner_table.hash_set.read());
 
-            if !(is_same_allocation && is_same_atom_list) {
+            if !(is_same_inner_table && is_same_hash_set) {
                 // some other thread raced us between our lookup and
                 // us aquring the update lock,
                 // try again
@@ -544,21 +546,36 @@ impl AtomTable {
             let size = mem::size_of::<AtomHeader>() + string.len();
             let size = size.next_multiple_of(AtomTable::ALIGN);
 
+            // SAFETY:
+            // - Asserted: we are in the `update` mutex.
+            // - Invariant: from `AtomTable`, all mutations of `AtomTable` must be done
+            //   within the `update` mutex.
+            // - Asserted: `inner_table` and `atom_table.inner` point to the same value.
+            // - Asserted: `hash_set` and `inner_table.hash_set` point to the same value.
+            // - Invariant: from `Arcu`, `atom_table.inner_table` was not mutated since
+            //   `inner_table` was acquired.
+            // - Invariant: from `Arcu`, `inner_table.hash_set` was not mutated since
+            //   `hash_set` was acquired.
+            //
+            // We thus have at this point in time:
+            // - `inner_table.lookup_str(string) == None`
+            // - `inner_table` upholds the invariants of `atom_table.inner`.
+            // - `hash_set` upholds the invariants of `inner_table.hash_set`.
             unsafe {
                 let atom_data_ptr = loop {
-                    let ptr = block_epoch.block.alloc(size);
+                    let ptr = inner_table.block.alloc(size);
 
                     if ptr.is_null() {
                         // garbage collection would go here
-                        let new_block = block_epoch.block.grow_new().unwrap();
-                        let new_table = Arcu::new(table_epoch.clone(), GlobalEpochCounterPool);
+                        let new_block = inner_table.block.grow_new().unwrap();
+                        let new_cmp_table = Arcu::new(hash_set.clone(), GlobalEpochCounterPool);
                         let new_alloc = InnerAtomTable {
                             block: new_block,
-                            table: new_table,
+                            hash_set: new_cmp_table,
                         };
                         atom_table.inner.replace(new_alloc);
-                        block_epoch = atom_table.inner.read();
-                        table_epoch = block_epoch.table.read();
+                        inner_table = atom_table.inner.read();
+                        hash_set = inner_table.hash_set.read();
                     } else {
                         break ptr;
                     }
@@ -567,7 +584,7 @@ impl AtomTable {
                 // SAFETY:
                 // - Asserted: `atom_data_ptr` is a return value of `RawBlock::alloc(..., size = size)`
                 // - Asserted: `atom_data_ptr` is not null.
-                let offset = block_epoch.block.offset_of_unchecked(atom_data_ptr);
+                let offset = inner_table.block.offset_of_unchecked(atom_data_ptr);
 
                 // SAFETY:
                 // - Asserted: `atom_data_ptr` is a return value of `RawBlock::alloc(..., size = size)`
@@ -587,9 +604,14 @@ impl AtomTable {
                     .with_tag(HeapCellValueTag::Atom as u8)
                     .get_name();
 
-                let mut table = table_epoch.clone();
+                // SAFETY:
+                // - Proved: `hash_set` contains the set of atoms in the table minus `atom`.
+                // - Asserted: `atom` points to a valid `AtomData` containing `string`.
+                // We are thus restoring the invariant that `inner_table.hash_set` should contain
+                // all the atoms in the table.
+                let mut table = hash_set.clone();
                 table.insert(atom);
-                block_epoch.table.replace(table);
+                inner_table.hash_set.replace(table);
 
                 // expicit drop to ensure we don't accidentally drop it early
                 drop(update_guard);
