@@ -314,37 +314,7 @@ impl Atom {
             let atom_table =
                 arc_atom_table().expect("We should only have an Atom while there is an AtomTable");
 
-            AtomTableRef::try_map(atom_table.inner.read(), |buf| {
-                let table_index = self.flat_index() as usize - STRINGS.len();
-                let table_offset = buf.offsets.read()[table_index];
-
-                let ptr = buf.block.get(table_offset)?;
-
-                // SAFETY:
-                // - Asserted: `ptr` is a valid pointer to memory.
-                // - Invariant: from InnerAtomTable, `table_offset` is aligned to `ATOM_TABLE_ALIGN`
-                // - Asserted: `ATOM_TABLE_ALIGN` is a multiple of `align_of::<AtomData>()`
-                // - Invariant: from InnerAtomTable, `block` contains a valid AtomData at `table_offset`
-                // Thus, `ptr` points to a valid `AtomData`.
-                unsafe {
-                    // SAFETY:
-                    // - Proved: `ptr` points to a valid `AtomData`
-                    // - Invariant: `offset_of!(AtomData, header) == 0`
-                    // Thus `ptr` points to a valid `AtomHeader`.
-                    let atom_header = *(ptr as *const AtomHeader);
-
-                    let len = atom_header.len() as usize;
-
-                    // NOTE: this is relying on the fact that pointer conversion of slice-like DSTs
-                    // preserve the fat pointer metadata. Here `len` does *not* refer to the physical
-                    // size of `atom_data`, but to the length of `atom_data.data.len()`.
-                    //
-                    // TODO: use std::ptr::from_raw_parts instead when feature ptr_metadata is stable rust-lang/rust#81513
-                    let atom_data = &*(std::ptr::slice_from_raw_parts(ptr, len) as *const AtomData);
-
-                    Some(atom_data)
-                }
-            })
+            atom_table.read_atom(&self)
         }
     }
 
@@ -547,6 +517,46 @@ impl AtomTable {
 
     pub fn active_table(&self) -> RcuRef<IndexSet<Atom>, IndexSet<Atom>> {
         self.inner.read().hash_set.read()
+    }
+
+    /// Attempts to read the data associated with `atom`.
+    /// Returns `None` if `atom` is invalid.
+    pub fn read_atom(&self, atom: &Atom) -> Option<AtomTableRef<AtomData>> {
+        if atom.is_static() {
+            return None;
+        }
+
+        AtomTableRef::try_map(self.inner.read(), |buf| {
+            let table_index = atom.flat_index() as usize - STRINGS.len();
+            let table_offset = *buf.offsets.read().get(table_index)?;
+
+            let ptr = buf.block.get(table_offset)?;
+
+            // SAFETY:
+            // - Asserted: `ptr` is a valid pointer to memory.
+            // - Invariant: from InnerAtomTable, `table_offset` is aligned to `ATOM_TABLE_ALIGN`
+            // - Asserted: `ATOM_TABLE_ALIGN` is a multiple of `align_of::<AtomData>()`
+            // - Invariant: from InnerAtomTable, `block` contains a valid AtomData at `table_offset`
+            // Thus, `ptr` points to a valid `AtomData`.
+            unsafe {
+                // SAFETY:
+                // - Proved: `ptr` points to a valid `AtomData`
+                // - Invariant: `offset_of!(AtomData, header) == 0`
+                // Thus `ptr` points to a valid `AtomHeader`.
+                let atom_header = *(ptr as *const AtomHeader);
+
+                let len = atom_header.len() as usize;
+
+                // NOTE: this is relying on the fact that pointer conversion of slice-like DSTs
+                // preserve the fat pointer metadata. Here `len` does *not* refer to the physical
+                // size of `atom_data`, but to the length of `atom_data.data.len()`.
+                //
+                // TODO: use std::ptr::from_raw_parts instead when feature ptr_metadata is stable rust-lang/rust#81513
+                let atom_data = &*(std::ptr::slice_from_raw_parts(ptr, len) as *const AtomData);
+
+                Some(atom_data)
+            }
+        })
     }
 
     pub fn build_with(atom_table: &AtomTable, string: &str) -> Atom {
