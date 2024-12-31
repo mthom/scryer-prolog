@@ -315,26 +315,17 @@ impl Atom {
                 arc_atom_table().expect("We should only have an Atom while there is an AtomTable");
 
             AtomTableRef::try_map(atom_table.inner.read(), |buf| {
-                let table_offset = self.flat_index() as usize - STRINGS.len();
-                assert!(
-                    table_offset < buf.block.len(),
-                    "{self:?} is invalid: out of bound"
-                );
-                assert!(
-                    table_offset % ATOM_TABLE_ALIGN == 0,
-                    "{self:?} is invalid: bad alignment"
-                );
+                let table_index = self.flat_index() as usize - STRINGS.len();
+                let table_offset = buf.offsets.read()[table_index];
 
                 let ptr = buf.block.get(table_offset)?;
 
                 // SAFETY:
                 // - Asserted: `ptr` is a valid pointer to memory.
-                // - Asserted: `table_offset` is aligned to `ATOM_TABLE_ALIGN`
+                // - Invariant: from InnerAtomTable, `table_offset` is aligned to `ATOM_TABLE_ALIGN`
                 // - Asserted: `ATOM_TABLE_ALIGN` is a multiple of `align_of::<AtomData>()`
-                // - Assumed: `block` contains a valid AtomData at `table_offset`
+                // - Invariant: from InnerAtomTable, `block` contains a valid AtomData at `table_offset`
                 // Thus, `ptr` points to a valid `AtomData`.
-                //
-                // TODO: verify that the last assumption above is correct
                 unsafe {
                     // SAFETY:
                     // - Proved: `ptr` points to a valid `AtomData`
@@ -459,12 +450,52 @@ impl Ord for Atom {
 
 #[derive(Debug)]
 pub struct InnerAtomTable {
+    /// # Safety
+    ///
+    /// All updates must not invalidate pointers to `block`
+    /// and must be done while the `update` mutex is held.
+    ///
+    /// All reads R must be such that either `offsets.read()` or `hash_set.read()`
+    /// *carries a dependency to* R.
     block: RawBlock<AtomTable>,
+
+    /// Array of offsets within `block`; `Atom` stores an index to this array.
+    ///
+    /// # Safety
+    ///
+    /// All updates must be done while the `update` mutex is held.
+    offsets: Arcu<Vec<usize>, GlobalEpochCounterPool>,
+
     /// Table used to verify that a new atom doesn't need to be created if it already exists
     /// within the atom table.
+    ///
+    /// # Safety
+    ///
+    /// All updates must be done while the `update` mutex is held.
     hash_set: Arcu<IndexSet<Atom>, GlobalEpochCounterPool>,
 }
 
+/// ## Representation
+///
+/// `AtomTable` stores strings together within a buffer, which is append-only.
+/// Whenever the buffer needs to be resized, a new copy is made.
+///
+/// This buffer is equipped with two control data structures:
+/// - An array of the offsets within that buffer.
+/// - A table of hashes, to quickly check that a given string doesn't exist within the table already.
+///
+/// `Atom` stores an index to the array of offsets (which allows us to shuffle them around
+/// during garbage collection), and the buffer stores metadata about the string in an `AtomHeader`:
+///
+/// ```no_rust
+///             | offsets |    |   buffer   |
+///             +---------+    +------------+
+///             |   ...   |    |    ...     |
+/// Atom(13) -> | 0x12580 | -> | AtomHeader | @12580
+///             |   ...   |    | "Hello wo" | @12588
+///             |   ...   |    | "rld!"____ | @12590
+///             |   ...   |    |    ...     |
+/// ```
 #[derive(Debug)]
 pub struct AtomTable {
     inner: Arcu<InnerAtomTable, GlobalEpochCounterPool>,
@@ -501,6 +532,7 @@ impl AtomTable {
                     inner: Arcu::new(
                         InnerAtomTable {
                             block: RawBlock::new(),
+                            offsets: Arcu::new(Vec::new(), GlobalEpochCounterPool),
                             hash_set: Arcu::new(IndexSet::new(), GlobalEpochCounterPool),
                         },
                         GlobalEpochCounterPool,
@@ -525,6 +557,7 @@ impl AtomTable {
         loop {
             let mut inner_table = atom_table.inner.read();
             let mut hash_set = inner_table.hash_set.read();
+            let mut offsets = inner_table.offsets.read();
 
             if let Some(atom) = inner_table.lookup_str(string) {
                 return atom;
@@ -535,8 +568,9 @@ impl AtomTable {
 
             let is_same_inner_table = RcuRef::same_epoch(&inner_table, &atom_table.inner.read());
             let is_same_hash_set = RcuRef::same_epoch(&hash_set, &inner_table.hash_set.read());
+            let is_same_offsets = RcuRef::same_epoch(&offsets, &inner_table.offsets.read());
 
-            if !(is_same_inner_table && is_same_hash_set) {
+            if !(is_same_inner_table && is_same_hash_set && is_same_offsets) {
                 // some other thread raced us between our lookup and
                 // us aquring the update lock,
                 // try again
@@ -552,30 +586,37 @@ impl AtomTable {
             //   within the `update` mutex.
             // - Asserted: `inner_table` and `atom_table.inner` point to the same value.
             // - Asserted: `hash_set` and `inner_table.hash_set` point to the same value.
+            // - Asserted: `offsets` and `inner_table.offsets` point to the same value.
             // - Invariant: from `Arcu`, `atom_table.inner_table` was not mutated since
             //   `inner_table` was acquired.
             // - Invariant: from `Arcu`, `inner_table.hash_set` was not mutated since
             //   `hash_set` was acquired.
+            // - Invariant: from `Arcu`, `inner_table.offsets` was not mutated since
+            //   `offsets` was acquired.
             //
             // We thus have at this point in time:
             // - `inner_table.lookup_str(string) == None`
             // - `inner_table` upholds the invariants of `atom_table.inner`.
             // - `hash_set` upholds the invariants of `inner_table.hash_set`.
+            // - `offsets` upholds the invariants of `inner_table.offsets`.
             unsafe {
                 let atom_data_ptr = loop {
                     let ptr = inner_table.block.alloc(size);
 
                     if ptr.is_null() {
-                        // garbage collection would go here
                         let new_block = inner_table.block.grow_new().unwrap();
-                        let new_cmp_table = Arcu::new(hash_set.clone(), GlobalEpochCounterPool);
+                        let new_hash_set = Arcu::new(hash_set.clone(), GlobalEpochCounterPool);
+                        let new_offsets = Arcu::new(offsets.clone(), GlobalEpochCounterPool);
+                        // TODO: perform garbage collection on new_block
                         let new_alloc = InnerAtomTable {
                             block: new_block,
-                            hash_set: new_cmp_table,
+                            offsets: new_offsets,
+                            hash_set: new_hash_set,
                         };
                         atom_table.inner.replace(new_alloc);
                         inner_table = atom_table.inner.read();
                         hash_set = inner_table.hash_set.read();
+                        offsets = inner_table.offsets.read();
                     } else {
                         break ptr;
                     }
@@ -594,9 +635,14 @@ impl AtomTable {
                 // - Asserted: `size == size_of::<AtomHeader>() + string.len()`.
                 // Since `atom_data_ptr` points to unused bytes, it cannot overlap with `string`.
                 write_to_ptr(string, atom_data_ptr);
+                let index = offsets.len();
+
+                let mut offsets = offsets.clone();
+                offsets.push(offset);
+                inner_table.offsets.replace(offsets);
 
                 let atom = AtomCell::new()
-                    .with_name((STRINGS.len() + offset) as u64)
+                    .with_name((STRINGS.len() + index) as u64)
                     .with_arity(0)
                     .with_f(false)
                     .with_m(false)
@@ -609,9 +655,26 @@ impl AtomTable {
                 // - Asserted: `atom` points to a valid `AtomData` containing `string`.
                 // We are thus restoring the invariant that `inner_table.hash_set` should contain
                 // all the atoms in the table.
-                let mut table = hash_set.clone();
-                table.insert(atom);
-                inner_table.hash_set.replace(table);
+
+                let mut hash_set = hash_set.clone();
+                hash_set.insert(atom);
+                inner_table.hash_set.replace(hash_set);
+
+                // SAFETY:
+                // - Asserted: `atom_data_ptr` is a return value of `self.inner.block.alloc(...)`.
+                // - Proved: `atom_data_ptr` points to yet-unused memory.
+                // - Invariant: for all reads R of `self.inner.block`, either `self.inner.hash_set.read()`
+                //   or `self.inner.offsets.read()` *carries a dependency* to R.
+                // - Assumed: `Arcu::replace` performs an atomic release operation.
+                // - Asserted: the previous call to `write_to_ptr` *is sequenced before*
+                //  `inner_table.hash_set.replace()` and *is sequenced before*
+                //  `inner_table.offsets.replace()`.
+                //
+                // Thus, for any read R of `self.inner.block`, it will either:
+                // - Observe a previous instance of `self.inner.hash_set` and not be able to access
+                //   the region owned by `atom_data_ptr` (since it was unused until now)
+                // - *Inter-thread happens before* `inner_table.hash_set.replace` or `inner_table.offsets.replace`,
+                //   depending on which it depends on.
 
                 // expicit drop to ensure we don't accidentally drop it early
                 drop(update_guard);
