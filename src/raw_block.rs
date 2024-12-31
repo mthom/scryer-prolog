@@ -85,12 +85,14 @@ impl<T: RawBlockTraits> RawBlock<T> {
     ///
     /// # Safety
     ///
-    /// The caller must ensure that `offset < self.len()`
+    /// The caller must ensure that `offset` is within a region allocated with [`Self::alloc`].
+    ///
+    /// It must notably ensure that `offset < self.capacity()`.
     pub unsafe fn get_unchecked(&self, offset: usize) -> *const u8 {
         // SAFETY:
         // - Invariant: `self.base + self.size() == self.top` is the top bound of
         //   the allocated region.
-        // - Assumed: `offset < self.len()`
+        // - Assumed: `offset < self.capacity()`
         // Thus `self.base + offset` is within the allocated region.
         self.base.add(offset)
     }
@@ -111,10 +113,12 @@ impl<T: RawBlockTraits> RawBlock<T> {
     ///
     /// # Safety
     ///
-    /// The caller must ensure that `offset < self.len()`
+    /// The caller must ensure that `offset` is within a region allocated with [`Self::alloc`].
+    ///
+    /// It must notably ensure that `offset < self.capacity()`.
     pub unsafe fn get_mut_unchecked(&mut self, offset: usize) -> *mut u8 {
         unsafe {
-            // SAFETY: Assumed: `offset < self.len()`
+            // SAFETY: Assumed.
             self.get_unchecked(offset).cast_mut()
         }
     }

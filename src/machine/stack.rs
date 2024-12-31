@@ -301,6 +301,25 @@ impl Stack {
         }
     }
 
+    /// Reads an [`OrFrame`] placed immediately after [`self.top()`](Self::top).
+    ///
+    /// # Safety
+    ///
+    /// The stack must contain a valid [`OrFrame`] at offset [`self.top()`](Self::top).
+    ///
+    /// No other allocations must have been done since the last call to [`truncate()`](Self::truncate).
+    #[inline(always)]
+    pub(crate) unsafe fn read_dangling_or_frame(&self) -> &OrFrame {
+        unsafe {
+            // SAFETY:
+            // - Assumed: the stack contains a valid `OrFrame` at this offset
+            // - Assumed: no other allocations have been done since the last call to `self.truncate()`
+            // - Postcondition: from `self.buf.truncate`, the pointer `ptr` is not yet invalidated.
+            let ptr = self.buf.get_unchecked(self.top());
+            &*(ptr as *const OrFrame)
+        }
+    }
+
     #[inline(always)]
     pub(crate) fn index_or_frame_mut(&mut self, b: usize) -> &mut OrFrame {
         unsafe {
