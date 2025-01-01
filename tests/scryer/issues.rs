@@ -33,3 +33,13 @@ fn call_qualification() {
 fn load_context_unreachable() {
     load_module_test("tests-pl/load-context-unreachable.pl", "");
 }
+
+// Issue #2725: A dcg of the form `id(X) --> X.` would previously trigger an instantiation
+// error, as it would call `strip_module(X, M, P)` and later `call(M:P)`,
+// but `strip_module` left `M` uninstanciated if the `module:` prefix was unspecified.
+#[serial]
+#[test]
+#[cfg_attr(miri, ignore = "it takes too long to run")]
+fn issue2725_dcg_without_module() {
+    load_module_test("tests-pl/issue2725.pl", "");
+}
