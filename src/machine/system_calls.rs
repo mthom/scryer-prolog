@@ -104,6 +104,13 @@ use super::libraries;
 use super::preprocessor::to_op_decl;
 use super::preprocessor::to_op_decl_spec;
 
+/// Represents the presence (or absence) of a `module:` prefix to predicates.
+///
+/// On the prolog side, `strip_module(X, Y, Z)` takes care of splitting the `X = module:predicate`
+/// pair into `Y = module` and `Z = predicate`. If no module prefix is present, then `Y` is left unset.
+///
+/// On the rust side, [`MachineState::strip_module`] splits a given [`HeapCellValue`] into
+/// a pair of [`ModuleQuantification`] and `HeapCellValue`.
 #[derive(Debug)]
 pub(crate) enum ModuleQuantification {
     Specified(HeapCellValue),
@@ -1141,9 +1148,7 @@ impl MachineState {
                     if name == atom!(":") && arity == 2 {
                         let module_loc = self.heap[s+1];
 
-                        module_quantification = ModuleQuantification::Specified(
-                            module_loc,
-                        );
+                        module_quantification = ModuleQuantification::Specified(module_loc);
 
                         qualified_goal = self.heap[s+2];
                     } else {
@@ -1328,11 +1333,18 @@ impl Machine {
                     }
                 )
             }
-            None => Ok(if let Some(load_context) = self.load_contexts.last() {
-                load_context.module
-            } else {
-                atom!("user")
-            }),
+            None => Ok(self.default_module_name()),
+        }
+    }
+
+    /// Returns the default module name: the last [`module`](super::LoadContext::module)
+    /// in [`load_contexts`](Self::load_contexts), or `"user"` if there are none.
+    #[inline]
+    pub(crate) fn default_module_name(&self) -> Atom {
+        if let Some(load_context) = self.load_contexts.last() {
+            load_context.module
+        } else {
+            atom!("user")
         }
     }
 

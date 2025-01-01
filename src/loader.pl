@@ -6,6 +6,7 @@
                    predicate_property/2,
                    prolog_load_context/2,
                    strip_module/3,
+                   default_module/1,
                    use_module/1,
                    use_module/2,
                    current_module/1
@@ -695,9 +696,12 @@ strip_module(Goal, M, G) :-
     (  MQ = specified(M) ->
        true
     ;  MQ = unspecified,
-       true
+       default_module(M)
     ).
 
+default_module(M) :-
+   '$default_module'(M0),
+   M = M0.
 
 :- non_counted_backtracking strip_subst_module/4.
 
