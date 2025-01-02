@@ -1,0 +1,16 @@
+args = [
+    "-f",
+    "--no-add-history",
+    "src/tests/module_resolution.pl",
+    "-f",
+    "-g", "use_module(library(module_resolution))",
+    "-g", "write('1 '), module_resolution:get_module(some_predicate, M), write(M), put_code(10)",
+    # Note: this test case currently fails
+    # "-g", "write('2 '), get_module(some_predicate, M), write(M), put_code(10)",
+    "-g", "write('3 '), module_resolution:get_module(get_module, M), write(M), put_code(10)",
+    # Note: this test case currently fails
+    # "-g", "write('4 '), get_module(get_module, M), write(M), put_code(10)",
+    "-g", "write('5 '), module_resolution:get_private_module(M), write(M), put_code(10)",
+    "-g", "write('6 '), get_private_module(M), write(M), put_code(10)",
+    "-g", "halt"
+]
