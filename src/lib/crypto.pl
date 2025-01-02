@@ -1,5 +1,5 @@
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   Written 2020-2024 by Markus Triska (triska@metalevel.at)
+   Written 2020-2025 by Markus Triska (triska@metalevel.at)
    Part of Scryer Prolog.
 
 /** Predicates for cryptographic applications.
@@ -439,7 +439,7 @@ dollar_segments(Ls, Segments) :-
 %  storing passwords, store these hashes. Later, you can verify the
 %  validity of a password with `crypto_password_hash/2`, comparing the
 %  then entered password to the stored hash. If you need to export this
-%  atom, you should treat it as opaque ASCII data with up to 255 bytes
+%  string, you should treat it as opaque ASCII data with up to 255 bytes
 %  of length. The maximal length may increase in the future.
 %
 %  Admissible options are:
