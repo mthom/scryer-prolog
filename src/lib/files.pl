@@ -18,7 +18,7 @@ _lists of characters_. This is an ideal representation:
 */
 
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   Written 2020, 2022 by Markus Triska (triska@metalevel.at)
+   Written 2020-2025 by Markus Triska (triska@metalevel.at)
    Part of Scryer Prolog.
 
    Predicates for reasoning about files and directories.
@@ -89,17 +89,17 @@ _lists of characters_. This is an ideal representation:
 
 %% directory_files(+Directory, -Files).
 %
-% Returns the list of files *and* directories available at a specific
-% directory in the current system.
+% True if `Files` are the files *and* directories available at a specific
+% `Directory` in the current system.
 
 directory_files(Directory, Files) :-
         must_be(chars, Directory),
         can_be(list, Files),
         '$directory_files'(Directory, Files).
 
-%% file_size(+File, -Size).
+%% file_size(+File, ?Size).
 %
-% Returns the size (in bytes) of a file. The file must exist.
+% True iff `Size` is the size (in bytes) of `File`. The file must exist.
 
 file_size(File, Size) :-
         file_must_exist(File, file_size/2),
@@ -108,22 +108,25 @@ file_size(File, Size) :-
 
 %% file_exists(+File).
 %
-% Succeeds if File is a file that exists in the current system.
+% True iff `File` is a file that exists in the current system.
+
 file_exists(File) :-
         must_be(chars, File),
         '$file_exists'(File).
 
 %% directory_exists(+Directory).
 %
-% Succeeds if Directory is a directory that exists in the current system.
+% True iff `Directory` is a directory that exists in the current system.
+
 directory_exists(Directory) :-
         must_be(chars, Directory),
         '$directory_exists'(Directory).
 
 %% make_directory(+Directory).
 %
-% Succeeds if it creates a new directory named Directory in the current system.
+% Creates a new directory named `Directory`.
 % If you want to create a nested directory, use `make_directory_path/1`.
+
 make_directory(Directory) :-
         must_be(chars, Directory),
         '$make_directory'(Directory).
@@ -216,25 +219,26 @@ path_canonical(Ps, Cs) :-
    For two time stamps A and B, if A precedes B, then A @< B holds.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
 
-%% file_modification_time(+File, -T).
+%% file_modification_time(+File, ?T).
 %
-% For a file File that must exist, it returns a time stamp  T with the modification time
+% For a file `File` that must exist, `T` is the modification time.
 %
-% T is a time stamp compatible with `library(time)`. 
+% T is a time stamp compatible with `library(time)`.
 file_modification_time(File, T) :-
         file_time_(File, modification, T).
 
-%% file_access_time(+File, -T).
+%% file_access_time(+File, ?T).
 %
-% For a file File that must exist, it returns a time stamp  T with the access time
+% For a file `File` that must exist, `T` is the access time.
 %
 % T is a time stamp compatible with `library(time)`.
+
 file_access_time(File, T) :-
         file_time_(File, access, T).
 
-%% file_creation_time(+File, -T).
+%% file_creation_time(+File, ?T).
 %
-% For a file File that must exist, it returns a time stamp  T with the creation time
+% For a file `File` that must exist, `T` is the creation time.
 %
 % T is a time stamp compatible with `library(time)`.
 file_creation_time(File, T) :-
@@ -246,7 +250,7 @@ file_time_(File, Which, T) :-
         read_from_chars(T0, T).
 
 
-%% path_segments(Ps, Segments).
+%% path_segments(?Ps, ?Segments).
 %
 % True iff Segments are the segments of Ps.
 %
