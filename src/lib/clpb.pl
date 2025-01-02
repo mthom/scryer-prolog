@@ -3,7 +3,7 @@
     Author:        Markus Triska
     E-mail:        triska@metalevel.at
     WWW:           https://www.metalevel.at
-    Copyright (C): 2019-2023 Markus Triska
+    Copyright (C): 2019-2025 Markus Triska
 
     Permission is hereby granted, free of charge, to any person
     obtaining a copy of this software and associated documentation
@@ -1150,8 +1150,9 @@ verify_attributes(Var, Other, Gs) :-
             (   integer(Other) ->
                 (   between(0, 1, Other) ->
                     root_get_formula_bdd(Root, Sat, BDD0),
+                    bdd_restriction(BDD0, I, Other, BDD),
                     root_put_formula_bdd(Root, Sat, BDD),
-                    Gs = [bdd_restriction(BDD0,I,Other,BDD),satisfiable_bdd(BDD)]
+                    Gs = [satisfiable_bdd(BDD)]
                 ;   no_truth_value(Other)
                 )
             ;   atom(Other) ->
