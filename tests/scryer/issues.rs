@@ -25,3 +25,9 @@ fn issue2588_load_html() {
 fn call_qualification() {
     load_module_test("tests-pl/issue2361-call-qualified.pl", "");
 }
+
+#[test]
+#[cfg_attr(miri, ignore = "it takes too long to run")]
+fn issue2725_dcg_without_module() {
+    load_module_test("tests-pl/issue2725.pl", "");
+}

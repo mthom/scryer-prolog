@@ -5009,6 +5009,20 @@ impl Machine {
                         self.strip_module();
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                     }
+                    &Instruction::CallDefaultModule => {
+                        self.machine_st.unify_atom(
+                            self.default_module_name(),
+                            self.machine_st.registers[1]
+                        );
+                        step_or_fail!(self, self.machine_st.p += 1);
+                    }
+                    &Instruction::ExecuteDefaultModule => {
+                        self.machine_st.unify_atom(
+                            self.default_module_name(),
+                            self.machine_st.registers[1]
+                        );
+                        step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
+                    }
                     &Instruction::CallPrepareCallClause(arity) => {
                         try_or_throw!(self.machine_st, self.prepare_call_clause(arity));
                         step_or_fail!(self, self.machine_st.p += 1);

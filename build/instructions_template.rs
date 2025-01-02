@@ -579,6 +579,8 @@ enum SystemClauseType {
     PredicateDefined,
     #[strum_discriminants(strum(props(Arity = "3", Name = "$strip_module")))]
     StripModule,
+    #[strum_discriminants(strum(props(Arity = "1", Name = "$default_module")))]
+    DefaultModule,
     #[strum_discriminants(strum(props(Arity = "5", Name = "$compile_inline_or_expanded_goal")))]
     CompileInlineOrExpandedGoal,
     #[strum_discriminants(strum(props(Arity = "arity", Name = "$fast_call")))]
@@ -1821,6 +1823,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::CallJsEval |
                     &Instruction::CallPredicateDefined |
                     &Instruction::CallStripModule |
+                    &Instruction::CallDefaultModule |
                     &Instruction::CallCurrentTime |
                     &Instruction::CallQuotedToken |
                     &Instruction::CallReadFromChars |
@@ -2059,6 +2062,7 @@ fn generate_instruction_preface() -> TokenStream {
                     &Instruction::ExecuteJsEval |
                     &Instruction::ExecutePredicateDefined |
                     &Instruction::ExecuteStripModule |
+                    &Instruction::ExecuteDefaultModule |
                     &Instruction::ExecuteCurrentTime |
                     &Instruction::ExecuteQuotedToken |
                     &Instruction::ExecuteReadFromChars |
