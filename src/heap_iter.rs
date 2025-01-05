@@ -2979,6 +2979,19 @@ mod tests {
 
         wam.machine_st.heap.clear();
 
+    }
+
+    #[test]
+    fn heap_stackless_post_order_iter_pstr() {
+        let mut wam = MockWAM::new();
+
+        let f_atom = atom!("f");
+        let a_atom = atom!("a");
+        let b_atom = atom!("b");
+
+        // clear the heap of resource error data etc
+        wam.machine_st.heap.clear();
+
         // first a 'dangling' partial string, later modified to be a
         // two-part complete string, then a three-part cyclic string
         // involving an uncompacted list of chars.
@@ -3004,9 +3017,13 @@ mod tests {
         }
 
         wam.machine_st.heap[2] = heap_loc_as_cell!(2);
+        assert_eq!(wam.machine_st.heap.cell_len(), 3);
+
         wam.machine_st.allocate_pstr("def").unwrap();
+        assert_eq!(wam.machine_st.heap.cell_len(), 4);
 
         wam.machine_st.heap.push_cell(pstr_loc_as_cell!(0)).unwrap();
+        assert_eq!(wam.machine_st.heap.cell_len(), 5);
 
         {
             let mut iter = stackless_post_order_iter(&mut wam.machine_st.heap, 4);
