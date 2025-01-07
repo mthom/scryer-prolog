@@ -15,11 +15,40 @@ use super::MachineState;
 use bitvec::prelude::*;
 use bitvec::slice::BitSlice;
 
-#[derive(Debug)]
 pub struct Heap {
     inner: InnerHeap,
     pstr_vec: BitVec,
     resource_err_loc: usize,
+}
+
+impl std::fmt::Debug for Heap {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "Heap {{ resource_err_loc: {}, data: [", self.resource_err_loc)?;
+        const ALIGN: usize = Heap::heap_cell_alignment();
+
+        for i in 0..self.cell_len() {
+            if self.pstr_at(i) {
+                let str = self.char_iter(i * ALIGN)
+                    .fuse()
+                    .take(ALIGN)
+                    .collect::<Vec<_>>();
+
+                write!(
+                    f,
+                    "    {i:>3} -> PStr(\"{}\",",
+                    String::from_iter(str.iter().copied()),
+                )?;
+                for _ in str.len()..ALIGN {
+                    write!(f, " ")?;
+                }
+                writeln!(f, " pad: {})", ALIGN - str.len())?;
+            } else {
+                writeln!(f, "    {i:>3} -> {:?}", self[i])?;
+            }
+        }
+
+        writeln!(f, "] }}")
+    }
 }
 
 impl Drop for Heap {
@@ -342,8 +371,6 @@ impl<'a> ReservedHeapSection<'a> {
         let cells_written;
         let str_byte_len = src.len();
 
-        const ALIGN_CELL: usize = Heap::heap_cell_alignment();
-
         unsafe {
             ptr::copy_nonoverlapping(
                 src.as_ptr(),
@@ -380,6 +407,7 @@ impl<'a> ReservedHeapSection<'a> {
                 // in this case, so nothing to point to in heap.
                 None
             } else {
+                // Note: this is currently unreachable. Should it be removed?
                 self.push_cell(heap_loc_as_cell!(orig_h));
                 Some(heap_loc_as_cell!(orig_h))
             };
@@ -905,6 +933,7 @@ impl Heap {
         writer.write_with(|section| {
             section.push_pstr(src);
         });
+        debug_assert_eq!(pstr_loc + size_in_heap, self.byte_len());
 
         Ok(if size_in_heap > 0 {
             Some(PStrWriteInfo { pstr_loc })
@@ -977,8 +1006,6 @@ impl Heap {
         let (s, tail_loc) = self.scan_slice_to_str(pstr_loc);
         let s_len = s.len();
 
-        const ALIGN_CELL: usize = Heap::heap_cell_alignment();
-
         let align_offset = pstr_sentinel_length(s_len);
 
         let copy_size = s_len + align_offset;
@@ -1044,31 +1071,23 @@ impl Heap {
 
     /// Returns the number of bytes needed to store `src` as a `PStr`.
     pub(crate) fn compute_pstr_size(src: &str) -> usize {
+        if src.is_empty() {
+            // As of now, null strings aren't allocated.
+            return 0;
+        }
+
         const ALIGN_CELL: usize = Heap::heap_cell_alignment();
 
         let mut byte_size = 0;
-        let mut null_idx = 0;
 
-        loop {
-            let src_bytes = src.as_bytes();
-
-            while null_idx < src_bytes.len() {
-                if src_bytes[null_idx] == 0u8 {
-                    break;
-                }
-
-                null_idx += 1;
-            }
-
-            byte_size += null_idx.next_multiple_of(ALIGN_CELL);
-            byte_size += mem::size_of::<HeapCellValue>();
-
-            if null_idx + 1 >= src.len() {
-                break;
-            } else {
-                null_idx += 1;
-            }
+        for segment in src.split('\0') {
+            // Note: we need to account for the sentinel value (hence the +1).
+            byte_size += (segment.len() + 1).next_multiple_of(ALIGN_CELL);
+            // Non-final segments allocate another cell to store the address of the next segment
+            byte_size += ALIGN_CELL;
         }
+        // Remove the unnecessary cell accounted for in the last segment
+        byte_size -= ALIGN_CELL;
 
         byte_size
     }
@@ -1086,7 +1105,9 @@ impl Heap {
                     byte_size += mem::size_of::<HeapCellValue>();
                 }
                 &FunctorElement::String(cell_len, _) => {
-                    byte_size += cell_len as usize * mem::size_of::<HeapCellValue>();
+                    // Note: the +1 here corresponds to the '[]' atom appended to strings
+                    // within functors.
+                    byte_size += (cell_len as usize + 1) * mem::size_of::<HeapCellValue>();
                 }
             }
 
@@ -1365,4 +1386,90 @@ pub(crate) fn to_local_code_ptr(heap: &Heap, addr: HeapCellValue) -> Option<usiz
             None
         }
     )
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    fn string_of_len(len: usize) -> String {
+        String::from_iter((0..len).map(|_| 'a'))
+    }
+
+    #[test]
+    fn test_compute_pstr_size() {
+        // Note: empty strings are not yet tested until the behavior of `allocate_pstr`
+        // has been vetted.
+
+        assert_eq!(
+            Heap::compute_pstr_size(&string_of_len(1)),
+            Heap::heap_cell_alignment(),
+        );
+
+        assert_eq!(
+            Heap::compute_pstr_size(&string_of_len(Heap::heap_cell_alignment() - 1)),
+            Heap::heap_cell_alignment()
+        );
+
+        assert_eq!(
+            Heap::compute_pstr_size(&string_of_len(Heap::heap_cell_alignment())),
+            2 * Heap::heap_cell_alignment(),
+            "Heap::compute_pstr_size does not allocate space for sentinel values"
+        );
+
+        let cmps = (0..=(2 * Heap::heap_cell_alignment()))
+            .map(|len| {
+                let mut heap = Heap::new();
+                let s = string_of_len(len);
+                heap.allocate_pstr(&s).unwrap();
+                (len, Heap::compute_pstr_size(&s), heap.byte_len())
+            })
+            .collect::<Vec<_>>();
+
+        for len in 0..=(2 * Heap::heap_cell_alignment()) {
+            let mut heap = Heap::new();
+            let s = string_of_len(len);
+            heap.allocate_pstr(&s).unwrap();
+            assert_eq!(
+                heap.byte_len(),
+                Heap::compute_pstr_size(&s),
+                "Heap::compute_pstr_size does not match with Heap::allocate_pstr. Here are some (len, actual, expected) triples: {cmps:#?}"
+            );
+        }
+    }
+
+    #[test]
+    fn test_compute_pstr_size_null_byte() {
+        fn string_with_null(before_null: usize, after_null: usize) -> String {
+            let mut res = string_of_len(before_null);
+            res.push('\0');
+            res.push_str(&string_of_len(after_null));
+            res
+        }
+
+        let mut fails = Vec::new();
+
+        // Note: segments of size zero are not yet tested until the logic for
+        // handling them gets settled.
+        for before_null in 1..=(2 * Heap::heap_cell_alignment()) {
+            for after_null in 1..=(2 * Heap::heap_cell_alignment()) {
+                let mut heap = Heap::new();
+                let s = string_with_null(before_null, after_null);
+                heap.allocate_pstr(&s).unwrap();
+
+                let expected = heap.byte_len();
+                let actual = Heap::compute_pstr_size(&s);
+
+                if actual != expected {
+                    fails.push((before_null, after_null, actual, expected));
+                }
+            }
+        }
+
+        assert!(
+            fails.is_empty(),
+            "compute_pstr_size did not return correct value when null bytes are involved: {:#?}",
+            fails
+        );
+    }
 }

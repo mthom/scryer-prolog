@@ -112,13 +112,18 @@ macro_rules! build_functor {
                        [$($subfunctor),*])
     });
     ([string($s:expr) $(, $dt:ident($($value:tt),*))*], [$($res:expr),*], $res_len:expr, [$($subfunctor:expr),*]) => ({
+        #[allow(unused_parens)]
         let string = $s;
         let pstr_len = cell_index!(Heap::compute_pstr_size(&string)) as u64;
         let result_len = 1 + count!($($dt)*) + $res_len;
 
         build_functor!([$($dt($($value),*)),*],
                        [$($res, )* FunctorElement::Cell(pstr_loc_as_cell!(heap_index!(result_len as usize) as u64))],
-                       1 + $res_len + pstr_len,
+                       // Note: we need to account for both the cell corresponding to
+                       // the argument of the functor (the one above this comment),
+                       // and the atom '[]' placed after the string (done by FunctorElement::String
+                       // in ReservedHeapSection::functor_writer).
+                       2 + $res_len + pstr_len,
                        [$($subfunctor, )* FunctorElement::String(pstr_len, string)])
     });
     ([atom_as_cell($n:expr) $(, $dt:ident($($value:tt),*))*], [$($res:expr),*], $res_len:expr, [$($subfunctor:expr),*]) => ({
@@ -458,12 +463,14 @@ mod tests {
     }
 
     #[test]
-    fn functors_with_indexing_code_ptr() {
+    fn functor_with_indexing_code_ptr_0() {
         let code_ptr = IndexingCodePtr::Internal(0);
         let functor = functor!(
             atom!("first"),
-            [string((String::from("a string"))),
-             indexing_code_ptr(code_ptr)]
+            [
+                string((String::from("a string"))),
+                indexing_code_ptr(code_ptr)
+            ]
         );
 
         let mut heap = Heap::new();
@@ -481,13 +488,21 @@ mod tests {
         assert_eq!(heap[6], atom_as_cell!(atom!("internal"), 1));
         assert_eq!(heap[7], fixnum_as_cell!(Fixnum::build_with(0)));
 
-        heap.truncate(0);
+    }
 
-        let functor = functor!(atom!("second"),
-                               [string((String::from("a string"))),
-                                functor((atom!("third")), [atom_as_cell((atom!("a"))),
-                                                           string((String::from("another string"))),
-                                                           indexing_code_ptr(code_ptr)])]);
+    #[test]
+    fn functor_with_indexing_code_ptr_1() {
+        let code_ptr = IndexingCodePtr::Internal(0);
+        let mut heap = Heap::new();
+
+        let functor = functor!(atom!("second"), [
+            string((String::from("a string"))),
+            functor((atom!("third")), [
+                atom_as_cell((atom!("a"))),
+                string((String::from("another string"))),
+                indexing_code_ptr(code_ptr)
+            ])
+        ]);
 
         let mut functor_writer = Heap::functor_writer(functor);
         functor_writer(&mut heap).unwrap();
@@ -507,16 +522,24 @@ mod tests {
         assert_eq!(heap[12], empty_list_as_cell!());
         assert_eq!(heap[13], atom_as_cell!(atom!("internal"), 1));
         assert_eq!(heap[14], fixnum_as_cell!(Fixnum::build_with(0)));
+    }
 
-        let functor = functor!(atom!("fourth"),
-                               [string((String::from("a string"))),
-                                functor((atom!("a")),
-                                        [functor((atom!("fifth")), [fixnum(5),
-                                                                    string((String::from("another string"))),
-                                                                    indexing_code_ptr(code_ptr)]),
-                                         string((String::from("and another")))])]);
+    #[test]
+    fn functor_with_indexing_code_ptr_2() {
+        let code_ptr = IndexingCodePtr::Internal(0);
+        let mut heap = Heap::new();
 
-        heap.truncate(0);
+        let functor = functor!(atom!("fourth"), [
+            string((String::from("a string"))),
+            functor((atom!("a")), [
+                functor((atom!("fifth")), [
+                    fixnum(5),
+                    string((String::from("another string"))),
+                    indexing_code_ptr(code_ptr)
+                ]),
+                string((String::from("and another")))
+            ])
+        ]);
 
         let mut functor_writer = Heap::functor_writer(functor);
         functor_writer(&mut heap).unwrap();
@@ -530,7 +553,7 @@ mod tests {
         assert_eq!(heap[5], empty_list_as_cell!());
         assert_eq!(heap[6], atom_as_cell!(atom!("a"), 2));
         assert_eq!(heap[7], str_loc_as_cell!(9));
-        assert_eq!(heap[8], pstr_loc_as_cell!(heap_index!(18))); // <-- wrong!
+        assert_eq!(heap[8], pstr_loc_as_cell!(heap_index!(18)));
         assert_eq!(heap[9], atom_as_cell!(atom!("fifth"), 3));
         assert_eq!(heap[10], fixnum_as_cell!(Fixnum::build_with(5)));
         assert_eq!(heap[11], pstr_loc_as_cell!(heap_index!(13)));
