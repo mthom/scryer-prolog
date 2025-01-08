@@ -113,37 +113,69 @@ impl InnerHeap {
 }
 
 unsafe impl Send for Heap {}
+// TODO: make Heap thread-safe or make it not Sync.
+// Right now any code writing to it from two threads will cause UB.
 unsafe impl Sync for Heap {}
 
 static RESOURCE_ERROR_OFFSET_INIT: Once = Once::new();
 
-// return the string at ptr and the tail location relative to ptr.
-// pstr_vec records the location of each string cell starting at index
-// 0.
-fn scan_slice_to_str(orig_ptr: *const u8, pstr_vec: &BitSlice) -> (&str, usize) {
-    unsafe {
-        debug_assert_eq!(pstr_vec[0], true);
-        const ALIGN_CELL: usize = Heap::heap_cell_alignment();
+/// Safely retrieves the PStr starting at `pstr_start_byte` (expressed in bytes) in `heap_view`.
+/// Returns the retrieved string, as well as the offset (in cells) of the cell immediately
+/// following the PStr.
+///
+/// The input and output values are relative to [`heap_view.cell_offset`](HeapView::cell_offset).
+///
+/// This function tries to make use of the properties of [`Heap`] to avoid
+/// having to perform unnecessary work, but some work is needed to ensure safety.
+fn scan_pstr_at<'a>(heap_view: &'_ HeapView<'a>, pstr_start_byte: usize) -> (&'a str, usize) {
+    let cell_start = cell_index!(pstr_start_byte);
+    let offset = pstr_start_byte - heap_index!(cell_start);
 
-        let tail_cell_offset = pstr_vec[0..].first_zero().unwrap();
-        let offset = (ALIGN_CELL - orig_ptr.align_offset(ALIGN_CELL)) % 8;
-        let buf_len = heap_index!(tail_cell_offset) - offset;
-        let slice = std::slice::from_raw_parts(orig_ptr, buf_len);
+    let bitslice = &heap_view.pstr_slice[cell_start..];
+    assert!(bitslice[0]);
+    // Maximum length of the slice, in cells
+    let pstr_cell_len = bitslice.first_zero().unwrap_or(bitslice.len());
 
-        // skip the final buffer byte which may not be 0 depending on
-        // the context, i.e. marking by an iterator. it is counted by
-        // the initial 1 as part of the padding but for this reason
-        // mustn't be allowed to stop the count.
+    let bytes = unsafe {
+        // SAFETY:
+        // - Invariant, from HeapView: `pstr_vec.len() <= heap_view.cell_len()`
+        // - Asserted: `pstr_cell_len <= bitslice.len()` and `bitslice[0..pstr_cell_len] == [1...]`
+        // - Invariant, from Heap: PStr cells are fully initialized
+        std::slice::from_raw_parts::<u8>(
+            heap_view.slice.add(heap_index!(cell_start)),
+            heap_index!(pstr_cell_len)
+        )
+    };
 
-        let padding_len = 1 + slice.iter()
-            .rev()
-            .skip(1)
-            .position(|b| *b != 0u8)
-            .unwrap();
+    // Note: when GC is involved, the last byte of the PStr might be used to store stuff.
+    // If GC isn't marking stuff, then it will be zero, so it's safe to ignore it.
+    let bytes = &bytes[..bytes.len() - 1];
 
-        let s_len = slice.len() - padding_len;
-        (std::str::from_utf8_unchecked(&slice[0 .. s_len]), tail_cell_offset)
-    }
+    debug_assert!(offset < bytes.len());
+
+    // The number of zero bytes still remaining at the end of `bytes`; forming its "tail".
+    let tail_length = bytes.iter().rev().position(|x| *x != 0).unwrap_or(bytes.len());
+    // The position of the tail.
+    let tail_pos = bytes.len() - tail_length;
+
+    // Remove the head (the `offset` first bytes) and the tail from bytes:
+    let bytes = &bytes[offset.min(tail_pos)..tail_pos];
+
+    // Well-formed PStrs should not contain data past the first zero:
+    debug_assert!(bytes.iter().all(|x| *x != 0));
+
+    // Only check for well-formedness in debug mode.
+    #[cfg(debug_assertions)]
+    let s = std::str::from_utf8(bytes).unwrap();
+
+    #[cfg(not(debug_assertions))]
+    let s = unsafe {
+        // SAFETY:
+        // - Invariant: from Heap, all PStrs contain valid utf8
+        std::str::from_utf8_unchecked(bytes)
+    };
+
+    (s, cell_start + pstr_cell_len)
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -191,12 +223,30 @@ impl PStrSegmentCmpResult {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct HeapView<'a> {
     slice: *const u8,
     cell_offset: usize,
     slice_cell_len: usize,
     pstr_slice: &'a BitSlice,
+}
+
+/// A type implementing this trait can be treated as a slice of the heap.
+trait AsHeapView {
+    fn as_heap_view<'a>(&'a self) -> HeapView<'a>;
+}
+
+impl AsHeapView for Heap {
+    #[inline(always)]
+    fn as_heap_view<'a>(&'a self) -> HeapView<'a> {
+        self.splice(..)
+    }
+}
+
+impl<'a> AsHeapView for HeapView<'a> {
+    fn as_heap_view<'b>(&'b self) -> HeapView<'b> {
+        self.clone()
+    }
 }
 
 impl<'a> HeapView<'a> {
@@ -266,6 +316,17 @@ pub(crate) struct HeapViewMut<'a> {
     cell_offset: usize,
     slice_cell_len: usize,
     pstr_slice: &'a BitSlice,
+}
+
+impl<'a> AsHeapView for HeapViewMut<'a> {
+    fn as_heap_view<'b>(&'b self) -> HeapView<'b> {
+        HeapView {
+            slice: self.slice.cast_const(),
+            cell_offset: self.cell_offset,
+            slice_cell_len: self.slice_cell_len,
+            pstr_slice: self.pstr_slice,
+        }
+    }
 }
 
 impl<'a> HeapViewMut<'a> {
@@ -524,6 +585,17 @@ pub struct HeapWriter<'a> {
     heap_byte_len: &'a mut usize,
 }
 
+impl<'a> AsHeapView for HeapWriter<'a> {
+    fn as_heap_view<'b>(&'b self) -> HeapView<'b> {
+        HeapView {
+            slice: self.section.heap_ptr.cast_const(),
+            cell_offset: 0,
+            slice_cell_len: self.section.heap_cell_len,
+            pstr_slice: &self.section.pstr_vec,
+        }
+    }
+}
+
 impl<'a> HeapWriter<'a> {
     #[allow(dead_code)]
     pub(crate) fn write_with_error_handling<E>(
@@ -596,12 +668,7 @@ impl<'a> SizedHeap for HeapWriter<'a> {
     }
 
     fn scan_slice_to_str(&self, slice_loc: usize) -> (&str, usize) {
-        let (s, tail_cell_offset) = scan_slice_to_str(
-            unsafe { self.section.heap_ptr.add(slice_loc) },
-            &self.section.pstr_vec.as_bitslice()[cell_index!(slice_loc) ..],
-        );
-
-        (s, cell_index!(slice_loc) + tail_cell_offset)
+        scan_pstr_at(&self.as_heap_view(), slice_loc)
     }
 
     fn pstr_at(&self, cell_offset: usize) -> bool {
@@ -775,6 +842,7 @@ impl Heap {
         pstr_loc1: usize,
         pstr_loc2: usize,
     ) -> PStrSegmentCmpResult {
+        // TODO: switch to using scan_slice_to_str, which is safe
         unsafe {
             let slice1 = std::slice::from_raw_parts(
                 self.inner.ptr.add(pstr_loc1),
@@ -808,12 +876,11 @@ impl Heap {
         }
     }
 
-    #[inline]
+    // TODO: deprecate and remove
+    #[inline(always)]
     pub(crate) fn slice_to_str(&self, slice_loc: usize, slice_len: usize) -> &str {
-        unsafe {
-            let slice = std::slice::from_raw_parts(self.inner.ptr.add(slice_loc), slice_len);
-            std::str::from_utf8_unchecked(&slice)
-        }
+        let res = self.scan_slice_to_str(slice_loc).0;
+        &res[..slice_len.min(res.len())]
     }
 
     #[inline]
@@ -1072,7 +1139,8 @@ impl Heap {
     /// Returns the number of bytes needed to store `src` as a `PStr`.
     pub(crate) fn compute_pstr_size(src: &str) -> usize {
         if src.is_empty() {
-            // As of now, null strings aren't allocated.
+            // Empty strings are represented by the '[]' atom.
+            // As such, no PStr is needed or allocated:
             return 0;
         }
 
@@ -1127,6 +1195,7 @@ impl Heap {
             let mut writer = heap.reserve(size)?;
             let heap_byte_len = *writer.heap_byte_len;
             let bytes_written = writer.write_with(&mut functor_writer);
+            debug_assert_eq!(bytes_written, size, "Functor writer did not write the expected number of cells: {heap:?}");
 
             Ok(if cell_index!(bytes_written) > 1 {
                 str_loc_as_cell!(cell_index!(heap_byte_len))
@@ -1235,12 +1304,7 @@ impl SizedHeap for Heap {
     }
 
     fn scan_slice_to_str(&self, slice_loc: usize) -> (&str, usize) {
-        let (s, tail_cell_offset) = scan_slice_to_str(
-            unsafe { self.inner.ptr.add(slice_loc) },
-            &self.pstr_vec.as_bitslice()[cell_index!(slice_loc) ..],
-        );
-
-        (s, cell_index!(slice_loc) + tail_cell_offset)
+        scan_pstr_at(&self.as_heap_view(), slice_loc)
     }
 
     fn pstr_at(&self, cell_offset: usize) -> bool {
@@ -1256,12 +1320,7 @@ impl<'a> SizedHeap for HeapView<'a> {
     }
 
     fn scan_slice_to_str(&self, slice_loc: usize) -> (&str, usize) {
-        let (s, tail_cell_offset) = scan_slice_to_str(
-            unsafe { self.slice.add(slice_loc) },
-            &self.pstr_slice[cell_index!(slice_loc) ..],
-        );
-
-        (s, cell_index!(slice_loc) + tail_cell_offset)
+        scan_pstr_at(self, slice_loc)
     }
 
     fn pstr_at(&self, cell_offset: usize) -> bool {
@@ -1275,12 +1334,7 @@ impl<'a> SizedHeap for HeapViewMut<'a> {
     }
 
     fn scan_slice_to_str(&self, slice_loc: usize) -> (&str, usize) {
-        let (s, tail_cell_offset) = scan_slice_to_str(
-            unsafe { self.slice.add(slice_loc) },
-            &self.pstr_slice[cell_index!(slice_loc) ..],
-        );
-
-        (s, cell_index!(slice_loc) + tail_cell_offset)
+        scan_pstr_at(&self.as_heap_view(), slice_loc)
     }
 
     fn pstr_at(&self, cell_offset: usize) -> bool {
@@ -1398,9 +1452,6 @@ mod test {
 
     #[test]
     fn test_compute_pstr_size() {
-        // Note: empty strings are not yet tested until the behavior of `allocate_pstr`
-        // has been vetted.
-
         assert_eq!(
             Heap::compute_pstr_size(&string_of_len(1)),
             Heap::heap_cell_alignment(),
@@ -1449,10 +1500,27 @@ mod test {
 
         let mut fails = Vec::new();
 
+        // Testing the whole range is slow on Miri,
+        // so we only focus on the interesting cases:
+        let interesting_lengths = [
+            1,
+
+            // If `before_null` and `after_null` are set to these,
+            // then the total string length will be one cell long:
+            Heap::heap_cell_alignment() / 2 - 1,
+            Heap::heap_cell_alignment() / 2,
+
+            Heap::heap_cell_alignment() - 1,
+            Heap::heap_cell_alignment(),
+            Heap::heap_cell_alignment() + 1,
+            2 * Heap::heap_cell_alignment() - 1,
+            2 * Heap::heap_cell_alignment(),
+        ];
+
         // Note: segments of size zero are not yet tested until the logic for
         // handling them gets settled.
-        for before_null in 1..=(2 * Heap::heap_cell_alignment()) {
-            for after_null in 1..=(2 * Heap::heap_cell_alignment()) {
+        for before_null in interesting_lengths {
+            for after_null in interesting_lengths {
                 let mut heap = Heap::new();
                 let s = string_with_null(before_null, after_null);
                 heap.allocate_pstr(&s).unwrap();
@@ -1471,5 +1539,17 @@ mod test {
             "compute_pstr_size did not return correct value when null bytes are involved: {:#?}",
             fails
         );
+    }
+
+    #[test]
+    fn test_scan_pstr() {
+        let mut heap = Heap::new();
+        heap.push_cell(atom_as_cell!(atom!("[]"))).unwrap();
+        heap.allocate_pstr("hello!").unwrap();
+        heap.push_cell(atom_as_cell!(atom!("[]"))).unwrap();
+
+        assert_eq!(scan_pstr_at(&heap.as_heap_view(), Heap::heap_cell_alignment()), ("hello!", 2));
+        assert_eq!(scan_pstr_at(&heap.splice(1..), 0), ("hello!", 1));
+        assert_eq!(scan_pstr_at(&heap.splice(1..2), 0), ("hello!", 1));
     }
 }
