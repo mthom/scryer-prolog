@@ -454,13 +454,28 @@ fn build_meta_predicate_clause<'a, LS: LoadState<'a>>(
     loader: &mut Loader<'a, LS>,
     module_name: Atom,
     arity: usize,
-    term: &TermWriteResult,
+    term: HeapCellValue,
     meta_specs: Vec<MetaSpec>,
 ) -> IndexMap<usize, CodeIndex, FxBuildHasher> {
     use crate::machine::heap::Heap;
+
+    let term_loc = read_heap_cell!(term,
+        (HeapCellValueTag::Str, loc) => {
+            loc
+        }
+        _ => {
+            panic!("build_meta_predicate_clause called with unsupported term ({term:?})");
+        }
+    );
+
+    debug_assert!(term_loc + arity < loader.machine_heap().cell_len());
+
     let mut index_ptrs = IndexMap::with_hasher(FxBuildHasher::default());
 
-    for (subterm_loc, meta_spec) in (term.focus + 1..term.focus + arity + 1).zip(meta_specs) {
+    for (arg_index, meta_spec) in meta_specs.into_iter().enumerate() {
+        let subterm_loc = term_nth_arg(loader.machine_heap(), term_loc, arg_index + 1)
+            .expect("Arity mismatch");
+
         if let MetaSpec::RequiresExpansionWithArgument(supp_args) = meta_spec {
             let predicate_key_opt = term_predicate_key(loader.machine_heap(), subterm_loc);
 
@@ -561,7 +576,7 @@ pub(super) fn clause_to_query_term<'a, LS: LoadState<'a>>(
         if let Some(meta_specs) = loader.get_meta_specs(name, arity).cloned() {
             let module_name = loader.payload.compilation_target.module_name();
             let code_indices =
-                build_meta_predicate_clause(loader, module_name, arity, terms, meta_specs);
+                build_meta_predicate_clause(loader, module_name, arity, term, meta_specs);
 
             return QueryClause {
                 ct: ClauseType::Named(key.1, key.0, idx),
@@ -600,7 +615,7 @@ pub(super) fn qualified_clause_to_query_term<'a, LS: LoadState<'a>>(
     if let ClauseType::Named(arity, name, idx) = ct {
         if let Some(meta_specs) = loader.get_meta_specs(name, arity).cloned() {
             let code_indices =
-                build_meta_predicate_clause(loader, module_name, arity, &terms, meta_specs);
+                build_meta_predicate_clause(loader, module_name, arity, term, meta_specs);
 
             return QueryClause {
                 ct: ClauseType::Named(key.1, key.0, idx),

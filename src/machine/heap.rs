@@ -1198,12 +1198,14 @@ impl Index<usize> for Heap {
     type Output = HeapCellValue;
 
     fn index(&self, idx: usize) -> &Self::Output {
+        debug_assert!(idx < cell_index!(self.inner.byte_len));
         unsafe { &*(self.inner.ptr as *const HeapCellValue).add(idx) }
     }
 }
 
 impl IndexMut<usize> for Heap {
     fn index_mut(&mut self, idx: usize) -> &mut Self::Output {
+        debug_assert!(idx < cell_index!(self.inner.byte_len));
         unsafe { &mut *(self.inner.ptr as *mut HeapCellValue).add(idx) }
     }
 }
