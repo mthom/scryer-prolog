@@ -31,7 +31,10 @@
       let 
         pkgs = import nixpkgs { inherit system overlays; };
         nativeBuildInputs = with pkgs; [ pkg-config ];
-        buildInputs = with pkgs; [ openssl ];
+        buildInputs = with pkgs; [ openssl ] ++
+                                 lib.optionals pkgs.stdenv.isDarwin [
+                                   pkgs.darwin.apple_sdk.frameworks.SystemConfiguration
+                                 ];
       in
       {
         devShells = {
