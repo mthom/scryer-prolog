@@ -7,18 +7,26 @@ use std::mem;
 use std::ops::{Index, IndexMut};
 use std::ptr;
 
+/// TODO: remove this in favor of [`Ord::max`] once const fns
+/// can be added in traits (https://github.com/rust-lang/rust/issues/67792)
+const fn usize_max(lhs: usize, rhs: usize) -> usize {
+    if lhs > rhs {
+        lhs
+    } else {
+        rhs
+    }
+}
+
 impl RawBlockTraits for Stack {
     #[inline]
     fn init_size() -> usize {
         10 * 1024 * 1024
     }
 
-    #[inline]
-    fn align() -> usize {
-        mem::align_of::<OrFrame>()
-            .max(mem::align_of::<AndFrame>())
-            .max(mem::align_of::<HeapCellValue>())
-    }
+    const ALIGN: usize = usize_max(
+        usize_max(mem::align_of::<OrFrame>(), mem::align_of::<AndFrame>()),
+        mem::align_of::<HeapCellValue>(),
+    );
 }
 
 #[inline(always)]
@@ -54,6 +62,11 @@ impl Index<usize> for AndFrame {
     type Output = HeapCellValue;
 
     fn index(&self, index: usize) -> &Self::Output {
+        assert!(
+            index > 0 && index <= self.prelude.num_cells,
+            "Invalid index within AndFrame: {index} not in 1..={}",
+            self.prelude.num_cells
+        );
         let prelude_offset = prelude_size::<AndFramePrelude>();
         let index_offset = (index - 1) * mem::size_of::<HeapCellValue>();
 
@@ -68,6 +81,11 @@ impl Index<usize> for AndFrame {
 
 impl IndexMut<usize> for AndFrame {
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        assert!(
+            index > 0 && index <= self.prelude.num_cells,
+            "Invalid index within AndFrame: {index} not in 1..={}",
+            self.prelude.num_cells
+        );
         let prelude_offset = prelude_size::<AndFramePrelude>();
         let index_offset = (index - 1) * mem::size_of::<HeapCellValue>();
 
@@ -86,7 +104,8 @@ impl Index<usize> for Stack {
     #[inline]
     fn index(&self, index: usize) -> &Self::Output {
         unsafe {
-            let ptr = self.buf.base as usize + index;
+            // TODO: implement some mechanism to verify soundness
+            let ptr = self.buf.get(index).unwrap();
             &*(ptr as *const HeapCellValue)
         }
     }
@@ -96,7 +115,7 @@ impl IndexMut<usize> for Stack {
     #[inline]
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
         unsafe {
-            let ptr = self.buf.base as usize + index;
+            let ptr = self.buf.get_mut_unchecked(index);
             &mut *(ptr as *mut HeapCellValue)
         }
     }
@@ -127,6 +146,11 @@ impl Index<usize> for OrFrame {
 
     #[inline]
     fn index(&self, index: usize) -> &Self::Output {
+        assert!(
+            index < self.prelude.num_cells,
+            "Invalid index within OrFrame: {index} not in 0..{}",
+            self.prelude.num_cells
+        );
         let prelude_offset = prelude_size::<OrFramePrelude>();
         let index_offset = index * mem::size_of::<HeapCellValue>();
 
@@ -142,6 +166,11 @@ impl Index<usize> for OrFrame {
 impl IndexMut<usize> for OrFrame {
     #[inline]
     fn index_mut(&mut self, index: usize) -> &mut Self::Output {
+        assert!(
+            index < self.prelude.num_cells,
+            "Invalid index within OrFrame: {index} not in 0..{}",
+            self.prelude.num_cells
+        );
         let prelude_offset = prelude_size::<OrFramePrelude>();
         let index_offset = index * mem::size_of::<HeapCellValue>();
 
@@ -193,8 +222,9 @@ impl Stack {
     pub(crate) fn allocate_and_frame(&mut self, num_cells: usize) -> usize {
         let frame_size = AndFrame::size_of(num_cells);
 
+        // TODO: prove safety of this block and prove that it upholds the invariants of `Stack`.
         unsafe {
-            let e = (*self.buf.ptr.get_mut()) as usize - self.buf.base as usize;
+            let e = self.buf.len();
             let new_ptr = self.alloc(frame_size);
             let mut offset = prelude_size::<AndFramePrelude>();
 
@@ -215,20 +245,21 @@ impl Stack {
     }
 
     pub(crate) fn top(&self) -> usize {
-        unsafe { (*self.buf.ptr.get()) as usize - self.buf.base as usize }
+        self.buf.len()
     }
 
     pub(crate) fn allocate_or_frame(&mut self, num_cells: usize) -> usize {
         let frame_size = OrFrame::size_of(num_cells);
 
+        // TODO: prove safety of this block and prove that it upholds the invariants of `Stack`.
         unsafe {
-            let b = (*self.buf.ptr.get_mut()) as usize - self.buf.base as usize;
+            let b = self.buf.len();
             let new_ptr = self.alloc(frame_size);
             let mut offset = prelude_size::<OrFramePrelude>();
 
             for idx in 0..num_cells {
                 ptr::write(
-                    (new_ptr as usize + offset) as *mut HeapCellValue,
+                    new_ptr.add(offset).cast::<HeapCellValue>(),
                     stack_loc_as_cell!(OrFrame, b, idx),
                 );
 
@@ -245,7 +276,8 @@ impl Stack {
     #[inline(always)]
     pub(crate) fn index_and_frame(&self, e: usize) -> &AndFrame {
         unsafe {
-            let ptr = self.buf.base as usize + e;
+            let ptr = self.buf.get(e).unwrap();
+            // TODO: ensure safety of this cast
             &*(ptr as *const AndFrame)
         }
     }
@@ -254,7 +286,8 @@ impl Stack {
     pub(crate) fn index_and_frame_mut(&mut self, e: usize) -> &mut AndFrame {
         unsafe {
             // This is doing alignment wrong
-            let ptr = self.buf.base.add(e);
+            let ptr = self.buf.get(e).unwrap();
+            // TODO: ensure safety of this cast
             &mut *(ptr as *mut AndFrame)
         }
     }
@@ -262,7 +295,27 @@ impl Stack {
     #[inline(always)]
     pub(crate) fn index_or_frame(&self, b: usize) -> &OrFrame {
         unsafe {
-            let ptr = self.buf.base as usize + b;
+            let ptr = self.buf.get(b).unwrap();
+            // TODO: ensure safety of this cast
+            &*(ptr as *const OrFrame)
+        }
+    }
+
+    /// Reads an [`OrFrame`] placed immediately after [`self.top()`](Self::top).
+    ///
+    /// # Safety
+    ///
+    /// The stack must contain a valid [`OrFrame`] at offset [`self.top()`](Self::top).
+    ///
+    /// No other allocations must have been done since the last call to [`truncate()`](Self::truncate).
+    #[inline(always)]
+    pub(crate) unsafe fn read_dangling_or_frame(&self) -> &OrFrame {
+        unsafe {
+            // SAFETY:
+            // - Assumed: the stack contains a valid `OrFrame` at this offset
+            // - Assumed: no other allocations have been done since the last call to `self.truncate()`
+            // - Postcondition: from `self.buf.truncate`, the pointer `ptr` is not yet invalidated.
+            let ptr = self.buf.get_unchecked(self.top());
             &*(ptr as *const OrFrame)
         }
     }
@@ -270,17 +323,24 @@ impl Stack {
     #[inline(always)]
     pub(crate) fn index_or_frame_mut(&mut self, b: usize) -> &mut OrFrame {
         unsafe {
-            let ptr = self.buf.base as usize + b;
+            let ptr = self.buf.get_mut_unchecked(b);
+            // TODO: ensure safety of this cast
             &mut *(ptr as *mut OrFrame)
         }
     }
 
+    /// Panics if `byte_offset` is not aligned to [`Stack::ALIGN`].
+    ///
+    /// Frames beyond `byte_offset` become invalidated after a call to this function.
     #[inline(always)]
-    pub(crate) fn truncate(&mut self, b: usize) {
-        let base = self.buf.base as usize + b;
-
-        if base < (*self.buf.ptr.get_mut()) as usize {
-            *self.buf.ptr.get_mut() = base as *mut _;
+    pub(crate) fn truncate(&mut self, byte_offset: usize) {
+        unsafe {
+            // TODO: implement a way to mitigate indexing to invalidated frames,
+            // and/or mark this function as unsafe.
+            //
+            // I think that one could also create a safer abstraction for the
+            // "store offset, do work, truncate to offset" kind of tasks.
+            self.buf.truncate(byte_offset);
         }
     }
 }
