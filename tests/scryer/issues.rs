@@ -25,3 +25,11 @@ fn issue2588_load_html() {
 fn call_qualification() {
     load_module_test("tests-pl/issue2361-call-qualified.pl", "");
 }
+
+// PR #2756: ensures that calling load_context with a bound variable doesn't trigger unreachable!()
+#[serial]
+#[test]
+#[cfg_attr(miri, ignore = "it takes too long to run")]
+fn load_context_unreachable() {
+    load_module_test("tests-pl/load-context-unreachable.pl", "");
+}

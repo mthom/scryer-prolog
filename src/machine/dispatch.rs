@@ -4812,11 +4812,11 @@ impl Machine {
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                     }
                     &Instruction::CallLoadContextModule => {
-                        self.load_context_module(self.machine_st.registers[1]);
+                        self.load_context_module(self.deref_register(1));
                         step_or_fail!(self, self.machine_st.p += 1);
                     }
                     &Instruction::ExecuteLoadContextModule => {
-                        self.load_context_module(self.machine_st.registers[1]);
+                        self.load_context_module(self.deref_register(1));
                         step_or_fail!(self, self.machine_st.p = self.machine_st.cp);
                     }
                     &Instruction::CallLoadContextStream => {
