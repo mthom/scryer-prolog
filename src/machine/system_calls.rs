@@ -104,6 +104,22 @@ use super::libraries;
 use super::preprocessor::to_op_decl;
 use super::preprocessor::to_op_decl_spec;
 
+/// Represents the presence (or absence) of a `module:` prefix to predicates, used to
+/// refer to predicates defined in a given `module` that haven't been imported
+/// (through `use_module/1`) or exported.
+///
+/// On the Rust side, [`MachineState::strip_module`] splits a given [`HeapCellValue`] into
+/// a pair of [`ModuleQuantification`] and `HeapCellValue`.
+///
+/// On the Prolog side, `strip_module(X, Y, Z)` is a wrapper around [`MachineState::strip_module`],
+/// which takes care of splitting the `X = module:predicate` pair into `Y = module` and
+/// `Z = predicate`. If no module prefix is present (ie. [`MachineState::strip_module`] returned
+/// `Unspecified`), then `strip_module/3` calls `load_context(Y)`, unifying `Y` with the currently
+/// loaded module (or `user`).
+///
+/// [`Machine::quantification_to_module_name`] provides a similar mechanism on the Rust side to
+/// obtain the currently loaded module in the `Unspecified` case.
+/// It also defaults to `user`, for instance if we are in the REPL.
 #[derive(Debug)]
 pub(crate) enum ModuleQuantification {
     Specified(HeapCellValue),

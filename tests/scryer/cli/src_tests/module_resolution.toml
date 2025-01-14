@@ -1,0 +1,10 @@
+args = [
+    "-f",
+    "--no-add-history",
+    "src/tests/module_resolution.pl",
+    "-f",
+    "-g", "use_module(library(module_resolution))",
+    "-g", "get_module(some_predicate, M), write(M), write('\\n')",
+    "-g", "module_resolution:get_module(some_predicate, M), write(M), write('\\n')",
+    "-g", "halt"
+]

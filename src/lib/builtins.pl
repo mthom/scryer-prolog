@@ -1175,7 +1175,7 @@ clause(H, B) :-
 % Asserts (inserts) a new clause (rule or fact) into the current module.
 % The clause will be inserted at the beginning of the module.
 asserta(Clause0) :-
-    loader:strip_subst_module(Clause0, user, Module, Clause),
+    loader:strip_module(Clause0, Module, Clause),
     asserta_(Module, Clause).
 
 asserta_(Module, (Head :- Body)) :-
@@ -1191,7 +1191,7 @@ asserta_(Module, Fact) :-
 % Asserts (inserts) a new clause (rule or fact) into the current module.
 % The clase will be inserted at the end of the module.
 assertz(Clause0) :-
-    loader:strip_subst_module(Clause0, user, Module, Clause),
+    loader:strip_module(Clause0, Module, Clause),
     assertz_(Module, Clause).
 
 assertz_(Module, (Head :- Body)) :-
@@ -1211,15 +1211,9 @@ retract(Clause0) :-
     loader:strip_module(Clause0, Module, Clause),
     (  Clause \= (_ :- _) ->
        loader:strip_module(Clause, Module, Head),
-       (  var(Module) -> Module = user
-       ;  true
-       ),
        Body = true,
        retract_module_clause(Head, Body, Module)
     ;  Clause = (Head :- Body) ->
-       (  var(Module) -> Module = user
-       ;  true
-       ),
        retract_module_clause(Head, Body, Module)
     ).
 
@@ -1374,10 +1368,6 @@ current_predicate(Pred) :-
        '$get_db_refs'(_, _, _, PIs),
        lists:member(Pred, PIs)
     ;  loader:strip_module(Pred, Module, UnqualifiedPred),
-       (  var(Module),
-          \+ functor(Pred, (:), 2)
-       ;  atom(Module)
-       ),
        UnqualifiedPred = Name/Arity ->
        (  (  nonvar(Name), \+ atom(Name)
           ;  nonvar(Arity), \+ integer(Arity)

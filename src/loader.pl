@@ -695,9 +695,8 @@ strip_module(Goal, M, G) :-
     (  MQ = specified(M) ->
        true
     ;  MQ = unspecified,
-       true
+       load_context(M)
     ).
-
 
 :- non_counted_backtracking strip_subst_module/4.
 
