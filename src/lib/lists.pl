@@ -162,6 +162,8 @@ append([L0|Ls0], Ls) :-
 % ```
 % ?- append([1,2,3], [4,5,6], Xs).
 %    Xs = [1,2,3,4,5,6].
+% ?- append([1,2,3], [4,5,6], [1,2,3,4,5,6]).
+%    true.
 % ```
 append([], R, R).
 append([X|L], R, [X|S]) :- append(L, R, S).
