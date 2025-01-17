@@ -374,7 +374,10 @@ pub(crate) fn rnd_i(n: &'_ Number, arena: &mut Arena) -> Number {
             if I64_MIN_TO_F <= f && f <= I64_MAX_TO_F {
                 fixnum!(Number, f.into_inner() as i64, arena)
             } else {
-                Number::Integer(arena_alloc!(Integer::from(f.0 as i64), arena))
+                Number::Integer(arena_alloc!(
+                    Integer::try_from(f.0).expect("Floats may not be infinite"),
+                    arena
+                ))
             }
         }
         Number::Rational(ref r) => {
