@@ -157,7 +157,7 @@ append([L0|Ls0], Ls) :-
 
 %% append(Xs0, Xs1, Xs).
 %
-% List Xs is the concatenation of Xs0 and Xs1
+% True if list Xs is the concatenation of Xs0 and Xs1
 %
 % ```
 % ?- append([1,2,3], [4,5,6], Xs).
