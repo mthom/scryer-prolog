@@ -1044,7 +1044,12 @@ pub(crate) fn sqrt(n1: Number) -> Result<f64, MachineStubGen> {
 
 #[inline]
 pub(crate) fn floor(n1: Number, arena: &mut Arena) -> Number {
-    rnd_i(&n1, arena)
+    rnd_i(&n1, arena).unwrap_or_else(|_err| {
+        // FIXME: Currently floor/1 (and several call sites) are infallible,
+        // but the failing cases (when `n1` is `Number::Float(NAN)` or `Number::Float(INFINITY)`)
+        // are not reachable with standard is/2 operations.
+        todo!("Make floor/1 fallible");
+    })
 }
 
 #[inline]

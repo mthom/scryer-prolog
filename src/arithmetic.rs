@@ -354,17 +354,17 @@ impl<'a> ArithmeticEvaluator<'a> {
 }
 
 // integer division rounding function -- 9.1.3.1.
-pub(crate) fn rnd_i(n: &'_ Number, arena: &mut Arena) -> Number {
+pub(crate) fn rnd_i(n: &'_ Number, arena: &mut Arena) -> Result<Number, EvalError> {
     match n {
         &Number::Integer(i) => {
             let result = (&*i).try_into();
             if let Ok(value) = result {
-                fixnum!(Number, value, arena)
+                Ok(fixnum!(Number, value, arena))
             } else {
-                *n
+                Ok(*n)
             }
         }
-        Number::Fixnum(_) => *n,
+        Number::Fixnum(_) => Ok(*n),
         &Number::Float(f) => {
             let f = f.floor();
 
@@ -372,18 +372,23 @@ pub(crate) fn rnd_i(n: &'_ Number, arena: &mut Arena) -> Number {
             const I64_MAX_TO_F: OrderedFloat<f64> = OrderedFloat(i64::MAX as f64);
 
             if I64_MIN_TO_F <= f && f <= I64_MAX_TO_F {
-                fixnum!(Number, f.into_inner() as i64, arena)
+                Ok(fixnum!(Number, f.into_inner() as i64, arena))
             } else {
-                Number::Integer(arena_alloc!(Integer::from(f.0 as i64), arena))
+                Ok(Number::Integer(arena_alloc!(
+                    Integer::try_from(classify_float(f.0)?).unwrap_or_else(|_| {
+                        unreachable!();
+                    }),
+                    arena
+                )))
             }
         }
         Number::Rational(ref r) => {
-            let (_, floor) = (r.fract(), r.floor());
+            let floor = r.floor();
 
             if let Ok(value) = (&floor).try_into() {
-                fixnum!(Number, value, arena)
+                Ok(fixnum!(Number, value, arena))
             } else {
-                Number::Integer(arena_alloc!(floor, arena))
+                Ok(Number::Integer(arena_alloc!(floor, arena)))
             }
         }
     }
