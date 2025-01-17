@@ -1072,16 +1072,22 @@ pub(crate) fn truncate(n: Number, arena: &mut Arena) -> Number {
     }
 }
 
-pub(crate) fn round(n: Number, arena: &mut Arena) -> Result<Number, MachineStubGen> {
-    let stub_gen = || {
-        let is_atom = atom!("is");
-        functor_stub(is_atom, 2)
+pub(crate) fn round(num: Number, arena: &mut Arena) -> Result<Number, MachineStubGen> {
+    let res = match num {
+        Number::Fixnum(_) | Number::Integer(_) => num,
+        Number::Rational(rat) => Number::arena_from(rat.round(), arena),
+        Number::Float(f) => Number::Float(OrderedFloat((*f).round())),
     };
 
-    let result = add(n, Number::Float(OrderedFloat(0.5f64)), arena);
-    let result = try_numeric_result!(result, stub_gen)?;
+    // FIXME: make round/1 return EvalError
+    rnd_i(&res, arena).map_err(|err| -> MachineStubGen {
+        Box::new(move |machine_st| {
+            let eval_error = machine_st.evaluation_error(err);
+            let stub = functor_stub(atom!("round"), 1);
 
-    Ok(floor(result, arena))
+            machine_st.error_form(eval_error, stub)
+        })
+    })
 }
 
 pub(crate) fn bitwise_complement(n1: Number, arena: &mut Arena) -> Result<Number, MachineStubGen> {
