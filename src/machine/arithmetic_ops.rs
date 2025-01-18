@@ -455,13 +455,8 @@ pub(crate) fn max(n1: Number, n2: Number) -> Result<Number, MachineStubGen> {
                 Ok(Number::Fixnum(n2))
             }
         }
-        (Number::Integer(n1), Number::Integer(n2)) => {
-            if n1 > n2 {
-                Ok(Number::Integer(n1))
-            } else {
-                Ok(Number::Integer(n2))
-            }
-        }
+        (Number::Integer(n1), Number::Integer(n2)) => Ok(Number::Integer(cmp::max(n1, n2))),
+        (Number::Rational(r1), Number::Rational(r2)) => Ok(Number::Rational(cmp::max(r1, r2))),
         (n1, n2) => {
             let stub_gen = || {
                 let max_atom = atom!("max");
@@ -471,7 +466,15 @@ pub(crate) fn max(n1: Number, n2: Number) -> Result<Number, MachineStubGen> {
             let f1 = try_numeric_result!(result_f(&n1), stub_gen)?;
             let f2 = try_numeric_result!(result_f(&n2), stub_gen)?;
 
-            Ok(Number::Float(cmp::max(OrderedFloat(f1), OrderedFloat(f2))))
+            match OrderedFloat(f1).cmp(&OrderedFloat(f2)) {
+                cmp::Ordering::Less => Ok(n2),
+                cmp::Ordering::Equal => {
+                    // Note: n1 and n2 were compared as floats,
+                    // so we return the second argument as a floating point value.
+                    Ok(Number::Float(OrderedFloat(f2)))
+                }
+                cmp::Ordering::Greater => Ok(n1),
+            }
         }
     }
 }
@@ -499,13 +502,8 @@ pub(crate) fn min(n1: Number, n2: Number) -> Result<Number, MachineStubGen> {
                 Ok(Number::Fixnum(n2))
             }
         }
-        (Number::Integer(n1), Number::Integer(n2)) => {
-            if n1 < n2 {
-                Ok(Number::Integer(n1))
-            } else {
-                Ok(Number::Integer(n2))
-            }
-        }
+        (Number::Integer(n1), Number::Integer(n2)) => Ok(Number::Integer(cmp::min(n1, n2))),
+        (Number::Rational(r1), Number::Rational(r2)) => Ok(Number::Rational(cmp::min(r1, r2))),
         (n1, n2) => {
             let stub_gen = || {
                 let min_atom = atom!("min");
@@ -515,7 +513,15 @@ pub(crate) fn min(n1: Number, n2: Number) -> Result<Number, MachineStubGen> {
             let f1 = try_numeric_result!(result_f(&n1), stub_gen)?;
             let f2 = try_numeric_result!(result_f(&n2), stub_gen)?;
 
-            Ok(Number::Float(cmp::min(OrderedFloat(f1), OrderedFloat(f2))))
+            match OrderedFloat(f1).cmp(&OrderedFloat(f2)) {
+                cmp::Ordering::Less => Ok(n1),
+                cmp::Ordering::Equal => {
+                    // Note: n1 and n2 were compared as floats,
+                    // so we return the first argument as a floating point value.
+                    Ok(Number::Float(OrderedFloat(f1)))
+                }
+                cmp::Ordering::Greater => Ok(n2),
+            }
         }
     }
 }
