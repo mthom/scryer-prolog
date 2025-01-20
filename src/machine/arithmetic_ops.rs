@@ -947,8 +947,7 @@ pub(crate) fn gcd(n1: Number, n2: Number, arena: &mut Arena) -> Result<Number, M
             Ok(Number::arena_from(Integer::from(n2_clone.gcd(&n1)), arena))
         }
         (Number::Integer(n1), Number::Integer(n2)) => {
-            let n2: isize = (&*n2).try_into().unwrap();
-            let value: Integer = (&*n1).gcd(&Integer::from(n2)).into();
+            let value: Integer = (&*n1).gcd(&*n2).into();
             Ok(Number::arena_from(value, arena))
         }
         (Number::Float(f), _) | (_, Number::Float(f)) => {
