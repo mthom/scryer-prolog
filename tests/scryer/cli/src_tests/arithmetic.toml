@@ -1,0 +1,1 @@
+args = ["-f", "--no-add-history", "src/tests/arithmetic.pl", "-f", "-g", "use_module(library(arithmetic_tests)), arithmetic_tests:main_quiet(arithmetic_tests)"]

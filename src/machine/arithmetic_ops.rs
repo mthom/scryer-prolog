@@ -455,13 +455,8 @@ pub(crate) fn max(n1: Number, n2: Number) -> Result<Number, MachineStubGen> {
                 Ok(Number::Fixnum(n2))
             }
         }
-        (Number::Integer(n1), Number::Integer(n2)) => {
-            if n1 > n2 {
-                Ok(Number::Integer(n1))
-            } else {
-                Ok(Number::Integer(n2))
-            }
-        }
+        (Number::Integer(n1), Number::Integer(n2)) => Ok(Number::Integer(cmp::max(n1, n2))),
+        (Number::Rational(r1), Number::Rational(r2)) => Ok(Number::Rational(cmp::max(r1, r2))),
         (n1, n2) => {
             let stub_gen = || {
                 let max_atom = atom!("max");
@@ -471,7 +466,11 @@ pub(crate) fn max(n1: Number, n2: Number) -> Result<Number, MachineStubGen> {
             let f1 = try_numeric_result!(result_f(&n1), stub_gen)?;
             let f2 = try_numeric_result!(result_f(&n2), stub_gen)?;
 
-            Ok(Number::Float(cmp::max(OrderedFloat(f1), OrderedFloat(f2))))
+            match OrderedFloat(f1).cmp(&OrderedFloat(f2)) {
+                cmp::Ordering::Less => Ok(n2),
+                cmp::Ordering::Equal => Ok(Number::Float(OrderedFloat(f1))),
+                cmp::Ordering::Greater => Ok(n1),
+            }
         }
     }
 }
@@ -499,13 +498,8 @@ pub(crate) fn min(n1: Number, n2: Number) -> Result<Number, MachineStubGen> {
                 Ok(Number::Fixnum(n2))
             }
         }
-        (Number::Integer(n1), Number::Integer(n2)) => {
-            if n1 < n2 {
-                Ok(Number::Integer(n1))
-            } else {
-                Ok(Number::Integer(n2))
-            }
-        }
+        (Number::Integer(n1), Number::Integer(n2)) => Ok(Number::Integer(cmp::min(n1, n2))),
+        (Number::Rational(r1), Number::Rational(r2)) => Ok(Number::Rational(cmp::min(r1, r2))),
         (n1, n2) => {
             let stub_gen = || {
                 let min_atom = atom!("min");
@@ -515,7 +509,11 @@ pub(crate) fn min(n1: Number, n2: Number) -> Result<Number, MachineStubGen> {
             let f1 = try_numeric_result!(result_f(&n1), stub_gen)?;
             let f2 = try_numeric_result!(result_f(&n2), stub_gen)?;
 
-            Ok(Number::Float(cmp::min(OrderedFloat(f1), OrderedFloat(f2))))
+            match OrderedFloat(f1).cmp(&OrderedFloat(f2)) {
+                cmp::Ordering::Less => Ok(n1),
+                cmp::Ordering::Equal => Ok(Number::Float(OrderedFloat(f1))),
+                cmp::Ordering::Greater => Ok(n2),
+            }
         }
     }
 }
@@ -947,8 +945,7 @@ pub(crate) fn gcd(n1: Number, n2: Number, arena: &mut Arena) -> Result<Number, M
             Ok(Number::arena_from(Integer::from(n2_clone.gcd(&n1)), arena))
         }
         (Number::Integer(n1), Number::Integer(n2)) => {
-            let n2: isize = (&*n2).try_into().unwrap();
-            let value: Integer = (&*n1).gcd(&Integer::from(n2)).into();
+            let value: Integer = (&*n1).gcd(&*n2).into();
             Ok(Number::arena_from(value, arena))
         }
         (Number::Float(f), _) | (_, Number::Float(f)) => {
@@ -1067,16 +1064,14 @@ pub(crate) fn truncate(n: Number, arena: &mut Arena) -> Number {
     }
 }
 
-pub(crate) fn round(n: Number, arena: &mut Arena) -> Result<Number, MachineStubGen> {
-    let stub_gen = || {
-        let is_atom = atom!("is");
-        functor_stub(is_atom, 2)
+pub(crate) fn round(num: Number, arena: &mut Arena) -> Result<Number, MachineStubGen> {
+    let res = match num {
+        Number::Fixnum(_) | Number::Integer(_) => num,
+        Number::Rational(rat) => Number::arena_from(rat.round(), arena),
+        Number::Float(f) => Number::Float(OrderedFloat((*f).round())),
     };
 
-    let result = add(n, Number::Float(OrderedFloat(0.5f64)), arena);
-    let result = try_numeric_result!(result, stub_gen)?;
-
-    Ok(floor(result, arena))
+    Ok(rnd_i(&res, arena))
 }
 
 pub(crate) fn bitwise_complement(n1: Number, arena: &mut Arena) -> Result<Number, MachineStubGen> {
