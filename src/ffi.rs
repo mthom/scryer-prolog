@@ -70,8 +70,11 @@ impl ForeignFunctionTable {
         self.table.extend(other.table);
     }
 
-    pub fn define_struct(&mut self, name: &str, atom_fields: Vec<Atom>) {
-        let mut fields: Vec<_> = atom_fields.iter().map(|x| self.map_type_ffi(x)).collect();
+    pub fn define_struct(&mut self, name: &str, atom_fields: Vec<Atom>) -> Result<(), FFIError> {
+        let mut fields: Vec<_> = atom_fields
+            .iter()
+            .map(|x| self.map_type_ffi(x))
+            .collect::<Result<_, FFIError>>()?;
         fields.push(std::ptr::null_mut::<ffi_type>());
         let struct_type = ffi_type {
             type_: STRUCT,
@@ -86,11 +89,12 @@ impl ForeignFunctionTable {
                 atom_fields,
             },
         );
+        Ok(())
     }
 
-    fn map_type_ffi(&mut self, source: &Atom) -> *mut ffi_type {
+    fn map_type_ffi(&mut self, source: &Atom) -> Result<*mut ffi_type, FFIError> {
         unsafe {
-            match source {
+            Ok(match source {
                 atom!("sint64") => addr_of_mut!(types::sint64),
                 atom!("sint32") => addr_of_mut!(types::sint32),
                 atom!("sint16") => addr_of_mut!(types::sint16),
@@ -107,9 +111,9 @@ impl ForeignFunctionTable {
                 atom!("f64") => addr_of_mut!(types::double),
                 struct_name => match self.structs.get_mut(&*struct_name.as_str()) {
                     Some(ref mut struct_type) => &mut struct_type.ffi_type,
-                    None => unreachable!(),
+                    None => return Err(FFIError::InvalidFFIType),
                 },
-            }
+            })
         }
     }
 
@@ -125,18 +129,22 @@ impl ForeignFunctionTable {
                 let symbol_name: CString = CString::new(function.name.clone())?;
                 let code_ptr: Symbol<*mut c_void> =
                     library.get(&symbol_name.into_bytes_with_nul())?;
-                let mut args: Vec<_> = function.args.iter().map(|x| self.map_type_ffi(x)).collect();
+                let mut args: Vec<_> = function
+                    .args
+                    .iter()
+                    .map(|x| self.map_type_ffi(x))
+                    .collect::<Result<_, FFIError>>()?;
                 let mut cif: ffi_cif = Default::default();
                 prep_cif(
                     &mut cif,
                     ffi_abi_FFI_DEFAULT_ABI,
                     args.len(),
-                    self.map_type_ffi(&function.return_value),
+                    self.map_type_ffi(&function.return_value)?,
                     args.as_mut_ptr(),
                 )
                 .unwrap();
 
-                let return_struct_name = if (*self.map_type_ffi(&function.return_value)).type_
+                let return_struct_name = if (*self.map_type_ffi(&function.return_value)?).type_
                     as u32
                     == libffi::raw::FFI_TYPE_STRUCT
                 {
@@ -524,3 +532,11 @@ pub enum FFIError {
     FunctionNotFound,
     StructNotFound,
 }
+
+impl std::fmt::Display for FFIError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        std::fmt::Debug::fmt(self, f)
+    }
+}
+
+impl Error for FFIError {}
