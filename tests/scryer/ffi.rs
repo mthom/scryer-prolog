@@ -88,3 +88,106 @@ fn ffi_f64_minus_zero() {
     // note: ouput is currently wrong correct would be 1.0,1.0
     load_module_test("tests-pl/ffi_f64_minus_zero.pl", "-1.0,1.0");
 }
+
+#[test]
+#[cfg_attr(miri, ignore = "ffi")]
+fn ffi_return_values() {
+    let dynlib_path = build_dynamic_library(
+        "ffi_return_values",
+        r##"
+                #[no_mangle]
+                extern "C" fn ffi_return_values_true() -> bool {
+                    true
+                }
+
+                #[no_mangle]
+                extern "C" fn ffi_return_values_false() -> bool {
+                    false
+                }
+
+                #[no_mangle]
+                extern "C" fn ffi_return_values_i8() -> i8 {
+                    -42
+                }
+
+                #[no_mangle]
+                extern "C" fn ffi_return_values_u8() -> u8 {
+                    73
+                }
+
+                #[no_mangle]
+                extern "C" fn ffi_return_values_i16() -> i16 {
+                    -0xBEE
+                }
+
+                #[no_mangle]
+                extern "C" fn ffi_return_values_u16() -> u16 {
+                    0xC0DE
+                }
+
+                
+                #[no_mangle]
+                extern "C" fn ffi_return_values_i32() -> i32 {
+                    -0xBEEFBEE
+                }
+                
+                #[no_mangle]
+                extern "C" fn ffi_return_values_u32() -> u32 {
+                    0xC0DEB000
+                }
+
+                #[no_mangle]
+                extern "C" fn ffi_return_values_i64() -> i64 {
+                    -0xBEEFBEE5C0DEB00
+                }
+                
+                #[no_mangle]
+                extern "C" fn ffi_return_values_u64() -> u64 {
+                    // 0xFEDCBA9876543210 // too large for i64
+                    0xBEEFBEE5C0DEB00
+                }
+
+                #[no_mangle]
+                extern "C" fn ffi_return_values_f32() -> f32 {
+                    std::f32::consts::PI
+                }
+
+                #[no_mangle]
+                extern "C" fn ffi_return_values_f64() -> f64 {
+                    std::f64::consts::TAU
+                }
+            "##,
+    );
+
+    // technically UB as tests are by default multi-threaded,
+    // but there is currently no other easy way to get the dynamic library file path as an input into a load_module_test test
+    std::env::set_var("ffi_return_values_LIB", dynlib_path);
+
+    // FIXME u32 and u64 have an incorrect result
+    load_module_test(
+        "tests-pl/ffi_return_values.pl",
+        "i8-214,u8-73,i16-18,u16-222,i32-18,u32-0,i64-0,u64- -4789548415587584,f32-3.1415927410125732,f64-6.283185307179586",
+    );
+}
+
+#[test]
+#[cfg_attr(miri, ignore = "ffi")]
+fn ffi_invalid_type() {
+    let dynlib_path = build_dynamic_library(
+        "ffi_invalid_type",
+        r##"
+                #[no_mangle]
+                extern "C" fn ffi_invalid_type() -> () {
+                }
+            "##,
+    );
+
+    // technically UB as tests are by default multi-threaded,
+    // but there is currently no other easy way to get the dynamic library file path as an input into a load_module_test test
+    std::env::set_var("ffi_invalid_type_LIB", dynlib_path);
+
+    load_module_test(
+        "tests-pl/ffi_invalid_type.pl",
+        "% Warning: initialization/1 failed for: user:test\n",
+    );
+}
