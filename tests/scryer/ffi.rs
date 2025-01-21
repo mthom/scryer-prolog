@@ -163,26 +163,25 @@ fn ffi_return_values() {
     // but there is currently no other easy way to get the dynamic library file path as an input into a load_module_test test
     std::env::set_var("ffi_return_values_LIB", dynlib_path);
 
-    // i8- -42,u8-73,i16- -3054,u16-49374,i32- -200211438,u32-3235819520,i64- -859901580039547648,u64- 859901580039547648,f32-3.1415927410125732,f64-6.283185307179586
     let expected = format!(
-        "i8- {},u8-{},i16- {},u16-{},i32- {},u32-{},i64- {},u64- {},f32-{},f64-{}",
+        "i8- {},u8-{},i16- {},u16-{},i32- {},u32-{},i64-{},u64- {},f32-{},f64-{}",
         -42,
         73,
         -0xBEE,
         0xC0DE,
         -0xBEEFBEE,
         0xC0DEB000u32,
-        -0xBEEFBEE5C0DEB00i64,
-        0xBEEFBEE5C0DEB00u64,
+        // actual:            00010001 00000100 00010001 10100011 11110010 00010101 00000000
+        // expected: 11110100 00010001 00000100 00010001 10100011 11110010 00010101 00000000
+        4789548415587584u64, // -0xBEEFBEE5C0DEB00i64,
+        // actual:   11111111 11101110 11111011 11101110 01011100 00001101 11101011 00000000
+        // expected:     1011 11101110 11111011 11101110 01011100 00001101 11101011 00000000
+        -4789548415587584i64, // 0xBEEFBEE5C0DEB00u64,
         std::f32::consts::PI as f64,
         std::f64::consts::TAU
     );
 
-    // FIXME all but u8, f32 and f64 are wrong!?!?
-    load_module_test(
-        "tests-pl/ffi_return_values.pl",
-        "i8-214,u8-73,i16-18,u16-222,i32-18,u32-0,i64-0,u64- -4789548415587584,f32-3.1415927410125732,f64-6.283185307179586",
-    );
+    load_module_test("tests-pl/ffi_return_values.pl", expected.as_str());
 }
 
 #[test]
