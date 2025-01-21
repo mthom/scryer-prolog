@@ -5148,7 +5148,11 @@ impl Machine {
                 Err(e) => return Err(e),
             };
             self.foreign_function_table
-                .define_struct(&struct_name.as_str(), fields);
+                .define_struct(&struct_name.as_str(), fields)
+                .map_err(|err| {
+                    let ffi_error = self.machine_st.ffi_error(err);
+                    self.machine_st.error_form(ffi_error, stub_gen())
+                })?;
             return Ok(());
         }
         self.machine_st.fail = true;
