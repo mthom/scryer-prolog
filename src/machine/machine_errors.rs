@@ -618,6 +618,8 @@ impl MachineState {
             FFIError::InvalidStructName => atom!("invalid_struct_name"),
             FFIError::FunctionNotFound => atom!("function_not_found"),
             FFIError::StructNotFound => atom!("struct_not_found"),
+            FFIError::ArgCountMismatch => atom!("mismatched_argument_count"),
+            FFIError::AllocationFailed => atom!("allocation_failed"),
         };
         let stub = functor!(atom!("ffi_error"), [atom(error_atom)]);
 
