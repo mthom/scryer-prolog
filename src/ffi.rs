@@ -327,7 +327,7 @@ impl ForeignFunctionTable {
         return unsafe {
             macro_rules! call_and_return {
                 ($type:ty) => {{
-                    let mut n: Box<u8> = Box::new(0);
+                    let mut n: Box<$type> = Box::new(0);
                     libffi::raw::ffi_call(
                         &mut function_impl.cif,
                         Some(*function_impl.code_ptr.as_safe_fun()),
@@ -359,7 +359,18 @@ impl ForeignFunctionTable {
                     ))
                 }
                 libffi::raw::FFI_TYPE_SINT64 => call_and_return!(i64),
-                libffi::raw::FFI_TYPE_POINTER => call_and_return!(*mut c_void),
+                libffi::raw::FFI_TYPE_POINTER => {
+                    let mut n: Box<*mut c_void> = Box::new(std::ptr::null_mut());
+                    libffi::raw::ffi_call(
+                        &mut function_impl.cif,
+                        Some(*function_impl.code_ptr.as_safe_fun()),
+                        &mut *n as *mut _ as *mut c_void,
+                        pointer_args.pointers.as_mut_ptr() as *mut *mut c_void,
+                    );
+                    Ok(Value::Int(
+                        i64::try_from(*n as isize).map_err(|_| FFIError::ValueDontFit)?,
+                    ))
+                }
                 libffi::raw::FFI_TYPE_FLOAT => {
                     let mut n: Box<f32> = Box::new(0.0);
                     libffi::raw::ffi_call(
