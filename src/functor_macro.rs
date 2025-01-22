@@ -78,7 +78,7 @@ macro_rules! build_functor {
      $res_len:expr,
      [$($subfunctor:expr),*]) => ({
          build_functor!([$($dt($($value),*)),*],
-                        [$($res, )* FunctorElement::Cell(fixnum_as_cell!(Fixnum::build_with($e as i64)))],
+                        [$($res, )* FunctorElement::Cell(fixnum_as_cell!(/*FIXME this is not safe*/ unsafe{Fixnum::build_with_unchecked($e as i64)}))],
                         1 + $res_len,
                         [$($subfunctor),*])
     });

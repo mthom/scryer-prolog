@@ -1003,7 +1003,10 @@ impl MachineState {
         arity: HeapCellValue,
     ) -> (Atom, usize) {
         let name = cell_as_atom!(self.store(self.deref(name)));
-        let arity = cell_as_fixnum!(self.store(self.deref(arity)));
+        let arity = unsafe {
+            self.store(self.deref(arity))
+                .to_fixnum_or_cut_point_unchecked()
+        };
 
         (name, usize::try_from(arity.get_num()).unwrap())
     }

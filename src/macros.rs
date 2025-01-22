@@ -14,12 +14,6 @@ macro_rules! fixnum_as_cell {
     };
 }
 
-macro_rules! cell_as_fixnum {
-    ($cell:expr) => {
-        Fixnum::from_bytes($cell.into_bytes())
-    };
-}
-
 macro_rules! integer_as_cell {
     ($n: expr) => {{
         match $n {
