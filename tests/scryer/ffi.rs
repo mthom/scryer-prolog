@@ -143,8 +143,7 @@ fn ffi_return_values() {
                 
                 #[no_mangle]
                 extern "C" fn ffi_return_values_u64() -> u64 {
-                    // 0xFEDCBA9876543210 // too large for i64
-                    0xBEEFBEE5C0DEB00
+                    0xFEDCBA9876543210
                 }
 
                 #[no_mangle]
@@ -172,7 +171,7 @@ fn ffi_return_values() {
         -0xBEEFBEE,
         0xC0DEB000u32,
         -0xBEEFBEE5C0DEB00i64,
-        0xBEEFBEE5C0DEB00u64,
+        0xFEDCBA9876543210u64,
         std::f32::consts::PI as f64,
         std::f64::consts::TAU
     );
