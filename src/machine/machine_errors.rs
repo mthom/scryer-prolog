@@ -308,7 +308,7 @@ pub(super) fn functor_stub(name: Atom, arity: usize) -> FunctorStub {
     [
         atom_as_cell!(atom!("/"), 2),
         atom_as_cell!(name),
-        fixnum_as_cell!(Fixnum::build_with(arity as i64)),
+        fixnum_as_cell!(Fixnum::build_with_unchecked(arity as i64)),
     ]
 }
 

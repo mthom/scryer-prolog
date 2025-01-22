@@ -884,7 +884,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                 }
 
                 self.get_single_quoted_char()
-                    .map(|c| Token::Literal(Literal::Fixnum(Fixnum::build_with(c as i64))))
+                    .map(|c| Token::Literal(Literal::Fixnum(Fixnum::build_with(u32::from(c)))))
                     .or_else(|err| {
                         match err {
                             ParserError::UnexpectedChar('\'', ..) => {}

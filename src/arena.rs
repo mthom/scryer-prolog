@@ -1137,7 +1137,7 @@ mod tests {
             _ => { unreachable!() }
         );
 
-        let fixnum_b_cell = fixnum_as_cell!(Fixnum::build_with(1 << 54));
+        let fixnum_b_cell = fixnum_as_cell!(Fixnum::build_with_unchecked(1 << 54));
 
         assert_eq!(fixnum_b_cell.get_tag(), HeapCellValueTag::Fixnum);
 
