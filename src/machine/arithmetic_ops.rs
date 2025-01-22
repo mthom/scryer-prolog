@@ -1104,7 +1104,7 @@ pub(crate) fn round(num: Number, arena: &mut Arena) -> Result<Number, MachineStu
 
 pub(crate) fn bitwise_complement(n1: Number, arena: &mut Arena) -> Result<Number, MachineStubGen> {
     match n1 {
-        Number::Fixnum(n) => Ok(Number::Fixnum(Fixnum::build_with(!n.get_num()))),
+        Number::Fixnum(n) => Ok(Number::Fixnum(Fixnum::build_with_unchecked(!n.get_num()))),
         Number::Integer(n1) => Ok(Number::arena_from(Integer::from(!&*n1), arena)),
         _ => {
             let stub_gen = || {

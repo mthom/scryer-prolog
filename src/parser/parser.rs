@@ -416,7 +416,7 @@ impl<'a> Parser<'a> {
                     for c in s.as_str().chars().rev() {
                         let h = section.cell_len();
 
-                        section.push_cell(fixnum_as_cell!(Fixnum::build_with(c as i64)));
+                        section.push_cell(fixnum_as_cell!(Fixnum::build_with(c)));
                         section.push_cell(list);
 
                         list = list_loc_as_cell!(h);

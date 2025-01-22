@@ -93,6 +93,7 @@ impl ForeignFunctionTable {
     }
 
     fn map_type_ffi(&mut self, source: &Atom) -> Result<*mut ffi_type, FFIError> {
+        #[allow(unused_unsafe)] // required in msrv rust version
         unsafe {
             Ok(match source {
                 atom!("sint64") => addr_of_mut!(types::sint64),
