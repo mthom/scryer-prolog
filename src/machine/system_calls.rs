@@ -578,9 +578,11 @@ impl MachineState {
 
             while lh_offset + 4 < self.lifted_heap.cell_len() {
                 let cell_threshold =
-                    cell_as_fixnum!(self.lifted_heap[lh_offset + 3]).get_num() as usize;
+                    unsafe { self.lifted_heap[lh_offset + 3].to_fixnum_or_cut_point_unchecked() }
+                        .get_num() as usize;
                 let pstr_upper_threshold =
-                    cell_as_fixnum!(self.lifted_heap[lh_offset + 4]).get_num() as usize;
+                    unsafe { self.lifted_heap[lh_offset + 4].to_fixnum_or_cut_point_unchecked() }
+                        .get_num() as usize;
 
                 for idx in lh_offset..cell_threshold {
                     section.push_cell(self.lifted_heap[idx] + offset);
@@ -740,7 +742,11 @@ impl MachineState {
         // self.heap.pop_cell();
 
         let target_n = self.store(self.deref(self.registers[1]));
-        self.unify_fixnum(Fixnum::build_with(brent_st.num_steps() as i64), target_n);
+        self.unify_fixnum(
+            /* FIXME this is not safe */
+            unsafe { Fixnum::build_with_unchecked(brent_st.num_steps() as i64) },
+            target_n,
+        );
 
         if !self.fail {
             unify!(self, self.registers[4], self.heap[prev_hare]);
@@ -749,7 +755,10 @@ impl MachineState {
 
     fn finalize_skip_max_list(&mut self, n: i64, value: HeapCellValue) {
         let target_n = self.store(self.deref(self.registers[1]));
-        self.unify_fixnum(Fixnum::build_with(n), target_n);
+        self.unify_fixnum(
+            /* FIXME this is not safe */ unsafe { Fixnum::build_with_unchecked(n) },
+            target_n,
+        );
 
         if !self.fail {
             let xs = self.registers[4];
@@ -881,7 +890,11 @@ impl MachineState {
         let value = self.store(self.deref(value));
 
         self.block = self.b;
-        self.unify_fixnum(Fixnum::build_with(self.block as i64), value);
+        self.unify_fixnum(
+            /* FIXME this is not safe */
+            unsafe { Fixnum::build_with_unchecked(self.block as i64) },
+            value,
+        );
 
         self.block
     }
@@ -959,7 +972,7 @@ impl MachineState {
         let mut tokens = vec![];
 
         match lexer.next_number_token() {
-            Ok(token @ Token::Literal(Literal::Atom(atom!("-")) | Literal::Char('-'))) => {
+            Ok(token @ Token::Literal(Literal::Atom(atom!("-")))) => {
                 tokens.push(token);
 
                 if let Ok(token) = lexer.next_number_token() {
@@ -1051,7 +1064,10 @@ impl MachineState {
         for index in s + 2..s + 2 + num_cells {
             if let HeapCellValueTag::CutPoint = self.heap[index].get_tag() {
                 // adjust cut point to occur after call_continuation.
-                and_frame[index - (s + 1)] = fixnum_as_cell!(Fixnum::as_cutpoint(self.b as i64));
+                and_frame[index - (s + 1)] = fixnum_as_cell!(
+                    /* FIXME this is not safe */
+                    unsafe { Fixnum::build_with_unchecked(self.b as i64) }.as_cutpoint()
+                );
             } else {
                 and_frame[index - (s + 1)] = self.heap[index];
             }
@@ -2332,7 +2348,7 @@ impl Machine {
             (HeapCellValueTag::Char, c) => {
                 let h = self.machine_st.heap.len();
 
-                self.machine_st.heap.push(fixnum_as_cell!(Fixnum::build_with(c as i64)));
+                self.machine_st.heap.push(fixnum_as_cell!(Fixnum::build_with(u32::from(c))));
                 self.machine_st.heap.push(empty_list_as_cell!());
 
                 unify!(self.machine_st, list_loc_as_cell!(h), self.machine_st.registers[2]);
@@ -2342,7 +2358,7 @@ impl Machine {
                 debug_assert_eq!(arity, 0);
 
                 let name = name.as_str();
-                let iter = name.chars().map(|c| fixnum_as_cell!(Fixnum::build_with(c as i64)));
+                let iter = name.chars().map(|c| fixnum_as_cell!(Fixnum::build_with(c)));
 
                 let list_cell = resource_error_call_result!(
                     self.machine_st,
@@ -2439,7 +2455,10 @@ impl Machine {
         );
 
         let a2 = self.deref_register(2);
-        self.machine_st.unify_fixnum(Fixnum::build_with(len), a2);
+        self.machine_st.unify_fixnum(
+            /* FIXME this is not safe */ unsafe { Fixnum::build_with_unchecked(len) },
+            a2,
+        );
     }
 
     #[inline(always)]
@@ -2593,7 +2612,7 @@ impl Machine {
                 Ok(Number::Integer(n)) => {
                     let result: Result<u8, _> = (&*n).try_into();
                     if let Ok(value) = result {
-                        fixnum_as_cell!(Fixnum::build_with(value as i64))
+                        fixnum_as_cell!(Fixnum::build_with(value))
                     } else {
                         let err = self.machine_st.type_error(ValidType::InByte, addr);
                         return Err(self.machine_st.error_form(err, stub_gen()));
@@ -2601,7 +2620,7 @@ impl Machine {
                 }
                 Ok(Number::Fixnum(n)) => {
                     if let Ok(nb) = u8::try_from(n.get_num()) {
-                        fixnum_as_cell!(Fixnum::build_with(nb as i64))
+                        fixnum_as_cell!(Fixnum::build_with(nb))
                     } else {
                         let err = self.machine_st.type_error(ValidType::InByte, addr);
                         return Err(self.machine_st.error_form(err, stub_gen()));
@@ -2617,8 +2636,7 @@ impl Machine {
         loop {
             match stream.peek_byte().map_err(|e| e.kind()) {
                 Ok(b) => {
-                    self.machine_st
-                        .unify_fixnum(Fixnum::build_with(b as i64), addr);
+                    self.machine_st.unify_fixnum(Fixnum::build_with(b), addr);
                     break;
                 }
                 Err(ErrorKind::PermissionDenied) => {
@@ -2783,10 +2801,8 @@ impl Machine {
                     Ok(Number::Integer(n)) => {
                         let n: u32 = (&*n).try_into().unwrap();
 
-                        let n = std::char::from_u32(n).map(|_| n);
-
-                        if let Some(n) = n {
-                            fixnum_as_cell!(Fixnum::build_with(n as i64))
+                        if std::char::from_u32(n).is_some() {
+                            fixnum_as_cell!(Fixnum::build_with(n))
                         } else {
                             let err = self.machine_st.representation_error(RepFlag::InCharacterCode);
                             return Err(self.machine_st.error_form(err, stub_gen()));
@@ -2798,7 +2814,7 @@ impl Machine {
                             .and_then(|n| std::char::from_u32(n).map(|_| n));
 
                         if let Some(n) = n {
-                            fixnum_as_cell!(Fixnum::build_with(n as i64))
+                            fixnum_as_cell!(Fixnum::build_with(n))
                         } else {
                             let err = self.machine_st.representation_error(RepFlag::InCharacterCode);
                             return Err(self.machine_st.error_form(err, stub_gen()));
@@ -2818,7 +2834,7 @@ impl Machine {
             match result.map(|result| result.map_err(|e| e.kind())) {
                 Some(Ok(c)) => {
                     self.machine_st
-                        .unify_fixnum(Fixnum::build_with(c as i64), addr);
+                        .unify_fixnum(Fixnum::build_with(u32::from(c)), addr);
                     break;
                 }
                 Some(Err(ErrorKind::PermissionDenied)) => {
@@ -2896,7 +2912,7 @@ impl Machine {
         let codes = string
             .trim()
             .chars()
-            .map(|c| fixnum_as_cell!(Fixnum::build_with(c as i64)));
+            .map(|c| fixnum_as_cell!(Fixnum::build_with(u32::from(c))));
 
         let list_cell = step_or_resource_error!(
             self.machine_st,
@@ -2939,7 +2955,9 @@ impl Machine {
     #[inline(always)]
     pub(crate) fn lifted_heap_length(&mut self) {
         let a1 = self.machine_st.registers[1];
-        let lh_len = Fixnum::build_with(self.machine_st.lifted_heap.cell_len() as i64);
+        /* FIXME this is not safe */
+        let lh_len =
+            unsafe { Fixnum::build_with_unchecked(self.machine_st.lifted_heap.cell_len() as i64) };
 
         self.machine_st.unify_fixnum(lh_len, a1);
     }
@@ -3002,7 +3020,7 @@ impl Machine {
         );
 
         self.machine_st
-            .unify_fixnum(Fixnum::build_with(c as i64), a2);
+            .unify_fixnum(Fixnum::build_with(u32::from(c)), a2);
 
         Ok(())
     }
@@ -3132,7 +3150,7 @@ impl Machine {
     #[inline(always)]
     pub(crate) fn check_cut_point(&mut self) {
         let addr = self.deref_register(1);
-        let old_b = cell_as_fixnum!(addr).get_num() as usize;
+        let old_b = unsafe { addr.to_fixnum_or_cut_point_unchecked() }.get_num() as usize;
 
         let prev_b = self
             .machine_st
@@ -3442,7 +3460,7 @@ impl Machine {
                     let n: Result<u8, _> = (&*n).try_into();
 
                     if let Ok(value) = n {
-                        fixnum_as_cell!(Fixnum::build_with(value as i64))
+                        fixnum_as_cell!(Fixnum::build_with(value))
                     } else {
                         let err = self.machine_st.type_error(ValidType::InByte, addr);
                         return Err(self.machine_st.error_form(err, stub_gen()));
@@ -3450,7 +3468,7 @@ impl Machine {
                 }
                 Ok(Number::Fixnum(n)) => {
                     if let Ok(nb) = u8::try_from(n.get_num()) {
-                        fixnum_as_cell!(Fixnum::build_with(nb as i64))
+                        fixnum_as_cell!(Fixnum::build_with(nb))
                     } else {
                         let err = self.machine_st.type_error(ValidType::InByte, addr);
                         return Err(self.machine_st.error_form(err, stub_gen()));
@@ -3467,8 +3485,7 @@ impl Machine {
 
         match stream.read(&mut b) {
             Ok(1) => {
-                self.machine_st
-                    .unify_fixnum(Fixnum::build_with(b[0] as i64), addr);
+                self.machine_st.unify_fixnum(Fixnum::build_with(b[0]), addr);
             }
             _ => {
                 stream.set_past_end_of_stream(true);
@@ -3693,7 +3710,7 @@ impl Machine {
                     let n = std::char::from_u32(n);
 
                     if let Some(n) = n {
-                        fixnum_as_cell!(Fixnum::build_with(n as i64))
+                        fixnum_as_cell!(Fixnum::build_with(u32::from(n)))
                     } else {
                         let err = self
                             .machine_st
@@ -3737,7 +3754,7 @@ impl Machine {
             match result {
                 Some(Ok(c)) => {
                     self.machine_st
-                        .unify_fixnum(Fixnum::build_with(c as i64), addr);
+                        .unify_fixnum(Fixnum::build_with(u32::from(c)), addr);
                     break;
                 }
                 _ => {
@@ -3916,7 +3933,8 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn copy_to_lifted_heap(&mut self) {
-        let lh_offset = cell_as_fixnum!(self.deref_register(1)).get_num() as usize;
+        let lh_offset =
+            unsafe { self.deref_register(1).to_fixnum_or_cut_point_unchecked() }.get_num() as usize;
         let copy_target = self.machine_st.registers[2];
         let FindallCopyInfo {
             offset: old_threshold,
@@ -3935,11 +3953,14 @@ impl Machine {
             self.machine_st.lifted_heap[idx] -= self.machine_st.heap.cell_len() + lh_offset;
         }
 
-        self.machine_st.lifted_heap[old_threshold + 1] =
-            fixnum_as_cell!(Fixnum::build_with(pstr_threshold as i64));
-        self.machine_st.lifted_heap[old_threshold + 2] = fixnum_as_cell!(Fixnum::build_with(
-            self.machine_st.lifted_heap.cell_len() as i64
-        ));
+        self.machine_st.lifted_heap[old_threshold + 1] = fixnum_as_cell!(
+            /* FIXME this is not safe */
+            unsafe { Fixnum::build_with_unchecked(pstr_threshold as i64) }
+        );
+        self.machine_st.lifted_heap[old_threshold + 2] =
+            fixnum_as_cell!(/* FIXME this is not safe */ unsafe {
+                Fixnum::build_with_unchecked(self.machine_st.lifted_heap.cell_len() as i64)
+            });
 
         let mut pstr_threshold = heap_index!(pstr_threshold);
 
@@ -3958,7 +3979,8 @@ impl Machine {
     pub(crate) fn lookup_db_ref(&mut self) {
         let module_name = self.deref_register(1);
         let name = cell_as_atom!(self.deref_register(2));
-        let arity = cell_as_fixnum!(self.deref_register(3)).get_num() as usize;
+        let arity =
+            unsafe { self.deref_register(3).to_fixnum_or_cut_point_unchecked() }.get_num() as usize;
 
         let module_name = read_heap_cell!(module_name,
             (HeapCellValueTag::Atom, (module_name, _arity)) => {
@@ -4285,7 +4307,12 @@ impl Machine {
                     return;
                 }
                 let value = self.rng.gen_range(lower..upper);
-                Number::Fixnum(Fixnum::build_with(value))
+                // Safety:
+                // - lower and uper bounds are Fixnum values
+                // - value is inbetween lower and upper
+                // - fixnums value range has no gaps
+                // so value is also a valid Fixnum value
+                Number::Fixnum(unsafe { Fixnum::build_with_unchecked(value) })
             }
             (Ok(Number::Fixnum(lower)), Ok(Number::Integer(upper))) => {
                 let lower = Integer::from(lower);
@@ -4463,7 +4490,7 @@ impl Machine {
                         // status code
                         let status = resp.status().as_u16();
                         self.machine_st
-                            .unify_fixnum(Fixnum::build_with(status as i64), address_status);
+                            .unify_fixnum(Fixnum::build_with(status), address_status);
                         // headers
                         let mut headers: Vec<HeapCellValue> = vec![];
 
@@ -5010,9 +5037,12 @@ impl Machine {
                     {
                         Ok(result) => {
                             match result {
-                                Value::Int(n) => self
-                                    .machine_st
-                                    .unify_fixnum(Fixnum::build_with(n), return_value),
+                                Value::Int(n) => self.machine_st.unify_fixnum(
+                                    Fixnum::build_with_checked(n).unwrap_or_else(|_| {
+                                        todo!("handle integer values that don't fit in fixnum")
+                                    }),
+                                    return_value,
+                                ),
                                 Value::Float(n) => {
                                     let n = float_alloc!(n, self.machine_st.arena);
                                     self.machine_st.unify_f64(n, return_value)
@@ -5060,7 +5090,16 @@ impl Machine {
 
         for val in args {
             expanded_args.push(match val {
-                Value::Int(n) => fixnum_as_cell!(Fixnum::build_with(n)),
+                Value::Int(n) => {
+                    if let Ok(fixnum) = Fixnum::build_with_checked(n) {
+                        fixnum_as_cell!(fixnum)
+                    } else {
+                        integer_as_cell!(Number::Integer(arena_alloc!(
+                            Integer::from(n),
+                            &mut self.machine_st.arena
+                        )))
+                    }
+                }
                 Value::Float(n) => HeapCellValue::from(float_alloc!(n, self.machine_st.arena)),
                 Value::CString(cstr) => atom_as_cell!(AtomTable::build_with(
                     &self.machine_st.atom_tbl,
@@ -5413,7 +5452,11 @@ impl Machine {
     #[inline(always)]
     pub(crate) fn get_attr_var_queue_delimiter(&mut self) {
         let addr = self.deref_register(1);
-        let value = Fixnum::build_with(self.machine_st.attr_var_init.attr_var_queue.len() as i64);
+
+        /* FIXME this is not safe */
+        let value = unsafe {
+            Fixnum::build_with_unchecked(self.machine_st.attr_var_init.attr_var_queue.len() as i64)
+        };
 
         self.machine_st.unify_fixnum(value, addr);
     }
@@ -5682,7 +5725,7 @@ impl Machine {
     #[inline(always)]
     pub(crate) fn get_continuation_chunk(&mut self) {
         let e = self.deref_register(1);
-        let e = cell_as_fixnum!(e).get_num() as usize;
+        let e = unsafe { e.to_fixnum_or_cut_point_unchecked() }.get_num() as usize;
         let h = self.machine_st.heap.cell_len();
 
         let p_functor_cell = self.deref_register(2);
@@ -5736,8 +5779,12 @@ impl Machine {
     #[inline(always)]
     pub(crate) fn get_lifted_heap_from_offset_diff(&mut self) {
         let lh_offset = self.machine_st.registers[1];
-        let lh_offset = cell_as_fixnum!(self.machine_st.store(self.machine_st.deref(lh_offset)))
-            .get_num() as usize;
+        let lh_offset = unsafe {
+            self.machine_st
+                .store(self.machine_st.deref(lh_offset))
+                .to_fixnum_or_cut_point_unchecked()
+        }
+        .get_num() as usize;
 
         if lh_offset >= self.machine_st.lifted_heap.cell_len() {
             let solutions = self.machine_st.registers[2];
@@ -5765,8 +5812,12 @@ impl Machine {
     #[inline(always)]
     pub(crate) fn get_lifted_heap_from_offset(&mut self) {
         let lh_offset = self.machine_st.registers[1];
-        let lh_offset = cell_as_fixnum!(self.machine_st.store(self.machine_st.deref(lh_offset)))
-            .get_num() as usize;
+        let lh_offset = unsafe {
+            self.machine_st
+                .store(self.machine_st.deref(lh_offset))
+                .to_fixnum_or_cut_point_unchecked()
+        }
+        .get_num() as usize;
 
         if lh_offset >= self.machine_st.lifted_heap.cell_len() {
             let solutions = self.machine_st.registers[2];
@@ -5888,7 +5939,7 @@ impl Machine {
             }
         };
 
-        let bp = cell_as_fixnum!(a1).get_num() as usize;
+        let bp = unsafe { a1.to_fixnum_or_cut_point_unchecked() }.get_num() as usize;
         let a3 = self.deref_register(3);
 
         let count = self.machine_st.cwil.add_limit(n, bp).clone();
@@ -5899,9 +5950,11 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn inference_count(&mut self, count_var: HeapCellValue, count: Integer) {
-        if let Ok(value) = <&Integer as TryInto<i64>>::try_into(&count) {
-            self.machine_st
-                .unify_fixnum(Fixnum::build_with(value), count_var);
+        if let Some(value) = <&Integer as TryInto<i64>>::try_into(&count)
+            .ok()
+            .and_then(|i| Fixnum::build_with_checked(i).ok())
+        {
+            self.machine_st.unify_fixnum(value, count_var);
         } else {
             let count = arena_alloc!(count, &mut self.machine_st.arena);
             self.machine_st.unify_big_int(count, count_var);
@@ -6028,7 +6081,8 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn remove_call_policy_check(&mut self) {
-        let bp = cell_as_fixnum!(self.deref_register(1)).get_num() as usize;
+        let bp =
+            unsafe { self.deref_register(1).to_fixnum_or_cut_point_unchecked() }.get_num() as usize;
 
         if bp == self.machine_st.b && self.machine_st.cwil.is_empty() {
             self.machine_st.cwil.reset();
@@ -6040,12 +6094,10 @@ impl Machine {
         let a1 = self.deref_register(1);
         let a2 = self.deref_register(2);
 
-        let block = cell_as_fixnum!(a1).get_num() as usize;
+        let block = unsafe { a1.to_fixnum_or_cut_point_unchecked() }.get_num() as usize;
         let count = self.machine_st.cwil.remove_limit(block).clone();
-        let result = count.clone().try_into();
-
-        if let Ok(value) = result {
-            self.machine_st.unify_fixnum(Fixnum::build_with(value), a2);
+        if let Ok(value) = Fixnum::build_with_checked(&count) {
+            self.machine_st.unify_fixnum(value, a2);
         } else {
             let count = arena_alloc!(count.clone(), &mut self.machine_st.arena);
             self.machine_st.unify_big_int(count, a2);
@@ -6063,18 +6115,23 @@ impl Machine {
             self.machine_st.registers[i] = self.machine_st.stack[stack_loc!(AndFrame, e, i)];
         }
 
-        self.machine_st.b0 = cell_as_fixnum!(
+        self.machine_st.b0 = unsafe {
             self.machine_st.stack[stack_loc!(AndFrame, e, frame_len - 2)]
-        )
+                .to_fixnum_or_cut_point_unchecked()
+        }
         .get_num() as usize;
 
-        self.machine_st.num_of_args = cell_as_fixnum!(
+        self.machine_st.num_of_args = unsafe {
             self.machine_st.stack[stack_loc!(AndFrame, e, frame_len - 1)]
-        )
+                .to_fixnum_or_cut_point_unchecked()
+        }
         .get_num() as usize;
 
-        let p = cell_as_fixnum!(self.machine_st.stack[stack_loc!(AndFrame, e, frame_len)]).get_num()
-            as usize;
+        let p = unsafe {
+            self.machine_st.stack[stack_loc!(AndFrame, e, frame_len)]
+                .to_fixnum_or_cut_point_unchecked()
+        }
+        .get_num() as usize;
 
         self.machine_st.deallocate();
         self.machine_st.p = p;
@@ -6191,7 +6248,7 @@ impl Machine {
         let a1 = self.deref_register(1);
         let a2 = self.deref_register(2);
 
-        let bp = cell_as_fixnum!(a2).get_num() as usize;
+        let bp = unsafe { a2.to_fixnum_or_cut_point_unchecked() }.get_num() as usize;
         let prev_b = self
             .machine_st
             .stack
@@ -6214,7 +6271,7 @@ impl Machine {
     #[inline(always)]
     pub(crate) fn clean_up_block(&mut self) {
         let nb = self.deref_register(1);
-        let nb = cell_as_fixnum!(nb).get_num() as usize;
+        let nb = unsafe { nb.to_fixnum_or_cut_point_unchecked() }.get_num() as usize;
 
         let b = self.machine_st.b;
 
@@ -6270,7 +6327,9 @@ impl Machine {
     #[inline(always)]
     pub(crate) fn get_current_block(&mut self) {
         let addr = self.machine_st.registers[1];
-        let block = Fixnum::build_with(self.machine_st.block as i64);
+
+        /* FIXME this is not safe */
+        let block = unsafe { Fixnum::build_with_unchecked(self.machine_st.block as i64) };
 
         self.machine_st.unify_fixnum(block, addr);
     }
@@ -6278,21 +6337,27 @@ impl Machine {
     #[inline(always)]
     pub(crate) fn get_current_scc_block(&mut self) {
         let addr = self.machine_st.registers[1];
-        let block = Fixnum::build_with(self.machine_st.scc_block as i64);
+
+        /* FIXME this is not safe */
+        let block = unsafe { Fixnum::build_with_unchecked(self.machine_st.scc_block as i64) };
 
         self.machine_st.unify_fixnum(block, addr);
     }
 
     #[inline(always)]
     pub(crate) fn get_b_value(&mut self) {
-        let n = Fixnum::as_cutpoint(i64::try_from(self.machine_st.b).unwrap());
+        /* FIXME this is not safe */
+        let n = unsafe { Fixnum::build_with_unchecked(i64::try_from(self.machine_st.b).unwrap()) }
+            .as_cutpoint();
         self.machine_st
             .unify_fixnum(n, self.machine_st.registers[1]);
     }
 
     #[inline(always)]
     pub(crate) fn get_cut_point(&mut self) {
-        let n = Fixnum::as_cutpoint(i64::try_from(self.machine_st.b0).unwrap());
+        /* FIXME this is not safe */
+        let n = unsafe { Fixnum::build_with_unchecked(i64::try_from(self.machine_st.b0).unwrap()) }
+            .as_cutpoint();
         self.machine_st
             .unify_fixnum(n, self.machine_st.registers[1]);
     }
@@ -6314,7 +6379,7 @@ impl Machine {
             let cp = and_frame.prelude.cp - 1;
 
             let e = and_frame.prelude.e;
-            let e = Fixnum::build_with(i64::try_from(e).unwrap());
+            let e = Fixnum::build_with_checked(e).unwrap();
 
             machine_st.unify_fixnum(e, machine_st.registers[2]);
 
@@ -6363,7 +6428,7 @@ impl Machine {
                     writer(&mut self.machine_st.heap)
                 );
 
-                let e = Fixnum::build_with(i64::try_from(and_frame.prelude.e).unwrap());
+                let e = Fixnum::build_with_checked(and_frame.prelude.e).unwrap();
                 self.machine_st.unify_fixnum(e, self.machine_st.registers[2]);
 
                 if !self.machine_st.fail {
@@ -6787,10 +6852,7 @@ impl Machine {
                     let port = tcp_listener.local_addr().map(|addr| addr.port()).ok();
 
                     if let Some(port) = port {
-                        (
-                            arena_alloc!(tcp_listener, &mut self.machine_st.arena),
-                            port as usize,
-                        )
+                        (arena_alloc!(tcp_listener, &mut self.machine_st.arena), port)
                     } else {
                         self.machine_st.fail = true;
                         return Ok(());
@@ -6817,7 +6879,7 @@ impl Machine {
 
         if had_zero_port {
             self.machine_st
-                .unify_fixnum(Fixnum::build_with(port as i64), self.deref_register(2));
+                .unify_fixnum(Fixnum::build_with(port), self.deref_register(2));
         }
 
         Ok(())
@@ -7266,7 +7328,8 @@ impl Machine {
     #[inline(always)]
     pub(crate) fn term_variables_under_max_depth(&mut self) {
         // Term, MaxDepth, VarList
-        let max_depth = cell_as_fixnum!(self.deref_register(2)).get_num() as usize;
+        let max_depth =
+            unsafe { self.deref_register(2).to_fixnum_or_cut_point_unchecked() }.get_num() as usize;
 
         self.machine_st.term_variables_under_max_depth(
             self.machine_st.registers[1],
@@ -7278,7 +7341,7 @@ impl Machine {
     #[inline(always)]
     pub(crate) fn truncate_lifted_heap_to(&mut self) {
         let a1 = self.deref_register(1);
-        let lh_offset = cell_as_fixnum!(a1).get_num() as usize;
+        let lh_offset = unsafe { a1.to_fixnum_or_cut_point_unchecked() }.get_num() as usize;
 
         self.machine_st.lifted_heap.truncate(lh_offset);
     }
@@ -7561,7 +7624,7 @@ impl Machine {
             }
         }
 
-        let byte = Fixnum::build_with(bytes[0] as i64);
+        let byte = Fixnum::build_with(bytes[0]);
         self.machine_st.unify_fixnum(byte, arg);
     }
 
@@ -7587,7 +7650,7 @@ impl Machine {
                         context_len,
                         finalized_context
                             .iter()
-                            .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64)))
+                            .map(|b| fixnum_as_cell!(Fixnum::build_with(*b)))
                     )
                 )
             }
@@ -7604,7 +7667,7 @@ impl Machine {
                         context_len,
                         finalized_context
                             .iter()
-                            .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64)))
+                            .map(|b| fixnum_as_cell!(Fixnum::build_with(*b)))
                     )
                 )
             }
@@ -7621,7 +7684,7 @@ impl Machine {
                         context_len,
                         finalized_context
                             .iter()
-                            .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64)))
+                            .map(|b| fixnum_as_cell!(Fixnum::build_with(*b)))
                     )
                 )
             }
@@ -7638,7 +7701,7 @@ impl Machine {
                         context_len,
                         finalized_context
                             .iter()
-                            .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64))),
+                            .map(|b| fixnum_as_cell!(Fixnum::build_with(*b))),
                     )
                 )
             }
@@ -7655,7 +7718,7 @@ impl Machine {
                         context_len,
                         finalized_context
                             .iter()
-                            .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64))),
+                            .map(|b| fixnum_as_cell!(Fixnum::build_with(*b))),
                     )
                 )
             }
@@ -7672,7 +7735,7 @@ impl Machine {
                         context_len,
                         finalized_context
                             .iter()
-                            .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64))),
+                            .map(|b| fixnum_as_cell!(Fixnum::build_with(*b))),
                     )
                 )
             }
@@ -7689,7 +7752,7 @@ impl Machine {
                         context_len,
                         finalized_context
                             .iter()
-                            .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64)))
+                            .map(|b| fixnum_as_cell!(Fixnum::build_with(*b)))
                     )
                 )
             }
@@ -7714,7 +7777,7 @@ impl Machine {
                         ints.as_ref().len(),
                         ints.as_ref()
                             .iter()
-                            .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64)))
+                            .map(|b| fixnum_as_cell!(Fixnum::build_with(*b)))
                     )
                 )
             }
@@ -7754,7 +7817,7 @@ impl Machine {
                 tag.as_ref().len(),
                 tag.as_ref()
                     .iter()
-                    .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64)))
+                    .map(|b| fixnum_as_cell!(Fixnum::build_with(*b)))
             )
         );
 
@@ -7825,7 +7888,7 @@ impl Machine {
                     bytes.len(),
                     bytes
                         .iter()
-                        .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64)))
+                        .map(|b| fixnum_as_cell!(Fixnum::build_with(*b)))
                 )
             )
         };
@@ -7881,7 +7944,7 @@ impl Machine {
                     bytes.len(),
                     bytes
                         .iter()
-                        .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64)))
+                        .map(|b| fixnum_as_cell!(Fixnum::build_with(*b)))
                 )
             )
         };
@@ -7928,7 +7991,7 @@ impl Machine {
                 tag.as_ref().len(),
                 tag.as_ref()
                     .iter()
-                    .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64)))
+                    .map(|b| fixnum_as_cell!(Fixnum::build_with(*b)))
             )
         );
 
@@ -8068,7 +8131,7 @@ impl Machine {
                 sig.as_ref().len(),
                 sig.as_ref()
                     .iter()
-                    .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64)))
+                    .map(|b| fixnum_as_cell!(Fixnum::build_with(*b)))
             )
         );
 
@@ -8482,7 +8545,7 @@ impl Machine {
         let number = self.deref_register(1);
         let pop_count = integer_as_cell!(match Number::try_from(number) {
             Ok(Number::Fixnum(n)) => {
-                Number::Fixnum(Fixnum::build_with(n.get_num().count_ones() as i64))
+                Number::Fixnum(Fixnum::build_with(n.get_num().count_ones()))
             }
             Ok(Number::Integer(n)) => {
                 let value: usize = if n.sign() == Sign::Positive {

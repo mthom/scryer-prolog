@@ -784,7 +784,9 @@ mod tests {
             _ => { unreachable!() }
         );
 
-        let fixnum_b_cell = fixnum_as_cell!(Fixnum::build_with(1 << 54));
+        let fixnum_b_cell = fixnum_as_cell!(
+            Fixnum::build_with_checked(1i64 << 54).expect("1 << 54 fits in Fixnum")
+        );
 
         assert_eq!(fixnum_b_cell.get_tag(), HeapCellValueTag::Fixnum);
 
@@ -793,41 +795,29 @@ mod tests {
             None => unreachable!(),
         }
 
-        if Fixnum::build_with_checked(1 << 56).is_ok() {
-            unreachable!()
-        }
+        Fixnum::build_with_checked(1i64 << 56).expect_err("1 << 56 is too large for fixnum");
 
-        if Fixnum::build_with_checked(i64::MAX).is_ok() {
-            unreachable!()
-        }
+        Fixnum::build_with_checked(i64::MAX).expect_err("i64::MAX is too large for Fixnum");
+        Fixnum::build_with_checked(i64::MIN).expect_err("i64::MIN is too small for Fixnum");
+        assert_eq!(
+            Fixnum::build_with_checked(-1i64)
+                .expect("-1 fits in fixnum")
+                .get_num(),
+            -1
+        );
 
-        if Fixnum::build_with_checked(i64::MIN).is_ok() {
-            unreachable!()
-        }
+        Fixnum::build_with_checked((1i64 << 55) - 1)
+            .expect("(1 << 55) - 1 is the largest value that fits in Fixnum");
 
-        match Fixnum::build_with_checked(-1) {
-            Ok(n) => assert_eq!(n.get_num(), -1),
-            _ => unreachable!(),
-        }
+        Fixnum::build_with_checked(-(1i64 << 55))
+            .expect("-(1 << 55) is the smallest value that fits in fixnum");
+        Fixnum::build_with_checked(-(1i64 << 55) - 1)
+            .expect_err("-(1<<55) - 1 is too small for Fixnum");
 
-        match Fixnum::build_with_checked((1 << 55) - 1) {
-            Ok(n) => assert_eq!(n.get_num(), (1 << 55) - 1),
-            _ => unreachable!(),
-        }
-
-        match Fixnum::build_with_checked(-(1 << 55)) {
-            Ok(n) => assert_eq!(n.get_num(), -(1 << 55)),
-            _ => unreachable!(),
-        }
-
-        if Fixnum::build_with_checked(-(1 << 55) - 1).is_ok() {
-            unreachable!()
-        }
-
-        match Fixnum::build_with_checked(-1) {
-            Ok(n) => assert_eq!(-n, Fixnum::build_with(1)),
-            _ => unreachable!(),
-        }
+        assert_eq!(
+            -Fixnum::build_with_checked(-1i64).expect("-1 fits in Fixnum"),
+            Fixnum::build_with(1)
+        );
 
         // float
 

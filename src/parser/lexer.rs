@@ -1,9 +1,7 @@
-use crate::arena::F64Ptr;
-use crate::arena::TypedArenaPtr;
-
 use crate::arena::*;
 use crate::atom_table::*;
 pub use crate::machine::machine_state::*;
+use crate::offset_table::F64Ptr;
 use crate::parser::ast::*;
 use crate::parser::char_reader::*;
 use crate::parser::dashu::Integer;
@@ -662,15 +660,15 @@ impl<'a, R: CharRead> Lexer<'a, R> {
         }
     }
 
-    fn vacate_with_float(&mut self, mut token: String) -> Result<Token, ParserError> {
+    fn vacate_with_float(&mut self, mut token: String) -> Result<Number, ParserError> {
         self.return_char(token.pop().unwrap());
 
         let n = parse_float_lossy(&token)?;
 
-        Ok(Token::Literal(Literal::from(float_alloc!(
+        Ok(Number::Float(float_alloc!(
             n,
             self.machine_st.arena
-        ))))
+        )))
     }
 
     fn skip_underscore_in_number(&mut self) -> Result<char, ParserError> {
@@ -797,7 +795,8 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                         }
 
                         let n = parse_float_lossy(&token)?;
-                        Ok(Token::Literal(Literal::from(float_alloc!(
+
+                        Ok(NumberToken::Number(Number::Float(float_alloc!(
                             n,
                             self.machine_st.arena
                         ))))
@@ -806,7 +805,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                     }
                 } else {
                     let n = parse_float_lossy(&token)?;
-                    Ok(Token::Literal(Literal::from(float_alloc!(
+                    Ok(NumberToken::Number(Number::Float(float_alloc!(
                         n,
                         self.machine_st.arena
                     ))))
@@ -859,7 +858,7 @@ impl<'a, R: CharRead> Lexer<'a, R> {
                 }
 
                 self.get_single_quoted_char()
-                    .map(|c| NumberToken::Number(Number::Fixnum(Fixnum::build_with(c as i64))))
+                    .map(|c| NumberToken::Number(Number::Fixnum(Fixnum::build_with(c))))
                     .or_else(|err| {
                         match err {
                             ParserError::UnexpectedChar('\'', ..) => {}

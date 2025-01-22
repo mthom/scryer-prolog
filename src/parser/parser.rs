@@ -389,7 +389,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
                         Cell::default(),
                         Box::new(Term::Literal(
                             Cell::default(),
-                            Literal::Fixnum(Fixnum::build_with(c as i64)),
+                            Literal::Fixnum(Fixnum::build_with(c)),
                         )),
                         Box::new(list),
                     );
@@ -963,12 +963,12 @@ impl<'a, R: CharRead> Parser<'a, R> {
             Token::Literal(Literal::Rational(n)) => {
                 self.negate_number(n, negate_rat_rc, |r, _| Literal::Rational(r))
             }
-            Token::Literal(Literal::Float(n)) if n.as_ptr().is_infinite() => {
+	    Token::Literal(Literal::Float(n)) if n.as_ptr().is_infinite() => {
 		return Err(ParserError::InfiniteFloat(
 		    self.lexer.line_num,
 		    self.lexer.col_num,
 		));
-            }
+	    }
             Token::Literal(Literal::Float(n)) => self.negate_number(
                 **n.as_ptr(),
                 |n, _| -n,
