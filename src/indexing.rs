@@ -1104,11 +1104,7 @@ pub(crate) fn constant_key_alternatives(constant: Literal) -> Option<Literal> {
         _ => return None,
     };
 
-    if let Ok(n) = n.try_into() {
-        Fixnum::build_with_checked(n).map(Literal::Fixnum).ok()
-    } else {
-        None
-    }
+    Fixnum::build_with_checked(n).map(Literal::Fixnum).ok()
 }
 
 #[derive(Debug)]
