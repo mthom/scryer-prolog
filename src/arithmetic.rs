@@ -358,9 +358,8 @@ impl<'a> ArithmeticEvaluator<'a> {
 pub(crate) fn rnd_i(n: &'_ Number, arena: &mut Arena) -> Result<Number, EvalError> {
     match n {
         &Number::Integer(i) => {
-            let result = (&*i).try_into();
-            if let Ok(value) = result {
-                Ok(fixnum!(Number, value, arena))
+            if let Ok(value) = Fixnum::build_with_checked(&*i) {
+                Ok(Number::Fixnum(value))
             } else {
                 Ok(*n)
             }
@@ -369,11 +368,14 @@ pub(crate) fn rnd_i(n: &'_ Number, arena: &mut Arena) -> Result<Number, EvalErro
         &Number::Float(f) => {
             let f = f.floor();
 
-            const I64_MIN_TO_F: OrderedFloat<f64> = OrderedFloat(i64::MIN as f64);
-            const I64_MAX_TO_F: OrderedFloat<f64> = OrderedFloat(i64::MAX as f64);
+            const FIXNUM_MIN_TO_F: OrderedFloat<f64> = OrderedFloat(Fixnum::MIN as f64);
+            const FIXNUM_MAX_TO_F: OrderedFloat<f64> = OrderedFloat(Fixnum::MAX as f64);
 
-            if I64_MIN_TO_F <= f && f <= I64_MAX_TO_F {
-                Ok(fixnum!(Number, f.into_inner() as i64, arena))
+            if (FIXNUM_MIN_TO_F..=FIXNUM_MAX_TO_F).contains(&f) {
+                Ok(Number::Fixnum(
+                    // Safety: We checked that the value is in range
+                    unsafe { Fixnum::build_with_unchecked(f.into_inner() as i64) },
+                ))
             } else {
                 Ok(Number::Integer(arena_alloc!(
                     Integer::try_from(classify_float(f.0)?).unwrap_or_else(|_| {
@@ -386,8 +388,8 @@ pub(crate) fn rnd_i(n: &'_ Number, arena: &mut Arena) -> Result<Number, EvalErro
         Number::Rational(ref r) => {
             let floor = r.floor();
 
-            if let Ok(value) = (&floor).try_into() {
-                Ok(fixnum!(Number, value, arena))
+            if let Ok(value) = Fixnum::build_with_checked(&floor) {
+                Ok(Number::Fixnum(value))
             } else {
                 Ok(Number::Integer(arena_alloc!(floor, arena)))
             }

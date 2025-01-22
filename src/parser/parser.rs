@@ -389,7 +389,7 @@ impl<'a, R: CharRead> Parser<'a, R> {
                         Cell::default(),
                         Box::new(Term::Literal(
                             Cell::default(),
-                            Literal::Fixnum(Fixnum::build_with(c as i64)),
+                            Literal::Fixnum(Fixnum::build_with(c)),
                         )),
                         Box::new(list),
                     );
