@@ -612,9 +612,11 @@ impl Fixnum {
     }
 
     #[inline]
-    pub fn build_with_checked(num: i64) -> Result<Self, OutOfBounds> {
-        const UPPER_BOUND: i64 = (1 << 55) - 1;
+    pub fn build_with_checked(num: impl TryInto<i64>) -> Result<Self, OutOfBounds> {
         const LOWER_BOUND: i64 = -(1 << 55);
+        const UPPER_BOUND: i64 = (1 << 55) - 1;
+
+        let num = num.try_into().map_err(|_| OutOfBounds {})?;
 
         if (LOWER_BOUND..=UPPER_BOUND).contains(&num) {
             Ok(Self::build_with_unchecked(num))

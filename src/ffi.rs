@@ -19,12 +19,16 @@ and for each field: we add to the pointer until we're aligned to the next data t
 and finally we add the pointer the size of what we've written.
 */
 
+use crate::arena::Arena;
 use crate::atom_table::Atom;
+use crate::forms::Number;
+use crate::parser::ast::Fixnum;
 
+use dashu::Integer;
+use ordered_float::OrderedFloat;
 use std::alloc::{self, Layout};
 use std::any::Any;
 use std::collections::HashMap;
-use std::convert::TryFrom;
 use std::error::Error;
 use std::ffi::{c_void, CString};
 use std::ptr::addr_of_mut;
@@ -181,8 +185,7 @@ impl ForeignFunctionTable {
             unsafe {
                 macro_rules! push_int {
                     ($type:ty) => {{
-                        let n: $type = <$type>::try_from(args[i].as_int()?)
-                            .map_err(|_| FFIError::ValueDontFit)?;
+                        let n: $type = args[i].as_int()?;
                         let mut box_value = Box::new(n) as Box<dyn Any>;
                         pointers.push(&mut *box_value as *mut _ as *mut c_void);
                         _memory.push(box_value);
@@ -255,8 +258,7 @@ impl ForeignFunctionTable {
                             ($type:ty) => {{
                                 field_ptr = field_ptr
                                     .add(field_ptr.align_offset(std::mem::align_of::<$type>()));
-                                let n: $type = <$type>::try_from(struct_args[i].as_int()?)
-                                    .map_err(|_| FFIError::ValueDontFit)?;
+                                let n: $type = struct_args[i].as_int()?;
                                 std::ptr::write(field_ptr as *mut $type, n);
                                 field_ptr = field_ptr.add(std::mem::size_of::<$type>());
                             }};
@@ -319,7 +321,12 @@ impl ForeignFunctionTable {
         }
     }
 
-    pub fn exec(&mut self, name: &str, mut args: Vec<Value>) -> Result<Value, FFIError> {
+    pub fn exec(
+        &mut self,
+        name: &str,
+        mut args: Vec<Value>,
+        arena: &mut Arena,
+    ) -> Result<Value, FFIError> {
         let function_impl = self.table.get_mut(name).ok_or(FFIError::FunctionNotFound)?;
         let mut pointer_args =
             Self::build_pointer_args(&mut args, &function_impl.args, &mut self.structs)?;
@@ -327,14 +334,14 @@ impl ForeignFunctionTable {
         return unsafe {
             macro_rules! call_and_return {
                 ($type:ty) => {{
-                    let mut n: Box<$type> = Box::new(0);
+                    let mut n: $type = 0;
                     libffi::raw::ffi_call(
                         &mut function_impl.cif,
                         Some(*function_impl.code_ptr.as_safe_fun()),
-                        &mut *n as *mut _ as *mut c_void,
+                        &mut n as *mut _ as *mut c_void,
                         pointer_args.pointers.as_mut_ptr() as *mut *mut c_void,
                     );
-                    Ok(Value::Int(i64::from(*n)))
+                    Ok(Value::Number(fixnum!(Number, n, arena)))
                 }};
             }
 
@@ -346,50 +353,37 @@ impl ForeignFunctionTable {
                 libffi::raw::FFI_TYPE_SINT16 => call_and_return!(i16),
                 libffi::raw::FFI_TYPE_UINT32 => call_and_return!(u32),
                 libffi::raw::FFI_TYPE_SINT32 => call_and_return!(i32),
-                libffi::raw::FFI_TYPE_UINT64 => {
-                    let mut n: Box<u64> = Box::new(0);
-                    libffi::raw::ffi_call(
-                        &mut function_impl.cif,
-                        Some(*function_impl.code_ptr.as_safe_fun()),
-                        &mut *n as *mut _ as *mut c_void,
-                        pointer_args.pointers.as_mut_ptr(),
-                    );
-                    Ok(Value::Int(
-                        i64::try_from(*n).map_err(|_| FFIError::ValueDontFit)?,
-                    ))
-                }
+                libffi::raw::FFI_TYPE_UINT64 => call_and_return!(u64),
                 libffi::raw::FFI_TYPE_SINT64 => call_and_return!(i64),
                 libffi::raw::FFI_TYPE_POINTER => {
-                    let mut n: Box<*mut c_void> = Box::new(std::ptr::null_mut());
+                    let mut n: *mut c_void = std::ptr::null_mut();
                     libffi::raw::ffi_call(
                         &mut function_impl.cif,
                         Some(*function_impl.code_ptr.as_safe_fun()),
-                        &mut *n as *mut _ as *mut c_void,
+                        &mut n as *mut _ as *mut c_void,
                         pointer_args.pointers.as_mut_ptr() as *mut *mut c_void,
                     );
-                    Ok(Value::Int(
-                        i64::try_from(*n as isize).map_err(|_| FFIError::ValueDontFit)?,
-                    ))
+                    Ok(Value::Number(fixnum!(Number, n as isize, arena)))
                 }
                 libffi::raw::FFI_TYPE_FLOAT => {
-                    let mut n: Box<f32> = Box::new(0.0);
+                    let mut n: f32 = 0.0;
                     libffi::raw::ffi_call(
                         &mut function_impl.cif,
                         Some(*function_impl.code_ptr.as_safe_fun()),
-                        &mut *n as *mut _ as *mut c_void,
+                        &mut n as *mut _ as *mut c_void,
                         pointer_args.pointers.as_mut_ptr(),
                     );
-                    Ok(Value::Float((*n).into()))
+                    Ok(Value::Number(Number::Float(OrderedFloat(n.into()))))
                 }
                 libffi::raw::FFI_TYPE_DOUBLE => {
-                    let mut n: Box<f64> = Box::new(0.0);
+                    let mut n: f64 = 0.0;
                     libffi::raw::ffi_call(
                         &mut function_impl.cif,
                         Some(*function_impl.code_ptr.as_safe_fun()),
-                        &mut *n as *mut _ as *mut c_void,
+                        &mut n as *mut _ as *mut c_void,
                         pointer_args.pointers.as_mut_ptr(),
                     );
-                    Ok(Value::Float(*n))
+                    Ok(Value::Number(Number::Float(OrderedFloat(n))))
                 }
                 libffi::raw::FFI_TYPE_STRUCT => {
                     let name = &function_impl
@@ -414,7 +408,7 @@ impl ForeignFunctionTable {
                         &mut *ptr as *mut _,
                         pointer_args.pointers.as_mut_ptr(),
                     );
-                    let struct_val = self.read_struct(ptr, name, struct_type);
+                    let struct_val = self.read_struct(ptr, name, struct_type, arena);
                     #[allow(clippy::from_raw_with_void_ptr)]
                     drop(Box::from_raw(ptr));
                     struct_val
@@ -429,6 +423,7 @@ impl ForeignFunctionTable {
         ptr: *mut c_void,
         name: &str,
         struct_type: &StructImpl,
+        arena: &mut Arena,
     ) -> Result<Value, FFIError> {
         unsafe {
             let mut returns = Vec::new();
@@ -442,7 +437,7 @@ impl ForeignFunctionTable {
                         field_ptr =
                             field_ptr.add(field_ptr.align_offset(std::mem::align_of::<$type>()));
                         let n = std::ptr::read(field_ptr as *mut $type);
-                        returns.push(Value::Int(i64::from(n)));
+                        returns.push(Value::Number(fixnum!(Number, n, arena)));
                         field_ptr = field_ptr.add(std::mem::size_of::<$type>());
                     }};
                 }
@@ -454,29 +449,21 @@ impl ForeignFunctionTable {
                     libffi::raw::FFI_TYPE_SINT16 => read_and_push_int!(i16),
                     libffi::raw::FFI_TYPE_UINT32 => read_and_push_int!(u32),
                     libffi::raw::FFI_TYPE_SINT32 => read_and_push_int!(i32),
-                    libffi::raw::FFI_TYPE_UINT64 => {
-                        field_ptr =
-                            field_ptr.add(field_ptr.align_offset(std::mem::align_of::<u64>()));
-                        let n = std::ptr::read(field_ptr as *mut u64);
-                        returns.push(Value::Int(
-                            i64::try_from(n).map_err(|_| FFIError::ValueDontFit)?,
-                        ));
-                        field_ptr = field_ptr.add(std::mem::size_of::<u64>());
-                    }
+                    libffi::raw::FFI_TYPE_UINT64 => read_and_push_int!(u64),
                     libffi::raw::FFI_TYPE_SINT64 => read_and_push_int!(i64),
                     libffi::raw::FFI_TYPE_POINTER => read_and_push_int!(i64),
                     libffi::raw::FFI_TYPE_FLOAT => {
                         field_ptr =
                             field_ptr.add(field_ptr.align_offset(std::mem::align_of::<f32>()));
                         let n: f32 = std::ptr::read(field_ptr as *mut f32);
-                        returns.push(Value::Float(n.into()));
+                        returns.push(Value::Number(Number::Float(OrderedFloat(n.into()))));
                         field_ptr = field_ptr.add(std::mem::size_of::<f32>());
                     }
                     libffi::raw::FFI_TYPE_DOUBLE => {
                         field_ptr =
                             field_ptr.add(field_ptr.align_offset(std::mem::align_of::<f64>()));
                         let n: f64 = std::ptr::read(field_ptr as *mut f64);
-                        returns.push(Value::Float(n));
+                        returns.push(Value::Number(Number::Float(OrderedFloat(n))));
                         field_ptr = field_ptr.add(std::mem::size_of::<f64>());
                     }
                     libffi::raw::FFI_TYPE_STRUCT => {
@@ -487,7 +474,8 @@ impl ForeignFunctionTable {
                             .ok_or(FFIError::StructNotFound)?;
                         field_ptr = field_ptr
                             .add(field_ptr.align_offset(struct_type.ffi_type.alignment as usize));
-                        let struct_val = self.read_struct(field_ptr, &substruct, struct_type);
+                        let struct_val =
+                            self.read_struct(field_ptr, &substruct, struct_type, arena);
                         returns.push(struct_val?);
                         field_ptr = field_ptr.add(struct_type.ffi_type.size);
                     }
@@ -503,24 +491,33 @@ impl ForeignFunctionTable {
 
 #[derive(Clone, Debug)]
 pub enum Value {
-    Int(i64),
-    Float(f64),
+    Number(Number),
     CString(CString),
     Struct(String, Vec<Value>),
 }
 
 impl Value {
-    fn as_int(&self) -> Result<i64, FFIError> {
+    fn as_int<I>(&self) -> Result<I, FFIError>
+    where
+        Integer: TryInto<I>,
+        i64: TryInto<I>,
+    {
         match self {
-            Value::Int(n) => Ok(*n),
+            Value::Number(Number::Integer(ibig_ptr)) => {
+                let ibig: &Integer = &*ibig_ptr;
+                ibig.clone().try_into().map_err(|_| FFIError::ValueDontFit)
+            }
+            Value::Number(Number::Fixnum(fixnum)) => fixnum
+                .get_num()
+                .try_into()
+                .map_err(|_| FFIError::ValueDontFit),
             _ => Err(FFIError::ValueCast),
         }
     }
 
     fn as_float(&self) -> Result<f64, FFIError> {
         match self {
-            Value::Float(n) => Ok(*n),
-            Value::Int(n) => Ok(*n as f64),
+            &Value::Number(Number::Float(OrderedFloat(f))) => Ok(f),
             _ => Err(FFIError::ValueCast),
         }
     }
@@ -528,7 +525,7 @@ impl Value {
     fn as_ptr(&mut self) -> Result<*mut c_void, FFIError> {
         match self {
             Value::CString(ref mut cstr) => Ok(&mut *cstr as *mut _ as *mut c_void),
-            Value::Int(n) => Ok(*n as *mut c_void),
+            Value::Number(Number::Fixnum(fixnum)) => Ok(fixnum.get_num() as *mut c_void),
             _ => Err(FFIError::ValueCast),
         }
     }

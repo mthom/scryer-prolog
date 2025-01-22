@@ -1146,36 +1146,28 @@ mod tests {
             None => unreachable!(),
         }
 
-        if Fixnum::build_with_checked(1 << 56).is_ok() {
-            unreachable!()
-        }
+        Fixnum::build_with_checked(1i64 << 56).unwrap_err();
 
-        if Fixnum::build_with_checked(i64::MAX).is_ok() {
-            unreachable!()
-        }
+        Fixnum::build_with_checked(i64::MAX).unwrap_err();
 
-        if Fixnum::build_with_checked(i64::MIN).is_ok() {
-            unreachable!()
-        }
+        Fixnum::build_with_checked(i64::MIN).unwrap_err();
 
         match Fixnum::build_with_checked(-1) {
             Ok(n) => assert_eq!(n.get_num(), -1),
             _ => unreachable!(),
         }
 
-        match Fixnum::build_with_checked((1 << 55) - 1) {
+        match Fixnum::build_with_checked((1i64 << 55) - 1) {
             Ok(n) => assert_eq!(n.get_num(), (1 << 55) - 1),
             _ => unreachable!(),
         }
 
-        match Fixnum::build_with_checked(-(1 << 55)) {
+        match Fixnum::build_with_checked(-(1i64 << 55)) {
             Ok(n) => assert_eq!(n.get_num(), -(1 << 55)),
             _ => unreachable!(),
         }
 
-        if Fixnum::build_with_checked(-(1 << 55) - 1).is_ok() {
-            unreachable!()
-        }
+        Fixnum::build_with_checked(-(1i64 << 55) - 1).unwrap_err();
 
         match Fixnum::build_with_checked(-1) {
             Ok(n) => assert_eq!(-n, Fixnum::build_with(1)),

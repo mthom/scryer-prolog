@@ -7,6 +7,7 @@ use crate::machine::machine_state::*;
 use crate::machine::*;
 use crate::types::*;
 
+use dashu::integer::IBig;
 use fxhash::FxBuildHasher;
 
 macro_rules! step_or_fail {
@@ -267,14 +268,10 @@ impl MachineState {
                         Literal::Rational(r)
                     }
                     (ArenaHeaderTag::Integer, n) => {
-                        let result = (&*n).try_into();
+                        let result : &IBig = &*n;
 
-                        match result {
-                            Ok(fixnum) => if let Ok(n) = Fixnum::build_with_checked(fixnum) {
-                                Literal::Fixnum(n)
-                            } else {
-                                Literal::Integer(n)
-                            },
+                        match Fixnum::build_with_checked(result) {
+                            Ok(fixnum) => Literal::Fixnum(fixnum),
                             Err(_) => Literal::Integer(n)
                         }
                     }

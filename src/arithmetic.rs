@@ -17,6 +17,7 @@ use crate::machine::machine_errors::*;
 
 use dashu::base::Abs;
 use dashu::base::BitTest;
+use dashu::integer::IBig;
 use num_order::NumOrd;
 use ordered_float::{Float, OrderedFloat};
 
@@ -357,9 +358,9 @@ impl<'a> ArithmeticEvaluator<'a> {
 pub(crate) fn rnd_i(n: &'_ Number, arena: &mut Arena) -> Result<Number, EvalError> {
     match n {
         &Number::Integer(i) => {
-            let result = (&*i).try_into();
-            if let Ok(value) = result {
-                Ok(fixnum!(Number, value, arena))
+            let i: &IBig = &i;
+            if let Ok(value) = Fixnum::build_with_checked(i) {
+                Ok(Number::Fixnum(value))
             } else {
                 Ok(*n)
             }
@@ -385,8 +386,8 @@ pub(crate) fn rnd_i(n: &'_ Number, arena: &mut Arena) -> Result<Number, EvalErro
         Number::Rational(ref r) => {
             let floor = r.floor();
 
-            if let Ok(value) = (&floor).try_into() {
-                Ok(fixnum!(Number, value, arena))
+            if let Ok(value) = Fixnum::build_with_checked(&floor) {
+                Ok(Number::Fixnum(value))
             } else {
                 Ok(Number::Integer(arena_alloc!(floor, arena)))
             }

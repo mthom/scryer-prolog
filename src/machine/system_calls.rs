@@ -4836,8 +4836,6 @@ impl Machine {
     #[cfg(feature = "ffi")]
     #[inline(always)]
     pub(crate) fn foreign_call(&mut self) -> CallResult {
-        use dashu::integer::IBig;
-
         let function_name = self.deref_register(1);
         let args_reg = self.deref_register(2);
         let return_value = self.deref_register(3);
@@ -4845,8 +4843,7 @@ impl Machine {
             let stub_gen = || functor_stub(atom!("foreign_call"), 3);
             fn map_arg(machine_st: &mut MachineState, source: HeapCellValue) -> crate::ffi::Value {
                 match Number::try_from(source) {
-                    Ok(Number::Fixnum(n)) => Value::Int(n.get_num()),
-                    Ok(Number::Float(n)) => Value::Float(n.into_inner()),
+                    Ok(number) => Value::Number(number),
                     _ => {
                         let stub_gen = || functor_stub(atom!("foreign_call"), 3);
                         if let Some(string) = machine_st.value_to_str_like(source) {
@@ -4881,28 +4878,29 @@ impl Machine {
                         .into_iter()
                         .map(|x| map_arg(&mut self.machine_st, x))
                         .collect();
-                    match self
-                        .foreign_function_table
-                        .exec(&function_name.as_str(), args)
-                    {
+                    match self.foreign_function_table.exec(
+                        &function_name.as_str(),
+                        args,
+                        &mut self.machine_st.arena,
+                    ) {
                         Ok(result) => {
                             match result {
-                                Value::Int(n) => {
-                                    if let Ok(fixnum) = Fixnum::build_with_checked(n) {
-                                        self.machine_st.unify_fixnum(fixnum, return_value)
-                                    } else {
-                                        let bigint = IBig::from(n);
-                                        let bigint = arena_alloc!(
-                                            bigint.clone(),
-                                            &mut self.machine_st.arena
-                                        );
-                                        self.machine_st.unify_big_int(bigint, return_value)
+                                Value::Number(n) => match n {
+                                    Number::Float(OrderedFloat(n)) => {
+                                        let n = float_alloc!(n, self.machine_st.arena);
+                                        self.machine_st.unify_f64(n, return_value)
                                     }
-                                }
-                                Value::Float(n) => {
-                                    let n = float_alloc!(n, self.machine_st.arena);
-                                    self.machine_st.unify_f64(n, return_value)
-                                }
+                                    Number::Integer(typed_arena_ptr) => {
+                                        self.machine_st.unify_big_int(typed_arena_ptr, return_value)
+                                    }
+                                    Number::Rational(typed_arena_ptr) => {
+                                        self.machine_st
+                                            .unify_rational(typed_arena_ptr, return_value);
+                                    }
+                                    Number::Fixnum(fixnum) => {
+                                        self.machine_st.unify_fixnum(fixnum, return_value)
+                                    }
+                                },
                                 Value::Struct(name, args) => {
                                     let struct_value = self.build_struct(&name, args);
                                     unify!(self.machine_st, return_value, struct_value);
@@ -4938,17 +4936,12 @@ impl Machine {
         let cells: Vec<_> = args
             .into_iter()
             .map(|val| match val {
-                Value::Int(n) => {
-                    if let Ok(fixnum) = Fixnum::build_with_checked(n) {
-                        fixnum_as_cell!(fixnum)
-                    } else {
-                        integer_as_cell!(Number::Integer(arena_alloc!(
-                            Integer::from(n),
-                            &mut self.machine_st.arena
-                        )))
+                Value::Number(n) => match n {
+                    Number::Float(OrderedFloat(f)) => {
+                        HeapCellValue::from(float_alloc!(f, self.machine_st.arena))
                     }
-                }
-                Value::Float(n) => HeapCellValue::from(float_alloc!(n, self.machine_st.arena)),
+                    _ => integer_as_cell!(n),
+                },
                 Value::CString(cstr) => atom_as_cell!(AtomTable::build_with(
                     &self.machine_st.atom_tbl,
                     &cstr.into_string().unwrap()
@@ -5882,11 +5875,7 @@ impl Machine {
 
         let block = cell_as_fixnum!(a1).get_num() as usize;
         let count = self.machine_st.cwil.remove_limit(block).clone();
-        let result = count
-            .clone()
-            .try_into()
-            .ok()
-            .and_then(|i| Fixnum::build_with_checked(i).ok());
+        let result = Fixnum::build_with_checked(&count).ok();
 
         if let Some(value) = result {
             self.machine_st.unify_fixnum(value, a2);
