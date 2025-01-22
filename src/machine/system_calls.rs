@@ -5002,6 +5002,8 @@ impl Machine {
     #[cfg(feature = "ffi")]
     #[inline(always)]
     pub(crate) fn foreign_call(&mut self) -> CallResult {
+        use dashu::integer::IBig;
+
         let function_name = self.deref_register(1);
         let args_reg = self.deref_register(2);
         let return_value = self.deref_register(3);
@@ -5051,12 +5053,18 @@ impl Machine {
                     {
                         Ok(result) => {
                             match result {
-                                Value::Int(n) => self.machine_st.unify_fixnum(
-                                    Fixnum::build_with_checked(n).unwrap_or_else(|_| {
-                                        todo!("handle integer values that don't fit in fixnum")
-                                    }),
-                                    return_value,
-                                ),
+                                Value::Int(n) => {
+                                    if let Ok(fixnum) = Fixnum::build_with_checked(n) {
+                                        self.machine_st.unify_fixnum(fixnum, return_value)
+                                    } else {
+                                        let bigint = IBig::from(n);
+                                        let bigint = arena_alloc!(
+                                            bigint.clone(),
+                                            &mut self.machine_st.arena
+                                        );
+                                        self.machine_st.unify_big_int(bigint, return_value)
+                                    }
+                                }
                                 Value::Float(n) => {
                                     let n = float_alloc!(n, self.machine_st.arena);
                                     self.machine_st.unify_f64(n, return_value)
