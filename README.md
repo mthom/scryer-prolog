@@ -125,9 +125,14 @@ Rust updated to the latest stable release; any existing Rust
 distribution should be uninstalled from your system before rustup is
 used.
 
+The minimum rust toolchain version required can be found in the [Cargo.toml](https://github.com/mthom/scryer-prolog/blob/master/Cargo.toml#L13)
+under the `package.rust-version` key.
+
 Currently the only way to install the latest version of Scryer is to
 clone directly from this git repository, and compile the system. This
 can be done as follows:
+
+### From a local git checkout
 
 ```
 $> git clone https://github.com/mthom/scryer-prolog
@@ -141,6 +146,32 @@ faster executable.
 After compilation, the executable `scryer-prolog` is available in the
 directory&nbsp;`target/release` and can be invoked to run the system.
 
+### Via `cargo install`
+
+#### From git
+
+```
+cargo install --locked --git https://github.com/mthom/scryer-prolog.git
+```
+
+Afterwards the binary will be under `$HOME/.cargo/bin` which is usually added to your PATH 
+during the installation of the rust toolchain.
+
+#### From Crates.io [![Crates.io Version](https://img.shields.io/crates/v/scryer-prolog)](https://crates.io/crates/scryer-prolog) ![Crates.io MSRV](https://img.shields.io/crates/msrv/scryer-prolog)
+
+> [!NOTE]
+> The lates crates.io release can be significantly behind the version available in the git repository
+> The crates.io badge in this sections title is a link to the crates.io page.
+> The msrv badge in the section title referece to the minimum rust toolchain version required to compile the latest crates.io release
+
+`scryer-prolog` is also release on crates.io and can be installed with
+
+```
+cargo install --locked scryer-prolog
+```
+
+### Caveates for Windows
+
 On Windows, Scryer Prolog is easier to build inside a [MSYS2](https://www.msys2.org/)
 environment as some crates may require native C compilation. However,
 the resulting binary does not need MSYS2 to run. When executing Scryer in a shell, it is recommended to use a more advanced shell than mintty (the default MSYS2 shell). The [Windows Terminal](https://github.com/microsoft/terminal) works correctly.
@@ -151,8 +182,6 @@ candle.exe scryer-prolog.wxs
 light.exe scryer-prolog.wixobj
 ```
 It will generate a very basic MSI file which installs the main executable and a shortcut in the Start Menu. It can be installed with a double-click. To uninstall, go to the Control Panel and uninstall as usual.
-
-Scryer Prolog must be built with **Rust 1.70 and up**.
 
 ### Building WebAssembly
 
