@@ -117,7 +117,7 @@ at:
 ### Native Compilation
 
 First, install the latest stable version of
-[Rust](https://www.rust-lang.org/en-US/install.html) using your
+[Rust](https://www.rust-lang.org/tools/install) using your
 preferred method. Scryer tends to use features from newer Rust
 releases, whereas Rust packages in Linux distributions, Macports,
 etc. tend to lag behind. [rustup](http://rustup.rs) will keep your
