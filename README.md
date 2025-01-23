@@ -153,7 +153,7 @@ directory&nbsp;`target/release` and can be invoked to run the system.
 cargo install --locked --git https://github.com/mthom/scryer-prolog.git
 ```
 
-Afterwards the binary will be under `$HOME/.cargo/bin` which is usually added to your PATH 
+Afterwards the `scryer-prolog` binary will be in the `$HOME/.cargo/bin` directory which is usually added to your PATH 
 during the installation of the rust toolchain.
 
 #### From Crates.io [![Crates.io Version](https://img.shields.io/crates/v/scryer-prolog)](https://crates.io/crates/scryer-prolog) ![Crates.io MSRV](https://img.shields.io/crates/msrv/scryer-prolog)
