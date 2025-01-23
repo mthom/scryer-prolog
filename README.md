@@ -125,12 +125,11 @@ Rust updated to the latest stable release; any existing Rust
 distribution should be uninstalled from your system before rustup is
 used.
 
-The minimum rust toolchain version required can be found in the [Cargo.toml](https://github.com/mthom/scryer-prolog/blob/master/Cargo.toml#L13)
-under the `package.rust-version` key.
 
-Currently the only way to install the latest version of Scryer is to
-clone directly from this git repository, and compile the system. This
-can be done as follows:
+> [!NOTE]
+> The minimum rust toolchain version required can be found in the [Cargo.toml](https://github.com/mthom/scryer-prolog/blob/master/Cargo.toml#L13)
+under the `package.rust-version` key.
+> The acurracy of this values is validated in CI
 
 ### From a local git checkout
 
