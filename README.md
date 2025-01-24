@@ -169,7 +169,7 @@ during the installation of the rust toolchain.
 cargo install --locked scryer-prolog
 ```
 
-### Caveates for Windows
+### Caveats for Windows
 
 On Windows, Scryer Prolog is easier to build inside a [MSYS2](https://www.msys2.org/)
 environment as some crates may require native C compilation. However,
