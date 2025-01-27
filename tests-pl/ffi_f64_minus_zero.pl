@@ -2,7 +2,9 @@
 :- use_module(library(ffi)).
 
 test :- 
-    getenv("ffi_f64_minus_zero_LIB", LIB),    
+    read(Body),
+    term_variables(Body, [LIB]),
+    Body,
     use_foreign_module(LIB, ['ffi_f64_minus_zero'([], f64), 'signum'([f64], f64)]),
     ffi:'ffi_f64_minus_zero'(N),
     A is max(0.0, N),
