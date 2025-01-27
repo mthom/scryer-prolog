@@ -78,7 +78,7 @@ impl OutputStreamConfig {
 
 #[derive(Debug)]
 enum InputStreamConfigInner {
-    String(String),
+    String(Cow<'static, str>),
     Stdin,
     Channel(Receiver<Vec<u8>>),
 }
@@ -97,7 +97,7 @@ pub struct InputStreamConfig {
 
 impl InputStreamConfig {
     /// Gets input from string.
-    pub fn string(s: impl Into<String>) -> Self {
+    pub fn string(s: impl Into<Cow<'static, str>>) -> Self {
         Self {
             inner: InputStreamConfigInner::String(s.into()),
         }
@@ -123,7 +123,10 @@ impl InputStreamConfig {
 
     fn into_stream(self, arena: &mut Arena, add_history: bool) -> Stream {
         match self.inner {
-            InputStreamConfigInner::String(s) => Stream::from_owned_string(s, arena),
+            InputStreamConfigInner::String(s) => match s {
+                Cow::Owned(s) => Stream::from_owned_string(s, arena),
+                Cow::Borrowed(s) => Stream::from_static_string(s, arena),
+            },
             InputStreamConfigInner::Stdin => Stream::stdin(arena, add_history),
             InputStreamConfigInner::Channel(channel) => Stream::input_channel(channel, arena),
         }
