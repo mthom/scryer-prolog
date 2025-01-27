@@ -1078,7 +1078,7 @@ mod test {
         assert_eq!(wam.machine_st.heap[5], pstr_offset_as_cell!(4));
         assert_eq!(
             wam.machine_st.heap[6],
-            fixnum_as_cell!(Fixnum::build_with("abc".len() as i64))
+            fixnum_as_cell!(Fixnum::build_with_unchecked("abc".len() as i64))
         );
 
         // test iteration on X = [b,c,b,c,b,c,b,c|...] as an offset.

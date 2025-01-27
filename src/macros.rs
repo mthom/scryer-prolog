@@ -499,7 +499,7 @@ macro_rules! functor_term {
         HeapCellValue::arena_from(Number::arena_from($e, $arena), $arena)
     );
     (fixnum($e:expr), $arity:expr, $aux_lens:expr, $addendum:ident) => (
-        fixnum_as_cell!(Fixnum::build_with($e as i64))
+        fixnum_as_cell!(Fixnum::build_with_unchecked($e as i64))
     );
     (indexing_code_ptr($h:expr, $e:expr), $arity:expr, $aux_lens:expr, $addendum:ident) => ({
         let stub =

@@ -1452,7 +1452,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
             self.state_stack.push(TokenOrRedirect::NumberFocus(
                 max_depth,
-                NumberFocus::Unfocused(Number::Fixnum(Fixnum::build_with(port as i64))),
+                NumberFocus::Unfocused(Number::Fixnum(Fixnum::build_with(port))),
                 None,
             ));
             self.state_stack.push(TokenOrRedirect::Comma);
@@ -1477,7 +1477,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
                 TokenOrRedirect::NumberFocus(
                     max_depth,
-                    NumberFocus::Unfocused(Number::Fixnum(Fixnum::build_with(idx))),
+                    NumberFocus::Unfocused(Number::Fixnum(Fixnum::build_with_unchecked(idx))),
                     None,
                 )
             };

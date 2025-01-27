@@ -381,7 +381,7 @@ impl MachineState {
                             let h_len = self.heap.len();
 
                             self.heap.push(pstr_offset_as_cell!(h));
-                            self.heap.push(fixnum_as_cell!(Fixnum::build_with(*n as i64)));
+                            self.heap.push(fixnum_as_cell!(Fixnum::build_with_unchecked(*n as i64)));
 
                             pstr_loc_as_cell!(h_len)
                         } else {
@@ -403,7 +403,7 @@ impl MachineState {
                             let h_len = self.heap.len();
 
                             self.heap.push(pstr_offset_as_cell!(h));
-                            self.heap.push(fixnum_as_cell!(Fixnum::build_with(*n as i64)));
+                            self.heap.push(fixnum_as_cell!(Fixnum::build_with_unchecked(*n as i64)));
 
                             pstr_loc_as_cell!(h_len)
                         } else {
@@ -1211,13 +1211,13 @@ impl MachineState {
                                 if n == 1 {
                                     self.unify_char(c, a3);
                                 } else {
-                                    let offset = (offset + c.len_utf8()) as i64;
+                                    let offset = offset + c.len_utf8() ;
                                     let h_len = self.heap.len();
                                     let pstr_atom: Atom = pstr.into();
 
-                                    if pstr_atom.len() > offset as usize {
+                                    if pstr_atom.len() > offset {
                                         self.heap.push(pstr_offset_as_cell!(h));
-                                        self.heap.push(fixnum_as_cell!(Fixnum::build_with(offset)));
+                                        self.heap.push(fixnum_as_cell!(Fixnum::build_with_unchecked(offset as i64)));
 
                                         unify_fn!(*self, pstr_loc_as_cell!(h_len), a3);
                                     } else {
@@ -1248,13 +1248,13 @@ impl MachineState {
                             if n == 1 {
                                 self.unify_char(c, self.store(self.deref(self.registers[3])));
                             } else if n == 2 {
-                                let offset = c.len_utf8() as i64;
+                                let offset = c.len_utf8();
                                 let h_len = self.heap.len();
 
-                                if cstr_atom.len() > offset as usize {
+                                if cstr_atom.len() > offset{
                                     self.heap.push(atom_as_cstr_cell!(cstr_atom));
                                     self.heap.push(pstr_offset_as_cell!(h_len));
-                                    self.heap.push(fixnum_as_cell!(Fixnum::build_with(offset)));
+                                    self.heap.push(fixnum_as_cell!(Fixnum::build_with_unchecked(offset as i64)));
 
                                     unify_fn!(*self, pstr_loc_as_cell!(h_len+1), self.registers[3]);
                                 } else {
@@ -1301,7 +1301,7 @@ impl MachineState {
 
         if !self.fail {
             let a3 = self.store(self.deref(self.registers[3]));
-            self.unify_fixnum(Fixnum::build_with(arity as i64), a3);
+            self.unify_fixnum(Fixnum::build_with_unchecked(arity as i64), a3);
         }
     }
 

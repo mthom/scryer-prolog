@@ -2,7 +2,7 @@ use std::borrow::Cow;
 
 use rand::{rngs::StdRng, SeedableRng};
 
-use crate::Machine;
+use crate::{arena::Arena, Machine};
 
 use super::{
     bootstrapping_compile, current_dir, import_builtin_impls, libraries, load_module, Atom,
@@ -10,16 +10,19 @@ use super::{
 };
 
 /// Describes how the streams of a [`Machine`](crate::Machine) will be handled.
-#[derive(Default)]
 pub struct StreamConfig {
-    inner: StreamConfigInner,
+    input: StreamInputConfigInner,
+    output: StreamOutputConfigInner,
+    error: StreamOutputConfigInner,
 }
 
 impl StreamConfig {
     /// Binds the input, output and error streams to stdin, stdout and stderr.
     pub fn stdio() -> Self {
         StreamConfig {
-            inner: StreamConfigInner::Stdio,
+            input: StreamInputConfigInner::StdIn,
+            output: StreamOutputConfigInner::StdOut,
+            error: StreamOutputConfigInner::StdErr,
         }
     }
 
@@ -28,14 +31,51 @@ impl StreamConfig {
     /// The input stream is ignored.
     pub fn in_memory() -> Self {
         StreamConfig {
-            inner: StreamConfigInner::Memory,
+            input: StreamInputConfigInner::Empty,
+            output: StreamOutputConfigInner::Memory,
+            error: StreamOutputConfigInner::StdErr,
+        }
+    }
+
+    /// Binds the output stream to null, and the error stream to stderr.
+    ///
+    /// The input stream is ignored.
+    pub fn null() -> Self {
+        StreamConfig {
+            input: StreamInputConfigInner::Empty,
+            output: StreamOutputConfigInner::Null,
+            error: StreamOutputConfigInner::StdErr,
+        }
+    }
+
+    /// Use the provided String for stdin.
+    pub fn with_input(self, input: impl Into<Cow<'static, str>>) -> Self {
+        Self {
+            input: StreamInputConfigInner::Memory(input.into()),
+            ..self
         }
     }
 }
 
+impl Default for StreamConfig {
+    fn default() -> Self {
+        Self::in_memory()
+    }
+}
+
 #[derive(Default)]
-enum StreamConfigInner {
-    Stdio,
+enum StreamInputConfigInner {
+    StdIn,
+    #[default]
+    Empty,
+    Memory(Cow<'static, str>),
+}
+
+#[derive(Default)]
+enum StreamOutputConfigInner {
+    StdErr,
+    StdOut,
+    Null,
     #[default]
     Memory,
 }
@@ -79,18 +119,26 @@ impl MachineBuilder {
         let args = MachineArgs::new();
         let mut machine_st = MachineState::new();
 
-        let (user_input, user_output, user_error) = match self.streams.inner {
-            StreamConfigInner::Stdio => (
-                Stream::stdin(&mut machine_st.arena, args.add_history),
-                Stream::stdout(&mut machine_st.arena),
-                Stream::stderr(&mut machine_st.arena),
-            ),
-            StreamConfigInner::Memory => (
-                Stream::Null(StreamOptions::default()),
-                Stream::from_owned_string("".to_owned(), &mut machine_st.arena),
-                Stream::stderr(&mut machine_st.arena),
-            ),
+        let user_input = match self.streams.input {
+            StreamInputConfigInner::Memory(initial) => match initial {
+                Cow::Borrowed(str) => Stream::from_static_string(str, &mut machine_st.arena),
+                Cow::Owned(str) => Stream::from_owned_string(str, &mut machine_st.arena),
+            },
+            StreamInputConfigInner::StdIn => Stream::stdin(&mut machine_st.arena, args.add_history),
+            StreamInputConfigInner::Empty => Stream::Null(StreamOptions::default()),
         };
+
+        fn out_stream(config: StreamOutputConfigInner, arena: &mut Arena) -> Stream {
+            match config {
+                StreamOutputConfigInner::Memory => Stream::from_owned_string("".to_owned(), arena),
+                StreamOutputConfigInner::StdOut => Stream::stdout(arena),
+                StreamOutputConfigInner::StdErr => Stream::stderr(arena),
+                StreamOutputConfigInner::Null => Stream::Null(StreamOptions::default()),
+            }
+        }
+
+        let user_output = out_stream(self.streams.output, &mut machine_st.arena);
+        let user_error = out_stream(self.streams.error, &mut machine_st.arena);
 
         let mut wam = Machine {
             machine_st,

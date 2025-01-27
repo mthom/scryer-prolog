@@ -999,7 +999,7 @@ mod tests {
         wam.machine_st.heap.push(pstr_offset_as_cell!(0));
         wam.machine_st
             .heap
-            .push(fixnum_as_cell!(Fixnum::build_with(0i64)));
+            .push(fixnum_as_cell!(Fixnum::build_with(0)));
 
         wam.machine_st.heap.push(pstr_loc_as_cell!(0));
 
@@ -1025,7 +1025,7 @@ mod tests {
 
         all_cells_unmarked(&wam.machine_st.heap);
 
-        wam.machine_st.heap[5] = fixnum_as_cell!(Fixnum::build_with(1i64));
+        wam.machine_st.heap[5] = fixnum_as_cell!(Fixnum::build_with(1));
 
         {
             let mut iter = stackless_preorder_iter(&mut wam.machine_st.heap, 6);
@@ -1055,7 +1055,7 @@ mod tests {
         assert_eq!(wam.machine_st.heap[4], pstr_offset_as_cell!(0));
         assert_eq!(
             wam.machine_st.heap[5],
-            fixnum_as_cell!(Fixnum::build_with(1i64))
+            fixnum_as_cell!(Fixnum::build_with(1))
         );
 
         all_cells_unmarked(&wam.machine_st.heap);
@@ -2046,7 +2046,7 @@ mod tests {
         wam.machine_st.heap.push(pstr_offset_as_cell!(0));
         wam.machine_st
             .heap
-            .push(fixnum_as_cell!(Fixnum::build_with(0i64)));
+            .push(fixnum_as_cell!(Fixnum::build_with(0)));
 
         {
             let mut iter = stackful_preorder_iter::<NonListElider>(
@@ -2062,10 +2062,7 @@ mod tests {
             assert_eq!(unmark_cell_bits!(iter.next().unwrap()), pstr_cell);
             assert_eq!(unmark_cell_bits!(iter.next().unwrap()), pstr_second_cell);
             assert_eq!(unmark_cell_bits!(iter.next().unwrap()), pstr_offset_cell);
-            assert_eq!(
-                iter.next().unwrap(),
-                fixnum_as_cell!(Fixnum::build_with(0i64))
-            );
+            assert_eq!(iter.next().unwrap(), fixnum_as_cell!(Fixnum::build_with(0)));
 
             assert_eq!(iter.next(), None);
         }
@@ -2081,7 +2078,7 @@ mod tests {
         wam.machine_st.heap.pop();
         wam.machine_st
             .heap
-            .push(fixnum_as_cell!(Fixnum::build_with(1i64)));
+            .push(fixnum_as_cell!(Fixnum::build_with(1)));
 
         {
             let mut iter = stackful_preorder_iter::<NonListElider>(
@@ -2098,10 +2095,7 @@ mod tests {
             assert_eq!(unmark_cell_bits!(iter.next().unwrap()), pstr_second_cell);
 
             assert_eq!(unmark_cell_bits!(iter.next().unwrap()), pstr_offset_cell);
-            assert_eq!(
-                iter.next().unwrap(),
-                fixnum_as_cell!(Fixnum::build_with(1i64))
-            );
+            assert_eq!(iter.next().unwrap(), fixnum_as_cell!(Fixnum::build_with(1)));
 
             let h = iter.focus();
 
@@ -2109,7 +2103,7 @@ mod tests {
             assert_eq!(unmark_cell_bits!(iter.heap[4]), pstr_offset_as_cell!(0));
             assert_eq!(
                 unmark_cell_bits!(iter.heap[5]),
-                fixnum_as_cell!(Fixnum::build_with(1i64))
+                fixnum_as_cell!(Fixnum::build_with(1))
             );
 
             assert_eq!(iter.next(), None);
@@ -2640,7 +2634,7 @@ mod tests {
         wam.machine_st.heap.push(pstr_offset_as_cell!(0));
         wam.machine_st
             .heap
-            .push(fixnum_as_cell!(Fixnum::build_with(0i64)));
+            .push(fixnum_as_cell!(Fixnum::build_with(0)));
 
         {
             let mut iter = stackful_post_order_iter::<NonListElider>(
@@ -2649,10 +2643,7 @@ mod tests {
                 pstr_loc_as_cell!(0),
             );
 
-            assert_eq!(
-                iter.next().unwrap(),
-                fixnum_as_cell!(Fixnum::build_with(0i64))
-            );
+            assert_eq!(iter.next().unwrap(), fixnum_as_cell!(Fixnum::build_with(0)));
             assert_eq!(
                 unmark_cell_bits!(iter.next().unwrap()),
                 pstr_offset_as_cell!(0)
@@ -2667,7 +2658,7 @@ mod tests {
         wam.machine_st.heap.pop();
         wam.machine_st
             .heap
-            .push(fixnum_as_cell!(Fixnum::build_with(1i64)));
+            .push(fixnum_as_cell!(Fixnum::build_with(1)));
 
         {
             let mut iter = stackful_post_order_iter::<NonListElider>(
@@ -2676,10 +2667,7 @@ mod tests {
                 pstr_loc_as_cell!(0),
             );
 
-            assert_eq!(
-                iter.next().unwrap(),
-                fixnum_as_cell!(Fixnum::build_with(1i64))
-            );
+            assert_eq!(iter.next().unwrap(), fixnum_as_cell!(Fixnum::build_with(1)));
             assert_eq!(
                 unmark_cell_bits!(iter.next().unwrap()),
                 pstr_offset_as_cell!(0)

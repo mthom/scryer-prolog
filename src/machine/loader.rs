@@ -2355,7 +2355,7 @@ impl Machine {
                         MetaSpec::Either => atom_as_cell!(atom!("?")),
                         MetaSpec::Colon => atom_as_cell!(atom!(":")),
                         MetaSpec::RequiresExpansionWithArgument(ref arg_num) => {
-                            fixnum_as_cell!(Fixnum::build_with(*arg_num as i64))
+                            fixnum_as_cell!(Fixnum::build_with_unchecked(*arg_num as i64))
                         }
                     }));
 

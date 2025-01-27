@@ -693,7 +693,10 @@ impl MachineState {
         self.heap.pop();
 
         let target_n = self.store(self.deref(self.registers[1]));
-        self.unify_fixnum(Fixnum::build_with(brent_st.num_steps() as i64), target_n);
+        self.unify_fixnum(
+            Fixnum::build_with_unchecked(brent_st.num_steps() as i64),
+            target_n,
+        );
 
         if !self.fail {
             unify!(self, self.registers[4], self.heap[prev_hare]);
@@ -702,7 +705,7 @@ impl MachineState {
 
     fn finalize_skip_max_list(&mut self, n: i64, value: HeapCellValue) {
         let target_n = self.store(self.deref(self.registers[1]));
-        self.unify_fixnum(Fixnum::build_with(n), target_n);
+        self.unify_fixnum(Fixnum::build_with_unchecked(n), target_n);
 
         if !self.fail {
             let xs = self.registers[4];
@@ -735,7 +738,7 @@ impl MachineState {
 
                     self.heap.push(pstr_offset_as_cell!(pstr_loc));
                     self.heap
-                        .push(fixnum_as_cell!(Fixnum::build_with(offset as i64)));
+                        .push(fixnum_as_cell!(Fixnum::build_with_unchecked(offset as i64)));
 
                     pstr_loc_as_cell!(h)
                 } else {
@@ -754,7 +757,7 @@ impl MachineState {
                     self.heap.push(string_as_cstr_cell!(cstr_atom));
                     self.heap.push(pstr_offset_as_cell!(h));
                     self.heap
-                        .push(fixnum_as_cell!(Fixnum::build_with(n as i64)));
+                        .push(fixnum_as_cell!(Fixnum::build_with_unchecked(n as i64)));
 
                     pstr_loc_as_cell!(h + 1)
                 } else {
@@ -852,7 +855,7 @@ impl MachineState {
         let value = self.store(self.deref(value));
 
         self.block = self.b;
-        self.unify_fixnum(Fixnum::build_with(self.block as i64), value);
+        self.unify_fixnum(Fixnum::build_with_unchecked(self.block as i64), value);
 
         self.block
     }
@@ -2327,7 +2330,7 @@ impl Machine {
             (HeapCellValueTag::Char, c) => {
                 let h = self.machine_st.heap.len();
 
-                self.machine_st.heap.push(fixnum_as_cell!(Fixnum::build_with(c as i64)));
+                self.machine_st.heap.push(fixnum_as_cell!(Fixnum::build_with(u32::from(c))));
                 self.machine_st.heap.push(empty_list_as_cell!());
 
                 unify!(self.machine_st, list_loc_as_cell!(h), self.machine_st.registers[2]);
@@ -2336,7 +2339,7 @@ impl Machine {
                 if arity == 0 {
                     let name = name.as_str();
                     let iter = name.chars()
-                        .map(|c| fixnum_as_cell!(Fixnum::build_with(c as i64)));
+                        .map(|c| fixnum_as_cell!(Fixnum::build_with(u32::from(c))));
 
                     let h = iter_to_heap_list(&mut self.machine_st.heap, iter);
                     unify!(self.machine_st, heap_loc_as_cell!(h), self.machine_st.registers[2]);
@@ -2351,7 +2354,7 @@ impl Machine {
                 if arity == 0 {
                     let name = name.as_str();
                     let iter = name.chars()
-                        .map(|c| fixnum_as_cell!(Fixnum::build_with(c as i64)));
+                        .map(|c| fixnum_as_cell!(Fixnum::build_with(u32::from(c))));
 
                     let h = iter_to_heap_list(&mut self.machine_st.heap, iter);
                     unify!(self.machine_st, heap_loc_as_cell!(h), self.machine_st.registers[2]);
@@ -2415,7 +2418,8 @@ impl Machine {
         );
 
         let a2 = self.deref_register(2);
-        self.machine_st.unify_fixnum(Fixnum::build_with(len), a2);
+        self.machine_st
+            .unify_fixnum(Fixnum::build_with_unchecked(len), a2);
     }
 
     #[inline(always)]
@@ -2578,7 +2582,7 @@ impl Machine {
                 Ok(Number::Integer(n)) => {
                     let result: Result<u8, _> = (&*n).try_into();
                     if let Ok(value) = result {
-                        fixnum_as_cell!(Fixnum::build_with(value as i64))
+                        fixnum_as_cell!(Fixnum::build_with(value))
                     } else {
                         let err = self.machine_st.type_error(ValidType::InByte, addr);
                         return Err(self.machine_st.error_form(err, stub_gen()));
@@ -2586,7 +2590,7 @@ impl Machine {
                 }
                 Ok(Number::Fixnum(n)) => {
                     if let Ok(nb) = u8::try_from(n.get_num()) {
-                        fixnum_as_cell!(Fixnum::build_with(nb as i64))
+                        fixnum_as_cell!(Fixnum::build_with(nb))
                     } else {
                         let err = self.machine_st.type_error(ValidType::InByte, addr);
                         return Err(self.machine_st.error_form(err, stub_gen()));
@@ -2602,8 +2606,7 @@ impl Machine {
         loop {
             match stream.peek_byte().map_err(|e| e.kind()) {
                 Ok(b) => {
-                    self.machine_st
-                        .unify_fixnum(Fixnum::build_with(b as i64), addr);
+                    self.machine_st.unify_fixnum(Fixnum::build_with(b), addr);
                     break;
                 }
                 Err(ErrorKind::PermissionDenied) => {
@@ -2766,10 +2769,8 @@ impl Machine {
                     Ok(Number::Integer(n)) => {
                         let n: u32 = (&*n).try_into().unwrap();
 
-                        let n = std::char::from_u32(n).map(|_| n);
-
-                        if let Some(n) = n {
-                            fixnum_as_cell!(Fixnum::build_with(n as i64))
+                        if std::char::from_u32(n).is_some() {
+                            fixnum_as_cell!(Fixnum::build_with(n))
                         } else {
                             let err = self.machine_st.representation_error(RepFlag::InCharacterCode);
                             return Err(self.machine_st.error_form(err, stub_gen()));
@@ -2781,7 +2782,7 @@ impl Machine {
                             .and_then(|n| std::char::from_u32(n).map(|_| n));
 
                         if let Some(n) = n {
-                            fixnum_as_cell!(Fixnum::build_with(n as i64))
+                            fixnum_as_cell!(Fixnum::build_with(n))
                         } else {
                             let err = self.machine_st.representation_error(RepFlag::InCharacterCode);
                             return Err(self.machine_st.error_form(err, stub_gen()));
@@ -2801,7 +2802,7 @@ impl Machine {
             match result.map(|result| result.map_err(|e| e.kind())) {
                 Some(Ok(c)) => {
                     self.machine_st
-                        .unify_fixnum(Fixnum::build_with(c as i64), addr);
+                        .unify_fixnum(Fixnum::build_with(u32::from(c)), addr);
                     break;
                 }
                 Some(Err(ErrorKind::PermissionDenied)) => {
@@ -2875,7 +2876,7 @@ impl Machine {
         let codes = string
             .trim()
             .chars()
-            .map(|c| fixnum_as_cell!(Fixnum::build_with(c as i64)));
+            .map(|c| fixnum_as_cell!(Fixnum::build_with(u32::from(c))));
 
         let h = iter_to_heap_list(&mut self.machine_st.heap, codes);
         unify!(self.machine_st, heap_loc_as_cell!(h), chs);
@@ -2910,7 +2911,7 @@ impl Machine {
     #[inline(always)]
     pub(crate) fn lifted_heap_length(&mut self) {
         let a1 = self.machine_st.registers[1];
-        let lh_len = Fixnum::build_with(self.machine_st.lifted_heap.len() as i64);
+        let lh_len = Fixnum::build_with_unchecked(self.machine_st.lifted_heap.len() as i64);
 
         self.machine_st.unify_fixnum(lh_len, a1);
     }
@@ -2971,7 +2972,7 @@ impl Machine {
         );
 
         self.machine_st
-            .unify_fixnum(Fixnum::build_with(c as i64), a2);
+            .unify_fixnum(Fixnum::build_with(u32::from(c)), a2);
 
         Ok(())
     }
@@ -3402,7 +3403,7 @@ impl Machine {
                     let n: Result<u8, _> = (&*n).try_into();
 
                     if let Ok(value) = n {
-                        fixnum_as_cell!(Fixnum::build_with(value as i64))
+                        fixnum_as_cell!(Fixnum::build_with(value))
                     } else {
                         let err = self.machine_st.type_error(ValidType::InByte, addr);
                         return Err(self.machine_st.error_form(err, stub_gen()));
@@ -3410,7 +3411,7 @@ impl Machine {
                 }
                 Ok(Number::Fixnum(n)) => {
                     if let Ok(nb) = u8::try_from(n.get_num()) {
-                        fixnum_as_cell!(Fixnum::build_with(nb as i64))
+                        fixnum_as_cell!(Fixnum::build_with(nb))
                     } else {
                         let err = self.machine_st.type_error(ValidType::InByte, addr);
                         return Err(self.machine_st.error_form(err, stub_gen()));
@@ -3427,8 +3428,7 @@ impl Machine {
 
         match stream.read(&mut b) {
             Ok(1) => {
-                self.machine_st
-                    .unify_fixnum(Fixnum::build_with(b[0] as i64), addr);
+                self.machine_st.unify_fixnum(Fixnum::build_with(b[0]), addr);
             }
             _ => {
                 stream.set_past_end_of_stream(true);
@@ -3648,7 +3648,7 @@ impl Machine {
                     let n = std::char::from_u32(n);
 
                     if let Some(n) = n {
-                        fixnum_as_cell!(Fixnum::build_with(n as i64))
+                        fixnum_as_cell!(Fixnum::build_with(u32::from(n)))
                     } else {
                         let err = self
                             .machine_st
@@ -3692,7 +3692,7 @@ impl Machine {
             match result {
                 Some(Ok(c)) => {
                     self.machine_st
-                        .unify_fixnum(Fixnum::build_with(c as i64), addr);
+                        .unify_fixnum(Fixnum::build_with(u32::from(c)), addr);
                     break;
                 }
                 _ => {
@@ -4248,7 +4248,7 @@ impl Machine {
                     return;
                 }
                 let value = self.rng.gen_range(lower..upper);
-                Number::Fixnum(Fixnum::build_with(value))
+                Number::Fixnum(Fixnum::build_with_unchecked(value))
             }
             (Ok(Number::Fixnum(lower)), Ok(Number::Integer(upper))) => {
                 let lower = Integer::from(lower);
@@ -4426,7 +4426,7 @@ impl Machine {
                     // status code
                     let status = resp.status().as_u16();
                     self.machine_st
-                        .unify_fixnum(Fixnum::build_with(status as i64), address_status);
+                        .unify_fixnum(Fixnum::build_with(status), address_status);
                     // headers
                     let headers: Vec<HeapCellValue> = resp
                         .headers()
@@ -4880,8 +4880,7 @@ impl Machine {
             let stub_gen = || functor_stub(atom!("foreign_call"), 3);
             fn map_arg(machine_st: &mut MachineState, source: HeapCellValue) -> crate::ffi::Value {
                 match Number::try_from(source) {
-                    Ok(Number::Fixnum(n)) => Value::Int(n.get_num()),
-                    Ok(Number::Float(n)) => Value::Float(n.into_inner()),
+                    Ok(number) => Value::Number(number),
                     _ => {
                         let stub_gen = || functor_stub(atom!("foreign_call"), 3);
                         if let Some(string) = machine_st.value_to_str_like(source) {
@@ -4916,19 +4915,29 @@ impl Machine {
                         .into_iter()
                         .map(|x| map_arg(&mut self.machine_st, x))
                         .collect();
-                    match self
-                        .foreign_function_table
-                        .exec(&function_name.as_str(), args)
-                    {
+                    match self.foreign_function_table.exec(
+                        &function_name.as_str(),
+                        args,
+                        &mut self.machine_st.arena,
+                    ) {
                         Ok(result) => {
                             match result {
-                                Value::Int(n) => self
-                                    .machine_st
-                                    .unify_fixnum(Fixnum::build_with(n), return_value),
-                                Value::Float(n) => {
-                                    let n = float_alloc!(n, self.machine_st.arena);
-                                    self.machine_st.unify_f64(n, return_value)
-                                }
+                                Value::Number(n) => match n {
+                                    Number::Float(OrderedFloat(n)) => {
+                                        let n = float_alloc!(n, self.machine_st.arena);
+                                        self.machine_st.unify_f64(n, return_value)
+                                    }
+                                    Number::Integer(typed_arena_ptr) => {
+                                        self.machine_st.unify_big_int(typed_arena_ptr, return_value)
+                                    }
+                                    Number::Rational(typed_arena_ptr) => {
+                                        self.machine_st
+                                            .unify_rational(typed_arena_ptr, return_value);
+                                    }
+                                    Number::Fixnum(fixnum) => {
+                                        self.machine_st.unify_fixnum(fixnum, return_value)
+                                    }
+                                },
                                 Value::Struct(name, args) => {
                                     let struct_value = self.build_struct(&name, args);
                                     unify!(self.machine_st, return_value, struct_value);
@@ -4964,8 +4973,12 @@ impl Machine {
         let cells: Vec<_> = args
             .into_iter()
             .map(|val| match val {
-                Value::Int(n) => fixnum_as_cell!(Fixnum::build_with(n)),
-                Value::Float(n) => HeapCellValue::from(float_alloc!(n, self.machine_st.arena)),
+                Value::Number(n) => match n {
+                    Number::Float(OrderedFloat(f)) => {
+                        HeapCellValue::from(float_alloc!(f, self.machine_st.arena))
+                    }
+                    _ => integer_as_cell!(n),
+                },
                 Value::CString(cstr) => atom_as_cell!(AtomTable::build_with(
                     &self.machine_st.atom_tbl,
                     &cstr.into_string().unwrap()
@@ -4998,7 +5011,11 @@ impl Machine {
                 Err(e) => return Err(e),
             };
             self.foreign_function_table
-                .define_struct(&struct_name.as_str(), fields);
+                .define_struct(&struct_name.as_str(), fields)
+                .map_err(|err| {
+                    let ffi_error = self.machine_st.ffi_error(err);
+                    self.machine_st.error_form(ffi_error, stub_gen())
+                })?;
             return Ok(());
         }
         self.machine_st.fail = true;
@@ -5294,7 +5311,8 @@ impl Machine {
     #[inline(always)]
     pub(crate) fn get_attr_var_queue_delimiter(&mut self) {
         let addr = self.deref_register(1);
-        let value = Fixnum::build_with(self.machine_st.attr_var_init.attr_var_queue.len() as i64);
+        let value =
+            Fixnum::build_with_unchecked(self.machine_st.attr_var_init.attr_var_queue.len() as i64);
 
         self.machine_st.unify_fixnum(value, addr);
     }
@@ -5747,9 +5765,11 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn inference_count(&mut self, count_var: HeapCellValue, count: Integer) {
-        if let Ok(value) = <&Integer as TryInto<i64>>::try_into(&count) {
-            self.machine_st
-                .unify_fixnum(Fixnum::build_with(value), count_var);
+        if let Some(value) = <&Integer as TryInto<i64>>::try_into(&count)
+            .ok()
+            .and_then(|i| Fixnum::build_with_checked(i).ok())
+        {
+            self.machine_st.unify_fixnum(value, count_var);
         } else {
             let count = arena_alloc!(count, &mut self.machine_st.arena);
             self.machine_st.unify_big_int(count, count_var);
@@ -5891,10 +5911,10 @@ impl Machine {
 
         let block = cell_as_fixnum!(a1).get_num() as usize;
         let count = self.machine_st.cwil.remove_limit(block).clone();
-        let result = count.clone().try_into();
+        let result = Fixnum::build_with_checked(&count).ok();
 
-        if let Ok(value) = result {
-            self.machine_st.unify_fixnum(Fixnum::build_with(value), a2);
+        if let Some(value) = result {
+            self.machine_st.unify_fixnum(value, a2);
         } else {
             let count = arena_alloc!(count.clone(), &mut self.machine_st.arena);
             self.machine_st.unify_big_int(count, a2);
@@ -6121,7 +6141,7 @@ impl Machine {
     #[inline(always)]
     pub(crate) fn get_current_block(&mut self) {
         let addr = self.machine_st.registers[1];
-        let block = Fixnum::build_with(self.machine_st.block as i64);
+        let block = Fixnum::build_with_unchecked(self.machine_st.block as i64);
 
         self.machine_st.unify_fixnum(block, addr);
     }
@@ -6129,7 +6149,7 @@ impl Machine {
     #[inline(always)]
     pub(crate) fn get_current_scc_block(&mut self) {
         let addr = self.machine_st.registers[1];
-        let block = Fixnum::build_with(self.machine_st.scc_block as i64);
+        let block = Fixnum::build_with_unchecked(self.machine_st.scc_block as i64);
 
         self.machine_st.unify_fixnum(block, addr);
     }
@@ -6165,7 +6185,7 @@ impl Machine {
             let cp = and_frame.prelude.cp - 1;
 
             let e = and_frame.prelude.e;
-            let e = Fixnum::build_with(i64::try_from(e).unwrap());
+            let e = Fixnum::build_with_unchecked(i64::try_from(e).unwrap());
 
             let p = str_loc_as_cell!(machine_st.heap.len());
 
@@ -6206,7 +6226,7 @@ impl Machine {
                 let p = str_loc_as_cell!(self.machine_st.heap.len());
                 self.machine_st.heap.extend(functor!(atom!("dir_entry"), [fixnum(cp)]));
 
-                let e = Fixnum::build_with(i64::try_from(and_frame.prelude.e).unwrap());
+                let e = Fixnum::build_with_unchecked(i64::try_from(and_frame.prelude.e).unwrap());
                 self.machine_st.unify_fixnum(e, self.machine_st.registers[2]);
 
                 if !self.machine_st.fail {
@@ -6628,10 +6648,7 @@ impl Machine {
                     let port = tcp_listener.local_addr().map(|addr| addr.port()).ok();
 
                     if let Some(port) = port {
-                        (
-                            arena_alloc!(tcp_listener, &mut self.machine_st.arena),
-                            port as usize,
-                        )
+                        (arena_alloc!(tcp_listener, &mut self.machine_st.arena), port)
                     } else {
                         self.machine_st.fail = true;
                         return Ok(());
@@ -6658,7 +6675,7 @@ impl Machine {
 
         if had_zero_port {
             self.machine_st
-                .unify_fixnum(Fixnum::build_with(port as i64), self.deref_register(2));
+                .unify_fixnum(Fixnum::build_with(port), self.deref_register(2));
         }
 
         Ok(())
@@ -7380,7 +7397,7 @@ impl Machine {
             }
         }
 
-        let byte = Fixnum::build_with(bytes[0] as i64);
+        let byte = Fixnum::build_with(bytes[0]);
         self.machine_st.unify_fixnum(byte, arg);
     }
 
@@ -7401,7 +7418,7 @@ impl Machine {
                     context
                         .finalize()
                         .iter()
-                        .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64))),
+                        .map(|b| fixnum_as_cell!(Fixnum::build_with(*b))),
                 ))
             }
             atom!("sha3_256") => {
@@ -7412,7 +7429,7 @@ impl Machine {
                     context
                         .finalize()
                         .iter()
-                        .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64))),
+                        .map(|b| fixnum_as_cell!(Fixnum::build_with(*b))),
                 ))
             }
             atom!("sha3_384") => {
@@ -7424,7 +7441,7 @@ impl Machine {
                     context
                         .finalize()
                         .iter()
-                        .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64))),
+                        .map(|b| fixnum_as_cell!(Fixnum::build_with(*b))),
                 ))
             }
             atom!("sha3_512") => {
@@ -7436,7 +7453,7 @@ impl Machine {
                     context
                         .finalize()
                         .iter()
-                        .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64))),
+                        .map(|b| fixnum_as_cell!(Fixnum::build_with(*b))),
                 ))
             }
             atom!("blake2s256") => {
@@ -7448,7 +7465,7 @@ impl Machine {
                     context
                         .finalize()
                         .iter()
-                        .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64))),
+                        .map(|b| fixnum_as_cell!(Fixnum::build_with(*b))),
                 ))
             }
             atom!("blake2b512") => {
@@ -7460,7 +7477,7 @@ impl Machine {
                     context
                         .finalize()
                         .iter()
-                        .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64))),
+                        .map(|b| fixnum_as_cell!(Fixnum::build_with(*b))),
                 ))
             }
             atom!("ripemd160") => {
@@ -7472,7 +7489,7 @@ impl Machine {
                     context
                         .finalize()
                         .iter()
-                        .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64))),
+                        .map(|b| fixnum_as_cell!(Fixnum::build_with(*b))),
                 ))
             }
             _ => {
@@ -7493,7 +7510,7 @@ impl Machine {
                     &mut self.machine_st.heap,
                     ints.as_ref()
                         .iter()
-                        .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64))),
+                        .map(|b| fixnum_as_cell!(Fixnum::build_with(*b))),
                 ))
             }
         };
@@ -7529,7 +7546,7 @@ impl Machine {
             &mut self.machine_st.heap,
             tag.as_ref()
                 .iter()
-                .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64))),
+                .map(|b| fixnum_as_cell!(Fixnum::build_with(*b))),
         ));
 
         unify!(self.machine_st, self.machine_st.registers[4], ints_list);
@@ -7596,7 +7613,7 @@ impl Machine {
                 &mut self.machine_st.heap,
                 bytes
                     .iter()
-                    .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64))),
+                    .map(|b| fixnum_as_cell!(Fixnum::build_with(*b))),
             ))
         };
 
@@ -7648,7 +7665,7 @@ impl Machine {
                 &mut self.machine_st.heap,
                 bytes
                     .iter()
-                    .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64))),
+                    .map(|b| fixnum_as_cell!(Fixnum::build_with(*b))),
             ))
         };
 
@@ -7691,7 +7708,7 @@ impl Machine {
             &mut self.machine_st.heap,
             tag.as_ref()
                 .iter()
-                .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64))),
+                .map(|b| fixnum_as_cell!(Fixnum::build_with(*b))),
         ));
 
         let complete_string = self.u8s_to_string(&in_out);
@@ -7819,7 +7836,7 @@ impl Machine {
             &mut self.machine_st.heap,
             sig.as_ref()
                 .iter()
-                .map(|b| fixnum_as_cell!(Fixnum::build_with(*b as i64))),
+                .map(|b| fixnum_as_cell!(Fixnum::build_with(*b))),
         ));
 
         unify!(self.machine_st, self.machine_st.registers[4], sig_list);
@@ -8225,7 +8242,7 @@ impl Machine {
         let number = self.deref_register(1);
         let pop_count = integer_as_cell!(match Number::try_from(number) {
             Ok(Number::Fixnum(n)) => {
-                Number::Fixnum(Fixnum::build_with(n.get_num().count_ones() as i64))
+                Number::Fixnum(Fixnum::build_with(n.get_num().count_ones()))
             }
             Ok(Number::Integer(n)) => {
                 let value: usize = if n.sign() == Sign::Positive {

@@ -449,7 +449,7 @@ mod tests {
         wam.machine_st.heap.push(pstr_offset_as_cell!(0));
         wam.machine_st
             .heap
-            .push(fixnum_as_cell!(Fixnum::build_with(0i64)));
+            .push(fixnum_as_cell!(Fixnum::build_with(0)));
 
         {
             let wam = TermCopyingMockWAM { wam: &mut wam };
@@ -465,7 +465,7 @@ mod tests {
         assert_eq!(wam.machine_st.heap[4], pstr_offset_as_cell!(0));
         assert_eq!(
             wam.machine_st.heap[5],
-            fixnum_as_cell!(Fixnum::build_with(0i64))
+            fixnum_as_cell!(Fixnum::build_with(0))
         );
 
         assert_eq!(wam.machine_st.heap[7], pstr_cell);
@@ -475,7 +475,7 @@ mod tests {
         assert_eq!(wam.machine_st.heap[11], pstr_offset_as_cell!(7));
         assert_eq!(
             wam.machine_st.heap[12],
-            fixnum_as_cell!(Fixnum::build_with(0i64))
+            fixnum_as_cell!(Fixnum::build_with(0))
         );
 
         wam.machine_st.heap.clear();
