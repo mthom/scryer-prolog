@@ -129,7 +129,7 @@ used.
 > [!NOTE]
 > The minimum rust toolchain version required can be found in the [Cargo.toml](https://github.com/mthom/scryer-prolog/blob/master/Cargo.toml#L13)
 under the `package.rust-version` key.
-> The acurracy of this values is validated in CI
+> The accuracy of this value is validated in CI
 
 ### From a local git checkout
 
