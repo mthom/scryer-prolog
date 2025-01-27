@@ -38,7 +38,7 @@ pub(crate) fn load_module_test<T: Expectable>(file: &str, expected: T) {
 
 pub(crate) fn load_module_test_with_input<T: Expectable>(
     file: &str,
-    input: Cow<'static, str>,
+    input: impl Into<Cow<'static, str>>,
     expected: T,
 ) {
     use scryer_prolog::MachineBuilder;
