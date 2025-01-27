@@ -5,7 +5,7 @@ use std::{
     process::Stdio,
 };
 
-use crate::helper::load_module_test;
+use crate::helper::load_module_test_with_input;
 
 use current_platform::CURRENT_PLATFORM;
 
@@ -53,12 +53,9 @@ fn ffi_f64_nan() {
             "##,
     );
 
-    // technically UB as tests are by default multi-threaded,
-    // but there is currently no other easy way to get the dynamic library file path as an input into a load_module_test test
-    std::env::set_var("ffi_f64_nan_LIB", dynlib_path);
-
-    load_module_test(
+    load_module_test_with_input(
         "tests-pl/ffi_f64_nan.pl",
+        format!("LIB={dynlib_path:?}."),
         "   error(evaluation_error(undefined),round/1).\n",
     );
 }
@@ -81,12 +78,12 @@ fn ffi_f64_minus_zero() {
             "##,
     );
 
-    // technically UB as tests are by default multi-threaded,
-    // but there is currently no other easy way to get the dynamic library file path as an input into a load_module_test test
-    std::env::set_var("ffi_f64_minus_zero_LIB", dynlib_path);
-
     // note: ouput is currently wrong correct would be 1.0,1.0
-    load_module_test("tests-pl/ffi_f64_minus_zero.pl", "-1.0,1.0");
+    load_module_test_with_input(
+        "tests-pl/ffi_f64_minus_zero.pl",
+        format!("LIB={dynlib_path:?}."),
+        "-1.0,1.0",
+    );
 }
 
 #[test]
@@ -158,10 +155,6 @@ fn ffi_return_values() {
             "##,
     );
 
-    // technically UB as tests are by default multi-threaded,
-    // but there is currently no other easy way to get the dynamic library file path as an input into a load_module_test test
-    std::env::set_var("ffi_return_values_LIB", dynlib_path);
-
     let expected = format!(
         "i8- {},u8-{},i16- {},u16-{},i32- {},u32-{},i64- {},u64-{},f32-{},f64-{}",
         -42,
@@ -176,7 +169,11 @@ fn ffi_return_values() {
         std::f64::consts::TAU
     );
 
-    load_module_test("tests-pl/ffi_return_values.pl", expected.as_str());
+    load_module_test_with_input(
+        "tests-pl/ffi_return_values.pl",
+        format!("LIB={dynlib_path:?}."),
+        expected.as_str(),
+    );
 }
 
 #[test]
@@ -191,12 +188,9 @@ fn ffi_invalid_type() {
             "##,
     );
 
-    // technically UB as tests are by default multi-threaded,
-    // but there is currently no other easy way to get the dynamic library file path as an input into a load_module_test test
-    std::env::set_var("ffi_invalid_type_LIB", dynlib_path);
-
-    load_module_test(
+    load_module_test_with_input(
         "tests-pl/ffi_invalid_type.pl",
+        format!("LIB={dynlib_path:?}."),
         "% Warning: initialization/1 failed for: user:test\n",
     );
 }
