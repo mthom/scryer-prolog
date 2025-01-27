@@ -2,7 +2,9 @@
 :- use_module(library(ffi)).
 
 test :- 
-    getenv("ffi_return_values_LIB", LIB),    
+    read(Body),
+    term_variables(Body, [LIB]),
+    Body,   
     use_foreign_module(LIB, [
         'ffi_return_values_true'([], bool), 
         'ffi_return_values_false'([], bool), 
