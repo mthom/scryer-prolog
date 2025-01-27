@@ -1,5 +1,9 @@
 use scryer_prolog::MachineBuilder;
 
+use std::borrow::Cow;
+
+use scryer_prolog::{InputStreamConfig, StreamConfig};
+
 pub(crate) trait Expectable {
     #[track_caller]
     fn assert_eq(self, other: &[u8]);
@@ -46,4 +50,17 @@ pub(crate) fn load_module_test_with_tokio_runtime<T: Expectable>(file: &str, exp
         let mut wam = MachineBuilder::default().build();
         expected.assert_eq(wam.test_load_file(file).as_slice())
     });
+}
+
+pub(crate) fn load_module_test_with_input<T: Expectable>(
+    file: &str,
+    input: Cow<'static, str>,
+    expected: T,
+) {
+    use scryer_prolog::MachineBuilder;
+
+    let mut wam = MachineBuilder::default()
+        .with_streams(StreamConfig::in_memory().with_user_input(InputStreamConfig::string(input)))
+        .build();
+    expected.assert_eq(wam.test_load_file(file).as_slice());
 }
