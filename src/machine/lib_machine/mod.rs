@@ -1,3 +1,4 @@
+use std::cell::Cell;
 use std::cmp::Ordering;
 use std::collections::BTreeMap;
 
@@ -8,13 +9,14 @@ use crate::machine::mock_wam::CompositeOpDir;
 use crate::machine::{
     F64Offset, F64Ptr, Fixnum, Number, BREAK_FROM_DISPATCH_LOOP_LOC, LIB_QUERY_SUCCESS,
 };
-use crate::parser::ast::{Var, VarPtr};
+use crate::parser::ast::{Literal, Term as AstTerm, Var, VarPtr};
 use crate::parser::parser::{Parser, Tokens};
 use crate::read::{write_term_to_heap, TermWriteResult};
 
 use dashu::{Integer, Rational};
 use indexmap::IndexMap;
 
+use super::AtomTable;
 use super::{streams::Stream, Atom, AtomCell, HeapCellValue, HeapCellValueTag, Machine};
 
 #[cfg(test)]
@@ -401,6 +403,47 @@ impl Term {
         debug_assert_eq!(term_stack.len(), 1);
         term_stack.pop().unwrap()
     }
+
+    pub(crate) fn into_ast_term(self, machine: &mut Machine) -> AstTerm {
+        match self {
+            Term::Integer(i) => AstTerm::Literal(
+                Cell::default(),
+                Literal::Integer(arena_alloc!(i, &mut machine.machine_st.arena)),
+            ),
+            Term::Rational(r) => AstTerm::Literal(
+                Cell::default(),
+                Literal::Rational(arena_alloc!(r, &mut machine.machine_st.arena)),
+            ),
+            Term::Float(f) => AstTerm::Literal(
+                Cell::default(),
+                Literal::Float(float_alloc!(f, &mut machine.machine_st.arena).as_offset()),
+            ),
+            Term::Atom(a) => AstTerm::Literal(
+                Cell::default(),
+                Literal::Atom(AtomTable::build_with(&machine.machine_st.atom_tbl, &a)),
+            ),
+            Term::String(s) => AstTerm::Literal(
+                Cell::default(),
+                Literal::String(AtomTable::build_with(&machine.machine_st.atom_tbl, &s)),
+            ),
+            Term::List(l) => l.iter().rev().fold(
+                AstTerm::Literal(Cell::default(), Literal::Atom(atom!("[]"))),
+                |tail, head| {
+                    AstTerm::Cons(
+                        Cell::default(),
+                        Box::new(head.clone().into_ast_term(machine)),
+                        Box::new(tail),
+                    )
+                },
+            ),
+            Term::Compound(f, args) => AstTerm::Clause(
+                Cell::default(),
+                AtomTable::build_with(&machine.machine_st.atom_tbl, &f),
+                args.into_iter().map(|x| x.into_ast_term(machine)).collect(),
+            ),
+            Term::Var(v) => AstTerm::Var(Cell::default(), VarPtr::from(v)),
+        }
+    }
 }
 
 /// An iterator though the leaf answers of a query.
@@ -525,6 +568,42 @@ impl Iterator for QueryState<'_> {
     }
 }
 
+enum QueryInfoInner {
+    String(String),
+    Term(Term),
+}
+
+/// Information for a query used inside `[Machine::run_query]`.
+///
+/// See `[IntoQuery]` trait.
+pub struct QueryInfo {
+    inner: QueryInfoInner,
+}
+
+/// Something that can be used as a query.
+///
+/// See `[Machine::run_query]`.
+pub trait IntoQuery {
+    /// Convert to a query.
+    fn into_query(self) -> QueryInfo;
+}
+
+impl<T: Into<String>> IntoQuery for T {
+    fn into_query(self) -> QueryInfo {
+        QueryInfo {
+            inner: QueryInfoInner::String(self.into()),
+        }
+    }
+}
+
+impl IntoQuery for Term {
+    fn into_query(self) -> QueryInfo {
+        QueryInfo {
+            inner: QueryInfoInner::Term(self),
+        }
+    }
+}
+
 impl Machine {
     /// Loads a module into the [`Machine`] from a string.
     pub fn load_module_string(&mut self, module_name: &str, program: impl Into<String>) {
@@ -569,22 +648,31 @@ impl Machine {
     }
 
     /// Runs a query.
-    pub fn run_query(&mut self, query: impl Into<String>) -> QueryState {
-        let mut parser = Parser::new(
-            Stream::from_owned_string(query.into(), &mut self.machine_st.arena),
-            &mut self.machine_st,
-        );
-        let op_dir = CompositeOpDir::new(&self.indices.op_dir, None);
-        let term = parser
-            .read_term(&op_dir, Tokens::Default)
-            .expect("Failed to parse query");
+    pub fn run_query(&mut self, query: impl IntoQuery) -> QueryState {
+        let ast_term = match query.into_query().inner {
+            QueryInfoInner::String(query_string) => {
+                let mut parser = Parser::new(
+                    Stream::from_owned_string(query_string, &mut self.machine_st.arena),
+                    &mut self.machine_st,
+                );
+                let op_dir = CompositeOpDir::new(&self.indices.op_dir, None);
+
+                parser
+                    .read_term(&op_dir, Tokens::Default)
+                    .expect("Failed to parse query")
+            }
+            QueryInfoInner::Term(query_term) => query_term.into_ast_term(self),
+        };
 
         self.allocate_stub_choice_point();
 
         // Write parsed term to heap
-        let term_write_result =
-            write_term_to_heap(&term, &mut self.machine_st.heap, &self.machine_st.atom_tbl)
-                .expect("couldn't write term to heap");
+        let term_write_result = write_term_to_heap(
+            &ast_term,
+            &mut self.machine_st.heap,
+            &self.machine_st.atom_tbl,
+        )
+        .expect("couldn't write term to heap");
 
         let var_names: IndexMap<_, _> = term_write_result
             .var_dict
