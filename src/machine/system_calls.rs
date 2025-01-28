@@ -1701,7 +1701,7 @@ impl Machine {
         let h = self.machine_st.heap.len();
         let ref_cell = HeapCellValue::build_with(ref_cell_tag, h as u64);
 
-        self.machine_st.heap.extend(functor_stub.into_iter());
+        self.machine_st.heap.extend(functor_stub);
 
         unify_fn!(&mut self.machine_st, ref_cell, target_module_loc);
 
@@ -4252,28 +4252,28 @@ impl Machine {
             }
             (Ok(Number::Fixnum(lower)), Ok(Number::Integer(upper))) => {
                 let lower = Integer::from(lower);
-                if &lower >= &*upper {
+                if lower >= *upper {
                     self.machine_st.fail = true;
                     return;
                 }
-                let value = self.rng.gen_range(lower..(&*upper).clone());
+                let value = self.rng.gen_range(lower..(*upper).clone());
                 Number::arena_from(value, &mut self.machine_st.arena)
             }
             (Ok(Number::Integer(lower)), Ok(Number::Fixnum(upper))) => {
                 let upper = Integer::from(upper);
-                if &*lower >= &upper {
+                if *lower >= upper {
                     self.machine_st.fail = true;
                     return;
                 }
-                let value = self.rng.gen_range((&*lower).clone()..upper);
+                let value = self.rng.gen_range((*lower).clone()..upper);
                 Number::arena_from(value, &mut self.machine_st.arena)
             }
             (Ok(Number::Integer(lower)), Ok(Number::Integer(upper))) => {
-                if &*lower >= &*upper {
+                if *lower >= *upper {
                     self.machine_st.fail = true;
                     return;
                 }
-                let value = self.rng.gen_range((&*lower).clone()..(&*upper).clone());
+                let value = self.rng.gen_range((*lower).clone()..(*upper).clone());
                 Number::arena_from(value, &mut self.machine_st.arena)
             }
             _ => {
