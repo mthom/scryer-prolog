@@ -181,6 +181,7 @@ pub enum ArenaHeaderTag {
     ReadlineStream = 0b110000,
     StaticStringStream = 0b110100,
     ByteStream = 0b111000,
+    CallbackStream = 0b111001,
     StandardOutputStream = 0b1100,
     StandardErrorStream = 0b11000,
     NullStream = 0b111100,
@@ -840,6 +841,9 @@ unsafe fn drop_slab_in_place(value: NonNull<AllocSlab>, tag: ArenaHeaderTag) {
         }
         ArenaHeaderTag::ByteStream => {
             drop_typed_slab_in_place!(ByteStream, value);
+        }
+        ArenaHeaderTag::CallbackStream => {
+            drop_typed_slab_in_place!(CallbackStream, value);
         }
         ArenaHeaderTag::LiveLoadState | ArenaHeaderTag::InactiveLoadState => {
             drop_typed_slab_in_place!(LiveLoadState, value);

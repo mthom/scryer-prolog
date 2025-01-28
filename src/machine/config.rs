@@ -6,7 +6,8 @@ use crate::Machine;
 
 use super::{
     bootstrapping_compile, current_dir, import_builtin_impls, libraries, load_module, Atom,
-    CompilationTarget, IndexStore, ListingSource, MachineArgs, MachineState, Stream, StreamOptions,
+    Callback, CompilationTarget, IndexStore, ListingSource, MachineArgs, MachineState, Stream,
+    StreamOptions,
 };
 
 /// Describes how the streams of a [`Machine`](crate::Machine) will be handled.
@@ -31,6 +32,13 @@ impl StreamConfig {
             inner: StreamConfigInner::Memory,
         }
     }
+
+    /// Calls the given callbacks when the respective streams are written to.
+    pub fn with_callbacks(stdout: Option<Callback>, stderr: Option<Callback>) -> Self {
+        StreamConfig {
+            inner: StreamConfigInner::Callbacks { stdout, stderr },
+        }
+    }
 }
 
 #[derive(Default)]
@@ -38,6 +46,10 @@ enum StreamConfigInner {
     Stdio,
     #[default]
     Memory,
+    Callbacks {
+        stdout: Option<Callback>,
+        stderr: Option<Callback>,
+    },
 }
 
 /// Describes how a [`Machine`](crate::Machine) will be configured.
@@ -89,6 +101,17 @@ impl MachineBuilder {
                 Stream::Null(StreamOptions::default()),
                 Stream::from_owned_string("".to_owned(), &mut machine_st.arena),
                 Stream::stderr(&mut machine_st.arena),
+            ),
+            StreamConfigInner::Callbacks { stdout, stderr } => (
+                Stream::Null(StreamOptions::default()),
+                stdout.map_or_else(
+                    || Stream::Null(StreamOptions::default()),
+                    |x| Stream::from_callback(x, &mut machine_st.arena),
+                ),
+                stderr.map_or_else(
+                    || Stream::Null(StreamOptions::default()),
+                    |x| Stream::from_callback(x, &mut machine_st.arena),
+                ),
             ),
         };
 
