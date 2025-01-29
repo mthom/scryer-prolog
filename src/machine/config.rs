@@ -1,4 +1,7 @@
-use std::borrow::Cow;
+use std::cell::RefCell;
+use std::io::{Seek, SeekFrom, Write};
+use std::rc::Rc;
+use std::{borrow::Cow, io::Cursor};
 
 use rand::{rngs::StdRng, SeedableRng};
 
@@ -34,10 +37,45 @@ impl StreamConfig {
     }
 
     /// Calls the given callbacks when the respective streams are written to.
-    pub fn with_callbacks(stdout: Option<Callback>, stderr: Option<Callback>) -> Self {
-        StreamConfig {
-            inner: StreamConfigInner::Callbacks { stdout, stderr },
-        }
+    ///
+    /// This also returns a handler to the stdin do the [`Machine`](crate::Machine).
+    pub fn with_callbacks(stdout: Option<Callback>, stderr: Option<Callback>) -> (UserInput, Self) {
+        let stdin = Rc::new(RefCell::new(Cursor::new(Vec::new())));
+        (
+            UserInput {
+                inner: stdin.clone(),
+            },
+            StreamConfig {
+                inner: StreamConfigInner::Callbacks {
+                    stdin,
+                    stdout,
+                    stderr,
+                },
+            },
+        )
+    }
+}
+
+/// A handler for the stdin of the [`Machine`](crate::Machine).
+#[derive(Debug)]
+pub struct UserInput {
+    inner: Rc<RefCell<Cursor<Vec<u8>>>>,
+}
+
+impl Write for UserInput {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        let mut inner = self.inner.borrow_mut();
+        let pos = inner.position();
+
+        inner.seek(SeekFrom::End(0))?;
+        let result = inner.write(buf);
+        inner.seek(SeekFrom::Start(pos))?;
+
+        result
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.inner.borrow_mut().flush()
     }
 }
 
@@ -47,6 +85,7 @@ enum StreamConfigInner {
     #[default]
     Memory,
     Callbacks {
+        stdin: Rc<RefCell<Cursor<Vec<u8>>>>,
         stdout: Option<Callback>,
         stderr: Option<Callback>,
     },
@@ -102,8 +141,12 @@ impl MachineBuilder {
                 Stream::from_owned_string("".to_owned(), &mut machine_st.arena),
                 Stream::stderr(&mut machine_st.arena),
             ),
-            StreamConfigInner::Callbacks { stdout, stderr } => (
-                Stream::Null(StreamOptions::default()),
+            StreamConfigInner::Callbacks {
+                stdin,
+                stdout,
+                stderr,
+            } => (
+                Stream::input_channel(stdin, &mut machine_st.arena),
                 stdout.map_or_else(
                     || Stream::Null(StreamOptions::default()),
                     |x| Stream::from_callback(x, &mut machine_st.arena),
