@@ -199,22 +199,59 @@ warn_about_singletons([Singleton|Singletons], LinesRead) :-
     ).
 
 
-load_loop(Stream, Evacuable) :-
+stream_next_term(Stream, Term, LinesRead, Singletons) :-
     (  '$devour_whitespace'(Stream) ->
        stream_property(Stream, position(position_and_lines_read(_, LinesRead))),
        read_term(Stream, Term, [singletons(Singletons)])
     ;  Term = end_of_file
-    ),
+    ).
+
+load_loop(Stream, Evacuable) :-
+    stream_next_term(Stream, Term, LinesRead, Singletons),
     (  Term == end_of_file ->
        close(Stream),
        '$conclude_load'(Evacuable)
     ;  var(Term) ->
        instantiation_error(load/1)
+    ;  Term = (?- _Query) ->
+       devour_answer_descriptions(Stream, Evacuable)
     ;  warn_about_singletons(Singletons, LinesRead),
        compile_term(Term, Evacuable),
        load_loop(Stream, Evacuable)
     ).
 
+devour_answer_descriptions(Stream, Evacuable) :-
+    stream_next_term(Stream, Term, LinesRead, Singletons),
+    (  Term == end_of_file ->
+       close(Stream),
+       '$conclude_load'(Evacuable)
+    ;  var(Term) ->
+       instantiation_error(load/1)
+    ;  Term = (?- _Query) ->
+       devour_answer_descriptions(Stream, Evacuable)
+    ;  answer_description(Term) ->
+       devour_answer_descriptions(Stream, Evacuable)
+    ;  warn_about_singletons(Singletons, LinesRead),
+       compile_term(Term, Evacuable),
+       load_loop(Stream, Evacuable)
+    ).
+
+answer_description(true).
+answer_description(false).
+answer_description(_V=_T).
+answer_description((_A,_As)).
+answer_description((_Answer;_Answers)).
+answer_description(...).
+answer_description(loops).
+answer_description(throw(_Ball)).
+answer_description(error(_Error_Term, _Impdef)).
+answer_description(instantiation_error).
+answer_description(type_error(_Type,_Culprit)).
+answer_description(domain_error(_Domain, _Culprit)).
+answer_description(syntax_error(_Error)).
+answer_description(resource_error(_Ressource)).
+answer_description(uninstantiation_error(_Culprit)).
+answer_description('|'(_AD,_ADs)).
 
 compile_term(Term, Evacuable) :-
     expand_terms_and_goals(Term, Terms),
