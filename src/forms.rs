@@ -679,14 +679,14 @@ impl ArenaFrom<isize> for Number {
 impl ArenaFrom<u32> for Number {
     #[inline]
     fn arena_from(value: u32, _arena: &mut Arena) -> Number {
-        Number::Fixnum(Fixnum::build_with(value as i64))
+        Number::Fixnum(Fixnum::build_with(value))
     }
 }
 
 impl ArenaFrom<i32> for Number {
     #[inline]
     fn arena_from(value: i32, _arena: &mut Arena) -> Number {
-        Number::Fixnum(Fixnum::build_with(value as i64))
+        Number::Fixnum(Fixnum::build_with(value))
     }
 }
 

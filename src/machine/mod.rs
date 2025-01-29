@@ -1192,7 +1192,7 @@ impl Machine {
                     (r_c_w_h, 0)
                 } else {
                     self.machine_st.registers[1] =
-                        fixnum_as_cell!(Fixnum::build_with(b_cutoff as i64));
+                        fixnum_as_cell!(Fixnum::build_with_unchecked(b_cutoff as i64));
 
                     (r_c_wo_h, 1)
                 };

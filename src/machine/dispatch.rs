@@ -7,6 +7,7 @@ use crate::machine::machine_state::*;
 use crate::machine::*;
 use crate::types::*;
 
+use dashu::integer::IBig;
 use fxhash::FxBuildHasher;
 
 macro_rules! step_or_fail {
@@ -267,14 +268,10 @@ impl MachineState {
                         Literal::Rational(r)
                     }
                     (ArenaHeaderTag::Integer, n) => {
-                        let result = (&*n).try_into();
+                        let result : &IBig = &*n;
 
-                        match result {
-                            Ok(fixnum) => if let Ok(n) = Fixnum::build_with_checked(fixnum) {
-                                Literal::Fixnum(n)
-                            } else {
-                                Literal::Integer(n)
-                            },
+                        match Fixnum::build_with_checked(result) {
+                            Ok(fixnum) => Literal::Fixnum(fixnum),
                             Err(_) => Literal::Integer(n)
                         }
                     }
@@ -1007,9 +1004,10 @@ impl Machine {
                                         match self.find_living_dynamic_else(p + next_i) {
                                             Some(_) => {
                                                 self.machine_st.registers
-                                                    [self.machine_st.num_of_args + 1] = fixnum_as_cell!(
-                                                    Fixnum::build_with(self.machine_st.cc as i64)
-                                                );
+                                                    [self.machine_st.num_of_args + 1] =
+                                                    fixnum_as_cell!(Fixnum::build_with_unchecked(
+                                                        self.machine_st.cc as i64
+                                                    ));
 
                                                 self.machine_st.num_of_args += 1;
                                                 self.try_me_else(next_i);
@@ -1080,9 +1078,10 @@ impl Machine {
                                         match self.find_living_dynamic_else(p + next_i) {
                                             Some(_) => {
                                                 self.machine_st.registers
-                                                    [self.machine_st.num_of_args + 1] = fixnum_as_cell!(
-                                                    Fixnum::build_with(self.machine_st.cc as i64)
-                                                );
+                                                    [self.machine_st.num_of_args + 1] =
+                                                    fixnum_as_cell!(Fixnum::build_with_unchecked(
+                                                        self.machine_st.cc as i64
+                                                    ));
 
                                                 self.machine_st.num_of_args += 1;
                                                 self.try_me_else(next_i);
@@ -3016,10 +3015,11 @@ impl Machine {
                                                 match self.find_living_dynamic(oi, ii + 1) {
                                                     Some(_) => {
                                                         self.machine_st.registers
-                                                            [self.machine_st.num_of_args + 1] =
-                                                            fixnum_as_cell!(Fixnum::build_with(
+                                                            [self.machine_st.num_of_args + 1] = fixnum_as_cell!(
+                                                            Fixnum::build_with_unchecked(
                                                                 self.machine_st.cc as i64
-                                                            ));
+                                                            )
+                                                        );
 
                                                         self.machine_st.num_of_args += 1;
                                                         self.indexed_try(offset);
@@ -5127,7 +5127,7 @@ impl Machine {
                                 .store(self.machine_st.deref(self.machine_st.registers[5]));
 
                             self.machine_st
-                                .unify_fixnum(Fixnum::build_with(n as i64), r);
+                                .unify_fixnum(Fixnum::build_with_unchecked(n as i64), r);
                         }
 
                         self.machine_st.call_at_index(2, p);
@@ -5170,7 +5170,7 @@ impl Machine {
                                 .store(self.machine_st.deref(self.machine_st.registers[5]));
 
                             self.machine_st
-                                .unify_fixnum(Fixnum::build_with(n as i64), r);
+                                .unify_fixnum(Fixnum::build_with_unchecked(n as i64), r);
                         }
 
                         self.machine_st.execute_at_index(2, p);

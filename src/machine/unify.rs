@@ -211,7 +211,7 @@ pub(crate) trait Unifier: DerefMut<Target = MachineState> {
 
                                 machine_st.heap.push(pstr_offset_as_cell!(focus));
                                 machine_st.heap.push(fixnum_as_cell!(
-                                    Fixnum::build_with(n as i64)
+                                    Fixnum::build_with_unchecked(n as i64)
                                 ));
 
                                 machine_st.pdl.push(pstr_loc_as_cell!(h_len));
@@ -237,7 +237,7 @@ pub(crate) trait Unifier: DerefMut<Target = MachineState> {
 
                                 machine_st.heap.push(pstr_offset_as_cell!(pstr_loc));
                                 machine_st.heap.push(fixnum_as_cell!(
-                                    Fixnum::build_with(n as i64)
+                                    Fixnum::build_with_unchecked(n as i64)
                                 ));
 
                                 machine_st.pdl.push(pstr_loc_as_cell!(h_len));

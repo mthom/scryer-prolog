@@ -4,6 +4,7 @@ use crate::parser::ast::*;
 use crate::forms::*;
 use crate::instructions::*;
 
+use dashu::integer::IBig;
 use fxhash::FxBuildHasher;
 use indexmap::IndexMap;
 
@@ -1120,13 +1121,9 @@ pub(crate) fn constant_key_alternatives(
         }
         */
         Literal::Integer(ref n) => {
-            let result = (&**n).try_into();
-            if let Ok(value) = result {
-                Fixnum::build_with_checked(value)
-                    .map(|n| {
-                        constants.push(Literal::Fixnum(n));
-                    })
-                    .unwrap();
+            let n: &IBig = &*n;
+            if let Ok(value) = Fixnum::build_with_checked(n) {
+                constants.push(Literal::Fixnum(value));
             }
         }
         _ => {}
