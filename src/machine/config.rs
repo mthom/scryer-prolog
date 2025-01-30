@@ -1,7 +1,6 @@
-use std::cell::RefCell;
-use std::io::{Seek, SeekFrom, Write};
-use std::rc::Rc;
-use std::{borrow::Cow, io::Cursor};
+use std::borrow::Cow;
+use std::io::Write;
+use std::sync::mpsc::{channel, Receiver, Sender};
 
 use rand::{rngs::StdRng, SeedableRng};
 
@@ -40,14 +39,12 @@ impl StreamConfig {
     ///
     /// This also returns a handler to the stdin do the [`Machine`](crate::Machine).
     pub fn with_callbacks(stdout: Option<Callback>, stderr: Option<Callback>) -> (UserInput, Self) {
-        let stdin = Rc::new(RefCell::new(Cursor::new(Vec::new())));
+        let (sender, receiver) = channel();
         (
-            UserInput {
-                inner: stdin.clone(),
-            },
+            UserInput { inner: sender },
             StreamConfig {
                 inner: StreamConfigInner::Callbacks {
-                    stdin,
+                    stdin: receiver,
                     stdout,
                     stderr,
                 },
@@ -59,23 +56,19 @@ impl StreamConfig {
 /// A handler for the stdin of the [`Machine`](crate::Machine).
 #[derive(Debug)]
 pub struct UserInput {
-    inner: Rc<RefCell<Cursor<Vec<u8>>>>,
+    inner: Sender<Vec<u8>>,
 }
 
 impl Write for UserInput {
     fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-        let mut inner = self.inner.borrow_mut();
-        let pos = inner.position();
-
-        inner.seek(SeekFrom::End(0))?;
-        let result = inner.write(buf);
-        inner.seek(SeekFrom::Start(pos))?;
-
-        result
+        self.inner
+            .send(buf.into())
+            .map(|_| buf.len())
+            .map_err(|_| std::io::ErrorKind::BrokenPipe.into())
     }
 
     fn flush(&mut self) -> std::io::Result<()> {
-        self.inner.borrow_mut().flush()
+        Ok(())
     }
 }
 
@@ -85,7 +78,7 @@ enum StreamConfigInner {
     #[default]
     Memory,
     Callbacks {
-        stdin: Rc<RefCell<Cursor<Vec<u8>>>>,
+        stdin: Receiver<Vec<u8>>,
         stdout: Option<Callback>,
         stderr: Option<Callback>,
     },
