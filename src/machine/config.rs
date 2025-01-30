@@ -7,22 +7,83 @@ use rand::{rngs::StdRng, SeedableRng};
 use crate::Machine;
 
 use super::{
-    bootstrapping_compile, current_dir, import_builtin_impls, libraries, load_module, Atom,
+    bootstrapping_compile, current_dir, import_builtin_impls, libraries, load_module, Arena, Atom,
     Callback, CompilationTarget, IndexStore, ListingSource, MachineArgs, MachineState, Stream,
     StreamOptions,
 };
 
-/// Describes how the streams of a [`Machine`](crate::Machine) will be handled.
 #[derive(Default)]
+enum OutputStreamConfig {
+    #[default]
+    Null,
+    Memory,
+    Stdout,
+    Stderr,
+    Callback(Callback),
+}
+
+impl std::fmt::Debug for OutputStreamConfig {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Null => write!(f, "Null"),
+            Self::Memory => write!(f, "Memory"),
+            Self::Stdout => write!(f, "Stdout"),
+            Self::Stderr => write!(f, "Stderr"),
+            Self::Callback(_) => f.debug_tuple("Callback").field(&"<callback>").finish(),
+        }
+    }
+}
+
+impl OutputStreamConfig {
+    fn into_stream(self, arena: &mut Arena) -> Stream {
+        match self {
+            OutputStreamConfig::Null => Stream::Null(StreamOptions::default()),
+            OutputStreamConfig::Memory => Stream::from_owned_string("".to_owned(), arena),
+            OutputStreamConfig::Stdout => Stream::stdout(arena),
+            OutputStreamConfig::Stderr => Stream::stderr(arena),
+            OutputStreamConfig::Callback(callback) => Stream::from_callback(callback, arena),
+        }
+    }
+}
+
+#[derive(Debug, Default)]
+enum InputStreamConfig {
+    #[default]
+    Null,
+    Stdin,
+    Channel(Receiver<Vec<u8>>),
+}
+
+impl InputStreamConfig {
+    fn into_stream(self, arena: &mut Arena, add_history: bool) -> Stream {
+        match self {
+            InputStreamConfig::Null => Stream::Null(StreamOptions::default()),
+            InputStreamConfig::Stdin => Stream::stdin(arena, add_history),
+            InputStreamConfig::Channel(channel) => Stream::input_channel(channel, arena),
+        }
+    }
+}
+
+/// Describes how the streams of a [`Machine`](crate::Machine) will be handled.
 pub struct StreamConfig {
-    inner: StreamConfigInner,
+    stdin: InputStreamConfig,
+    stdout: OutputStreamConfig,
+    stderr: OutputStreamConfig,
+}
+
+impl Default for StreamConfig {
+    fn default() -> Self {
+        Self::in_memory()
+    }
 }
 
 impl StreamConfig {
     /// Binds the input, output and error streams to stdin, stdout and stderr.
     pub fn stdio() -> Self {
         StreamConfig {
-            inner: StreamConfigInner::Stdio,
+            stdin: InputStreamConfig::Stdin,
+            stdout: OutputStreamConfig::Stdout,
+            stderr: OutputStreamConfig::Stderr,
         }
     }
 
@@ -31,7 +92,9 @@ impl StreamConfig {
     /// The input stream is ignored.
     pub fn in_memory() -> Self {
         StreamConfig {
-            inner: StreamConfigInner::Memory,
+            stdin: InputStreamConfig::Null,
+            stdout: OutputStreamConfig::Memory,
+            stderr: OutputStreamConfig::Stderr,
         }
     }
 
@@ -43,12 +106,22 @@ impl StreamConfig {
         (
             UserInput { inner: sender },
             StreamConfig {
-                inner: StreamConfigInner::Callbacks {
-                    stdin: receiver,
-                    stdout,
-                    stderr,
-                },
+                stdin: InputStreamConfig::Channel(receiver),
+                stdout: stdout.map_or(OutputStreamConfig::Null, |x| {
+                    OutputStreamConfig::Callback(x)
+                }),
+                stderr: stderr.map_or(OutputStreamConfig::Null, |x| {
+                    OutputStreamConfig::Callback(x)
+                }),
             },
+        )
+    }
+
+    fn into_streams(self, arena: &mut Arena, add_history: bool) -> (Stream, Stream, Stream) {
+        (
+            self.stdin.into_stream(arena, add_history),
+            self.stdout.into_stream(arena),
+            self.stderr.into_stream(arena),
         )
     }
 }
@@ -70,18 +143,6 @@ impl Write for UserInput {
     fn flush(&mut self) -> std::io::Result<()> {
         Ok(())
     }
-}
-
-#[derive(Default)]
-enum StreamConfigInner {
-    Stdio,
-    #[default]
-    Memory,
-    Callbacks {
-        stdin: Receiver<Vec<u8>>,
-        stdout: Option<Callback>,
-        stderr: Option<Callback>,
-    },
 }
 
 /// Describes how a [`Machine`](crate::Machine) will be configured.
@@ -123,33 +184,9 @@ impl MachineBuilder {
         let args = MachineArgs::new();
         let mut machine_st = MachineState::new();
 
-        let (user_input, user_output, user_error) = match self.streams.inner {
-            StreamConfigInner::Stdio => (
-                Stream::stdin(&mut machine_st.arena, args.add_history),
-                Stream::stdout(&mut machine_st.arena),
-                Stream::stderr(&mut machine_st.arena),
-            ),
-            StreamConfigInner::Memory => (
-                Stream::Null(StreamOptions::default()),
-                Stream::from_owned_string("".to_owned(), &mut machine_st.arena),
-                Stream::stderr(&mut machine_st.arena),
-            ),
-            StreamConfigInner::Callbacks {
-                stdin,
-                stdout,
-                stderr,
-            } => (
-                Stream::input_channel(stdin, &mut machine_st.arena),
-                stdout.map_or_else(
-                    || Stream::Null(StreamOptions::default()),
-                    |x| Stream::from_callback(x, &mut machine_st.arena),
-                ),
-                stderr.map_or_else(
-                    || Stream::Null(StreamOptions::default()),
-                    |x| Stream::from_callback(x, &mut machine_st.arena),
-                ),
-            ),
-        };
+        let (user_input, user_output, user_error) = self
+            .streams
+            .into_streams(&mut machine_st.arena, args.add_history);
 
         let mut wam = Machine {
             machine_st,
