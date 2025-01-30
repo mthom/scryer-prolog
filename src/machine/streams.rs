@@ -16,7 +16,6 @@ pub use scryer_modular_bitfield::prelude::*;
 
 #[cfg(feature = "http")]
 use bytes::{buf::Reader as BufReader, Buf, Bytes};
-use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::error::Error;
 use std::fmt;
@@ -30,7 +29,8 @@ use std::net::{Shutdown, TcpStream};
 use std::ops::{Deref, DerefMut};
 use std::path::PathBuf;
 use std::ptr;
-use std::rc::Rc;
+use std::sync::mpsc::Receiver;
+use std::sync::mpsc::TryRecvError;
 
 #[cfg(feature = "tls")]
 use native_tls::TlsStream;
@@ -414,13 +414,50 @@ impl Write for CallbackStream {
 
 #[derive(Debug)]
 pub struct InputChannelStream {
-    pub(crate) inner: Rc<RefCell<Cursor<Vec<u8>>>>,
+    pub(crate) inner: Cursor<Vec<u8>>,
+    pub eof: bool,
+    channel: Receiver<Vec<u8>>,
 }
 
 impl Read for InputChannelStream {
     #[inline]
     fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
-        self.inner.borrow_mut().read(buf)
+        if self.eof {
+            return Ok(0);
+        }
+
+        let to_read = buf.len();
+        let mut total_read = 0;
+
+        loop {
+            total_read += self.inner.read(&mut buf[total_read..])?;
+
+            if total_read < to_read {
+                // We need to get more data to read
+                match self.channel.try_recv() {
+                    Ok(data) => {
+                        // Append into self.inner
+                        let pos = self.inner.position();
+                        assert_eq!(pos as usize, self.inner.get_ref().len());
+                        self.inner.write_all(&data)?;
+                        self.inner.seek(SeekFrom::Start(pos))?;
+                    }
+                    Err(TryRecvError::Empty) => {
+                        // Data is pending
+                        break;
+                    }
+                    Err(TryRecvError::Disconnected) => {
+                        // The other end of the channel was closed so we are EOF
+                        self.eof = true;
+                        break;
+                    }
+                }
+            } else {
+                assert_eq!(total_read, to_read);
+                break;
+            }
+        }
+        Ok(total_read)
     }
 }
 
@@ -602,9 +639,14 @@ impl Stream {
     }
 
     #[inline]
-    pub fn input_channel(cursor: Rc<RefCell<Cursor<Vec<u8>>>>, arena: &mut Arena) -> Stream {
+    pub fn input_channel(channel: Receiver<Vec<u8>>, arena: &mut Arena) -> Stream {
+        let inner = Cursor::new(Vec::new());
         Stream::InputChannel(arena_alloc!(
-            StreamLayout::new(CharReader::new(InputChannelStream { inner: cursor })),
+            StreamLayout::new(CharReader::new(InputChannelStream {
+                inner,
+                eof: false,
+                channel
+            })),
             arena
         ))
     }
@@ -1239,6 +1281,13 @@ impl Stream {
                     AtEndOfStream::Past
                 }
             }
+            Stream::InputChannel(stream_layout) => {
+                if stream_layout.stream.get_ref().eof {
+                    AtEndOfStream::At
+                } else {
+                    AtEndOfStream::Not
+                }
+            }
             _ => AtEndOfStream::Not,
         }
     }
@@ -1517,6 +1566,10 @@ impl Stream {
             }
             Stream::Readline(ref mut readline_stream) => {
                 readline_stream.reset();
+                true
+            }
+            Stream::InputChannel(ref mut input_channel_stream) => {
+                input_channel_stream.stream.get_mut().inner.set_position(0);
                 true
             }
             _ => false,

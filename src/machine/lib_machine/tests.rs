@@ -620,7 +620,7 @@ fn callback_streams() {
 
     let (mut user_input, streams) = StreamConfig::with_callbacks(
         Some(Box::new(move |x| {
-            x.read_to_string(&mut *test_string2.borrow_mut()).unwrap();
+            x.read_to_string(&mut test_string2.borrow_mut()).unwrap();
         })),
         None,
     );
