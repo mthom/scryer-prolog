@@ -9,7 +9,6 @@ use crate::Machine;
 use super::{
     bootstrapping_compile, current_dir, import_builtin_impls, libraries, load_module, Arena, Atom,
     Callback, CompilationTarget, IndexStore, ListingSource, MachineArgs, MachineState, Stream,
-    StreamOptions,
 };
 
 #[derive(Default)]
@@ -77,12 +76,17 @@ impl OutputStreamConfig {
     }
 }
 
-#[derive(Debug, Default)]
+#[derive(Debug)]
 enum InputStreamConfigInner {
-    #[default]
-    Null,
+    String(String),
     Stdin,
     Channel(Receiver<Vec<u8>>),
+}
+
+impl Default for InputStreamConfigInner {
+    fn default() -> Self {
+        Self::String("".into())
+    }
 }
 
 /// Configuration for an input stream;
@@ -92,10 +96,10 @@ pub struct InputStreamConfig {
 }
 
 impl InputStreamConfig {
-    /// Ignores all input.
-    pub fn null() -> Self {
+    /// Gets input from string.
+    pub fn string(s: impl Into<String>) -> Self {
         Self {
-            inner: InputStreamConfigInner::Null,
+            inner: InputStreamConfigInner::String(s.into()),
         }
     }
 
@@ -119,7 +123,7 @@ impl InputStreamConfig {
 
     fn into_stream(self, arena: &mut Arena, add_history: bool) -> Stream {
         match self.inner {
-            InputStreamConfigInner::Null => Stream::Null(StreamOptions::default()),
+            InputStreamConfigInner::String(s) => Stream::from_owned_string(s, arena),
             InputStreamConfigInner::Stdin => Stream::stdin(arena, add_history),
             InputStreamConfigInner::Channel(channel) => Stream::input_channel(channel, arena),
         }
@@ -152,14 +156,12 @@ impl StreamConfig {
         }
     }
 
-    /// Binds the output stream to a memory buffer, and the error stream to stderr.
-    ///
-    /// The input stream is ignored.
+    /// Binds the output and error streams to memory buffers and has an empty input.
     pub fn in_memory() -> Self {
         StreamConfig {
-            stdin: InputStreamConfig::null(),
+            stdin: InputStreamConfig::string(""),
             stdout: OutputStreamConfig::memory(),
-            stderr: OutputStreamConfig::stderr(),
+            stderr: OutputStreamConfig::memory(),
         }
     }
 
