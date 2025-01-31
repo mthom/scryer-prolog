@@ -291,7 +291,7 @@ impl Machine {
     }
 
     fn load_file(&mut self, path: &str, stream: Stream) {
-        self.machine_st.registers[1] = stream_as_cell!(stream);
+        self.machine_st.registers[1] = stream.into();
         self.machine_st.registers[2] =
             atom_as_cell!(AtomTable::build_with(&self.machine_st.atom_tbl, path));
 

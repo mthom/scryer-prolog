@@ -218,12 +218,6 @@ macro_rules! string_as_pstr_cell {
     }};
 }
 
-macro_rules! stream_as_cell {
-    ($ptr:expr) => {
-        raw_ptr_as_cell!($ptr.as_ptr())
-    };
-}
-
 macro_rules! cell_as_stream {
     ($cell:expr) => {{
         let ptr = cell_as_untyped_arena_ptr!($cell);

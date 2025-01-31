@@ -982,6 +982,20 @@ fn cursor_position<T>(
     }
 }
 
+impl From<Stream> for HeapCellValue {
+    #[inline(always)]
+    fn from(stream: Stream) -> Self {
+        if stream.is_null_stream() {
+            let res = atom!("null_stream");
+            atom_as_cell!(res)
+        } else {
+            let res = stream.as_ptr();
+            debug_assert!(!res.is_null());
+            raw_ptr_as_cell!(res)
+        }
+    }
+}
+
 impl Stream {
     #[inline]
     pub(crate) fn position(&mut self) -> Option<(u64, usize)> {
@@ -1626,7 +1640,7 @@ impl MachineState {
                             match_untyped_arena_ptr!(ptr,
                                 (ArenaHeaderTag::Stream, stream) => {
                                     return if stream.is_null_stream() {
-                                        Err(self.open_permission_error(stream_as_cell!(stream), caller, arity))
+                                        Err(self.open_permission_error(HeapCellValue::from(stream), caller, arity))
                                     } else {
                                         Ok(stream)
                                     };
@@ -1689,7 +1703,7 @@ impl MachineState {
             if let Some(alias) = stream.options().get_alias() {
                 atom_as_cell!(alias)
             } else {
-                stream_as_cell!(stream)
+                stream.into()
             },
         );
 
@@ -1891,5 +1905,83 @@ impl MachineState {
                 Stream::from_file_as_output(file_spec, file, in_append_mode, &mut self.arena)
             });
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::machine::config::*;
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn current_input_null_stream() {
+        let mut machine = MachineBuilder::new()
+            .with_streams(StreamConfig::in_memory())
+            .build();
+
+        let results = machine.run_query("current_input(S).").collect::<Vec<_>>();
+
+        assert_eq!(results.len(), 1);
+        assert!(results[0].is_ok());
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn read_null_stream() {
+        let mut machine = MachineBuilder::new()
+            .with_streams(StreamConfig::in_memory())
+            .build();
+
+        let results = machine.run_query("get_code(C).").collect::<Vec<_>>();
+
+        assert_eq!(results.len(), 1);
+        assert!(results[0].is_err());
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn current_output_null_stream() {
+        // TODO: switch to a proper solution for configuring the machine with null streams
+        // once `StreamConfig` supports it.
+        let mut machine = MachineBuilder::new().build();
+        machine.user_output = Stream::Null(StreamOptions::default());
+        machine.configure_streams();
+
+        let results = machine.run_query("current_output(S).").collect::<Vec<_>>();
+
+        assert_eq!(results.len(), 1);
+        assert!(results[0].is_ok());
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn write_null_stream() {
+        // TODO: switch to a proper solution for configuring the machine with null streams
+        // once `StreamConfig` supports it.
+        let mut machine = MachineBuilder::new().build();
+        machine.user_output = Stream::Null(StreamOptions::default());
+        machine.configure_streams();
+
+        let results = machine.run_query("write(hello).").collect::<Vec<_>>();
+
+        assert_eq!(results.len(), 1);
+        assert!(results[0].is_err());
+    }
+
+    /// A variant of the [`write_null_stream`] that tries to write to a (null) input stream.
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn write_null_input_stream() {
+        let mut machine = MachineBuilder::new()
+            .with_streams(StreamConfig::in_memory())
+            .build();
+
+        let results = machine
+            .run_query("current_input(Stream), write(Stream, hello).")
+            .collect::<Vec<_>>();
+
+        assert_eq!(results.len(), 1);
+        assert!(results[0].is_err());
     }
 }
