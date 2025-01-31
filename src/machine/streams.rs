@@ -2097,9 +2097,143 @@ impl MachineState {
 }
 
 #[cfg(test)]
-mod test {
-    use super::*;
-    use crate::machine::config::*;
+mod tests {
+    use crate::*;
+    use std::{cell::RefCell, io::Read, io::Write, rc::Rc};
+
+    fn succeeded(answer: Vec<Result<LeafAnswer, Term>>) -> bool {
+        // Ideally this should be a method in QueryState or LeafAnswer.
+        matches!(
+            answer[0].as_ref(),
+            Ok(LeafAnswer::True) | Ok(LeafAnswer::LeafAnswer { .. })
+        )
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn user_input_string_stream() {
+        let streams = StreamConfig {
+            stdin: InputStreamConfig::string("a(1,2,3)."),
+            ..Default::default()
+        };
+
+        let mut machine = MachineBuilder::default().with_streams(streams).build();
+
+        let complete_answer: Vec<_> = machine
+            .run_query(r#"current_input(_), \+ at_end_of_stream."#)
+            .collect();
+
+        assert!(succeeded(complete_answer));
+
+        let complete_answer: Vec<_> = machine.run_query("read(A).").collect();
+
+        assert_eq!(
+            complete_answer,
+            [Ok(LeafAnswer::from_bindings([(
+                "A",
+                Term::compound("a", [Term::integer(1), Term::integer(2), Term::integer(3),])
+            )]))]
+        );
+
+        let complete_answer: Vec<_> = machine.run_query(r#"at_end_of_stream."#).collect();
+
+        assert!(succeeded(complete_answer));
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn user_input_channel_stream() {
+        let (mut user_input, channel_stream) = InputStreamConfig::channel();
+        let streams = StreamConfig {
+            stdin: channel_stream,
+            ..Default::default()
+        };
+
+        let mut machine = MachineBuilder::default().with_streams(streams).build();
+
+        let complete_answer: Vec<_> = machine
+            .run_query(r#"current_input(_), \+ at_end_of_stream."#)
+            .collect();
+
+        assert!(succeeded(complete_answer));
+
+        write!(user_input, "a(1,2,3).").unwrap();
+
+        let complete_answer: Vec<_> = machine
+            .run_query(r#"\+ at_end_of_stream, read(A)."#)
+            .collect();
+
+        assert_eq!(
+            complete_answer,
+            [Ok(LeafAnswer::from_bindings([(
+                "A",
+                Term::compound("a", [Term::integer(1), Term::integer(2), Term::integer(3),])
+            )]))]
+        );
+
+        // End-of-data but not end-of-stream;
+        let complete_answer: Vec<_> = machine
+            .run_query(
+                r#"
+                use_module(library(charsio)),
+                current_input(In), get_n_chars(In, N, C),
+                N == 0, \+ at_end_of_stream.
+            "#,
+            )
+            .collect();
+
+        assert!(succeeded(complete_answer));
+
+        // Dropping the sender closes the input
+        drop(user_input);
+
+        let complete_answer: Vec<_> = machine
+            .run_query(
+                r#"
+                current_input(In), get_n_chars(In, N, _),
+                N == 0, at_end_of_stream.
+            "#,
+            )
+            .collect();
+
+        assert!(succeeded(complete_answer));
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn user_output_callback_stream() {
+        let test_string = Rc::new(RefCell::new(String::new()));
+
+        let streams = StreamConfig {
+            stdout: OutputStreamConfig::callback(Box::new({
+                let test_string = test_string.clone();
+                move |x| {
+                    x.read_to_string(&mut test_string.borrow_mut()).unwrap();
+                }
+            })),
+            ..Default::default()
+        };
+
+        let mut machine = MachineBuilder::default().with_streams(streams).build();
+
+        let complete_answer: Vec<_> = machine
+            .run_query(r#"current_output(Out), \+ at_end_of_stream(Out)."#)
+            .collect();
+
+        assert!(succeeded(complete_answer));
+
+        let complete_answer: Vec<_> = machine
+            .run_query(r#"write(asdf), nl, flush_output."#)
+            .collect();
+
+        assert!(succeeded(complete_answer));
+        assert_eq!(test_string.borrow().as_str(), "asdf\n");
+
+        let complete_answer: Vec<_> = machine.run_query(r#"write(abcd), flush_output."#).collect();
+
+        assert!(succeeded(complete_answer));
+        assert_eq!(test_string.borrow().as_str(), "asdf\nabcd");
+    }
 
     #[test]
     #[cfg_attr(miri, ignore)]

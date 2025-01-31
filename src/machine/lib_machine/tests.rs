@@ -1,8 +1,5 @@
-use std::io::Write;
-use std::{cell::RefCell, io::Read, rc::Rc};
-
 use super::*;
-use crate::{MachineBuilder, StreamConfig};
+use crate::MachineBuilder;
 
 #[test]
 #[cfg_attr(miri, ignore = "it takes too long to run")]
@@ -610,35 +607,4 @@ fn errors_and_exceptions() {
         complete_answer,
         [Ok(LeafAnswer::Exception(Term::atom("a")))]
     );
-}
-
-#[test]
-#[cfg_attr(miri, ignore)]
-fn callback_streams() {
-    let test_string = Rc::new(RefCell::new(String::new()));
-    let test_string2 = test_string.clone();
-
-    let (mut user_input, streams) = StreamConfig::with_callbacks(
-        Some(Box::new(move |x| {
-            x.read_to_string(&mut test_string2.borrow_mut()).unwrap();
-        })),
-        None,
-    );
-    let mut machine = MachineBuilder::default().with_streams(streams).build();
-
-    write!(&mut user_input, "a(1,2,3).").unwrap();
-
-    let complete_answer: Vec<_> = machine
-        .run_query("read(A), write('asdf'), nl, flush_output.")
-        .collect();
-
-    assert_eq!(
-        complete_answer,
-        [Ok(LeafAnswer::from_bindings([(
-            "A",
-            Term::compound("a", [Term::integer(1), Term::integer(2), Term::integer(3)])
-        ),]))]
-    );
-
-    assert_eq!(*test_string.borrow(), "asdf\n");
 }
