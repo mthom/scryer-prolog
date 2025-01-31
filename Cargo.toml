@@ -139,6 +139,17 @@ opt-level = 3
 lto = true
 opt-level = 3
 
+[profile.wasm-dev]
+inherits = "dev"
+opt-level = 1
+lto = "off"
+
+[profile.wasm-release]
+inherits = "release"
+lto = "off"
+panic = "abort"
+codegen-units = 256
+
 [[bench]]
 name = "run_criterion"
 harness = false
