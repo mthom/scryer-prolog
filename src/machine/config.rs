@@ -13,7 +13,7 @@ use super::{
 };
 
 #[derive(Default)]
-enum OutputStreamConfig {
+enum OutputStreamConfigInner {
     #[default]
     Null,
     Memory,
@@ -22,7 +22,7 @@ enum OutputStreamConfig {
     Callback(Callback),
 }
 
-impl std::fmt::Debug for OutputStreamConfig {
+impl std::fmt::Debug for OutputStreamConfigInner {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::Null => write!(f, "Null"),
@@ -34,41 +34,110 @@ impl std::fmt::Debug for OutputStreamConfig {
     }
 }
 
+/// Configuration for an output stream.
+#[derive(Debug, Default)]
+pub struct OutputStreamConfig {
+    inner: OutputStreamConfigInner,
+}
+
 impl OutputStreamConfig {
+    /// Ignores all output.
+    pub fn null() -> Self {
+        Self {
+            inner: OutputStreamConfigInner::Null,
+        }
+    }
+    /// Sends output to stdout.
+    pub fn stdout() -> Self {
+        Self {
+            inner: OutputStreamConfigInner::Stdout,
+        }
+    }
+    /// Sends output to stderr.
+    pub fn stderr() -> Self {
+        Self {
+            inner: OutputStreamConfigInner::Stderr,
+        }
+    }
+    /// Keeps output in a memory buffer.
+    pub fn memory() -> Self {
+        Self {
+            inner: OutputStreamConfigInner::Memory,
+        }
+    }
+    /// Calls a callback with the output whenever the stream is written to.
+    pub fn callback(callback: Callback) -> Self {
+        Self {
+            inner: OutputStreamConfigInner::Callback(callback),
+        }
+    }
+
     fn into_stream(self, arena: &mut Arena) -> Stream {
-        match self {
-            OutputStreamConfig::Null => Stream::Null(StreamOptions::default()),
-            OutputStreamConfig::Memory => Stream::from_owned_string("".to_owned(), arena),
-            OutputStreamConfig::Stdout => Stream::stdout(arena),
-            OutputStreamConfig::Stderr => Stream::stderr(arena),
-            OutputStreamConfig::Callback(callback) => Stream::from_callback(callback, arena),
+        match self.inner {
+            OutputStreamConfigInner::Null => Stream::Null(StreamOptions::default()),
+            OutputStreamConfigInner::Memory => Stream::from_owned_string("".to_owned(), arena),
+            OutputStreamConfigInner::Stdout => Stream::stdout(arena),
+            OutputStreamConfigInner::Stderr => Stream::stderr(arena),
+            OutputStreamConfigInner::Callback(callback) => Stream::from_callback(callback, arena),
         }
     }
 }
 
 #[derive(Debug, Default)]
-enum InputStreamConfig {
+enum InputStreamConfigInner {
     #[default]
     Null,
     Stdin,
     Channel(Receiver<Vec<u8>>),
 }
 
+/// Configuration for an input stream;
+#[derive(Debug, Default)]
+pub struct InputStreamConfig {
+    inner: InputStreamConfigInner,
+}
+
 impl InputStreamConfig {
+    /// Ignores all input.
+    pub fn null() -> Self {
+        Self {
+            inner: InputStreamConfigInner::Null,
+        }
+    }
+    /// Gets input from stdin.
+    pub fn stdin() -> Self {
+        Self {
+            inner: InputStreamConfigInner::Stdin,
+        }
+    }
+    /// Connects the input to the receiving end of a channel.
+    pub fn channel() -> (UserInput, Self) {
+        let (sender, receiver) = channel();
+        (
+            UserInput { inner: sender },
+            Self {
+                inner: InputStreamConfigInner::Channel(receiver),
+            },
+        )
+    }
+
     fn into_stream(self, arena: &mut Arena, add_history: bool) -> Stream {
-        match self {
-            InputStreamConfig::Null => Stream::Null(StreamOptions::default()),
-            InputStreamConfig::Stdin => Stream::stdin(arena, add_history),
-            InputStreamConfig::Channel(channel) => Stream::input_channel(channel, arena),
+        match self.inner {
+            InputStreamConfigInner::Null => Stream::Null(StreamOptions::default()),
+            InputStreamConfigInner::Stdin => Stream::stdin(arena, add_history),
+            InputStreamConfigInner::Channel(channel) => Stream::input_channel(channel, arena),
         }
     }
 }
 
 /// Describes how the streams of a [`Machine`](crate::Machine) will be handled.
 pub struct StreamConfig {
-    stdin: InputStreamConfig,
-    stdout: OutputStreamConfig,
-    stderr: OutputStreamConfig,
+    /// The configuration for the stdin of the [`Machine`](crate::Machine).
+    pub stdin: InputStreamConfig,
+    /// The configuration for the stdout of the [`Machine`](crate::Machine).
+    pub stdout: OutputStreamConfig,
+    /// The configuration for the stderr of the [`Machine`](crate::Machine).
+    pub stderr: OutputStreamConfig,
 }
 
 impl Default for StreamConfig {
@@ -81,9 +150,9 @@ impl StreamConfig {
     /// Binds the input, output and error streams to stdin, stdout and stderr.
     pub fn stdio() -> Self {
         StreamConfig {
-            stdin: InputStreamConfig::Stdin,
-            stdout: OutputStreamConfig::Stdout,
-            stderr: OutputStreamConfig::Stderr,
+            stdin: InputStreamConfig::stdin(),
+            stdout: OutputStreamConfig::stdout(),
+            stderr: OutputStreamConfig::stderr(),
         }
     }
 
@@ -92,9 +161,9 @@ impl StreamConfig {
     /// The input stream is ignored.
     pub fn in_memory() -> Self {
         StreamConfig {
-            stdin: InputStreamConfig::Null,
-            stdout: OutputStreamConfig::Memory,
-            stderr: OutputStreamConfig::Stderr,
+            stdin: InputStreamConfig::null(),
+            stdout: OutputStreamConfig::memory(),
+            stderr: OutputStreamConfig::stderr(),
         }
     }
 
@@ -102,17 +171,13 @@ impl StreamConfig {
     ///
     /// This also returns a handler to the stdin do the [`Machine`](crate::Machine).
     pub fn with_callbacks(stdout: Option<Callback>, stderr: Option<Callback>) -> (UserInput, Self) {
-        let (sender, receiver) = channel();
+        let (user_input, channel_stream) = InputStreamConfig::channel();
         (
-            UserInput { inner: sender },
+            user_input,
             StreamConfig {
-                stdin: InputStreamConfig::Channel(receiver),
-                stdout: stdout.map_or(OutputStreamConfig::Null, |x| {
-                    OutputStreamConfig::Callback(x)
-                }),
-                stderr: stderr.map_or(OutputStreamConfig::Null, |x| {
-                    OutputStreamConfig::Callback(x)
-                }),
+                stdin: channel_stream,
+                stdout: stdout.map_or_else(OutputStreamConfig::null, OutputStreamConfig::callback),
+                stderr: stderr.map_or_else(OutputStreamConfig::null, OutputStreamConfig::callback),
             },
         )
     }
