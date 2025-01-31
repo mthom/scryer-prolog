@@ -175,6 +175,7 @@ macro_rules! raw_ptr_as_cell {
         // TODO use <*{const,mut} _>::addr instead of as when the strict_provenance feature is stable rust-lang/rust#95228
         // we might need <*{const,mut} _>::expose_provenance for strict provenance, dependening on how we recreate a pointer later
         let ptr : *const _ = $ptr;
+        debug_assert!(!$ptr.is_null());
         HeapCellValue::from_ptr_addr(ptr as usize)
     }};
 }

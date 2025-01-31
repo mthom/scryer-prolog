@@ -656,6 +656,7 @@ pub struct UntypedArenaPtr {
 impl UntypedArenaPtr {
     #[inline(always)]
     pub fn build_with(ptr: usize) -> Self {
+        debug_assert!(ptr != 0);
         UntypedArenaPtr::new().with_ptr(ptr as u64)
     }
 }
@@ -698,6 +699,7 @@ impl UntypedArenaPtr {
     #[inline]
     pub fn get_tag(self) -> ArenaHeaderTag {
         unsafe {
+            debug_assert!(!self.get_ptr().is_null());
             let header = *(self.get_ptr() as *const ArenaHeader);
             header.get_tag()
         }
