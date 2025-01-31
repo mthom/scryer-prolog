@@ -1,28 +1,26 @@
-<?xml version="1.0" encoding="utf-8"?>
-<Wix xmlns="http://schemas.microsoft.com/wix/2006/wi">
-  <Product Name="Scryer Prolog" Manufacturer="Scryer Prolog contributors" Id="*" UpgradeCode="cfb2dee4-5dd5-4d7d-b426-cd7340810559" Language="1033" Codepage="1252" Version="0.9.0">
-    <Package Description="An open source industrial strength production environment for ISO Prolog that is also a testbed for bleeding edge research in logic and constraint programming, which is itself written in a high-level language." Platform="x64" Keywords="prolog" Id="*" Compressed="yes" InstallScope="perMachine" InstallerVersion="300" Languages="1033" SummaryCodepage="1252" Manufacturer="Scryer Prolog contributors"/>
-    <Property Id="APPHELPLINK" Value="https://github.com/mthom/scryer-prolog"/>
+﻿<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="Scryer Prolog" Manufacturer="Scryer Prolog contributors" UpgradeCode="cfb2dee4-5dd5-4d7d-b426-cd7340810559" Language="1033" Codepage="1252" Version="0.9.0" InstallerVersion="300"><SummaryInformation Description="An open source industrial strength production environment for ISO Prolog that is also a testbed for bleeding edge research in logic and constraint programming, which is itself written in a high-level language." Keywords="prolog" Manufacturer="Scryer Prolog contributors" />
+    <Property Id="APPHELPLINK" Value="https://github.com/mthom/scryer-prolog" />
     <Media Id="1" Cabinet="scryer.cab" EmbedCab="yes" />
-    <Directory Id="TARGETDIR" Name="SourceDir">
-      <Directory Id="ProgramFilesFolder" Name="PFiles">
+    
+    <Feature Id="Complete" Level="1" Display="expand" ConfigurableDirectory="INSTALLDIR">
+      <ComponentRef Id="MainExecutable" />
+      <ComponentRef Id="ApplicationShortcut" />
+    </Feature>
+  
+      <StandardDirectory Id="ProgramFilesFolder">
         <Directory Id="INSTALLDIR" Name="Scryer Prolog">
           <Component Id="MainExecutable" Guid="1b41ceda-ba18-47f9-911b-ee41b4f20921">
-            <File Id="ScryerPrologEXE" Name="scryer-prolog.exe" DiskId="1" Source="target/release/scryer-prolog.exe" KeyPath="yes" Checksum="yes"/>
+            <File Id="ScryerPrologEXE" Name="scryer-prolog.exe" DiskId="1" Source="target/release/scryer-prolog.exe" KeyPath="yes" Checksum="yes" />
           </Component>
         </Directory>
-      </Directory>
-      <Directory Id="ProgramMenuFolder">
+      </StandardDirectory>
+      <StandardDirectory Id="ProgramMenuFolder">
         <Component Id="ApplicationShortcut" Guid="8c9b14a3-e7b1-4d30-a892-61d7371dcae2">
-          <Shortcut Id="ApplicationStarMenuShortcut" Name="Scryer Prolog" Description="Launch Scryer Prolog" Target="[#ScryerPrologEXE]" WorkingDirectory="INSTALLDIR"/>
-          <RemoveFolder Id="ApplicationShortcut" On="uninstall"/>
-          <RegistryValue Root="HKCU" Key="Software\Microsoft\ScryerProlog" Name="installed" Type="integer" Value="1" KeyPath="yes"/>
+          <Shortcut Id="ApplicationStarMenuShortcut" Name="Scryer Prolog" Description="Launch Scryer Prolog" Target="[#ScryerPrologEXE]" WorkingDirectory="INSTALLDIR" />
+          <RemoveFolder Id="ApplicationShortcut" On="uninstall" />
+          <RegistryValue Root="HKCU" Key="Software\Microsoft\ScryerProlog" Name="installed" Type="integer" Value="1" KeyPath="yes" />
         </Component>
-      </Directory>
-    </Directory>
-    <Feature Id="Complete" Level="1" Display="expand" ConfigurableDirectory="INSTALLDIR">
-      <ComponentRef Id="MainExecutable"/>
-      <ComponentRef Id="ApplicationShortcut"/>
-    </Feature>
-  </Product>
+      </StandardDirectory>
+    </Package>
 </Wix>
