@@ -116,6 +116,7 @@ web-sys = { version = "0.3", features = [
     "Performance",
 ] }
 js-sys = "0.3"
+ouroboros = "0.18"
 
 [dev-dependencies]
 maplit = "1.0.2"
