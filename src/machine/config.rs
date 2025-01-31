@@ -15,7 +15,6 @@ use super::{
 #[derive(Default)]
 enum OutputStreamConfigInner {
     #[default]
-    Null,
     Memory,
     Stdout,
     Stderr,
@@ -25,7 +24,6 @@ enum OutputStreamConfigInner {
 impl std::fmt::Debug for OutputStreamConfigInner {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::Null => write!(f, "Null"),
             Self::Memory => write!(f, "Memory"),
             Self::Stdout => write!(f, "Stdout"),
             Self::Stderr => write!(f, "Stderr"),
@@ -41,30 +39,27 @@ pub struct OutputStreamConfig {
 }
 
 impl OutputStreamConfig {
-    /// Ignores all output.
-    pub fn null() -> Self {
-        Self {
-            inner: OutputStreamConfigInner::Null,
-        }
-    }
     /// Sends output to stdout.
     pub fn stdout() -> Self {
         Self {
             inner: OutputStreamConfigInner::Stdout,
         }
     }
+
     /// Sends output to stderr.
     pub fn stderr() -> Self {
         Self {
             inner: OutputStreamConfigInner::Stderr,
         }
     }
+
     /// Keeps output in a memory buffer.
     pub fn memory() -> Self {
         Self {
             inner: OutputStreamConfigInner::Memory,
         }
     }
+
     /// Calls a callback with the output whenever the stream is written to.
     pub fn callback(callback: Callback) -> Self {
         Self {
@@ -74,7 +69,6 @@ impl OutputStreamConfig {
 
     fn into_stream(self, arena: &mut Arena) -> Stream {
         match self.inner {
-            OutputStreamConfigInner::Null => Stream::Null(StreamOptions::default()),
             OutputStreamConfigInner::Memory => Stream::from_owned_string("".to_owned(), arena),
             OutputStreamConfigInner::Stdout => Stream::stdout(arena),
             OutputStreamConfigInner::Stderr => Stream::stderr(arena),
@@ -104,12 +98,14 @@ impl InputStreamConfig {
             inner: InputStreamConfigInner::Null,
         }
     }
+
     /// Gets input from stdin.
     pub fn stdin() -> Self {
         Self {
             inner: InputStreamConfigInner::Stdin,
         }
     }
+
     /// Connects the input to the receiving end of a channel.
     pub fn channel() -> (UserInput, Self) {
         let (sender, receiver) = channel();
@@ -176,8 +172,10 @@ impl StreamConfig {
             user_input,
             StreamConfig {
                 stdin: channel_stream,
-                stdout: stdout.map_or_else(OutputStreamConfig::null, OutputStreamConfig::callback),
-                stderr: stderr.map_or_else(OutputStreamConfig::null, OutputStreamConfig::callback),
+                stdout: stdout
+                    .map_or_else(OutputStreamConfig::memory, OutputStreamConfig::callback),
+                stderr: stderr
+                    .map_or_else(OutputStreamConfig::memory, OutputStreamConfig::callback),
             },
         )
     }
