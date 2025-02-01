@@ -210,7 +210,8 @@ load_loop(Stream, Evacuable) :-
        '$conclude_load'(Evacuable)
     ;  var(Term) ->
        instantiation_error(load/1)
-    ;  warn_about_singletons(Singletons, LinesRead),
+    ;  LineNum is LinesRead + 1,
+       warn_about_singletons(Singletons, LineNum),
        compile_term(Term, Evacuable),
        load_loop(Stream, Evacuable)
     ).

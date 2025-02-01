@@ -42,14 +42,14 @@ $ scryer-prolog -f --no-add-history tests-pl/invalid_decl7.pl -g halt
 
 ```trycmd
 $ scryer-prolog -f --no-add-history tests-pl/invalid_decl8.pl -g halt
-% Warning: singleton variables Var at line 0 of invalid_decl8.pl
+% Warning: singleton variables Var at line 1 of invalid_decl8.pl
    error(domain_error(operator_specifier,todo_insert_invalid_term_here),load/1).
 
 ```
 
 ```trycmd
 $ scryer-prolog -f --no-add-history tests-pl/invalid_decl9.pl -g halt
-% Warning: singleton variables Var at line 0 of invalid_decl9.pl
+% Warning: singleton variables Var at line 1 of invalid_decl9.pl
    error(type_error(integer,todo_insert_invalid_term_here),load/1).
 
 ```
@@ -63,7 +63,7 @@ FIXME I belive the following test should result in a `error(instantiation_error,
 
 ```trycmd
 $ scryer-prolog -f --no-add-history tests-pl/invalid_decl11.pl -g halt
-% Warning: singleton variables Var at line 0 of invalid_decl11.pl
+% Warning: singleton variables Var at line 1 of invalid_decl11.pl
    error(type_error(list,todo_insert_invalid_term_here),load/1).
 
 ```
@@ -101,7 +101,7 @@ $ scryer-prolog -f --no-add-history tests-pl/invalid_decl16.pl -g halt
 
 ```trycmd
 $ scryer-prolog -f --no-add-history tests-pl/invalid_decl_issue2467.pl -g halt
-% Warning: singleton variables D at line 0 of invalid_decl_issue2467.pl
+% Warning: singleton variables D at line 1 of invalid_decl_issue2467.pl
    error(instantiation_error,load/1).
 
 ```
