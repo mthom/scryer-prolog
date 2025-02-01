@@ -1,0 +1,2 @@
+use_module(a), use_module(b), use_module(c).
+\+ \+ (test_a, test_b, test_c).

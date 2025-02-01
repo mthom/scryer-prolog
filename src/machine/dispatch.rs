@@ -566,7 +566,38 @@ impl Machine {
                         let mut p = self.machine_st.p;
                         let mut arity = 0;
 
+                        self.indices.code_dir.sort_by(|_, a, _, b| a.cmp(b));
+
+                        let predicate_idx = self
+                            .indices
+                            .code_dir
+                            .binary_search_by_key(&p, |_, x| x.get().p() as usize)
+                            .unwrap_or_else(|x| x - 1);
+
+                        let current_pred_limit = self
+                            .indices
+                            .code_dir
+                            .get_index(predicate_idx + 1)
+                            .map(|x| x.1.p() as usize);
+
                         while self.code[p].is_head_instr() {
+                            //println!("{}: {:?}", p, &self.code[p]);
+                            //println!("{} {:?}", arity, self.code[p]);
+                            for r in self.code[p].registers() {
+                                //println!("reg {:?}", r);
+                                if let RegType::Temp(t) = r {
+                                    arity = std::cmp::max(arity, t);
+                                }
+                            }
+
+                            p += 1;
+                        }
+
+                        let p_interrupt = p;
+
+                        while p < self.code.len()
+                            && current_pred_limit.map(|x| p < x).unwrap_or(true)
+                        {
                             for r in self.code[p].registers() {
                                 if let RegType::Temp(t) = r {
                                     arity = std::cmp::max(arity, t);
@@ -577,14 +608,15 @@ impl Machine {
                         }
 
                         let instr = std::mem::replace(
-                            &mut self.code[p],
+                            &mut self.code[p_interrupt],
                             Instruction::VerifyAttrInterrupt(arity),
                         );
 
                         self.code[VERIFY_ATTR_INTERRUPT_LOC] = instr;
-                        self.machine_st.attr_var_init.cp = p;
+                        self.machine_st.attr_var_init.cp = p_interrupt;
                     }
                     &Instruction::VerifyAttrInterrupt(arity) => {
+                        //println!("VerifyAttr arity: {arity}");
                         // let (_, arity) = self.code[VERIFY_ATTR_INTERRUPT_LOC].to_name_and_arity();
                         // let arity = std::cmp::max(arity, self.machine_st.num_of_args);
                         self.run_verify_attr_interrupt(arity);
