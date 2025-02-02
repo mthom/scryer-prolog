@@ -509,6 +509,10 @@ impl Machine {
             .insert(atom!("user_error"), self.user_error);
 
         self.indices.streams.insert(self.user_error);
+
+        self.indices
+            .stream_aliases
+            .insert(atom!("null_stream"), Stream::Null(StreamOptions::default()));
     }
 
     #[inline(always)]

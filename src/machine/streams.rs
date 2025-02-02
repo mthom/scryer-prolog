@@ -836,13 +836,13 @@ impl Read for Stream {
                 ErrorKind::PermissionDenied,
                 StreamError::ReadFromOutputStream,
             )),
-            Stream::OutputFile(_)
-            | Stream::StandardError(_)
-            | Stream::StandardOutput(_)
-            | Stream::Null(_) => Err(std::io::Error::new(
-                ErrorKind::PermissionDenied,
-                StreamError::ReadFromOutputStream,
-            )),
+            Stream::Null(_) => Ok(buf.len()),
+            Stream::OutputFile(_) | Stream::StandardError(_) | Stream::StandardOutput(_) => {
+                Err(std::io::Error::new(
+                    ErrorKind::PermissionDenied,
+                    StreamError::ReadFromOutputStream,
+                ))
+            }
         }
     }
 }
@@ -864,13 +864,10 @@ impl Write for Stream {
                 ErrorKind::PermissionDenied,
                 StreamError::WriteToInputStream,
             )),
-            Stream::StaticString(_)
-            | Stream::Readline(_)
-            | Stream::InputFile(..)
-            | Stream::Null(_) => Err(std::io::Error::new(
-                ErrorKind::PermissionDenied,
-                StreamError::WriteToInputStream,
-            )),
+            Stream::Null(_) => Ok(buf.len()),
+            Stream::StaticString(_) | Stream::Readline(_) | Stream::InputFile(..) => Err(
+                std::io::Error::new(ErrorKind::PermissionDenied, StreamError::WriteToInputStream),
+            ),
         }
     }
 
@@ -890,13 +887,10 @@ impl Write for Stream {
                 ErrorKind::PermissionDenied,
                 StreamError::FlushToInputStream,
             )),
-            Stream::StaticString(_)
-            | Stream::Readline(_)
-            | Stream::InputFile(_)
-            | Stream::Null(_) => Err(std::io::Error::new(
-                ErrorKind::PermissionDenied,
-                StreamError::FlushToInputStream,
-            )),
+            Stream::Null(_) => Ok(()),
+            Stream::StaticString(_) | Stream::Readline(_) | Stream::InputFile(_) => Err(
+                std::io::Error::new(ErrorKind::PermissionDenied, StreamError::FlushToInputStream),
+            ),
         }
     }
 }
@@ -1144,6 +1138,7 @@ impl Stream {
                     }
                 }
             }
+            Stream::Null(_) => AtEndOfStream::At,
             #[cfg(feature = "http")]
             Stream::HttpRead(stream_layout) => {
                 if stream_layout
@@ -1356,7 +1351,8 @@ impl Stream {
             | Stream::Byte(_)
             | Stream::Readline(_)
             | Stream::StaticString(_)
-            | Stream::InputFile(..) => true,
+            | Stream::InputFile(..)
+            | Stream::Null(_) => true,
             _ => false,
         }
     }
@@ -1372,7 +1368,8 @@ impl Stream {
             | Stream::StandardOutput(_)
             | Stream::NamedTcp(..)
             | Stream::Byte(_)
-            | Stream::OutputFile(..) => true,
+            | Stream::OutputFile(..)
+            | Stream::Null(_) => true,
             _ => false,
         }
     }
@@ -1607,7 +1604,7 @@ impl MachineState {
                             debug_assert_eq!(arity, 0);
 
                             return match stream_aliases.get(&name) {
-                                Some(stream) if !stream.is_null_stream() => Ok(*stream),
+                                Some(stream) => Ok(*stream),
                                 _ => {
                                     let stub = functor_stub(caller, arity);
                                     let addr = atom_as_cell!(name);
@@ -1625,7 +1622,7 @@ impl MachineState {
                             debug_assert_eq!(arity, 0);
 
                             return match stream_aliases.get(&name) {
-                                Some(stream) if !stream.is_null_stream() => Ok(*stream),
+                                Some(stream) => Ok(*stream),
                                 _ => {
                                     let stub = functor_stub(caller, arity);
                                     let addr = atom_as_cell!(name);
@@ -1639,11 +1636,10 @@ impl MachineState {
                         (HeapCellValueTag::Cons, ptr) => {
                             match_untyped_arena_ptr!(ptr,
                                 (ArenaHeaderTag::Stream, stream) => {
-                                    return if stream.is_null_stream() {
-                                        Err(self.open_permission_error(HeapCellValue::from(stream), caller, arity))
-                                    } else {
-                                        Ok(stream)
-                                    };
+                                    if stream.is_null_stream() {
+                                        unreachable!("Null streams have no Cons representation");
+                                    }
+                                    return Ok(stream);
                                 }
                                 (ArenaHeaderTag::Dropped, _value) => {
                                     let stub = functor_stub(caller, arity);
@@ -1936,7 +1932,11 @@ mod test {
         let results = machine.run_query("get_code(C).").collect::<Vec<_>>();
 
         assert_eq!(results.len(), 1);
-        assert!(results[0].is_err());
+        assert!(
+            results[0].is_ok(),
+            "Expected read to succeed, got {:?}",
+            results[0]
+        );
     }
 
     #[test]
@@ -1966,7 +1966,11 @@ mod test {
         let results = machine.run_query("write(hello).").collect::<Vec<_>>();
 
         assert_eq!(results.len(), 1);
-        assert!(results[0].is_err());
+        assert!(
+            results[0].is_ok(),
+            "Expected write to succeed, got {:?}",
+            results[0]
+        );
     }
 
     /// A variant of the [`write_null_stream`] that tries to write to a (null) input stream.
@@ -1982,6 +1986,10 @@ mod test {
             .collect::<Vec<_>>();
 
         assert_eq!(results.len(), 1);
-        assert!(results[0].is_err());
+        assert!(
+            results[0].is_ok(),
+            "Expected write to succeed, got {:?}",
+            results[0]
+        );
     }
 }
