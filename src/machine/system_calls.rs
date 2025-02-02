@@ -3868,47 +3868,26 @@ impl Machine {
             stream.flush().unwrap(); // 8.11.6.1b)
         }
 
+        if stream == self.user_input || stream == self.user_output || stream.is_stderr() {
+            // stdin, stdout and stderr shouldn't be removed from the store, so return now
+            return Ok(());
+        }
+
         self.indices.streams.remove(&stream);
 
-        if stream == self.user_input {
-            self.user_input = self
-                .indices
-                .stream_aliases
-                .get(&atom!("user_input"))
-                .cloned()
-                .unwrap();
-
-            self.indices.streams.insert(self.user_input);
-        } else if stream == self.user_output {
-            self.user_output = self
-                .indices
-                .stream_aliases
-                .get(&atom!("user_output"))
-                .cloned()
-                .unwrap();
-
-            self.indices.streams.insert(self.user_output);
+        if let Some(alias) = stream.options().get_alias() {
+            self.indices.stream_aliases.swap_remove(&alias);
         }
 
-        if !stream.is_stdin() && !stream.is_stdout() && !stream.is_stderr() {
-            if let Some(alias) = stream.options().get_alias() {
-                self.indices.stream_aliases.swap_remove(&alias);
-            }
+        stream.close().map_err(|_| {
+            let stub = functor_stub(atom!("close"), 1);
+            let addr = stream_as_cell!(stream);
+            let err = self
+                .machine_st
+                .existence_error(ExistenceError::Stream(addr));
 
-            let close_result = stream.close();
-
-            if close_result.is_err() {
-                let stub = functor_stub(atom!("close"), 1);
-                let addr = stream_as_cell!(stream);
-                let err = self
-                    .machine_st
-                    .existence_error(ExistenceError::Stream(addr));
-
-                return Err(self.machine_st.error_form(err, stub));
-            }
-        }
-
-        Ok(())
+            self.machine_st.error_form(err, stub)
+        })
     }
 
     #[inline(always)]

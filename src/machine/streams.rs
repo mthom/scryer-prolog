@@ -1288,11 +1288,10 @@ impl Stream {
         ))
     }
 
+    /// Drops the stream handle and marks the arena pointer as [`ArenaHeaderTag::Dropped`].
     #[inline]
     pub(crate) fn close(&mut self) -> Result<(), std::io::Error> {
-        let mut stream = std::mem::replace(self, Stream::Null(StreamOptions::default()));
-
-        match stream {
+        match self {
             Stream::NamedTcp(ref mut tcp_stream) => {
                 tcp_stream.inner_mut().tcp_stream.shutdown(Shutdown::Both)
             }
@@ -1322,7 +1321,20 @@ impl Stream {
 
                 Ok(())
             }
-            _ => Ok(()),
+            Stream::Byte(mut stream) => {
+                stream.drop_payload();
+                Ok(())
+            }
+            Stream::StaticString(mut stream) => {
+                stream.drop_payload();
+                Ok(())
+            }
+
+            Stream::Null(_) => Ok(()),
+
+            Stream::Readline(_) | Stream::StandardOutput(_) | Stream::StandardError(_) => {
+                unreachable!();
+            }
         }
     }
 
@@ -1891,5 +1903,47 @@ impl MachineState {
                 Stream::from_file_as_output(file_spec, file, in_append_mode, &mut self.arena)
             });
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::machine::config::*;
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn close_memory_user_output_stream() {
+        let mut machine = MachineBuilder::new()
+            .with_streams(StreamConfig::in_memory())
+            .build();
+
+        let results = machine
+            .run_query(
+                "\\+ \\+ (current_output(Stream), close(Stream)), write(user_output, hello).",
+            )
+            .collect::<Vec<_>>();
+
+        assert_eq!(results.len(), 1);
+        assert!(results[0].is_ok());
+
+        let mut actual = String::new();
+        machine.user_output.read_to_string(&mut actual).unwrap();
+        assert_eq!(actual, "hello");
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn close_memory_user_output_stream_twice() {
+        let mut machine = MachineBuilder::new()
+            .with_streams(StreamConfig::in_memory())
+            .build();
+
+        let results = machine
+            .run_query("\\+ \\+ (current_output(Stream), close(Stream), close(Stream)).")
+            .collect::<Vec<_>>();
+
+        assert_eq!(results.len(), 1);
+        assert!(results[0].is_ok());
     }
 }
