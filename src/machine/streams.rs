@@ -1594,7 +1594,7 @@ impl MachineState {
     pub(crate) fn get_stream_or_alias(
         &mut self,
         addr: HeapCellValue,
-        stream_aliases: &StreamAliasDir,
+        indices: &IndexStore,
         caller: Atom,
         arity: usize,
     ) -> Result<Stream, MachineStub> {
@@ -1604,8 +1604,8 @@ impl MachineState {
                         (HeapCellValueTag::Atom, (name, arity)) => {
                             debug_assert_eq!(arity, 0);
 
-                            return match stream_aliases.get(&name) {
-                                Some(stream) if !stream.is_null_stream() => Ok(*stream),
+                            return match indices.get_stream(name) {
+                                Some(stream) if !stream.is_null_stream() => Ok(stream),
                                 _ => {
                                     let stub = functor_stub(caller, arity);
                                     let addr = atom_as_cell!(name);
@@ -1622,8 +1622,8 @@ impl MachineState {
 
                             debug_assert_eq!(arity, 0);
 
-                            return match stream_aliases.get(&name) {
-                                Some(stream) if !stream.is_null_stream() => Ok(*stream),
+                            return match indices.get_stream(name) {
+                                Some(stream) if !stream.is_null_stream() => Ok(stream),
                                 _ => {
                                     let stub = functor_stub(caller, arity);
                                     let addr = atom_as_cell!(name);
@@ -1813,7 +1813,7 @@ impl MachineState {
 
         // 8.11.5.3l)
         if let Some(alias) = options.get_alias() {
-            if indices.stream_aliases.contains_key(&alias) {
+            if indices.has_stream(alias) {
                 return Err(self.occupied_alias_permission_error(alias, atom!("open"), 4));
             }
         }

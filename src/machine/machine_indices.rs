@@ -7,8 +7,9 @@ use crate::atom_table::*;
 use crate::forms::*;
 use crate::machine::loader::*;
 use crate::machine::machine_state::*;
-use crate::machine::streams::Stream;
+use crate::machine::streams::{Stream, StreamOptions};
 use crate::machine::ClauseType;
+use crate::machine::MachineStubGen;
 
 use fxhash::FxBuildHasher;
 use indexmap::{IndexMap, IndexSet};
@@ -261,8 +262,8 @@ pub struct IndexStore {
     pub(super) meta_predicates: MetaPredicateDir,
     pub(super) modules: ModuleDir,
     pub(super) op_dir: OpDir,
-    pub(super) streams: StreamDir,
-    pub(super) stream_aliases: StreamAliasDir,
+    streams: StreamDir,
+    stream_aliases: StreamAliasDir,
 }
 
 impl IndexStore {
@@ -459,6 +460,94 @@ impl IndexStore {
         }
     }
 
+    pub(crate) fn add_stream(
+        &mut self,
+        stream: Stream,
+        stub_name: Atom,
+        stub_arity: usize,
+    ) -> Result<(), MachineStubGen> {
+        if let Some(alias) = stream.options().get_alias() {
+            if self.stream_aliases.contains_key(&alias) {
+                return Err(Box::new(move |machine_st| {
+                    machine_st.occupied_alias_permission_error(alias, stub_name, stub_arity)
+                }));
+            }
+
+            self.stream_aliases.insert(alias, stream);
+        }
+
+        self.streams.insert(stream);
+
+        Ok(())
+    }
+
+    pub(crate) fn remove_stream(&mut self, stream: Stream) {
+        if let Some(alias) = stream.options().get_alias() {
+            debug_assert_eq!(self.stream_aliases.get(&alias), Some(&stream));
+            self.stream_aliases.swap_remove(&alias);
+        }
+        self.streams.remove(&stream);
+    }
+
+    pub(crate) fn update_stream_options<F: Fn(&mut StreamOptions)>(
+        &mut self,
+        mut stream: Stream,
+        callback: F,
+    ) {
+        if let Some(prev_alias) = stream.options().get_alias() {
+            debug_assert_eq!(self.stream_aliases.get(&prev_alias), Some(&stream));
+        }
+        let options = stream.options_mut();
+        let prev_alias = options.get_alias();
+
+        callback(options);
+
+        if options.get_alias() != prev_alias {
+            if let Some(prev_alias) = prev_alias {
+                self.stream_aliases.swap_remove(&prev_alias);
+            }
+            if let Some(new_alias) = options.get_alias() {
+                self.stream_aliases.insert(new_alias, stream);
+            }
+        }
+    }
+
+    pub(crate) fn has_stream(&self, alias: Atom) -> bool {
+        self.stream_aliases.contains_key(&alias)
+    }
+
+    pub(crate) fn get_stream(&self, alias: Atom) -> Option<Stream> {
+        self.stream_aliases.get(&alias).copied()
+    }
+
+    pub(crate) fn iter_streams<'a, R: std::ops::RangeBounds<Stream>>(
+        &'a self,
+        range: R,
+    ) -> impl Iterator<Item = Stream> + 'a {
+        self.streams.range(range).into_iter().copied()
+    }
+
+    /// Forcibly sets `alias` to `stream`.
+    /// If there was a previous stream with that alias, it will lose that alias.
+    ///
+    /// Consider using [`add_stream`](Self::add_stream) if you wish to instead
+    /// return an error when stream aliases conflict.
+    pub(crate) fn set_stream(&mut self, alias: Atom, mut stream: Stream) {
+        if let Some(mut prev_stream) = self.get_stream(alias) {
+            if prev_stream == stream {
+                // Nothing to do, as the stream is already present
+                return;
+            }
+
+            prev_stream.options_mut().set_alias_to_atom_opt(None);
+        }
+
+        stream.options_mut().set_alias_to_atom_opt(Some(alias));
+
+        self.stream_aliases.insert(alias, stream);
+        self.streams.insert(stream);
+    }
+
     #[inline]
     pub(super) fn new() -> Self {
         index_store!(
@@ -467,4 +556,14 @@ impl IndexStore {
             ModuleDir::with_hasher(FxBuildHasher::default())
         )
     }
+}
+
+/// A stream is said to have a "protected" alias if modifying its
+/// alias would cause breakage in other parts of the code.
+///
+/// A stream with a protected alias cannot be realiased through
+/// [`IndexStore::update_stream_options`]. Instead, one has to use
+/// [`IndexStore::set_stream`] to do so.
+fn is_protected_alias(alias: Atom) -> bool {
+    alias == atom!("user_input") || alias == atom!("user_output") || alias == atom!("user_error")
 }

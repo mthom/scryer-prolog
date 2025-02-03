@@ -483,32 +483,16 @@ impl Machine {
         }
     }
 
+    /// Ensures that [`Machine::indices`] properly reflects
+    /// the streams stored in [`Machine::user_input`], [`Machine::user_output`]
+    /// and [`Machine::user_error`].
     pub(crate) fn configure_streams(&mut self) {
-        self.user_input
-            .options_mut()
-            .set_alias_to_atom_opt(Some(atom!("user_input")));
-
         self.indices
-            .stream_aliases
-            .insert(atom!("user_input"), self.user_input);
-
-        self.indices.streams.insert(self.user_input);
-
-        self.user_output
-            .options_mut()
-            .set_alias_to_atom_opt(Some(atom!("user_output")));
-
+            .set_stream(atom!("user_input"), self.user_input);
         self.indices
-            .stream_aliases
-            .insert(atom!("user_output"), self.user_output);
-
-        self.indices.streams.insert(self.user_output);
-
+            .set_stream(atom!("user_output"), self.user_output);
         self.indices
-            .stream_aliases
-            .insert(atom!("user_error"), self.user_error);
-
-        self.indices.streams.insert(self.user_error);
+            .set_stream(atom!("user_error"), self.user_error);
     }
 
     #[inline(always)]

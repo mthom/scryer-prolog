@@ -41,7 +41,6 @@ use indexmap::IndexSet;
 
 use std::cell::Cell;
 use std::cmp::Ordering;
-use std::collections::BTreeSet;
 use std::convert::TryFrom;
 use std::env;
 #[cfg(feature = "ffi")]
@@ -55,7 +54,6 @@ use std::mem;
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::net::{TcpListener, TcpStream};
 use std::num::NonZeroU32;
-use std::ops::Sub;
 use std::process;
 #[cfg(feature = "http")]
 use std::str::FromStr;
@@ -2543,7 +2541,7 @@ impl Machine {
 
         let mut stream = self.machine_st.get_stream_or_alias(
             self.machine_st.registers[1],
-            &self.indices.stream_aliases,
+            &self.indices,
             atom!("peek_byte"),
             2,
         )?;
@@ -2634,7 +2632,7 @@ impl Machine {
 
         let mut stream = self.machine_st.get_stream_or_alias(
             self.machine_st.registers[1],
-            &self.indices.stream_aliases,
+            &self.indices,
             atom!("peek_char"),
             2,
         )?;
@@ -2726,7 +2724,7 @@ impl Machine {
 
         let mut stream = self.machine_st.get_stream_or_alias(
             self.machine_st.registers[1],
-            &self.indices.stream_aliases,
+            &self.indices,
             atom!("peek_code"),
             2,
         )?;
@@ -3147,7 +3145,7 @@ impl Machine {
     pub(crate) fn put_code(&mut self) -> CallResult {
         let mut stream = self.machine_st.get_stream_or_alias(
             self.machine_st.registers[1],
-            &self.indices.stream_aliases,
+            &self.indices,
             atom!("put_code"),
             2,
         )?;
@@ -3199,7 +3197,7 @@ impl Machine {
     pub(crate) fn put_char(&mut self) -> CallResult {
         let mut stream = self.machine_st.get_stream_or_alias(
             self.machine_st.registers[1],
-            &self.indices.stream_aliases,
+            &self.indices,
             atom!("put_char"),
             2,
         )?;
@@ -3243,7 +3241,7 @@ impl Machine {
     pub(crate) fn put_chars(&mut self) -> CallResult {
         let mut stream = self.machine_st.get_stream_or_alias(
             self.machine_st.registers[1],
-            &self.indices.stream_aliases,
+            &self.indices,
             atom!("$put_chars"),
             2,
         )?;
@@ -3292,7 +3290,7 @@ impl Machine {
     pub(crate) fn put_byte(&mut self) -> CallResult {
         let mut stream = self.machine_st.get_stream_or_alias(
             self.machine_st.registers[1],
-            &self.indices.stream_aliases,
+            &self.indices,
             atom!("put_byte"),
             2,
         )?;
@@ -3359,7 +3357,7 @@ impl Machine {
     pub(crate) fn get_byte(&mut self) -> CallResult {
         let mut stream = self.machine_st.get_stream_or_alias(
             self.machine_st.registers[1],
-            &self.indices.stream_aliases,
+            &self.indices,
             atom!("get_byte"),
             2,
         )?;
@@ -3444,7 +3442,7 @@ impl Machine {
     pub(crate) fn get_char(&mut self) -> CallResult {
         let mut stream = self.machine_st.get_stream_or_alias(
             self.machine_st.registers[1],
-            &self.indices.stream_aliases,
+            &self.indices,
             atom!("get_char"),
             2,
         )?;
@@ -3539,7 +3537,7 @@ impl Machine {
     pub(crate) fn get_n_chars(&mut self) -> CallResult {
         let stream = self.machine_st.get_stream_or_alias(
             self.machine_st.registers[1],
-            &self.indices.stream_aliases,
+            &self.indices,
             atom!("get_n_chars"),
             3,
         )?;
@@ -3608,7 +3606,7 @@ impl Machine {
     pub(crate) fn get_code(&mut self) -> CallResult {
         let mut stream = self.machine_st.get_stream_or_alias(
             self.machine_st.registers[1],
-            &self.indices.stream_aliases,
+            &self.indices,
             atom!("get_code"),
             2,
         )?;
@@ -3715,19 +3713,11 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn first_stream(&mut self) {
-        let mut first_stream = None;
-        let mut null_streams = BTreeSet::new();
-
-        for stream in self.indices.streams.iter().cloned() {
-            if !stream.is_null_stream() {
-                first_stream = Some(stream);
-                break;
-            } else {
-                null_streams.insert(stream);
-            }
-        }
-
-        self.indices.streams = self.indices.streams.sub(&null_streams);
+        let first_stream = self
+            .indices
+            .iter_streams(..)
+            .filter(|s| !s.is_null_stream())
+            .next();
 
         if let Some(first_stream) = first_stream {
             let stream = stream_as_cell!(first_stream);
@@ -3743,20 +3733,12 @@ impl Machine {
     #[inline(always)]
     pub(crate) fn next_stream(&mut self) {
         let prev_stream = cell_as_stream!(self.deref_register(1));
-
-        let mut next_stream = None;
-        let mut null_streams = BTreeSet::new();
-
-        for stream in self.indices.streams.range(prev_stream..).skip(1).cloned() {
-            if !stream.is_null_stream() {
-                next_stream = Some(stream);
-                break;
-            } else {
-                null_streams.insert(stream);
-            }
-        }
-
-        self.indices.streams = self.indices.streams.sub(&null_streams);
+        let next_stream = self
+            .indices
+            .iter_streams(prev_stream..)
+            .filter(|s| !s.is_null_stream())
+            .skip(1)
+            .next();
 
         if let Some(next_stream) = next_stream {
             let var = self.deref_register(2).as_var().unwrap();
@@ -3772,7 +3754,7 @@ impl Machine {
     pub(crate) fn flush_output(&mut self) -> CallResult {
         let mut stream = self.machine_st.get_stream_or_alias(
             self.machine_st.registers[1],
-            &self.indices.stream_aliases,
+            &self.indices,
             atom!("flush_output"),
             1,
         )?;
@@ -3859,7 +3841,7 @@ impl Machine {
     pub(crate) fn close(&mut self) -> CallResult {
         let mut stream = self.machine_st.get_stream_or_alias(
             self.machine_st.registers[1],
-            &self.indices.stream_aliases,
+            &self.indices,
             atom!("close"),
             2,
         )?;
@@ -3873,11 +3855,7 @@ impl Machine {
             return Ok(());
         }
 
-        self.indices.streams.remove(&stream);
-
-        if let Some(alias) = stream.options().get_alias() {
-            self.indices.stream_aliases.swap_remove(&alias);
-        }
+        self.indices.remove_stream(stream);
 
         stream.close().map_err(|_| {
             let stub = functor_stub(atom!("close"), 1);
@@ -4445,11 +4423,10 @@ impl Machine {
                         &mut self.machine_st.arena,
                     );
                     *stream.options_mut() = StreamOptions::default();
-                    if let Some(alias) = stream.options().get_alias() {
-                        self.indices.stream_aliases.insert(alias, stream);
-                    }
 
-                    self.indices.streams.insert(stream);
+                    self.indices
+                        .add_stream(stream, atom!("http_open"), 3)
+                        .map_err(|stub_gen| stub_gen(&mut self.machine_st))?;
 
                     let stream = stream_as_cell!(stream);
 
@@ -4667,7 +4644,10 @@ impl Machine {
                 );
                 *stream.options_mut() = StreamOptions::default();
                 stream.options_mut().set_stream_type(StreamType::Binary);
-                self.indices.streams.insert(stream);
+
+                self.indices.add_stream(stream, atom!("http_accept"), 7)
+                    .map_err(|stub_gen| stub_gen(&mut self.machine_st))?;
+
                 let stream = stream_as_cell!(stream);
 
                                 let handle: TypedArenaPtr<HttpResponse> = arena_alloc!(request.response, &mut self.machine_st.arena);
@@ -4781,7 +4761,11 @@ impl Machine {
                 );
                 *stream.options_mut() = StreamOptions::default();
                 stream.options_mut().set_stream_type(StreamType::Binary);
-                self.indices.streams.insert(stream);
+
+
+                self.indices.add_stream(stream, atom!("http_answer"), 4)
+                    .map_err(|stub_gen| stub_gen(&mut self.machine_st))?;
+
                 let stream = stream_as_cell!(stream);
                 self.machine_st.bind(stream_addr.as_var().unwrap(), stream);
                 }
@@ -5096,11 +5080,10 @@ impl Machine {
                     .stream_from_file_spec(file_spec, &mut self.indices, &options)?;
 
             *stream.options_mut() = options;
-            self.indices.streams.insert(stream);
 
-            if let Some(alias) = stream.options().get_alias() {
-                self.indices.stream_aliases.insert(alias, stream);
-            }
+            self.indices
+                .add_stream(stream, atom!("open"), 4)
+                .map_err(|stub_gen| stub_gen(&mut self.machine_st))?;
 
             let stream_var = self.deref_register(3);
             self.machine_st
@@ -5181,7 +5164,7 @@ impl Machine {
     pub(crate) fn set_stream_options(&mut self) -> CallResult {
         let mut stream = self.machine_st.get_stream_or_alias(
             self.machine_st.registers[1],
-            &self.indices.stream_aliases,
+            &self.indices,
             atom!("open"),
             4,
         )?;
@@ -5937,12 +5920,9 @@ impl Machine {
     pub(crate) fn set_input(&mut self) -> CallResult {
         let addr = self.deref_register(1);
 
-        let stream = self.machine_st.get_stream_or_alias(
-            addr,
-            &self.indices.stream_aliases,
-            atom!("set_input"),
-            1,
-        )?;
+        let stream =
+            self.machine_st
+                .get_stream_or_alias(addr, &self.indices, atom!("set_input"), 1)?;
 
         if !stream.is_input_stream() {
             let stub = functor_stub(atom!("set_input"), 1);
@@ -5964,12 +5944,9 @@ impl Machine {
     #[inline(always)]
     pub(crate) fn set_output(&mut self) -> CallResult {
         let addr = self.deref_register(1);
-        let stream = self.machine_st.get_stream_or_alias(
-            addr,
-            &self.indices.stream_aliases,
-            atom!("set_output"),
-            1,
-        )?;
+        let stream =
+            self.machine_st
+                .get_stream_or_alias(addr, &self.indices, atom!("set_output"), 1)?;
 
         if !stream.is_output_stream() {
             let stub = functor_stub(atom!("set_output"), 1);
@@ -6275,7 +6252,7 @@ impl Machine {
 
         let stream = self.machine_st.get_stream_or_alias(
             self.machine_st.registers[1],
-            &self.indices.stream_aliases,
+            &self.indices,
             atom!("read_term"),
             3,
         )?;
@@ -6516,7 +6493,7 @@ impl Machine {
         }
 
         if let Some(alias) = options.get_alias() {
-            if self.indices.stream_aliases.contains_key(&alias) {
+            if self.indices.has_stream(alias) {
                 return Err(self.machine_st.occupied_alias_permission_error(
                     alias,
                     atom!("socket_client_open"),
@@ -6532,11 +6509,9 @@ impl Machine {
 
                 *stream.options_mut() = options;
 
-                if let Some(alias) = stream.options().get_alias() {
-                    self.indices.stream_aliases.insert(alias, stream);
-                }
-
-                self.indices.streams.insert(stream);
+                self.indices
+                    .add_stream(stream, atom!("socket_client_open"), 7)
+                    .map_err(|stub_gen| stub_gen(&mut self.machine_st))?;
 
                 stream_as_cell!(stream)
             }
@@ -6544,7 +6519,7 @@ impl Machine {
                 return Err(self.machine_st.open_permission_error(
                     addr,
                     atom!("socket_client_open"),
-                    3,
+                    7,
                 ));
             }
             Err(ErrorKind::NotFound) => {
@@ -6661,7 +6636,7 @@ impl Machine {
         }
 
         if let Some(alias) = options.get_alias() {
-            if self.indices.stream_aliases.contains_key(&alias) {
+            if self.indices.has_stream(alias) {
                 return Err(self.machine_st.occupied_alias_permission_error(
                     alias,
                     atom!("socket_server_accept"),
@@ -6688,11 +6663,10 @@ impl Machine {
 
                                  *tcp_stream.options_mut() = options;
 
-                                 if let Some(alias) = &tcp_stream.options().get_alias() {
-                                     self.indices.stream_aliases.insert(*alias, tcp_stream);
-                                 }
-
-                                 self.indices.streams.insert(tcp_stream);
+                                 self.indices.add_stream(tcp_stream, atom!("socket_server_accept"), 4)
+                                    .map_err(|stub_gen| {
+                                        stub_gen(&mut self.machine_st)
+                                    })?;
 
                                  let tcp_stream = stream_as_cell!(tcp_stream);
                                  let client = atom_as_cell!(client);
@@ -6728,7 +6702,7 @@ impl Machine {
         {
             let stream0 = self.machine_st.get_stream_or_alias(
                 self.machine_st.registers[2],
-                &self.indices.stream_aliases,
+                &self.indices,
                 atom!("tls_client_negotiate"),
                 3,
             )?;
@@ -6747,7 +6721,10 @@ impl Machine {
 
             let addr = atom!("TLS");
             let stream = Stream::from_tls_stream(addr, stream, &mut self.machine_st.arena);
-            self.indices.streams.insert(stream);
+
+            self.indices
+                .add_stream(stream, atom!("tls_client_negotiate"), 3)
+                .map_err(|stub_gen| stub_gen(&mut self.machine_st))?;
 
             self.machine_st.heap.push(stream_as_cell!(stream));
             let stream_addr = self.deref_register(3);
@@ -6782,7 +6759,7 @@ impl Machine {
 
             let stream0 = self.machine_st.get_stream_or_alias(
                 self.machine_st.registers[3],
-                &self.indices.stream_aliases,
+                &self.indices,
                 atom!("tls_server_negotiate"),
                 3,
             )?;
@@ -6801,7 +6778,10 @@ impl Machine {
             };
 
             let stream = Stream::from_tls_stream(atom!("TLS"), stream, &mut self.machine_st.arena);
-            self.indices.streams.insert(stream);
+
+            self.indices
+                .add_stream(stream, atom!("tls_server_negotiate"), 3)
+                .map_err(|stub_gen| stub_gen(&mut self.machine_st))?;
 
             let stream_addr = self.deref_register(4);
             self.machine_st
@@ -6843,7 +6823,7 @@ impl Machine {
     pub(crate) fn set_stream_position(&mut self) -> CallResult {
         let mut stream = self.machine_st.get_stream_or_alias(
             self.machine_st.registers[1],
-            &self.indices.stream_aliases,
+            &self.indices,
             atom!("set_stream_position"),
             2,
         )?;
@@ -6886,7 +6866,7 @@ impl Machine {
     pub(crate) fn stream_property(&mut self) -> CallResult {
         let mut stream = self.machine_st.get_stream_or_alias(
             self.machine_st.registers[1],
-            &self.indices.stream_aliases,
+            &self.indices,
             atom!("stream_property"),
             2,
         )?;
@@ -7237,7 +7217,7 @@ impl Machine {
     pub(crate) fn write_term(&mut self) -> CallResult {
         let mut stream = self.machine_st.get_stream_or_alias(
             self.machine_st.registers[1],
-            &self.indices.stream_aliases,
+            &self.indices,
             atom!("write_term"),
             3,
         )?;
@@ -8113,7 +8093,7 @@ impl Machine {
     pub(crate) fn devour_whitespace(&mut self) -> CallResult {
         let mut stream = self.machine_st.get_stream_or_alias(
             self.machine_st.registers[1],
-            &self.indices.stream_aliases,
+            &self.indices,
             atom!("$devour_whitespace"),
             1,
         )?;
