@@ -1476,6 +1476,10 @@ impl MachineState {
         }
     }
 
+    /// ## Warning
+    ///
+    /// The options of streams stored in `Machine::indices` should only
+    /// be modified through [`IndexStore::update_stream_options`].
     pub(crate) fn get_stream_options(
         &mut self,
         alias: HeapCellValue,
@@ -1591,6 +1595,19 @@ impl MachineState {
         options
     }
 
+    /// If `addr` is a [`Cons`](HeapCellValueTag::Cons) to a stream, then returns it.
+    ///
+    /// If it is an atom or a string, then this searches for the corresponding stream
+    /// inside of [`self.indices`], returning it.
+    ///
+    /// ## Warning
+    ///
+    /// **Do not directly modify [`stream.options_mut()`](Stream::options_mut)
+    /// on the returned stream.**
+    ///
+    /// Other functions rely on the invariants of [`IndexStore`], which may
+    /// become invalidated by the direct modification of a stream's option (namely,
+    /// its alias name). Instead, use [`IndexStore::update_stream_options`].
     pub(crate) fn get_stream_or_alias(
         &mut self,
         addr: HeapCellValue,
@@ -1953,14 +1970,40 @@ mod test {
         let mut machine = MachineBuilder::new().build();
 
         let results = machine
-            .run_query(r#"
+            .run_query(
+                r#"
                 \+ \+ (
                     open("README.md", read, S, [alias(readme)]),
                     open(stream(S), read, _, [alias(another_alias)]),
                     close(S)
                 ),
                 open("README.md", read, _, [alias(readme)]).
-            "#)
+            "#,
+            )
+            .collect::<Vec<_>>();
+
+        assert_eq!(results.len(), 1);
+        assert!(results[0].is_ok());
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn close_realiased_user_output() {
+        let mut machine = MachineBuilder::new()
+            .with_streams(StreamConfig::in_memory())
+            .build();
+
+        let results = machine
+            .run_query(
+                r#"
+                \+ \+ (
+                    open("README.md", read, S),
+                    open(stream(S), read, _, [alias(user_output)]),
+                    close(S)
+                ),
+                write(user_output, hello).
+            "#,
+            )
             .collect::<Vec<_>>();
 
         assert_eq!(results.len(), 1);

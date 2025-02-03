@@ -484,6 +484,8 @@ impl IndexStore {
     pub(crate) fn remove_stream(&mut self, stream: Stream) {
         if let Some(alias) = stream.options().get_alias() {
             debug_assert_eq!(self.stream_aliases.get(&alias), Some(&stream));
+            assert!(!is_protected_alias(alias));
+
             self.stream_aliases.swap_remove(&alias);
         }
         self.streams.remove(&stream);
@@ -503,6 +505,18 @@ impl IndexStore {
         callback(options);
 
         if options.get_alias() != prev_alias {
+            if prev_alias.map(is_protected_alias).unwrap_or(false)
+                || options
+                    .get_alias()
+                    .map(|alias| self.has_stream(alias))
+                    .unwrap_or(false)
+            {
+                // user_input, user_output and user_error cannot be realiased,
+                // and realiasing cannot shadow an existing stream.
+                options.set_alias_to_atom_opt(prev_alias);
+                return;
+            }
+
             if let Some(prev_alias) = prev_alias {
                 self.stream_aliases.swap_remove(&prev_alias);
             }
@@ -516,6 +530,11 @@ impl IndexStore {
         self.stream_aliases.contains_key(&alias)
     }
 
+    /// ## Warning
+    ///
+    /// The returned stream's options should only be modified through
+    /// [`IndexStore::update_stream_options`], to avoid breaking the
+    /// invariants of [`IndexStore`].
     pub(crate) fn get_stream(&self, alias: Atom) -> Option<Stream> {
         self.stream_aliases.get(&alias).copied()
     }
