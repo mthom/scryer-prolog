@@ -640,7 +640,7 @@ impl Stream {
         }
     }
 
-    pub fn options_mut(&mut self) -> &mut StreamOptions {
+    pub(super) fn options_mut(&mut self) -> &mut StreamOptions {
         match self {
             Stream::Byte(ref mut ptr) => &mut ptr.options,
             Stream::InputFile(ref mut ptr) => &mut ptr.options,
@@ -1941,6 +1941,26 @@ mod test {
 
         let results = machine
             .run_query("\\+ \\+ (current_output(Stream), close(Stream), close(Stream)).")
+            .collect::<Vec<_>>();
+
+        assert_eq!(results.len(), 1);
+        assert!(results[0].is_ok());
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn close_realiased_stream() {
+        let mut machine = MachineBuilder::new().build();
+
+        let results = machine
+            .run_query(r#"
+                \+ \+ (
+                    open("README.md", read, S, [alias(readme)]),
+                    open(stream(S), read, _, [alias(another_alias)]),
+                    close(S)
+                ),
+                open("README.md", read, _, [alias(readme)]).
+            "#)
             .collect::<Vec<_>>();
 
         assert_eq!(results.len(), 1);

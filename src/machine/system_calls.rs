@@ -5162,7 +5162,7 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn set_stream_options(&mut self) -> CallResult {
-        let mut stream = self.machine_st.get_stream_or_alias(
+        let stream = self.machine_st.get_stream_or_alias(
             self.machine_st.registers[1],
             &self.indices,
             atom!("open"),
@@ -5174,10 +5174,12 @@ impl Machine {
         let reposition = self.machine_st.registers[4];
         let stream_type = self.machine_st.registers[5];
 
-        let options =
+        let new_options =
             self.machine_st
                 .get_stream_options(alias, eof_action, reposition, stream_type);
-        *stream.options_mut() = options;
+        self.indices.update_stream_options(stream, |options| {
+            *options = new_options;
+        });
 
         Ok(())
     }
