@@ -544,7 +544,7 @@ impl Machine {
         self.run_module_predicate(atom!("loader"), (atom!("consult_stream"), 2));
     }
 
-    fn allocate_stub_choice_point(&mut self) {
+    pub(crate) fn allocate_stub_choice_point(&mut self) {
         // NOTE: create a choice point to terminate the dispatch_loop
         // if an exception is thrown.
 

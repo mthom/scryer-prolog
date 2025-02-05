@@ -279,6 +279,7 @@ impl Machine {
         if let Some(module) = self.indices.modules.get(&module_name) {
             if let Some(code_index) = module.code_dir.get(&key) {
                 let p = code_index.local().unwrap();
+                self.allocate_stub_choice_point();
 
                 self.machine_st.cp = BREAK_FROM_DISPATCH_LOOP_LOC;
                 self.machine_st.p = p;
@@ -1262,5 +1263,27 @@ impl Machine {
                 TrailEntryTag::TrailedAttachedValue => {}
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::config::*;
+    use super::*;
+
+    #[test]
+    fn test_run_module_predicate_throw() {
+        let mut machine = MachineBuilder::default()
+            .with_toplevel(
+                r#"
+            :- module('$toplevel', []).
+            repl :- throw(kaboom).
+        "#,
+            )
+            .build();
+
+        let query = machine.run_module_predicate(atom!("$toplevel"), (atom!("repl"), 0));
+
+        assert_eq!(query, std::process::ExitCode::SUCCESS);
     }
 }
