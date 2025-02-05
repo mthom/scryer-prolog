@@ -1,43 +1,228 @@
 use std::borrow::Cow;
+use std::io::Write;
+use std::sync::mpsc::{channel, Receiver, Sender};
 
 use rand::{rngs::StdRng, SeedableRng};
 
 use crate::Machine;
 
 use super::{
-    bootstrapping_compile, current_dir, import_builtin_impls, libraries, load_module, Atom,
-    CompilationTarget, IndexStore, ListingSource, MachineArgs, MachineState, Stream, StreamOptions,
+    bootstrapping_compile, current_dir, import_builtin_impls, libraries, load_module, Arena, Atom,
+    Callback, CompilationTarget, IndexStore, ListingSource, MachineArgs, MachineState, Stream,
 };
 
-/// Describes how the streams of a [`Machine`](crate::Machine) will be handled.
 #[derive(Default)]
+enum OutputStreamConfigInner {
+    #[default]
+    Memory,
+    Stdout,
+    Stderr,
+    Callback(Callback),
+}
+
+impl std::fmt::Debug for OutputStreamConfigInner {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Memory => write!(f, "Memory"),
+            Self::Stdout => write!(f, "Stdout"),
+            Self::Stderr => write!(f, "Stderr"),
+            Self::Callback(_) => f.debug_tuple("Callback").field(&"<callback>").finish(),
+        }
+    }
+}
+
+/// Configuration for an output stream.
+#[derive(Debug, Default)]
+pub struct OutputStreamConfig {
+    inner: OutputStreamConfigInner,
+}
+
+impl OutputStreamConfig {
+    /// Sends output to stdout.
+    pub fn stdout() -> Self {
+        Self {
+            inner: OutputStreamConfigInner::Stdout,
+        }
+    }
+
+    /// Sends output to stderr.
+    pub fn stderr() -> Self {
+        Self {
+            inner: OutputStreamConfigInner::Stderr,
+        }
+    }
+
+    /// Keeps output in a memory buffer.
+    pub fn memory() -> Self {
+        Self {
+            inner: OutputStreamConfigInner::Memory,
+        }
+    }
+
+    /// Calls a callback with the output whenever the stream is written to.
+    pub fn callback(callback: Callback) -> Self {
+        Self {
+            inner: OutputStreamConfigInner::Callback(callback),
+        }
+    }
+
+    fn into_stream(self, arena: &mut Arena) -> Stream {
+        match self.inner {
+            OutputStreamConfigInner::Memory => Stream::from_owned_string("".to_owned(), arena),
+            OutputStreamConfigInner::Stdout => Stream::stdout(arena),
+            OutputStreamConfigInner::Stderr => Stream::stderr(arena),
+            OutputStreamConfigInner::Callback(callback) => Stream::from_callback(callback, arena),
+        }
+    }
+}
+
+#[derive(Debug)]
+enum InputStreamConfigInner {
+    String(String),
+    Stdin,
+    Channel(Receiver<Vec<u8>>),
+}
+
+impl Default for InputStreamConfigInner {
+    fn default() -> Self {
+        Self::String("".into())
+    }
+}
+
+/// Configuration for an input stream;
+#[derive(Debug, Default)]
+pub struct InputStreamConfig {
+    inner: InputStreamConfigInner,
+}
+
+impl InputStreamConfig {
+    /// Gets input from string.
+    pub fn string(s: impl Into<String>) -> Self {
+        Self {
+            inner: InputStreamConfigInner::String(s.into()),
+        }
+    }
+
+    /// Gets input from stdin.
+    pub fn stdin() -> Self {
+        Self {
+            inner: InputStreamConfigInner::Stdin,
+        }
+    }
+
+    /// Connects the input to the receiving end of a channel.
+    pub fn channel() -> (UserInput, Self) {
+        let (sender, receiver) = channel();
+        (
+            UserInput { inner: sender },
+            Self {
+                inner: InputStreamConfigInner::Channel(receiver),
+            },
+        )
+    }
+
+    fn into_stream(self, arena: &mut Arena, add_history: bool) -> Stream {
+        match self.inner {
+            InputStreamConfigInner::String(s) => Stream::from_owned_string(s, arena),
+            InputStreamConfigInner::Stdin => Stream::stdin(arena, add_history),
+            InputStreamConfigInner::Channel(channel) => Stream::input_channel(channel, arena),
+        }
+    }
+}
+
+/// Describes how the streams of a [`Machine`](crate::Machine) will be handled.
 pub struct StreamConfig {
-    inner: StreamConfigInner,
+    user_input: InputStreamConfig,
+    user_output: OutputStreamConfig,
+    user_error: OutputStreamConfig,
+}
+
+impl Default for StreamConfig {
+    fn default() -> Self {
+        Self::in_memory()
+    }
 }
 
 impl StreamConfig {
     /// Binds the input, output and error streams to stdin, stdout and stderr.
     pub fn stdio() -> Self {
         StreamConfig {
-            inner: StreamConfigInner::Stdio,
+            user_input: InputStreamConfig::stdin(),
+            user_output: OutputStreamConfig::stdout(),
+            user_error: OutputStreamConfig::stderr(),
         }
     }
 
-    /// Binds the output stream to a memory buffer, and the error stream to stderr.
-    ///
-    /// The input stream is ignored.
+    /// Binds the output and error streams to memory buffers and has an empty input.
     pub fn in_memory() -> Self {
         StreamConfig {
-            inner: StreamConfigInner::Memory,
+            user_input: InputStreamConfig::string(""),
+            user_output: OutputStreamConfig::memory(),
+            user_error: OutputStreamConfig::memory(),
         }
+    }
+
+    /// Calls the given callbacks when the respective streams are written to.
+    ///
+    /// This also returns a handler to the stdin of the [`Machine`](crate::Machine).
+    pub fn from_callbacks(stdout: Option<Callback>, stderr: Option<Callback>) -> (UserInput, Self) {
+        let (user_input, channel_stream) = InputStreamConfig::channel();
+        (
+            user_input,
+            StreamConfig {
+                user_input: channel_stream,
+                user_output: stdout
+                    .map_or_else(OutputStreamConfig::memory, OutputStreamConfig::callback),
+                user_error: stderr
+                    .map_or_else(OutputStreamConfig::memory, OutputStreamConfig::callback),
+            },
+        )
+    }
+
+    /// Configures the `user_input` stream.
+    pub fn with_user_input(self, user_input: InputStreamConfig) -> Self {
+        Self { user_input, ..self }
+    }
+
+    /// Configures the `user_output` stream.
+    pub fn with_user_output(self, user_output: OutputStreamConfig) -> Self {
+        Self {
+            user_output,
+            ..self
+        }
+    }
+
+    /// Configures the `user_error` stream.
+    pub fn with_user_error(self, user_error: OutputStreamConfig) -> Self {
+        Self { user_error, ..self }
+    }
+
+    fn into_streams(self, arena: &mut Arena, add_history: bool) -> (Stream, Stream, Stream) {
+        (
+            self.user_input.into_stream(arena, add_history),
+            self.user_output.into_stream(arena),
+            self.user_error.into_stream(arena),
+        )
     }
 }
 
-#[derive(Default)]
-enum StreamConfigInner {
-    Stdio,
-    #[default]
-    Memory,
+/// A handler for the stdin of the [`Machine`](crate::Machine).
+#[derive(Debug)]
+pub struct UserInput {
+    inner: Sender<Vec<u8>>,
+}
+
+impl Write for UserInput {
+    fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+        self.inner
+            .send(buf.into())
+            .map(|_| buf.len())
+            .map_err(|_| std::io::ErrorKind::BrokenPipe.into())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
 }
 
 /// Describes how a [`Machine`](crate::Machine) will be configured.
@@ -79,18 +264,9 @@ impl MachineBuilder {
         let args = MachineArgs::new();
         let mut machine_st = MachineState::new();
 
-        let (user_input, user_output, user_error) = match self.streams.inner {
-            StreamConfigInner::Stdio => (
-                Stream::stdin(&mut machine_st.arena, args.add_history),
-                Stream::stdout(&mut machine_st.arena),
-                Stream::stderr(&mut machine_st.arena),
-            ),
-            StreamConfigInner::Memory => (
-                Stream::Null(StreamOptions::default()),
-                Stream::from_owned_string("".to_owned(), &mut machine_st.arena),
-                Stream::stderr(&mut machine_st.arena),
-            ),
-        };
+        let (user_input, user_output, user_error) = self
+            .streams
+            .into_streams(&mut machine_st.arena, args.add_history);
 
         let mut wam = Machine {
             machine_st,
