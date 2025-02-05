@@ -132,12 +132,9 @@ impl InputStreamConfig {
 
 /// Describes how the streams of a [`Machine`](crate::Machine) will be handled.
 pub struct StreamConfig {
-    /// The configuration for the stdin of the [`Machine`](crate::Machine).
-    pub stdin: InputStreamConfig,
-    /// The configuration for the stdout of the [`Machine`](crate::Machine).
-    pub stdout: OutputStreamConfig,
-    /// The configuration for the stderr of the [`Machine`](crate::Machine).
-    pub stderr: OutputStreamConfig,
+    user_input: InputStreamConfig,
+    user_output: OutputStreamConfig,
+    user_error: OutputStreamConfig,
 }
 
 impl Default for StreamConfig {
@@ -150,43 +147,61 @@ impl StreamConfig {
     /// Binds the input, output and error streams to stdin, stdout and stderr.
     pub fn stdio() -> Self {
         StreamConfig {
-            stdin: InputStreamConfig::stdin(),
-            stdout: OutputStreamConfig::stdout(),
-            stderr: OutputStreamConfig::stderr(),
+            user_input: InputStreamConfig::stdin(),
+            user_output: OutputStreamConfig::stdout(),
+            user_error: OutputStreamConfig::stderr(),
         }
     }
 
     /// Binds the output and error streams to memory buffers and has an empty input.
     pub fn in_memory() -> Self {
         StreamConfig {
-            stdin: InputStreamConfig::string(""),
-            stdout: OutputStreamConfig::memory(),
-            stderr: OutputStreamConfig::memory(),
+            user_input: InputStreamConfig::string(""),
+            user_output: OutputStreamConfig::memory(),
+            user_error: OutputStreamConfig::memory(),
         }
     }
 
     /// Calls the given callbacks when the respective streams are written to.
     ///
-    /// This also returns a handler to the stdin do the [`Machine`](crate::Machine).
-    pub fn with_callbacks(stdout: Option<Callback>, stderr: Option<Callback>) -> (UserInput, Self) {
+    /// This also returns a handler to the stdin of the [`Machine`](crate::Machine).
+    pub fn from_callbacks(stdout: Option<Callback>, stderr: Option<Callback>) -> (UserInput, Self) {
         let (user_input, channel_stream) = InputStreamConfig::channel();
         (
             user_input,
             StreamConfig {
-                stdin: channel_stream,
-                stdout: stdout
+                user_input: channel_stream,
+                user_output: stdout
                     .map_or_else(OutputStreamConfig::memory, OutputStreamConfig::callback),
-                stderr: stderr
+                user_error: stderr
                     .map_or_else(OutputStreamConfig::memory, OutputStreamConfig::callback),
             },
         )
     }
 
+    /// Configures the `user_input` stream.
+    pub fn with_user_input(self, user_input: InputStreamConfig) -> Self {
+        Self { user_input, ..self }
+    }
+
+    /// Configures the `user_output` stream.
+    pub fn with_user_output(self, user_output: OutputStreamConfig) -> Self {
+        Self {
+            user_output,
+            ..self
+        }
+    }
+
+    /// Configures the `user_error` stream.
+    pub fn with_user_error(self, user_error: OutputStreamConfig) -> Self {
+        Self { user_error, ..self }
+    }
+
     fn into_streams(self, arena: &mut Arena, add_history: bool) -> (Stream, Stream, Stream) {
         (
-            self.stdin.into_stream(arena, add_history),
-            self.stdout.into_stream(arena),
-            self.stderr.into_stream(arena),
+            self.user_input.into_stream(arena, add_history),
+            self.user_output.into_stream(arena),
+            self.user_error.into_stream(arena),
         )
     }
 }

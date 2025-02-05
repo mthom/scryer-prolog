@@ -2112,10 +2112,8 @@ mod tests {
     #[test]
     #[cfg_attr(miri, ignore)]
     fn user_input_string_stream() {
-        let streams = StreamConfig {
-            stdin: InputStreamConfig::string("a(1,2,3)."),
-            ..Default::default()
-        };
+        let streams =
+            StreamConfig::default().with_user_input(InputStreamConfig::string("a(1,2,3)."));
 
         let mut machine = MachineBuilder::default().with_streams(streams).build();
 
@@ -2144,11 +2142,7 @@ mod tests {
     #[cfg_attr(miri, ignore)]
     fn user_input_channel_stream() {
         let (mut user_input, channel_stream) = InputStreamConfig::channel();
-        let streams = StreamConfig {
-            stdin: channel_stream,
-            ..Default::default()
-        };
-
+        let streams = StreamConfig::default().with_user_input(channel_stream);
         let mut machine = MachineBuilder::default().with_streams(streams).build();
 
         let complete_answer: Vec<_> = machine
@@ -2204,15 +2198,13 @@ mod tests {
     fn user_output_callback_stream() {
         let test_string = Rc::new(RefCell::new(String::new()));
 
-        let streams = StreamConfig {
-            stdout: OutputStreamConfig::callback(Box::new({
+        let streams =
+            StreamConfig::default().with_user_output(OutputStreamConfig::callback(Box::new({
                 let test_string = test_string.clone();
                 move |x| {
                     x.read_to_string(&mut test_string.borrow_mut()).unwrap();
                 }
-            })),
-            ..Default::default()
-        };
+            })));
 
         let mut machine = MachineBuilder::default().with_streams(streams).build();
 
