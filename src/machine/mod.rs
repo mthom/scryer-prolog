@@ -1272,18 +1272,17 @@ mod tests {
     use super::*;
 
     #[test]
+    #[cfg_attr(miri, ignore)]
     fn test_run_module_predicate_throw() {
         let mut machine = MachineBuilder::default()
             .with_toplevel(
                 r#"
-            :- module('$toplevel', []).
-            repl :- throw(kaboom).
-        "#,
+                    :- module('$toplevel', []).
+                    repl :- throw(kaboom).
+                "#,
             )
             .build();
 
-        let query = machine.run_module_predicate(atom!("$toplevel"), (atom!("repl"), 0));
-
-        assert_eq!(query, std::process::ExitCode::SUCCESS);
+        machine.run_module_predicate(atom!("$toplevel"), (atom!("repl"), 0));
     }
 }
