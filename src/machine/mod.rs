@@ -271,6 +271,11 @@ impl Machine {
             .unwrap()
     }
 
+    /// Runs the predicate `key` in `module_name` until completion.
+    /// Siltently ignores failure, thrown errors and choice points.
+    ///
+    /// Consider using [`Machine::run_query`] if you wish to handle
+    /// predicates that may fail, leave a choice point or throw.
     pub(crate) fn run_module_predicate(
         &mut self,
         module_name: Atom,
@@ -279,6 +284,7 @@ impl Machine {
         if let Some(module) = self.indices.modules.get(&module_name) {
             if let Some(code_index) = module.code_dir.get(&key) {
                 let p = code_index.local().unwrap();
+                // Leave a halting choice point to backtrack to in case the predicate fails or throws.
                 self.allocate_stub_choice_point();
 
                 self.machine_st.cp = BREAK_FROM_DISPATCH_LOOP_LOC;
