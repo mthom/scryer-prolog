@@ -5940,6 +5940,7 @@ impl Machine {
         }
 
         self.user_input = stream;
+        self.indices.set_stream(atom!("user_input"), stream);
         Ok(())
     }
 
@@ -5964,6 +5965,7 @@ impl Machine {
         }
 
         self.user_output = stream;
+        self.indices.set_stream(atom!("user_output"), stream);
         Ok(())
     }
 
