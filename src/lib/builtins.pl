@@ -2188,12 +2188,10 @@ stream_property(S, P) :-
 %% at_end_of_stream(+Stream).
 %
 % True iff the stream Stream has ended
-at_end_of_stream(S_or_a) :-
-    (  var(S_or_a) ->
+at_end_of_stream(S) :-
+    (  var(S) ->
        throw(error(instantiation_error, at_end_of_stream/1))
-    ;  atom(S_or_a) ->
-       stream_property(S, alias(S_or_a))
-    ;  S = S_or_a
+    ;  true
     ),
     stream_property(S, end_of_stream(E)),
     ( E = at -> true ; E = past ).
@@ -2205,7 +2203,7 @@ at_end_of_stream :-
     current_input(S),
     stream_property(S, end_of_stream(E)),
     !,
-    ( E = at ; E = past ).
+    ( E = at -> true ; E = past ).
 
 %% set_stream_position(+Stream, +Position).
 %

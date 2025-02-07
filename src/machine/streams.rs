@@ -1908,6 +1908,14 @@ impl MachineState {
 mod test {
     use super::*;
     use crate::machine::config::*;
+    use crate::LeafAnswer;
+
+    fn is_successful<T>(answer: &Result<LeafAnswer, T>) -> bool {
+        matches!(
+            answer,
+            Ok(LeafAnswer::True) | Ok(LeafAnswer::LeafAnswer { .. })
+        )
+    }
 
     #[test]
     #[cfg_attr(miri, ignore)]
@@ -1919,7 +1927,7 @@ mod test {
         let results = machine.run_query("current_input(S).").collect::<Vec<_>>();
 
         assert_eq!(results.len(), 1);
-        assert!(results[0].is_ok());
+        assert!(is_successful(&results[0]));
     }
 
     #[test]
@@ -1933,7 +1941,7 @@ mod test {
 
         assert_eq!(results.len(), 1);
         assert!(
-            results[0].is_ok(),
+            is_successful(&results[0]),
             "Expected read to succeed, got {:?}",
             results[0]
         );
@@ -1951,7 +1959,7 @@ mod test {
         let results = machine.run_query("current_output(S).").collect::<Vec<_>>();
 
         assert_eq!(results.len(), 1);
-        assert!(results[0].is_ok());
+        assert!(is_successful(&results[0]));
     }
 
     #[test]
@@ -1967,7 +1975,28 @@ mod test {
 
         assert_eq!(results.len(), 1);
         assert!(
-            results[0].is_ok(),
+            is_successful(&results[0]),
+            "Expected write to succeed, got {:?}",
+            results[0]
+        );
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn put_code_null_stream() {
+        // TODO: switch to a proper solution for configuring the machine with null streams
+        // once `StreamConfig` supports it.
+        let mut machine = MachineBuilder::new().build();
+        machine.user_output = Stream::Null(StreamOptions::default());
+        machine.configure_streams();
+
+        let results = machine
+            .run_query("put_code(user_output, 65).")
+            .collect::<Vec<_>>();
+
+        assert_eq!(results.len(), 1);
+        assert!(
+            is_successful(&results[0]),
             "Expected write to succeed, got {:?}",
             results[0]
         );
@@ -1987,8 +2016,44 @@ mod test {
 
         assert_eq!(results.len(), 1);
         assert!(
-            results[0].is_ok(),
+            is_successful(&results[0]),
             "Expected write to succeed, got {:?}",
+            results[0]
+        );
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn at_end_of_stream_0_null_stream() {
+        let mut machine = MachineBuilder::new()
+            .with_streams(StreamConfig::in_memory())
+            .build();
+
+        let results = machine.run_query("at_end_of_stream.").collect::<Vec<_>>();
+
+        assert_eq!(results.len(), 1);
+        assert!(
+            is_successful(&results[0]),
+            "Expected at_end_of_stream to succeed, got {:?}",
+            results[0]
+        );
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn at_end_of_stream_1_null_stream() {
+        let mut machine = MachineBuilder::new()
+            .with_streams(StreamConfig::in_memory())
+            .build();
+
+        let results = machine
+            .run_query("current_input(Stream), at_end_of_stream(Stream).")
+            .collect::<Vec<_>>();
+
+        assert_eq!(results.len(), 1);
+        assert!(
+            is_successful(&results[0]),
+            "Expected at_end_of_stream to succeed, got {:?}",
             results[0]
         );
     }

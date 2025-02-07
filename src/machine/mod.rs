@@ -510,9 +510,12 @@ impl Machine {
 
         self.indices.streams.insert(self.user_error);
 
+        let mut null_options = StreamOptions::default();
+        null_options.set_alias_to_atom_opt(Some(atom!("null_stream")));
+
         self.indices
             .stream_aliases
-            .insert(atom!("null_stream"), Stream::Null(StreamOptions::default()));
+            .insert(atom!("null_stream"), Stream::Null(null_options));
     }
 
     #[inline(always)]
