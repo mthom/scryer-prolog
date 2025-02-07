@@ -836,7 +836,7 @@ impl Read for Stream {
                 ErrorKind::PermissionDenied,
                 StreamError::ReadFromOutputStream,
             )),
-            Stream::Null(_) => Ok(buf.len()),
+            Stream::Null(_) => Ok(0),
             Stream::OutputFile(_) | Stream::StandardError(_) | Stream::StandardOutput(_) => {
                 Err(std::io::Error::new(
                     ErrorKind::PermissionDenied,
