@@ -535,7 +535,7 @@ impl Machine {
     /// Consults a module into the [`Machine`] from a string.
     pub fn consult_module_string(&mut self, module_name: &str, program: impl Into<String>) {
         let stream = Stream::from_owned_string(program.into(), &mut self.machine_st.arena);
-        self.machine_st.registers[1] = stream_as_cell!(stream);
+        self.machine_st.registers[1] = stream.into();
         self.machine_st.registers[2] = atom_as_cell!(&atom_table::AtomTable::build_with(
             &self.machine_st.atom_tbl,
             module_name

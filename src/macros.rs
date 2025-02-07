@@ -175,6 +175,7 @@ macro_rules! raw_ptr_as_cell {
         // TODO use <*{const,mut} _>::addr instead of as when the strict_provenance feature is stable rust-lang/rust#95228
         // we might need <*{const,mut} _>::expose_provenance for strict provenance, dependening on how we recreate a pointer later
         let ptr : *const _ = $ptr;
+        debug_assert!(!$ptr.is_null());
         HeapCellValue::from_ptr_addr(ptr as usize)
     }};
 }
@@ -215,12 +216,6 @@ macro_rules! string_as_pstr_cell {
             AtomCell::build_with(offset as u64, 0, HeapCellValueTag::PStr).into_bytes(),
         )
     }};
-}
-
-macro_rules! stream_as_cell {
-    ($ptr:expr) => {
-        raw_ptr_as_cell!($ptr.as_ptr())
-    };
 }
 
 macro_rules! cell_as_stream {
