@@ -563,30 +563,62 @@ impl Machine {
                             self.machine_st.cp = self.machine_st.attr_var_init.cp;
                         }
 
-                        let mut p = self.machine_st.p;
-                        let mut arity = 0;
+                        let p = self.machine_st.p;
 
-                        while self.code[p].is_head_instr() {
-                            for r in self.code[p].registers() {
-                                if let RegType::Temp(t) = r {
-                                    arity = std::cmp::max(arity, t);
-                                }
-                            }
+                        // Find the boundaries of the current predicate
+                        self.indices.code_dir.sort_by(|_, a, _, b| a.cmp(b));
 
-                            p += 1;
-                        }
+                        let predicate_idx = self
+                            .indices
+                            .code_dir
+                            .binary_search_by_key(&p, |_, x| x.get().p() as usize)
+                            .unwrap_or_else(|x| x - 1);
+
+                        let current_pred_start = self
+                            .indices
+                            .code_dir
+                            .get_index(predicate_idx)
+                            .map(|x| x.1.p() as usize)
+                            .unwrap();
+
+                        debug_assert!(current_pred_start <= p);
+
+                        let current_pred_end = self
+                            .indices
+                            .code_dir
+                            .get_index(predicate_idx + 1)
+                            .map(|x| x.1.p() as usize)
+                            .unwrap_or(self.code.len());
+
+                        debug_assert!(current_pred_end >= p);
+                        debug_assert!(current_pred_end <= self.code.len());
+
+                        // Find point to insert the interrupt
+                        let p_interrupt = p + self.code[p..current_pred_end]
+                            .iter()
+                            .position(|x| !x.is_head_instr())
+                            .unwrap();
+
+                        // Scan registers of all instructions to find out how many to save
+                        let arity = self.code[current_pred_start..current_pred_end]
+                            .iter()
+                            .flat_map(Instruction::registers)
+                            .flat_map(|r| match r {
+                                RegType::Temp(t) => Some(t),
+                                _ => None,
+                            })
+                            .max()
+                            .unwrap_or(0);
 
                         let instr = std::mem::replace(
-                            &mut self.code[p],
+                            &mut self.code[p_interrupt],
                             Instruction::VerifyAttrInterrupt(arity),
                         );
 
                         self.code[VERIFY_ATTR_INTERRUPT_LOC] = instr;
-                        self.machine_st.attr_var_init.cp = p;
+                        self.machine_st.attr_var_init.cp = p_interrupt;
                     }
                     &Instruction::VerifyAttrInterrupt(arity) => {
-                        // let (_, arity) = self.code[VERIFY_ATTR_INTERRUPT_LOC].to_name_and_arity();
-                        // let arity = std::cmp::max(arity, self.machine_st.num_of_args);
                         self.run_verify_attr_interrupt(arity);
                     }
                     &Instruction::Add(ref a1, ref a2, t) => {

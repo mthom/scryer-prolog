@@ -1,0 +1,2 @@
+# issue 2706
+args = ["-f", "--no-add-history"]
