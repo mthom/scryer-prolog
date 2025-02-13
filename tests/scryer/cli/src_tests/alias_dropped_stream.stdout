@@ -1,0 +1,1 @@
+   error(existence_error(stream,readme),stream_property/0).

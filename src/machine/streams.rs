@@ -640,7 +640,7 @@ impl Stream {
         }
     }
 
-    pub fn options_mut(&mut self) -> &mut StreamOptions {
+    pub(super) fn options_mut(&mut self) -> &mut StreamOptions {
         match self {
             Stream::Byte(ref mut ptr) => &mut ptr.options,
             Stream::InputFile(ref mut ptr) => &mut ptr.options,
@@ -1288,11 +1288,10 @@ impl Stream {
         ))
     }
 
+    /// Drops the stream handle and marks the arena pointer as [`ArenaHeaderTag::Dropped`].
     #[inline]
     pub(crate) fn close(&mut self) -> Result<(), std::io::Error> {
-        let mut stream = std::mem::replace(self, Stream::Null(StreamOptions::default()));
-
-        match stream {
+        match self {
             Stream::NamedTcp(ref mut tcp_stream) => {
                 tcp_stream.inner_mut().tcp_stream.shutdown(Shutdown::Both)
             }
@@ -1322,7 +1321,20 @@ impl Stream {
 
                 Ok(())
             }
-            _ => Ok(()),
+            Stream::Byte(mut stream) => {
+                stream.drop_payload();
+                Ok(())
+            }
+            Stream::StaticString(mut stream) => {
+                stream.drop_payload();
+                Ok(())
+            }
+
+            Stream::Null(_) => Ok(()),
+
+            Stream::Readline(_) | Stream::StandardOutput(_) | Stream::StandardError(_) => {
+                unreachable!();
+            }
         }
     }
 
@@ -1464,6 +1476,10 @@ impl MachineState {
         }
     }
 
+    /// ## Warning
+    ///
+    /// The options of streams stored in `Machine::indices` should only
+    /// be modified through [`IndexStore::update_stream_options`].
     pub(crate) fn get_stream_options(
         &mut self,
         alias: HeapCellValue,
@@ -1579,10 +1595,23 @@ impl MachineState {
         options
     }
 
+    /// If `addr` is a [`Cons`](HeapCellValueTag::Cons) to a stream, then returns it.
+    ///
+    /// If it is an atom or a string, then this searches for the corresponding stream
+    /// inside of [`self.indices`], returning it.
+    ///
+    /// ## Warning
+    ///
+    /// **Do not directly modify [`stream.options_mut()`](Stream::options_mut)
+    /// on the returned stream.**
+    ///
+    /// Other functions rely on the invariants of [`IndexStore`], which may
+    /// become invalidated by the direct modification of a stream's option (namely,
+    /// its alias name). Instead, use [`IndexStore::update_stream_options`].
     pub(crate) fn get_stream_or_alias(
         &mut self,
         addr: HeapCellValue,
-        stream_aliases: &StreamAliasDir,
+        indices: &IndexStore,
         caller: Atom,
         arity: usize,
     ) -> Result<Stream, MachineStub> {
@@ -1592,8 +1621,8 @@ impl MachineState {
                         (HeapCellValueTag::Atom, (name, arity)) => {
                             debug_assert_eq!(arity, 0);
 
-                            return match stream_aliases.get(&name) {
-                                Some(stream) if !stream.is_null_stream() => Ok(*stream),
+                            return match indices.get_stream(name) {
+                                Some(stream) if !stream.is_null_stream() => Ok(stream),
                                 _ => {
                                     let stub = functor_stub(caller, arity);
                                     let addr = atom_as_cell!(name);
@@ -1610,8 +1639,8 @@ impl MachineState {
 
                             debug_assert_eq!(arity, 0);
 
-                            return match stream_aliases.get(&name) {
-                                Some(stream) if !stream.is_null_stream() => Ok(*stream),
+                            return match indices.get_stream(name) {
+                                Some(stream) if !stream.is_null_stream() => Ok(stream),
                                 _ => {
                                     let stub = functor_stub(caller, arity);
                                     let addr = atom_as_cell!(name);
@@ -1801,7 +1830,7 @@ impl MachineState {
 
         // 8.11.5.3l)
         if let Some(alias) = options.get_alias() {
-            if indices.stream_aliases.contains_key(&alias) {
+            if indices.has_stream(alias) {
                 return Err(self.occupied_alias_permission_error(alias, atom!("open"), 4));
             }
         }
@@ -1891,5 +1920,93 @@ impl MachineState {
                 Stream::from_file_as_output(file_spec, file, in_append_mode, &mut self.arena)
             });
         }
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use crate::machine::config::*;
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn close_memory_user_output_stream() {
+        let mut machine = MachineBuilder::new()
+            .with_streams(StreamConfig::in_memory())
+            .build();
+
+        let results = machine
+            .run_query(
+                "\\+ \\+ (current_output(Stream), close(Stream)), write(user_output, hello).",
+            )
+            .collect::<Vec<_>>();
+
+        assert_eq!(results.len(), 1);
+        assert!(results[0].is_ok());
+
+        let mut actual = String::new();
+        machine.user_output.read_to_string(&mut actual).unwrap();
+        assert_eq!(actual, "hello");
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn close_memory_user_output_stream_twice() {
+        let mut machine = MachineBuilder::new()
+            .with_streams(StreamConfig::in_memory())
+            .build();
+
+        let results = machine
+            .run_query("\\+ \\+ (current_output(Stream), close(Stream), close(Stream)).")
+            .collect::<Vec<_>>();
+
+        assert_eq!(results.len(), 1);
+        assert!(results[0].is_ok());
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn close_realiased_stream() {
+        let mut machine = MachineBuilder::new().build();
+
+        let results = machine
+            .run_query(
+                r#"
+                \+ \+ (
+                    open("README.md", read, S, [alias(readme)]),
+                    open(stream(S), read, _, [alias(another_alias)]),
+                    close(S)
+                ),
+                open("README.md", read, _, [alias(readme)]).
+            "#,
+            )
+            .collect::<Vec<_>>();
+
+        assert_eq!(results.len(), 1);
+        assert!(results[0].is_ok());
+    }
+
+    #[test]
+    #[cfg_attr(miri, ignore)]
+    fn close_realiased_user_output() {
+        let mut machine = MachineBuilder::new()
+            .with_streams(StreamConfig::in_memory())
+            .build();
+
+        let results = machine
+            .run_query(
+                r#"
+                \+ \+ (
+                    open("README.md", read, S),
+                    open(stream(S), read, _, [alias(user_output)]),
+                    close(S)
+                ),
+                write(user_output, hello).
+            "#,
+            )
+            .collect::<Vec<_>>();
+
+        assert_eq!(results.len(), 1);
+        assert!(results[0].is_ok());
     }
 }

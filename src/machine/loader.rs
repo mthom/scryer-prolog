@@ -1808,7 +1808,7 @@ impl Machine {
     pub(crate) fn push_load_context(&mut self) -> CallResult {
         let stream = self.machine_st.get_stream_or_alias(
             self.machine_st.registers[1],
-            &self.indices.stream_aliases,
+            &self.indices,
             atom!("$push_load_context"),
             2,
         )?;
