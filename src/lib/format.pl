@@ -1,5 +1,5 @@
 /* - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -
-   Written 2020-2024 by Markus Triska (triska@metalevel.at)
+   Written 2020-2025 by Markus Triska (triska@metalevel.at)
    Part of Scryer Prolog.
    I place this code in the public domain. Use it in any way you want.
 - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - - */
@@ -187,7 +187,8 @@ elements_gluevars([E|Es], N0, N) -->
         elements_gluevars(Es, N1, N).
 
 element_gluevar(chars(Cs), N0, N) -->
-        { length(Cs, L),
+        { must_be(chars, Cs),
+          length(Cs, L),
           N is N0 + L }.
 element_gluevar(glue(_,V), N, N) --> [V].
 element_gluevar(goal(G), N, N)   --> { G }.
