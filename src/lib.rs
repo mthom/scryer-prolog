@@ -39,27 +39,15 @@ mod repl_helper;
 mod targets;
 pub(crate) mod types;
 
-#[cfg(target_arch = "wasm32")]
-use wasm_bindgen::prelude::*;
-
 // Re-exports
 pub use machine::config::*;
 pub use machine::lib_machine::*;
 pub use machine::Machine;
 
-/// Eval a source file in Wasm.
 #[cfg(target_arch = "wasm32")]
-#[wasm_bindgen]
-pub fn eval_code(s: &str) -> String {
-    use machine::mock_wam::*;
+pub mod wasm;
 
-    console_error_panic_hook::set_once();
-
-    let mut wam = MachineBuilder::default().build();
-    let bytes = wam.test_load_string(s);
-    String::from_utf8_lossy(&bytes).to_string()
-}
-
+#[cfg(not(target_arch = "wasm32"))]
 /// The entry point for the Scryer Prolog CLI.
 pub fn run_binary() -> std::process::ExitCode {
     use crate::atom_table::Atom;
