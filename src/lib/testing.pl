@@ -1,3 +1,82 @@
+/** Testing framework
+
+This module provides the predicates `run_tests/0` and `run_tests/1` that can be used to do basic
+unit testing.
+
+# Getting started
+
+Suppose you have a file `my_module.pl` with contents:
+
+```prolog
+:- module(my_module, [example/1]).
+
+example(1). 
+example(2). 
+```
+
+You could then write a `my_module_tests.pl` with contents:
+
+```prolog
+:- use_module(library(testing)).
+
+:- use_module(my_module).
+
+test("test 1 and 2", (
+    example(1),
+    example(2)
+)).
+
+test("test 3 and 4", (
+    example(3),
+    example(4)
+)).
+```
+
+You can then run the tests with the following command:
+
+```
+$ scryer-prolog -f my_module_tests.pl -g run_tests
+Running tests in module user.
+  test "test 1 and 2" ... succeeded
+  test "test 3 and 4" ... failed
+```
+
+And we can see that our test failed. We can filter just the failing test to investigate it better.
+
+```
+$ scryer-prolog -f my_module_tests.pl -g 'run_tests([filter("test 3 and 4")])'
+Running tests in module user.
+  test "test 3 and 4" ... failed
+```
+
+Adding `example(3). example(4).` to `my_module.pl` and rerunning the tests we see that it now
+passes.
+
+# How it works
+
+This testing framework expects the tests to be written as predicates of the form
+`test(-Name, -Goal)`. `Name` is the name of the test that can be used to identify and filter it,
+`Goal` is the goal that needs to succeed for the test to pass.
+
+By default `run_tests/1` only searches the `user` module for these test predicates, and so only
+finds the tests that are written outside any module. You can use the `modules(+Modules)` option
+to specify other modules it should search. This making it possible to write unit tests inside
+modules, although this may lead to unexpected behavior because of limitations of the module system
+and so it's not very recomended if you need to deal with metapredicates.
+
+Errors and other exceptions make a test fail, but are reported to the user to help in debugging:
+
+```
+$ scryer-prolog -f my_module_tests.pl -g 'run_tests'
+Running tests in module user.
+  test "example with error" ... error(instantiation_error,functor/3)
+  test "example with exception" ... exception(example_exception)
+```
+
+After running, `run_tests/1` exits with a status code of 0 if all tests that were run succeeded and
+1 otherwise. This makes it possible to check if tests pass inside scripts.
+*/
+
 :- module(testing, [run_tests/0, run_tests/1]).
 
 :- use_module(library(lists)).
@@ -7,9 +86,20 @@
 :- use_module(library(lambda)).
 :- use_module(library(error)).
 
-:- use_module(library(debug)).
-
+%% run_tests.
+%
+% Runs tests with default options. See `run_tests/1`.
 run_tests :- run_tests([]).
+
+%% run_tests(+Options).
+%
+% Runs tests with the options given in the list `Options`. Currently supported are:
+%
+% - `modules(+Modules)`: Runs the tests found in the given modules. Default: `[user]`. 
+% - `filter(+Filter)`: Either `no_filter` to do no filtering or a string. Runs only the tests that
+%    contain the string in their names. Default: `no_filter`.
+% - `color(+Color)`: Either `true` or `false` to indicate if the output should be colored or not.
+%   Default: `true`.
 run_tests(Options) :-
     must_be(list, Options),
     options_option_default(Options, modules(Modules), [user]),
