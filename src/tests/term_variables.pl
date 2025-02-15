@@ -1,8 +1,6 @@
 /**/
 
-:- module(term_variables_tests, []).
-
-:- use_module(test_framework).
+:- use_module(library(testing)).
 
 test("term_variables#1400", (
     term_variables(A+B*C/B-D, Vars),

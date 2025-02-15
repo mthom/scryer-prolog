@@ -1,5 +1,4 @@
-:- module(arithmetic_tests, []).
-:- use_module(test_framework).
+:- use_module(library(testing)).
 :- use_module(library(pairs)).
 :- use_module(library(iso_ext)).
 :- use_module(library(lists)).
@@ -64,29 +63,29 @@ test_cos_sin(X) :-
     call(is, Sin, sin(X)),
 
     One is Cos * Cos + Sin * Sin,
-    arithmetic_tests:approx_eq(One, 1.0),
+    approx_eq(One, 1.0),
 
     Sin2 is cos(X - pi/2),
-    arithmetic_tests:approx_eq(Sin, Sin2),
+    approx_eq(Sin, Sin2),
     call(is, Sin3, cos(X - pi/2)),
-    arithmetic_tests:approx_eq(Sin, Sin3),
+    approx_eq(Sin, Sin3),
 
     Cos2 is sin(X + pi/2),
-    arithmetic_tests:approx_eq(Cos, Cos2),
+    approx_eq(Cos, Cos2),
     call(is, Cos3, sin(X + pi/2)),
-    arithmetic_tests:approx_eq(Cos, Cos3).
+    approx_eq(Cos, Cos3).
 
 test_tan(X) :-
     Cos is cos(X),
     Sin is sin(X),
     Tan is tan(X),
     Tan2 is Sin / Cos,
-    arithmetic_tests:approx_eq(Tan, Tan2),
+    approx_eq(Tan, Tan2),
     call(is, Tan, tan(X)).
 
 test_float_fractional_part(X, Exp) :-
     Y is float_fractional_part(X),
-    arithmetic_tests:approx_eq(Y, Exp),
+    approx_eq(Y, Exp),
     call(is, Y, float_fractional_part(X)).
 
 test_float_integer_part(X, Exp) :-
@@ -99,7 +98,7 @@ test_sqrt(X) :-
     Y is sqrt(Abs),
     Y2 is Y * Y,
     One is Y2 / Abs,
-    arithmetic_tests:approx_eq(One, 1.0),
+    approx_eq(One, 1.0),
     call(is, Y, sqrt(abs(X))).
 
 test_log(X) :-
@@ -107,34 +106,34 @@ test_log(X) :-
     Y is log(Abs),
     Y2 is e ^ Y,
     One is Y2 / Abs,
-    arithmetic_tests:approx_eq(One, 1.0),
+    approx_eq(One, 1.0),
     call(is, Y, log(abs(X))).
 
 test_exp(X) :-
     Y is exp(X),
     Y2 is e ^ X,
-    arithmetic_tests:approx_eq(Y2, Y),
+    approx_eq(Y2, Y),
     call(is, Y, exp(X)).
 
 test_acos(X) :-
     XMod is abs(X) - (floor(abs(X) / pi) * pi),
     Cos is cos(XMod),
     Y is acos(Cos),
-    arithmetic_tests:approx_eq(Y, XMod),
+    approx_eq(Y, XMod),
     call(is, Y, acos(Cos)).
 
 test_asin(X) :-
     XMod is abs(X) - (floor(abs(X) / (pi / 2)) * (pi / 2)),
     Sin is sin(XMod),
     Y is asin(Sin),
-    arithmetic_tests:approx_eq(Y, XMod),
+    approx_eq(Y, XMod),
     call(is, Y, asin(Sin)).
 
 test_atan(X) :-
     XMod is abs(X) - (floor(abs(X) / (pi / 2)) * (pi / 2)),
     Tan is tan(XMod),
     Y is atan(Tan),
-    arithmetic_tests:approx_eq(Y, XMod),
+    approx_eq(Y, XMod),
     call(is, Y, atan(Tan)).
 
 test_bitwise_complement(X, Exp) :-
@@ -229,7 +228,7 @@ test_rdiv(X, Y) :-
     call(is, Z2, X rdiv Y),
     Z == Z2,
     Z3 is float(Z) / (X / Y),
-    arithmetic_tests:approx_eq(Z3, 1.0).
+    approx_eq(Z3, 1.0).
 
 
 test_shift(X, Y) :-
@@ -288,11 +287,11 @@ test_atan2(Angle) :-
     Cos is cos(Angle),
     Sin is sin(Angle),
     A is atan2(Sin, Cos),
-    arithmetic_tests:approx_eq(A, Angle),
+    approx_eq(A, Angle),
     call(is, A2, atan2(Sin, Cos)),
     A == A2,
     A3 is atan2(Sin * 1.5, Cos * 1.5),
-    arithmetic_tests:approx_eq(A3, Angle).
+    approx_eq(A3, Angle).
 
 test_gcd(X, Y, Expected) :-
     Gcd is gcd(X, Y),
@@ -324,7 +323,7 @@ test_bad_corecursive2 :- X = 1 /\ Y, Y is 2 + X.
 test("test_value", (
     R1 is 7 rdiv 8,
     R2 is -9 rdiv 10,
-    findall([X, Y], arithmetic_tests:test_value(
+    findall([X, Y], test_value(
         X, Y,
         [1, -2, 3.4, -5.6, R1, R2, 18446744073709551616, -9223372036854775808]
     ), L),
@@ -335,89 +334,89 @@ test("test_value", (
 test("abs", (
     R1 is 7 rdiv 8,
     R2 is 9 rdiv 10,
-    forall(arithmetic_tests:test_value(
+    forall(test_value(
         X, Exp,
         [1, 2, 3.4, 5.6, R1, R2, 18446744073709551616, 9223372036854775808]
-    ), arithmetic_tests:test_abs(X, Exp))
+    ), test_abs(X, Exp))
 )).
 
 test("neg", (
     R1 is -7 rdiv 8,
     R2 is 9 rdiv 10,
-    forall(arithmetic_tests:test_value(
+    forall(test_value(
         X, Exp,
         [-1, 2, -3.4, 5.6, R1, R2, -18446744073709551616, 9223372036854775808]
-    ), arithmetic_tests:test_neg(X, Exp))
+    ), test_neg(X, Exp))
 )).
 
 test("truncate", (
-    forall(arithmetic_tests:test_value(
+    forall(test_value(
         X, Exp,
         [1, -2, 3, -5, 0, 0, 18446744073709551616, -9223372036854775808]
-    ), arithmetic_tests:test_truncate(X, Exp))
+    ), test_truncate(X, Exp))
 )).
 
 test("floor", (
-    forall(arithmetic_tests:test_value(
+    forall(test_value(
         X, Exp,
         [1, -2, 3, -6, 0, -1, 18446744073709551616, -9223372036854775808]
-    ), arithmetic_tests:test_floor(X, Exp))
+    ), test_floor(X, Exp))
 )).
 
 test("ceiling", (
-    forall(arithmetic_tests:test_value(
+    forall(test_value(
         X, Exp,
         [1, -2, 4, -5, 1, 0, 18446744073709551616, -9223372036854775808]
-    ), arithmetic_tests:test_ceiling(X, Exp))
+    ), test_ceiling(X, Exp))
 )).
 
 test("round", (
-    forall(arithmetic_tests:test_value(
+    forall(test_value(
         X, Exp,
         [1, -2, 3, -6, 1, -1, 18446744073709551616, -9223372036854775808]
-    ), arithmetic_tests:test_round(X, Exp))
+    ), test_round(X, Exp))
 )).
 
 test("float", (
-    forall(arithmetic_tests:test_value(
+    forall(test_value(
         X, Exp,
         [1.0, -2.0, 3.4, -5.6, 0.875, -0.9, 18446744073709551616.0, -9223372036854775808.0]
-    ), arithmetic_tests:test_float(X, Exp))
+    ), test_float(X, Exp))
 )).
 
 test("plus", (
-    forall(arithmetic_tests:test_value(X, _, _), arithmetic_tests:test_plus(X))
+    forall(test_value(X, _, _), test_plus(X))
 )).
 
 test("cos_sin", (
-    forall((arithmetic_tests:test_value(X, _, _), X < 100.0, X > -100.0), arithmetic_tests:test_cos_sin(X))
+    forall((test_value(X, _, _), X < 100.0, X > -100.0), test_cos_sin(X))
 )).
 
 test("tan", (
-    forall(arithmetic_tests:test_value(X, _, _), arithmetic_tests:test_tan(X))
+    forall(test_value(X, _, _), test_tan(X))
 )).
 
 test("float_fractional_part", (
     forall(
-        arithmetic_tests:test_value(X, Exp, [0.0, 0.0, 0.4, -0.6, 0.875, -0.9, 0.0, 0.0]),
-        arithmetic_tests:test_float_fractional_part(X, Exp)
+        test_value(X, Exp, [0.0, 0.0, 0.4, -0.6, 0.875, -0.9, 0.0, 0.0]),
+        test_float_fractional_part(X, Exp)
     )
 )).
 
 test("float_integer_part", (
     forall(
-        arithmetic_tests:test_value(X, Exp, [1.0, -2.0, 3.0, -5.0, 0.0, 0.0, 18446744073709551616.0, -9223372036854775808.0]),
-        arithmetic_tests:test_float_integer_part(X, Exp)
+        test_value(X, Exp, [1.0, -2.0, 3.0, -5.0, 0.0, 0.0, 18446744073709551616.0, -9223372036854775808.0]),
+        test_float_integer_part(X, Exp)
     )
 )).
 
 test("sqrt", (
-    forall(arithmetic_tests:test_value(X, _, _), arithmetic_tests:test_sqrt(X)),
+    forall(test_value(X, _, _), test_sqrt(X)),
     \+ catch(_ is sqrt(-1.0), _, false)
 )).
 
 test("log", (
-    forall(arithmetic_tests:test_value(X, _, _), arithmetic_tests:test_log(X)),
+    forall(test_value(X, _, _), test_log(X)),
     \+ catch(_ is log(0.0), _, false),
     \+ catch(_ is log(0), _, false),
     \+ catch(_ is log(-1.0), _, false),
@@ -425,43 +424,43 @@ test("log", (
 )).
 
 test("exp", (
-    forall((arithmetic_tests:test_value(X, _, _), X < 1000), arithmetic_tests:test_exp(X)),
+    forall((test_value(X, _, _), X < 1000), test_exp(X)),
     \+ catch(_ is exp(10000), _, false)
 )).
 
 test("acos", (
     forall(
-        (arithmetic_tests:test_value(X, _, _), X < 1000, X > -1000),
-        arithmetic_tests:test_acos(X)
+        (test_value(X, _, _), X < 1000, X > -1000),
+        test_acos(X)
     )
 )).
 
 test("asin", (
     forall(
-        (arithmetic_tests:test_value(X, _, _), X < 1000, X > -1000),
-        arithmetic_tests:test_asin(X)
+        (test_value(X, _, _), X < 1000, X > -1000),
+        test_asin(X)
     )
 )).
 
 test("atan", (
     forall(
-        (arithmetic_tests:test_value(X, _, _), X < 1000, X > -1000),
-        arithmetic_tests:test_atan(X)
+        (test_value(X, _, _), X < 1000, X > -1000),
+        test_atan(X)
     )
 )).
 
 test("bitwise_complement", (
-    forall(arithmetic_tests:test_value(
+    forall(test_value(
         X, Exp,
         [-2, 1, -4, 5, -1, 0, -18446744073709551617, 9223372036854775807]
-    ), arithmetic_tests:test_bitwise_complement(X, Exp)),
+    ), test_bitwise_complement(X, Exp)),
     \+ catch(_ is \1.0, _, false)
 )).
 
 test("sign", (
     forall(
-        arithmetic_tests:test_value(X, Exp, [1, -1, 1.0, -1.0, 1, -1, 1, -1]),
-        arithmetic_tests:test_sign(X, Exp)
+        test_value(X, Exp, [1, -1, 1.0, -1.0, 1, -1, 1, -1]),
+        test_sign(X, Exp)
     )
 )).
 
@@ -484,7 +483,7 @@ test("add", (
             [B, BF, 0.0],
             [B, R, BR]
         ]),
-        arithmetic_tests:test_add(X, Y, Z)
+        test_add(X, Y, Z)
     )
 )).
 
@@ -505,7 +504,7 @@ test("mul", (
             [18446744073709551616, R, 13835058055282163712],
             [18446744073709551616, 2.0, 36893488147419103232.0]
         ]),
-        arithmetic_tests:test_mul(X, Y, Z)
+        test_mul(X, Y, Z)
     )
 )).
 
@@ -514,7 +513,7 @@ test("sub", (
     forall((
         lists:member(X, [0, 1, -7, 1.5, R, 18446744073709551616]),
         lists:member(Y, [0, 1, -7, 1.5, R, 18446744073709551616])
-    ), arithmetic_tests:test_sub(X, Y))
+    ), test_sub(X, Y))
 )).
 
 test("idiv", test_idiv).
@@ -533,7 +532,7 @@ test("pow", (
             [R, 2, 2.25],
             [R, 2.0, 2.25]
         ]),
-        arithmetic_tests:test_pow(X, Y, Z)
+        test_pow(X, Y, Z)
     )
 )).
 
@@ -551,7 +550,7 @@ test("ipow", (
             [-1, 18446744073709551617, -1],
             [18446744073709551616, 2, 340282366920938463463374607431768211456]
         ]),
-        arithmetic_tests:test_ipow(X, Y, Z)
+        test_ipow(X, Y, Z)
     ),
     \+ catch(X is -3 ^ -2, _, false),
     \+ catch(X is -30000000000000000000000000 ^ -2, _, false),
@@ -567,7 +566,7 @@ test("min_max", (
     forall((
         between:between(1, Len, X),
         between:between(1, Len, Y)
-    ), arithmetic_tests:test_min_max(X, Y, L))
+    ), test_min_max(X, Y, L))
 )).
 
 test("rdiv", (
@@ -575,7 +574,7 @@ test("rdiv", (
     forall((
         lists:member(X, [2, -3, R, 4.5, 9223372036854775807]),
         lists:member(Y, [1, -17, R, 9223372036854775807])
-    ), arithmetic_tests:test_rdiv(X, Y)),
+    ), test_rdiv(X, Y)),
     \+ catch(_ is 5 rdiv 0, _, false),
     \+ catch(_ is 36893488147419103232 rdiv 0, _, false)
 )).
@@ -585,7 +584,7 @@ test("shift", (
         % Note: shifting negative integers is implementation-defined.
         lists:member(X, [2, 3, 5, 9223372036854775807, 36893488147419103232]),
         lists:member(Y, [1, 0, -1, 4, -4, 63, 64, -63, -64])
-    ), arithmetic_tests:test_shift(X, Y))
+    ), test_shift(X, Y))
 )).
 
 test("and_or_xor", (
@@ -610,7 +609,7 @@ test("and_or_xor", (
             -36893488147419103233,
             92233720368547758080
         ]
-    ]), arithmetic_tests:test_and_or_xor(X, Y, AndExpected, OrExpected, XorExpected)),
+    ]), test_and_or_xor(X, Y, AndExpected, OrExpected, XorExpected)),
     \+ catch(_ is 1 /\ 2.0, _, false),
     \+ catch(_ is 1 \/ 2.0, _, false),
     \+ catch(_ is 1 xor 2.0, _, false)
@@ -620,7 +619,7 @@ test("mod_rem", (
     forall((
         lists:member(X, [2, -3, 7, 9223372036854775807, 9223372036854775809]),
         lists:member(Y, [1, -17, 7, 9223372036854775807])
-    ), arithmetic_tests:test_mod_rem(X, Y)),
+    ), test_mod_rem(X, Y)),
 
     \+ catch(_ is 2 mod 0, _, false),
     \+ catch(_ is 2 rem 0, _, false),
@@ -633,7 +632,7 @@ test("mod_rem", (
 )).
 
 test("atan2", (
-    forall(lists:member(Angle, [0, -1, 1, 3.14, -2.7]), arithmetic_tests:test_atan2(Angle)),
+    forall(lists:member(Angle, [0, -1, 1, 3.14, -2.7]), test_atan2(Angle)),
     % ISO states that atan2(0, 0) should throw, but SWI-Prolog chooses to instead return zero.
     \+ catch(X is atan2(0.0, 0.0), _, false),
     \+ catch(X is atan2(0.0, 0), _, false),
@@ -654,7 +653,7 @@ test("gcd", (
             [258254417031933722617, 36893488147419103231, 36893488147419103231],
             [-9223372036854775808, -9223372036854775808, 9223372036854775808]
         ]),
-        arithmetic_tests:test_gcd(X, Y, Expected)
+        test_gcd(X, Y, Expected)
     ),
     \+ catch(X is gcd(1.0, 1), _, false),
     \+ catch(X is gcd(1 rdiv 2, 1), _, false)
