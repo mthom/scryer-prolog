@@ -4,34 +4,62 @@
 :- use_module(library(dcgs)).
 :- use_module(library(pio)).
 :- use_module(library(format)).
+:- use_module(library(lambda)).
+:- use_module(library(error)).
 
 :- use_module(library(debug)).
 
 run_tests :- run_tests([]).
 run_tests(Options) :-
-    options_option_default(Options, color(Color), true),
+    must_be(list, Options),
+    options_option_default(Options, modules(Modules), [user]),
     options_option_default(Options, filter(Filter), no_filter),
-    run_tests_opt(Color, Filter).
+    options_option_default(Options, color(Color), true),
+    run_tests_opt(Modules, Color, Filter).
 
-run_tests_opt(Color, Filter) :-
-    catch(
-        % FIXME: No way to programatically test other modules yet.
-        % See: https://github.com/mthom/scryer-prolog/issues/2826
-        findall(test(Name, user:Goal), user:test(Name, Goal), Tests0),
-        error(existence_error(procedure,_),_),
-        Tests0 = []
+run_tests_opt(Modules, Color, Filter) :-
+    maplist(module_mtests, Modules, MTests),
+    maplist(
+        [Color,Filter]+\(Module-Tests)^Succ^run_tests_module_opt(Module, Tests, Color, Filter, Succ),
+        MTests,
+        Successes
     ),
-    filter_tests(Filter, Tests0, Tests),
-    portray((
-        "Running tests in module ",
-        ansi(Color, white), "user", ansi(Color, reset),
-        ".\n"
-    )),
-    run_tests_(Tests, Color, true, Success),
-    (   Success == true ->
+    (   all_succeeded(Successes) ->
         halt
     ;   halt(1)
     ).
+
+module_tests(Module, Tests) :-
+    catch(
+        findall(
+            test(Name, Module:Goal),
+            (
+                % Workaround. See: https://github.com/mthom/scryer-prolog/issues/2826
+                G0 = Module:test(Name, Goal),
+                call(G0)
+            ),
+            Tests
+        ),
+        error(existence_error(procedure,_),_),
+        Tests = []
+    ),
+    true.
+
+module_mtests(Module, MTests) :-
+    module_tests(Module, Tests),
+    MTests = Module-Tests.
+
+all_succeeded([]).
+all_succeeded([true|Succs]) :- all_succeeded(Succs).
+
+run_tests_module_opt(Module, Tests0, Color, Filter, Success) :-
+    filter_tests(Filter, Tests0, Tests),
+    portray((
+        "Running tests in module ",
+        ansi(Color, white), format_("~q", [Module]), ansi(Color, reset),
+        ".\n"
+    )),
+    run_tests_(Tests, Color, true, Success).
 
 options_option_default(Options, Option, Default) :-
     (   member(Option, Options) ->
