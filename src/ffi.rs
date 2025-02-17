@@ -156,14 +156,14 @@ impl ForeignFunctionTable {
 
     fn map_type_ffi(&mut self, source: &Atom) -> Result<libffi::middle::Type, FFIError> {
         Ok(match source {
-            atom!("sint64") => libffi::middle::Type::i64(),
-            atom!("sint32") => libffi::middle::Type::i32(),
-            atom!("sint16") => libffi::middle::Type::i16(),
-            atom!("sint8") => libffi::middle::Type::i8(),
-            atom!("uint64") => libffi::middle::Type::u64(),
-            atom!("uint32") => libffi::middle::Type::u32(),
-            atom!("uint16") => libffi::middle::Type::u16(),
-            atom!("uint8") => libffi::middle::Type::u8(),
+            atom!("sint64") | atom!("i64") => libffi::middle::Type::i64(),
+            atom!("sint32") | atom!("i32") => libffi::middle::Type::i32(),
+            atom!("sint16") | atom!("i16") => libffi::middle::Type::i16(),
+            atom!("sint8") | atom!("i8") => libffi::middle::Type::i8(),
+            atom!("uint64") | atom!("u64") => libffi::middle::Type::u64(),
+            atom!("uint32") | atom!("u32") => libffi::middle::Type::u32(),
+            atom!("uint16") | atom!("u16") => libffi::middle::Type::u16(),
+            atom!("uint8") | atom!("u8") => libffi::middle::Type::u8(),
             atom!("bool") => libffi::middle::Type::i8(),
             atom!("void") => libffi::middle::Type::void(),
             atom!("cstr") => libffi::middle::Type::pointer(),
