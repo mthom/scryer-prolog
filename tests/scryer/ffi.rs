@@ -194,3 +194,55 @@ fn ffi_invalid_type() {
         "% Warning: initialization/1 failed for: user:test\n",
     );
 }
+
+#[test]
+#[cfg_attr(miri, ignore = "ffi")]
+fn ffi_struct() {
+    let dynlib_path = build_dynamic_library(
+        "ffi_struct",
+        r##"
+                #[repr(C)]
+                struct PaddingGalore {
+                    a: u8,
+                    b: u16,
+                    c: u32,
+                    d: u64,
+                    a2: u8,
+                    e: f32,
+                    f: f64,
+                }
+
+                #[no_mangle]
+                extern "C" fn construct(a: u8, b: u16, c: u32, d: u64, a2: u8, e: f32, f: f64) -> PaddingGalore {
+                    PaddingGalore {
+                        a,
+                        a2,
+                        b,
+                        c,
+                        d,
+                        e,
+                        f,
+                    }
+                }
+
+                #[no_mangle]
+                extern "C" fn modify(data: PaddingGalore) -> PaddingGalore {
+                    PaddingGalore {
+                        a: data.a2,
+                        a2: data.a,
+                        b: !data.b,
+                        c: !data.c,
+                        d: !data.d,
+                        e: -data.e,
+                        f: -data.f,
+                    }
+                }
+            "##,
+    );
+
+    load_module_test_with_input(
+        "tests-pl/ffi_struct.pl",
+        format!("LIB={dynlib_path:?}."),
+        "[P,G]-[pg,8,12,46,40,127,1.3680000305175781,-4.587]\n[P,G,2]-[pg,127,65523,4294967249,18446744073709551575,8,[s,k,i,p],[s,k,i,p]]\n",
+    );
+}
