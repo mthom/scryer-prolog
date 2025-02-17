@@ -6,11 +6,13 @@ use crate::heap_iter::{stackful_post_order_iter, NonListElider};
 use crate::machine::machine_indices::VarKey;
 use crate::machine::mock_wam::CompositeOpDir;
 use crate::machine::{
-    F64Offset, F64Ptr, Fixnum, Number, BREAK_FROM_DISPATCH_LOOP_LOC, LIB_QUERY_SUCCESS,
+    ArenaHeaderTag, F64Offset, F64Ptr, Fixnum, Number, BREAK_FROM_DISPATCH_LOOP_LOC,
+    LIB_QUERY_SUCCESS,
 };
 use crate::parser::ast::{Var, VarPtr};
 use crate::parser::parser::{Parser, Tokens};
 use crate::read::{write_term_to_heap, TermWriteResult};
+use crate::types::UntypedArenaPtr;
 
 use dashu::{Integer, Rational};
 use indexmap::IndexMap;
@@ -280,11 +282,32 @@ impl Term {
                 (HeapCellValueTag::Fixnum, n) => {
                     term_stack.push(Term::Integer(n.into()));
                 }
-                (HeapCellValueTag::Cons) => {
-                    match Number::try_from(addr) {
-                        Ok(Number::Integer(i)) => term_stack.push(Term::Integer((*i).clone())),
-                        Ok(Number::Rational(r)) => term_stack.push(Term::Rational((*r).clone())),
-                        _ => {}
+                (HeapCellValueTag::Cons, ptr) => {
+                    if let Ok(n) = Number::try_from(addr) {
+                        match n {
+                            Number::Integer(i) => term_stack.push(Term::Integer((*i).clone())),
+                            Number::Rational(r) => term_stack.push(Term::Rational((*r).clone())),
+                            _ => { unreachable!() },
+                        }
+                    } else {
+                        match_untyped_arena_ptr!(ptr,
+                            (ArenaHeaderTag::Stream, stream) => {
+                                let stream_term = if let Some(alias) = stream.options().get_alias() {
+                                    Term::atom(alias.as_str().to_string())
+                                } else {
+                                    Term::compound("$stream", [
+                                        Term::integer(stream.as_ptr() as usize)
+                                    ])
+                                };
+                                term_stack.push(stream_term);
+                            }
+                            (ArenaHeaderTag::Dropped, _stream) => {
+                                term_stack.push(Term::atom("$dropped_value"));
+                            }
+                            _ => {
+                                unreachable!();
+                            }
+                        );
                     }
                 }
                 (HeapCellValueTag::CStr, s) => {
@@ -394,6 +417,7 @@ impl Term {
                 }
                 */
                 _ => {
+                    unreachable!();
                 }
             );
         }
