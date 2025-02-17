@@ -322,9 +322,11 @@ impl ForeignFunctionTable {
                                     );
                                     field_ptr = field_ptr.add(struct_size);
                                 }
-                                _ => {
-                                    unreachable!()
-                                }
+                                libffi::raw::FFI_TYPE_VOID
+                                | libffi::raw::FFI_TYPE_INT
+                                | libffi::raw::FFI_TYPE_LONGDOUBLE
+                                | libffi::raw::FFI_TYPE_COMPLEX
+                                | _ => return Err(FFIError::InvalidFFIType),
                             }
                         }
                     }
