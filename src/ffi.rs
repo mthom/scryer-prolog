@@ -292,6 +292,7 @@ impl ForeignFunctionTable {
 
                         let field = &struct_type.fields[i];
                         unsafe {
+                            #[allow(clippy::wildcard_in_or_patterns)]
                             match (*field.as_raw_ptr()).type_ as u32 {
                                 libffi::raw::FFI_TYPE_UINT8 => try_write_int!(u8),
                                 libffi::raw::FFI_TYPE_SINT8 => try_write_int!(i8),
@@ -322,9 +323,11 @@ impl ForeignFunctionTable {
                                     );
                                     field_ptr = field_ptr.add(struct_size);
                                 }
-                                _ => {
-                                    unreachable!()
-                                }
+                                libffi::raw::FFI_TYPE_VOID
+                                | libffi::raw::FFI_TYPE_INT
+                                | libffi::raw::FFI_TYPE_LONGDOUBLE
+                                | libffi::raw::FFI_TYPE_COMPLEX
+                                | _ => return Err(FFIError::InvalidFFIType),
                             }
                         }
                     }
