@@ -317,7 +317,10 @@ impl ForeignFunctionTable {
                 .extend(Layout::new::<T>())
                 .map_err(|_| FFIError::AllocationFailed)?;
             *layout = new_layout;
-            ptr.byte_offset(offset as isize).cast::<T>().write(val);
+            ptr.as_ptr()
+                .byte_offset(offset as isize)
+                .cast::<T>()
+                .write(val);
             Ok(())
         }
 
@@ -344,7 +347,7 @@ impl ForeignFunctionTable {
 
                         std::ptr::copy(
                             arg.ptr.as_ptr(),
-                            alloc.ptr.byte_offset(offset as isize).as_ptr(),
+                            alloc.ptr.as_ptr().byte_offset(offset as isize),
                             arg.layout.size(),
                         );
                     }
