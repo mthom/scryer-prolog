@@ -10,10 +10,6 @@ test :-
     ffi:'construct'(8, 12, 46, 40, 127, 1.368, -4.587, PG),
     write(("PG"-PG)), nl,
     ffi:'modify'(PG, [pg, A, B, C, D, A2, E, F]),
-    % skipping E & F for now as the result changes between runs for some reason
-    write(("PG2"-[pg, A, B, C, D, A2, "skip", "skip"])), nl,
-    % avoide singelton warning
-    E = _,
-    F = _.
+    write(("PG2"-[pg, A, B, C, D, A2, E, F])), nl.
 
 :- initialization(test).
