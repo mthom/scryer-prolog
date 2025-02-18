@@ -3,7 +3,7 @@ use crate::atom_table::*;
 use crate::parser::ast::*;
 
 #[cfg(feature = "ffi")]
-use crate::ffi::FFIError;
+use crate::ffi::FfiError;
 use crate::forms::*;
 use crate::machine::heap::*;
 use crate::machine::loader::CompilationTarget;
@@ -308,7 +308,7 @@ pub(super) fn functor_stub(name: Atom, arity: usize) -> FunctorStub {
     [
         atom_as_cell!(atom!("/"), 2),
         atom_as_cell!(name),
-        fixnum_as_cell!(Fixnum::build_with(arity as i64)),
+        fixnum_as_cell!(Fixnum::build_with_unchecked(arity as i64)),
     ]
 }
 
@@ -610,14 +610,18 @@ impl MachineState {
     }
 
     #[cfg(feature = "ffi")]
-    pub(super) fn ffi_error(&mut self, err: FFIError) -> MachineError {
+    pub(super) fn ffi_error(&mut self, err: FfiError) -> MachineError {
         let error_atom = match err {
-            FFIError::ValueCast => atom!("value_cast"),
-            FFIError::ValueDontFit => atom!("value_dont_fit"),
-            FFIError::InvalidFFIType => atom!("invalid_ffi_type"),
-            FFIError::InvalidStructName => atom!("invalid_struct_name"),
-            FFIError::FunctionNotFound => atom!("function_not_found"),
-            FFIError::StructNotFound => atom!("struct_not_found"),
+            FfiError::ValueCast => atom!("value_cast"),
+            FfiError::ValueDontFit => atom!("value_dont_fit"),
+            FfiError::InvalidFfiType => atom!("invalid_ffi_type"),
+            FfiError::InvalidStructName => atom!("invalid_struct_name"),
+            FfiError::FunctionNotFound => atom!("function_not_found"),
+            FfiError::StructNotFound => atom!("struct_not_found"),
+            FfiError::ArgCountMismatch => atom!("mismatched_argument_count"),
+            FfiError::AllocationFailed => atom!("allocation_failed"),
+            FfiError::LayoutError => atom!("layout_error"),
+            FfiError::UnsupportedAbi => atom!("unsupported_abi"),
         };
         let stub = functor!(atom!("ffi_error"), [atom(error_atom)]);
 
