@@ -17,6 +17,7 @@ pub struct HeapPStrIter<'a> {
     stepper: fn(&mut HeapPStrIter<'a>) -> Option<PStrIteratee>,
 }
 
+#[allow(clippy::enum_variant_names)]
 #[derive(Debug, Clone, Copy)]
 pub enum PStrCmpResult<'a> {
     ListMatch {

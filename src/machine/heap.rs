@@ -5,10 +5,10 @@ use crate::types::*;
 
 use std::alloc;
 use std::convert::TryFrom;
+use std::mem::size_of;
 use std::ops::{Bound, Index, IndexMut, Range, RangeBounds};
 use std::ptr;
-use std::sync::Once;
-use std::mem::size_of; // Not in prelude in 1.77
+use std::sync::Once; // Not in prelude in 1.77
 
 use super::MachineState;
 
@@ -521,7 +521,6 @@ impl Heap {
         }
     }
 
-    #[must_use]
     pub fn reserve(&mut self, num_cells: usize) -> Result<HeapWriter, usize> {
         let section;
         let len = heap_index!(num_cells);

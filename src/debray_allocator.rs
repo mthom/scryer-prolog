@@ -533,12 +533,9 @@ impl DebrayAllocator {
     }
 
     pub(crate) fn free_var(&mut self, chunk_num: usize, var_num: usize) {
-        match &mut self.var_data.records[var_num].allocation {
-            VarAlloc::Perm { allocation, .. } => {
-                *allocation = PermVarAllocation::Pending;
-                self.add_perm_to_free_list(chunk_num, var_num);
-            }
-            _ => {}
+        if let VarAlloc::Perm { allocation, .. } = &mut self.var_data.records[var_num].allocation {
+            *allocation = PermVarAllocation::Pending;
+            self.add_perm_to_free_list(chunk_num, var_num);
         }
     }
 
@@ -744,21 +741,18 @@ impl Allocator for DebrayAllocator {
     ) -> RegType {
         let r = self.get_non_var_binding(heap_loc);
 
-        
-
         match lvl {
             Level::Shallow => {
                 let k = self.arg_c;
 
                 if let GenContext::Last(chunk_num) = context {
                     if let Some(new_r) = self.evacuate_arg::<Target>(chunk_num, code) {
-                        self.non_var_register_heap_locs
-                            .swap_remove(&k)
-                            .map(|old_heap_loc| {
-                                self.non_var_registers.insert(old_heap_loc, new_r.reg_num());
-                                self.non_var_register_heap_locs
-                                    .insert(new_r.reg_num(), old_heap_loc);
-                            });
+                        if let Some(old_heap_loc) = self.non_var_register_heap_locs.swap_remove(&k)
+                        {
+                            self.non_var_registers.insert(old_heap_loc, new_r.reg_num());
+                            self.non_var_register_heap_locs
+                                .insert(new_r.reg_num(), old_heap_loc);
+                        }
 
                         self.non_var_registers.insert(heap_loc, k);
                         self.non_var_register_heap_locs.insert(k, heap_loc);

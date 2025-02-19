@@ -87,7 +87,7 @@ fn push_literal(interm: &mut Vec<ArithmeticTerm>, c: HeapCellValue) -> Result<()
                     Number::Float(OrderedFloat(std::f64::consts::PI)),
                 )),
                 atom!("epsilon") => interm.push(ArithmeticTerm::Number(
-                    Number::Float(OrderedFloat(std::f64::EPSILON)),
+                    Number::Float(OrderedFloat(f64::EPSILON)),
                 )),
                 atom!("e") => interm.push(ArithmeticTerm::Number(
                     Number::Float(OrderedFloat(std::f64::consts::E)),

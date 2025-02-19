@@ -1103,18 +1103,15 @@ pub(crate) fn constant_key_alternatives(
 ) -> Vec<HeapCellValue> {
     let mut constants = vec![];
 
-    match Number::try_from(constant) {
-        Ok(Number::Integer(n)) => {
-            let result = (&*n).try_into();
-            if let Ok(value) = result {
-                constants.push(
-                    Fixnum::build_with_checked(value)
-                        .map(|n| fixnum_as_cell!(n))
-                        .unwrap(),
-                );
-            }
+    if let Ok(Number::Integer(n)) = Number::try_from(constant) {
+        let result = (&*n).try_into();
+        if let Ok(value) = result {
+            constants.push(
+                Fixnum::build_with_checked(value)
+                    .map(|n| fixnum_as_cell!(n))
+                    .unwrap(),
+            );
         }
-        _ => {}
     }
 
     /*

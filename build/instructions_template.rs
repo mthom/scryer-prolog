@@ -1055,7 +1055,7 @@ fn generate_instruction_preface() -> TokenStream {
                             constants.iter().map(|(c, ptr)| {
                                 functor!(
                                     atom!(":"),
-                                    [cell((c.clone())), indexing_code_ptr((*ptr))]
+                                    [cell((*c)), indexing_code_ptr((*ptr))]
                                 )
                             }),
                         )

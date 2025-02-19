@@ -938,7 +938,9 @@ impl MachineState {
             Ok(token) => {
                 let minus = if let Token::Literal(atom) = token {
                     atom == atom_as_cell!(atom!("-"))
-                } else { false };
+                } else {
+                    false
+                };
 
                 tokens.push(token);
 
@@ -3773,9 +3775,7 @@ impl Machine {
 
     #[inline(always)]
     pub(crate) fn first_stream(&mut self) {
-        let first_stream = self
-            .indices
-            .iter_streams(..).find(|s| !s.is_null_stream());
+        let first_stream = self.indices.iter_streams(..).find(|s| !s.is_null_stream());
 
         if let Some(first_stream) = first_stream {
             let stream = stream_as_cell!(first_stream);
@@ -3794,7 +3794,8 @@ impl Machine {
         let next_stream = self
             .indices
             .iter_streams(prev_stream..)
-            .filter(|s| !s.is_null_stream()).nth(1);
+            .filter(|s| !s.is_null_stream())
+            .nth(1);
 
         if let Some(next_stream) = next_stream {
             let var = self.deref_register(2).as_var().unwrap();
@@ -7370,18 +7371,18 @@ impl Machine {
             instr.enqueue_functors(&mut self.machine_st.arena, &mut functors);
             let new_len = functors.len();
 
-            for index in old_len..new_len {
-                let functor_len = functors[index].len();
+            for functor in &functors[old_len..new_len] {
+                let functor_len = functor.len();
 
                 match functor_len {
                     0 => {}
                     1 => {
                         functor_list.push(heap_loc_as_cell!(h));
-                        h += cell_index!(Heap::compute_functor_byte_size(&functors[index]));
+                        h += cell_index!(Heap::compute_functor_byte_size(functor));
                     }
                     _ => {
                         functor_list.push(str_loc_as_cell!(h));
-                        h += cell_index!(Heap::compute_functor_byte_size(&functors[index]));
+                        h += cell_index!(Heap::compute_functor_byte_size(functor));
                     }
                 };
             }

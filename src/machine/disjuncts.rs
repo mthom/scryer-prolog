@@ -475,7 +475,8 @@ impl VariableClassifier {
         head_loc: usize,
     ) -> Result<(), CompilationError> {
         let heap = &mut LS::machine_st(&mut loader.payload).heap;
-        let arity = term_predicate_key(heap, head_loc).map(|(_, arity)| arity)
+        let arity = term_predicate_key(heap, head_loc)
+            .map(|(_, arity)| arity)
             .ok_or(CompilationError::InvalidRuleHead)?;
 
         let mut classify_info = ClassifyInfo { arg_c: 1, arity };

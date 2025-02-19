@@ -54,10 +54,7 @@ impl<'a> BootstrappingTermStream<'a> {
 impl<'a> TermStream for BootstrappingTermStream<'a> {
     #[inline]
     fn next(&mut self, op_dir: &CompositeOpDir) -> Result<TermWriteResult, CompilationError> {
-        
-
-        self
-            .lexer_parser
+        self.lexer_parser
             .read_term(op_dir, Tokens::Default)
             .map_err(CompilationError::from)
     }

@@ -37,10 +37,13 @@ macro_rules! functor {
         vec![FunctorElement::Cell(atom_as_cell!($name))]
     });
     ($name:expr, [$($dt:ident($($value:tt),*)),+]) => ({
-        build_functor!([$($dt($($value),*)),*],
+        #[allow(unused_parens)]
+        {
+            build_functor!([$($dt($($value),*)),*],
                        [FunctorElement::Cell(atom_as_cell!($name, count!($($dt) *)))],
                        1,
                        [])
+        }
     });
 }
 

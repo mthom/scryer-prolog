@@ -435,7 +435,7 @@ impl CodeGenerator {
              | HeapCellValueTag::PStrLoc) => {
                 let r = self.marker.mark_non_var::<Target>(Level::Deep, heap_loc, context, target);
                 target.push_back(Target::clause_arg_to_instr(r));
-                return Some(r);
+                Some(r)
             }
             _ => {
                 target.push_back(Target::constant_subterm(subterm));
@@ -523,12 +523,10 @@ impl CodeGenerator {
                             })
                             .collect();
 
-                        for r_opt in free_list_regs {
-                            if let Some(r) = r_opt {
-                                <CodeGenerator as AddToFreeList<'a, Target>>::add_subterm_to_free_list(
-                                    self, r,
-                                );
-                            }
+                        for r_opt in free_list_regs.into_iter().flatten() {
+                            <CodeGenerator as AddToFreeList<'a, Target>>::add_subterm_to_free_list(
+                                self, r_opt,
+                            );
                         }
                     }
                 }
