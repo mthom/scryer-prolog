@@ -747,13 +747,12 @@ impl Allocator for DebrayAllocator {
 
                 if let GenContext::Last(chunk_num) = context {
                     if let Some(new_r) = self.evacuate_arg::<Target>(chunk_num, code) {
-                        self.non_var_register_heap_locs
-                            .swap_remove(&k)
-                            .map(|old_heap_loc| {
-                                self.non_var_registers.insert(old_heap_loc, new_r.reg_num());
-                                self.non_var_register_heap_locs
-                                    .insert(new_r.reg_num(), old_heap_loc);
-                            });
+                        if let Some(old_heap_loc) = self.non_var_register_heap_locs.swap_remove(&k)
+                        {
+                            self.non_var_registers.insert(old_heap_loc, new_r.reg_num());
+                            self.non_var_register_heap_locs
+                                .insert(new_r.reg_num(), old_heap_loc);
+                        }
 
                         self.non_var_registers.insert(heap_loc, k);
                         self.non_var_register_heap_locs.insert(k, heap_loc);

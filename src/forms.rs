@@ -308,9 +308,9 @@ pub enum PredicateClause {
 
 impl PredicateClause {
     pub(crate) fn args(&self, heap: &Heap) -> Option<std::ops::RangeInclusive<usize>> {
-        let focus = match self {
-            &PredicateClause::Fact(Fact { term_loc }, _) => term_loc,
-            &PredicateClause::Rule(Rule { term_loc, .. }, _) => {
+        let focus = match *self {
+            PredicateClause::Fact(Fact { term_loc }, _) => term_loc,
+            PredicateClause::Rule(Rule { term_loc, .. }, _) => {
                 term_nth_arg(heap, term_loc, 1).unwrap()
             }
         };
@@ -345,11 +345,11 @@ pub enum ModuleSource {
 
 impl ModuleSource {
     pub(crate) fn as_functor_stub(&self) -> MachineStub {
-        match self {
-            &ModuleSource::Library(name) => {
+        match *self {
+            ModuleSource::Library(name) => {
                 functor!(atom!("library"), [atom_as_cell(name)])
             }
-            &ModuleSource::File(name) => {
+            ModuleSource::File(name) => {
                 functor!(name)
             }
         }

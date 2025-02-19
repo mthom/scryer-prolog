@@ -364,8 +364,6 @@ impl<'a> ReservedHeapSection<'a> {
         let cells_written;
         let str_byte_len = src.len();
 
-        const ALIGN_CELL: usize = Heap::heap_cell_alignment();
-
         unsafe {
             ptr::copy_nonoverlapping(
                 src.as_ptr(),
@@ -646,7 +644,6 @@ impl Heap {
         }
     }
 
-    #[must_use]
     pub fn reserve(&mut self, num_cells: usize) -> Result<HeapWriter, usize> {
         let section;
         let len = heap_index!(num_cells);
@@ -1001,8 +998,6 @@ impl Heap {
         let (s, tail_loc) = self.scan_slice_to_str(pstr_loc);
         let s_len = s.len();
 
-        const ALIGN_CELL: usize = Heap::heap_cell_alignment();
-
         let align_offset = pstr_sentinel_length(s_len);
 
         let copy_size = s_len + align_offset;
@@ -1321,7 +1316,7 @@ pub fn heap_bound_store(heap: &impl SizedHeap, value: HeapCellValue) -> HeapCell
 }
 
 #[allow(dead_code)]
-pub fn print_heap_terms<'a, I: Iterator<Item = HeapCellValue>>(heap: I, h: usize) {
+pub fn print_heap_terms<I: Iterator<Item = HeapCellValue>>(heap: I, h: usize) {
     for (index, term) in heap.enumerate() {
         println!("{} : {:?}", h + index, term);
     }

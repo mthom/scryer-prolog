@@ -499,6 +499,6 @@ macro_rules! heap_index {
 
 macro_rules! cell_index {
     ($idx:expr) => {
-        (($idx) / std::mem::size_of::<HeapCellValue>())
+        ($idx) / std::mem::size_of::<HeapCellValue>()
     };
 }

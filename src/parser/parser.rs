@@ -529,16 +529,15 @@ impl<'a> Parser<'a> {
                         }
                     }
 
-                    if is_yf!(desc1.spec) && affirm_yf(desc1, desc2) {
+                    if (is_yf!(desc1.spec) && affirm_yf(desc1, desc2))
+                        || (is_xf!(desc1.spec) && affirm_xf(desc1, desc2))
+                        || (is_xf!(desc1.spec) && affirm_xf(desc1, desc2))
+                    {
                         self.push_unary_op(desc1, desc2, LTERM);
                         continue;
-                    } else if is_xf!(desc1.spec) && affirm_xf(desc1, desc2) {
-                        self.push_unary_op(desc1, desc2, LTERM);
-                        continue;
-                    } else if is_fy!(desc2.spec) && affirm_fy(priority, desc1, desc2) {
-                        self.push_unary_op(desc2, desc1, TERM);
-                        continue;
-                    } else if is_fx!(desc2.spec) && affirm_fx(priority, desc1, desc2) {
+                    } else if (is_fy!(desc2.spec) && affirm_fy(priority, desc1, desc2))
+                        || (is_fx!(desc2.spec) && affirm_fx(priority, desc1, desc2))
+                    {
                         self.push_unary_op(desc2, desc1, TERM);
                         continue;
                     } else {

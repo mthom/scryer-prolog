@@ -208,7 +208,7 @@ fn setup_use_module_decl(term: &FocusedHeapRefMut) -> Result<ModuleSource, Compi
                 )
             }
 
-            return Err(CompilationError::InvalidModuleDecl);
+            Err(CompilationError::InvalidModuleDecl)
         }
         (HeapCellValueTag::Atom, (name, arity)) => {
             if arity == 0 {
