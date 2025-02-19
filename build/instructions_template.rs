@@ -1054,6 +1054,7 @@ fn generate_instruction_preface() -> TokenStream {
                                 functor!(
                                     atom!(":"),
                                     [cell((c.clone())), indexing_code_ptr((*ptr))]
+                                    [cell((*c)), indexing_code_ptr((*ptr))]
                                 )
                             }),
                         )
