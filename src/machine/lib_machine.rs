@@ -92,29 +92,24 @@ impl Iterator for QueryState<'_> {
 
         for (var_loc, var_name) in inverse_var_locs.iter() {
             if var_name.starts_with('_') {
-                let should_print = var_names.values().any(|v| {
-                    v == var_name
-                });
+                let should_print = var_names.values().any(|v| v == var_name);
                 if !should_print {
                     continue;
                 }
             }
 
             let var_loc = *var_loc;
-            let term = Value::from_heapcell(
-                machine,
-                heap_loc_as_cell!(var_loc),
-                &mut var_names.clone(),
-            );
+            let term =
+                Value::from_heapcell(machine, heap_loc_as_cell!(var_loc), &mut var_names.clone());
 
             if let Value::Var(ref term_str) = term {
                 if *term_str == **var_name {
                     continue;
                 }
 
-                let var_cell = machine.machine_st.store(
-                    machine.machine_st.deref(machine.machine_st.heap[var_loc]),
-                );
+                let var_cell = machine
+                    .machine_st
+                    .store(machine.machine_st.deref(machine.machine_st.heap[var_loc]));
 
                 if (var_cell.get_value() as usize) < var_loc {
                     bindings.insert(term_str.clone(), Value::Var(var_name.to_string()));

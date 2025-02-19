@@ -37,7 +37,7 @@ pub(super) enum MachineMode {
 pub(super) enum HeapPtr {
     HeapCell(usize),
     PStr(usize), // Char(usize),
-    // PStrLocation(usize),
+                 // PStrLocation(usize),
 }
 
 impl Default for HeapPtr {
@@ -215,7 +215,8 @@ fn push_var_eq_functors(
         let mut writer = heap.reserve(1 + 5 * size)?;
 
         writer.write_with(|section| {
-            for (var_loc, var) in iter { // (var, binding) in iter {
+            for (var_loc, var) in iter {
+                // (var, binding) in iter {
                 let var_atom = AtomTable::build_with(atom_tbl, &var.to_string());
                 let binding = heap_loc_as_cell!(var_loc);
 
@@ -224,7 +225,7 @@ fn push_var_eq_functors(
                 section.push_cell(binding);
             }
 
-            for idx in 0 .. size {
+            for idx in 0..size {
                 section.push_cell(list_loc_as_cell!(section.cell_len() + 1));
                 section.push_cell(str_loc_as_cell!(src_h + 3 * idx));
             }
@@ -274,7 +275,7 @@ impl Ball {
 
         dest.append(self.stub.splice(..))?;
 
-        for cell in &mut dest.splice_mut(h ..) {
+        for cell in &mut dest.splice_mut(h..) {
             *cell = *cell - diff;
         }
 
@@ -342,7 +343,7 @@ impl<'a> CopierTarget for CopyTerm<'a> {
 
     #[inline(always)]
     fn pstr_head_cell_index(&self, pstr_loc: usize) -> usize {
-        self.state.heap.pstr_vec()[0 .. cell_index!(pstr_loc)]
+        self.state.heap.pstr_vec()[0..cell_index!(pstr_loc)]
             .last_zero()
             .map(|idx| idx + 1)
             .unwrap_or(0)
@@ -358,7 +359,7 @@ impl<'a> CopierTarget for CopyTerm<'a> {
         // unwrap is safe here because a partial string is always
         // followed by a tail cell, i.e. a non-pstr cell, supposing
         // self.state.heap[loc] is a pstr cell
-        self.state.heap.pstr_vec()[loc ..].first_zero().unwrap()
+        self.state.heap.pstr_vec()[loc..].first_zero().unwrap()
     }
 
     #[inline(always)]
@@ -482,12 +483,12 @@ impl<'a> CopierTarget for CopyBallTerm<'a> {
     #[inline]
     fn pstr_head_cell_index(&self, pstr_loc: usize) -> usize {
         if pstr_loc >= self.heap.byte_len() {
-            self.stub.pstr_vec()[0 .. cell_index!(pstr_loc - self.heap.byte_len())]
+            self.stub.pstr_vec()[0..cell_index!(pstr_loc - self.heap.byte_len())]
                 .last_zero()
                 .map(|idx| idx + 1)
                 .unwrap_or(0)
         } else {
-            self.heap.pstr_vec()[0 .. cell_index!(pstr_loc)]
+            self.heap.pstr_vec()[0..cell_index!(pstr_loc)]
                 .last_zero()
                 .map(|idx| idx + 1)
                 .unwrap_or(0)
@@ -506,9 +507,11 @@ impl<'a> CopierTarget for CopyBallTerm<'a> {
     #[inline]
     fn next_non_pstr_cell_index(&self, loc: usize) -> usize {
         let zero_from_loc = if loc >= self.heap.cell_len() {
-            self.stub.pstr_vec()[loc - self.heap.cell_len() ..].first_zero().unwrap()
+            self.stub.pstr_vec()[loc - self.heap.cell_len()..]
+                .first_zero()
+                .unwrap()
         } else {
-            self.heap.pstr_vec()[loc ..].first_zero().unwrap()
+            self.heap.pstr_vec()[loc..].first_zero().unwrap()
         };
 
         zero_from_loc + loc
@@ -705,9 +708,9 @@ impl MachineState {
             push_var_eq_functors(
                 &mut self.heap,
                 var_list.len(),
-                var_list.iter().map(|(var_name, var, _)| {
-                    (var.get_value() as usize, var_name.clone())
-                }),
+                var_list
+                    .iter()
+                    .map(|(var_name, var, _)| { (var.get_value() as usize, var_name.clone()) }),
                 &self.atom_tbl,
             )
         );
@@ -743,7 +746,9 @@ impl MachineState {
 
         let mut singleton_var_set: IndexMap<Ref, bool> = IndexMap::new();
 
-        for cell in stackful_preorder_iter::<NonListElider>(&mut self.heap, &mut self.stack, term.focus) {
+        for cell in
+            stackful_preorder_iter::<NonListElider>(&mut self.heap, &mut self.stack, term.focus)
+        {
             let cell = unmark_cell_bits!(cell);
 
             if let Some(var) = cell.as_var() {
@@ -762,9 +767,10 @@ impl MachineState {
                 singleton_var_set
                     .iter()
                     .filter(|(var, is_singleton)| {
-                        **is_singleton && term.inverse_var_locs.contains_key(
-                            &(var.get_value() as usize)
-                        )
+                        **is_singleton
+                            && term
+                                .inverse_var_locs
+                                .contains_key(&(var.get_value() as usize))
                     })
                     .count(),
                 term.inverse_var_locs
@@ -879,7 +885,8 @@ impl MachineState {
                         CompilationError::ParserError(e) if e.is_unexpected_eof() => {
                             match eof_handler(self, stream)? {
                                 OnEOF::Return => {
-                                    return self.write_read_term_options(vec![], empty_list_as_cell!());
+                                    return self
+                                        .write_read_term_options(vec![], empty_list_as_cell!());
                                 }
                                 OnEOF::Continue => continue,
                             }
@@ -1023,11 +1030,9 @@ impl MachineState {
 
                 let term_loc = self.heap.cell_len();
 
-                step_or_resource_error!(
-                    self,
-                    self.heap.push_cell(term_to_be_printed),
-                    { return Ok(None); }
-                );
+                step_or_resource_error!(self, self.heap.push_cell(term_to_be_printed), {
+                    return Ok(None);
+                });
 
                 let mut printer = HCPrinter::new(
                     &mut self.heap,

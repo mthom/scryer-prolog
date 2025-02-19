@@ -1110,12 +1110,11 @@ pub(crate) fn constant_key_alternatives(
                 constants.push(
                     Fixnum::build_with_checked(value)
                         .map(|n| fixnum_as_cell!(n))
-                        .unwrap()
+                        .unwrap(),
                 );
             }
         }
-        _ => {
-        }
+        _ => {}
     }
 
     /*
@@ -1465,11 +1464,7 @@ impl<I: Indexer> CodeOffsets<I> {
         self.indices.lists().push_back(index);
     }
 
-    fn index_constant(
-        &mut self,
-        constant: HeapCellValue,
-        index: usize,
-    ) -> Vec<HeapCellValue> {
+    fn index_constant(&mut self, constant: HeapCellValue, index: usize) -> Vec<HeapCellValue> {
         let overlapping_constants = constant_key_alternatives(constant);
         let code = self.indices.constants().entry(constant).or_default();
 

@@ -486,7 +486,12 @@ pub struct HCPrinter<'a, Outputter> {
     pub double_quotes: bool,
 }
 
-fn ambiguity_check(outputter: &impl HCValueOutputter, quoted: bool, last_item_idx: usize, atom: &str) -> bool {
+fn ambiguity_check(
+    outputter: &impl HCValueOutputter,
+    quoted: bool,
+    last_item_idx: usize,
+    atom: &str,
+) -> bool {
     let tail = &outputter.as_str()[last_item_idx..];
 
     if atom == "," || !quoted || non_quoted_token(atom.chars()) {
@@ -1126,7 +1131,7 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             }
 
             macro_rules! emit_char {
-                ($c:expr) => ({
+                ($c:expr) => {{
                     append_str!(self, "'.'");
                     push_char!(self, '(');
 
@@ -1135,14 +1140,17 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
                     self.state_stack.push(TokenOrRedirect::Close);
                     char_count += 1;
-                });
+                }};
             }
 
             match iteratee {
                 PStrIteratee::Char { value, .. } => {
                     emit_char!(value);
                 }
-                PStrIteratee::PStrSlice { slice_loc, slice_len } => {
+                PStrIteratee::PStrSlice {
+                    slice_loc,
+                    slice_len,
+                } => {
                     let s = iter.heap.slice_to_str(slice_loc, slice_len);
 
                     for c in s.chars() {
@@ -1175,10 +1183,11 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
         if max_depth == 0 {
             while let Some(iteratee) = iter.next() {
                 let iter: Box<dyn Iterator<Item = char>> = match iteratee {
-                    PStrIteratee::Char { value: c, .. } => {
-                        Box::new(std::iter::once(c))
-                    }
-                    PStrIteratee::PStrSlice { slice_loc, slice_len } => {
+                    PStrIteratee::Char { value: c, .. } => Box::new(std::iter::once(c)),
+                    PStrIteratee::PStrSlice {
+                        slice_loc,
+                        slice_len,
+                    } => {
                         let s = iter.heap.slice_to_str(slice_loc, slice_len);
                         Box::new(s.chars())
                     }
@@ -1195,10 +1204,11 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
             while let Some(iteratee) = iter.next() {
                 let iter: Box<dyn Iterator<Item = char>> = match iteratee {
-                    PStrIteratee::Char { value: c, .. } => {
-                        Box::new(std::iter::once(c))
-                    }
-                    PStrIteratee::PStrSlice { slice_loc, slice_len } => {
+                    PStrIteratee::Char { value: c, .. } => Box::new(std::iter::once(c)),
+                    PStrIteratee::PStrSlice {
+                        slice_loc,
+                        slice_len,
+                    } => {
                         let s = iter.heap.slice_to_str(slice_loc, slice_len);
                         Box::new(s.chars())
                     }
@@ -1592,7 +1602,8 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
             }
             */
 
-            self.state_stack.push(TokenOrRedirect::FunctorRedirect(max_depth + 1));
+            self.state_stack
+                .push(TokenOrRedirect::FunctorRedirect(max_depth + 1));
             self.state_stack.push(TokenOrRedirect::HeadTailSeparator);
         }
     }
@@ -1872,9 +1883,8 @@ mod tests {
 
         let mut functor_writer = Heap::functor_writer(functor!(
             f_atom,
-            [atom_as_cell(a_atom),
-             atom_as_cell(b_atom)]),
-        );
+            [atom_as_cell(a_atom), atom_as_cell(b_atom)]
+        ));
 
         let cell = functor_writer(&mut wam.machine_st.heap).unwrap();
         wam.machine_st.heap.push_cell(cell).unwrap();
@@ -1984,9 +1994,11 @@ mod tests {
 
         let mut functor_writer = Heap::functor_writer(functor!(
             f_atom,
-            [atom_as_cell(a_atom),
-             atom_as_cell(b_atom),
-             atom_as_cell(b_atom)]
+            [
+                atom_as_cell(a_atom),
+                atom_as_cell(b_atom),
+                atom_as_cell(b_atom)
+            ]
         ));
 
         functor_writer(&mut wam.machine_st.heap).unwrap();

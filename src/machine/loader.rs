@@ -27,15 +27,14 @@ impl TermWriteResult {
 
         heap[0] = value;
 
-        let inverse_var_locs = inverse_var_locs_from_iter(
-            stackful_preorder_iter::<NonListElider>(
-                heap,
-                &mut stack,
-                0,
-            ),
-        );
+        let inverse_var_locs = inverse_var_locs_from_iter(stackful_preorder_iter::<NonListElider>(
+            heap, &mut stack, 0,
+        ));
 
-        Ok(Self { focus, inverse_var_locs })
+        Ok(Self {
+            focus,
+            inverse_var_locs,
+        })
     }
 }
 
@@ -529,9 +528,10 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             let composite_op_dir = self.wam_prelude.composite_op_dir(compilation_target);
 
             let mut term = load_state.term_stream.next(&composite_op_dir)?;
-            let predicate_focus_opt = load_state.predicates.first().map(|term_write_result| {
-                term_write_result.focus
-            });
+            let predicate_focus_opt = load_state
+                .predicates
+                .first()
+                .map(|term_write_result| term_write_result.focus);
 
             let machine_st = LS::machine_st(&mut self.payload);
             let term_key_opt = clause_predicate_key(&machine_st.heap, term.focus);
@@ -1072,10 +1072,15 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
         let cell = machine_st[r];
 
         let focus = machine_st.heap.cell_len();
-        machine_st.heap.push_cell(cell)
+        machine_st
+            .heap
+            .push_cell(cell)
             .map_err(|_err_loc| ParserError::ResourceError(ParserErrorSrc::default()))?;
 
-        let export_list = FocusedHeapRefMut { heap: &mut machine_st.heap, focus };
+        let export_list = FocusedHeapRefMut {
+            heap: &mut machine_st.heap,
+            focus,
+        };
         let export_list = setup_module_export_list(export_list)?;
 
         Ok(export_list.into_iter().collect())
@@ -1129,8 +1134,10 @@ impl<'a, LS: LoadState<'a>> Loader<'a, LS> {
             }
         );
 
-        Ok(TermWriteResult::from(&mut machine_st.heap, heap_loc_as_cell!(focus))
-           .map_err(|_err_loc| ParserError::ResourceError(ParserErrorSrc::default()))?)
+        Ok(
+            TermWriteResult::from(&mut machine_st.heap, heap_loc_as_cell!(focus))
+                .map_err(|_err_loc| ParserError::ResourceError(ParserErrorSrc::default()))?,
+        )
     }
 
     fn add_extensible_predicate_declaration(
@@ -1628,18 +1635,15 @@ impl Machine {
         };
 
         let value = self.machine_st.registers[2];
-        let term  = resource_error_call_result!(
+        let term = resource_error_call_result!(
             self.machine_st,
             TermWriteResult::from(&mut self.machine_st.heap, value)
         );
 
         let add_clause = || {
             let indexing_arg_opt = match term_predicate_key(&self.machine_st.heap, term.focus) {
-                Some((atom!(":-"), _)) => {
-                    term_nth_arg(&self.machine_st.heap, term.focus, 1).and_then(|h| {
-                        term_nth_arg(&self.machine_st.heap, h, 1)
-                    })
-                }
+                Some((atom!(":-"), _)) => term_nth_arg(&self.machine_st.heap, term.focus, 1)
+                    .and_then(|h| term_nth_arg(&self.machine_st.heap, h, 1)),
                 Some(_) => term_nth_arg(&self.machine_st.heap, term.focus, 1),
                 None => None,
             };
@@ -2240,9 +2244,11 @@ impl Machine {
         };
 
         let mut loader = self.loader_from_heap_evacuable(temp_v!(4));
-        let predicate_focus_opt = loader.payload.predicates.first().map(|term_write_result| {
-            term_write_result.focus
-        });
+        let predicate_focus_opt = loader
+            .payload
+            .predicates
+            .first()
+            .map(|term_write_result| term_write_result.focus);
 
         let is_consistent = if let Some(predicate_focus) = predicate_focus_opt {
             let machine_st = LiveLoadAndMachineState::machine_st(&mut loader.payload);
@@ -2253,7 +2259,7 @@ impl Machine {
 
         LiveLoadAndMachineState::machine_st(&mut loader.payload).fail =
             (!loader.payload.predicates.is_empty()
-             && loader.payload.predicates.compilation_target != compilation_target)
+                && loader.payload.predicates.compilation_target != compilation_target)
                 || !is_consistent;
 
         let result = LiveLoadAndMachineState::evacuate(loader);

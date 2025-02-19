@@ -66,7 +66,7 @@ impl AtomCell {
         debug_assert!(string.len() <= INLINED_ATOM_MAX_LEN);
 
         let mut string_buf: [u8; 8] = [0u8; 8];
-        string_buf[.. string.len()].copy_from_slice(string.as_bytes());
+        string_buf[..string.len()].copy_from_slice(string.as_bytes());
         let encoding = u64::from_le_bytes(string_buf);
 
         AtomCell::new()
@@ -80,7 +80,7 @@ impl AtomCell {
 
     #[inline]
     pub fn new_char_inlined(c: char) -> Self {
-        let mut char_buf = [0u8;8];
+        let mut char_buf = [0u8; 8];
         c.encode_utf8(&mut char_buf);
 
         let encoding = u64::from_le_bytes(char_buf);
@@ -109,7 +109,9 @@ impl AtomCell {
 
     #[inline]
     pub fn get_name(self) -> Atom {
-        Atom { index: (self.name() << 1) | self.is_inlined() as u64 }
+        Atom {
+            index: (self.name() << 1) | self.is_inlined() as u64,
+        }
     }
 
     #[inline]
@@ -216,21 +218,22 @@ impl Hash for Atom {
 
 pub enum AtomString<'a> {
     Static(&'a str),
-    Inlined([u8;8]),
+    Inlined([u8; 8]),
     Dynamic(AtomTableRef<str>),
 }
 
-fn inlined_to_str<'a>(bytes: &'a [u8;8]) -> &'a str {
+fn inlined_to_str<'a>(bytes: &'a [u8; 8]) -> &'a str {
     // allow the '\0\' atom to be represented as the 0-valued inlined atom
     let slice_len = if bytes[0] == 0 {
         1
     } else {
-        bytes.iter().position(|&b| b == 0u8).unwrap_or(INLINED_ATOM_MAX_LEN)
+        bytes
+            .iter()
+            .position(|&b| b == 0u8)
+            .unwrap_or(INLINED_ATOM_MAX_LEN)
     };
 
-    unsafe {
-        str::from_utf8_unchecked(&bytes[..slice_len])
-    }
+    unsafe { str::from_utf8_unchecked(&bytes[..slice_len]) }
 }
 
 impl std::fmt::Debug for AtomString<'_> {

@@ -474,7 +474,6 @@ impl Div<Number> for Number {
     }
 }
 
-
 impl PartialEq for Number {
     fn eq(&self, rhs: &Self) -> bool {
         match (self, rhs) {
@@ -557,7 +556,6 @@ impl PartialOrd for Number {
         Some(self.cmp(rhs))
     }
 }
-
 
 impl Ord for Number {
     fn cmp(&self, rhs: &Number) -> Ordering {
