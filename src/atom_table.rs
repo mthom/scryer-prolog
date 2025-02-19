@@ -222,7 +222,7 @@ pub enum AtomString<'a> {
     Dynamic(AtomTableRef<str>),
 }
 
-fn inlined_to_str<'a>(bytes: &'a [u8; 8]) -> &'a str {
+fn inlined_to_str(bytes: &[u8; 8]) -> &str {
     // allow the '\0\' atom to be represented as the 0-valued inlined atom
     let slice_len = if bytes[0] == 0 {
         1
@@ -253,7 +253,7 @@ impl std::ops::Deref for AtomString<'_> {
     fn deref(&self) -> &Self::Target {
         match self {
             Self::Static(reference) => reference,
-            Self::Inlined(inlined) => inlined_to_str(&inlined),
+            Self::Inlined(inlined) => inlined_to_str(inlined),
             Self::Dynamic(guard) => guard.deref(),
         }
     }
@@ -467,7 +467,7 @@ impl AtomTable {
     }
 
     pub fn build_with(atom_table: &AtomTable, string: &str) -> Atom {
-        if 0 < string.len() && string.len() <= INLINED_ATOM_MAX_LEN {
+        if !string.is_empty() && string.len() <= INLINED_ATOM_MAX_LEN {
             return Atom::new_inlined(string);
         }
 

@@ -54,7 +54,7 @@ impl Token {
             Token::String(string) if flags.double_quotes.is_codes() => {
                 2 * string.chars().count() + 1
             }
-            Token::String(string) => Heap::compute_pstr_size(&string),
+            Token::String(string) => Heap::compute_pstr_size(string),
             Token::Literal(_)
             | Token::Comma
             | Token::HeadTailSeparator
@@ -656,7 +656,7 @@ impl<'a, R: CharRead> LexerParser<'a, R> {
     fn parse_lossy_wrapper<T: FromLexical>(&self, token: &str) -> Result<T, ParserError> {
         match parse::<T, _>(token.as_bytes()) {
             Ok(n) => Ok(n),
-            Err(_) => return Err(ParserError::LexicalError(self.loc_to_err_src())),
+            Err(_) => Err(ParserError::LexicalError(self.loc_to_err_src())),
         }
     }
 

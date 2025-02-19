@@ -156,7 +156,7 @@ fn pstr_segment_char_count_up_to(
     let mut byte_offset = 0;
 
     if max_chars > 0 {
-        while let Some(c) = char_iter.next() {
+        for c in char_iter.by_ref() {
             if c == '\u{0}' {
                 break;
             }
@@ -695,7 +695,7 @@ impl MachineState {
                 let steps = if max_steps > -1 {
                     std::cmp::min(max_steps, num_steps as i64)
                 } else {
-                    max_steps as i64
+                    max_steps
                 };
 
                 self.finalize_skip_max_list(steps, pstr_loc); // cell);
@@ -1607,9 +1607,9 @@ impl Machine {
                         &mut self.machine_st.arena,
                     );
 
-                    self.machine_st.heap.last_cell_mut().map(|cell| {
+                    if let Some(cell) = self.machine_st.heap.last_cell_mut() {
                         *cell = untyped_arena_ptr_as_cell!(UntypedArenaPtr::from(idx));
-                    });
+                    }
 
                     str_loc_as_cell!(h)
                 }
@@ -2271,7 +2271,7 @@ impl Machine {
 
                 let cell = step_or_resource_error!(
                     self.machine_st,
-                    self.machine_st.allocate_cstr(&*name.as_str())
+                    self.machine_st.allocate_cstr(&name.as_str())
                 );
 
                 unify!(self.machine_st, self.machine_st.registers[2], cell);
@@ -2330,7 +2330,7 @@ impl Machine {
                     self.machine_st,
                     sized_iter_to_heap_list(
                         &mut self.machine_st.heap,
-                        (&*name).chars().count(),
+                        name.chars().count(),
                         iter,
                     )
                 );
@@ -2472,7 +2472,7 @@ impl Machine {
 
         let pstr_loc_cell = step_or_resource_error!(
             self.machine_st,
-            self.machine_st.allocate_pstr(&*atom.as_str())
+            self.machine_st.allocate_pstr(&atom.as_str())
         );
 
         let tail_loc = Heap::neighboring_cell_offset(atom.as_str().len() + heap_index!(pstr_h));
@@ -4121,9 +4121,7 @@ impl Machine {
 
                 let mut functor_writer = Heap::functor_writer(functor);
 
-                if let Err(e) = functor_writer(heap) {
-                    return Err(e);
-                }
+                functor_writer(heap)?;
 
                 num_functors += 1;
             }
@@ -7524,7 +7522,7 @@ impl Machine {
 
         let buffer = git_version!(cargo_prefix = "cargo:", fallback = "unknown");
         let cstr_cell =
-            step_or_resource_error!(self.machine_st, self.machine_st.allocate_cstr(&buffer));
+            step_or_resource_error!(self.machine_st, self.machine_st.allocate_cstr(buffer));
 
         unify!(self.machine_st, cstr_cell, self.machine_st.registers[1]);
     }

@@ -1017,9 +1017,8 @@ impl<'a> Parser<'a> {
             return false;
         }
 
-        match self.stack.last().map(|token| token.tt) {
-            Some(TokenType::Open | TokenType::OpenCT) => return false,
-            _ => {}
+        if let Some(TokenType::Open | TokenType::OpenCT) = self.stack.last().map(|token| token.tt) {
+            return false;
         }
 
         let idx = self.stack.len() - 2;
@@ -1117,31 +1116,29 @@ impl<'a> Parser<'a> {
         Negator: Fn(N, &mut Arena) -> N,
         ToLiteral: Fn(N, &mut Arena) -> HeapCellValue,
     {
-        match self.stack.last().cloned() {
-            Some(
-                td @ TokenDesc {
-                    tt: TokenType::Term { .. },
-                    spec,
-                    ..
-                },
-            ) => {
-                if let Some(name) = self.get_term_name(td) {
-                    if name == atom!("-") && (is_prefix!(spec) || is_negate!(spec)) {
-                        self.stack.pop();
+        if let Some(
+            td @ TokenDesc {
+                tt: TokenType::Term { .. },
+                spec,
+                ..
+            },
+        ) = self.stack.last().cloned()
+        {
+            if let Some(name) = self.get_term_name(td) {
+                if name == atom!("-") && (is_prefix!(spec) || is_negate!(spec)) {
+                    self.stack.pop();
 
-                        let arena = &mut self.arena;
-                        let literal = constr(negator(n, arena), arena);
+                    let arena = &mut self.arena;
+                    let literal = constr(negator(n, arena), arena);
 
-                        self.shift(Token::Literal(literal), 0, TERM);
+                    self.shift(Token::Literal(literal), 0, TERM);
 
-                        return;
-                    }
+                    return;
                 }
             }
-            _ => {}
         }
 
-        let literal = constr(n, &mut self.arena);
+        let literal = constr(n, self.arena);
         self.shift(Token::Literal(literal), 0, TERM);
     }
 

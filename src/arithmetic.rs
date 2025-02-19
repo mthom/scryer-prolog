@@ -246,7 +246,7 @@ impl<'a> ArithmeticEvaluator<'a> {
     ) -> Result<ArithCont, ArithmeticError> {
         let mut code = CodeDeque::new();
         let mut stack = Stack::uninitialized();
-        let mut iter = query_iterator::<false>(&mut src.heap, &mut stack, term_loc);
+        let mut iter = query_iterator::<false>(src.heap, &mut stack, term_loc);
 
         let chunk_num = context.chunk_num();
 

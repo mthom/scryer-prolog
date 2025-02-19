@@ -941,7 +941,7 @@ impl CodeGenerator {
             }
             _ => {
                 if Number::try_from(var).is_ok() {
-                    let v = HeapCellValue::from(var);
+                    let v = var;
                     code.push_back(instr!("put_constant", Level::Shallow, v, temp_v!(1)));
 
                     self.marker.advance_arg();
@@ -1169,7 +1169,7 @@ impl CodeGenerator {
         self.marker.reset_free_list();
         code.extend(fact);
 
-        self.compile_seq(term, &clauses, &mut code)?;
+        self.compile_seq(term, clauses, &mut code)?;
 
         Ok(Vec::from(code))
     }
@@ -1215,7 +1215,7 @@ impl CodeGenerator {
         self.marker.reset_arg(term.arity(clause.term_loc()));
 
         let mut stack = Stack::uninitialized();
-        let iter = query_iterator::<true>(&mut term.heap, &mut stack, clause.term_loc());
+        let iter = query_iterator::<true>(term.heap, &mut stack, clause.term_loc());
 
         let query = self.compile_target::<QueryInstruction, _>(iter, &clause.code_indices, context);
 

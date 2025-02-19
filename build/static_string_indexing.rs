@@ -87,7 +87,7 @@ impl<'ast> Visit<'ast> for StaticStrVisitor {
 const INLINED_ATOM_MAX_LEN: usize = 6;
 
 fn static_string_index(string: &str, index: usize) -> u64 {
-    if 0 < string.len() && string.len() <= INLINED_ATOM_MAX_LEN {
+    if !string.is_empty() && string.len() <= INLINED_ATOM_MAX_LEN {
         let mut string_buf: [u8; 8] = [0u8; 8];
         string_buf[..string.len()].copy_from_slice(string.as_bytes());
         (u64::from_le_bytes(string_buf) << 1) | 1

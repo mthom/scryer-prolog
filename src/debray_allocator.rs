@@ -533,12 +533,9 @@ impl DebrayAllocator {
     }
 
     pub(crate) fn free_var(&mut self, chunk_num: usize, var_num: usize) {
-        match &mut self.var_data.records[var_num].allocation {
-            VarAlloc::Perm { allocation, .. } => {
-                *allocation = PermVarAllocation::Pending;
-                self.add_perm_to_free_list(chunk_num, var_num);
-            }
-            _ => {}
+        if let VarAlloc::Perm { allocation, .. } = &mut self.var_data.records[var_num].allocation {
+            *allocation = PermVarAllocation::Pending;
+            self.add_perm_to_free_list(chunk_num, var_num);
         }
     }
 
@@ -744,7 +741,7 @@ impl Allocator for DebrayAllocator {
     ) -> RegType {
         let r = self.get_non_var_binding(heap_loc);
 
-        let r = match lvl {
+        match lvl {
             Level::Shallow => {
                 let k = self.arg_c;
 
@@ -777,9 +774,7 @@ impl Allocator for DebrayAllocator {
                 self.in_use.insert(r.reg_num());
                 r
             }
-        };
-
-        r
+        }
     }
 
     fn mark_var<'a, Target: CompilationTarget<'a>>(
