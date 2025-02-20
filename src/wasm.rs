@@ -1,7 +1,5 @@
 //! Wasm interface
 
-#![allow(missing_docs)]
-
 use std::mem;
 use std::sync::mpsc;
 use std::sync::mpsc::{Receiver, Sender};
@@ -11,6 +9,7 @@ use wasm_bindgen::prelude::*;
 
 use crate::*;
 
+/// A builder for a `Machine`.
 #[wasm_bindgen(js_name = MachineBuilder)]
 #[derive(Default)]
 pub struct WasmMachineBuilder {
@@ -19,11 +18,13 @@ pub struct WasmMachineBuilder {
 
 #[wasm_bindgen(js_class = MachineBuilder)]
 impl WasmMachineBuilder {
+    /// Creates a new `MachineBuilder` with the default configuration.
     #[wasm_bindgen(constructor)]
     pub fn new() -> Self {
         Default::default()
     }
 
+    /// Creates a new `Machine`.
     pub fn build(&mut self) -> WasmMachine {
         WasmMachine {
             inner: Ok(std::mem::take(&mut self.inner).build()),
@@ -31,6 +32,7 @@ impl WasmMachineBuilder {
     }
 }
 
+/// The Scryer Prolog `Machine`.
 #[wasm_bindgen(js_name = Machine)]
 pub struct WasmMachine {
     inner: Result<Machine, Receiver<Machine>>,
@@ -52,6 +54,10 @@ impl WasmMachine {
         Ok(())
     }
 
+    /// Runs a query.
+    ///
+    /// You can only have one query at a time. If you try to do anything with this machine while
+    /// doing a query an error will be thrown.
     #[wasm_bindgen(js_name = runQuery)]
     pub fn run_query(&mut self, query: String) -> Result<JsValue, JsValue> {
         self.ensure_machine_ownership()?;
@@ -76,6 +82,7 @@ impl WasmMachine {
         Ok(query_state)
     }
 
+    /// Consults a module.
     #[wasm_bindgen(js_name = consultModuleString)]
     pub fn consult_module_string(
         &mut self,
@@ -101,6 +108,7 @@ struct WasmQueryStateInner {
     query_state: QueryState<'this>,
 }
 
+/// The state of a running query.
 #[wasm_bindgen(js_name = QueryState)]
 pub struct WasmQueryState {
     inner: Option<WasmQueryStateInner>,
@@ -108,6 +116,12 @@ pub struct WasmQueryState {
 
 #[wasm_bindgen(js_class = QueryState)]
 impl WasmQueryState {
+    /// Gets the next leaf answer.
+    ///
+    /// This follows the Javascript iterator protocol, so it returns an object that
+    /// contains a `done` field and a `value` field. If `done` is `false`, then the query ended
+    /// and control of the `Machine` will be given back to the `Machine` that created this query.
+    /// Any call after that will result in an error.
     #[wasm_bindgen(js_name = next)]
     pub fn next_answer(&mut self) -> Result<JsValue, JsValue> {
         let ret = js_sys::Object::new();
@@ -146,6 +160,10 @@ impl WasmQueryState {
         Ok(ret.into())
     }
 
+    /// Drops the query.
+    ///
+    /// This is useful to end a query early. Like finishing a query, control will be given back
+    /// to the `Machine` and any call to `next` after that will result in an error.
     #[wasm_bindgen(js_name = drop)]
     pub fn drop_inner(&mut self) {
         let ouroboros_impl_wasm_query_state_inner::Heads {
