@@ -1103,18 +1103,14 @@ pub(crate) fn constant_key_alternatives(
 ) -> Vec<HeapCellValue> {
     let mut constants = vec![];
 
-    match Number::try_from(constant) {
-        Ok(Number::Integer(n)) => {
-            let result = (&*n).try_into();
-            if let Ok(value) = result {
-                constants.push(
-                    Fixnum::build_with_checked(value)
-                        .map(|n| fixnum_as_cell!(n))
-                        .unwrap()
-                );
-            }
-        }
-        _ => {
+    if let Ok(Number::Integer(n)) = Number::try_from(constant) {
+        let result = (&*n).try_into();
+        if let Ok(value) = result {
+            constants.push(
+                Fixnum::build_with_checked(value)
+                    .map(|n| fixnum_as_cell!(n))
+                    .unwrap(),
+            );
         }
     }
 
@@ -1465,11 +1461,7 @@ impl<I: Indexer> CodeOffsets<I> {
         self.indices.lists().push_back(index);
     }
 
-    fn index_constant(
-        &mut self,
-        constant: HeapCellValue,
-        index: usize,
-    ) -> Vec<HeapCellValue> {
+    fn index_constant(&mut self, constant: HeapCellValue, index: usize) -> Vec<HeapCellValue> {
         let overlapping_constants = constant_key_alternatives(constant);
         let code = self.indices.constants().entry(constant).or_default();
 

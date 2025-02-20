@@ -14,7 +14,9 @@ use std::iter::*;
 use std::ops::Deref;
 use std::vec::Vec;
 
-pub(crate) trait TermIterator: Deref<Target = Heap> + Iterator<Item = HeapCellValue> {
+pub(crate) trait TermIterator:
+    Deref<Target = Heap> + Iterator<Item = HeapCellValue>
+{
     fn focus(&self) -> IterStackLoc;
     fn level(&mut self) -> Level;
 }
@@ -45,9 +47,9 @@ fn record_path(
                 }
             }
             (HeapCellValueTag::Lis) => {
-		        root_terms.insert(root_loc);
-		        break;
-	        }
+                root_terms.insert(root_loc);
+                break;
+            }
             _ => {
                 if cell.is_ref() {
                     root_terms.insert(cell.get_value() as usize);
@@ -166,9 +168,7 @@ impl<I: FocusedHeapIter, const SKIP_ROOT: bool> Iterator for TargetIterator<I, S
         loop {
             let next_term = self.iter.next();
 
-            if next_term.is_none() {
-                return None;
-            }
+            next_term?;
 
             let focus = self.iter.focus().value() as usize;
 
@@ -228,7 +228,10 @@ pub(crate) enum ClauseItem<'a> {
     FirstBranch(usize),
     NextBranch,
     BranchEnd(usize),
-    Chunk { chunk_num: usize, terms: &'a VecDeque<QueryTerm> },
+    Chunk {
+        chunk_num: usize,
+        terms: &'a VecDeque<QueryTerm>,
+    },
 }
 
 #[derive(Debug)]
@@ -271,10 +274,9 @@ impl<'a> ClauseIterator<'a> {
 
         while let Some(state) = self.state_stack.pop() {
             match state {
-                ClauseIteratorState::RemainingBranches(terms, focus)
-                    if terms.len() == focus => {
-                        depth += 1;
-                    }
+                ClauseIteratorState::RemainingBranches(terms, focus) if terms.len() == focus => {
+                    depth += 1;
+                }
                 _ => {
                     self.state_stack.push(state);
                     break;
@@ -292,25 +294,27 @@ impl<'a> Iterator for ClauseIterator<'a> {
     fn next(&mut self) -> Option<Self::Item> {
         while let Some(state) = self.state_stack.pop() {
             match state {
-                ClauseIteratorState::RemainingChunks(chunks, focus)
-                    if focus < chunks.len() => {
-                        if focus + 1 < chunks.len() {
-                            self.state_stack
-                                .push(ClauseIteratorState::RemainingChunks(chunks, focus + 1));
-                        } else {
-                            self.remaining_chunks_on_stack -= 1;
-                        }
+                ClauseIteratorState::RemainingChunks(chunks, focus) if focus < chunks.len() => {
+                    if focus + 1 < chunks.len() {
+                        self.state_stack
+                            .push(ClauseIteratorState::RemainingChunks(chunks, focus + 1));
+                    } else {
+                        self.remaining_chunks_on_stack -= 1;
+                    }
 
-                        match &chunks[focus] {
-                            ChunkedTerms::Branch(branches) => {
-                                self.state_stack
-                                    .push(ClauseIteratorState::RemainingBranches(branches, 0));
-                            }
-                            &ChunkedTerms::Chunk { chunk_num, ref terms } => {
-                                return Some(ClauseItem::Chunk { chunk_num, terms });
-                            }
+                    match &chunks[focus] {
+                        ChunkedTerms::Branch(branches) => {
+                            self.state_stack
+                                .push(ClauseIteratorState::RemainingBranches(branches, 0));
+                        }
+                        &ChunkedTerms::Chunk {
+                            chunk_num,
+                            ref terms,
+                        } => {
+                            return Some(ClauseItem::Chunk { chunk_num, terms });
                         }
                     }
+                }
                 ClauseIteratorState::RemainingChunks(chunks, focus) => {
                     debug_assert_eq!(chunks.len(), focus);
                 }

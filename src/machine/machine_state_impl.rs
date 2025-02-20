@@ -359,14 +359,14 @@ impl MachineState {
             HeapPtr::PStr(h) => {
                 let mut char_iter = self.heap.char_iter(h);
 
-                if self.s_offset == 0 { // read the car of the list
+                if self.s_offset == 0 {
+                    // read the car of the list
                     let c = char_iter.next().unwrap();
                     char_as_cell!(c)
-                } else { // read the (self.s_offset)^{th} cdr of the list
-                    let byte_offset: usize = char_iter
-                        .take(self.s_offset)
-                        .map(|c| c.len_utf8())
-                        .sum();
+                } else {
+                    // read the (self.s_offset)^{th} cdr of the list
+                    let byte_offset: usize =
+                        char_iter.take(self.s_offset).map(|c| c.len_utf8()).sum();
                     let new_h = h + byte_offset;
 
                     self.s_offset = 0;
@@ -1044,7 +1044,12 @@ impl MachineState {
         }
     }
 
-    fn try_functor_fabricate_struct(&mut self, name: Atom, arity: usize, r: Ref) -> Result<(), usize> {
+    fn try_functor_fabricate_struct(
+        &mut self,
+        name: Atom,
+        arity: usize,
+        r: Ref,
+    ) -> Result<(), usize> {
         let h = self.heap.cell_len();
         let mut writer = self.heap.reserve(arity + 1)?;
 
@@ -1144,7 +1149,7 @@ impl MachineState {
                 };
 
                 read_heap_cell!(store_name,
-                    (HeapCellValueTag::Cons | HeapCellValueTag::Fixnum | // HeapCellValueTag::Char | 
+                    (HeapCellValueTag::Cons | HeapCellValueTag::Fixnum | // HeapCellValueTag::Char |
                      HeapCellValueTag::F64) if arity == 0 => {
                         self.bind(a1.as_var().unwrap(), deref_name);
                     }

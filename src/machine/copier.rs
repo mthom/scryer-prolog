@@ -93,7 +93,7 @@ impl<T: CopierTarget> CopyTermState<T> {
         }
 
         let threshold = self.target.threshold();
-        self.target.copy_slice_to_end(addr .. addr + 2)?;
+        self.target.copy_slice_to_end(addr..addr + 2)?;
 
         *self.value_at_scan() = list_loc_as_cell!(threshold);
 
@@ -158,7 +158,8 @@ impl<T: CopierTarget> CopyTermState<T> {
 
         *self.value_at_scan() = pstr_loc_as_cell!(heap_index!(threshold) + pstr_offset);
 
-        self.trail.push((Ref::heap_cell(head_cell_idx), self.target[head_cell_idx]));
+        self.trail
+            .push((Ref::heap_cell(head_cell_idx), self.target[head_cell_idx]));
         self.write_pstr_index(head_cell_idx, threshold);
 
         let tail_cell = self.target[tail_loc];
@@ -314,48 +315,48 @@ impl<T: CopierTarget> CopyTermState<T> {
 
     fn copy_structure(&mut self, addr: usize) -> Result<(), usize> {
         read_heap_cell!(self.target[addr],
-            (HeapCellValueTag::Atom, (_name, arity)) => {
-                let threshold = self.target.threshold();
+                    (HeapCellValueTag::Atom, (_name, arity)) => {
+                        let threshold = self.target.threshold();
 
-                *self.value_at_scan() = str_loc_as_cell!(threshold);
+                        *self.value_at_scan() = str_loc_as_cell!(threshold);
 
-                self.target.copy_slice_to_end(addr .. addr + 1 + arity)?;
+                        self.target.copy_slice_to_end(addr .. addr + 1 + arity)?;
 
-                let trail_item = mem::replace(
-                    &mut self.target[addr],
-                    str_loc_as_cell!(threshold),
-                );
+                        let trail_item = mem::replace(
+                            &mut self.target[addr],
+                            str_loc_as_cell!(threshold),
+                        );
 
-                self.trail.push((Ref::heap_cell(addr), trail_item));
-/*
-                self.target.push(atom_as_cell!(name, arity));
+                        self.trail.push((Ref::heap_cell(addr), trail_item));
+        /*
+                        self.target.push(atom_as_cell!(name, arity));
 
-                for i in 0..arity {
-                    let hcv = self.target[addr + 1 + i];
-                    self.target.push(hcv);
-                }
-*/
-                if !self.target.pstr_at(addr + 1 + arity) {
-                    let index_cell = self.target[addr + 1 + arity];
+                        for i in 0..arity {
+                            let hcv = self.target[addr + 1 + i];
+                            self.target.push(hcv);
+                        }
+        */
+                        if !self.target.pstr_at(addr + 1 + arity) {
+                            let index_cell = self.target[addr + 1 + arity];
 
-                    if get_structure_index(index_cell).is_some() {
-                        // copy the index pointer trailing this
-                        // inlined or expanded goal.
-                        let mut writer = self.target.reserve(1).unwrap();
+                            if get_structure_index(index_cell).is_some() {
+                                // copy the index pointer trailing this
+                                // inlined or expanded goal.
+                                let mut writer = self.target.reserve(1).unwrap();
 
-                        writer.write_with(|section| {
-                            section.push_cell(index_cell);
-                        });
+                                writer.write_with(|section| {
+                                    section.push_cell(index_cell);
+                                });
+                            }
+                        }
                     }
-                }
-            }
-            (HeapCellValueTag::Str, h) => {
-                *self.value_at_scan() = str_loc_as_cell!(h);
-            }
-            _ => {
-                unreachable!()
-            }
-        );
+                    (HeapCellValueTag::Str, h) => {
+                        *self.value_at_scan() = str_loc_as_cell!(h);
+                    }
+                    _ => {
+                        unreachable!()
+                    }
+                );
 
         self.scan += 1;
         Ok(())
@@ -438,9 +439,10 @@ mod tests {
         let a_atom = atom!("a");
         let b_atom = atom!("b");
 
-        let mut functor_writer = Heap::functor_writer(
-            functor!(f_atom, [atom_as_cell(a_atom), atom_as_cell(b_atom)]),
-        );
+        let mut functor_writer = Heap::functor_writer(functor!(
+            f_atom,
+            [atom_as_cell(a_atom), atom_as_cell(b_atom)]
+        ));
 
         functor_writer(&mut wam.machine_st.heap).unwrap();
 
@@ -480,13 +482,12 @@ mod tests {
             copy_term(wam, pstr_loc_as_cell!(0), AttrVarPolicy::DeepCopy).unwrap();
         }
 
-        assert_eq!(
-            wam.machine_st.heap.slice_to_str(0, "abc ".len()),
-            "abc "
-        );
+        assert_eq!(wam.machine_st.heap.slice_to_str(0, "abc ".len()), "abc ");
         assert_eq!(wam.machine_st.heap[1], pstr_loc_as_cell!(heap_index!(2)));
         assert_eq!(
-            wam.machine_st.heap.slice_to_str(heap_index!(2), "def".len()),
+            wam.machine_st
+                .heap
+                .slice_to_str(heap_index!(2), "def".len()),
             "def"
         );
         assert_eq!(wam.machine_st.heap[3], pstr_loc_as_cell!(0));
@@ -494,12 +495,16 @@ mod tests {
         assert_eq!(wam.machine_st.heap[4], pstr_loc_as_cell!(heap_index!(5)));
 
         assert_eq!(
-            wam.machine_st.heap.slice_to_str(heap_index!(5), "abc ".len()),
+            wam.machine_st
+                .heap
+                .slice_to_str(heap_index!(5), "abc ".len()),
             "abc "
         );
         assert_eq!(wam.machine_st.heap[6], pstr_loc_as_cell!(heap_index!(7)));
         assert_eq!(
-            wam.machine_st.heap.slice_to_str(heap_index!(7), "def".len()),
+            wam.machine_st
+                .heap
+                .slice_to_str(heap_index!(7), "def".len()),
             "def"
         );
         assert_eq!(wam.machine_st.heap[8], pstr_loc_as_cell!(heap_index!(5)));

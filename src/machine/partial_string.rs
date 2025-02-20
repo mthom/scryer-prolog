@@ -17,11 +17,20 @@ pub struct HeapPStrIter<'a> {
     stepper: fn(&mut HeapPStrIter<'a>) -> Option<PStrIteratee>,
 }
 
+#[allow(clippy::enum_variant_names)]
 #[derive(Debug, Clone, Copy)]
 pub enum PStrCmpResult<'a> {
-    ListMatch { list_loc: usize },
-    CompletePStrMatch { chars_matched: usize, pstr_loc: usize },
-    PartialPStrMatch { string: &'a str, var_loc: usize },
+    ListMatch {
+        list_loc: usize,
+    },
+    CompletePStrMatch {
+        chars_matched: usize,
+        pstr_loc: usize,
+    },
+    PartialPStrMatch {
+        string: &'a str,
+        var_loc: usize,
+    },
 }
 
 struct PStrIterStep {
@@ -52,7 +61,7 @@ impl<'a> HeapPStrIter<'a> {
         self.brent_st.hare
     }
 
-    pub fn compare_pstr_to_string<'b>(self, mut s: &'b str) -> Option<PStrCmpResult<'b>> {
+    pub fn compare_pstr_to_string(self, mut s: &str) -> Option<PStrCmpResult<'_>> {
         let mut curr_hare = self.brent_st.hare;
 
         while !s.is_empty() {
@@ -319,7 +328,10 @@ impl<'a> Iterator for PStrCharsIter<'a> {
                     self.item = self.iter.next();
                     return Some(value);
                 }
-                PStrIteratee::PStrSlice { slice_loc, slice_len } => {
+                PStrIteratee::PStrSlice {
+                    slice_loc,
+                    slice_len,
+                } => {
                     let s = self.iter.heap.slice_to_str(slice_loc, slice_len);
 
                     match s.chars().next() {
@@ -353,7 +365,10 @@ mod test {
         let mut wam = MockWAM::new();
 
         let pstr_cell = wam.machine_st.allocate_pstr("abc ").unwrap();
-        wam.machine_st.heap.push_cell(empty_list_as_cell!()).unwrap();
+        wam.machine_st
+            .heap
+            .push_cell(empty_list_as_cell!())
+            .unwrap();
 
         // not overwriting anything! 0 is an interstitial cell
         // reserved for use by the runtime
@@ -364,7 +379,10 @@ mod test {
 
             assert_eq!(
                 iter.next(),
-                Some(PStrIteratee::PStrSlice { slice_loc: heap_index!(1), slice_len: "abc ".len() }),
+                Some(PStrIteratee::PStrSlice {
+                    slice_loc: heap_index!(1),
+                    slice_len: "abc ".len()
+                }),
             );
             assert_eq!(iter.next(), None);
             assert!(!iter.is_cyclic());
@@ -384,7 +402,10 @@ mod test {
 
             assert_eq!(
                 iter.next(),
-                Some(PStrIteratee::PStrSlice { slice_loc: heap_index!(1), slice_len: "abc ".len() })
+                Some(PStrIteratee::PStrSlice {
+                    slice_loc: heap_index!(1),
+                    slice_len: "abc ".len()
+                })
             );
             assert_eq!(
                 iter.next(),
@@ -407,7 +428,10 @@ mod test {
 
             assert_eq!(
                 iter.next(),
-                Some(PStrIteratee::PStrSlice { slice_loc: heap_index!(1), slice_len: "abc ".len() })
+                Some(PStrIteratee::PStrSlice {
+                    slice_loc: heap_index!(1),
+                    slice_len: "abc ".len()
+                })
             );
             assert_eq!(
                 iter.next(),
@@ -552,7 +576,11 @@ mod test {
             section.push_cell(heap_loc_as_cell!(h));
         });
 
-        unify!(wam.machine_st, pstr_cell, pstr_loc_as_cell!(heap_index!(start)));
+        unify!(
+            wam.machine_st,
+            pstr_cell,
+            pstr_loc_as_cell!(heap_index!(start))
+        );
 
         assert!(!wam.machine_st.fail);
 
@@ -561,7 +589,9 @@ mod test {
             "abcdef"
         );
         assert_eq!(
-            wam.machine_st.heap.slice_to_str(heap_index!(start), "abc".len()),
+            wam.machine_st
+                .heap
+                .slice_to_str(heap_index!(start), "abc".len()),
             "abc"
         );
         assert_eq!(
@@ -587,7 +617,10 @@ mod test {
 
             assert_eq!(
                 iter.next(),
-                Some(PStrIteratee::PStrSlice { slice_loc: 'a'.len_utf8(), slice_len: "bc".len() })
+                Some(PStrIteratee::PStrSlice {
+                    slice_loc: 'a'.len_utf8(),
+                    slice_len: "bc".len()
+                })
             );
 
             for _ in iter {}
@@ -609,7 +642,11 @@ mod test {
             section.push_cell(empty_list_as_cell!());
         });
 
-        unify!(wam.machine_st, list_loc_as_cell!(start), pstr_loc_as_cell!(0));
+        unify!(
+            wam.machine_st,
+            list_loc_as_cell!(start),
+            pstr_loc_as_cell!(0)
+        );
 
         assert!(!wam.machine_st.fail);
 
@@ -629,7 +666,11 @@ mod test {
             section.push_cell(empty_list_as_cell!());
         });
 
-        unify!(wam.machine_st, list_loc_as_cell!(start), pstr_loc_as_cell!(0));
+        unify!(
+            wam.machine_st,
+            list_loc_as_cell!(start),
+            pstr_loc_as_cell!(0)
+        );
 
         assert_eq!(wam.machine_st.heap[2 + start], char_as_cell!('a'));
         assert!(!wam.machine_st.fail);
@@ -652,7 +693,11 @@ mod test {
             section.push_cell(empty_list_as_cell!());
         });
 
-        unify!(wam.machine_st, list_loc_as_cell!(start), pstr_loc_as_cell!(0));
+        unify!(
+            wam.machine_st,
+            list_loc_as_cell!(start),
+            pstr_loc_as_cell!(0)
+        );
 
         assert_eq!(wam.machine_st.heap[start], char_as_cell!('a'));
         assert_eq!(wam.machine_st.heap[4 + start], char_as_cell!('b'));
@@ -676,7 +721,11 @@ mod test {
             section.push_cell(empty_list_as_cell!());
         });
 
-        unify!(wam.machine_st, list_loc_as_cell!(start), pstr_loc_as_cell!(0));
+        unify!(
+            wam.machine_st,
+            list_loc_as_cell!(start),
+            pstr_loc_as_cell!(0)
+        );
 
         assert_eq!(wam.machine_st.heap[2 + start], char_as_cell!('a'));
         assert!(!wam.machine_st.fail);
@@ -699,10 +748,17 @@ mod test {
             section.push_cell(heap_loc_as_cell!(5 + start));
         });
 
-        unify!(wam.machine_st, list_loc_as_cell!(start), pstr_loc_as_cell!(0));
+        unify!(
+            wam.machine_st,
+            list_loc_as_cell!(start),
+            pstr_loc_as_cell!(0)
+        );
 
         assert_eq!(wam.machine_st.heap[2 + start], char_as_cell!('a'));
-        assert_eq!(wam.machine_st.heap[5 + start], pstr_loc_as_cell!(heap_index!(0) + 3));
+        assert_eq!(
+            wam.machine_st.heap[5 + start],
+            pstr_loc_as_cell!(heap_index!(0) + 3)
+        );
         assert!(!wam.machine_st.fail);
 
         // #2293, test6.
@@ -723,7 +779,11 @@ mod test {
             section.push_cell(empty_list_as_cell!());
         });
 
-        unify!(wam.machine_st, list_loc_as_cell!(start), pstr_loc_as_cell!(0));
+        unify!(
+            wam.machine_st,
+            list_loc_as_cell!(start),
+            pstr_loc_as_cell!(0)
+        );
 
         assert_eq!(wam.machine_st.heap[start], char_as_cell!('a'));
         assert_eq!(wam.machine_st.heap[4 + start], char_as_cell!('c'));
@@ -750,7 +810,11 @@ mod test {
             section.push_cell(empty_list_as_cell!());
         });
 
-        unify!(wam.machine_st, list_loc_as_cell!(start), pstr_loc_as_cell!(0));
+        unify!(
+            wam.machine_st,
+            list_loc_as_cell!(start),
+            pstr_loc_as_cell!(0)
+        );
 
         assert_eq!(wam.machine_st.heap[2 + start], char_as_cell!('b'));
         assert_eq!(wam.machine_st.heap[6 + start], char_as_cell!('d'));

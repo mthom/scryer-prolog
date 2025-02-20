@@ -1,7 +1,7 @@
 use crate::arena::*;
 use crate::atom_table::*;
-use crate::instructions::*;
 use crate::functor_macro::*;
+use crate::instructions::*;
 use crate::machine::disjuncts::VarData;
 use crate::machine::heap::*;
 // use crate::machine::loader::PredicateQueue;
@@ -80,8 +80,8 @@ impl GenContext {
     #[inline]
     pub fn chunk_type(&self) -> ChunkType {
         match self {
-            GenContext::Head    => ChunkType::Head,
-            GenContext::Mid(_)  => ChunkType::Mid,
+            GenContext::Head => ChunkType::Head,
+            GenContext::Mid(_) => ChunkType::Mid,
             GenContext::Last(_) => ChunkType::Last,
         }
     }
@@ -118,7 +118,10 @@ impl ChunkType {
 #[derive(Debug)]
 pub enum ChunkedTerms {
     Branch(Vec<VecDeque<ChunkedTerms>>),
-    Chunk { chunk_num: usize, terms: VecDeque<QueryTerm> },
+    Chunk {
+        chunk_num: usize,
+        terms: VecDeque<QueryTerm>,
+    },
 }
 
 #[derive(Debug)]
@@ -190,7 +193,8 @@ impl ChunkedTermVec {
     }
 
     pub fn current_gen_context(&self) -> GenContext {
-        self.current_chunk_type.to_gen_context(self.current_chunk_num)
+        self.current_chunk_type
+            .to_gen_context(self.current_chunk_num)
     }
 
     pub fn push_chunk_term(&mut self, term: QueryTerm) {
@@ -290,9 +294,7 @@ pub fn clause_predicate_key(heap: &impl SizedHeap, term_loc: usize) -> Option<Pr
     let key_opt = term_predicate_key(heap, term_loc);
 
     if Some((atom!(":-"), 2)) == key_opt {
-        term_nth_arg(heap, term_loc, 1).and_then(|arg_loc| {
-            term_predicate_key(heap, arg_loc)
-        })
+        term_nth_arg(heap, term_loc, 1).and_then(|arg_loc| term_predicate_key(heap, arg_loc))
     } else {
         key_opt
     }
@@ -305,10 +307,10 @@ pub enum PredicateClause {
 }
 
 impl PredicateClause {
-    pub(crate) fn args<'a>(&self, heap: &'a Heap) -> Option<std::ops::RangeInclusive<usize>> {
-        let focus = match self {
-            &PredicateClause::Fact(Fact { term_loc }, _) => term_loc,
-            &PredicateClause::Rule(Rule { term_loc, .. }, _) => {
+    pub(crate) fn args(&self, heap: &Heap) -> Option<std::ops::RangeInclusive<usize>> {
+        let focus = match *self {
+            PredicateClause::Fact(Fact { term_loc }, _) => term_loc,
+            PredicateClause::Rule(Rule { term_loc, .. }, _) => {
                 term_nth_arg(heap, term_loc, 1).unwrap()
             }
         };
@@ -343,11 +345,11 @@ pub enum ModuleSource {
 
 impl ModuleSource {
     pub(crate) fn as_functor_stub(&self) -> MachineStub {
-        match self {
-            &ModuleSource::Library(name) => {
+        match *self {
+            ModuleSource::Library(name) => {
                 functor!(atom!("library"), [atom_as_cell(name)])
             }
-            &ModuleSource::File(name) => {
+            ModuleSource::File(name) => {
                 functor!(name)
             }
         }

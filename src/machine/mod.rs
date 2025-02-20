@@ -642,7 +642,8 @@ impl Machine {
                                 s,
                             )) => {
                                 cell = self.deref_register(arg);
-                                self.machine_st.select_switch_on_term_index(cell, v, c, l, s)
+                                self.machine_st
+                                    .select_switch_on_term_index(cell, v, c, l, s)
                             }
                             IndexingLine::Indexing(IndexingInstruction::SwitchOnConstant(hm)) => {
                                 // let lit = self.machine_st.constant_to_literal(cell);

@@ -2,11 +2,11 @@ use crate::atom_table::*;
 use crate::forms::*;
 use crate::instructions::*;
 use crate::iterators::fact_iterator;
-use crate::machine::Stack;
 use crate::machine::heap::*;
 use crate::machine::loader::*;
 use crate::machine::machine_errors::CompilationError;
 use crate::machine::preprocessor::*;
+use crate::machine::Stack;
 use crate::parser::ast::*;
 use crate::parser::dashu::Rational;
 use crate::types::*;
@@ -229,7 +229,8 @@ impl VarLocsToNums {
     }
 
     pub fn get(&self, idx: VarPtrIndex) -> VarPtr {
-        self.map.get(&idx)
+        self.map
+            .get(&idx)
             .cloned()
             .map(VarPtr::Numbered)
             .unwrap_or_else(|| VarPtr::Anon)
@@ -260,8 +261,10 @@ impl VarData {
 
         if let Some(global_cut_var_num) = global_cut_var_num {
             let term = QueryTerm::GetLevel(global_cut_var_num);
-            self.records[global_cut_var_num].allocation =
-                VarAlloc::Perm { reg: 0, allocation: PermVarAllocation::Pending };
+            self.records[global_cut_var_num].allocation = VarAlloc::Perm {
+                reg: 0,
+                allocation: PermVarAllocation::Pending,
+            };
 
             match build_stack.front_mut() {
                 Some(ChunkedTerms::Branch(_)) => {
@@ -326,7 +329,7 @@ impl VariableClassifier {
         loader: &mut Loader<'a, LS>,
         term: &TermWriteResult,
     ) -> Result<ClassifyFactResult, CompilationError> {
-        self.classify_head_variables(loader, &term, term.focus)?;
+        self.classify_head_variables(loader, term, term.focus)?;
         Ok(self.branch_map.separate_and_classify_variables(
             self.var_num,
             self.global_cut_var_num,
@@ -344,7 +347,7 @@ impl VariableClassifier {
         let head_loc = term_nth_arg(heap, term.focus, 1).unwrap();
         let body_loc = term_nth_arg(heap, term.focus, 2).unwrap();
 
-        self.classify_head_variables(loader, &term, head_loc)?;
+        self.classify_head_variables(loader, term, head_loc)?;
         self.root_set.insert(self.current_branch_num.clone());
 
         let mut query_terms = self.classify_body_variables(loader, term, body_loc)?;
@@ -395,14 +398,10 @@ impl VariableClassifier {
 
         let mut lvl = Level::Shallow;
         let mut stack = Stack::uninitialized();
-        let mut iter = fact_iterator::<false>(
-            term.heap,
-            &mut stack,
-            term.focus,
-        );
+        let iter = fact_iterator::<false>(term.heap, &mut stack, term.focus);
 
         // second arg is true to iterate the root, which may be a variable
-        while let Some(subterm) = iter.next() {
+        for subterm in iter {
             if !subterm.is_var() {
                 lvl = Level::Deep;
                 continue;
@@ -425,8 +424,7 @@ impl VariableClassifier {
 
     fn probe_body_var(&mut self, context: GenContext, var_info: VarInfo) {
         let chunk_num = context.chunk_num();
-        let branch_info_v = self.branch_map.entry(var_info.var)
-            .or_default();
+        let branch_info_v = self.branch_map.entry(var_info.var).or_default();
 
         let needs_new_branch = if let Some(last_bi) = branch_info_v.last() {
             !self.root_set.contains(&last_bi.branch_num)
@@ -478,7 +476,7 @@ impl VariableClassifier {
     ) -> Result<(), CompilationError> {
         let heap = &mut LS::machine_st(&mut loader.payload).heap;
         let arity = term_predicate_key(heap, head_loc)
-            .and_then(|(_, arity)| Some(arity))
+            .map(|(_, arity)| arity)
             .ok_or(CompilationError::InvalidRuleHead)?;
 
         let mut classify_info = ClassifyInfo { arg_c: 1, arity };
@@ -489,16 +487,12 @@ impl VariableClassifier {
 
             debug_assert_eq!(value.get_tag(), HeapCellValueTag::Str);
 
-            for idx in str_offset + 1 ..= str_offset + arity {
+            for idx in str_offset + 1..=str_offset + arity {
                 let mut lvl = Level::Shallow;
                 let mut stack = Stack::uninitialized();
-                let mut iter = fact_iterator::<false>(
-                    heap,
-                    &mut stack,
-                    idx,
-                );
+                let iter = fact_iterator::<false>(heap, &mut stack, idx);
 
-                while let Some(subterm) = iter.next() {
+                for subterm in iter {
                     if !subterm.is_var() {
                         lvl = Level::Deep;
                         continue;
@@ -661,13 +655,14 @@ impl VariableClassifier {
                     mut term_loc,
                 } => {
                     // return true iff new chunk should be added.
-                    let update_chunk_data = |build_stack: &mut ChunkedTermVec, key: PredicateKey| {
-                        if ClauseType::is_inlined(key.0, key.1) {
-                            build_stack.try_set_chunk_at_inlined_boundary()
-                        } else {
-                            build_stack.try_set_chunk_at_call_boundary()
-                        }
-                    };
+                    let update_chunk_data =
+                        |build_stack: &mut ChunkedTermVec, key: PredicateKey| {
+                            if ClauseType::is_inlined(key.0, key.1) {
+                                build_stack.try_set_chunk_at_inlined_boundary()
+                            } else {
+                                build_stack.try_set_chunk_at_call_boundary()
+                            }
+                        };
 
                     macro_rules! add_chunk {
                         ($key:expr, $tag:expr, $term_loc:expr) => {{
@@ -678,9 +673,10 @@ impl VariableClassifier {
                             let context = build_stack.current_gen_context();
 
                             for (arg_c, term_loc) in
-                                ($term_loc + 1 ..= $term_loc + $key.1).enumerate()
+                                ($term_loc + 1..=$term_loc + $key.1).enumerate()
                             {
-                                let mut term = FocusedHeapRefMut::from(loader.machine_heap(), term_loc);
+                                let mut term =
+                                    FocusedHeapRefMut::from(loader.machine_heap(), term_loc);
 
                                 self.probe_body_term(
                                     arg_c + 1,
@@ -710,9 +706,10 @@ impl VariableClassifier {
                             let context = build_stack.current_gen_context();
 
                             for (arg_c, term_loc) in
-                                ($term_loc + 1 ..= $term_loc + $key.1).enumerate()
+                                ($term_loc + 1..=$term_loc + $key.1).enumerate()
                             {
-                                let mut term = FocusedHeapRefMut::from(loader.machine_heap(), term_loc);
+                                let mut term =
+                                    FocusedHeapRefMut::from(loader.machine_heap(), term_loc);
 
                                 self.probe_body_term(
                                     arg_c + 1,
@@ -1043,8 +1040,8 @@ impl BranchMap {
 
         for (var, branches) in self.iter_mut() {
             let (mut var_num, var_num_incr) = match var {
-                &ClassifiedVar::InSitu { var_num} => (var_num, false),
-                _ => (var_data.records.len(), true)
+                &ClassifiedVar::InSitu { var_num } => (var_num, false),
+                _ => (var_data.records.len(), true),
             };
 
             for branch in branches.iter_mut() {
@@ -1088,7 +1085,10 @@ impl BranchMap {
                         let chunk_num = chunk.term_loc.chunk_num();
 
                         var_data.var_locs_to_nums.insert(
-                            VarPtrIndex { chunk_num, term_loc },
+                            VarPtrIndex {
+                                chunk_num,
+                                term_loc,
+                            },
                             var_num,
                         );
                     }

@@ -58,7 +58,7 @@ impl MachineState {
         let op_dir = CompositeOpDir::new(op_dir, None);
 
         let term_result = lexer_parser.read_term(&op_dir, Tokens::Default);
-        let lines_read  = lexer_parser.line_num();
+        let lines_read = lexer_parser.line_num();
 
         term_result.map(|term| (term, lines_read))
     }

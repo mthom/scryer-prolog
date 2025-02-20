@@ -1,7 +1,7 @@
 use std::{collections::BTreeMap, fs, path::Path};
 
 use maplit::btreemap;
-use scryer_prolog::{QueryResolution, Value, Machine};
+use scryer_prolog::{Machine, QueryResolution, Value};
 
 pub fn prolog_benches() -> BTreeMap<&'static str, PrologBenchmark> {
     [

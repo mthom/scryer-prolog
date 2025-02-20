@@ -56,9 +56,7 @@ impl MockWAM {
         let var_names = term_write_result
             .inverse_var_locs
             .iter()
-            .map(|(var_loc, var_name)| {
-                (self.machine_st.heap[*var_loc], var_name.clone())
-            })
+            .map(|(var_loc, var_name)| (self.machine_st.heap[*var_loc], var_name.clone()))
             .collect();
 
         let mut printer = HCPrinter::new(
@@ -171,7 +169,7 @@ impl<'a> CopierTarget for TermCopyingMockWAM<'a> {
 
     #[inline(always)]
     fn pstr_head_cell_index(&self, pstr_loc: usize) -> usize {
-        self.wam.machine_st.heap.pstr_vec()[0 .. cell_index!(pstr_loc)]
+        self.wam.machine_st.heap.pstr_vec()[0..cell_index!(pstr_loc)]
             .last_zero()
             .map(|idx| idx + 1)
             .unwrap_or(0)
@@ -187,7 +185,8 @@ impl<'a> CopierTarget for TermCopyingMockWAM<'a> {
         // unwrap is safe here because a partial string is always
         // followed by a tail cell, i.e. a non-pstr cell, supposing
         // self.machine_st.heap[loc] is a pstr cell
-        self.wam.machine_st.heap.pstr_vec()[loc ..].first_zero()
+        self.wam.machine_st.heap.pstr_vec()[loc..]
+            .first_zero()
             .map(|idx| idx + loc)
             .unwrap()
     }
@@ -634,11 +633,7 @@ mod tests {
         let cstr_cell = wam.allocate_cstr("string").unwrap();
 
         assert_eq!(
-            compare_term_test!(
-                wam,
-                atom_as_cell!(atom!("atom")),
-                cstr_cell
-            ),
+            compare_term_test!(wam, atom_as_cell!(atom!("atom")), cstr_cell),
             Some(Ordering::Less)
         );
 
@@ -737,11 +732,7 @@ mod tests {
         let cstr_cell = wam.allocate_cstr("string").unwrap();
 
         assert_eq!(
-            compare_term_test!(
-                wam,
-                empty_list_as_cell!(),
-                cstr_cell
-            ),
+            compare_term_test!(wam, empty_list_as_cell!(), cstr_cell),
             Some(Ordering::Less)
         );
 
@@ -787,13 +778,10 @@ mod tests {
         all_cells_unmarked(wam.heap.splice(..));
         wam.heap.clear();
 
-        let mut functor_writer = Heap::functor_writer(
-            functor!(
-                atom!("f"),
-                [atom_as_cell((atom!("a"))),
-                 atom_as_cell((atom!("b")))]
-            ),
-        );
+        let mut functor_writer = Heap::functor_writer(functor!(
+            atom!("f"),
+            [atom_as_cell((atom!("a"))), atom_as_cell((atom!("b")))]
+        ));
 
         functor_writer(&mut wam.heap).unwrap();
 

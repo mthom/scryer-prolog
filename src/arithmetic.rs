@@ -87,7 +87,7 @@ fn push_literal(interm: &mut Vec<ArithmeticTerm>, c: HeapCellValue) -> Result<()
                     Number::Float(OrderedFloat(std::f64::consts::PI)),
                 )),
                 atom!("epsilon") => interm.push(ArithmeticTerm::Number(
-                    Number::Float(OrderedFloat(std::f64::EPSILON)),
+                    Number::Float(OrderedFloat(f64::EPSILON)),
                 )),
                 atom!("e") => interm.push(ArithmeticTerm::Number(
                     Number::Float(OrderedFloat(std::f64::consts::E)),
@@ -246,7 +246,7 @@ impl<'a> ArithmeticEvaluator<'a> {
     ) -> Result<ArithCont, ArithmeticError> {
         let mut code = CodeDeque::new();
         let mut stack = Stack::uninitialized();
-        let mut iter = query_iterator::<false>(&mut src.heap, &mut stack, term_loc);
+        let mut iter = query_iterator::<false>(src.heap, &mut stack, term_loc);
 
         let chunk_num = context.chunk_num();
 
@@ -474,7 +474,6 @@ impl Div<Number> for Number {
     }
 }
 
-
 impl PartialEq for Number {
     fn eq(&self, rhs: &Self) -> bool {
         match (self, rhs) {
@@ -557,7 +556,6 @@ impl PartialOrd for Number {
         Some(self.cmp(rhs))
     }
 }
-
 
 impl Ord for Number {
     fn cmp(&self, rhs: &Number) -> Ordering {
