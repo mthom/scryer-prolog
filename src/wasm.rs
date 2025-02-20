@@ -19,6 +19,7 @@ pub struct WasmMachineBuilder {
 
 #[wasm_bindgen(js_class = MachineBuilder)]
 impl WasmMachineBuilder {
+    #[wasm_bindgen(constructor)]
     pub fn new() -> Self {
         Default::default()
     }
