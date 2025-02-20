@@ -38,8 +38,7 @@ pub struct WasmMachine {
 
 #[wasm_bindgen(js_class = Machine)]
 impl WasmMachine {
-    #[wasm_bindgen(js_name = runQuery)]
-    pub fn run_query(&mut self, query: String) -> Result<JsValue, JsValue> {
+    fn ensure_machine_ownership(&mut self) -> Result<(), JsValue> {
         if self.inner.is_err() {
             // We have a receiver, try to get the Machine
             let machine = self
@@ -50,7 +49,12 @@ impl WasmMachine {
                 .map_err(|_| js_sys::Error::new("Another query is still active"))?;
             let _ = mem::replace(&mut self.inner, Ok(machine));
         }
+        Ok(())
+    }
 
+    #[wasm_bindgen(js_name = runQuery)]
+    pub fn run_query(&mut self, query: String) -> Result<JsValue, JsValue> {
+        self.ensure_machine_ownership()?;
         assert!(self.inner.is_ok());
 
         // Installs a receiver and gets the machine
@@ -70,6 +74,21 @@ impl WasmMachine {
         .into();
 
         Ok(query_state)
+    }
+
+    #[wasm_bindgen(js_name = consultModuleString)]
+    pub fn consult_module_string(
+        &mut self,
+        module: String,
+        program: String,
+    ) -> Result<(), JsValue> {
+        self.ensure_machine_ownership()?;
+        assert!(self.inner.is_ok());
+
+        let inner = self.inner.as_mut().unwrap();
+        inner.consult_module_string(&module, program);
+
+        Ok(())
     }
 }
 
