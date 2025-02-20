@@ -31,17 +31,6 @@ impl WasmMachineBuilder {
     }
 }
 
-#[wasm_bindgen(inline_js = "
-    export function self_iterable(obj) {
-        obj[Symbol.iterator] = function () {
-            return this
-        };
-    }
-")]
-extern "C" {
-    fn self_iterable(obj: &JsValue);
-}
-
 #[wasm_bindgen(js_name = Machine)]
 pub struct WasmMachine {
     inner: Result<Machine, Receiver<Machine>>,
@@ -80,7 +69,6 @@ impl WasmMachine {
         }
         .into();
 
-        self_iterable(&query_state);
         Ok(query_state)
     }
 }
@@ -149,151 +137,29 @@ impl WasmQueryState {
     }
 }
 
-#[wasm_bindgen(inline_js = r#"
-    export class LeafAnswer {
-        constructor(bindings) {
-            this.bindings = bindings;
-        }
-    }
-
-    export class PrologInteger {
-        constructor(integerStr) {
-            this.type = "integer";
-            this.integer = BigInt(integerStr);
-        }
-    }
-
-    export class PrologRational {
-        constructor(numeratorStr, denominatorStr) {
-            this.type = "rational";
-            this.numerator = BigInt(numeratorStr);
-            this.denominator = BigInt(denominatorStr);
-        }
-    }
-
-    export class PrologFloat {
-        constructor(float) {
-            this.type = "float";
-            this.float = float;
-        }
-    }
-
-    export class PrologAtom {
-        constructor(atom) {
-            this.type = "atom";
-            this.atom = atom;
-        }
-    }
-
-    export class PrologString {
-        constructor(string) {
-            this.type = "string";
-            this.string = string;
-        }
-    }
-
-    export class PrologList {
-        constructor(list) {
-            this.type = "list";
-            this.list = list;
-        }
-    }
-
-    export class PrologCompound {
-        constructor(functor, args) {
-            this.type = "compound";
-            this.functor = functor;
-            this.args = args;
-        }
-    }
-
-    export class PrologVariable {
-        constructor(variable) {
-            this.type = "variable";
-            this.variable = variable;
-        }
-    }
-
-    export class PrologException {
-        constructor(exception) {
-            this.exception = exception;
-        }
-    }
-"#)]
-extern "C" {
-    #[wasm_bindgen(js_name = LeafAnswer)]
-    pub type JsLeafAnswer;
-
-    #[wasm_bindgen(constructor, js_class = LeafAnswer)]
-    pub fn new(bindings: js_sys::Object) -> JsLeafAnswer;
-
-    #[wasm_bindgen(js_name = PrologInteger)]
-    pub type JsPrologInteger;
-
-    #[wasm_bindgen(constructor, js_class = PrologInteger)]
-    pub fn new(int_str: &str) -> JsPrologInteger;
-
-    #[wasm_bindgen(js_name = PrologRational)]
-    pub type JsPrologRational;
-
-    #[wasm_bindgen(constructor, js_class = PrologRational)]
-    pub fn new(numer_str: &str, denom_str: &str) -> JsPrologRational;
-
-    #[wasm_bindgen(js_name = PrologFloat)]
-    pub type JsPrologFloat;
-
-    #[wasm_bindgen(constructor, js_class = PrologFloat)]
-    pub fn new(float: f64) -> JsPrologFloat;
-
-    #[wasm_bindgen(js_name = PrologAtom)]
-    pub type JsPrologAtom;
-
-    #[wasm_bindgen(constructor, js_class = PrologAtom)]
-    pub fn new(atom: &str) -> JsPrologAtom;
-
-    #[wasm_bindgen(js_name = PrologString)]
-    pub type JsPrologString;
-
-    #[wasm_bindgen(constructor, js_class = PrologString)]
-    pub fn new(string: &str) -> JsPrologString;
-
-    #[wasm_bindgen(js_name = PrologList)]
-    pub type JsPrologList;
-
-    #[wasm_bindgen(constructor, js_class = PrologList)]
-    pub fn new(list: js_sys::Array) -> JsPrologList;
-
-    #[wasm_bindgen(js_name = PrologCompound)]
-    pub type JsPrologCompound;
-
-    #[wasm_bindgen(constructor, js_class = PrologCompound)]
-    pub fn new(functor: &str, args: js_sys::Array) -> JsPrologCompound;
-
-    #[wasm_bindgen(js_name = PrologVariable)]
-    pub type JsPrologVariable;
-
-    #[wasm_bindgen(constructor, js_class = PrologVariable)]
-    pub fn new(variable: &str) -> JsPrologVariable;
-
-    #[wasm_bindgen(js_name = PrologException)]
-    pub type JsPrologException;
-
-    #[wasm_bindgen(constructor, js_class = PrologException)]
-    pub fn new(exception: JsValue) -> JsPrologException;
-}
-
 impl From<LeafAnswer> for JsValue {
     fn from(leaf_answer: LeafAnswer) -> JsValue {
         match leaf_answer {
             LeafAnswer::True => true.into(),
             LeafAnswer::False => false.into(),
-            LeafAnswer::Exception(e) => JsPrologException::new(e.into()).into(),
+            LeafAnswer::Exception(e) => {
+                let obj = js_sys::Object::new();
+                js_sys::Reflect::set(&obj, &"type".into(), &"exception".into()).unwrap();
+                js_sys::Reflect::set(&obj, &"exception".into(), &e.into()).unwrap();
+                obj.into()
+            }
             LeafAnswer::LeafAnswer { bindings } => {
                 let bindings_obj = js_sys::Object::new();
                 for (var, term) in bindings.into_iter() {
                     js_sys::Reflect::set(&bindings_obj, &var.into(), &term.into()).unwrap();
                 }
-                JsLeafAnswer::new(bindings_obj).into()
+
+                let leaf_answer_obj = js_sys::Object::new();
+                js_sys::Reflect::set(&leaf_answer_obj, &"type".into(), &"leafAnswer".into())
+                    .unwrap();
+                js_sys::Reflect::set(&leaf_answer_obj, &"bindings".into(), &bindings_obj.into())
+                    .unwrap();
+                leaf_answer_obj.into()
             }
         }
     }
@@ -302,20 +168,85 @@ impl From<LeafAnswer> for JsValue {
 impl From<Term> for JsValue {
     fn from(term: Term) -> JsValue {
         match term {
-            Term::Integer(i) => JsPrologInteger::new(&i.to_string()).into(),
+            Term::Integer(i) => {
+                let obj = js_sys::Object::new();
+                js_sys::Reflect::set(&obj, &"type".into(), &"integer".into()).unwrap();
+                js_sys::Reflect::set(
+                    &obj,
+                    &"integer".into(),
+                    &js_sys::BigInt::new(&i.to_string().into()).unwrap().into(),
+                )
+                .unwrap();
+                obj.into()
+            }
             Term::Rational(r) => {
-                JsPrologRational::new(&r.numerator().to_string(), &r.denominator().to_string())
-                    .into()
+                let obj = js_sys::Object::new();
+                js_sys::Reflect::set(&obj, &"type".into(), &"rational".into()).unwrap();
+                js_sys::Reflect::set(
+                    &obj,
+                    &"numerator".into(),
+                    &js_sys::BigInt::new(&r.numerator().to_string().into())
+                        .unwrap()
+                        .into(),
+                )
+                .unwrap();
+                js_sys::Reflect::set(
+                    &obj,
+                    &"denominator".into(),
+                    &js_sys::BigInt::new(&r.denominator().to_string().into())
+                        .unwrap()
+                        .into(),
+                )
+                .unwrap();
+                obj.into()
             }
-            Term::Float(f) => JsPrologFloat::new(f).into(),
-            Term::Atom(a) => JsPrologAtom::new(&a).into(),
-            Term::String(s) => JsPrologString::new(&s).into(),
-            Term::List(l) => JsPrologList::new(l.into_iter().map(JsValue::from).collect()).into(),
+            Term::Float(f) => {
+                let obj = js_sys::Object::new();
+                js_sys::Reflect::set(&obj, &"type".into(), &"float".into()).unwrap();
+                js_sys::Reflect::set(&obj, &"float".into(), &f.into()).unwrap();
+                obj.into()
+            }
+            Term::Atom(a) => {
+                let obj = js_sys::Object::new();
+                js_sys::Reflect::set(&obj, &"type".into(), &"atom".into()).unwrap();
+                js_sys::Reflect::set(&obj, &"atom".into(), &a.into()).unwrap();
+                obj.into()
+            }
+            Term::String(s) => {
+                let obj = js_sys::Object::new();
+                js_sys::Reflect::set(&obj, &"type".into(), &"string".into()).unwrap();
+                js_sys::Reflect::set(&obj, &"string".into(), &s.into()).unwrap();
+                obj.into()
+            }
+            Term::List(l) => {
+                let list = js_sys::Array::new();
+                for term in l {
+                    list.push(&term.into());
+                }
+
+                let obj = js_sys::Object::new();
+                js_sys::Reflect::set(&obj, &"type".into(), &"list".into()).unwrap();
+                js_sys::Reflect::set(&obj, &"list".into(), &list.into()).unwrap();
+                obj.into()
+            }
             Term::Compound(functor, args) => {
-                JsPrologCompound::new(&functor, args.into_iter().map(JsValue::from).collect())
-                    .into()
+                let args_list = js_sys::Array::new();
+                for term in args {
+                    args_list.push(&term.into());
+                }
+
+                let obj = js_sys::Object::new();
+                js_sys::Reflect::set(&obj, &"type".into(), &"compound".into()).unwrap();
+                js_sys::Reflect::set(&obj, &"functor".into(), &functor.into()).unwrap();
+                js_sys::Reflect::set(&obj, &"args".into(), &args_list.into()).unwrap();
+                obj.into()
             }
-            Term::Var(v) => JsPrologVariable::new(&v).into(),
+            Term::Var(v) => {
+                let obj = js_sys::Object::new();
+                js_sys::Reflect::set(&obj, &"type".into(), &"variable".into()).unwrap();
+                js_sys::Reflect::set(&obj, &"variable".into(), &v.into()).unwrap();
+                obj.into()
+            }
         }
     }
 }
