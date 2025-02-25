@@ -91,6 +91,8 @@ use roxmltree;
 use futures::future;
 #[cfg(feature = "http")]
 use reqwest::Url;
+use tokio::runtime::Handle;
+use tokio::task;
 #[cfg(feature = "http")]
 use warp::hyper::header::{HeaderName, HeaderValue};
 #[cfg(feature = "http")]
@@ -4378,65 +4380,70 @@ impl Machine {
             }
 
             // do it!
-            match futures::executor::block_on(req.send()) {
-                Ok(resp) => {
-                    // status code
-                    let status = resp.status().as_u16();
-                    self.machine_st
-                        .unify_fixnum(Fixnum::build_with(status as i64), address_status);
-                    // headers
-                    let headers: Vec<HeapCellValue> = resp
-                        .headers()
-                        .iter()
-                        .map(|(header_name, header_value)| {
-                            let h = self.machine_st.heap.len();
+            task::block_in_place(move || {
+                match Handle::current().block_on(req.send()) {
+                    Ok(resp) => {
+                        // status code
+                        let status = resp.status().as_u16();
+                        self.machine_st
+                            .unify_fixnum(Fixnum::build_with(status as i64), address_status);
+                        // headers
+                        let headers: Vec<HeapCellValue> = resp
+                            .headers()
+                            .iter()
+                            .map(|(header_name, header_value)| {
+                                let h = self.machine_st.heap.len();
 
-                            let header_term = functor!(
-                                AtomTable::build_with(
-                                    &self.machine_st.atom_tbl,
-                                    header_name.as_str()
-                                ),
-                                [cell(string_as_cstr_cell!(AtomTable::build_with(
-                                    &self.machine_st.atom_tbl,
-                                    header_value.to_str().unwrap()
-                                )))]
-                            );
+                                let header_term = functor!(
+                                    AtomTable::build_with(
+                                        &self.machine_st.atom_tbl,
+                                        header_name.as_str()
+                                    ),
+                                    [cell(string_as_cstr_cell!(AtomTable::build_with(
+                                        &self.machine_st.atom_tbl,
+                                        header_value.to_str().unwrap()
+                                    )))]
+                                );
 
-                            self.machine_st.heap.extend(header_term);
-                            str_loc_as_cell!(h)
-                        })
-                        .collect();
+                                self.machine_st.heap.extend(header_term);
+                                str_loc_as_cell!(h)
+                            })
+                            .collect();
 
-                    let headers_list =
-                        iter_to_heap_list(&mut self.machine_st.heap, headers.into_iter());
-                    unify!(
-                        self.machine_st,
-                        heap_loc_as_cell!(headers_list),
-                        self.machine_st.registers[6]
-                    );
-                    // body
-                    let reader = futures::executor::block_on(resp.bytes()).unwrap().reader();
+                        let headers_list =
+                            iter_to_heap_list(&mut self.machine_st.heap, headers.into_iter());
 
-                    let mut stream = Stream::from_http_stream(
-                        AtomTable::build_with(&self.machine_st.atom_tbl, &address_string),
-                        reader,
-                        &mut self.machine_st.arena,
-                    );
-                    *stream.options_mut() = StreamOptions::default();
+                        unify!(
+                            self.machine_st,
+                            heap_loc_as_cell!(headers_list),
+                            self.machine_st.registers[6]
+                        );
 
-                    self.indices
-                        .add_stream(stream, atom!("http_open"), 3)
-                        .map_err(|stub_gen| stub_gen(&mut self.machine_st))?;
+                        // body
+                        let reader = futures::executor::block_on(resp.bytes()).unwrap().reader();
 
-                    let stream = stream_as_cell!(stream);
+                        let mut stream = Stream::from_http_stream(
+                            AtomTable::build_with(&self.machine_st.atom_tbl, &address_string),
+                            reader,
+                            &mut self.machine_st.arena,
+                        );
+                        *stream.options_mut() = StreamOptions::default();
 
-                    let stream_addr = self.deref_register(2);
-                    self.machine_st.bind(stream_addr.as_var().unwrap(), stream);
+                        self.indices
+                            .add_stream(stream, atom!("http_open"), 3)
+                            .map_err(|stub_gen| stub_gen(&mut self.machine_st))
+                            .unwrap();
+
+                        let stream = stream_as_cell!(stream);
+
+                        let stream_addr = self.deref_register(2);
+                        self.machine_st.bind(stream_addr.as_var().unwrap(), stream);
+                    }
+                    Err(_) => {
+                        self.machine_st.fail = true;
+                    }
                 }
-                Err(_) => {
-                    self.machine_st.fail = true;
-                }
-            }
+            });
         } else {
             let err = self
                 .machine_st
