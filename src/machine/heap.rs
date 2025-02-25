@@ -15,6 +15,8 @@ use super::MachineState;
 use bitvec::prelude::*;
 use bitvec::slice::BitSlice;
 
+const ALIGN: usize = Heap::heap_cell_alignment();
+
 #[derive(Debug)]
 pub struct Heap {
     inner: InnerHeap,
@@ -94,10 +96,9 @@ static RESOURCE_ERROR_OFFSET_INIT: Once = Once::new();
 fn scan_slice_to_str(orig_ptr: *const u8, pstr_vec: &BitSlice) -> (&str, usize) {
     unsafe {
         debug_assert_eq!(pstr_vec[0], true);
-        const ALIGN_CELL: usize = Heap::heap_cell_alignment();
 
         let tail_cell_offset = pstr_vec[0..].first_zero().unwrap();
-        let offset = (ALIGN_CELL - orig_ptr.align_offset(ALIGN_CELL)) % 8;
+        let offset = (ALIGN - orig_ptr.align_offset(ALIGN)) % 8;
         let buf_len = heap_index!(tail_cell_offset) - offset;
         let slice = std::slice::from_raw_parts(orig_ptr, buf_len);
 
@@ -342,8 +343,6 @@ impl<'a> ReservedHeapSection<'a> {
         let cells_written;
         let str_byte_len = src.len();
 
-        const ALIGN_CELL: usize = Heap::heap_cell_alignment();
-
         unsafe {
             ptr::copy_nonoverlapping(
                 src.as_ptr(),
@@ -477,8 +476,6 @@ impl<'a> Index<usize> for ReservedHeapSection<'a> {
 /// with zeroes, such that `chunk_len + pstr_sentinel_length(chunk_len)` is a
 /// multiple of `Heap::heap_cell_alignement()`.
 fn pstr_sentinel_length(chunk_len: usize) -> usize {
-    const ALIGN: usize = Heap::heap_cell_alignment();
-
     let res = chunk_len.next_multiple_of(ALIGN) - chunk_len;
 
     // No bytes available in last chunk
@@ -924,8 +921,7 @@ impl Heap {
     // takes a byte offset into the Heap ptr.
     #[inline(always)]
     pub(crate) const fn neighboring_cell_offset(offset: usize) -> usize {
-        const ALIGN_CELL: usize = Heap::heap_cell_alignment();
-        cell_index!((offset & !(ALIGN_CELL - 1)) + ALIGN_CELL)
+        cell_index!((offset & !(ALIGN - 1)) + ALIGN)
     }
 
     #[inline]
@@ -978,10 +974,7 @@ impl Heap {
         let (s, tail_loc) = self.scan_slice_to_str(pstr_loc);
         let s_len = s.len();
 
-        const ALIGN_CELL: usize = Heap::heap_cell_alignment();
-
         let align_offset = pstr_sentinel_length(s_len);
-
         let copy_size = s_len + align_offset;
 
         unsafe {
@@ -1044,10 +1037,8 @@ impl Heap {
     }
 
     /// Returns the number of bytes needed to store `src` as a `PStr`.
-    /// Assumes the string will be allocated on a ALIGN_CELL-byte boundary.
+    /// Assumes the string will be allocated on a ALIGN-byte boundary.
     pub(crate) fn compute_pstr_size(src: &str) -> usize {
-        const ALIGN_CELL: usize = Heap::heap_cell_alignment();
-
         if src.is_empty() {
             return 0;
         }
@@ -1066,9 +1057,9 @@ impl Heap {
                 null_idx += 1;
             }
 
-            byte_size += null_idx.next_multiple_of(ALIGN_CELL);
+            byte_size += null_idx + pstr_sentinel_length(null_idx);
 
-            if (null_idx + 1) % ALIGN_CELL == 0 {
+            if (null_idx + 1) % ALIGN == 0 {
                 byte_size += 2 * mem::size_of::<HeapCellValue>();
             } else {
                 byte_size += mem::size_of::<HeapCellValue>();
