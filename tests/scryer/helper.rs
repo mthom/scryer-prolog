@@ -1,3 +1,5 @@
+use scryer_prolog::MachineBuilder;
+
 pub(crate) trait Expectable {
     #[track_caller]
     fn assert_eq(self, other: &[u8]);
@@ -30,4 +32,17 @@ pub(crate) fn load_module_test<T: Expectable>(file: &str, expected: T) {
 
     let mut wam = MachineBuilder::default().build();
     expected.assert_eq(wam.test_load_file(file).as_slice());
+}
+
+pub(crate) fn load_module_test_with_tokio_runtime<T: Expectable>(file: &str, expected: T) {
+    #[cfg(not(target_arch = "wasm32"))]
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()
+        .unwrap();
+
+    runtime.block_on(async move {
+        let mut wam = MachineBuilder::default().build();
+        expected.assert_eq(wam.test_load_file(file).as_slice())
+    });
 }
