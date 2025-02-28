@@ -116,6 +116,7 @@ web-sys = { version = "0.3", features = [
     "Performance",
 ] }
 js-sys = "0.3"
+ouroboros = "0.18"
 
 [dev-dependencies]
 maplit = "1.0.2"
@@ -138,6 +139,17 @@ opt-level = 3
 [profile.release]
 lto = true
 opt-level = 3
+
+[profile.wasm-dev]
+inherits = "dev"
+opt-level = 1
+lto = "off"
+
+[profile.wasm-release]
+inherits = "release"
+lto = "off"
+panic = "abort"
+codegen-units = 256
 
 [[bench]]
 name = "run_criterion"
