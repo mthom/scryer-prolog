@@ -1,11 +1,9 @@
 /**/
 
-:- module(nth_partial_strings_tests, []).
-
 :- use_module(library(between)).
 :- use_module(library(lists)).
 
-:- use_module(test_framework).
+:- use_module(library(testing)).
 
 test("nth_partial_string_tests#1827_1", (
          L="ab",
