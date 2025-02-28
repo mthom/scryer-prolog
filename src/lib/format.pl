@@ -580,6 +580,7 @@ portray_clause_(Term) -->
 literal(Lit, VNs) -->
         { write_term_to_chars(Lit, [quoted(true),variable_names(VNs),double_quotes(true)], Ls) },
         (   { nonvar(Lit),
+              \+ number(Lit),
               functor(Lit, F, A),
               current_op(Pri, _, F),
               (   A =:= 0
