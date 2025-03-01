@@ -439,14 +439,23 @@ mod tests {
 
         assert!(!wam.fail);
 
-        assert_eq!(wam.heap.slice_to_str(heap_index!(0), "this is a string".len()),
-                   "this is a string");
+        assert_eq!(
+            wam.heap
+                .slice_to_str(heap_index!(0), "this is a string".len()),
+            "this is a string"
+        );
         assert_eq!(wam.heap[3], pstr_loc_as_cell!(heap_index!(8)));
-        assert_eq!(wam.heap.slice_to_str(heap_index!(4), "this is a string".len()),
-                   "this is a string");
+        assert_eq!(
+            wam.heap
+                .slice_to_str(heap_index!(4), "this is a string".len()),
+            "this is a string"
+        );
         assert_eq!(wam.heap[7], pstr_loc_as_cell!(heap_index!(8)));
-        assert_eq!(wam.heap.slice_to_str(heap_index!(8), "this is a string".len()),
-                   "this is a string");
+        assert_eq!(
+            wam.heap
+                .slice_to_str(heap_index!(8), "this is a string".len()),
+            "this is a string"
+        );
         assert_eq!(wam.heap[11], pstr_loc_as_cell!(heap_index!(8)));
 
         wam.heap.clear();
