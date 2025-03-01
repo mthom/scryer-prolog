@@ -534,7 +534,7 @@ pub fn rational_from_number(
     match n {
         Number::Fixnum(n) => Ok(arena_alloc!(Rational::from(n.get_num()), arena)),
         Number::Rational(r) => Ok(r),
-        Number::Float(OrderedFloat(f)) => match Rational::simplest_from_f64(f) {
+        Number::Float(OrderedFloat(f)) => match Rational::try_from(f).ok() {
             Some(r) => Ok(arena_alloc!(r, arena)),
             None => Err(Box::new(move |machine_st| {
                 let instantiation_error = machine_st.instantiation_error();
