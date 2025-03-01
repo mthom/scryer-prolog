@@ -2,7 +2,6 @@
 #![recursion_limit = "4112"]
 #![deny(missing_docs)]
 
-
 #[macro_use]
 extern crate static_assertions;
 
