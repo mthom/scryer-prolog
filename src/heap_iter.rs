@@ -2220,10 +2220,16 @@ mod tests {
             assert_eq!(iter.next(), None);
         }
 
-        assert_eq!(wam.machine_st.heap.slice_to_str(0, "a string".len()), "a string");
-        assert_eq!(wam.machine_st.heap[1], HeapCellValue::build_with(HeapCellValueTag::Cons, 0));
+        assert_eq!(
+            wam.machine_st.heap.slice_to_str(0, "a string".len()),
+            "a string"
+        );
+        assert_eq!(
+            wam.machine_st.heap[1],
+            HeapCellValue::build_with(HeapCellValueTag::Cons, 0)
+        );
 
-        for idx in 2 ..= 3 {
+        for idx in 2..=3 {
             assert!(!wam.machine_st.heap[idx].get_mark_bit());
             assert!(!wam.machine_st.heap[idx].get_forwarding_bit());
         }
@@ -2970,7 +2976,6 @@ mod tests {
         assert_eq!(wam.machine_st.heap[4], heap_loc_as_cell!(0));
 
         wam.machine_st.heap.clear();
-
     }
 
     #[test]
