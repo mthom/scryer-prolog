@@ -130,7 +130,7 @@ impl PStrLocValuesMap {
     }
 
     fn progress_pstr_marking(&mut self, heap_slice: &[u8], pstr_loc: usize) -> usize {
-        match self.hit_set.range(..= pstr_loc).next_back() {
+        match self.hit_set.range(..=pstr_loc).next_back() {
             Some((_prev_pstr_loc, &tail_idx)) if pstr_loc < heap_index!(tail_idx) => {
                 return tail_idx;
             }
@@ -142,7 +142,10 @@ impl PStrLocValuesMap {
             None => heap_slice.len(),
         };
 
-        match heap_slice[pstr_loc..delimiter].iter().position(|b| *b == 0u8) {
+        match heap_slice[pstr_loc..delimiter]
+            .iter()
+            .position(|b| *b == 0u8)
+        {
             Some(zero_byte_offset) => {
                 let tail_idx = if (zero_byte_offset + 1) % Heap::heap_cell_alignment() == 0 {
                     cell_index!(pstr_loc + zero_byte_offset) + 2
@@ -354,7 +357,8 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
                             .pstr_loc_values
                             .progress_pstr_marking(self.heap.as_slice(), pstr_loc);
 
-                        self.pstr_loc_values.insert_pstr_loc_value(self.current, pstr_loc);
+                        self.pstr_loc_values
+                            .insert_pstr_loc_value(self.current, pstr_loc);
 
                         if self.heap[tail_idx].get_forwarding_bit() {
                             return Some(self.backward_and_return());
@@ -379,10 +383,18 @@ impl<'a, UMP: UnmarkPolicy> StacklessPreOrderHeapIter<'a, UMP> {
                         }
                     }
                     HeapCellValueTag::Cons => {
-                        match self.pstr_loc_values.hit_set.range(.. heap_index!(self.current + 1)).next_back() {
+                        match self
+                            .pstr_loc_values
+                            .hit_set
+                            .range(..heap_index!(self.current + 1))
+                            .next_back()
+                        {
                             Some((_prev_pstr_loc, &tail_idx)) if self.current + 1 == tail_idx => {
                                 let pstr_loc_loc = self.heap[self.current].get_value() as usize;
-                                let pstr_loc_val = self.pstr_loc_values.pstr_loc_loc_value(pstr_loc_loc).unwrap();
+                                let pstr_loc_val = self
+                                    .pstr_loc_values
+                                    .pstr_loc_loc_value(pstr_loc_loc)
+                                    .unwrap();
 
                                 self.heap[self.current].set_value(self.next);
 
