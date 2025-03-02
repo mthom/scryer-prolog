@@ -8,6 +8,7 @@ use std::convert::TryFrom;
 use std::ops::{Bound, Index, IndexMut, Range, RangeBounds};
 use std::ptr;
 use std::sync::Once;
+use std::mem::size_of; // Not in prelude in 1.77
 
 use super::MachineState;
 

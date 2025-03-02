@@ -935,15 +935,18 @@ impl MachineState {
         let mut tokens = vec![];
 
         match lexer_parser.next_token() {
-            Ok(token @ Token::Literal(atom)) if atom == atom_as_cell!(atom!("-")) => {
+            Ok(token) => {
+                let minus = if let Token::Literal(atom) = token {
+                    atom == atom_as_cell!(atom!("-"))
+                } else { false };
+
                 tokens.push(token);
 
-                if let Ok(token) = lexer_parser.next_token() {
-                    tokens.push(token);
+                if minus {
+                    if let Ok(token) = lexer_parser.next_token() {
+                        tokens.push(token);
+                    }
                 }
-            }
-            Ok(token) => {
-                tokens.push(token);
             }
             Err(err) => {
                 let err = self.syntax_error(err);

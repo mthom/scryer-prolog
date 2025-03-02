@@ -457,7 +457,6 @@ fn build_meta_predicate_clause<'a, LS: LoadState<'a>>(
     term: &TermWriteResult,
     meta_specs: Vec<MetaSpec>,
 ) -> IndexMap<usize, CodeIndex, FxBuildHasher> {
-    use crate::machine::heap::Heap;
     let mut index_ptrs = IndexMap::with_hasher(FxBuildHasher::default());
 
     for (subterm_loc, meta_spec) in (term.focus + 1..term.focus + arity + 1).zip(meta_specs) {
