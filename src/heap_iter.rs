@@ -270,7 +270,7 @@ impl<'a, ElideLists> Deref for StackfulPreOrderHeapIter<'a, ElideLists> {
     type Target = Heap;
 
     fn deref(&self) -> &Self::Target {
-        &self.heap
+        self.heap
     }
 }
 

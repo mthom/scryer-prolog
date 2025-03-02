@@ -524,11 +524,11 @@ impl IndexStore {
         self.stream_aliases.get(&alias).copied()
     }
 
-    pub(crate) fn iter_streams<'a, R: std::ops::RangeBounds<Stream>>(
-        &'a self,
+    pub(crate) fn iter_streams<R: std::ops::RangeBounds<Stream>>(
+        &self,
         range: R,
-    ) -> impl Iterator<Item = Stream> + 'a {
-        self.streams.range(range).into_iter().copied()
+    ) -> impl Iterator<Item = Stream> + '_ {
+        self.streams.range(range).copied()
     }
 
     /// Forcibly sets `alias` to `stream`.

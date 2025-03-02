@@ -194,7 +194,7 @@ fn pstr_segment_char_count_up_to(
     let mut byte_offset = 0;
 
     if max_chars > 0 {
-        while let Some(c) = char_iter.next() {
+        for c in char_iter.by_ref() {
             if c == '\u{0}' {
                 break;
             }
@@ -737,7 +737,7 @@ impl MachineState {
                 let steps = if max_steps > -1 {
                     std::cmp::min(max_steps, num_steps as i64)
                 } else {
-                    max_steps as i64
+                    max_steps
                 };
 
                 self.finalize_skip_max_list(steps, pstr_loc); // cell);
@@ -2299,7 +2299,7 @@ impl Machine {
 
                 let cell = step_or_resource_error!(
                     self.machine_st,
-                    self.machine_st.allocate_cstr(&*name.as_str())
+                    self.machine_st.allocate_cstr(&name.as_str())
                 );
 
                 unify!(self.machine_st, self.machine_st.registers[2], cell);
@@ -2358,7 +2358,7 @@ impl Machine {
                     self.machine_st,
                     sized_iter_to_heap_list(
                         &mut self.machine_st.heap,
-                        (&*name).chars().count(),
+                        name.chars().count(),
                         iter,
                     )
                 );
@@ -2500,7 +2500,7 @@ impl Machine {
 
         let pstr_loc_cell = step_or_resource_error!(
             self.machine_st,
-            self.machine_st.allocate_pstr(&*atom.as_str())
+            self.machine_st.allocate_pstr(&atom.as_str())
         );
 
         let tail_loc = Heap::pstr_tail_idx(atom.as_str().len() + heap_index!(pstr_h));
@@ -3775,9 +3775,7 @@ impl Machine {
     pub(crate) fn first_stream(&mut self) {
         let first_stream = self
             .indices
-            .iter_streams(..)
-            .filter(|s| !s.is_null_stream())
-            .next();
+            .iter_streams(..).find(|s| !s.is_null_stream());
 
         if let Some(first_stream) = first_stream {
             let stream = stream_as_cell!(first_stream);
@@ -3796,9 +3794,7 @@ impl Machine {
         let next_stream = self
             .indices
             .iter_streams(prev_stream..)
-            .filter(|s| !s.is_null_stream())
-            .skip(1)
-            .next();
+            .filter(|s| !s.is_null_stream()).nth(1);
 
         if let Some(next_stream) = next_stream {
             let var = self.deref_register(2).as_var().unwrap();
@@ -4123,9 +4119,7 @@ impl Machine {
 
                 let mut functor_writer = Heap::functor_writer(functor);
 
-                if let Err(e) = functor_writer(heap) {
-                    return Err(e);
-                }
+                functor_writer(heap)?;
 
                 num_functors += 1;
             }
@@ -7590,7 +7584,7 @@ impl Machine {
 
         let buffer = git_version!(cargo_prefix = "cargo:", fallback = "unknown");
         let cstr_cell =
-            step_or_resource_error!(self.machine_st, self.machine_st.allocate_cstr(&buffer));
+            step_or_resource_error!(self.machine_st, self.machine_st.allocate_cstr(buffer));
 
         unify!(self.machine_st, cstr_cell, self.machine_st.registers[1]);
     }

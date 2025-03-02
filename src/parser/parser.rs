@@ -1141,7 +1141,7 @@ impl<'a> Parser<'a> {
             _ => {}
         }
 
-        let literal = constr(n, &mut self.arena);
+        let literal = constr(n, self.arena);
         self.shift(Token::Literal(literal), 0, TERM);
     }
 

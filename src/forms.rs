@@ -307,7 +307,7 @@ pub enum PredicateClause {
 }
 
 impl PredicateClause {
-    pub(crate) fn args<'a>(&self, heap: &'a Heap) -> Option<std::ops::RangeInclusive<usize>> {
+    pub(crate) fn args(&self, heap: &Heap) -> Option<std::ops::RangeInclusive<usize>> {
         let focus = match self {
             &PredicateClause::Fact(Fact { term_loc }, _) => term_loc,
             &PredicateClause::Rule(Rule { term_loc, .. }, _) => {

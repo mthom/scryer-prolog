@@ -329,7 +329,7 @@ impl VariableClassifier {
         loader: &mut Loader<'a, LS>,
         term: &TermWriteResult,
     ) -> Result<ClassifyFactResult, CompilationError> {
-        self.classify_head_variables(loader, &term, term.focus)?;
+        self.classify_head_variables(loader, term, term.focus)?;
         Ok(self.branch_map.separate_and_classify_variables(
             self.var_num,
             self.global_cut_var_num,
@@ -347,7 +347,7 @@ impl VariableClassifier {
         let head_loc = term_nth_arg(heap, term.focus, 1).unwrap();
         let body_loc = term_nth_arg(heap, term.focus, 2).unwrap();
 
-        self.classify_head_variables(loader, &term, head_loc)?;
+        self.classify_head_variables(loader, term, head_loc)?;
         self.root_set.insert(self.current_branch_num.clone());
 
         let mut query_terms = self.classify_body_variables(loader, term, body_loc)?;
@@ -398,10 +398,10 @@ impl VariableClassifier {
 
         let mut lvl = Level::Shallow;
         let mut stack = Stack::uninitialized();
-        let mut iter = fact_iterator::<false>(term.heap, &mut stack, term.focus);
+        let iter = fact_iterator::<false>(term.heap, &mut stack, term.focus);
 
         // second arg is true to iterate the root, which may be a variable
-        while let Some(subterm) = iter.next() {
+        for subterm in iter {
             if !subterm.is_var() {
                 lvl = Level::Deep;
                 continue;
@@ -475,8 +475,7 @@ impl VariableClassifier {
         head_loc: usize,
     ) -> Result<(), CompilationError> {
         let heap = &mut LS::machine_st(&mut loader.payload).heap;
-        let arity = term_predicate_key(heap, head_loc)
-            .and_then(|(_, arity)| Some(arity))
+        let arity = term_predicate_key(heap, head_loc).map(|(_, arity)| arity)
             .ok_or(CompilationError::InvalidRuleHead)?;
 
         let mut classify_info = ClassifyInfo { arg_c: 1, arity };
@@ -490,9 +489,9 @@ impl VariableClassifier {
             for idx in str_offset + 1..=str_offset + arity {
                 let mut lvl = Level::Shallow;
                 let mut stack = Stack::uninitialized();
-                let mut iter = fact_iterator::<false>(heap, &mut stack, idx);
+                let iter = fact_iterator::<false>(heap, &mut stack, idx);
 
-                while let Some(subterm) = iter.next() {
+                for subterm in iter {
                     if !subterm.is_var() {
                         lvl = Level::Deep;
                         continue;

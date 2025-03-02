@@ -744,7 +744,9 @@ impl Allocator for DebrayAllocator {
     ) -> RegType {
         let r = self.get_non_var_binding(heap_loc);
 
-        let r = match lvl {
+        
+
+        match lvl {
             Level::Shallow => {
                 let k = self.arg_c;
 
@@ -777,9 +779,7 @@ impl Allocator for DebrayAllocator {
                 self.in_use.insert(r.reg_num());
                 r
             }
-        };
-
-        r
+        }
     }
 
     fn mark_var<'a, Target: CompilationTarget<'a>>(

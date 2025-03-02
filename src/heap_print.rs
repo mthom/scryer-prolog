@@ -1269,11 +1269,9 @@ impl<'a, Outputter: HCValueOutputter> HCPrinter<'a, Outputter> {
 
         let at_cdr = self.outputter.ends_with("|");
 
-        if self.double_quotes && !self.ignore_ops && !is_cyclic {
-            if end_cell.is_string_terminator(self.iter.heap) {
-                self.remove_list_children(focus.value() as usize);
-                return self.print_proper_string(focus.value() as usize, max_depth);
-            }
+        if self.double_quotes && !self.ignore_ops && !is_cyclic && end_cell.is_string_terminator(self.iter.heap) {
+            self.remove_list_children(focus.value() as usize);
+            return self.print_proper_string(focus.value() as usize, max_depth);
         }
 
         if self.ignore_ops {

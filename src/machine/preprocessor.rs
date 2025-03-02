@@ -185,7 +185,7 @@ fn setup_module_decl(mut term: FocusedHeapRefMut) -> Result<ModuleDecl, Compilat
         .map(|(name, _)| name)
         .ok_or(CompilationError::InvalidModuleDecl)?;
 
-    term.focus = term.focus + 2;
+    term.focus += 2;
     let exports = setup_module_export_list(term)?;
 
     Ok(ModuleDecl { name, exports })
@@ -240,7 +240,7 @@ fn setup_qualified_import(term: FocusedHeapRefMut) -> Result<UseModuleExport, Co
         };
 
         exports.insert(setup_module_export(&term)?);
-        focus = focus + 1;
+        focus += 1;
     }
 
     if term.heap[focus] == empty_list_as_cell!() {
@@ -598,7 +598,7 @@ pub(super) fn qualified_clause_to_query_term<'a, LS: LoadState<'a>>(
     if let ClauseType::Named(arity, name, idx) = ct {
         if let Some(meta_specs) = loader.get_meta_specs(name, arity).cloned() {
             let code_indices =
-                build_meta_predicate_clause(loader, module_name, arity, &terms, meta_specs);
+                build_meta_predicate_clause(loader, module_name, arity, terms, meta_specs);
 
             return QueryClause {
                 ct: ClauseType::Named(key.1, key.0, idx),

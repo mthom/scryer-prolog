@@ -93,7 +93,7 @@ pub struct HeapStringScan<'a> {
 }
 
 // return the string at ptr and the tail location relative to ptr.
-unsafe fn scan_slice_to_str<'a>(heap_slice: &'a [u8]) -> HeapStringScan<'a> {
+unsafe fn scan_slice_to_str(heap_slice: &[u8]) -> HeapStringScan<'_> {
     let string_len = heap_slice.iter().position(|b| *b == 0u8).unwrap();
     let zero_byte_addr = heap_slice.as_ptr().add(string_len);
     let sentinel_len = pstr_sentinel_length(zero_byte_addr as usize);
@@ -267,7 +267,7 @@ impl ReservedHeapSection {
         }
 
         loop {
-            let null_char_idx = src.find('\u{0}').unwrap_or_else(|| src.len());
+            let null_char_idx = src.find('\u{0}').unwrap_or(src.len());
             let cells_written = self.push_pstr_segment(&src[0..null_char_idx]);
             let tail_idx = self.cell_len();
 
@@ -313,14 +313,14 @@ impl ReservedHeapSection {
                             section.push_cell(cell + cell_offset);
                         }
                         &FunctorElement::String(_cell_len, ref string) => {
-                            if section.push_pstr(&string).is_some() {
+                            if section.push_pstr(string).is_some() {
                                 section.push_cell(empty_list_as_cell!());
                             }
                         }
                         FunctorElement::InnerFunctor(_inner_size, succ_functor) => {
                             if cursor + 1 < functor.len() {
                                 functor_stack.push(FunctorData {
-                                    functor: &functor,
+                                    functor,
                                     cell_offset,
                                     cursor: cursor + 1,
                                 });
@@ -659,8 +659,8 @@ impl Heap {
                 self.inner.byte_len - pstr_loc2,
             );
 
-            let str1 = std::str::from_utf8_unchecked(&slice1);
-            let str2 = std::str::from_utf8_unchecked(&slice2);
+            let str1 = std::str::from_utf8_unchecked(slice1);
+            let str2 = std::str::from_utf8_unchecked(slice2);
 
             debug_assert!(!str1.is_empty());
             debug_assert!(!str2.is_empty());
@@ -697,7 +697,7 @@ impl Heap {
     pub(crate) fn slice_to_str(&self, slice_loc: usize, slice_len: usize) -> &str {
         unsafe {
             let slice = std::slice::from_raw_parts(self.inner.ptr.add(slice_loc), slice_len);
-            std::str::from_utf8_unchecked(&slice)
+            std::str::from_utf8_unchecked(slice)
         }
     }
 
@@ -717,7 +717,7 @@ impl Heap {
         self.inner.byte_cap - self.inner.byte_len
     }
 
-    pub(crate) fn char_iter<'a>(&'a self, pstr_loc: usize) -> PStrSegmentIter<'a> {
+    pub(crate) fn char_iter(&self, pstr_loc: usize) -> PStrSegmentIter<'_> {
         PStrSegmentIter::from(self, pstr_loc)
     }
 
@@ -725,10 +725,8 @@ impl Heap {
     // the heap to a pre-allocated resource error
     pub(crate) fn push_cell(&mut self, cell: HeapCellValue) -> Result<(), usize> {
         unsafe {
-            if self.inner.byte_len == self.inner.byte_cap {
-                if !self.grow() {
-                    return Err(self.resource_error_offset());
-                }
+            if self.inner.byte_len == self.inner.byte_cap && !self.grow() {
+                return Err(self.resource_error_offset());
             }
 
             // SAFETY:
@@ -841,7 +839,7 @@ impl Heap {
         let s = unsafe {
             let char_ptr = self.inner.ptr.add(byte_idx);
             let slice = std::slice::from_raw_parts(char_ptr, size_of::<char>());
-            std::str::from_utf8_unchecked(&slice)
+            std::str::from_utf8_unchecked(slice)
         };
 
         s.chars().next().unwrap()
@@ -852,7 +850,7 @@ impl Heap {
             let char_ptr = self.inner.ptr.add(loc);
             let slice = std::slice::from_raw_parts(char_ptr, self.inner.byte_len - loc);
 
-            let s = std::str::from_utf8_unchecked(&slice);
+            let s = std::str::from_utf8_unchecked(slice);
             let mut chars_iter = s.chars();
             let c = chars_iter.next().unwrap();
             let succ_len = loc + c.len_utf8();
@@ -1040,7 +1038,7 @@ impl<'a> PStrSegmentIter<'a> {
         let string_buf = unsafe {
             let char_ptr = heap.inner.ptr.add(pstr_loc);
             let slice = std::slice::from_raw_parts(char_ptr, heap.inner.byte_len - pstr_loc);
-            std::str::from_utf8_unchecked(&slice)
+            std::str::from_utf8_unchecked(slice)
         };
 
         PStrSegmentIter { string_buf }
@@ -1090,7 +1088,7 @@ pub trait SizedHeap: Index<usize, Output = HeapCellValue> {
     fn cell_len(&self) -> usize;
 
     // return a pointer to the heap string and the cell index of its tail
-    fn scan_slice_to_str<'a>(&'a self, slice_loc: usize) -> HeapStringScan<'a>;
+    fn scan_slice_to_str(&self, slice_loc: usize) -> HeapStringScan<'_>;
 
     fn as_slice(&self) -> &[u8];
 
@@ -1119,7 +1117,7 @@ impl SizedHeap for Heap {
         self.cell_len()
     }
 
-    fn scan_slice_to_str<'a>(&'a self, slice_loc: usize) -> HeapStringScan<'a> {
+    fn scan_slice_to_str(&self, slice_loc: usize) -> HeapStringScan<'_> {
         let HeapStringScan { string, tail_idx } = unsafe {
             let slice = std::slice::from_raw_parts(
                 self.inner.ptr.add(slice_loc),
