@@ -251,31 +251,73 @@ impl ReservedHeapSection {
     }
 
     pub(crate) fn push_pstr(&mut self, mut src: &str) -> Option<HeapCellValue> {
-        let orig_h = self.cell_len();
-
-        if src.is_empty() {
-            return if orig_h == self.heap_cell_len {
-                // src is empty and always was. nothing allocated
-                // in this case, so nothing to point to in heap.
-                None
-            } else {
-                self.push_cell(heap_loc_as_cell!(orig_h));
-                Some(heap_loc_as_cell!(orig_h))
-            };
-        }
+        let anchor = self.cell_len();
+        let mut ret = None;
 
         loop {
-            let null_char_idx = src.find('\u{0}').unwrap_or(src.len());
-            let cells_written = self.push_pstr_segment(&src[0..null_char_idx]);
+            // Eat the first null chars
+            while let Some('\u{0}') = src.chars().next() {
+                match ret {
+                    Some(_) => {
+                        debug_assert_ne!(anchor, self.cell_len());
+                        self.push_cell(list_loc_as_cell!(self.cell_len() + 1));
+                    }
+                    None => {
+                        debug_assert_eq!(anchor, self.cell_len());
+                        ret = Some(list_loc_as_cell!(self.cell_len()));
+                    }
+                }
 
-            if cells_written == 0 {
-                return None;
-            } else if null_char_idx + 1 < src.len() {
-                let tail_idx = self.cell_len();
-                self.push_cell(pstr_loc_as_cell!(heap_index!(tail_idx + 1)));
+                self.push_cell(char_as_cell!('\u{0}'));
+
+                src = &src[1..];
+            }
+
+            if src.is_empty() {
+                return ret;
+            }
+
+            debug_assert!(!src.is_empty());
+
+            if let Some(null_char_idx) = src.find('\u{0}') {
+                debug_assert_ne!(null_char_idx, 0);
+
+                match ret {
+                    Some(_) => {
+                        debug_assert_ne!(anchor, self.cell_len());
+                        self.push_cell(pstr_loc_as_cell!(heap_index!(self.cell_len() + 1)));
+                    }
+                    None => {
+                        debug_assert_eq!(anchor, self.cell_len());
+                        ret = Some(pstr_loc_as_cell!(heap_index!(self.cell_len())));
+                    }
+                }
+
+                self.push_pstr_segment(&src[0..null_char_idx]);
+
+                // Put the \x0\
+                self.push_cell(list_loc_as_cell!(self.cell_len() + 1));
+                self.push_cell(char_as_cell!('\u{0}'));
+
                 src = &src[null_char_idx + 1..];
+                if src.is_empty() {
+                    return ret;
+                }
             } else {
-                return Some(pstr_loc_as_cell!(heap_index!(orig_h)));
+                match ret {
+                    Some(_) => {
+                        debug_assert_ne!(anchor, self.cell_len());
+                        self.push_cell(pstr_loc_as_cell!(heap_index!(self.cell_len() + 1)));
+                    }
+                    None => {
+                        debug_assert_eq!(anchor, self.cell_len());
+                        ret = Some(pstr_loc_as_cell!(heap_index!(self.cell_len())));
+                    }
+                }
+
+                self.push_pstr_segment(&src);
+
+                return ret;
             }
         }
     }
@@ -812,6 +854,7 @@ impl Heap {
 
     pub fn allocate_pstr(&mut self, src: &str) -> Result<Option<PStrWriteInfo>, usize> {
         let size_in_heap = Self::compute_pstr_size(src);
+
         let pstr_loc = heap_index!(self.cell_len());
 
         Ok(if size_in_heap > 0 {
