@@ -1,10 +1,8 @@
 /**/
 
-:- module(ground_tests, []).
-
 :- use_module(library(atts)).
 
-:- use_module(test_framework).
+:- use_module(library(testing)).
 
 :- attribute a/1.
 
