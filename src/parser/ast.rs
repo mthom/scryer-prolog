@@ -907,7 +907,7 @@ pub fn term_nth_arg(heap: &impl SizedHeap, mut term_loc: usize, n: usize) -> Opt
                 };
             }
             (HeapCellValueTag::Lis, l) => {
-                return if 1 <= n && n <= 2 {
+                return if (1..=2).contains(&n) {
                     Some(l+n-1)
                 } else if n == 0 {
                     Some(term_loc)

@@ -185,7 +185,7 @@ fn setup_module_decl(mut term: FocusedHeapRefMut) -> Result<ModuleDecl, Compilat
         .map(|(name, _)| name)
         .ok_or(CompilationError::InvalidModuleDecl)?;
 
-    term.focus = term.focus + 2;
+    term.focus += 2;
     let exports = setup_module_export_list(term)?;
 
     Ok(ModuleDecl { name, exports })
@@ -208,7 +208,7 @@ fn setup_use_module_decl(term: &FocusedHeapRefMut) -> Result<ModuleSource, Compi
                 )
             }
 
-            return Err(CompilationError::InvalidModuleDecl);
+            Err(CompilationError::InvalidModuleDecl)
         }
         (HeapCellValueTag::Atom, (name, arity)) => {
             if arity == 0 {
@@ -240,7 +240,7 @@ fn setup_qualified_import(term: FocusedHeapRefMut) -> Result<UseModuleExport, Co
         };
 
         exports.insert(setup_module_export(&term)?);
-        focus = focus + 1;
+        focus += 1;
     }
 
     if term.heap[focus] == empty_list_as_cell!() {
@@ -457,7 +457,6 @@ fn build_meta_predicate_clause<'a, LS: LoadState<'a>>(
     term: &TermWriteResult,
     meta_specs: Vec<MetaSpec>,
 ) -> IndexMap<usize, CodeIndex, FxBuildHasher> {
-    use crate::machine::heap::Heap;
     let mut index_ptrs = IndexMap::with_hasher(FxBuildHasher::default());
 
     for (subterm_loc, meta_spec) in (term.focus + 1..term.focus + arity + 1).zip(meta_specs) {
@@ -599,7 +598,7 @@ pub(super) fn qualified_clause_to_query_term<'a, LS: LoadState<'a>>(
     if let ClauseType::Named(arity, name, idx) = ct {
         if let Some(meta_specs) = loader.get_meta_specs(name, arity).cloned() {
             let code_indices =
-                build_meta_predicate_clause(loader, module_name, arity, &terms, meta_specs);
+                build_meta_predicate_clause(loader, module_name, arity, terms, meta_specs);
 
             return QueryClause {
                 ct: ClauseType::Named(key.1, key.0, idx),

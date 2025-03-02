@@ -17,6 +17,7 @@ pub struct HeapPStrIter<'a> {
     stepper: fn(&mut HeapPStrIter<'a>) -> Option<PStrIteratee>,
 }
 
+#[allow(clippy::enum_variant_names)]
 #[derive(Debug, Clone, Copy)]
 pub enum PStrCmpResult<'a> {
     ListMatch {
@@ -60,7 +61,7 @@ impl<'a> HeapPStrIter<'a> {
         self.brent_st.hare
     }
 
-    pub fn compare_pstr_to_string<'b>(self, mut s: &'b str) -> Option<PStrCmpResult<'b>> {
+    pub fn compare_pstr_to_string(self, mut s: &str) -> Option<PStrCmpResult<'_>> {
         let mut curr_hare = self.brent_st.hare;
 
         while !s.is_empty() {

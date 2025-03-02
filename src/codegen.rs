@@ -435,7 +435,7 @@ impl CodeGenerator {
              | HeapCellValueTag::PStrLoc) => {
                 let r = self.marker.mark_non_var::<Target>(Level::Deep, heap_loc, context, target);
                 target.push_back(Target::clause_arg_to_instr(r));
-                return Some(r);
+                Some(r)
             }
             _ => {
                 target.push_back(Target::constant_subterm(subterm));
@@ -523,12 +523,10 @@ impl CodeGenerator {
                             })
                             .collect();
 
-                        for r_opt in free_list_regs {
-                            if let Some(r) = r_opt {
-                                <CodeGenerator as AddToFreeList<'a, Target>>::add_subterm_to_free_list(
-                                    self, r,
-                                );
-                            }
+                        for r_opt in free_list_regs.into_iter().flatten() {
+                            <CodeGenerator as AddToFreeList<'a, Target>>::add_subterm_to_free_list(
+                                self, r_opt,
+                            );
                         }
                     }
                 }
@@ -936,7 +934,7 @@ impl CodeGenerator {
             }
             _ => {
                 if Number::try_from(var).is_ok() {
-                    let v = HeapCellValue::from(var);
+                    let v = var;
                     code.push_back(instr!("put_constant", Level::Shallow, v, temp_v!(1)));
 
                     self.marker.advance_arg();
@@ -1164,7 +1162,7 @@ impl CodeGenerator {
         self.marker.reset_free_list();
         code.extend(fact);
 
-        self.compile_seq(term, &clauses, &mut code)?;
+        self.compile_seq(term, clauses, &mut code)?;
 
         Ok(Vec::from(code))
     }
@@ -1210,7 +1208,7 @@ impl CodeGenerator {
         self.marker.reset_arg(term.arity(clause.term_loc()));
 
         let mut stack = Stack::uninitialized();
-        let iter = query_iterator::<true>(&mut term.heap, &mut stack, clause.term_loc());
+        let iter = query_iterator::<true>(term.heap, &mut stack, clause.term_loc());
 
         let query = self.compile_target::<QueryInstruction, _>(iter, &clause.code_indices, context);
 

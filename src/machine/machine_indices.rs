@@ -279,9 +279,11 @@ impl IndexStore {
             _ => self
                 .get_meta_predicate_spec(key.0, key.1, &compilation_target)
                 .map(|meta_specs| {
-                    meta_specs.iter().find(|meta_spec| match meta_spec {
-                        MetaSpec::Colon | MetaSpec::RequiresExpansionWithArgument(_) => true,
-                        _ => false,
+                    meta_specs.iter().find(|meta_spec| {
+                        matches!(
+                            meta_spec,
+                            MetaSpec::Colon | MetaSpec::RequiresExpansionWithArgument(_)
+                        )
                     })
                 })
                 .map(|meta_spec_opt| meta_spec_opt.is_some())
@@ -524,11 +526,11 @@ impl IndexStore {
         self.stream_aliases.get(&alias).copied()
     }
 
-    pub(crate) fn iter_streams<'a, R: std::ops::RangeBounds<Stream>>(
-        &'a self,
+    pub(crate) fn iter_streams<R: std::ops::RangeBounds<Stream>>(
+        &self,
         range: R,
-    ) -> impl Iterator<Item = Stream> + 'a {
-        self.streams.range(range).into_iter().copied()
+    ) -> impl Iterator<Item = Stream> + '_ {
+        self.streams.range(range).copied()
     }
 
     /// Forcibly sets `alias` to `stream`.

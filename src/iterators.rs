@@ -168,9 +168,7 @@ impl<I: FocusedHeapIter, const SKIP_ROOT: bool> Iterator for TargetIterator<I, S
         loop {
             let next_term = self.iter.next();
 
-            if next_term.is_none() {
-                return None;
-            }
+            next_term?;
 
             let focus = self.iter.focus().value() as usize;
 

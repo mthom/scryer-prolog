@@ -657,7 +657,7 @@ impl Machine {
                             self.machine_st.heap[0] = cell;
                             let iter = HeapPStrIter::new(&self.machine_st.heap, 0);
 
-                            if iter.compare_pstr_to_string(&string).is_none() {
+                            if iter.compare_pstr_to_string(string).is_none() {
                                 return false;
                             }
 
