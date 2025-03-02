@@ -485,7 +485,7 @@ mod tests {
         let mut functor_writer = Heap::functor_writer(functor);
         functor_writer(&mut heap).unwrap();
 
-        assert_eq!(heap.cell_len(), 8);
+        assert_eq!(heap.cell_len(), 10);
 
         assert_eq!(heap[0], atom_as_cell!(atom!("second"), 1));
         assert_eq!(heap[1], pstr_loc_as_cell!(heap_index!(2)));
@@ -493,12 +493,14 @@ mod tests {
             heap.slice_to_str(heap_index!(2), "a stuttered".len()),
             "a stuttered"
         );
-        assert_eq!(heap[4], pstr_loc_as_cell!(heap_index!(5)));
+        assert_eq!(heap[4], list_loc_as_cell!(5));
+        assert_eq!(heap[5], char_as_cell!('\u{0}'));
+        assert_eq!(heap[6], pstr_loc_as_cell!(heap_index!(7)));
         assert_eq!(
-            heap.slice_to_str(heap_index!(5), " string".len()),
+            heap.slice_to_str(heap_index!(7), " string".len()),
             " string"
         );
-        assert_eq!(heap[7], empty_list_as_cell!());
+        assert_eq!(heap[9], empty_list_as_cell!());
     }
 
     #[test]
