@@ -225,7 +225,6 @@ impl ReservedHeapSection {
             );
 
             let zero_region_idx = heap_index!(self.heap_cell_len) + str_byte_len;
-
             let align_offset = pstr_sentinel_length(zero_region_idx);
 
             ptr::write_bytes(self.heap_ptr.add(zero_region_idx), 0u8, align_offset);
@@ -266,13 +265,13 @@ impl ReservedHeapSection {
         }
 
         loop {
-            let null_char_idx = src.find('\u{0}').unwrap_or_else(|| src.len());
+            let null_char_idx = src.find('\u{0}').unwrap_or(src.len());
             let cells_written = self.push_pstr_segment(&src[0..null_char_idx]);
-            let tail_idx = self.cell_len();
 
             if cells_written == 0 {
                 return None;
             } else if null_char_idx + 1 < src.len() {
+                let tail_idx = self.cell_len();
                 self.push_cell(pstr_loc_as_cell!(heap_index!(tail_idx + 1)));
                 src = &src[null_char_idx + 1..];
             } else {
@@ -311,15 +310,15 @@ impl ReservedHeapSection {
                         &FunctorElement::Cell(cell) => {
                             section.push_cell(cell + cell_offset);
                         }
-                        &FunctorElement::String(_cell_len, ref string) => {
-                            if section.push_pstr(&string).is_some() {
+                        FunctorElement::String(_cell_len, string) => {
+                            if section.push_pstr(string).is_some() {
                                 section.push_cell(empty_list_as_cell!());
                             }
                         }
                         FunctorElement::InnerFunctor(_inner_size, succ_functor) => {
                             if cursor + 1 < functor.len() {
                                 functor_stack.push(FunctorData {
-                                    functor: &functor,
+                                    functor,
                                     cell_offset,
                                     cursor: cursor + 1,
                                 });

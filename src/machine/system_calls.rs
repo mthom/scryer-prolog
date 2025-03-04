@@ -570,6 +570,44 @@ pub(crate) struct FindallCopyInfo {
 }
 
 impl MachineState {
+    fn copy_lifted_heap_from_offset(&mut self, offset: usize, lh_offset: usize) {
+        let reserve_size = self.lifted_heap.cell_len() - lh_offset;
+        let mut writer = step_or_resource_error!(self, self.heap.reserve(reserve_size));
+
+        writer.write_with(|section| {
+            let mut lh_offset = lh_offset;
+
+            while lh_offset + 4 < self.lifted_heap.cell_len() {
+                let cell_threshold =
+                    cell_as_fixnum!(self.lifted_heap[lh_offset + 3]).get_num() as usize;
+                let pstr_upper_threshold =
+                    cell_as_fixnum!(self.lifted_heap[lh_offset + 4]).get_num() as usize;
+
+                for idx in lh_offset..cell_threshold {
+                    section.push_cell(self.lifted_heap[idx] + offset);
+                }
+
+                let mut pstr_threshold = heap_index!(cell_threshold);
+
+                while pstr_threshold < heap_index!(pstr_upper_threshold) {
+                    let HeapStringScan { string, tail_idx } =
+                        self.lifted_heap.scan_slice_to_str(pstr_threshold);
+
+                    section.push_pstr(string);
+                    section.push_cell(self.lifted_heap[tail_idx] + offset);
+
+                    pstr_threshold = heap_index!(tail_idx + 1);
+                }
+
+                lh_offset = pstr_upper_threshold;
+            }
+
+            for idx in lh_offset..self.lifted_heap.cell_len() {
+                section.push_cell(self.lifted_heap[idx] + offset);
+            }
+        });
+    }
+
     #[inline(always)]
     pub(crate) fn unattributed_var(&mut self) {
         let attr_var = self.store(self.deref(self.registers[1]));
@@ -858,13 +896,14 @@ impl MachineState {
         copy_target: HeapCellValue,
     ) -> Result<FindallCopyInfo, usize> {
         let threshold = self.lifted_heap.cell_len() - lh_offset;
-
-        let mut writer = self.lifted_heap.reserve(3)?;
+        let mut writer = self.lifted_heap.reserve(5)?;
 
         writer.write_with(|section| {
             section.push_cell(list_loc_as_cell!(threshold + 1));
-            section.push_cell(heap_loc_as_cell!(threshold + 3));
+            section.push_cell(heap_loc_as_cell!(threshold + 5));
             section.push_cell(heap_loc_as_cell!(threshold + 2));
+            section.push_cell(fixnum_as_cell!(Fixnum::build_with(0)));
+            section.push_cell(fixnum_as_cell!(Fixnum::build_with(0)));
         });
 
         let old_lifted_cell_len = self.lifted_heap.cell_len();
@@ -3945,6 +3984,12 @@ impl Machine {
             self.machine_st.lifted_heap[idx] -= self.machine_st.heap.cell_len() + lh_offset;
         }
 
+        self.machine_st.lifted_heap[old_threshold + 1] =
+            fixnum_as_cell!(Fixnum::build_with(pstr_threshold as i64));
+        self.machine_st.lifted_heap[old_threshold + 2] = fixnum_as_cell!(Fixnum::build_with(
+            self.machine_st.lifted_heap.cell_len() as i64
+        ));
+
         let mut pstr_threshold = heap_index!(pstr_threshold);
 
         while pstr_threshold < heap_index!(self.machine_st.lifted_heap.cell_len()) {
@@ -5722,38 +5767,7 @@ impl Machine {
             }
         });
 
-        /*
-        let mut addrs = vec![];
-
-        for idx in 1..num_cells + 1 {
-            let addr = self.machine_st.stack[stack_loc!(AndFrame, e, idx)];
-            let addr = self.machine_st.store(self.machine_st.deref(addr));
-
-            // avoid pushing stack variables to the heap where they
-            // must not go.
-            if addr.is_stack_var() {
-                let h = self.machine_st.heap.cell_len();
-
-                self.machine_st.heap.push(heap_loc_as_cell!(h));
-                self.machine_st.bind(Ref::heap_cell(h), addr);
-
-                addrs.push(heap_loc_as_cell!(h));
-            } else {
-                addrs.push(addr);
-            }
-        }
-        */
-
         let chunk = str_loc_as_cell!(self.machine_st.heap.cell_len());
-
-        /*
-        self.machine_st
-            .heap
-            .push(atom_as_cell!(atom!("cont_chunk"), 1 + num_cells));
-        self.machine_st.heap.push(p_functor_cell);
-        self.machine_st.heap.extend(addrs);
-        */
-
         unify!(self.machine_st, self.machine_st.registers[3], chunk);
     }
 
@@ -5770,18 +5784,7 @@ impl Machine {
             unify_fn!(self.machine_st, solutions, diff);
         } else {
             let h = self.machine_st.heap.cell_len();
-            let reserve_size = self.machine_st.lifted_heap.cell_len() - lh_offset;
-
-            let mut writer = step_or_resource_error!(
-                self.machine_st,
-                self.machine_st.heap.reserve(reserve_size)
-            );
-
-            writer.write_with(|section| {
-                for idx in lh_offset..self.machine_st.lifted_heap.cell_len() {
-                    section.push_cell(self.machine_st.lifted_heap[idx] + h);
-                }
-            });
+            self.machine_st.copy_lifted_heap_from_offset(h, lh_offset);
 
             let diff = self.machine_st.registers[3];
             unify_fn!(
@@ -5808,19 +5811,8 @@ impl Machine {
             unify_fn!(self.machine_st, solutions, empty_list_as_cell!());
         } else {
             let h = self.machine_st.heap.cell_len();
-            let reserve_size = self.machine_st.lifted_heap.cell_len() - lh_offset;
 
-            let mut writer = step_or_resource_error!(
-                self.machine_st,
-                self.machine_st.heap.reserve(reserve_size)
-            );
-
-            writer.write_with(|section| {
-                for idx in lh_offset..self.machine_st.lifted_heap.cell_len() {
-                    section.push_cell(self.machine_st.lifted_heap[idx] + h);
-                }
-            });
-
+            self.machine_st.copy_lifted_heap_from_offset(h, lh_offset);
             self.machine_st.lifted_heap.truncate(lh_offset);
 
             let solutions = self.machine_st.registers[2];
