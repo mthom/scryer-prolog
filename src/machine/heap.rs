@@ -1281,3 +1281,17 @@ pub(crate) fn to_local_code_ptr(heap: &Heap, addr: HeapCellValue) -> Option<usiz
         }
     )
 }
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn heap_manipulation() {
+        let mut heap = Heap::new();
+
+        for idx in 0 .. 10 {
+            heap.push_cell(heap_loc_as_cell!(idx)).unwrap();
+        }
+    }
+}
