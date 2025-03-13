@@ -267,16 +267,6 @@ impl MachineState {
         unifier.unify_atom(atom, value);
     }
 
-    pub fn unify_list(&mut self, l1: usize, value: HeapCellValue) {
-        let mut unifier = DefaultUnifier::from(self);
-        unifier.unify_list(l1, value);
-    }
-
-    pub fn unify_partial_string(&mut self, pstr_loc: usize, value: HeapCellValue) {
-        let mut unifier = DefaultUnifier::from(self);
-        unifier.unify_partial_string(pstr_loc, value);
-    }
-
     pub fn unify_char(&mut self, c: char, value: HeapCellValue) {
         let mut unifier = DefaultUnifier::from(self);
         unifier.unify_char(c, value);
