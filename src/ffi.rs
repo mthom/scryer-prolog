@@ -89,27 +89,25 @@ impl ForeignFunctionTable {
     }
 
     fn map_type_ffi(&mut self, source: &Atom) -> *mut ffi_type {
-        unsafe {
-            match source {
-                atom!("sint64") => addr_of_mut!(types::sint64),
-                atom!("sint32") => addr_of_mut!(types::sint32),
-                atom!("sint16") => addr_of_mut!(types::sint16),
-                atom!("sint8") => addr_of_mut!(types::sint8),
-                atom!("uint64") => addr_of_mut!(types::uint64),
-                atom!("uint32") => addr_of_mut!(types::uint32),
-                atom!("uint16") => addr_of_mut!(types::uint16),
-                atom!("uint8") => addr_of_mut!(types::uint8),
-                atom!("bool") => addr_of_mut!(types::sint8),
-                atom!("void") => addr_of_mut!(types::void),
-                atom!("cstr") => addr_of_mut!(types::pointer),
-                atom!("ptr") => addr_of_mut!(types::pointer),
-                atom!("f32") => addr_of_mut!(types::float),
-                atom!("f64") => addr_of_mut!(types::double),
-                struct_name => match self.structs.get_mut(&*struct_name.as_str()) {
-                    Some(ref mut struct_type) => &mut struct_type.ffi_type,
-                    None => unreachable!(),
-                },
-            }
+        match source {
+            atom!("sint64") => addr_of_mut!(types::sint64),
+            atom!("sint32") => addr_of_mut!(types::sint32),
+            atom!("sint16") => addr_of_mut!(types::sint16),
+            atom!("sint8") => addr_of_mut!(types::sint8),
+            atom!("uint64") => addr_of_mut!(types::uint64),
+            atom!("uint32") => addr_of_mut!(types::uint32),
+            atom!("uint16") => addr_of_mut!(types::uint16),
+            atom!("uint8") => addr_of_mut!(types::uint8),
+            atom!("bool") => addr_of_mut!(types::sint8),
+            atom!("void") => addr_of_mut!(types::void),
+            atom!("cstr") => addr_of_mut!(types::pointer),
+            atom!("ptr") => addr_of_mut!(types::pointer),
+            atom!("f32") => addr_of_mut!(types::float),
+            atom!("f64") => addr_of_mut!(types::double),
+            struct_name => match self.structs.get_mut(&*struct_name.as_str()) {
+                Some(ref mut struct_type) => &mut struct_type.ffi_type,
+                None => unreachable!(),
+            },
         }
     }
 
