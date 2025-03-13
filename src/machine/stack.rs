@@ -228,7 +228,7 @@ impl Stack {
 
             for idx in 0..num_cells {
                 ptr::write(
-                    (new_ptr as usize + offset) as *mut HeapCellValue,
+                    new_ptr.byte_add(offset) as *mut HeapCellValue,
                     stack_loc_as_cell!(OrFrame, b, idx),
                 );
 

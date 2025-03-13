@@ -97,8 +97,7 @@ impl ConsPtr {
 
     #[inline(always)]
     pub fn as_ptr(self) -> *mut u8 {
-        let addr: u64 = self.ptr();
-        addr as usize as *mut _
+        unsafe { mem::transmute::<_, *mut u8>(self.ptr()) }
     }
 
     #[inline(always)]
@@ -676,23 +675,22 @@ impl UntypedArenaPtr {
     }
 
     #[inline]
-    pub fn get_ptr(self) -> *const u8 {
-        let addr: u64 = self.ptr();
-        addr as usize as *const u8
+    pub fn get_ptr(self) -> *const ArenaHeader {
+        unsafe { mem::transmute::<_, *const ArenaHeader>(self.ptr()) }
     }
 
     #[inline]
     pub fn get_tag(self) -> ArenaHeaderTag {
         unsafe {
             debug_assert!(!self.get_ptr().is_null());
-            let header = *(self.get_ptr() as *const ArenaHeader);
+            let header = *self.get_ptr();
             header.get_tag()
         }
     }
 
     #[inline]
     pub fn payload_offset(self) -> *const u8 {
-        unsafe { self.get_ptr().add(mem::size_of::<ArenaHeader>()) }
+        unsafe { self.get_ptr().byte_add(mem::size_of::<ArenaHeader>()) as *const _ }
     }
 
     /// # Safety
