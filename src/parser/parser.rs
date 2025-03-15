@@ -662,24 +662,36 @@ impl<'a> Parser<'a> {
 
                     match as_partial_string(&self.terms, head, tail) {
                         Some((string_buf, tail_opt)) => {
-                            let bytes_written = self.terms.write_with(|section| {
-                                let pstr_cell = section.push_pstr(&string_buf).unwrap();
-                                section.push_cell(tail_opt.unwrap_or(empty_list_as_cell!()));
-                                section.push_cell(pstr_cell);
-                            });
+                            let HeapSectionWriteResult { bytes_written, .. } =
+                                self.terms.write_with(|section| {
+                                    if let Some(pstr_cell) = section.push_pstr(&string_buf) {
+                                        section
+                                            .push_cell(tail_opt.unwrap_or(empty_list_as_cell!()));
+                                        section.push_cell(pstr_cell);
+                                    } else {
+                                        section.push_cell(empty_list_as_cell!());
+                                    }
+                                });
 
-                            let heap_loc = cell_index!(bytes_written) - 1 + cell_len;
-
-                            TokenType::Term {
-                                heap_loc: heap_loc_as_cell!(heap_loc),
+                            if cell_index!(bytes_written) > 1 {
+                                TokenType::Term {
+                                    heap_loc: heap_loc_as_cell!(
+                                        cell_index!(bytes_written) - 1 + cell_len
+                                    ),
+                                }
+                            } else {
+                                TokenType::Term {
+                                    heap_loc: heap_loc_as_cell!(cell_len),
+                                }
                             }
                         }
                         None => {
-                            let bytes_written = self.terms.write_with(|section| {
-                                section.push_cell(head);
-                                section.push_cell(tail);
-                                section.push_cell(list_loc_as_cell!(term_idx));
-                            });
+                            let HeapSectionWriteResult { bytes_written, .. } =
+                                self.terms.write_with(|section| {
+                                    section.push_cell(head);
+                                    section.push_cell(tail);
+                                    section.push_cell(list_loc_as_cell!(term_idx));
+                                });
 
                             TokenType::Term {
                                 heap_loc: heap_loc_as_cell!(
@@ -911,13 +923,19 @@ impl<'a> Parser<'a> {
             Some((string_buf, tail_opt)) => {
                 self.terms.truncate(pre_terms_len);
 
-                let bytes_written = self.terms.write_with(|section| {
-                    let pstr_cell = section.push_pstr(&string_buf).unwrap();
-                    section.push_cell(tail_opt.unwrap_or(empty_list_as_cell!()));
-                    section.push_cell(pstr_cell);
-                });
+                let HeapSectionWriteResult { bytes_written, .. } =
+                    self.terms.write_with(|section| {
+                        if let Some(pstr_cell) = section.push_pstr(&string_buf) {
+                            section.push_cell(tail_opt.unwrap_or(empty_list_as_cell!()));
+                            section.push_cell(pstr_cell);
+                        }
+                    });
 
-                heap_loc_as_cell!(pre_terms_len + cell_index!(bytes_written) - 1)
+                if bytes_written > 0 {
+                    heap_loc_as_cell!(pre_terms_len + cell_index!(bytes_written) - 1)
+                } else {
+                    empty_list_as_cell!()
+                }
             }
             None => {
                 heap_loc_as_cell!(list_loc) // head_term
