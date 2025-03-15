@@ -460,7 +460,19 @@ fn build_meta_predicate_clause<'a, LS: LoadState<'a>>(
     use crate::machine::heap::Heap;
     let mut index_ptrs = IndexMap::with_hasher(FxBuildHasher::default());
 
-    for (subterm_loc, meta_spec) in (term.focus + 1..term.focus + arity + 1).zip(meta_specs) {
+    let focus = {
+        let heap = loader.machine_heap();
+        let focus_cell =
+            heap_bound_store(heap, heap_bound_deref(heap, heap_loc_as_cell!(term.focus)));
+
+        if focus_cell.get_tag() == HeapCellValueTag::Str {
+            focus_cell.get_value() as usize
+        } else {
+            return index_ptrs;
+        }
+    };
+
+    for (subterm_loc, meta_spec) in (focus + 1..focus + arity + 1).zip(meta_specs) {
         if let MetaSpec::RequiresExpansionWithArgument(supp_args) = meta_spec {
             let predicate_key_opt = term_predicate_key(loader.machine_heap(), subterm_loc);
 
