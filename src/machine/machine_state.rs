@@ -289,10 +289,13 @@ impl Ball {
         while pstr_threshold < heap_index!(self.stub.cell_len()) {
             let HeapStringScan { string, tail_idx } = self.stub.scan_slice_to_str(pstr_threshold);
 
-            pstr_threshold += dest_writer.write_with(|section| {
-                section.push_pstr(string).unwrap();
-                section.push_cell(self.stub[tail_idx] - diff);
-            });
+            pstr_threshold += dest_writer
+                .write_with(|section| {
+                    if section.push_pstr(string).is_some() {
+                        section.push_cell(self.stub[tail_idx] - diff);
+                    }
+                })
+                .bytes_written;
         }
 
         Ok(h)
