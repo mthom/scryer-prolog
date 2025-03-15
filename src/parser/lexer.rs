@@ -1,15 +1,12 @@
 use crate::arena::F64Ptr;
 use crate::arena::TypedArenaPtr;
-use lexical::{FromLexical, parse};
 
 use crate::arena::*;
 use crate::atom_table::*;
-use crate::machine::heap::*;
 pub use crate::machine::machine_state::*;
 use crate::parser::ast::*;
 use crate::parser::char_reader::*;
 use crate::parser::dashu::Integer;
-use crate::types::*;
 
 use std::convert::TryFrom;
 use std::fmt;
@@ -35,7 +32,7 @@ struct LayoutInfo {
 
 #[derive(Debug, PartialEq)]
 pub enum Token {
-    Literal(HeapCellValue),
+    Literal(Literal),
     Var(String),
     String(String),
     Open,              // '('
@@ -51,26 +48,6 @@ pub enum Token {
 }
 
 impl Token {
-    pub(super) fn byte_size(&self, flags: MachineFlags) -> usize {
-        match self {
-            Token::String(string) if flags.double_quotes.is_codes() => {
-                2 * string.chars().count() + 1
-            }
-            Token::String(string) => Heap::compute_pstr_size(&string),
-            Token::Literal(_)
-            | Token::Comma
-            | Token::HeadTailSeparator
-            | Token::Open
-            | Token::OpenCT
-            | Token::OpenCurly
-            | Token::OpenList
-            | Token::Var(_) => {
-                heap_index!(1)
-            }
-            _ => 0,
-        }
-    }
-
     #[inline]
     pub(super) fn is_end(&self) -> bool {
         matches!(self, Token::End)
@@ -126,14 +103,14 @@ macro_rules! try_nt {
     }};
 }
 
-pub(crate) struct LexerParser<'a, R> {
+pub(crate) struct Lexer<'a, R> {
     pub(crate) reader: R,
     pub(crate) machine_st: &'a mut MachineState,
     pub(crate) line_num: usize,
     pub(crate) col_num: usize,
 }
 
-impl<'a, R: fmt::Debug> fmt::Debug for LexerParser<'a, R> {
+impl<'a, R: fmt::Debug> fmt::Debug for Lexer<'a, R> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("LexerParser")
             .field("reader", &"&'a mut R") // Hacky solution.
@@ -143,9 +120,9 @@ impl<'a, R: fmt::Debug> fmt::Debug for LexerParser<'a, R> {
     }
 }
 
-impl<'a, R: CharRead> LexerParser<'a, R> {
+impl<'a, R: CharRead> Lexer<'a, R> {
     pub fn new(src: R, machine_st: &'a mut MachineState) -> Self {
-        LexerParser {
+        Self {
             reader: src,
             machine_st,
             line_num: 0,
@@ -156,14 +133,14 @@ impl<'a, R: CharRead> LexerParser<'a, R> {
     pub fn lookahead_char(&mut self) -> Result<char, ParserError> {
         match self.reader.peek_char() {
             Some(Ok(c)) => Ok(c),
-            _ => Err(ParserError::unexpected_eof(self.loc_to_err_src())),
+            _ => Err(ParserError::unexpected_eof()),
         }
     }
 
     pub fn read_char(&mut self) -> Result<char, ParserError> {
         match self.reader.read_char() {
             Some(Ok(c)) => Ok(c),
-            _ => Err(ParserError::unexpected_eof(self.loc_to_err_src())),
+            _ => Err(ParserError::unexpected_eof()),
         }
     }
 
@@ -238,7 +215,10 @@ impl<'a, R: CharRead> LexerParser<'a, R> {
 
             match comment_loop() {
                 Err(e) if e.is_unexpected_eof() => {
-                    return Err(ParserError::IncompleteReduction(self.loc_to_err_src()));
+                    return Err(ParserError::IncompleteReduction(
+                        self.line_num,
+                        self.col_num,
+                    ));
                 }
                 Err(e) => {
                     return Err(e);
@@ -250,7 +230,7 @@ impl<'a, R: CharRead> LexerParser<'a, R> {
                 self.skip_char(c);
                 Ok(true)
             } else {
-                Err(ParserError::NonPrologChar(self.loc_to_err_src()))
+                Err(ParserError::NonPrologChar(self.line_num, self.col_num))
             }
         } else {
             self.return_char('/');
@@ -267,7 +247,7 @@ impl<'a, R: CharRead> LexerParser<'a, R> {
 
             if !back_quote_char!(c2) {
                 self.return_char(c);
-                Err(ParserError::UnexpectedChar(c, self.loc_to_err_src()))
+                Err(ParserError::UnexpectedChar(c, self.line_num, self.col_num))
             } else {
                 self.skip_char(c2);
                 Ok(c2)
@@ -292,7 +272,7 @@ impl<'a, R: CharRead> LexerParser<'a, R> {
                 Ok(None)
             } else {
                 self.return_char(c);
-                Err(ParserError::UnexpectedChar(c, self.loc_to_err_src()))
+                Err(ParserError::UnexpectedChar(c, self.line_num, self.col_num))
             }
         } else {
             self.get_back_quoted_char().map(Some)
@@ -314,10 +294,10 @@ impl<'a, R: CharRead> LexerParser<'a, R> {
                 self.skip_char(c);
                 Ok(token)
             } else {
-                Err(ParserError::MissingQuote(self.loc_to_err_src()))
+                Err(ParserError::MissingQuote(self.line_num, self.col_num))
             }
         } else {
-            Err(ParserError::UnexpectedChar(c, self.loc_to_err_src()))
+            Err(ParserError::UnexpectedChar(c, self.line_num, self.col_num))
         }
     }
 
@@ -348,7 +328,7 @@ impl<'a, R: CharRead> LexerParser<'a, R> {
 
             if !single_quote_char!(c2) {
                 self.return_char(c);
-                Err(ParserError::UnexpectedChar(c, self.loc_to_err_src()))
+                Err(ParserError::UnexpectedChar(c, self.line_num, self.col_num))
             } else {
                 self.skip_char(c2);
                 Ok(c2)
@@ -389,7 +369,7 @@ impl<'a, R: CharRead> LexerParser<'a, R> {
 
             if !double_quote_char!(c2) {
                 self.return_char(c);
-                Err(ParserError::UnexpectedChar(c, self.loc_to_err_src()))
+                Err(ParserError::UnexpectedChar(c, self.line_num, self.col_num))
             } else {
                 self.skip_char(c2);
                 Ok(c2)
@@ -413,7 +393,7 @@ impl<'a, R: CharRead> LexerParser<'a, R> {
             't' => '\t',
             'n' => '\n',
             'r' => '\r',
-            c => return Err(ParserError::UnexpectedChar(c, self.loc_to_err_src())),
+            c => return Err(ParserError::UnexpectedChar(c, self.line_num, self.col_num)),
         };
 
         self.skip_char(c);
@@ -431,7 +411,10 @@ impl<'a, R: CharRead> LexerParser<'a, R> {
         if hexadecimal_digit_char!(c) {
             self.escape_sequence_to_char(|c| hexadecimal_digit_char!(c), 16)
         } else {
-            Err(ParserError::IncompleteReduction(self.loc_to_err_src()))
+            Err(ParserError::IncompleteReduction(
+                self.line_num,
+                self.col_num,
+            ))
         }
     }
 
@@ -457,11 +440,17 @@ impl<'a, R: CharRead> LexerParser<'a, R> {
         if backslash_char!(c) {
             self.skip_char(c);
             u32::from_str_radix(&token, radix).map_or_else(
-                |_| Err(ParserError::ParseBigInt(self.loc_to_err_src())),
-                |n| char::try_from(n).map_err(|_| ParserError::Utf8Error(self.loc_to_err_src())),
+                |_| Err(ParserError::ParseBigInt(self.line_num, self.col_num)),
+                |n| {
+                    char::try_from(n)
+                        .map_err(|_| ParserError::Utf8Error(self.line_num, self.col_num))
+                },
             )
         } else {
-            Err(ParserError::IncompleteReduction(self.loc_to_err_src()))
+            Err(ParserError::IncompleteReduction(
+                self.line_num,
+                self.col_num,
+            ))
         }
     }
 
@@ -473,7 +462,7 @@ impl<'a, R: CharRead> LexerParser<'a, R> {
             Ok(c)
         } else {
             if !backslash_char!(c) {
-                return Err(ParserError::UnexpectedChar(c, self.loc_to_err_src()));
+                return Err(ParserError::UnexpectedChar(c, self.line_num, self.col_num));
             }
 
             self.skip_char(c);
@@ -504,7 +493,7 @@ impl<'a, R: CharRead> LexerParser<'a, R> {
             self.skip_char(c);
             Ok(token)
         } else {
-            Err(ParserError::MissingQuote(self.loc_to_err_src()))
+            Err(ParserError::MissingQuote(self.line_num, self.col_num))
         }
     }
 
@@ -529,7 +518,7 @@ impl<'a, R: CharRead> LexerParser<'a, R> {
                 .map(NumberToken::Number)
         } else {
             self.return_char(start);
-            Err(ParserError::ParseBigInt(self.loc_to_err_src()))
+            Err(ParserError::ParseBigInt(self.line_num, self.col_num))
         }
     }
 
@@ -554,7 +543,7 @@ impl<'a, R: CharRead> LexerParser<'a, R> {
                 .map(NumberToken::Number)
         } else {
             self.return_char(start);
-            Err(ParserError::ParseBigInt(self.loc_to_err_src()))
+            Err(ParserError::ParseBigInt(self.line_num, self.col_num))
         }
     }
 
@@ -579,7 +568,7 @@ impl<'a, R: CharRead> LexerParser<'a, R> {
                 .map(NumberToken::Number)
         } else {
             self.return_char(start);
-            Err(ParserError::ParseBigInt(self.loc_to_err_src()))
+            Err(ParserError::ParseBigInt(self.line_num, self.col_num))
         }
     }
 
@@ -646,42 +635,37 @@ impl<'a, R: CharRead> LexerParser<'a, R> {
 
                 if !token.is_empty() && token.chars().nth(1).is_none() {
                     if let Some(c) = token.chars().next() {
-                        return Ok(Token::Literal(char_as_cell!(c)));
+                        return Ok(Token::Literal(Literal::Atom(
+                            AtomCell::new_char_inlined(c).get_name(),
+                        )));
                     }
                 }
             } else {
-                return Err(ParserError::InvalidSingleQuotedCharacter(
-                    self.loc_to_err_src(),
-                ));
+                return Err(ParserError::InvalidSingleQuotedCharacter(c));
             }
         } else {
             match self.get_back_quoted_string() {
-                Ok(_) => return Err(ParserError::BackQuotedString(self.loc_to_err_src())),
+                Ok(_) => return Err(ParserError::BackQuotedString(self.line_num, self.col_num)),
                 Err(e) => return Err(e),
             }
         }
 
         if token.as_str() == "[]" {
-            Ok(Token::Literal(empty_list_as_cell!()))
+            Ok(Token::Literal(Literal::Atom(atom!("[]"))))
         } else {
-            Ok(Token::Literal(atom_as_cell!(AtomTable::build_with(
+            Ok(Token::Literal(Literal::Atom(AtomTable::build_with(
                 &self.machine_st.atom_tbl,
                 &token,
             ))))
         }
     }
 
-    fn parse_lossy_wrapper<T: FromLexical>(&self, token: &str) -> Result<T, ParserError> {
-        match parse::<T, _>(token.as_bytes()) {
-            Ok(n) => Ok(n),
-            Err(_) => return Err(ParserError::LexicalError(self.loc_to_err_src())),
-        }
-    }
-
     fn vacate_with_float(&mut self, mut token: String) -> Result<Token, ParserError> {
         self.return_char(token.pop().unwrap());
-        let n = self.parse_lossy_wrapper::<f64>(&token)?;
-        Ok(Token::Literal(HeapCellValue::from(float_alloc!(
+
+        let n = parse_float_lossy(&token)?;
+
+        Ok(Token::Literal(Literal::from(float_alloc!(
             n,
             self.machine_st.arena
         ))))
@@ -698,7 +682,7 @@ impl<'a, R: CharRead> LexerParser<'a, R> {
             if decimal_digit_char!(c) {
                 Ok(c)
             } else {
-                Err(ParserError::ParseBigInt(self.loc_to_err_src()))
+                Err(ParserError::ParseBigInt(self.line_num, self.col_num))
             }
         } else {
             Ok(c)
@@ -810,8 +794,8 @@ impl<'a, R: CharRead> LexerParser<'a, R> {
                             }
                         }
 
-                        let n = self.parse_lossy_wrapper::<f64>(&token)?;
-                        Ok(Token::Literal(HeapCellValue::from(float_alloc!(
+                        let n = parse_float_lossy(&token)?;
+                        Ok(Token::Literal(Literal::from(float_alloc!(
                             n,
                             self.machine_st.arena
                         ))))
@@ -819,8 +803,8 @@ impl<'a, R: CharRead> LexerParser<'a, R> {
                         return self.vacate_with_float(token).map(NumberToken::Number);
                     }
                 } else {
-                    let n = self.parse_lossy_wrapper::<f64>(&token)?;
-                    Ok(Token::Literal(HeapCellValue::from(float_alloc!(
+                    let n = parse_float_lossy(&token)?;
+                    Ok(Token::Literal(Literal::from(float_alloc!(
                         n,
                         self.machine_st.arena
                     ))))
@@ -1057,14 +1041,14 @@ impl<'a, R: CharRead> LexerParser<'a, R> {
 
                     return if let DoubleQuotes::Atom = self.machine_st.flags.double_quotes {
                         let atom = AtomTable::build_with(&self.machine_st.atom_tbl, &s);
-                        Ok(Token::Literal(atom_as_cell!(atom)))
+                        Ok(Token::Literal(Literal::Atom(atom)))
                     } else {
                         Ok(Token::String(s))
                     };
                 }
 
                 if c == '\u{0}' {
-                    return Err(ParserError::unexpected_eof(self.loc_to_err_src()));
+                    return Err(ParserError::unexpected_eof());
                 }
 
                 self.name_token(c)
@@ -1072,4 +1056,14 @@ impl<'a, R: CharRead> LexerParser<'a, R> {
             Err(e) => Err(e),
         }
     }
+}
+
+fn parse_float_lossy(token: &str) -> Result<f64, ParserError> {
+    const FORMAT: u128 = lexical::format::STANDARD;
+    let options = lexical::ParseFloatOptions::builder()
+        .lossy(true)
+        .build()
+        .unwrap();
+    let n = lexical::parse_with_options::<f64, _, FORMAT>(token.as_bytes(), &options)?;
+    Ok(n)
 }

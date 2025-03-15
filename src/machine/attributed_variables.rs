@@ -10,8 +10,8 @@ use std::cmp::Ordering;
 pub(super) type Bindings = Vec<(usize, HeapCellValue)>;
 
 #[derive(Debug)]
-pub(crate) struct AttrVarInitializer {
-    pub(crate) attr_var_queue: Vec<usize>,
+pub(super) struct AttrVarInitializer {
+    pub(super) attr_var_queue: Vec<usize>,
     pub(super) bindings: Bindings,
     pub(super) p: usize,
     pub(super) cp: usize,
@@ -138,17 +138,10 @@ impl MachineState {
 
         let mut seen_set = IndexSet::new();
         let mut seen_vars = vec![];
-        let root_loc = if cell.is_ref() {
-            cell.get_value() as usize
-        } else {
-            return vec![];
-        };
 
-        let mut iter = stackful_preorder_iter::<NonListElider>(
-            &mut self.heap,
-            &mut self.stack,
-            root_loc, // cell,
-        );
+        self.heap[0] = cell;
+
+        let mut iter = stackful_preorder_iter::<NonListElider>(&mut self.heap, &mut self.stack, 0);
 
         while let Some(value) = iter.next() {
             read_heap_cell!(value,
