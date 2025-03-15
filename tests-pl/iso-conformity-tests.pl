@@ -761,7 +761,8 @@ test_171 :- writeq_term_to_chars("a", C),
 
 test_229 :- test_syntax_error("\"\\z.\"", syntax_error(missing_quote)).
 
-test_300 :- writeq_term_to_chars("\0\", C),
+test_300 :- '$debug_hook',
+            writeq_term_to_chars("\0\", C),
             C == "['\\x0\\']".
 
 test_172 :- X is 10.0** -323,

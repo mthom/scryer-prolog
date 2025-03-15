@@ -194,9 +194,9 @@ enum ReplCodePtr {
     DynamicProperty,
     #[strum_discriminants(strum(props(Arity = "3", Name = "$abolish_clause")))]
     AbolishClause,
-    #[strum_discriminants(strum(props(Arity = "2", Name = "$asserta")))]
+    #[strum_discriminants(strum(props(Arity = "3", Name = "$asserta")))]
     Asserta,
-    #[strum_discriminants(strum(props(Arity = "2", Name = "$assertz")))]
+    #[strum_discriminants(strum(props(Arity = "3", Name = "$assertz")))]
     Assertz,
     #[strum_discriminants(strum(props(Arity = "4", Name = "$retract_clause")))]
     Retract,
@@ -3122,6 +3122,14 @@ pub fn generate_instructions_rs() -> TokenStream {
                 match self {
                     #(
                         #clause_type_to_instr_arms,
+                    )*
+                }
+            }
+
+            pub fn name(&self) -> Atom {
+                match self {
+                    #(
+                        #clause_type_name_arms,
                     )*
                 }
             }

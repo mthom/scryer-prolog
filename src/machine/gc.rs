@@ -1,4 +1,11 @@
 #[cfg(test)]
+use fxhash::FxBuildHasher;
+#[cfg(test)]
+use indexmap::IndexMap;
+#[cfg(test)]
+use std::collections::BTreeMap;
+
+#[cfg(test)]
 use crate::atom_table::*;
 #[cfg(test)]
 use crate::machine::heap::*;
@@ -7,17 +14,6 @@ use crate::types::*;
 
 #[cfg(test)]
 use crate::heap_iter::{FocusedHeapIter, HeapOrStackTag, IterStackLoc};
-
-#[cfg(test)]
-use std::collections::BTreeMap;
-#[cfg(test)]
-use std::ops::Deref;
-
-#[cfg(test)]
-use fxhash::FxBuildHasher;
-
-#[cfg(test)]
-use indexmap::IndexMap;
 
 #[cfg(test)]
 pub(crate) trait UnmarkPolicy {
@@ -183,15 +179,6 @@ pub(crate) struct StacklessPreOrderHeapIter<'a, UMP: UnmarkPolicy> {
     next: u64,
     iter_state: UMP,
     pstr_loc_values: PStrLocValuesMap,
-}
-
-#[cfg(test)]
-impl<'a> Deref for StacklessPreOrderHeapIter<'a, IteratorUMP> {
-    type Target = Heap;
-
-    fn deref(&self) -> &Self::Target {
-        self.heap
-    }
 }
 
 #[cfg(test)]
@@ -778,7 +765,7 @@ mod tests {
         // two-part complete string, then a three-part cyclic string
         // involving an uncompacted list of chars.
 
-        let pstr_cell = wam.machine_st.allocate_pstr("abc ").unwrap();
+        let pstr_cell = wam.machine_st.heap.allocate_pstr("abc ").unwrap();
 
         wam.machine_st.heap.push_cell(heap_loc_as_cell!(1)).unwrap();
 
@@ -812,7 +799,7 @@ mod tests {
 
         wam.machine_st.heap[1] = pstr_loc_as_cell!(heap_index!(3));
 
-        wam.machine_st.allocate_pstr("abcdef ").unwrap();
+        wam.machine_st.heap.allocate_pstr("abcdef ").unwrap();
         wam.machine_st.heap.push_cell(heap_loc_as_cell!(5)).unwrap();
 
         mark_cells(&mut wam.machine_st.heap, 2);
