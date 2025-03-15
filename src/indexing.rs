@@ -1,9 +1,9 @@
 use crate::atom_table::*;
+use crate::parser::ast::*;
+
 use crate::forms::*;
 use crate::instructions::*;
-use crate::machine::heap::*;
-use crate::parser::ast::Fixnum;
-use crate::types::*;
+use crate::types::HeapCellValue;
 
 use fxhash::FxBuildHasher;
 use indexmap::IndexMap;
@@ -113,7 +113,7 @@ impl<'a> IndexingCodeMergingPtr<'a> {
 
         match constant_key {
             Some(OptArgIndexKey::Literal(_, _, constant, _)) => {
-                constants.insert(*constant, constant_ptr);
+                constants.insert(HeapCellValue::from(*constant), constant_ptr);
             }
             _ if constant_ptr.is_external() => {
                 // this must be a defunct clause, because it's been deleted
@@ -634,12 +634,15 @@ pub(crate) fn merge_clause_index(
     match &opt_arg_index_key {
         OptArgIndexKey::Literal(_, index_loc, constant, ref overlapping_constants) => {
             let offset = new_clause_loc - index_loc + 1;
-            merging_ptr.index_constant(*constant, offset);
+            merging_ptr.index_constant(HeapCellValue::from(*constant), offset);
 
-            for overlapping_constant in overlapping_constants {
+            if let Some(overlapping_constant) = overlapping_constants {
                 merging_ptr.offset = 0;
-
-                merging_ptr.index_overlapping_constant(*constant, *overlapping_constant, offset);
+                merging_ptr.index_overlapping_constant(
+                    HeapCellValue::from(*constant),
+                    HeapCellValue::from(*overlapping_constant),
+                    offset,
+                );
             }
         }
         OptArgIndexKey::Structure(_, index_loc, name, arity) => {
@@ -664,8 +667,8 @@ pub(crate) fn merge_clause_index(
 }
 
 pub(crate) fn remove_constant_indices(
-    constant: HeapCellValue,
-    overlapping_constants: &[HeapCellValue],
+    constant: Literal,
+    overlapping_constants: Option<Literal>,
     indexing_code: &mut [IndexingLine],
     offset: usize,
 ) {
@@ -694,15 +697,13 @@ pub(crate) fn remove_constant_indices(
 
     let mut constants_index = 0;
 
-    for constant in iter {
+    for constant in iter.map(|l| HeapCellValue::from(*l)) {
         loop {
             match &mut indexing_code[index] {
                 IndexingLine::Indexing(IndexingInstruction::SwitchOnConstant(
                     ref mut constants,
                 )) => {
                     constants_index = index;
-
-                    let constant = *constant;
 
                     match constants.get(&constant).cloned() {
                         Some(IndexingCodePtr::DynamicExternal(_))
@@ -741,7 +742,7 @@ pub(crate) fn remove_constant_indices(
                                 IndexingLine::Indexing(IndexingInstruction::SwitchOnConstant(
                                     ref mut constants,
                                 )) => {
-                                    constants.insert(*constant, ext);
+                                    constants.insert(constant, ext);
                                 }
                                 _ => {
                                     unreachable!()
@@ -774,7 +775,7 @@ pub(crate) fn remove_constant_indices(
                                 IndexingLine::Indexing(IndexingInstruction::SwitchOnConstant(
                                     ref mut constants,
                                 )) => {
-                                    constants.insert(*constant, ext);
+                                    constants.insert(constant, ext);
                                 }
                                 _ => {
                                     unreachable!()
@@ -1034,7 +1035,7 @@ pub(crate) fn remove_index(
 ) {
     match opt_arg_index_key {
         OptArgIndexKey::Literal(_, _, constant, ref overlapping_constants) => {
-            remove_constant_indices(*constant, overlapping_constants, indexing_code, clause_loc);
+            remove_constant_indices(*constant, *overlapping_constants, indexing_code, clause_loc);
         }
         OptArgIndexKey::Structure(_, _, name, arity) => {
             remove_structure_index(*name, *arity, indexing_code, clause_loc);
@@ -1096,60 +1097,18 @@ fn uncap_choice_seq_with_try(prelude: &mut [IndexedChoiceInstruction]) {
     }
 }
 
-pub(crate) fn constant_key_alternatives(
-    constant: HeapCellValue,
-    // atom_tbl: &AtomTable,
-    // arena: &mut Arena,
-) -> Vec<HeapCellValue> {
-    let mut constants = vec![];
+pub(crate) fn constant_key_alternatives(constant: Literal) -> Option<Literal> {
+    let n = match &constant {
+        Literal::Rational(n) if n.denominator().is_one() => n.numerator(),
+        Literal::Integer(n) => n,
+        _ => return None,
+    };
 
-    match Number::try_from(constant) {
-        Ok(Number::Integer(n)) => {
-            let result = (&*n).try_into();
-            if let Ok(value) = result {
-                constants.push(
-                    Fixnum::build_with_checked(value)
-                        .map(|n| fixnum_as_cell!(n))
-                        .unwrap(),
-                );
-            }
-        }
-        _ => {}
+    if let Ok(n) = n.try_into() {
+        Fixnum::build_with_checked(n).map(Literal::Fixnum).ok()
+    } else {
+        None
     }
-
-    /*
-    match constant {
-        Literal::Atom(ref name) => {
-            if let Some(c) = name.as_char() {
-                constants.push(Literal::Char(c));
-            }
-        }
-        Literal::Char(c) => {
-            let atom = AtomTable::build_with(atom_tbl, &c.to_string());
-            constants.push(Literal::Atom(atom));
-        }
-        /*
-        // constant_to_literal takes care of the downward conversion from Integer to Fixnum
-        // if possible.
-        Literal::Fixnum(ref n) => {
-            constants.push(Literal::Integer(arena_alloc!(n, arena)));
-        }
-        */
-        Literal::Integer(ref n) => {
-            let result = (&**n).try_into();
-            if let Ok(value) = result {
-                Fixnum::build_with_checked(value)
-                    .map(|n| {
-                        constants.push(Literal::Fixnum(n));
-                    })
-                    .unwrap();
-            }
-        }
-        _ => {}
-    }
-    */
-
-    constants
 }
 
 #[derive(Debug)]
@@ -1464,9 +1423,13 @@ impl<I: Indexer> CodeOffsets<I> {
         self.indices.lists().push_back(index);
     }
 
-    fn index_constant(&mut self, constant: HeapCellValue, index: usize) -> Vec<HeapCellValue> {
-        let overlapping_constants = constant_key_alternatives(constant);
-        let code = self.indices.constants().entry(constant).or_default();
+    fn index_constant(&mut self, constant: Literal, index: usize) -> Option<Literal> {
+        let overlapping_constant_opt = constant_key_alternatives(constant);
+        let code = self
+            .indices
+            .constants()
+            .entry(HeapCellValue::from(constant))
+            .or_default();
 
         let is_initial_index = code.is_empty();
         code.push_back(I::compute_index(
@@ -1475,8 +1438,8 @@ impl<I: Indexer> CodeOffsets<I> {
             self.non_counted_bt,
         ));
 
-        for constant in &overlapping_constants {
-            let code = self.indices.constants().entry(*constant).or_default();
+        if let Some(constant) = overlapping_constant_opt.map(HeapCellValue::from) {
+            let code = self.indices.constants().entry(constant).or_default();
 
             let is_initial_index = code.is_empty();
             let index = I::compute_index(is_initial_index, index, self.non_counted_bt);
@@ -1484,7 +1447,7 @@ impl<I: Indexer> CodeOffsets<I> {
             code.push_back(index);
         }
 
-        overlapping_constants
+        overlapping_constant_opt
     }
 
     fn index_structure(&mut self, name: Atom, arity: usize, index: usize) -> usize {
@@ -1503,55 +1466,33 @@ impl<I: Indexer> CodeOffsets<I> {
 
     pub(crate) fn index_term(
         &mut self,
-        heap: &Heap,
-        optimal_arg: HeapCellValue,
+        optimal_arg: &Term,
         index: usize,
         clause_index_info: &mut ClauseIndexInfo,
     ) {
-        read_heap_cell!(optimal_arg,
-            (HeapCellValueTag::Str, s) => {
-                let (name, arity) = cell_as_atom_cell!(heap[s]).get_name_and_arity();
-
-                if (name, arity) == (atom!("."), 2) {
-                    clause_index_info.opt_arg_index_key = OptArgIndexKey::List(self.optimal_index, 0);
-                    self.index_list(index);
-                } else {
-                    clause_index_info.opt_arg_index_key =
-                        OptArgIndexKey::Structure(self.optimal_index, 0, name, arity);
-
-                    self.index_structure(name, arity, index);
-                }
-            }
-            (HeapCellValueTag::Atom, (name, arity)) => {
-                debug_assert_eq!(arity, 0);
-
-                let overlapping_constants = self.index_constant(atom_as_cell!(name), index);
-
-                clause_index_info.opt_arg_index_key = OptArgIndexKey::Literal(
-                    self.optimal_index,
-                    0,
-                    atom_as_cell!(name),
-                    overlapping_constants,
-                );
-            }
-            (HeapCellValueTag::Lis
-             // | HeapCellValueTag::CStr
-             | HeapCellValueTag::PStrLoc) => {
+        match optimal_arg {
+            &Term::Clause(_, atom!("."), ref terms) if terms.len() == 2 => {
                 clause_index_info.opt_arg_index_key = OptArgIndexKey::List(self.optimal_index, 0);
                 self.index_list(index);
             }
-            _ if optimal_arg.is_constant() => {
-                let overlapping_constants = self.index_constant(optimal_arg, index);
+            &Term::Cons(..) | &Term::PartialString(..) | &Term::CompleteString(..) => {
+                clause_index_info.opt_arg_index_key = OptArgIndexKey::List(self.optimal_index, 0);
+                self.index_list(index);
+            }
+            &Term::Clause(_, name, ref terms) => {
+                clause_index_info.opt_arg_index_key =
+                    OptArgIndexKey::Structure(self.optimal_index, 0, name, terms.len());
 
-                clause_index_info.opt_arg_index_key = OptArgIndexKey::Literal(
-                    self.optimal_index,
-                    0,
-                    optimal_arg,
-                    overlapping_constants,
-                );
+                self.index_structure(name, terms.len(), index);
+            }
+            &Term::Literal(_, constant) => {
+                let overlapping_constants = self.index_constant(constant, index);
+
+                clause_index_info.opt_arg_index_key =
+                    OptArgIndexKey::Literal(self.optimal_index, 0, constant, overlapping_constants);
             }
             _ => {}
-        );
+        }
     }
 
     pub(crate) fn no_indices(&mut self) -> bool {

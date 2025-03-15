@@ -363,7 +363,7 @@ mod test {
     fn pstr_iter_tests() {
         let mut wam = MockWAM::new();
 
-        let pstr_cell = wam.machine_st.allocate_pstr("abc ").unwrap();
+        let pstr_cell = wam.machine_st.heap.allocate_pstr("abc ").unwrap();
         wam.machine_st
             .heap
             .push_cell(empty_list_as_cell!())
@@ -391,7 +391,7 @@ mod test {
 
         wam.machine_st.heap[2] = pstr_loc_as_cell!(heap_index!(3));
 
-        wam.machine_st.allocate_pstr("def").unwrap();
+        wam.machine_st.heap.allocate_pstr("def").unwrap();
         let h = wam.machine_st.heap.cell_len();
 
         wam.machine_st.heap.push_cell(heap_loc_as_cell!(h)).unwrap();
@@ -456,7 +456,7 @@ mod test {
 
         wam.machine_st.heap.clear();
 
-        let pstr_cell = wam.machine_st.allocate_cstr("abc").unwrap();
+        let pstr_cell = wam.machine_st.heap.allocate_cstr("abc").unwrap();
         let start = wam.machine_st.heap.cell_len();
 
         let mut writer = wam.machine_st.heap.reserve(16).unwrap();
@@ -484,7 +484,7 @@ mod test {
 
         wam.machine_st.heap.clear();
 
-        let pstr_cell = wam.machine_st.allocate_cstr("abc").unwrap();
+        let pstr_cell = wam.machine_st.heap.allocate_cstr("abc").unwrap();
         let start = wam.machine_st.heap.cell_len();
 
         let mut writer = wam.machine_st.heap.reserve(16).unwrap();
@@ -515,7 +515,7 @@ mod test {
 
         wam.machine_st.heap.clear();
 
-        let pstr_cell = wam.machine_st.allocate_cstr("d").unwrap();
+        let pstr_cell = wam.machine_st.heap.allocate_cstr("d").unwrap();
         let start = wam.machine_st.heap.cell_len();
 
         let mut writer = wam.machine_st.heap.reserve(16).unwrap();
@@ -534,7 +534,7 @@ mod test {
 
         wam.machine_st.heap.clear();
 
-        let pstr_cell = wam.machine_st.allocate_cstr("abc").unwrap();
+        let pstr_cell = wam.machine_st.heap.allocate_cstr("abc").unwrap();
         let start = wam.machine_st.heap.cell_len();
 
         let mut writer = wam.machine_st.heap.reserve(16).unwrap();
@@ -564,7 +564,7 @@ mod test {
 
         wam.machine_st.heap.clear();
 
-        let pstr_cell = wam.machine_st.allocate_cstr("abcdef").unwrap();
+        let pstr_cell = wam.machine_st.heap.allocate_cstr("abcdef").unwrap();
         let start = wam.machine_st.heap.cell_len();
 
         let mut writer = wam.machine_st.heap.reserve(16).unwrap();
@@ -602,7 +602,7 @@ mod test {
 
         wam.machine_st.heap.clear();
 
-        wam.machine_st.allocate_cstr("abc").unwrap();
+        wam.machine_st.heap.allocate_cstr("abc").unwrap();
         let start = wam.machine_st.heap.cell_len();
 
         let mut writer = wam.machine_st.heap.reserve(16).unwrap();
@@ -629,7 +629,7 @@ mod test {
 
         wam.machine_st.heap.clear();
 
-        wam.machine_st.allocate_cstr("a ").unwrap();
+        wam.machine_st.heap.allocate_cstr("a ").unwrap();
         let start = wam.machine_st.heap.cell_len();
 
         let mut writer = wam.machine_st.heap.reserve(16).unwrap();
@@ -653,7 +653,7 @@ mod test {
 
         wam.machine_st.heap.clear();
 
-        wam.machine_st.allocate_cstr(" a").unwrap();
+        wam.machine_st.heap.allocate_cstr(" a").unwrap();
         let start = wam.machine_st.heap.cell_len();
 
         let mut writer = wam.machine_st.heap.reserve(16).unwrap();
@@ -678,7 +678,7 @@ mod test {
 
         wam.machine_st.heap.clear();
 
-        wam.machine_st.allocate_cstr("a b").unwrap();
+        wam.machine_st.heap.allocate_cstr("a b").unwrap();
         let start = wam.machine_st.heap.cell_len();
 
         let mut writer = wam.machine_st.heap.reserve(16).unwrap();
@@ -706,7 +706,7 @@ mod test {
 
         wam.machine_st.heap.clear();
 
-        wam.machine_st.allocate_cstr(" a ").unwrap();
+        wam.machine_st.heap.allocate_cstr(" a ").unwrap();
         let start = wam.machine_st.heap.cell_len();
 
         let mut writer = wam.machine_st.heap.reserve(16).unwrap();
@@ -733,7 +733,7 @@ mod test {
 
         wam.machine_st.heap.clear();
 
-        wam.machine_st.allocate_cstr(" a bc").unwrap();
+        wam.machine_st.heap.allocate_cstr(" a bc").unwrap();
         let start = wam.machine_st.heap.cell_len();
 
         let mut writer = wam.machine_st.heap.reserve(16).unwrap();
@@ -764,7 +764,7 @@ mod test {
 
         wam.machine_st.heap.clear();
 
-        wam.machine_st.allocate_cstr("abc").unwrap();
+        wam.machine_st.heap.allocate_cstr("abc").unwrap();
         let start = wam.machine_st.heap.cell_len();
 
         let mut writer = wam.machine_st.heap.reserve(16).unwrap();
@@ -791,7 +791,7 @@ mod test {
         // #2293, test7.
 
         wam.machine_st.heap.clear();
-        wam.machine_st.allocate_cstr("abcde").unwrap();
+        wam.machine_st.heap.allocate_cstr("abcde").unwrap();
 
         let start = wam.machine_st.heap.cell_len();
         let mut writer = wam.machine_st.heap.reserve(16).unwrap();
