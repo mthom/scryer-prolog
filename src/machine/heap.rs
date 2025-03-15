@@ -183,7 +183,7 @@ impl PStrSegmentCmpResult {
 
 #[derive(Debug)]
 pub struct PStrWriteInfo {
-    pstr_loc: usize,
+    cell: HeapCellValue,
 }
 
 #[derive(Debug)]
@@ -414,29 +414,40 @@ pub struct HeapWriter<'a> {
     heap_byte_len: &'a mut usize,
 }
 
+pub(crate) struct HeapSectionWriteResult<R> {
+    pub(crate) bytes_written: usize,
+    pub(crate) result: R,
+}
+
 impl<'a> HeapWriter<'a> {
     #[allow(dead_code)]
-    pub(crate) fn write_with_error_handling<E>(
+    pub(crate) fn write_with_error_handling<R, E>(
         &mut self,
-        writer: impl FnOnce(&mut ReservedHeapSection) -> Result<(), E>,
-    ) -> Result<usize, E> {
+        writer: impl FnOnce(&mut ReservedHeapSection) -> Result<R, E>,
+    ) -> Result<HeapSectionWriteResult<R>, E> {
         let old_section_cell_len = self.section.heap_cell_len;
-        writer(&mut self.section)?;
+        let result = writer(&mut self.section)?;
         *self.heap_byte_len = heap_index!(self.section.heap_cell_len);
 
         // return the number of bytes written
-        Ok(heap_index!(
-            self.section.heap_cell_len - old_section_cell_len
-        ))
+        Ok(HeapSectionWriteResult {
+            bytes_written: heap_index!(self.section.heap_cell_len - old_section_cell_len),
+            result,
+        })
     }
 
-    pub(crate) fn write_with(&mut self, writer: impl FnOnce(&mut ReservedHeapSection)) -> usize {
+    pub(crate) fn write_with<R>(
+        &mut self,
+        writer: impl FnOnce(&mut ReservedHeapSection) -> R,
+    ) -> HeapSectionWriteResult<R> {
         let old_section_cell_len = self.section.heap_cell_len;
-        writer(&mut self.section);
+        let result = writer(&mut self.section);
         *self.heap_byte_len = heap_index!(self.section.heap_cell_len);
 
-        // return the number of bytes written
-        heap_index!(self.section.heap_cell_len - old_section_cell_len)
+        HeapSectionWriteResult {
+            bytes_written: heap_index!(self.section.heap_cell_len - old_section_cell_len),
+            result,
+        }
     }
 
     #[inline]
@@ -854,20 +865,11 @@ impl Heap {
 
     pub fn allocate_pstr(&mut self, src: &str) -> Result<Option<PStrWriteInfo>, usize> {
         let size_in_heap = Self::compute_pstr_size(src);
+        let mut writer = self.reserve(size_in_heap)?;
+        let HeapSectionWriteResult { result, .. } =
+            writer.write_with(|section| section.push_pstr(src));
 
-        let pstr_loc = heap_index!(self.cell_len());
-
-        Ok(if size_in_heap > 0 {
-            let mut writer = self.reserve(size_in_heap)?;
-
-            writer.write_with(|section| {
-                section.push_pstr(src);
-            });
-
-            Some(PStrWriteInfo { pstr_loc })
-        } else {
-            None
-        })
+        Ok(result.map(|cell| PStrWriteInfo { cell }))
     }
 
     pub const fn heap_cell_alignment() -> usize {
@@ -1053,7 +1055,8 @@ impl Heap {
         move |heap| {
             let mut writer = heap.reserve(size)?;
             let heap_byte_len = *writer.heap_byte_len;
-            let bytes_written = writer.write_with(&mut functor_writer);
+            let HeapSectionWriteResult { bytes_written, .. } =
+                writer.write_with(&mut functor_writer);
 
             Ok(if cell_index!(bytes_written) > 1 {
                 str_loc_as_cell!(cell_index!(heap_byte_len))
@@ -1108,19 +1111,18 @@ impl MachineState {
     pub(crate) fn allocate_pstr(&mut self, src: &str) -> Result<HeapCellValue, usize> {
         match self.heap.allocate_pstr(src)? {
             None => Ok(empty_list_as_cell!()),
-            Some(PStrWriteInfo { pstr_loc, .. }) => Ok(pstr_loc_as_cell!(pstr_loc)),
+            Some(PStrWriteInfo { cell }) => Ok(cell),
         }
     }
 
-    // note that allocate_cstr does emit a tail cell to the string
-    // (completing it with the empty list), allocate_pstr does not, in
-    // any incarnation.
+    // note that allocate_cstr emits a tail cell to the string (completing it with the empty list)
+    // unlike any version of allocate_pstr.
     pub(crate) fn allocate_cstr(&mut self, src: &str) -> Result<HeapCellValue, usize> {
         match self.heap.allocate_pstr(src)? {
             None => Ok(empty_list_as_cell!()),
-            Some(PStrWriteInfo { pstr_loc, .. }) => {
+            Some(PStrWriteInfo { cell }) => {
                 self.heap.push_cell(empty_list_as_cell!())?;
-                Ok(pstr_loc_as_cell!(pstr_loc))
+                Ok(cell)
             }
         }
     }
@@ -1280,18 +1282,4 @@ pub(crate) fn to_local_code_ptr(heap: &Heap, addr: HeapCellValue) -> Option<usiz
             None
         }
     )
-}
-
-#[cfg(test)]
-mod test {
-    use super::*;
-
-    #[test]
-    fn heap_manipulation() {
-        let mut heap = Heap::new();
-
-        for idx in 0 .. 10 {
-            heap.push_cell(heap_loc_as_cell!(idx)).unwrap();
-        }
-    }
 }
